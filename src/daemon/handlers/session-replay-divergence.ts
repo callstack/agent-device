@@ -198,8 +198,10 @@ export function toReplayRepairHintCapture(
 }
 
 /**
- * The single post-failure capture, blessed via the standard ref-issuing
- * sequence (setSessionSnapshot -> markSessionSnapshotRefsIssued -> store).
+ * The single post-failure capture, blessed via the ADR-0014 partial ref-issuing
+ * sequence (setSessionSnapshot -> markSessionPartialRefsIssued -> store): a
+ * divergence screen publishes only its bounded ref set, so it activates a
+ * PARTIAL frame authorizing exactly those bodies, not a complete namespace.
  * Sparse captures do not write back (selector-capture reliability contract),
  * so a sparse verdict degrades the whole observation.
  *
@@ -251,19 +253,17 @@ export async function captureDivergenceObservation(params: {
       };
     }
     setSessionSnapshot(session, snapshot);
-    // ADR 0014: the divergence screen digest publishes only its capped,
-    // non-covered, non-chrome refs — the same set `buildReplayDivergenceScreenRefs`
-    // renders. Activate a PARTIAL frame authorizing exactly those bodies.
-    const chromeRefs = collectSettleChromeRefs(snapshot.nodes, session.appBundleId);
-    const digestBodies = snapshot.nodes
-      .filter(
-        (node) =>
-          node.ref !== undefined &&
-          node.interactionBlocked !== 'covered' &&
-          !chromeRefs.has(node.ref),
-      )
-      .slice(0, SCREEN_REF_CAPTURE_LIMIT)
-      .map((node) => node.ref as string);
+    // ADR 0014 (#1257) + #1264: the divergence screen publishes exactly the
+    // ranked, occlusion-resolved, capped ref set `screen.refs` renders. Activate
+    // a PARTIAL frame authorizing precisely THOSE bodies — derived from the same
+    // `selectDivergenceScreenRefNodes` the digest uses, so the frame never
+    // authorizes a ref the screen hides (over-pin risk) nor rejects one the
+    // screen advertised (e.g. the mass-covered fallback surfaces covered refs
+    // that the old non-covered-only filter would have excluded here).
+    const digestBodies = selectDivergenceScreenRefNodes(
+      snapshot.nodes,
+      session.appBundleId,
+    ).nodes.map((node) => node.ref as string);
     markSessionPartialRefsIssued(session, digestBodies);
     sessionStore.set(sessionName, session);
     return {
@@ -372,14 +372,20 @@ function isForeignOverlayDismissTarget(
   );
 }
 
-function buildReplayDivergenceScreenRefs(
+/**
+ * The single source of truth for which nodes a divergence `screen.refs`
+ * publishes, and in what order. Both the rendered `screen.refs` digest
+ * (`buildReplayDivergenceScreenRefs`) AND the ADR-0014 partial ref frame the
+ * capture authorizes (`captureDivergenceObservation` →
+ * `markSessionPartialRefsIssued`) derive from THIS function, so the authorized
+ * ref set is exactly the set the agent is shown — never a superset it can pin
+ * refs outside of, nor a subset that rejects a ref the screen advertised.
+ * Returns the capped node list plus whether ranking overflowed the cap.
+ */
+function selectDivergenceScreenRefNodes(
   nodes: SnapshotNode[],
-  sanitize: DivergenceFieldSanitizer,
   appBundleId: string | undefined,
-): {
-  refs: ReplayDivergenceScreenRef[];
-  truncated: boolean;
-} {
+): { nodes: SnapshotNode[]; truncated: boolean } {
   // Keyboard/IME chrome must not consume the ref budget: it reuses the exact
   // structural classifier `--settle`'s tail already relies on (#1198/#1200)
   // rather than a second keyboard/IME node-type list.
@@ -411,7 +417,20 @@ function buildReplayDivergenceScreenRefs(
     ...pool.filter((node) => isForeignOverlayDismissTarget(node, appBundleId)),
     ...pool.filter((node) => !isForeignOverlayDismissTarget(node, appBundleId)),
   ];
-  const refs = ranked.slice(0, SCREEN_REF_CAPTURE_LIMIT).map((node) => {
+  const selected = ranked.slice(0, SCREEN_REF_CAPTURE_LIMIT);
+  return { nodes: selected, truncated: ranked.length > selected.length };
+}
+
+function buildReplayDivergenceScreenRefs(
+  nodes: SnapshotNode[],
+  sanitize: DivergenceFieldSanitizer,
+  appBundleId: string | undefined,
+): {
+  refs: ReplayDivergenceScreenRef[];
+  truncated: boolean;
+} {
+  const { nodes: selected, truncated } = selectDivergenceScreenRefNodes(nodes, appBundleId);
+  const refs = selected.map((node) => {
     const role = formatRole(node.type ?? 'Element');
     const label = displayLabel(node, role);
     return {
@@ -420,7 +439,7 @@ function buildReplayDivergenceScreenRefs(
       ...(label ? { label: sanitize(label) } : {}),
     };
   });
-  return { refs, truncated: ranked.length > refs.length };
+  return { refs, truncated };
 }
 
 const BASIS_RANK: Record<ReplayDivergenceSuggestionBasis, number> = {

@@ -828,6 +828,62 @@ test('buildReplayFailureDivergence: a mass-covered app with no actionable overla
   expect(screen.refs.some((ref) => ref.label === 'Field A')).toBe(true);
 });
 
+// #1257 + #1264 reconciliation: the ADR-0014 partial ref frame the divergence
+// capture activates (`markSessionPartialRefsIssued`) must authorize EXACTLY the
+// refs the `screen.refs` digest renders — both now derive from the shared
+// `selectDivergenceScreenRefNodes`. This is load-bearing in the mass-covered
+// fallback: the screen surfaces COVERED refs, which #1257's original
+// non-covered-only `digestBodies` filter would have EXCLUDED from the frame —
+// leaving the agent a ref the screen advertised but the frame rejects. Assert
+// the frame scope equals the emitted screen ref set (covered refs included).
+test('buildReplayFailureDivergence: the partial ref frame authorizes exactly the emitted screen.refs, including mass-covered fallback refs (#1257 + #1264)', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-frame-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  const appBundleId = 'com.callstack.agentdevicelab';
+  sessionStore.set(sessionName, makeAndroidSession(sessionName, { appBundleId }));
+
+  mockDispatchCommand.mockReset();
+  mockDispatchCommand.mockResolvedValue({
+    nodes: bareScrimMassCoveringApp(appBundleId),
+    truncated: false,
+    backend: 'android',
+  });
+
+  const action = {
+    ts: 0,
+    command: 'press',
+    positionals: ['label="Field A"'],
+    flags: {},
+    result: { selectorChain: ['label="Field A"'] },
+  };
+  const divergence = await buildReplayFailureDivergence({
+    error: { code: 'COMMAND_FAILED', message: 'not hittable' },
+    action,
+    index: 0,
+    sourcePath: path.join(root, 'flow.ad'),
+    sourceLine: 1,
+    session: sessionStore.get(sessionName),
+    sessionName,
+    sessionStore,
+    logPath: path.join(root, 'daemon.log'),
+    responseLevel: 'default',
+    planActions: [action],
+    planDigest: 'test-plan-digest',
+  });
+
+  const screen = divergence.screen as Extract<typeof divergence.screen, { state: 'available' }>;
+  const screenRefBodies = new Set(screen.refs.map((ref) => ref.ref));
+  expect(screenRefBodies.size).toBeGreaterThan(0);
+
+  // The partial ref frame the capture activated authorizes exactly the emitted
+  // screen refs — no more (no over-pin surface), no less (every advertised ref
+  // is usable), even though every one of them is a `covered` node here.
+  const stored = sessionStore.get(sessionName);
+  expect(stored?.refFrameState).toBe('active');
+  expect(stored?.refFrameScope).toEqual(screenRefBodies);
+});
+
 // #1264 (capture parity, point 1): the divergence capture must go through the
 // SAME `captureSnapshot` wrapper as a plain `snapshot`, so it inherits Android
 // freshness + post-action retry. Otherwise a divergence could consume the first
