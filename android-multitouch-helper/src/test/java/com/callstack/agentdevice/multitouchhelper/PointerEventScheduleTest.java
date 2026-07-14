@@ -8,18 +8,18 @@ public final class PointerEventScheduleTest {
   public static void main(String[] args) {
     assertSteps(
         PointerEventSchedule.create(1, new long[] {0, 16, 32}),
-        "DOWN:0:1:0",
-        "MOVE:1:1:16",
-        "MOVE:2:1:32",
-        "UP:2:1:40");
+        "DOWN:0:1:0:true",
+        "MOVE:1:1:16:false",
+        "MOVE:2:1:32:true",
+        "UP:2:1:32:true");
     assertSteps(
         PointerEventSchedule.create(2, new long[] {0, 16, 32}),
-        "DOWN:0:1:0",
-        "POINTER_DOWN:0:2:8",
-        "MOVE:1:2:16",
-        "MOVE:2:2:32",
-        "POINTER_UP:2:2:32",
-        "UP:2:1:40");
+        "DOWN:0:1:0:true",
+        "POINTER_DOWN:0:2:8:true",
+        "MOVE:1:2:16:false",
+        "MOVE:2:2:32:true",
+        "POINTER_UP:2:2:32:true",
+        "UP:2:1:40:true");
   }
 
   private static void assertSteps(List<PointerEventSchedule.Step> actual, String... expected) {
@@ -35,7 +35,9 @@ public final class PointerEventScheduleTest {
               + ":"
               + step.pointerCount
               + ":"
-              + step.offsetMs;
+              + step.offsetMs
+              + ":"
+              + step.waitForDispatch;
       if (!expected[index].equals(description)) {
         throw new AssertionError(
             "Step " + index + ": expected " + expected[index] + ", got " + description);

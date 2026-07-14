@@ -137,12 +137,12 @@ public final class MultiTouchInstrumentation extends Instrumentation {
         inject(
             automation,
             motionEvent(downTime, eventTime, motionEventAction(step.action), active),
-            step.action != PointerEventSchedule.Action.MOVE);
+            step.waitForDispatch);
         count += 1;
       }
       return count;
     } catch (RuntimeException error) {
-      if (count > 0) injectCancel(automation, downTime, eventTime + 16, active);
+      if (count > 0) injectCancel(automation, downTime, SystemClock.uptimeMillis(), active);
       throw error;
     }
   }
