@@ -6,6 +6,7 @@ const ANDROID_WINDOW_TYPE_APPLICATION = 1;
 const MAX_REPORTED_WINDOW_TYPES = 8;
 const MIN_FOREGROUND_APP_MEANINGFUL_NODES = 2;
 const MIN_INPUT_METHOD_MEANINGFUL_NODES = 2;
+const ANDROID_SYSTEM_UI_PACKAGE = 'com.android.systemui';
 const ANDROID_SYSTEM_PACKAGES = new Set(['android', 'com.android.systemui']);
 const INSUFFICIENT_APP_CONTENT_REASON =
   'Android snapshot helper returned insufficient application window content';
@@ -15,6 +16,7 @@ export type AndroidHelperContentRecoveryDecision = {
   failureReason: string;
   diagnostics: {
     helperNodeCount: number;
+    helperSystemUiNodeCount: number;
     helperWindowRootCount: number;
     helperApplicationWindowRootCount: number;
     helperMeaningfulNodeCount: number;
@@ -103,7 +105,9 @@ function isForegroundAppContentHiddenByInputMethod(summary: AndroidHelperXmlSumm
 function isForegroundAppContentPoor(summary: AndroidHelperXmlSummary): boolean {
   const foregroundCount = summary.foregroundAppMeaningfulNodeCount;
   if (foregroundCount === undefined) return false;
-  if (foregroundCount === 0) return true;
+  if (foregroundCount === 0) {
+    return summary.applicationMeaningfulNodeCount < MIN_FOREGROUND_APP_MEANINGFUL_NODES;
+  }
   return (
     foregroundCount < MIN_FOREGROUND_APP_MEANINGFUL_NODES &&
     summary.meaningfulNodeCount > foregroundCount
@@ -131,7 +135,12 @@ function isWindowlessMultiWindowContentPoor(
 }
 
 function isSystemWindowOnly(summary: AndroidHelperXmlSummary): boolean {
-  return summary.windowRootCount > 0 && summary.applicationWindowRootCount === 0;
+  return (
+    (summary.windowRootCount > 0 && summary.applicationWindowRootCount === 0) ||
+    (summary.windowRootCount === 0 &&
+      summary.nodeCount > 0 &&
+      summary.systemUiNodeCount === summary.nodeCount)
+  );
 }
 
 function buildRecoveryDecision(
@@ -149,6 +158,7 @@ function buildRecoveryDecision(
 
 type AndroidHelperXmlSummary = {
   nodeCount: number;
+  systemUiNodeCount: number;
   windowRootCount: number;
   applicationWindowRootCount: number;
   meaningfulNodeCount: number;
@@ -183,6 +193,7 @@ function createAndroidHelperXmlSummaryState(
 ): AndroidHelperXmlSummaryState {
   return {
     nodeCount: 0,
+    systemUiNodeCount: 0,
     windowRootCount: 0,
     applicationWindowRootCount: 0,
     meaningfulNodeCount: 0,
@@ -201,6 +212,7 @@ function recordAndroidHelperSummaryNode(
   node: AndroidUiNodeMetadata,
 ): void {
   summary.nodeCount += 1;
+  if (node.packageName === ANDROID_SYSTEM_UI_PACKAGE) summary.systemUiNodeCount += 1;
   recordAndroidHelperWindowNode(summary, node);
   recordAndroidHelperMeaningfulNode(summary, node);
 }
@@ -226,7 +238,10 @@ function recordAndroidHelperMeaningfulNode(
   if (!isMeaningfulContentNode(node)) return;
 
   summary.meaningfulNodeCount += 1;
-  if (summary.currentWindowType === ANDROID_WINDOW_TYPE_APPLICATION) {
+  if (
+    summary.currentWindowType === ANDROID_WINDOW_TYPE_APPLICATION &&
+    !isAndroidSystemPackage(node.packageName)
+  ) {
     summary.applicationMeaningfulNodeCount += 1;
   }
   if (!isAndroidSystemPackage(node.packageName)) {
@@ -253,6 +268,7 @@ function finalizeAndroidHelperXmlSummary(
 ): AndroidHelperXmlSummary {
   return {
     nodeCount: summary.nodeCount,
+    systemUiNodeCount: summary.systemUiNodeCount,
     windowRootCount: summary.windowRootCount,
     applicationWindowRootCount: summary.applicationWindowRootCount,
     meaningfulNodeCount: summary.meaningfulNodeCount,
@@ -288,6 +304,7 @@ function buildRecoveryDiagnostics(
 ): AndroidHelperContentRecoveryDecision['diagnostics'] {
   return {
     helperNodeCount: summary.nodeCount,
+    helperSystemUiNodeCount: summary.systemUiNodeCount,
     helperWindowRootCount: summary.windowRootCount,
     helperApplicationWindowRootCount: summary.applicationWindowRootCount,
     helperMeaningfulNodeCount: summary.meaningfulNodeCount,

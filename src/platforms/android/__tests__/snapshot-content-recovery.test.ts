@@ -39,7 +39,7 @@ test('keeps known IME blocking windows instead of falling back to covered app co
   expect(decision).toBeUndefined();
 });
 
-test('falls back when helper output has only one meaningful IME node', () => {
+test('rejects helper output with only one meaningful IME node', () => {
   const decision = classifyAndroidHelperContentRecovery(
     helperXml([
       node({
@@ -67,7 +67,7 @@ test('falls back when helper output has only one meaningful IME node', () => {
   expect(decision?.diagnostics.helperInputMethodMeaningfulNodeCount).toBe(1);
 });
 
-test('falls back when helper output has no foreground app or IME content', () => {
+test('rejects helper output with no foreground app or IME content', () => {
   const decision = classifyAndroidHelperContentRecovery(
     helperXml([
       node({
@@ -93,6 +93,104 @@ test('falls back when helper output has no foreground app or IME content', () =>
 
   expect(decision?.reason).toBe('content-poor-app-window');
   expect(decision?.diagnostics.helperInputMethodMeaningfulNodeCount).toBe(0);
+});
+
+test('keeps a meaningful foreground application surface owned by another package', () => {
+  const decision = classifyAndroidHelperContentRecovery(
+    helperXml([
+      node({
+        windowType: 1,
+        packageName: 'com.google.android.permissioncontroller',
+        className: 'android.widget.FrameLayout',
+      }),
+      node({
+        text: 'Allow access to photos?',
+        packageName: 'com.google.android.permissioncontroller',
+        className: 'android.widget.TextView',
+      }),
+      node({
+        text: 'Allow',
+        resourceId: 'com.android.permissioncontroller:id/permission_allow_button',
+        packageName: 'com.google.android.permissioncontroller',
+        className: 'android.widget.Button',
+      }),
+    ]),
+    {
+      backend: 'android-helper',
+      nodeCount: 3,
+      rootPresent: true,
+      windowCount: 1,
+      captureMode: 'interactive-windows',
+    },
+    { foregroundAppPackage: 'org.reactnavigation.playground' },
+  );
+
+  expect(decision).toBeUndefined();
+});
+
+test('rejects a status-bar-only capture without window metadata', () => {
+  const decision = classifyAndroidHelperContentRecovery(
+    helperXml([
+      node({
+        text: '7:52',
+        resourceId: 'com.android.systemui:id/clock',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.TextView',
+      }),
+      node({
+        text: 'Battery 100 percent',
+        resourceId: 'com.android.systemui:id/battery',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.LinearLayout',
+      }),
+    ]),
+    {
+      backend: 'android-helper',
+      nodeCount: 2,
+      rootPresent: true,
+      windowCount: 1,
+      captureMode: 'interactive-windows',
+    },
+  );
+
+  expect(decision?.reason).toBe('system-window-only');
+  expect(decision?.diagnostics.helperWindowRootCount).toBe(0);
+  expect(decision?.diagnostics.helperSystemUiNodeCount).toBe(2);
+  expect(decision?.diagnostics.helperNonSystemMeaningfulNodeCount).toBe(0);
+});
+
+test('rejects system chrome inherited under an empty application window', () => {
+  const decision = classifyAndroidHelperContentRecovery(
+    helperXml([
+      node({
+        windowType: 1,
+        packageName: 'com.pagerviewexample',
+        className: 'android.widget.FrameLayout',
+      }),
+      node({
+        text: '5:25',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.TextView',
+      }),
+      node({
+        text: 'Battery 100 percent',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.ImageView',
+      }),
+    ]),
+    {
+      backend: 'android-helper',
+      nodeCount: 3,
+      rootPresent: true,
+      windowCount: 2,
+      captureMode: 'interactive-windows',
+    },
+    { foregroundAppPackage: 'com.pagerviewexample' },
+  );
+
+  expect(decision?.reason).toBe('content-poor-app-window');
+  expect(decision?.diagnostics.helperApplicationMeaningfulNodeCount).toBe(0);
+  expect(decision?.diagnostics.helperNonSystemMeaningfulNodeCount).toBe(0);
 });
 
 function helperXml(nodes: string[]): string {
