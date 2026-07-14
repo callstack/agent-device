@@ -15,7 +15,7 @@ import {
 } from './runtime-targets.ts';
 import type {
   MaestroDispatchSelector,
-  MaestroRuntimeOperationContext,
+  MaestroRuntimeReadContext,
   MaestroTargetMatch,
   MaestroTargetQuery,
 } from './runtime-port-types.ts';
@@ -26,24 +26,22 @@ export type DaemonMaestroRuntimeDependencies = {
   readonly sleep: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
 };
 
-export type MaestroSnapshotReader = (
-  context: MaestroRuntimeOperationContext,
-) => Promise<SnapshotState>;
+export type MaestroSnapshotReader = (context: MaestroRuntimeReadContext) => Promise<SnapshotState>;
 
 export type MaestroSnapshotSource = {
   readonly capture: MaestroSnapshotReader;
   readonly bindObservation: (observation: MaestroObservation) => MaestroObservation;
-  readonly reuseObservation: (context: MaestroRuntimeOperationContext) => SnapshotState | undefined;
+  readonly reuseObservation: (context: MaestroRuntimeReadContext) => SnapshotState | undefined;
   readonly invalidate: () => void;
   readonly requireStability: () => void;
-  readonly settlePending: (context: MaestroRuntimeOperationContext) => Promise<void>;
+  readonly settlePending: (context: MaestroRuntimeReadContext) => Promise<void>;
 };
 
 export type MaestroTargetResolutionMode = 'tap' | 'swipe' | 'observe';
 
 export async function captureRetriableMaestroSnapshot(
   params: {
-    readonly context: MaestroRuntimeOperationContext;
+    readonly context: MaestroRuntimeReadContext;
     readonly snapshot: MaestroSnapshotReader;
     readonly dependencies: DaemonMaestroRuntimeDependencies;
   },
@@ -69,7 +67,7 @@ export async function captureRetriableMaestroSnapshot(
 
 export async function resolveTypedMaestroTarget(params: {
   readonly query: MaestroTargetQuery;
-  readonly context: MaestroRuntimeOperationContext;
+  readonly context: MaestroRuntimeReadContext;
   readonly snapshot: SnapshotState;
   readonly platform: Extract<MaestroPlatform, 'ios' | 'android'>;
 }): Promise<MaestroTargetMatch> {
@@ -81,7 +79,7 @@ export async function resolveTypedMaestroTarget(params: {
 
 function resolveTargetFromSnapshot(params: {
   readonly query: SnapshotTargetQuery & { readonly allowAtomicSelectorDispatch?: boolean };
-  readonly context: MaestroRuntimeOperationContext;
+  readonly context: MaestroRuntimeReadContext;
   readonly snapshot: SnapshotState;
   readonly platform: Extract<MaestroPlatform, 'ios' | 'android'>;
   readonly mode: MaestroTargetResolutionMode;
@@ -105,7 +103,7 @@ function resolveTargetFromSnapshot(params: {
 export async function observeTypedMaestroCondition(params: {
   readonly condition: MaestroObservationCondition;
   readonly timeoutMs: number;
-  readonly context: MaestroRuntimeOperationContext;
+  readonly context: MaestroRuntimeReadContext;
   readonly snapshot: MaestroSnapshotReader;
   readonly dependencies: DaemonMaestroRuntimeDependencies;
   readonly platform: Extract<MaestroPlatform, 'ios' | 'android'>;
@@ -146,7 +144,7 @@ export async function scrollUntilTypedMaestroTarget(params: {
   readonly selector: MaestroSelector;
   readonly direction: string;
   readonly timeoutMs: number;
-  readonly context: MaestroRuntimeOperationContext;
+  readonly context: MaestroRuntimeReadContext;
   readonly snapshot: MaestroSnapshotReader;
   readonly scroll: (remainingMs: number) => Promise<SnapshotState>;
   readonly dependencies: DaemonMaestroRuntimeDependencies;
@@ -188,7 +186,7 @@ export async function scrollUntilTypedMaestroTarget(params: {
 
 export async function waitForTypedSnapshotStability(params: {
   readonly timeoutMs: number;
-  readonly context: MaestroRuntimeOperationContext;
+  readonly context: MaestroRuntimeReadContext;
   readonly snapshot: MaestroSnapshotReader;
   readonly dependencies: DaemonMaestroRuntimeDependencies;
 }): Promise<SnapshotState> {

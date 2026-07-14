@@ -131,7 +131,7 @@ test('atomically dispatches a unique exact iOS target from same-generation evide
   expect(requests.at(-1)?.flags?.maestro).toBeUndefined();
 });
 
-test('lets atomic iOS dispatch resolve raw provider wrapper duplicates', async () => {
+test('uses canonical iOS presentation only for atomic selector uniqueness', async () => {
   const requests: DaemonRequest[] = [];
   const duplicateRect = { x: 0, y: 298, width: 393, height: 48 };
   const port = createDaemonMaestroRuntimePort({
@@ -144,9 +144,28 @@ test('lets atomic iOS dispatch resolve raw provider wrapper duplicates', async (
         data: {
           createdAt: 0,
           nodes: [
-            { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 393, height: 852 } },
-            { index: 1, parentIndex: 0, type: 'Other', label: 'First', rect: duplicateRect },
-            { index: 2, parentIndex: 1, type: 'ScrollView', label: 'First', rect: duplicateRect },
+            {
+              index: 0,
+              depth: 0,
+              type: 'Application',
+              rect: { x: 0, y: 0, width: 393, height: 852 },
+            },
+            {
+              index: 1,
+              depth: 1,
+              parentIndex: 0,
+              type: 'Other',
+              label: 'First',
+              rect: duplicateRect,
+            },
+            {
+              index: 2,
+              depth: 2,
+              parentIndex: 1,
+              type: 'Button',
+              label: 'First',
+              rect: duplicateRect,
+            },
           ],
         },
       };
@@ -167,7 +186,61 @@ test('lets atomic iOS dispatch resolve raw provider wrapper duplicates', async (
   });
 
   expect(requests.map(({ command }) => command)).toEqual(['snapshot', 'click']);
+  expect(requests[0]?.flags?.snapshotInteractiveOnly).toBeUndefined();
   expect(requests[1]?.positionals).toEqual(['text="First"']);
+});
+
+test('does not collapse distinct nested iOS controls with identical frames', async () => {
+  const requests: DaemonRequest[] = [];
+  const duplicateRect = { x: 16, y: 298, width: 180, height: 48 };
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      requests.push(request);
+      if (request.command !== 'snapshot') return { ok: true, data: {} };
+      return {
+        ok: true,
+        data: {
+          createdAt: 0,
+          nodes: [
+            { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 393, height: 852 } },
+            {
+              index: 1,
+              parentIndex: 0,
+              type: 'Button',
+              label: 'Save',
+              identifier: 'save-row',
+              rect: duplicateRect,
+            },
+            {
+              index: 2,
+              parentIndex: 1,
+              type: 'Button',
+              label: 'Save',
+              identifier: 'save-action',
+              rect: duplicateRect,
+            },
+          ],
+        },
+      };
+    },
+    dependencies: makeDependencies(),
+    platform: 'ios',
+  });
+
+  await port.execute({
+    command: {
+      kind: 'tapOn',
+      source: { line: 2 },
+      target: { space: 'target', selector: { text: 'Save' } },
+    },
+    generation: 0,
+    env: {},
+    invalidateObservation() {},
+  });
+
+  expect(requests.map(({ command }) => command)).toEqual(['snapshot', 'click']);
+  expect(requests[1]?.positionals).toEqual(['106', '322']);
 });
 
 test('does not atomically dispatch distinct iOS matches with identical frames', async () => {

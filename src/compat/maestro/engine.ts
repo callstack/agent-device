@@ -18,10 +18,9 @@ export async function executeMaestroProgram(
   port: MaestroRuntimePort,
   options: MaestroEngineOptions = {},
 ): Promise<MaestroEngineResult> {
-  const normalizedOptions = normalizeMaestroEngineOptions(options);
-  const plan = await compileMaestroReplayPlan(program, normalizedOptions);
-  const startIndex = resolveExecutionStartIndex(plan, normalizedOptions);
-  return await executeMaestroReplayPlan(plan, port, { ...normalizedOptions, startIndex });
+  const plan = await compileMaestroReplayPlan(program, options);
+  const startIndex = resolveExecutionStartIndex(plan, options);
+  return await executeMaestroReplayPlan(plan, port, { ...options, startIndex });
 }
 
 export async function executeMaestroPlan(
@@ -29,20 +28,8 @@ export async function executeMaestroPlan(
   port: MaestroRuntimePort,
   options: MaestroEngineOptions = {},
 ): Promise<MaestroEngineResult> {
-  const normalizedOptions = normalizeMaestroEngineOptions(options);
-  const startIndex = resolveExecutionStartIndex(plan, normalizedOptions);
-  return await executeMaestroReplayPlan(plan, port, { ...normalizedOptions, startIndex });
-}
-
-function normalizeMaestroEngineOptions(
-  options: MaestroEngineOptions,
-): MaestroEngineExecutionOptions {
-  const { builtins, ...normalizedOptions } = options;
-  if (builtins === undefined) return normalizedOptions;
-  return {
-    ...normalizedOptions,
-    defaults: { ...(normalizedOptions.defaults ?? {}), ...builtins },
-  };
+  const startIndex = resolveExecutionStartIndex(plan, options);
+  return await executeMaestroReplayPlan(plan, port, { ...options, startIndex });
 }
 
 function resolveExecutionStartIndex(

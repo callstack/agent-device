@@ -49,6 +49,15 @@ export type MaestroRuntimeRequest = {
   signal?: AbortSignal;
 };
 
+export type MaestroObservationRequest = {
+  condition: MaestroObservationCondition;
+  timeoutMs: number;
+  generation: number;
+  env: Readonly<Record<string, string>>;
+  cachedObservation?: MaestroObservation;
+  signal?: AbortSignal;
+};
+
 export type MaestroObservationEffect = 'preserve' | 'invalidate';
 
 export type MaestroRuntimeResult = {
@@ -59,14 +68,7 @@ export type MaestroRuntimeResult = {
 
 export type MaestroRuntimePort = {
   execute(request: MaestroRuntimeRequest): Promise<MaestroRuntimeResult>;
-  observe(request: {
-    condition: MaestroObservationCondition;
-    timeoutMs: number;
-    generation: number;
-    env: Readonly<Record<string, string>>;
-    cachedObservation?: MaestroObservation;
-    signal?: AbortSignal;
-  }): Promise<MaestroObservation>;
+  observe(request: MaestroObservationRequest): Promise<MaestroObservation>;
 };
 
 export type MaestroEngineEvent = {
@@ -95,8 +97,6 @@ export type MaestroEngineOptions = {
   env?: Readonly<Record<string, string>>;
   /** Lowest-precedence defaults, normally replay built-ins. */
   defaults?: Readonly<Record<string, string | number | boolean>>;
-  /** @deprecated Use `defaults`; accepted at the engine boundary for compatibility. */
-  builtins?: Readonly<Record<string, string>>;
   platform?: MaestroPlatform;
   target?: string;
   /** Internal zero-based plan offset. Prefer from/planDigest for resume callers. */
@@ -115,7 +115,7 @@ export type MaestroEngineOptions = {
   now?: () => number;
 };
 
-export type MaestroEngineExecutionOptions = Omit<MaestroEngineOptions, 'builtins'>;
+export type MaestroEngineExecutionOptions = MaestroEngineOptions;
 
 export type MaestroEngineResult = {
   executed: number;

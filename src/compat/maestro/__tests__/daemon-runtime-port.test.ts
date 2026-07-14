@@ -226,29 +226,33 @@ test('settles a gesture before dispatching another gesture', async () => {
   expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS);
 });
 
-test('does not leak replay and test controls into nested public commands', async () => {
+test('preserves the resolved nested-command request context', async () => {
   const requests: DaemonRequest[] = [];
-  const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({
+  const baseReq = {
+    ...makeBaseRequest({
+      token: 'nested-token',
+      session: 'maestro-nested',
+      meta: {
+        debug: true,
+        includeCost: true,
+        responseLevel: 'full',
+        sessionIsolation: 'tenant',
+      },
       flags: {
         platform: 'android',
-        replayBackend: 'maestro',
-        replayUpdate: true,
-        replayEnv: ['TOKEN=value'],
-        replayShellEnv: { AD_VAR_TOKEN: 'value' },
-        replayFrom: 2,
-        replayPlanDigest: 'digest',
-        saveScript: true,
-        failFast: true,
-        timeoutMs: 30_000,
-        retries: 2,
-        recordVideo: true,
-        shardAll: 4,
-        shardSplit: 2,
-        shardCount: 4,
-        shardIndex: 1,
+        target: 'mobile',
+        noRecord: true,
       },
     }),
+    runtime: {
+      platform: 'android' as const,
+      metroHost: '127.0.0.1',
+      metroPort: 8081,
+      bundleUrl: 'http://127.0.0.1:8081/index.bundle',
+    },
+  };
+  const port = createDaemonMaestroRuntimePort({
+    baseReq,
     invoke: async (request) => {
       requests.push(request);
       return { ok: true, data: {} };
@@ -271,8 +275,23 @@ test('does not leak replay and test controls into nested public commands', async
   });
 
   expect(requests).toHaveLength(2);
-  expect(requests[0]?.flags).toEqual({ platform: 'android', relaunch: true });
-  expect(requests[1]?.flags).toEqual({ platform: 'android' });
+  expect(requests[0]).toMatchObject({
+    token: 'nested-token',
+    session: 'maestro-nested',
+    runtime: baseReq.runtime,
+    meta: baseReq.meta,
+    flags: {
+      platform: 'android',
+      target: 'mobile',
+      noRecord: true,
+      relaunch: true,
+    },
+  });
+  expect(requests[1]?.flags).toEqual({
+    platform: 'android',
+    target: 'mobile',
+    noRecord: true,
+  });
 });
 
 test('preserves native Enter dispatch failures', async () => {

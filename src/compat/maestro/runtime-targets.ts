@@ -1,13 +1,16 @@
-import type { Rect, SnapshotNode, SnapshotState } from '../../kernel/snapshot.ts';
+import {
+  attachRefs,
+  type Rect,
+  type SnapshotNode,
+  type SnapshotState,
+} from '../../kernel/snapshot.ts';
+import { presentIosInteractiveSnapshot } from '../../daemon/snapshot-presentation/ios/index.ts';
 import {
   buildSnapshotNodeByIndex,
   isDescendantOfSnapshotNode,
 } from '../../snapshot/snapshot-processing.ts';
 import type { MaestroSelector } from './program-ir.ts';
-import {
-  countMaestroDispatchCandidates,
-  findMaestroTypedSelectorMatches,
-} from './runtime-target-matching.ts';
+import { findMaestroTypedSelectorMatches } from './runtime-target-matching.ts';
 import { filterVisibleMaestroMatches, type MaestroPlatform } from './runtime-target-policy.ts';
 import { selectMaestroSnapshotMatch } from './runtime-target-ranking.ts';
 
@@ -80,9 +83,33 @@ export function resolveMaestroTargetFromSnapshot(
     node: target.node,
     rect: target.rect,
     matches: visible.matches.length,
-    dispatchCandidates: countMaestroDispatchCandidates(snapshot, visible.matches),
+    dispatchCandidates: countCanonicalDispatchCandidates(
+      snapshot,
+      query,
+      platform,
+      visible.matches,
+    ),
     evidence,
   };
+}
+
+function countCanonicalDispatchCandidates(
+  snapshot: SnapshotState,
+  query: MaestroTargetQuery,
+  platform: MaestroPlatform,
+  visibleMatches: SnapshotNode[],
+): number {
+  if (platform !== 'ios' || query.childOf) return visibleMatches.length;
+  const canonicalSnapshot = {
+    ...snapshot,
+    nodes: attachRefs(presentIosInteractiveSnapshot(snapshot.nodes)),
+  };
+  const canonicalMatches = findMaestroTypedSelectorMatches(canonicalSnapshot, query.selector);
+  return filterVisibleMaestroMatches({
+    nodes: canonicalSnapshot.nodes,
+    matches: canonicalMatches,
+    platform,
+  }).matches.length;
 }
 
 function buildMaestroTargetEvidence(

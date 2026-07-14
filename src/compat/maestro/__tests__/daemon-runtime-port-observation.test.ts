@@ -394,7 +394,7 @@ test.each([
   expect(requests[0]?.positionals).toEqual([text]);
 });
 
-test('keeps a successful input mutation successful when optional settling is unavailable', async () => {
+test('propagates input stabilization failures after dispatch', async () => {
   const requests: DaemonRequest[] = [];
   const port = createDaemonMaestroRuntimePort({
     baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
@@ -419,7 +419,7 @@ test('keeps a successful input mutation successful when optional settling is una
       env: {},
       invalidateObservation() {},
     }),
-  ).resolves.toBeDefined();
+  ).rejects.toMatchObject({ code: 'COMMAND_FAILED', message: 'Snapshot helper is unavailable.' });
   expect(requests.map(({ command }) => command)).toEqual(['type', 'snapshot']);
 });
 

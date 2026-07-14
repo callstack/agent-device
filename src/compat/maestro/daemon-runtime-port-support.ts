@@ -11,15 +11,20 @@ import type { MaestroPlatform } from './program-ir.ts';
 import type { MaestroObservation } from './engine-types.ts';
 import type {
   MaestroRuntimeOperationContext,
+  MaestroRuntimeReadContext,
   MaestroTargetMatch,
   MaestroTargetQuery,
 } from './runtime-port-types.ts';
 import type { Rect } from '../../kernel/snapshot.ts';
 import type { DaemonMaestroRuntimeDependencies } from './daemon-runtime-port-observation.ts';
+import {
+  projectMaestroPublicOperation,
+  type MaestroPublicOperation,
+} from './daemon-runtime-public-operation.ts';
 
 type DirectMaestroRuntimeDependencies = DaemonMaestroRuntimeDependencies & {
   readonly resolveGestureViewport: (
-    context: MaestroRuntimeOperationContext,
+    context: MaestroRuntimeReadContext,
   ) => Promise<Rect | undefined>;
 };
 
@@ -33,31 +38,25 @@ export type CreateDaemonMaestroRuntimeOperationsOptions = {
   readonly platform: Extract<MaestroPlatform, 'ios' | 'android'>;
 };
 
-export async function invokeMaestroPublicCommand(
+export async function invokeMaestroPublicOperation(
   options: CreateDaemonMaestroRuntimeOperationsOptions,
-  command: string,
-  positionals: string[],
-  requestOptions: {
-    input?: Record<string, unknown>;
-    flags?: CommandFlags;
-    internal?: DaemonRequest['internal'];
-  } = {},
+  operation: MaestroPublicOperation,
 ): Promise<DaemonResponseData | undefined> {
-  const { input, flags, internal: requestInternal } = requestOptions;
+  const projected = projectMaestroPublicOperation(operation);
   const {
     input: _baseInput,
     flags: baseFlags,
     internal: baseInternal,
     ...baseReq
   } = options.baseReq;
-  const effectiveFlags = flags ?? stripReplayControlFlags(baseFlags);
+  const effectiveFlags = flagsWith(baseFlags, projected.flags ?? {});
   const effectiveInternal =
-    requestInternal === undefined ? baseInternal : { ...baseInternal, ...requestInternal };
+    projected.internal === undefined ? baseInternal : { ...baseInternal, ...projected.internal };
   const response = await options.invoke({
     ...baseReq,
-    command,
-    positionals,
-    ...(input === undefined ? {} : { input }),
+    command: projected.command,
+    positionals: projected.positionals,
+    ...(projected.input === undefined ? {} : { input: projected.input }),
     ...(effectiveFlags === undefined ? {} : { flags: effectiveFlags }),
     ...(effectiveInternal === undefined ? {} : { internal: effectiveInternal }),
   });
@@ -65,34 +64,12 @@ export async function invokeMaestroPublicCommand(
   return response.data;
 }
 
-export function flagsWith(
+function flagsWith(
   base: CommandFlags | undefined,
   extra: Partial<CommandFlags>,
 ): CommandFlags | undefined {
-  const flags = { ...stripReplayControlFlags(base), ...extra };
+  const flags = { ...base, ...extra };
   return Object.keys(flags).length > 0 ? flags : undefined;
-}
-
-function stripReplayControlFlags(flags: CommandFlags | undefined): CommandFlags | undefined {
-  if (!flags) return undefined;
-  const nested = { ...flags };
-  delete nested.saveScript;
-  delete nested.replayUpdate;
-  delete nested.replayBackend;
-  delete nested.replayEnv;
-  delete nested.replayShellEnv;
-  delete nested.replayFrom;
-  delete nested.replayPlanDigest;
-  delete nested.failFast;
-  delete nested.timeoutMs;
-  delete nested.retries;
-  delete nested.recordVideo;
-  delete nested.shardAll;
-  delete nested.shardSplit;
-  delete nested.shardCount;
-  delete nested.shardIndex;
-  delete nested.maestro;
-  return Object.keys(nested).length > 0 ? nested : undefined;
 }
 
 export function launchArgumentValues(

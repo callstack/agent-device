@@ -2,11 +2,11 @@ import { AppError } from '../../kernel/errors.ts';
 import { maestroTestFailure } from './compatibility-errors.ts';
 import type {
   MaestroObservation,
-  MaestroObservationCondition,
+  MaestroObservationRequest,
   MaestroRuntimeRequest,
 } from './engine-types.ts';
 import type { MaestroSelector } from './program-ir.ts';
-import { operationContext } from './runtime-port-context.ts';
+import { observationContext, operationContext } from './runtime-port-context.ts';
 import type {
   MaestroRuntimeOperations,
   MaestroSelectorEvidence,
@@ -16,20 +16,13 @@ import type {
 } from './runtime-port-types.ts';
 
 export async function observeMaestroCondition(
-  request: {
-    condition: MaestroObservationCondition;
-    timeoutMs: number;
-    generation: number;
-    env: Readonly<Record<string, string>>;
-    cachedObservation?: MaestroObservation;
-    signal?: AbortSignal;
-  },
+  request: MaestroObservationRequest,
   operations: MaestroRuntimeOperations,
 ): Promise<MaestroObservation> {
   const match = validateTargetMatch(
     await operations.observe(
       { condition: request.condition, timeoutMs: request.timeoutMs },
-      operationContext(request),
+      observationContext(request),
     ),
     request.generation,
   );

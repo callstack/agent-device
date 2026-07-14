@@ -120,7 +120,7 @@ describe('executeMaestroProgram', () => {
     expect(result.generation).toBe(2);
   });
 
-  test('caps retry blocks at three retries', async () => {
+  test('caps retry blocks at the upstream Maestro retry preset', async () => {
     const execute = vi.fn(async (request: MaestroRuntimeRequest) => {
       request.invalidateObservation();
       throw maestroTestFailure('retry me');

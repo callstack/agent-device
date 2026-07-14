@@ -11,6 +11,7 @@ export type { MaestroRuntimePort } from './engine-types.ts';
 export type {
   MaestroInputTarget,
   MaestroRuntimeOperationContext,
+  MaestroRuntimeReadContext,
   MaestroRuntimeOperationResult,
   MaestroRuntimeOperations,
   MaestroSelectorEvidence,

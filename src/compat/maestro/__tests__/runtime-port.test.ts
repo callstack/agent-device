@@ -2,11 +2,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { executeMaestroProgram } from '../engine.ts';
 import { parseMaestroProgram } from '../program-ir-parser.ts';
 import { createMaestroRuntimePort } from '../runtime-port.ts';
-import type {
-  MaestroRuntimeOperationContext,
-  MaestroRuntimeOperations,
-  MaestroTargetMatch,
-} from '../runtime-port-types.ts';
+import type { MaestroRuntimeOperations, MaestroTargetMatch } from '../runtime-port-types.ts';
 import { makeOperations, record, type RecordedCall } from './runtime-port-fixtures.ts';
 
 describe('MaestroRuntimePort', () => {
@@ -228,7 +224,7 @@ describe('MaestroRuntimePort', () => {
     const resolveTarget = vi.fn(
       async (
         { selector }: Parameters<MaestroRuntimeOperations['resolveTarget']>[0],
-        context: MaestroRuntimeOperationContext,
+        context: Parameters<MaestroRuntimeOperations['resolveTarget']>[1],
       ) => ({
         ...(resolved[selector.id ?? selector.text ?? ''] ?? {
           generation: context.generation,

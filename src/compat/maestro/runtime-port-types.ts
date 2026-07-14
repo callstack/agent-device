@@ -14,15 +14,18 @@ import type {
   MaestroObservationEvidence,
 } from './engine-types.ts';
 
-export type MaestroRuntimeOperationContext = {
+export type MaestroRuntimeReadContext = {
   readonly appId?: string;
   readonly env: Readonly<Record<string, string>>;
   readonly generation: number;
   readonly source?: MaestroSourceLocation;
   readonly cachedObservation?: MaestroObservation;
-  readonly invalidateObservation: () => void;
   readonly signal?: AbortSignal;
   readonly gestureViewport?: Rect;
+};
+
+export type MaestroRuntimeOperationContext = MaestroRuntimeReadContext & {
+  readonly invalidateObservation: () => void;
 };
 
 /** Evidence returned by the shared selector runtime for one observation generation. */
@@ -97,16 +100,16 @@ export type MaestroRuntimeOperations = {
   readonly platform: Extract<MaestroPlatform, 'ios' | 'android'>;
   readonly resolveTarget: (
     input: MaestroTargetQuery,
-    context: MaestroRuntimeOperationContext,
+    context: MaestroRuntimeReadContext,
   ) => Promise<MaestroTargetMatch>;
   readonly observe: (
     input: {
       readonly condition: MaestroObservationCondition;
       readonly timeoutMs: number;
     },
-    context: MaestroRuntimeOperationContext,
+    context: MaestroRuntimeReadContext,
   ) => Promise<MaestroTargetMatch>;
-  readonly resolveGestureViewport: (context: MaestroRuntimeOperationContext) => Promise<Rect>;
+  readonly resolveGestureViewport: (context: MaestroRuntimeReadContext) => Promise<Rect>;
 
   readonly launchApp: MaestroRuntimeOperation<{
     readonly appId?: string;

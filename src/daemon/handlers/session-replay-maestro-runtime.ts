@@ -253,9 +253,18 @@ function createMaestroReplayPort(params: {
 }) {
   const { req, invoke, logPath, sessionName, sessionStore, platform, runtimeHints, sourcePath } =
     params;
-  const { command: _command, positionals: _positionals, ...requestBase } = req;
-  const baseReq =
-    runtimeHints === undefined ? requestBase : { ...requestBase, runtime: runtimeHints };
+  const {
+    command: _command,
+    positionals: _positionals,
+    input: _input,
+    flags: _flags,
+    ...requestBase
+  } = req;
+  const baseReq = {
+    ...requestBase,
+    flags: { platform, noRecord: true },
+    ...(runtimeHints === undefined ? {} : { runtime: runtimeHints }),
+  };
   return createDaemonMaestroRuntimePort({
     baseReq,
     invoke,
