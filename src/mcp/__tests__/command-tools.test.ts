@@ -39,38 +39,6 @@ test('MCP command tool executor hides client creation behind an execution adapte
   assert.equal(result.content[0]?.text, 'Ran wait');
 });
 
-test('MCP executes deprecated rotate calls without advertising a second tool', async () => {
-  const calls: unknown[] = [];
-  const executor = createCommandToolExecutor({
-    createClient: () => ({}) as AgentDeviceClient,
-    runCommand: async (_client, name, input) => {
-      calls.push({ name, input });
-      return {
-        action: 'orientation',
-        orientation: 'landscape-left',
-        message: 'Rotated to landscape-left',
-      };
-    },
-  });
-
-  const result = await executor.execute('rotate', { orientation: 'landscape-left' });
-
-  const expectedCall = {
-    name: 'orientation',
-    input: { orientation: 'landscape-left' },
-  };
-  assert.deepEqual(calls, [expectedCall]);
-  assert.deepEqual(result.structuredContent, {
-    action: 'rotate',
-    orientation: 'landscape-left',
-    message: 'Rotated to landscape-left',
-  });
-  assert.equal(
-    listCommandTools().some((tool) => tool.name === 'rotate'),
-    false,
-  );
-});
-
 test('MCP command tool executor renders optimized snapshot text by default', async () => {
   const executor = createCommandToolExecutor({
     createClient: () => ({}) as AgentDeviceClient,

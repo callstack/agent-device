@@ -11,7 +11,7 @@ import {
 } from '../../cli-schema/command-schema.ts';
 import { isFlagSupportedForCommand } from '../../cli-schema/option-schema.ts';
 import { isKnownCliCommandName } from '../../command-catalog.ts';
-import { commandAlias, normalizeCommandAlias } from '../../command-aliases.ts';
+import { cliCommandAlias, normalizeCliCommandAlias } from '../../cli-command-aliases.ts';
 import { formatUnknownFlagMessage, suggestCommandFor } from './command-suggestions.ts';
 
 type ParsedArgs = {
@@ -118,7 +118,7 @@ export function parseRawArgs(argv: string[]): RawParsedArgs {
 
 function applyAliasImpliedFlags(rawCommand: string | null, flags: CliFlags): void {
   if (!rawCommand) return;
-  for (const key of commandAlias(rawCommand)?.impliedFlags ?? []) {
+  for (const key of cliCommandAlias(rawCommand)?.impliedFlags ?? []) {
     flags[key] = true;
   }
 }
@@ -381,4 +381,8 @@ export async function usage(): Promise<string> {
 export async function usageForCommand(command: string): Promise<string | null> {
   const { buildCommandUsageText } = await import('./cli-help.ts');
   return buildCommandUsageText(normalizeCommandAlias(command));
+}
+
+function normalizeCommandAlias(command: string): string {
+  return normalizeCliCommandAlias(command);
 }

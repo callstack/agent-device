@@ -3,7 +3,6 @@ import { type SessionRuntimeHints } from '../kernel/contracts.ts';
 import { parseBatchStepRuntime } from '../batch-contract.ts';
 import { readInputFromCli } from '../commands/cli-grammar.ts';
 import { isCommandName, type CommandName } from '../commands/command-metadata.ts';
-import { normalizeCrossSurfaceCommandAlias } from '../command-aliases.ts';
 import type { CliFlags } from '../commands/cli-grammar/flag-types.ts';
 import { AppError } from '../kernel/errors.ts';
 import { isRecord } from '../utils/parsing.ts';
@@ -69,8 +68,6 @@ function readStructuredBatchStep(
   const { runtime: _runtime, ...rest } = step;
   return {
     ...rest,
-    // Resolve command-name aliases (e.g. `rotate` -> `orientation`) from the shared map.
-    command: normalizeCrossSurfaceCommandAlias(rest.command),
     ...(runtime === undefined ? {} : { runtime }),
   };
 }
@@ -93,10 +90,8 @@ function readLegacyCliBatchStep(step: unknown, stepNumber: number): LegacyCliBat
 }
 
 function readLegacyCommand(value: unknown, stepNumber: number): CommandName {
-  const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  if (!raw) throw new AppError('INVALID_ARGS', `Batch step ${stepNumber} requires command.`);
-  // Resolve command-name aliases (e.g. `rotate` -> `orientation`) from the shared map.
-  const command = normalizeCrossSurfaceCommandAlias(raw);
+  const command = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (!command) throw new AppError('INVALID_ARGS', `Batch step ${stepNumber} requires command.`);
   if (isCommandName(command)) return command;
   throw new AppError(
     'INVALID_ARGS',
