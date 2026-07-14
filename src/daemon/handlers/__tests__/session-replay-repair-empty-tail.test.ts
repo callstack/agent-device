@@ -36,6 +36,7 @@ import { freshEvidence, makeRecordingReplayInvoke } from './session-replay-repai
 import {
   bottomTabsRealCaptureFixture,
   recordArticleEvidence,
+  toSnapshotNodes,
 } from './session-replay-target-classification-fixtures.ts';
 
 const mockDispatchCommand = vi.mocked(dispatchCommand);
@@ -230,4 +231,185 @@ test('a --from one past the plan end is rejected as out of range when no record-
     expect(exploitAttempt.error.message).toMatch(/out of range/);
   }
   expect(session.saveScriptComplete).toBeFalsy();
+});
+
+test('an unauthorized --from one past the plan end is rejected on an ARMED session whose last-step divergence hint is state-repair, not record-and-heal', async () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'agent-device-replay-empty-tail-state-repair-'),
+  );
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  const evidence = recordArticleEvidence();
+  const filePath = writeReplayFile(root, [
+    'open "Demo" --relaunch',
+    `# agent-device:target-v1 ${JSON.stringify(evidence)}`,
+    'click id="article"',
+  ]);
+
+  // The pre-action verification capture is a COMPLETELY unrelated screen —
+  // "article" resolves to matchCount 0 (selector-miss) AND the recorded
+  // container itself is absent (not merely the leaf), so this routes to
+  // `state-repair` (the app-state sub-flow), never `record-and-heal`. No
+  // `pendingRecordAndHeal` watermark is ever stamped for this session.
+  mockDispatchCommand.mockResolvedValue({
+    nodes: toSnapshotNodes([
+      {
+        index: 0,
+        type: 'Application',
+        label: 'Unrelated Screen',
+        rect: { x: 0, y: 0, width: 100, height: 100 },
+        depth: 0,
+      },
+    ]),
+    truncated: false,
+    backend: 'xctest',
+  });
+
+  const invoke = makeRecordingReplayInvoke({ sessionStore, sessionName });
+
+  // --- The armed session diverges pre-action (target verification), never
+  // reaching `invoke` for "click" — this is the SAME repair-armed
+  // (`--save-script`) lifecycle a record-and-heal repair uses, just a
+  // different repair sub-flow. ---
+  const leg1 = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+  expect(leg1.ok).toBe(false);
+  if (leg1.ok) return;
+  const divergence = leg1.error.details?.divergence as {
+    kind: string;
+    repairHint: string;
+    resume: { allowed: boolean; from: number; planDigest: string };
+  };
+  expect(divergence.kind).toBe('selector-miss');
+  expect(divergence.repairHint).toBe('state-repair');
+  // `state-repair` never shifts `from` — it stays AT the failed step (2).
+  expect(divergence.resume.from).toBe(2);
+  const session = sessionStore.get(sessionName)!;
+  expect(session.pendingRecordAndHeal).toBeUndefined();
+  expect(session.saveScriptBoundary).toBeDefined(); // genuinely armed
+
+  // --- Exploit attempt: `--from 3` (one past the plan's end) — exactly the
+  // ordinal a record-and-heal empty-tail resume would use — on an armed
+  // session whose divergence hint is `state-repair`. Must be rejected: no
+  // record-and-heal watermark authorizes skipping the unresolved final step,
+  // regardless of how the session's OTHER lifecycle state (armed/held)
+  // looks. ---
+  const exploitAttempt = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [filePath],
+      flags: { saveScript: true, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+  expect(exploitAttempt.ok).toBe(false);
+  if (!exploitAttempt.ok) {
+    expect(exploitAttempt.error.code).toBe('INVALID_ARGS');
+    expect(exploitAttempt.error.message).toMatch(/out of range/);
+  }
+  expect(session.saveScriptComplete).toBeFalsy();
+});
+
+test('a stale --plan-digest on an empty-tail resume is rejected WITHOUT consuming the watermark, so a subsequent correct retry still succeeds', async () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'agent-device-replay-empty-tail-digest-retry-'),
+  );
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  const evidence = recordArticleEvidence();
+  const filePath = writeReplayFile(root, [
+    'open "Demo" --relaunch',
+    `# agent-device:target-v1 ${JSON.stringify(evidence)}`,
+    'click id="article"',
+  ]);
+
+  const invoke = makeRecordingReplayInvoke({
+    sessionStore,
+    sessionName,
+    failSteps: new Set(['click id="article"']),
+  });
+
+  const leg1 = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+  expect(leg1.ok).toBe(false);
+  if (leg1.ok) return;
+  const divergence = leg1.error.details?.divergence as {
+    repairHint: string;
+    resume: { allowed: boolean; from: number; planDigest: string };
+  };
+  expect(divergence.repairHint).toBe('record-and-heal');
+  expect(divergence.resume.from).toBe(3);
+
+  const session = sessionStore.get(sessionName)!;
+  sessionStore.recordAction(session, {
+    command: 'press',
+    positionals: ['@e6'],
+    flags: {},
+    result: { selectorChain: ['id="article-v2"'] },
+    targetEvidence: freshEvidence('article-v2', 'Article V2'),
+  });
+  expect(session.pendingRecordAndHeal).toBeDefined();
+
+  // --- A resume at the correct `from` but a STALE digest is rejected — the
+  // watermark must NOT be consumed here, or a legitimate retry with the
+  // correct digest would find it already cleared and get rejected as
+  // out-of-range, permanently locking the agent out of completing the
+  // repair. ---
+  const staleDigestAttempt = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [filePath],
+      flags: {
+        saveScript: true,
+        replayFrom: divergence.resume.from,
+        replayPlanDigest: 'stale-digest-does-not-match',
+      },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+  expect(staleDigestAttempt.ok).toBe(false);
+  if (!staleDigestAttempt.ok) {
+    expect(staleDigestAttempt.error.code).toBe('INVALID_ARGS');
+    expect(staleDigestAttempt.error.message).toMatch(/plan digest/);
+  }
+  // The watermark survives the rejected leg untouched.
+  expect(session.pendingRecordAndHeal).toEqual({
+    expectedFrom: divergence.resume.from,
+    actionsCountAtDivergence: 1,
+  });
+
+  // --- The retry with the CORRECT digest still succeeds — never locked out. ---
+  const retry = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [filePath],
+      flags: {
+        saveScript: true,
+        replayFrom: divergence.resume.from,
+        replayPlanDigest: divergence.resume.planDigest,
+      },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+  expect(retry.ok).toBe(true);
+  expect(session.saveScriptComplete).toBe(true);
+  expect(session.pendingRecordAndHeal).toBeUndefined();
 });
