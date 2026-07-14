@@ -84,10 +84,16 @@ export class SessionScriptWriter {
       publishHealedScriptAtomically({
         scriptPath,
         script,
-        // The completeness-aware no-clobber guard protects ONLY the DEFAULT
-        // healed sibling (an explicit `--save-script=<out>` may overwrite as
-        // the caller directed).
-        protectComplete: Boolean(session.saveScriptDefaultedHealedPath),
+        // ADR 0012 decision 6 (BLOCKER 4): the completeness-aware no-clobber
+        // guard protects EVERY repair-armed publish target — the DEFAULT
+        // healed sibling AND an explicit `--save-script=<path>` alike. An
+        // explicit target is still caller-DIRECTED (which path), never
+        // caller-authorized to silently destroy an unreviewed prior healed
+        // diff sitting there; the caller must remove/rename it or pick
+        // another path. Only ever actually engages against a sentinel-marked
+        // artifact, which only a repair-armed write can produce, so an
+        // ordinary (non-repair) recording's target is unaffected either way.
+        protectComplete: repairArmed,
       });
       // COMMITTED: idempotent guard above + teardown's abort/tombstone routing.
       if (repairArmed) session.saveScriptCommitted = true;
@@ -193,10 +199,12 @@ function publishHealedScriptAtomically(params: {
 }
 
 /**
- * An explicit `--save-script=<path>` target is caller-directed and never
- * no-clobber-protected — BLOCKER 1's "is the existing target incomplete"
- * classification never runs on this path, so a plain atomic publish is
- * correct: absent -> exclusive create; present -> atomic rename-replace.
+ * ADR 0012 decision 6 (BLOCKER 4): an ORDINARY (non-repair-armed) recording's
+ * target is never no-clobber-protected — it never carries the completeness
+ * sentinel in the first place (only a repair-armed write appends it), so
+ * BLOCKER 1's "is the existing target incomplete" classification would never
+ * find anything to refuse on anyway. A plain atomic publish is correct:
+ * absent -> exclusive create; present -> atomic rename-replace.
  */
 function publishOverwriteAtomically(tempPath: string, scriptPath: string): void {
   try {

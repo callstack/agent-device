@@ -481,6 +481,41 @@ test('BLOCKER 1 (lock reclaim): a stale dead-lock decision never steals a lock a
   expect(fs.readFileSync(healedPath, 'utf8')).toBe(originalContent);
 });
 
+// BLOCKER 4: the no-clobber, complete-artifact protection must apply to an
+// EXPLICIT `--save-script=<path>` target too, not just the default healed
+// sibling — an explicit target is caller-DIRECTED (which path to use), never
+// caller-AUTHORIZED to silently destroy an unreviewed prior COMPLETE healed
+// diff sitting there.
+test('BLOCKER 4: write() refuses to clobber an existing COMPLETE artifact at an EXPLICIT --save-script=<path> target too', () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'agent-device-script-writer-explicit-complete-clobber-'),
+  );
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const explicitOut = path.join(root, 'flows', 'promoted.ad');
+  fs.mkdirSync(path.dirname(explicitOut), { recursive: true });
+  fs.writeFileSync(
+    explicitOut,
+    `context platform=ios device="x"\nclick id="old"\n${HEAL_COMPLETE_SENTINEL}\n`,
+  );
+  const before = fs.readFileSync(explicitOut, 'utf8');
+
+  const session = makeIosSession('default', {
+    recordSession: true,
+    saveScriptBoundary: 0,
+    saveScriptComplete: true,
+    saveScriptPath: explicitOut,
+    // No saveScriptDefaultedHealedPath: this is an explicit, caller-directed
+    // target — the protection must apply here too, not just the default path.
+    actions: [action({ command: 'click', positionals: ['id="new"'] })],
+  });
+
+  const result = writer.write(session);
+  expect(result.written).toBe(false);
+  expect(result.written === false && result.error?.message).toMatch(/already exists/);
+  // The prior complete diff at the explicit target is untouched.
+  expect(fs.readFileSync(explicitOut, 'utf8')).toBe(before);
+});
+
 test('write() DOES overwrite when the caller passed an explicit --save-script=<path> (not defaulted)', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-explicit-out-'));
   const writer = new SessionScriptWriter(path.join(root, 'sessions'));
