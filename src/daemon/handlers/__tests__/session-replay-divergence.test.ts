@@ -174,6 +174,124 @@ test('buildReplayFailureDivergence excludes keyboard chrome from screen.refs and
   expect(screen.truncated).toBeUndefined();
 });
 
+// 25 unlabeled, non-interactive structural containers — the RN ViewGroup/
+// FrameLayout wrappers a full (non-interactive) divergence capture pulls in.
+// They carry refs but no identity and aren't tappable, and they sort ahead of
+// the actionable controls in document order, so without the meaningful-target
+// filter they consume the whole SCREEN_REF_CAPTURE_LIMIT and truncate the real
+// controls out (the same shape as the keyboard swamp, minus the chrome).
+function structuralNoiseNodes() {
+  const noise = Array.from({ length: 25 }, (_, i) => ({
+    index: 1 + i,
+    depth: 1,
+    parentIndex: 0,
+    type: 'Other',
+    rect: { x: 0, y: 10 * i, width: 402, height: 8 },
+  }));
+  const base = 1 + noise.length;
+  return [
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      label: 'Checkout form',
+      rect: { x: 0, y: 0, width: 402, height: 874 },
+      hittable: true,
+    },
+    ...noise,
+    {
+      index: base,
+      depth: 1,
+      parentIndex: 0,
+      type: 'StaticText',
+      label: 'Full name',
+      rect: { x: 20, y: 300, width: 160, height: 20 },
+    },
+    {
+      index: base + 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'TextField',
+      value: 'ada@example.com',
+      rect: { x: 20, y: 330, width: 300, height: 44 },
+      hittable: true,
+    },
+    {
+      index: base + 2,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Submit order',
+      identifier: 'submit-order',
+      rect: { x: 20, y: 400, width: 160, height: 44 },
+      hittable: true,
+    },
+    // Unlabeled but interactive — a bare icon button. `hittable` alone makes it a
+    // legitimate target, so it must survive even without any label/identifier.
+    {
+      index: base + 3,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      rect: { x: 340, y: 20, width: 44, height: 44 },
+      hittable: true,
+    },
+  ];
+}
+
+test('buildReplayFailureDivergence drops unlabeled non-interactive structural nodes so actionable controls surface within the cap', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-structural-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+
+  mockDispatchCommand.mockResolvedValue({
+    nodes: structuralNoiseNodes(),
+    truncated: false,
+    backend: 'xctest',
+  });
+
+  const action = {
+    ts: 0,
+    command: 'get',
+    positionals: ['text', 'label="Submit order RENAMED"'],
+    flags: {},
+    result: { selectorChain: ['label="Submit order RENAMED"'] },
+  };
+  const divergence = await buildReplayFailureDivergence({
+    error: { code: 'COMMAND_FAILED', message: 'target not found' },
+    action,
+    index: 0,
+    sourcePath: path.join(root, 'flow.ad'),
+    sourceLine: 1,
+    session: sessionStore.get(sessionName),
+    sessionName,
+    sessionStore,
+    logPath: path.join(root, 'daemon.log'),
+    responseLevel: 'default',
+    planActions: [action],
+    planDigest: 'test-plan-digest',
+  });
+
+  expect(divergence.screen.state).toBe('available');
+  const screen = divergence.screen as Extract<typeof divergence.screen, { state: 'available' }>;
+  // The 25 structural wrappers no longer consume the cap, so the actionable
+  // controls — which sorted after them and were truncated out before — surface.
+  expect(screen.refs.some((ref) => ref.label === 'Submit order')).toBe(true);
+  expect(screen.refs.some((ref) => ref.label === 'Full name')).toBe(true);
+  expect(screen.refs.some((ref) => ref.label === 'ada@example.com')).toBe(true);
+  // An unlabeled-but-hittable control is still a valid target.
+  expect(screen.refs.some((ref) => !ref.label && ref.role.toLowerCase().includes('button'))).toBe(
+    true,
+  );
+  // No unlabeled, non-interactive structural container leaks into the ref list.
+  expect(
+    screen.refs.every(
+      (ref) => ref.label !== undefined || ref.role.toLowerCase().includes('button'),
+    ),
+  ).toBe(true);
+});
+
 // Same live-shape keyboard window, but the app hosts an inputAccessoryView
 // toolbar (a "Send" button) as a bar ABOVE the keys inside the keyboard
 // window. The keys are still chrome; the app-owned accessory control must NOT

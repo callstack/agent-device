@@ -274,6 +274,21 @@ export function buildDivergenceScreen(
 // by boundReplayDivergence/applyReplayDivergenceLevelCaps.
 const SCREEN_REF_CAPTURE_LIMIT = 20;
 
+/**
+ * A divergence `screen.ref` is only useful if an agent could actually re-target
+ * it: it must be identifiable (a display label / value / non-generic identifier)
+ * or interactive (`hittable`). The `get`/`is`/`wait` divergence uses a full
+ * (non-interactive) capture so static-text targets survive, but that also pulls
+ * in unlabeled structural containers — ViewGroups / ComposeViews that carry a
+ * ref yet no identity and aren't tappable. Those are never valid repair targets,
+ * and on deeply-nested RN trees they would otherwise consume the
+ * `SCREEN_REF_CAPTURE_LIMIT` budget ahead of the actionable controls (and the
+ * app content the excluded status/nav chrome just freed room for).
+ */
+function isMeaningfulDivergenceTarget(node: SnapshotNode): boolean {
+  return Boolean(displayLabel(node, formatRole(node.type ?? 'Element'))) || node.hittable === true;
+}
+
 function buildReplayDivergenceScreenRefs(
   nodes: SnapshotNode[],
   sanitize: DivergenceFieldSanitizer,
@@ -287,7 +302,11 @@ function buildReplayDivergenceScreenRefs(
   // rather than a second keyboard/IME node-type list.
   const chromeRefs = collectSettleChromeRefs(nodes, appBundleId);
   const candidates = nodes.filter(
-    (node) => node.ref && node.interactionBlocked !== 'covered' && !chromeRefs.has(node.ref),
+    (node) =>
+      node.ref &&
+      node.interactionBlocked !== 'covered' &&
+      !chromeRefs.has(node.ref) &&
+      isMeaningfulDivergenceTarget(node),
   );
   const refs = candidates.slice(0, SCREEN_REF_CAPTURE_LIMIT).map((node) => {
     const role = formatRole(node.type ?? 'Element');
