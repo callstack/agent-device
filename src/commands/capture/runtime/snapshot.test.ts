@@ -149,24 +149,6 @@ test('runtime snapshot emits filtered Android guidance from backend analysis', a
   ]);
 });
 
-test('runtime snapshot warns when Android helper falls back to stock UIAutomator', async () => {
-  const device = createSnapshotOnlyDevice({
-    nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Window', label: 'Home' }],
-    truncated: false,
-    backend: 'android',
-    androidSnapshot: {
-      backend: 'uiautomator-dump',
-      fallbackReason: 'helper artifact missing',
-    },
-  });
-
-  const result = await device.capture.snapshot({ session: 'default', interactiveOnly: true });
-
-  assert.deepEqual(result.warnings, [
-    'Android snapshot helper unavailable; using stock UIAutomator dump, which can time out on busy React Native UIs. Reason: helper artifact missing',
-  ]);
-});
-
 test('runtime snapshot warns when iOS interactive output is root-only', async () => {
   const device = createSnapshotOnlyDevice({
     nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Application' }],

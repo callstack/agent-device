@@ -6,7 +6,10 @@ import type { MaestroRuntimeRequest } from './engine-types.ts';
 import type { MaestroCoordinate, MaestroDirection, MaestroSwipeGesture } from './program-ir.ts';
 import { operationContext } from './runtime-port-context.ts';
 import { resolveMaestroTarget } from './runtime-port-observation.ts';
-import { MAESTRO_TARGET_SWIPE_POLICY } from './runtime-port-geometry-policy.ts';
+import {
+  MAESTRO_DEFAULT_SWIPE_DURATION_MS,
+  MAESTRO_TARGET_SWIPE_POLICY,
+} from './runtime-port-geometry-policy.ts';
 import type {
   MaestroRuntimeOperations,
   MaestroSinglePointerGestureInput,
@@ -54,7 +57,7 @@ export async function resolveMaestroSwipeOperation(
     const { start, end } = screenSwipeEndpoints(viewport, authored.direction);
     return {
       authored,
-      gesture: normalizedScreenVerticalSwipe(authored.direction, start, end, authored.duration),
+      gesture: normalizedScreenVerticalSwipe(start, end, authored.duration),
       viewport,
     };
   }
@@ -107,14 +110,18 @@ function normalizedSwipeFromEndpoints(
   end: { x: number; y: number },
   durationMs: number | undefined,
 ): MaestroSinglePointerGestureInput {
-  const gesture = normalizePublicSwipeMotion({ from: start, to: end, durationMs }).gesture;
-  if (gesture.intent === 'fling') return gesture;
+  const gesture = normalizePublicSwipeMotion({
+    from: start,
+    to: end,
+    durationMs: durationMs ?? MAESTRO_DEFAULT_SWIPE_DURATION_MS,
+  }).gesture;
   if (gesture.intent === 'pan' && 'origin' in gesture) {
     return {
       intent: 'pan',
       origin: gesture.origin,
       delta: gesture.delta,
-      ...(gesture.durationMs === undefined ? {} : { durationMs: gesture.durationMs }),
+      durationMs: gesture.durationMs,
+      executionProfile: 'endpoint-hold',
     };
   }
   throw new AppError('COMMAND_FAILED', 'Swipe normalization produced a non-swipe gesture.');
@@ -124,25 +131,20 @@ function normalizedScreenHorizontalSwipe(
   direction: Extract<MaestroDirection, 'left' | 'right'>,
   durationMs: number | undefined,
 ): MaestroSinglePointerGestureInput {
-  const preset = direction;
-  return durationMs === undefined
-    ? { intent: 'fling', preset }
-    : { intent: 'pan', preset, durationMs };
+  return {
+    intent: 'pan',
+    preset: direction,
+    durationMs: durationMs ?? MAESTRO_DEFAULT_SWIPE_DURATION_MS,
+    executionProfile: 'endpoint-hold',
+  };
 }
 
 function normalizedScreenVerticalSwipe(
-  direction: Extract<MaestroDirection, 'up' | 'down'>,
   start: { x: number; y: number },
   end: { x: number; y: number },
   durationMs: number | undefined,
 ): MaestroSinglePointerGestureInput {
-  if (durationMs !== undefined) return normalizedSwipeFromEndpoints(start, end, durationMs);
-  return {
-    intent: 'fling',
-    direction,
-    origin: start,
-    distance: Math.abs(end.y - start.y),
-  };
+  return normalizedSwipeFromEndpoints(start, end, durationMs);
 }
 
 function screenSwipeEndpoints(

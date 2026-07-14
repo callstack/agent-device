@@ -17,7 +17,7 @@ vi.mock('../adb.ts', async (importOriginal) => {
 });
 
 import { screenshotAndroid } from '../screenshot.ts';
-import { dumpUiHierarchy, snapshotAndroid } from '../snapshot.ts';
+import { snapshotAndroid } from '../snapshot.ts';
 import { buildUiHierarchySnapshot, parseUiHierarchyTree } from '../ui-hierarchy.ts';
 import type { DeviceInfo } from '../../../kernel/device.ts';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
@@ -43,7 +43,6 @@ const VALID_PNG = Buffer.from(
 );
 const mockRunCmd = vi.mocked(runCmd);
 const mockSleep = vi.mocked(sleep);
-const localAdbExecOptions = { detached: process.platform !== 'win32' };
 
 const device: DeviceInfo = {
   platform: 'android',
@@ -93,21 +92,31 @@ function snapshotAndroidWithHelper(
 }
 
 function createHelperAdb(
-  handlers: Partial<Record<'instrument' | 'stock', AndroidAdbExecutor>>,
+  handlers: Partial<Record<'instrument' | 'activity', AndroidAdbExecutor>>,
 ): AndroidAdbExecutor {
   return async (args, options) => {
-    if (args.includes('--show-versioncode')) return installedHelperProbe;
-    if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'force-stop') {
+    if (isHelperVersionProbe(args)) return installedHelperProbe;
+    if (isHelperRuntimeReset(args)) {
       return { exitCode: 0, stdout: '', stderr: '' };
     }
-    if (args.includes('instrument') && handlers.instrument) {
-      return await handlers.instrument(args, options);
-    }
-    if (args.includes('exec-out') && handlers.stock) {
-      return await handlers.stock(args, options);
-    }
+    const operation = helperAdbOperation(args);
+    const handler = operation ? handlers[operation] : undefined;
+    if (handler) return await handler(args, options);
     throw new Error(`unexpected helper adb args: ${args.join(' ')}`);
   };
+}
+
+function isHelperVersionProbe(args: string[]): boolean {
+  return args.includes('--show-versioncode');
+}
+
+function isHelperRuntimeReset(args: string[]): boolean {
+  return args[0] === 'shell' && args[1] === 'am' && args[2] === 'force-stop';
+}
+
+function helperAdbOperation(args: string[]): 'instrument' | 'activity' | undefined {
+  if (args.includes('instrument')) return 'instrument';
+  return args.includes('dumpsys') && args.includes('activity') ? 'activity' : undefined;
 }
 
 function createPersistentSnapshotHelperProvider(options: {
@@ -367,18 +376,6 @@ function androidSystemWindowOnlyXml(): string {
   ].join('\n');
 }
 
-function androidFabricAppXml(): string {
-  return [
-    '<?xml version="1.0" encoding="UTF-8"?>',
-    '<hierarchy rotation="0">',
-    '  <node index="0" class="android.widget.FrameLayout" package="io.example.fabric" bounds="[0,0][390,844]" enabled="true">',
-    '    <node index="0" text="Fabric dashboard" resource-id="io.example.fabric:id/title" class="android.widget.TextView" package="io.example.fabric" bounds="[24,96][280,140]" enabled="true" />',
-    '    <node index="1" text="Open details" class="android.widget.Button" package="io.example.fabric" bounds="[24,180][220,236]" clickable="true" enabled="true" focusable="true" />',
-    '  </node>',
-    '</hierarchy>',
-  ].join('\n');
-}
-
 function androidContentPoorFabricAppWindowXml(): string {
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
@@ -445,18 +442,12 @@ async function withTempScreenshot(
   }
 }
 
-function mockAndroidSnapshotXml(xml: string, activityDump = ''): void {
-  mockRunCmd.mockImplementation(async (_cmd, args) => {
-    if (isAndroidSdkVersionCommand(args)) {
-      return { exitCode: 0, stdout: '35', stderr: '' };
-    }
-    if (args.includes('exec-out')) {
-      return { exitCode: 0, stdout: xml, stderr: '' };
-    }
-    if (args.includes('dumpsys') && args.includes('activity') && args.includes('top')) {
-      return { exitCode: 0, stdout: activityDump, stderr: '' };
-    }
-    throw new Error(`unexpected args: ${args.join(' ')}`);
+function androidSnapshotHelperAdb(xml: string, activityDump?: string): AndroidAdbExecutor {
+  return createHelperAdb({
+    instrument: async () => ({ exitCode: 0, stdout: helperOutput(xml), stderr: '' }),
+    ...(activityDump === undefined
+      ? {}
+      : { activity: async () => ({ exitCode: 0, stdout: activityDump, stderr: '' }) }),
   });
 }
 
@@ -464,14 +455,6 @@ function isAndroidSdkVersionCommand(args: string[]): boolean {
   return (
     args.includes('shell') && args.includes('getprop') && args.includes('ro.build.version.sdk')
   );
-}
-
-function adbTimeout(args: string[]): AppError {
-  return new AppError('COMMAND_FAILED', 'adb timed out after 8000ms', {
-    cmd: 'adb',
-    args,
-    timeoutMs: 8000,
-  });
 }
 
 async function captureDiagnostics(
@@ -489,29 +472,7 @@ async function captureDiagnostics(
   }
 }
 
-test('dumpUiHierarchy returns streamed XML even when exec-out exits non-zero', async () => {
-  const xml =
-    '<?xml version="1.0" encoding="UTF-8"?><hierarchy><node text="streamed"/></hierarchy>';
-
-  mockRunCmd.mockImplementation(async (_cmd, args) => {
-    if (args.includes('exec-out')) {
-      return { exitCode: 1, stdout: xml, stderr: 'theme warning' };
-    }
-    throw new Error('fallback should not run');
-  });
-
-  const result = await dumpUiHierarchy(device);
-
-  assert.equal(result, xml);
-  assert.equal(mockRunCmd.mock.calls.length, 1);
-  assert.deepEqual(mockRunCmd.mock.calls[0]?.[2], {
-    allowFailure: true,
-    timeoutMs: 8000,
-    ...localAdbExecOptions,
-  });
-});
-
-test('snapshotAndroid uses injected helper artifact before stock uiautomator', async () => {
+test('snapshotAndroid uses the injected helper artifact', async () => {
   const timeouts: Array<number | undefined> = [];
   const helperAdb: AndroidAdbExecutor = async (args, options) => {
     timeouts.push(options?.timeoutMs);
@@ -754,10 +715,8 @@ test('snapshotAndroid keeps daemon-session helper alive for reuse until session 
   );
 });
 
-test('snapshotAndroid falls back to stock uiautomator when helper fails', async () => {
+test('snapshotAndroid fails closed when the helper fails', async () => {
   const adbCalls: string[][] = [];
-  const stockXml =
-    '<?xml version="1.0" encoding="UTF-8"?><hierarchy><node text="stock" bounds="[0,0][10,10]" /></hierarchy>';
   const helperAdb: AndroidAdbExecutor = async (args) => {
     adbCalls.push(args);
     if (args.includes('--show-versioncode')) {
@@ -767,37 +726,26 @@ test('snapshotAndroid falls back to stock uiautomator when helper fails', async 
         stderr: '',
       };
     }
-    if (args.includes('exec-out')) {
-      return { exitCode: 0, stdout: stockXml, stderr: '' };
-    }
     if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'force-stop') {
       return { exitCode: 0, stdout: '', stderr: '' };
     }
     return { exitCode: 1, stdout: '', stderr: 'instrumentation failed' };
   };
 
-  const result = await snapshotAndroid(device, {
-    helperAdb,
-    helperArtifact,
-  });
-
-  assert.equal(result.nodes[0]?.label, 'stock');
-  assert.equal(result.androidSnapshot.backend, 'uiautomator-dump');
-  assert.match(
-    result.androidSnapshot.fallbackReason ?? '',
-    /failed before returning parseable output/,
+  await assert.rejects(
+    () => snapshotAndroid(device, { helperAdb, helperArtifact }),
+    /Android snapshot helper failed.*failed before returning parseable output/,
   );
-  assert.deepEqual(
-    adbCalls.map((args) => args[0]),
-    ['shell', 'shell', 'shell', 'exec-out'],
+  assert.equal(
+    adbCalls.some((args) => args.includes('exec-out')),
+    false,
   );
   assert.equal(mockRunCmd.mock.calls.length, 0);
 });
 
-test('snapshotAndroid falls back to stock uiautomator when helper returns only system windows', async () => {
+test('snapshotAndroid fails closed when helper returns only system windows', async () => {
   const adbCalls: string[][] = [];
   const helperXml = androidSystemWindowOnlyXml();
-  const stockXml = androidFabricAppXml();
   const helperAdb: AndroidAdbExecutor = async (args) => {
     adbCalls.push(args);
     if (args.includes('--show-versioncode')) return installedHelperProbe;
@@ -807,26 +755,12 @@ test('snapshotAndroid falls back to stock uiautomator when helper returns only s
     if (args.includes('instrument')) {
       return { exitCode: 0, stdout: helperOutput(helperXml, { nodeCount: 3 }), stderr: '' };
     }
-    if (args.includes('exec-out')) {
-      return { exitCode: 0, stdout: stockXml, stderr: '' };
-    }
     throw new Error(`unexpected helper adb args: ${args.join(' ')}`);
   };
 
-  const result = await snapshotAndroidWithHelper(helperAdb);
-
-  assert.equal(result.androidSnapshot.backend, 'uiautomator-dump');
-  assert.equal(
-    result.androidSnapshot.fallbackReason,
-    'Android snapshot helper returned only non-application windows',
-  );
-  assert.equal(
-    result.nodes.some((node) => node.label === 'Fabric dashboard'),
-    true,
-  );
-  assert.equal(
-    result.nodes.some((node) => node.label === 'Open details'),
-    true,
+  await assert.rejects(
+    () => snapshotAndroidWithHelper(helperAdb),
+    /Android snapshot helper returned only non-application windows/,
   );
   assert.equal(
     adbCalls.some(
@@ -836,97 +770,64 @@ test('snapshotAndroid falls back to stock uiautomator when helper returns only s
   );
   assert.equal(
     adbCalls.some((args) => args.includes('exec-out')),
-    true,
+    false,
   );
 });
 
-test('snapshotAndroid falls back to stock uiautomator when helper returns no nodes', async () => {
+test('snapshotAndroid fails closed when helper returns no nodes', async () => {
   const helperXml = '<?xml version="1.0" encoding="UTF-8"?><hierarchy rotation="0"></hierarchy>';
-  const stockXml = androidFabricAppXml();
   const helperAdb = createHelperAdb({
     instrument: async () => ({
       exitCode: 0,
       stdout: helperOutput(helperXml, { nodeCount: 0 }),
       stderr: '',
     }),
-    stock: async () => ({ exitCode: 0, stdout: stockXml, stderr: '' }),
   });
 
-  const result = await snapshotAndroidWithHelper(helperAdb);
-
-  assert.equal(result.androidSnapshot.backend, 'uiautomator-dump');
-  assert.equal(
-    result.androidSnapshot.fallbackReason,
-    'Android snapshot helper returned no accessibility nodes',
-  );
-  assert.equal(
-    result.nodes.some((node) => node.label === 'Fabric dashboard'),
-    true,
+  await assert.rejects(
+    () => snapshotAndroidWithHelper(helperAdb),
+    /Android snapshot helper returned no accessibility nodes/,
   );
 });
 
-test('snapshotAndroid falls back to stock uiautomator when foreground app window lacks content', async () => {
+test('snapshotAndroid fails closed when foreground app window lacks content', async () => {
   const helperXml = androidContentPoorFabricAppWindowXml();
-  const stockXml = androidFabricAppXml();
   const helperAdb = createHelperAdb({
     instrument: async () => ({
       exitCode: 0,
       stdout: helperOutput(helperXml, { nodeCount: 4, windowCount: 2 }),
       stderr: '',
     }),
-    stock: async () => ({ exitCode: 0, stdout: stockXml, stderr: '' }),
   });
 
-  const result = await snapshotAndroidWithHelper(helperAdb, {
-    appBundleId: 'io.example.fabric',
-  });
-
-  assert.equal(result.androidSnapshot.backend, 'uiautomator-dump');
-  assert.equal(
-    result.androidSnapshot.fallbackReason,
-    'Android snapshot helper returned insufficient foreground app content',
-  );
-  assert.equal(
-    result.nodes.some((node) => node.label === 'Fabric dashboard'),
-    true,
-  );
-  assert.equal(
-    result.nodes.some((node) => node.label === 'Open details'),
-    true,
+  await assert.rejects(
+    () => snapshotAndroidWithHelper(helperAdb, { appBundleId: 'io.example.fabric' }),
+    (error: unknown) => {
+      assert(error instanceof AppError);
+      assert.match(error.message, /insufficient foreground app content/);
+      assert.equal(error.details?.retriable, true);
+      return true;
+    },
   );
 });
 
-test('snapshotAndroid falls back to stock uiautomator when standalone helper sees only an app overlay', async () => {
+test('snapshotAndroid fails closed when standalone helper sees only an app overlay', async () => {
   const helperXml = androidContentPoorExpoToolsOverlayXml();
-  const stockXml = androidFabricAppXml();
   const helperAdb = createHelperAdb({
     instrument: async () => ({
       exitCode: 0,
       stdout: helperOutput(helperXml, { nodeCount: 4, windowCount: 2 }),
       stderr: '',
     }),
-    stock: async () => ({ exitCode: 0, stdout: stockXml, stderr: '' }),
   });
 
-  const result = await snapshotAndroidWithHelper(helperAdb);
-
-  assert.equal(result.androidSnapshot.backend, 'uiautomator-dump');
-  assert.equal(
-    result.androidSnapshot.fallbackReason,
-    'Android snapshot helper returned insufficient application window content',
-  );
-  assert.equal(
-    result.nodes.some((node) => node.label === 'Fabric dashboard'),
-    true,
-  );
-  assert.equal(
-    result.nodes.some((node) => node.label === 'Open details'),
-    true,
+  await assert.rejects(
+    () => snapshotAndroidWithHelper(helperAdb),
+    /Android snapshot helper returned insufficient application window content/,
   );
 });
 
 test('snapshotAndroid keeps helper output when application and system windows are both present', async () => {
-  let stockAttempted = false;
   const helperXml = [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<hierarchy rotation="0">',
@@ -945,10 +846,6 @@ test('snapshotAndroid keeps helper output when application and system windows ar
       stdout: helperOutput(helperXml, { nodeCount: 4 }),
       stderr: '',
     }),
-    stock: async () => {
-      stockAttempted = true;
-      throw new Error('stock fallback should not run');
-    },
   });
 
   const result = await snapshotAndroidWithHelper(helperAdb, {
@@ -956,17 +853,13 @@ test('snapshotAndroid keeps helper output when application and system windows ar
   });
 
   assert.equal(result.androidSnapshot.backend, 'android-helper');
-  assert.equal(result.androidSnapshot.fallbackReason, undefined);
   assert.equal(
     result.nodes.some((node) => node.label === 'Fabric dashboard'),
     true,
   );
-  assert.equal(stockAttempted, false);
 });
 
-test('snapshotAndroid emits fallback and stock capture diagnostics', async () => {
-  const stockXml =
-    '<?xml version="1.0" encoding="UTF-8"?><hierarchy><node text="stock" bounds="[0,0][10,10]" /></hierarchy>';
+test('snapshotAndroid emits helper failure diagnostics', async () => {
   const helperAdb: AndroidAdbExecutor = async (args) => {
     if (args.includes('--show-versioncode')) {
       return {
@@ -975,37 +868,24 @@ test('snapshotAndroid emits fallback and stock capture diagnostics', async () =>
         stderr: '',
       };
     }
-    if (args.includes('exec-out')) {
-      return { exitCode: 0, stdout: stockXml, stderr: '' };
-    }
+    if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'force-stop')
+      return { exitCode: 0, stdout: '', stderr: '' };
     return { exitCode: 1, stdout: '', stderr: 'helper unavailable' };
   };
 
   const diagnostics = await captureDiagnostics(
-    { session: 'snapshot-fallback', requestId: 'req-2', command: 'snapshot', debug: true },
+    { session: 'snapshot-failure', requestId: 'req-2', command: 'snapshot', debug: true },
     async () => {
-      await snapshotAndroid(device, {
-        helperAdb,
-        helperArtifact,
-      });
+      await assert.rejects(() => snapshotAndroid(device, { helperAdb, helperArtifact }));
       return flushDiagnosticsToSessionFile({ force: true });
     },
   );
 
-  assert.match(diagnostics, /android_snapshot_helper_fallback/);
-  assert.match(diagnostics, /android_snapshot_stock_capture/);
+  assert.match(diagnostics, /android_snapshot_helper_failed/);
   assert.match(diagnostics, /helper unavailable/);
 });
 
 test('snapshotAndroid emits unavailable diagnostics when helper artifact is missing', async () => {
-  const stockXml =
-    '<?xml version="1.0" encoding="UTF-8"?><hierarchy><node text="stock" bounds="[0,0][10,10]" /></hierarchy>';
-  const helperAdb: AndroidAdbExecutor = async (args) => {
-    if (args.includes('exec-out')) {
-      return { exitCode: 0, stdout: stockXml, stderr: '' };
-    }
-    throw new Error(`unexpected adb args: ${args.join(' ')}`);
-  };
   const accessSpy = vi.spyOn(fs, 'access').mockRejectedValueOnce(new Error('helper missing'));
 
   try {
@@ -1017,9 +897,10 @@ test('snapshotAndroid emits unavailable diagnostics when helper artifact is miss
         debug: true,
       },
       async () => {
-        const result = await snapshotAndroid(device, { helperAdb });
-        assert.equal(result.nodes[0]?.label, 'stock');
-        assert.equal(result.androidSnapshot.backend, 'uiautomator-dump');
+        await assert.rejects(
+          () => snapshotAndroid(device),
+          /Android snapshot helper is unavailable/,
+        );
         return flushDiagnosticsToSessionFile({ force: true });
       },
     );
@@ -1027,20 +908,16 @@ test('snapshotAndroid emits unavailable diagnostics when helper artifact is miss
     assert.match(diagnostics, /android_snapshot_helper_artifact_resolution/);
     assert.match(diagnostics, /android_snapshot_helper_unavailable/);
     assert.match(diagnostics, /artifact_not_found/);
-    assert.match(diagnostics, /android_snapshot_stock_capture/);
   } finally {
     accessSpy.mockRestore();
   }
 });
 
-test('snapshotAndroid emits timeout fallback diagnostics when helper capture times out', async () => {
-  const stockXml =
-    '<?xml version="1.0" encoding="UTF-8"?><hierarchy><node text="stock" bounds="[0,0][10,10]" /></hierarchy>';
+test('snapshotAndroid emits timeout diagnostics when helper capture times out', async () => {
   const helperAdb = createHelperAdb({
     instrument: async () => {
       throw new AppError('COMMAND_FAILED', 'helper capture timed out');
     },
-    stock: async () => ({ exitCode: 0, stdout: stockXml, stderr: '' }),
   });
 
   const diagnostics = await captureDiagnostics(
@@ -1051,20 +928,19 @@ test('snapshotAndroid emits timeout fallback diagnostics when helper capture tim
       debug: true,
     },
     async () => {
-      const result = await snapshotAndroidWithHelper(helperAdb);
-      assert.equal(result.androidSnapshot.backend, 'uiautomator-dump');
-      assert.match(result.androidSnapshot.fallbackReason ?? '', /helper capture timed out/);
+      await assert.rejects(
+        () => snapshotAndroidWithHelper(helperAdb),
+        /Android snapshot helper failed: helper capture timed out/,
+      );
       return flushDiagnosticsToSessionFile({ force: true });
     },
   );
 
-  assert.match(diagnostics, /android_snapshot_helper_fallback/);
+  assert.match(diagnostics, /android_snapshot_helper_failed/);
   assert.match(diagnostics, /helper capture timed out/);
-  assert.match(diagnostics, /android_snapshot_stock_capture/);
 });
 
-test('snapshotAndroid skips stock fallback after structured helper timeout', async () => {
-  let stockAttempted = false;
+test('snapshotAndroid preserves structured helper timeout guidance', async () => {
   const helperAdb = createHelperAdb({
     instrument: async () => ({
       exitCode: 1,
@@ -1079,17 +955,13 @@ test('snapshotAndroid skips stock fallback after structured helper timeout', asy
       ].join('\n'),
       stderr: '',
     }),
-    stock: async () => {
-      stockAttempted = true;
-      throw new Error('stock fallback should not run');
-    },
   });
 
   await assert.rejects(
     () => snapshotAndroidWithHelper(helperAdb),
     (error) => {
       assert.match((error as Error).message, /Timed out waiting for accessibility root/);
-      assert.match((error as Error).message, /Stock UIAutomator fallback was skipped/);
+      assert.match((error as Error).message, /Android snapshot helper failed/);
       assert.equal(
         (error as { details?: Record<string, unknown> }).details?.hint,
         'Android accessibility snapshots can be blocked by busy or continuously changing app UI. Use screenshot as visual truth after this timeout and report the busy UI if it persists.',
@@ -1097,17 +969,11 @@ test('snapshotAndroid skips stock fallback after structured helper timeout', asy
       return true;
     },
   );
-  assert.equal(stockAttempted, false);
 });
 
-test('snapshotAndroid skips stock fallback after killed helper instrumentation', async () => {
-  let stockAttempted = false;
+test('snapshotAndroid preserves killed helper instrumentation details', async () => {
   const helperAdb = createHelperAdb({
     instrument: async () => ({ exitCode: 137, stdout: '', stderr: '' }),
-    stock: async () => {
-      stockAttempted = true;
-      throw new Error('stock fallback should not run');
-    },
   });
 
   await assert.rejects(
@@ -1117,17 +983,14 @@ test('snapshotAndroid skips stock fallback after killed helper instrumentation',
         (error as Error).message,
         /Android snapshot helper failed before returning parseable output/,
       );
-      assert.match((error as Error).message, /Stock UIAutomator fallback was skipped/);
+      assert.match((error as Error).message, /Android snapshot helper failed/);
       assert.equal((error as { details?: Record<string, unknown> }).details?.exitCode, 137);
       return true;
     },
   );
-  assert.equal(stockAttempted, false);
 });
 
-test('snapshotAndroid falls back to stock dump after unparseable helper output', async () => {
-  const stockXml =
-    '<?xml version="1.0" encoding="UTF-8"?><hierarchy><node text="stock" bounds="[0,0][10,10]" /></hierarchy>';
+test('snapshotAndroid fails closed after unparseable helper output', async () => {
   const calls: string[][] = [];
   const helperAdb: AndroidAdbExecutor = async (args) => {
     calls.push(args);
@@ -1136,16 +999,12 @@ test('snapshotAndroid falls back to stock dump after unparseable helper output',
     if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'force-stop') {
       return { exitCode: 0, stdout: '', stderr: '' };
     }
-    if (args.includes('exec-out')) return { exitCode: 0, stdout: stockXml, stderr: '' };
     throw new Error(`unexpected helper adb args: ${args.join(' ')}`);
   };
 
-  const result = await snapshotAndroidWithHelper(helperAdb);
-
-  assert.equal(result.androidSnapshot.backend, 'uiautomator-dump');
-  assert.match(
-    result.androidSnapshot.fallbackReason ?? '',
-    /Android snapshot helper output could not be parsed/,
+  await assert.rejects(
+    () => snapshotAndroidWithHelper(helperAdb),
+    /Android snapshot helper failed.*output could not be parsed/,
   );
   assert.equal(
     calls.some((args) => args.includes('instrument')),
@@ -1159,14 +1018,12 @@ test('snapshotAndroid falls back to stock dump after unparseable helper output',
   );
   assert.equal(
     calls.some((args) => args.includes('exec-out')),
-    true,
+    false,
   );
   assert.equal(mockSleep.mock.calls.at(-1)?.[0], 150);
 });
 
-test('snapshotAndroid falls back to stock dump after helper adb timeout', async () => {
-  const stockXml =
-    '<?xml version="1.0" encoding="UTF-8"?><hierarchy><node text="stock" bounds="[0,0][10,10]" /></hierarchy>';
+test('snapshotAndroid fails closed after helper adb timeout', async () => {
   const helperAdb = createHelperAdb({
     instrument: async (args) => {
       throw new AppError('COMMAND_FAILED', 'adb timed out after 8000ms', {
@@ -1174,46 +1031,14 @@ test('snapshotAndroid falls back to stock dump after helper adb timeout', async 
         timeoutMs: 8000,
       });
     },
-    stock: async () => ({ exitCode: 0, stdout: stockXml, stderr: '' }),
   });
 
-  const result = await snapshotAndroidWithHelper(helperAdb);
-
-  assert.equal(result.androidSnapshot.backend, 'uiautomator-dump');
-  assert.match(result.androidSnapshot.fallbackReason ?? '', /adb timed out after 8000ms/);
-});
-
-test('snapshotAndroid preserves helper failure reason when stock fallback fails', async () => {
-  const helperAdb: AndroidAdbExecutor = async (args) => {
-    if (args.includes('--show-versioncode')) {
-      return {
-        exitCode: 0,
-        stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:13004',
-        stderr: '',
-      };
-    }
-    if (args.includes('exec-out')) {
-      throw new AppError('COMMAND_FAILED', 'stock dump timed out', { hint: 'stock hint' });
-    }
-    return { exitCode: 1, stdout: '', stderr: 'instrumentation failed' };
-  };
-
   await assert.rejects(
-    () =>
-      snapshotAndroid(device, {
-        helperAdb,
-        helperArtifact,
-      }),
+    () => snapshotAndroidWithHelper(helperAdb),
     (error) => {
       assert.ok(error instanceof AppError);
-      assert.match(error.message, /stock dump timed out/);
-      assert.match(error.message, /Android snapshot helper failed before stock fallback/);
-      assert.match(error.message, /failed before returning parseable output/);
-      assert.match(
-        String(error.details?.androidSnapshotHelperFallbackReason),
-        /Android snapshot helper failed before returning parseable output/,
-      );
-      assert.equal(error.details?.hint, 'stock hint');
+      assert.match(error.message, /Android snapshot helper failed: adb timed out after 8000ms/);
+      assert.equal(error.details?.androidSnapshotHelperFailureReason, 'adb timed out after 8000ms');
       return true;
     },
   );
@@ -1242,188 +1067,19 @@ test('snapshotAndroid re-probes helper install after helper capture failure', as
         stderr: '',
       };
     }
-    if (args.includes('exec-out')) {
-      return { exitCode: 0, stdout: stockXml, stderr: '' };
-    }
     throw new Error(`unexpected helper adb args: ${args.join(' ')}`);
   };
-  const stockXml =
-    '<?xml version="1.0" encoding="UTF-8"?><hierarchy><node text="stock" bounds="[0,0][10,10]" /></hierarchy>';
   const helperOptions = {
     helperAdb,
     helperArtifact,
   };
 
-  const fallback = await snapshotAndroid(device, helperOptions);
+  await assert.rejects(() => snapshotAndroid(device, helperOptions));
   const helper = await snapshotAndroid(device, helperOptions);
 
-  assert.equal(fallback.androidSnapshot.backend, 'uiautomator-dump');
   assert.equal(helper.androidSnapshot.backend, 'android-helper');
   assert.equal(helper.nodes[0]?.label, 'helper');
   assert.equal(versionProbeCount, 2);
-});
-
-test('dumpUiHierarchy reads fallback XML when dump exits non-zero', async () => {
-  const xml =
-    '<?xml version="1.0" encoding="UTF-8"?><hierarchy><node text="fallback"/></hierarchy>';
-
-  mockRunCmd.mockImplementation(async (_cmd, args, options) => {
-    if (args.includes('exec-out')) {
-      return { exitCode: 1, stdout: '', stderr: 'stream unavailable' };
-    }
-    if (
-      args.includes('uiautomator') &&
-      args.includes('dump') &&
-      args.includes('/sdcard/window_dump.xml')
-    ) {
-      if (options?.allowFailure !== true) {
-        throw new AppError('COMMAND_FAILED', 'adb exited with code 1', {
-          stderr: 'theme engine error',
-        });
-      }
-      return {
-        exitCode: 1,
-        stdout: 'UI hierarchy dumped to: /sdcard/window_dump.xml',
-        stderr: 'theme engine error',
-      };
-    }
-    if (args.includes('cat') && args.includes('/sdcard/window_dump.xml')) {
-      return { exitCode: 0, stdout: xml, stderr: '' };
-    }
-    throw new Error(`unexpected args: ${args.join(' ')}`);
-  });
-
-  const result = await dumpUiHierarchy(device);
-  const dumpCall = mockRunCmd.mock.calls.find(([, args]) =>
-    args.includes('/sdcard/window_dump.xml'),
-  );
-  const catCall = mockRunCmd.mock.calls.find(
-    ([, args]) => args.includes('cat') && args.includes('/sdcard/window_dump.xml'),
-  );
-
-  assert.equal(result, xml);
-  assert.deepEqual(dumpCall?.[2], {
-    allowFailure: true,
-    timeoutMs: 8000,
-    ...localAdbExecOptions,
-  });
-  assert.deepEqual(catCall?.[2], localAdbExecOptions);
-});
-
-test('dumpUiHierarchy does not read a stale fallback file when dump fails without a path', async () => {
-  mockRunCmd.mockImplementation(async (_cmd, args) => {
-    if (args.includes('exec-out')) {
-      return { exitCode: 137, stdout: 'Killed', stderr: '' };
-    }
-    if (
-      args.includes('uiautomator') &&
-      args.includes('dump') &&
-      args.includes('/sdcard/window_dump.xml')
-    ) {
-      return { exitCode: 137, stdout: 'Killed', stderr: '' };
-    }
-    if (args.includes('cat') && args.includes('/sdcard/window_dump.xml')) {
-      throw new Error('cat should not read a stale dump file');
-    }
-    throw new Error(`unexpected args: ${args.join(' ')}`);
-  });
-
-  await assert.rejects(
-    dumpUiHierarchy(device),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.code === 'COMMAND_FAILED' &&
-      error.message.includes('did not return XML') &&
-      error.details?.reason === 'missing_fresh_dump',
-  );
-});
-
-test('dumpUiHierarchy retries when fallback dump file is temporarily missing', async () => {
-  const xml = '<?xml version="1.0" encoding="UTF-8"?><hierarchy><node text="retried"/></hierarchy>';
-  let catAttempts = 0;
-
-  mockRunCmd.mockImplementation(async (_cmd, args) => {
-    if (args.includes('exec-out')) {
-      return { exitCode: 1, stdout: '', stderr: 'stream unavailable' };
-    }
-    if (
-      args.includes('uiautomator') &&
-      args.includes('dump') &&
-      args.includes('/sdcard/window_dump.xml')
-    ) {
-      return {
-        exitCode: 0,
-        stdout: 'UI hierarchy dumped to: /sdcard/window_dump.xml',
-        stderr: '',
-      };
-    }
-    if (args.includes('cat') && args.includes('/sdcard/window_dump.xml')) {
-      catAttempts += 1;
-      if (catAttempts === 1) {
-        throw new AppError('COMMAND_FAILED', 'adb exited with code 1', {
-          stderr: 'cat: /sdcard/window_dump.xml: No such file or directory',
-        });
-      }
-      return { exitCode: 0, stdout: xml, stderr: '' };
-    }
-    throw new Error(`unexpected args: ${args.join(' ')}`);
-  });
-
-  const result = await dumpUiHierarchy(device);
-
-  assert.equal(result, xml);
-  assert.equal(catAttempts, 2);
-  assert.equal(
-    mockRunCmd.mock.calls.filter(
-      ([, args]) => args.includes('uiautomator') && args.includes('/sdcard/window_dump.xml'),
-    ).length,
-    2,
-  );
-});
-
-test('dumpUiHierarchy explains timeout on looping Android animations', async () => {
-  mockRunCmd.mockImplementation(async (_cmd, args) => {
-    if (args.includes('uiautomator')) {
-      throw adbTimeout(args);
-    }
-    throw new Error(`unexpected args: ${args.join(' ')}`);
-  });
-
-  await assert.rejects(
-    dumpUiHierarchy(device),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.message.includes('Android UI hierarchy dump timed out') &&
-      typeof error.details?.hint === 'string' &&
-      error.details.hint.includes('Android accessibility snapshots can be blocked') &&
-      error.details.hint.includes('Use screenshot as visual truth after this timeout'),
-  );
-});
-
-test('dumpUiHierarchy does not attach animation hint to non-dump timeouts', async () => {
-  mockRunCmd.mockImplementation(async (_cmd, args) => {
-    if (args.includes('exec-out')) {
-      return { exitCode: 0, stdout: '', stderr: '' };
-    }
-    if (args.includes('uiautomator')) {
-      return { exitCode: 0, stdout: 'UI hierarchy dumped to: /sdcard/window_dump.xml', stderr: '' };
-    }
-    if (args.includes('cat')) {
-      throw adbTimeout(args);
-    }
-    throw new Error(`unexpected args: ${args.join(' ')}`);
-  });
-
-  await assert.rejects(
-    dumpUiHierarchy(device),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.message === 'adb timed out after 8000ms' &&
-      // Non-dump timeouts keep the generic classified adb-timeout hint instead
-      // of the looping-animation explanation reserved for uiautomator dump.
-      !String(error.details?.hint).includes('Android accessibility snapshots can be blocked') &&
-      error.details?.adbFailure === 'timeout',
-  );
 });
 
 test('snapshotAndroid preserves hidden scroll content hints in interactive snapshots', async () => {
@@ -1447,9 +1103,9 @@ test('snapshotAndroid preserves hidden scroll content hints in interactive snaps
     '        com.facebook.react.views.view.ReactViewGroup{c V.E...... ........ 0,636-390,804 #3}',
   ].join('\n');
 
-  mockAndroidSnapshotXml(xml, dump);
-
-  const result = await snapshotAndroid(device, { interactiveOnly: true });
+  const result = await snapshotAndroidWithHelper(androidSnapshotHelperAdb(xml, dump), {
+    interactiveOnly: true,
+  });
   const scrollArea = result.nodes.find((node) => node.type === 'android.widget.ScrollView');
 
   assert.ok(scrollArea);
@@ -1470,9 +1126,9 @@ test('snapshotAndroid keeps generic-id scroll containers in interactive snapshot
   </node>
 </hierarchy>`;
 
-  mockAndroidSnapshotXml(xml);
-
-  const result = await snapshotAndroid(device, { interactiveOnly: true });
+  const result = await snapshotAndroidWithHelper(androidSnapshotHelperAdb(xml, ''), {
+    interactiveOnly: true,
+  });
   const scrollArea = result.nodes.find(
     (node) =>
       node.type === 'android.widget.ScrollView' &&
@@ -1490,20 +1146,9 @@ test('snapshotAndroid skips activity dump when snapshot has no scrollable nodes'
   </node>
 </hierarchy>`;
 
-  mockRunCmd.mockImplementation(async (_cmd, args) => {
-    if (isAndroidSdkVersionCommand(args)) {
-      return { exitCode: 0, stdout: '35', stderr: '' };
-    }
-    if (args.includes('exec-out')) {
-      return { exitCode: 0, stdout: xml, stderr: '' };
-    }
-    if (args.includes('dumpsys') && args.includes('activity') && args.includes('top')) {
-      throw new Error('dumpsys activity top should not run without scrollable nodes');
-    }
-    throw new Error(`unexpected args: ${args.join(' ')}`);
+  const result = await snapshotAndroidWithHelper(androidSnapshotHelperAdb(xml), {
+    interactiveOnly: true,
   });
-
-  const result = await snapshotAndroid(device, { interactiveOnly: true });
 
   assert.equal(result.nodes.length, 1);
   assert.equal(result.nodes[0]?.label, 'Continue');
@@ -1519,20 +1164,9 @@ test('snapshotAndroid skips hidden content hints when disabled', async () => {
   </node>
 </hierarchy>`;
 
-  mockRunCmd.mockImplementation(async (_cmd, args) => {
-    if (isAndroidSdkVersionCommand(args)) {
-      return { exitCode: 0, stdout: '35', stderr: '' };
-    }
-    if (args.includes('exec-out')) {
-      return { exitCode: 0, stdout: xml, stderr: '' };
-    }
-    if (args.includes('dumpsys') && args.includes('activity') && args.includes('top')) {
-      throw new Error('dumpsys activity top should not run when hints are disabled');
-    }
-    throw new Error(`unexpected args: ${args.join(' ')}`);
+  const result = await snapshotAndroidWithHelper(androidSnapshotHelperAdb(xml), {
+    includeHiddenContentHints: false,
   });
-
-  const result = await snapshotAndroid(device, { includeHiddenContentHints: false });
 
   assert.equal(
     result.nodes.some((node) => node.type === 'android.widget.ScrollView'),
@@ -1552,20 +1186,7 @@ test('snapshotAndroid uses helper scroll action hints without activity dump', as
   </node>
 </hierarchy>`;
 
-  mockRunCmd.mockImplementation(async (_cmd, args) => {
-    if (isAndroidSdkVersionCommand(args)) {
-      return { exitCode: 0, stdout: '35', stderr: '' };
-    }
-    if (args.includes('exec-out')) {
-      return { exitCode: 0, stdout: xml, stderr: '' };
-    }
-    if (args.includes('dumpsys') && args.includes('activity') && args.includes('top')) {
-      throw new Error('dumpsys activity top should not run when helper action hints exist');
-    }
-    throw new Error(`unexpected args: ${args.join(' ')}`);
-  });
-
-  const result = await snapshotAndroid(device);
+  const result = await snapshotAndroidWithHelper(androidSnapshotHelperAdb(xml));
   const scrollArea = result.nodes.find((node) => node.type === 'android.widget.ScrollView');
 
   assert.ok(scrollArea);
@@ -1585,20 +1206,7 @@ test('snapshotAndroid does not convert horizontal helper scroll action to vertic
   </node>
 </hierarchy>`;
 
-  mockRunCmd.mockImplementation(async (_cmd, args) => {
-    if (isAndroidSdkVersionCommand(args)) {
-      return { exitCode: 0, stdout: '35', stderr: '' };
-    }
-    if (args.includes('exec-out')) {
-      return { exitCode: 0, stdout: xml, stderr: '' };
-    }
-    if (args.includes('dumpsys') && args.includes('activity') && args.includes('top')) {
-      throw new Error('dumpsys activity top should not run when helper action hints exist');
-    }
-    throw new Error(`unexpected args: ${args.join(' ')}`);
-  });
-
-  const result = await snapshotAndroid(device);
+  const result = await snapshotAndroidWithHelper(androidSnapshotHelperAdb(xml));
   const scrollArea = result.nodes.find(
     (node) => node.type === 'android.widget.HorizontalScrollView',
   );
@@ -1621,9 +1229,9 @@ test('snapshotAndroid derives hidden content hints for interactive snapshots fro
   </node>
 </hierarchy>`;
 
-  mockAndroidSnapshotXml(xml);
-
-  const result = await snapshotAndroid(device, { interactiveOnly: true });
+  const result = await snapshotAndroidWithHelper(androidSnapshotHelperAdb(xml), {
+    interactiveOnly: true,
+  });
   const scrollArea = result.nodes.find((node) => node.type === 'android.widget.ScrollView');
 
   assert.ok(scrollArea);
@@ -1652,9 +1260,9 @@ test('snapshotAndroid omits zero-area interactive nodes from interactive snapsho
   </node>
 </hierarchy>`;
 
-  mockAndroidSnapshotXml(xml);
-
-  const result = await snapshotAndroid(device, { interactiveOnly: true });
+  const result = await snapshotAndroidWithHelper(androidSnapshotHelperAdb(xml), {
+    interactiveOnly: true,
+  });
 
   assert.equal(
     result.nodes.some((node) => node.label === 'Visible action'),
@@ -1689,9 +1297,9 @@ test('snapshotAndroid preserves bottomed-out hidden-above hints in interactive s
     '        com.facebook.react.views.view.ReactViewGroup{c V.E...... ........ 0,636-390,804 #3}',
   ].join('\n');
 
-  mockAndroidSnapshotXml(xml, dump);
-
-  const result = await snapshotAndroid(device, { interactiveOnly: true });
+  const result = await snapshotAndroidWithHelper(androidSnapshotHelperAdb(xml, dump), {
+    interactiveOnly: true,
+  });
   const scrollArea = result.nodes.find(
     (node) => node.hiddenContentAbove === true || node.hiddenContentBelow === true,
   );

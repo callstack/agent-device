@@ -229,9 +229,11 @@ describe('MaestroRuntimePort', () => {
     );
     expect(gesture).toHaveBeenCalledWith(
       {
-        intent: 'fling',
-        from: { x: 150, y: 240 },
-        to: { x: 300, y: 240 },
+        intent: 'pan',
+        origin: { x: 150, y: 240 },
+        delta: { x: 150, y: 0 },
+        durationMs: 400,
+        executionProfile: 'endpoint-hold',
       },
       expect.objectContaining({
         generation: 1,

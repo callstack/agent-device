@@ -66,6 +66,59 @@ test('delegates lifecycle and coordinate gestures through public daemon commands
   ]);
 });
 
+test('pairs percentage swipe geometry with the nested public gesture request', async () => {
+  const requests: DaemonRequest[] = [];
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      requests.push(request);
+      if (request.command === 'snapshot') {
+        return {
+          ok: true,
+          data: {
+            createdAt: 0,
+            nodes: [
+              {
+                index: 0,
+                type: 'Application',
+                rect: { x: 10, y: 20, width: 400, height: 800 },
+              },
+            ],
+          },
+        };
+      }
+      return { ok: true, data: {} };
+    },
+    dependencies: makeDependencies(),
+    platform: 'android',
+  });
+
+  await port.execute({
+    command: {
+      kind: 'swipe',
+      source: { line: 3 },
+      gesture: {
+        kind: 'coordinates',
+        start: { space: 'percent', x: 90, y: 50 },
+        end: { space: 'percent', x: 10, y: 50 },
+        duration: 300,
+      },
+    },
+    generation: 0,
+    env: {},
+  });
+
+  expect(requests.at(-1)).toMatchObject({
+    command: 'swipe',
+    input: {
+      from: { x: 360, y: 400 },
+      to: { x: 40, y: 400 },
+      durationMs: 300,
+    },
+    internal: { gestureViewport: { x: 0, y: 0, width: 400, height: 800 } },
+  });
+});
+
 test('does not leak replay and test controls into nested public commands', async () => {
   const requests: DaemonRequest[] = [];
   const port = createDaemonMaestroRuntimePort({
@@ -222,194 +275,4 @@ test('takes one final observation when polling wakes after the deadline', async 
     }),
   ).resolves.toMatchObject({ matched: true });
   expect(snapshots).toBe(3);
-});
-
-test('waits for a delayed input target using fresh snapshots', async () => {
-  const requests: DaemonRequest[] = [];
-  let snapshots = 0;
-  const invoke: DaemonInvokeFn = async (request) => {
-    requests.push(request);
-    if (request.command !== 'snapshot') return { ok: true, data: {} };
-    snapshots += 1;
-    return {
-      ok: true,
-      data: {
-        createdAt: snapshots,
-        nodes: [
-          {
-            index: 0,
-            type: 'Application',
-            rect: { x: 0, y: 0, width: 402, height: 874 },
-          },
-          ...(snapshots < 3
-            ? []
-            : [
-                {
-                  index: 1,
-                  parentIndex: 0,
-                  type: 'Button',
-                  identifier: 'delayedButton',
-                  rect: { x: 20, y: 40, width: 120, height: 44 },
-                },
-              ]),
-        ],
-      },
-    };
-  };
-  const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
-    invoke,
-    dependencies: makeDependencies(),
-    platform: 'android',
-  });
-
-  await expect(
-    port.execute({
-      command: {
-        kind: 'tapOn',
-        source: { line: 2 },
-        target: { space: 'target', selector: { id: 'delayedButton' } },
-      },
-      generation: 0,
-      env: {},
-    }),
-  ).resolves.toMatchObject({ mutated: true });
-  expect(requests.map((request) => request.command)).toEqual([
-    'snapshot',
-    'snapshot',
-    'snapshot',
-    'click',
-  ]);
-  expect(requests.at(-1)?.positionals).toEqual(['80', '62']);
-});
-
-test('hands a successful observation snapshot to same-generation target resolution', async () => {
-  const requests: DaemonRequest[] = [];
-  const invoke: DaemonInvokeFn = async (request) => {
-    requests.push(request);
-    if (request.command !== 'snapshot') return { ok: true, data: {} };
-    return {
-      ok: true,
-      data: {
-        createdAt: 0,
-        nodes: [
-          {
-            index: 0,
-            type: 'Application',
-            rect: { x: 0, y: 0, width: 402, height: 874 },
-          },
-          {
-            index: 1,
-            parentIndex: 0,
-            type: 'Text',
-            identifier: 'ready',
-            rect: { x: 20, y: 40, width: 120, height: 44 },
-          },
-          {
-            index: 2,
-            parentIndex: 0,
-            type: 'Button',
-            identifier: 'continue',
-            rect: { x: 20, y: 100, width: 120, height: 44 },
-          },
-        ],
-      },
-    };
-  };
-  const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
-    invoke,
-    dependencies: makeDependencies(),
-    platform: 'ios',
-  });
-
-  const observation = await port.observe({
-    condition: { kind: 'visible', selector: { id: 'ready' } },
-    timeoutMs: 0,
-    generation: 0,
-    env: {},
-  });
-  await expect(
-    port.execute({
-      command: {
-        kind: 'tapOn',
-        source: { line: 2 },
-        target: { space: 'target', selector: { id: 'continue' } },
-      },
-      generation: 0,
-      cachedObservation: observation,
-      env: {},
-    }),
-  ).resolves.toMatchObject({ mutated: true });
-
-  expect(requests.map((request) => request.command)).toEqual(['snapshot', 'click']);
-  expect(requests.at(-1)?.positionals).toEqual(['80', '122']);
-});
-
-test('captures fresh state immediately when a reused observation does not contain the target', async () => {
-  const requests: DaemonRequest[] = [];
-  let snapshots = 0;
-  const invoke: DaemonInvokeFn = async (request) => {
-    requests.push(request);
-    if (request.command !== 'snapshot') return { ok: true, data: {} };
-    snapshots += 1;
-    return {
-      ok: true,
-      data: {
-        createdAt: snapshots,
-        nodes: [
-          {
-            index: 0,
-            type: 'Application',
-            rect: { x: 0, y: 0, width: 402, height: 874 },
-          },
-          {
-            index: 1,
-            parentIndex: 0,
-            type: 'Text',
-            identifier: 'ready',
-            rect: { x: 20, y: 40, width: 120, height: 44 },
-          },
-          ...(snapshots === 1
-            ? []
-            : [
-                {
-                  index: 2,
-                  parentIndex: 0,
-                  type: 'Button',
-                  identifier: 'continue',
-                  rect: { x: 20, y: 100, width: 120, height: 44 },
-                },
-              ]),
-        ],
-      },
-    };
-  };
-  const now = { value: 0 };
-  const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
-    invoke,
-    dependencies: makeDependencies(now),
-    platform: 'ios',
-  });
-
-  const observation = await port.observe({
-    condition: { kind: 'visible', selector: { id: 'ready' } },
-    timeoutMs: 0,
-    generation: 0,
-    env: {},
-  });
-  await port.execute({
-    command: {
-      kind: 'tapOn',
-      source: { line: 2 },
-      target: { space: 'target', selector: { id: 'continue' } },
-    },
-    generation: 0,
-    cachedObservation: observation,
-    env: {},
-  });
-
-  expect(requests.map((request) => request.command)).toEqual(['snapshot', 'snapshot', 'click']);
-  expect(now.value).toBe(0);
 });

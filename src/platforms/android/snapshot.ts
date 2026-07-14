@@ -1,6 +1,5 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { withRetry } from '../../utils/retry.ts';
 import { AppError, normalizeError, toAppErrorCode } from '../../kernel/errors.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
@@ -22,8 +21,6 @@ import {
   type AndroidUiHierarchy,
 } from './ui-hierarchy.ts';
 import {
-  androidAdbResultError,
-  classifyAdbFailure,
   resolveAndroidAdbExecutor,
   resolveAndroidAdbProvider,
   type AndroidAdbProvider,
@@ -51,20 +48,11 @@ import {
   type AndroidHelperContentRecoveryDecision,
 } from './snapshot-content-recovery.ts';
 
-const UI_HIERARCHY_DUMP_TIMEOUT_MS = 8_000;
 const HELPER_INSTALL_TIMEOUT_MS = 30_000;
 const HELPER_CAPTURE_TIMEOUT_MS = 5_000;
 const HELPER_COMMAND_TIMEOUT_MS = 30_000;
 const HELPER_RUNTIME_RESET_DELAY_MS = 150;
 const HELPER_RUNTIME_RESET_TIMEOUT_MS = 2_000;
-// Transient adb transport families (device offline/not found, transport error,
-// connection reset, broken pipe) come from the shared classifier; these extras
-// are snapshot-specific races (dump timeouts, dump-file reads) worth retrying.
-const SNAPSHOT_ONLY_RETRYABLE_ADB_STDERR_PATTERNS = [
-  'timed out',
-  'no such file or directory',
-] as const;
-
 export type AndroidSnapshotOptions = SnapshotOptions & {
   appBundleId?: string;
   helperArtifact?: AndroidSnapshotHelperArtifact;
@@ -201,11 +189,11 @@ async function captureAndroidUiHierarchy(
   }
 
   emitDiagnostic({
-    level: helper.fallbackReason ? 'warn' : 'info',
+    level: 'error',
     phase: 'android_snapshot_helper_unavailable',
-    data: { reason: helper.fallbackReason ?? 'artifact_not_found' },
+    data: { reason: helper.errorReason ?? 'artifact_not_found' },
   });
-  return await captureStockUiHierarchy(device, helper.fallbackReason, adb);
+  throw androidSnapshotHelperUnavailableError(helper.errorReason);
 }
 
 async function captureAndroidUiHierarchyWithHelper(
@@ -218,43 +206,45 @@ async function captureAndroidUiHierarchyWithHelper(
   const adbProvider = resolveAndroidAdbProvider(device, options.helperAdb);
   const commandScopedHelperSession = options.helperSessionScope !== 'daemon-session';
   try {
-    const install = await installAndroidSnapshotHelper(
-      options,
-      adb,
-      adbProvider,
-      artifact,
-      helperDeviceKey,
-    );
-    if (install.installed) {
-      await stopAndroidSnapshotHelperSession(helperDeviceKey);
+    let helperCapture: { xml: string; metadata: AndroidSnapshotBackendMetadata };
+    try {
+      const install = await installAndroidSnapshotHelper(
+        options,
+        adb,
+        adbProvider,
+        artifact,
+        helperDeviceKey,
+      );
+      if (install.installed) {
+        await stopAndroidSnapshotHelperSession(helperDeviceKey);
+      }
+      const capture = await captureAndroidUiHierarchyFromHelper({
+        options,
+        adb,
+        adbProvider,
+        artifact,
+        helperDeviceKey,
+      });
+      helperCapture = formatAndroidHelperCaptureResult(capture, artifact, install.reason);
+    } catch (error) {
+      return await rejectAndroidHelperCaptureFailure({
+        error,
+        helperDeviceKey,
+        artifact,
+        adb,
+      });
     }
-    const capture = await captureAndroidUiHierarchyFromHelper({
-      options,
-      adb,
-      adbProvider,
-      artifact,
-      helperDeviceKey,
-    });
-    const helperCapture = formatAndroidHelperCaptureResult(capture, artifact, install.reason);
+
     const contentRecovery = classifyAndroidHelperContentRecovery(
       helperCapture.xml,
       helperCapture.metadata,
       { foregroundAppPackage: options.appBundleId },
     );
     if (!contentRecovery) return helperCapture;
-    return await recoverAndroidHelperContentUnavailable({
+    return await rejectAndroidHelperContentUnavailable({
       contentRecovery,
       helperDeviceKey,
       artifact,
-      device,
-      adb,
-    });
-  } catch (error) {
-    return await recoverAndroidHelperCaptureFailure({
-      error,
-      helperDeviceKey,
-      artifact,
-      device,
       adb,
     });
   } finally {
@@ -384,44 +374,41 @@ function formatAndroidHelperCaptureResult(
   };
 }
 
-async function recoverAndroidHelperContentUnavailable(params: {
+async function rejectAndroidHelperContentUnavailable(params: {
   contentRecovery: AndroidHelperContentRecoveryDecision;
   helperDeviceKey: string;
   artifact: AndroidSnapshotHelperArtifact;
-  device: DeviceInfo;
   adb: AndroidAdbExecutor;
 }): Promise<{ xml: string; metadata: AndroidSnapshotBackendMetadata }> {
   emitDiagnostic({
-    level: 'warn',
-    phase: 'android_snapshot_helper_content_fallback',
+    level: 'error',
+    phase: 'android_snapshot_helper_content_invalid',
     data: {
       reason: params.contentRecovery.reason,
-      fallbackReason: params.contentRecovery.fallbackReason,
+      failureReason: params.contentRecovery.failureReason,
       ...params.contentRecovery.diagnostics,
     },
   });
   await resetAndroidSnapshotHelperRuntime(params.adb, params.artifact.manifest.packageName);
-  return await captureStockUiHierarchy(
-    params.device,
-    params.contentRecovery.fallbackReason,
-    params.adb,
-  );
+  throw new AppError('COMMAND_FAILED', params.contentRecovery.failureReason, {
+    ...params.contentRecovery.diagnostics,
+    androidSnapshotHelperFailureReason: params.contentRecovery.reason,
+    retriable: true,
+    hint: 'Retry after the app UI stabilizes. If this persists, capture a screenshot and report the helper diagnostics; agent-device does not substitute a second snapshot engine.',
+  });
 }
 
-async function recoverAndroidHelperCaptureFailure(params: {
+async function rejectAndroidHelperCaptureFailure(params: {
   error: unknown;
   helperDeviceKey: string;
   artifact: AndroidSnapshotHelperArtifact;
-  device: DeviceInfo;
   adb: AndroidAdbExecutor;
 }): Promise<{ xml: string; metadata: AndroidSnapshotBackendMetadata }> {
-  const busyError = formatAndroidSnapshotHelperBusyError(params.error);
-  if (busyError) throw busyError;
-  const fallbackReason = formatAndroidSnapshotHelperFallbackReason(params.error);
+  const failureReason = formatAndroidSnapshotHelperFailureReason(params.error);
   emitDiagnostic({
-    level: 'warn',
-    phase: 'android_snapshot_helper_fallback',
-    data: { reason: fallbackReason },
+    level: 'error',
+    phase: 'android_snapshot_helper_failed',
+    data: { reason: failureReason },
   });
   await stopAndroidSnapshotHelperSession(params.helperDeviceKey);
   await resetAndroidSnapshotHelperRuntime(params.adb, params.artifact.manifest.packageName);
@@ -430,7 +417,7 @@ async function recoverAndroidHelperCaptureFailure(params: {
     packageName: params.artifact.manifest.packageName,
     versionCode: params.artifact.manifest.versionCode,
   });
-  return await captureStockUiHierarchy(params.device, fallbackReason, params.adb);
+  throw androidSnapshotHelperCaptureError(params.error, failureReason);
 }
 
 async function resetAndroidSnapshotHelperRuntime(
@@ -457,7 +444,7 @@ async function resetAndroidSnapshotHelperRuntime(
   }
 }
 
-function formatAndroidSnapshotHelperFallbackReason(error: unknown): string {
+function formatAndroidSnapshotHelperFailureReason(error: unknown): string {
   const normalized = normalizeError(error);
   const helperMessage = readHelperMessage(normalized.details?.helper);
   if (helperMessage && helperMessage !== normalized.message) {
@@ -470,22 +457,21 @@ function formatAndroidSnapshotHelperFallbackReason(error: unknown): string {
   return firstLine ? `${normalized.message}: ${firstLine}` : normalized.message;
 }
 
-function formatAndroidSnapshotHelperBusyError(error: unknown): AppError | undefined {
+function androidSnapshotHelperCaptureError(error: unknown, reason: string): AppError {
   const normalized = normalizeError(error);
-  if (
-    !isStructuredHelperTimeout(normalized.details?.helper, normalized.message) &&
-    !isKilledHelperInstrumentationFailure(normalized)
-  ) {
-    return undefined;
-  }
-  const reason = formatAndroidSnapshotHelperFallbackReason(error);
-  const hint =
-    'Android accessibility snapshots can be blocked by busy or continuously changing app UI. Use screenshot as visual truth after this timeout and report the busy UI if it persists.';
+  const busy =
+    isStructuredHelperTimeout(normalized.details?.helper, normalized.message) ||
+    isKilledHelperInstrumentationFailure(normalized);
+  const hint = busy
+    ? 'Android accessibility snapshots can be blocked by busy or continuously changing app UI. Use screenshot as visual truth after this timeout and report the busy UI if it persists.'
+    : (normalized.hint ??
+      'Retry once. If the helper still fails, run agent-device doctor and report the diagnostic log; agent-device does not substitute a second snapshot engine.');
   return new AppError(
     toAppErrorCode(normalized.code),
-    `${reason}. Stock UIAutomator fallback was skipped because this usually means the Android accessibility tree is busy or stalled.`,
+    `Android snapshot helper failed: ${reason}`,
     {
       ...normalized.details,
+      androidSnapshotHelperFailureReason: reason,
       hint,
     },
     error,
@@ -517,7 +503,7 @@ function isStructuredHelperTimeout(helper: unknown, fallbackMessage: string): bo
 
 async function resolveAndroidSnapshotHelperArtifact(
   explicitArtifact?: AndroidSnapshotHelperArtifact,
-): Promise<{ artifact?: AndroidSnapshotHelperArtifact; fallbackReason?: string }> {
+): Promise<{ artifact?: AndroidSnapshotHelperArtifact; errorReason?: string }> {
   if (explicitArtifact) {
     return { artifact: explicitArtifact };
   }
@@ -546,55 +532,16 @@ async function resolveAndroidSnapshotHelperArtifact(
     await fs.access(apkPath);
     return { artifact: { apkPath, manifest } };
   } catch (error) {
-    return { fallbackReason: normalizeError(error).message };
+    return { errorReason: normalizeError(error).message };
   }
 }
 
-async function captureStockUiHierarchy(
-  device: DeviceInfo,
-  fallbackReason?: string,
-  adb?: AndroidAdbExecutor,
-): Promise<{ xml: string; metadata: AndroidSnapshotBackendMetadata }> {
-  let xml: string;
-  try {
-    xml = await withDiagnosticTimer(
-      'android_snapshot_stock_capture',
-      async () => await dumpUiHierarchy(device, adb),
-      {
-        fallbackReason,
-        timeoutMs: UI_HIERARCHY_DUMP_TIMEOUT_MS,
-      },
-    );
-  } catch (error) {
-    if (fallbackReason) {
-      throw enrichStockSnapshotFailureWithHelperReason(error, fallbackReason);
-    }
-    throw error;
-  }
-  return {
-    xml,
-    metadata: {
-      backend: 'uiautomator-dump',
-      ...(fallbackReason ? { fallbackReason } : {}),
-    },
-  };
-}
-
-function enrichStockSnapshotFailureWithHelperReason(
-  error: unknown,
-  fallbackReason: string,
-): AppError {
-  const normalized = normalizeError(error);
-  return new AppError(
-    toAppErrorCode(normalized.code),
-    `${normalized.message} Android snapshot helper failed before stock fallback: ${fallbackReason}`,
-    {
-      ...normalized.details,
-      androidSnapshotHelperFallbackReason: fallbackReason,
-      ...(normalized.hint ? { hint: normalized.hint } : {}),
-    },
-    error,
-  );
+function androidSnapshotHelperUnavailableError(errorReason: string | undefined): AppError {
+  const reason = errorReason ?? 'the bundled helper artifact was not found';
+  return new AppError('COMMAND_FAILED', `Android snapshot helper is unavailable: ${reason}`, {
+    androidSnapshotHelperFailureReason: reason,
+    hint: 'For a source checkout, run pnpm build:android. For a packaged install, reinstall agent-device; the Android snapshot helper must ship with the package.',
+  });
 }
 
 async function deriveScrollableContentHintsIfNeeded(
@@ -638,110 +585,6 @@ function collectExistingHiddenContentHints(
     }
   }
   return hintsByIndex;
-}
-
-export async function dumpUiHierarchy(
-  device: DeviceInfo,
-  adb = resolveAndroidAdbExecutor(device),
-): Promise<string> {
-  try {
-    return await withRetry(() => dumpUiHierarchyOnce(adb), {
-      shouldRetry: isRetryableAdbError,
-    });
-  } catch (error) {
-    if (isUiHierarchyDumpTimeout(error)) {
-      const hint =
-        'Android accessibility snapshots can be blocked by busy or continuously changing app UI. Use screenshot as visual truth after this timeout. Stock Android UIAutomator may still time out on app-owned infinite animations.';
-      throw new AppError(
-        'COMMAND_FAILED',
-        `Android UI hierarchy dump timed out while waiting for the UI to become idle. ${hint}`,
-        {
-          ...(error.details ?? {}),
-          hint,
-        },
-        error,
-      );
-    }
-    throw error;
-  }
-}
-
-async function dumpUiHierarchyOnce(adb: AndroidAdbExecutor): Promise<string> {
-  // Preferred: stream XML directly to stdout, avoiding file I/O race conditions.
-  const streamed = await adb(['exec-out', 'uiautomator', 'dump', '/dev/tty'], {
-    allowFailure: true,
-    timeoutMs: UI_HIERARCHY_DUMP_TIMEOUT_MS,
-  });
-  const fromStream = extractUiDumpXml(streamed.stdout, streamed.stderr);
-  if (fromStream) return fromStream;
-
-  // Fallback: dump to file and read back.
-  // If `cat` fails with "no such file", the outer withRetry (via isRetryableAdbError) handles it.
-  const dumpPath = '/sdcard/window_dump.xml';
-  const dumpResult = await adb(['shell', 'uiautomator', 'dump', dumpPath], {
-    allowFailure: true,
-    timeoutMs: UI_HIERARCHY_DUMP_TIMEOUT_MS,
-  });
-  const reportedPath = readDumpPath(dumpResult.stdout, dumpResult.stderr);
-  if (dumpResult.exitCode !== 0 && !reportedPath) {
-    throw androidAdbResultError('uiautomator dump did not return XML', dumpResult, {
-      reason: 'missing_fresh_dump',
-    });
-  }
-  const actualPath = reportedPath ?? dumpPath;
-
-  const result = await adb(['shell', 'cat', actualPath]);
-  const xml = extractUiDumpXml(result.stdout, result.stderr);
-  if (!xml) {
-    throw new AppError('COMMAND_FAILED', 'uiautomator dump did not return XML', {
-      stdout: result.stdout,
-      stderr: result.stderr,
-    });
-  }
-  return xml;
-}
-
-function readDumpPath(stdout: string, stderr: string): string | undefined {
-  const text = `${stdout}\n${stderr}`;
-  const match = /dumped to:\s*(\S+)/i.exec(text);
-  return match?.[1];
-}
-
-function extractUiDumpXml(stdout: string, stderr: string): string | null {
-  const text = `${stdout}\n${stderr}`;
-  const start = text.indexOf('<?xml');
-  const hierarchyStart = start >= 0 ? start : text.indexOf('<hierarchy');
-  if (hierarchyStart < 0) return null;
-  const end = text.lastIndexOf('</hierarchy>');
-  if (end < 0 || end < hierarchyStart) return null;
-  const xml = text.slice(hierarchyStart, end + '</hierarchy>'.length).trim();
-  return xml.length > 0 ? xml : null;
-}
-
-function isRetryableAdbError(err: unknown): boolean {
-  if (!(err instanceof AppError)) return false;
-  if (err.code !== 'COMMAND_FAILED') return false;
-  const rawStderr = err.details?.stderr;
-  const stderr = (typeof rawStderr === 'string' ? rawStderr : '').toLowerCase();
-  if (classifyAdbFailure(stderr)?.retriable === true) return true;
-  return SNAPSHOT_ONLY_RETRYABLE_ADB_STDERR_PATTERNS.some((pattern) => stderr.includes(pattern));
-}
-
-function isUiHierarchyDumpTimeout(err: unknown): err is AppError {
-  if (!(err instanceof AppError)) return false;
-  if (err.code !== 'COMMAND_FAILED') return false;
-  const timeoutMs = err.details?.timeoutMs;
-  if (typeof timeoutMs !== 'number') return false;
-  return err.details?.cmd === 'adb' && isUiAutomatorDumpArgs(err.details?.args);
-}
-
-function isUiAutomatorDumpArgs(rawArgs: unknown): boolean {
-  const args = Array.isArray(rawArgs)
-    ? rawArgs.map(String)
-    : typeof rawArgs === 'string'
-      ? rawArgs.split(/\s+/)
-      : [];
-  return args.includes('uiautomator') && args.includes('dump');
 }
 
 async function dumpActivityTop(

@@ -199,6 +199,7 @@ async function resolveTapOnTarget(
         : MAESTRO_INPUT_TARGET_TIMEOUT_MS,
     index: command.index,
     childOf: command.childOf,
+    allowAtomicSelectorDispatch: command.repeat === undefined && command.delay === undefined,
   };
   return command.optional === true
     ? await resolveInputTarget(command.target, query, request, operations, true)

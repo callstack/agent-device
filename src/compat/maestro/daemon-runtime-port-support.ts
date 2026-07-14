@@ -31,17 +31,29 @@ export async function invokeMaestroPublicCommand(
   options: CreateDaemonMaestroRuntimeOperationsOptions,
   command: string,
   positionals: string[],
-  requestOptions: { input?: Record<string, unknown>; flags?: CommandFlags } = {},
+  requestOptions: {
+    input?: Record<string, unknown>;
+    flags?: CommandFlags;
+    internal?: DaemonRequest['internal'];
+  } = {},
 ): Promise<DaemonResponseData | undefined> {
-  const { input, flags } = requestOptions;
-  const { input: _baseInput, flags: baseFlags, ...baseReq } = options.baseReq;
+  const { input, flags, internal: requestInternal } = requestOptions;
+  const {
+    input: _baseInput,
+    flags: baseFlags,
+    internal: baseInternal,
+    ...baseReq
+  } = options.baseReq;
   const effectiveFlags = flags ?? stripReplayControlFlags(baseFlags);
+  const effectiveInternal =
+    requestInternal === undefined ? baseInternal : { ...baseInternal, ...requestInternal };
   const response = await options.invoke({
     ...baseReq,
     command,
     positionals,
     ...(input === undefined ? {} : { input }),
     ...(effectiveFlags === undefined ? {} : { flags: effectiveFlags }),
+    ...(effectiveInternal === undefined ? {} : { internal: effectiveInternal }),
   });
   if (!response.ok) throw daemonResponseError(response);
   return response.data;

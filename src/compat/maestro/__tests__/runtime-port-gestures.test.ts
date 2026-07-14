@@ -62,6 +62,7 @@ test('uses the structured gesture contract without observing absolute swipes', a
       origin: { x: 100, y: 200 },
       delta: { x: 200, y: 0 },
       durationMs: 240,
+      executionProfile: 'endpoint-hold',
     },
     expect.objectContaining({
       generation: 0,
@@ -76,9 +77,11 @@ test('uses the structured gesture contract without observing absolute swipes', a
   expect(gesture).toHaveBeenNthCalledWith(
     2,
     {
-      intent: 'fling',
-      from: { x: 370, y: 420 },
-      to: { x: 50, y: 420 },
+      intent: 'pan',
+      origin: { x: 370, y: 420 },
+      delta: { x: -320, y: 0 },
+      durationMs: 400,
+      executionProfile: 'endpoint-hold',
     },
     expect.objectContaining({
       generation: 1,
@@ -93,6 +96,7 @@ test('uses the structured gesture contract without observing absolute swipes', a
       origin: { x: 210, y: 140 },
       delta: { x: 0, y: 560 },
       durationMs: 300,
+      executionProfile: 'endpoint-hold',
     },
     expect.objectContaining({
       generation: 2,
@@ -102,7 +106,12 @@ test('uses the structured gesture contract without observing absolute swipes', a
   );
   expect(gesture).toHaveBeenNthCalledWith(
     4,
-    { intent: 'fling', preset: 'left' },
+    {
+      intent: 'pan',
+      preset: 'left',
+      durationMs: 400,
+      executionProfile: 'endpoint-hold',
+    },
     expect.objectContaining({
       generation: 3,
       authoredSwipe: { kind: 'screen', direction: 'left' },

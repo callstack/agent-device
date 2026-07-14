@@ -12,7 +12,7 @@ const INSUFFICIENT_APP_CONTENT_REASON =
 
 export type AndroidHelperContentRecoveryDecision = {
   reason: 'empty-helper-output' | 'system-window-only' | 'content-poor-app-window';
-  fallbackReason: string;
+  failureReason: string;
   diagnostics: {
     helperNodeCount: number;
     helperWindowRootCount: number;
@@ -138,11 +138,11 @@ function buildRecoveryDecision(
   summary: AndroidHelperXmlSummary,
   metadata: AndroidSnapshotBackendMetadata,
   reason: AndroidHelperContentRecoveryDecision['reason'],
-  fallbackReason: string,
+  failureReason: string,
 ): AndroidHelperContentRecoveryDecision {
   return {
     reason,
-    fallbackReason,
+    failureReason,
     diagnostics: buildRecoveryDiagnostics(summary, metadata),
   };
 }

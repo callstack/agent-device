@@ -39,13 +39,17 @@ The engine has five responsibilities:
 3. The runtime port exposes typed app, input, observation, target, and single-pointer gesture
    operations backed by the existing agent-device runtime and platform adapters.
 4. One explicit execution context owns variables and the current observation generation. A mutation
-   invalidates that generation; reads may reuse evidence only within the same generation.
+   invalidates that generation; reads may reuse semantic evidence only within the same generation.
+   Geometry is action-local and is never carried across command boundaries.
 5. An observer adapts source-aware progress, traces, artifacts, and failures to the existing replay and
    test result contracts. Observer telemetry is redacted and best-effort; trace persistence cannot
    change command success or failure.
 
 The engine does not implement platform input. Absolute swipes resolve without a viewport query.
 Percentage and preset swipes resolve against the cheapest fresh interaction viewport available.
+When normalization already resolves a viewport, the adapter pairs it with the nested public gesture
+request as daemon-internal metadata. ADR 0013 planning consumes that exact frame instead of probing
+the platform a second time.
 Target-relative swipes reuse the target-resolution observation. The resulting typed single-pointer
 motion enters ADR 0013 after public compatibility normalization. Maestro code cannot construct or
 execute two-pointer pan, pinch, rotate, transform, or physical pointer trajectories.
@@ -57,11 +61,14 @@ fallback. Raw hierarchies, screenshots, and complete candidate lists are failure
 happy-path requirements.
 
 The daemon adapter may retain the provider snapshot behind a successful observation without exposing it
-through the engine contract. A following target resolution may consume that snapshot only when the
-engine presents the exact same-generation observation produced from that snapshot. A miss captures fresh
-state immediately before polling. Every mutating attempt invalidates retained evidence before a retry,
-including an attempt whose dispatch reports failure, because the adapter cannot prove the app stayed
-unchanged.
+through the engine contract. A following target resolution may use that snapshot only as semantic
+evidence. On iOS, a unique exact match may be dispatched as a selector so XCTest resolves geometry and
+taps atomically; a structured live-selector miss, ambiguity, or off-screen result falls back to fresh
+Maestro resolution. All other targets capture fresh geometry before coordinate dispatch. Visibility can
+be true while a scroll view or tab strip is still moving, so an observation frame is never authoritative
+for a later interaction, even within the same mutation generation. Every mutating attempt invalidates
+retained evidence before dispatch, including an attempt whose dispatch reports failure, because the
+adapter cannot prove the app stayed unchanged.
 
 Upstream Maestro is a version-pinned development oracle, not a production dependency. Opt-in fixture
 generation and scheduled conformance runs compare syntax, normalized command intent, and app-observable
@@ -74,8 +81,9 @@ The migration cannot switch production routing until Android and iOS satisfy all
 and react-navigation corpora:
 
 - total wall time is no slower than the pre-migration compatibility engine;
-- successful simple target operations perform at most one provider query;
-- hierarchy capture count does not increase;
+- successful simple target interactions perform at most one provider query; an atomic iOS selector tap
+  may reuse same-generation semantic evidence while resolving live geometry inside XCTest;
+- no command captures a second hierarchy merely to re-verify evidence produced within that command;
 - absolute coordinate swipes perform no viewport or accessibility capture;
 - percentage swipe conversion preserves authored endpoints exactly;
 - helper/runner startup remains amortized across a suite;

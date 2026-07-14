@@ -3421,6 +3421,7 @@ function singlePanPlan(): Extract<GesturePlan, { topology: 'single' }> {
   return {
     topology: 'single',
     intent: 'pan',
+    executionProfile: 'timed-pan',
     durationMs: 500,
     viewport: { x: 0, y: 0, width: 400, height: 800 },
     pointers: [

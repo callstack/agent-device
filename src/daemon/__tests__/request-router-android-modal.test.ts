@@ -33,7 +33,7 @@ vi.mock('../../platforms/android/snapshot.ts', async (importOriginal) => {
     snapshotAndroid: vi.fn(async () => {
       snapshotCalls += 1;
       if (snapshotMode === 'throws') {
-        throw new Error('uiautomator dump did not return XML');
+        throw new Error('Android snapshot helper did not return XML');
       }
       if (snapshotCalls === 1) {
         return {

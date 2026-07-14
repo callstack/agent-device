@@ -1,6 +1,6 @@
 import type { CommandFlags } from '../../core/dispatch.ts';
 import { getSnapshotReferenceFrame } from '../../daemon/touch-reference-frame.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError, asAppError } from '../../kernel/errors.ts';
 import type { Rect, SnapshotState } from '../../kernel/snapshot.ts';
 import { executeRunScriptFile } from './run-script-execution.ts';
 import { executeMaestroRuntimeCommand } from './runtime-port-commands.ts';
@@ -12,13 +12,16 @@ import type {
   MaestroRuntimeResult,
 } from './engine-types.ts';
 import type {
+  MaestroDispatchSelector,
   MaestroRuntimeOperationContext,
   MaestroRuntimeOperations,
   MaestroTargetMatch,
   MaestroTargetQuery,
 } from './runtime-port-types.ts';
+import { pointInsideRect } from '../../utils/rect-center.ts';
 import {
   MAESTRO_OBSERVATION_POLL_MS,
+  captureRetriableMaestroSnapshot,
   observeTypedMaestroCondition,
   resolveTypedMaestroPreferredContext,
   resolveTypedMaestroTarget,
@@ -40,6 +43,9 @@ import {
   type CreateDaemonMaestroRuntimeOperationsOptions,
 } from './daemon-runtime-port-support.ts';
 
+// Maestro's default waitForAppToSettle loop is bounded to ten 200 ms polls.
+const MAESTRO_TEXT_SETTLE_TIMEOUT_MS = 2_000;
+
 export type { DaemonMaestroRuntimeDependencies } from './daemon-runtime-port-observation.ts';
 export type {
   CreateDaemonMaestroRuntimeOperationsOptions,
@@ -55,8 +61,28 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
   const invoke = (
     command: string,
     positionals: string[],
-    requestOptions: { input?: Record<string, unknown>; flags?: CommandFlags } = {},
+    requestOptions: Parameters<typeof invokeMaestroPublicCommand>[3] = {},
   ) => invokeMaestroPublicCommand(options, command, positionals, requestOptions);
+  const invokeMutation = (
+    command: string,
+    positionals: string[],
+    requestOptions: Parameters<typeof invokeMaestroPublicCommand>[3] = {},
+  ) => {
+    snapshots.invalidate();
+    return invoke(command, positionals, requestOptions);
+  };
+  const typeTextAndSettle = async (
+    text: string,
+    context: MaestroRuntimeOperationContext,
+  ): Promise<void> => {
+    await invokeMutation('type', [text]);
+    await waitForTypedSnapshotStability({
+      timeoutMs: MAESTRO_TEXT_SETTLE_TIMEOUT_MS,
+      context,
+      snapshot: snapshots.capture,
+      dependencies: options.dependencies,
+    });
+  };
 
   const operations: MaestroRuntimeOperations = {
     resolveTarget: async (input, context) =>
@@ -85,7 +111,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
       ];
       const clearState = input.clearState === true;
       const relaunch = !clearState && input.stopApp !== false;
-      await invoke('open', appId ? [appId] : [], {
+      await invokeMutation('open', appId ? [appId] : [], {
         flags: flagsWith(options.baseReq.flags, {
           ...(relaunch ? { relaunch: true } : {}),
           ...(clearState ? { clearAppState: true } : {}),
@@ -95,49 +121,53 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     },
     stopApp: async (input, context) => {
       const appId = input.appId ?? context.appId;
-      await invoke('close', appId ? [appId] : []);
+      await invokeMutation('close', appId ? [appId] : []);
     },
     openLink: async (input, context) => {
       const positionals = context.appId ? [context.appId, input.link] : [input.link];
-      await invoke('open', positionals, {
+      await invokeMutation('open', positionals, {
         flags: flagsWith(options.baseReq.flags, {
           ...(platform === 'ios' ? { maestro: { prewarmRunnerBeforeOpen: true } } : {}),
         }),
       });
     },
 
-    tapOn: async (input) =>
-      await clickTarget(options, input.target.point, {
+    tapOn: async (input, context) =>
+      await tapTarget(options, snapshots, input.target, context, {
         count: input.repeat,
         intervalMs: input.delay,
         postGestureStabilization: true,
       }),
-    doubleTapOn: async (input) =>
+    doubleTapOn: async (input) => {
+      snapshots.invalidate();
       await clickTarget(options, input.target.point, {
         doubleTap: true,
         ...(input.delay === undefined ? {} : { intervalMs: input.delay }),
         postGestureStabilization: true,
-      }),
-    longPressOn: async (input) =>
+      });
+    },
+    longPressOn: async (input) => {
+      snapshots.invalidate();
       await clickTarget(options, input.target.point, {
         holdMs: 3_000,
         postGestureStabilization: true,
-      }),
+      });
+    },
     gesture: async (input, context) => {
       const request = publicGestureRequest(input, context);
-      await invoke(request.command, [], { input: request.input });
+      await invokeMutation(request.command, [], {
+        input: request.input,
+        ...(context.gestureViewport
+          ? { internal: { gestureViewport: context.gestureViewport } }
+          : {}),
+      });
     },
-    inputText: async (input) => {
-      await invoke('type', [input.text]);
-    },
-    eraseText: async (input) => {
-      await invoke('type', ['\b'.repeat(input.charactersToErase ?? 50)]);
-    },
-    pasteText: async (input) => {
-      await invoke('type', [input.text]);
-    },
+    inputText: async (input, context) => await typeTextAndSettle(input.text, context),
+    eraseText: async (input, context) =>
+      await typeTextAndSettle('\b'.repeat(input.charactersToErase ?? 50), context),
+    pasteText: async (input, context) => await typeTextAndSettle(input.text, context),
     scroll: async (input) => {
-      await invoke('scroll', [input.direction]);
+      await invokeMutation('scroll', [input.direction]);
     },
     scrollUntilVisible: async (input, context) => {
       const match = await scrollUntilTypedMaestroTarget({
@@ -149,7 +179,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
         dependencies: options.dependencies,
         platform,
         scroll: async () => {
-          await invoke('scroll', [input.direction]);
+          await invokeMutation('scroll', [input.direction]);
         },
       });
       if (!match.matched || !match.visible) {
@@ -163,21 +193,21 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     },
     pressKey: async (input) => {
       if (input.key === 'back' || input.key === 'home') {
-        await invoke(input.key, []);
+        await invokeMutation(input.key, []);
         return;
       }
       try {
-        await invoke('keyboard', [input.key]);
+        await invokeMutation('keyboard', [input.key]);
       } catch (error) {
         if (input.key !== 'enter' && input.key !== 'return') throw error;
-        await invoke('type', ['\n']);
+        await invokeMutation('type', ['\n']);
       }
     },
     back: async () => {
-      await invoke('back', []);
+      await invokeMutation('back', []);
     },
     hideKeyboard: async () => {
-      await invoke('keyboard', ['dismiss']);
+      await invokeMutation('keyboard', ['dismiss']);
     },
     waitForAnimationToEnd: async (input, context) =>
       await waitForTypedSnapshotStability({
@@ -208,14 +238,19 @@ async function resolveDaemonMaestroTarget(params: {
   context: MaestroRuntimeOperationContext;
   snapshots: MaestroSnapshotSource;
   options: CreateDaemonMaestroRuntimeOperationsOptions;
+  allowObservationReuse?: boolean;
 }): Promise<MaestroTargetMatch> {
   const { input, context, snapshots, options } = params;
   const deadline = options.dependencies.now() + input.timeoutMs;
-  let currentSnapshot = snapshots.reuseObservation(context);
+  let currentSnapshot =
+    params.allowObservationReuse === false ? undefined : snapshots.reuseObservation(context);
   while (true) {
     const captureStartedAt = options.dependencies.now();
     const reusedObservation = currentSnapshot !== undefined;
-    currentSnapshot ??= await snapshots.capture(context);
+    currentSnapshot ??= await captureRetriableMaestroSnapshot(
+      { context, snapshot: snapshots.capture, dependencies: options.dependencies },
+      deadline,
+    );
     const match = await resolveTypedMaestroTarget({
       query: input,
       context,
@@ -223,7 +258,12 @@ async function resolveDaemonMaestroTarget(params: {
       platform: options.platform,
       preferredContext: preferredContextForObservation(context, currentSnapshot, options.platform),
     });
-    if (isActionableTarget(match) || captureStartedAt >= deadline) return match;
+    if (
+      canUseResolvedTarget(match, options.platform, reusedObservation) ||
+      captureStartedAt >= deadline
+    ) {
+      return match;
+    }
     currentSnapshot = undefined;
     if (!reusedObservation) await sleepBeforeTargetPoll(options, deadline, context.signal);
   }
@@ -241,6 +281,15 @@ function preferredContextForObservation(
 
 function isActionableTarget(match: MaestroTargetMatch): boolean {
   return match.matched && match.visible && match.rect !== undefined;
+}
+
+function canUseResolvedTarget(
+  match: MaestroTargetMatch,
+  platform: CreateDaemonMaestroRuntimeOperationsOptions['platform'],
+  reusedObservation: boolean,
+): boolean {
+  if (!isActionableTarget(match)) return false;
+  return !reusedObservation || platform === 'android' || match.dispatchSelector !== undefined;
 }
 
 async function sleepBeforeTargetPoll(
@@ -295,7 +344,66 @@ function createSnapshotSource(
       if (cached?.generation !== context.generation) return undefined;
       return cached.observation === context.cachedObservation ? cached.snapshot : undefined;
     },
+    invalidate: () => {
+      cached = undefined;
+    },
   };
+}
+
+async function tapTarget(
+  options: CreateDaemonMaestroRuntimeOperationsOptions,
+  snapshots: MaestroSnapshotSource,
+  target: Parameters<MaestroRuntimeOperations['tapOn']>[0]['target'],
+  context: MaestroRuntimeOperationContext,
+  flags: Partial<CommandFlags>,
+): Promise<void> {
+  const dispatchSelector = target.resolution?.dispatchSelector;
+  if (dispatchSelector) {
+    const resolution = target.resolution!;
+    snapshots.invalidate();
+    try {
+      await clickSelector(options, dispatchSelector, flags);
+      return;
+    } catch (error) {
+      if (!isAtomicSelectorFallbackError(error)) throw error;
+      const refreshed = await resolveDaemonMaestroTarget({
+        input: resolution.query,
+        context,
+        snapshots,
+        options,
+        allowObservationReuse: false,
+      });
+      if (!isActionableTarget(refreshed)) throw error;
+      snapshots.invalidate();
+      await clickTarget(options, pointInsideRect(refreshed.rect!), flags);
+      return;
+    }
+  }
+  snapshots.invalidate();
+  await clickTarget(options, target.point, flags);
+}
+
+async function clickSelector(
+  options: CreateDaemonMaestroRuntimeOperationsOptions,
+  selector: MaestroDispatchSelector,
+  flags: Partial<CommandFlags>,
+): Promise<void> {
+  await invokeMaestroPublicCommand(
+    options,
+    'click',
+    [`${selector.key}=${JSON.stringify(selector.value)}`],
+    {
+      flags: flagsWith(options.baseReq.flags, {
+        ...flags,
+        maestro: { allowNonHittableCoordinateFallback: true },
+      }),
+    },
+  );
+}
+
+function isAtomicSelectorFallbackError(error: unknown): boolean {
+  const code = asAppError(error).code;
+  return code === 'AMBIGUOUS_MATCH' || code === 'ELEMENT_NOT_FOUND' || code === 'ELEMENT_OFFSCREEN';
 }
 
 async function clickTarget(

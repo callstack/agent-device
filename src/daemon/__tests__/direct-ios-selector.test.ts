@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import { AppError } from '../../kernel/errors.ts';
 import { isDirectIosSelectorFallbackError } from '../direct-ios-selector.ts';
 
-test('runner ELEMENT_OFFSCREEN always falls back to tree-based resolution', () => {
+test('runner ELEMENT_OFFSCREEN delegates normally but stays typed for Maestro replay', () => {
   const error = new AppError('ELEMENT_OFFSCREEN', 'element resolved off-screen at (-161, 265)');
   assert.equal(isDirectIosSelectorFallbackError(error), true);
   assert.equal(isDirectIosSelectorFallbackError(error, { allowElementNotFound: false }), true);
-  assert.equal(isDirectIosSelectorFallbackError(error, { delegateSemanticFailures: false }), true);
+  assert.equal(isDirectIosSelectorFallbackError(error, { delegateSemanticFailures: true }), true);
+  assert.equal(isDirectIosSelectorFallbackError(error, { delegateSemanticFailures: false }), false);
 });
 
 test('runner ELEMENT_NOT_FOUND falls back for query callers that allow it', () => {

@@ -87,6 +87,7 @@ export async function resolveMaestroTarget(
   return {
     kind: 'selector',
     selector,
+    query: { selector, ...query },
     ...validated,
     rect: validated.rect,
   };

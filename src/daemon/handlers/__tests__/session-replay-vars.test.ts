@@ -74,6 +74,9 @@ async function runReplayFixture(params: {
       flags: req.flags,
     });
     if (params.invoke) return await params.invoke(req);
+    if (isMaestro && req.command === 'snapshot') {
+      return { ok: true, data: { createdAt: 0, nodes: [] } };
+    }
     return { ok: true, data: {} };
   };
   const response = await runReplayScriptFile({
@@ -619,6 +622,7 @@ test('runReplayScriptFile applies CLI env overrides before Maestro compat mappin
     ].join('\n'),
     flags: {
       replayBackend: 'maestro',
+      platform: 'android',
       replayShellEnv: { AD_VAR_BUTTON_ID: 'shell-button' },
       replayEnv: ['APP_ID=cli-app'],
     },
@@ -678,7 +682,11 @@ output.result = SERVER_PATH + ':' + json(res.body).appviewDid
   assert.equal(response.ok, true);
   assert.deepEqual(
     calls.map((call) => [call.command, call.positionals]),
-    [['type', ['local:did:plc:test']]],
+    [
+      ['type', ['local:did:plc:test']],
+      ['snapshot', []],
+      ['snapshot', []],
+    ],
   );
 });
 
@@ -731,7 +739,11 @@ output.result = parsed.method + ':' + json(parsed.body).ok
     assert.equal(response.ok, true);
     assert.deepEqual(
       calls.map((call) => [call.command, call.positionals]),
-      [['type', ['POST:true']]],
+      [
+        ['type', ['POST:true']],
+        ['snapshot', []],
+        ['snapshot', []],
+      ],
     );
   } finally {
     server.child.kill();
@@ -766,7 +778,11 @@ output.result = [
   assert.equal(response.ok, true);
   assert.deepEqual(
     calls.map((call) => [call.command, call.positionals]),
-    [['type', ['false:false:false:2']]],
+    [
+      ['type', ['false:false:false:2']],
+      ['snapshot', []],
+      ['snapshot', []],
+    ],
   );
 });
 
@@ -1295,7 +1311,7 @@ test('runReplayScriptFile retries Maestro id tapOn through snapshot coordinates'
   const { response } = await runReplayFixture({
     label: 'maestro-tap-on-retry',
     script: ['appId: demo.app', '---', '- tapOn:', '    id: delayedButton', ''].join('\n'),
-    flags: { replayBackend: 'maestro' },
+    flags: { replayBackend: 'maestro', platform: 'android' },
     invoke: async (req) => {
       calls.push({ command: req.command, positionals: req.positionals, flags: req.flags });
       if (req.command === 'snapshot') {
@@ -1410,7 +1426,7 @@ test('runReplayScriptFile lets snapshot id tap handle Maestro one-point edge con
   const { response } = await runReplayFixture({
     label: 'maestro-tap-edge-rect',
     script: ['appId: demo.app', '---', '- tapOn:', '    id: hiddenTestLogin', ''].join('\n'),
-    flags: { replayBackend: 'maestro' },
+    flags: { replayBackend: 'maestro', platform: 'android' },
     invoke: async (req) => {
       calls.push({ command: req.command, positionals: req.positionals, flags: req.flags });
       if (req.command === 'snapshot') {
@@ -1454,7 +1470,7 @@ test('runReplayScriptFile resolves a text-entry target once before typing', asyn
       '- pressKey: Enter',
       '',
     ].join('\n'),
-    flags: { replayBackend: 'maestro' },
+    flags: { replayBackend: 'maestro', platform: 'android' },
     invoke: async (req) => {
       calls.push({ command: req.command, positionals: req.positionals, flags: req.flags });
       if (req.command === 'snapshot') {
@@ -1482,6 +1498,8 @@ test('runReplayScriptFile resolves a text-entry target once before typing', asyn
       ['snapshot', []],
       ['click', ['120', '120']],
       ['type', ['Saved list']],
+      ['snapshot', []],
+      ['snapshot', []],
       ['keyboard', ['enter']],
     ],
   );
@@ -1894,7 +1912,7 @@ test('runReplayScriptFile runs Maestro runFlow.when.visible commands when presen
       '      - tapOn: Continue',
       '',
     ].join('\n'),
-    flags: { replayBackend: 'maestro' },
+    flags: { replayBackend: 'maestro', platform: 'android' },
     invoke: async (req) => {
       calls.push({ command: req.command, positionals: req.positionals, flags: req.flags });
       if (req.command === 'snapshot') {
@@ -2031,7 +2049,7 @@ test('runReplayScriptFile resolves nested Maestro runFlow.when command variables
       '      - tapOn: ${TARGET_LABEL}',
       '',
     ].join('\n'),
-    flags: { replayBackend: 'maestro' },
+    flags: { replayBackend: 'maestro', platform: 'android' },
     invoke: async (req) => {
       calls.push({ command: req.command, positionals: req.positionals, flags: req.flags });
       if (req.command === 'snapshot') {

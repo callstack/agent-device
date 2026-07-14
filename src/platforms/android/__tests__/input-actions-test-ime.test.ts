@@ -25,7 +25,10 @@ vi.mock('../ime-helper.ts', async (importOriginal) => {
   };
 });
 
-import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
+import {
+  ANDROID_EMULATOR,
+  createAndroidSnapshotHelperExecutor,
+} from '../../../__tests__/test-utils/index.ts';
 import { fillAndroid, typeAndroid } from '../input-actions.ts';
 import { withAndroidAdbProvider, type AndroidAdbExecutor } from '../adb-executor.ts';
 import {
@@ -80,24 +83,24 @@ test('fillAndroid clears then commits non-ASCII text through the test IME and ve
   setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
   let currentText = '';
   const calls: string[][] = [];
-  const adb: AndroidAdbExecutor = async (args) => {
-    calls.push(args);
-    if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'broadcast') {
-      const action = args[args.indexOf('-a') + 1];
-      if (action === 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT') {
-        currentText = '';
-      } else if (action === 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64') {
-        const textIndex = args.indexOf('text');
-        const payload = textIndex >= 0 ? args[textIndex + 1] : undefined;
-        currentText += Buffer.from(payload ?? '', 'base64').toString('utf8');
+  const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
+    exec: async (args) => {
+      calls.push(args);
+      if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'broadcast') {
+        const action = args[args.indexOf('-a') + 1];
+        if (action === 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT') {
+          currentText = '';
+        } else if (action === 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64') {
+          const textIndex = args.indexOf('text');
+          const payload = textIndex >= 0 ? args[textIndex + 1] : undefined;
+          currentText += Buffer.from(payload ?? '', 'base64').toString('utf8');
+        }
+        return { exitCode: 0, stdout: '', stderr: '' };
       }
       return { exitCode: 0, stdout: '', stderr: '' };
-    }
-    if (args[0] === 'exec-out') {
-      return { exitCode: 0, stdout: androidInputXml({ text: currentText }), stderr: '' };
-    }
-    return { exitCode: 0, stdout: '', stderr: '' };
-  };
+    },
+    captureXml: () => androidInputXml({ text: currentText }),
+  });
 
   await withAndroidAdbProvider(adb, { serial: ANDROID_EMULATOR.id }, async () => {
     await fillAndroid(ANDROID_EMULATOR, 10, 10, 'Café ☕ 🎉 你好');

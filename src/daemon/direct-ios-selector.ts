@@ -54,11 +54,13 @@ export function isDirectIosSelectorFallbackError(
     return options.delegateSemanticFailures === true || options.allowElementNotFound === true;
   }
   if (appError.code === 'AMBIGUOUS_MATCH') return options.delegateSemanticFailures === true;
-  // The runner refuses to tap a hittable match whose frame is outside the app
-  // frame (closed drawer, off-viewport carousel). The tree-based path either
-  // prefers an on-screen candidate or raises the actionable offscreen_selector
-  // error, so always fall back.
-  if (appError.code === 'ELEMENT_OFFSCREEN') return true;
+  // Regular interactions delegate off-screen matches to the shared tree, which
+  // can prefer an on-screen candidate or raise offscreen_selector. Maestro
+  // replay keeps the typed runner outcome so its compatibility resolver can
+  // apply Maestro-specific ranking and tab-strip inference instead.
+  if (appError.code === 'ELEMENT_OFFSCREEN') {
+    return options.delegateSemanticFailures !== false;
+  }
   if (appError.code !== 'COMMAND_FAILED') return false;
   // Transport-failure classification stays message-based deliberately: the
   // sniffed shapes originate at 4+ scattered throw sites (runner-transport

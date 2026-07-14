@@ -56,7 +56,7 @@
   long-press receives its paired provider-owned viewport. See ADR 0013.
 - Multi-touch geometry: the internal initial span and angle plus centroid translation, scale, and rotation used to build both contact trajectories. Geometry is viewport-aware and fails early when the requested motion cannot fit; it is not a public tuning surface.
 - Maestro program: source-preserving typed representation of supported Maestro YAML. It is interpreted directly through the compatibility runtime port and never lowered through generic replay action strings. See ADR 0015.
-- Maestro observation generation: explicit compatibility-engine state identifying evidence captured since the most recent mutation. Queries may share evidence within one generation; every mutation invalidates it.
+- Maestro observation generation: explicit compatibility-engine state identifying evidence captured since the most recent mutation. Queries may share semantic evidence within one generation; every mutation attempt invalidates it before dispatch. Interaction geometry is action-local: unique exact iOS selectors resolve and tap atomically in XCTest, while coordinate dispatch uses a fresh target snapshot. Rectangles are never shared across command boundaries.
 - Guarantee cell: one (dispatch path, guarantee) entry in `src/contracts/interaction-guarantees.ts`, classified as runtime/runner/delegated/inapplicable/waived. Completeness is a compile error; honesty is gate-tested.
 - Owned waiver: a `gap:`-prefixed waived cell carrying a `trackingIssue` URL. Waivers are diffable debt with an owner, never folklore.
 - Parity table: golden JSON fixture under `contracts/fixtures/` consumed by both vitest and the runner's gated Swift tests, so a cross-language rule (e.g. tap-point policy) cannot drift silently. Change the rule only via the table.
@@ -160,11 +160,13 @@ the observable freshness and failure semantics below before any runtime refactor
   disables direct iOS selector shortcuts while pending.
 - `setSessionSnapshot` is the centralized session snapshot mutation path. Sparse captures do not
   write back, and empty `@ref`-scoped snapshot output must not replace the stored session snapshot.
-- Maestro target matching remains snapshot-based, fresh, and policy-rich. Native selector
-  simplification must not erase Maestro regex/string selector behavior, visibility filtering,
-  ranking, visible-context preference, Android duplicate handling, tab-strip inference, or
-  assertion/wait semantics. Plain text is exact and regex-aware; do not add substring/fuzzy
-  recovery that changes authored selector meaning.
+- Maestro target matching remains snapshot-based and policy-rich. Coordinate dispatch always uses a
+  fresh target snapshot. A unique exact iOS match may instead reuse bound same-generation semantic
+  evidence and dispatch through XCTest's atomic selector tap; structured live-selector failures return
+  to fresh Maestro resolution. This optimization must not erase Maestro regex/string selector behavior,
+  visibility filtering, ranking, visible-context preference, Android duplicate handling, tab-strip
+  inference, or assertion/wait semantics. Plain text is exact and regex-aware; do not add
+  substring/fuzzy recovery that changes authored selector meaning.
 
 Evidence: [ADR 0002](docs/adr/0002-persistent-platform-helper-sessions.md),
 [ADR 0004](docs/adr/0004-ios-snapshot-backend-strategy.md),

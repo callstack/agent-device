@@ -32,13 +32,16 @@ test('normalizeError enriches generic command-failed message with stderr excerpt
 });
 
 test('normalizeError appends stderr excerpt to specific command-failed messages', () => {
-  const err = new AppError('COMMAND_FAILED', 'uiautomator dump did not return XML', {
+  const err = new AppError('COMMAND_FAILED', 'Android snapshot helper did not return XML', {
     exitCode: 1,
     processExitError: true,
-    stderr: 'uiautomator unavailable\n',
+    stderr: 'instrumentation unavailable\n',
   });
   const normalized = normalizeError(err);
-  assert.equal(normalized.message, 'uiautomator dump did not return XML: uiautomator unavailable');
+  assert.equal(
+    normalized.message,
+    'Android snapshot helper did not return XML: instrumentation unavailable',
+  );
 });
 
 test('normalizeError does not duplicate an excerpt already present in the message', () => {

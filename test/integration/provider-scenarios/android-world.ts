@@ -445,13 +445,6 @@ function androidCaptureAdbResult(
       exitCode: 0,
     };
   }
-  if (key === 'exec-out uiautomator dump /dev/tty') {
-    return {
-      stdout: snapshotXml?.() ?? androidSettingsXml(searchText),
-      stderr: '',
-      exitCode: 0,
-    };
-  }
   if (key === 'exec-out screencap -p') {
     return { stdout: '', stderr: '', exitCode: 0, stdoutBuffer: validPng() };
   }

@@ -57,6 +57,9 @@ test('Maestro YAML uses the typed engine while .ad remains generic', async () =>
   );
   const commands: string[] = [];
   const invoke = vi.fn(async (request) => {
+    if (request.command === 'snapshot') {
+      return { ok: true as const, data: { createdAt: 0, nodes: [] } };
+    }
     commands.push(request.command);
     return { ok: true as const, data: {} };
   });
@@ -150,7 +153,10 @@ test('typed Maestro writes source-aware redacted step timing traces', async () =
     logPath: path.join(root, 'daemon.log'),
     sessionStore,
     tracePath,
-    invoke: async () => ({ ok: true, data: {} }),
+    invoke: async (request) =>
+      request.command === 'snapshot'
+        ? { ok: true, data: { createdAt: 0, nodes: [] } }
+        : { ok: true, data: {} },
   });
 
   expect(response.ok).toBe(true);

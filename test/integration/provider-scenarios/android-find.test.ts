@@ -195,13 +195,6 @@ function androidFindAdbResult(
       exitCode: 0,
     };
   }
-  if (args.join(' ') === 'exec-out uiautomator dump /dev/tty') {
-    return {
-      stdout: androidSettingsXml(searchText, { duplicateAppsRow: includeDuplicateAppsRow }),
-      stderr: '',
-      exitCode: 0,
-    };
-  }
   if (args.join(' ').startsWith('shell am instrument ')) {
     return {
       stdout: androidSnapshotHelperOutput(

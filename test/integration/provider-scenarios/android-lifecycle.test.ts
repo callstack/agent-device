@@ -1468,11 +1468,10 @@ function assertAndroidInteractionContract(world: AndroidSettingsWorld): void {
   assert.ok(
     adbCalls.some(
       (call) =>
-        arrayEqual(call, ['exec-out', 'uiautomator', 'dump', '/dev/tty']) ||
-        (call[0] === 'shell' &&
-          call[1] === 'am' &&
-          call[2] === 'instrument' &&
-          call.includes('com.callstack.agentdevice.snapshothelper/.SnapshotInstrumentation')),
+        call[0] === 'shell' &&
+        call[1] === 'am' &&
+        call[2] === 'instrument' &&
+        call.includes('com.callstack.agentdevice.snapshothelper/.SnapshotInstrumentation'),
     ),
     JSON.stringify(adbCalls),
   );

@@ -9,6 +9,7 @@ import {
 import { GESTURE_DURATION_MAX_MS, GESTURE_DURATION_MIN_MS } from './gesture-plan-types.ts';
 import type {
   GesturePlan,
+  GestureExecutionProfile,
   GestureSemanticInput,
   MultiTouchGesturePlan,
   PointerTrajectory,
@@ -134,7 +135,15 @@ function buildFlingPlan(
 ): SinglePointerGesturePlan {
   if ('preset' in input) {
     const { from, to } = presetGestureEndpoints(input.preset, viewport);
-    return buildSinglePointerPlan('fling', from, to, GESTURE_FLING_DURATION_MS, viewport, profile);
+    return buildSinglePointerPlan(
+      'fling',
+      from,
+      to,
+      GESTURE_FLING_DURATION_MS,
+      viewport,
+      'endpoint-hold',
+      profile,
+    );
   }
   if ('from' in input) {
     return buildSinglePointerPlan(
@@ -143,6 +152,7 @@ function buildFlingPlan(
       input.to,
       GESTURE_FLING_DURATION_MS,
       viewport,
+      'endpoint-hold',
       profile,
     );
   }
@@ -157,6 +167,7 @@ function buildFlingPlan(
     addPoints(start, gestureDirectionDelta(input.direction, distance)),
     GESTURE_FLING_DURATION_MS,
     viewport,
+    'endpoint-hold',
     profile,
   );
 }
@@ -173,7 +184,15 @@ function buildPanPlan(
   );
   if ('preset' in input) {
     const { from, to } = presetGestureEndpoints(input.preset, viewport);
-    return buildSinglePointerPlan('pan', from, to, durationMs, viewport, profile);
+    return buildSinglePointerPlan(
+      'pan',
+      from,
+      to,
+      durationMs,
+      viewport,
+      input.executionProfile ?? 'timed-pan',
+      profile,
+    );
   }
   if ((input.pointerCount ?? 1) === 1) {
     const start = finitePoint(input.origin, 'gesture pan origin');
@@ -184,6 +203,7 @@ function buildPanPlan(
       addPoints(start, delta),
       durationMs,
       viewport,
+      input.executionProfile ?? 'timed-pan',
       profile,
     );
   }
@@ -210,6 +230,7 @@ function buildSinglePointerPlan(
   to: Point,
   durationMs: number,
   viewport: Rect,
+  executionProfile: GestureExecutionProfile,
   profile: GesturePlatformProfile,
 ): SinglePointerGesturePlan {
   const start = finitePoint(from, `gesture ${intent} start`);
@@ -222,6 +243,7 @@ function buildSinglePointerPlan(
   return {
     topology: 'single',
     intent,
+    executionProfile,
     durationMs,
     viewport,
     pointers: [{ pointerId: 0, samples }],

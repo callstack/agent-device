@@ -8,6 +8,9 @@ export const GESTURE_DURATION_MAX_MS = 10_000;
 
 export type GestureIntent = 'fling' | 'pan' | 'pinch' | 'rotate' | 'transform';
 
+/** Selects one-pointer release timing without changing semantic gesture intent. */
+export type GestureExecutionProfile = 'endpoint-hold' | 'timed-pan';
+
 export type GestureSemanticInput =
   | { intent: 'fling'; from: Point; to: Point }
   | { intent: 'fling'; preset: SwipePreset }
@@ -23,8 +26,14 @@ export type GestureSemanticInput =
       delta: Point;
       pointerCount?: GesturePointerCount;
       durationMs?: number;
+      executionProfile?: GestureExecutionProfile;
     }
-  | { intent: 'pan'; preset: SwipePreset; durationMs: number }
+  | {
+      intent: 'pan';
+      preset: SwipePreset;
+      durationMs: number;
+      executionProfile?: GestureExecutionProfile;
+    }
   | { intent: 'pinch'; origin?: Point; scale: number }
   | { intent: 'rotate'; origin?: Point; degrees: number }
   | {
@@ -46,6 +55,7 @@ export type PointerTrajectory = {
 export type SinglePointerGesturePlan = {
   topology: 'single';
   intent: 'fling' | 'pan';
+  executionProfile: GestureExecutionProfile;
   durationMs: number;
   viewport: Rect;
   pointers: readonly [PointerTrajectory];

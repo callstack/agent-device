@@ -148,6 +148,7 @@ struct Command: Codable {
 struct RunnerGesturePlan: Codable {
   let topology: String
   let intent: String
+  let executionProfile: String?
   let durationMs: Double
   let viewport: RunnerGestureViewport
   let pointers: [RunnerGesturePointer]

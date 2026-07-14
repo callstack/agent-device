@@ -283,13 +283,13 @@ agent-device get attrs @e1
 ```
 
 - iOS snapshots use XCTest on simulators and physical devices.
-- Android snapshots use the bundled Android snapshot helper when the npm package includes it. The
-  first helper-backed snapshot verifies and installs the helper APK if it is missing or outdated;
-  helper failures fall back to one-shot helper capture, then stock UIAutomator, and include
-  `androidSnapshot.fallbackReason` in typed results. Local ADB-backed sessions keep the helper
+- Android snapshots require the bundled Android snapshot helper. The first snapshot verifies and
+  installs the helper APK if it is missing or outdated. Local ADB-backed sessions keep the helper
   process warm over an `adb forward` socket and report `androidSnapshot.helperTransport` as
-  `persistent-session`; set `AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION=0` to disable that fast
-  path. Source checkouts without a bundled helper use stock UIAutomator. The helper serializes
+  `persistent-session`; if that transport is unavailable, capture retries through one-shot
+  instrumentation in the same helper. Set `AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION=0` to
+  disable the persistent fast path. Missing or failed helper artifacts are reported directly; a
+  source checkout must run `pnpm build:android` before Android verification. The helper serializes
   Android interactive window roots when available, so keyboard and system-overlay nodes can appear
   alongside the app root; `androidSnapshot.captureMode` and `androidSnapshot.windowCount` describe
   the capture.

@@ -154,10 +154,10 @@ function mockAndroidTimeoutEvidenceDispatch(): void {
 function androidSnapshotTimeoutError(): AppError {
   return new AppError(
     'COMMAND_FAILED',
-    'Android UI hierarchy dump timed out while waiting for the UI to become idle.',
+    'Android snapshot helper timed out while waiting for the UI to become idle.',
     {
       cmd: 'adb',
-      args: ['exec-out', 'uiautomator', 'dump', '/dev/tty'],
+      args: ['shell', 'am', 'instrument'],
       timeoutMs: 8000,
       hint: 'Android accessibility snapshots can be blocked by busy or continuously changing app UI. Use screenshot as visual truth after this timeout.',
     },
@@ -169,7 +169,7 @@ function expectAndroidTimeoutEvidence(
 ) {
   if (!response) throw new Error('Expected snapshot response');
   if (response.ok) throw new Error('Expected snapshot timeout failure');
-  expect(response.error.message).toMatch(/UI hierarchy dump timed out/i);
+  expect(response.error.message).toMatch(/snapshot helper timed out/i);
   expect(response.error.hint).toMatch(/Use screenshot as visual truth/i);
   assertAndroidTimeoutEvidencePayload(response.error.details?.androidSnapshotTimeoutScreenshot);
 }

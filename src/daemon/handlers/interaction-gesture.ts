@@ -47,7 +47,7 @@ export async function dispatchGestureViaRuntime(
     const input = readGesturePayload(params.req.input);
     const normalized = normalizePublicGesture(input);
     requireGestureSupported(normalized.gesture, session.device);
-    const result = await createInteractionRuntime(params).interactions.gesture({
+    const result = await createGestureRuntime(params).interactions.gesture({
       session: params.sessionName,
       requestId: params.req.meta?.requestId,
       gesture: normalized.gesture,
@@ -70,7 +70,7 @@ export async function dispatchSwipeViaRuntime(
     const count = input.count ?? 1;
     const pauseMs = input.pauseMs ?? 0;
     const pattern = input.pattern ?? 'one-way';
-    const runtime = createInteractionRuntime(params);
+    const runtime = createGestureRuntime(params);
     const result = await runSwipeRepetitions(runtime, params, input, count, pauseMs, pattern);
     return {
       positionals: swipeReplayPositionals(input),
@@ -89,6 +89,13 @@ export async function dispatchSwipeViaRuntime(
         pattern,
       }),
     };
+  });
+}
+
+function createGestureRuntime(params: GestureHandlerParams) {
+  return createInteractionRuntime({
+    ...params,
+    pairedGestureViewport: params.req.internal?.gestureViewport,
   });
 }
 

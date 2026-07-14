@@ -29,13 +29,17 @@ model; compatibility is owed at CLI, Node.js, and MCP.
 The runtime plans canonical intent in `src/contracts/gesture-plan.ts`. Contact topology is separate
 from motion:
 
-- one contact: pan or fling with a complete pointer trajectory;
+- one contact: pan or fling with a complete pointer trajectory and an explicit execution profile;
 - two contacts: pan, pinch, rotate, or transform with two complete, synchronized trajectories.
 
-`swipe` is public sugar for a fixed-duration fling. Its historical optional duration remains a
-thin compatibility alias to pan and reports a deprecation. The same rule applies to the historical
-fling duration. Pinch fixes translation and rotation at zero; rotate fixes translation at zero and
-scale at one; two-finger pan fixes scale at one and rotation at zero; transform can apply all three
+`swipe` without a duration is public sugar for a fixed-duration fling. Its historical optional
+duration normalizes to pan intent with an endpoint-hold execution profile and reports a deprecation
+toward explicit pan. Maestro-authored swipes follow the same normalization and materialize
+Maestro's 400 ms default when duration is omitted. A genuine pan uses the timed-pan profile, so
+compatibility aliases retain their release behavior without becoming a new semantic intent. The
+same deprecation-to-pan rule applies to the historical fling duration. Pinch fixes translation and rotation at zero; rotate fixes
+translation at zero and scale at one; two-finger pan fixes scale at one and rotation at zero;
+transform can apply all three
 components atomically. Intent remains on the plan even when aliases share an executor.
 
 The planner owns deterministic multi-touch geometry. Contacts start at -90 degrees, except Android
@@ -65,10 +69,14 @@ Platform adapters consume the canonical plan:
   injected coordinates against zero-origin extents that include the viewport offset. The snapshot helper is stopped
   before local gesture instrumentation because Android permits only one instrumentation owner of
   `UiAutomation`.
-- iOS converts every planned point to native orientation and feeds the exact arrays to the existing
-  private XCTest event bridge. macOS lowers a one-contact plan to its drag executor and tvOS lowers
-  it to remote direction. Core admission and the Apple adapter both consume the same shared
-  multi-touch support policy; multi-touch remains capability-gated to iOS simulators.
+- iOS lowers one-contact endpoint-hold plans to the established fast-swipe synthesis profile. That
+  profile reaches the endpoint in 100 ms, then holds there for the planned duration before lifting,
+  matching Maestro's XCTest driver. Timed-pan and two-contact plans convert every point to native
+  orientation and feed the exact planned arrays to the private XCTest event bridge. Android and
+  WebDriver continue to execute the plan samples across the authored duration, matching their
+  native Maestro drivers. macOS lowers a one-contact plan to its drag executor and tvOS lowers it to remote
+  direction. Core admission and the Apple adapter both consume the same shared multi-touch support
+  policy; multi-touch remains capability-gated to iOS simulators.
 - WebDriver lowers a supported plan to synchronized W3C pointer action sources. Multi-touch remains
   capability-gated until a provider proves it.
 

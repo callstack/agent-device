@@ -69,7 +69,7 @@ test('Provider-backed integration Android replay test suite covers retries and f
   });
 });
 
-test('Provider-backed integration Android Maestro reuses observation evidence and preserves authored swipe points', async () => {
+test('Provider-backed integration Android Maestro reuses the exact observation snapshot and preserves authored swipe points', async () => {
   let snapshots = 0;
   await withProviderScenarioResource(
     async () =>
@@ -124,7 +124,8 @@ test('Provider-backed integration Android Maestro reuses observation evidence an
       assert.equal(swipePlan.durationMs, 300);
       assert.deepEqual(swipePlan.pointers[0]?.samples[0]?.point, { x: 351, y: 300 });
       assert.deepEqual(swipePlan.pointers[0]?.samples.at(-1)?.point, { x: 39, y: 300 });
-      // Percentage resolution snapshots remain fresh; gesture planning uses the provider viewport.
+      // The snapshot frame used to resolve percentages is paired with the gesture plan.
+      assert.equal(world.gestureViewportCalls, 0);
       assertSnapshotCountInRange(snapshots, 3, 5);
     },
   );

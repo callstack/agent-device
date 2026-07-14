@@ -32,12 +32,16 @@ test('Provider-backed integration normalizes provider failures through the reque
       assert.equal(response.json?.error?.data?.code, 'COMMAND_FAILED');
       assert.match(
         response.json?.error?.message ?? '',
-        /uiautomator dump did not return XML: uiautomator unavailable/i,
+        /Android snapshot helper failed.*uiautomator unavailable/i,
       );
       assert.equal(typeof response.json?.error?.data?.diagnosticId, 'string');
       assert.ok(
-        adbCalls.some((call) => call.join(' ') === 'exec-out uiautomator dump /dev/tty'),
+        adbCalls.some((call) => call.includes('--show-versioncode')),
         JSON.stringify(adbCalls),
+      );
+      assert.equal(
+        adbCalls.some((call) => call.join(' ') === 'exec-out uiautomator dump /dev/tty'),
+        false,
       );
     },
   );

@@ -49,7 +49,9 @@ For Android snapshots, productize a persistent helper mode that keeps `UiAutomat
 serves fresh snapshot requests over an `adb forward` socket. Do not add snapshot result caching as
 part of that first step. The first reliable win is infrastructure reuse, not data reuse. The current
 implementation keeps the existing one-shot instrumentation helper as the fallback for startup,
-socket, protocol, and request failures.
+socket, protocol, and request failures. Both transports execute the same packaged helper contract;
+agent-device must fail closed when that helper is unavailable or invalid instead of substituting
+the legacy `adb uiautomator dump` snapshot engine.
 
 Android permits only one reliable instrumentation-owned `UiAutomation` context per device. Before
 starting a different instrumentation helper, such as touch synthesis, the daemon must stop the

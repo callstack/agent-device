@@ -271,3 +271,28 @@ test('Provider-backed integration maestro replay dispatch keeps runner AMBIGUOUS
     assertRpcError(click, 'AMBIGUOUS_MATCH', /matched multiple/);
   });
 });
+
+test('Provider-backed integration maestro replay dispatch keeps runner ELEMENT_OFFSCREEN without fallback', async () => {
+  const transcript = createProviderTranscript([
+    {
+      command: 'ios.runner.tap',
+      deviceId: DEVICE_ID,
+      platform: 'apple',
+      request: {
+        command: 'tap',
+        selectorKey: 'label',
+        selectorValue: 'Continue',
+        allowNonHittableCoordinateFallback: true,
+        appBundleId: APP,
+      },
+      error: new AppError('ELEMENT_OFFSCREEN', 'element resolved off-screen at (-161, 265)'),
+    },
+  ]);
+
+  await withDirectSelectorScenario(transcript, async (daemon) => {
+    const click = await daemon.callCommand('click', ['label="Continue"'], {
+      maestro: { allowNonHittableCoordinateFallback: true },
+    });
+    assertRpcError(click, 'ELEMENT_OFFSCREEN', /resolved off-screen/);
+  });
+});

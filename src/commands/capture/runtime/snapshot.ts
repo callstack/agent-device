@@ -240,11 +240,6 @@ function buildSnapshotWarnings(params: {
     warnings.push(...buildMergedAccessibilityLeafWarnings(params.snapshot.nodes));
   }
 
-  const helperFallbackWarning = formatAndroidHelperFallbackWarning(
-    params.annotations.androidSnapshot,
-  );
-  if (helperFallbackWarning) warnings.push(helperFallbackWarning);
-
   const reactNativeOverlayWarning = formatReactNativeOverlayWarning(params.snapshot.nodes);
   if (reactNativeOverlayWarning) warnings.push(reactNativeOverlayWarning);
 
@@ -333,14 +328,6 @@ function buildEmptyAndroidInteractiveWarnings(params: {
     );
   }
   return warnings;
-}
-
-function formatAndroidHelperFallbackWarning(
-  androidSnapshot: SnapshotCaptureAnnotations['androidSnapshot'],
-): string | undefined {
-  if (androidSnapshot?.backend !== 'uiautomator-dump') return undefined;
-  const reason = androidSnapshot.fallbackReason ? ` Reason: ${androidSnapshot.fallbackReason}` : '';
-  return `Android snapshot helper unavailable; using stock UIAutomator dump, which can time out on busy React Native UIs.${reason}`;
 }
 
 function formatRecentSnapshotDropWarning(params: {

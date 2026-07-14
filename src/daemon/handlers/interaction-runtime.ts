@@ -21,12 +21,14 @@ import { createDaemonRuntimeSessionStore } from '../runtime-session.ts';
 import { resolveWebProvider, type WebProvider } from '../../platforms/web/provider.ts';
 import { stripAtPrefix } from './interaction-touch-targets.ts';
 import { NO_ACTIVE_SESSION_MESSAGE } from './response.ts';
+import type { Rect } from '../../kernel/snapshot.ts';
 
-export function createInteractionRuntime(
-  params: InteractionHandlerParams & {
-    captureSnapshotForSession: CaptureSnapshotForSession;
-  },
-) {
+type InteractionRuntimeParams = InteractionHandlerParams & {
+  captureSnapshotForSession: CaptureSnapshotForSession;
+  pairedGestureViewport?: Rect;
+};
+
+export function createInteractionRuntime(params: InteractionRuntimeParams) {
   const session = params.sessionStore.get(params.sessionName);
   if (!session) throw new AppError('SESSION_NOT_FOUND', NO_ACTIVE_SESSION_MESSAGE);
   return createAgentDevice({
@@ -52,9 +54,7 @@ export function createInteractionRuntime(
 }
 
 function createInteractionBackend(
-  params: InteractionHandlerParams & { session: SessionState } & {
-    captureSnapshotForSession: CaptureSnapshotForSession;
-  },
+  params: InteractionRuntimeParams & { session: SessionState },
 ): AgentDeviceBackend {
   const { req, session } = params;
   const webProvider = resolveNativeWebInteractionProvider(session);
@@ -73,7 +73,8 @@ function createInteractionBackend(
       ),
     }),
     resolveGestureViewport: async () =>
-      await dispatchGestureViewport(
+      params.pairedGestureViewport ??
+      (await dispatchGestureViewport(
         session.device,
         params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
       ),

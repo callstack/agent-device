@@ -1186,6 +1186,13 @@ extension RunnerTests {
       : plan.intent == "pan" || plan.intent == "pinch" || plan.intent == "rotate"
         || plan.intent == "transform"
     guard supportedIntent else { return "planned gesture has unsupported intent for its topology" }
+    if plan.topology == "single" {
+      guard plan.executionProfile == "endpoint-hold" || plan.executionProfile == "timed-pan" else {
+        return "single-pointer gesture requires a supported execution profile"
+      }
+    } else if plan.executionProfile != nil {
+      return "multi-touch gesture cannot define a single-pointer execution profile"
+    }
     guard plan.durationMs.isFinite, plan.durationMs >= 16, plan.durationMs <= 10_000 else {
       return "planned gesture durationMs must be between 16 and 10000"
     }
@@ -1245,7 +1252,9 @@ extension RunnerTests {
   }
 
   func plannedGestureExecution(for plan: RunnerGesturePlan) -> PlannedGestureExecution {
-    plan.topology == "single" && plan.intent == "fling" ? .fastSwipe : .sampled
+    plan.topology == "single" && plan.executionProfile == "endpoint-hold"
+      ? .fastSwipe
+      : .sampled
   }
 
   func sampledPlannedGesture(
@@ -1459,6 +1468,7 @@ extension RunnerTests {
     )
 
     XCTAssertNil(plannedGestureValidationError(plan))
+    XCTAssertEqual(plannedGestureExecution(for: plan), .sampled)
   }
 
   func testPlannedMultiTouchGestureRejectsMismatchedOffsets() throws {
@@ -1479,7 +1489,7 @@ extension RunnerTests {
     let plan = try JSONDecoder().decode(
       RunnerGesturePlan.self,
       from: Data(
-        #"{"topology":"single","intent":"fling","durationMs":100,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":160,"y":150}},{"offsetMs":100,"point":{"x":40,"y":150}}]}]}"#.utf8
+        #"{"topology":"single","intent":"fling","executionProfile":"endpoint-hold","durationMs":100,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":160,"y":150}},{"offsetMs":100,"point":{"x":40,"y":150}}]}]}"#.utf8
       )
     )
 
@@ -1490,11 +1500,37 @@ extension RunnerTests {
     let plan = try JSONDecoder().decode(
       RunnerGesturePlan.self,
       from: Data(
-        #"{"topology":"single","intent":"pan","durationMs":500,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":160,"y":150}},{"offsetMs":250,"point":{"x":100,"y":150}},{"offsetMs":500,"point":{"x":40,"y":150}}]}]}"#.utf8
+        #"{"topology":"single","intent":"pan","executionProfile":"timed-pan","durationMs":500,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":160,"y":150}},{"offsetMs":250,"point":{"x":100,"y":150}},{"offsetMs":500,"point":{"x":40,"y":150}}]}]}"#.utf8
       )
     )
 
     XCTAssertEqual(plannedGestureExecution(for: plan), .sampled)
+  }
+
+  func testSinglePointerEndpointHoldUsesFastSwipeExecution() throws {
+    let plan = try JSONDecoder().decode(
+      RunnerGesturePlan.self,
+      from: Data(
+        #"{"topology":"single","intent":"pan","executionProfile":"endpoint-hold","durationMs":500,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":160,"y":150}},{"offsetMs":500,"point":{"x":40,"y":150}}]}]}"#.utf8
+      )
+    )
+
+    XCTAssertNil(plannedGestureValidationError(plan))
+    XCTAssertEqual(plannedGestureExecution(for: plan), .fastSwipe)
+  }
+
+  func testSinglePointerGestureRejectsMissingExecutionProfile() throws {
+    let plan = try JSONDecoder().decode(
+      RunnerGesturePlan.self,
+      from: Data(
+        #"{"topology":"single","intent":"pan","durationMs":500,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":160,"y":150}},{"offsetMs":500,"point":{"x":40,"y":150}}]}]}"#.utf8
+      )
+    )
+
+    XCTAssertEqual(
+      plannedGestureValidationError(plan),
+      "single-pointer gesture requires a supported execution profile"
+    )
   }
 
   func testDesktopScrollWheelDeltasMapDirections() throws {

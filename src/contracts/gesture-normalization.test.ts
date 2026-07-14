@@ -4,6 +4,7 @@ import {
   gesturePayloadFromPositionals,
   gesturePayloadToPositionals,
   normalizePublicGesture,
+  normalizePublicSwipeMotion,
   swipePayloadFromPositionals,
 } from './gesture-normalization.ts';
 
@@ -62,6 +63,7 @@ test('gesture recording codec preserves timed fling duration when distance is om
       origin: { x: 10, y: 20 },
       delta: { x: -180, y: 0 },
       durationMs: 600,
+      executionProfile: 'endpoint-hold',
     },
     deprecations: [{ rule: 'fling-duration', replacement: 'Use gesture pan for timed movement.' }],
   });
@@ -83,15 +85,42 @@ test('rotate serialization omits behaviorless velocity when no origin can delimi
   ]);
 });
 
-test('swipe is fling sugar unless legacy duration requests a pan', () => {
+test('swipe is fling sugar unless legacy duration preserves swipe timing', () => {
   assert.deepEqual(normalizePublicGesture({ kind: 'swipe', preset: 'left' }), {
     gesture: { intent: 'fling', preset: 'left' },
     deprecations: [],
   });
   assert.deepEqual(normalizePublicGesture({ kind: 'swipe', preset: 'left', durationMs: 400 }), {
-    gesture: { intent: 'pan', preset: 'left', durationMs: 400 },
+    gesture: {
+      intent: 'pan',
+      preset: 'left',
+      durationMs: 400,
+      executionProfile: 'endpoint-hold',
+    },
     deprecations: [{ rule: 'swipe-duration', replacement: 'Use gesture pan for timed movement.' }],
   });
+});
+
+test('coordinate swipe duration preserves swipe timing and endpoints', () => {
+  assert.deepEqual(
+    normalizePublicSwipeMotion({
+      from: { x: 360, y: 400 },
+      to: { x: 40, y: 400 },
+      durationMs: 500,
+    }),
+    {
+      gesture: {
+        intent: 'pan',
+        origin: { x: 360, y: 400 },
+        delta: { x: -320, y: 0 },
+        durationMs: 500,
+        executionProfile: 'endpoint-hold',
+      },
+      deprecations: [
+        { rule: 'swipe-duration', replacement: 'Use gesture pan for timed movement.' },
+      ],
+    },
+  );
 });
 
 test('duration-bearing fling is an explicit compatibility alias for pan', () => {
@@ -109,6 +138,7 @@ test('duration-bearing fling is an explicit compatibility alias for pan', () => 
         origin: { x: 200, y: 300 },
         delta: { x: -80, y: 0 },
         durationMs: 500,
+        executionProfile: 'endpoint-hold',
       },
       deprecations: [
         { rule: 'fling-duration', replacement: 'Use gesture pan for timed movement.' },

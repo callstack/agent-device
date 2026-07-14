@@ -14,12 +14,17 @@ import {
   type MaestroTargetQuery as SnapshotTargetQuery,
 } from './runtime-targets.ts';
 import type {
+  MaestroDispatchSelector,
   MaestroRuntimeOperationContext,
   MaestroTargetMatch,
   MaestroTargetQuery,
 } from './runtime-port-types.ts';
 
 export const MAESTRO_OBSERVATION_POLL_MS = 250;
+// Snapshot transport readiness is distinct from selector matching. A launched app may own the
+// foreground activity before it exposes an accessibility surface, especially during a cold start.
+export const MAESTRO_INITIAL_SNAPSHOT_READY_TIMEOUT_MS = 30_000;
+const MAESTRO_STABILITY_POLL_MS = 200;
 
 export type DaemonMaestroRuntimeDependencies = {
   readonly now: () => number;
@@ -34,9 +39,36 @@ export type MaestroSnapshotSource = {
   readonly capture: MaestroSnapshotReader;
   readonly bindObservation: (observation: MaestroObservation) => void;
   readonly reuseObservation: (context: MaestroRuntimeOperationContext) => SnapshotState | undefined;
+  readonly invalidate: () => void;
 };
 
 export type MaestroTargetResolutionMode = 'tap' | 'swipe' | 'observe';
+
+export async function captureRetriableMaestroSnapshot(
+  params: {
+    readonly context: MaestroRuntimeOperationContext;
+    readonly snapshot: MaestroSnapshotReader;
+    readonly dependencies: DaemonMaestroRuntimeDependencies;
+  },
+  deadline: number,
+): Promise<SnapshotState> {
+  while (true) {
+    throwIfAborted(params.context.signal);
+    try {
+      return await params.snapshot(params.context);
+    } catch (error) {
+      if (!isRetriableSnapshotError(error)) throw error;
+      throwIfAborted(params.context.signal);
+      const remaining = deadline - params.dependencies.now();
+      if (remaining <= 0) throw error;
+      await sleepWithinBudget(
+        params.dependencies,
+        Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining),
+        params.context.signal,
+      );
+    }
+  }
+}
 
 export async function resolveTypedMaestroTarget(params: {
   readonly query: MaestroTargetQuery;
@@ -67,7 +99,7 @@ export function resolveTypedMaestroPreferredContext(params: {
 }
 
 function resolveTargetFromSnapshot(params: {
-  readonly query: SnapshotTargetQuery;
+  readonly query: SnapshotTargetQuery & { readonly allowAtomicSelectorDispatch?: boolean };
   readonly context: MaestroRuntimeOperationContext;
   readonly snapshot: SnapshotState;
   readonly platform: Extract<MaestroPlatform, 'ios' | 'android'>;
@@ -82,7 +114,15 @@ function resolveTargetFromSnapshot(params: {
     frame,
     resolutionOptions(params.mode, params.preferredContext),
   );
-  return targetMatchFromResolution(resolution, params.context.generation, frame);
+  return targetMatchFromResolution(
+    resolution,
+    params.context.generation,
+    frame,
+    params.query,
+    params.snapshot,
+    params.platform,
+    params.mode,
+  );
 }
 
 export async function observeTypedMaestroCondition(params: {
@@ -95,12 +135,18 @@ export async function observeTypedMaestroCondition(params: {
 }): Promise<MaestroTargetMatch> {
   validateTimeout(params.timeoutMs, 'observation');
   let lastMatch: MaestroTargetMatch | undefined;
-  const deadline = params.dependencies.now() + params.timeoutMs;
+  const initialSnapshotDeadline =
+    params.dependencies.now() + MAESTRO_INITIAL_SNAPSHOT_READY_TIMEOUT_MS;
+  let conditionDeadline: number | undefined;
 
   while (true) {
     throwIfAborted(params.context.signal);
     const captureStartedAt = params.dependencies.now();
-    const snapshot = await params.snapshot(params.context);
+    const snapshot = await captureRetriableMaestroSnapshot(
+      params,
+      conditionDeadline ?? initialSnapshotDeadline,
+    );
+    conditionDeadline ??= params.dependencies.now() + params.timeoutMs;
     const match = resolveTargetFromSnapshot({
       query: { selector: params.condition.selector },
       context: params.context,
@@ -110,9 +156,9 @@ export async function observeTypedMaestroCondition(params: {
     });
     lastMatch = match;
     if (conditionMatches(params.condition, match)) return match;
-    if (captureStartedAt >= deadline) break;
+    if (captureStartedAt >= conditionDeadline) break;
 
-    const remaining = deadline - params.dependencies.now();
+    const remaining = conditionDeadline - params.dependencies.now();
     if (remaining > 0) {
       await sleepWithinBudget(
         params.dependencies,
@@ -143,7 +189,7 @@ export async function scrollUntilTypedMaestroTarget(params: {
   while (true) {
     throwIfAborted(params.context.signal);
     const captureStartedAt = params.dependencies.now();
-    const snapshot = await params.snapshot(params.context);
+    const snapshot = await captureRetriableMaestroSnapshot(params, deadline);
     lastMatch = resolveTargetFromSnapshot({
       query: { selector: params.selector },
       context: params.context,
@@ -185,17 +231,18 @@ export async function waitForTypedSnapshotStability(params: {
   while (true) {
     throwIfAborted(params.context.signal);
     const captureStartedAt = params.dependencies.now();
-    const snapshot = await params.snapshot(params.context);
+    const snapshot = await captureRetriableMaestroSnapshot(params, deadline);
     const signature = snapshotStabilitySignature(snapshot);
     if (signature === previousSignature) return;
+    const hadPreviousSignature = previousSignature !== undefined;
     previousSignature = signature;
     if (captureStartedAt >= deadline) return;
 
     const remaining = deadline - params.dependencies.now();
-    if (remaining > 0) {
+    if (hadPreviousSignature && remaining > 0) {
       await sleepWithinBudget(
         params.dependencies,
-        Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining),
+        Math.min(MAESTRO_STABILITY_POLL_MS, remaining),
         params.context.signal,
       );
     }
@@ -223,6 +270,10 @@ function targetMatchFromResolution(
   resolution: ReturnType<typeof resolveMaestroTargetFromSnapshot>,
   generation: number,
   frame: TouchReferenceFrame | undefined,
+  query: SnapshotTargetQuery & { allowAtomicSelectorDispatch?: boolean },
+  snapshot: SnapshotState,
+  platform: Extract<MaestroPlatform, 'ios' | 'android'>,
+  mode: MaestroTargetResolutionMode,
 ): MaestroTargetMatch {
   if (!resolution.ok) {
     return {
@@ -234,6 +285,13 @@ function targetMatchFromResolution(
       ...(snapshotViewportRect(frame) ? { viewport: snapshotViewportRect(frame) } : {}),
     };
   }
+  const dispatchSelector = resolveAtomicIosDispatchSelector({
+    query,
+    resolution,
+    snapshot,
+    platform,
+    mode,
+  });
   return {
     generation,
     matched: true,
@@ -242,7 +300,75 @@ function targetMatchFromResolution(
     rect: resolution.rect,
     ...(resolution.evidence.ref ? { ref: resolution.evidence.ref } : {}),
     ...(snapshotViewportRect(frame) ? { viewport: snapshotViewportRect(frame) } : {}),
+    ...(dispatchSelector ? { dispatchSelector } : {}),
   };
+}
+
+function resolveAtomicIosDispatchSelector(params: {
+  query: SnapshotTargetQuery & { allowAtomicSelectorDispatch?: boolean };
+  resolution: Extract<ReturnType<typeof resolveMaestroTargetFromSnapshot>, { ok: true }>;
+  snapshot: SnapshotState;
+  platform: Extract<MaestroPlatform, 'ios' | 'android'>;
+  mode: MaestroTargetResolutionMode;
+}): MaestroDispatchSelector | undefined {
+  const { query, resolution, snapshot, platform, mode } = params;
+  if (!allowsAtomicIosDispatch(query, platform, mode)) return undefined;
+  const selector = singleExactDispatchSelector(query.selector);
+  if (!selector) return undefined;
+
+  const exactMatches = snapshot.nodes.filter((node) =>
+    runnerSelectorValues(node, selector.key).some((candidate) =>
+      equalIgnoringCase(candidate, selector.value),
+    ),
+  );
+  if (exactMatches.length !== 1 || exactMatches[0]?.index !== resolution.node.index) {
+    return undefined;
+  }
+  return selector;
+}
+
+function allowsAtomicIosDispatch(
+  query: SnapshotTargetQuery & { allowAtomicSelectorDispatch?: boolean },
+  platform: Extract<MaestroPlatform, 'ios' | 'android'>,
+  mode: MaestroTargetResolutionMode,
+): boolean {
+  return (
+    platform === 'ios' &&
+    mode === 'tap' &&
+    query.allowAtomicSelectorDispatch === true &&
+    query.index === undefined &&
+    query.childOf === undefined
+  );
+}
+
+function singleExactDispatchSelector(
+  selector: MaestroSelector,
+): MaestroDispatchSelector | undefined {
+  const entries = Object.entries(selector).filter(([, value]) => value !== undefined);
+  if (entries.length !== 1) return undefined;
+  const [key, rawValue] = entries[0]!;
+  if (!isDispatchSelectorKey(key) || typeof rawValue !== 'string') return undefined;
+  const value = rawValue.trim();
+  return value ? { key, value } : undefined;
+}
+
+function isDispatchSelectorKey(key: string): key is MaestroDispatchSelector['key'] {
+  return key === 'id' || key === 'label' || key === 'text';
+}
+
+function runnerSelectorValues(
+  node: SnapshotState['nodes'][number],
+  key: MaestroDispatchSelector['key'],
+): string[] {
+  if (key === 'id') return typeof node.identifier === 'string' ? [node.identifier] : [];
+  if (key === 'label') return typeof node.label === 'string' ? [node.label] : [];
+  return [node.label, node.identifier, node.value].filter(
+    (value): value is string => typeof value === 'string',
+  );
+}
+
+function equalIgnoringCase(left: string, right: string): boolean {
+  return left.toLocaleLowerCase() === right.toLocaleLowerCase();
 }
 
 function conditionMatches(
@@ -278,15 +404,36 @@ function validateTimeout(timeoutMs: number, command: string): void {
   }
 }
 
+function isRetriableSnapshotError(error: unknown): boolean {
+  return error instanceof AppError && error.details?.retriable === true;
+}
+
 function snapshotStabilitySignature(snapshot: SnapshotState): string {
   return JSON.stringify(
     snapshot.nodes.map((node) => ({
       index: node.index,
       parentIndex: node.parentIndex,
+      depth: node.depth,
       type: node.type,
+      role: node.role,
+      subrole: node.subrole,
       identifier: node.identifier,
       label: node.label,
       value: node.value,
+      enabled: node.enabled,
+      selected: node.selected,
+      focused: node.focused,
+      visibleToUser: node.visibleToUser,
+      hittable: node.hittable,
+      pid: node.pid,
+      bundleId: node.bundleId,
+      appName: node.appName,
+      windowTitle: node.windowTitle,
+      surface: node.surface,
+      hiddenContentAbove: node.hiddenContentAbove,
+      hiddenContentBelow: node.hiddenContentBelow,
+      interactionBlocked: node.interactionBlocked,
+      presentationHints: node.presentationHints,
       rect: node.rect
         ? {
             x: Math.round(node.rect.x),

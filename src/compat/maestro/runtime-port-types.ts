@@ -36,6 +36,12 @@ export type MaestroTargetMatch = {
   readonly rect?: Rect;
   readonly viewport?: Rect;
   readonly ref?: string;
+  readonly dispatchSelector?: MaestroDispatchSelector;
+};
+
+export type MaestroDispatchSelector = {
+  readonly key: 'id' | 'label' | 'text';
+  readonly value: string;
 };
 
 export type MaestroSelectorEvidence = MaestroObservationEvidence;
@@ -43,6 +49,7 @@ export type MaestroSelectorEvidence = MaestroObservationEvidence;
 export type MaestroTargetResolution = MaestroTargetMatch & {
   readonly kind: 'selector';
   readonly selector: MaestroSelector;
+  readonly query: MaestroTargetQuery;
   readonly rect: Rect;
 };
 
@@ -52,6 +59,7 @@ export type MaestroTargetQuery = {
   readonly timeoutMs: number;
   readonly index?: number;
   readonly childOf?: MaestroSelector;
+  readonly allowAtomicSelectorDispatch?: boolean;
 };
 
 export type MaestroInputTarget = {

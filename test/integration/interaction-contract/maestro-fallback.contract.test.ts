@@ -5,9 +5,7 @@ import { AppError } from '../../../src/kernel/errors.ts';
 import { assertRpcError, assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { scenarioName } from './coverage-manifest.ts';
 import { MAESTRO_FALLBACK_COVERAGE } from './maestro-fallback.coverage.ts';
-import { RUNNER_CLOSED_DRAWER_NODES } from './fixtures.ts';
 import {
-  runnerSnapshotEntry,
   runnerTapEntry,
   runnerTapErrorEntry,
   runnerTypeEntry,
@@ -130,21 +128,13 @@ test('maestro-non-hittable-fallback fill resolutionDisclosure: allowed-but-not-t
 test(scenario('offscreen'), async () => {
   await withIosContractDaemon(
     [
-      // hasTappableFrame refuses empty/out-of-app frames runner-side; the
-      // daemon then falls back to the runtime path, which refuses with the
-      // actionable offscreen shape instead of tapping blind coordinates.
+      // The runner refuses empty/out-of-app frames. Maestro replay preserves
+      // this typed result so the compat runtime can own fresh-geometry fallback.
       runnerTapErrorEntry(new AppError('ELEMENT_OFFSCREEN', 'Element has no tappable frame')),
-      runnerSnapshotEntry(RUNNER_CLOSED_DRAWER_NODES),
     ],
     async (daemon) => {
       const click = await daemon.callCommand('click', ['label=Explore'], MAESTRO_FLAGS);
-      const error = assertRpcError(
-        click,
-        'COMMAND_FAILED',
-        /off-screen element and is not safe to click/,
-      );
-      const details = error.details as Record<string, unknown> | undefined;
-      assert.equal(details?.reason, 'offscreen_selector');
+      assertRpcError(click, 'ELEMENT_OFFSCREEN', /no tappable frame/);
     },
   );
 });

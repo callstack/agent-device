@@ -171,6 +171,7 @@ export function normalizePublicGesture(input: GesturePayload): NormalizedPublicG
               input.distance ?? GESTURE_FLING_DEFAULT_DISTANCE,
             ),
             durationMs: input.durationMs,
+            executionProfile: 'endpoint-hold',
           },
           deprecations: [
             { rule: 'fling-duration', replacement: 'Use gesture pan for timed movement.' },
@@ -191,7 +192,12 @@ export function normalizePublicGesture(input: GesturePayload): NormalizedPublicG
       return input.durationMs === undefined
         ? { gesture: { intent: 'fling', preset: input.preset }, deprecations: [] }
         : {
-            gesture: { intent: 'pan', preset: input.preset, durationMs: input.durationMs },
+            gesture: {
+              intent: 'pan',
+              preset: input.preset,
+              durationMs: input.durationMs,
+              executionProfile: 'endpoint-hold',
+            },
             deprecations: [
               { rule: 'swipe-duration', replacement: 'Use gesture pan for timed movement.' },
             ],
@@ -246,6 +252,7 @@ export function normalizePublicSwipeMotion(input: {
       origin: input.from,
       delta: { x: input.to.x - input.from.x, y: input.to.y - input.from.y },
       durationMs: input.durationMs,
+      executionProfile: 'endpoint-hold',
     },
     deprecations: [{ rule: 'swipe-duration', replacement: 'Use gesture pan for timed movement.' }],
   };

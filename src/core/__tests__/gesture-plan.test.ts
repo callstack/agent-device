@@ -22,6 +22,7 @@ describe('single-pointer plans', () => {
     );
     assert.equal(plan.topology, 'single');
     assert.equal(plan.intent, 'pan');
+    assert.equal(plan.executionProfile, 'timed-pan');
     assert.equal(plan.durationMs, 500);
     assert.deepEqual(plan.pointers[0].samples[0]?.point, { x: 100, y: 200 });
     assert.deepEqual(plan.pointers[0].samples.at(-1)?.point, { x: 60, y: 225 });
@@ -36,8 +37,12 @@ describe('single-pointer plans', () => {
       { intent: 'fling', from: { x: 50, y: 100 }, to: { x: 230, y: 100 } },
       PORTRAIT,
     );
+    assert.equal(directional.topology, 'single');
+    assert.equal(endpoints.topology, 'single');
     assert.equal(directional.durationMs, 100);
     assert.equal(endpoints.durationMs, 100);
+    assert.equal(directional.executionProfile, 'endpoint-hold');
+    assert.equal(endpoints.executionProfile, 'endpoint-hold');
     assert.deepEqual(directional.pointers[0].samples.at(-1)?.point, { x: 50, y: 20 });
     assert.deepEqual(endpoints.pointers[0].samples.at(-1)?.point, { x: 230, y: 100 });
   });
@@ -52,6 +57,26 @@ describe('single-pointer plans', () => {
     assert.equal(pan.durationMs, 400);
     assert.deepEqual(pan.pointers[0].samples[0]?.point, { x: 80, y: 430 });
     assert.deepEqual(pan.pointers[0].samples.at(-1)?.point, { x: 360, y: 430 });
+  });
+
+  test('single-pointer pan preserves its execution profile', () => {
+    const plan = buildGesturePlan(
+      {
+        intent: 'pan',
+        origin: { x: 360, y: 430 },
+        delta: { x: -320, y: 0 },
+        durationMs: 500,
+        executionProfile: 'endpoint-hold',
+      },
+      PORTRAIT,
+    );
+
+    assert.equal(plan.topology, 'single');
+    assert.equal(plan.intent, 'pan');
+    assert.equal(plan.executionProfile, 'endpoint-hold');
+    assert.equal(plan.durationMs, 500);
+    assert.deepEqual(plan.pointers[0].samples[0]?.point, { x: 360, y: 430 });
+    assert.deepEqual(plan.pointers[0].samples.at(-1)?.point, { x: 40, y: 430 });
   });
 });
 
