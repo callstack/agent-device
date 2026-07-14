@@ -3388,8 +3388,7 @@ test('a ref press crosses the ADR 0014 side-effect seam and expires the ref fram
 
   const press = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
   expect(press?.ok).toBe(true);
-  // The transition is wired at the leaf seam even though iOS enforcement of the
-  // expired-frame rejection is deferred to a later migration step.
+  // The transition is wired at the leaf seam.
   expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
 
   // ADR 0014: a PARTIAL publication (find/settle/divergence, via
@@ -3397,6 +3396,39 @@ test('a ref press crosses the ADR 0014 side-effect seam and expires the ref fram
   // re-authorize the complete frame — only a complete snapshot does.
   markSessionSnapshotRefsIssued(sessionStore.get(sessionName)!);
   expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+});
+
+test('ADR 0014 evidence #1: a second ref mutation rejects (bare and pinned) until a fresh observation re-authorizes', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'seam-sequence';
+  const session = makeStaleRefSession(sessionName);
+  session.snapshotGeneration = 500;
+  // A complete snapshot issued the frame at generation 500.
+  activateCompleteRefFrame(session);
+  sessionStore.set(sessionName, session);
+  mockDispatch.mockImplementation(async (_device, command) =>
+    command === 'snapshot' ? { nodes: makeTwoButtonNodes(), backend: 'xctest' } : {},
+  );
+
+  // `snapshot -> press @e1`: admitted; crosses the seam and expires the frame.
+  const first = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
+  expect(first?.ok).toBe(true);
+  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+
+  // `-> press @e2`: the unobserved second mutation rejects (bare).
+  const bare = await runInteraction(sessionStore, sessionName, 'press', ['@e2']);
+  expect(bare?.ok).toBe(false);
+  if (bare && !bare.ok) expect(bare.error.details?.reason).toBe('ref_frame_expired');
+
+  // A pin at the same epoch also rejects — expiry is evaluated before the pin.
+  const pinned = await runInteraction(sessionStore, sessionName, 'press', ['@e2~s500']);
+  expect(pinned?.ok).toBe(false);
+  if (pinned && !pinned.ok) expect(pinned.error.details?.reason).toBe('ref_frame_expired');
+
+  // `-> snapshot -> press @e2`: a fresh complete frame re-authorizes.
+  activateCompleteRefFrame(sessionStore.get(sessionName)!);
+  const reobserved = await runInteraction(sessionStore, sessionName, 'press', ['@e2']);
+  expect(reobserved?.ok).toBe(true);
 });
 
 test('direct iOS selector click crosses the ADR 0014 fused seam and expires the ref frame', async () => {

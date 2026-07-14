@@ -11,12 +11,12 @@ import type { SessionState } from './types.ts';
  * coarse client-stale marker) fields, which keep their wire-visible names
  * (`refsGeneration`, the `@e12~s42` pin grammar) for compatibility.
  *
- * Migration status: this step introduces the model and the admission matrix and
- * routes the existing iOS stale-ref enforcement (#1241) through it. Frame
- * expiration at the device side-effect seam, non-`all` issuance scope, and
- * fail-closed enforcement on other platforms land in later steps; until then a
- * frame is always `active` with scope `all`, so `admitRefMutation` reduces to
- * the generation-pin check that path already performed.
+ * The frame is expired at the device side-effect seam, carries a non-`all`
+ * issuance scope after a partial publication, and its admission matrix is
+ * enforced fail-closed on every platform before dispatch (ADR 0014 steps 3–7).
+ * The wire names `refsGeneration` and the `@e12~s42` pin grammar are unchanged;
+ * the coarse `snapshotRefsStale` marker still backs read-only staleness warnings
+ * until migration step 8 removes it.
  */
 
 /**
