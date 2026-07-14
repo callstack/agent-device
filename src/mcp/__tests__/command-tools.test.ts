@@ -65,7 +65,10 @@ test('MCP executes deprecated rotate calls without advertising a second tool', a
     orientation: 'landscape-left',
     message: 'Rotated to landscape-left',
   });
-  assert.equal(listCommandTools().some((tool) => tool.name === 'rotate'), false);
+  assert.equal(
+    listCommandTools().some((tool) => tool.name === 'rotate'),
+    false,
+  );
 });
 
 test('MCP command tool executor renders optimized snapshot text by default', async () => {
