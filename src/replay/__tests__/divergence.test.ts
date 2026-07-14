@@ -470,3 +470,84 @@ test('formatReplayDivergenceReport lists candidates for an identity-unverifiable
   assert.match(report!, /2 candidate\(s\) shared the recorded identity/);
   assert.match(report!, /@e1 \[button\] "Row"/);
 });
+
+// --- ADR 0012 decision 6: the `repairHint` text guidance embeds the
+// concrete `resume.from`/`planDigest` command ONLY when `resume.allowed` is
+// true, and never renders a `--from` command a structured caller would be
+// refused — it surfaces `resume.reason` instead. ---
+
+test('formatReplayDivergenceReport embeds the concrete resume command for an allowed record-and-heal divergence', async () => {
+  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const report = formatReplayDivergenceReport({
+    divergence: {
+      version: 1,
+      kind: 'action-failure',
+      step: { index: 2, source: { path: '/tmp/flow.ad', line: 3 } },
+      action: 'click id="article"',
+      cause: { code: 'COMMAND_FAILED', message: 'not hittable' },
+      screen: { state: 'available', refsGeneration: 1, refs: [{ ref: 'e1', role: 'button' }] },
+      suggestions: [],
+      suggestionCount: 0,
+      resume: { allowed: true, from: 3, planDigest: 'deadbeef' },
+      repairHint: 'record-and-heal',
+    },
+  });
+  assert.ok(report);
+  assert.match(report!, /Repair hint: record-and-heal — press the correct control/);
+  // The LITERAL next command, computed from this exact `resume` — never the
+  // generic `<step\+1>` placeholder — so a text-only caller reads the same
+  // continuation a JSON\/MCP-first caller would follow mechanically.
+  assert.match(report!, /then replay --from 3 --plan-digest deadbeef\./);
+  assert.doesNotMatch(report!, /<step/);
+});
+
+test('formatReplayDivergenceReport never renders a --from command when resume is NOT allowed, surfacing the reason instead', async () => {
+  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const report = formatReplayDivergenceReport({
+    divergence: {
+      version: 1,
+      kind: 'action-failure',
+      step: { index: 2, source: { path: '/tmp/flow.ad', line: 3 } },
+      action: 'click id="article"',
+      cause: { code: 'COMMAND_FAILED', message: 'not hittable' },
+      screen: { state: 'available', refsGeneration: 1, refs: [{ ref: 'e1', role: 'button' }] },
+      suggestions: [],
+      suggestionCount: 0,
+      resume: {
+        allowed: false,
+        from: 3,
+        planDigest: 'deadbeef',
+        reason: 'step 1 is inside runtime control flow (retry); skipping it cannot be proven safe.',
+      },
+      repairHint: 'record-and-heal',
+    },
+  });
+  assert.ok(report);
+  assert.match(report!, /Repair hint: record-and-heal/);
+  // A text caller must never be told to run a --from a structured caller
+  // (reading the same `resume.allowed:false`) would be refused.
+  assert.doesNotMatch(report!, /replay --from/);
+  assert.match(report!, /cannot currently be resumed automatically/);
+  assert.match(report!, /step 1 is inside runtime control flow \(retry\)/);
+});
+
+test('formatReplayDivergenceReport falls back to a generic non-resumable sentence when resume carries no reason', async () => {
+  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const report = formatReplayDivergenceReport({
+    divergence: {
+      version: 1,
+      kind: 'action-failure',
+      step: { index: 2, source: { path: '/tmp/flow.ad', line: 3 } },
+      action: 'click id="article"',
+      cause: { code: 'COMMAND_FAILED', message: 'not hittable' },
+      screen: { state: 'unavailable', reason: 'sparse-snapshot', hint: 'run snapshot -i.' },
+      suggestions: [],
+      suggestionCount: 0,
+      resume: { allowed: false, reason: 'resume not yet supported' },
+      repairHint: 'state-repair',
+    },
+  });
+  assert.ok(report);
+  assert.doesNotMatch(report!, /replay --from/);
+  assert.match(report!, /cannot currently be resumed automatically \(resume not yet supported\)/);
+});

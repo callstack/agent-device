@@ -32,15 +32,31 @@ export function readEffectiveReplayPlanDigestMetadata(
 
 type ReplayEntryIndexResult = { ok: true; value: number } | { ok: false; response: DaemonResponse };
 
+/** The session-side state that gates an EMPTY-TAIL resume (`--from actionCount + 1`). */
+export type PendingRecordAndHeal = { expectedFrom: number; actionsCountAtDivergence: number };
+
 /**
  * Resolves `--from`/`--plan-digest` into a 0-based loop entry index before
  * any device action. `--from` is 1-based and matches divergence step indices.
+ *
+ * `pendingRecordAndHeal`/`sessionActionsLength` gate the ONE ordinal beyond
+ * the plan's end (`actionCount + 1`): ADR 0012 decision 6, R2's `record-and-heal`
+ * repair resumes past the plan's LAST step once the agent performs the
+ * diverged step manually, and that resume must execute zero device actions
+ * before reaching the normal completion path. That allowance is scoped to
+ * the EXACT session + target that actually produced it (`stampPendingRecordAndHealWatermark`,
+ * `session-replay-resume.ts`), and only once a new action proves the
+ * corrective press happened — never a blanket "one past the end is fine" for
+ * any session, which would let an unrelated or blind `--from actionCount + 1`
+ * silently skip the plan's tail and commit an unfinished repair.
  */
 export function resolveReplayEntryIndex(
   flags: CommandFlags | undefined,
   actionCount: number,
   planDigest: string,
   actions: SessionAction[],
+  pendingRecordAndHeal: PendingRecordAndHeal | undefined,
+  sessionActionsLength: number,
 ): ReplayEntryIndexResult {
   const from = flags?.replayFrom;
   const digest = flags?.replayPlanDigest;
@@ -50,7 +66,15 @@ export function resolveReplayEntryIndex(
       'replay --from requires --plan-digest (and --plan-digest requires --from).',
     );
   }
-  const message = validateReplayResumeRequest({ from, digest, planDigest, actionCount, actions });
+  const message = validateReplayResumeRequest({
+    from,
+    digest,
+    planDigest,
+    actionCount,
+    actions,
+    pendingRecordAndHeal,
+    sessionActionsLength,
+  });
   return message ? invalidReplayEntryIndex(message) : { ok: true, value: from - 1 };
 }
 
@@ -64,17 +88,39 @@ function validateReplayResumeRequest(params: {
   planDigest: string;
   actionCount: number;
   actions: SessionAction[];
+  pendingRecordAndHeal: PendingRecordAndHeal | undefined;
+  sessionActionsLength: number;
 }): string | undefined {
-  const { from, digest, planDigest, actionCount, actions } = params;
-  // `from === actionCount + 1` is a legal EMPTY-TAIL resume (ADR 0012 decision
-  // 6, R2): a `record-and-heal` divergence on the plan's LAST step reports
-  // exactly this `resume.from`, since the agent performs that step manually
-  // and there is nothing left to replay. The loop then executes zero steps
-  // and falls through to the normal end-of-plan completion path
-  // (`runReplayScriptFile`), correctly flipping an armed repair transaction
-  // COMPLETE. `from > actionCount + 1` has no addressable target at all.
-  if (!Number.isInteger(from) || from < 1 || from > actionCount + 1) {
+  const { from, digest, planDigest, actionCount, actions, pendingRecordAndHeal, sessionActionsLength } =
+    params;
+  // `actionCount + 1` (one past the plan's end) is a legal EMPTY-TAIL resume
+  // ONLY when it matches THIS session's own `record-and-heal` divergence
+  // watermark (`stampPendingRecordAndHealWatermark`, `session-replay-resume.ts`)
+  // — never a blanket "one past the end is fine" for any session or repair
+  // kind. Absent a matching watermark, `actionCount + 1` is exactly as
+  // out-of-range as any other ordinal beyond the plan.
+  const isAuthorizedEmptyTail =
+    from === actionCount + 1 &&
+    pendingRecordAndHeal !== undefined &&
+    pendingRecordAndHeal.expectedFrom === from;
+  if (!Number.isInteger(from) || from < 1 || (from > actionCount && !isAuthorizedEmptyTail)) {
     return `replay --from ${from} is out of range for a ${actionCount}-step plan.`;
+  }
+  // A `from` matching a pending `record-and-heal` watermark — in-range
+  // (mid-plan) or the empty-tail boundary above — requires proof the agent
+  // actually performed the diverged step: the session's recorded action
+  // count must have grown since the divergence. Without that proof, this
+  // would silently resume past an unrepaired step instead of rejecting.
+  if (
+    pendingRecordAndHeal?.expectedFrom === from &&
+    sessionActionsLength === pendingRecordAndHeal.actionsCountAtDivergence
+  ) {
+    return (
+      `replay --from ${from} continues a record-and-heal repair, but no corrective action has been ` +
+      'recorded on this session since that divergence; press the correct control via a blessed @ref ' +
+      "from the divergence's screen.refs (recorded, no --no-record) before resuming with " +
+      `--from ${from}.`
+    );
   }
   if (digest !== planDigest) {
     return (

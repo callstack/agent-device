@@ -168,3 +168,66 @@ test('a record-and-heal divergence on the LAST step resumes with an empty tail a
   expect(healedScript).toContain('article-v2');
   expect(healedScript).not.toMatch(/^click /m);
 });
+
+test('a --from one past the plan end is rejected as out of range when no record-and-heal watermark authorizes it', async () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'agent-device-replay-empty-tail-unauthorized-'),
+  );
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  // No target-v1 annotation: an unannotated action-failure always routes to
+  // the `manual` fail-safe (no recorded targetEvidence), so NO
+  // `pendingRecordAndHeal` watermark is ever stamped for this divergence.
+  const filePath = writeReplayFile(root, ['open "Demo" --relaunch', 'click label="Save"']);
+
+  const invoke = makeRecordingReplayInvoke({
+    sessionStore,
+    sessionName,
+    failSteps: new Set(['click label="Save"']),
+  });
+
+  const leg1 = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+  expect(leg1.ok).toBe(false);
+  if (leg1.ok) return;
+  const divergence = leg1.error.details?.divergence as {
+    repairHint: string;
+    resume: { allowed: boolean; from: number; planDigest: string };
+  };
+  expect(divergence.repairHint).toBe('manual');
+  // `from` stays AT the failed step (2) — never shifted, since only
+  // `record-and-heal` shifts `from`. The plan has 2 actions, so `--from 3`
+  // (one past the end) is what an EMPTY-TAIL resume would use — but this
+  // session never authorized it.
+  expect(divergence.resume.from).toBe(2);
+  const session = sessionStore.get(sessionName)!;
+  expect(session.pendingRecordAndHeal).toBeUndefined();
+
+  // --- A caller crafts `--from 3` directly — exactly the one-past-the-end
+  // ordinal a record-and-heal empty-tail resume would use, but with no
+  // matching watermark on this session. Must be rejected as out of range,
+  // never silently executed with zero steps (which would let `close`
+  // commit while the actual final "click" step remains unresolved). ---
+  const exploitAttempt = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [filePath],
+      flags: { saveScript: true, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+  expect(exploitAttempt.ok).toBe(false);
+  if (!exploitAttempt.ok) {
+    expect(exploitAttempt.error.code).toBe('INVALID_ARGS');
+    expect(exploitAttempt.error.message).toMatch(/out of range/);
+  }
+  expect(session.saveScriptComplete).toBeFalsy();
+});
