@@ -55,7 +55,12 @@ export const HEAL_COMPLETE_SENTINEL = '# agent-device:heal-complete';
  *   after a divergence but before the plan finishes from committing a PREFIX;
  *   every non-completion teardown (divergence-only exit, daemon shutdown,
  *   idle-reap) lands here too.
- * Ordinary (non-repair) recording is never blocked (no `saveScriptBoundary`).
+ * Ordinary (non-repair) recording is never blocked here (no `saveScriptBoundary`) —
+ * this gate only decides whether `write()` attempts a publish AT ALL. It says
+ * nothing about what happens once it does: `publishHealedScriptAtomically`'s
+ * refuse-on-exist applies to that attempted publish uniformly, repair-armed or
+ * not (see its doc comment) — ordinary recording is never blocked from trying,
+ * but it can still be refused if the target already exists.
  */
 function isRepairArmedWriteBlocked(session: SessionState): boolean {
   if (session.saveScriptBoundary === undefined) return false;
@@ -98,9 +103,16 @@ export class SessionScriptWriter {
       // SURFACED (no-clobber refusal, bare-`@ref`, or a filesystem error alike)
       // so close/teardown can report it and keep the session for retry — never
       // swallowed into a silent `{written:false}`. Ordinary (non-repair)
-      // recording keeps its existing behavior: an unexpected AppError still
-      // fails loud (none is raised on that path today), an fs error is a quiet
-      // skip.
+      // recording keeps its existing SHAPE of behavior: an AppError still
+      // fails loud (thrown, not swallowed into `{written:false}`) and any other
+      // fs error is a quiet skip — but an AppError is no longer only
+      // theoretical here. Since `publishHealedScriptAtomically` refuses ANY
+      // pre-existing target uniformly (maintainer-approved: refuse-on-exist
+      // applies to ordinary recording too, not just repair heals), an ordinary
+      // `open`/`close --save-script` write against an existing target now
+      // throws that same no-clobber AppError, surfacing here as a genuine
+      // "fails loud" case rather than the "none is raised on that path" it was
+      // before that change.
       if (repairArmed) {
         return { written: false, error: toRepairCommitFailure(error, scriptPath) };
       }
@@ -148,6 +160,15 @@ function formatSessionScript(session: SessionState, appendCompleteSentinel: bool
  * publishes `script` to `scriptPath` atomically, refusing ANY pre-existing
  * target — complete or partial, the default healed sibling or an explicit
  * `--save-script=<path>` alike.
+ *
+ * This is `write()`'s ONLY publish primitive, called unconditionally for
+ * every target — a repair-armed heal AND an ordinary, non-repair
+ * `open`/`close --save-script` recording alike. There is no
+ * repair-armed-vs-ordinary branch here (an earlier design had one —
+ * `publishOverwriteAtomically`, rename-replace for ordinary writes — since
+ * removed): an ordinary recording's target is refused exactly like a healed
+ * repair's, never silently overwritten. `--force`/`--overwrite` is a future
+ * escape hatch (#1258), not implemented today.
  *
  * The temp file is created in the SAME DIRECTORY as the target (never
  * `/tmp`), so the publish itself is a single intra-directory `linkSync`:

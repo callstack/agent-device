@@ -282,9 +282,12 @@ export type SessionState = {
   /**
    * ADR 0012 decision 6: set when `saveScriptPath` was DEFAULTED to the
    * `<original-stem>.healed.ad` sibling (no explicit `--save-script=<out>`).
-   * The writer refuses to clobber an existing default healed script, so a
-   * second repair against the same original never destroys an unreviewed
-   * prior `.healed.ad` diff.
+   * Bookkeeping only — it does not gate the writer's refuse-on-exist
+   * decision, which is uniform regardless of this flag (see
+   * `publishHealedScriptAtomically`): a second repair against the same
+   * original is refused at the default healed sibling exactly like an
+   * explicit `--save-script=<path>` or an ordinary recording's target would
+   * be, never destroying an unreviewed prior `.healed.ad` diff.
    */
   saveScriptDefaultedHealedPath?: boolean;
   /**

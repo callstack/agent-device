@@ -23,8 +23,12 @@ export function recordActionEntry(
     session.recordSession = true;
     if (typeof entry.flags.saveScript === 'string') {
       // ADR 0012 decision 6: an explicit `--save-script=<path>` (e.g. `close
-      // --save-script=<path>`) clears the defaulted-healed marker so the
-      // writer's clobber guard never refuses an overwrite the caller directed.
+      // --save-script=<path>`) clears the defaulted-healed marker, since this
+      // path was no longer defaulted to the healed sibling. This marker plays
+      // no role in the publish decision itself: the writer's refuse-on-exist
+      // guard is uniform (see `publishHealedScriptAtomically`) and refuses
+      // ANY pre-existing target — an explicit, caller-DIRECTED path included.
+      // Directing the path is not the same as authorizing an overwrite.
       session.saveScriptPath = expandSessionPath(entry.flags.saveScript);
       session.saveScriptDefaultedHealedPath = false;
     }

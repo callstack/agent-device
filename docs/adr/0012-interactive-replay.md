@@ -579,7 +579,9 @@ Implementation is not accepted on benchmark evidence alone. Required automated c
   created in the target's own directory and published via a single exclusive `linkSync`
   (create-if-absent, first writer wins); and a no-clobber test proving publication refuses ANY
   pre-existing target — complete or partial alike, byte-for-byte unchanged — for both the default healed
-  sibling and an explicit `--save-script=<path>`.
+  sibling and an explicit `--save-script=<path>`, **and for an ordinary (non-repair) `open`/`close
+  --save-script` recording whose target already exists** — the writer entry point and publish primitive
+  are shared, so the refusal is uniform, not repair-only (see "Scope" below).
 
 Extend the settle benchmark (`~/.agent-device-bench/rnnav-matrix.py` pattern, external harness) with a
 replay arm only after these contracts pass: measure clean replay and one induced divergence repaired
@@ -809,6 +811,20 @@ a complete, review-worthy repair artifact for any other reader — but it no lon
 publish decision. Auto-versioned output names (e.g. `.healed.2.ad`) are explicitly **out of scope** here —
 a separate naming change, not part of this decision.
 
+**Scope: this refusal is uniform across repair AND ordinary recording, not repair-only.** Everything
+above is written in the context of decision 6's repair-armed heal, but `publishHealedScriptAtomically`
+(`src/daemon/session-script-writer.ts`) is the single publish primitive `SessionScriptWriter.write` calls
+for every `--save-script` target, with no repair-armed-vs-ordinary branch — a repair-armed heal
+(`saveScriptBoundary` set) and an ordinary, non-repair `open --save-script`/`close --save-script`
+recording (`saveScriptBoundary` absent) publish through the exact same exclusive `linkSync`. Before this
+decision, ordinary recording published via a separate atomic rename-replace path
+(`publishOverwriteAtomically`, since removed), silently overwriting an existing target; that overwrite
+path is gone. An ordinary recording whose target already exists is now refused exactly like a healed
+repair publish would be: `EEXIST` surfaces as the same `AppError`, the existing file is left
+byte-for-byte unchanged, and the caller must remove it or choose a different `--save-script=<path>`.
+There is no `--force`/`--overwrite` escape hatch for either path today; that is tracked as a future
+follow-up (#1258), not part of this decision.
+
 **Repair-session tombstone (R7 ownership).** When a bounded-expiry escape hatch idle-reaps (or a daemon
 shutdown tears down) a repair-armed transaction that has **not** reached `COMPLETE`, the teardown aborts
 (no publish, per the state machine) and must leave a **tombstone** rather than deleting the session record
@@ -929,7 +945,9 @@ each states its dependencies explicitly.
    `REPAIR_SESSION_EXPIRED` tombstone for an incomplete-transaction reap/shutdown (keyed by session key,
    owner + bounded expiry, cleared by a fresh `replay --save-script`); and race-safe atomic publication
    (temp file in the target's own directory, published via a single exclusive `linkSync` that refuses ANY
-   pre-existing target — complete or partial, default or explicit path alike — never overwriting one).
+   pre-existing target — complete or partial, default or explicit path alike, and uniformly for an
+   ordinary non-repair recording's target too, since the publish primitive is shared — never overwriting
+   one; see "Scope" under Decision 6 above).
 
 ## Migration progress
 

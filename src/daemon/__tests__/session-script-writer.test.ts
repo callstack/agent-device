@@ -410,6 +410,69 @@ test('write() now refuses an explicit --save-script=<path> pointing at an existi
   expect(fs.readFileSync(outPath, 'utf8')).toBe(before);
 });
 
+// (e) the refuse-on-exist publish primitive is shared with ORDINARY
+// (non-repair) recording too — no `saveScriptBoundary` at all, i.e. a plain
+// `open --save-script`/`close --save-script` session, never `replay
+// --save-script`. Before the maintainer-approved uniform simplification,
+// this path published via a separate atomic rename-replace and silently
+// overwrote an existing target; that overwrite path is gone (see the ADR's
+// "Scope" note under decision 6). This is the coverage gap the reviewer
+// flagged on #1235: only repair-armed (`saveScriptBoundary` set, even to 0)
+// sessions were exercised above.
+test('an ordinary (non-repair) recording now refuses an existing target too (behavior change: no more rename-replace overwrite)', () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'agent-device-script-writer-ordinary-clobber-'),
+  );
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const outPath = path.join(root, 'flows', 'existing.ad');
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  fs.writeFileSync(outPath, 'context platform=ios device="x"\nclick id="old"\n');
+  const before = fs.readFileSync(outPath, 'utf8');
+
+  const session = makeIosSession('default', {
+    recordSession: true,
+    // No saveScriptBoundary: an ordinary open/close --save-script recording,
+    // never armed via `replay --save-script` — this is NOT a repair.
+    saveScriptPath: outPath,
+    actions: [action({ command: 'click', positionals: ['id="new"'] })],
+  });
+
+  // Unlike a repair-armed write (which returns `{written:false, error}`), an
+  // ordinary (non-repair-armed) write's catch block RETHROWS an AppError
+  // (`write()`: `if (repairArmed) return {...}; if (error instanceof
+  // AppError) throw error;`) — so refusal here surfaces as a thrown error,
+  // not a returned result.
+  expect(() => writer.write(session)).toThrow(/already exists/);
+  // The pre-existing target is left byte-for-byte unchanged — refused, not
+  // clobbered.
+  expect(fs.readFileSync(outPath, 'utf8')).toBe(before);
+});
+
+// (f) confirm the absent-target case still succeeds for ordinary recording —
+// the refusal is scoped to an EXISTING target, not a blanket block.
+test('an ordinary (non-repair) recording still publishes cleanly when its target does not exist yet', () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'agent-device-script-writer-ordinary-absent-'),
+  );
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const outPath = path.join(root, 'flows', 'fresh.ad');
+
+  const session = makeIosSession('default', {
+    recordSession: true,
+    // No saveScriptBoundary: ordinary recording, not a repair.
+    saveScriptPath: outPath,
+    actions: [action({ command: 'click', positionals: ['id="new"'] })],
+  });
+
+  const result = writer.write(session);
+  expect(result.written).toBe(true);
+  expect(result.written && result.path).toBe(outPath);
+  const parsed = parseReplayScriptDetailed(fs.readFileSync(outPath, 'utf8'));
+  expect(parsed.actions.map((a) => a.positionals[0])).toEqual(['id="new"']);
+  // Ordinary recording never carries the repair-only completeness sentinel.
+  expect(fs.readFileSync(outPath, 'utf8')).not.toContain(HEAL_COMPLETE_SENTINEL);
+});
+
 test('close --save-script=<explicit path> clears the defaulted marker, and a write to that (absent) explicit path succeeds', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-close-explicit-'));
   const writer = new SessionScriptWriter(path.join(root, 'sessions'));

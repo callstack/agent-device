@@ -548,9 +548,13 @@ function armReplaySaveScriptStep(params: {
   if (!session) return;
   session.recordSession = true;
   if (typeof saveScript === 'string') {
-    // An EXPLICIT `--save-script=<path>` clears the defaulted marker so the
-    // clobber guard never refuses a path the caller directed (invariant: the
-    // marker is set iff the current `saveScriptPath` was defaulted).
+    // An EXPLICIT `--save-script=<path>` clears the defaulted marker
+    // (invariant: the marker is set iff the current `saveScriptPath` was
+    // defaulted, not caller-directed). This no longer affects the publish
+    // decision either way — the writer's refuse-on-exist guard is uniform
+    // (`publishHealedScriptAtomically`) and refuses ANY pre-existing target,
+    // an explicit caller-directed path included, exactly like the default
+    // healed sibling.
     session.saveScriptPath = expandSessionPath(saveScript);
     session.saveScriptDefaultedHealedPath = false;
   } else if (session.saveScriptPath === undefined) {
