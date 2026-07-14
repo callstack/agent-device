@@ -3,6 +3,7 @@ import type {
   DaemonResponse as SharedDaemonResponse,
 } from '../types.ts';
 import type { RequestProgressSink } from '../../request/progress.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { createRequestId, emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { prepareRemoteRequestArtifacts } from '../../remote/daemon-artifacts.ts';
@@ -13,6 +14,7 @@ import {
   isHeldRepairDivergence,
   resolveClientSettings,
   type DaemonClientSettings,
+  type EnsuredDaemon,
 } from './daemon-client-lifecycle.ts';
 import { sendRequest } from './daemon-client-transport.ts';
 import { resolveDaemonRequestTimeoutMs } from './daemon-client-timeout.ts';
@@ -78,9 +80,8 @@ export async function sendToDaemon(
       session: req.session,
     },
   });
-  let response: DaemonResponse | undefined;
-  try {
-    response = await withDiagnosticTimer(
+  return await performDaemonRequestWithCleanup(req, daemon, settings, async () => {
+    const response = await withDiagnosticTimer(
       'daemon_request',
       async () =>
         await sendRequest(
@@ -93,11 +94,47 @@ export async function sendToDaemon(
         ),
       { requestId, command: req.command },
     );
-    response = withRepairSessionAddressHintIfOwned(response, settings);
-    return response;
-  } finally {
-    await cleanupDaemonAfterRequest(req, daemon, settings, response);
+    return withRepairSessionAddressHintIfOwned(response, settings);
+  });
+}
+
+/**
+ * ADR 0012 decision 6 (BLOCKER 2, third follow-up): runs `send` and ALWAYS
+ * runs cleanup afterward, using cleanup's result (not `send`'s raw result) as
+ * the response the caller actually receives — cleanup can discover a
+ * shutdown-time repair-commit failure the request itself never knew about (a
+ * one-shot repair that completed with no divergence returns SUCCESS
+ * immediately; the actual commit is deferred to daemon teardown, which
+ * `cleanupDaemonAfterRequest` triggers and inspects). A caught-and-rethrown
+ * error (rather than a `return` inside `finally`, which oxlint's
+ * `no-unsafe-finally` rejects and which would also make a thrown `send`
+ * failure silently swallowed by a later `return`) keeps cleanup running
+ * unconditionally while a thrown failure still propagates normally afterward.
+ */
+async function performDaemonRequestWithCleanup(
+  req: Omit<DaemonRequest, 'token'>,
+  daemon: EnsuredDaemon,
+  settings: DaemonClientSettings,
+  send: () => Promise<DaemonResponse>,
+): Promise<DaemonResponse> {
+  let response: DaemonResponse | undefined;
+  let requestFailed = false;
+  let requestError: unknown;
+  try {
+    response = await send();
+  } catch (error) {
+    requestFailed = true;
+    requestError = error;
   }
+  const finalResponse = await cleanupDaemonAfterRequest(req, daemon, settings, response);
+  if (requestFailed) throw requestError;
+  if (!finalResponse) {
+    // Unreachable in practice: `requestFailed` is false here, so `response`
+    // was successfully set above, and `cleanupDaemonAfterRequest` always
+    // returns a response (unchanged or overridden) when given one.
+    throw new AppError('COMMAND_FAILED', 'Daemon request produced no response after cleanup');
+  }
+  return finalResponse;
 }
 
 /**

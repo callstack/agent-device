@@ -2,11 +2,12 @@ import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError, normalizeError } from '../../kernel/errors.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { runCmdDetachedMonitored, type ExecDetachedExit } from '../../utils/exec.ts';
 import { findProjectRoot, readVersion } from '../../utils/version.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { findUnrecoveredRepairCommitFailure } from '../session-store.ts';
 import {
   resolveDaemonPaths,
   resolveDaemonServerMode,
@@ -305,12 +306,29 @@ async function startLocalDaemon(settings: DaemonClientSettings): Promise<Ensured
   });
 }
 
+/**
+ * ADR 0012 decision 6 (BLOCKER 2, third follow-up): a one-shot repair
+ * (`replay --save-script`) that COMPLETES without diverging returns SUCCESS
+ * here — the actual healed-script COMMIT is deferred to daemon teardown
+ * (`finalizeRepairTeardown`, run inside the daemon process's own shutdown
+ * handler, triggered by `stopDaemonProcessForTakeover` below). If that
+ * deferred commit then FAILS, the daemon leaves a `REPAIR_COMMIT_FAILED`
+ * tombstone in this owned state dir — the only surviving record of the
+ * failure, since the daemon process (and its in-memory session) is gone by
+ * the time this function inspects it. Unconditionally deleting the owned
+ * state dir here would silently discard both the failure and the tombstone's
+ * re-run guidance, while the CALLER still holds the success response this
+ * function already returned. Returns the response the caller should actually
+ * use: unchanged, unless an unrecovered commit failure is found, in which
+ * case the state dir is preserved (never `rmSync`'d) and the response is
+ * overridden to surface it.
+ */
 export async function cleanupDaemonAfterRequest(
   req: Omit<DaemonRequest, 'token'>,
   daemon: EnsuredDaemon,
   settings: DaemonClientSettings,
   response: DaemonResponse | undefined,
-): Promise<void> {
+): Promise<DaemonResponse | undefined> {
   if (
     !isOneShotReplayCommand(req.command) ||
     (!daemon.startedByClient && !settings.ownedStateDir) ||
@@ -326,7 +344,7 @@ export async function cleanupDaemonAfterRequest(
     // below from racing ahead of that window.
     isHeldRepairDivergence(response)
   ) {
-    return;
+    return response;
   }
 
   const result = {
@@ -336,6 +354,7 @@ export async function cleanupDaemonAfterRequest(
     removedStateDir: false,
     error: undefined as string | undefined,
   };
+  let surfacedResponse = response;
 
   try {
     await stopDaemonProcessForTakeover(daemon.info);
@@ -351,8 +370,17 @@ export async function cleanupDaemonAfterRequest(
     result.removedLock = lockExists && !fs.existsSync(settings.paths.lockPath);
 
     if (settings.ownedStateDir) {
-      fs.rmSync(settings.paths.baseDir, { recursive: true, force: true });
-      result.removedStateDir = !fs.existsSync(settings.paths.baseDir);
+      // `stopDaemonProcessForTakeover` above waits for the (real) daemon
+      // process to actually exit, which only happens AFTER its shutdown
+      // handler finishes `finalizeRepairTeardown` for every session — so by
+      // now any commit-failure tombstone it would leave is already on disk.
+      const unrecovered = findUnrecoveredRepairCommitFailure(settings.paths.sessionsDir);
+      if (unrecovered) {
+        surfacedResponse = surfaceUnrecoveredRepairCommitFailure(response, unrecovered);
+      } else {
+        fs.rmSync(settings.paths.baseDir, { recursive: true, force: true });
+        result.removedStateDir = !fs.existsSync(settings.paths.baseDir);
+      }
     }
   }
 
@@ -361,6 +389,37 @@ export async function cleanupDaemonAfterRequest(
     phase: 'daemon_replay_cleanup',
     data: result,
   });
+  return surfacedResponse;
+}
+
+/**
+ * ADR 0012 decision 6 (BLOCKER 2, third follow-up): converts an unrecovered
+ * shutdown-time commit failure into the response the CALLER actually sees.
+ * The original response may have been a genuine SUCCESS — the replay/plan
+ * itself completed with no divergence, only the deferred healed-script
+ * publish failed afterward at teardown — so there is no existing error to
+ * attach a hint to (unlike `attachRepairSessionAddressHint`, which only ever
+ * runs on an already-`ok:false` divergence): this REPLACES the response with
+ * the same `REPAIR_COMMIT_FAILED` error the daemon's own
+ * `repairExpiredIfTombstoned` (request-router.ts) would surface to a
+ * follow-up request on this session — a one-shot command has no follow-up
+ * request to receive it, so the client raises it here instead. An existing
+ * `ok:false` response (e.g. the platform close itself failed for a different,
+ * more specific reason) is returned unchanged.
+ */
+function surfaceUnrecoveredRepairCommitFailure(
+  response: DaemonResponse | undefined,
+  unrecovered: NonNullable<ReturnType<typeof findUnrecoveredRepairCommitFailure>>,
+): DaemonResponse {
+  if (response && !response.ok) return response;
+  const { sessionName, tombstone } = unrecovered;
+  const reRun = tombstone.sourcePath
+    ? `re-run: replay ${tombstone.sourcePath} --save-script`
+    : 're-run your replay <script> --save-script from the start';
+  const message =
+    `The repair transaction for session "${sessionName}" completed, but committing its ` +
+    `healed script failed at teardown: ${tombstone.commitFailure.message}. ${reRun}.`;
+  return { ok: false, error: normalizeError(new AppError('REPAIR_COMMIT_FAILED', message)) };
 }
 
 /**
