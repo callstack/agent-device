@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon/types.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
 import { MAESTRO_OBSERVATION_POLL_MS } from '../daemon-runtime-port-observation.ts';
@@ -69,30 +69,18 @@ test('delegates lifecycle and coordinate gestures through public daemon commands
   ]);
 });
 
-test('pairs percentage swipe geometry with the nested public gesture request', async () => {
+test('uses the direct viewport without snapshot and pairs it with the nested gesture request', async () => {
   const requests: DaemonRequest[] = [];
+  const viewport = { x: 10, y: 20, width: 400, height: 800 };
+  const resolveGestureViewport = vi.fn(async () => viewport);
   const port = createDaemonMaestroRuntimePort({
     baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
-      if (request.command === 'snapshot') {
-        return {
-          ok: true,
-          data: {
-            createdAt: 0,
-            nodes: [
-              {
-                index: 0,
-                type: 'Application',
-                rect: { x: 10, y: 20, width: 400, height: 800 },
-              },
-            ],
-          },
-        };
-      }
+      if (request.command === 'snapshot') throw new Error('gesture viewport must not snapshot');
       return { ok: true, data: {} };
     },
-    dependencies: makeDependencies(),
+    dependencies: { ...makeDependencies(), resolveGestureViewport },
     platform: 'android',
   });
 
@@ -115,12 +103,14 @@ test('pairs percentage swipe geometry with the nested public gesture request', a
   expect(requests.at(-1)).toMatchObject({
     command: 'swipe',
     input: {
-      from: { x: 360, y: 400 },
-      to: { x: 40, y: 400 },
+      from: { x: 370, y: 420 },
+      to: { x: 50, y: 420 },
       durationMs: 300,
     },
-    internal: { gestureViewport: { x: 0, y: 0, width: 400, height: 800 } },
+    internal: { gestureViewport: viewport },
   });
+  expect(resolveGestureViewport).toHaveBeenCalledOnce();
+  expect(requests.map(({ command }) => command)).toEqual(['swipe']);
 });
 
 test('does not leak replay and test controls into nested public commands', async () => {
@@ -325,6 +315,7 @@ test('takes one final observation when polling wakes after the deadline', async 
       sleep: async (milliseconds) => {
         now.value += milliseconds + 1;
       },
+      resolveGestureViewport: async () => ({ x: 0, y: 0, width: 402, height: 874 }),
     },
     platform: 'android',
   });

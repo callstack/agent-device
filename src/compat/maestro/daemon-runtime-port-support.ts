@@ -15,14 +15,21 @@ import type {
   MaestroTargetMatch,
   MaestroTargetQuery,
 } from './runtime-port-types.ts';
+import type { Rect } from '../../kernel/snapshot.ts';
 import type { DaemonMaestroRuntimeDependencies } from './daemon-runtime-port-observation.ts';
+
+type DirectMaestroRuntimeDependencies = DaemonMaestroRuntimeDependencies & {
+  readonly resolveGestureViewport: (
+    context: MaestroRuntimeOperationContext,
+  ) => Promise<Rect | undefined>;
+};
 
 export type DaemonMaestroRuntimeBaseRequest = Omit<DaemonRequest, 'command' | 'positionals'>;
 
 export type CreateDaemonMaestroRuntimeOperationsOptions = {
   readonly baseReq: DaemonMaestroRuntimeBaseRequest;
   readonly invoke: DaemonInvokeFn;
-  readonly dependencies: DaemonMaestroRuntimeDependencies;
+  readonly dependencies: DirectMaestroRuntimeDependencies;
   readonly sourcePath?: string;
   readonly platform: Extract<MaestroPlatform, 'ios' | 'android'>;
 };

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
-import { resolveTargetDevice } from '../../core/dispatch.ts';
+import { dispatchGestureViewport, resolveTargetDevice } from '../../core/dispatch.ts';
 import { getRequestSignal } from '../../request/cancel.ts';
 import { emitRequestProgress, readReplayTestActionProgress } from '../../request/progress.ts';
 import {
@@ -40,6 +40,7 @@ import {
 } from './session-replay-maestro-failure.ts';
 import { resolveEffectiveOpenRuntimeHints } from './session-runtime.ts';
 import { appendReplayTraceEvent } from './session-replay-trace.ts';
+import { contextFromFlags } from '../context.ts';
 
 type TypedMaestroReplayParams = {
   req: DaemonRequest;
@@ -125,6 +126,9 @@ async function executeTypedMaestroReplay(
   const port = createMaestroReplayPort({
     req,
     invoke,
+    logPath: params.logPath,
+    sessionName,
+    sessionStore,
     platform: context.platform,
     runtimeHints: context.runtimeHints,
     sourcePath: context.filePath,
@@ -240,11 +244,15 @@ function buildTypedMaestroEnv(req: DaemonRequest): Record<string, string> {
 function createMaestroReplayPort(params: {
   req: DaemonRequest;
   invoke: DaemonInvokeFn;
+  logPath: string;
+  sessionName: string;
+  sessionStore: SessionStore;
   platform: Extract<MaestroPlatform, 'android' | 'ios'>;
   runtimeHints: ReturnType<typeof resolveEffectiveOpenRuntimeHints>;
   sourcePath: string;
 }) {
-  const { req, invoke, platform, runtimeHints, sourcePath } = params;
+  const { req, invoke, logPath, sessionName, sessionStore, platform, runtimeHints, sourcePath } =
+    params;
   const { command: _command, positionals: _positionals, ...requestBase } = req;
   const baseReq =
     runtimeHints === undefined ? requestBase : { ...requestBase, runtime: runtimeHints };
@@ -257,6 +265,16 @@ function createMaestroReplayPort(params: {
       now: Date.now,
       sleep: async (milliseconds, abortSignal) => {
         await sleep(milliseconds, undefined, { signal: abortSignal });
+      },
+      resolveGestureViewport: async () => {
+        const session = sessionStore.get(sessionName);
+        if (!session) {
+          throw new AppError('SESSION_NOT_FOUND', 'No active session. Run open first.');
+        }
+        return await dispatchGestureViewport(
+          session.device,
+          contextFromFlags(logPath, req.flags, session.appBundleId, session.trace?.outPath),
+        );
       },
     },
   });

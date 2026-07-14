@@ -1,6 +1,6 @@
 import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon/types.ts';
 import type { SnapshotNode, SnapshotState } from '../../../kernel/snapshot.ts';
-import type { DaemonMaestroRuntimeDependencies } from '../daemon-runtime-port.ts';
+import type { CreateDaemonMaestroRuntimeOperationsOptions } from '../daemon-runtime-port.ts';
 
 export type CapturedDaemonRequest = Pick<
   DaemonRequest,
@@ -30,12 +30,13 @@ export function makeBaseRequest(
 
 export function makeDependencies(
   now: { value: number } = { value: 0 },
-): DaemonMaestroRuntimeDependencies {
+): CreateDaemonMaestroRuntimeOperationsOptions['dependencies'] {
   return {
     now: () => now.value,
     sleep: async (milliseconds) => {
       now.value += milliseconds;
     },
+    resolveGestureViewport: async () => ({ x: 0, y: 0, width: 402, height: 874 }),
   };
 }
 

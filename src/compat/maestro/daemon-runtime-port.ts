@@ -1,7 +1,6 @@
 import type { CommandFlags } from '../../core/dispatch.ts';
-import { getSnapshotReferenceFrame } from '../../daemon/touch-reference-frame.ts';
 import { AppError, asAppError } from '../../kernel/errors.ts';
-import type { Rect, SnapshotState } from '../../kernel/snapshot.ts';
+import type { SnapshotState } from '../../kernel/snapshot.ts';
 import { isRequestCanceledError } from '../../request/cancel.ts';
 import { executeRunScriptFile } from './run-script-execution.ts';
 import {
@@ -31,7 +30,6 @@ import {
   observeTypedMaestroCondition,
   resolveTypedMaestroTarget,
   scrollUntilTypedMaestroTarget,
-  snapshotViewportRect,
   waitForTypedSnapshotStability,
   type MaestroSnapshotReader,
   type MaestroSnapshotSource,
@@ -104,10 +102,11 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
         platform,
       }),
     resolveGestureViewport: async (context) => {
-      const frame = getSnapshotReferenceFrame(await snapshots.capture(context));
-      if (!frame)
+      const viewport = await options.dependencies.resolveGestureViewport(context);
+      if (!viewport) {
         throw new AppError('COMMAND_FAILED', 'Unable to resolve Maestro gesture viewport.');
-      return snapshotViewportRect(frame) as Rect;
+      }
+      return viewport;
     },
 
     launchApp: async (input, context) => {
