@@ -3,9 +3,18 @@ import { formatMaestroCommandProgress } from '../../compat/maestro/progress.ts';
 import type { MaestroCommand, MaestroSelector } from '../../compat/maestro/program-ir.ts';
 import { evaluateMaestroReplayResume } from '../../compat/maestro/replay-plan.ts';
 import type { MaestroReplayPlan } from '../../compat/maestro/replay-plan-types.ts';
-import { resolveMaestroTargetFromSnapshot } from '../../compat/maestro/runtime-targets.ts';
+import { findMaestroTypedSelectorMatches } from '../../compat/maestro/runtime-target-matching.ts';
+import {
+  filterVisibleMaestroMatches,
+  matchesMaestroTypedSelector,
+} from '../../compat/maestro/runtime-target-policy.ts';
+import { normalizeMaestroSnapshotMatches } from '../../compat/maestro/runtime-target-ranking.ts';
 import type { DaemonError } from '../../kernel/contracts.ts';
 import type { SnapshotNode } from '../../kernel/snapshot.ts';
+import {
+  buildSnapshotNodeByIndex,
+  isDescendantOfSnapshotNode,
+} from '../../snapshot/snapshot-processing.ts';
 import {
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
   createReplayDivergenceSanitizer,
@@ -192,17 +201,57 @@ function collectTypedMaestroSuggestions(params: {
   const query = typedSuggestionQuery(params.command);
   if (!query || (params.platform !== 'android' && params.platform !== 'ios')) return [];
   const snapshot = { createdAt: Date.now(), nodes: params.nodes };
-  const resolution = resolveMaestroTargetFromSnapshot(snapshot, query, params.platform);
-  if (!resolution.ok) return [];
-  return [
-    buildReplayDivergenceSuggestionForNode({
-      node: resolution.node,
-      session: params.session,
-      action: params.action,
-      basis: suggestionBasis(query.selector),
-      sanitize: params.sanitize,
-    }),
-  ];
+  const candidates = collectTypedMaestroCandidates(snapshot, query, params.platform);
+  const byNode = new Map<number, { node: SnapshotNode; basis: TypedSuggestionBasis }>();
+  for (const node of candidates) {
+    const basis = suggestionBasis(query.selector, node);
+    const existing = byNode.get(node.index);
+    if (!existing || typedSuggestionBasisRank(basis) < typedSuggestionBasisRank(existing.basis)) {
+      byNode.set(node.index, { node, basis });
+    }
+  }
+  return [...byNode.values()]
+    .sort(
+      (left, right) =>
+        typedSuggestionBasisRank(left.basis) - typedSuggestionBasisRank(right.basis) ||
+        left.node.index - right.node.index,
+    )
+    .map(({ node, basis }) =>
+      buildReplayDivergenceSuggestionForNode({
+        node,
+        session: params.session,
+        action: params.action,
+        basis,
+        sanitize: params.sanitize,
+      }),
+    );
+}
+
+type TypedSuggestionBasis = 'id' | 'label' | 'other';
+
+function collectTypedMaestroCandidates(
+  snapshot: { nodes: SnapshotNode[]; createdAt: number },
+  query: TypedSuggestionQuery,
+  platform: Extract<MaestroReplayPlan['platform'], 'android' | 'ios'>,
+): SnapshotNode[] {
+  let matches = findMaestroTypedSelectorMatches(snapshot, query.selector);
+  if (query.childOf) {
+    const parents = findMaestroTypedSelectorMatches(snapshot, query.childOf);
+    if (parents.length === 0) return [];
+    const nodeByIndex = buildSnapshotNodeByIndex(snapshot.nodes);
+    matches = matches.filter((node) =>
+      parents.some((parent) =>
+        isDescendantOfSnapshotNode(snapshot.nodes, node, parent, nodeByIndex),
+      ),
+    );
+  }
+
+  const visible = filterVisibleMaestroMatches({
+    nodes: snapshot.nodes,
+    matches,
+    platform,
+  });
+  return normalizeMaestroSnapshotMatches(snapshot.nodes, visible.matches, query.selector, platform);
 }
 
 type TypedSuggestionQuery = {
@@ -275,10 +324,25 @@ function observationSuggestion(command: ObservationCommand): TypedSuggestionQuer
   }
 }
 
-function suggestionBasis(selector: MaestroSelector): 'id' | 'label' | 'other' {
+function suggestionBasis(selector: MaestroSelector, node: SnapshotNode): TypedSuggestionBasis {
   if (selector.id !== undefined) return 'id';
+  if (
+    selector.text !== undefined &&
+    matchesMaestroTypedSelector(
+      { ...node, label: undefined, value: undefined },
+      { text: selector.text },
+    )
+  ) {
+    return 'id';
+  }
   if (selector.text !== undefined || selector.label !== undefined) return 'label';
   return 'other';
+}
+
+function typedSuggestionBasisRank(basis: TypedSuggestionBasis): number {
+  if (basis === 'id') return 0;
+  if (basis === 'label') return 2;
+  return 3;
 }
 
 function reportCommandForCapture(command: string): string {
