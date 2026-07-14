@@ -55,9 +55,11 @@ test('MCP executes deprecated rotate calls without advertising a second tool', a
 
   const result = await executor.execute('rotate', { orientation: 'landscape-left' });
 
-  assert.deepEqual(calls, [
-    { name: 'orientation', input: { orientation: 'landscape-left' } },
-  ]);
+  const expectedCall = {
+    name: 'orientation',
+    input: { orientation: 'landscape-left' },
+  };
+  assert.deepEqual(calls, [expectedCall]);
   assert.deepEqual(result.structuredContent, {
     action: 'rotate',
     orientation: 'landscape-left',
