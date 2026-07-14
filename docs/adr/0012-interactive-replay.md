@@ -576,10 +576,10 @@ Implementation is not accepted on benchmark evidence alone. Required automated c
   `COMPLETE` transaction committing (not tombstoning) — and is idempotent with no re-publish once
   `COMMITTED`; a terminal-close test proving an armed replay reaching the terminal source `close`
   **skips** it without deleting the session (C4); an atomic-publication test proving the temp file is
-  created in the target's own directory and the no-clobber is race-safe (create-exclusive/rename-if-absent);
-  and a no-clobber test proving an existing *complete* (sentinel-marked) healed artifact is protected
-  while an incomplete/partial one is
-  overwritable.
+  created in the target's own directory and published via a single exclusive `linkSync`
+  (create-if-absent, first writer wins); and a no-clobber test proving publication refuses ANY
+  pre-existing target — complete or partial alike, byte-for-byte unchanged — for both the default healed
+  sibling and an explicit `--save-script=<path>`.
 
 Extend the settle benchmark (`~/.agent-device-bench/rnnav-matrix.py` pattern, external harness) with a
 replay arm only after these contracts pass: measure clean replay and one induced divergence repaired
@@ -791,19 +791,23 @@ double-commit nor trip the no-clobber guard).
 
 **Atomic, race-safe publication.** The commit serializes the healed slice (ending with a serialized
 `close` line so the artifact is self-contained) to a temp file created **in the same directory as the
-final target** — atomic `rename` requires the same filesystem, and an explicit `--save-script=<path>`
-target may live on a different mount than any process-wide temp dir — then atomically renames it into
-place. A reader therefore never observes a half-written healed script, and an aborted repair leaves no
-partial behind. The no-clobber guard is enforced **race-safely** by the atomic primitive itself
-(create-exclusive / rename-if-absent), not by a check-then-write.
+final target** — an explicit `--save-script=<path>` target may live on a different mount than any
+process-wide temp dir, and `linkSync` requires the same filesystem — then publishes with a single
+exclusive `linkSync(temp, target)`: create-if-absent, first writer wins. A reader therefore never
+observes a half-written healed script, and an aborted repair leaves no partial behind.
 
-**No-clobber applies only to a COMPLETE healed artifact.** The guard protects a *complete, review-worthy*
-artifact only. An incomplete or partial file is always overwritable by a fresh repair that reaches
-`COMMITTED`. Completeness is established by a sentinel written **only on commit** — a trailing
-`# agent-device:heal-complete` marker — or an equivalent structural check; the atomic temp→publish flow is
-what makes that sentinel trustworthy (a partial never reaches the published path carrying the sentinel).
-Auto-versioned output names (e.g. `.healed.2.ad`) are explicitly **out of scope** here — a separate
-naming change, not part of this decision.
+**Publication refuses ANY pre-existing target — complete or partial, default or explicit path alike.**
+An earlier design distinguished a *complete, review-worthy* artifact (protected) from an incomplete or
+partial one (silently overwritable), enforced through a publish lock. That distinction added a whole
+class of lock/lease/reclaim races for a case that is, in practice, a degenerate state: a partial healed
+file left behind by an aborted or reaped repair. The simpler, adopted design collapses this: the atomic
+`linkSync` itself decides the winner (`EEXIST` iff a file already sits at the target, regardless of its
+contents), and the caller must explicitly clear the way — remove the existing file, or pass a different
+`replay --save-script=<path>` — rather than have it silently replaced. No lock, no lease, no steal, no
+overwrite. The `# agent-device:heal-complete` trailing sentinel remains — it still marks a healed `.ad` as
+a complete, review-worthy repair artifact for any other reader — but it no longer participates in the
+publish decision. Auto-versioned output names (e.g. `.healed.2.ad`) are explicitly **out of scope** here —
+a separate naming change, not part of this decision.
 
 **Repair-session tombstone (R7 ownership).** When a bounded-expiry escape hatch idle-reaps (or a daemon
 shutdown tears down) a repair-armed transaction that has **not** reached `COMPLETE`, the teardown aborts
@@ -924,8 +928,8 @@ each states its dependencies explicitly.
    regression proving the session is NOT deleted when the terminal `close` is reached; the
    `REPAIR_SESSION_EXPIRED` tombstone for an incomplete-transaction reap/shutdown (keyed by session key,
    owner + bounded expiry, cleared by a fresh `replay --save-script`); and race-safe atomic publication
-   (temp file in the target's own directory, create-exclusive/rename-if-absent no-clobber against the
-   `# agent-device:heal-complete` sentinel).
+   (temp file in the target's own directory, published via a single exclusive `linkSync` that refuses ANY
+   pre-existing target — complete or partial, default or explicit path alike — never overwriting one).
 
 ## Migration progress
 

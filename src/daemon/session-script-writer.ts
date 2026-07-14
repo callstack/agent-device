@@ -80,20 +80,7 @@ export class SessionScriptWriter {
       const scriptDir = path.dirname(scriptPath);
       if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir, { recursive: true });
       const script = formatSessionScript(session, repairArmed);
-      publishHealedScriptAtomically({
-        scriptPath,
-        script,
-        // ADR 0012 decision 6 (BLOCKER 4): the completeness-aware no-clobber
-        // guard protects EVERY repair-armed publish target — the DEFAULT
-        // healed sibling AND an explicit `--save-script=<path>` alike. An
-        // explicit target is still caller-DIRECTED (which path), never
-        // caller-authorized to silently destroy an unreviewed prior healed
-        // diff sitting there; the caller must remove/rename it or pick
-        // another path. Only ever actually engages against a sentinel-marked
-        // artifact, which only a repair-armed write can produce, so an
-        // ordinary (non-repair) recording's target is unaffected either way.
-        protectComplete: repairArmed,
-      });
+      publishHealedScriptAtomically({ scriptPath, script });
       // COMMITTED: idempotent guard above + teardown's abort/tombstone routing.
       if (repairArmed) session.saveScriptCommitted = true;
       return { written: true, path: scriptPath };
@@ -157,27 +144,23 @@ function formatSessionScript(session: SessionState, appendCompleteSentinel: bool
 }
 
 /**
- * ADR 0012 decision 6, commit semantics + no-clobber (Fix 4, C5b, BLOCKER 1):
- * publishes `script` to `scriptPath` atomically AND race-safely.
+ * ADR 0012 decision 6, no-clobber (maintainer-approved simplification):
+ * publishes `script` to `scriptPath` atomically, refusing ANY pre-existing
+ * target — complete or partial, the default healed sibling or an explicit
+ * `--save-script=<path>` alike.
  *
- * - Atomic: the temp file is created in the SAME DIRECTORY as the target
- *   (never `/tmp`), so the final publish is an intra-directory rename/link on
- *   one filesystem — a reader never observes a half-written script, and an
- *   explicit `--save-script=<path>` on a different mount still publishes
- *   atomically. An aborted write leaves only the (removed) temp, no partial
- *   at the target.
- * - Race-safe no-clobber (BLOCKER 1): the DEFAULT healed-sibling path is
- *   protected by `publishNoClobberAtomically`, which makes an atomic primitive
- *   (never a check-then-write gap) decide the winner even when the existing
- *   target is a partial. An explicit `--save-script=<path>` target is
- *   caller-directed and unprotected either way (`publishOverwriteAtomically`).
+ * The temp file is created in the SAME DIRECTORY as the target (never
+ * `/tmp`), so the publish itself is a single intra-directory `linkSync`:
+ * atomic create-exclusive, first writer wins. That single primitive is
+ * enough — a concurrent complete-vs-complete race is already correct this
+ * way (the loser sees `EEXIST` and is refused), and a partial healed file
+ * left behind by an aborted/reaped repair is a degenerate state: the caller
+ * clears it explicitly (remove it, or pick another `--save-script` path)
+ * rather than having it silently replaced. No lock, no lease, no steal, no
+ * overwrite.
  */
-function publishHealedScriptAtomically(params: {
-  scriptPath: string;
-  script: string;
-  protectComplete: boolean;
-}): void {
-  const { scriptPath, script, protectComplete } = params;
+function publishHealedScriptAtomically(params: { scriptPath: string; script: string }): void {
+  const { scriptPath, script } = params;
   const dir = path.dirname(scriptPath);
   const tempPath = path.join(
     dir,
@@ -185,304 +168,19 @@ function publishHealedScriptAtomically(params: {
   );
   fs.writeFileSync(tempPath, script);
   try {
-    if (protectComplete) {
-      publishNoClobberAtomically(tempPath, scriptPath);
-    } else {
-      publishOverwriteAtomically(tempPath, scriptPath);
-    }
-  } finally {
-    // linkSync leaves the temp hard-link behind on success; rename consumes it;
-    // an error leaves it — always clean up whatever of our own temp remains.
-    fs.rmSync(tempPath, { force: true });
-  }
-}
-
-/**
- * ADR 0012 decision 6 (BLOCKER 4): an ORDINARY (non-repair-armed) recording's
- * target is never no-clobber-protected — it never carries the completeness
- * sentinel in the first place (only a repair-armed write appends it), so
- * BLOCKER 1's "is the existing target incomplete" classification would never
- * find anything to refuse on anyway. A plain atomic publish is correct:
- * absent -> exclusive create; present -> atomic rename-replace.
- */
-function publishOverwriteAtomically(tempPath: string, scriptPath: string): void {
-  try {
-    // Atomic create-if-absent: EEXIST iff the target already exists.
+    // Atomic create-exclusive: EEXIST iff a file already sits at scriptPath.
     fs.linkSync(tempPath, scriptPath);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-    fs.renameSync(tempPath, scriptPath);
-  }
-}
-
-const NO_CLOBBER_PUBLISH_MAX_ATTEMPTS = 16;
-const LEASE_ACQUIRE_MAX_ATTEMPTS = 40;
-const LEASE_ACQUIRE_BACKOFF_MS = 5;
-/**
- * ADR 0012 decision 6 (BLOCKER 1, lease replacement, maintainer-approved
- * design): a holder older than this is treated as crashed/hung, never merely
- * slow — the publish lease's whole decide-and-act sequence is a handful of
- * synchronous fs calls, nowhere close to this budget.
- */
-const LEASE_TTL_MS = 30_000;
-
-/**
- * ADR 0012 decision 6, no-clobber (BLOCKER 1, BLOCKER 4): publishes to a
- * repair-armed session's target — the DEFAULT healed sibling path OR an
- * explicit `--save-script=<path>` alike (BLOCKER 4: an explicit target is
- * caller-DIRECTED, never caller-AUTHORIZED to silently destroy an unreviewed
- * prior healed diff) — where a COMPLETE (sentinel-marked) prior artifact must
- * never be clobbered.
- *
- * A prior fix made the "is the existing target overwritable" decision itself
- * atomic (grab-to-quarantine + inspect, `grabAndDiscardPartialTarget` below)
- * instead of a plain read — but the inspect/restore/publish SEQUENCE was
- * still not exclusive: writer A could quarantine an existing COMPLETE
- * target, and — before A restored it — writer B could `linkSync` its own
- * COMPLETE artifact into the now-empty `scriptPath` and return success, only
- * for A's restore (`renameSync`, which replaces an existing destination per
- * POSIX) to silently stomp B's freshly published bytes. B would report
- * success while its bytes were gone.
- *
- * Here the ENTIRE decide-and-act sequence for a given `scriptPath` — the
- * exclusive-link attempt, the grab/inspect, and the refuse-and-restore or
- * discard-and-retry — runs while holding a verified, exclusive publish LEASE
- * (`acquireLease`/`releaseLease` below). A competing writer for the SAME
- * `scriptPath` cannot even begin its own decision until the lease holder's
- * entire sequence has finished and released it, so the "restore stomps a
- * concurrently-published winner" interleaving above is no longer reachable:
- * whichever writer holds the lease always observes (and, on refusal,
- * restores) exactly what it itself grabbed, with nothing else able to touch
- * `scriptPath` in between.
- */
-function publishNoClobberAtomically(tempPath: string, scriptPath: string): void {
-  const lockPath = `${scriptPath}.lock`;
-  const myToken = acquireLease(lockPath);
-  try {
-    // Closes the pathological window where acquiring took long enough (or
-    // ran up against a small enough TTL) that this lease itself expired and
-    // was stolen by someone else between `acquireLease` returning and here —
-    // never publish on a lease this caller no longer verifiably holds.
-    if (!verifyOwnership(lockPath, myToken)) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        `Could not publish the healed script to ${scriptPath}: the publish lease expired before the write could start.`,
-      );
-    }
-    for (let attempt = 0; attempt < NO_CLOBBER_PUBLISH_MAX_ATTEMPTS; attempt += 1) {
-      if (tryExclusiveLink(tempPath, scriptPath)) return;
-      // Something is at `scriptPath`. We hold the verified exclusive publish
-      // lease, so nothing else can repopulate it underneath us: this is
-      // either a genuine partial (grabbed-and-discarded, then retried above)
-      // or a COMPLETE artifact (grabbed, restored, and the publish refused —
-      // `grabAndDiscardPartialTarget` never returns on that path).
-      grabAndDiscardPartialTarget(scriptPath);
-    }
     throw new AppError(
       'COMMAND_FAILED',
-      `Could not publish the healed script to ${scriptPath}: too much contention from concurrent writers.`,
+      `A file already exists at ${scriptPath}; remove it or pass replay --save-script=<other-path> so an existing healed script is never overwritten.`,
     );
   } finally {
-    releaseLease(lockPath, myToken);
-  }
-}
-
-/**
- * ADR 0012 decision 6 (BLOCKER 1, lease replacement — maintainer-approved
- * design): claims a TTL LEASE on `lockPath` — replaces the prior PID-liveness
- * "reclaim" scheme (`reclaimDeadLock`, removed), which was structurally
- * race-prone: reclaiming a dead lock meant GRABBING it away first (rename to
- * inspect) and, if it turned out to have gone LIVE in the meantime (raced by
- * a concurrent reclaimer), RESTORING it. That grab-then-restore shape is
- * exactly the bug the reviewer found: a three-writer interleaving lets waiter
- * A rename waiter B's now-LIVE lock away (to inspect it), waiter C
- * `linkSync` its own lock into the momentarily-empty path, then A's
- * "restore" (`renameSync`, which replaces an existing destination) silently
- * clobbers C's freshly acquired lock — and a pathname-based release could
- * then remove a SUCCESSOR's lock, not the caller's own.
- *
- * A lease never has that shape — there is no restore path, ever. Each lock
- * file's content is a unique OWNER TOKEN (`pid:random:createdAtMs`).
- * Staleness is judged purely from the trailing timestamp (`LEASE_TTL_MS`),
- * never from asking the OS whether a PID is alive, so there is nothing to
- * "put back" if the judgment turns out to be wrong: a lease found to be
- * fresh is simply left completely untouched (back off, retry later); a lease
- * found to be expired is stolen via a single atomic
- * `renameSync(lockPath, <lockPath>.expired.<unique>)` — exactly one caller
- * can ever win that rename for a given still-existing `lockPath` (a second,
- * concurrent rename of the same already-moved source fails `ENOENT`, never
- * silently succeeds), so it doubles as a compare-and-swap on "the right to
- * discard whatever currently sits here". The winner discards what it grabbed
- * and retries the link; a loser (`ENOENT`) does nothing and also retries the
- * link, observing whatever the winner left behind. A LIVE holder's canonical
- * claim at `lockPath` is thus NEVER renamed or removed by anyone but its own
- * `releaseLease`.
- */
-function acquireLease(lockPath: string): string {
-  const myToken = createLeaseToken();
-  for (let attempt = 0; attempt < LEASE_ACQUIRE_MAX_ATTEMPTS; attempt += 1) {
-    if (tryClaimLease(lockPath, myToken)) return myToken;
-    const existingToken = readLeaseToken(lockPath);
-    // Raced away between our EEXIST and this read (the holder released, or a
-    // steal completed) — nothing to judge; retry the link immediately.
-    if (existingToken === undefined) continue;
-    const createdAtMs = leaseCreatedAtMs(existingToken);
-    if (createdAtMs === undefined || Date.now() - createdAtMs > LEASE_TTL_MS) {
-      // Expired (or unparseable, which we also treat as abandoned) — steal
-      // it. Whether WE won the steal or someone else did, the lock is now
-      // either empty or held by a fresh claimant: retry the link either way.
-      stealExpiredLease(lockPath);
-      continue;
-    }
-    // A fresh claim — a genuinely live holder. Never touched; just wait.
-    sleepSyncMs(LEASE_ACQUIRE_BACKOFF_MS);
-  }
-  throw new AppError(
-    'COMMAND_FAILED',
-    `Could not publish the healed script: timed out waiting for a concurrent writer.`,
-  );
-}
-
-/** A unique per-attempt owner token: `pid:random:createdAtMs`. */
-function createLeaseToken(): string {
-  return `${process.pid}:${Math.random().toString(36).slice(2)}:${Date.now()}`;
-}
-
-/** Parses the trailing `createdAtMs` segment off a lease token; `undefined` if malformed. */
-function leaseCreatedAtMs(token: string): number | undefined {
-  const raw = token.split(':').at(-1);
-  const parsed = raw === undefined ? Number.NaN : Number(raw);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-/**
- * The only primitive that can WIN a lease outright: atomic create-if-absent
- * via `linkSync`. `true` = claimed; `false` = `EEXIST` (something is at
- * `lockPath` right now, live or expired — the caller decides which next).
- */
-function tryClaimLease(lockPath: string, token: string): boolean {
-  const tempPath = `${lockPath}.${token.replace(/:/g, '-')}.tmp`;
-  fs.writeFileSync(tempPath, token);
-  try {
-    fs.linkSync(tempPath, lockPath);
-    return true;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
-    throw error;
-  } finally {
+    // linkSync leaves the temp hard-link behind on success; an error leaves
+    // it too — always clean up whatever of our own temp remains.
     fs.rmSync(tempPath, { force: true });
   }
-}
-
-/** Reads the current owner token at `lockPath`; `undefined` if missing/unreadable. */
-function readLeaseToken(lockPath: string): string | undefined {
-  try {
-    return fs.readFileSync(lockPath, 'utf8');
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Steals an EXPIRED lease via a single atomic rename — never a restore. On
- * success, the caller is the SOLE owner of the quarantined file (no one else
- * can have grabbed the same source path) and discards it. On `ENOENT`,
- * someone else's steal of this exact lease already won the race; there is
- * nothing left to discard. Either way, the (now-live-or-empty) `lockPath` is
- * left for the caller's next `tryClaimLease` retry to observe.
- */
-function stealExpiredLease(lockPath: string): void {
-  const quarantinePath = `${lockPath}.expired.${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  try {
-    fs.renameSync(lockPath, quarantinePath);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
-    throw error;
-  }
-  fs.rmSync(quarantinePath, { force: true });
-}
-
-/** `true` iff `token` is still the current owner of `lockPath` right now. */
-function verifyOwnership(lockPath: string, token: string): boolean {
-  return readLeaseToken(lockPath) === token;
-}
-
-/**
- * Releases `lockPath` iff its CURRENT token is still `myToken` — a successor
- * that has since stolen (expired) or freshly re-claimed the same path is
- * NEVER removed by an earlier holder's release; only the caller's own claim
- * is ever a release candidate. Best-effort: a concurrent removal (already
- * gone) is not an error.
- */
-function releaseLease(lockPath: string, myToken: string): void {
-  if (readLeaseToken(lockPath) !== myToken) return;
-  try {
-    fs.unlinkSync(lockPath);
-  } catch {}
-}
-
-/**
- * Blocks the event loop for `ms` — a synchronous backoff to match this
- * file's synchronous (`Sync`) publish primitives. Never runs longer than
- * `LOCK_ACQUIRE_MAX_ATTEMPTS * LOCK_ACQUIRE_BACKOFF_MS` in the worst case.
- */
-function sleepSyncMs(ms: number): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-
-/**
- * The only primitive that can WIN outright: atomic create-if-absent.
- * `true` = published (won); `false` = `EEXIST` (a file is at `scriptPath`
- * right now). Any other error propagates.
- */
-function tryExclusiveLink(tempPath: string, scriptPath: string): boolean {
-  try {
-    fs.linkSync(tempPath, scriptPath);
-    return true;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
-    throw error;
-  }
-}
-
-/**
- * Atomically grabs whatever currently sits at `scriptPath` into a private,
- * uniquely-named quarantine file (a single `renameSync`) and inspects it
- * there. The caller holds the exclusive publish lock for the whole of this
- * decision, so no OTHER writer can be repopulating `scriptPath` while we
- * inspect our quarantined copy. A genuinely partial grab is discarded
- * (returns normally — the caller retries the exclusive link). `ENOENT` is
- * unreachable under the lock but is handled defensively rather than assumed.
- * A COMPLETE grab is restored and this throws, refusing the clobber.
- */
-function grabAndDiscardPartialTarget(scriptPath: string): void {
-  const quarantinePath = `${scriptPath}.${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.quarantine`;
-  try {
-    fs.renameSync(scriptPath, quarantinePath);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
-    throw error;
-  }
-  try {
-    if (isCompleteHealedScript(quarantinePath)) refuseCompleteClobber(quarantinePath, scriptPath);
-  } finally {
-    fs.rmSync(quarantinePath, { force: true });
-  }
-}
-
-/**
- * Restores a quarantined COMPLETE artifact and refuses the publish. The
- * caller holds the exclusive publish lock, so nothing else can have
- * repopulated `scriptPath` in the meantime — the restore always lands back
- * on the same empty slot we just vacated, never over another writer's
- * publish.
- */
-function refuseCompleteClobber(quarantinePath: string, scriptPath: string): never {
-  fs.renameSync(quarantinePath, scriptPath);
-  throw new AppError(
-    'COMMAND_FAILED',
-    `A prior healed script already exists at ${scriptPath}; pass replay --save-script=<path> to write elsewhere, or remove/rename it first, so an unreviewed healed script is never clobbered.`,
-  );
 }
 
 function buildOptimizedActions(session: SessionState): SessionAction[] {
@@ -528,25 +226,6 @@ function assertNoUnresolvedRefFallback(action: SessionAction): void {
     'COMMAND_FAILED',
     `Cannot write recorded step "${action.command} ${refPositional}" to a script: it never resolved to a selector, so the ref would not resolve in a fresh replay session.`,
   );
-}
-
-/**
- * ADR 0012 decision 6, no-clobber (Fix 4, C5b): a file is a COMPLETE,
- * review-worthy healed artifact iff it carries the completeness sentinel
- * (written only on a successful atomic commit). A file without it is a partial
- * — from an aborted/reaped repair — and is freely overwritable by a fresh
- * repair that completes.
- */
-function isCompleteHealedScript(scriptPath: string): boolean {
-  let contents: string;
-  try {
-    contents = fs.readFileSync(scriptPath, 'utf8');
-  } catch {
-    // Missing (nothing to clobber) or unreadable (not provably complete
-    // either way — never block the repair behind a file we cannot inspect).
-    return false;
-  }
-  return contents.split(/\r?\n/).some((line) => line.trim() === HEAL_COMPLETE_SENTINEL);
 }
 
 function optimizeSelectorChainAction(action: SessionAction): SessionAction | undefined {

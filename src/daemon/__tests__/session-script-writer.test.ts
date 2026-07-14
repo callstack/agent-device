@@ -191,16 +191,44 @@ test('an ordinary (non-repair-armed) recording keeps the existing bare-ref fallb
 });
 
 // --- ADR 0012 decision 6 (P2): the default `.healed.ad` sibling is never
-// silently clobbered — a human must review each healed diff before promoting. ---
+// silently clobbered — a human must review each healed diff before promoting.
+// The publish primitive refuses ANY pre-existing target, complete or
+// partial, uniformly (no lock, no lease, no overwrite). ---
 
-test('write() refuses to clobber an existing COMPLETE DEFAULT .healed.ad (no explicit --save-script=<path>)', () => {
+// (a) publishing to an ABSENT target succeeds.
+test('write() publishes cleanly when the target does not exist yet', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-absent-'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const healedPath = path.join(root, 'flows', 'login.healed.ad');
+
+  const session = makeIosSession('default', {
+    recordSession: true,
+    saveScriptBoundary: 0,
+    saveScriptComplete: true,
+    saveScriptPath: healedPath,
+    saveScriptDefaultedHealedPath: true,
+    actions: [action({ command: 'click', positionals: ['id="new"'] })],
+  });
+
+  const result = writer.write(session);
+  expect(result.written).toBe(true);
+  expect(result.written && result.path).toBe(healedPath);
+  const script = fs.readFileSync(healedPath, 'utf8');
+  expect(script).toContain(HEAL_COMPLETE_SENTINEL);
+  const parsed = parseReplayScriptDetailed(script);
+  expect(parsed.actions.map((a) => a.positionals[0])).toEqual(['id="new"']);
+});
+
+// (b) publishing when a COMPLETE sentinel-marked artifact exists is REFUSED,
+// bytes unchanged.
+test('write() refuses to clobber an existing COMPLETE DEFAULT .healed.ad', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-clobber-'));
   const writer = new SessionScriptWriter(path.join(root, 'sessions'));
   const healedPath = path.join(root, 'flows', 'login.healed.ad');
   fs.mkdirSync(path.dirname(healedPath), { recursive: true });
   // A prior, unreviewed, COMPLETE healed script already sits at the default
-  // sibling path (Fix 4: only a file carrying the completeness sentinel is
-  // protected).
+  // sibling path — the publish primitive refuses ANY pre-existing target, so
+  // this is refused regardless of the sentinel.
   fs.writeFileSync(
     healedPath,
     `context platform=ios device="x"\nclick id="old"\n${HEAL_COMPLETE_SENTINEL}\n`,
@@ -225,7 +253,7 @@ test('write() refuses to clobber an existing COMPLETE DEFAULT .healed.ad (no exp
   expect(fs.readFileSync(healedPath, 'utf8')).toBe(before);
 });
 
-test('write() DOES overwrite a stale INCOMPLETE .healed.ad at the default path (Fix 4: partial is overwritable)', () => {
+test('write() now refuses to clobber a stale PARTIAL (non-sentinel) .healed.ad at the default path too (behavior change: no more auto-overwrite)', () => {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), 'agent-device-script-writer-clobber-partial-'),
   );
@@ -233,212 +261,12 @@ test('write() DOES overwrite a stale INCOMPLETE .healed.ad at the default path (
   const healedPath = path.join(root, 'flows', 'login.healed.ad');
   fs.mkdirSync(path.dirname(healedPath), { recursive: true });
   // A partial left over from a diverged-and-abandoned repair (pre-Fix-2 bug,
-  // or any other incomplete write) — no completeness sentinel.
+  // or any other incomplete write) — no completeness sentinel. The lock/lease
+  // machinery used to distinguish this from a COMPLETE artifact and silently
+  // overwrite it; the simplified publish primitive refuses ANY pre-existing
+  // target uniformly, complete or partial alike.
   fs.writeFileSync(healedPath, 'context platform=ios device="x"\nclick id="stale-partial"\n');
-
-  const session = makeIosSession('default', {
-    recordSession: true,
-    saveScriptBoundary: 0,
-    saveScriptComplete: true,
-    saveScriptPath: healedPath,
-    saveScriptDefaultedHealedPath: true,
-    actions: [action({ command: 'click', positionals: ['id="new"'] })],
-  });
-
-  const result = writer.write(session);
-  expect(result.written).toBe(true);
-  const script = fs.readFileSync(healedPath, 'utf8');
-  expect(script).toContain(HEAL_COMPLETE_SENTINEL);
-  const parsed = parseReplayScriptDetailed(script);
-  expect(parsed.actions.map((a) => a.positionals[0])).toEqual(['id="new"']);
-});
-
-// BLOCKER 1: the reported race is TWO writers concurrently seeing the SAME
-// pre-existing PARTIAL (no-sentinel) default healed sibling and both
-// classifying it as overwritable — the prior implementation then let both
-// `renameSync` over it, silently, with no signal to the loser. The publish
-// primitive (not the "is it complete" check) must decide exactly one winner.
-test('BLOCKER 1: two writers racing on the SAME pre-existing PARTIAL target — the atomic primitive, not the incomplete check, decides exactly one winner', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-partial-race-'));
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
-  const healedPath = path.join(root, 'flows', 'login.healed.ad');
-  fs.mkdirSync(path.dirname(healedPath), { recursive: true });
-  // The shared, pre-existing PARTIAL target both writers race against — no
-  // sentinel, so both writers' own completeness checks say "overwritable".
-  fs.writeFileSync(healedPath, 'context platform=ios device="x"\nclick id="stale-partial"\n');
-
-  const sessionA = makeIosSession('writer-a', {
-    recordSession: true,
-    saveScriptBoundary: 0,
-    saveScriptComplete: true,
-    saveScriptPath: healedPath,
-    saveScriptDefaultedHealedPath: true,
-    actions: [action({ command: 'click', positionals: ['id="from-a"'] })],
-  });
-  const sessionB = makeIosSession('writer-b', {
-    recordSession: true,
-    saveScriptBoundary: 0,
-    saveScriptComplete: true,
-    saveScriptPath: healedPath,
-    saveScriptDefaultedHealedPath: true,
-    actions: [action({ command: 'click', positionals: ['id="from-b"'] })],
-  });
-
-  // Force a genuine interleaving deterministically instead of hoping two
-  // in-process calls happen to race: when writer A performs its atomic
-  // "grab the existing target to inspect it" rename, run writer B's ENTIRE
-  // publish to completion first — exactly the reported scenario, both
-  // writers starting against the identical partial target — then let A's own
-  // call proceed against whatever B left behind.
-  const realRenameSync = fs.renameSync;
-  let triggeredCompetingWriter = false;
-  let resultB: ReturnType<SessionScriptWriter['write']> | undefined;
-  const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
-    if (!triggeredCompetingWriter && from === healedPath) {
-      triggeredCompetingWriter = true;
-      resultB = writer.write(sessionB);
-    }
-    return realRenameSync(from, to);
-  });
-
-  const resultA = writer.write(sessionA);
-  renameSpy.mockRestore();
-
-  expect(resultB).toBeDefined();
-  // Exactly one writer wins (publishes), the other observes a definitive
-  // loss — never both silently succeeding, never a torn file caused by an
-  // unconditional renameSync racing another. BLOCKER 1's follow-up fix now
-  // serializes the whole decide-and-act sequence for `scriptPath` behind an
-  // exclusive publish lock (see `publishNoClobberAtomically`), so the loser
-  // here may fail either via the no-clobber refusal (it grabbed the target
-  // and found it COMPLETE) or via lock contention (it never got a turn before
-  // the winner published) — which one depends on interleaving timing, but
-  // either way it is a clean, thrown loss, never a silent one.
-  const outcomes = [resultA, resultB!];
-  const wins = outcomes.filter((r) => r.written);
-  const losses = outcomes.filter((r) => !r.written);
-  expect(wins).toHaveLength(1);
-  expect(losses).toHaveLength(1);
-  expect(losses[0]!.written === false && losses[0]!.error?.message).toMatch(
-    /already exists|timed out waiting/,
-  );
-
-  // The surviving file is exactly the winner's complete, uncorrupted script —
-  // never an interleaved mix of both writers' content.
-  const finalScript = fs.readFileSync(healedPath, 'utf8');
-  expect(finalScript).toContain(HEAL_COMPLETE_SENTINEL);
-  const parsed = parseReplayScriptDetailed(finalScript);
-  const winnerLabel = resultB!.written ? 'id="from-b"' : 'id="from-a"';
-  expect(parsed.actions.map((a) => a.positionals[0])).toEqual([winnerLabel]);
-});
-
-// BLOCKER 1 (follow-up): the reported race is a COMPLETE target being
-// silently clobbered because the inspect/restore/publish sequence was not
-// exclusive — writer A quarantines an existing COMPLETE artifact, writer B
-// publishes its own COMPLETE artifact into the now-empty slot and returns
-// success, and writer A's restore (`renameSync`, which replaces an existing
-// destination per POSIX) then silently stomps B's freshly published bytes.
-test('BLOCKER 1 (follow-up): a writer publishing while another is mid quarantine-and-restore of a COMPLETE target never gets silently clobbered', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-complete-race-'));
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
-  const healedPath = path.join(root, 'flows', 'login.healed.ad');
-  fs.mkdirSync(path.dirname(healedPath), { recursive: true });
-  // A genuine, pre-existing COMPLETE (sentinel-marked) healed artifact.
-  fs.writeFileSync(
-    healedPath,
-    `context platform=ios device="x"\nclick id="original"\n${HEAL_COMPLETE_SENTINEL}\n`,
-  );
   const before = fs.readFileSync(healedPath, 'utf8');
-
-  const sessionA = makeIosSession('writer-a', {
-    recordSession: true,
-    saveScriptBoundary: 0,
-    saveScriptComplete: true,
-    saveScriptPath: healedPath,
-    saveScriptDefaultedHealedPath: true,
-    actions: [action({ command: 'click', positionals: ['id="from-a"'] })],
-  });
-  const sessionB = makeIosSession('writer-b', {
-    recordSession: true,
-    saveScriptBoundary: 0,
-    saveScriptComplete: true,
-    saveScriptPath: healedPath,
-    saveScriptDefaultedHealedPath: true,
-    actions: [action({ command: 'click', positionals: ['id="from-b"'] })],
-  });
-
-  // Force the exact interleaving the reviewer identified: let writer A's own
-  // atomic "grab the existing COMPLETE target into quarantine" rename
-  // actually happen (scriptPath is now momentarily empty), THEN — before A
-  // restores its quarantined copy — run writer B's entire publish. Under the
-  // prior implementation, B's `linkSync` won the now-empty slot and returned
-  // success, only for A's subsequent restore to silently stomp B's bytes.
-  const realRenameSync = fs.renameSync;
-  let triggeredCompetingWriter = false;
-  let resultB: ReturnType<SessionScriptWriter['write']> | undefined;
-  const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
-    const isGrab =
-      !triggeredCompetingWriter && from === healedPath && String(to).includes('.quarantine');
-    if (isGrab) {
-      const result = realRenameSync(from, to);
-      triggeredCompetingWriter = true;
-      resultB = writer.write(sessionB);
-      return result;
-    }
-    return realRenameSync(from, to);
-  });
-
-  const resultA = writer.write(sessionA);
-  renameSpy.mockRestore();
-
-  expect(triggeredCompetingWriter).toBe(true);
-  expect(resultB).toBeDefined();
-
-  // No writer may report success unless ITS complete bytes are the ones
-  // actually sitting at the target.
-  const finalScript = fs.readFileSync(healedPath, 'utf8');
-  if (resultA.written) expect(finalScript).toContain('id="from-a"');
-  if (resultB!.written) expect(finalScript).toContain('id="from-b"');
-
-  // A genuine COMPLETE artifact already sat at the target before either
-  // writer ran: no-clobber means NEITHER may publish over it — both must be
-  // refused, and the original bytes survive byte-for-byte.
-  expect(resultA.written).toBe(false);
-  expect(resultB!.written).toBe(false);
-  expect(finalScript).toBe(before);
-});
-
-// BLOCKER 1 (lease replacement — maintainer-approved design): the PID-liveness
-// `reclaimDeadLock` scheme (grab lock away -> inspect PID -> restore if live)
-// was structurally race-prone: a three-writer interleaving let waiter A
-// rename waiter B's now-LIVE lock away (to inspect it), waiter C `linkSync`
-// its own lock into the momentarily-empty path, then A's "restore"
-// (`renameSync`, which replaces an existing destination) silently clobbered
-// C's freshly acquired lock — and the pathname-based release could then
-// remove a SUCCESSOR's lock, not the caller's own. Replaced with a TTL LEASE:
-// staleness is judged purely from a timestamp embedded in the lock file's own
-// content (never by asking the OS whether a PID is alive), a stolen lease is
-// NEVER restored (an unconditional discard after a single atomic rename), and
-// every publish verifies it STILL owns the lease immediately before entering
-// the critical section — closing the window where the lock FILE could be
-// contended out from under a legitimate holder.
-
-test('BLOCKER 1 (lease): a FRESH lease is never stolen regardless of its recorded owner — staleness is judged purely by age — and a contender backs off and times out', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-lease-fresh-'));
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
-  const healedPath = path.join(root, 'flows', 'login.healed.ad');
-  fs.mkdirSync(path.dirname(healedPath), { recursive: true });
-  const originalContent = 'context platform=ios device="x"\nclick id="stale-partial"\n';
-  fs.writeFileSync(healedPath, originalContent);
-
-  const lockPath = `${healedPath}.lock`;
-  // A lease recorded under a pid that could never be a real, running
-  // process — the OLD PID-liveness scheme would have judged this "dead" on
-  // sight and reclaimed it. The lease scheme must never steal it: it is
-  // FRESH (just created), and staleness is judged purely by age now, never
-  // by asking the OS whether a pid is alive.
-  const freshToken = `999999999:unrelated-writer:${Date.now()}`;
-  fs.writeFileSync(lockPath, freshToken);
 
   const session = makeIosSession('default', {
     recordSession: true,
@@ -451,72 +279,29 @@ test('BLOCKER 1 (lease): a FRESH lease is never stolen regardless of its recorde
 
   const result = writer.write(session);
   expect(result.written).toBe(false);
-  expect(result.written === false && result.error?.message).toMatch(/timed out waiting/);
-  // The fresh lease survives byte-for-byte — never renamed/removed.
-  expect(fs.readFileSync(lockPath, 'utf8')).toBe(freshToken);
-  // The contender never entered the critical section.
-  expect(fs.readFileSync(healedPath, 'utf8')).toBe(originalContent);
+  expect(result.written === false && result.error?.message).toMatch(/already exists/);
+  expect(fs.readFileSync(healedPath, 'utf8')).toBe(before);
 });
 
-test('BLOCKER 1 (lease): an EXPIRED lease is stolen safely — never restored — and a fresh reclaim afterward publishes cleanly', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-lease-expired-'));
+// The lock/lease machinery previously here (acquireLease/releaseLease/
+// stealExpiredLease/the three-writer interleaving) is gone: the publish
+// primitive is now a single exclusive `linkSync`, which already decides a
+// concurrent race correctly without any lock — first writer wins, the loser
+// sees `EEXIST` and is refused.
+test('two writers racing on the SAME ABSENT target: exactly one linkSync wins, the other is refused (no lock involved)', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-race-'));
   const writer = new SessionScriptWriter(path.join(root, 'sessions'));
   const healedPath = path.join(root, 'flows', 'login.healed.ad');
   fs.mkdirSync(path.dirname(healedPath), { recursive: true });
-  fs.writeFileSync(healedPath, 'context platform=ios device="x"\nclick id="stale-partial"\n');
 
-  const lockPath = `${healedPath}.lock`;
-  // A crashed writer's abandoned lease: older than LEASE_TTL_MS (30_000ms).
-  fs.writeFileSync(lockPath, `424242:crashed-writer:${Date.now() - 31_000}`);
-
-  const session = makeIosSession('default', {
+  const sessionA = makeIosSession('writer-a', {
     recordSession: true,
     saveScriptBoundary: 0,
     saveScriptComplete: true,
     saveScriptPath: healedPath,
     saveScriptDefaultedHealedPath: true,
-    actions: [action({ command: 'click', positionals: ['id="new"'] })],
+    actions: [action({ command: 'click', positionals: ['id="from-a"'] })],
   });
-
-  const result = writer.write(session);
-  expect(result.written).toBe(true);
-  // The expired lease was stolen and released again — no lock file lingers.
-  expect(fs.existsSync(lockPath)).toBe(false);
-  const script = fs.readFileSync(healedPath, 'utf8');
-  expect(script).toContain(HEAL_COMPLETE_SENTINEL);
-  expect(parseReplayScriptDetailed(script).actions.map((a) => a.positionals[0])).toEqual([
-    'id="new"',
-  ]);
-});
-
-// BLOCKER 1 (lease, three-writer interleaving — the reviewer's exact missing
-// case): during ANY reclaim window, a third writer C can validly acquire and
-// enter the critical section. Assert: (1) exactly one holder is EVER in the
-// critical section for a given moment — a writer whose lease gets displaced
-// underneath it (B) is never fooled into proceeding unprotected, because
-// `verifyOwnership` re-checks immediately before the critical section; (2) a
-// displaced writer's OWN release never deletes its successor's (A's) lock —
-// release is strictly token-scoped; (3) the discarding writer (A) never
-// performs a destination-replacing "restore" — a live claim it accidentally
-// grabbed is discarded outright, never renamed back over whoever now holds
-// the path, so a genuinely fresh writer (C) can subsequently acquire and
-// publish cleanly once the lock is free.
-test('BLOCKER 1 (lease, three-writer interleaving): a stale steal decision can never let two writers enter the critical section at once, and release never deletes a successor lock', () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-script-writer-lease-three-writer-'),
-  );
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
-  const healedPath = path.join(root, 'flows', 'login.healed.ad');
-  fs.mkdirSync(path.dirname(healedPath), { recursive: true });
-  const originalContent = 'context platform=ios device="x"\nclick id="stale-partial"\n';
-  fs.writeFileSync(healedPath, originalContent);
-
-  const lockPath = `${healedPath}.lock`;
-  // Writer X crashed, leaving an abandoned, genuinely EXPIRED lease — both A
-  // and B will independently decide (correctly, at the time each reads it)
-  // that this is stealable.
-  fs.writeFileSync(lockPath, `111111:x-writer-token:${Date.now() - 31_000}`);
-
   const sessionB = makeIosSession('writer-b', {
     recordSession: true,
     saveScriptBoundary: 0,
@@ -526,93 +311,50 @@ test('BLOCKER 1 (lease, three-writer interleaving): a stale steal decision can n
     actions: [action({ command: 'click', positionals: ['id="from-b"'] })],
   });
 
-  // Deterministically drive the exact interleaving: right after WRITER B's
-  // own claim (`linkSync`) legitimately WINS the now-freed `lockPath` (B has
-  // just, validly, re-acquired a FRESH lease and is about to verify
-  // ownership and publish) — inject WRITER A independently grabbing
-  // whatever CURRENTLY sits at `lockPath`. A's own decision to steal was
-  // made from an EARLIER read of X's now-superseded dead lease — but a
-  // rename operates on whatever is there NOW, not on the bytes A read
-  // earlier, so A's grab unavoidably catches B's fresh claim instead of X's.
-  // A discards it outright (never a restore) and re-claims fresh as its own
-  // — using the exact same primitives the real implementation uses.
+  // Force a genuine interleaving deterministically: just before writer A's
+  // own final `linkSync` into `healedPath` runs, drive writer B's ENTIRE
+  // publish to completion first — both writers started against the same
+  // absent target, but B's own `linkSync` gets there first.
   const realLinkSync = fs.linkSync;
-  let injected = false;
-  const aToken = `222222:a-writer-token:${Date.now()}`;
-  let lockContentDuringInjection: string | undefined;
+  let triggeredCompetingWriter = false;
+  let resultB: ReturnType<SessionScriptWriter['write']> | undefined;
   const linkSpy = vi
     .spyOn(fs, 'linkSync')
     .mockImplementation((existingPath: fs.PathLike, newPath: fs.PathLike) => {
-      let thrown: unknown;
-      try {
-        realLinkSync(existingPath, newPath);
-      } catch (error) {
-        thrown = error;
+      if (!triggeredCompetingWriter && newPath === healedPath) {
+        triggeredCompetingWriter = true;
+        resultB = writer.write(sessionB);
       }
-      if (!thrown && !injected && newPath === lockPath) {
-        injected = true;
-        const aQuarantine = `${lockPath}.a-writer.quarantine`;
-        fs.renameSync(lockPath, aQuarantine); // A's grab — catches B's fresh claim, not X's.
-        fs.rmSync(aQuarantine, { force: true }); // Unconditional discard — never a restore.
-        const aTemp = `${lockPath}.a-writer.tmp`;
-        fs.writeFileSync(aTemp, aToken);
-        fs.linkSync(aTemp, lockPath); // A's own fresh re-claim.
-        fs.rmSync(aTemp, { force: true });
-        lockContentDuringInjection = fs.readFileSync(lockPath, 'utf8');
-      }
-      if (thrown) throw thrown;
+      return realLinkSync(existingPath, newPath);
     });
 
-  const resultB = writer.write(sessionB);
+  const resultA = writer.write(sessionA);
   linkSpy.mockRestore();
 
-  expect(injected).toBe(true);
-  // A's re-claim was its OWN fresh token — never B's trampled one restored
-  // back verbatim (that would be the forbidden clobbering "restore" shape).
-  expect(lockContentDuringInjection).toBe(aToken);
-  // (1) B's fresh claim was displaced underneath it, but B is never fooled
-  // into proceeding unprotected: `verifyOwnership` catches the mismatch
-  // immediately before the critical section, so B safely aborts instead of
-  // silently entering it alongside anyone else.
-  expect(resultB.written).toBe(false);
-  expect(resultB.written === false && resultB.error?.message).toMatch(/lease/);
-  // scriptPath is untouched — B never reached the critical section, so it
-  // never got the chance to publish or corrupt it.
-  expect(fs.readFileSync(healedPath, 'utf8')).toBe(originalContent);
-  // (2) B's own `finally` release ran as it unwound from the throw — it
-  // must NOT have deleted A's now-current lock: release is strictly
-  // token-scoped (B's token no longer matches what's actually there).
-  expect(fs.readFileSync(lockPath, 'utf8')).toBe(aToken);
+  expect(resultB).toBeDefined();
+  // Exactly one writer wins (its own linkSync creates the file), the other's
+  // subsequent linkSync sees EEXIST and is cleanly refused — never both
+  // silently succeeding, never a torn/mixed file.
+  const outcomes = [resultA, resultB!];
+  const wins = outcomes.filter((r) => r.written);
+  const losses = outcomes.filter((r) => !r.written);
+  expect(wins).toHaveLength(1);
+  expect(losses).toHaveLength(1);
+  expect(losses[0]!.written === false && losses[0]!.error?.message).toMatch(/already exists/);
 
-  // A eventually releases (as any real holder would), and a genuinely fresh
-  // writer C can then cleanly acquire and publish — (3) exactly ONE holder
-  // (C) ever actually ends up in the critical section for this scriptPath.
-  fs.rmSync(lockPath, { force: true });
-  const sessionC = makeIosSession('writer-c', {
-    recordSession: true,
-    saveScriptBoundary: 0,
-    saveScriptComplete: true,
-    saveScriptPath: healedPath,
-    saveScriptDefaultedHealedPath: true,
-    actions: [action({ command: 'click', positionals: ['id="from-c"'] })],
-  });
-  const resultC = writer.write(sessionC);
-  expect(resultC.written).toBe(true);
   const finalScript = fs.readFileSync(healedPath, 'utf8');
   expect(finalScript).toContain(HEAL_COMPLETE_SENTINEL);
-  expect(parseReplayScriptDetailed(finalScript).actions.map((a) => a.positionals[0])).toEqual([
-    'id="from-c"',
-  ]);
-  // No lock file lingers once C's publish (and release) completes.
-  expect(fs.existsSync(lockPath)).toBe(false);
+  const parsed = parseReplayScriptDetailed(finalScript);
+  const winnerLabel = resultB!.written ? 'id="from-b"' : 'id="from-a"';
+  expect(parsed.actions.map((a) => a.positionals[0])).toEqual([winnerLabel]);
 });
 
-// BLOCKER 4: the no-clobber, complete-artifact protection must apply to an
-// EXPLICIT `--save-script=<path>` target too, not just the default healed
-// sibling — an explicit target is caller-DIRECTED (which path to use), never
-// caller-AUTHORIZED to silently destroy an unreviewed prior COMPLETE healed
-// diff sitting there.
-test('BLOCKER 4: write() refuses to clobber an existing COMPLETE artifact at an EXPLICIT --save-script=<path> target too', () => {
+// BLOCKER 4: the no-clobber protection applies to an EXPLICIT
+// `--save-script=<path>` target identically to the default healed sibling —
+// an explicit target is caller-DIRECTED (which path to use), never
+// caller-AUTHORIZED to silently destroy an unreviewed prior healed diff
+// sitting there.
+test('write() refuses to clobber an existing COMPLETE artifact at an EXPLICIT --save-script=<path> target too', () => {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), 'agent-device-script-writer-explicit-complete-clobber-'),
   );
@@ -642,12 +384,16 @@ test('BLOCKER 4: write() refuses to clobber an existing COMPLETE artifact at an 
   expect(fs.readFileSync(explicitOut, 'utf8')).toBe(before);
 });
 
-test('write() DOES overwrite when the caller passed an explicit --save-script=<path> (not defaulted)', () => {
+// (d) an explicit --save-script=<path> to an existing file is REFUSED
+// identically to the default path — behavior change: this used to succeed
+// (a non-sentinel/partial file was freely overwritable at an explicit path).
+test('write() now refuses an explicit --save-script=<path> pointing at an existing (non-sentinel) file too', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-explicit-out-'));
   const writer = new SessionScriptWriter(path.join(root, 'sessions'));
   const outPath = path.join(root, 'flows', 'explicit.ad');
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, 'context platform=ios device="x"\nclick id="old"\n');
+  const before = fs.readFileSync(outPath, 'utf8');
 
   const session = makeIosSession('default', {
     recordSession: true,
@@ -659,18 +405,16 @@ test('write() DOES overwrite when the caller passed an explicit --save-script=<p
   });
 
   const result = writer.write(session);
-  expect(result.written).toBe(true);
-  const parsed = parseReplayScriptDetailed(fs.readFileSync(outPath, 'utf8'));
-  expect(parsed.actions.map((a) => a.positionals[0])).toEqual(['id="new"']);
+  expect(result.written).toBe(false);
+  expect(result.written === false && result.error?.message).toMatch(/already exists/);
+  expect(fs.readFileSync(outPath, 'utf8')).toBe(before);
 });
 
-test('close --save-script=<explicit path> clears the defaulted marker, so an explicit overwrite of an existing file SUCCEEDS', () => {
+test('close --save-script=<explicit path> clears the defaulted marker, and a write to that (absent) explicit path succeeds', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-close-explicit-'));
   const writer = new SessionScriptWriter(path.join(root, 'sessions'));
   const defaultedHealed = path.join(root, 'flows', 'login.healed.ad');
   const explicitOut = path.join(root, 'flows', 'promoted.ad');
-  fs.mkdirSync(path.dirname(explicitOut), { recursive: true });
-  fs.writeFileSync(explicitOut, 'context platform=ios device="x"\nclick id="old"\n');
 
   // The repair defaulted to `.healed.ad` (marker set).
   const session = makeIosSession('default', {
@@ -681,9 +425,11 @@ test('close --save-script=<explicit path> clears the defaulted marker, so an exp
     actions: [action({ command: 'click', positionals: ['id="new"'] })],
   });
 
-  // `close --save-script=<explicit existing path>` re-points the path AND
-  // clears the marker (regression: it used to retain the marker and wrongly
-  // refuse the explicit overwrite).
+  // `close --save-script=<explicit path>` re-points the path AND clears the
+  // marker (regression: it used to retain the marker and wrongly refuse the
+  // explicit target). The marker no longer affects the publish decision at
+  // all (refusal is now uniform), but a redirected session must still
+  // publish cleanly to its own (absent) explicit target.
   recordActionEntry(session, {
     command: 'close',
     positionals: [],
@@ -817,7 +563,8 @@ test('write() publishes atomically: no stray temp file survives a successful rep
   const result = writer.write(session);
   expect(result.written).toBe(true);
   // The only file left in the destination directory is the published script
-  // itself — the temp path was renamed into place, not left behind.
+  // itself — the temp hard-link was cleaned up after the exclusive `linkSync`
+  // published the target, not left behind.
   expect(fs.readdirSync(path.dirname(outPath))).toEqual([path.basename(outPath)]);
   expect(fs.readFileSync(outPath, 'utf8')).toContain(HEAL_COMPLETE_SENTINEL);
 });
