@@ -2,6 +2,7 @@ import type { MaestroSelector } from './program-ir.ts';
 import type { SnapshotNode, SnapshotState } from '../../kernel/snapshot.ts';
 import { evaluateIsPredicate } from '../../selectors/predicates.ts';
 import { normalizeText } from '../../selectors/find.ts';
+import { matchesMaestroRegex } from './selector-regex.ts';
 import { extractNodeText } from '../../snapshot/snapshot-processing.ts';
 import {
   detectReactNativeOverlay,
@@ -35,7 +36,8 @@ export type ReactNativeOverlayFilterResult = {
  * not lower the selector to the legacy `key=value` expression grammar.
  *
  * Maestro's compatibility parser treats id as the strongest primary field,
- * then text, then label. Text is the visible-text form used by scalar
+ * then text, then label. Primary values are full-match regular expressions.
+ * Text is the visible-text form used by scalar
  * selectors, so it checks label, readable node text, and identifier values.
  * Enabled and selected are independent state constraints.
  */
@@ -49,7 +51,11 @@ export function matchesMaestroTypedSelector(
     const matched =
       primary.key === 'text'
         ? matchesMaestroVisibleText(node, primary.value, options)
-        : textEqualsOrRegex(readMaestroTextTermValue(node, primary.key), primary.value, options);
+        : matchesMaestroSelectorValue(
+            readMaestroTextTermValue(node, primary.key),
+            primary.value,
+            options,
+          );
     if (!matched) return false;
   } else if (selector.enabled === undefined && selector.selected === undefined) {
     return false;
@@ -70,7 +76,7 @@ export function extractMaestroVisibleTextQueryFromSelector(
 ): string | null {
   if (selector.id !== undefined) return null;
   const query = selector.text ?? selector.label;
-  return query ? query : null;
+  return query ?? null;
 }
 
 export function filterVisibleMaestroMatches(params: {
@@ -139,11 +145,11 @@ export function maestroVisibleTextMatchRank(node: SnapshotNode, query: string): 
   );
   if (values.some((value) => value === query)) return 0;
   if (values.some((value) => normalizeText(value) === normalizeText(query))) return 1;
-  if (values.some((value) => textEqualsOrRegex(value, query))) return 2;
+  if (values.some((value) => matchesMaestroRegex(value, query))) return 2;
   return 3;
 }
 
-function textEqualsOrRegex(
+function matchesMaestroSelectorValue(
   value: string | undefined,
   query: string,
   options: MaestroSelectorMatchOptions = {},
@@ -153,17 +159,12 @@ function textEqualsOrRegex(
   const normalizedQuery = normalizeText(query);
   if (normalizedText === normalizedQuery) return true;
   if (
-    options.allowLeadingCompositeLabelMatch !== false &&
+    options.allowLeadingCompositeLabelMatch === true &&
     isLeadingCompositeLabelMatch(normalizedText, normalizedQuery)
   ) {
     return true;
   }
-  if (!looksLikeMaestroRegex(query)) return false;
-  try {
-    return new RegExp(query).test(text);
-  } catch {
-    return false;
-  }
+  return matchesMaestroRegex(text, query);
 }
 
 function readTypedPrimarySelector(
@@ -182,7 +183,7 @@ function matchesMaestroVisibleText(
 ): boolean {
   return [node.label, extractNodeText(node), node.identifier]
     .filter((value): value is string => Boolean(value))
-    .some((value) => textEqualsOrRegex(value, query, options));
+    .some((value) => matchesMaestroSelectorValue(value, query, options));
 }
 
 function readMaestroTextTermValue(
@@ -199,8 +200,4 @@ function isLeadingCompositeLabelMatch(normalizedText: string, normalizedQuery: s
   if (!normalizedText.startsWith(normalizedQuery)) return false;
   const next = normalizedText.at(normalizedQuery.length);
   return next === ',' || next === ':' || next === ';';
-}
-
-function looksLikeMaestroRegex(query: string): boolean {
-  return /(?:\.\*|\.\+|\[[^\]]+\]|\([^)]*\)|\||\^|\$|\\[dDsSwWbB])/.test(query);
 }

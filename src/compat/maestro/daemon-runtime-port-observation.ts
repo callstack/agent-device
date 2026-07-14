@@ -7,6 +7,7 @@ import { AppError } from '../../kernel/errors.ts';
 import type { Rect, SnapshotState } from '../../kernel/snapshot.ts';
 import type { MaestroObservation, MaestroObservationCondition } from './engine-types.ts';
 import type { MaestroPlatform, MaestroSelector } from './program-ir.ts';
+import { literalFromMaestroRegex } from './selector-regex.ts';
 import {
   resolveMaestroTargetFromSnapshot,
   type MaestroMatchResolutionOptions,
@@ -261,6 +262,7 @@ function resolutionOptions(
 ): MaestroMatchResolutionOptions {
   return {
     promoteTapTarget: mode === 'tap',
+    allowLeadingCompositeLabelMatch: mode === 'tap',
     requireOnScreen: true,
     ...(preferredContext ? { preferredContext } : {}),
   };
@@ -348,7 +350,7 @@ function singleExactDispatchSelector(
   if (entries.length !== 1) return undefined;
   const [key, rawValue] = entries[0]!;
   if (!isDispatchSelectorKey(key) || typeof rawValue !== 'string') return undefined;
-  const value = rawValue.trim();
+  const value = literalFromMaestroRegex(rawValue)?.trim();
   return value ? { key, value } : undefined;
 }
 

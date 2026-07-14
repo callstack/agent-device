@@ -33,3 +33,17 @@ test('typed Maestro id and label selectors keep their primary field semantics', 
   expect(matchesMaestroTypedSelector(node, { label: 'Submit' })).toBe(false);
   expect(matchesMaestroTypedSelector(node, { label: '^Submit.*' })).toBe(true);
 });
+
+test('treats selector values as full Maestro regex without punctuation inference', () => {
+  const node = makeSnapshot([
+    {
+      index: 1,
+      type: 'TextView',
+      label: 'Item 22 [ready',
+    },
+  ]).nodes[0]!;
+
+  expect(matchesMaestroTypedSelector(node, { text: 'item \\d{2} \\[ready' })).toBe(true);
+  expect(matchesMaestroTypedSelector(node, { text: 'Item 2' })).toBe(false);
+  expect(matchesMaestroTypedSelector(node, { text: 'Item 22 [ready' })).toBe(true);
+});

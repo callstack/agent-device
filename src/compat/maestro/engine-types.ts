@@ -80,7 +80,7 @@ export type MaestroCompatibilityTimingPolicy = {
 export const DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY = {
   assertVisibleTimeoutMs: 17_000,
   assertNotVisibleTimeoutMs: 3_000,
-  extendedWaitUntilTimeoutMs: 10_000,
+  extendedWaitUntilTimeoutMs: 17_000,
   runFlowConditionTimeoutMs: 3_000,
 } as const satisfies MaestroCompatibilityTimingPolicy;
 
