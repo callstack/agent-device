@@ -233,7 +233,10 @@ export async function runReplayScriptFile(params: {
     // action was recorded since the divergence — the corrective press
     // happened. Consume the watermark on the latter so it can never be
     // re-checked against a later, unrelated request.
-    if (preEntrySession && preEntrySession.pendingRecordAndHeal?.expectedFrom === req.flags?.replayFrom) {
+    if (
+      preEntrySession &&
+      preEntrySession.pendingRecordAndHeal?.expectedFrom === req.flags?.replayFrom
+    ) {
       preEntrySession.pendingRecordAndHeal = undefined;
       sessionStore.set(sessionName, preEntrySession);
     }

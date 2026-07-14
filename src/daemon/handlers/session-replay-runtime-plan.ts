@@ -82,6 +82,9 @@ function invalidReplayEntryIndex(message: string): ReplayEntryIndexResult {
   return { ok: false, response: errorResponse('INVALID_ARGS', message) };
 }
 
+/** A single sub-check of a `--from` resume request; `undefined` means "no objection". */
+type ReplayResumeCheck = () => string | undefined;
+
 function validateReplayResumeRequest(params: {
   from: number;
   digest: string;
@@ -91,44 +94,91 @@ function validateReplayResumeRequest(params: {
   pendingRecordAndHeal: PendingRecordAndHeal | undefined;
   sessionActionsLength: number;
 }): string | undefined {
-  const { from, digest, planDigest, actionCount, actions, pendingRecordAndHeal, sessionActionsLength } =
-    params;
-  // `actionCount + 1` (one past the plan's end) is a legal EMPTY-TAIL resume
-  // ONLY when it matches THIS session's own `record-and-heal` divergence
-  // watermark (`stampPendingRecordAndHealWatermark`, `session-replay-resume.ts`)
-  // — never a blanket "one past the end is fine" for any session or repair
-  // kind. Absent a matching watermark, `actionCount + 1` is exactly as
-  // out-of-range as any other ordinal beyond the plan.
+  const {
+    from,
+    digest,
+    planDigest,
+    actionCount,
+    actions,
+    pendingRecordAndHeal,
+    sessionActionsLength,
+  } = params;
+  const checks: ReplayResumeCheck[] = [
+    () => describeOutOfRangeResumeFrom({ from, actionCount, pendingRecordAndHeal }),
+    () => describeUnperformedRecordAndHeal({ from, pendingRecordAndHeal, sessionActionsLength }),
+    () => describeStaleResumeDigest(digest, planDigest),
+    () => describeUnsafeResumePreflight(from, actions),
+  ];
+  for (const check of checks) {
+    const message = check();
+    if (message) return message;
+  }
+  return undefined;
+}
+
+/**
+ * `actionCount + 1` (one past the plan's end) is a legal EMPTY-TAIL resume
+ * ONLY when it matches THIS session's own `record-and-heal` divergence
+ * watermark (`stampPendingRecordAndHealWatermark`, `session-replay-resume.ts`)
+ * — never a blanket "one past the end is fine" for any session or repair
+ * kind. Absent a matching watermark, `actionCount + 1` is exactly as
+ * out-of-range as any other ordinal beyond the plan.
+ */
+function describeOutOfRangeResumeFrom(params: {
+  from: number;
+  actionCount: number;
+  pendingRecordAndHeal: PendingRecordAndHeal | undefined;
+}): string | undefined {
+  const { from, actionCount, pendingRecordAndHeal } = params;
   const isAuthorizedEmptyTail =
     from === actionCount + 1 &&
     pendingRecordAndHeal !== undefined &&
     pendingRecordAndHeal.expectedFrom === from;
-  if (!Number.isInteger(from) || from < 1 || (from > actionCount && !isAuthorizedEmptyTail)) {
-    return `replay --from ${from} is out of range for a ${actionCount}-step plan.`;
-  }
-  // A `from` matching a pending `record-and-heal` watermark — in-range
-  // (mid-plan) or the empty-tail boundary above — requires proof the agent
-  // actually performed the diverged step: the session's recorded action
-  // count must have grown since the divergence. Without that proof, this
-  // would silently resume past an unrepaired step instead of rejecting.
+  const inRange =
+    Number.isInteger(from) && from >= 1 && (from <= actionCount || isAuthorizedEmptyTail);
+  return inRange
+    ? undefined
+    : `replay --from ${from} is out of range for a ${actionCount}-step plan.`;
+}
+
+/**
+ * A `from` matching a pending `record-and-heal` watermark — in-range
+ * (mid-plan) or the empty-tail boundary the range check above authorizes —
+ * requires proof the agent actually performed the diverged step: the
+ * session's recorded action count must have grown since the divergence.
+ * Without that proof, this would silently resume past an unrepaired step
+ * instead of rejecting.
+ */
+function describeUnperformedRecordAndHeal(params: {
+  from: number;
+  pendingRecordAndHeal: PendingRecordAndHeal | undefined;
+  sessionActionsLength: number;
+}): string | undefined {
+  const { from, pendingRecordAndHeal, sessionActionsLength } = params;
   if (
-    pendingRecordAndHeal?.expectedFrom === from &&
-    sessionActionsLength === pendingRecordAndHeal.actionsCountAtDivergence
+    pendingRecordAndHeal?.expectedFrom !== from ||
+    sessionActionsLength !== pendingRecordAndHeal.actionsCountAtDivergence
   ) {
-    return (
-      `replay --from ${from} continues a record-and-heal repair, but no corrective action has been ` +
-      'recorded on this session since that divergence; press the correct control via a blessed @ref ' +
-      "from the divergence's screen.refs (recorded, no --no-record) before resuming with " +
-      `--from ${from}.`
-    );
+    return undefined;
   }
-  if (digest !== planDigest) {
-    return (
-      'replay --plan-digest does not match the current plan digest; the script, its includes, or its ' +
-      'platform-conditioned expansion changed since the divergence report was generated. Run a fresh full ' +
-      'replay to get a new digest.'
-    );
-  }
+  return (
+    `replay --from ${from} continues a record-and-heal repair, but no corrective action has been ` +
+    'recorded on this session since that divergence; press the correct control via a blessed @ref ' +
+    "from the divergence's screen.refs (recorded, no --no-record) before resuming with " +
+    `--from ${from}.`
+  );
+}
+
+function describeStaleResumeDigest(digest: string, planDigest: string): string | undefined {
+  if (digest === planDigest) return undefined;
+  return (
+    'replay --plan-digest does not match the current plan digest; the script, its includes, or its ' +
+    'platform-conditioned expansion changed since the divergence report was generated. Run a fresh full ' +
+    'replay to get a new digest.'
+  );
+}
+
+function describeUnsafeResumePreflight(from: number, actions: SessionAction[]): string | undefined {
   const preflight = evaluateReplayResumePreflight({ from, actions });
   return preflight.allowed ? undefined : `replay --from ${from} cannot resume: ${preflight.reason}`;
 }

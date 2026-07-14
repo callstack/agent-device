@@ -389,14 +389,19 @@ function divergenceRepairHintLine(repairHint: unknown, resume: unknown): string[
   return [`Repair hint: ${repairHint}${guidance ? ` — ${guidance}` : ''}`];
 }
 
-type ResumeGuidance = { allowed: true; command: string } | { allowed: false; reason: string | undefined };
+type ResumeGuidance =
+  | { allowed: true; command: string }
+  | { allowed: false; reason: string | undefined };
 
 /** Reads the parts of `resume` the repair-hint guidance needs; `undefined` when the shape is unreadable. */
 function readResumeGuidance(resume: unknown): ResumeGuidance | undefined {
   const record = resume as Record<string, unknown> | undefined;
   if (!record || typeof record.allowed !== 'boolean') return undefined;
   if (!record.allowed) {
-    return { allowed: false, reason: typeof record.reason === 'string' ? record.reason : undefined };
+    return {
+      allowed: false,
+      reason: typeof record.reason === 'string' ? record.reason : undefined,
+    };
   }
   const { from, planDigest } = record;
   if (typeof from !== 'number' || typeof planDigest !== 'string' || planDigest.length === 0) {
