@@ -4,6 +4,7 @@ import { AppError, normalizeError } from '../../kernel/errors.ts';
 import { runCmdSync } from '../../utils/exec.ts';
 
 const RUN_SCRIPT_TIMEOUT_MS = 30_000;
+const RUN_SCRIPT_DIAGNOSTIC_PREVIEW_CHARS = 1_000;
 
 type HttpResponse = {
   status: number;
@@ -114,7 +115,7 @@ function parseRunScriptJson(value: unknown): unknown {
     throw new AppError(
       'COMMAND_FAILED',
       `Maestro runScript json() could not parse response body: ${error instanceof Error ? error.message : String(error)}`,
-      { bodyPreview: value.slice(0, 1000) },
+      { bodyPreview: value.slice(0, RUN_SCRIPT_DIAGNOSTIC_PREVIEW_CHARS) },
       error instanceof Error ? error : undefined,
     );
   }
@@ -158,8 +159,8 @@ function runHttpRequestSync(
       'COMMAND_FAILED',
       `Maestro runScript http.${method.toLowerCase()} returned invalid JSON for ${url}`,
       {
-        stdout: result.stdout.slice(0, 1000),
-        stderr: result.stderr.slice(0, 1000),
+        stdout: result.stdout.slice(0, RUN_SCRIPT_DIAGNOSTIC_PREVIEW_CHARS),
+        stderr: result.stderr.slice(0, RUN_SCRIPT_DIAGNOSTIC_PREVIEW_CHARS),
       },
       error instanceof Error ? error : undefined,
     );
@@ -184,5 +185,7 @@ function stringifyOutputValue(value: unknown): string {
 
 function trimHttpErrorOutput(stderr: string): string {
   const trimmed = stderr.trim();
-  return trimmed.length > 0 ? trimmed.slice(0, 1000) : 'request process exited without stderr';
+  return trimmed.length > 0
+    ? trimmed.slice(0, RUN_SCRIPT_DIAGNOSTIC_PREVIEW_CHARS)
+    : 'request process exited without stderr';
 }
