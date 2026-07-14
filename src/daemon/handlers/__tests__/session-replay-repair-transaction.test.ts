@@ -475,9 +475,13 @@ test('BLOCKER 2b/2c: a close whose commit FAILS (no-clobber) keeps the session f
   // success, not a swallowed skip), distinguishable from a filesystem failure.
   if (!closeResponse.ok) {
     expect(closeResponse.error.message).toMatch(/already exists/);
-    // BLOCKER 3: the session was kept specifically so the agent can retry —
-    // `retriable` must say so, never contradict that recovery guidance.
-    expect(closeResponse.error.details?.retriable).toBe(true);
+    // BLOCKER 3 (original): the session was kept specifically so the agent
+    // can retry — `retriable` must say so, never contradict that recovery
+    // guidance. BLOCKER 2 (second follow-up): at the TOP level of the error —
+    // the location the router/client actually read — never buried under
+    // `details`.
+    expect(closeResponse.error.retriable).toBe(true);
+    expect(closeResponse.error.details?.retriable).toBeUndefined();
   }
   // The prior complete artifact is untouched.
   expect(fs.readFileSync(path.join(root, 'flow.healed.ad'), 'utf8')).toBe(before);
@@ -520,6 +524,10 @@ test('BLOCKER 2 (new): a repair close whose PLATFORM close fails never commits a
   const platformCloseError = new AppError('DEVICE_UNAVAILABLE', 'platform close failed', {
     reason: 'device_disconnected',
     hint: 'Reconnect the device and retry close.',
+    // BLOCKER 2 (second follow-up): the underlying platform error's own
+    // diagnosticId/logPath must survive normalization, never be flattened away.
+    diagnosticId: 'diag-platform-close-1',
+    logPath: '/tmp/platform-close-1.log',
   });
   mockDispatchCommand.mockRejectedValueOnce(platformCloseError);
 
@@ -546,8 +554,15 @@ test('BLOCKER 2 (new): a repair close whose PLATFORM close fails never commits a
   expect(closeResponse.ok).toBe(false);
   if (!closeResponse.ok) {
     expect(closeResponse.error.code).toBe('DEVICE_UNAVAILABLE');
-    // BLOCKER 3: the session was kept for retry — `retriable` must agree.
-    expect(closeResponse.error.details?.retriable).toBe(true);
+    // BLOCKER 3 (original): the session was kept for retry — `retriable`
+    // must agree. BLOCKER 2 (second follow-up): at the TOP level, and the
+    // underlying platform error's diagnosticId/logPath/details are preserved
+    // rather than discarded.
+    expect(closeResponse.error.retriable).toBe(true);
+    expect(closeResponse.error.details?.retriable).toBeUndefined();
+    expect(closeResponse.error.diagnosticId).toBe('diag-platform-close-1');
+    expect(closeResponse.error.logPath).toBe('/tmp/platform-close-1.log');
+    expect(closeResponse.error.details?.reason).toBe('device_disconnected');
   }
   // BLOCKER 2b-style contract: the session stays addressable, untouched, so
   // the agent can fix the cause (e.g. reconnect the device) and retry.

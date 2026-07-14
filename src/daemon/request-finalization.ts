@@ -29,6 +29,16 @@ export function finalizeDaemonResponse(
       },
     });
     const logPathOnFailure = flushDiagnosticsToSessionFile({ force: true }) ?? undefined;
+    // ADR 0012 decision 6, BLOCKER 2 (second follow-up): every handler-RETURNED
+    // (as opposed to thrown) failure response is rebuilt here into a fresh
+    // AppError before re-normalizing — this used to copy `hint`/`diagnosticId`/
+    // `logPath` from the incoming `response.error` but NOT `retriable`/
+    // `supportedOn`, so a handler that set them at the correct top-level
+    // location (matching `DaemonError`'s wire contract) still lost them at
+    // this reconstruction, regardless of how correctly the handler itself
+    // built its response. Both are now carried through the same way, with the
+    // same defensive `details` fallback `hint` already used (some cause
+    // objects still carry them nested under `details` instead of top-level).
     const normalizedError = normalizeError(
       new AppError(toAppErrorCode(response.error.code), response.error.message, {
         ...(response.error.details ?? {}),
@@ -39,6 +49,16 @@ export function finalizeDaemonResponse(
             : undefined),
         diagnosticId: response.error.diagnosticId,
         logPath: response.error.logPath,
+        retriable:
+          response.error.retriable ??
+          (typeof response.error.details?.retriable === 'boolean'
+            ? response.error.details.retriable
+            : undefined),
+        supportedOn:
+          response.error.supportedOn ??
+          (typeof response.error.details?.supportedOn === 'string'
+            ? response.error.details.supportedOn
+            : undefined),
       }),
       {
         diagnosticId: details.diagnosticId,

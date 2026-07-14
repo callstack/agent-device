@@ -1,5 +1,5 @@
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError, normalizeError } from '../../kernel/errors.ts';
 import { scheduleIosRunnerIdleStop } from '../../platforms/apple/core/runner/runner-client.ts';
 import { isApplePlatform, type DeviceInfo } from '../../kernel/device.ts';
 import { dispatchCommand } from '../../core/dispatch.ts';
@@ -106,23 +106,33 @@ function commitRepairBeforeClose(
  * ADR 0012 decision 6 (BLOCKER 2b): a commit-failure close response. The session
  * is intentionally NOT torn down (the caller returns before teardown), so the
  * agent can fix the cause and retry `close --save-script`.
+ *
+ * BLOCKER 2 (second follow-up): routes `error` through the SAME
+ * `normalizeError` normalization every other AppError -> DaemonResponse
+ * conversion in this codebase uses (see `repairExpiredIfTombstoned` in
+ * request-router.ts and the dozens of handler call sites doing
+ * `{ ok: false, error: normalizeError(error) }`) — a hand-rolled reshape here
+ * previously dropped the underlying platform/commit error's `details`,
+ * `diagnosticId`, and `logPath` entirely, and put `retriable` under
+ * `error.details.retriable`, a location neither the router's `enrichDaemonError`
+ * nor the client reads (both read the TOP-LEVEL `error.retriable` — see
+ * `DaemonError` in kernel/contracts.ts). `retriable: true` is still forced
+ * unconditionally at the end: the session was preserved specifically so the
+ * agent can retry (`close`/`close --save-script=<other>`), which must never
+ * be contradicted by the underlying error's own (usually absent) classification.
  */
 function buildRepairCloseFailureResponse(session: SessionState, error: AppError): DaemonResponse {
-  const hint = typeof error.details?.hint === 'string' ? error.details.hint : undefined;
+  const normalized = normalizeError(error);
   return {
     ok: false,
     error: {
-      code: error.code,
-      message: error.message,
-      ...(hint ? { hint } : {}),
+      ...normalized,
       details: {
+        ...normalized.details,
         session: session.name,
         ...(session.saveScriptPath ? { savedScript: session.saveScriptPath } : {}),
-        // BLOCKER 3: the session was preserved specifically so the agent can
-        // retry (`close`/`close --save-script=<other>`) — `retriable` must
-        // agree with that, never contradict the recovery guidance above.
-        retriable: true,
       },
+      retriable: true,
     },
   };
 }

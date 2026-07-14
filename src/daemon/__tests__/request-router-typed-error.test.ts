@@ -122,3 +122,48 @@ test('deterministic errors (INVALID_ARGS) are returned with the default shape �
   expect('supportedOn' in response.error).toBe(false);
   expect(mockDispatch).not.toHaveBeenCalled();
 });
+
+// ADR 0012 decision 6, BLOCKER 2 (second follow-up): a repair-armed `close`
+// whose targeted platform close fails must surface `retriable: true` at the
+// TOP level of the wire error — the location `enrichDaemonError` below and
+// the client actually read (`DaemonError.retriable` in kernel/contracts.ts) —
+// and must preserve the underlying platform error's own diagnosticId/logPath/
+// details rather than discarding them. Exercised through the REAL router
+// boundary (`createRequestHandler`), not just the raw response builder, so a
+// regression in either the handler OR `enrichDaemonError`'s own
+// `error.retriable ?? retriableForErrorCode(error.code)` fallback is caught.
+test('BLOCKER 2 (second follow-up): a repair-close platform-close failure surfaces retriable:true and diagnosticId/logPath/details at the TOP level through the router', async () => {
+  const { sessionStore, handler } = makeHandler();
+  const session = makeIosSession('typed-error');
+  session.recordSession = true;
+  session.saveScriptBoundary = 0;
+  session.saveScriptComplete = true;
+  session.actions = [{ ts: 1, command: 'open', positionals: ['Demo'], flags: {} }];
+  sessionStore.set('typed-error', session);
+
+  // DEVICE_NOT_FOUND is not in `retriableForErrorCode`'s conservative allow
+  // list — if the handler ever regressed to relying on that code-level
+  // fallback instead of forcing `retriable: true` itself, this would catch it.
+  mockDispatch.mockRejectedValueOnce(
+    new AppError('DEVICE_NOT_FOUND', 'device vanished', {
+      diagnosticId: 'diag-router-close-1',
+      logPath: '/tmp/router-close-1.log',
+      someExtra: 'x',
+    }),
+  );
+
+  // A targeted close (an explicit positional app target) is what makes the
+  // repair-armed platform close actually dispatch instead of no-op.
+  const response = await handler(request('close', { positionals: ['com.example.app'] }));
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.retriable).toBe(true);
+  expect('retriable' in (response.error.details ?? {})).toBe(false);
+  expect(response.error.diagnosticId).toBe('diag-router-close-1');
+  expect(response.error.logPath).toBe('/tmp/router-close-1.log');
+  expect(response.error.details?.someExtra).toBe('x');
+  expect(response.error.code).toBe('DEVICE_NOT_FOUND');
+  // The session is retained (not torn down), addressable for the retry.
+  expect(sessionStore.get('typed-error')).toBeDefined();
+});
