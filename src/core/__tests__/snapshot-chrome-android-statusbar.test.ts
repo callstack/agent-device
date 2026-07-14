@@ -104,14 +104,16 @@ test('Android non-raw capture: status-bar leaves are recognized as chrome once t
   }
 });
 
-test('Android actionable systemui overlay (volume dialog) still survives with the status-bar leak fix (#1251)', () => {
-  // Extend the RAW capture with a disjoint systemui run whose leaf ids look
-  // like an actionable overlay (volume dialog): no real capture of that
-  // surface was available, but the point of this test is exactly that the
-  // new leaf-id set must NOT broaden to "any systemui id". Appended to the
-  // RAW array (not the already-walked output) so the whole tree — status bar
-  // AND volume dialog — goes through the real walk together, exactly as a
-  // single device capture would.
+test('Android actionable systemui overlay (volume dialog) still survives the chrome filter (#1251)', () => {
+  // Filter-logic unit test, NOT a live-capture-path claim (#1264 finding 2): this
+  // exercises `collectSettleChromeRefs` in isolation over a synthetic systemui
+  // run appended to an unrelated capture fixture. The leaf ids ARE real,
+  // live-verified volume-dialog ids (`volume_dialog_container`,
+  // `volume_new_ringer_active_icon_container`), but appending them to this
+  // fixture does not reproduce how a live capture reaches the filter — that is
+  // covered separately by the full-capture invariant test below. The point
+  // here is narrower: the status-bar/nav-bar leaf-id set (#1251) must NOT
+  // broaden to "any systemui id" and drop an actionable overlay it is handed.
   const rawWithVolumeDialog: RawSnapshotNode[] = [
     ...ANDROID_IME_CAPTURE_RAW_NODES,
     {
@@ -125,8 +127,8 @@ test('Android actionable systemui overlay (volume dialog) still survives with th
       parentIndex: 9000,
       type: 'android.widget.ImageButton',
       bundleId: 'com.android.systemui',
-      identifier: 'com.android.systemui:id/volume_dialog_slider',
-      label: 'Media volume',
+      identifier: 'com.android.systemui:id/volume_new_ringer_active_icon_container',
+      label: 'Ringer volume',
       hittable: true,
     },
   ];
@@ -134,13 +136,16 @@ test('Android actionable systemui overlay (volume dialog) still survives with th
   const chromeRefs = collectSettleChromeRefs(nodes, 'com.callstack.agentdevicelab');
 
   // The container is non-hittable with a generic id, but its hittable
-  // `volume_dialog_slider` child keeps it in the walked tree (descendantHittable).
+  // `volume_new_ringer_active_icon_container` child keeps it in the walked
+  // tree (descendantHittable).
   assert.equal(
     chromeRefs.has(refForIdentifier(nodes, 'com.android.systemui:id/volume_dialog_container')),
     false,
   );
   assert.equal(
-    chromeRefs.has(refForIdentifier(nodes, 'com.android.systemui:id/volume_dialog_slider')),
+    chromeRefs.has(
+      refForIdentifier(nodes, 'com.android.systemui:id/volume_new_ringer_active_icon_container'),
+    ),
     false,
   );
   // The status-bar leak fix stays active in the very same tree.

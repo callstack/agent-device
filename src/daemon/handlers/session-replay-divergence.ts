@@ -1,14 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { dispatchCommand } from '../../core/dispatch.ts';
-import { contextFromFlags } from '../context.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from '../session-snapshot.ts';
 import { isSparseSnapshotQualityVerdict } from '../../snapshot/snapshot-quality.ts';
 import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
 import { redactDiagnosticData } from '../../kernel/redaction.ts';
 import type { DaemonError, ResponseLevel } from '../../kernel/contracts.ts';
-import type { RawSnapshotNode, SnapshotBackend, SnapshotNode } from '../../kernel/snapshot.ts';
-import { buildSnapshotState } from './snapshot-capture.ts';
+import type { SnapshotNode } from '../../kernel/snapshot.ts';
+import { buildSnapshotState, captureSnapshotData } from './snapshot-capture.ts';
 import {
   buildSelectorChainForNode,
   resolveSelectorChain,
@@ -203,6 +201,17 @@ export function toReplayRepairHintCapture(
  * sequence (setSessionSnapshot -> markSessionSnapshotRefsIssued -> store).
  * Sparse captures do not write back (selector-capture reliability contract),
  * so a sparse verdict degrades the whole observation.
+ *
+ * ADR 0012 decision 4 amendment (#1264): this reuses `captureSnapshotData` —
+ * the SAME function the `snapshot` command itself builds its capture with
+ * (Android: snapshot-helper full-window route with the graceful app-scoped
+ * fallback; iOS: the bounded system-modal probe path; macOS/Linux: their
+ * surface-scoped branches) — instead of a parallel hand-rolled dispatch. An
+ * agent must never see a healthier `screen` in a divergence report than a
+ * plain `snapshot` would show it, so `screen` cannot be built from a narrower
+ * capture than `snapshot`'s. The chrome filter (`collectSettleChromeRefs`)
+ * and the meaningful-target filter below stay layered ON TOP of this full
+ * capture as FILTERS, never as a narrower scoping.
  */
 export async function captureDivergenceObservation(params: {
   session: SessionState;
@@ -213,24 +222,15 @@ export async function captureDivergenceObservation(params: {
 }): Promise<DivergenceObservation> {
   const { session, sessionName, sessionStore, logPath, action } = params;
   const snapshotInteractiveOnly = divergenceCaptureInteractiveOnly(action);
+  const flags = { ...(action.flags ?? {}), snapshotInteractiveOnly };
   try {
-    const data = (await dispatchCommand(session.device, 'snapshot', [], undefined, {
-      ...contextFromFlags(
-        logPath,
-        { ...(action.flags ?? {}), snapshotInteractiveOnly },
-        session.appBundleId,
-        session.trace?.outPath,
-      ),
-    })) as {
-      nodes?: RawSnapshotNode[];
-      truncated?: boolean;
-      backend?: SnapshotBackend;
-      quality?: unknown;
-    };
-    const snapshot = buildSnapshotState(data, {
-      ...(action.flags ?? {}),
-      snapshotInteractiveOnly,
+    const data = await captureSnapshotData({
+      device: session.device,
+      session,
+      flags,
+      logPath,
     });
+    const snapshot = buildSnapshotState(data, flags);
     if (isSparseSnapshotQualityVerdict(snapshot.snapshotQuality)) {
       return {
         state: 'unavailable',

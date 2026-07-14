@@ -12,6 +12,9 @@ Accepted (2026-07-10); partially implemented (last updated 2026-07-13). See [Mig
   `REPLAY_DIVERGENCE` repair-loop fix (#1223).
 - Decision 6, the base agent-supervised re-record repair — `replay --save-script` arming, the
   post-watermark healed slice, `repairHint`, and the writer's bare-`@ref` fail-loud guard (#1228).
+- Decision 4 amendment, `screen`'s capture scope — the divergence `screen` capture is unified with
+  `snapshot`'s own full-window scope, with the chrome and meaningful-target filters layered on top as
+  filters, not scopings (#1264).
 
 **Accepted but NOT yet implemented** (this amendment; tracked by #1235 — repair-transaction lifecycle):
 the R7 repair-transaction keep-alive and its distinct `resume.repairSessionHeld` signal, the ARMED →
@@ -437,6 +440,22 @@ contract only guarantees it is transported.
 healthy snapshot digest and the only form that issues actionable refs. `{ state: "unavailable", reason,
 hint }` is returned when capture fails or is sparse; it has no refs or generation and must not fall back to
 the old session tree. Screen-capture failure never replaces or masks the original replay cause.
+
+> **Amendment (#1264): `screen`'s capture scope.** `refs` is a filtered digest of the exact same tree a
+> plain `snapshot` would return at that moment — the capture underneath `screen` is built with `snapshot`'s
+> own full-window scope (Android: the snapshot-helper route, with the existing graceful app-scoped fallback
+> only when the helper is unavailable; iOS: the same capture semantics as the bounded system-modal probe
+> path; macOS/Linux: their surface-scoped branches), never a narrower, app-window-only capture assembled
+> separately for divergence reporting. The chrome filter (#1233/#1256, `collectSettleChromeRefs`) and the
+> meaningful-target filter (label/id or `hittable`) are layered ON TOP of that full capture as **filters**,
+> not as a separate, narrower scoping — a filter may drop a node the full capture contains, but the capture
+> itself must never omit content `snapshot` would show. This is a hard invariant: **an agent must never see
+> a healthier `screen` in a divergence report than a plain `snapshot` would show it.** Concretely, a
+> separate-window system overlay covering the app at the moment of capture — a held volume dialog, a
+> persistent quick-settings shade, a permission dialog — must appear in `screen.refs` (its actionable/
+> hittable/labeled nodes surviving the filters) exactly as `snapshot` would present it, and `repairHint`
+> (decision 6) is computed over that same full, correctly-scoped capture so it is never routed as if the
+> app underneath a covering overlay were healthy.
 
 Response levels bound the entire serialized UTF-8 `details.divergence` object, not merely its arrays:
 compact (`--level digest`) is at most **8 KiB**, default at most **24 KiB**, and full at most **64 KiB**.

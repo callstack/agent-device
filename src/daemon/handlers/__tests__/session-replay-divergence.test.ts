@@ -471,3 +471,93 @@ test('buildReplayFailureDivergence excludes Android status-bar/IME chrome from s
   expect(screen.refs.some((ref) => ref.label === '+48 555 010 010')).toBe(true); // field-phone
   expect(screen.truncated).toBeUndefined();
 });
+
+// #1264 invariant: an agent must never see a healthier `screen` in a
+// divergence report than a plain `snapshot` would show it. A separate-window
+// system overlay (e.g. the volume dialog) that a full `snapshot` capture would
+// include must also survive into divergence `screen.refs` — its actionable
+// (hittable) content passing the meaningful-target filter — while ordinary
+// status-bar/nav-bar/IME chrome in the SAME capture is still excluded. This
+// extends the real (walked) Android fixture from the test above with a
+// systemui overlay run using real, live-verified volume-dialog leaf ids
+// (`volume_dialog_container`, `volume_new_ringer_active_icon_container`, see
+// `core/__tests__/snapshot-chrome-android-statusbar.test.ts`), appended to the
+// RAW array so the whole tree — app content, status bar, AND the overlay —
+// goes through the real non-raw walk together, exactly as a single full
+// capture would.
+test('buildReplayFailureDivergence: a system-overlay window in the full capture survives into screen.refs while status/nav chrome is filtered (#1264)', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-overlay-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(
+    sessionName,
+    makeAndroidSession(sessionName, { appBundleId: 'com.callstack.agentdevicelab' }),
+  );
+
+  const rawWithVolumeDialog = [
+    ...ANDROID_IME_CAPTURE_RAW_NODES,
+    {
+      index: 9000,
+      type: 'android.widget.FrameLayout',
+      bundleId: 'com.android.systemui',
+      identifier: 'com.android.systemui:id/volume_dialog_container',
+    },
+    {
+      index: 9001,
+      parentIndex: 9000,
+      type: 'android.widget.ImageButton',
+      bundleId: 'com.android.systemui',
+      identifier: 'com.android.systemui:id/volume_new_ringer_active_icon_container',
+      label: 'Ringer volume',
+      hittable: true,
+    },
+  ];
+
+  mockDispatchCommand.mockResolvedValue({
+    nodes: walkNonRawAndroidFixture(rawWithVolumeDialog),
+    truncated: false,
+    backend: 'android',
+  });
+
+  const action = {
+    ts: 0,
+    command: 'press',
+    positionals: ['label="Full name"'],
+    flags: {},
+    result: { selectorChain: ['label="Full name"'] },
+  };
+  const divergence = await buildReplayFailureDivergence({
+    error: { code: 'COMMAND_FAILED', message: 'not hittable' },
+    action,
+    index: 0,
+    sourcePath: path.join(root, 'flow.ad'),
+    sourceLine: 1,
+    session: sessionStore.get(sessionName),
+    sessionName,
+    sessionStore,
+    logPath: path.join(root, 'daemon.log'),
+    responseLevel: 'default',
+    planActions: [action],
+    planDigest: 'test-plan-digest',
+  });
+
+  expect(divergence.screen.state).toBe('available');
+  const screen = divergence.screen as Extract<typeof divergence.screen, { state: 'available' }>;
+
+  // The overlay's actionable (hittable) control survives the filters, exactly
+  // as a plain `snapshot` at the same moment would show it.
+  expect(screen.refs.some((ref) => ref.label === 'Ringer volume')).toBe(true);
+
+  // Ordinary status-bar/mobile/wifi systemui chrome and IME keys, present in
+  // the SAME capture, are still filtered — the overlay fix does not broaden
+  // the chrome filter into a no-op.
+  expect(screen.refs.some((ref) => ref.label === '7:03')).toBe(false); // clock
+  expect(screen.refs.some((ref) => ref.label === 'T-Mobile, signal full.')).toBe(false); // mobile_combo
+  expect(screen.refs.some((ref) => ref.label === 'Wifi signal full.')).toBe(false); // wifi_signal
+  expect(screen.refs.some((ref) => ref.label === 'Shift')).toBe(false); // IME key
+
+  // App content underneath, from the same capture, is unaffected by either
+  // the overlay or the chrome filter.
+  expect(screen.refs.some((ref) => ref.label === 'Checkout form')).toBe(true);
+  expect(screen.refs.some((ref) => ref.label === 'review name')).toBe(true); // field-name
+});
