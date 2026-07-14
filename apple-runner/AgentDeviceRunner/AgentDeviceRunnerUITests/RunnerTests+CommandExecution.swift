@@ -737,18 +737,24 @@ extension RunnerTests {
       return runnerWedgedResponse(command: command, abandonedForSeconds: abandonedForSeconds)
     }
     if Thread.isMainThread {
-      return try executeOnMainSafely(command: command)
+      let alertDeadline = command.command == .alert
+        ? Date().addingTimeInterval(Self.alertCommandTimeout(timeoutMs: command.timeoutMs))
+        : nil
+      return try executeOnMainSafely(command: command, alertDeadline: alertDeadline)
     }
     if command.command == .snapshot {
       return try executeSnapshotDispatched(command: command)
     }
     if command.command == .alert {
+      let deadline = Date().addingTimeInterval(
+        Self.alertCommandTimeout(timeoutMs: command.timeoutMs)
+      )
       return try runMainThreadWork(
         command: command,
-        timeout: Self.alertCommandTimeout(timeoutMs: command.timeoutMs),
+        timeout: max(0.001, deadline.timeIntervalSinceNow),
         timeoutError: mainThreadExecutionTimeoutError
       ) {
-        try self.executeOnMainSafely(command: command)
+        try self.executeOnMainSafely(command: command, alertDeadline: deadline)
       }
     }
     return try runMainThreadWork(
@@ -834,7 +840,10 @@ extension RunnerTests {
 
   // MARK: - Command Handling
 
-  private func executeOnMainSafely(command: Command) throws -> Response {
+  private func executeOnMainSafely(
+    command: Command,
+    alertDeadline: Date? = nil
+  ) throws -> Response {
     var hasRetried = false
     while true {
       var response: Response?
@@ -842,7 +851,7 @@ extension RunnerTests {
       let failureCountBefore = currentXCTestFailureCount()
       let exceptionMessage = RunnerObjCExceptionCatcher.catchException({
         do {
-          response = try self.executeOnMain(command: command)
+          response = try self.executeOnMain(command: command, alertDeadline: alertDeadline)
         } catch {
           swiftError = error
         }
@@ -1073,7 +1082,7 @@ extension RunnerTests {
     return preparation
   }
 
-  private func executeOnMain(command: Command) throws -> Response {
+  private func executeOnMain(command: Command, alertDeadline: Date?) throws -> Response {
     let preparation = prepareActiveCommandContext(command: command)
     let activeApp: XCUIApplication
     switch preparation {
@@ -1153,7 +1162,11 @@ extension RunnerTests {
     default:
       break
     }
-    return try executeOnMainPrepared(command: command, activeApp: activeApp)
+    return try executeOnMainPrepared(
+      command: command,
+      activeApp: activeApp,
+      alertDeadline: alertDeadline
+    )
   }
 
   private func prepareActiveCommandContext(command: Command) -> ActiveCommandPreparation {
@@ -1223,7 +1236,11 @@ extension RunnerTests {
     return .context(ActiveCommandContext(app: activeApp))
   }
 
-  private func executeOnMainPrepared(command: Command, activeApp: XCUIApplication) throws -> Response {
+  private func executeOnMainPrepared(
+    command: Command,
+    activeApp: XCUIApplication,
+    alertDeadline: Date? = nil
+  ) throws -> Response {
     var activeApp = activeApp
     switch command.command {
     case .status, .shutdown, .recordStart, .recordStop, .uptime:
@@ -1688,7 +1705,7 @@ extension RunnerTests {
       )
     case .alert:
       let action = (command.action ?? "get").lowercased()
-      let deadline = Date().addingTimeInterval(
+      let deadline = alertDeadline ?? Date().addingTimeInterval(
         Self.alertCommandTimeout(timeoutMs: command.timeoutMs)
       )
       guard let alert = resolveAlert(app: activeApp, deadline: deadline) else {
