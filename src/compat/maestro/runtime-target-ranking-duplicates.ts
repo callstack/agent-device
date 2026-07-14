@@ -22,6 +22,8 @@ type MaestroMatchWithScreenContainer = {
   container: SnapshotNode & { rect: Rect };
 };
 
+type ScreenContainerContextScore = readonly [priority: 0 | 1, distance: number];
+
 export function selectPreferredMaestroSnapshotMatch(
   nodes: SnapshotState['nodes'],
   candidates: MaestroResolvedSnapshotMatch[],
@@ -168,30 +170,52 @@ function selectContextualOverlappingScreenContainerMatches(
     rawContextContainer && rectContains(rawContextContainer.rect, context.rect)
       ? rawContextContainer
       : null;
-  const scored = entries.map((entry) => ({
-    entry,
-    score: scoreScreenContainerAgainstContext(entry.container, context, contextContainer),
-  }));
-  const bestScore = Math.min(...scored.map((entry) => entry.score));
-  if (!Number.isFinite(bestScore)) return [];
-  return scored.filter((entry) => entry.score === bestScore).map((entry) => entry.entry.candidate);
+  const scored = entries
+    .map((entry) => ({
+      entry,
+      score: scoreScreenContainerAgainstContext(entry.container, context, contextContainer),
+    }))
+    .filter(
+      (
+        entry,
+      ): entry is { entry: MaestroMatchWithScreenContainer; score: ScreenContainerContextScore } =>
+        entry.score !== null,
+    );
+  if (scored.length === 0) return [];
+
+  const bestScore = scored.reduce<ScreenContainerContextScore>(
+    (best, entry) =>
+      compareScreenContainerContextScores(entry.score, best) < 0 ? entry.score : best,
+    scored[0]!.score,
+  );
+  return scored
+    .filter((entry) => compareScreenContainerContextScores(entry.score, bestScore) === 0)
+    .map((entry) => entry.entry.candidate);
 }
 
 function scoreScreenContainerAgainstContext(
   container: SnapshotNode & { rect: Rect },
   context: MaestroPreferredContext,
   contextContainer: (SnapshotNode & { rect: Rect }) | null,
-): number {
+): ScreenContainerContextScore | null {
   if (contextContainer) {
-    if (container.index === contextContainer.index) return 0;
-    if (rectOverlapRatio(container.rect, contextContainer.rect) < 0.6)
-      return Number.POSITIVE_INFINITY;
-    return Math.abs(container.index - contextContainer.index);
+    if (container.index === contextContainer.index) return [0, 0];
+    if (rectOverlapRatio(container.rect, contextContainer.rect) < 0.6) return null;
+    return [0, Math.abs(container.index - contextContainer.index)];
   }
 
-  if (rectOverlapRatio(container.rect, context.rect) >= 0.6) return 0;
+  if (rectOverlapRatio(container.rect, context.rect) >= 0.6) return [0, 0];
   const orderDistance = container.index - context.node.index;
-  return orderDistance >= 0 ? orderDistance : 100_000 + Math.abs(orderDistance);
+  return [orderDistance < 0 ? 1 : 0, Math.abs(orderDistance)];
+}
+
+function compareScreenContainerContextScores(
+  left: ScreenContainerContextScore,
+  right: ScreenContainerContextScore,
+): number {
+  if (left[0] !== right[0]) return left[0] < right[0] ? -1 : 1;
+  if (left[1] === right[1]) return 0;
+  return left[1] < right[1] ? -1 : 1;
 }
 
 function selectLargestOverlappingScreenContainerMatches(
