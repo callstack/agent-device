@@ -442,14 +442,18 @@ complete daemon classification and gate (2), the pre-side-effect seam at every l
 complete/partial publication with bounded scope, MCP pin retention, and pinned partial CLI text (4),
 Android freshness decoupled from positional ref authorization (5), the cross-platform contract and
 provider evidence (6), and fail-closed admission enforcement across platforms with typed reasons (7).
-Fresh live evidence has exercised most production seams — Apple runtime-ref, direct/native selector,
-generation-pin, generic, and lifecycle paths, plus Android helper freshness (including proven
-non-retarget) and Android existing-session relaunch. Two seams remain UNEXERCISED and are therefore
-explicit release blockers, not confirmed enablement: Android blocking-dialog recovery, and a real
-provider-backed interaction plus provider-backed lifecycle operation. Enforcement stays enabled in
-code, but those two seams are not claimed as verified until their live runs exist. Step 8's removal of
-the superseded coarse `snapshotRefsStale` marker follows full confirmation, so read-only warnings are
-not disturbed before every enabled seam is proven on hardware.
+Fresh live evidence has exercised nearly every production seam — Apple runtime-ref, direct/native
+selector, generation-pin, generic, and lifecycle paths; Android helper freshness (including proven
+non-retarget) and Android existing-session relaunch; and a real provider-backed interaction plus
+provider-backed lifecycle operation (AWS Device Farm, `backend: webdriver`: a fresh ref succeeded, an
+immediate stale ref was rejected before dispatch with the shared typed fields, an `open --relaunch`
+lifecycle mutation expired the frame, and a fresh observation restored authorization). ONE seam remains
+UNEXERCISED and is therefore an explicit release blocker, not confirmed enablement: Android
+blocking-dialog recovery — blocked only on a bootable free Android target plus a deterministic
+app-owned ANR trigger, not on any code gap. Enforcement stays enabled in code, but that seam is not
+claimed as verified until its live run exists. Step 8's removal of the superseded coarse
+`snapshotRefsStale` marker follows that final confirmation, so read-only warnings are not disturbed
+before every enabled seam is proven on hardware.
 
 PR #1241 landed independently as a compatible transitional fix. It rejects a known iOS stale-marker
 case before this full lifecycle is implemented; it does not own the architecture migration.
