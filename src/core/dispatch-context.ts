@@ -12,10 +12,7 @@ import type { Point } from '../kernel/snapshot.ts';
 export type MaestroRuntimeFlags = {
   allowNonHittableCoordinateFallback?: boolean;
   expectedTapPoint?: Point;
-  allowAlreadyPastLoading?: boolean;
-  optional?: boolean;
   prewarmRunnerBeforeOpen?: boolean;
-  runScriptEnv?: Record<string, string>;
 };
 
 export type CommandFlags = Omit<CliFlags, DaemonExcludedCliFlag> & {

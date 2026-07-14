@@ -39,7 +39,6 @@ export async function executeMaestroReplayPlan(
     skipped: plan.compatibility.staticallySkippedControls,
   };
   for (let index = startIndex; index < plan.steps.length; index += 1) {
-    checkpointMaestroCancellation(options.signal);
     try {
       await executeObservedStep(plan.steps[index]!, index, state);
     } catch (error) {

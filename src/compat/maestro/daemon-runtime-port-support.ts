@@ -68,7 +68,15 @@ function flagsWith(
   base: CommandFlags | undefined,
   extra: Partial<CommandFlags>,
 ): CommandFlags | undefined {
-  const flags = { ...base, ...extra };
+  const maestro =
+    base?.maestro === undefined && extra.maestro === undefined
+      ? undefined
+      : { ...base?.maestro, ...extra.maestro };
+  const flags = {
+    ...base,
+    ...extra,
+    ...(maestro === undefined ? {} : { maestro }),
+  };
   return Object.keys(flags).length > 0 ? flags : undefined;
 }
 

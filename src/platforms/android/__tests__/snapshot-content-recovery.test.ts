@@ -159,6 +159,30 @@ test('rejects a status-bar-only capture without window metadata', () => {
   expect(decision?.diagnostics.helperNonSystemMeaningfulNodeCount).toBe(0);
 });
 
+test('rejects framework-owned content without window metadata', () => {
+  const decision = classifyAndroidHelperContentRecovery(
+    helperXml([
+      node({
+        text: 'System dialog',
+        resourceId: 'android:id/message',
+        packageName: 'android',
+        className: 'android.widget.TextView',
+      }),
+    ]),
+    {
+      backend: 'android-helper',
+      nodeCount: 1,
+      rootPresent: true,
+      windowCount: 1,
+      captureMode: 'interactive-windows',
+    },
+  );
+
+  expect(decision?.reason).toBe('system-window-only');
+  expect(decision?.diagnostics.helperSystemUiNodeCount).toBe(1);
+  expect(decision?.diagnostics.helperNonSystemMeaningfulNodeCount).toBe(0);
+});
+
 test('keeps a recognized system dialog without window metadata', () => {
   const decision = classifyAndroidHelperContentRecovery(
     helperXml([

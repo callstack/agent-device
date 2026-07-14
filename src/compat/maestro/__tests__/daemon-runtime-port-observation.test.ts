@@ -3,11 +3,12 @@ import type { DaemonRequest } from '../../../daemon/types.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
 import {
   MAESTRO_OBSERVATION_POLL_MS,
+  resolveTypedMaestroTarget,
   waitForTypedSnapshotStability,
 } from '../daemon-runtime-port-observation.ts';
 import { makeBaseRequest, makeDependencies, makeSnapshot } from './daemon-runtime-port-fixtures.ts';
 
-test('does not pair an observation with later same-generation snapshots', async () => {
+test('replaces pre-mutation evidence with the stable post-mutation snapshot', async () => {
   const requests: DaemonRequest[] = [];
   let snapshots = 0;
   const port = createDaemonMaestroRuntimePort({
@@ -16,7 +17,7 @@ test('does not pair an observation with later same-generation snapshots', async 
       requests.push(request);
       if (request.command !== 'snapshot') return { ok: true, data: {} };
       snapshots += 1;
-      const targetX = snapshots >= 4 ? 40 : 200;
+      const targetX = snapshots >= 2 ? 40 : 200;
       return {
         ok: true,
         data: {
@@ -49,7 +50,7 @@ test('does not pair an observation with later same-generation snapshots', async 
     platform: 'ios',
   });
 
-  const observation = await port.observe({
+  await port.observe({
     condition: { kind: 'visible', selector: { id: 'ready' } },
     timeoutMs: 0,
     generation: 0,
@@ -58,7 +59,6 @@ test('does not pair an observation with later same-generation snapshots', async 
   await port.execute({
     command: { kind: 'inputText', source: { line: 2 }, text: 'hello' },
     generation: 0,
-    cachedObservation: observation,
     env: {},
     invalidateObservation() {},
   });
@@ -68,8 +68,7 @@ test('does not pair an observation with later same-generation snapshots', async 
       source: { line: 3 },
       target: { space: 'target', selector: { id: 'continue' } },
     },
-    generation: 0,
-    cachedObservation: observation,
+    generation: 1,
     env: {},
     invalidateObservation() {},
   });
@@ -79,10 +78,49 @@ test('does not pair an observation with later same-generation snapshots', async 
     'type',
     'snapshot',
     'snapshot',
-    'snapshot',
     'click',
   ]);
   expect(requests.at(-1)?.positionals).toEqual(['id="continue"']);
+  expect(requests.at(-1)?.flags?.maestro?.expectedTapPoint).toEqual({ x: 100, y: 122 });
+});
+
+test('computes expensive target evidence only for the command policies that consume it', () => {
+  const snapshot = makeSnapshot([
+    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 402, height: 874 } },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: 'continue',
+      hittable: true,
+      rect: { x: 20, y: 40, width: 120, height: 44 },
+    },
+  ]);
+  const base = {
+    context: { generation: 0, env: {} },
+    snapshot,
+    platform: 'ios' as const,
+  };
+
+  const ordinary = resolveTypedMaestroTarget({
+    ...base,
+    query: { selector: { id: 'continue' }, purpose: 'tap', timeoutMs: 0 },
+  });
+  const atomicRetry = resolveTypedMaestroTarget({
+    ...base,
+    query: {
+      selector: { id: 'continue' },
+      purpose: 'tap',
+      timeoutMs: 0,
+      allowAtomicSelectorDispatch: true,
+      includeSurfaceSignature: true,
+    },
+  });
+
+  expect(ordinary).not.toHaveProperty('surfaceSignature');
+  expect(ordinary).not.toHaveProperty('dispatchSelector');
+  expect(atomicRetry.surfaceSignature).toMatch(/^[a-f0-9]{64}$/);
+  expect(atomicRetry.dispatchSelector).toEqual({ key: 'id', value: 'continue' });
 });
 
 test('compares snapshots before sleeping and captures once beyond a zero settle budget', async () => {

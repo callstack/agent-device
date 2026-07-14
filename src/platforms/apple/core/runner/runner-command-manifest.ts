@@ -2,6 +2,7 @@ import type { RunnerCommand } from './runner-contract.ts';
 
 export type RunnerCommandTraitClass =
   | 'default'
+  | 'readinessPreflightExemptMutation'
   | 'readOnly'
   | 'readOnlyReadinessProbe'
   | 'preflightSkippableTouchMutation';
@@ -37,6 +38,6 @@ export const RUNNER_COMMAND_TRAIT_MANIFEST = {
   recordStop: 'default',
   status: 'readOnlyReadinessProbe',
   uptime: 'readOnlyReadinessProbe',
-  targetReset: 'default',
+  targetReset: 'readinessPreflightExemptMutation',
   shutdown: 'default',
 } as const satisfies Record<RunnerCommand['command'], RunnerCommandTraitClass>;

@@ -40,7 +40,7 @@ export type MaestroSnapshotSource = {
   readonly settlePending: (context: MaestroRuntimeReadContext) => Promise<void>;
 };
 
-export type MaestroTargetResolutionMode = 'tap' | 'swipe' | 'observe';
+type MaestroTargetResolutionMode = 'tap' | 'swipe' | 'observe';
 
 export async function captureRetriableMaestroSnapshot(
   params: {
@@ -68,12 +68,12 @@ export async function captureRetriableMaestroSnapshot(
   }
 }
 
-export async function resolveTypedMaestroTarget(params: {
+export function resolveTypedMaestroTarget(params: {
   readonly query: MaestroTargetQuery;
   readonly context: MaestroRuntimeReadContext;
   readonly snapshot: SnapshotState;
   readonly platform: Extract<MaestroPlatform, 'ios' | 'android'>;
-}): Promise<MaestroTargetMatch> {
+}): MaestroTargetMatch {
   return resolveTargetFromSnapshot({
     ...params,
     mode: params.query.purpose === 'swipe' ? 'swipe' : 'tap',
@@ -81,7 +81,7 @@ export async function resolveTypedMaestroTarget(params: {
 }
 
 function resolveTargetFromSnapshot(params: {
-  readonly query: SnapshotTargetQuery & { readonly allowAtomicSelectorDispatch?: boolean };
+  readonly query: SnapshotTargetQuery & { readonly includeSurfaceSignature?: boolean };
   readonly context: MaestroRuntimeReadContext;
   readonly snapshot: SnapshotState;
   readonly platform: Extract<MaestroPlatform, 'ios' | 'android'>;
@@ -230,18 +230,19 @@ function targetMatchFromResolution(
   snapshot: SnapshotState,
   generation: number,
   frame: TouchReferenceFrame | undefined,
-  query: SnapshotTargetQuery & { allowAtomicSelectorDispatch?: boolean },
+  query: SnapshotTargetQuery & { includeSurfaceSignature?: boolean },
   platform: Extract<MaestroPlatform, 'ios' | 'android'>,
   mode: MaestroTargetResolutionMode,
 ): MaestroTargetMatch {
   if (!resolution.ok) {
+    const viewport = snapshotViewportRect(frame);
     return {
       generation,
       matched: resolution.evidence.matched,
       visible: resolution.evidence.visible,
       candidateCount: resolution.evidence.candidateCount,
       ...(resolution.evidence.ref ? { ref: resolution.evidence.ref } : {}),
-      ...(snapshotViewportRect(frame) ? { viewport: snapshotViewportRect(frame) } : {}),
+      ...(viewport ? { viewport } : {}),
     };
   }
   const dispatchSelector = resolveAtomicIosDispatchSelector({
@@ -261,7 +262,9 @@ function targetMatchFromResolution(
     ...(resolution.evidence.ref ? { ref: resolution.evidence.ref } : {}),
     ...(viewport ? { viewport } : {}),
     ...(dispatchSelector ? { dispatchSelector } : {}),
-    surfaceSignature: maestroSnapshotSignature(snapshot),
+    ...(query.includeSurfaceSignature
+      ? { surfaceSignature: maestroSnapshotSignature(snapshot) }
+      : {}),
   };
 }
 
@@ -281,7 +284,7 @@ function visibleScreenPercentage(rect: Rect, viewport: Rect): number {
 }
 
 function resolveAtomicIosDispatchSelector(params: {
-  query: SnapshotTargetQuery & { allowAtomicSelectorDispatch?: boolean };
+  query: SnapshotTargetQuery;
   platform: Extract<MaestroPlatform, 'ios' | 'android'>;
   mode: MaestroTargetResolutionMode;
   dispatchCandidates: number;
@@ -292,7 +295,7 @@ function resolveAtomicIosDispatchSelector(params: {
 }
 
 function allowsAtomicIosDispatch(
-  query: SnapshotTargetQuery & { allowAtomicSelectorDispatch?: boolean },
+  query: SnapshotTargetQuery,
   platform: Extract<MaestroPlatform, 'ios' | 'android'>,
   mode: MaestroTargetResolutionMode,
 ): boolean {

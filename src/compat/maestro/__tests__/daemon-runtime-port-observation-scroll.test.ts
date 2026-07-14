@@ -93,7 +93,7 @@ test('scrolls until the target is fully visible in the screen viewport', async (
     platform: 'ios',
   });
 
-  await port.execute({
+  const result = await port.execute({
     command: {
       kind: 'scrollUntilVisible',
       source: { line: 2 },
@@ -108,6 +108,8 @@ test('scrolls until the target is fully visible in the screen viewport', async (
 
   expect(requests.filter(({ command }) => command === 'scroll')).toHaveLength(1);
   expect(requests.filter(({ command }) => command === 'snapshot')).toHaveLength(3);
+  expect(result.observation).toMatchObject({ generation: 1, matched: true });
+  expect(result.observation?.identity).toMatch(/^maestro-observation-/);
 });
 
 test('does not treat a target larger than the viewport as fully visible', async () => {

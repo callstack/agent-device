@@ -1,5 +1,5 @@
 import { AppError, asAppError } from '../../kernel/errors.ts';
-import type { SnapshotState } from '../../kernel/snapshot.ts';
+import type { Rect, SnapshotState } from '../../kernel/snapshot.ts';
 import { executeRunScriptFile } from './run-script-execution.ts';
 import {
   MAESTRO_COMPATIBILITY_PRESETS,
@@ -73,12 +73,13 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     context: MaestroRuntimeOperationContext,
   ): Promise<void> => {
     await invokeMutation({ kind: 'typeText', text });
-    await waitForTypedSnapshotStability({
+    const snapshot = await waitForTypedSnapshotStability({
       timeoutMs: MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,
       context,
       snapshot: snapshots.capture,
       dependencies: options.dependencies,
     });
+    snapshots.prime(context.generation, snapshot);
   };
 
   const operations: MaestroRuntimeOperations = {
@@ -204,13 +205,11 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
           timeoutMs: input.timeoutMs,
         });
       }
-      return { observation: observationFromMatch(input.selector, match) };
+      return {
+        observation: snapshots.bindObservation(observationFromMatch(input.selector, match)),
+      };
     },
     pressKey: async (input) => {
-      if (input.key === 'back' || input.key === 'home') {
-        await invokeMutation({ kind: 'pressKey', key: input.key });
-        return;
-      }
       await invokeMutation({ kind: 'pressKey', key: input.key });
     },
     back: async () => {
@@ -239,7 +238,6 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
         env: {
           ...context.env,
           ...(input.env ? stringifyEnvironment(input.env) : {}),
-          ...(options.baseReq.flags?.maestro?.runScriptEnv ?? {}),
         },
       }),
     }),
@@ -265,7 +263,7 @@ async function resolveDaemonMaestroTarget(params: {
       { context, snapshot: snapshots.capture, dependencies: options.dependencies },
       deadline,
     );
-    const match = await resolveTypedMaestroTarget({
+    const match = resolveTypedMaestroTarget({
       query: input,
       context,
       snapshot: currentSnapshot,
@@ -279,7 +277,9 @@ async function resolveDaemonMaestroTarget(params: {
   }
 }
 
-function isActionableTarget(match: MaestroTargetMatch): boolean {
+function isActionableTarget(
+  match: MaestroTargetMatch,
+): match is MaestroTargetMatch & { rect: Rect } {
   return match.matched && match.visible && match.rect !== undefined;
 }
 
@@ -427,7 +427,7 @@ async function tapTargetAndSettle(
     attempts += 1;
     observed = await settle();
   }
-  snapshots.prime(context.generation + 1, observed);
+  snapshots.prime(context.generation, observed);
 }
 
 async function dispatchTapTarget(
@@ -437,12 +437,12 @@ async function dispatchTapTarget(
   context: MaestroRuntimeOperationContext,
   flags: MaestroClickOptions,
 ): Promise<void> {
-  const dispatchSelector = target.resolution?.dispatchSelector;
-  if (dispatchSelector) {
-    const resolution = target.resolution!;
+  const resolution = target.resolution;
+  const dispatchSelector = resolution?.dispatchSelector;
+  if (dispatchSelector && target.point) {
     snapshots.invalidate();
     try {
-      await clickSelector(options, dispatchSelector, target.point!, flags);
+      await clickSelector(options, dispatchSelector, target.point, flags);
       return;
     } catch (error) {
       if (!isAtomicSelectorFallbackError(error)) throw error;
@@ -455,7 +455,7 @@ async function dispatchTapTarget(
       });
       if (!isActionableTarget(refreshed)) throw error;
       snapshots.invalidate();
-      await clickTarget(options, pointInsideRect(refreshed.rect!), flags);
+      await clickTarget(options, pointInsideRect(refreshed.rect), flags);
       return;
     }
   }

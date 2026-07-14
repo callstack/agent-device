@@ -1594,6 +1594,25 @@ test('runner session preflights with conservative_command for non-allowlisted mu
   assert.match(diagnostics, /"reason":"conservative_command"/);
 });
 
+test('runner session sends targetReset without a readiness preflight', async () => {
+  const session = makeRunnerSession({ ready: true });
+  mockSendRunnerCommandOnce.mockResolvedValueOnce(runnerResponse({ targetReset: true }));
+
+  const diagnostics = await captureDiagnostics(async () => {
+    await executeRunnerCommandWithSession(
+      IOS_SIMULATOR,
+      session,
+      { command: 'targetReset' },
+      '/tmp/runner.log',
+      30_000,
+    );
+  });
+
+  assert.equal(mockWaitForRunner.mock.calls.length, 0);
+  assert.equal(mockSendRunnerCommandOnce.mock.calls.length, 1);
+  assert.match(diagnostics, /"reason":"preflight_exempt_command"/);
+});
+
 test('runner session preflights with no_recent_healthy_mutation when ready without a record', async () => {
   const session = makeRunnerSession({ ready: true });
   mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));

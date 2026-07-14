@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseMaestroProgram } from '../src/compat/maestro/program-ir-parser.ts';
+import { MAESTRO_COMPATIBILITY_PRESETS } from '../src/compat/maestro/compatibility-policy.ts';
 import type {
   MaestroCommand,
   MaestroProgram,
@@ -20,7 +21,7 @@ import type {
 } from './maestro-conformance-types.ts';
 import { readOptionalString, readRequiredRecord } from './maestro-conformance-values.ts';
 
-const DEFAULT_SWIPE_DURATION_MS = 400;
+const UPSTREAM_DEFAULT_SWIPE_DURATION_MS = 400;
 
 export function normalizeUpstreamFixture(
   fixture: RawFixture,
@@ -87,7 +88,7 @@ function normalizeAgentCommand(
         {
           kind: command.kind,
           selector: normalizeTypedSelector(command.target),
-          timeoutMs: 17_000,
+          timeoutMs: MAESTRO_COMPATIBILITY_PRESETS.command.targetLookupTimeoutMs,
           source,
         },
       ];
@@ -139,7 +140,7 @@ function normalizeAgentSwipe(
   gesture: Extract<MaestroCommand, { kind: 'swipe' }>['gesture'],
   source: NormalizedSource,
 ): NormalizedAction {
-  const durationMs = gesture.duration ?? DEFAULT_SWIPE_DURATION_MS;
+  const durationMs = gesture.duration ?? MAESTRO_COMPATIBILITY_PRESETS.command.swipeDurationMs;
   if (gesture.kind === 'screen') {
     return { kind: 'swipe', mode: 'direction', direction: gesture.direction, durationMs, source };
   }
@@ -207,7 +208,7 @@ function normalizeUpstreamCommand(
 }
 
 function normalizeUpstreamSwipe(command: RawCommand, source: NormalizedSource): NormalizedAction {
-  const durationMs = integerOrDefault(command.duration, DEFAULT_SWIPE_DURATION_MS);
+  const durationMs = integerOrDefault(command.duration, UPSTREAM_DEFAULT_SWIPE_DURATION_MS);
   const startRelative = readOptionalString(command, 'startRelative');
   const endRelative = readOptionalString(command, 'endRelative');
   if (startRelative !== undefined || endRelative !== undefined) {

@@ -92,7 +92,7 @@ describe('MaestroRuntimePort', () => {
         clearState: true,
         launchArguments: { kind: 'map', values: { seed: 7 } },
       },
-      generation: 0,
+      generation: 1,
       appId: 'com.example.checkout',
     });
     expect(calls[5]).toMatchObject({
@@ -104,12 +104,12 @@ describe('MaestroRuntimePort', () => {
         durationMs: 601,
       },
     });
-    expect(calls[6]).toMatchObject({ kind: 'hideKeyboard', input: {}, generation: 6 });
-    expect(calls[7]).toMatchObject({ kind: 'pressKey', input: { key: 'enter' }, generation: 7 });
+    expect(calls[6]).toMatchObject({ kind: 'hideKeyboard', input: {}, generation: 7 });
+    expect(calls[7]).toMatchObject({ kind: 'pressKey', input: { key: 'enter' }, generation: 8 });
     expect(calls[9]).toMatchObject({
       kind: 'waitForAnimationToEnd',
       input: { timeoutMs: 50 },
-      generation: 9,
+      generation: 10,
     });
     expect(calls[11]).toMatchObject({
       kind: 'runScript',
@@ -275,7 +275,7 @@ describe('MaestroRuntimePort', () => {
           }),
         }),
       }),
-      expect.objectContaining({ generation: 0 }),
+      expect.objectContaining({ generation: 1 }),
     );
     expect(gesture).toHaveBeenCalledWith(
       {
@@ -284,7 +284,7 @@ describe('MaestroRuntimePort', () => {
         durationMs: 400,
       },
       expect.objectContaining({
-        generation: 1,
+        generation: 2,
         gestureViewport: { x: 0, y: 0, width: 402, height: 874 },
       }),
     );

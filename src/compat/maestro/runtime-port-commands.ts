@@ -210,6 +210,7 @@ async function resolveTapOnTarget(
     index: command.index,
     childOf: command.childOf,
     allowAtomicSelectorDispatch: command.repeat === undefined && command.delay === undefined,
+    ...(command.retryTapIfNoChange === true ? { includeSurfaceSignature: true } : {}),
   };
   return await resolveInputTarget(command.target, query, request, operations);
 }
@@ -378,15 +379,23 @@ async function invokeOperation<TInput>(
   observationEffect: MaestroObservationEffect,
   observation?: MaestroObservation,
 ): Promise<MaestroRuntimeResult> {
-  if (observationEffect === 'invalidate') context.invalidateObservation();
-  const result = await operation(input, context);
+  const operationContext = contextAfterObservationEffect(context, observationEffect);
+  const result = await operation(input, operationContext);
   return resultWithArtifacts(
     result,
     [],
     observationEffect === 'preserve' ? observation : undefined,
-    context.generation,
-    observationEffect === 'preserve',
+    operationContext.generation,
   );
+}
+
+function contextAfterObservationEffect(
+  context: MaestroRuntimeOperationContext,
+  observationEffect: MaestroObservationEffect,
+): MaestroRuntimeOperationContext {
+  if (observationEffect === 'preserve') return context;
+  context.invalidateObservation();
+  return { ...context, generation: context.generation + 1 };
 }
 
 function resultWithArtifacts(
@@ -394,14 +403,11 @@ function resultWithArtifacts(
   defaultArtifacts: readonly string[],
   observation?: MaestroObservation,
   generation?: number,
-  includeOperationObservation = true,
 ): MaestroRuntimeResult {
   const operationObservation = result?.observation;
   assertObservationGeneration(operationObservation, generation);
   return {
-    ...optionalObservation(
-      observation ?? (includeOperationObservation ? operationObservation : undefined),
-    ),
+    ...optionalObservation(observation ?? operationObservation),
     ...optionalOutputEnv(result?.outputEnv),
     ...optionalArtifactPaths(defaultArtifacts, result?.artifactPaths),
   };

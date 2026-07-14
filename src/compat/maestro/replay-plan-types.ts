@@ -61,8 +61,3 @@ export type MaestroReplayResumeRequest = {
 export type MaestroReplayResumePreflight =
   | { readonly allowed: true; readonly startIndex: number }
   | { readonly allowed: false; readonly reason: string };
-
-export type MaestroReplayStartIndex = {
-  readonly startIndex: number;
-  readonly plan: MaestroReplayPlan;
-};

@@ -1,49 +1,42 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { AppError, normalizeError } from '../../kernel/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import {
   dispatchGestureViewport,
   resolveTargetDevice,
   type CommandFlags,
 } from '../../core/dispatch.ts';
 import { getRequestSignal } from '../../request/cancel.ts';
-import { emitRequestProgress, readReplayTestActionProgress } from '../../request/progress.ts';
 import {
   collectReplayShellEnv,
   parseReplayCliEnvEntries,
   readReplayCliEnvEntries,
   readReplayShellEnvSource,
 } from '../../replay/vars.ts';
-import { summarizeSnapshotTimingSamples } from '../../snapshot-diagnostics.ts';
 import { createDaemonMaestroRuntimePort } from '../../compat/maestro/daemon-runtime-port.ts';
 import { executeMaestroPlan } from '../../compat/maestro/engine.ts';
-import { formatMaestroCommandProgress } from '../../compat/maestro/progress.ts';
 import { parseMaestroProgram } from '../../compat/maestro/program-ir-parser.ts';
 import { createMaestroProgramLoader } from '../../compat/maestro/program-loader.ts';
 import {
   compileMaestroReplayPlan,
   resolveMaestroReplayStartIndex,
 } from '../../compat/maestro/replay-plan.ts';
-import type {
-  MaestroEngineEvent,
-  MaestroEngineObserver,
-} from '../../compat/maestro/engine-types.ts';
 import type { MaestroPlatform, MaestroProgram } from '../../compat/maestro/program-ir.ts';
 import type { MaestroReplayPlan } from '../../compat/maestro/replay-plan-types.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
-import type { ReplayCommandResult } from '../../contracts/replay.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../types.ts';
 import { assertSessionSelectorMatches } from '../session-selector.ts';
 import { SessionStore } from '../session-store.ts';
 import { errorResponse } from './response.ts';
 import { buildReplayBuiltinVars } from './session-replay-vars.ts';
+import type { MaestroFailedEngineEvent } from './session-replay-maestro-failure.ts';
+import { createMaestroReplayObserver } from './session-replay-maestro-observer.ts';
 import {
-  buildTypedMaestroFailureResponse,
-  type MaestroFailedEngineEvent,
-} from './session-replay-maestro-failure.ts';
+  buildTypedMaestroReplayErrorResponse,
+  buildTypedMaestroSuccessResponse,
+} from './session-replay-maestro-response.ts';
 import { resolveEffectiveOpenRuntimeHints } from './session-runtime.ts';
-import { appendReplayTraceEvent } from './session-replay-trace.ts';
 import { contextFromFlags } from '../context.ts';
 
 type TypedMaestroReplayParams = {
@@ -405,149 +398,6 @@ function unresolvedIosMaestroFlags(
   return flags;
 }
 
-function createMaestroReplayObserver(params: {
-  filePath: string;
-  tracePath: string | undefined;
-  onFailure: (event: MaestroFailedEngineEvent) => void;
-}): MaestroEngineObserver {
-  const { filePath, tracePath, onFailure } = params;
-  const traceStarts = new Map<number, MaestroEngineEvent>();
-  return {
-    commandStarted: (event) => {
-      traceStarts.set(event.stepIndex, event);
-      runMaestroObserverCallback(() => emitMaestroProgress(filePath, event));
-      runMaestroObserverCallback(() => appendMaestroTraceStart(tracePath, filePath, event));
-    },
-    commandCompleted: (event) => {
-      const traceEvent = takeMaestroTraceStart(traceStarts, event.stepIndex);
-      runMaestroObserverCallback(() =>
-        appendMaestroTraceStop(tracePath, filePath, maestroTraceStopEvent(traceEvent, event), true),
-      );
-    },
-    commandFailed: (event) => {
-      const traceEvent = takeMaestroTraceStart(traceStarts, event.stepIndex);
-      runMaestroObserverCallback(() => onFailure(event));
-      runMaestroObserverCallback(() =>
-        appendMaestroTraceStop(
-          tracePath,
-          filePath,
-          maestroTraceStopEvent(traceEvent, event),
-          false,
-        ),
-      );
-    },
-  };
-}
-
-function runMaestroObserverCallback(callback: () => void): void {
-  try {
-    callback();
-  } catch {}
-}
-
-function takeMaestroTraceStart(
-  traceStarts: Map<number, MaestroEngineEvent>,
-  stepIndex: number,
-): MaestroEngineEvent | undefined {
-  const event = traceStarts.get(stepIndex);
-  traceStarts.delete(stepIndex);
-  return event;
-}
-
-function maestroTraceStopEvent(
-  start: MaestroEngineEvent | undefined,
-  event: MaestroEngineEvent & { durationMs: number; error?: unknown },
-): MaestroEngineEvent & { durationMs: number; error?: unknown } {
-  return {
-    ...(start ?? event),
-    durationMs: event.durationMs,
-    ...(event.error === undefined ? {} : { error: event.error }),
-  };
-}
-
-function buildTypedMaestroSuccessResponse(params: {
-  result: { artifactPaths: string[]; warnings?: string[] };
-  plan: MaestroReplayPlan;
-  startIndex: number;
-  startedAt: number;
-  sessionName: string;
-  sessionStore: SessionStore;
-  snapshotStart: number;
-}): DaemonResponse {
-  const { result, plan, startIndex, startedAt, sessionName, sessionStore, snapshotStart } = params;
-  const snapshotDiagnostics = readTypedMaestroSnapshotDiagnostics(
-    sessionStore,
-    sessionName,
-    snapshotStart,
-  );
-  const replayed = plan.total - startIndex;
-  return {
-    ok: true,
-    data: {
-      replayed,
-      healed: 0,
-      session: sessionName,
-      artifactPaths: result.artifactPaths,
-      ...(result.warnings ? { warnings: result.warnings } : {}),
-      ...(snapshotDiagnostics ? { snapshotDiagnostics } : {}),
-      message: replaySuccessMessage(replayed, Date.now() - startedAt),
-    } satisfies ReplayCommandResult,
-  };
-}
-
-async function buildTypedMaestroReplayErrorResponse(
-  params: TypedMaestroReplayParams & {
-    requestedPath: string;
-    state: TypedMaestroReplayState;
-    error: unknown;
-  },
-): Promise<DaemonResponse> {
-  const normalizedError = normalizeError(params.error);
-  const { failedEvent, plan } = params.state;
-  if (failedEvent && plan) {
-    return await buildTypedMaestroFailureResponse({
-      error: normalizedError,
-      event: failedEvent,
-      plan,
-      replayPath: SessionStore.expandHome(params.requestedPath, params.req.meta?.cwd),
-      req: params.req,
-      sessionName: params.sessionName,
-      sessionStore: params.sessionStore,
-      logPath: params.logPath,
-      snapshotDiagnostics: readTypedMaestroSnapshotDiagnostics(
-        params.sessionStore,
-        params.sessionName,
-        params.state.snapshotStart,
-      ),
-    });
-  }
-  return errorResponse(normalizedError.code, normalizedError.message, {
-    ...(normalizedError.details ?? {}),
-    ...buildTypedMaestroErrorDetails(failedEvent),
-  });
-}
-
-function readTypedMaestroSnapshotDiagnostics(
-  sessionStore: SessionStore,
-  sessionName: string,
-  snapshotStart: number,
-) {
-  const samples =
-    sessionStore.get(sessionName)?.snapshotDiagnostics?.samples.slice(snapshotStart) ?? [];
-  return summarizeSnapshotTimingSamples(samples);
-}
-
-function buildTypedMaestroErrorDetails(
-  failedEvent: MaestroFailedEngineEvent | undefined,
-): Record<string, unknown> {
-  if (!failedEvent) return {};
-  return {
-    replaySource: failedEvent.source,
-    replayStep: failedEvent.stepIndex,
-    replayStepTotal: failedEvent.stepTotal,
-  };
-}
-
 export function isTypedMaestroReplay(req: DaemonRequest, filePath: string): boolean {
   return (
     req.flags?.replayBackend === 'maestro' &&
@@ -573,67 +423,4 @@ function resolveMaestroTarget(req: DaemonRequest, sessionDevice: DeviceInfo | un
   return typeof req.flags?.target === 'string'
     ? req.flags.target
     : (sessionDevice?.target ?? 'mobile');
-}
-
-function emitMaestroProgress(file: string, event: MaestroEngineEvent): void {
-  const progress = readReplayTestActionProgress();
-  if (!progress) return;
-  const formatted = formatMaestroCommandProgress(event.command);
-  emitRequestProgress({
-    type: 'replay-test',
-    ...progress,
-    file: progress.file || file,
-    status: 'progress',
-    stepIndex: event.stepIndex,
-    stepTotal: event.stepTotal,
-    stepCommand: formatted.command,
-    ...(formatted.value ? { stepValue: formatted.value } : {}),
-  });
-}
-
-function appendMaestroTraceStart(
-  tracePath: string | undefined,
-  replayPath: string,
-  event: MaestroEngineEvent,
-): void {
-  const formatted = formatMaestroCommandProgress(event.command);
-  appendReplayTraceEvent(tracePath, {
-    type: 'replay_action_start',
-    ts: new Date().toISOString(),
-    replayPath,
-    ...(event.source.path && event.source.path !== replayPath
-      ? { sourcePath: event.source.path }
-      : {}),
-    line: event.source.line,
-    step: event.stepIndex,
-    command: formatted.command,
-    positionals: formatted.value ? [formatted.value] : [],
-  });
-}
-
-function appendMaestroTraceStop(
-  tracePath: string | undefined,
-  replayPath: string,
-  event: MaestroEngineEvent & { durationMs: number; error?: unknown },
-  ok: boolean,
-): void {
-  appendReplayTraceEvent(tracePath, {
-    type: 'replay_action_stop',
-    ts: new Date().toISOString(),
-    replayPath,
-    ...(event.source.path && event.source.path !== replayPath
-      ? { sourcePath: event.source.path }
-      : {}),
-    line: event.source.line,
-    step: event.stepIndex,
-    command: formatMaestroCommandProgress(event.command).command,
-    ok,
-    durationMs: event.durationMs,
-    ...(!ok && event.error instanceof AppError ? { errorCode: event.error.code } : {}),
-  });
-}
-
-function replaySuccessMessage(replayed: number, wallClockMs: number): string {
-  const noun = replayed === 1 ? 'step' : 'steps';
-  return `Replayed ${replayed} ${noun} in ${(wallClockMs / 1_000).toFixed(1)}s`;
 }

@@ -36,6 +36,7 @@ import { withRunnerCommandId, type RunnerCommand } from './runner-contract.ts';
 import {
   canSkipRunnerReadinessPreflightAfterHealthyMutation,
   isReadOnlyRunnerCommand,
+  isRunnerReadinessPreflightExempt,
   isRunnerReadinessProbeCommand,
 } from './runner-command-traits.ts';
 import {
@@ -88,7 +89,7 @@ type RunnerReadinessPreflightDecision =
     }
   | {
       action: 'skip';
-      reason: 'read_only_startup_command' | 'readiness_probe_command';
+      reason: 'read_only_startup_command' | 'readiness_probe_command' | 'preflight_exempt_command';
     }
   | {
       action: 'skip';
@@ -949,6 +950,9 @@ function resolveRunnerReadinessPreflightDecision(
   command: RunnerCommand,
 ): RunnerReadinessPreflightDecision {
   const readOnlyCommand = isReadOnlyRunnerCommand(command.command);
+  if (isRunnerReadinessPreflightExempt(command.command)) {
+    return { action: 'skip', reason: 'preflight_exempt_command' };
+  }
   if (!session.ready) {
     if (readOnlyCommand) {
       return {

@@ -7,13 +7,20 @@ import {
 export type RunnerCommandTraits = Readonly<{
   readOnly: boolean;
   readinessProbe: boolean;
+  readinessPreflightExempt: boolean;
   readinessPreflightSkipEligibleAfterHealthyMutation: boolean;
 }>;
 
 const DEFAULT_TRAITS: RunnerCommandTraits = {
   readOnly: false,
   readinessProbe: false,
+  readinessPreflightExempt: false,
   readinessPreflightSkipEligibleAfterHealthyMutation: false,
+};
+
+const READINESS_PREFLIGHT_EXEMPT_MUTATION_TRAITS: RunnerCommandTraits = {
+  ...DEFAULT_TRAITS,
+  readinessPreflightExempt: true,
 };
 
 const READ_ONLY_TRAITS: RunnerCommandTraits = {
@@ -56,6 +63,10 @@ export function isRunnerReadinessProbeCommand(command: RunnerCommand['command'])
   return readRunnerCommandTraits(command).readinessProbe;
 }
 
+export function isRunnerReadinessPreflightExempt(command: RunnerCommand['command']): boolean {
+  return readRunnerCommandTraits(command).readinessPreflightExempt;
+}
+
 export function canSkipRunnerReadinessPreflightAfterHealthyMutation(
   command: RunnerCommand['command'],
 ): boolean {
@@ -66,6 +77,8 @@ function traitsForClass(traitClass: RunnerCommandTraitClass): RunnerCommandTrait
   switch (traitClass) {
     case 'default':
       return DEFAULT_TRAITS;
+    case 'readinessPreflightExemptMutation':
+      return READINESS_PREFLIGHT_EXEMPT_MUTATION_TRAITS;
     case 'readOnly':
       return READ_ONLY_TRAITS;
     case 'readOnlyReadinessProbe':

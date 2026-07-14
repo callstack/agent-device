@@ -66,7 +66,7 @@ test('uses the structured gesture contract without observing absolute swipes', a
       to: { x: 300, y: 200 },
       durationMs: 240,
     },
-    expect.objectContaining({ generation: 0 }),
+    expect.objectContaining({ generation: 1 }),
   );
   expect(gesture).toHaveBeenNthCalledWith(
     2,
@@ -76,7 +76,7 @@ test('uses the structured gesture contract without observing absolute swipes', a
       durationMs: 400,
     },
     expect.objectContaining({
-      generation: 1,
+      generation: 2,
       gestureViewport: { x: 10, y: 20, width: 400, height: 800 },
     }),
   );
@@ -88,7 +88,7 @@ test('uses the structured gesture contract without observing absolute swipes', a
       durationMs: 300,
     },
     expect.objectContaining({
-      generation: 2,
+      generation: 3,
       gestureViewport: { x: 10, y: 20, width: 400, height: 800 },
     }),
   );
@@ -100,7 +100,7 @@ test('uses the structured gesture contract without observing absolute swipes', a
       durationMs: 400,
     },
     expect.objectContaining({
-      generation: 3,
+      generation: 4,
       gestureViewport: { x: 10, y: 20, width: 400, height: 800 },
     }),
   );

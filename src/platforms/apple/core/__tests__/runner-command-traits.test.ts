@@ -4,6 +4,7 @@ import type { RunnerCommand } from '../runner/runner-contract.ts';
 import {
   canSkipRunnerReadinessPreflightAfterHealthyMutation,
   isReadOnlyRunnerCommand,
+  isRunnerReadinessPreflightExempt,
   isRunnerReadinessProbeCommand,
   readRunnerCommandTraits,
   type RunnerCommandTraits,
@@ -46,6 +47,7 @@ test('runner command manifest pins lifecycle-sensitive command groups', () => {
     'snapshot',
   ]);
   assert.deepEqual(commandsForClass('readOnlyReadinessProbe'), ['status', 'uptime']);
+  assert.deepEqual(commandsForClass('readinessPreflightExemptMutation'), ['targetReset']);
 });
 
 test('runner command trait helpers read from the shared trait table', () => {
@@ -55,6 +57,11 @@ test('runner command trait helpers read from the shared trait table', () => {
     const traits = EXPECTED_RUNNER_COMMAND_TRAITS[command];
     assert.equal(isReadOnlyRunnerCommand(command), traits.readOnly, command);
     assert.equal(isRunnerReadinessProbeCommand(command), traits.readinessProbe, command);
+    assert.equal(
+      isRunnerReadinessPreflightExempt(command),
+      traits.readinessPreflightExempt,
+      command,
+    );
     assert.equal(
       canSkipRunnerReadinessPreflightAfterHealthyMutation(command),
       traits.readinessPreflightSkipEligibleAfterHealthyMutation,
@@ -78,6 +85,8 @@ function expectedTraitsForClass(
   switch (traitClass) {
     case 'default':
       return defaults();
+    case 'readinessPreflightExemptMutation':
+      return preflightExemptMutation();
     case 'readOnly':
       return readOnly();
     case 'readOnlyReadinessProbe':
@@ -91,6 +100,7 @@ function defaults(): RunnerCommandTraits {
   return {
     readOnly: false,
     readinessProbe: false,
+    readinessPreflightExempt: false,
     readinessPreflightSkipEligibleAfterHealthyMutation: false,
   };
 }
@@ -106,6 +116,13 @@ function readOnlyReadinessProbe(): RunnerCommandTraits {
   return {
     ...readOnly(),
     readinessProbe: true,
+  };
+}
+
+function preflightExemptMutation(): RunnerCommandTraits {
+  return {
+    ...defaults(),
+    readinessPreflightExempt: true,
   };
 }
 

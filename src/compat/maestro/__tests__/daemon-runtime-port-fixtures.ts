@@ -1,11 +1,6 @@
-import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon/types.ts';
+import type { DaemonRequest } from '../../../daemon/types.ts';
 import type { SnapshotNode, SnapshotState } from '../../../kernel/snapshot.ts';
 import type { CreateDaemonMaestroRuntimeOperationsOptions } from '../daemon-runtime-port.ts';
-
-export type CapturedDaemonRequest = Pick<
-  DaemonRequest,
-  'command' | 'positionals' | 'input' | 'flags'
->;
 
 export const IOS_FRAME = { x: 0, y: 0, width: 402, height: 874 } as const;
 
@@ -37,28 +32,5 @@ export function makeDependencies(
       now.value += milliseconds;
     },
     resolveGestureViewport: async () => ({ x: 0, y: 0, width: 402, height: 874 }),
-  };
-}
-
-export function makeInvoke(
-  requests: CapturedDaemonRequest[],
-  response: DaemonInvokeFn = async (request) => {
-    requests.push({
-      command: request.command,
-      positionals: request.positionals,
-      input: request.input,
-      flags: request.flags,
-    });
-    return { ok: true, data: {} };
-  },
-): DaemonInvokeFn {
-  return async (request) => {
-    requests.push({
-      command: request.command,
-      positionals: request.positionals,
-      input: request.input,
-      flags: request.flags,
-    });
-    return await response(request);
   };
 }

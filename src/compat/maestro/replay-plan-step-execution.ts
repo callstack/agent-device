@@ -58,7 +58,6 @@ export async function executeMaestroReplayPlanStep(
 }
 
 async function executeStep(step: MaestroReplayPlanStep, state: MaestroReplayPlanExecutionState) {
-  checkpointMaestroCancellation(state.options.signal);
   if (step.kind === 'command') {
     await executeOptionalCommand(step.command, step.appId, state);
     return;
@@ -189,7 +188,6 @@ async function executeNestedSteps(
   state: MaestroReplayPlanExecutionState,
 ): Promise<void> {
   for (const step of steps) {
-    checkpointMaestroCancellation(state.options.signal);
     await executeMaestroReplayPlanStep(step, state);
   }
 }

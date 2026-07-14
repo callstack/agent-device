@@ -149,7 +149,6 @@ test('commits Maestro input text before dispatching an immediate tap', async () 
     'snapshot',
     'snapshot',
     'snapshot',
-    'snapshot',
     'click',
   ]);
 });

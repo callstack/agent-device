@@ -63,6 +63,7 @@ export type MaestroTargetQuery = {
   readonly index?: number;
   readonly childOf?: MaestroSelector;
   readonly allowAtomicSelectorDispatch?: boolean;
+  readonly includeSurfaceSignature?: boolean;
 };
 
 export type MaestroInputTarget = {

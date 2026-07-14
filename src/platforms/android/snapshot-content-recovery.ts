@@ -7,7 +7,6 @@ const ANDROID_WINDOW_TYPE_APPLICATION = 1;
 const MAX_REPORTED_WINDOW_TYPES = 8;
 const MIN_FOREGROUND_APP_MEANINGFUL_NODES = 2;
 const MIN_INPUT_METHOD_MEANINGFUL_NODES = 2;
-const ANDROID_SYSTEM_UI_PACKAGE = 'com.android.systemui';
 const ANDROID_SYSTEM_PACKAGES = new Set(['android', 'com.android.systemui']);
 const INSUFFICIENT_APP_CONTENT_REASON =
   'Android snapshot helper returned insufficient application window content';
@@ -222,7 +221,7 @@ function recordAndroidHelperSummaryNode(
   node: AndroidUiNodeMetadata,
 ): void {
   summary.nodeCount += 1;
-  if (node.packageName === ANDROID_SYSTEM_UI_PACKAGE) summary.systemUiNodeCount += 1;
+  if (isExplicitAndroidSystemPackage(node.packageName)) summary.systemUiNodeCount += 1;
   if (node.visibleToUser !== false) recordAndroidAlertIdentifier(summary, node.resourceId);
   recordAndroidHelperWindowNode(summary, node);
   recordAndroidHelperMeaningfulNode(summary, node);
@@ -318,6 +317,10 @@ function hasText(value: string | null): boolean {
 
 function isAndroidSystemPackage(packageName: string | null): boolean {
   return packageName === null || ANDROID_SYSTEM_PACKAGES.has(packageName);
+}
+
+function isExplicitAndroidSystemPackage(packageName: string | null): boolean {
+  return packageName !== null && ANDROID_SYSTEM_PACKAGES.has(packageName);
 }
 
 function buildRecoveryDiagnostics(

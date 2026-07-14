@@ -5,8 +5,6 @@ export type MaestroSourceLocation = {
   line: number;
 };
 
-export type MaestroSource = MaestroSourceLocation;
-
 export type MaestroPlatform = 'android' | 'ios' | 'web';
 
 export type MaestroDirection = 'up' | 'down' | 'left' | 'right';
@@ -14,8 +12,6 @@ export type MaestroDirection = 'up' | 'down' | 'left' | 'right';
 export type MaestroCoordinate =
   | { space: 'absolute'; x: number; y: number }
   | { space: 'percent'; x: number; y: number };
-
-export type MaestroPoint = MaestroCoordinate;
 
 export type MaestroSelectorMap = {
   text?: string;
@@ -57,7 +53,6 @@ export type MaestroTapOnCommand = MaestroOptionalCommand & {
   retryTapIfNoChange?: boolean;
   repeat?: number;
   delay?: number;
-  optional?: boolean;
   label?: string;
   index?: number;
   childOf?: MaestroSelector;

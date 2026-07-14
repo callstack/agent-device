@@ -12,6 +12,7 @@ export function createMaestroExecutionContext(
   let persistentValues = stringifyValues(defaults);
   const scopes: Record<string, string>[] = [];
   const expandedValues = new Map<string, string>();
+  let cachedValues: Readonly<Record<string, string>> | undefined;
   let generation = 0;
   let observation: MaestroObservation | undefined;
 
@@ -31,6 +32,7 @@ export function createMaestroExecutionContext(
     enter(scopedValues: Record<string, string | number | boolean> = {}): () => void {
       const resolved = resolveScopedValues(scopedValues);
       scopes.push(resolved);
+      cachedValues = undefined;
       return () => {
         const current = scopes.pop();
         if (current !== resolved) {
@@ -39,10 +41,12 @@ export function createMaestroExecutionContext(
             'Maestro environment scopes were left out of order.',
           );
         }
+        cachedValues = undefined;
       };
     },
     merge(output: Record<string, string>): void {
       persistentValues = { ...persistentValues, ...output };
+      cachedValues = undefined;
     },
     recordObservation(next: MaestroObservation): void {
       if (next.generation !== generation) {
@@ -65,11 +69,13 @@ export function createMaestroExecutionContext(
     },
   };
 
-  function currentValues(): Record<string, string> {
+  function currentValues(): Readonly<Record<string, string>> {
+    if (cachedValues) return cachedValues;
     const scoped = scopes.reduce((values, scope) => ({ ...values, ...scope }), {
       ...persistentValues,
     });
-    return { ...scoped, ...overrides };
+    cachedValues = { ...scoped, ...overrides };
+    return cachedValues;
   }
 
   function resolveScopedValues(

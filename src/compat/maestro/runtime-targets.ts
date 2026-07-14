@@ -21,6 +21,7 @@ export type MaestroTargetQuery = {
   selector: MaestroSelector;
   index?: number;
   childOf?: MaestroSelector;
+  allowAtomicSelectorDispatch?: boolean;
 };
 
 export type MaestroTargetEvidence = {
@@ -98,7 +99,7 @@ function countCanonicalDispatchCandidates(
   platform: MaestroPlatform,
   target: { node: SnapshotNode; rect: Rect },
 ): number {
-  if (platform !== 'ios' || query.childOf) return 0;
+  if (platform !== 'ios' || !query.allowAtomicSelectorDispatch || query.childOf) return 0;
   const canonicalSnapshot = {
     ...snapshot,
     nodes: attachRefs(presentIosInteractiveSnapshot(snapshot.nodes)),
