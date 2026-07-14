@@ -170,6 +170,47 @@ test('lets atomic iOS dispatch resolve raw provider wrapper duplicates', async (
   expect(requests[1]?.positionals).toEqual(['text="First"']);
 });
 
+test('does not atomically dispatch distinct iOS matches with identical frames', async () => {
+  const requests: DaemonRequest[] = [];
+  let snapshots = 0;
+  const duplicateRect = { x: 16, y: 298, width: 180, height: 48 };
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      requests.push(request);
+      if (request.command !== 'snapshot') return { ok: true, data: {} };
+      snapshots += 1;
+      return {
+        ok: true,
+        data: {
+          createdAt: snapshots,
+          nodes: [
+            { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 393, height: 852 } },
+            { index: 1, parentIndex: 0, type: 'Button', label: 'Save', rect: duplicateRect },
+            { index: 2, parentIndex: 0, type: 'Button', label: 'Save', rect: duplicateRect },
+          ],
+        },
+      };
+    },
+    dependencies: makeDependencies(),
+    platform: 'ios',
+  });
+
+  await port.execute({
+    command: {
+      kind: 'tapOn',
+      source: { line: 2 },
+      target: { space: 'target', selector: { text: 'Save' } },
+    },
+    generation: 0,
+    env: {},
+    invalidateObservation() {},
+  });
+
+  expect(requests.map(({ command }) => command)).toEqual(['snapshot', 'click']);
+  expect(requests[1]?.positionals).toEqual(['106', '322']);
+});
+
 test('falls back to fresh Maestro geometry when atomic iOS dispatch resolves off-screen', async () => {
   const requests: DaemonRequest[] = [];
   let snapshots = 0;

@@ -4,7 +4,10 @@ import {
   isDescendantOfSnapshotNode,
 } from '../../snapshot/snapshot-processing.ts';
 import type { MaestroSelector } from './program-ir.ts';
-import { findMaestroTypedSelectorMatches } from './runtime-target-matching.ts';
+import {
+  countMaestroDispatchCandidates,
+  findMaestroTypedSelectorMatches,
+} from './runtime-target-matching.ts';
 import { filterVisibleMaestroMatches, type MaestroPlatform } from './runtime-target-policy.ts';
 import { selectMaestroSnapshotMatch } from './runtime-target-ranking.ts';
 
@@ -29,6 +32,7 @@ export type MaestroTargetResolution =
       node: SnapshotNode;
       rect: Rect;
       matches: number;
+      dispatchCandidates: number;
       evidence: MaestroTargetEvidence;
     }
   | { ok: false; message: string; evidence: MaestroTargetEvidence };
@@ -76,6 +80,7 @@ export function resolveMaestroTargetFromSnapshot(
     node: target.node,
     rect: target.rect,
     matches: visible.matches.length,
+    dispatchCandidates: countMaestroDispatchCandidates(snapshot, visible.matches),
     evidence,
   };
 }

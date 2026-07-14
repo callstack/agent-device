@@ -243,6 +243,7 @@ function targetMatchFromResolution(
     query,
     platform,
     mode,
+    dispatchCandidates: resolution.dispatchCandidates,
   });
   const viewport = snapshotViewportRect(frame);
   return {
@@ -297,9 +298,10 @@ function resolveAtomicIosDispatchSelector(params: {
   query: SnapshotTargetQuery & { allowAtomicSelectorDispatch?: boolean };
   platform: Extract<MaestroPlatform, 'ios' | 'android'>;
   mode: MaestroTargetResolutionMode;
+  dispatchCandidates: number;
 }): MaestroDispatchSelector | undefined {
-  const { query, platform, mode } = params;
-  if (!allowsAtomicIosDispatch(query, platform, mode)) return undefined;
+  const { query, platform, mode, dispatchCandidates } = params;
+  if (!allowsAtomicIosDispatch(query, platform, mode) || dispatchCandidates !== 1) return undefined;
   return singleExactDispatchSelector(query.selector);
 }
 
