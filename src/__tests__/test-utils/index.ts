@@ -20,6 +20,11 @@ export {
 
 export { makeSnapshotState } from './snapshot-builders.ts';
 
+export {
+  rawFixtureToAndroidTree,
+  walkNonRawAndroidFixture,
+} from './android-ui-hierarchy-fixtures.ts';
+
 export { makeSessionStore } from './store-factory.ts';
 
 export { withNoColor } from './color.ts';

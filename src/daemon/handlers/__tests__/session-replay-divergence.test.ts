@@ -9,7 +9,14 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
 });
 
 import { dispatchCommand } from '../../../core/dispatch.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import {
+  makeAndroidSession,
+  makeIosSession,
+} from '../../../__tests__/test-utils/session-factories.ts';
+import {
+  ANDROID_IME_CAPTURE_RAW_NODES,
+  walkNonRawAndroidFixture,
+} from '../../../__tests__/test-utils/android-ui-hierarchy-fixtures.ts';
 import { SessionStore } from '../../session-store.ts';
 import { buildReplayFailureDivergence } from '../session-replay-divergence.ts';
 
@@ -393,4 +400,74 @@ test('buildReplayFailureDivergence keeps an app inputAccessoryView control in sc
   expect(screen.refs.some((ref) => ref.role.toLowerCase() === 'key')).toBe(false);
   // The app's accessory "Send" button survives and is available to heal against.
   expect(screen.refs.some((ref) => ref.label === 'Send')).toBe(true);
+});
+
+// Android target-binding divergence route (#1256 test-validity fix): every
+// other test in this file uses an iOS session with hand-picked mock nodes,
+// which never exercises Android's status-bar/IME chrome classification. This
+// test uses an ANDROID session instead, and — since `dispatchCommand` here is
+// mocked (this handler's own capture step, `captureDivergenceObservation`,
+// calls it downstream of the on-device Android walk, which cannot run inside
+// a unit test) — feeds the mock the output of the REAL non-raw Android walk
+// (`walkNonRawAndroidFixture`, `buildUiHierarchySnapshot({ raw: false })`)
+// over the same real-device capture used in
+// `core/__tests__/snapshot-chrome-android-statusbar.test.ts`. That means the
+// walk's own inclusion/drop decisions are exercised for real; only the
+// on-device transport that produces the pre-walk raw tree is stubbed.
+test('buildReplayFailureDivergence excludes Android status-bar/IME chrome from screen.refs on a real (walked) non-raw capture', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-android-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(
+    sessionName,
+    makeAndroidSession(sessionName, { appBundleId: 'com.callstack.agentdevicelab' }),
+  );
+
+  mockDispatchCommand.mockResolvedValue({
+    nodes: walkNonRawAndroidFixture(ANDROID_IME_CAPTURE_RAW_NODES),
+    truncated: false,
+    backend: 'android',
+  });
+
+  const action = {
+    ts: 0,
+    command: 'get',
+    positionals: ['text', 'label="Full name RENAMED"'],
+    flags: {},
+    result: { selectorChain: ['label="Full name RENAMED"'] },
+  };
+  const divergence = await buildReplayFailureDivergence({
+    error: { code: 'COMMAND_FAILED', message: 'target not found' },
+    action,
+    index: 0,
+    sourcePath: path.join(root, 'flow.ad'),
+    sourceLine: 1,
+    session: sessionStore.get(sessionName),
+    sessionName,
+    sessionStore,
+    logPath: path.join(root, 'daemon.log'),
+    responseLevel: 'default',
+    planActions: [action],
+    planDigest: 'test-plan-digest',
+  });
+
+  expect(divergence.screen.state).toBe('available');
+  const screen = divergence.screen as Extract<typeof divergence.screen, { state: 'available' }>;
+
+  // No status-bar/mobile/wifi systemui chrome, nor IME keys, leak into the ref
+  // budget — the exact same classification as the chrome-unit test, now
+  // exercised through the real divergence route.
+  expect(screen.refs.some((ref) => ref.label === '7:03')).toBe(false); // clock
+  expect(screen.refs.some((ref) => ref.label === 'T-Mobile, signal full.')).toBe(false); // mobile_combo
+  expect(screen.refs.some((ref) => ref.label === 'Wifi signal full.')).toBe(false); // wifi_signal
+  expect(screen.refs.some((ref) => ref.label === 'Shift')).toBe(false); // IME key
+  expect(screen.refs.some((ref) => ref.label === 'Space')).toBe(false); // IME key
+  expect(screen.refs.some((ref) => ref.label === 'Use voice typing')).toBe(false); // IME key
+
+  // The app's own controls, real nodes from the same capture, stay visible.
+  expect(screen.refs.some((ref) => ref.label === 'Checkout form')).toBe(true);
+  expect(screen.refs.some((ref) => ref.label === 'review name')).toBe(true); // field-name
+  expect(screen.refs.some((ref) => ref.label === 'ada@example.com')).toBe(true); // field-email
+  expect(screen.refs.some((ref) => ref.label === '+48 555 010 010')).toBe(true); // field-phone
+  expect(screen.truncated).toBeUndefined();
 });
