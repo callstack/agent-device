@@ -408,6 +408,79 @@ test('BLOCKER 1 (follow-up): a writer publishing while another is mid quarantine
   expect(finalScript).toBe(before);
 });
 
+// BLOCKER 1 (lock reclaim, second follow-up): the reclaim of a DEAD lock was
+// itself a TOCTOU — `isHeldByDeadProcess` read the lock file's PID, then a
+// SEPARATE `rmSync(lockPath)` acted on it BY PATHNAME. If a second waiter
+// reclaimed the SAME dead lock and re-acquired with its OWN live lock inside
+// that gap, the first waiter's stale removal deleted the live lock it never
+// actually inspected — not the dead one it read — letting both waiters
+// believe they held the exclusive lock at once.
+test('BLOCKER 1 (lock reclaim): a stale dead-lock decision never steals a lock a concurrent reclaimer has since made LIVE', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-lock-race-'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const healedPath = path.join(root, 'flows', 'login.healed.ad');
+  fs.mkdirSync(path.dirname(healedPath), { recursive: true });
+  const originalContent = 'context platform=ios device="x"\nclick id="stale-partial"\n';
+  fs.writeFileSync(healedPath, originalContent);
+
+  const lockPath = `${healedPath}.lock`;
+  // A DEAD writer's abandoned lock: a PID far outside any real range, so
+  // `isProcessAlive` reports it as not running — same convention used for the
+  // same purpose in `process-lock.test.ts`.
+  fs.writeFileSync(lockPath, '999999999');
+
+  const sessionA = makeIosSession('writer-a', {
+    recordSession: true,
+    saveScriptBoundary: 0,
+    saveScriptComplete: true,
+    saveScriptPath: healedPath,
+    saveScriptDefaultedHealedPath: true,
+    actions: [action({ command: 'click', positionals: ['id="from-a"'] })],
+  });
+
+  // Deterministically drive the exact interleaving the reviewer found: A's
+  // FIRST read of the dead lock (`isHeldByDeadProcess`'s `readFileSync`)
+  // captures the stale dead-PID snapshot A will act on — but as a side
+  // effect of that very read, "writer B" independently reclaims the SAME
+  // dead lock and re-acquires it with a genuinely LIVE pid (this test
+  // process's own, real, alive pid) before A's own reclaim step runs. A must
+  // never destroy B's freshly-live lock.
+  const realReadFileSync = fs.readFileSync;
+  let interleaved = false;
+  const liveMarkerPid = String(process.pid);
+  const readSpy = vi
+    .spyOn(fs, 'readFileSync')
+    .mockImplementation((target: fs.PathOrFileDescriptor, options?: unknown) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = (realReadFileSync as any)(target, options);
+      if (!interleaved && target === lockPath) {
+        interleaved = true;
+        // "Writer B" reclaims the same dead lock and re-acquires it live,
+        // using the exact same primitives the real implementation uses.
+        const bTempLockPath = `${lockPath}.b-writer.tmp`;
+        fs.rmSync(lockPath, { force: true });
+        fs.writeFileSync(bTempLockPath, liveMarkerPid);
+        fs.linkSync(bTempLockPath, lockPath);
+        fs.rmSync(bTempLockPath, { force: true });
+      }
+      return result;
+    });
+
+  const resultA = writer.write(sessionA);
+  readSpy.mockRestore();
+
+  expect(interleaved).toBe(true);
+  // B's live lock is never stolen: A must back off rather than silently
+  // steal it and proceed into the exclusive/publish section — B never
+  // releases it in this test, so A exhausts its bounded wait and fails loud.
+  expect(resultA.written).toBe(false);
+  expect(resultA.written === false && resultA.error?.message).toMatch(/timed out waiting/);
+  // B's lock survives, byte-for-byte, for the entire time A contended for it.
+  expect(fs.readFileSync(lockPath, 'utf8')).toBe(liveMarkerPid);
+  // A never published over the target while B's lock was live.
+  expect(fs.readFileSync(healedPath, 'utf8')).toBe(originalContent);
+});
+
 test('write() DOES overwrite when the caller passed an explicit --save-script=<path> (not defaulted)', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-explicit-out-'));
   const writer = new SessionScriptWriter(path.join(root, 'sessions'));

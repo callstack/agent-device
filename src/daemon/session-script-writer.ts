@@ -267,10 +267,10 @@ function publishNoClobberAtomically(tempPath: string, scriptPath: string): void 
  * live holder releases it quickly.
  *
  * A lock whose recorded PID is no longer running is a crashed writer's
- * abandoned claim — reclaimed immediately (a dead process can never release
- * it). A lock held by a LIVE process is never stolen: exhausting the bounded
- * wait fails loudly instead, so a slow (but live) holder's in-progress
- * publish is never second-guessed.
+ * abandoned claim — reclaimed via `reclaimDeadLock` (race-safely; see its
+ * doc). A lock held by a LIVE process is never stolen: exhausting the
+ * bounded wait fails loudly instead, so a slow (but live) holder's
+ * in-progress publish is never second-guessed.
  */
 function acquireNoClobberLock(scriptPath: string): string {
   const lockPath = `${scriptPath}.lock`;
@@ -283,11 +283,10 @@ function acquireNoClobberLock(scriptPath: string): string {
         return lockPath;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-        if (isHeldByDeadProcess(lockPath)) {
-          fs.rmSync(lockPath, { force: true });
-          continue;
-        }
-        sleepSyncMs(LOCK_ACQUIRE_BACKOFF_MS);
+        // 'reclaimed' (we cleared a dead lock) and 'contended' (someone
+        // else's reclaim of that SAME dead lock just won) both retry the
+        // exclusive link immediately — only a confirmed-LIVE holder backs off.
+        if (reclaimDeadLock(lockPath) === 'live') sleepSyncMs(LOCK_ACQUIRE_BACKOFF_MS);
       }
     }
     throw new AppError(
@@ -303,14 +302,62 @@ function releaseNoClobberLock(lockPath: string): void {
   fs.rmSync(lockPath, { force: true });
 }
 
-/** `true` iff `lockPath` names a PID that is provably no longer running. */
-function isHeldByDeadProcess(lockPath: string): boolean {
+type LockReclaimOutcome = 'reclaimed' | 'contended' | 'live';
+
+/**
+ * Reclaims `lockPath` iff it is provably a DEAD writer's abandoned lock —
+ * race-safely. The prior implementation decided "dead" from a plain read,
+ * then removed the lock BY PATHNAME as a separate step
+ * (`fs.rmSync(lockPath)`) — a classic TOCTOU: waiters A and B could both read
+ * the same dead-PID lock and both decide to reclaim; if B's reclaim (remove
+ * + re-`linkSync` its OWN live lock) completed inside the gap between A's
+ * read and A's own removal, A's stale `rmSync(lockPath)` would delete B's
+ * LIVE lock by pathname — not the dead one A actually inspected — and both
+ * waiters would then believe they held the exclusive lock at once.
+ *
+ * Here the removal is never "read, then act by pathname" — it is a single
+ * atomic claim: `fs.renameSync(lockPath, claimPath)` can only ever move a
+ * given SOURCE path for exactly one caller (a second, concurrent rename of
+ * the same already-moved source fails `ENOENT`, never silently succeeds), so
+ * it doubles as a compare-and-swap on "claim the right to inspect/discard
+ * whatever currently sits at `lockPath` right now". Only the winner of that
+ * claim inspects the object it actually grabbed (not a stale earlier read):
+ * if it is genuinely dead, discard it; if the claim raced with someone
+ * else's fresh reclaim and grabbed their LIVE lock instead, restore it
+ * untouched and report contention rather than dropping it. The live holder's
+ * lock is never stolen.
+ */
+function reclaimDeadLock(lockPath: string): LockReclaimOutcome {
+  if (!isHeldByDeadProcess(lockPath)) return 'live';
+  const claimPath = `${lockPath}.${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.dead-claim`;
+  try {
+    fs.renameSync(lockPath, claimPath);
+  } catch (error) {
+    // Someone else's claim of this exact dead lock already won the race —
+    // there is nothing left for us to reclaim; the caller retries and will
+    // observe whatever that winner leaves behind (dead-again or freshly live).
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'contended';
+    throw error;
+  }
+  if (isHeldByDeadProcess(claimPath)) {
+    fs.rmSync(claimPath, { force: true });
+    return 'reclaimed';
+  }
+  // What we claimed is actually LIVE: another writer reclaimed and
+  // re-acquired between our precheck read above and this rename winning.
+  // Restore it exactly as claimed — never discard a live holder's lock.
+  fs.renameSync(claimPath, lockPath);
+  return 'live';
+}
+
+/** `true` iff `filePath` names a PID that is provably no longer running. */
+function isHeldByDeadProcess(filePath: string): boolean {
   let raw: string;
   try {
-    raw = fs.readFileSync(lockPath, 'utf8');
+    raw = fs.readFileSync(filePath, 'utf8');
   } catch {
-    // Released between our EEXIST and this read — not steal-worthy, the next
-    // attempt's `linkSync` will simply succeed against the now-clear path.
+    // Released/moved between our EEXIST and this read — not steal-worthy,
+    // the next attempt will simply observe whatever the current state is.
     return false;
   }
   const pid = Number(raw.trim());
