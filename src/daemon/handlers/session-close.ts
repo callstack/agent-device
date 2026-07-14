@@ -320,7 +320,15 @@ export async function handleCloseCommand(params: {
   // never actually happened on the device. On failure, return without
   // touching the session at all (mirrors the commit-failure path below): it
   // stays addressable so the agent can fix the cause and retry.
-  if (repairArmed) {
+  //
+  // BLOCKER 3: a PRIOR close attempt on this same session may already have
+  // dispatched the platform close and confirmed its success, then failed to
+  // commit (the session is retained for exactly that retry — see below). A
+  // retry must never re-dispatch a (possibly non-idempotent) platform close
+  // against an already-closed target; `repairPlatformCloseSucceeded` records
+  // that the platform-level close already happened, so this retry consumes
+  // it and goes straight to the commit instead.
+  if (repairArmed && !session.repairPlatformCloseSucceeded) {
     const platformCloseError = await dispatchTargetedPlatformClose({ req, session, logPath });
     if (platformCloseError) {
       return buildRepairCloseFailureResponse(
@@ -328,6 +336,7 @@ export async function handleCloseCommand(params: {
         toRepairPlatformCloseFailure(platformCloseError),
       );
     }
+    session.repairPlatformCloseSucceeded = true;
   }
   // Commit the repair transaction BEFORE any destructive teardown. On failure,
   // return without tearing the session down — it stays addressable so the
@@ -336,6 +345,11 @@ export async function handleCloseCommand(params: {
   if (repairCommit.kind === 'failed') {
     return buildRepairCloseFailureResponse(session, repairCommit.error);
   }
+  // The transaction has now either committed for real or intentionally
+  // aborted (an incomplete transaction never reaches 'failed') — either way
+  // this close attempt's outcome is settled, so the platform-close-succeeded
+  // marker (BLOCKER 3) has served its purpose and must not linger.
+  session.repairPlatformCloseSucceeded = false;
   const healedScriptPath = repairCommit.kind === 'committed' ? repairCommit.path : undefined;
   let providerData: Record<string, unknown> | undefined;
   // Resource teardown is failure-isolated: a rejected step is collected instead of

@@ -593,6 +593,74 @@ test('BLOCKER 2 (new): a repair close whose PLATFORM close fails never commits a
   ).toHaveLength(1);
 });
 
+test('BLOCKER 3 (second follow-up): a retry after a SUCCESSFUL platform close but a FAILED commit never re-dispatches the platform close', async () => {
+  const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
+    'agent-device-repair-transaction-close-idempotent-',
+  );
+  makeCompleteRepairSession(sessionStore, sessionName, root);
+  const healedPath = path.join(root, 'flow.healed.ad');
+  // A prior COMPLETE (sentinel-marked) healed artifact already sits at the
+  // default path — the commit must refuse to clobber it, giving a
+  // deterministic commit FAILURE after a platform close that genuinely
+  // succeeds (mockDispatchCommand's `beforeEach` default resolves). A
+  // targeted close (an explicit positional app target) is what makes
+  // `dispatchTargetedPlatformClose` actually dispatch instead of no-op.
+  fs.writeFileSync(
+    healedPath,
+    `context platform=ios device="x"\nclick id="old"\n${HEAL_COMPLETE_SENTINEL}\n`,
+  );
+  const before = fs.readFileSync(healedPath, 'utf8');
+
+  const closeResponse = await handleCloseCommand({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: ['com.example.app'],
+      flags: {},
+    },
+    sessionName,
+    logPath,
+    sessionStore,
+    leaseRegistry,
+  });
+
+  // The platform close genuinely ran and succeeded; the SUBSEQUENT commit
+  // failed (no-clobber) — the session is retained for retry.
+  expect(mockDispatchCommand).toHaveBeenCalledTimes(1);
+  expect(closeResponse.ok).toBe(false);
+  if (!closeResponse.ok) expect(closeResponse.error.message).toMatch(/already exists/);
+  expect(sessionStore.get(sessionName)).toBeDefined();
+  expect(fs.readFileSync(healedPath, 'utf8')).toBe(before);
+  expect(sessionStore.get(sessionName)!.repairPlatformCloseSucceeded).toBe(true);
+
+  // Retry with an explicit path: the ALREADY-SUCCEEDED platform close must
+  // NEVER be dispatched again — a non-idempotent backend could fail (or
+  // wedge recovery entirely) on a second close of an already-closed target.
+  const retryPath = path.join(root, 'flow.promoted.ad');
+  const retry = await handleCloseCommand({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: ['com.example.app'],
+      flags: { saveScript: retryPath },
+    },
+    sessionName,
+    logPath,
+    sessionStore,
+    leaseRegistry,
+  });
+
+  // Still exactly ONE dispatch total — the retry consumed the recorded
+  // success and went straight to the commit.
+  expect(mockDispatchCommand).toHaveBeenCalledTimes(1);
+  expect(retry.ok).toBe(true);
+  expect(fs.existsSync(retryPath)).toBe(true);
+  const promoted = fs.readFileSync(retryPath, 'utf8');
+  expect(promoted).toContain(HEAL_COMPLETE_SENTINEL);
+});
+
 test('BLOCKER 3: a competing second writer never overwrites a COMPLETE artifact and gets a clear no-clobber error', async () => {
   const { root, sessionStore, sessionName } = setup('agent-device-repair-transaction-competing-');
   const healedPath = path.join(root, 'flow.healed.ad');

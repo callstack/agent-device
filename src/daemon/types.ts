@@ -307,6 +307,18 @@ export type SessionState = {
    */
   saveScriptCommitted?: boolean;
   /**
+   * ADR 0012 decision 6 (BLOCKER 3, second follow-up): set the moment a
+   * repair-armed `close`'s targeted platform close returns SUCCESS, cleared
+   * once the transaction commits/tears down (never lingers past a single
+   * close attempt's outcome). If the subsequent commit then FAILS (no-clobber
+   * refusal, a bare-`@ref` failure, or an fs error) the session is retained
+   * for retry — a later `close`/`close --save-script=<other>` on the SAME
+   * session must consume this flag and skip re-dispatching the platform
+   * close rather than invoking a (possibly non-idempotent) backend a second
+   * time against an already-closed target.
+   */
+  repairPlatformCloseSucceeded?: boolean;
+  /**
    * ADR 0012 decision 6, R7 (C5a): the original replay input path of an armed
    * repair, stashed so an idle-reap tombstone can hand the agent an actionable
    * `replay <path> --save-script` re-run command instead of a bare
