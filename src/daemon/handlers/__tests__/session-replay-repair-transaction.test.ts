@@ -690,3 +690,110 @@ test('BLOCKER 3: a competing second writer never overwrites a COMPLETE artifact 
   // The first writer's complete artifact is byte-for-byte intact.
   expect(fs.readFileSync(healedPath, 'utf8')).toBe(committed);
 });
+
+// --- ADR 0012 decision 6 (BLOCKER 3, third follow-up): `repairPlatformCloseSucceeded`
+// was session-wide, not bound to WHICH close request actually succeeded. An
+// untargeted close performs NO platform operation (`shouldDispatchPlatformClose`
+// is false with no positional target), yet the prior implementation still set
+// the marker as though a real close succeeded; a retry with a DIFFERENT
+// identity (a target added, or a different target) then wrongly skipped the
+// platform close entirely, committing as though it had run. ---
+
+test('BLOCKER 3 (third follow-up): an untargeted close that performed NO platform operation never lets a targeted retry skip the platform close', async () => {
+  const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
+    'agent-device-repair-transaction-close-identity-untargeted-',
+  );
+  makeCompleteRepairSession(sessionStore, sessionName, root);
+  const healedPath = path.join(root, 'flow.healed.ad');
+  // A prior COMPLETE artifact already sits at the default path so the commit
+  // deterministically fails and the session is retained for retry.
+  fs.writeFileSync(
+    healedPath,
+    `context platform=ios device="x"\nclick id="old"\n${HEAL_COMPLETE_SENTINEL}\n`,
+  );
+
+  // First attempt: UNTARGETED close — `shouldDispatchPlatformClose` is false
+  // (no positional target, not `web`), so the platform close never dispatches
+  // at all; the commit then fails (no-clobber).
+  const first = await handleCloseCommand({
+    req: { token: 't', session: sessionName, command: 'close', positionals: [], flags: {} },
+    sessionName,
+    logPath,
+    sessionStore,
+    leaseRegistry,
+  });
+  expect(first.ok).toBe(false);
+  expect(mockDispatchCommand).not.toHaveBeenCalled();
+  expect(sessionStore.get(sessionName)).toBeDefined();
+
+  // Retry WITH a target: the prior session-wide `repairPlatformCloseSucceeded`
+  // flag (set true even though nothing dispatched for the untargeted attempt)
+  // would wrongly skip the platform close here. It must actually run.
+  const retry = await handleCloseCommand({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: ['com.example.app'],
+      flags: { saveScript: path.join(root, 'flow.promoted.ad') },
+    },
+    sessionName,
+    logPath,
+    sessionStore,
+    leaseRegistry,
+  });
+  expect(mockDispatchCommand).toHaveBeenCalledTimes(1);
+  expect(mockDispatchCommand.mock.calls[0]?.[2]).toEqual(['com.example.app']);
+  expect(retry.ok).toBe(true);
+});
+
+test('BLOCKER 3 (third follow-up): a retry targeting a DIFFERENT app than the succeeded close never skips the platform close for the new target', async () => {
+  const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
+    'agent-device-repair-transaction-close-identity-changed-target-',
+  );
+  makeCompleteRepairSession(sessionStore, sessionName, root);
+  const healedPath = path.join(root, 'flow.healed.ad');
+  fs.writeFileSync(
+    healedPath,
+    `context platform=ios device="x"\nclick id="old"\n${HEAL_COMPLETE_SENTINEL}\n`,
+  );
+
+  // First attempt targets app-a; the platform close succeeds, the commit fails.
+  const first = await handleCloseCommand({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: ['com.example.app-a'],
+      flags: {},
+    },
+    sessionName,
+    logPath,
+    sessionStore,
+    leaseRegistry,
+  });
+  expect(first.ok).toBe(false);
+  expect(mockDispatchCommand).toHaveBeenCalledTimes(1);
+  expect(sessionStore.get(sessionName)!.repairPlatformCloseSucceeded).toBe(true);
+
+  // Retry targets a DIFFERENT app (app-b) — a genuinely different platform
+  // operation. The prior session-wide marker would wrongly treat app-b as
+  // already closed just because SOME close succeeded. It must dispatch again,
+  // against app-b specifically.
+  const retry = await handleCloseCommand({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: ['com.example.app-b'],
+      flags: { saveScript: path.join(root, 'flow.promoted.ad') },
+    },
+    sessionName,
+    logPath,
+    sessionStore,
+    leaseRegistry,
+  });
+  expect(mockDispatchCommand).toHaveBeenCalledTimes(2);
+  expect(mockDispatchCommand.mock.calls[1]?.[2]).toEqual(['com.example.app-b']);
+  expect(retry.ok).toBe(true);
+});

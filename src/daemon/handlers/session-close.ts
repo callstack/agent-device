@@ -233,6 +233,25 @@ async function stopBestEffortSessionResources(
   );
 }
 
+/**
+ * ADR 0012 decision 6 (BLOCKER 3, third follow-up): identifies WHICH close
+ * request's platform close succeeded — not merely THAT one did. Only the
+ * request's TARGET (`positionals`) can change what `dispatchTargetedPlatformClose`
+ * actually does: `shouldDispatchPlatformClose` decides purely from
+ * `hasCloseTarget(req)` (plus the `web` special case, constant for a given
+ * session), and the dispatch itself is `dispatchCommand(device, 'close',
+ * req.positionals, ...)`. `close`'s only other flags (`shutdown`, `saveScript`
+ * — see `closeCliSchema`) feed the post-teardown shutdown and the commit path
+ * respectively, never this call, so they carry no identity here. Binding the
+ * marker to this identity means an untargeted close's "succeeded" (a no-op,
+ * since `shouldDispatchPlatformClose` was false) can never be misread as "the
+ * platform close for THIS target already ran" by a later retry that adds or
+ * changes the target — that retry's identity differs, so it re-dispatches.
+ */
+function repairPlatformCloseIdentity(req: DaemonRequest): string {
+  return JSON.stringify(req.positionals ?? []);
+}
+
 async function dispatchTargetedPlatformClose(params: {
   req: DaemonRequest;
   session: SessionState;
@@ -314,6 +333,7 @@ export async function handleCloseCommand(params: {
     return await closeWithoutSession(req, logPath);
   }
   const repairArmed = session.saveScriptBoundary !== undefined;
+  const closeIdentity = repairPlatformCloseIdentity(req);
   // ADR 0012 decision 6 (BLOCKER 2): for a repair-armed session, the platform
   // close must run and SUCCEED before anything is committed or torn down —
   // otherwise a committed healed `.ad` could claim a successful `close` that
@@ -325,10 +345,17 @@ export async function handleCloseCommand(params: {
   // dispatched the platform close and confirmed its success, then failed to
   // commit (the session is retained for exactly that retry — see below). A
   // retry must never re-dispatch a (possibly non-idempotent) platform close
-  // against an already-closed target; `repairPlatformCloseSucceeded` records
-  // that the platform-level close already happened, so this retry consumes
-  // it and goes straight to the commit instead.
-  if (repairArmed && !session.repairPlatformCloseSucceeded) {
+  // against an already-closed target; `repairPlatformCloseSucceeded` +
+  // `repairPlatformCloseIdentity` together record that the platform-level
+  // close already happened FOR THIS EXACT request identity, so a same-identity
+  // retry consumes it and goes straight to the commit instead. A retry whose
+  // identity DIFFERS (third follow-up: e.g. untargeted -> targeted, or a
+  // changed target) never matches — the marker only ever attests to the
+  // identity it was recorded under, so the platform close runs (again).
+  if (
+    repairArmed &&
+    !(session.repairPlatformCloseSucceeded && session.repairPlatformCloseIdentity === closeIdentity)
+  ) {
     const platformCloseError = await dispatchTargetedPlatformClose({ req, session, logPath });
     if (platformCloseError) {
       return buildRepairCloseFailureResponse(
@@ -337,6 +364,7 @@ export async function handleCloseCommand(params: {
       );
     }
     session.repairPlatformCloseSucceeded = true;
+    session.repairPlatformCloseIdentity = closeIdentity;
   }
   // Commit the repair transaction BEFORE any destructive teardown. On failure,
   // return without tearing the session down — it stays addressable so the
@@ -350,6 +378,7 @@ export async function handleCloseCommand(params: {
   // this close attempt's outcome is settled, so the platform-close-succeeded
   // marker (BLOCKER 3) has served its purpose and must not linger.
   session.repairPlatformCloseSucceeded = false;
+  session.repairPlatformCloseIdentity = undefined;
   const healedScriptPath = repairCommit.kind === 'committed' ? repairCommit.path : undefined;
   let providerData: Record<string, unknown> | undefined;
   // Resource teardown is failure-isolated: a rejected step is collected instead of
