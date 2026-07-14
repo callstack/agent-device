@@ -1,6 +1,5 @@
 import { randomInt } from 'node:crypto';
 import type { SnapshotState } from '../kernel/snapshot.ts';
-import { activateRefFrame } from './ref-frame.ts';
 import type { SessionState } from './types.ts';
 
 /**
@@ -71,12 +70,18 @@ export function nextSnapshotGeneration(current: number | undefined): number {
   return current === undefined ? randomInt(100_000, 1_000_000) : current + 1;
 }
 
-/** The response being returned hands the stored snapshot's refs to the client. */
+/**
+ * The response being returned hands the stored snapshot's refs to the client.
+ *
+ * ADR 0014: every caller is a PARTIAL publication (`find`, settled diff, replay
+ * divergence) that exposes only a few refs, so this clears the coarse client
+ * marker but must NOT re-authorize a complete frame — restoring broad `all`-scope
+ * mutation authority from a partial result is exactly the ADR hole. Only a
+ * complete namespace (the snapshot command, via `buildNextSnapshotSession`)
+ * re-activates the frame; bounded partial issuance scope lands in a later step.
+ */
 export function markSessionSnapshotRefsIssued(session: SessionState): void {
   session.snapshotRefsStale = false;
-  // ADR 0014: issuing refs to the client (re-)authorizes a complete frame, so a
-  // fresh capture between mutations restores usability after a side-effect expiry.
-  activateRefFrame(session);
 }
 
 /**

@@ -65,6 +65,7 @@ import {
   type AndroidBlockingDialogReadinessResult,
 } from '../android-system-dialog.ts';
 import { staleIosRefGuardResponse } from './interaction-ref-policy.ts';
+import { expireRefFrame } from '../ref-frame.ts';
 
 export async function handleTouchInteractionCommands(
   params: InteractionHandlerParams & {
@@ -401,6 +402,11 @@ async function dispatchDirectIosSelectorInteraction(params: {
     fallbackPhase,
   } = params;
   const actionStartedAt = Date.now();
+  // ADR 0014 side-effect seam: the direct iOS selector path fuses its final
+  // status/target check and mutation into one runner request and consumes no
+  // ref, so dispatching that fused request is the conservative seam. A later
+  // not-found/timeout is post-seam and does not restore the frame.
+  expireRefFrame(session);
   try {
     const data =
       (await dispatchCommand(session.device, command, positionals, handlerParams.req.flags?.out, {

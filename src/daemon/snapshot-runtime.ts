@@ -19,6 +19,7 @@ import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
 import { maybeBuildAndroidSnapshotTimeoutFailure } from './android-snapshot-timeout-evidence.ts';
 import { summarizeSnapshotDiagnostics } from '../snapshot-diagnostics.ts';
 import { nextSnapshotGeneration } from './session-snapshot.ts';
+import { activateCompleteRefFrame } from './ref-frame.ts';
 
 export async function dispatchSnapshotViaRuntime(params: {
   req: DaemonRequest;
@@ -264,11 +265,7 @@ function buildNextSnapshotSession(params: {
   nextSession.snapshotGeneration = keepCurrentSnapshot
     ? current?.snapshotGeneration
     : nextSnapshotGeneration(current?.snapshotGeneration);
-  nextSession.refFrameState = resolveNextRefFrameState({
-    current,
-    keepCurrentSnapshot,
-    issuesRefsToClient: params.issuesRefsToClient,
-  });
+  reactivateCompleteFrameIfIssuing(nextSession, keepCurrentSnapshot, params.issuesRefsToClient);
   if (record.appName) nextSession.appName = record.appName;
   return nextSession;
 }
@@ -287,17 +284,19 @@ function shouldKeepCurrentSnapshot(
   );
 }
 
-// ADR 0014: a snapshot command hands the client the complete ref namespace, so
-// it re-authorizes a complete frame (recovering usability after a side-effect
-// expiry). A diff (summary response) or a kept tree preserves the prior
-// authorization state that buildSnapshotSession carried over.
-function resolveNextRefFrameState(params: {
-  current: SessionState | undefined;
-  keepCurrentSnapshot: boolean;
-  issuesRefsToClient: boolean;
-}): SessionState['refFrameState'] {
-  if (!params.keepCurrentSnapshot && params.issuesRefsToClient) return 'active';
-  return params.current?.refFrameState;
+// ADR 0014: only a snapshot command hands the client the complete ref namespace,
+// so only it re-authorizes a complete frame (recovering usability after a
+// side-effect expiry). A diff (summary response) or a kept tree preserves the
+// prior authorization state buildSnapshotSession carried over; partial
+// publications (find/settled/divergence) never reach this path.
+function reactivateCompleteFrameIfIssuing(
+  session: SessionState,
+  keepCurrentSnapshot: boolean,
+  issuesRefsToClient: boolean,
+): void {
+  if (!keepCurrentSnapshot && issuesRefsToClient) {
+    activateCompleteRefFrame(session);
+  }
 }
 
 function resolveNextSnapshotScopeSource(params: {

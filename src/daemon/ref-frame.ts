@@ -61,12 +61,13 @@ export function expireRefFrame(session: SessionState): void {
 }
 
 /**
- * Re-authorize a complete frame when a response issues its refs to the client
- * (ADR 0014). This is the only transition that restores plain-ref mutation after
- * an expiry; internal read captures never call it. The complete namespace has
- * scope `all`.
+ * Re-authorize a complete frame with scope `all` (ADR 0014). This is the only
+ * transition that restores plain-ref mutation after an expiry, and it is
+ * reserved for a COMPLETE namespace publication (the snapshot command). Partial
+ * publications (`find`, settled diffs, replay divergence) and internal read
+ * captures never call it, so a partial result cannot restore broad authority.
  */
-export function activateRefFrame(session: SessionState): void {
+export function activateCompleteRefFrame(session: SessionState): void {
   session.refFrameState = 'active';
   session.refFrameScope = undefined;
 }

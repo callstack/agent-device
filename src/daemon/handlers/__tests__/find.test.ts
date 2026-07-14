@@ -75,6 +75,24 @@ async function runFindClickScenario(options: {
   return { response: response!, invokeCalls, session };
 }
 
+test('mutating find focus crosses the ADR 0014 side-effect seam and expires the ref frame', async () => {
+  // find focus/type dispatch the device command directly (they do NOT re-enter
+  // the interaction leaf like find click/fill), so the seam must live in find.
+  const node = {
+    index: 0,
+    type: 'Button',
+    label: 'Save',
+    hittable: true,
+    rect: { x: 10, y: 20, width: 100, height: 40 },
+  };
+  const { response, session } = await runFindClickScenario({
+    positionals: ['Save', 'focus'],
+    nodes: [node],
+  });
+  expect(response.ok).toBe(true);
+  expect(session.refFrameState).toBe('expired');
+});
+
 test('handleFindCommands click returns deterministic metadata across locator variants', async () => {
   const hittableParentNoRect = { index: 0, type: 'View', hittable: true, depth: 0 };
   const nonHittableChildWithRect = {

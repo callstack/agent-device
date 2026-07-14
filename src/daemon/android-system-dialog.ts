@@ -11,6 +11,7 @@ import { AppError } from '../kernel/errors.ts';
 import { centerOfRect, attachRefs, type SnapshotNode } from '../kernel/snapshot.ts';
 import { sleep } from '../utils/timeouts.ts';
 import { pruneGroupNodes } from '../snapshot/snapshot-processing.ts';
+import { expireRefFrame } from './ref-frame.ts';
 import type { SessionState } from './types.ts';
 
 const ANDROID_BLOCKING_MODAL_PATTERN = /\bis(?:n(?:'|&apos;|&#39;)?t| not)\s+responding\b/i;
@@ -275,6 +276,11 @@ async function tapAndroidDialogButton(
     return { ok: false, exitCode: 1, stdout: '', stderr: 'button has no rect' };
   }
   const { x, y } = centerOfRect(button.rect);
+  // ADR 0014 side-effect seam: blocking-dialog recovery is itself device
+  // mutating. Expire the frame before the recovery tap (the first recovery side
+  // effect), even when invoked from apparent readiness work, so a ref action
+  // cannot continue against the recovered UI.
+  expireRefFrame(session);
   const result = await runAndroidAdb(
     session.device,
     ['shell', 'input', 'tap', String(Math.round(x)), String(Math.round(y))],

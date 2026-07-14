@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
-  activateRefFrame,
+  activateCompleteRefFrame,
   admitRefMutation,
   expireRefFrame,
   refFrameEpoch,
@@ -105,10 +105,10 @@ test('expireRefFrame is idempotent and rejects all refs while expired', () => {
   );
 });
 
-test('activateRefFrame re-authorizes a complete frame after expiry', () => {
+test('activateCompleteRefFrame re-authorizes a complete frame after expiry', () => {
   const s = session({ snapshotGeneration: 42, refFrameScope: new Set(['e1']) });
   expireRefFrame(s);
-  activateRefFrame(s);
+  activateCompleteRefFrame(s);
   assert.equal(refFrameState(s), 'active');
   assert.equal(refFrameScope(s), 'all');
   assert.deepEqual(admitRefMutation({ session: s, refBody: 'e9', mintedGeneration: undefined }), {

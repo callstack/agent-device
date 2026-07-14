@@ -3315,9 +3315,31 @@ test('a ref press crosses the ADR 0014 side-effect seam and expires the ref fram
   // expired-frame rejection is deferred to a later migration step.
   expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
 
-  // Re-issuing a complete snapshot re-authorizes the frame.
+  // ADR 0014: a PARTIAL publication (find/settle/divergence, via
+  // markSessionSnapshotRefsIssued) clears the coarse marker but must NOT
+  // re-authorize the complete frame — only a complete snapshot does.
   markSessionSnapshotRefsIssued(sessionStore.get(sessionName)!);
-  expect(sessionStore.get(sessionName)?.refFrameState).toBe('active');
+  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+});
+
+test('direct iOS selector click crosses the ADR 0014 fused seam and expires the ref frame', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'direct-ios-seam';
+  const session = makeStaleRefSession(sessionName);
+  sessionStore.set(sessionName, session);
+  mockDispatch.mockImplementation(async (_device, command) =>
+    command === 'snapshot' ? { nodes: makeTwoButtonNodes(), backend: 'xctest' } : {},
+  );
+
+  // click + a simple selector on a non-recording iOS session takes the direct
+  // iOS selector fast path (no daemon-tree resolution).
+  const click = await runInteraction(sessionStore, sessionName, 'click', ['label=Continue']);
+  expect(click?.ok).toBe(true);
+  const tookDirectPath = mockDispatch.mock.calls.some(
+    (call) => (call[4] as { directElementSelector?: unknown })?.directElementSelector !== undefined,
+  );
+  expect(tookDirectPath).toBe(true);
+  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
 });
 
 test('press @ref directly after refs were issued does not warn', async () => {

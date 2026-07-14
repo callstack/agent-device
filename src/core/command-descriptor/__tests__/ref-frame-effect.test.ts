@@ -60,10 +60,14 @@ test('app-switcher no longer bypasses classification (ADR 0014 escape hatch)', (
 });
 
 test('resolver commands classify per selected subaction', () => {
-  // keyboard: status probe preserves, dismiss mutates.
+  // keyboard: status/get probes preserve; dismiss/enter/return mutate. enter and
+  // return dispatch a real return key, so they must NOT be preserve.
   assert.equal(resolveRefFrameEffect(makeRequest('keyboard')), 'preserve');
   assert.equal(resolveRefFrameEffect(makeRequest('keyboard', ['status'])), 'preserve');
+  assert.equal(resolveRefFrameEffect(makeRequest('keyboard', ['get'])), 'preserve');
   assert.equal(resolveRefFrameEffect(makeRequest('keyboard', ['dismiss'])), 'may-invalidate');
+  assert.equal(resolveRefFrameEffect(makeRequest('keyboard', ['enter'])), 'may-invalidate');
+  assert.equal(resolveRefFrameEffect(makeRequest('keyboard', ['return'])), 'may-invalidate');
   // alert: get/wait read, accept/dismiss mutate.
   assert.equal(resolveRefFrameEffect(makeRequest('alert')), 'preserve');
   assert.equal(resolveRefFrameEffect(makeRequest('alert', ['get'])), 'preserve');

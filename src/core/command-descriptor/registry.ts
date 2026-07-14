@@ -85,18 +85,27 @@ const isShardedTestRequest = (req: DaemonRequest): boolean =>
   req.command === 'test' &&
   (typeof req.flags?.shardAll === 'number' || typeof req.flags?.shardSplit === 'number');
 
-// ADR 0014 request-sensitive ref-frame resolvers. `keyboard status` and
-// `alert get`/`wait` are read-only status probes that preserve the frame, while
-// `keyboard dismiss` and `alert accept`/`dismiss` cross a device side effect.
-// The action is the leading positional (see keyboard/alert daemon writers in
-// src/commands/system/index.ts and src/commands/capture/alert.ts).
+// ADR 0014 request-sensitive ref-frame resolvers. The action is the leading
+// positional (see keyboard/alert daemon writers in src/commands/system/index.ts
+// and src/commands/capture/alert.ts). Only the read-only status probes preserve
+// the frame; every mutating subaction crosses a device side effect.
+//
+// keyboard actions are status/get/dismiss/enter/return (src/commands/system/
+// runtime/system.ts): status/get inspect, while dismiss hides the keyboard and
+// enter/return dispatch a real return key. Anything other than a read is
+// classified may-invalidate (the honest superset for unknown subactions).
+const KEYBOARD_READ_ONLY_ACTIONS = new Set(['status', 'get']);
 const keyboardRefFrameEffect = (req: DaemonRequest): RefFrameEffect =>
-  (req.positionals?.[0] ?? 'status').toLowerCase() === 'dismiss' ? 'may-invalidate' : 'preserve';
+  KEYBOARD_READ_ONLY_ACTIONS.has((req.positionals?.[0] ?? 'status').toLowerCase())
+    ? 'preserve'
+    : 'may-invalidate';
 
-const alertRefFrameEffect = (req: DaemonRequest): RefFrameEffect => {
-  const action = (req.positionals?.[0] ?? 'get').toLowerCase();
-  return action === 'accept' || action === 'dismiss' ? 'may-invalidate' : 'preserve';
-};
+// alert actions are get/wait/accept/dismiss: get/wait read, accept/dismiss act.
+const ALERT_READ_ONLY_ACTIONS = new Set(['get', 'wait']);
+const alertRefFrameEffect = (req: DaemonRequest): RefFrameEffect =>
+  ALERT_READ_ONLY_ACTIONS.has((req.positionals?.[0] ?? 'get').toLowerCase())
+    ? 'preserve'
+    : 'may-invalidate';
 
 // ---------------------------------------------------------------------------
 // Capability matrices — platform/kind buckets, copied VERBATIM from

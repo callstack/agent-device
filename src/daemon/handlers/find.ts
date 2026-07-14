@@ -7,6 +7,7 @@ import {
   type FindLocator,
 } from '../../selectors/find.ts';
 import { centerOfRect, type SnapshotState } from '../../kernel/snapshot.ts';
+import { expireRefFrame } from '../ref-frame.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { contextFromFlags } from '../context.ts';
@@ -599,6 +600,9 @@ async function handleFindType(
   }
   const focusResponse = await dispatchFocusForFindMatch(ctx, match);
   if (!focusResponse.ok) return focusResponse;
+  // The focus above already crossed the seam; expiry is idempotent, but keep it
+  // explicit at the type dispatch so it does not rely on the focus-first order.
+  if (session) expireRefFrame(session);
   const response = await dispatchCommand(device, 'type', [value], req.flags?.out, {
     ...contextFromFlags(logPath, req.flags, session?.appBundleId, session?.trace?.outPath),
   });
@@ -617,6 +621,10 @@ async function dispatchFocusForFindMatch(
   if (!coords) {
     return errorResponse('COMMAND_FAILED', 'matched element has no bounds');
   }
+  // ADR 0014 side-effect seam: mutating find focus/type dispatch the device
+  // command directly (they do not re-enter the interaction leaf), so expire the
+  // frame here before the device op. Pre-seam guards above preserve the frame.
+  if (session) expireRefFrame(session);
   const response = await dispatchCommand(
     device,
     'focus',
