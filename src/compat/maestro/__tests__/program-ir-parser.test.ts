@@ -282,6 +282,43 @@ describe('parseMaestroProgram', () => {
       /when cannot be empty.*line 3/i,
     );
   });
+
+  test('preserves source paths for unsupported and malformed flows', () => {
+    const sourcePath = '/flows/includes/child.yaml';
+    assert.throws(
+      () =>
+        parseMaestroProgram(
+          `---
+- unsupportedCommand: true
+`,
+          { sourcePath },
+        ),
+      /unsupported.*\/flows\/includes\/child\.yaml:line 2/i,
+    );
+    assert.throws(
+      () =>
+        parseMaestroProgram(
+          `---
+- tapOn:
+    label: Save
+    unsupported: true
+`,
+          { sourcePath },
+        ),
+      /not supported.*\/flows\/includes\/child\.yaml:line 4/i,
+    );
+    assert.throws(
+      () =>
+        parseMaestroProgram(
+          `---
+- runFlow:
+    file: [child.yaml
+`,
+          { sourcePath },
+        ),
+      /Invalid Maestro YAML flow[\s\S]*\/flows\/includes\/child\.yaml:line 4/i,
+    );
+  });
 });
 
 function commandOfKind<K extends MaestroCommand['kind']>(

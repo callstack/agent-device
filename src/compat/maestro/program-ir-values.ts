@@ -17,9 +17,19 @@ export function sourceAt(
   node: Node | null | undefined,
   context: MaestroProgramParseContext,
 ): MaestroSourceLocation {
-  const offset = node?.range?.[0] ?? 0;
-  const line = context.lineCounter.linePos(offset).line;
+  return sourceAtOffset(node?.range?.[0], context);
+}
+
+export function sourceAtOffset(
+  offset: number | undefined,
+  context: MaestroProgramParseContext,
+): MaestroSourceLocation {
+  const line = context.lineCounter.linePos(offset !== undefined && offset >= 0 ? offset : 0).line;
   return context.sourcePath === undefined ? { line } : { path: context.sourcePath, line };
+}
+
+export function formatSourceLocation(source: MaestroSourceLocation): string {
+  return `${source.path === undefined ? '' : `${source.path}:`}line ${source.line}`;
 }
 
 export function invalidAt(
@@ -27,7 +37,10 @@ export function invalidAt(
   node: Node | null | undefined,
   context: MaestroProgramParseContext,
 ): never {
-  throw new AppError('INVALID_ARGS', `${message} (line ${sourceAt(node, context).line})`);
+  throw new AppError(
+    'INVALID_ARGS',
+    `${message} (${formatSourceLocation(sourceAt(node, context))})`,
+  );
 }
 
 export function readMapEntries(

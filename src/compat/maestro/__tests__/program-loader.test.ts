@@ -39,3 +39,13 @@ test('caches parsed programs by resolved path and honors cancellation before I/O
   });
   readFileSync.mockRestore();
 });
+
+test('preserves the resolved child source path when an included flow is unsupported', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-loader-error-'));
+  const childPath = path.join(root, 'child.yaml');
+  fs.writeFileSync(childPath, '---\n- unsupportedCommand: true\n');
+
+  const loader = createMaestroProgramLoader(root);
+
+  await expect(loader('child.yaml')).rejects.toThrow(`${childPath}:line 2`);
+});

@@ -8,6 +8,7 @@ import type {
 import { parseMaestroCommandList } from './program-ir-command-parser.ts';
 import {
   assertOnlyKeys,
+  formatSourceLocation,
   invalidAt,
   readMapEntries,
   readOptionalString,
@@ -15,6 +16,7 @@ import {
   readScalarMap,
   readStringSequence,
   sourceAt,
+  sourceAtOffset,
   type MaestroProgramParseContext,
 } from './program-ir-values.ts';
 
@@ -23,20 +25,25 @@ export function parseMaestroProgram(
   options: MaestroProgramParseOptions = {},
 ): MaestroProgram {
   const lineCounter = new LineCounter();
-  const documents = parseAllDocuments(script, { lineCounter });
-  for (const document of documents) {
-    if (document.errors.length > 0) {
-      const message = document.errors[0]?.message ?? 'Invalid Maestro YAML flow.';
-      throw new AppError('INVALID_ARGS', `Invalid Maestro YAML flow: ${message}`);
-    }
-  }
-
   const context: MaestroProgramParseContext = {
     lineCounter,
     ...(options.sourcePath === undefined ? {} : { sourcePath: options.sourcePath }),
   };
+  const documents = parseAllDocuments(script, { lineCounter });
+  for (const document of documents) {
+    if (document.errors.length > 0) {
+      const error = document.errors[0];
+      const message = error?.message ?? 'Invalid Maestro YAML flow.';
+      const source = sourceAtOffset(error?.pos[0], context);
+      throw new AppError(
+        'INVALID_ARGS',
+        `Invalid Maestro YAML flow: ${message} (${formatSourceLocation(source)})`,
+      );
+    }
+  }
+
   const contents = documents.map((document) => document.contents).filter((value) => value !== null);
-  if (contents.length === 0) throw new AppError('INVALID_ARGS', 'Maestro flow is empty.');
+  if (contents.length === 0) invalidAt('Maestro flow is empty.', undefined, context);
 
   let configNode: Node | undefined;
   let commandsNode: Node | undefined;
