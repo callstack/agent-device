@@ -12,9 +12,11 @@ Accepted (2026-07-10); partially implemented (last updated 2026-07-13). See [Mig
   `REPLAY_DIVERGENCE` repair-loop fix (#1223).
 - Decision 6, the base agent-supervised re-record repair — `replay --save-script` arming, the
   post-watermark healed slice, `repairHint`, and the writer's bare-`@ref` fail-loud guard (#1228).
-- Decision 4 amendment, `screen`'s capture scope and ref selection — the divergence `screen` capture is
-  unified with `snapshot`'s own full-window scope (chrome and meaningful-target filters layered on top as
-  filters, not scopings), and `screen.refs` is ranked within the byte cap (foreign-window dismiss targets
+- Decision 4 amendment, `screen`'s capture scope and ref selection — the divergence `screen` capture runs
+  through the same `captureSnapshot` wrapper as plain `snapshot` (full-window scope + Android freshness /
+  post-action retry parity) under a clean, fixed capture-flags policy (a failed raw/scoped/`-d` action can
+  no longer narrow the diagnostic tree), with the chrome and meaningful-target filters layered on top as
+  filters, not scopings; and `screen.refs` is ranked within the byte cap (foreign-window dismiss targets
   ahead of app content; mass-covered app nodes surfaced rather than emptied) instead of sliced in document
   order, so a captured overlay is never buried past the cap (#1264).
 
@@ -446,14 +448,21 @@ the old session tree. Screen-capture failure never replaces or masks the origina
 > **Amendment (#1264): `screen`'s capture scope and ref selection.** `refs` is a filtered, ranked digest
 > of the exact same tree a plain `snapshot` would return at that moment. Two guarantees back the invariant:
 >
-> 1. **Capture scope.** The capture underneath `screen` is built with `snapshot`'s own full-window scope
->    (Android: the snapshot-helper route, with the existing graceful app-scoped fallback only when the
->    helper is unavailable; iOS: the same capture semantics as the bounded system-modal probe path;
->    macOS/Linux: their surface-scoped branches), never a narrower, app-window-only capture assembled
->    separately for divergence reporting. The chrome filter (#1233/#1256, `collectSettleChromeRefs`) and the
->    meaningful-target filter (label/id or `hittable`) are layered ON TOP of that full capture as
->    **filters**, not as a separate, narrower scoping — a filter may drop a node the full capture contains,
->    but the capture itself must never omit content `snapshot` would show.
+> 1. **Capture scope.** The capture underneath `screen` runs through the **same `captureSnapshot` wrapper**
+>    the plain `snapshot` command's backend calls — not a parallel single-shot dispatch — so it inherits
+>    `snapshot`'s full-window scope (Android: the snapshot-helper route, with the existing graceful
+>    app-scoped fallback only when the helper is unavailable; iOS: the bounded system-modal probe path;
+>    macOS/Linux: their surface-scoped branches) AND its Android freshness / post-action retry policy. A
+>    divergence must not consume a first stale or app-scoped dump while a plain `snapshot` retries to the
+>    fresh full-window tree — that would make the divergence staler or narrower than `snapshot`, violating
+>    the invariant. The divergence capture's flags are a **clean, fixed policy** (full-window, non-raw,
+>    default depth), NOT the failed action's flags: a failed `snapshot --raw`/scoped/`-d` action must never
+>    narrow or reshape the diagnostic tree below what a plain `snapshot` shows, so `snapshotRaw` /
+>    `snapshotScope` / `snapshotDepth` are dropped; only the interactive-only policy (full for non-rect
+>    `get`/`is`/`wait` reads, interactive otherwise) is carried. The chrome filter (#1233/#1256,
+>    `collectSettleChromeRefs`) and the meaningful-target filter (label/id or `hittable`) are layered ON TOP
+>    of that full capture as **filters**, not as a separate, narrower scoping — a filter may drop a node the
+>    full capture contains, but the capture itself must never omit content `snapshot` would show.
 > 2. **Ref selection within the cap.** The `screen.refs` cap is a **byte bound**, not a "first N in document
 >    order" policy. A separate-window overlay enumerates AFTER the app window's nodes, so a document-order
 >    slice truncates a fully-captured overlay away (its dismiss target sits past the cap) — reporting a

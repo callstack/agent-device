@@ -4,9 +4,10 @@ import { markSessionPartialRefsIssued, setSessionSnapshot } from '../session-sna
 import { isSparseSnapshotQualityVerdict } from '../../snapshot/snapshot-quality.ts';
 import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
 import { redactDiagnosticData } from '../../kernel/redaction.ts';
+import type { CommandFlags } from '../../core/dispatch.ts';
 import type { DaemonError, ResponseLevel } from '../../kernel/contracts.ts';
 import type { SnapshotNode } from '../../kernel/snapshot.ts';
-import { buildSnapshotState, captureSnapshotData } from './snapshot-capture.ts';
+import { captureSnapshot } from './snapshot-capture.ts';
 import {
   buildSelectorChainForNode,
   resolveSelectorChain,
@@ -202,16 +203,28 @@ export function toReplayRepairHintCapture(
  * Sparse captures do not write back (selector-capture reliability contract),
  * so a sparse verdict degrades the whole observation.
  *
- * ADR 0012 decision 4 amendment (#1264): this reuses `captureSnapshotData` —
- * the SAME function the `snapshot` command itself builds its capture with
- * (Android: snapshot-helper full-window route with the graceful app-scoped
- * fallback; iOS: the bounded system-modal probe path; macOS/Linux: their
- * surface-scoped branches) — instead of a parallel hand-rolled dispatch. An
- * agent must never see a healthier `screen` in a divergence report than a
- * plain `snapshot` would show it, so `screen` cannot be built from a narrower
- * capture than `snapshot`'s. The chrome filter (`collectSettleChromeRefs`)
- * and the meaningful-target filter below stay layered ON TOP of this full
- * capture as FILTERS, never as a narrower scoping.
+ * ADR 0012 decision 4 amendment (#1264): this routes through `captureSnapshot`
+ * — the EXACT wrapper the `snapshot` command's backend calls
+ * (`dispatchSnapshotViaRuntime` -> `createDaemonSnapshotBackend`), which owns
+ * Android freshness + post-action retry (`capturePostActionAwareSnapshot`) on
+ * top of the per-platform capture (Android snapshot-helper full-window route
+ * with its graceful app-scoped fallback; iOS bounded system-modal probe path;
+ * macOS/Linux surface-scoped branches). Calling the inner single-shot
+ * `captureSnapshotData` instead would let a divergence consume a first stale /
+ * app-scoped dump while a plain `snapshot` retries to the fresh full-window
+ * tree — a divergence STALER or NARROWER than `snapshot`, which is exactly the
+ * invariant this amendment forbids: an agent must never see a healthier
+ * `screen` in a divergence report than a plain `snapshot` would show it.
+ *
+ * The capture flags are a CLEAN, fixed divergence-capture policy, NOT the
+ * failed action's flags: `snapshotRaw`/`snapshotScope`/`snapshotDepth` from a
+ * failed `snapshot --raw`/scoped/`-d` action would narrow or reshape the
+ * diagnostic tree below what a plain `snapshot` shows, so they are dropped. The
+ * only carried policy is interactive-only (`divergenceCaptureInteractiveOnly` —
+ * full for non-rect `get`/`is`/`wait` reads so static-text targets survive,
+ * interactive otherwise), matching heal's long-standing rule. The chrome filter
+ * (`collectSettleChromeRefs`) and the meaningful-target filter stay layered ON
+ * TOP of this full capture as FILTERS, never as a narrower scoping.
  */
 export async function captureDivergenceObservation(params: {
   session: SessionState;
@@ -221,16 +234,15 @@ export async function captureDivergenceObservation(params: {
   action: SessionAction;
 }): Promise<DivergenceObservation> {
   const { session, sessionName, sessionStore, logPath, action } = params;
-  const snapshotInteractiveOnly = divergenceCaptureInteractiveOnly(action);
-  const flags = { ...(action.flags ?? {}), snapshotInteractiveOnly };
+  const flags = divergenceCaptureFlags(action);
   try {
-    const data = await captureSnapshotData({
+    const capture = await captureSnapshot({
       device: session.device,
       session,
       flags,
       logPath,
     });
-    const snapshot = buildSnapshotState(data, flags);
+    const snapshot = capture.snapshot;
     if (isSparseSnapshotQualityVerdict(snapshot.snapshotQuality)) {
       return {
         state: 'unavailable',
@@ -267,6 +279,17 @@ export async function captureDivergenceObservation(params: {
       hint: `Post-failure snapshot capture failed (${error instanceof Error ? error.message : String(error)}); the original replay failure is unaffected.`,
     };
   }
+}
+
+/**
+ * The clean, fixed flags for a divergence capture (#1264): full-window
+ * (no `snapshotScope`), non-raw (no `snapshotRaw`), default depth (no
+ * `snapshotDepth`) — a failed scoped/raw/depth-limited action must never
+ * produce a narrowed divergence `screen`. Only the interactive-only policy is
+ * carried, since it governs whether static-text suggestion targets survive.
+ */
+function divergenceCaptureFlags(action: SessionAction): CommandFlags {
+  return { snapshotInteractiveOnly: divergenceCaptureInteractiveOnly(action) };
 }
 
 /**
