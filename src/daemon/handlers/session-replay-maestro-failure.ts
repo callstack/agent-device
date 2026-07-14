@@ -16,13 +16,13 @@ import {
 import { formatScriptArg } from '../../replay/script-utils.ts';
 import type { SnapshotDiagnosticsSummary } from '../../snapshot-diagnostics.ts';
 import { SessionStore } from '../session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionAction, SessionState } from '../types.ts';
+import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
+import type { ReplayReportAction } from './session-replay-report-action.ts';
 import {
   boundReplayDivergenceForSession,
   buildReplayDivergenceSuggestionForNode,
   buildDivergenceScreen,
   captureDivergenceObservation,
-  collectReplayDivergenceSuggestions,
   toReplayRepairHintCapture,
   type DivergenceFieldSanitizer,
 } from './session-replay-divergence.ts';
@@ -39,6 +39,35 @@ export type MaestroFailedEngineEvent = MaestroEngineEvent & {
   readonly expandedVariables: Readonly<Record<string, string>>;
 };
 
+export type MaestroFailureReportAction = Pick<
+  ReplayReportAction,
+  'command' | 'positionals' | 'flags'
+>;
+
+export type MaestroFailureReportProjection = {
+  readonly authoredCommand: MaestroCommand;
+  readonly source: MaestroEngineEvent['source'];
+  readonly progress: ReturnType<typeof formatMaestroCommandProgress>;
+  readonly action: MaestroFailureReportAction;
+};
+
+export function buildTypedMaestroFailureReportProjection(
+  event: MaestroFailedEngineEvent,
+  req: DaemonRequest,
+): MaestroFailureReportProjection {
+  const progress = formatMaestroCommandProgress(event.command);
+  return {
+    authoredCommand: event.command,
+    source: event.source,
+    progress,
+    action: {
+      command: reportCommandForCapture(event.command.kind),
+      positionals: safeProgressPositionals(event.command.kind, progress.value),
+      flags: req.flags ?? {},
+    },
+  };
+}
+
 export async function buildTypedMaestroFailureResponse(params: {
   readonly error: DaemonError;
   readonly event: MaestroFailedEngineEvent;
@@ -51,10 +80,11 @@ export async function buildTypedMaestroFailureResponse(params: {
   readonly snapshotDiagnostics?: SnapshotDiagnosticsSummary;
 }): Promise<DaemonResponse> {
   const { event, plan, replayPath, req, sessionName, sessionStore, logPath } = params;
+  const report = buildTypedMaestroFailureReportProjection(event, req);
   const cause = hoistReplayFailureCauseDiagnosticMeta(params.error);
   const scrubVars = [
     ...collectExpandedScrubVars(event.expandedVariables),
-    ...collectMaestroTextScrubVars(event.command),
+    ...collectMaestroTextScrubVars(report.authoredCommand),
   ].sort((left, right) => right.value.length - left.value.length);
   const sanitize = createReplayDivergenceSanitizer(scrubVars);
   const safeCause = {
@@ -62,7 +92,6 @@ export async function buildTypedMaestroFailureResponse(params: {
     message: sanitize(cause.message),
     ...(cause.hint ? { hint: sanitize(cause.hint) } : {}),
   };
-  const diagnosticAction = diagnosticActionForEvent(event, req);
   const session = sessionStore.get(sessionName);
   const observation = session
     ? await captureDivergenceObservation({
@@ -70,7 +99,7 @@ export async function buildTypedMaestroFailureResponse(params: {
         sessionName,
         sessionStore,
         logPath,
-        action: diagnosticAction,
+        action: report.action,
       })
     : {
         state: 'unavailable' as const,
@@ -80,9 +109,9 @@ export async function buildTypedMaestroFailureResponse(params: {
   const suggestions =
     session && observation.state === 'available'
       ? collectTypedMaestroSuggestions({
-          command: event.command,
+          command: report.authoredCommand,
           platform: plan.platform,
-          action: diagnosticAction,
+          action: report.action,
           session,
           nodes: observation.nodes,
           sanitize,
@@ -92,8 +121,7 @@ export async function buildTypedMaestroFailureResponse(params: {
     from: event.stepIndex,
     planDigest: plan.digest,
   });
-  const progress = formatMaestroCommandProgress(event.command);
-  const actionLabel = [event.command.kind, formatMaestroActionValue(progress.value)]
+  const actionLabel = [report.authoredCommand.kind, formatMaestroActionValue(report.progress.value)]
     .filter(Boolean)
     .join(' ');
   const divergence: ReplayDivergence = {
@@ -102,8 +130,8 @@ export async function buildTypedMaestroFailureResponse(params: {
     step: {
       index: event.stepIndex,
       source: {
-        path: sanitize(event.source.path ?? replayPath),
-        line: event.source.line,
+        path: sanitize(report.source.path ?? replayPath),
+        line: report.source.line,
       },
     },
     action: sanitize(actionLabel),
@@ -125,7 +153,7 @@ export async function buildTypedMaestroFailureResponse(params: {
         },
     repairHint: computeReplayRepairHint({
       kind: 'action-failure',
-      targetEvidence: diagnosticAction.targetEvidence,
+      targetEvidence: undefined,
       capture: toReplayRepairHintCapture(observation),
     }),
   };
@@ -138,8 +166,8 @@ export async function buildTypedMaestroFailureResponse(params: {
   return buildReplayDivergenceFailureResponseFromDescriptor({
     error: safeCause,
     actionLabel,
-    action: event.command.kind,
-    positionals: safeProgressPositionals(event.command.kind, progress.value),
+    action: report.authoredCommand.kind,
+    positionals: [...report.action.positionals],
     step: event.stepIndex,
     replayPath,
     artifactPaths: [...event.artifactPaths],
@@ -154,34 +182,16 @@ function formatMaestroActionValue(value: string | undefined): string {
   return formatScriptArg(value);
 }
 
-function diagnosticActionForEvent(event: MaestroEngineEvent, req: DaemonRequest): SessionAction {
-  const progress = formatMaestroCommandProgress(event.command);
-  const command = diagnosticCommand(event.command.kind);
-  return {
-    ts: Date.now(),
-    command,
-    positionals: safeProgressPositionals(event.command.kind, progress.value),
-    flags: req.flags ?? {},
-  };
-}
-
 function collectTypedMaestroSuggestions(params: {
   command: MaestroCommand;
   platform: MaestroReplayPlan['platform'];
-  action: SessionAction;
+  action: MaestroFailureReportAction;
   session: SessionState;
   nodes: SnapshotNode[];
   sanitize: DivergenceFieldSanitizer;
 }) {
   const query = typedSuggestionQuery(params.command);
-  if (!query || (params.platform !== 'android' && params.platform !== 'ios')) {
-    return collectReplayDivergenceSuggestions({
-      action: params.action,
-      session: params.session,
-      nodes: params.nodes,
-      sanitize: params.sanitize,
-    });
-  }
+  if (!query || (params.platform !== 'android' && params.platform !== 'ios')) return [];
   const snapshot = { createdAt: Date.now(), nodes: params.nodes };
   const resolution = resolveMaestroTargetFromSnapshot(
     snapshot,
@@ -280,7 +290,7 @@ function suggestionBasis(selector: MaestroSelector): 'id' | 'label' | 'other' {
   return 'other';
 }
 
-function diagnosticCommand(command: string): string {
+function reportCommandForCapture(command: string): string {
   if (command === 'tapOn' || command === 'doubleTapOn') return 'click';
   if (command === 'longPressOn') return 'longpress';
   if (

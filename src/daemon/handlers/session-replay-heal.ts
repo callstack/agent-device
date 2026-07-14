@@ -1,6 +1,6 @@
 import { splitIsSelectorArgs, splitSelectorFromArgs } from '../../selectors/index.ts';
 import { uniqueStrings } from '../../kernel/collections.ts';
-import type { SessionAction } from '../types.ts';
+import type { ReplayReportAction } from './session-replay-report-action.ts';
 import { isTouchTargetCommand } from '../../replay/script-utils.ts';
 
 /**
@@ -34,7 +34,7 @@ function parseSelectorWaitPositionals(positionals: string[]): {
 }
 
 // fallow-ignore-next-line complexity
-export function collectReplaySelectorCandidates(action: SessionAction): string[] {
+export function collectReplaySelectorCandidates(action: ReplayReportAction): string[] {
   const result: string[] = [];
   const explicitChain =
     Array.isArray(action.result?.selectorChain) &&
@@ -63,13 +63,13 @@ export function collectReplaySelectorCandidates(action: SessionAction): string[]
     }
   }
   if (action.command === 'is') {
-    const { split } = splitIsSelectorArgs(action.positionals);
+    const { split } = splitIsSelectorArgs([...action.positionals]);
     if (split) {
       result.push(split.selectorExpression);
     }
   }
   if (action.command === 'wait') {
-    const { selectorExpression } = parseSelectorWaitPositionals(action.positionals ?? []);
+    const { selectorExpression } = parseSelectorWaitPositionals([...action.positionals]);
     if (selectorExpression) {
       result.push(selectorExpression);
     }
@@ -78,8 +78,8 @@ export function collectReplaySelectorCandidates(action: SessionAction): string[]
   return uniqueStrings(result).filter((entry) => entry.trim().length > 0);
 }
 
-function readTargetSelectorPositionals(action: SessionAction): string[] {
-  const positionals = action.positionals ?? [];
+function readTargetSelectorPositionals(action: ReplayReportAction): readonly string[] {
+  const positionals = action.positionals;
   if (action.command !== 'longpress') return positionals;
   const last = positionals.at(-1);
   return positionals.length > 1 && isFiniteNumberString(last)

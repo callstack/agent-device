@@ -80,6 +80,11 @@ function isBareScriptToken(value: string): boolean {
 
 const TYPED_TEXT_COMMANDS = new Set(['fill', 'type']);
 
+type DivergenceActionLabelInput = {
+  command: string;
+  positionals: readonly string[];
+};
+
 /**
  * Action summary safe for the divergence report / user-facing failure text.
  * For typing commands the typed value is categorically dropped and replaced
@@ -87,7 +92,7 @@ const TYPED_TEXT_COMMANDS = new Set(['fill', 'type']);
  * merely redacted-if-secret-shaped. The target (selector / @ref / point)
  * still shows so the caller can see WHICH field failed.
  */
-export function formatDivergenceActionLabel(action: SessionAction): string {
+export function formatDivergenceActionLabel(action: DivergenceActionLabelInput): string {
   if (!TYPED_TEXT_COMMANDS.has(action.command)) {
     const values = (action.positionals ?? []).map((value) => formatScriptArg(value));
     return [action.command, ...values].join(' ');
@@ -102,7 +107,7 @@ export function formatDivergenceActionLabel(action: SessionAction): string {
  * `@ref`, a two-token point (`x y`), or a single selector. Everything after
  * is the typed value and is excluded.
  */
-function divergenceTypingTargetTokens(action: SessionAction): string[] {
+function divergenceTypingTargetTokens(action: DivergenceActionLabelInput): string[] {
   if (action.command === 'type') return [];
   const positionals = action.positionals ?? [];
   const first = positionals[0];

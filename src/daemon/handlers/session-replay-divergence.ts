@@ -26,6 +26,7 @@ import {
   type ReplayRepairHintCapture,
 } from './session-replay-repair-hint.ts';
 import { SessionStore } from '../session-store.ts';
+import type { ReplayReportAction } from './session-replay-report-action.ts';
 import type { SessionAction, SessionState } from '../types.ts';
 import {
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
@@ -50,7 +51,7 @@ export type DivergenceFieldSanitizer = (value: string, limit?: number) => string
  */
 export async function buildReplayFailureDivergence(params: {
   error: DaemonError;
-  action: SessionAction;
+  action: ReplayReportAction;
   index: number;
   sourcePath: string;
   sourceLine: number;
@@ -233,7 +234,7 @@ export async function captureDivergenceObservation(params: {
   sessionName: string;
   sessionStore: SessionStore;
   logPath: string;
-  action: SessionAction;
+  action: ReplayReportAction;
 }): Promise<DivergenceObservation> {
   const { session, sessionName, sessionStore, logPath, action } = params;
   const flags = divergenceCaptureFlags(action);
@@ -297,7 +298,7 @@ function divergenceCaptureFlags(action: SessionAction): CommandFlags {
  * (`get`/`is`/`wait`) whose suggestion targets include static text — the
  * same `snapshotInteractiveOnly: requiresRect` rule heal always used.
  */
-function divergenceCaptureInteractiveOnly(action: SessionAction): boolean {
+function divergenceCaptureInteractiveOnly(action: ReplayReportAction): boolean {
   if (!isSuggestionEligibleCommand(action.command)) return true;
   return resolveSuggestionMatchingConfig(action).requiresRect;
 }
@@ -466,7 +467,7 @@ function classifySuggestionBasis(selector: Selector): ReplayDivergenceSuggestion
  * recorded evidence (migration step 4).
  */
 export function collectReplayDivergenceSuggestions(params: {
-  action: SessionAction;
+  action: ReplayReportAction;
   session: SessionState;
   nodes: SnapshotNode[];
   sanitize: DivergenceFieldSanitizer;
@@ -485,7 +486,9 @@ function isSuggestionEligibleCommand(command: string): boolean {
 
 export type SuggestionMatchingConfig = { requiresRect: boolean; allowDisambiguation: boolean };
 
-export function resolveSuggestionMatchingConfig(action: SessionAction): SuggestionMatchingConfig {
+export function resolveSuggestionMatchingConfig(
+  action: ReplayReportAction,
+): SuggestionMatchingConfig {
   const isTouch = isTouchTargetCommand(action.command);
   return {
     requiresRect: isTouch || action.command === 'fill',
@@ -506,7 +509,7 @@ function rankSuggestionCandidates(params: {
   candidates: string[];
   nodes: SnapshotNode[];
   session: SessionState;
-  action: SessionAction;
+  action: ReplayReportAction;
   matching: SuggestionMatchingConfig;
   sanitize: DivergenceFieldSanitizer;
 }): ReplayDivergenceSuggestion[] {
@@ -538,7 +541,7 @@ function resolveSuggestionCandidate(params: {
   candidate: string;
   nodes: SnapshotNode[];
   session: SessionState;
-  action: SessionAction;
+  action: ReplayReportAction;
   matching: SuggestionMatchingConfig;
   sanitize: DivergenceFieldSanitizer;
 }): RankedSuggestion | undefined {
@@ -569,7 +572,7 @@ function resolveSuggestionCandidate(params: {
 export function buildReplayDivergenceSuggestionForNode(params: {
   node: SnapshotNode;
   session: SessionState;
-  action: SessionAction;
+  action: ReplayReportAction;
   basis: ReplayDivergenceSuggestionBasis;
   sanitize: DivergenceFieldSanitizer;
 }): ReplayDivergenceSuggestion {
