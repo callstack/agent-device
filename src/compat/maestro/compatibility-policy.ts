@@ -29,18 +29,11 @@ export const MAESTRO_COMPATIBILITY_PRESETS = {
     farEdgeFraction: 0.9,
   },
   screenSwipe: {
-    android: {
-      up: { start: { x: 0.5, y: 0.5 }, end: { x: 0.5, y: 0.1 } },
-      down: { start: { x: 0.5, y: 0.2 }, end: { x: 0.5, y: 0.9 } },
-      left: { start: { x: 0.9, y: 0.5 }, end: { x: 0.1, y: 0.5 } },
-      right: { start: { x: 0.1, y: 0.5 }, end: { x: 0.9, y: 0.5 } },
-    },
-    ios: {
-      up: { start: { x: 0.5, y: 0.9 }, end: { x: 0.5, y: 0.1 } },
-      down: { start: { x: 0.5, y: 0.2 }, end: { x: 0.5, y: 0.9 } },
-      left: { start: { x: 0.9, y: 0.5 }, end: { x: 0.1, y: 0.5 } },
-      right: { start: { x: 0.1, y: 0.5 }, end: { x: 0.9, y: 0.5 } },
-    },
+    nearEdgeFraction: 0.1,
+    farEdgeFraction: 0.9,
+    centerFraction: 0.5,
+    downStartFraction: 0.2,
+    upStartFraction: { android: 0.5, ios: 0.9 },
   },
 } as const;
 

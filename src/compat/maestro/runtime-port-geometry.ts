@@ -128,16 +128,42 @@ function screenSwipeEndpoints(
   direction: MaestroDirection,
   platform: MaestroRuntimeOperations['platform'],
 ): { start: { x: number; y: number }; end: { x: number; y: number } } {
-  const preset = MAESTRO_COMPATIBILITY_PRESETS.screenSwipe[platform][direction];
+  const preset = MAESTRO_COMPATIBILITY_PRESETS.screenSwipe;
+  const nearX = pointInViewport(viewport, preset.nearEdgeFraction, preset.centerFraction);
+  const farX = pointInViewport(viewport, preset.farEdgeFraction, preset.centerFraction);
+  const nearY = pointInViewport(viewport, preset.centerFraction, preset.nearEdgeFraction);
+  const farY = pointInViewport(viewport, preset.centerFraction, preset.farEdgeFraction);
+  const downStart = pointInViewport(viewport, preset.centerFraction, preset.downStartFraction);
+  const upStart = pointInViewport(
+    viewport,
+    preset.centerFraction,
+    preset.upStartFraction[platform],
+  );
+  switch (direction) {
+    case 'up':
+      return { start: upStart, end: nearY };
+    case 'down':
+      return { start: downStart, end: farY };
+    case 'left':
+      return { start: farX, end: nearX };
+    case 'right':
+      return { start: nearX, end: farX };
+  }
+}
+
+function pointInViewport(
+  viewport: {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  },
+  xFraction: number,
+  yFraction: number,
+): { x: number; y: number } {
   return {
-    start: {
-      x: viewport.x + Math.trunc(viewport.width * preset.start.x),
-      y: viewport.y + Math.trunc(viewport.height * preset.start.y),
-    },
-    end: {
-      x: viewport.x + Math.trunc(viewport.width * preset.end.x),
-      y: viewport.y + Math.trunc(viewport.height * preset.end.y),
-    },
+    x: viewport.x + Math.trunc(viewport.width * xFraction),
+    y: viewport.y + Math.trunc(viewport.height * yFraction),
   };
 }
 
