@@ -67,13 +67,12 @@ export function buildInteractionResponseData(params: {
    */
   extra?: Record<string, unknown>;
   /**
-   * Staleness warning for the consumed `@ref` argument (#1076), resolved by
-   * `resolveRefStalenessWarning` (src/daemon/session-snapshot.ts): the coarse
-   * STALE_SNAPSHOT_REFS_WARNING for plain refs while `snapshotRefsStale` is
-   * set, or the precise pinned-generation warning for `@e12~s3` refs whose
-   * generation no longer matches the stored tree. iOS stale mutations are
-   * rejected before reaching this builder; remaining paths append it to the
-   * response warning.
+   * Staleness warning for the consumed `@ref` argument (ADR 0014), resolved by
+   * `resolveRefStalenessWarning` (src/daemon/session-snapshot.ts): the
+   * STALE_SNAPSHOT_REFS_WARNING for a plain ref once the frame has expired, or
+   * the precise pinned-generation warning for a `@e12~s3` ref whose epoch no
+   * longer matches the frame. Stale mutations are rejected before reaching this
+   * builder; remaining paths append it to the response warning.
    */
   staleRefsWarning?: string;
   /**

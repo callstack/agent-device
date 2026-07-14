@@ -215,20 +215,6 @@ export type SessionState = {
   appName?: string;
   snapshot?: SnapshotState;
   /**
-   * Honest-marker for stale client refs (#1076): true when the stored session
-   * snapshot was replaced by a capture whose response did NOT hand the new refs
-   * to the client (selector-resolution captures, wait/find polling captures,
-   * verify-evidence captures, ...). Commands that consume `@ref` arguments while
-   * this is true must surface staleness — refs are positional indexes into the
-   * latest tree, so they may silently resolve to different elements. iOS
-   * mutations reject before dispatch; read-only and non-iOS consumers attach a
-   * warning. Cleared only where
-   * the client demonstrably receives the new refs (snapshot responses, find
-   * responses that return a ref). Set/cleared at the choke points documented in
-   * `setSessionSnapshot` (src/daemon/session-snapshot.ts).
-   */
-  snapshotRefsStale?: boolean;
-  /**
    * Monotonically increasing generation of the stored session snapshot (#1076
    * versioned refs). Incremented every time the stored tree is REPLACED — at
    * the `setSessionSnapshot` choke point and in the snapshot/diff command path

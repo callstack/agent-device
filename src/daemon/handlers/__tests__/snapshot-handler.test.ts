@@ -402,7 +402,7 @@ test('snapshot on iOS runs when the session tracks an app', async () => {
   );
 });
 
-test('snapshot clears the stale-refs marker; diff leaves client refs stale (#1076)', async () => {
+test('snapshot re-activates a complete frame; diff preserves it (ADR 0014)', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'android-stale-refs-marker';
   const session = makeSession(sessionName, androidDevice);
@@ -411,8 +411,8 @@ test('snapshot clears the stale-refs marker; diff leaves client refs stale (#107
     createdAt: Date.now(),
     backend: 'android',
   };
-  // As set by a selector-resolution capture that replaced the stored tree.
-  session.snapshotRefsStale = true;
+  // A prior device action expired the frame.
+  session.refFrameState = 'expired';
   sessionStore.set(sessionName, session);
   mockDispatch.mockResolvedValue({
     nodes: [{ index: 0, depth: 0, type: 'android.widget.Button', label: 'Fresh' }],
@@ -427,9 +427,10 @@ test('snapshot clears the stale-refs marker; diff leaves client refs stale (#107
     sessionStore,
   });
 
-  // The snapshot response hands every stored node's ref to the client.
+  // The snapshot response hands every stored node's ref to the client: it
+  // re-activates a complete frame, so refs are current again.
   expect(snapshotResponse?.ok).toBe(true);
-  expect(sessionStore.get(sessionName)?.snapshotRefsStale).toBe(false);
+  expect(sessionStore.get(sessionName)?.refFrameState).toBe('active');
 
   const diffResponse = await handleSnapshotCommands({
     req: {
@@ -444,10 +445,10 @@ test('snapshot clears the stale-refs marker; diff leaves client refs stale (#107
     sessionStore,
   });
 
-  // diff replaces the stored tree but only returns a summary, so the refs the
-  // client holds go stale again.
+  // diff replaces the observation but is a read (summary response): it preserves
+  // the authorized frame rather than expiring it.
   expect(diffResponse?.ok).toBe(true);
-  expect(sessionStore.get(sessionName)?.snapshotRefsStale).toBe(true);
+  expect(sessionStore.get(sessionName)?.refFrameState).toBe('active');
 });
 
 // #1076 versioned refs — shared harness for the refsGeneration tests below.

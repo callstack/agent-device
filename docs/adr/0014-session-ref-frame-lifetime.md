@@ -36,8 +36,9 @@ remain compatible with selector-based replay, and add no automatic capture or pe
 ## Decision
 
 The terms introduced below are now the implemented model; the ref-frame vocabulary is promoted into
-`CONTEXT.md`. The coarse `snapshotRefsStale` marker still backs read-only staleness warnings and is
-removed once per-platform enforcement is confirmed by live evidence (migration step 8).
+`CONTEXT.md`. The superseded coarse `snapshotRefsStale` marker has been removed (migration step 8):
+read-only ref staleness is now derived from frame state — a plain ref warns once the frame has expired,
+and a read-only capture no longer marks refs stale because it does not expire the frame.
 
 ### Ref frames are separate from operational observations
 
@@ -221,12 +222,12 @@ resolver rather than pretending all subcommands behave alike.
 The registry is the exhaustive source of truth. The following table is non-exhaustive guidance for
 classifying representative actions; it must not become a second prose registry:
 
-| Effect | Commands/actions |
-| --- | --- |
-| `may-invalidate` | press, click, fill, longpress, type, focus, scroll, swipe, gesture, back, home, `tv-remote`, orientation, open/relaunch, trigger/push delivery, settings changes, install/reinstall, React Native overlay dismissal, and lifecycle operations that can replace the visible surface |
-| Conditional resolver | keyboard status preserves while dismiss/return/input invalidate; alert get/wait preserve while accept/dismiss invalidate; find reads preserve while click/fill/focus/type delegate to their leaf mutation |
-| `delegated` | batch, replay, and test/suite orchestrators; each nested leaf owns its transition |
-| `preserve` | snapshots and other observation, assertion, screenshot, recording, trace, logs, events, network inspection, performance, inventory, capability, lease, and transport-management operations unless a selected subaction directly manipulates the visible surface |
+| Effect               | Commands/actions                                                                                                                                                                                                                                                                   |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `may-invalidate`     | press, click, fill, longpress, type, focus, scroll, swipe, gesture, back, home, `tv-remote`, orientation, open/relaunch, trigger/push delivery, settings changes, install/reinstall, React Native overlay dismissal, and lifecycle operations that can replace the visible surface |
+| Conditional resolver | keyboard status preserves while dismiss/return/input invalidate; alert get/wait preserve while accept/dismiss invalidate; find reads preserve while click/fill/focus/type delegate to their leaf mutation                                                                          |
+| `delegated`          | batch, replay, and test/suite orchestrators; each nested leaf owns its transition                                                                                                                                                                                                  |
+| `preserve`           | snapshots and other observation, assertion, screenshot, recording, trace, logs, events, network inspection, performance, inventory, capability, lease, and transport-management operations unless a selected subaction directly manipulates the visible surface                    |
 
 Clipboard reads and writes preserve the frame because pasteboard state alone does not change element
 identity. A later paste/type action is independently invalidating.
@@ -437,11 +438,12 @@ Each step lands green and independently useful:
    evidence; promote the implemented vocabulary into `CONTEXT.md`; then remove the superseded coarse
    stale marker.
 
-Implementation status: steps 1–7 have landed — the ref-frame module and observation split (1), the
-complete daemon classification and gate (2), the pre-side-effect seam at every leaf (3), correct
-complete/partial publication with bounded scope, MCP pin retention, and pinned partial CLI text (4),
-Android freshness decoupled from positional ref authorization (5), the cross-platform contract and
-provider evidence (6), and fail-closed admission enforcement across platforms with typed reasons (7).
+Implementation status: all migration steps have landed — the ref-frame module and observation split
+(1), the complete daemon classification and gate (2), the pre-side-effect seam at every leaf (3),
+correct complete/partial publication with bounded scope, MCP pin retention, and pinned partial CLI text
+(4), Android freshness decoupled from positional ref authorization (5), the cross-platform contract and
+provider evidence (6), fail-closed admission enforcement across platforms with typed reasons (7), and
+the docs/vocabulary promotion plus removal of the superseded coarse `snapshotRefsStale` marker (8).
 Fresh live evidence has exercised nearly every production seam — Apple runtime-ref, direct/native
 selector, generation-pin, generic, and lifecycle paths; Android helper freshness (including proven
 non-retarget) and Android existing-session relaunch; and a real provider-backed interaction plus
@@ -455,8 +457,7 @@ regressions (`android-system-dialog-ref-frame.test.ts` proves recovery expires t
 tap; `interaction-android-recovery-abort.test.ts` proves an outstanding ref action then aborts with the
 shared `ref_frame_expired` rejection and no dispatch), the seam is enforced in code identically to the
 verified paths, and it is recorded here as a documented, accepted evidence gap rather than an open
-release blocker. Every other enabled seam is proven on hardware, so step 8's removal of the superseded
-coarse `snapshotRefsStale` marker is unblocked.
+release blocker. Every other enabled seam is proven on hardware.
 
 PR #1241 landed independently as a compatible transitional fix. It rejects a known iOS stale-marker
 case before this full lifecycle is implemented; it does not own the architecture migration.

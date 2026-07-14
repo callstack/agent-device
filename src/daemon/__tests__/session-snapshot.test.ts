@@ -32,7 +32,8 @@ test('setSessionSnapshot advances the generation on every tree replacement (#107
   const seeded = session.snapshotGeneration!;
   expect(seeded).toBeGreaterThanOrEqual(100_000);
   expect(seeded).toBeLessThan(1_000_000);
-  expect(session.snapshotRefsStale).toBe(true);
+  // ADR 0014: replacing the observation does NOT touch the ref frame.
+  expect(session.refFrameState).toBeUndefined();
 
   // Storing the SAME snapshot object again is not a replacement.
   setSessionSnapshot(session, first);
@@ -51,7 +52,6 @@ test('a reopened session reseeds so pins from a previous lifetime do not silentl
   // Reopen: a fresh session object restarts the counter with a NEW seed.
   const secondLifetime = makeSession();
   setSessionSnapshot(secondLifetime, makeSnapshot());
-  secondLifetime.snapshotRefsStale = false;
 
   // Probabilistic, not identity-based: the seeds collide with ~1/900000
   // probability (an accepted residual risk, documented on the field).
@@ -66,13 +66,14 @@ test('a reopened session reseeds so pins from a previous lifetime do not silentl
   ).toContain(`minted from snapshot s${oldGeneration}`);
 });
 
-test('resolveRefStalenessWarning: pinned-current clean, pinned-stale precise, plain coarse', () => {
+test('resolveRefStalenessWarning: pinned-current clean, pinned-stale precise, plain warns once the frame expired', () => {
   const session = makeSession();
   session.snapshotGeneration = 15;
-  session.snapshotRefsStale = true;
+  session.refFrameGeneration = 15;
+  // A device side effect expired the frame.
+  session.refFrameState = 'expired';
 
-  // Pinned to the stored generation: the pin proves the ref matches the tree,
-  // so the coarse marker is overruled.
+  // Pinned to the current frame epoch: the pin proves the ref matches the frame.
   expect(
     resolveRefStalenessWarning({ session, ref: '@e37', mintedGeneration: 15 }),
   ).toBeUndefined();
@@ -81,11 +82,13 @@ test('resolveRefStalenessWarning: pinned-current clean, pinned-stale precise, pl
     'Ref @e37 was minted from snapshot s12 but the session tree is now s15 — re-run snapshot -i.',
   );
 
+  // A plain ref warns while the frame is expired (a device action changed the screen).
   expect(resolveRefStalenessWarning({ session, ref: '@e37', mintedGeneration: undefined })).toBe(
     STALE_SNAPSHOT_REFS_WARNING,
   );
 
-  session.snapshotRefsStale = false;
+  // Re-activate: a plain ref against the active frame is clean.
+  session.refFrameState = 'active';
   expect(
     resolveRefStalenessWarning({ session, ref: '@e37', mintedGeneration: undefined }),
   ).toBeUndefined();
@@ -99,23 +102,22 @@ test('resolveRefStalenessWarning treats a missing stored generation as s0', () =
   expect(resolveRefStalenessWarning({ session, ref: '@e2', mintedGeneration: 0 })).toBeUndefined();
 });
 
-test('markSessionPartialRefsIssued: an empty result leaves all state untouched (ADR 0014)', () => {
+test('markSessionPartialRefsIssued: an empty result leaves all frame state untouched (ADR 0014)', () => {
   const session = makeSession();
   // A useful prior frame exists.
-  session.snapshotRefsStale = true;
   session.refFrameState = 'active';
   session.refFrameScope = new Set(['e1']);
   session.refFrameGeneration = 7;
 
-  // An empty partial publication (no refs) must not supersede that authority or
-  // even clear the coarse marker.
+  // An empty partial publication (no refs) must not supersede that authority.
   markSessionPartialRefsIssued(session, []);
-  expect(session.snapshotRefsStale).toBe(true);
+  expect(session.refFrameState).toBe('active');
   expect(session.refFrameScope).toEqual(new Set(['e1']));
   expect(session.refFrameGeneration).toBe(7);
 
   // A non-empty result supersedes with exactly its bodies.
+  session.snapshotGeneration = 9;
   markSessionPartialRefsIssued(session, ['@e5~s7', 'e6']);
-  expect(session.snapshotRefsStale).toBe(false);
   expect(session.refFrameScope).toEqual(new Set(['e5', 'e6']));
+  expect(session.refFrameGeneration).toBe(9);
 });

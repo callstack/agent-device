@@ -6,12 +6,13 @@ import type { CommandFlags } from '../../../core/dispatch.ts';
 import type { SnapshotBackend } from '../../../kernel/snapshot.ts';
 import { buildSnapshotState } from '../snapshot-capture.ts';
 import { setSessionSnapshot } from '../../session-snapshot.ts';
+import { activateCompleteRefFrame } from '../../ref-frame.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 
 // #1101 --settle daemon response shape: the settle payload (diff + settled +
 // refsGeneration) rides the wire response through the shared builder, and a
-// diff-carrying settle response is ref-issuing (clears snapshotRefsStale).
+// diff-carrying settle response is ref-issuing (activates a partial frame).
 // Quiet windows are tuned down (--settle-quiet 25) so no test waits real time
 // beyond a few poll ticks.
 
@@ -92,8 +93,9 @@ async function emulateCaptureSnapshotForSession(
 function seedSession(sessionName: string, sessionStore: ReturnType<typeof makeSessionStore>) {
   const session = makeIosSession(sessionName);
   setSessionSnapshot(session, buildSnapshotState({ nodes: BEFORE_NODES, backend: 'xctest' }, {}));
-  // The seed emulates a snapshot response that issued these refs.
-  session.snapshotRefsStale = false;
+  // The seed emulates a snapshot response that issued these refs: a complete,
+  // active ref frame (ADR 0014).
+  activateCompleteRefFrame(session);
   sessionStore.set(sessionName, session);
   return session;
 }
@@ -186,9 +188,9 @@ test('press --settle responds with the settled diff, refsGeneration, and clears 
   expect(added).toEqual({ kind: 'added', text: expect.stringContaining('Welcome!'), ref: 'e2' });
 
   const session = sessionStore.get(sessionName) as SessionState;
-  // The settle response handed the settled tree's refs to the client: the
-  // coarse marker clears and the payload carries the stored generation.
-  expect(session.snapshotRefsStale).toBe(false);
+  // The settle response handed the settled tree's refs to the client: it
+  // activated a partial frame and the payload carries the stored generation.
+  expect(session.refFrameState).toBe('active');
   expect(settle.refsGeneration).toBe(session.snapshotGeneration);
   // The settled tree became the stored session snapshot.
   expect(session.snapshot?.nodes.some((node) => node.label === 'Welcome!')).toBe(true);
@@ -264,9 +266,7 @@ test('press --settle rejects an expired-frame ref before dispatch or observation
   const sessionStore = makeSessionStore();
   const sessionName = 'settle-stale-ref';
   const session = seedSession(sessionName, sessionStore);
-  // ADR 0014: a device action since the snapshot expired the ref frame; the
-  // coarse marker rides along but the frame lifecycle is what rejects.
-  session.snapshotRefsStale = true;
+  // ADR 0014: a device action since the snapshot expired the ref frame.
   session.refFrameState = 'expired';
   sessionStore.set(sessionName, session);
   mockDispatch.mockRejectedValue(
@@ -294,7 +294,7 @@ test('press --settle rejects an expired-frame ref before dispatch or observation
     expect(String(response.error.details?.hint)).toMatch(/refs were issued/);
   }
   expect(mockCaptureSnapshotForSession).not.toHaveBeenCalled();
-  expect(sessionStore.get(sessionName)?.snapshotRefsStale).toBe(true);
+  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
 });
 
 test('a settle observation without a diff leaves ref staleness untouched', async () => {
@@ -330,8 +330,9 @@ test('a settle observation without a diff leaves ref staleness untouched', async
   expect(settle.settled).toBe(false);
   expect(settle.diff).toBeUndefined();
   expect(settle.hint).toMatch(/Settle observation unavailable/);
-  // No refs were issued: the resolution capture left the marker stale.
-  expect(sessionStore.get(sessionName)?.snapshotRefsStale).toBe(true);
+  // The press mutated (expiring the frame) and no partial frame was published,
+  // so the frame stays expired — refs are stale until a fresh snapshot.
+  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
 });
 
 test('bare timeout without --settle stays compatible', async () => {

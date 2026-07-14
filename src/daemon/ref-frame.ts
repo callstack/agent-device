@@ -6,17 +6,16 @@ import type { SessionState } from './types.ts';
  *
  * A session owns at most one **ref frame**: the namespace whose refs a caller
  * may use to target a mutation. This module is the single owner of the frame's
- * transitions and of the admission decision. It is introduced behind the
- * existing `snapshotGeneration` (the frame epoch) and `snapshotRefsStale` (the
- * coarse client-stale marker) fields, which keep their wire-visible names
- * (`refsGeneration`, the `@e12~s42` pin grammar) for compatibility.
+ * transitions and of the admission decision. The frame epoch reuses the existing
+ * `snapshotGeneration`/`refsGeneration` counter and the `@e12~s42` pin grammar
+ * for wire compatibility.
  *
  * The frame is expired at the device side-effect seam, carries a non-`all`
  * issuance scope after a partial publication, and its admission matrix is
  * enforced fail-closed on every platform before dispatch (ADR 0014 steps 3–7).
- * The wire names `refsGeneration` and the `@e12~s42` pin grammar are unchanged;
- * the coarse `snapshotRefsStale` marker still backs read-only staleness warnings
- * until migration step 8 removes it.
+ * Read-only ref staleness is now derived from frame state (an expired frame
+ * warns; an active one does not) rather than a coarse client-stale marker, which
+ * migration step 8 removed.
  */
 
 /**

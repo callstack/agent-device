@@ -751,33 +751,6 @@ test('handleFindCommands wait captures fresh snapshots while polling', async () 
   expect(mockDispatch).toHaveBeenCalledTimes(2);
 });
 
-test('handleFindCommands click re-issues a fresh ref and clears the stale-refs marker (#1076)', async () => {
-  const sessionName = 'default';
-  const session = makeSession(sessionName);
-  // As set by an earlier selector-resolution capture that replaced the tree.
-  session.snapshotRefsStale = true;
-
-  const { response, session: storedSession } = await runFindClickScenario({
-    positionals: ['Increment', 'click'],
-    nodes: [
-      {
-        index: 0,
-        type: 'Button',
-        label: 'Increment',
-        hittable: true,
-        rect: { x: 50, y: 0, width: 100, height: 100 },
-        depth: 0,
-      },
-    ],
-    session,
-  });
-
-  expect(response.ok).toBe(true);
-  // The response returns a ref minted from the freshly stored snapshot, so
-  // the marker clears before the internal click @ref sub-invocation runs.
-  expect(storedSession.snapshotRefsStale).toBe(false);
-});
-
 test('handleFindCommands click omits refsGeneration — a mutating find never issues a pinnable ref (ADR 0014)', async () => {
   const sessionName = 'default';
   const session = makeSession(sessionName);

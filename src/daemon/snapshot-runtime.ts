@@ -251,13 +251,6 @@ function buildNextSnapshotSession(params: {
     keepCurrentSnapshot,
     refScopedSnapshot,
   });
-  // #1076 honest marker (see setSessionSnapshot in session-snapshot.ts):
-  // - kept current snapshot (empty ref-scoped result): tree unchanged, flag unchanged;
-  // - snapshot command: the response hands every node's ref to the client → cleared;
-  // - diff: tree replaced but the response is a summary → client refs go stale.
-  nextSession.snapshotRefsStale = keepCurrentSnapshot
-    ? current?.snapshotRefsStale
-    : !params.issuesRefsToClient;
   // #1076 versioned refs: this path bypasses setSessionSnapshot, so it advances
   // the generation itself whenever the stored tree is replaced (snapshot AND
   // diff — diff's summary response leaves client refs pinned to the previous
