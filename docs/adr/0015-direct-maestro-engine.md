@@ -54,11 +54,10 @@ Target-relative swipes reuse the target-resolution observation. The resulting ty
 motion enters ADR 0013 after public compatibility normalization. Maestro code cannot construct or
 execute two-pointer pan, pinch, rotate, transform, or physical pointer trajectories.
 
-Simple successful target queries return their match, visibility decision, frame, candidate count, and
-observation generation in one response. The engine must not capture a second hierarchy merely to
-verify evidence already returned by that query. Relational or ambiguous selectors may use a full-tree
-fallback. Raw hierarchies, screenshots, and complete candidate lists are failure/debug artifacts, not
-happy-path requirements.
+Simple successful target queries return their match, visibility decision, candidate count, and
+observation generation in one response. The daemon may retain the provider snapshot behind that
+evidence, but geometry stays action-local. Raw hierarchies, screenshots, and complete candidate lists
+are failure/debug artifacts, not happy-path requirements.
 
 The daemon adapter may retain the provider snapshot behind a successful observation without exposing it
 through the engine contract. A following target resolution may use that snapshot only as semantic

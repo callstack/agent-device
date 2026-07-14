@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { resolveMaestroTargetFromSnapshot } from '../runtime-targets.ts';
-import { IOS_TAB_FRAME, makeSnapshot } from './runtime-target-fixtures.ts';
+import { makeSnapshot } from './runtime-target-fixtures.ts';
 
 test('typed target resolution returns target geometry and structured evidence', () => {
   const snapshot = makeSnapshot([
@@ -19,7 +19,6 @@ test('typed target resolution returns target geometry and structured evidence', 
     snapshot,
     { selector: { id: 'continue', enabled: true } },
     'ios',
-    IOS_TAB_FRAME,
   );
 
   expect(result).toMatchObject({
@@ -53,13 +52,11 @@ test('typed target resolution applies typed childOf and reports structured misse
     snapshot,
     { selector: { text: 'Delete' }, childOf: { id: 'row' } },
     'android',
-    { referenceWidth: 1080, referenceHeight: 2340 },
   );
   const missingParent = resolveMaestroTargetFromSnapshot(
     snapshot,
     { selector: { text: 'Delete' }, childOf: { id: 'missing' } },
     'android',
-    { referenceWidth: 1080, referenceHeight: 2340 },
   );
 
   expect(result).toMatchObject({ ok: true, node: { index: 2 }, evidence: { candidateCount: 1 } });

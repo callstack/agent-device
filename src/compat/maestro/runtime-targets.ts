@@ -1,4 +1,3 @@
-import type { TouchReferenceFrame } from '../../daemon/touch-reference-frame.ts';
 import type { Rect, SnapshotNode, SnapshotState } from '../../kernel/snapshot.ts';
 import {
   buildSnapshotNodeByIndex,
@@ -6,19 +5,8 @@ import {
 } from '../../snapshot/snapshot-processing.ts';
 import type { MaestroSelector } from './program-ir.ts';
 import { findMaestroTypedSelectorMatches } from './runtime-target-matching.ts';
-import {
-  extractMaestroVisibleTextQueryFromSelector,
-  filterVisibleMaestroMatches,
-  type MaestroPlatform,
-  type MaestroPreferredContext,
-} from './runtime-target-policy.ts';
+import { filterVisibleMaestroMatches, type MaestroPlatform } from './runtime-target-policy.ts';
 import { selectMaestroSnapshotMatch } from './runtime-target-ranking.ts';
-
-export type MaestroMatchResolutionOptions = {
-  promoteTapTarget?: boolean;
-  preferredContext?: MaestroPreferredContext;
-  requireOnScreen?: boolean;
-};
 
 export type MaestroTargetQuery = {
   selector: MaestroSelector;
@@ -45,14 +33,10 @@ export type MaestroTargetResolution =
     }
   | { ok: false; message: string; evidence: MaestroTargetEvidence };
 
-export type { MaestroPreferredContext } from './runtime-target-policy.ts';
-
 export function resolveMaestroTargetFromSnapshot(
   snapshot: SnapshotState,
   query: MaestroTargetQuery,
   platform: MaestroPlatform,
-  frame: TouchReferenceFrame | undefined,
-  options: MaestroMatchResolutionOptions = {},
 ): MaestroTargetResolution {
   let matches = findMaestroTypedSelectorMatches(snapshot, query.selector);
   if (query.childOf) {
@@ -73,16 +57,7 @@ export function resolveMaestroTargetFromSnapshot(
   }
 
   const visible = filterVisibleMaestroMatches({ nodes: snapshot.nodes, matches, platform });
-  const target = selectMaestroSnapshotMatch(
-    snapshot.nodes,
-    visible.matches,
-    query.index,
-    extractMaestroVisibleTextQueryFromSelector(query.selector),
-    frame,
-    options.requireOnScreen === true,
-    options.promoteTapTarget,
-    options.preferredContext,
-  );
+  const target = selectMaestroSnapshotMatch(visible.matches, query.index);
   const evidence = buildMaestroTargetEvidence(query, matches, visible.matches, target?.node);
   if (!target) {
     const index = query.index === undefined ? '' : ` index ${query.index}`;

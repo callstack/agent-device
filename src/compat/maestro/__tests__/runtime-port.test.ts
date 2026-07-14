@@ -104,7 +104,12 @@ describe('MaestroRuntimePort', () => {
     });
     expect(calls[6]).toMatchObject({
       kind: 'scrollUntilVisible',
-      input: { selector: { text: 'Checkout' }, direction: 'up', timeoutMs: 1200 },
+      input: {
+        selector: { text: 'Checkout' },
+        direction: 'up',
+        timeoutMs: 1200,
+        durationMs: 601,
+      },
     });
     expect(calls[7]).toMatchObject({ kind: 'hideKeyboard', input: {}, generation: 7 });
     expect(calls[8]).toMatchObject({ kind: 'pressKey', input: { key: 'enter' }, generation: 8 });

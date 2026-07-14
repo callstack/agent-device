@@ -402,7 +402,18 @@ function parsePoint(
   const absolute = /^\s*(\d+)\s*,\s*(\d+)\s*$/.exec(value);
   if (absolute) return { space: 'absolute', x: Number(absolute[1]), y: Number(absolute[2]) };
   const percent = /^\s*(\d+(?:\.\d+)?)%\s*,\s*(\d+(?:\.\d+)?)%\s*$/.exec(value);
-  if (percent) return { space: 'percent', x: Number(percent[1]), y: Number(percent[2]) };
+  if (percent) {
+    const x = Number(percent[1]);
+    const y = Number(percent[2]);
+    if (x > 100 || y > 100) {
+      invalidAt(
+        `Maestro ${name} percentage coordinates must be between 0% and 100%.`,
+        node,
+        context,
+      );
+    }
+    return { space: 'percent', x, y };
+  }
   invalidAt(`Maestro ${name} expects absolute or percentage coordinates.`, node, context);
 }
 

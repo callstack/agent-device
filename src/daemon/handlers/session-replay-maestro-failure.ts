@@ -4,7 +4,6 @@ import type { MaestroCommand, MaestroSelector } from '../../compat/maestro/progr
 import { evaluateMaestroReplayResume } from '../../compat/maestro/replay-plan.ts';
 import type { MaestroReplayPlan } from '../../compat/maestro/replay-plan-types.ts';
 import { resolveMaestroTargetFromSnapshot } from '../../compat/maestro/runtime-targets.ts';
-import { getSnapshotReferenceFrame } from '../touch-reference-frame.ts';
 import type { DaemonError } from '../../kernel/contracts.ts';
 import type { SnapshotNode } from '../../kernel/snapshot.ts';
 import {
@@ -193,13 +192,7 @@ function collectTypedMaestroSuggestions(params: {
   const query = typedSuggestionQuery(params.command);
   if (!query || (params.platform !== 'android' && params.platform !== 'ios')) return [];
   const snapshot = { createdAt: Date.now(), nodes: params.nodes };
-  const resolution = resolveMaestroTargetFromSnapshot(
-    snapshot,
-    query,
-    params.platform,
-    getSnapshotReferenceFrame(snapshot),
-    { requireOnScreen: true, promoteTapTarget: query.promoteTapTarget },
-  );
+  const resolution = resolveMaestroTargetFromSnapshot(snapshot, query, params.platform);
   if (!resolution.ok) return [];
   return [
     buildReplayDivergenceSuggestionForNode({
@@ -216,7 +209,6 @@ type TypedSuggestionQuery = {
   selector: MaestroSelector;
   index?: number;
   childOf?: MaestroSelector;
-  promoteTapTarget?: boolean;
 };
 
 function typedSuggestionQuery(command: MaestroCommand): TypedSuggestionQuery | undefined {
@@ -248,10 +240,9 @@ function targetInteractionSuggestion(
       selector: command.target.selector,
       index: command.index,
       childOf: command.childOf,
-      promoteTapTarget: true,
     };
   }
-  return { selector: command.target.selector, promoteTapTarget: true };
+  return { selector: command.target.selector };
 }
 
 type ObservationCommand = Extract<

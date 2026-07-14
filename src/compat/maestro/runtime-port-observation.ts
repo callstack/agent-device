@@ -1,4 +1,5 @@
 import { AppError } from '../../kernel/errors.ts';
+import { maestroTestFailure } from './compatibility-errors.ts';
 import type {
   MaestroObservation,
   MaestroObservationCondition,
@@ -78,7 +79,7 @@ export async function resolveMaestroTarget(
   const validated = validateTargetMatch(match, request.generation);
   if (!validated.matched || !validated.visible || !validated.rect) {
     if (optional) return undefined;
-    throw new AppError('COMMAND_FAILED', 'Maestro target did not resolve to a visible element.', {
+    throw maestroTestFailure('Maestro target did not resolve to a visible element.', {
       selector,
       candidateCount: validated.candidateCount,
     });

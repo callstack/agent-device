@@ -15,6 +15,7 @@ export function makeOperations(
 ): MaestroRuntimeOperations {
   const noOp = async (): Promise<void> => undefined;
   return {
+    platform: 'android',
     resolveTarget: async ({ selector }, context) => ({
       generation: context.generation,
       matched: true,

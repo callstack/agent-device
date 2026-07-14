@@ -11,8 +11,6 @@ import type { MaestroPlatform, MaestroSelector } from './program-ir.ts';
 import { literalFromMaestroRegex } from './selector-regex.ts';
 import {
   resolveMaestroTargetFromSnapshot,
-  type MaestroMatchResolutionOptions,
-  type MaestroPreferredContext,
   type MaestroTargetQuery as SnapshotTargetQuery,
 } from './runtime-targets.ts';
 import type {
@@ -23,9 +21,6 @@ import type {
 } from './runtime-port-types.ts';
 
 export const MAESTRO_OBSERVATION_POLL_MS = MAESTRO_COMPATIBILITY_PRESETS.observation.pollIntervalMs;
-export const MAESTRO_INITIAL_SNAPSHOT_READY_TIMEOUT_MS =
-  MAESTRO_COMPATIBILITY_PRESETS.observation.maxSettleTimeoutMs;
-
 export type DaemonMaestroRuntimeDependencies = {
   readonly now: () => number;
   readonly sleep: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
@@ -75,27 +70,11 @@ export async function resolveTypedMaestroTarget(params: {
   readonly context: MaestroRuntimeOperationContext;
   readonly snapshot: SnapshotState;
   readonly platform: Extract<MaestroPlatform, 'ios' | 'android'>;
-  readonly preferredContext?: MaestroPreferredContext;
 }): Promise<MaestroTargetMatch> {
   return resolveTargetFromSnapshot({
     ...params,
     mode: params.query.purpose === 'swipe' ? 'swipe' : 'tap',
   });
-}
-
-export function resolveTypedMaestroPreferredContext(params: {
-  readonly selector: MaestroSelector;
-  readonly snapshot: SnapshotState;
-  readonly platform: Extract<MaestroPlatform, 'ios' | 'android'>;
-}): MaestroPreferredContext | undefined {
-  const resolution = resolveMaestroTargetFromSnapshot(
-    params.snapshot,
-    { selector: params.selector },
-    params.platform,
-    getSnapshotReferenceFrame(params.snapshot),
-    resolutionOptions('observe', undefined),
-  );
-  return resolution.ok ? { node: resolution.node, rect: resolution.rect } : undefined;
 }
 
 function resolveTargetFromSnapshot(params: {
@@ -104,15 +83,12 @@ function resolveTargetFromSnapshot(params: {
   readonly snapshot: SnapshotState;
   readonly platform: Extract<MaestroPlatform, 'ios' | 'android'>;
   readonly mode: MaestroTargetResolutionMode;
-  readonly preferredContext?: MaestroPreferredContext;
 }): MaestroTargetMatch {
   const frame = getSnapshotReferenceFrame(params.snapshot);
   const resolution = resolveMaestroTargetFromSnapshot(
     params.snapshot,
     params.query,
     params.platform,
-    frame,
-    resolutionOptions(params.mode, params.preferredContext),
   );
   return targetMatchFromResolution(
     resolution,
@@ -135,18 +111,11 @@ export async function observeTypedMaestroCondition(params: {
 }): Promise<MaestroTargetMatch> {
   validateTimeout(params.timeoutMs, 'observation');
   let lastMatch: MaestroTargetMatch | undefined;
-  const initialSnapshotDeadline =
-    params.dependencies.now() + MAESTRO_INITIAL_SNAPSHOT_READY_TIMEOUT_MS;
-  let conditionDeadline: number | undefined;
+  const conditionDeadline = params.dependencies.now() + params.timeoutMs;
 
   while (true) {
     throwIfAborted(params.context.signal);
-    const captureStartedAt = params.dependencies.now();
-    const snapshot = await captureRetriableMaestroSnapshot(
-      params,
-      conditionDeadline ?? initialSnapshotDeadline,
-    );
-    conditionDeadline ??= params.dependencies.now() + params.timeoutMs;
+    const snapshot = await captureRetriableMaestroSnapshot(params, conditionDeadline);
     const match = resolveTargetFromSnapshot({
       query: { selector: params.condition.selector },
       context: params.context,
@@ -156,7 +125,7 @@ export async function observeTypedMaestroCondition(params: {
     });
     lastMatch = match;
     if (conditionMatches(params.condition, match)) return match;
-    if (captureStartedAt >= conditionDeadline) break;
+    if (params.dependencies.now() >= conditionDeadline) break;
 
     const remaining = conditionDeadline - params.dependencies.now();
     if (remaining > 0) {
@@ -178,18 +147,19 @@ export async function scrollUntilTypedMaestroTarget(params: {
   readonly timeoutMs: number;
   readonly context: MaestroRuntimeOperationContext;
   readonly snapshot: MaestroSnapshotReader;
-  readonly scroll: () => Promise<void>;
+  readonly scroll: (remainingMs: number) => Promise<SnapshotState>;
   readonly dependencies: DaemonMaestroRuntimeDependencies;
   readonly platform: Extract<MaestroPlatform, 'ios' | 'android'>;
 }): Promise<MaestroTargetMatch> {
   validateTimeout(params.timeoutMs, 'scrollUntilVisible');
   const deadline = params.dependencies.now() + params.timeoutMs;
   let lastMatch: MaestroTargetMatch | undefined;
+  let settledSnapshot: SnapshotState | undefined;
 
   while (true) {
     throwIfAborted(params.context.signal);
-    const captureStartedAt = params.dependencies.now();
-    const snapshot = await captureRetriableMaestroSnapshot(params, deadline);
+    const snapshot = settledSnapshot ?? (await captureRetriableMaestroSnapshot(params, deadline));
+    settledSnapshot = undefined;
     lastMatch = resolveTargetFromSnapshot({
       query: { selector: params.selector },
       context: params.context,
@@ -198,19 +168,11 @@ export async function scrollUntilTypedMaestroTarget(params: {
       mode: 'observe',
     });
     if (lastMatch.matched && lastMatch.visible) return lastMatch;
-    if (captureStartedAt >= deadline) break;
+    if (params.dependencies.now() >= deadline) break;
 
     const remaining = deadline - params.dependencies.now();
     if (remaining > 0) {
-      await params.scroll();
-      const afterScroll = deadline - params.dependencies.now();
-      if (afterScroll > 0) {
-        await sleepWithinBudget(
-          params.dependencies,
-          Math.min(MAESTRO_OBSERVATION_POLL_MS, afterScroll),
-          params.context.signal,
-        );
-      }
+      settledSnapshot = await params.scroll(remaining);
     }
   }
 
@@ -223,7 +185,7 @@ export async function waitForTypedSnapshotStability(params: {
   readonly context: MaestroRuntimeOperationContext;
   readonly snapshot: MaestroSnapshotReader;
   readonly dependencies: DaemonMaestroRuntimeDependencies;
-}): Promise<void> {
+}): Promise<SnapshotState> {
   validateTimeout(params.timeoutMs, 'waitForAnimationToEnd');
   const deadline = params.dependencies.now() + params.timeoutMs;
   let previousSignature: string | undefined;
@@ -233,10 +195,10 @@ export async function waitForTypedSnapshotStability(params: {
     const captureStartedAt = params.dependencies.now();
     const snapshot = await captureRetriableMaestroSnapshot(params, deadline);
     const signature = snapshotStabilitySignature(snapshot);
-    if (signature === previousSignature) return;
+    if (signature === previousSignature) return snapshot;
     const hadPreviousSignature = previousSignature !== undefined;
     previousSignature = signature;
-    if (captureStartedAt >= deadline) return;
+    if (captureStartedAt >= deadline) return snapshot;
 
     const remaining = deadline - params.dependencies.now();
     if (hadPreviousSignature && remaining > 0) {
@@ -253,17 +215,6 @@ export function snapshotViewportRect(frame: TouchReferenceFrame | undefined): Re
   return frame
     ? { x: 0, y: 0, width: frame.referenceWidth, height: frame.referenceHeight }
     : undefined;
-}
-
-function resolutionOptions(
-  mode: MaestroTargetResolutionMode,
-  preferredContext: MaestroPreferredContext | undefined,
-): MaestroMatchResolutionOptions {
-  return {
-    promoteTapTarget: mode === 'tap',
-    requireOnScreen: true,
-    ...(preferredContext ? { preferredContext } : {}),
-  };
 }
 
 function targetMatchFromResolution(
@@ -434,14 +385,7 @@ function snapshotStabilitySignature(snapshot: SnapshotState): string {
       hiddenContentBelow: node.hiddenContentBelow,
       interactionBlocked: node.interactionBlocked,
       presentationHints: node.presentationHints,
-      rect: node.rect
-        ? {
-            x: Math.round(node.rect.x),
-            y: Math.round(node.rect.y),
-            width: Math.round(node.rect.width),
-            height: Math.round(node.rect.height),
-          }
-        : undefined,
+      rect: node.rect,
     })),
   );
 }

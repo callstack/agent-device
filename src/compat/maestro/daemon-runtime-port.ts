@@ -7,6 +7,7 @@ import {
   MAESTRO_COMPATIBILITY_PRESETS,
   MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,
 } from './compatibility-policy.ts';
+import { maestroTestFailure } from './compatibility-errors.ts';
 import { executeMaestroRuntimeCommand } from './runtime-port-commands.ts';
 import { observeMaestroCondition } from './runtime-port-observation.ts';
 import type {
@@ -27,7 +28,6 @@ import {
   MAESTRO_OBSERVATION_POLL_MS,
   captureRetriableMaestroSnapshot,
   observeTypedMaestroCondition,
-  resolveTypedMaestroPreferredContext,
   resolveTypedMaestroTarget,
   scrollUntilTypedMaestroTarget,
   snapshotViewportRect,
@@ -86,6 +86,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
   };
 
   const operations: MaestroRuntimeOperations = {
+    platform,
     resolveTarget: async (input, context) =>
       await resolveDaemonMaestroTarget({ input, context, snapshots, options }),
     observe: async (input, context) =>
@@ -179,18 +180,24 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
         snapshot: snapshots.capture,
         dependencies: options.dependencies,
         platform,
-        scroll: async () => {
+        scroll: async (remainingMs) => {
           await invokeMutation('scroll', [input.direction], {
+            input: { direction: input.direction, durationMs: input.durationMs },
             flags: flagsWith(options.baseReq.flags, { postGestureStabilization: false }),
+          });
+          return await waitForTypedSnapshotStability({
+            timeoutMs: Math.min(MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS, remainingMs),
+            context,
+            snapshot: snapshots.capture,
+            dependencies: options.dependencies,
           });
         },
       });
       if (!match.matched || !match.visible) {
-        throw new AppError(
-          'COMMAND_FAILED',
-          'Maestro scrollUntilVisible target did not become visible.',
-          { selector: input.selector, timeoutMs: input.timeoutMs },
-        );
+        throw maestroTestFailure('Maestro scrollUntilVisible target did not become visible.', {
+          selector: input.selector,
+          timeoutMs: input.timeoutMs,
+        });
       }
       return { observation: observationFromMatch(input.selector, match) };
     },
@@ -202,7 +209,12 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
       try {
         await invokeMutation('keyboard', [input.key]);
       } catch (error) {
-        if (input.key !== 'enter' && input.key !== 'return') throw error;
+        if (
+          (input.key !== 'enter' && input.key !== 'return') ||
+          asAppError(error).code !== 'UNSUPPORTED_OPERATION'
+        ) {
+          throw error;
+        }
         await invokeMutation('type', ['\n']);
       }
     },
@@ -212,14 +224,15 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     hideKeyboard: async () => {
       await invokeMutation('keyboard', ['dismiss']);
     },
-    waitForAnimationToEnd: async (input, context) =>
+    waitForAnimationToEnd: async (input, context) => {
       await waitForTypedSnapshotStability({
         timeoutMs:
           input.timeoutMs ?? MAESTRO_COMPATIBILITY_PRESETS.command.waitForAnimationToEndTimeoutMs,
         context,
         snapshot: snapshots.capture,
         dependencies: options.dependencies,
-      }),
+      });
+    },
     takeScreenshot: async (input) => ({
       artifactPaths: artifactPathsFromData(await invoke('screenshot', [input.path])),
     }),
@@ -260,7 +273,6 @@ async function resolveDaemonMaestroTarget(params: {
       context,
       snapshot: currentSnapshot,
       platform: options.platform,
-      preferredContext: preferredContextForObservation(context, currentSnapshot, options.platform),
     });
     if (canUseResolvedTarget(match, reusedObservation) || captureStartedAt >= deadline) {
       return match;
@@ -268,16 +280,6 @@ async function resolveDaemonMaestroTarget(params: {
     currentSnapshot = undefined;
     if (!reusedObservation) await sleepBeforeTargetPoll(options, deadline, context.signal);
   }
-}
-
-function preferredContextForObservation(
-  context: MaestroRuntimeOperationContext,
-  snapshot: SnapshotState,
-  platform: CreateDaemonMaestroRuntimeOperationsOptions['platform'],
-) {
-  const evidence = context.cachedObservation?.evidence;
-  if (!evidence?.visible) return undefined;
-  return resolveTypedMaestroPreferredContext({ selector: evidence.selector, snapshot, platform });
 }
 
 function isActionableTarget(match: MaestroTargetMatch): boolean {

@@ -1,10 +1,7 @@
 import { expect, test } from 'vitest';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon/types.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
-import {
-  MAESTRO_INITIAL_SNAPSHOT_READY_TIMEOUT_MS,
-  MAESTRO_OBSERVATION_POLL_MS,
-} from '../daemon-runtime-port-observation.ts';
+import { MAESTRO_OBSERVATION_POLL_MS } from '../daemon-runtime-port-observation.ts';
 import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';
 
 test('does not pair an observation with a later same-generation snapshot', async () => {
@@ -135,7 +132,7 @@ test('retries typed transient snapshot failures within the observation budget', 
   expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS);
 });
 
-test('starts the selector timeout after the first valid snapshot', async () => {
+test('includes initial snapshot recovery in the selector timeout', async () => {
   const clock = { value: 0 };
   let snapshots = 0;
   const port = createDaemonMaestroRuntimePort({
@@ -180,10 +177,10 @@ test('starts the selector timeout after the first valid snapshot', async () => {
       env: {},
     }),
   ).resolves.toMatchObject({ matched: true });
-  expect(clock.value).toBe(3 * MAESTRO_OBSERVATION_POLL_MS);
+  expect(clock.value).toBe(500);
 });
 
-test('bounds initial typed snapshot recovery independently of selector matching', async () => {
+test('bounds initial typed snapshot recovery by the authored observation timeout', async () => {
   const clock = { value: 0 };
   const port = createDaemonMaestroRuntimePort({
     baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
@@ -207,7 +204,7 @@ test('bounds initial typed snapshot recovery independently of selector matching'
       env: {},
     }),
   ).rejects.toMatchObject({ message: 'Foreground app window is transitioning.' });
-  expect(clock.value).toBe(MAESTRO_INITIAL_SNAPSHOT_READY_TIMEOUT_MS);
+  expect(clock.value).toBe(500);
 });
 
 test('does not retry deterministic snapshot failures', async () => {
@@ -242,8 +239,15 @@ test('does not retry deterministic snapshot failures', async () => {
 });
 
 test('fails scrollUntilVisible when the target stays absent', async () => {
-  const invoke: DaemonInvokeFn = async (request) =>
-    request.command === 'snapshot'
+  const clock = { value: 0 };
+  const requests: DaemonRequest[] = [];
+  const invoke: DaemonInvokeFn = async (request) => {
+    requests.push(request);
+    if (request.command === 'scroll') {
+      clock.value += Number(request.input?.durationMs ?? 0);
+      return { ok: true, data: {} };
+    }
+    return request.command === 'snapshot'
       ? {
           ok: true,
           data: {
@@ -258,10 +262,11 @@ test('fails scrollUntilVisible when the target stays absent', async () => {
           },
         }
       : { ok: true, data: {} };
+  };
   const port = createDaemonMaestroRuntimePort({
     baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke,
-    dependencies: makeDependencies(),
+    dependencies: makeDependencies(clock),
     platform: 'ios',
   });
 
@@ -282,6 +287,8 @@ test('fails scrollUntilVisible when the target stays absent', async () => {
     code: 'COMMAND_FAILED',
     message: 'Maestro scrollUntilVisible target did not become visible.',
   });
+  expect(requests.filter(({ command }) => command === 'scroll')).toHaveLength(1);
+  expect(requests.filter(({ command }) => command === 'snapshot')).toHaveLength(3);
 });
 
 test.each([

@@ -172,6 +172,59 @@ test('does not leak replay and test controls into nested public commands', async
   expect(requests[1]?.flags).toEqual({ platform: 'android' });
 });
 
+test('falls back from Enter only when keyboard dispatch is unsupported', async () => {
+  const requests: DaemonRequest[] = [];
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      requests.push(request);
+      return request.command === 'keyboard'
+        ? {
+            ok: false,
+            error: { code: 'UNSUPPORTED_OPERATION', message: 'Key dispatch is unsupported.' },
+          }
+        : { ok: true, data: {} };
+    },
+    dependencies: makeDependencies(),
+    platform: 'android',
+  });
+
+  await port.execute({
+    command: { kind: 'pressKey', source: { line: 2 }, key: 'enter' },
+    generation: 0,
+    env: {},
+    invalidateObservation() {},
+  });
+
+  expect(requests.map(({ command }) => command)).toEqual(['keyboard', 'type']);
+});
+
+test('does not repeat Enter after an ambiguous keyboard failure', async () => {
+  const requests: DaemonRequest[] = [];
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      requests.push(request);
+      return {
+        ok: false,
+        error: { code: 'COMMAND_FAILED', message: 'Keyboard dispatch timed out.' },
+      };
+    },
+    dependencies: makeDependencies(),
+    platform: 'android',
+  });
+
+  await expect(
+    port.execute({
+      command: { kind: 'pressKey', source: { line: 2 }, key: 'enter' },
+      generation: 0,
+      env: {},
+      invalidateObservation() {},
+    }),
+  ).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
+  expect(requests.map(({ command }) => command)).toEqual(['keyboard']);
+});
+
 test('keeps absent negative observations, script output, and artifacts typed', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-daemon-port-'));
   const sourcePath = path.join(root, 'flow.yaml');

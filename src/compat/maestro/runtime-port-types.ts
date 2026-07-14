@@ -5,6 +5,7 @@ import type {
   MaestroDirection,
   MaestroGestureTarget,
   MaestroLaunchArguments,
+  MaestroPlatform,
   MaestroSelector,
   MaestroSourceLocation,
   MaestroSwipeGesture,
@@ -99,6 +100,7 @@ export type MaestroRuntimeOperation<TInput> = (
 ) => Promise<MaestroRuntimeOperationResult | void>;
 
 export type MaestroRuntimeOperations = {
+  readonly platform: Extract<MaestroPlatform, 'ios' | 'android'>;
   readonly resolveTarget: (
     input: MaestroTargetQuery,
     context: MaestroRuntimeOperationContext,
@@ -145,6 +147,7 @@ export type MaestroRuntimeOperations = {
     readonly selector: MaestroSelector;
     readonly direction: MaestroDirection;
     readonly timeoutMs: number;
+    readonly durationMs: number;
   }>;
   readonly pressKey: MaestroRuntimeOperation<{
     readonly key: 'back' | 'enter' | 'return' | 'home';

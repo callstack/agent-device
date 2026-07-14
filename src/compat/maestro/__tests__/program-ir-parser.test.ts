@@ -266,6 +266,15 @@ describe('parseMaestroProgram', () => {
     assert.throws(
       () =>
         parseMaestroProgram(`---
+- swipe:
+    start: 150%,50%
+    end: 10%,50%
+`),
+      /between 0% and 100%.*line 3/i,
+    );
+    assert.throws(
+      () =>
+        parseMaestroProgram(`---
 - runFlow:
     when: {}
     commands: []

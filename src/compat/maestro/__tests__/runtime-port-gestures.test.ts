@@ -58,7 +58,7 @@ test('uses the structured gesture contract without observing absolute swipes', a
     invalidateObservation() {},
   });
 
-  expect(resolveGestureViewport).toHaveBeenCalledTimes(2);
+  expect(resolveGestureViewport).toHaveBeenCalledTimes(3);
   expect(gesture).toHaveBeenNthCalledWith(
     1,
     {
@@ -97,7 +97,7 @@ test('uses the structured gesture contract without observing absolute swipes', a
     3,
     {
       intent: 'pan',
-      origin: { x: 210, y: 140 },
+      origin: { x: 210, y: 180 },
       delta: { x: 0, y: 560 },
       durationMs: 300,
       executionProfile: 'endpoint-hold',
@@ -112,14 +112,37 @@ test('uses the structured gesture contract without observing absolute swipes', a
     4,
     {
       intent: 'pan',
-      preset: 'left',
+      origin: { x: 370, y: 420 },
+      delta: { x: -320, y: 0 },
       durationMs: 400,
       executionProfile: 'endpoint-hold',
     },
     expect.objectContaining({
       generation: 3,
       authoredSwipe: { kind: 'screen', direction: 'left' },
+      gestureViewport: { x: 10, y: 20, width: 400, height: 800 },
     }),
+  );
+});
+
+test('uses Maestro iOS screen-swipe geometry', async () => {
+  const gesture = vi.fn(async () => undefined);
+  const operations = makeOperations({ platform: 'ios', gesture });
+
+  await createMaestroRuntimePort(operations).execute({
+    command: {
+      kind: 'swipe',
+      source: { line: 2 },
+      gesture: { kind: 'screen', direction: 'up' },
+    },
+    generation: 0,
+    env: {},
+    invalidateObservation() {},
+  });
+
+  expect(gesture).toHaveBeenCalledWith(
+    expect.objectContaining({ origin: { x: 201, y: 786 }, delta: { x: 0, y: -699 } }),
+    expect.anything(),
   );
 });
 

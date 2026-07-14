@@ -11,17 +11,6 @@ import {
 
 export type MaestroPlatform = 'ios' | 'android';
 
-export type MaestroResolvedSnapshotMatch = {
-  node: SnapshotNode;
-  rect: NonNullable<SnapshotNode['rect']>;
-  inheritedRect: boolean;
-};
-
-export type MaestroPreferredContext = {
-  node: SnapshotNode;
-  rect: NonNullable<SnapshotNode['rect']>;
-};
-
 export type ReactNativeOverlayFilterResult = {
   matches: SnapshotNode[];
   blockedByReactNativeOverlay: boolean;
@@ -59,15 +48,6 @@ export function matchesMaestroTypedSelector(
     return false;
   }
   return true;
-}
-
-/** Read the visible-text fallback query represented by the typed selector. */
-export function extractMaestroVisibleTextQueryFromSelector(
-  selector: MaestroSelector,
-): string | null {
-  if (selector.id !== undefined) return null;
-  const query = selector.text ?? selector.label;
-  return query ?? null;
 }
 
 export function filterVisibleMaestroMatches(params: {
@@ -130,24 +110,11 @@ function filterReactNativeOverlayBlockedMatches(
   };
 }
 
-export function maestroVisibleTextMatchRank(node: SnapshotNode, query: string): number {
-  const values = [node.label, extractNodeText(node), node.identifier, node.value].filter(
-    (value): value is string => Boolean(value),
-  );
-  if (values.some((value) => value === query)) return 0;
-  if (values.some((value) => normalizeText(value) === normalizeText(query))) return 1;
-  if (values.some((value) => matchesMaestroRegex(value, query))) return 2;
-  return 3;
-}
-
 function matchesMaestroSelectorValue(value: string | undefined, query: string): boolean {
   const text = value ?? '';
   const normalizedText = normalizeText(text);
   const normalizedQuery = normalizeText(query);
   if (normalizedText === normalizedQuery) return true;
-  if (isLeadingCompositeLabelMatch(normalizedText, normalizedQuery)) {
-    return true;
-  }
   return matchesMaestroRegex(text, query);
 }
 
@@ -173,11 +140,4 @@ function readMaestroTextTermValue(
   if (key === 'id') return node.identifier;
   if (key === 'label') return node.label;
   return extractNodeText(node);
-}
-
-function isLeadingCompositeLabelMatch(normalizedText: string, normalizedQuery: string): boolean {
-  if (!normalizedText || !normalizedQuery) return false;
-  if (!normalizedText.startsWith(normalizedQuery)) return false;
-  const next = normalizedText.at(normalizedQuery.length);
-  return next === ',' || next === ':' || next === ';';
 }

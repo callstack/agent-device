@@ -1,6 +1,9 @@
 import { AppError } from '../../kernel/errors.ts';
 import { pointInsideRect } from '../../utils/rect-center.ts';
-import { MAESTRO_COMPATIBILITY_PRESETS } from './compatibility-policy.ts';
+import {
+  maestroScrollDurationFromSpeed,
+  MAESTRO_COMPATIBILITY_PRESETS,
+} from './compatibility-policy.ts';
 import type { MaestroGestureTarget } from './program-ir.ts';
 import type {
   MaestroObservation,
@@ -151,7 +154,10 @@ async function executeTargetCommand(
       );
       return await invokeOperation(
         operations.doubleTapOn,
-        { target, ...(command.delay === undefined ? {} : { delay: command.delay }) },
+        {
+          target,
+          delay: command.delay ?? MAESTRO_COMPATIBILITY_PRESETS.command.repeatDelayMs,
+        },
         context,
         'invalidate',
         target.resolution ? observationForTarget(target.resolution) : undefined,
@@ -219,7 +225,11 @@ function tapOnInput(command: MaestroCommandOf<'tapOn'>, target: MaestroInputTarg
   return {
     target,
     ...(command.repeat === undefined ? {} : { repeat: command.repeat }),
-    ...(command.delay === undefined ? {} : { delay: command.delay }),
+    ...(command.repeat === undefined
+      ? command.delay === undefined
+        ? {}
+        : { delay: command.delay }
+      : { delay: command.delay ?? MAESTRO_COMPATIBILITY_PRESETS.command.repeatDelayMs }),
     ...(command.optional === undefined ? {} : { optional: command.optional }),
     ...(command.label === undefined ? {} : { label: command.label }),
     ...(command.index === undefined ? {} : { index: command.index }),
@@ -325,6 +335,9 @@ function scrollUntilVisibleInput(command: MaestroCommandOf<'scrollUntilVisible'>
     selector: command.element,
     direction: command.direction ?? 'down',
     timeoutMs: command.timeout ?? MAESTRO_COMPATIBILITY_PRESETS.command.scrollUntilVisibleTimeoutMs,
+    durationMs: maestroScrollDurationFromSpeed(
+      MAESTRO_COMPATIBILITY_PRESETS.command.scrollUntilVisibleSpeed,
+    ),
   };
 }
 

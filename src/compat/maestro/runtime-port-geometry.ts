@@ -1,6 +1,5 @@
 import { AppError } from '../../kernel/errors.ts';
 import { normalizePublicSwipeMotion } from '../../contracts/gesture-normalization.ts';
-import { buildInPageSwipeGesturePlan } from '../../contracts/scroll-gesture.ts';
 import { pointInsideRect } from '../../utils/rect-center.ts';
 import { MAESTRO_COMPATIBILITY_PRESETS } from './compatibility-policy.ts';
 import type { MaestroRuntimeRequest } from './engine-types.ts';
@@ -40,19 +39,13 @@ export async function resolveMaestroSwipeOperation(
   }
 
   if (authored.kind === 'screen') {
-    if (authored.direction === 'left' || authored.direction === 'right') {
-      return {
-        authored,
-        gesture: normalizedScreenHorizontalSwipe(authored.direction, authored.duration),
-      };
-    }
     const viewport = await operations.resolveGestureViewport(
       operationContext(request, request.command),
     );
-    const { start, end } = screenSwipeEndpoints(viewport, authored.direction);
+    const { start, end } = screenSwipeEndpoints(viewport, authored.direction, operations.platform);
     return {
       authored,
-      gesture: normalizedScreenVerticalSwipe(start, end, authored.duration),
+      gesture: normalizedSwipeFromEndpoints(start, end, authored.duration),
       viewport,
     };
   }
@@ -125,26 +118,6 @@ function normalizedSwipeFromEndpoints(
   throw new AppError('COMMAND_FAILED', 'Swipe normalization produced a non-swipe gesture.');
 }
 
-function normalizedScreenHorizontalSwipe(
-  direction: Extract<MaestroDirection, 'left' | 'right'>,
-  durationMs: number | undefined,
-): MaestroSinglePointerGestureInput {
-  return {
-    intent: 'pan',
-    preset: direction,
-    durationMs: durationMs ?? MAESTRO_COMPATIBILITY_PRESETS.command.swipeDurationMs,
-    executionProfile: 'endpoint-hold',
-  };
-}
-
-function normalizedScreenVerticalSwipe(
-  start: { x: number; y: number },
-  end: { x: number; y: number },
-  durationMs: number | undefined,
-): MaestroSinglePointerGestureInput {
-  return normalizedSwipeFromEndpoints(start, end, durationMs);
-}
-
 function screenSwipeEndpoints(
   viewport: {
     readonly x: number;
@@ -153,14 +126,18 @@ function screenSwipeEndpoints(
     readonly height: number;
   },
   direction: MaestroDirection,
+  platform: MaestroRuntimeOperations['platform'],
 ): { start: { x: number; y: number }; end: { x: number; y: number } } {
-  const plan = buildInPageSwipeGesturePlan(direction, {
-    referenceWidth: viewport.width,
-    referenceHeight: viewport.height,
-  });
+  const preset = MAESTRO_COMPATIBILITY_PRESETS.screenSwipe[platform][direction];
   return {
-    start: { x: viewport.x + plan.x1, y: viewport.y + plan.y1 },
-    end: { x: viewport.x + plan.x2, y: viewport.y + plan.y2 },
+    start: {
+      x: viewport.x + Math.trunc(viewport.width * preset.start.x),
+      y: viewport.y + Math.trunc(viewport.height * preset.start.y),
+    },
+    end: {
+      x: viewport.x + Math.trunc(viewport.width * preset.end.x),
+      y: viewport.y + Math.trunc(viewport.height * preset.end.y),
+    },
   };
 }
 
