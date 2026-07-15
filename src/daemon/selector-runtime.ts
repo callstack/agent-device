@@ -153,9 +153,10 @@ export async function dispatchGetViaRuntime(
   });
   if (!resolvedRuntime.ok) return resolvedRuntime.response;
 
-  // #1076: get @ref reads from the stored snapshot; warn once the ref frame
-  // has expired (ADR 0014) — any ref then gets the frame-derived warning,
-  // else a pinned `@e12~s3` ref whose epoch no longer matches gets the
+  // #1076 + ADR 0014: a get @ref binds against the retained ref-frame evidence,
+  // so it never silently retargets to a newer positional tree. Its warning is
+  // frame-derived: once the ref frame has expired any ref gets the frame-derived
+  // warning, else a pinned `@e12~s3` ref whose epoch no longer matches gets the
   // precise generation-mismatch warning.
   const staleRefsWarning =
     target.target.kind === 'ref'
@@ -257,12 +258,13 @@ export async function dispatchWaitViaRuntime(
     });
     if (directResponse) return directResponse;
   }
-  // #1076: wait @ref re-resolves the ref against fresh polling captures; warn
-  // once the ref frame has expired (ADR 0014) — any ref then gets the
-  // frame-derived warning, else a pinned `@e12~s3` ref whose epoch no longer
-  // matches gets the precise generation-mismatch warning. The pin is split
-  // off HERE so the runtime and recording only ever see the plain `@e12`
-  // form.
+  // #1076 + ADR 0014: a wait @ref names an element from the retained ref-frame
+  // evidence, and its staleness is frame-derived rather than a property of the
+  // live polling capture the condition is checked against. Once the ref frame
+  // has expired any ref gets the frame-derived warning, else a pinned `@e12~s3`
+  // ref whose epoch no longer matches gets the precise generation-mismatch
+  // warning. The pin is split off HERE so the runtime and recording only ever
+  // see the plain `@e12` form.
   let waitParsed = parsed;
   let staleRefsWarning: string | undefined;
   if (parsed.kind === 'ref') {

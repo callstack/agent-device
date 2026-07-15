@@ -322,8 +322,10 @@ function resolveSettleHint(
 // The settle loop itself captures with updateSession: false (a capture that
 // later stalls must not race a session write past the response). The FINAL
 // capture is stored so follow-up snapshots/selectors see the latest surface.
-// Only settled captures issue a diff/ref payload; unsettled stored captures
-// conservatively mark prior refs stale through the runtime session writer.
+// Only settled captures issue a diff/ref payload; an unsettled stored capture
+// replaces the observation without issuing refs — it does NOT touch the ref
+// frame. Read staleness is frame-derived: the frame expires at a side-effect
+// seam (ADR 0014), not because a fresh observation was stored here.
 // Sparse-quality captures are not stored (mirroring captureSelectorSnapshot)
 // and therefore issue no refs. The fetched session is returned alongside
 // `stored` so the caller can read `appBundleId` for settle-chrome scoping

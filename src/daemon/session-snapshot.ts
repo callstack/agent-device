@@ -11,7 +11,7 @@ import type { SessionState } from './types.ts';
  * resolves the ref; mutations reject an expired-frame ref before dispatch.
  */
 export const STALE_SNAPSHOT_REFS_WARNING =
-  'The session snapshot changed since your refs were issued — @refs may now point at different elements. Re-run snapshot -i to refresh refs.';
+  'The UI may have changed since these refs were issued, so they no longer represent current device state. Take a new snapshot before relying on or interacting with them.';
 
 /**
  * The single daemon-side write choke point for replacing a session's stored

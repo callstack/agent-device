@@ -155,7 +155,7 @@ function expectInvalidArgs(
   return (response.error ?? {}) as Record<string, unknown>;
 }
 
-test('press --settle responds with the settled diff, refsGeneration, and clears the stale marker', async () => {
+test('press --settle responds with the settled diff, refsGeneration, and activates a partial ref frame', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'settle-press';
   seedSession(sessionName, sessionStore);
