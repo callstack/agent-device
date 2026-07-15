@@ -3547,7 +3547,7 @@ test('press with a pinned ref from an older generation rejects with the precise 
   if (response && !response.ok) {
     expect(response.error.code).toBe('COMMAND_FAILED');
     expect(response.error.details?.hint).toBe(
-      'Ref @e1 was minted from snapshot s12 but the session tree is now s15 — re-run snapshot -i.',
+      "Ref @e1 was minted from snapshot s12 but the session's ref frame is now s15 — re-run snapshot -i.",
     );
   }
   expect(mockDispatch).not.toHaveBeenCalled();
@@ -3581,7 +3581,7 @@ test('fill with a pinned stale ref rejects; pinned current is clean', async () =
   if (stale && !stale.ok) {
     expect(stale.error.code).toBe('COMMAND_FAILED');
     expect(stale.error.details?.hint).toBe(
-      'Ref @e1 was minted from snapshot s2 but the session tree is now s3 — re-run snapshot -i.',
+      "Ref @e1 was minted from snapshot s2 but the session's ref frame is now s3 — re-run snapshot -i.",
     );
   }
   expect(mockDispatch).not.toHaveBeenCalled();
@@ -3666,7 +3666,7 @@ test('get text with a pinned stale ref gets the precise warning', async () => {
   expect(response?.ok).toBe(true);
   if (response?.ok) {
     expect(response.data?.warning).toBe(
-      'Ref @e1 was minted from snapshot s2 but the session tree is now s4 — re-run snapshot -i.',
+      "Ref @e1 was minted from snapshot s2 but the session's ref frame is now s4 — re-run snapshot -i.",
     );
     expect(response.data?.ref).toBe('e1');
   }

@@ -91,18 +91,21 @@ export function markSessionPartialRefsIssued(session: SessionState, refs: Iterab
 }
 
 /**
- * Warning for a ref pinned to a generation (`@e12~s3`) that no longer matches
- * the stored tree's generation. Unlike STALE_SNAPSHOT_REFS_WARNING it is
- * PRECISE: the pin proves which tree minted the ref, so the mismatch is a
- * fact, not a conservative marker.
+ * Warning for a ref pinned to a generation (`@e12~s3`) whose epoch no longer
+ * matches the session's current ref-frame epoch (`refFrameEpoch`) — NOT the
+ * latest observation generation. A read-only capture bumps the observation
+ * counter without re-issuing the frame, so the two can diverge; the warning
+ * names the frame epoch the pin is actually compared against. Unlike
+ * STALE_SNAPSHOT_REFS_WARNING it is PRECISE: the pin proves which frame minted
+ * the ref, so the mismatch is a fact, not a conservative marker.
  */
 function buildPinnedStaleRefWarning(params: {
   ref: string;
   mintedGeneration: number;
-  currentGeneration: number;
+  currentFrameEpoch: number;
 }): string {
   const plainRef = params.ref.startsWith('@') ? params.ref.slice(1) : params.ref;
-  return `Ref @${plainRef} was minted from snapshot s${params.mintedGeneration} but the session tree is now s${params.currentGeneration} — re-run snapshot -i.`;
+  return `Ref @${plainRef} was minted from snapshot s${params.mintedGeneration} but the session's ref frame is now s${params.currentFrameEpoch} — re-run snapshot -i.`;
 }
 
 /**
@@ -131,9 +134,9 @@ export function resolveRefStalenessWarning(params: {
     // Compare against the FRAME epoch (frozen at issuance), not the observation
     // counter — a read-only capture that bumped `snapshotGeneration` must not
     // make a valid pin from the issuing frame look stale.
-    const currentGeneration = session ? (refFrameEpoch(session) ?? 0) : 0;
-    if (mintedGeneration !== currentGeneration) {
-      return buildPinnedStaleRefWarning({ ref, mintedGeneration, currentGeneration });
+    const currentFrameEpoch = session ? (refFrameEpoch(session) ?? 0) : 0;
+    if (mintedGeneration !== currentFrameEpoch) {
+      return buildPinnedStaleRefWarning({ ref, mintedGeneration, currentFrameEpoch });
     }
   }
   return undefined;

@@ -91,14 +91,40 @@ test('resolveRefStalenessWarning: frame expiry is checked before the epoch (ADR 
     resolveRefStalenessWarning({ session, ref: '@e37', mintedGeneration: undefined }),
   ).toBeUndefined();
   expect(resolveRefStalenessWarning({ session, ref: '@e37', mintedGeneration: 12 })).toBe(
-    'Ref @e37 was minted from snapshot s12 but the session tree is now s15 — re-run snapshot -i.',
+    "Ref @e37 was minted from snapshot s12 but the session's ref frame is now s15 — re-run snapshot -i.",
+  );
+});
+
+test('resolveRefStalenessWarning names the frozen frame epoch, not the bumped observation generation (ADR 0014)', () => {
+  const session = makeSession();
+  // A frame was issued at generation 15.
+  session.snapshotGeneration = 15;
+  session.refFrameGeneration = 15;
+  session.refFrameState = 'active';
+
+  // A read-only capture replaces the observation and advances the observation
+  // counter WITHOUT re-issuing the frame — the frame epoch stays frozen at 15.
+  setSessionSnapshot(session, makeSnapshot());
+  expect(session.snapshotGeneration).toBe(16);
+  expect(session.refFrameGeneration).toBe(15);
+
+  // A pin matching the FROZEN frame epoch is clean, even though the observation
+  // generation has since advanced past it.
+  expect(
+    resolveRefStalenessWarning({ session, ref: '@e37', mintedGeneration: 15 }),
+  ).toBeUndefined();
+
+  // A pin from another epoch names the frame epoch (s15), never the bumped
+  // observation generation (s16).
+  expect(resolveRefStalenessWarning({ session, ref: '@e37', mintedGeneration: 12 })).toBe(
+    "Ref @e37 was minted from snapshot s12 but the session's ref frame is now s15 — re-run snapshot -i.",
   );
 });
 
 test('resolveRefStalenessWarning treats a missing stored generation as s0', () => {
   const session = makeSession();
   expect(resolveRefStalenessWarning({ session, ref: 'e2', mintedGeneration: 3 })).toBe(
-    'Ref @e2 was minted from snapshot s3 but the session tree is now s0 — re-run snapshot -i.',
+    "Ref @e2 was minted from snapshot s3 but the session's ref frame is now s0 — re-run snapshot -i.",
   );
   expect(resolveRefStalenessWarning({ session, ref: '@e2', mintedGeneration: 0 })).toBeUndefined();
 });

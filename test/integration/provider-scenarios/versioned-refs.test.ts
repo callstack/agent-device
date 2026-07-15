@@ -139,7 +139,7 @@ test('Provider-backed integration rejects stale pinned @refs and accepts current
       assert.equal(pinnedStaleDetails.currentGeneration, g2);
       assert.equal(
         pinnedStaleData.hint,
-        `Ref @e2 was minted from snapshot s${g1} but the session tree is now s${g2} — re-run snapshot -i.`,
+        `Ref @e2 was minted from snapshot s${g1} but the session's ref frame is now s${g2} — re-run snapshot -i.`,
       );
 
       // A pin to the current generation is admitted.
