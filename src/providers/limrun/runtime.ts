@@ -24,7 +24,6 @@ import type {
 import { createAndroidInteractor } from '../../core/interactors/android.ts';
 import type { DeviceInventoryProvider } from '../../core/dispatch-resolve.ts';
 import {
-  withAndroidAdbProvider,
   type AndroidAdbExecutorOptions,
   type AndroidAdbExecutorResult,
   type AndroidAdbProvider,
@@ -469,18 +468,7 @@ function limrunAndroidAdbError(adbArgs: string[], result: AndroidAdbExecutorResu
 function createLimrunAndroidInteractor(
   session: Extract<LimrunRuntimeSession, { platform: 'android' }>,
 ): Interactor {
-  const base = createAndroidInteractor(session.device);
-  const provider = createLimrunAndroidAdbProvider(session);
-  return new Proxy(base, {
-    get(target, property, receiver) {
-      const value = Reflect.get(target, property, receiver);
-      if (typeof value !== 'function') return value;
-      return (...args: unknown[]) =>
-        withAndroidAdbProvider(provider, { serial: session.device.id }, async () =>
-          value.apply(target, args),
-        );
-    },
-  });
+  return createAndroidInteractor(session.device, createLimrunAndroidAdbProvider(session));
 }
 
 function createLimrunAndroidAdbProvider(

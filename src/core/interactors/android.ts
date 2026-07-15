@@ -21,6 +21,10 @@ import {
   readAndroidGestureViewport,
 } from '../../platforms/android/touch-executor.ts';
 import {
+  withAndroidAdbProvider,
+  type AndroidAdbProvider,
+} from '../../platforms/android/adb-executor.ts';
+import {
   readAndroidClipboardText,
   writeAndroidClipboardText,
 } from '../../platforms/android/device-input-state.ts';
@@ -32,8 +36,11 @@ import type { DeviceInfo } from '../../kernel/device.ts';
 import type { Interactor } from '../interactor-types.ts';
 import { snapshotCaptureAnnotationsFrom } from '../../snapshot-capture-annotations.ts';
 
-export function createAndroidInteractor(device: DeviceInfo): Interactor {
-  return {
+export function createAndroidInteractor(
+  device: DeviceInfo,
+  provider?: AndroidAdbProvider,
+): Interactor {
+  const interactor: Interactor = {
     open: (app, options) =>
       openAndroidApp(device, app, {
         activity: options?.activity,
@@ -90,4 +97,17 @@ export function createAndroidInteractor(device: DeviceInfo): Interactor {
     setSetting: (setting, state, appId, options) =>
       setAndroidSetting(device, setting, state, appId, options),
   };
+  if (!provider) return interactor;
+  return new Proxy(interactor, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (typeof value !== 'function') return value;
+      return (...args: unknown[]) =>
+        withAndroidAdbProvider(
+          provider,
+          { serial: device.id },
+          async () => await value.apply(target, args),
+        );
+    },
+  });
 }

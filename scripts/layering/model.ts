@@ -55,6 +55,7 @@ export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   'compat',
   'mcp',
   'metro',
+  'providers',
   'recording',
   'remote',
   'replay',
