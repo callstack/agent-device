@@ -3452,6 +3452,52 @@ test('fill @ref rejects after a device action expired the frame', async () => {
   expect(mockDispatch).not.toHaveBeenCalled();
 });
 
+test('ADR 0014 evidence #17: get text @ref reads the retained frame tree, not a newer observation', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'read-frame-tree';
+  // Frame tree: @e1 = Continue, @e2 = Cancel.
+  const session = makeStaleRefSession(sessionName);
+  // A read-only capture replaced the OBSERVATION with a divergent tree where the
+  // same index means a different element. The frame tree is untouched.
+  setSessionSnapshot(session, {
+    nodes: attachRefs([
+      { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'XCUIElementTypeButton',
+        label: 'Different',
+        rect: { x: 10, y: 20, width: 100, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+    ] as never),
+    createdAt: Date.now(),
+    backend: 'xctest',
+  });
+  sessionStore.set(sessionName, session);
+  mockDispatch.mockRejectedValue(new Error('get text @ref must not recapture'));
+
+  // Resolves against the frame tree's @e2 (Continue), never the observation's
+  // positional @e2 (Different) — no fall-through by positional coincidence.
+  const response = await runInteraction(sessionStore, sessionName, 'get', ['text', '@e2']);
+  expect(response?.ok).toBe(true);
+  if (response?.ok) {
+    expect(response.data?.ref).toBe('e2');
+    expect(String(response.data?.text)).toContain('Continue');
+    expect(String(response.data?.text)).not.toContain('Different');
+  }
+
+  // Missing frame evidence FAILS rather than resolving a newer observation.
+  const missing = await runInteraction(sessionStore, sessionName, 'get', ['text', '@e9']);
+  expect(missing?.ok).toBe(false);
+  if (missing && !missing.ok) {
+    expect(missing.error.code).toBe('COMMAND_FAILED');
+    expect(missing.error.message).toMatch(/not found/i);
+  }
+  expect(mockDispatch).not.toHaveBeenCalled();
+});
+
 test('get text @ref warns while the frame is expired (retained evidence still resolves)', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'stale-ref-get-text';
@@ -3544,6 +3590,65 @@ test('fill with a pinned stale ref rejects; pinned current is clean', async () =
   expect(current?.ok).toBe(true);
   if (current?.ok) {
     expect(current.data?.warning).toBeUndefined();
+  }
+});
+
+test("ADR 0014 blocker-2: a mutating find's internal fill from an expired frame carries no stale-ref warning", async () => {
+  // Removing the coarse marker (step 8) means an expired frame now derives read
+  // staleness. A mutating `find fill` re-resolves the locator itself and re-enters
+  // the fill leaf with a LOCATOR-minted ref (`internal.findResolvedTarget`) — the
+  // caller never consumed a `@ref`, so the public find response must not claim
+  // stale refs even though the frame is expired.
+  const sessionStore = makeSessionStore();
+  const sessionName = 'find-internal-fill-expired';
+  const session = makeStaleRefSession(sessionName);
+  session.snapshot = {
+    nodes: attachRefs([
+      {
+        index: 0,
+        type: 'XCUIElementTypeTextField',
+        label: 'Email',
+        rect: { x: 10, y: 20, width: 200, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+    ]),
+    createdAt: Date.now(),
+    backend: 'xctest',
+  };
+  // Re-issue the frame over the overridden snapshot, then expire it as if a prior
+  // device side effect changed the screen.
+  activateCompleteRefFrame(session);
+  expireRefFrame(session);
+  sessionStore.set(sessionName, session);
+  mockDispatch.mockResolvedValue({ filled: true });
+
+  // Contrast: a user-supplied `@ref` against the expired frame rejects before
+  // dispatch (it consumed a stale ref).
+  const userRef = await runInteraction(sessionStore, sessionName, 'fill', ['@e1', 'hello']);
+  expect(userRef?.ok).toBe(false);
+  if (userRef && !userRef.ok) {
+    expect(userRef.error.details?.reason).toBe('ref_frame_expired');
+  }
+
+  // The mutating find's internal dispatch (the exact request find.ts hands the
+  // leaf) bypasses admission AND attaches no stale-ref warning.
+  const internal = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'fill',
+      positionals: ['@e1', 'hello'],
+      flags: {},
+      internal: { findResolvedTarget: true },
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+  expect(internal?.ok).toBe(true);
+  if (internal?.ok) {
+    expect(internal.data?.warning).toBeUndefined();
   }
 });
 

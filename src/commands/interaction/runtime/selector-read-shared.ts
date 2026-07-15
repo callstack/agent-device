@@ -20,6 +20,15 @@ export type CapturedSnapshot = {
 
 export type SelectorSnapshotOptions = SelectorSnapshotInput;
 
+/**
+ * Resolve the snapshot a `@ref` READ binds against. ADR 0014: a ref resolves
+ * against the AUTHORIZED frame tree (`refFrameSnapshot`), never the latest
+ * operational observation — so an internal read-only capture that replaced the
+ * observation cannot let a plain `@eN` resolve a different element by positional
+ * coincidence. Missing frame evidence fails (the ref is simply not found in the
+ * retained tree) rather than falling through to a newer observation. Only used
+ * by ref reads; selector reads capture fresh through `captureSelectorSnapshot`.
+ */
 export async function requireSnapshotSession(
   runtime: AgentDeviceRuntime,
   requestedName: string | undefined,
@@ -27,10 +36,11 @@ export async function requireSnapshotSession(
   const sessionName = requestedName ?? 'default';
   const session = await runtime.sessions.get(sessionName);
   if (!session) throw new AppError('SESSION_NOT_FOUND', 'No active session. Run open first.');
-  if (!session.snapshot) {
+  const frameTree = session.refFrameSnapshot ?? session.snapshot;
+  if (!frameTree) {
     throw new AppError('INVALID_ARGS', 'No snapshot in session. Run snapshot first.');
   }
-  return { sessionName, session, snapshot: session.snapshot };
+  return { sessionName, session, snapshot: frameTree };
 }
 
 export async function captureSelectorSnapshot(

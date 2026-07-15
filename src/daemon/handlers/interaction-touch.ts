@@ -135,12 +135,14 @@ async function dispatchTargetedTouchViaRuntime(
       : parseTouchTarget(req.positionals ?? [], commandLabel);
   if (!parsedTarget.ok) return parsedTarget.response;
   // Staleness relative to what the client knew when it sent this @ref — read
-  // BEFORE any internal recapture (Android freshness refresh, --verify) flips
-  // the flag or advances the generation as a side effect of this same command
-  // (#1076). Pinned refs (`@e12~s3`) get a precise generation-mismatch
-  // warning; plain refs keep the coarse marker warning.
+  // BEFORE any internal recapture (Android freshness refresh, --verify) advances
+  // the generation as a side effect of this same command. Pinned refs
+  // (`@e12~s3`) get a precise generation-mismatch warning; a plain ref warns
+  // while the frame is expired. A mutating `find`'s internal dispatch supplies a
+  // locator-minted ref (`internal.findResolvedTarget`), so it carries no
+  // user-facing staleness — the caller never consumed a `@ref` (ADR 0014).
   const staleRefsWarning =
-    parsedTarget.target.kind === 'ref'
+    parsedTarget.target.kind === 'ref' && req.internal?.findResolvedTarget !== true
       ? resolveRefStalenessWarning({
           session,
           ref: parsedTarget.target.ref,
@@ -642,11 +644,16 @@ async function prepareFillRefTarget(
   refGeneration: number | undefined,
 ): Promise<{ response?: DaemonResponse; staleRefsWarning?: string }> {
   if (target.kind !== 'ref') return {};
-  const staleRefsWarning = resolveRefStalenessWarning({
-    session,
-    ref: target.ref,
-    mintedGeneration: refGeneration,
-  });
+  // A mutating `find`'s internal dispatch supplies a locator-minted ref, so the
+  // public response must not claim the caller consumed a stale `@ref` (ADR 0014).
+  const staleRefsWarning =
+    params.req.internal?.findResolvedTarget === true
+      ? undefined
+      : resolveRefStalenessWarning({
+          session,
+          ref: target.ref,
+          mintedGeneration: refGeneration,
+        });
   const invalidRefFlagsResponse = params.refSnapshotFlagGuardResponse('fill', params.req.flags);
   if (invalidRefFlagsResponse) return { response: invalidRefFlagsResponse, staleRefsWarning };
   const admissionResponse = params.req.internal?.findResolvedTarget

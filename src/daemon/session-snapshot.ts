@@ -105,13 +105,15 @@ function buildPinnedStaleRefWarning(params: {
 }
 
 /**
- * Staleness warning for a command consuming an `@ref` argument (ADR 0014):
- * - pinned ref (`@e12~s3`) matching the current frame epoch → no warning (the
- *   pin proves the ref came from the still-current frame);
- * - pinned ref with any other epoch → the precise pinned warning;
- * - plain ref → warns once the frame has EXPIRED (a device side effect changed
- *   the screen since issuance). A read-only capture no longer marks refs stale,
- *   because it does not expire the frame.
+ * Staleness warning for a command consuming an `@ref` argument (ADR 0014).
+ * Frame expiry is checked FIRST, matching the admission order (evidence #17): an
+ * expired frame means a device side effect changed the screen since issuance, so
+ * a read is stale even when a pin matches the epoch — a matching pin proves
+ * identity within the retained frame, not that the UI is current.
+ * - frame expired → the coarse staleness warning (any ref);
+ * - active frame, pinned ref with a different epoch → the precise pinned warning;
+ * - active frame, pin matching the epoch or a plain ref → no warning. A read-only
+ *   capture no longer marks refs stale, because it does not expire the frame.
  *
  * This resolver is advisory; command handlers may enforce stronger freshness
  * policy. In particular, a ref mutation rejects an expired-frame ref before
@@ -123,13 +125,15 @@ export function resolveRefStalenessWarning(params: {
   mintedGeneration: number | undefined;
 }): string | undefined {
   const { session, ref, mintedGeneration } = params;
+  if (session && refFrameState(session) === 'expired') return STALE_SNAPSHOT_REFS_WARNING;
   if (mintedGeneration !== undefined) {
     // Compare against the FRAME epoch (frozen at issuance), not the observation
     // counter — a read-only capture that bumped `snapshotGeneration` must not
     // make a valid pin from the issuing frame look stale.
     const currentGeneration = session ? (refFrameEpoch(session) ?? 0) : 0;
-    if (mintedGeneration === currentGeneration) return undefined;
-    return buildPinnedStaleRefWarning({ ref, mintedGeneration, currentGeneration });
+    if (mintedGeneration !== currentGeneration) {
+      return buildPinnedStaleRefWarning({ ref, mintedGeneration, currentGeneration });
+    }
   }
-  return session && refFrameState(session) === 'expired' ? STALE_SNAPSHOT_REFS_WARNING : undefined;
+  return undefined;
 }

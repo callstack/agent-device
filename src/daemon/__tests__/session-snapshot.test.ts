@@ -66,32 +66,33 @@ test('a reopened session reseeds so pins from a previous lifetime do not silentl
   ).toContain(`minted from snapshot s${oldGeneration}`);
 });
 
-test('resolveRefStalenessWarning: pinned-current clean, pinned-stale precise, plain warns once the frame expired', () => {
+test('resolveRefStalenessWarning: frame expiry is checked before the epoch (ADR 0014 evidence #17)', () => {
   const session = makeSession();
   session.snapshotGeneration = 15;
   session.refFrameGeneration = 15;
-  // A device side effect expired the frame.
+
+  // Expired frame: ANY read is stale, even a pin matching the epoch — a matching
+  // pin proves identity within the retained frame, not that the UI is current.
   session.refFrameState = 'expired';
-
-  // Pinned to the current frame epoch: the pin proves the ref matches the frame.
-  expect(
-    resolveRefStalenessWarning({ session, ref: '@e37', mintedGeneration: 15 }),
-  ).toBeUndefined();
-
-  expect(resolveRefStalenessWarning({ session, ref: '@e37', mintedGeneration: 12 })).toBe(
-    'Ref @e37 was minted from snapshot s12 but the session tree is now s15 — re-run snapshot -i.',
+  expect(resolveRefStalenessWarning({ session, ref: '@e37', mintedGeneration: 15 })).toBe(
+    STALE_SNAPSHOT_REFS_WARNING,
   );
-
-  // A plain ref warns while the frame is expired (a device action changed the screen).
   expect(resolveRefStalenessWarning({ session, ref: '@e37', mintedGeneration: undefined })).toBe(
     STALE_SNAPSHOT_REFS_WARNING,
   );
 
-  // Re-activate: a plain ref against the active frame is clean.
+  // Active frame: a pin matching the epoch and a plain ref are both clean; a pin
+  // from another epoch gets the precise generation warning.
   session.refFrameState = 'active';
+  expect(
+    resolveRefStalenessWarning({ session, ref: '@e37', mintedGeneration: 15 }),
+  ).toBeUndefined();
   expect(
     resolveRefStalenessWarning({ session, ref: '@e37', mintedGeneration: undefined }),
   ).toBeUndefined();
+  expect(resolveRefStalenessWarning({ session, ref: '@e37', mintedGeneration: 12 })).toBe(
+    'Ref @e37 was minted from snapshot s12 but the session tree is now s15 — re-run snapshot -i.',
+  );
 });
 
 test('resolveRefStalenessWarning treats a missing stored generation as s0', () => {
