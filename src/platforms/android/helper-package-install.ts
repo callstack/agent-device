@@ -141,7 +141,7 @@ export async function resolveAndroidHelperArtifact<
   unavailableMessage: string;
 }): Promise<{ apkPath: string; manifest: Manifest }> {
   const version = readVersion();
-  const helperDir = path.join(findProjectRoot(), options.helperDirName, 'dist');
+  const helperDir = path.join(findProjectRoot(), 'android', options.helperDirName, 'dist');
   const manifestPath = path.join(helperDir, options.manifestFileName(version));
   try {
     const manifest = options.parseManifest(JSON.parse(await fs.readFile(manifestPath, 'utf8')));

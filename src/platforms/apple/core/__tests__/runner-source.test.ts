@@ -10,8 +10,8 @@ import {
 
 test('resolveAppleRunnerSourceRoot prefers checkout source over packaged source', () => {
   const root = makeTempRoot();
-  const checkoutSource = path.join(root, 'apple-runner', 'AgentDeviceRunner');
-  const packagedSource = path.join(root, 'dist', 'apple-runner', 'AgentDeviceRunner');
+  const checkoutSource = path.join(root, 'apple', 'runner', 'AgentDeviceRunner');
+  const packagedSource = path.join(root, 'dist', 'apple', 'runner', 'AgentDeviceRunner');
   fs.mkdirSync(path.join(checkoutSource, 'AgentDeviceRunner.xcodeproj'), { recursive: true });
   fs.mkdirSync(path.join(packagedSource, 'AgentDeviceRunner.xcodeproj'), { recursive: true });
 
@@ -24,7 +24,7 @@ test('resolveAppleRunnerSourceRoot prefers checkout source over packaged source'
 
 test('resolveAppleRunnerSourceRoot falls back to packaged source', () => {
   const root = makeTempRoot();
-  const packagedSource = path.join(root, 'dist', 'apple-runner', 'AgentDeviceRunner');
+  const packagedSource = path.join(root, 'dist', 'apple', 'runner', 'AgentDeviceRunner');
   fs.mkdirSync(path.join(packagedSource, 'AgentDeviceRunner.xcodeproj'), { recursive: true });
 
   assert.equal(resolveAppleRunnerSourceRoot(root), packagedSource);

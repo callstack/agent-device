@@ -244,20 +244,21 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
     check: 'swift-runner',
     rule: 'own:swift',
     detail: 'Swift runner sources require the XCUITest build',
-    owns: (file) => file.startsWith('apple-runner/') || file.endsWith('.swift'),
+    owns: (file) => file.startsWith('apple/runner/') || file.endsWith('.swift'),
   },
   {
     check: 'android-helpers',
     rule: 'own:android-helpers',
     detail: 'Android helper packages have their own build',
     owns: (file) =>
-      file.startsWith('android-snapshot-helper/') || file.startsWith('android-multitouch-helper/'),
+      file.startsWith('android/snapshot-helper/') ||
+      file.startsWith('android/multitouch-helper/'),
   },
   {
     check: 'macos-helper',
     rule: 'own:macos-helper',
     detail: 'macOS helper is a separate Swift package build',
-    owns: (file) => file.startsWith('macos-helper/'),
+    owns: (file) => file.startsWith('apple/macos-helper/'),
   },
   {
     check: 'mcp-metadata',

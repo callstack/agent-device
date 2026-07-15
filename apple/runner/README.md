@@ -15,7 +15,7 @@ Current internal runner for iOS, tvOS, and macOS desktop automation.
 Protocol and maintenance references:
 
 - Protocol overview: [`RUNNER_PROTOCOL.md`](RUNNER_PROTOCOL.md)
-- TypeScript client: [`../src/platforms/apple/core/runner/runner-client.ts`](../src/platforms/apple/core/runner/runner-client.ts)
+- TypeScript client: [`../../src/platforms/apple/core/runner/runner-client.ts`](../../src/platforms/apple/core/runner/runner-client.ts)
 - Swift wire models: [`AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift)
 
 ## UITest Runner File Map
@@ -46,7 +46,7 @@ serialize reliably. In those cases interactive snapshots may return a sparse roo
 full snapshots preserve the XCTest error. A penalized simulator can recover through private AX;
 physical devices use a short XCTest probe because no non-XCTest semantic backend is available
 there. See
-[`../docs/adr/0004-ios-snapshot-backend-strategy.md`](../docs/adr/0004-ios-snapshot-backend-strategy.md)
+[`../../docs/adr/0004-ios-snapshot-backend-strategy.md`](../../docs/adr/0004-ios-snapshot-backend-strategy.md)
 for the backend boundary and future simulator AX-service direction.
 
 ## Protocol Notes

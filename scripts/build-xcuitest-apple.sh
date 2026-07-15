@@ -2,7 +2,7 @@
 set -eu
 
 PLATFORM="${AGENT_DEVICE_XCUITEST_PLATFORM:-}"
-PROJECT_PATH="apple-runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj"
+PROJECT_PATH="apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj"
 SCHEME="AgentDeviceRunner"
 DEFAULT_IOS_RUNNER_APP_BUNDLE_ID="com.callstack.agentdevice.runner"
 

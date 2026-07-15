@@ -126,7 +126,7 @@ export function isNodeVisibleOnScreen(
 // fails open (allowed) — resolving the best available viewport is the
 // caller's job, and the rule must not turn a missing frame into a refusal.
 //
-// Swift twin: apple-runner/AgentDeviceRunner/AgentDeviceRunnerUITests/
+// Swift twin: apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/
 // RunnerTapPointPolicy.swift (TapPointPolicy.isAllowed). Parity is enforced
 // by the golden fixture table contracts/fixtures/tap-point-policy.json,
 // asserted on both sides (tap-point-policy-parity.test.ts / the gated XCTest

@@ -183,7 +183,7 @@ beforeEach(() => {
 
 test('resolveMacOsHelperPackageRootFrom finds helper package from source and dist-like paths', async () => {
   const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-helper-root-'));
-  const helperRoot = path.join(repoRoot, 'macos-helper');
+  const helperRoot = path.join(repoRoot, 'apple', 'macos-helper');
   await fs.mkdir(helperRoot, { recursive: true });
   await fs.writeFile(path.join(helperRoot, 'Package.swift'), '// test\n', 'utf8');
 

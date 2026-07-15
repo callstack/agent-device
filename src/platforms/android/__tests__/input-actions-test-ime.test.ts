@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 const PACKAGE = 'com.callstack.agentdevice.imehelper';
 
-// Inject a fixture artifact so the tests never read android-ime-helper/dist from disk (which a
+// Inject a fixture artifact so the tests never read android/ime-helper/dist from disk (which a
 // fresh checkout that hasn't packaged the helper won't have — CI's Coverage job included).
 vi.mock('../ime-helper.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../ime-helper.ts')>();

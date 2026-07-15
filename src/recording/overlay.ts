@@ -17,7 +17,7 @@ export function buildRecordingScriptPathCandidates(
   projectRoot: string,
   cwd: string,
 ): string[] {
-  const sourceScriptPath = `apple-runner/AgentDeviceRunner/RecordingScripts/${scriptName}`;
+  const sourceScriptPath = `apple/runner/AgentDeviceRunner/RecordingScripts/${scriptName}`;
   const packagedScriptPath = `dist/${sourceScriptPath}`;
   return [
     path.resolve(moduleDir, scriptName),
@@ -46,7 +46,7 @@ function resolveRecordingScriptPath(scriptName: string): string {
   }
 
   throw new AppError('COMMAND_FAILED', `Missing recording helper script: ${scriptName}`, {
-    hint: 'Ensure apple-runner/AgentDeviceRunner/RecordingScripts is present in this checkout or bundled under dist/apple-runner in the package.',
+    hint: 'Ensure apple/runner/AgentDeviceRunner/RecordingScripts is present in this checkout or bundled under dist/apple/runner in the package.',
     scriptName,
     searchedPaths: scriptCandidates,
   });

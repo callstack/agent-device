@@ -160,7 +160,7 @@ test('recording script candidates include packaged dist apple-runner source', ()
   const packageRoot = path.join(tmpDir, 'package');
   const scriptPath = path.join(
     packageRoot,
-    'dist/apple-runner/AgentDeviceRunner/RecordingScripts/recording-overlay.swift',
+    'dist/apple/runner/AgentDeviceRunner/RecordingScripts/recording-overlay.swift',
   );
   fs.mkdirSync(path.dirname(scriptPath), { recursive: true });
   fs.writeFileSync(scriptPath, 'print("overlay")\n');

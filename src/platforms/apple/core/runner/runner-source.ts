@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const APPLE_RUNNER_SOURCE_ROOT = path.join('apple-runner', 'AgentDeviceRunner');
-const PACKAGED_APPLE_RUNNER_SOURCE_ROOT = path.join('dist', 'apple-runner', 'AgentDeviceRunner');
+const APPLE_RUNNER_SOURCE_ROOT = path.join('apple', 'runner', 'AgentDeviceRunner');
+const PACKAGED_APPLE_RUNNER_SOURCE_ROOT = path.join('dist', 'apple', 'runner', 'AgentDeviceRunner');
 
 export function resolveAppleRunnerSourceRoot(projectRoot: string): string {
   const checkoutSourceRoot = path.join(projectRoot, APPLE_RUNNER_SOURCE_ROOT);

@@ -975,7 +975,7 @@ test('xctestrunReferencesProjectRoot rejects stale worktree artifacts', async ()
   const xctestrunPath = path.join(tmpDir, 'AgentDeviceRunner.xctestrun');
   fs.writeFileSync(
     xctestrunPath,
-    '<plist><dict><key>SourceFilesCommonPathPrefix</key><string>/tmp/other-worktree/agent-device/apple-runner/AgentDeviceRunner</string></dict></plist>',
+    '<plist><dict><key>SourceFilesCommonPathPrefix</key><string>/tmp/other-worktree/agent-device/apple/runner/AgentDeviceRunner</string></dict></plist>',
     'utf8',
   );
 
@@ -1026,7 +1026,8 @@ test('resolveRunnerDerivedPath reuses cache path for identical runner source fin
   const firstRoot = path.join(tmpDir, 'first');
   const secondRoot = path.join(tmpDir, 'second');
   const runnerRelativePath = path.join(
-    'apple-runner',
+    'apple',
+    'runner',
     'AgentDeviceRunner',
     'AgentDeviceRunnerUITests',
     'RunnerTests.swift',
@@ -1283,7 +1284,8 @@ test('ensureXctestrunArtifact rebuilds after cached macOS runner repair failure'
   const { derivedPath, existingXctestrunPath } = await makeCachedRunnerXctestrun();
   const projectPath = path.join(
     projectRoot,
-    'apple-runner',
+    'apple',
+    'runner',
     'AgentDeviceRunner',
     'AgentDeviceRunner.xcodeproj',
   );

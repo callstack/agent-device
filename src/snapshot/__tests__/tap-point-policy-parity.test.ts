@@ -6,7 +6,7 @@ import { isTapPointInsideViewport } from '../mobile-snapshot-semantics.ts';
 import type { Rect } from '../../kernel/snapshot.ts';
 
 // ADR 0011 Layer 2 golden parity table: the SAME JSON is asserted against the
-// Swift twin (TapPointPolicy in apple-runner/AgentDeviceRunner/
+// Swift twin (TapPointPolicy in apple/runner/AgentDeviceRunner/
 // AgentDeviceRunnerUITests/RunnerTapPointPolicy.swift, gated XCTest in the
 // same file), so drift between the runner's ELEMENT_OFFSCREEN guard and the
 // runtime's offscreen rule turns CI red on whichever side changed.

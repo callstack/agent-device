@@ -9,7 +9,7 @@ fi
 VERSION="$1"
 OUTPUT_DIR="$2"
 PROJECT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-HELPER_DIR="$PROJECT_DIR/android-snapshot-helper"
+HELPER_DIR="$PROJECT_DIR/android/snapshot-helper"
 PACKAGE_NAME="com.callstack.agentdevice.snapshothelper"
 MIN_SDK=23
 TARGET_SDK=36

@@ -215,12 +215,12 @@ test('setup metadata script matches expected iOS simulator cache metadata', asyn
     const binDir = path.join(root, 'bin');
     fs.mkdirSync(binDir, { recursive: true });
     fs.mkdirSync(derivedRoot, { recursive: true });
-    fs.mkdirSync(path.join(projectRoot, 'apple-runner', 'AgentDeviceRunner'), {
+    fs.mkdirSync(path.join(projectRoot, 'apple', 'runner', 'AgentDeviceRunner'), {
       recursive: true,
     });
     fs.writeFileSync(path.join(projectRoot, 'package.json'), '{"version":"0.19.0"}\n');
     fs.writeFileSync(
-      path.join(projectRoot, 'apple-runner', 'AgentDeviceRunner', 'Runner.swift'),
+      path.join(projectRoot, 'apple', 'runner', 'AgentDeviceRunner', 'Runner.swift'),
       'final class Runner {}\n',
     );
     writeExecutable(

@@ -4,8 +4,16 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const UNIT_TEST_CONDITION = 'AGENT_DEVICE_RUNNER_UNIT_TESTS';
-const SOURCE_DIR = path.join('apple-runner');
-const OUTPUT_DIR = path.join('dist', 'apple-runner');
+const SOURCE_DIR = path.join('apple', 'runner');
+const OUTPUT_DIR = path.join('dist', 'apple', 'runner');
+// Packaged-runner locations from before the apple-runner/ -> apple/runner/ move. `dist` ships
+// wholesale, so a stale tree left by an older build/checkout would double-ship into the npm
+// package (and inflate the bundle-size diff, which packages the base then the PR into one dist).
+// Always remove them so only the current OUTPUT_DIR survives.
+const LEGACY_OUTPUT_DIRS = [
+  path.join('dist', 'apple-runner'),
+  path.join('dist', 'apple', 'apple-runner'),
+];
 const SKIPPED_DIR_NAMES = new Set(['.build', '.swiftpm', 'xcuserdata']);
 const SKIPPED_ROOT_FILES = new Set(['README.md', 'RUNNER_PROTOCOL.md']);
 
@@ -18,6 +26,9 @@ export function packageAppleRunnerSource(options = {}) {
   }
 
   fs.rmSync(outputRoot, { recursive: true, force: true });
+  for (const legacyDir of LEGACY_OUTPUT_DIRS) {
+    fs.rmSync(path.join(root, legacyDir), { recursive: true, force: true });
+  }
   const summary = {
     outputRoot,
     copiedFiles: 0,

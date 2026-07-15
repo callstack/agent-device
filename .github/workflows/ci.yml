@@ -32,7 +32,7 @@ jobs:
 
       - name: Disallow trailing commas before closing parenthesis in Swift
         run: |
-          if rg -nU --glob '*.swift' ',\s*\n\s*\)' apple-runner; then
+          if rg -nU --glob '*.swift' ',\s*\n\s*\)' apple/runner; then
             echo "Found trailing commas before ')' in Swift files. This syntax requires Swift 6.1+ and breaks older Xcode toolchains."
             exit 1
           fi

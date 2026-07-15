@@ -6,7 +6,7 @@ const NORMAL_IME = 'com.google.android.inputmethod.latin/.LatinIME';
 
 // probeAndroidTestIme reads the helper's service component from the bundled artifact; inject a
 // fixture so the orphan-detection checks pass on a fresh checkout that hasn't packaged
-// android-ime-helper/dist (CI's Coverage job runs no packaging step).
+// android/ime-helper/dist (CI's Coverage job runs no packaging step).
 vi.mock('../../../platforms/android/ime-helper.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../platforms/android/ime-helper.ts')>();
   return {

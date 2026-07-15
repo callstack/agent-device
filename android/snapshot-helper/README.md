@@ -20,7 +20,7 @@ sh ./scripts/build-android-snapshot-helper.sh "$VERSION" .tmp/android-snapshot-h
 
 The build uses Android SDK command-line tools directly. It expects `ANDROID_HOME` or
 `ANDROID_SDK_ROOT` to point at an SDK with `platforms/android-36` and matching build tools.
-`pnpm prepack` builds the npm-bundled helper into `android-snapshot-helper/dist`; npm users get
+`pnpm prepack` builds the npm-bundled helper into `android/snapshot-helper/dist`; npm users get
 that APK in the package and the first helper-backed `snapshot` installs it automatically when
 missing or outdated.
 

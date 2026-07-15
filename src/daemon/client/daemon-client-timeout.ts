@@ -20,7 +20,7 @@ import {
 const IOS_RUNNER_XCODEBUILD_KILL_PATTERNS = [
   'xcodebuild .*AgentDeviceRunnerUITests/RunnerTests/testCommand',
   'xcodebuild .*AgentDeviceRunner\\.env\\.session-',
-  'xcodebuild build-for-testing .*apple-runner/AgentDeviceRunner/AgentDeviceRunner\\.xcodeproj',
+  'xcodebuild build-for-testing .*apple/runner/AgentDeviceRunner/AgentDeviceRunner\\.xcodeproj',
 ];
 
 type BoundedTimeoutPolicy = CommandTimeoutPolicy & { envelopeMs: number };

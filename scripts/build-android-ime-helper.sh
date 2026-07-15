@@ -9,7 +9,7 @@ fi
 VERSION="$1"
 OUTPUT_DIR="$2"
 PROJECT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-HELPER_DIR="$PROJECT_DIR/android-ime-helper"
+HELPER_DIR="$PROJECT_DIR/android/ime-helper"
 PACKAGE_NAME="com.callstack.agentdevice.imehelper"
 MIN_SDK=23
 TARGET_SDK=36
@@ -49,7 +49,7 @@ BUILD_DIR="$HELPER_DIR/build"
 CLASSES_DIR="$BUILD_DIR/classes"
 DEX_DIR="$BUILD_DIR/dex"
 RES_COMPILED_DIR="$BUILD_DIR/res-compiled"
-KEYSTORE="$PROJECT_DIR/android-snapshot-helper/debug.keystore"
+KEYSTORE="$PROJECT_DIR/android/snapshot-helper/debug.keystore"
 UNSIGNED_APK="$BUILD_DIR/helper-unsigned.apk"
 ALIGNED_APK="$BUILD_DIR/helper-aligned.apk"
 APK_PATH="$OUTPUT_DIR/$APK_BASENAME"

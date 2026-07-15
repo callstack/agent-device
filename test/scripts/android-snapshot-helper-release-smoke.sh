@@ -40,7 +40,7 @@ DEX_DIR="$WORK_DIR/dex"
 UNSIGNED_APK="$WORK_DIR/app-unsigned.apk"
 ALIGNED_APK="$WORK_DIR/app-aligned.apk"
 APK_PATH="$WORK_DIR/app-release.apk"
-KEYSTORE="$PROJECT_DIR/android-snapshot-helper/debug.keystore"
+KEYSTORE="$PROJECT_DIR/android/snapshot-helper/debug.keystore"
 
 # This APK is throwaway test code signed with the helper debug keystore only for CI smoke coverage.
 mkdir -p "$SRC_DIR" "$CLASSES_DIR" "$DEX_DIR"

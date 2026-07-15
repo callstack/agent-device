@@ -10,28 +10,28 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../
 const packageScript = path.join(repoRoot, 'scripts', 'package-apple-runner-source.mjs');
 const runnerSnapshotSwiftPath = path.join(
   repoRoot,
-  'apple-runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Snapshot.swift',
+  'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Snapshot.swift',
 );
 
 test('package apple runner source strips unit-test blocks without mutating checkout source', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-runner-package-'));
   onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
 
-  writeFixtureFile(root, 'apple-runner/README.md', 'developer docs\n');
-  writeFixtureFile(root, 'apple-runner/.build/cache.txt', 'cache\n');
+  writeFixtureFile(root, 'apple/runner/README.md', 'developer docs\n');
+  writeFixtureFile(root, 'apple/runner/.build/cache.txt', 'cache\n');
   writeFixtureFile(
     root,
-    'apple-runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/project.pbxproj',
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/project.pbxproj',
     '',
   );
   writeFixtureFile(
     root,
-    'apple-runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/xcuserdata/user.xcuserstate',
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/xcuserdata/user.xcuserstate',
     'state\n',
   );
   writeFixtureFile(
     root,
-    'apple-runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift',
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift',
     [
       'extension RunnerTests {',
       '  func runtimeHelper() {}',
@@ -54,11 +54,11 @@ test('package apple runner source strips unit-test blocks without mutating check
 
   const sourceSwiftPath = path.join(
     root,
-    'apple-runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift',
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift',
   );
   const packagedSwiftPath = path.join(
     root,
-    'dist/apple-runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift',
+    'dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift',
   );
   const sourceSwift = fs.readFileSync(sourceSwiftPath, 'utf8');
   const packagedSwift = fs.readFileSync(packagedSwiftPath, 'utf8');
@@ -70,20 +70,50 @@ test('package apple runner source strips unit-test blocks without mutating check
   assert.match(packagedSwift, /#if os\(macOS\)/);
   assert.ok(
     fs.existsSync(
-      path.join(root, 'dist/apple-runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj'),
+      path.join(root, 'dist/apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj'),
     ),
   );
-  assert.equal(fs.existsSync(path.join(root, 'dist/apple-runner/README.md')), false);
-  assert.equal(fs.existsSync(path.join(root, 'dist/apple-runner/.build/cache.txt')), false);
+  assert.equal(fs.existsSync(path.join(root, 'dist/apple/runner/README.md')), false);
+  assert.equal(fs.existsSync(path.join(root, 'dist/apple/runner/.build/cache.txt')), false);
   assert.equal(
     fs.existsSync(
       path.join(
         root,
-        'dist/apple-runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/xcuserdata/user.xcuserstate',
+        'dist/apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/xcuserdata/user.xcuserstate',
       ),
     ),
     false,
   );
+});
+
+test('package apple runner source removes legacy dist/apple-runner output before shipping', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-runner-package-legacy-'));
+  onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  // Minimal current-layout source so packaging succeeds.
+  writeFixtureFile(
+    root,
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/project.pbxproj',
+    '',
+  );
+  // Stale packaged trees left by builds/checkouts predating the apple-runner -> apple/runner
+  // move. `dist` ships wholesale, so these must not survive packaging or they double-ship.
+  writeFixtureFile(
+    root,
+    'dist/apple-runner/AgentDeviceRunner/RunnerTests+Legacy.swift',
+    'legacy\n',
+  );
+  writeFixtureFile(
+    root,
+    'dist/apple/apple-runner/AgentDeviceRunner/RunnerTests+Mid.swift',
+    'mid\n',
+  );
+
+  await runCmd(process.execPath, [packageScript, '--root', root, '--quiet']);
+
+  assert.equal(fs.existsSync(path.join(root, 'dist/apple-runner')), false);
+  assert.equal(fs.existsSync(path.join(root, 'dist/apple/apple-runner')), false);
+  assert.ok(fs.existsSync(path.join(root, 'dist/apple/runner/AgentDeviceRunner')));
 });
 
 test('apple runner tree snapshot capture stays on the main queue', () => {

@@ -8,10 +8,10 @@ examples/test-app/.expo/
 .build/
 .swiftpm/
 DerivedData/
-android-snapshot-helper/build/
-android-snapshot-helper/dist/
-android-multitouch-helper/build/
-android-multitouch-helper/dist/
+android/snapshot-helper/build/
+android/snapshot-helper/dist/
+android/multitouch-helper/build/
+android/multitouch-helper/dist/
 
 # Tool caches
 .fallow/

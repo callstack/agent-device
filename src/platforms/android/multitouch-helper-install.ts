@@ -36,7 +36,7 @@ export type AndroidMultiTouchHelperArtifact = {
 
 export async function resolveAndroidMultiTouchHelperArtifact(): Promise<AndroidMultiTouchHelperArtifact> {
   return await resolveAndroidHelperArtifact({
-    helperDirName: 'android-multitouch-helper',
+    helperDirName: 'multitouch-helper',
     manifestFileName: (version) =>
       `agent-device-android-multitouch-helper-${version}.manifest.json`,
     parseManifest: parseAndroidMultiTouchHelperManifest,

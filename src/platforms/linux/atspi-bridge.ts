@@ -30,28 +30,20 @@ const SCRIPT_NAME = 'atspi-dump.py';
 
 let cachedScriptPath: string | null = null;
 
-/** Resolve atspi-dump.py relative to this module, checking both source and dist layouts. */
+/** Resolve atspi-dump.py, which lives under `linux/` at the repo/package root. */
 function resolveScriptPath(): string {
   if (cachedScriptPath) return cachedScriptPath;
   const thisDir = path.dirname(fileURLToPath(import.meta.url));
 
-  // Walk upward looking for the script — handles both:
-  //   src/platforms/linux/  (source)
-  //   dist/src/             (bundled, .py lives in package root under src/platforms/linux/)
+  // Walk upward looking for linux/atspi-dump.py — handles both:
+  //   <repo root>/linux/     (source; this module lives at src/platforms/linux/)
+  //   <package root>/linux/  (bundled; this module lives under dist/src/)
   let dir = thisDir;
-  for (let i = 0; i < 5; i++) {
-    const candidate = path.join(dir, 'src', 'platforms', 'linux', SCRIPT_NAME);
+  for (let i = 0; i < 6; i++) {
+    const candidate = path.join(dir, 'linux', SCRIPT_NAME);
     if (fs.existsSync(candidate)) {
       cachedScriptPath = candidate;
       return candidate;
-    }
-    // Also check same-directory (running from source dir directly)
-    if (i === 0) {
-      const sameDir = path.join(dir, SCRIPT_NAME);
-      if (fs.existsSync(sameDir)) {
-        cachedScriptPath = sameDir;
-        return sameDir;
-      }
     }
     dir = path.dirname(dir);
   }

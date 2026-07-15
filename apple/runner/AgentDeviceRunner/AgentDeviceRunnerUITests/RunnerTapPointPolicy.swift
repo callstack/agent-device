@@ -53,7 +53,8 @@ extension RunnerTests {
     let fixtureURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent() // AgentDeviceRunnerUITests
       .deletingLastPathComponent() // AgentDeviceRunner
-      .deletingLastPathComponent() // apple-runner
+      .deletingLastPathComponent() // runner
+      .deletingLastPathComponent() // apple
       .deletingLastPathComponent() // repo root
       .appendingPathComponent("contracts")
       .appendingPathComponent("fixtures")

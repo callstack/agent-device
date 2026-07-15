@@ -19,7 +19,7 @@ import {
 export type MacOsPermissionTarget = 'accessibility' | 'screen-recording' | 'input-monitoring';
 
 // Keep this shape aligned with macOS helper SnapshotNodeResponse in
-// macos-helper/Sources/AgentDeviceMacOSHelper/SnapshotTraversal.swift.
+// apple/macos-helper/Sources/AgentDeviceMacOSHelper/SnapshotTraversal.swift.
 export type MacOsSnapshotNode = {
   index: number;
   type?: string;
@@ -99,7 +99,7 @@ function appendMacOsHelperContextArgs(
 export function resolveMacOsHelperPackageRootFrom(modulePath: string): string {
   let currentDir = path.dirname(modulePath);
   while (true) {
-    const candidate = path.join(currentDir, 'macos-helper');
+    const candidate = path.join(currentDir, 'apple', 'macos-helper');
     if (existsSync(path.join(candidate, 'Package.swift'))) {
       return candidate;
     }

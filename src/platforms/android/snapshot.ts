@@ -513,7 +513,7 @@ async function resolveAndroidSnapshotHelperArtifact(
   }
 
   const version = readVersion();
-  const helperDir = path.join(findProjectRoot(), 'android-snapshot-helper', 'dist');
+  const helperDir = path.join(findProjectRoot(), 'android', 'snapshot-helper', 'dist');
   const manifestPath = path.join(
     helperDir,
     `agent-device-android-snapshot-helper-${version}.manifest.json`,

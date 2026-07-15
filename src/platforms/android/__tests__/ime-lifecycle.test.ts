@@ -9,7 +9,7 @@ const SETTINGS_KEY = 'agent_device_ime_helper_previous_ime';
 const PENDING_DIR = 'android-test-ime-pending';
 
 // activateAndroidTestIme reads the bundled artifact for the service component; inject a fixture so
-// the suite passes on a fresh checkout that hasn't packaged android-ime-helper/dist (CI Coverage).
+// the suite passes on a fresh checkout that hasn't packaged android/ime-helper/dist (CI Coverage).
 vi.mock('../ime-helper.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../ime-helper.ts')>();
   const fixture = await import('../../../__tests__/test-utils/android-snapshot-helper.ts');

@@ -6,7 +6,8 @@ export const PROJECT_ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
 
 const RUNNER_SOURCES_DIR = path.join(
   PROJECT_ROOT,
-  'apple-runner',
+  'apple',
+  'runner',
   'AgentDeviceRunner',
   'AgentDeviceRunnerUITests',
 );

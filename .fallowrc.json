@@ -28,7 +28,7 @@
     "examples/test-app/**",
     "scripts/perf/**",
     "scripts/layering/**",
-    "apple-runner/AgentDeviceRunner/AgentDeviceRunnerUITests.xctestplan",
+    "apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests.xctestplan",
     "scripts/write-xcuitest-cache-metadata.mjs"
   ],
   "ignoreDependencies": ["@theme"],

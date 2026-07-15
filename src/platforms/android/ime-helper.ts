@@ -49,7 +49,7 @@ export type AndroidImeHelperArtifact = {
 
 export async function resolveAndroidImeHelperArtifact(): Promise<AndroidImeHelperArtifact> {
   return await resolveAndroidHelperArtifact({
-    helperDirName: 'android-ime-helper',
+    helperDirName: 'ime-helper',
     manifestFileName: (version) => `agent-device-android-ime-helper-${version}.manifest.json`,
     parseManifest: parseAndroidImeHelperManifest,
     unavailableMessage:
