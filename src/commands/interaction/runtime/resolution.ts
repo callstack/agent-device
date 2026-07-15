@@ -403,6 +403,7 @@ function describeResolvedInteractionNode(
     node,
     selectorChain: buildSelectorChainForNode(node, runtime.backend.platform, {
       action: action === 'fill' ? 'fill' : 'click',
+      nodes,
     }),
     refLabel: resolveRefLabel(node, nodes),
     ...describeNonHittableTarget(node, action),

@@ -45,7 +45,7 @@ export function computeTargetEvidence(
   const { node, preActionNodes: nodes } = capture;
   if (typeof node.index !== 'number') return undefined;
   const byIndex = buildIndexMap(nodes);
-  const identity = boundedLocalIdentity(node);
+  const identity = demoteNonUniqueId(boundedLocalIdentity(node), nodes, byIndex);
   const ancestryWalk = buildAncestryChain(node, byIndex, TARGET_ANNOTATION_MAX_ANCESTRY);
   const fullAncestry = ancestryWalk.chain;
   const sibling = computeSiblingOrdinal(nodes, node);
@@ -235,6 +235,34 @@ export function filterIdentitySet(
     // A candidate with a broken parent walk cannot prove the prefix.
     return !observed.broken && matchesAncestryPrefix(observed.chain, ancestry);
   });
+}
+
+/**
+ * ADR 0012 decision 3 amendment (#1269): an id is identity only when it
+ * uniquely denotes the target in the record-time tree. `boundedLocalIdentity`
+ * reads a node's id unconditionally, but a shared framework resource id
+ * (Android's `android:id/title` matching every list row is the measured
+ * case — #1269) is not selective: on replay the id-led identity set spans
+ * every row, position drifts, and verification correctly refuses a
+ * confident bind. Passing an empty `ancestry` to `filterIdentitySet`
+ * degrades its ancestry-prefix check to vacuously-true, so it returns
+ * exactly the nodes sharing this id anywhere in the tree — the id's own
+ * capture-time match count, independent of structural context. When that
+ * count is greater than one, fall back to role+label, exactly the identity
+ * an unrecorded id already computes. The rule is capture-time uniqueness,
+ * not an id-namespace heuristic: a reused RN `FlatList` `testID` hits the
+ * same demotion on iOS.
+ */
+function demoteNonUniqueId(
+  identity: LocalIdentity,
+  nodes: readonly SnapshotNode[],
+  byIndex: Map<number, SnapshotNode>,
+): LocalIdentity {
+  if (identity.id === undefined) return identity;
+  const idMatchCount = filterIdentitySet(nodes, byIndex, identity, []).length;
+  if (idMatchCount <= 1) return identity;
+  const { role, label } = identity;
+  return { role, ...(label !== undefined ? { label } : {}) };
 }
 
 function computeDisambiguationDomain(params: {

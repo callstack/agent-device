@@ -210,6 +210,7 @@ export const getCommand: RuntimeCommand<GetCommandOptions, GetCommandResult> = a
     );
     const selectorChain = buildSelectorChainForNode(resolved.node, runtime.backend.platform, {
       action: 'get',
+      nodes: capture.snapshot.nodes,
     });
     const target = { kind: 'ref' as const, ref: `@${resolved.ref}` };
     const preActionNodes = capture.snapshot.nodes;
@@ -233,6 +234,7 @@ export const getCommand: RuntimeCommand<GetCommandOptions, GetCommandResult> = a
 
   const selectorChain = buildSelectorChainForNode(resolved.node, runtime.backend.platform, {
     action: 'get',
+    nodes: resolved.capture.snapshot.nodes,
   });
 
   if (options.property === 'attrs') {

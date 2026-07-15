@@ -19,6 +19,11 @@ Accepted (2026-07-10); partially implemented (last updated 2026-07-13). See [Mig
   filters, not scopings; and `screen.refs` is ranked within the byte cap (foreign-window dismiss targets
   ahead of app content; mass-covered app nodes surfaced rather than emptied) instead of sliced in document
   order, so a captured overlay is never buried past the cap (#1264).
+- Decision 3 amendment, id demotion under non-unique capture-time match — a recorded id no longer serves
+  as identity, or leads the selector chain, unless it is unique in the record-time tree; a non-unique id
+  (a shared Android framework resource id such as `android:id/title`, or a reused RN `FlatList` `testID`)
+  falls back to role+label in both `computeTargetEvidence`'s `target-v1` tuple and
+  `buildSelectorChainForNode`'s chain (#1269).
 
 **Accepted but NOT yet implemented** (this amendment; tracked by #1235 — repair-transaction lifecycle):
 the R7 repair-transaction keep-alive and its distinct `resume.repairSessionHeld` signal, the ARMED →
@@ -315,6 +320,14 @@ not an expected path. The record-time self-check (step 5 below) runs against the
 or, when the recording carries no `id`, when their normalized roles are equal and their normalized labels
 are equal (label absent on both sides counts as equal; label present on exactly one side is a mismatch).
 A recorded `id` never matches a node without that id.
+
+> **Amendment (#1269).** An id may serve as identity (and lead the selector chain) only when it uniquely
+> denotes the target in the record-time tree: the writer computes the id's own capture-time match count
+> (independent of ancestry) and, whenever more than one node in the record-time tree carries the recorded
+> id, demotes it — falling back to role+label exactly as an unrecorded id already does. A shared
+> Android framework resource id (`android:id/title`, present on every titled list row) is the measured
+> case, but the rule is capture-time uniqueness, not an `android:id/*` namespace heuristic: a reused RN
+> `FlatList` `testID` hits the same demotion on iOS.
 
 **Ancestry.** The chain is the nearest **K = 8** ancestors of the target, ordered **leaf→root** (nearest
 ancestor first), each entry `{ role, label? }` under the same normalization (`role` may be the empty

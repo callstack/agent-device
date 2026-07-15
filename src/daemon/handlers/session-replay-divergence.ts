@@ -557,6 +557,7 @@ export function buildReplayDivergenceSuggestionForNode(params: {
   const selectorChain = buildSelectorChainForNode(node, session.device.platform, {
     action:
       action.command === 'fill' ? 'fill' : isTouchTargetCommand(action.command) ? 'click' : 'get',
+    nodes,
   });
   const role = formatRole(node.type ?? 'Element');
   const label = displayLabel(node, role);

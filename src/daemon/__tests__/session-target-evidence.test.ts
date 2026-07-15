@@ -466,3 +466,126 @@ test('computeTargetEvidence: a parent cycle records unverifiable, never verified
   assert.ok(evidence);
   assert.equal(evidence.verification, 'unverifiable');
 });
+
+// ---------------------------------------------------------------------------
+// #1269: ADR 0012 decision 3 amendment — an id is identity only when it
+// uniquely denotes the target in the record-time tree. A shared framework
+// resource id (Android's `android:id/title`, present on every titled list
+// row) is not selective: the recorded ancestry is label-less generic
+// containers (linearlayout/recyclerview/framelayout) contributing no
+// disambiguation, so an id-led identity set spans every row and replay binds
+// the wrong one under positional drift. The fix demotes the id back to
+// role+label whenever it matches more than one node at record time — the
+// same fallback an unrecorded id already uses.
+// ---------------------------------------------------------------------------
+
+function androidSettingsListFixture(): SnapshotNode[] {
+  return toSnapshotNodes([
+    { index: 0, type: 'FrameLayout', depth: 0 },
+    { index: 1, type: 'RecyclerView', depth: 1, parentIndex: 0 },
+    // Each row is a label-less LinearLayout wrapper (real Android list
+    // shape) whose title TextView shares one framework resource id.
+    { index: 2, type: 'LinearLayout', depth: 2, parentIndex: 1 },
+    {
+      index: 3,
+      type: 'TextView',
+      identifier: 'android:id/title',
+      label: 'Network & internet',
+      rect: { x: 0, y: 100, width: 300, height: 48 },
+      depth: 3,
+      parentIndex: 2,
+    },
+    { index: 4, type: 'LinearLayout', depth: 2, parentIndex: 1 },
+    {
+      index: 5,
+      type: 'TextView',
+      identifier: 'android:id/title',
+      label: 'Connected devices',
+      rect: { x: 0, y: 148, width: 300, height: 48 },
+      depth: 3,
+      parentIndex: 4,
+    },
+    { index: 6, type: 'LinearLayout', depth: 2, parentIndex: 1 },
+    {
+      index: 7,
+      type: 'TextView',
+      identifier: 'android:id/title',
+      label: 'Apps',
+      rect: { x: 0, y: 196, width: 300, height: 48 },
+      depth: 3,
+      parentIndex: 6,
+    },
+  ]);
+}
+
+test('computeTargetEvidence: a shared Android framework id (matchCount 3 > 1) is demoted to role+label, and still verifies via the now-selective label', () => {
+  const nodes = androidSettingsListFixture();
+  const winner = findByLabel(nodes, 'Network & internet');
+  const evidence = computeTargetEvidence({ node: winner, preActionNodes: nodes });
+  assert.ok(evidence);
+  assert.equal(
+    evidence.id,
+    undefined,
+    'the non-unique android:id/title must not be recorded as identity',
+  );
+  assert.equal(evidence.role, 'textview');
+  assert.equal(evidence.label, 'Network & internet');
+  assert.deepEqual(evidence.ancestry[0], { role: 'linearlayout' });
+  // With the id demoted, role+label uniquely isolates this row among the
+  // three sharing the id, so the record-time self-check still verifies —
+  // this is the measured "get-only stripped-id: 20/20 clean" fix.
+  assert.equal(evidence.verification, 'verified');
+});
+
+test('computeTargetEvidence: an RN FlatList reusing one testID across rows (iOS/RN, matchCount > 1) is demoted the same way', () => {
+  // The class is not Android-specific: an RN `FlatList` `renderItem` that
+  // assigns the SAME testID to every row reproduces one shared accessibility
+  // identifier across siblings on iOS too. Capture-time uniqueness — not an
+  // `android:id/*` namespace check — is the rule.
+  const nodes = toSnapshotNodes([
+    { index: 0, type: 'Application', depth: 0 },
+    { index: 1, type: 'ScrollView', identifier: 'contacts-list', depth: 1, parentIndex: 0 },
+    {
+      index: 2,
+      type: 'Cell',
+      identifier: 'contact-row',
+      label: 'Ada Lovelace',
+      rect: { x: 0, y: 0, width: 320, height: 60 },
+      depth: 2,
+      parentIndex: 1,
+    },
+    {
+      index: 3,
+      type: 'Cell',
+      identifier: 'contact-row',
+      label: 'Grace Hopper',
+      rect: { x: 0, y: 60, width: 320, height: 60 },
+      depth: 2,
+      parentIndex: 1,
+    },
+    {
+      index: 4,
+      type: 'Cell',
+      identifier: 'contact-row',
+      label: 'Katherine Johnson',
+      rect: { x: 0, y: 120, width: 320, height: 60 },
+      depth: 2,
+      parentIndex: 1,
+    },
+  ]);
+  const winner = findByLabel(nodes, 'Grace Hopper');
+  const evidence = computeTargetEvidence({ node: winner, preActionNodes: nodes });
+  assert.ok(evidence);
+  assert.equal(evidence.id, undefined, 'the shared testID must not be recorded as identity');
+  assert.equal(evidence.role, 'cell');
+  assert.equal(evidence.label, 'Grace Hopper');
+  assert.equal(evidence.verification, 'verified');
+});
+
+test('computeTargetEvidence: a unique id is still recorded as identity (already-clean case unchanged)', () => {
+  const nodes = toolbarFixture();
+  const winner = findByLabel(nodes, 'Save');
+  const evidence = computeTargetEvidence({ node: winner, preActionNodes: nodes });
+  assert.ok(evidence);
+  assert.equal(evidence.id, 'save');
+});

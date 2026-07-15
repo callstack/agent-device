@@ -6,11 +6,11 @@ import { extractNodeText, normalizeType } from '../snapshot/snapshot-processing.
 export function buildSelectorChainForNode(
   node: SnapshotNode,
   _platform: Platform | PublicPlatform,
-  options: { action?: 'click' | 'fill' | 'get' } = {},
+  options: { action?: 'click' | 'fill' | 'get'; nodes?: readonly SnapshotNode[] } = {},
 ): string[] {
   const chain: string[] = [];
   const role = normalizeType(node.type ?? '');
-  const id = normalizeSelectorText(node.identifier);
+  const id = selectableId(node, options.nodes);
   const label = normalizeSelectorText(node.label);
   const value = normalizeSelectorText(node.value);
   const text = normalizeSelectorText(extractNodeText(node));
@@ -64,6 +64,32 @@ export function buildSelectorChainForNode(
     if (visible) deduped.push('visible=true');
   }
   return deduped;
+}
+
+/**
+ * ADR 0012 decision 3 amendment (#1269): an id may lead the selector chain
+ * only when it uniquely denotes the node in the record-time tree it was
+ * captured from — a shared framework resource id (Android's
+ * `android:id/title` matching every list row is the measured case) resolves
+ * the wrong element under positional drift on replay. The rule is
+ * capture-time uniqueness, not an id-namespace heuristic: a reused RN
+ * `FlatList` `testID` hits the same demotion. `nodes` is the record-time
+ * tree the node was captured from; every writer call site passes it. When
+ * absent (e.g. a node built in isolation with no tree to check against) the
+ * id is trusted as-is.
+ */
+function selectableId(
+  node: SnapshotNode,
+  nodes: readonly SnapshotNode[] | undefined,
+): string | null {
+  const id = normalizeSelectorText(node.identifier);
+  if (!id || !nodes) return id;
+  let matches = 0;
+  for (const candidate of nodes) {
+    if (normalizeSelectorText(candidate.identifier) === id) matches += 1;
+    if (matches > 1) return null;
+  }
+  return id;
 }
 
 function uniqueStrings(values: readonly string[]): string[] {
