@@ -1,7 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 import { AppError } from '../../../kernel/errors.ts';
 import { maestroTestFailure } from '../compatibility-errors.ts';
-import { executeMaestroProgram } from '../engine.ts';
 import { parseMaestroProgram } from '../program-ir-parser.ts';
 import type {
   MaestroObservation,
@@ -9,6 +8,7 @@ import type {
   MaestroRuntimeRequest,
   MaestroRuntimeResult,
 } from '../engine-types.ts';
+import { executeMaestroProgram } from './runtime-port-fixtures.ts';
 
 describe('executeMaestroProgram', () => {
   test('preserves authored percentage swipe intent without observing', async () => {

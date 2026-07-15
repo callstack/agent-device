@@ -1,8 +1,8 @@
 import { expect, test, vi } from 'vitest';
-import { executeMaestroProgram } from '../engine.ts';
 import { createMaestroExecutionContext } from '../engine-context.ts';
 import type { MaestroRuntimePort } from '../engine-types.ts';
 import { parseMaestroProgram } from '../program-ir-parser.ts';
+import { executeMaestroProgram } from './runtime-port-fixtures.ts';
 
 test('resolves transitive scoped variables to their final value', () => {
   const context = createMaestroExecutionContext();

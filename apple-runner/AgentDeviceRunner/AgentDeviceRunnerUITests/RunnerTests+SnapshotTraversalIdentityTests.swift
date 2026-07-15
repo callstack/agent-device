@@ -15,6 +15,10 @@ extension RunnerTests {
       frame: CGRect(x: 0, y: 97, width: 131, height: 48)
     )
 
+    #if os(iOS)
     XCTAssertNotEqual(wrapper, leaf)
+    #else
+    XCTAssertEqual(wrapper, leaf)
+    #endif
   }
 }

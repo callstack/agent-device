@@ -1,8 +1,8 @@
 import { describe, expect, test, vi } from 'vitest';
-import { executeMaestroProgram } from '../engine.ts';
 import type { MaestroRuntimePort } from '../engine-types.ts';
 import { parseMaestroProgram } from '../program-ir-parser.ts';
 import { compileMaestroReplayPlan, evaluateMaestroReplayResume } from '../replay-plan.ts';
+import { executeMaestroProgram } from './runtime-port-fixtures.ts';
 
 describe('typed Maestro replay plan', () => {
   test('expands static hooks and includes while retaining runtime controls', async () => {

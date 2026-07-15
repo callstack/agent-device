@@ -34,7 +34,7 @@ export type MaestroReplayPlan = {
   readonly steps: readonly MaestroReplayPlanStep[];
   readonly total: number;
   readonly digest: string;
-  /** Counts retained for the existing executeMaestroProgram result shape. */
+  /** Static control counts included in the engine result. */
   readonly compatibility: {
     readonly staticallyExecutedControls: number;
     readonly staticallySkippedControls: number;

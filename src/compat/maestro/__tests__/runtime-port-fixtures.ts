@@ -2,6 +2,14 @@ import type {
   MaestroRuntimeOperationContext,
   MaestroRuntimeOperations,
 } from '../runtime-port-types.ts';
+import { executeMaestroPlan } from '../engine.ts';
+import type {
+  MaestroEngineOptions,
+  MaestroEngineResult,
+  MaestroRuntimePort,
+} from '../engine-types.ts';
+import type { MaestroProgram } from '../program-ir.ts';
+import { compileMaestroReplayPlan } from '../replay-plan.ts';
 
 export type RecordedCall = {
   kind: string;
@@ -9,6 +17,14 @@ export type RecordedCall = {
   generation: number;
   appId?: string;
 };
+
+export async function executeMaestroProgram(
+  program: MaestroProgram,
+  port: MaestroRuntimePort,
+  options: MaestroEngineOptions = {},
+): Promise<MaestroEngineResult> {
+  return await executeMaestroPlan(await compileMaestroReplayPlan(program, options), port, options);
+}
 
 export function makeOperations(
   overrides: Partial<MaestroRuntimeOperations> = {},

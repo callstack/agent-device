@@ -1,9 +1,13 @@
 import { describe, expect, test, vi } from 'vitest';
-import { executeMaestroProgram } from '../engine.ts';
 import { parseMaestroProgram } from '../program-ir-parser.ts';
 import { createMaestroRuntimePort } from '../runtime-port.ts';
 import type { MaestroRuntimeOperations, MaestroTargetMatch } from '../runtime-port-types.ts';
-import { makeOperations, record, type RecordedCall } from './runtime-port-fixtures.ts';
+import {
+  executeMaestroProgram,
+  makeOperations,
+  record,
+  type RecordedCall,
+} from './runtime-port-fixtures.ts';
 
 describe('MaestroRuntimePort', () => {
   test('delegates typed lifecycle, input, keyboard, screenshot, and script operations', async () => {

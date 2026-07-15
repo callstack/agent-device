@@ -1129,7 +1129,11 @@ extension RunnerTests {
     identifier: String,
     frame: CGRect
   ) -> String {
+    #if os(iOS)
     "\(elementType)-\(label)-\(identifier)-\(frame.origin.x)-\(frame.origin.y)-\(frame.width)-\(frame.height)"
+    #else
+    return "\(elementType)-\(label)-\(identifier)-\(frame.origin.x)-\(frame.origin.y)"
+    #endif
   }
 
   private func aggregatedLabel(for snapshot: XCUIElementSnapshot, depth: Int = 0) -> String? {

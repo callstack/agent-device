@@ -10,8 +10,15 @@ import {
 } from '../input-actions.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { withScriptedAdb } from '../../../__tests__/test-utils/mocked-binaries.ts';
-import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
-import { withAndroidAdbProvider, type AndroidTouchInjector } from '../adb-executor.ts';
+import {
+  ANDROID_EMULATOR,
+  ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+} from '../../../__tests__/test-utils/index.ts';
+import {
+  createDeviceAdbExecutor,
+  withAndroidAdbProvider,
+  type AndroidTouchInjector,
+} from '../adb-executor.ts';
 
 test('scrollAndroid plans explicit pixel travel through semantic touch injection', async () => {
   const touchCalls: Parameters<AndroidTouchInjector>[0][] = [];
@@ -241,7 +248,9 @@ test('fillAndroid uses chunk-safe shell input and retries when verification stil
       '',
     ].join('\n'),
     async ({ argsLogPath, device }) => {
-      await fillAndroid(device, 10, 10, 'curtis.layne+test+73kmc@uber.com');
+      await withScriptedSnapshotHelper(device, async () => {
+        await fillAndroid(device, 10, 10, 'curtis.layne+test+73kmc@uber.com');
+      });
       const logged = await fs.readFile(argsLogPath, 'utf8');
       assert.doesNotMatch(logged, /shell\ncmd\nclipboard\nset\ntext/);
       assert.doesNotMatch(logged, /shell\ninput\nkeyevent\nKEYCODE_PASTE/);
@@ -283,7 +292,9 @@ test('fillAndroid keeps delayed typing in typed-input mode', async () => {
       '',
     ].join('\n'),
     async ({ argsLogPath, device }) => {
-      await fillAndroid(device, 10, 10, 'go', 1);
+      await withScriptedSnapshotHelper(device, async () => {
+        await fillAndroid(device, 10, 10, 'go', 1);
+      });
       const logged = await fs.readFile(argsLogPath, 'utf8');
       const shellInputTextCount = (logged.match(/shell\ninput\ntext\n/g) ?? []).length;
       assert.equal(shellInputTextCount, 2);
@@ -336,7 +347,9 @@ test('fillAndroid tolerates delayed React Native text verification', async () =>
       '',
     ].join('\n'),
     async ({ device }) => {
-      await fillAndroid(device, 10, 10, 'sent the update');
+      await withScriptedSnapshotHelper(device, async () => {
+        await fillAndroid(device, 10, 10, 'sent the update');
+      });
     },
   );
 }, 10_000);
@@ -403,4 +416,18 @@ function androidSnapshotHelperStateFileScript(
     '  exit 0',
     'fi',
   ];
+}
+
+async function withScriptedSnapshotHelper(
+  device: typeof ANDROID_EMULATOR,
+  run: () => Promise<void>,
+): Promise<void> {
+  await withAndroidAdbProvider(
+    {
+      exec: createDeviceAdbExecutor(device),
+      snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+    },
+    { serial: device.id },
+    run,
+  );
 }
