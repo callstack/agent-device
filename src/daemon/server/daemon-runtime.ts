@@ -98,7 +98,7 @@ export async function startDaemonRuntime(
   const token = crypto.randomBytes(24).toString('hex');
   const daemonProcessStartTime = readProcessStartTime(process.pid) ?? undefined;
   const daemonCodeSignature = resolveDaemonCodeSignature();
-  const providerDeviceRuntimes = createDefaultProviderDeviceRuntimes(env);
+  const providerDeviceRuntimes = await createDefaultProviderDeviceRuntimes(env);
   const providerRuntimeProviders =
     createProviderDeviceRuntimeRequestProviders(providerDeviceRuntimes);
   const cloudArtifactProvider = composeCloudArtifactProviders(
