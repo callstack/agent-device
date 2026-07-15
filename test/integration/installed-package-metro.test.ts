@@ -78,6 +78,7 @@ function linkRuntimeDependencies(installedPackageRoot: string, consumerRoot: str
     const sourcePath = path.join(repoRoot, 'node_modules', dependencyName);
     const targetPath = path.join(consumerNodeModules, dependencyName);
     if (!fs.existsSync(sourcePath) || fs.existsSync(targetPath)) continue;
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
     fs.symlinkSync(sourcePath, targetPath, 'junction');
   }
 }

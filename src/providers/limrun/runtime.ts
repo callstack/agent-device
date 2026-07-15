@@ -11,7 +11,7 @@ import {
   type InstanceClient as LimrunIosClient,
 } from '@limrun/api/ios-client';
 import { AppError } from '../../kernel/errors.ts';
-import { runCmd } from '../../utils/exec.ts';
+import { execFailureDetails, runCmd } from '../../utils/exec.ts';
 import { readVersion } from '../../utils/version.ts';
 import type { DeviceRotation } from '../../contracts/device-rotation.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
@@ -415,9 +415,7 @@ async function prepareLimrunIosAsset(artifactPath: string): Promise<{
     await fs.promises.rm(tempDir, { recursive: true, force: true });
     throw new AppError('COMMAND_FAILED', 'Failed to package iOS .app for Limrun install', {
       command: ['zip', '-qr', zipPath, path.basename(artifactPath)].join(' '),
-      exitCode: result.exitCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
+      ...execFailureDetails(result),
     });
   }
   return {
@@ -459,9 +457,7 @@ function limrunAdbRunOptions(options: AndroidAdbExecutorOptions | undefined) {
 function limrunAndroidAdbError(adbArgs: string[], result: AndroidAdbExecutorResult): AppError {
   return new AppError('COMMAND_FAILED', 'Limrun Android ADB command failed', {
     command: ['adb', ...adbArgs].join(' '),
-    exitCode: result.exitCode,
-    stdout: result.stdout,
-    stderr: result.stderr,
+    ...execFailureDetails(result),
   });
 }
 
@@ -688,9 +684,7 @@ async function ensureAndroidPortReverse(
         `tcp:${options.devicePort}`,
         `tcp:${options.hostPort}`,
       ].join(' '),
-      exitCode: result.exitCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
+      ...execFailureDetails(result),
     });
   }
   session.reversedPorts.set(options.devicePort, options.name);
