@@ -3,6 +3,7 @@ import type { MaestroProgram } from './program-ir.ts';
 import { compileMaestroReplayPlanSteps } from './replay-plan-steps.ts';
 import type { MaestroReplayPlan, MaestroReplayPlanOptions } from './replay-plan-types.ts';
 import type { SessionRuntimeHints } from '../../kernel/contracts.ts';
+import { stripUndefined } from '../../utils/parsing.ts';
 
 export async function compileMaestroReplayPlan(
   program: MaestroProgram,
@@ -11,11 +12,11 @@ export async function compileMaestroReplayPlan(
   const { steps, staticallyExecutedControls, staticallySkippedControls } =
     await compileMaestroReplayPlanSteps(program, options);
   const runtimeHints = normalizeRuntimeHints(options.runtimeHints);
-  const planWithoutDigest = {
+  const planWithoutDigest = stripUndefined({
     kind: 'maestroReplayPlan' as const,
-    ...(options.platform === undefined ? {} : { platform: options.platform }),
-    ...(options.target === undefined ? {} : { target: options.target }),
-    ...(runtimeHints === undefined ? {} : { runtimeHints }),
+    platform: options.platform,
+    target: options.target,
+    runtimeHints,
     initialStaticEnv: cloneValue({
       ...(options.defaults ?? {}),
       ...(program.config.env ?? {}),
@@ -27,7 +28,7 @@ export async function compileMaestroReplayPlan(
       staticallyExecutedControls,
       staticallySkippedControls,
     },
-  };
+  });
   const digest = computeMaestroReplayPlanDigest(planWithoutDigest);
   return freezeDeep({ ...planWithoutDigest, digest });
 }

@@ -384,18 +384,3 @@ function firstAncestryMismatch(
   }
   return [];
 }
-
-// ---------------------------------------------------------------------------
-// Daemon-level orchestration: capture, session, wire shaping.
-// ---------------------------------------------------------------------------
-
-/**
- * Post-resolution guard payload for a verified action: dispatch re-resolves
- * with its own occlusion/visibility guards, and its winner must carry
- * `expected` (the verified member's identity) or the interaction layer
- * refuses pre-action (`assertExpectedResolvedTarget`, resolution.ts).
- * `matchCount` is verification's recorded-selector match count, carried so
- * the resulting identity-mismatch divergence satisfies decision 3's
- * matchCount presence rule.
- */
-export type ReplayVerifiedTargetGuard = { expected: LocalIdentity; matchCount: number };

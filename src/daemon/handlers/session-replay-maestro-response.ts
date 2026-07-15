@@ -49,8 +49,8 @@ export async function buildTypedMaestroReplayErrorResponse(params: {
   sessionStore: SessionStore;
   logPath: string;
 }): Promise<DaemonResponse> {
-  const normalizedError = normalizeError(params.error);
   const { failedEvent, plan } = params.state;
+  const normalizedError = normalizeError(failedEvent?.error ?? params.error);
   if (failedEvent && plan) {
     return await buildTypedMaestroFailureResponse({
       error: normalizedError,

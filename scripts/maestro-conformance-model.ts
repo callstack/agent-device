@@ -20,6 +20,7 @@ import type {
   UpstreamSource,
 } from './maestro-conformance-types.ts';
 import { readOptionalString, readRequiredRecord } from './maestro-conformance-values.ts';
+import { stripUndefined } from '../src/utils/parsing.ts';
 
 const UPSTREAM_DEFAULT_SWIPE_DURATION_MS = 400;
 
@@ -125,13 +126,11 @@ function normalizeAgentTap(
   }
   return {
     kind: 'tapOn',
-    selector: {
+    selector: stripUndefined({
       ...normalizeTypedSelector(command.target.selector),
-      ...(command.index === undefined ? {} : { index: command.index }),
-      ...(command.childOf === undefined
-        ? {}
-        : { childOf: normalizeTypedSelector(command.childOf) }),
-    },
+      index: command.index,
+      childOf: command.childOf ? normalizeTypedSelector(command.childOf) : undefined,
+    }),
     source,
   };
 }
@@ -159,12 +158,7 @@ function normalizeAgentSwipe(
 
 function normalizeTypedSelector(selector: MaestroSelector): NormalizedSelector {
   const text = selector.text ?? selector.label;
-  return {
-    ...(selector.id === undefined ? {} : { id: selector.id }),
-    ...(text === undefined ? {} : { text }),
-    ...(selector.enabled === undefined ? {} : { enabled: selector.enabled }),
-    ...(selector.selected === undefined ? {} : { selected: selector.selected }),
-  };
+  return stripUndefined({ id: selector.id, text, enabled: selector.enabled, selected: selector.selected });
 }
 
 function normalizeUpstreamCommand(

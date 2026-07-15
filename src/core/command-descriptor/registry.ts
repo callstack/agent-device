@@ -96,16 +96,22 @@ const isShardedTestRequest = (req: DaemonRequest): boolean =>
 // classified may-invalidate (the honest superset for unknown subactions).
 const KEYBOARD_READ_ONLY_ACTIONS = new Set(['status', 'get']);
 const keyboardRefFrameEffect = (req: DaemonRequest): RefFrameEffect =>
-  KEYBOARD_READ_ONLY_ACTIONS.has((req.positionals?.[0] ?? 'status').toLowerCase())
-    ? 'preserve'
-    : 'may-invalidate';
+  readOnlySubactionRefFrameEffect(req, KEYBOARD_READ_ONLY_ACTIONS, 'status');
 
 // alert actions are get/wait/accept/dismiss: get/wait read, accept/dismiss act.
 const ALERT_READ_ONLY_ACTIONS = new Set(['get', 'wait']);
 const alertRefFrameEffect = (req: DaemonRequest): RefFrameEffect =>
-  ALERT_READ_ONLY_ACTIONS.has((req.positionals?.[0] ?? 'get').toLowerCase())
+  readOnlySubactionRefFrameEffect(req, ALERT_READ_ONLY_ACTIONS, 'get');
+
+function readOnlySubactionRefFrameEffect(
+  req: DaemonRequest,
+  readOnlyActions: ReadonlySet<string>,
+  defaultAction: string,
+): RefFrameEffect {
+  return readOnlyActions.has((req.positionals?.[0] ?? defaultAction).toLowerCase())
     ? 'preserve'
     : 'may-invalidate';
+}
 
 // ---------------------------------------------------------------------------
 // Capability matrices — platform/kind buckets, copied VERBATIM from

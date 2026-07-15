@@ -16,10 +16,8 @@ import {
 } from '../../selectors/index.ts';
 import { collectReplaySelectorCandidates } from './session-replay-heal.ts';
 import { collectSettleChromeRefs } from '../../core/snapshot-chrome.ts';
-import {
-  buildReplayDivergenceResume,
-  stampPendingRecordAndHealWatermark,
-} from './session-replay-resume.ts';
+import { buildAndPersistReplayDivergenceResume } from './session-replay-resume.ts';
+import { rankAndDedupeReplaySuggestions } from './session-replay-suggestion-ranking.ts';
 import { formatDivergenceActionLabel, isTouchTargetCommand } from '../../replay/script-utils.ts';
 import {
   computeReplayRepairHint,
@@ -119,25 +117,14 @@ export async function buildReplayFailureDivergence(params: {
     capture: toReplayRepairHintCapture(observation),
   });
 
-  const resume = buildReplayDivergenceResume({
+  const resume = buildAndPersistReplayDivergenceResume({
     failedIndex: index + 1,
     actions: planActions,
     planDigest,
     repairHint,
-    // A live session is required to stamp the empty-tail watermark below, so it
-    // gates whether the one-past-the-end `alternateFrom` may be advertised.
-    sessionExists: session !== undefined,
+    sessionStore,
+    sessionName,
   });
-  if (session) {
-    stampPendingRecordAndHealWatermark({
-      session,
-      resume,
-      repairHint,
-      failedIndex: index + 1,
-      actions: planActions,
-    });
-    sessionStore.set(sessionName, session);
-  }
 
   const divergence: ReplayDivergence = {
     version: 1,
@@ -443,13 +430,6 @@ function buildReplayDivergenceScreenRefs(
   return { refs, truncated };
 }
 
-const BASIS_RANK: Record<ReplayDivergenceSuggestionBasis, number> = {
-  id: 0,
-  'role-label': 1,
-  label: 2,
-  other: 3,
-};
-
 function classifySuggestionBasis(selector: Selector): ReplayDivergenceSuggestionBasis {
   const keys = new Set(selector.terms.map((term) => term.key));
   if (keys.has('id')) return 'id';
@@ -501,7 +481,7 @@ export function resolveSuggestionMatchingConfig(
 
 type RankedSuggestion = {
   suggestion: ReplayDivergenceSuggestion;
-  basisRank: number;
+  basis: ReplayDivergenceSuggestionBasis;
   nodeIndex: number;
 };
 
@@ -518,7 +498,7 @@ function rankSuggestionCandidates(params: {
   // per the ADR: a node reachable through several recorded selector terms
   // appears once, tagged with its strongest basis — not whichever candidate
   // happened to resolve it first.
-  const byNode = new Map<number, RankedSuggestion>();
+  const entries: RankedSuggestion[] = [];
   for (const candidate of candidates) {
     const entry = resolveSuggestionCandidate({
       candidate,
@@ -529,12 +509,9 @@ function rankSuggestionCandidates(params: {
       sanitize,
     });
     if (!entry) continue;
-    const existing = byNode.get(entry.nodeIndex);
-    if (!existing || entry.basisRank < existing.basisRank) byNode.set(entry.nodeIndex, entry);
+    entries.push(entry);
   }
-  return [...byNode.values()]
-    .sort((a, b) => a.basisRank - b.basisRank || a.nodeIndex - b.nodeIndex)
-    .map((entry) => entry.suggestion);
+  return rankAndDedupeReplaySuggestions(entries).map((entry) => entry.suggestion);
 }
 
 function resolveSuggestionCandidate(params: {
@@ -564,7 +541,7 @@ function resolveSuggestionCandidate(params: {
       basis,
       sanitize,
     }),
-    basisRank: BASIS_RANK[basis],
+    basis,
     nodeIndex: resolved.node.index,
   };
 }

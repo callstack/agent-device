@@ -8,6 +8,7 @@ import {
   type CommandFlags,
 } from '../../core/dispatch.ts';
 import { getRequestSignal } from '../../request/cancel.ts';
+import { stripUndefined } from '../../utils/parsing.ts';
 import {
   collectReplayShellEnv,
   parseReplayCliEnvEntries,
@@ -313,11 +314,11 @@ function createMaestroReplayPort(params: {
     flags: _flags,
     ...requestBase
   } = req;
-  const baseReq = {
+  const baseReq = stripUndefined({
     ...requestBase,
     flags: maestroRuntimeDeviceFlags(device, platform, req.flags),
-    ...(runtimeHints === undefined ? {} : { runtime: runtimeHints }),
-  };
+    runtime: runtimeHints,
+  });
   return createDaemonMaestroRuntimePort({
     baseReq,
     invoke,

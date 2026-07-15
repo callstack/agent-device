@@ -9,16 +9,10 @@ import {
   type IosInteractiveSnapshotPresentation,
 } from '../../daemon/snapshot-presentation/ios/index.ts';
 import type { MaestroSelector } from './program-ir.ts';
-import {
-  findMaestroTypedSelectorMatches,
-  scopeMaestroMatchesByAncestor,
-} from './runtime-target-matching.ts';
-import { filterVisibleMaestroMatches, type MaestroPlatform } from './runtime-target-policy.ts';
-import {
-  normalizeMaestroSnapshotMatches,
-  selectMaestroSnapshotMatch,
-} from './runtime-target-ranking.ts';
+import type { MaestroPlatform } from './runtime-target-policy.ts';
+import { rankMaestroCandidates, selectMaestroSnapshotMatch } from './runtime-target-ranking.ts';
 import { pointInsideRect } from '../../utils/rect-center.ts';
+import { stripUndefined } from '../../utils/parsing.ts';
 
 export type MaestroTargetQuery = {
   selector: MaestroSelector;
@@ -53,26 +47,15 @@ export function resolveMaestroTargetFromSnapshot(
   platform: MaestroPlatform,
   options: { interactiveBounds?: boolean } = {},
 ): MaestroTargetResolution {
-  let matches = findMaestroTypedSelectorMatches(snapshot, query.selector);
-  if (query.childOf) {
-    const scoped = scopeMaestroMatchesByAncestor(snapshot, matches, query.childOf);
-    if (!scoped.parentMatched) {
-      return {
-        ok: false,
-        message: 'Maestro childOf parent did not match.',
-        evidence: buildMaestroTargetEvidence(query, matches, [], undefined),
-      };
-    }
-    matches = scoped.matches;
+  const candidates = rankMaestroCandidates(snapshot, query.selector, platform, query.childOf);
+  if (!candidates.parentMatched) {
+    return {
+      ok: false,
+      message: 'Maestro childOf parent did not match.',
+      evidence: buildMaestroTargetEvidence(query, candidates.matches, [], undefined),
+    };
   }
-
-  const visible = filterVisibleMaestroMatches({ nodes: snapshot.nodes, matches, platform });
-  const rankedMatches = normalizeMaestroSnapshotMatches(
-    snapshot.nodes,
-    visible,
-    query.selector,
-    platform,
-  );
+  const { matches, ranked: rankedMatches } = candidates;
   const target = selectMaestroSnapshotMatch(rankedMatches, query.index);
   const evidence = buildMaestroTargetEvidence(query, matches, rankedMatches, target?.node);
   if (!target) {
@@ -91,13 +74,10 @@ export function resolveMaestroTargetFromSnapshot(
     node: target.node,
     rect,
     matches: rankedMatches.length,
-    dispatchCandidates: countCanonicalDispatchCandidates(
-      snapshot,
-      query,
-      platform,
-      { ...target, rect },
-      presentation,
-    ),
+    dispatchCandidates:
+      platform === 'ios' && query.allowAtomicSelectorDispatch && !query.childOf
+        ? countCanonicalDispatchCandidates(snapshot, query, { ...target, rect }, presentation)
+        : 0,
     evidence,
   };
 }
@@ -122,29 +102,20 @@ function failedTargetResolution(
 function countCanonicalDispatchCandidates(
   snapshot: SnapshotState,
   query: MaestroTargetQuery,
-  platform: MaestroPlatform,
   target: { node: SnapshotNode; rect: Rect },
   presentation: IosInteractiveSnapshotPresentation | undefined,
 ): number {
-  if (platform !== 'ios' || !query.allowAtomicSelectorDispatch || query.childOf) return 0;
   const canonicalSnapshot = {
     ...snapshot,
     nodes: attachRefs(
       (presentation ?? buildIosInteractiveSnapshotPresentation(snapshot.nodes)).nodes,
     ),
   };
-  const canonicalMatches = findMaestroTypedSelectorMatches(canonicalSnapshot, query.selector);
-  const canonicalVisibleMatches = filterVisibleMaestroMatches({
-    nodes: canonicalSnapshot.nodes,
-    matches: canonicalMatches,
-    platform,
-  });
-  const canonicalRankedMatches = normalizeMaestroSnapshotMatches(
-    canonicalSnapshot.nodes,
-    canonicalVisibleMatches,
+  const canonicalRankedMatches = rankMaestroCandidates(
+    canonicalSnapshot,
     query.selector,
-    platform,
-  );
+    'ios',
+  ).ranked;
   if (canonicalRankedMatches.length !== 1) return canonicalRankedMatches.length;
   const canonicalTarget = selectMaestroSnapshotMatch(canonicalRankedMatches, undefined);
   return canonicalTarget &&
@@ -166,12 +137,12 @@ function buildMaestroTargetEvidence(
   visibleMatches: SnapshotNode[],
   target: SnapshotNode | undefined,
 ): MaestroTargetEvidence {
-  return {
+  return stripUndefined({
     selector: query.selector,
-    ...(query.childOf === undefined ? {} : { childOf: query.childOf }),
+    childOf: query.childOf,
     matched: matches.length > 0,
     visible: visibleMatches.length > 0,
     candidateCount: matches.length,
-    ...(target?.ref === undefined ? {} : { ref: target.ref }),
-  };
+    ref: target?.ref,
+  });
 }

@@ -143,8 +143,14 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-export function stripUndefined<T extends Record<string, unknown>>(value: T): T {
-  const output = {} as T;
+type WithoutUndefined<T extends Record<string, unknown>> = {
+  [K in keyof T as undefined extends T[K] ? never : K]: T[K];
+} & {
+  [K in keyof T as undefined extends T[K] ? K : never]?: Exclude<T[K], undefined>;
+};
+
+export function stripUndefined<T extends Record<string, unknown>>(value: T): WithoutUndefined<T> {
+  const output = {} as WithoutUndefined<T>;
   for (const [key, current] of Object.entries(value)) {
     if (current !== undefined) {
       (output as Record<string, unknown>)[key] = current;

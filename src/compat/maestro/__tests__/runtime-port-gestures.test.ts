@@ -1,6 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import { createMaestroRuntimePort } from '../runtime-port.ts';
-import { makeOperations } from './runtime-port-fixtures.ts';
+import { createMaestroRuntimePort, makeOperations } from './runtime-port-fixtures.ts';
 
 test('uses the structured gesture contract without observing absolute swipes', async () => {
   const resolveGestureViewport = vi.fn(async () => ({ x: 10, y: 20, width: 400, height: 800 }));

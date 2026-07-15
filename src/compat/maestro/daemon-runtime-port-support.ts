@@ -17,6 +17,7 @@ import type {
 } from './runtime-port-types.ts';
 import type { Rect } from '../../kernel/snapshot.ts';
 import type { DaemonMaestroRuntimeDependencies } from './daemon-runtime-port-observation.ts';
+import { stripUndefined } from '../../utils/parsing.ts';
 import {
   projectMaestroPublicOperation,
   type MaestroPublicOperation,
@@ -52,14 +53,16 @@ export async function invokeMaestroPublicOperation(
   const effectiveFlags = flagsWith(baseFlags, projected.flags ?? {});
   const effectiveInternal =
     projected.internal === undefined ? baseInternal : { ...baseInternal, ...projected.internal };
-  const response = await options.invoke({
-    ...baseReq,
-    command: projected.command,
-    positionals: projected.positionals,
-    ...(projected.input === undefined ? {} : { input: projected.input }),
-    ...(effectiveFlags === undefined ? {} : { flags: effectiveFlags }),
-    ...(effectiveInternal === undefined ? {} : { internal: effectiveInternal }),
-  });
+  const response = await options.invoke(
+    stripUndefined({
+      ...baseReq,
+      command: projected.command,
+      positionals: projected.positionals,
+      input: projected.input,
+      flags: effectiveFlags,
+      internal: effectiveInternal,
+    }),
+  );
   if (!response.ok) throw daemonResponseError(response);
   return response.data;
 }
@@ -72,11 +75,11 @@ function flagsWith(
     base?.maestro === undefined && extra.maestro === undefined
       ? undefined
       : { ...base?.maestro, ...extra.maestro };
-  const flags = {
+  const flags = stripUndefined({
     ...base,
     ...extra,
-    ...(maestro === undefined ? {} : { maestro }),
-  };
+    maestro,
+  });
   return Object.keys(flags).length > 0 ? flags : undefined;
 }
 
@@ -148,13 +151,29 @@ export function stringifyEnvironment(
 
 function daemonResponseError(response: Extract<DaemonResponse, { ok: false }>): AppError {
   const error = response.error;
-  const details = {
+  const details = stripUndefined({
     ...(error.details ?? {}),
-    ...(error.hint === undefined ? {} : { hint: error.hint }),
-    ...(error.diagnosticId === undefined ? {} : { diagnosticId: error.diagnosticId }),
-    ...(error.logPath === undefined ? {} : { logPath: error.logPath }),
-    ...(error.retriable === undefined ? {} : { retriable: error.retriable }),
-    ...(error.supportedOn === undefined ? {} : { supportedOn: error.supportedOn }),
-  };
+    hint: error.hint ?? stringErrorDetail(error.details, 'hint'),
+    diagnosticId: error.diagnosticId ?? stringErrorDetail(error.details, 'diagnosticId'),
+    logPath: error.logPath ?? stringErrorDetail(error.details, 'logPath'),
+    retriable: error.retriable ?? booleanErrorDetail(error.details, 'retriable'),
+    supportedOn: error.supportedOn ?? stringErrorDetail(error.details, 'supportedOn'),
+  });
   return new AppError(error.code, error.message, Object.keys(details).length ? details : undefined);
+}
+
+function stringErrorDetail(
+  details: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
+  const value = details?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function booleanErrorDetail(
+  details: Record<string, unknown> | undefined,
+  key: string,
+): boolean | undefined {
+  const value = details?.[key];
+  return typeof value === 'boolean' ? value : undefined;
 }

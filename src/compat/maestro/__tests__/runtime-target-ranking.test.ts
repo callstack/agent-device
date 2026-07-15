@@ -1,6 +1,17 @@
 import { expect, test } from 'vitest';
-import { selectMaestroSnapshotMatch } from '../runtime-target-ranking.ts';
+import { rankMaestroCandidates, selectMaestroSnapshotMatch } from '../runtime-target-ranking.ts';
 import { makeSnapshot } from './runtime-target-fixtures.ts';
+
+test('typed target matching preserves snapshot read order', () => {
+  const snapshot = makeSnapshot([
+    { index: 1, label: 'Save', rect: { x: 10, y: 10, width: 100, height: 40 } },
+    { index: 2, label: 'Save', rect: { x: 10, y: 80, width: 100, height: 40 } },
+  ]);
+
+  expect(
+    rankMaestroCandidates(snapshot, { text: 'Save' }, 'ios').matches.map((node) => node.index),
+  ).toEqual([1, 2]);
+});
 
 test('target selection preserves snapshot aggregate order when no index is authored', () => {
   const snapshot = makeSnapshot([

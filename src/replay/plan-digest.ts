@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { SessionAction } from '../daemon/types.ts';
+import { canonicalJson } from '../utils/canonical-json.ts';
 
 /**
  * ADR 0012 decision 4 / migration step 5: `planDigest` is SHA-256 over the
@@ -27,7 +28,7 @@ export function computeReplayPlanDigest(params: {
   metadata: ReplayPlanDigestMetadata;
 }): string {
   const canonical = buildCanonicalPlan(params);
-  const json = stableStringify(canonical);
+  const json = canonicalJson(canonical);
   return createHash('sha256').update(json, 'utf8').digest('hex');
 }
 
@@ -60,26 +61,4 @@ function canonicalizeAction(
     targetEvidence: action.targetEvidence ?? null,
     source: { path: sourcePath, line },
   };
-}
-
-/**
- * Deterministic JSON serialization: object keys are sorted so the digest
- * never depends on incidental property insertion order (e.g. how an action's
- * `flags` bag was built up across parse/normalization steps).
- */
-function stableStringify(value: unknown): string {
-  return JSON.stringify(sortKeysDeep(value));
-}
-
-function sortKeysDeep(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortKeysDeep);
-  if (value && typeof value === 'object') {
-    const record = value as Record<string, unknown>;
-    const sorted: Record<string, unknown> = {};
-    for (const key of Object.keys(record).sort()) {
-      sorted[key] = sortKeysDeep(record[key]);
-    }
-    return sorted;
-  }
-  return value;
 }

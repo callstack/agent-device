@@ -2,6 +2,7 @@ import { AppError } from '../../kernel/errors.ts';
 import { maestroTestFailure } from './compatibility-errors.ts';
 import type {
   MaestroObservation,
+  MaestroObservationCondition,
   MaestroObservationRequest,
   MaestroRuntimeRequest,
 } from './engine-types.ts';
@@ -35,13 +36,19 @@ export async function observeMaestroCondition(
   };
   return {
     generation: request.generation,
-    matched:
-      request.condition.kind === 'visible'
-        ? match.matched && match.visible
-        : !match.matched || !match.visible,
+    matched: maestroObservationMatches(request.condition, match),
     candidateCount: match.candidateCount,
     evidence,
   };
+}
+
+export function maestroObservationMatches(
+  condition: MaestroObservationCondition,
+  match: Pick<MaestroTargetMatch, 'matched' | 'visible'>,
+): boolean {
+  return condition.kind === 'visible'
+    ? match.matched && match.visible
+    : !match.matched || !match.visible;
 }
 
 export async function resolveMaestroTarget(

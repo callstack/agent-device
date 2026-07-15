@@ -19,9 +19,13 @@ export default defineConfig({
       {
         test: {
           name: 'unit-core',
-          // The explicit scripts entry keeps the help-bench guard tests in the
-          // suite without waking every ad-hoc *.test.ts under scripts/.
-          include: ['src/**/*.test.ts', 'scripts/__tests__/help-conformance-bench.test.ts'],
+          // Explicit script entries keep maintained conformance guards in the
+          // unit suite without waking every ad-hoc *.test.ts under scripts/.
+          include: [
+            'src/**/*.test.ts',
+            'scripts/__tests__/help-conformance-bench.test.ts',
+            'scripts/maestro-conformance.test.ts',
+          ],
           exclude: [ANDROID_ADB_STUB_TESTS],
           setupFiles: ['src/__tests__/process-memo-setup.ts'],
         },

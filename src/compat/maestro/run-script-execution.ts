@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
 import { runCmdSync } from '../../utils/exec.ts';
+import { stripUndefined } from '../../utils/parsing.ts';
 
 const RUN_SCRIPT_TIMEOUT_MS = 30_000;
 const RUN_SCRIPT_DIAGNOSTIC_PREVIEW_CHARS = 1_000;
@@ -60,15 +61,15 @@ export function executeRunScriptFile(params: {
     throw new AppError(
       normalized.code,
       `Maestro runScript failed: ${normalized.message}`,
-      {
+      stripUndefined({
         ...(normalized.details ?? {}),
-        ...(normalized.hint ? { hint: normalized.hint } : {}),
-        ...(normalized.diagnosticId ? { diagnosticId: normalized.diagnosticId } : {}),
-        ...(normalized.logPath ? { logPath: normalized.logPath } : {}),
-        ...(normalized.retriable === undefined ? {} : { retriable: normalized.retriable }),
-        ...(normalized.supportedOn ? { supportedOn: normalized.supportedOn } : {}),
+        hint: normalized.hint,
+        diagnosticId: normalized.diagnosticId,
+        logPath: normalized.logPath,
+        retriable: normalized.retriable,
+        supportedOn: normalized.supportedOn,
         scriptPath,
-      },
+      }),
       error instanceof Error ? error : undefined,
     );
   }

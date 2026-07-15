@@ -1,5 +1,6 @@
 import { isMap, isSeq, LineCounter, parseAllDocuments, type Node } from 'yaml';
 import { AppError } from '../../kernel/errors.ts';
+import { stripUndefined } from '../../utils/parsing.ts';
 import type {
   MaestroProgram,
   MaestroProgramConfig,
@@ -25,10 +26,10 @@ export function parseMaestroProgram(
   options: MaestroProgramParseOptions = {},
 ): MaestroProgram {
   const lineCounter = new LineCounter();
-  const context: MaestroProgramParseContext = {
+  const context: MaestroProgramParseContext = stripUndefined({
     lineCounter,
-    ...(options.sourcePath === undefined ? {} : { sourcePath: options.sourcePath }),
-  };
+    sourcePath: options.sourcePath,
+  });
   const documents = parseAllDocuments(script, { lineCounter });
   for (const document of documents) {
     if (document.errors.length > 0) {
@@ -93,12 +94,5 @@ function parseProgramConfig(node: Node, context: MaestroProgramParseContext): Ma
   const onFlowComplete = readOptionalEntry(entries, 'onFlowComplete', (entry) =>
     parseMaestroCommandList(entry, 'onFlowComplete', context),
   );
-  return {
-    ...(name === undefined ? {} : { name }),
-    ...(appId === undefined ? {} : { appId }),
-    ...(tags === undefined ? {} : { tags }),
-    ...(env === undefined ? {} : { env }),
-    ...(onFlowStart === undefined ? {} : { onFlowStart }),
-    ...(onFlowComplete === undefined ? {} : { onFlowComplete }),
-  };
+  return stripUndefined({ name, appId, tags, env, onFlowStart, onFlowComplete });
 }

@@ -158,8 +158,6 @@ export type MaestroEngineOptions = {
   now?: () => number;
 };
 
-export type MaestroEngineExecutionOptions = MaestroEngineOptions;
-
 export type MaestroEngineResult = {
   executed: number;
   skipped: number;

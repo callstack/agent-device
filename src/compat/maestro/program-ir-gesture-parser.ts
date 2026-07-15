@@ -1,4 +1,5 @@
 import { isScalar, type Node } from 'yaml';
+import { stripUndefined } from '../../utils/parsing.ts';
 import type {
   MaestroCoordinate,
   MaestroDirection,
@@ -29,10 +30,11 @@ import {
   type MaestroMapEntry,
   type MaestroProgramParseContext,
 } from './program-ir-values.ts';
-
-const BASE_SELECTOR_KEYS = ['id', 'text', 'enabled', 'selected'] as const;
-const TAP_SELECTOR_KEYS = [...BASE_SELECTOR_KEYS, 'label'] as const;
-type SelectorKey = keyof MaestroSelectorMap;
+import {
+  MAESTRO_BASE_SELECTOR_KEYS,
+  MAESTRO_TAP_SELECTOR_KEYS,
+  type MaestroSelectorKey,
+} from './selector-vocabulary.ts';
 
 type SelectorFieldReader = (
   selector: MaestroSelectorMap,
@@ -40,6 +42,12 @@ type SelectorFieldReader = (
   name: string,
   context: MaestroProgramParseContext,
 ) => void;
+
+type ParsedPointOrSelectorTarget = {
+  readonly source: MaestroSourceLocation;
+  readonly entries: readonly MaestroMapEntry[];
+  readonly target: MaestroGestureTarget;
+};
 
 const SELECTOR_FIELD_READERS: Readonly<Record<string, SelectorFieldReader>> = {
   id: (selector, entry, name, context) =>
@@ -58,20 +66,40 @@ export function parseMaestroSelector(
   node: Node | null | undefined,
   name: string,
   context: MaestroProgramParseContext,
-  selectorKeys: readonly SelectorKey[] = BASE_SELECTOR_KEYS,
+  selectorKeys: readonly MaestroSelectorKey[] = MAESTRO_BASE_SELECTOR_KEYS,
 ): MaestroSelector {
   if (isScalar(node)) return { text: readRequiredString(node, name, context) };
   const entries = readMapEntries(node, name, context);
   assertOnlyKeys(entries, name, selectorKeys, context);
-  return parseMaestroSelectorEntries(entries, name, context);
+  return parseMaestroSelectorMapEntries(entries, name, context);
 }
 
-export function parseMaestroSelectorEntries(
+export function parseMaestroSelectorMapEntries(
   entries: readonly MaestroMapEntry[],
   name: string,
   context: MaestroProgramParseContext,
 ): MaestroSelector {
-  return parseSelectorEntries(entries, name, context);
+  if (entries.length === 0) invalidAt(`Maestro ${name} selector is empty.`, undefined, context);
+  const selector: MaestroSelectorMap = {};
+  for (const entry of entries) {
+    const read = SELECTOR_FIELD_READERS[entry.key];
+    if (!read) {
+      invalidAt(
+        `Maestro ${name} selector field "${entry.key}" is not supported.`,
+        entry.keyNode,
+        context,
+      );
+    }
+    read(selector, entry, name, context);
+  }
+  if (Object.keys(selector).length === 0) {
+    invalidAt(
+      `Maestro ${name} selector must contain a selector value.`,
+      entries[0]?.keyNode,
+      context,
+    );
+  }
+  return selector;
 }
 
 export function parseMaestroTapOnCommand(
@@ -79,53 +107,48 @@ export function parseMaestroTapOnCommand(
   commandNode: Node,
   context: MaestroProgramParseContext,
 ): MaestroTapOnCommand {
-  const source = sourceAt(commandNode, context);
-  if (isScalar(value)) {
+  const parsed = parsePointOrSelectorTarget(value, commandNode, context, {
+    name: 'tapOn',
+    selectorKeys: MAESTRO_TAP_SELECTOR_KEYS,
+    pointConflictingSelectorKeys: MAESTRO_BASE_SELECTOR_KEYS,
+    pointAllowedKeys: ['point', 'retryTapIfNoChange', 'repeat', 'delay', 'optional', 'label'],
+    selectorAllowedKeys: [
+      ...MAESTRO_TAP_SELECTOR_KEYS,
+      'retryTapIfNoChange',
+      'repeat',
+      'delay',
+      'optional',
+      'index',
+      'childOf',
+    ],
+    parsePoint,
+  });
+  if (parsed.entries.length === 0) {
+    return { kind: 'tapOn', source: parsed.source, target: parsed.target };
+  }
+  if (parsed.target.space !== 'target') {
     return {
       kind: 'tapOn',
-      source,
-      target: selectorTarget(parseMaestroSelector(value, 'tapOn', context, TAP_SELECTOR_KEYS)),
+      source: parsed.source,
+      target: parsed.target,
+      ...tapOptions(parsed.entries, context, true),
     };
   }
-
-  const entries = readMapEntries(value, 'tapOn', context);
-  if (hasEntry(entries, 'point')) {
-    assertOnlyKeys(
-      entries,
-      'tapOn',
-      ['point', 'retryTapIfNoChange', 'repeat', 'delay', 'optional', 'label'],
-      context,
-    );
-    return {
-      kind: 'tapOn',
-      source,
-      target: parsePoint(entryValue(entries, 'point'), 'tapOn.point', context),
-      ...tapOptions(entries, context, true),
-    };
-  }
-
-  assertOnlyKeys(
-    entries,
-    'tapOn',
-    [...TAP_SELECTOR_KEYS, 'retryTapIfNoChange', 'repeat', 'delay', 'optional', 'index', 'childOf'],
-    context,
-  );
-  const selectorEntries = entries.filter((entry) => isSelectorKey(entry.key, TAP_SELECTOR_KEYS));
-  const childOf = hasEntry(entries, 'childOf')
-    ? parseMaestroSelector(entryValue(entries, 'childOf'), 'tapOn.childOf', context)
+  const childOf = hasEntry(parsed.entries, 'childOf')
+    ? parseMaestroSelector(entryValue(parsed.entries, 'childOf'), 'tapOn.childOf', context)
     : undefined;
-  const options = tapOptions(entries, context, false);
-  const index = hasEntry(entries, 'index')
-    ? readOptionalNonNegativeInteger(entryValue(entries, 'index'), 'tapOn.index', context)
+  const options = tapOptions(parsed.entries, context, false);
+  const index = hasEntry(parsed.entries, 'index')
+    ? readOptionalNonNegativeInteger(entryValue(parsed.entries, 'index'), 'tapOn.index', context)
     : undefined;
-  return {
-    kind: 'tapOn',
-    source,
-    target: selectorTarget(parseSelectorEntries(selectorEntries, 'tapOn', context)),
+  return stripUndefined({
+    kind: 'tapOn' as const,
+    source: parsed.source,
+    target: parsed.target,
     ...options,
-    ...(index === undefined ? {} : { index }),
-    ...(childOf === undefined ? {} : { childOf }),
-  };
+    index,
+    childOf,
+  });
 }
 
 export function parseMaestroDoubleTapOnCommand(
@@ -133,54 +156,28 @@ export function parseMaestroDoubleTapOnCommand(
   commandNode: Node,
   context: MaestroProgramParseContext,
 ): MaestroDoubleTapOnCommand {
-  const source = sourceAt(commandNode, context);
-  if (isScalar(value)) {
-    return {
-      kind: 'doubleTapOn',
-      source,
-      target: selectorTarget(parseMaestroSelector(value, 'doubleTapOn', context)),
-    };
-  }
-  const entries = readMapEntries(value, 'doubleTapOn', context);
-  assertOnlyKeys(
-    entries,
-    'doubleTapOn',
-    ['point', ...BASE_SELECTOR_KEYS, 'delay', 'optional'],
-    context,
-  );
-  const options = readOptionalCommandOption(entries, 'doubleTapOn', context);
-  const delay = hasEntry(entries, 'delay')
-    ? readOptionalNonNegativeInteger(entryValue(entries, 'delay'), 'doubleTapOn.delay', context)
+  const parsed = parsePointOrSelectorTarget(value, commandNode, context, {
+    name: 'doubleTapOn',
+    selectorKeys: MAESTRO_BASE_SELECTOR_KEYS,
+    pointAllowedKeys: ['point', 'delay', 'optional'],
+    selectorAllowedKeys: [...MAESTRO_BASE_SELECTOR_KEYS, 'delay', 'optional'],
+    parsePoint: parseAbsolutePoint,
+  });
+  const options = readOptionalCommandOption(parsed.entries, 'doubleTapOn', context);
+  const delay = hasEntry(parsed.entries, 'delay')
+    ? readOptionalNonNegativeInteger(
+        entryValue(parsed.entries, 'delay'),
+        'doubleTapOn.delay',
+        context,
+      )
     : undefined;
-  if (hasEntry(entries, 'point')) {
-    if (entries.some((entry) => isSelectorKey(entry.key, BASE_SELECTOR_KEYS))) {
-      invalidAt(
-        'Maestro doubleTapOn.point cannot be combined with a selector.',
-        commandNode,
-        context,
-      );
-    }
-    return {
-      kind: 'doubleTapOn',
-      source,
-      target: parseAbsolutePoint(entryValue(entries, 'point'), 'doubleTapOn.point', context),
-      ...options,
-      ...(delay === undefined ? {} : { delay }),
-    };
-  }
-  return {
-    kind: 'doubleTapOn',
-    source,
-    target: selectorTarget(
-      parseSelectorEntries(
-        entries.filter((entry) => isSelectorKey(entry.key, BASE_SELECTOR_KEYS)),
-        'doubleTapOn',
-        context,
-      ),
-    ),
+  return stripUndefined({
+    kind: 'doubleTapOn' as const,
+    source: parsed.source,
+    target: parsed.target,
     ...options,
-    ...(delay === undefined ? {} : { delay }),
-  };
+    delay,
+  });
 }
 
 export function parseMaestroLongPressOnCommand(
@@ -188,43 +185,76 @@ export function parseMaestroLongPressOnCommand(
   commandNode: Node,
   context: MaestroProgramParseContext,
 ): MaestroLongPressOnCommand {
+  const parsed = parsePointOrSelectorTarget(value, commandNode, context, {
+    name: 'longPressOn',
+    selectorKeys: MAESTRO_BASE_SELECTOR_KEYS,
+    pointAllowedKeys: ['point', 'optional'],
+    selectorAllowedKeys: [...MAESTRO_BASE_SELECTOR_KEYS, 'optional'],
+    parsePoint: parseAbsolutePoint,
+  });
+  return {
+    kind: 'longPressOn',
+    source: parsed.source,
+    target: parsed.target,
+    ...readOptionalCommandOption(parsed.entries, 'longPressOn', context),
+  };
+}
+
+function parsePointOrSelectorTarget(
+  value: Node | null,
+  commandNode: Node,
+  context: MaestroProgramParseContext,
+  options: {
+    readonly name: string;
+    readonly selectorKeys: readonly MaestroSelectorKey[];
+    readonly pointConflictingSelectorKeys?: readonly MaestroSelectorKey[];
+    readonly pointAllowedKeys: readonly string[];
+    readonly selectorAllowedKeys: readonly string[];
+    readonly parsePoint: (
+      node: Node | null | undefined,
+      name: string,
+      context: MaestroProgramParseContext,
+    ) => MaestroCoordinate;
+  },
+): ParsedPointOrSelectorTarget {
   const source = sourceAt(commandNode, context);
   if (isScalar(value)) {
     return {
-      kind: 'longPressOn',
       source,
-      target: selectorTarget(parseMaestroSelector(value, 'longPressOn', context)),
+      entries: [],
+      target: selectorTarget(
+        parseMaestroSelector(value, options.name, context, options.selectorKeys),
+      ),
     };
   }
-  const entries = readMapEntries(value, 'longPressOn', context);
-  assertOnlyKeys(entries, 'longPressOn', ['point', ...BASE_SELECTOR_KEYS, 'optional'], context);
-  const options = readOptionalCommandOption(entries, 'longPressOn', context);
-  if (hasEntry(entries, 'point')) {
-    if (entries.some((entry) => isSelectorKey(entry.key, BASE_SELECTOR_KEYS))) {
+  const entries = readMapEntries(value, options.name, context);
+  const hasPoint = hasEntry(entries, 'point');
+  assertOnlyKeys(
+    entries,
+    options.name,
+    hasPoint ? options.pointAllowedKeys : options.selectorAllowedKeys,
+    context,
+  );
+  if (hasPoint) {
+    const conflictingKeys = options.pointConflictingSelectorKeys ?? options.selectorKeys;
+    if (entries.some((entry) => isSelectorKey(entry.key, conflictingKeys))) {
       invalidAt(
-        'Maestro longPressOn.point cannot be combined with a selector.',
+        `Maestro ${options.name}.point cannot be combined with a selector.`,
         commandNode,
         context,
       );
     }
     return {
-      kind: 'longPressOn',
       source,
-      target: parseAbsolutePoint(entryValue(entries, 'point'), 'longPressOn.point', context),
-      ...options,
+      entries,
+      target: options.parsePoint(entryValue(entries, 'point'), `${options.name}.point`, context),
     };
   }
+  const selectorEntries = entries.filter((entry) => isSelectorKey(entry.key, options.selectorKeys));
   return {
-    kind: 'longPressOn',
     source,
-    target: selectorTarget(
-      parseSelectorEntries(
-        entries.filter((entry) => isSelectorKey(entry.key, BASE_SELECTOR_KEYS)),
-        'longPressOn',
-        context,
-      ),
-    ),
-    ...options,
+    entries,
+    target: selectorTarget(parseMaestroSelectorMapEntries(selectorEntries, options.name, context)),
   };
 }
 
@@ -285,12 +315,12 @@ function parseCoordinateSwipe(
   return {
     kind: 'swipe',
     source,
-    gesture: {
-      kind: 'coordinates',
+    gesture: stripUndefined({
+      kind: 'coordinates' as const,
       start,
       end,
-      ...(duration === undefined ? {} : { duration }),
-    },
+      duration,
+    }),
   };
 }
 
@@ -314,13 +344,13 @@ function parseTargetSwipe(
   return {
     kind: 'swipe',
     source,
-    gesture: {
-      kind: 'target',
+    gesture: stripUndefined({
+      kind: 'target' as const,
       from,
       direction,
-      ...(duration === undefined ? {} : { duration }),
-      ...(label === undefined ? {} : { label }),
-    },
+      duration,
+      label,
+    }),
   };
 }
 
@@ -341,7 +371,7 @@ function parseScreenSwipe(
   return {
     kind: 'swipe',
     source,
-    gesture: { kind: 'screen', direction, ...(duration === undefined ? {} : { duration }) },
+    gesture: stripUndefined({ kind: 'screen' as const, direction, duration }),
   };
 }
 
@@ -365,41 +395,7 @@ function tapOptions(
         readOptionalString(entry, 'tapOn.label', context),
       )
     : undefined;
-  return {
-    ...(retryTapIfNoChange === undefined ? {} : { retryTapIfNoChange }),
-    ...(repeat === undefined ? {} : { repeat }),
-    ...(delay === undefined ? {} : { delay }),
-    ...(optional === undefined ? {} : { optional }),
-    ...(label === undefined ? {} : { label }),
-  };
-}
-
-function parseSelectorEntries(
-  entries: readonly MaestroMapEntry[],
-  name: string,
-  context: MaestroProgramParseContext,
-): MaestroSelectorMap {
-  if (entries.length === 0) invalidAt(`Maestro ${name} selector is empty.`, undefined, context);
-  const selector: MaestroSelectorMap = {};
-  for (const entry of entries) {
-    const read = SELECTOR_FIELD_READERS[entry.key];
-    if (!read) {
-      invalidAt(
-        `Maestro ${name} selector field "${entry.key}" is not supported.`,
-        entry.keyNode,
-        context,
-      );
-    }
-    read(selector, entry, name, context);
-  }
-  if (Object.keys(selector).length === 0) {
-    invalidAt(
-      `Maestro ${name} selector must contain a selector value.`,
-      entries[0]?.keyNode,
-      context,
-    );
-  }
-  return selector;
+  return stripUndefined({ retryTapIfNoChange, repeat, delay, optional, label });
 }
 
 function assignStringSelector(
@@ -424,8 +420,11 @@ function assignBooleanSelector(
   if (value !== undefined) selector[key] = value;
 }
 
-function isSelectorKey(key: string, selectorKeys: readonly SelectorKey[]): key is SelectorKey {
-  return selectorKeys.includes(key as SelectorKey);
+function isSelectorKey(
+  key: string,
+  selectorKeys: readonly MaestroSelectorKey[],
+): key is MaestroSelectorKey {
+  return selectorKeys.includes(key as MaestroSelectorKey);
 }
 
 function parsePoint(

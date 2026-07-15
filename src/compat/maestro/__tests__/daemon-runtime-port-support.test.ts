@@ -37,3 +37,29 @@ test('composes operation-specific Maestro flags with the runtime envelope', asyn
     }),
   );
 });
+
+test('preserves diagnostic metadata carried inside daemon error details', async () => {
+  const invoke = vi.fn(async () => ({
+    ok: false as const,
+    error: {
+      code: 'COMMAND_FAILED',
+      message: 'Developer tools are disabled',
+      details: { hint: 'Enable developer tools.', diagnosticId: 'diag-1' },
+    },
+  }));
+
+  await expect(
+    invokeMaestroPublicOperation(
+      {
+        baseReq: makeBaseRequest(),
+        invoke,
+        dependencies: makeDependencies(),
+        platform: 'ios',
+      },
+      { kind: 'openLink', link: 'demo://screen', prewarmRunner: true },
+    ),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { hint: 'Enable developer tools.', diagnosticId: 'diag-1' },
+  });
+});

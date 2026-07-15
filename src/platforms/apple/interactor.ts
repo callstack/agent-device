@@ -172,6 +172,8 @@ async function runAppleScreenshot(
     return;
   }
   if (options.captureBackend === 'runner') {
+    // Runner capture returns the XCTest surface as-is; density and simulator
+    // status-bar normalization belong only to the simctl capture pipeline.
     await captureScreenshotViaRunner(
       device,
       outPath,

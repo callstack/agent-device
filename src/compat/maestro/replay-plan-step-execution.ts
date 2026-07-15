@@ -1,18 +1,21 @@
 import { AppError } from '../../kernel/errors.ts';
+import { stripUndefined } from '../../utils/parsing.ts';
 import { isMaestroTestFailure, maestroTestFailure } from './compatibility-errors.ts';
-import { MAESTRO_COMPATIBILITY_PRESETS } from './compatibility-policy.ts';
+import {
+  MAESTRO_COMPATIBILITY_PRESETS,
+  resolveMaestroTimingPolicy,
+} from './compatibility-policy.ts';
 import type { MaestroExecutionContext } from './engine-context.ts';
 import {
   checkpointMaestroCancellation,
   observationConditions,
   readIterationCount,
   resolveCommand,
-  resolveMaestroTimingPolicy,
   staticConditionMatches,
 } from './engine-flow.ts';
 import type { MaestroRunFlowCondition } from './program-ir.ts';
 import type {
-  MaestroEngineExecutionOptions,
+  MaestroEngineOptions,
   MaestroEngineEvent,
   MaestroObservation,
   MaestroObservationCondition,
@@ -28,7 +31,7 @@ import type {
 export type MaestroReplayPlanExecutionState = {
   readonly plan: MaestroReplayPlan;
   readonly port: MaestroRuntimePort;
-  readonly options: MaestroEngineExecutionOptions;
+  readonly options: MaestroEngineOptions;
   readonly context: MaestroExecutionContext;
   readonly timing: ReturnType<typeof resolveMaestroTimingPolicy>;
   readonly artifacts: Set<string>;
@@ -132,15 +135,15 @@ async function executeRuntimeCommand(
   appId: string | undefined,
   state: MaestroReplayPlanExecutionState,
 ): Promise<void> {
-  const request = {
+  const request = stripUndefined({
     command,
     env: state.context.values,
-    ...(appId === undefined ? {} : { appId: state.context.resolve(appId) }),
+    appId: appId === undefined ? undefined : state.context.resolve(appId),
     generation: state.context.generation,
     invalidateObservation: state.context.invalidateObservation,
-    ...(state.context.observation ? { cachedObservation: state.context.observation } : {}),
-    ...(state.options.signal ? { signal: state.options.signal } : {}),
-  };
+    cachedObservation: state.context.observation,
+    signal: state.options.signal,
+  });
   const result = await state.port.execute(request);
   checkpointMaestroCancellation(state.options.signal);
   if (result.observation) state.context.recordObservation(result.observation);

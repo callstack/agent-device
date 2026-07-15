@@ -2,7 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseReplayInput } from '../../compat/replay-input.ts';
 import { asAppError } from '../../kernel/errors.ts';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionAction } from '../types.ts';
+import type {
+  DaemonInvokeFn,
+  DaemonRequest,
+  DaemonResponse,
+  SessionAction,
+  SessionState,
+} from '../types.ts';
 import {
   emitRequestProgress,
   readReplayTestActionProgress,
@@ -29,6 +35,8 @@ import {
   type SnapshotTimingSample,
 } from '../../snapshot-diagnostics.ts';
 import type { ReplayCommandResult } from '../../contracts/replay.ts';
+import type { ReplayDivergenceResume } from '../../replay/divergence.ts';
+import { isRecord } from '../../utils/parsing.ts';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import { withReplayFailureDiagnostics } from './session-replay-runtime-failure.ts';
 import {
@@ -136,7 +144,6 @@ async function resolveReplayStepResponse(
   });
 }
 
-// fallow-ignore-next-line complexity
 export async function runReplayScriptFile(params: {
   req: DaemonRequest;
   sessionName: string;
@@ -156,169 +163,37 @@ export async function runReplayScriptFile(params: {
   const artifactPaths = new Set<string>();
   try {
     resolved = SessionStore.expandHome(filePath, req.meta?.cwd);
-    if (isTypedMaestroReplay(req, resolved)) {
-      if (sessionStore.get(sessionName)?.saveScriptBoundary !== undefined) {
-        return errorResponse(
-          'INVALID_ARGS',
-          'This session has an active .ad --save-script repair run; finish it with replay --from or close before running Maestro YAML.',
-        );
-      }
-      return await runTypedMaestroReplayFile({
-        req,
-        sessionName,
-        logPath,
-        sessionStore,
-        tracePath,
-        invoke,
-      });
-    }
-    const script = fs.readFileSync(resolved, 'utf8');
-    const firstNonWhitespace = script.trimStart()[0];
-    if (firstNonWhitespace === '{' || firstNonWhitespace === '[') {
-      return errorResponse(
-        'INVALID_ARGS',
-        'replay accepts .ad script files. JSON replay payloads are no longer supported.',
-      );
-    }
-
-    const parsed = parseReplayInput(script, req.flags);
-    const metadata = parsed.metadata;
-    const replayReq =
-      metadata.platform || metadata.target
-        ? { ...req, flags: buildReplayMetadataFlags(req.flags, metadata) }
-        : req;
-    const actions = parsed.actions;
-    const actionLines = parsed.actionLines;
-    const actionSourcePaths = parsed.actionSourcePaths;
-    const planDigest = computeReplayPlanDigest({
+    const typedResponse = await runTypedReplayIfNeeded({ ...params, resolved });
+    if (typedResponse) return typedResponse;
+    const planPreparation = prepareReplayPlan({
+      req,
+      sessionName,
+      sessionStore,
+      tracePath,
+      resolved,
+    });
+    if (!planPreparation.ok) return planPreparation.response;
+    const {
+      replayReq,
       actions,
       actionLines,
       actionSourcePaths,
-      metadata: readEffectiveReplayPlanDigestMetadata(replayReq.flags),
-    });
-    // ADR 0012 decision 4 / migration step 5: resume preflight, entirely
-    // before any device action. `test` never reaches here with either flag
-    // set (rejected earlier, in handleSessionReplayCommands). Fetched before
-    // any mutation below so the pending record-and-heal watermark (decision
-    // 6, R2/R3) reflects this session's state AT REQUEST START, scoping the
-    // one-past-the-plan `--from` ordinal to the exact session that produced it.
-    const preEntrySession = sessionStore.get(sessionName);
-    const entryIndex = resolveReplayEntryIndex(
-      req.flags,
-      actions.length,
       planDigest,
-      preEntrySession?.pendingRecordAndHeal,
-      preEntrySession?.actions.length ?? 0,
-    );
-    if (!entryIndex.ok) return entryIndex.response;
-    const scope = buildReplayVarScope({
-      builtins: buildReplayBuiltinVars({
-        req: replayReq,
-        sessionName,
-        metadata,
-        resolvedPath: resolved,
-      }),
-      fileEnv: metadata.env,
-      shellEnv: collectReplayShellEnv(readReplayShellEnvSource(req.flags?.replayShellEnv)),
-      cliEnv: parseReplayCliEnvEntries(readReplayCliEnvEntries(req.flags?.replayEnv)),
-    });
-    const actionTracePath = tracePath ?? sessionStore.get(sessionName)?.trace?.outPath;
-    const snapshotDiagnosticSamples: SnapshotTimingSample[] = [];
-    // ADR 0012 decision 6, R1/R2/R6: R2 preflight rejects ANY fresh full replay
-    // on a session with an active repair run — regardless of `--save-script`
-    // this time — because the session stays repair-armed (`recordSession` +
-    // `saveScriptBoundary`), so even a plain full replay re-appends the
-    // recorded prefix. The armer then stamps the boundary watermark on the
-    // session that actually accumulates this run's actions, robust to step-1
-    // `open` replacing the session.
-    const repairRunPreflight = preflightReplayAgainstActiveRepair({
-      entryIndex: entryIndex.value,
-      sessionStore,
-      sessionName,
-    });
-    if (repairRunPreflight) return repairRunPreflight;
-    // ADR 0012 decision 6, R7 (BLOCKER 1): a `--from` continuation (entryIndex > 0)
-    // resumes an EXISTING session — it never replays step 1 (`open`), so it
-    // cannot create one. If the session is gone (its repair was idle-reaped),
-    // surface SESSION_NOT_FOUND HERE so the router translates it to
-    // REPAIR_SESSION_EXPIRED via the tombstone — instead of the missing session
-    // surfacing later as a REPLAY_DIVERGENCE that wraps the first step's failure
-    // and slips past the tombstone translation.
-    if (entryIndex.value > 0 && !sessionStore.get(sessionName)) {
-      return noActiveSessionError();
-    }
-    // ADR 0012 decision 6, R2/R3: `resolveReplayEntryIndex` already proved (or
-    // this `from` never matched the watermark at all) that a `record-and-heal`
-    // continuation is either not this session's pending target, or that a new
-    // action was recorded since the divergence — the corrective press
-    // happened. Consume the watermark on the latter so it can never be
-    // re-checked against a later, unrelated request.
-    if (
-      preEntrySession &&
-      preEntrySession.pendingRecordAndHeal?.expectedFrom === req.flags?.replayFrom
-    ) {
-      preEntrySession.pendingRecordAndHeal = undefined;
-      sessionStore.set(sessionName, preEntrySession);
-    }
-    if (req.flags?.saveScript) {
-      // ADR 0012 decision 6, R7 (C5a): a fresh `replay --save-script` on this
-      // key clears any prior reap tombstone before starting a new transaction.
-      sessionStore.clearRepairTombstone(sessionName);
-    }
-    const preRunSession = sessionStore.get(sessionName);
-    // #1258: arm-time EEXIST preflight — fail HERE, before any step of this
-    // invocation dispatches, rather than letting the whole run (and, for a
-    // fresh repair, its very first `open`) execute only to hit the SAME
-    // refuse-on-exist at publish time (`publishHealedScriptAtomically`, at
-    // `close`/completion). Computes the SAME target `armReplaySaveScriptStep`
-    // below would resolve, without needing the session to exist yet, and
-    // honors the SAME effective force decision publication uses — read-only:
-    // it never mutates the session (it runs BEFORE `applySaveScriptRetarget`),
-    // so `liveForce`/`persistedForce` are passed separately for it to apply the
-    // per-target rule against the target it computes.
-    const saveScriptPreflight = preflightSaveScriptTarget({
-      saveScript: req.flags?.saveScript,
-      liveForce: req.flags?.force,
-      persistedForce: preRunSession?.saveScriptForce,
-      sourcePath: resolved,
-      existingSaveScriptPath: preRunSession?.saveScriptPath,
-    });
-    if (saveScriptPreflight) return saveScriptPreflight;
-    // ADR 0012 decision 6 (C2): a repair-armed resume re-opens the completion
-    // window — a leg that re-diverges must not inherit a prior leg's COMPLETE
-    // flag and let a later `close` commit a now-stale transaction. #1258: this
-    // reset MUST run AFTER the preflight's early-return above — a preflight
-    // REJECTION (a retarget to an existing target without force) leaves the
-    // session untouched, so a prior COMPLETE transaction stays committable at
-    // its ORIGINAL target; resetting before the return would corrupt it (a
-    // later `close` would then refuse to commit the original). The reset is
-    // correct only when this run actually proceeds to re-arm.
-    if (preRunSession?.saveScriptBoundary !== undefined) preRunSession.saveScriptComplete = false;
-    const armReplaySaveScriptStep = createReplaySaveScriptArmer({
-      saveScript: req.flags?.saveScript,
-      force: req.flags?.force,
+      preEntrySession,
+      entryIndex,
+      scope,
+      actionTracePath,
+      snapshotDiagnosticSamples,
+    } = planPreparation.value;
+    const sessionPreparation = prepareReplaySession({
+      req,
+      entryIndex,
+      preEntrySession,
       sessionStore,
       sessionName,
       sourcePath: resolved,
     });
-    const failStep = (failedResponse: DaemonResponse, failedAction: SessionAction, index: number) =>
-      withReplayFailureDiagnostics({
-        response: failedResponse,
-        action: failedAction,
-        index,
-        replayPath: resolved,
-        sourcePath: actionSourcePaths?.[index] ?? resolved,
-        sourceLine: actionLines[index] ?? 1,
-        artifactPaths: [...artifactPaths],
-        snapshotDiagnosticSamples,
-        scope,
-        req,
-        sessionName,
-        sessionStore,
-        logPath,
-        planActions: actions,
-        planDigest,
-      });
+    if (!sessionPreparation.ok) return sessionPreparation.response;
     const stepContext: ReplayStepContext = {
       scope,
       replayReq,
@@ -334,85 +209,34 @@ export async function runReplayScriptFile(params: {
       responseLevel: req.meta?.responseLevel,
       invoke,
     };
-    for (let index = entryIndex.value; index < actions.length; index += 1) {
-      const action = actions[index];
-      if (!action || action.command === 'replay') continue;
-      // ADR 0012 decision 6, R1 (BLOCKER 4): arm BEFORE the terminal-close
-      // check. Pre-`open` arming is a no-op (no session yet), so for a script
-      // whose first step CREATES the session (`open`), the boundary is only set
-      // once a later iteration runs the armer on the now-existing session.
-      // Arming first means a minimal `[open, close]` transaction arms at the
-      // `close` step, so `isRepairArmedTerminalClose` then sees the boundary and
-      // treats the terminal `close` as lifecycle (skipped) rather than
-      // dispatching it and tearing the session down un-armed.
-      armReplaySaveScriptStep();
-      if (
-        isRepairArmedTerminalClose({
-          action,
-          index,
-          totalActions: actions.length,
-          sessionStore,
-          sessionName,
-        })
-      ) {
-        continue;
-      }
-      emitReplayTestActionProgress(resolved, index, actions.length, action);
-      const sampleStart = readSessionSnapshotSampleCount(sessionStore, sessionName);
-      const response = await resolveReplayStepResponse(stepContext, action, index, [
-        ...artifactPaths,
-      ]);
-      snapshotDiagnosticSamples.push(
-        ...readSessionSnapshotSamplesSince(sessionStore, sessionName, sampleStart),
-      );
-      collectReplayActionArtifactPaths(response).forEach((entry) => artifactPaths.add(entry));
-      if (!response.ok) {
-        // ADR 0012 decision 6, R7 (C1): a divergence from a repair-armed run
-        // keeps its session live — mark the wire signal so the client keeps the
-        // owning daemon alive and the agent knows the session is addressable.
-        const held = (r: DaemonResponse): DaemonResponse =>
-          markRepairSessionHeldIfArmed({ response: r, sessionStore, sessionName });
-        // A complete target-binding divergence must pass through unchanged —
-        // failStep would rebuild it as a generic action-failure divergence
-        // (double-capture + lost kind/targetBinding).
-        if (isCompleteTargetBindingDivergenceResponse(response)) return held(response);
-        return held(await failStep(response, action, index));
-      }
-    }
-
-    // ADR 0012 decision 6, R1 (BLOCKER 4): a final arm so a repair whose LAST
-    // executable step created the session (e.g. a bare `[open]`, or `[open,
-    // close]` where the close is skipped) still arms the transaction before the
-    // completion/commit gate below evaluates it.
-    armReplaySaveScriptStep();
-
-    // ADR 0012 decision 6 (C2): the loop reached the last executable step with
-    // no outstanding divergence (the terminal source `close` was skipped, C4) —
-    // the repair transaction is now COMPLETE and commit-eligible.
-    const completedSession = sessionStore.get(sessionName);
-    if (completedSession?.saveScriptBoundary !== undefined) {
-      completedSession.saveScriptComplete = true;
-      sessionStore.set(sessionName, completedSession);
-    }
-
-    const replayedCount = actions.length - entryIndex.value;
-    const snapshotDiagnosticsSummary = summarizeSnapshotTimingSamples(snapshotDiagnosticSamples);
-    const wallClockMs = Date.now() - startedAt;
-    return {
-      ok: true,
-      data: {
-        replayed: replayedCount,
-        // ADR 0012 migration step 6: `--update` retired as an actor; it never
-        // healed anything in this run, so the count is always 0. Kept on the
-        // wire shape for existing reporters/consumers (test summary, JUnit).
-        healed: 0,
-        session: sessionName,
-        artifactPaths: [...artifactPaths],
-        ...(snapshotDiagnosticsSummary ? { snapshotDiagnostics: snapshotDiagnosticsSummary } : {}),
-        // ADR 0012: one-line text success summary; --json shape is additive.
-        message: formatReplaySuccessMessage(replayedCount, wallClockMs),
-      } satisfies ReplayCommandResult,
-    };
+    const failure = await executeReplayActions({
+      req,
+      sessionName,
+      sessionStore,
+      logPath,
+      resolved,
+      actions,
+      actionLines,
+      actionSourcePaths,
+      planDigest,
+      entryIndex,
+      scope,
+      stepContext,
+      artifactPaths,
+      snapshotDiagnosticSamples,
+      armSaveScript: sessionPreparation.armSaveScript,
+    });
+    if (failure) return failure;
+    return completeReplayRun({
+      startedAt,
+      sessionName,
+      sessionStore,
+      actions,
+      entryIndex,
+      artifactPaths,
+      snapshotDiagnosticSamples,
+      armSaveScript: sessionPreparation.armSaveScript,
+    });
   } catch (err) {
     const appErr = asAppError(err);
     return errorResponse(
@@ -421,6 +245,149 @@ export async function runReplayScriptFile(params: {
       artifactPaths.size > 0 ? { artifactPaths: [...artifactPaths] } : undefined,
     );
   }
+}
+
+type ReplayActionExecution = {
+  req: DaemonRequest;
+  sessionName: string;
+  sessionStore: SessionStore;
+  logPath: string;
+  resolved: string;
+  actions: SessionAction[];
+  actionLines: number[];
+  actionSourcePaths: (string | undefined)[] | undefined;
+  planDigest: string;
+  entryIndex: number;
+  scope: ReplayVarScope;
+  stepContext: ReplayStepContext;
+  artifactPaths: Set<string>;
+  snapshotDiagnosticSamples: SnapshotTimingSample[];
+  armSaveScript: () => void;
+};
+
+async function executeReplayActions(
+  params: ReplayActionExecution,
+): Promise<DaemonResponse | undefined> {
+  const {
+    sessionName,
+    sessionStore,
+    resolved,
+    actions,
+    entryIndex,
+    stepContext,
+    artifactPaths,
+    snapshotDiagnosticSamples,
+    armSaveScript,
+  } = params;
+  for (let index = entryIndex; index < actions.length; index += 1) {
+    const action = actions[index];
+    if (!isExecutableReplayAction(action)) continue;
+    // Arm before checking terminal close so `[open, close]` records the
+    // session created by `open` before treating `close` as lifecycle.
+    armSaveScript();
+    if (
+      isRepairArmedTerminalClose({
+        action,
+        index,
+        totalActions: actions.length,
+        sessionStore,
+        sessionName,
+      })
+    ) {
+      continue;
+    }
+    emitReplayTestActionProgress(resolved, index, actions.length, action);
+    const sampleStart = readSessionSnapshotSampleCount(sessionStore, sessionName);
+    const response = await resolveReplayStepResponse(stepContext, action, index, [
+      ...artifactPaths,
+    ]);
+    snapshotDiagnosticSamples.push(
+      ...readSessionSnapshotSamplesSince(sessionStore, sessionName, sampleStart),
+    );
+    collectReplayActionArtifactPaths(response).forEach((entry) => artifactPaths.add(entry));
+    if (response.ok) continue;
+    return await buildReplayActionFailure(params, action, index, response);
+  }
+  return undefined;
+}
+
+function isExecutableReplayAction(action: SessionAction | undefined): action is SessionAction {
+  return Boolean(action && action.command !== 'replay');
+}
+
+async function buildReplayActionFailure(
+  params: ReplayActionExecution,
+  action: SessionAction,
+  index: number,
+  response: Extract<DaemonResponse, { ok: false }>,
+): Promise<DaemonResponse> {
+  const heldResponse = (failure: DaemonResponse): DaemonResponse =>
+    markRepairSessionHeldIfArmed({
+      response: failure,
+      sessionStore: params.sessionStore,
+      sessionName: params.sessionName,
+    });
+  if (isCompleteTargetBindingDivergenceResponse(response)) return heldResponse(response);
+  return heldResponse(
+    await withReplayFailureDiagnostics({
+      response,
+      action,
+      index,
+      replayPath: params.resolved,
+      sourcePath: params.actionSourcePaths?.[index] ?? params.resolved,
+      sourceLine: params.actionLines[index] ?? 1,
+      artifactPaths: [...params.artifactPaths],
+      snapshotDiagnosticSamples: params.snapshotDiagnosticSamples,
+      scope: params.scope,
+      req: params.req,
+      sessionName: params.sessionName,
+      sessionStore: params.sessionStore,
+      logPath: params.logPath,
+      planActions: params.actions,
+      planDigest: params.planDigest,
+    }),
+  );
+}
+
+function completeReplayRun(params: {
+  startedAt: number;
+  sessionName: string;
+  sessionStore: SessionStore;
+  actions: SessionAction[];
+  entryIndex: number;
+  artifactPaths: Set<string>;
+  snapshotDiagnosticSamples: SnapshotTimingSample[];
+  armSaveScript: () => void;
+}): DaemonResponse {
+  const {
+    startedAt,
+    sessionName,
+    sessionStore,
+    actions,
+    entryIndex,
+    artifactPaths,
+    snapshotDiagnosticSamples,
+    armSaveScript,
+  } = params;
+  armSaveScript();
+  const completedSession = sessionStore.get(sessionName);
+  if (completedSession?.saveScriptBoundary !== undefined) {
+    completedSession.saveScriptComplete = true;
+    sessionStore.set(sessionName, completedSession);
+  }
+  const replayedCount = actions.length - entryIndex;
+  const snapshotDiagnosticsSummary = summarizeSnapshotTimingSamples(snapshotDiagnosticSamples);
+  return {
+    ok: true,
+    data: {
+      replayed: replayedCount,
+      healed: 0,
+      session: sessionName,
+      artifactPaths: [...artifactPaths],
+      ...(snapshotDiagnosticsSummary ? { snapshotDiagnostics: snapshotDiagnosticsSummary } : {}),
+      message: formatReplaySuccessMessage(replayedCount, Date.now() - startedAt),
+    } satisfies ReplayCommandResult,
+  };
 }
 
 function emitReplayTestActionProgress(
@@ -476,6 +443,219 @@ function readSelectorDisplayValue(selector: string | undefined): string | undefi
   if (values.length === 0) return undefined;
   const first = values[0];
   return first && values.every((value) => value === first) ? first : undefined;
+}
+
+type PreparedReplayPlan = {
+  replayReq: DaemonRequest;
+  actions: SessionAction[];
+  actionLines: number[];
+  actionSourcePaths: (string | undefined)[] | undefined;
+  planDigest: string;
+  preEntrySession: SessionState | undefined;
+  entryIndex: number;
+  scope: ReplayVarScope;
+  actionTracePath: string | undefined;
+  snapshotDiagnosticSamples: SnapshotTimingSample[];
+};
+
+type ParsedReplayInput = ReturnType<typeof parseReplayInput>;
+
+async function runTypedReplayIfNeeded(params: {
+  req: DaemonRequest;
+  sessionName: string;
+  logPath: string;
+  sessionStore: SessionStore;
+  tracePath?: string;
+  invoke: DaemonInvokeFn;
+  resolved: string;
+}): Promise<DaemonResponse | undefined> {
+  if (!isTypedMaestroReplay(params.req, params.resolved)) return undefined;
+  if (params.sessionStore.get(params.sessionName)?.saveScriptBoundary !== undefined) {
+    return errorResponse(
+      'INVALID_ARGS',
+      'This session has an active .ad --save-script repair run; finish it with replay --from or close before running Maestro YAML.',
+    );
+  }
+  return await runTypedMaestroReplayFile(params);
+}
+
+function prepareReplayPlan(params: {
+  req: DaemonRequest;
+  sessionName: string;
+  sessionStore: SessionStore;
+  tracePath: string | undefined;
+  resolved: string;
+}): { ok: true; value: PreparedReplayPlan } | { ok: false; response: DaemonResponse } {
+  const { req, sessionName, sessionStore, tracePath, resolved } = params;
+  const parsedResult = parseReplayScript(resolved, req);
+  if (!parsedResult.ok) return parsedResult;
+  const parsed = parsedResult.value;
+  const { metadata, actions, actionLines, actionSourcePaths } = parsed;
+  const replayReq = applyReplayMetadata(req, metadata);
+  const planDigest = computeReplayPlanDigest({
+    actions,
+    actionLines,
+    actionSourcePaths,
+    metadata: readEffectiveReplayPlanDigestMetadata(replayReq.flags),
+  });
+  const preEntrySession = sessionStore.get(sessionName);
+  const entryIndex = resolveReplayEntryIndex(
+    req.flags,
+    actions.length,
+    planDigest,
+    preEntrySession?.pendingRecordAndHeal,
+    preEntrySession?.actions.length ?? 0,
+  );
+  if (!entryIndex.ok) return entryIndex;
+
+  return {
+    ok: true,
+    value: {
+      replayReq,
+      actions,
+      actionLines,
+      actionSourcePaths,
+      planDigest,
+      preEntrySession,
+      entryIndex: entryIndex.value,
+      scope: buildPreparedReplayScope({ req, replayReq, sessionName, resolved, metadata }),
+      actionTracePath: tracePath ?? preEntrySession?.trace?.outPath,
+      snapshotDiagnosticSamples: [],
+    },
+  };
+}
+
+function parseReplayScript(
+  resolved: string,
+  req: DaemonRequest,
+): { ok: true; value: ParsedReplayInput } | { ok: false; response: DaemonResponse } {
+  const script = fs.readFileSync(resolved, 'utf8');
+  const firstNonWhitespace = script.trimStart()[0];
+  if (firstNonWhitespace !== '{' && firstNonWhitespace !== '[') {
+    return { ok: true, value: parseReplayInput(script, req.flags) };
+  }
+  return {
+    ok: false,
+    response: errorResponse(
+      'INVALID_ARGS',
+      'replay accepts .ad script files. JSON replay payloads are no longer supported.',
+    ),
+  };
+}
+
+function applyReplayMetadata(
+  req: DaemonRequest,
+  metadata: ParsedReplayInput['metadata'],
+): DaemonRequest {
+  if (!metadata.platform && !metadata.target) return req;
+  return { ...req, flags: buildReplayMetadataFlags(req.flags, metadata) };
+}
+
+function buildPreparedReplayScope(params: {
+  req: DaemonRequest;
+  replayReq: DaemonRequest;
+  sessionName: string;
+  resolved: string;
+  metadata: ParsedReplayInput['metadata'];
+}): ReplayVarScope {
+  const { req, replayReq, sessionName, resolved, metadata } = params;
+  return buildReplayVarScope({
+    builtins: buildReplayBuiltinVars({
+      req: replayReq,
+      sessionName,
+      metadata,
+      resolvedPath: resolved,
+    }),
+    fileEnv: metadata.env,
+    shellEnv: collectReplayShellEnv(readReplayShellEnvSource(req.flags?.replayShellEnv)),
+    cliEnv: parseReplayCliEnvEntries(readReplayCliEnvEntries(req.flags?.replayEnv)),
+  });
+}
+
+function prepareReplaySession(params: {
+  req: DaemonRequest;
+  entryIndex: number;
+  preEntrySession: SessionState | undefined;
+  sessionStore: SessionStore;
+  sessionName: string;
+  sourcePath: string;
+}): { ok: true; armSaveScript: () => void } | { ok: false; response: DaemonResponse } {
+  const { req, entryIndex, preEntrySession, sessionStore, sessionName, sourcePath } = params;
+  const sessionPreflight = validateReplaySessionEntry({
+    entryIndex,
+    sessionStore,
+    sessionName,
+  });
+  if (sessionPreflight) return { ok: false, response: sessionPreflight };
+
+  consumeReplayResumeState({ req, preEntrySession, sessionStore, sessionName });
+  return prepareSaveScriptSession({ req, sessionStore, sessionName, sourcePath });
+}
+
+function validateReplaySessionEntry(params: {
+  entryIndex: number;
+  sessionStore: SessionStore;
+  sessionName: string;
+}): DaemonResponse | undefined {
+  const repairPreflight = preflightReplayAgainstActiveRepair(params);
+  if (repairPreflight) return repairPreflight;
+  if (params.entryIndex > 0 && !params.sessionStore.get(params.sessionName)) {
+    return noActiveSessionError();
+  }
+  return undefined;
+}
+
+function prepareSaveScriptSession(params: {
+  req: DaemonRequest;
+  sessionStore: SessionStore;
+  sessionName: string;
+  sourcePath: string;
+}): { ok: true; armSaveScript: () => void } | { ok: false; response: DaemonResponse } {
+  const { req, sessionStore, sessionName, sourcePath } = params;
+  const preRunSession = sessionStore.get(sessionName);
+  const { saveScript, force } = req.flags ?? {};
+  const {
+    saveScriptForce: persistedForce,
+    saveScriptPath: existingSaveScriptPath,
+    saveScriptBoundary,
+  } = preRunSession ?? {};
+  const saveScriptPreflight = preflightSaveScriptTarget({
+    saveScript,
+    liveForce: force,
+    persistedForce,
+    sourcePath,
+    existingSaveScriptPath,
+  });
+  if (saveScriptPreflight) return { ok: false, response: saveScriptPreflight };
+
+  if (preRunSession && saveScriptBoundary !== undefined) preRunSession.saveScriptComplete = false;
+  return {
+    ok: true,
+    armSaveScript: createReplaySaveScriptArmer({
+      saveScript,
+      force,
+      sessionStore,
+      sessionName,
+      sourcePath,
+    }),
+  };
+}
+
+function consumeReplayResumeState(params: {
+  req: DaemonRequest;
+  preEntrySession: SessionState | undefined;
+  sessionStore: SessionStore;
+  sessionName: string;
+}): void {
+  const { req, preEntrySession, sessionStore, sessionName } = params;
+  if (
+    preEntrySession &&
+    preEntrySession.pendingRecordAndHeal?.expectedFrom === req.flags?.replayFrom
+  ) {
+    preEntrySession.pendingRecordAndHeal = undefined;
+    sessionStore.set(sessionName, preEntrySession);
+  }
+  if (req.flags?.saveScript) sessionStore.clearRepairTombstone(sessionName);
 }
 
 /**
@@ -679,11 +859,16 @@ function markRepairSessionHeldIfArmed(params: {
 /** The mutable `details.divergence.resume` record on a failed response, or `undefined`. */
 function readDivergenceResumeRecord(
   response: Extract<DaemonResponse, { ok: false }>,
-): Record<string, unknown> | undefined {
+): ReplayDivergenceResume | undefined {
   const divergence = response.error.details?.divergence;
-  if (!divergence || typeof divergence !== 'object') return undefined;
-  const resume = (divergence as Record<string, unknown>).resume;
-  return resume && typeof resume === 'object' ? (resume as Record<string, unknown>) : undefined;
+  if (!isRecord(divergence) || !isReplayDivergenceResume(divergence.resume)) return undefined;
+  return divergence.resume;
+}
+
+function isReplayDivergenceResume(value: unknown): value is ReplayDivergenceResume {
+  if (!isRecord(value) || typeof value.allowed !== 'boolean') return false;
+  if (!Number.isInteger(value.from) || typeof value.planDigest !== 'string') return false;
+  return value.allowed || typeof value.reason === 'string';
 }
 
 /** `flows/login.ad` -> `flows/login.healed.ad`, beside the original (R6). */

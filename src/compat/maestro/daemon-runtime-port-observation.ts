@@ -25,6 +25,7 @@ import type {
   MaestroTargetMatch,
   MaestroTargetQuery,
 } from './runtime-port-types.ts';
+import { maestroObservationMatches } from './runtime-port-observation.ts';
 
 export const MAESTRO_OBSERVATION_POLL_MS = MAESTRO_COMPATIBILITY_PRESETS.observation.pollIntervalMs;
 export type DaemonMaestroRuntimeDependencies = {
@@ -67,13 +68,13 @@ export async function captureRetriableMaestroSnapshot(
     } catch (error) {
       if (!isRetriableSnapshotError(error)) throw error;
       throwIfAborted(params.context.signal);
-      const remaining = deadline - params.dependencies.now();
-      if (remaining <= 0) throw error;
-      await sleepWithinBudget(
+      const slept = await sleepWithinDeadline(
         params.dependencies,
-        Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining),
+        deadline,
+        MAESTRO_OBSERVATION_POLL_MS,
         params.context.signal,
       );
+      if (!slept) throw error;
     }
   }
 }
@@ -138,17 +139,15 @@ export async function observeTypedMaestroCondition(params: {
       mode: 'observe',
     });
     lastMatch = match;
-    if (conditionMatches(params.condition, match)) return match;
+    if (maestroObservationMatches(params.condition, match)) return match;
     if (params.dependencies.now() >= conditionDeadline) break;
 
-    const remaining = conditionDeadline - params.dependencies.now();
-    if (remaining > 0) {
-      await sleepWithinBudget(
-        params.dependencies,
-        Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining),
-        params.context.signal,
-      );
-    }
+    await sleepWithinDeadline(
+      params.dependencies,
+      conditionDeadline,
+      MAESTRO_OBSERVATION_POLL_MS,
+      params.context.signal,
+    );
   }
 
   throwIfAborted(params.context.signal);
@@ -214,14 +213,12 @@ export async function waitForTypedSnapshotStability(params: {
 
   while (true) {
     throwIfAborted(params.context.signal);
-    const remaining = deadline - params.dependencies.now();
-    if (remaining > 0) {
-      await sleepWithinBudget(
-        params.dependencies,
-        Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining),
-        params.context.signal,
-      );
-    }
+    await sleepWithinDeadline(
+      params.dependencies,
+      deadline,
+      MAESTRO_OBSERVATION_POLL_MS,
+      params.context.signal,
+    );
     const snapshot = await captureRetriableMaestroSnapshot(params, deadline);
     const signature = maestroSnapshotSignature(snapshot);
     if (signature === previousSignature) return { snapshot, signature };
@@ -338,16 +335,7 @@ function isDispatchSelectorKey(key: string): key is MaestroDispatchSelector['key
   return key === 'id' || key === 'label' || key === 'text';
 }
 
-function conditionMatches(
-  condition: MaestroObservationCondition,
-  match: MaestroTargetMatch,
-): boolean {
-  return condition.kind === 'visible'
-    ? match.matched && match.visible
-    : !match.matched || !match.visible;
-}
-
-export async function sleepWithinBudget(
+async function sleepWithinBudget(
   dependencies: DaemonMaestroRuntimeDependencies,
   milliseconds: number,
   signal: AbortSignal | undefined,
@@ -359,6 +347,18 @@ export async function sleepWithinBudget(
     throw error;
   }
   throwIfAborted(signal);
+}
+
+export async function sleepWithinDeadline(
+  dependencies: DaemonMaestroRuntimeDependencies,
+  deadline: number,
+  intervalMs: number,
+  signal: AbortSignal | undefined,
+): Promise<boolean> {
+  const remaining = deadline - dependencies.now();
+  if (remaining <= 0) return false;
+  await sleepWithinBudget(dependencies, Math.min(intervalMs, remaining), signal);
+  return true;
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
@@ -379,17 +379,19 @@ export function maestroSnapshotSignature(snapshot: SnapshotState): string {
   return createHash('sha256')
     .update(
       JSON.stringify(
-        snapshot.nodes.map((node) => ({
-          index: node.index,
-          parentIndex: node.parentIndex,
-          identifier: node.identifier ?? '',
-          label: node.label ?? '',
-          value: node.value ?? '',
-          enabled: node.enabled ?? false,
-          selected: node.selected ?? false,
-          focused: node.focused ?? false,
-          bounds: maestroSnapshotBounds(node.rect),
-        })),
+        [...snapshot.nodes]
+          .sort((left, right) => left.index - right.index)
+          .map((node) => ({
+            index: node.index,
+            parentIndex: node.parentIndex,
+            identifier: node.identifier ?? '',
+            label: node.label ?? '',
+            value: node.value ?? '',
+            enabled: node.enabled ?? false,
+            selected: node.selected ?? false,
+            focused: node.focused ?? false,
+            bounds: maestroSnapshotBounds(node.rect),
+          })),
       ),
     )
     .digest('hex');

@@ -1,5 +1,5 @@
-import { AppError } from '../../kernel/errors.ts';
 import { createMaestroExecutionContext, type MaestroExecutionContext } from './engine-context.ts';
+import { stripUndefined } from '../../utils/parsing.ts';
 import {
   assertIncludePathAvailable,
   checkpointMaestroCancellation,
@@ -8,6 +8,7 @@ import {
   sourcePathKey,
 } from './engine-flow.ts';
 import { evaluateMaestroBooleanExpression } from './engine-expression.ts';
+import type { MaestroRuntimeCommand } from './engine-types.ts';
 import type { MaestroCommand, MaestroProgram, MaestroRunFlowCommand } from './program-ir.ts';
 import type {
   MaestroReplayPlanCommandStep,
@@ -234,20 +235,17 @@ function hasUnresolvedVariable(value: string): boolean {
 }
 
 function commandStep(
-  command: Extract<MaestroReplayPlanStep['command'], { kind: string }>,
+  command: MaestroRuntimeCommand,
   scopes: readonly MaestroReplayPlanScope[],
   appId: string | undefined,
 ): MaestroReplayPlanCommandStep {
-  if (command.kind === 'runFlow' || command.kind === 'repeat' || command.kind === 'retry') {
-    throw new AppError('COMMAND_FAILED', `Unexpected opaque Maestro command ${command.kind}.`);
-  }
-  return {
-    kind: 'command',
+  return stripUndefined({
+    kind: 'command' as const,
     command,
     source: command.source,
     scopes,
-    ...(appId === undefined ? {} : { appId }),
-  };
+    appId,
+  });
 }
 
 function opaqueStep(
@@ -256,14 +254,14 @@ function opaqueStep(
   appId: string | undefined,
   body: readonly MaestroReplayPlanStep[],
 ): MaestroReplayPlanOpaqueStep {
-  return {
-    kind: 'opaque',
+  return stripUndefined({
+    kind: 'opaque' as const,
     command: opaqueControlCommand(command),
     source: command.source,
     scopes,
     body,
-    ...(appId === undefined ? {} : { appId }),
-  };
+    appId,
+  });
 }
 
 function opaqueControlCommand(
@@ -271,21 +269,21 @@ function opaqueControlCommand(
 ): MaestroReplayPlanOpaqueStep['command'] {
   switch (command.kind) {
     case 'runFlow':
-      return {
+      return stripUndefined({
         kind: command.kind,
         source: command.source,
-        ...(command.when === undefined ? {} : { when: command.when }),
-        ...(command.label === undefined ? {} : { label: command.label }),
+        when: command.when,
+        label: command.label,
         ...(command.include.kind === 'file' ? { includePath: command.include.path } : {}),
-      };
+      });
     case 'repeat':
       return { kind: command.kind, source: command.source, times: command.times };
     case 'retry':
-      return {
+      return stripUndefined({
         kind: command.kind,
         source: command.source,
-        ...(command.maxRetries === undefined ? {} : { maxRetries: command.maxRetries }),
-      };
+        maxRetries: command.maxRetries,
+      });
   }
 }
 

@@ -1,4 +1,4 @@
-import type { Rect, SnapshotNode } from '../../kernel/snapshot.ts';
+import type { Rect, SnapshotNode, SnapshotState } from '../../kernel/snapshot.ts';
 import { isPositiveFiniteRect } from '../../kernel/rect.ts';
 import {
   buildSnapshotNodeByIndex,
@@ -7,9 +7,41 @@ import {
 } from '../../snapshot/snapshot-processing.ts';
 import { normalizeText } from '../../selectors/find.ts';
 import type { MaestroSelector } from './program-ir.ts';
-import type { MaestroPlatform } from './runtime-target-policy.ts';
+import {
+  filterVisibleMaestroMatches,
+  matchesMaestroTypedSelector,
+  type MaestroPlatform,
+} from './runtime-target-policy.ts';
 
-export function normalizeMaestroSnapshotMatches(
+export type MaestroRankedCandidates = {
+  readonly matches: SnapshotNode[];
+  readonly visible: SnapshotNode[];
+  readonly ranked: SnapshotNode[];
+  readonly parentMatched: boolean;
+};
+
+export function rankMaestroCandidates(
+  snapshot: SnapshotState,
+  selector: MaestroSelector,
+  platform: MaestroPlatform,
+  childOf?: MaestroSelector,
+): MaestroRankedCandidates {
+  const matches = snapshot.nodes.filter((node) => matchesMaestroTypedSelector(node, selector));
+  const scoped = scopeMatchesByAncestor(snapshot, matches, childOf);
+  const visible = filterVisibleMaestroMatches({
+    nodes: snapshot.nodes,
+    matches: scoped.matches,
+    platform,
+  });
+  return {
+    matches,
+    visible,
+    ranked: normalizeMaestroSnapshotMatches(snapshot.nodes, visible, selector, platform),
+    parentMatched: scoped.parentMatched,
+  };
+}
+
+function normalizeMaestroSnapshotMatches(
   nodes: SnapshotNode[],
   matches: SnapshotNode[],
   selector: MaestroSelector,
@@ -96,4 +128,23 @@ function isInteractiveControl(node: SnapshotNode): boolean {
     type === 'securetextfield' ||
     type === 'textview'
   );
+}
+
+function scopeMatchesByAncestor(
+  snapshot: SnapshotState,
+  matches: SnapshotNode[],
+  childOf: MaestroSelector | undefined,
+): { matches: SnapshotNode[]; parentMatched: boolean } {
+  if (!childOf) return { matches, parentMatched: true };
+  const parents = snapshot.nodes.filter((node) => matchesMaestroTypedSelector(node, childOf));
+  if (parents.length === 0) return { matches: [], parentMatched: false };
+  const nodeByIndex = buildSnapshotNodeByIndex(snapshot.nodes);
+  return {
+    matches: matches.filter((node) =>
+      parents.some((parent) =>
+        isDescendantOfSnapshotNode(snapshot.nodes, node, parent, nodeByIndex),
+      ),
+    ),
+    parentMatched: true,
+  };
 }

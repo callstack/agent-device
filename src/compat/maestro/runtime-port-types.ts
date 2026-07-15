@@ -128,9 +128,6 @@ export type MaestroRuntimeOperations = {
     readonly retryTapIfNoChange?: boolean;
     readonly repeat?: number;
     readonly delay?: number;
-    readonly label?: string;
-    readonly index?: number;
-    readonly childOf?: MaestroSelector;
   }>;
   readonly doubleTapOn: MaestroRuntimeOperation<{
     readonly target: MaestroInputTarget;

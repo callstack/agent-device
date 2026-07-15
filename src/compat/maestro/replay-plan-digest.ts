@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { canonicalJson } from '../../utils/canonical-json.ts';
 
 export function computeMaestroReplayPlanDigest(plan: {
   readonly platform?: string;
@@ -15,16 +16,5 @@ export function computeMaestroReplayPlanDigest(plan: {
     initialStaticEnv: plan.initialStaticEnv,
     steps: plan.steps,
   };
-  return createHash('sha256')
-    .update(JSON.stringify(sortKeysDeep(canonical)), 'utf8')
-    .digest('hex');
-}
-
-function sortKeysDeep(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortKeysDeep);
-  if (!value || typeof value !== 'object') return value;
-  const record = value as Record<string, unknown>;
-  const sorted: Record<string, unknown> = {};
-  for (const key of Object.keys(record).sort()) sorted[key] = sortKeysDeep(record[key]);
-  return sorted;
+  return createHash('sha256').update(canonicalJson(canonical), 'utf8').digest('hex');
 }

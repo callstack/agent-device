@@ -187,6 +187,16 @@ test('canonicalizes rect key order before comparing snapshot signatures', () => 
   expect(maestroSnapshotSignature(first)).toBe(maestroSnapshotSignature(second));
 });
 
+test('canonicalizes node enumeration order before comparing snapshot signatures', () => {
+  const first = makeSnapshot([
+    { index: 0, type: 'Window', label: 'Root' },
+    { index: 1, parentIndex: 0, type: 'Button', label: 'Continue' },
+  ]);
+  const second = makeSnapshot([...first.nodes].reverse());
+
+  expect(maestroSnapshotSignature(first)).toBe(maestroSnapshotSignature(second));
+});
+
 test('compares truncated rect edges like Maestro hierarchy bounds', () => {
   const first = makeSnapshot([
     {

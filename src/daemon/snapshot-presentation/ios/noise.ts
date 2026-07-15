@@ -1,5 +1,5 @@
 import type { RawSnapshotNode } from '../../../kernel/snapshot.ts';
-import { rectContains } from '../../../kernel/rect.ts';
+import { rectArea, rectContains } from '../../../kernel/rect.ts';
 import {
   isReactNativeCollapsedWarningWrapperCandidate,
   isReactNativeCollapsedWarningWrapperWithVisibleBanner,
@@ -76,10 +76,6 @@ function smallestContainedDismissRect(
     }
   });
   return representative;
-}
-
-function rectArea(rect: NonNullable<RawSnapshotNode['rect']>): number {
-  return rect.width * rect.height;
 }
 
 function remainingHorizontalPartition(

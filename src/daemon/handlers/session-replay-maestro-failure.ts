@@ -6,21 +6,15 @@ import { formatMaestroCommandProgress } from '../../compat/maestro/progress.ts';
 import type { MaestroCommand, MaestroSelector } from '../../compat/maestro/program-ir.ts';
 import { evaluateMaestroReplayResume } from '../../compat/maestro/replay-plan.ts';
 import type { MaestroReplayPlan } from '../../compat/maestro/replay-plan-types.ts';
-import {
-  findMaestroTypedSelectorMatches,
-  scopeMaestroMatchesByAncestor,
-} from '../../compat/maestro/runtime-target-matching.ts';
-import {
-  filterVisibleMaestroMatches,
-  matchesMaestroTypedSelector,
-} from '../../compat/maestro/runtime-target-policy.ts';
-import { normalizeMaestroSnapshotMatches } from '../../compat/maestro/runtime-target-ranking.ts';
+import { matchesMaestroTypedSelector } from '../../compat/maestro/runtime-target-policy.ts';
+import { rankMaestroCandidates } from '../../compat/maestro/runtime-target-ranking.ts';
 import type { DaemonError } from '../../kernel/contracts.ts';
 import type { SnapshotNode } from '../../kernel/snapshot.ts';
 import {
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
   createReplayDivergenceSanitizer,
   type ReplayDivergence,
+  type ReplayDivergenceSuggestionBasis,
   type ReplayVarScrubEntry,
 } from '../../replay/divergence.ts';
 import { formatScriptArg } from '../../replay/script-utils.ts';
@@ -37,6 +31,7 @@ import {
   type DivergenceFieldSanitizer,
 } from './session-replay-divergence.ts';
 import { computeReplayRepairHint } from './session-replay-repair-hint.ts';
+import { rankAndDedupeReplaySuggestions } from './session-replay-suggestion-ranking.ts';
 import {
   buildReplayDivergenceFailureResponseFromDescriptor,
   hoistReplayFailureCauseDiagnosticMeta,
@@ -206,49 +201,31 @@ function collectTypedMaestroSuggestions(params: {
   if (!query || (params.platform !== 'android' && params.platform !== 'ios')) return [];
   const snapshot = { createdAt: Date.now(), nodes: params.nodes };
   const candidates = collectTypedMaestroCandidates(snapshot, query, params.platform);
-  const byNode = new Map<number, { node: SnapshotNode; basis: TypedSuggestionBasis }>();
-  for (const node of candidates) {
-    const basis = suggestionBasis(query.selector, node);
-    const existing = byNode.get(node.index);
-    if (!existing || typedSuggestionBasisRank(basis) < typedSuggestionBasisRank(existing.basis)) {
-      byNode.set(node.index, { node, basis });
-    }
-  }
-  return [...byNode.values()]
-    .sort(
-      (left, right) =>
-        typedSuggestionBasisRank(left.basis) - typedSuggestionBasisRank(right.basis) ||
-        left.node.index - right.node.index,
-    )
-    .map(({ node, basis }) =>
-      buildReplayDivergenceSuggestionForNode({
-        node,
-        session: params.session,
-        action: params.action,
-        basis,
-        sanitize: params.sanitize,
-      }),
-    );
+  return rankAndDedupeReplaySuggestions(
+    candidates.map((node) => ({
+      node,
+      nodeIndex: node.index,
+      basis: suggestionBasis(query.selector, node),
+    })),
+  ).map(({ node, basis }) =>
+    buildReplayDivergenceSuggestionForNode({
+      node,
+      session: params.session,
+      action: params.action,
+      basis,
+      sanitize: params.sanitize,
+    }),
+  );
 }
 
-type TypedSuggestionBasis = 'id' | 'label' | 'other';
+type TypedSuggestionBasis = Extract<ReplayDivergenceSuggestionBasis, 'id' | 'label' | 'other'>;
 
 function collectTypedMaestroCandidates(
   snapshot: { nodes: SnapshotNode[]; createdAt: number },
   query: TypedSuggestionQuery,
   platform: Extract<MaestroReplayPlan['platform'], 'android' | 'ios'>,
 ): SnapshotNode[] {
-  let matches = findMaestroTypedSelectorMatches(snapshot, query.selector);
-  if (query.childOf) {
-    matches = scopeMaestroMatchesByAncestor(snapshot, matches, query.childOf).matches;
-  }
-
-  const visible = filterVisibleMaestroMatches({
-    nodes: snapshot.nodes,
-    matches,
-    platform,
-  });
-  return normalizeMaestroSnapshotMatches(snapshot.nodes, visible, query.selector, platform);
+  return rankMaestroCandidates(snapshot, query.selector, platform, query.childOf).ranked;
 }
 
 type TypedSuggestionQuery = {
@@ -334,12 +311,6 @@ function suggestionBasis(selector: MaestroSelector, node: SnapshotNode): TypedSu
   }
   if (selector.text !== undefined || selector.label !== undefined) return 'label';
   return 'other';
-}
-
-function typedSuggestionBasisRank(basis: TypedSuggestionBasis): number {
-  if (basis === 'id') return 0;
-  if (basis === 'label') return 2;
-  return 3;
 }
 
 function reportCommandForCapture(command: string): string {

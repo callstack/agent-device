@@ -17,3 +17,7 @@ export function rectContains(container: Rect, nested: Rect): boolean {
     nested.y + nested.height <= container.y + container.height
   );
 }
+
+export function rectArea(rect: Rect): number {
+  return rect.width * rect.height;
+}

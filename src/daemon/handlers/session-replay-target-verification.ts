@@ -36,10 +36,7 @@ import {
   type ReplayRepairHintCapture,
 } from './session-replay-repair-hint.ts';
 import { buildReplayDivergenceFailureResponse } from './session-replay-runtime-failure-response.ts';
-import {
-  buildReplayDivergenceResume,
-  stampPendingRecordAndHealWatermark,
-} from './session-replay-resume.ts';
+import { buildAndPersistReplayDivergenceResume } from './session-replay-resume.ts';
 import {
   classifyReplayTarget,
   identityFieldMismatches,
@@ -135,26 +132,14 @@ function buildTargetBindingDivergenceResponse(
     targetEvidence: recorded,
     capture: built.repairCapture,
   });
-  // Fetched before the resume so its existence can gate the empty-tail
-  // `alternateFrom` (the watermark stamped below needs a live session).
-  const session = sessionStore.get(sessionName);
-  const resume = buildReplayDivergenceResume({
+  const resume = buildAndPersistReplayDivergenceResume({
     failedIndex: step,
     actions: planActions,
     planDigest,
     repairHint,
-    sessionExists: session !== undefined,
+    sessionStore,
+    sessionName,
   });
-  if (session) {
-    stampPendingRecordAndHealWatermark({
-      session,
-      resume,
-      repairHint,
-      failedIndex: step,
-      actions: planActions,
-    });
-    sessionStore.set(sessionName, session);
-  }
 
   const divergence: ReplayDivergence = {
     version: 1,

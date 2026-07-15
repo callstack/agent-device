@@ -1,5 +1,6 @@
 import { isMap, isNode, isScalar, isSeq, LineCounter, type Node } from 'yaml';
 import { AppError } from '../../kernel/errors.ts';
+import { stripUndefined } from '../../utils/parsing.ts';
 import type { MaestroOptionalCommand, MaestroScalar, MaestroSourceLocation } from './program-ir.ts';
 
 export type MaestroProgramParseContext = {
@@ -140,7 +141,7 @@ export function readOptionalCommandOption(
   const optional = readOptionalEntry(entries, 'optional', (entry) =>
     readOptionalBoolean(entry, `${name}.optional`, context),
   );
-  return optional === undefined ? {} : { optional };
+  return stripUndefined({ optional });
 }
 
 export function isNullNode(node: Node | null | undefined): boolean {

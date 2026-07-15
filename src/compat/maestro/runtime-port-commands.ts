@@ -1,5 +1,6 @@
 import { AppError } from '../../kernel/errors.ts';
 import { pointInsideRect } from '../../utils/rect-center.ts';
+import { stripUndefined } from '../../utils/parsing.ts';
 import {
   maestroScrollDurationFromSpeed,
   MAESTRO_COMPATIBILITY_PRESETS,
@@ -150,13 +151,13 @@ async function executeLifecycleCommand(
 }
 
 function launchAppInput(command: MaestroCommandOf<'launchApp'>, request: MaestroRuntimeRequest) {
-  return {
+  return stripUndefined({
     appId: command.appId ?? request.appId,
-    ...(command.stopApp === undefined ? {} : { stopApp: command.stopApp }),
-    ...(command.clearState === undefined ? {} : { clearState: command.clearState }),
-    ...(command.arguments === undefined ? {} : { arguments: command.arguments }),
-    ...(command.launchArguments === undefined ? {} : { launchArguments: command.launchArguments }),
-  };
+    stopApp: command.stopApp,
+    clearState: command.clearState,
+    arguments: command.arguments,
+    launchArguments: command.launchArguments,
+  });
 }
 
 async function executeTargetCommand(
@@ -249,21 +250,16 @@ function targetLookupTimeout(command: { readonly optional?: boolean }): number {
 }
 
 function tapOnInput(command: MaestroCommandOf<'tapOn'>, target: MaestroInputTarget) {
-  return {
+  const delay =
+    command.repeat === undefined
+      ? command.delay
+      : (command.delay ?? MAESTRO_COMPATIBILITY_PRESETS.command.repeatDelayMs);
+  return stripUndefined({
     target,
-    ...(command.retryTapIfNoChange === undefined
-      ? {}
-      : { retryTapIfNoChange: command.retryTapIfNoChange }),
-    ...(command.repeat === undefined ? {} : { repeat: command.repeat }),
-    ...(command.repeat === undefined
-      ? command.delay === undefined
-        ? {}
-        : { delay: command.delay }
-      : { delay: command.delay ?? MAESTRO_COMPATIBILITY_PRESETS.command.repeatDelayMs }),
-    ...(command.label === undefined ? {} : { label: command.label }),
-    ...(command.index === undefined ? {} : { index: command.index }),
-    ...(command.childOf === undefined ? {} : { childOf: command.childOf }),
-  };
+    retryTapIfNoChange: command.retryTapIfNoChange,
+    repeat: command.repeat,
+    delay,
+  });
 }
 
 async function executeSwipeCommand(
@@ -295,7 +291,7 @@ async function executeTextCommand(
     case 'inputText':
       return await invokeOperation(
         operations.inputText,
-        { text: command.text, ...(command.label === undefined ? {} : { label: command.label }) },
+        stripUndefined({ text: command.text, label: command.label }),
         context,
         'invalidate',
       );
@@ -362,7 +358,7 @@ function scrollUntilVisibleInput(command: MaestroCommandOf<'scrollUntilVisible'>
 }
 
 function waitForAnimationToEndInput(command: MaestroCommandOf<'waitForAnimationToEnd'>) {
-  return { ...(command.timeout === undefined ? {} : { timeoutMs: command.timeout }) };
+  return stripUndefined({ timeoutMs: command.timeout });
 }
 
 async function executeSupportCommand(
@@ -379,10 +375,7 @@ async function executeSupportCommand(
     case 'runScript':
       return await invokeOperation(
         operations.runScript,
-        {
-          file: command.file,
-          ...(command.env === undefined ? {} : { env: command.env }),
-        },
+        stripUndefined({ file: command.file, env: command.env }),
         context,
         'preserve',
       );

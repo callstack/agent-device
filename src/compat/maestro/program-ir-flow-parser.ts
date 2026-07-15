@@ -24,6 +24,7 @@ import {
   type MaestroProgramParseContext,
 } from './program-ir-values.ts';
 import { parseMaestroSelector } from './program-ir-gesture-parser.ts';
+import { stripUndefined } from '../../utils/parsing.ts';
 
 export type MaestroCommandListParser = (
   node: Node | null | undefined,
@@ -52,12 +53,12 @@ export function parseMaestroRunScriptCommand(
   const env = hasEntry(entries, 'env')
     ? readScalarMap(entryValue(entries, 'env'), 'runScript.env', context)
     : undefined;
-  return {
-    kind: 'runScript',
+  return stripUndefined({
+    kind: 'runScript' as const,
     source,
     file,
-    ...(env === undefined ? {} : { env }),
-  };
+    env,
+  });
 }
 
 export function parseMaestroRunFlowCommand(
@@ -103,14 +104,14 @@ export function parseMaestroRunFlowCommand(
   const label = hasEntry(entries, 'label')
     ? readOptionalString(entryValue(entries, 'label'), 'runFlow.label', context)
     : undefined;
-  return {
-    kind: 'runFlow',
+  return stripUndefined({
+    kind: 'runFlow' as const,
     source,
     include,
-    ...(env === undefined ? {} : { env }),
-    ...(when === undefined ? {} : { when }),
-    ...(label === undefined ? {} : { label }),
-  };
+    env,
+    when,
+    label,
+  });
 }
 
 export function parseMaestroRepeatCommand(
@@ -155,12 +156,12 @@ export function parseMaestroRetryCommand(
   const maxRetries = hasEntry(entries, 'maxRetries')
     ? readIntegerValue(entryValue(entries, 'maxRetries'), 'retry.maxRetries', context)
     : undefined;
-  return {
-    kind: 'retry',
+  return stripUndefined({
+    kind: 'retry' as const,
     source,
     commands: parseCommands(entryValue(entries, 'commands'), 'retry.commands', context),
-    ...(maxRetries === undefined ? {} : { maxRetries }),
-  };
+    maxRetries,
+  });
 }
 
 function parseMaestroRunFlowCondition(
@@ -179,12 +180,7 @@ function parseMaestroRunFlowCondition(
     parseMaestroSelector(entry, 'runFlow.when.notVisible', context),
   );
   const truth = readOptionalEntry(entries, 'true', (entry) => readConditionTruth(entry, context));
-  return {
-    ...(platform === undefined ? {} : { platform }),
-    ...(visible === undefined ? {} : { visible }),
-    ...(notVisible === undefined ? {} : { notVisible }),
-    ...(truth === undefined ? {} : { true: truth as boolean | string }),
-  };
+  return stripUndefined({ platform, visible, notVisible, true: truth });
 }
 
 function readConditionTruth(

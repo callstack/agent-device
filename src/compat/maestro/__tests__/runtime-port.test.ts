@@ -1,8 +1,8 @@
 import { describe, expect, test, vi } from 'vitest';
 import { parseMaestroProgram } from '../program-ir-parser.ts';
-import { createMaestroRuntimePort } from '../runtime-port.ts';
 import type { MaestroRuntimeOperations, MaestroTargetMatch } from '../runtime-port-types.ts';
 import {
+  createMaestroRuntimePort,
   executeMaestroProgram,
   makeOperations,
   record,

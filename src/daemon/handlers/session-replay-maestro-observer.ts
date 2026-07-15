@@ -6,6 +6,7 @@ import type {
 } from '../../compat/maestro/engine-types.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { emitRequestProgress, readReplayTestActionProgress } from '../../request/progress.ts';
+import { stripUndefined } from '../../utils/parsing.ts';
 import type { MaestroFailedEngineEvent } from './session-replay-maestro-failure.ts';
 import { appendReplayTraceEvent } from './session-replay-trace.ts';
 
@@ -65,12 +66,12 @@ function traceStopEvent(
   runtimeMetrics?: MaestroRuntimeMetrics;
   error?: unknown;
 } {
-  return {
+  return stripUndefined({
     ...(start ?? event),
     durationMs: event.durationMs,
-    ...(event.runtimeMetrics ? { runtimeMetrics: event.runtimeMetrics } : {}),
-    ...(event.error === undefined ? {} : { error: event.error }),
-  };
+    runtimeMetrics: event.runtimeMetrics,
+    error: event.error,
+  });
 }
 
 function emitMaestroProgress(file: string, event: MaestroEngineEvent): void {

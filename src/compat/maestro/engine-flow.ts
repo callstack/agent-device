@@ -9,14 +9,7 @@ import type {
 } from './program-ir.ts';
 import type { MaestroExecutionContext } from './engine-context.ts';
 import { evaluateMaestroBooleanExpression } from './engine-expression.ts';
-import {
-  DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY,
-  type MaestroCompatibilityTimingPolicy,
-} from './compatibility-policy.ts';
-import {
-  type MaestroEngineExecutionOptions,
-  type MaestroObservationCondition,
-} from './engine-types.ts';
+import { type MaestroEngineOptions, type MaestroObservationCondition } from './engine-types.ts';
 
 export function resolveCommand<T extends { readonly source: MaestroCommand['source'] }>(
   command: T,
@@ -41,28 +34,13 @@ export function readIterationCount(
   return resolved;
 }
 
-export function resolveMaestroTimingPolicy(
-  overrides: Partial<MaestroCompatibilityTimingPolicy> = {},
-): MaestroCompatibilityTimingPolicy {
-  const policy = { ...DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY, ...overrides };
-  for (const [name, value] of Object.entries(policy)) {
-    if (!Number.isInteger(value) || value < 0) {
-      throw new AppError(
-        'INVALID_ARGS',
-        `Maestro timing policy ${name} must be a non-negative integer.`,
-      );
-    }
-  }
-  return policy;
-}
-
 export function checkpointMaestroCancellation(signal: AbortSignal | undefined): void {
   if (signal?.aborted) throw createRequestCanceledError();
 }
 
 export async function readIncludedProgram(
   command: MaestroRunFlowCommand,
-  options: MaestroEngineExecutionOptions,
+  options: MaestroEngineOptions,
 ): Promise<MaestroProgram> {
   if (command.include.kind === 'commands') {
     return {
@@ -130,7 +108,7 @@ export function registerIncludedProgramPaths(
 export function staticConditionMatches(
   condition: MaestroRunFlowCondition,
   context: MaestroExecutionContext,
-  options: MaestroEngineExecutionOptions,
+  options: MaestroEngineOptions,
 ): boolean {
   if (condition.platform && condition.platform !== options.platform) return false;
   if (condition.true === undefined) return true;

@@ -1,5 +1,35 @@
 import type { SessionAction, SessionState } from '../types.ts';
 import type { ReplayDivergenceResume, ReplayRepairHint } from '../../replay/divergence.ts';
+import { SessionStore } from '../session-store.ts';
+
+export function buildAndPersistReplayDivergenceResume(params: {
+  readonly failedIndex: number;
+  readonly actions: SessionAction[];
+  readonly planDigest: string;
+  readonly repairHint: ReplayRepairHint;
+  readonly sessionStore: SessionStore;
+  readonly sessionName: string;
+}): ReplayDivergenceResume {
+  const session = params.sessionStore.get(params.sessionName);
+  const resume = buildReplayDivergenceResume({
+    failedIndex: params.failedIndex,
+    actions: params.actions,
+    planDigest: params.planDigest,
+    repairHint: params.repairHint,
+    sessionExists: session !== undefined,
+  });
+  if (session) {
+    stampPendingRecordAndHealWatermark({
+      session,
+      resume,
+      repairHint: params.repairHint,
+      failedIndex: params.failedIndex,
+      actions: params.actions,
+    });
+    params.sessionStore.set(params.sessionName, session);
+  }
+  return resume;
+}
 
 /**
  * Builds the `resume` object attached to every divergence report. `from` is

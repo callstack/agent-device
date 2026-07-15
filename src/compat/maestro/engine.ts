@@ -1,7 +1,6 @@
 import { assertMaestroReplayStartIndex, resolveMaestroReplayStartIndex } from './replay-plan.ts';
 import { executeMaestroReplayPlan } from './replay-plan-execution.ts';
 import type {
-  MaestroEngineExecutionOptions,
   MaestroEngineOptions,
   MaestroEngineResult,
   MaestroRuntimePort,
@@ -19,7 +18,7 @@ export async function executeMaestroPlan(
 
 function resolveExecutionStartIndex(
   plan: MaestroReplayPlan,
-  options: MaestroEngineExecutionOptions,
+  options: MaestroEngineOptions,
 ): number {
   return options.from !== undefined || options.planDigest !== undefined
     ? resolveMaestroReplayStartIndex(plan, {

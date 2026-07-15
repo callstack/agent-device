@@ -2,6 +2,7 @@ import { parseAllDocuments } from 'yaml';
 import { describe, expect, test } from 'vitest';
 import { AppError } from '../../../kernel/errors.ts';
 import { exportReplayScriptToMaestro } from '../export-flow.ts';
+import { parseMaestroProgram } from '../program-ir-parser.ts';
 
 describe('exportReplayScriptToMaestro', () => {
   test('exports app launch, selectors, input, keyboard, assertions, and screenshots', () => {
@@ -16,6 +17,7 @@ screenshot "./artifacts/checkout"
 `);
 
     const docs = parseYamlDocs(result.yaml);
+    expect(() => parseMaestroProgram(result.yaml)).not.toThrow();
     expect(docs).toEqual([
       { appId: 'com.example.app', env: { USER: 'Ada' } },
       [

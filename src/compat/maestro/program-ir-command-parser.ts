@@ -1,4 +1,5 @@
 import { isMap, isScalar, isSeq, type Node } from 'yaml';
+import { stripUndefined } from '../../utils/parsing.ts';
 import type {
   MaestroAssertNotVisibleCommand,
   MaestroAssertVisibleCommand,
@@ -23,7 +24,7 @@ import {
   parseMaestroDoubleTapOnCommand,
   parseMaestroLongPressOnCommand,
   parseMaestroSelector,
-  parseMaestroSelectorEntries,
+  parseMaestroSelectorMapEntries,
   parseMaestroSwipeCommand,
   parseMaestroTapOnCommand,
 } from './program-ir-gesture-parser.ts';
@@ -85,25 +86,7 @@ function parseScalarCommand(
   node: Node,
   context: MaestroProgramParseContext,
 ): MaestroCommand {
-  const source = sourceAt(node, context);
-  switch (name) {
-    case 'launchApp':
-      return { kind: 'launchApp', source };
-    case 'scroll':
-      return { kind: 'scroll', source };
-    case 'eraseText':
-      return { kind: 'eraseText', source };
-    case 'hideKeyboard':
-      return { kind: 'hideKeyboard', source };
-    case 'back':
-      return { kind: 'back', source };
-    case 'waitForAnimationToEnd':
-      return { kind: 'waitForAnimationToEnd', source };
-    case 'stopApp':
-      return { kind: 'stopApp', source };
-    default:
-      invalidAt(`Maestro command "${name}" is not supported.`, node, context);
-  }
+  return parseCommandValue(name, null, node, context);
 }
 
 type CommandValueParser = (
@@ -184,15 +167,15 @@ function parseLaunchApp(
   const launchArguments = readOptionalEntry(entries, 'launchArguments', (entry) =>
     parseLaunchArguments(entry, 'launchApp.launchArguments', context),
   );
-  return {
-    kind: 'launchApp',
+  return stripUndefined({
+    kind: 'launchApp' as const,
     source,
-    ...(appId === undefined ? {} : { appId }),
-    ...(stopApp === undefined ? {} : { stopApp }),
-    ...(clearState === undefined ? {} : { clearState }),
-    ...(args === undefined ? {} : { arguments: args }),
-    ...(launchArguments === undefined ? {} : { launchArguments }),
-  };
+    appId,
+    stopApp,
+    clearState,
+    arguments: args,
+    launchArguments,
+  });
 }
 
 function parseInputText(
@@ -211,7 +194,7 @@ function parseInputText(
   const label = hasEntry(entries, 'label')
     ? readOptionalString(entryValue(entries, 'label'), 'inputText.label', context)
     : undefined;
-  return { kind: 'inputText', source, text, ...(label === undefined ? {} : { label }) };
+  return stripUndefined({ kind: 'inputText' as const, source, text, label });
 }
 
 function parseEraseText(
@@ -236,11 +219,11 @@ function parseEraseText(
         context,
       )
     : undefined;
-  return {
-    kind: 'eraseText',
+  return stripUndefined({
+    kind: 'eraseText' as const,
     source,
-    ...(charactersToErase === undefined ? {} : { charactersToErase }),
-  };
+    charactersToErase,
+  });
 }
 
 function parseOpenLink(
@@ -276,7 +259,7 @@ function parseAssertion(
   return {
     kind,
     source,
-    target: parseMaestroSelectorEntries(
+    target: parseMaestroSelectorMapEntries(
       entries.filter((entry) => entry.key !== 'optional'),
       kind,
       context,
@@ -313,14 +296,14 @@ function parseExtendedWaitUntil(
   const timeout = hasEntry(entries, 'timeout')
     ? readOptionalNumber(entryValue(entries, 'timeout'), 'extendedWaitUntil.timeout', context)
     : undefined;
-  return {
-    kind: 'extendedWaitUntil',
+  return stripUndefined({
+    kind: 'extendedWaitUntil' as const,
     source: sourceAt(commandNode, context),
-    ...(visible === undefined ? {} : { visible }),
-    ...(notVisible === undefined ? {} : { notVisible }),
-    ...(timeout === undefined ? {} : { timeout }),
+    visible,
+    notVisible,
+    timeout,
     ...options,
-  };
+  });
 }
 
 function parseTakeScreenshot(
@@ -382,14 +365,14 @@ function parseScrollUntilVisible(
   const timeout = hasEntry(entries, 'timeout')
     ? readOptionalNumber(entryValue(entries, 'timeout'), 'scrollUntilVisible.timeout', context)
     : undefined;
-  return {
-    kind: 'scrollUntilVisible',
+  return stripUndefined({
+    kind: 'scrollUntilVisible' as const,
     source,
     element,
-    ...(direction === undefined ? {} : { direction }),
-    ...(timeout === undefined ? {} : { timeout }),
+    direction,
+    timeout,
     ...options,
-  };
+  });
 }
 
 function parseHideKeyboard(
@@ -431,14 +414,14 @@ function parseWaitForAnimationToEnd(
   if (isNullNode(value)) return { kind: 'waitForAnimationToEnd', source };
   if (isScalar(value)) {
     const timeout = readOptionalNumber(value, 'waitForAnimationToEnd', context);
-    return { kind: 'waitForAnimationToEnd', source, ...(timeout === undefined ? {} : { timeout }) };
+    return stripUndefined({ kind: 'waitForAnimationToEnd' as const, source, timeout });
   }
   const entries = readMapEntries(value, 'waitForAnimationToEnd', context);
   assertOnlyKeys(entries, 'waitForAnimationToEnd', ['timeout'], context);
   const timeout = hasEntry(entries, 'timeout')
     ? readOptionalNumber(entryValue(entries, 'timeout'), 'waitForAnimationToEnd.timeout', context)
     : undefined;
-  return { kind: 'waitForAnimationToEnd', source, ...(timeout === undefined ? {} : { timeout }) };
+  return stripUndefined({ kind: 'waitForAnimationToEnd' as const, source, timeout });
 }
 
 function parseStopApp(

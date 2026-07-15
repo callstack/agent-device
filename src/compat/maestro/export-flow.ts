@@ -11,6 +11,7 @@ import { formatMaestroPoint } from './export-points.ts';
 import { DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY } from './compatibility-policy.ts';
 import type { MaestroExportCommand, MaestroExportConfig } from './export-types.ts';
 import { stringifyMaestroYamlDocuments } from './export-yaml.ts';
+import { MAESTRO_STATE_SELECTOR_KEYS, MAESTRO_TEXT_SELECTOR_KEYS } from './selector-vocabulary.ts';
 
 export type MaestroExportWarning = {
   line: number;
@@ -41,8 +42,8 @@ type SwipeGeometry = {
   duration?: number;
 };
 
-const TEXT_SELECTOR_KEYS = new Set(['id', 'text', 'label']);
-const STATE_SELECTOR_KEYS = new Set(['enabled', 'selected']);
+const TEXT_SELECTOR_KEYS = new Set<string>(MAESTRO_TEXT_SELECTOR_KEYS);
+const STATE_SELECTOR_KEYS = new Set<string>(MAESTRO_STATE_SELECTOR_KEYS);
 const LONG_PRESS_DURATION_WARNING =
   'long-press duration exports as Maestro longPressOn; Maestro uses its default long-press duration';
 

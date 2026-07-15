@@ -1,6 +1,7 @@
 import { AppError, asAppError } from '../../kernel/errors.ts';
 import type { Rect } from '../../kernel/snapshot.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { stripUndefined } from '../../utils/parsing.ts';
 import { executeRunScriptFile } from './run-script-execution.ts';
 import {
   MAESTRO_COMPATIBILITY_PRESETS,
@@ -39,7 +40,7 @@ import {
   observeTypedMaestroCondition,
   resolveTypedMaestroTarget,
   scrollUntilTypedMaestroTarget,
-  sleepWithinBudget,
+  sleepWithinDeadline,
   waitForTypedSnapshotStability,
   maestroSnapshotSignature,
   type MaestroSnapshotSource,
@@ -77,18 +78,23 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     if (operation.kind === 'screenshot') metrics.screenshotCaptures += 1;
     return invokeMaestroPublicOperation(options, operation);
   };
-  const invokeMutation = async (
-    operation: MaestroPublicOperation,
+  const withMutation = async <T>(
+    mutation: () => Promise<T>,
     context: MaestroRuntimeOperationContext,
     stability: 'none' | 'deferred' = 'none',
-  ) => {
+  ): Promise<T> => {
     snapshots.invalidate(context.generation);
     try {
-      return await invoke(operation);
+      return await mutation();
     } finally {
       if (stability === 'deferred') snapshots.requireStability(context.generation);
     }
   };
+  const invokeMutation = async (
+    operation: MaestroPublicOperation,
+    context: MaestroRuntimeOperationContext,
+    stability: 'none' | 'deferred' = 'none',
+  ) => await withMutation(() => invoke(operation), context, stability);
   const typeTextAndSettle = async (
     text: string,
     context: MaestroRuntimeOperationContext,
@@ -170,25 +176,29 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
         retryIfNoChange: input.retryTapIfNoChange === true,
       }),
     doubleTapOn: async (input, context) => {
-      snapshots.invalidate(context.generation);
-      try {
-        await clickTarget(options, input.target.point, {
-          doubleTap: true,
-          ...(input.delay === undefined ? {} : { intervalMs: input.delay }),
-        });
-      } finally {
-        snapshots.requireStability(context.generation);
-      }
+      await withMutation(
+        () =>
+          clickTarget(
+            options,
+            input.target.point,
+            stripUndefined({
+              doubleTap: true,
+              intervalMs: input.delay,
+            }),
+          ),
+        context,
+        'deferred',
+      );
     },
     longPressOn: async (input, context) => {
-      snapshots.invalidate(context.generation);
-      try {
-        await clickTarget(options, input.target.point, {
-          holdMs: MAESTRO_COMPATIBILITY_PRESETS.command.longPressDurationMs,
-        });
-      } finally {
-        snapshots.requireStability(context.generation);
-      }
+      await withMutation(
+        () =>
+          clickTarget(options, input.target.point, {
+            holdMs: MAESTRO_COMPATIBILITY_PRESETS.command.longPressDurationMs,
+          }),
+        context,
+        'deferred',
+      );
     },
     gesture: async (input, context) => {
       await invokeMutation(
@@ -326,7 +336,12 @@ async function resolveDaemonMaestroTarget(params: {
     currentSnapshot = undefined;
     if (reusedObservation) continue;
     if (captureStartedAt >= deadline) return match;
-    await sleepBeforeTargetPoll(options, deadline, context.signal);
+    await sleepWithinDeadline(
+      options.dependencies,
+      deadline,
+      MAESTRO_OBSERVATION_POLL_MS,
+      context.signal,
+    );
   }
 }
 
@@ -339,20 +354,6 @@ function isActionableTarget(
 function canUseResolvedTarget(match: MaestroTargetMatch, reusedObservation: boolean): boolean {
   if (!isActionableTarget(match)) return false;
   return !reusedObservation || match.dispatchSelector !== undefined;
-}
-
-async function sleepBeforeTargetPoll(
-  options: CreateDaemonMaestroRuntimeOperationsOptions,
-  deadline: number,
-  signal: AbortSignal | undefined,
-): Promise<void> {
-  const remaining = deadline - options.dependencies.now();
-  if (remaining <= 0) return;
-  await sleepWithinBudget(
-    options.dependencies,
-    Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining),
-    signal,
-  );
 }
 
 export function createDaemonMaestroRuntimePort(
@@ -394,6 +395,7 @@ async function tapTargetAndSettle(
   }
 
   if (options.platform === 'ios') {
+    // Maestro retry parity requires pre-tap pixels; runtime metrics expose this unavoidable capture.
     await withMaestroScreenshotBaseline({
       signal: context.signal,
       capture: async (path) => {

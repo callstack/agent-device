@@ -5,6 +5,7 @@ import {
   type Rect,
   type SnapshotNode,
 } from '../kernel/snapshot.ts';
+import { rectArea } from '../kernel/rect.ts';
 
 type ReactNativeOverlayNode = Pick<
   RawSnapshotNode,
@@ -278,15 +279,11 @@ function isSemanticControlNode(node: ReactNativeOverlayNode): boolean {
   return /\b(button|menuitem|link)\b/.test(roleText);
 }
 
-function rectArea(rect: Rect | undefined): number {
-  return rect ? rect.width * rect.height : Number.POSITIVE_INFINITY;
-}
-
 function controlNodeScores(node: SnapshotNode): number[] {
   return [
     booleanScore(isSemanticControlNode(node)),
     booleanScore(node.hittable),
-    -rectArea(node.rect),
+    -(node.rect ? rectArea(node.rect) : Number.POSITIVE_INFINITY),
   ];
 }
 
