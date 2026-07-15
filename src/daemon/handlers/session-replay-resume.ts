@@ -1,17 +1,6 @@
 import type { SessionAction, SessionState } from '../types.ts';
 import type { ReplayDivergenceResume, ReplayRepairHint } from '../../replay/divergence.ts';
 
-/** Generic `.ad` actions have no runtime variable producers or control wrappers. */
-export type ReplayResumePreflightResult = { allowed: true } | { allowed: false; reason: string };
-
-export function evaluateReplayResumePreflight(params: {
-  from: number;
-  actions: SessionAction[];
-}): ReplayResumePreflightResult {
-  void params;
-  return { allowed: true };
-}
-
 /**
  * Builds the `resume` object attached to every divergence report. `from` is
  * the ordinal the agent should actually pass to `--from`, not merely the
@@ -28,12 +17,10 @@ export function evaluateReplayResumePreflight(params: {
  * sites resolve it from the plan they are actively executing), so the shifted
  * `from` is at most `actions.length + 1` — never further out of range. That
  * boundary case (`record-and-heal` diverged on the plan's LAST step) is a
- * legal EMPTY-TAIL resume, not an error: `evaluateReplayResumePreflight`
- * already proves it safe (it only checks whether the SKIPPED range 1..from-1
- * is safe to skip; there is no `from`-th step to reject), and the runtime
- * loop (`runReplayScriptFile`) executes zero steps and reaches the normal
+ * legal EMPTY-TAIL resume, not an error: the runtime loop
+ * (`runReplayScriptFile`) executes zero steps and reaches the normal
  * end-of-plan completion path, correctly flipping a repair transaction
- * COMPLETE. Rejecting it here would send the agent to `close` instead —
+ * COMPLETE. Rejecting it would send the agent to `close` instead —
  * which discards the just-recorded corrective action, since commit is gated
  * on that same COMPLETE flag.
  *
@@ -53,8 +40,6 @@ export function buildReplayDivergenceResume(params: {
 }): ReplayDivergenceResume {
   const { failedIndex, actions, planDigest, repairHint, sessionExists } = params;
   const from = repairHint === 'record-and-heal' ? failedIndex + 1 : failedIndex;
-  const preflight = evaluateReplayResumePreflight({ from, actions });
-  if (!preflight.allowed) return { allowed: false, from, planDigest, reason: preflight.reason };
   const alternateFrom = computeReplayResumeAlternateFrom({
     failedIndex,
     actions,
@@ -71,18 +56,13 @@ export function buildReplayDivergenceResume(params: {
 
 /**
  * ADR 0012 decision 4 / #1262: the `caution`/`manual` dual-path's SECOND
- * ordinal, the record-and-heal-shaped alternate (`failedIndex + 1`). Returned
- * ONLY when a `--from failedIndex + 1` request for this divergence would
- * actually be accepted by the daemon — i.e. exactly its own resume preflight
- * passes (`evaluateReplayResumePreflight`, which unlike `from`'s own preflight
- * ALSO requires the DIVERGED step to be skip-safe, since reaching
- * `failedIndex + 1` skips the diverged step). Its checked range is a strict
- * superset of `from`'s, so `alternateFrom` present implies `resume.allowed` —
- * never a contradiction.
+ * ordinal, the record-and-heal-shaped alternate (`failedIndex + 1`). Generic
+ * `.ad` plans contain neither runtime variable producers nor control wrappers,
+ * so every in-range ordinal is resumable.
  *
  * The alternate has two acceptance regimes by position:
  *  - MID-PLAN (`failedIndex + 1 <= actions.length`): in range, needs no
- *    watermark — session-independent, gated on the preflight alone.
+ *    watermark and is session-independent.
  *  - LAST STEP / EMPTY-TAIL (`failedIndex + 1 > actions.length`, one past the
  *    plan's end): the range check accepts this ordinal ONLY when it matches a
  *    stamped `pendingRecordAndHeal` watermark (`describeOutOfRangeResumeFrom`),
@@ -95,10 +75,8 @@ export function buildReplayDivergenceResume(params: {
  *    additionally requires `sessionExists`.
  *
  * Absent for `record-and-heal` (its `from` already IS `failedIndex + 1`) and
- * `state-repair` (no recorded-action alternate); absent when the diverged step
- * is a `runScript` (outputEnv producer) or inside runtime control flow, so the
- * alternate `--from failedIndex + 1` would be refused. The text renderer gates
- * the `N + 1` command on this field's PRESENCE rather than re-deriving
+ * `state-repair` (no recorded-action alternate). The text renderer gates the
+ * `N + 1` command on this field's presence rather than re-deriving
  * resumability, keeping text and the structured wire in agreement.
  */
 function computeReplayResumeAlternateFrom(params: {
@@ -110,7 +88,6 @@ function computeReplayResumeAlternateFrom(params: {
   const { failedIndex, actions, repairHint, sessionExists } = params;
   if (repairHint !== 'caution' && repairHint !== 'manual') return undefined;
   const alternateFrom = failedIndex + 1;
-  if (!evaluateReplayResumePreflight({ from: alternateFrom, actions }).allowed) return undefined;
   // Empty-tail: authorizable only via a watermark, which needs a live session.
   if (alternateFrom > actions.length && !sessionExists) return undefined;
   return alternateFrom;
@@ -138,10 +115,8 @@ function computeReplayResumeAlternateFrom(params: {
  * the plan's LAST step, `N + 1` is one past the plan's end — previously
  * ALWAYS out of range for `caution`/`manual` (dead end: `close` on the
  * not-yet-COMPLETE transaction discards a just-recorded corrective action).
- * Only THAT boundary ordinal is newly authorized here, and only when it is
- * independently preflight-safe (`evaluateReplayResumePreflight` on `N + 1`,
- * NOT the unrelated preflight verdict `resume.allowed` already carries for
- * `N` — a different ordinal). Authorizing it stamps the SAME watermark
+ * Only THAT boundary ordinal is newly authorized here. Authorizing it stamps
+ * the SAME watermark
  * `record-and-heal` uses, which — as an unavoidable side effect of sharing
  * the mechanism — also puts `describeUnperformedRecordAndHeal`'s
  * recorded-corrective-action guard in front of that specific `N + 1`
@@ -150,9 +125,8 @@ function computeReplayResumeAlternateFrom(params: {
  *
  * Called at every divergence site (not only the eligible hints/positions) so
  * a stale watermark from an earlier divergence never survives an unrelated
- * later one: an ineligible hint, a mid-plan `caution`/`manual` divergence, or
- * a last-step `caution`/`manual` divergence whose `N + 1` target is not
- * itself preflight-safe, all clear the field.
+ * later one: an ineligible hint or a mid-plan `caution`/`manual` divergence
+ * clears the field.
  */
 export function stampPendingRecordAndHealWatermark(params: {
   session: SessionState;
@@ -187,6 +161,5 @@ function computeRecordAndHealWatermark(params: {
   // see the function doc comment for why mid-plan `N + 1` stays un-gated.
   if (failedIndex !== actions.length) return undefined;
   const expectedFrom = failedIndex + 1;
-  const authorized = evaluateReplayResumePreflight({ from: expectedFrom, actions }).allowed;
-  return authorized ? { expectedFrom, actionsCountAtDivergence } : undefined;
+  return { expectedFrom, actionsCountAtDivergence };
 }

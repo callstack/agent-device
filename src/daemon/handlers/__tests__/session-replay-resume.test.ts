@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
   buildReplayDivergenceResume,
-  evaluateReplayResumePreflight,
   stampPendingRecordAndHealWatermark,
 } from '../session-replay-resume.ts';
 import type { SessionAction, SessionState } from '../../types.ts';
@@ -11,29 +10,6 @@ import { makeIosSession } from '../../../__tests__/test-utils/session-factories.
 function action(overrides: Partial<SessionAction> = {}): SessionAction {
   return { ts: 0, command: 'click', positionals: ['label="Save"'], flags: {}, ...overrides };
 }
-
-test('generic .ad replay allows resuming from the first action', () => {
-  const actions: SessionAction[] = [action({ command: 'back', positionals: [] }), action()];
-  assert.deepEqual(evaluateReplayResumePreflight({ from: 1, actions }), { allowed: true });
-});
-
-test('generic .ad replay allows resuming after earlier actions', () => {
-  const actions: SessionAction[] = [
-    action({ command: 'open', positionals: ['Demo'] }),
-    action({ command: 'click', positionals: ['label="Continue"'] }),
-    action({ command: 'click', positionals: ['label="Save"'] }),
-  ];
-  assert.deepEqual(evaluateReplayResumePreflight({ from: 3, actions }), { allowed: true });
-});
-
-test('repeated generic .ad action lines occupy distinct plan indices', () => {
-  const actions: SessionAction[] = [
-    action({ command: 'click', positionals: ['label="Item"'] }),
-    action({ command: 'click', positionals: ['label="Item"'] }),
-    action({ command: 'click', positionals: ['label="Item"'] }),
-  ];
-  assert.deepEqual(evaluateReplayResumePreflight({ from: 3, actions }), { allowed: true });
-});
 
 test('buildReplayDivergenceResume reports a resumable generic .ad failure', () => {
   const actions: SessionAction[] = [
@@ -91,13 +67,11 @@ test('buildReplayDivergenceResume with repairHint record-and-heal on the LAST pl
 });
 // --- buildReplayDivergenceResume: `resume.alternateFrom` (#1262). The
 // `caution`/`manual` dual-path's SECOND ordinal (`failedIndex + 1`), present
-// ONLY when a `--from failedIndex + 1` request would actually be accepted —
-// i.e. `evaluateReplayResumePreflight({ from: failedIndex + 1 })` passes,
-// which additionally requires the DIVERGED step itself to be skip-safe. This
-// closes the parity bug where the text renderer offered `--from N + 1` based
-// on `N`'s preflight (which does not check step `N`'s own skip-safety). ---
+// ONLY when a `--from failedIndex + 1` request would actually be accepted.
+// Generic `.ad` plans contain no runtime variable producers or control
+// wrappers, so only the empty-tail session requirement can block it. ---
 
-test('buildReplayDivergenceResume: caution mid-plan (skip-safe diverged step) carries alternateFrom = failedIndex + 1', () => {
+test('buildReplayDivergenceResume: caution mid-plan carries alternateFrom = failedIndex + 1', () => {
   const actions: SessionAction[] = [
     action({ command: 'open' }),
     action({ command: 'click' }),
@@ -116,7 +90,7 @@ test('buildReplayDivergenceResume: caution mid-plan (skip-safe diverged step) ca
   assert.equal(resume.alternateFrom, 3);
 });
 
-test('buildReplayDivergenceResume: manual last-step (skip-safe diverged step) carries alternateFrom = actions.length + 1', () => {
+test('buildReplayDivergenceResume: manual last-step carries alternateFrom = actions.length + 1', () => {
   const actions: SessionAction[] = [action({ command: 'open' }), action({ command: 'click' })];
   const resume = buildReplayDivergenceResume({
     failedIndex: 2,
@@ -129,44 +103,6 @@ test('buildReplayDivergenceResume: manual last-step (skip-safe diverged step) ca
   assert.equal(resume.from, 2);
   if (!resume.allowed) return;
   assert.equal(resume.alternateFrom, 3); // empty-tail ordinal
-});
-
-test('buildReplayDivergenceResume: caution whose diverged step is a runScript carries NO alternateFrom (mid-plan AND last-step)', () => {
-  // The `N + 1` alternate would skip the runScript (outputEnv producer) at
-  // step N, which `evaluateReplayResumePreflight({ from: N + 1 })` refuses —
-  // so alternateFrom is absent even though resuming AT N stays allowed.
-  const midPlan: SessionAction[] = [
-    action({ command: 'open' }),
-    action({ command: '__maestroRunScript', positionals: ['./setup.js'] }),
-    action({ command: 'click' }),
-  ];
-  const midPlanResume = buildReplayDivergenceResume({
-    failedIndex: 2,
-    actions: midPlan,
-    planDigest: 'abc123',
-    repairHint: 'caution',
-    sessionExists: true,
-  });
-  assert.equal(midPlanResume.allowed, true); // resuming AT 2 is fine
-  assert.equal(midPlanResume.from, 2);
-  if (!midPlanResume.allowed) return;
-  assert.equal(midPlanResume.alternateFrom, undefined);
-
-  const lastStep: SessionAction[] = [
-    action({ command: 'open' }),
-    action({ command: '__maestroRunScript', positionals: ['./setup.js'] }),
-  ];
-  const lastStepResume = buildReplayDivergenceResume({
-    failedIndex: 2,
-    actions: lastStep,
-    planDigest: 'abc123',
-    repairHint: 'caution',
-    sessionExists: true,
-  });
-  assert.equal(lastStepResume.allowed, true);
-  assert.equal(lastStepResume.from, 2);
-  if (!lastStepResume.allowed) return;
-  assert.equal(lastStepResume.alternateFrom, undefined);
 });
 
 test('buildReplayDivergenceResume: record-and-heal and state-repair never carry alternateFrom (no separate recorded-action alternate)', () => {
@@ -379,34 +315,6 @@ test('stampPendingRecordAndHealWatermark does NOT stamp for a MID-PLAN caution/m
       `expected no watermark for ${repairHint}`,
     );
   }
-});
-
-test('stampPendingRecordAndHealWatermark does not stamp for a LAST-step caution/manual divergence when the N + 1 target is not itself preflight-safe', () => {
-  // failedIndex (3) IS the last step, but skipping it (to reach N + 1 = 4)
-  // requires also skipping step 2 (an outputEnv-producing maestro runScript),
-  // which cannot be proven safe — even though `resume.from` (unshifted, at
-  // N = 3 — resuming AT it, not skipping it) is independently fine.
-  const actions: SessionAction[] = [
-    action({ command: 'open' }),
-    action({ command: '__maestroRunScript', positionals: ['./setup.js'] }),
-    action({ command: 'click' }),
-  ];
-  const resume = buildReplayDivergenceResume({
-    failedIndex: 3,
-    actions,
-    planDigest: 'abc123',
-    repairHint: 'caution',
-    sessionExists: true,
-  });
-  const session = sessionWithActions(2);
-  stampPendingRecordAndHealWatermark({
-    session,
-    resume,
-    repairHint: 'caution',
-    failedIndex: 3,
-    actions,
-  });
-  assert.equal(session.pendingRecordAndHeal, undefined);
 });
 
 test('stampPendingRecordAndHealWatermark never stamps for state-repair (not in the extended eligible set)', () => {

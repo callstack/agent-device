@@ -136,9 +136,7 @@ export type ReplayDivergenceSuggestion = {
  *
  * `planDigest` is the SHA-256 digest of the canonical fully expanded plan
  * (`computeReplayPlanDigest`) that produced this report — always present.
- * `allowed` is the preflight verdict for resuming AT `from`
- * (`evaluateReplayResumePreflight`, plus the same-session/action-count
- * authorization above when `from` is one past the plan's end); `reason` is
+ * `allowed` reports whether the daemon can resume AT `from`; `reason` is
  * present only when `allowed` is `false`. This must agree with the
  * `repairHint` text guidance rendered by `formatReplayDivergenceReport`
  * (below) — both are derived from the same computed `from`, and when
@@ -150,15 +148,13 @@ export type ReplayDivergenceSuggestion = {
  * `alternateFrom` (`N + 1`) is the record-and-heal-shaped alternate — the
  * agent performs the diverged step's intent as a recorded action, then
  * resumes PAST it. It is present ONLY when a `--from N + 1` request for THIS
- * divergence would actually be accepted by the daemon: the daemon computes it
- * as `evaluateReplayResumePreflight({ from: N + 1, actions }).allowed` (which
- * additionally requires the DIVERGED step `N` itself to be skip-safe — a
- * strict superset of `from`'s own preflight, so its presence never
- * contradicts `allowed`). Absent for every other hint (`record-and-heal`'s
+ * divergence would actually be accepted by the daemon. Generic `.ad` plans
+ * have no runtime variable producers or control wrappers, so only the
+ * empty-tail session requirement can make this alternate unavailable. Absent
+ * for every other hint (`record-and-heal`'s
  * `from` already IS the `N + 1` continuation; `state-repair` has no
- * recorded-action alternate), and absent whenever the alternate is not
- * resumable (step `N` is a `runScript`/control-flow action). The text
- * guidance (`buildRepairHintGuidance`, below) renders the `N + 1` command iff
+ * recorded-action alternate). The text guidance
+ * (`buildRepairHintGuidance`, below) renders the `N + 1` command iff
  * this field is present — it never re-derives resumability, so text and the
  * structured wire never disagree on the advertised next command.
  *
@@ -418,10 +414,8 @@ export function formatReplayDivergenceReport(
  * `session-replay-resume.ts`). The renderer gates the second command on that
  * field's PRESENCE and never re-derives resumability, so text and the
  * structured wire never disagree on the advertised next command. When
- * `resume.allowed` is false (a skipped step crosses runtime control flow or
- * would produce unavailable `outputEnv`), a resume command is never rendered
- * for ANY hint — a text caller must not be told to run a `--from` a structured
- * caller would be refused — and the reported `reason` is surfaced instead.
+ * `resume.allowed` is false, a resume command is never rendered for any hint,
+ * and the reported `reason` is surfaced instead.
  */
 function divergenceRepairHintLine(repairHint: unknown, resume: unknown): string[] {
   if (typeof repairHint !== 'string') return [];

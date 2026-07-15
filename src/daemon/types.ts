@@ -427,9 +427,9 @@ export type SessionState = {
    * failed step's index unchanged (never made illegal) — but ONLY when the
    * diverged step is the plan's LAST one: those hints have a legitimate
    * record-and-heal-SHAPED alternate repair targeting `failedIndex + 1`,
-   * stamped when that target is independently preflight-safe
-   * (`stampPendingRecordAndHealWatermark`, `session-replay-resume.ts`). A
-   * MID-PLAN `caution`/`manual` `failedIndex + 1` was already unconditionally
+   * stamped by `stampPendingRecordAndHealWatermark`
+   * (`session-replay-resume.ts`). A MID-PLAN `caution`/`manual`
+   * `failedIndex + 1` was already unconditionally
    * legal (in range) and un-gated before #1262 — these hints never mandate a
    * corrective action the way `record-and-heal` does, so an agent may
    * legitimately skip the diverged step without repairing it — and stays
@@ -441,9 +441,8 @@ export type SessionState = {
    * new action recorded since) is rejected — proof the corrective press
    * never happened, so the resume would silently skip the unrepaired step
    * instead of healing it. Overwritten by the next divergence (cleared to
-   * `undefined` for any hint outside the eligible set, a mid-plan
-   * `caution`/`manual` divergence, or a last-step `caution`/`manual`
-   * divergence whose `failedIndex + 1` target is not itself preflight-safe),
+   * `undefined` for any hint outside the eligible set or a mid-plan
+   * `caution`/`manual` divergence),
    * and cleared once a `--from` request observes the action count having
    * grown, so it never fires against an unrelated later request.
    */

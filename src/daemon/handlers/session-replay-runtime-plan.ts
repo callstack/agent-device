@@ -1,8 +1,7 @@
 import type { CommandFlags } from '../../core/dispatch.ts';
 import type { ReplayPlanDigestMetadata } from '../../replay/plan-digest.ts';
 import type { ReplayScriptMetadata } from '../../replay/script.ts';
-import type { DaemonResponse, SessionAction } from '../types.ts';
-import { evaluateReplayResumePreflight } from './session-replay-resume.ts';
+import type { DaemonResponse } from '../types.ts';
 import { errorResponse } from './response.ts';
 
 export function buildReplayMetadataFlags(
@@ -64,7 +63,6 @@ export function resolveReplayEntryIndex(
   flags: CommandFlags | undefined,
   actionCount: number,
   planDigest: string,
-  actions: SessionAction[],
   pendingRecordAndHeal: PendingRecordAndHeal | undefined,
   sessionActionsLength: number,
 ): ReplayEntryIndexResult {
@@ -81,7 +79,6 @@ export function resolveReplayEntryIndex(
     digest,
     planDigest,
     actionCount,
-    actions,
     pendingRecordAndHeal,
     sessionActionsLength,
   });
@@ -100,24 +97,15 @@ function validateReplayResumeRequest(params: {
   digest: string;
   planDigest: string;
   actionCount: number;
-  actions: SessionAction[];
   pendingRecordAndHeal: PendingRecordAndHeal | undefined;
   sessionActionsLength: number;
 }): string | undefined {
-  const {
-    from,
-    digest,
-    planDigest,
-    actionCount,
-    actions,
-    pendingRecordAndHeal,
-    sessionActionsLength,
-  } = params;
+  const { from, digest, planDigest, actionCount, pendingRecordAndHeal, sessionActionsLength } =
+    params;
   const checks: ReplayResumeCheck[] = [
     () => describeOutOfRangeResumeFrom({ from, actionCount, pendingRecordAndHeal }),
     () => describeUnperformedRecordAndHeal({ from, pendingRecordAndHeal, sessionActionsLength }),
     () => describeStaleResumeDigest(digest, planDigest),
-    () => describeUnsafeResumePreflight(from, actions),
   ];
   for (const check of checks) {
     const message = check();
@@ -193,9 +181,4 @@ function describeStaleResumeDigest(digest: string, planDigest: string): string |
     'platform-conditioned expansion changed since the divergence report was generated. Run a fresh full ' +
     'replay to get a new digest.'
   );
-}
-
-function describeUnsafeResumePreflight(from: number, actions: SessionAction[]): string | undefined {
-  const preflight = evaluateReplayResumePreflight({ from, actions });
-  return preflight.allowed ? undefined : `replay --from ${from} cannot resume: ${preflight.reason}`;
 }

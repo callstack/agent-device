@@ -289,7 +289,7 @@ export async function captureDivergenceObservation(params: {
  * produce a narrowed divergence `screen`. Only the interactive-only policy is
  * carried, since it governs whether static-text suggestion targets survive.
  */
-function divergenceCaptureFlags(action: SessionAction): CommandFlags {
+function divergenceCaptureFlags(action: ReplayReportAction): CommandFlags {
   return { snapshotInteractiveOnly: divergenceCaptureInteractiveOnly(action) };
 }
 

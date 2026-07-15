@@ -77,7 +77,7 @@ function createInteractionBackend(
       (await dispatchGestureViewport(
         session.device,
         params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
-      ),
+      )),
     tap: async (_context, point): Promise<BackendActionResult> => {
       // ADR 0014 side-effect seam: the point is resolved; expire the ref frame
       // synchronously before dispatching so a later step cannot reuse it.

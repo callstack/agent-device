@@ -208,7 +208,6 @@ export async function runReplayScriptFile(params: {
       req.flags,
       actions.length,
       planDigest,
-      actions,
       preEntrySession?.pendingRecordAndHeal,
       preEntrySession?.actions.length ?? 0,
     );

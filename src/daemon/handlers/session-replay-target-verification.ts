@@ -174,10 +174,9 @@ function buildTargetBindingDivergenceResponse(
     // executed — resuming AT `step` re-runs exactly the action that did not
     // send (unless `repairHint` is `record-and-heal`, in which case the agent
     // performs it manually and `buildReplayDivergenceResume` targets `step +
-    // 1` instead). `buildReplayDivergenceResume` runs the same skip-safety
-    // preflight as an action-failure divergence (allowed unless a skipped
-    // step produces outputEnv or the range crosses runtime control flow).
-    // This is the only resume site for target-binding divergences.
+    // 1` instead). Generic `.ad` actions have no runtime variable producers
+    // or control wrappers, so the reported ordinal is resumable. This is the
+    // only resume site for target-binding divergences.
     resume,
     repairHint,
     targetBinding,
