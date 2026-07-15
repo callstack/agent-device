@@ -2,6 +2,7 @@ import type { Platform, PublicPlatform } from '../kernel/device.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { isNodeVisible } from './node.ts';
 import { extractNodeText, normalizeType } from '../snapshot/snapshot-processing.ts';
+import { isNonDiscriminatingAndroidId } from '../replay/target-identity-node.ts';
 
 export function buildSelectorChainForNode(
   node: SnapshotNode,
@@ -15,8 +16,15 @@ export function buildSelectorChainForNode(
   const value = normalizeSelectorText(node.value);
   const text = normalizeSelectorText(extractNodeText(node));
   const requireEditable = options.action === 'fill';
+  // #1269: a shared `android:id/*` framework id (e.g. every list row's
+  // `android:id/title`) is not selective. When a label can discriminate
+  // instead, demote the id clause below every discriminating clause rather
+  // than leading the chain with it — the id would otherwise resolve
+  // ambiguously first and never even reach the label clause that resolves
+  // uniquely.
+  const idIsDemoted = Boolean(id) && isNonDiscriminatingAndroidId(id ?? undefined) && Boolean(label);
 
-  if (id) {
+  if (id && !idIsDemoted) {
     chain.push(`id=${quoteSelectorValue(id)}`);
   }
   if (role && label) {
@@ -49,6 +57,12 @@ export function buildSelectorChainForNode(
   }
   if (role && requireEditable && !chain.some((entry) => entry.includes('editable=true'))) {
     chain.push(`role=${quoteSelectorValue(role)} editable=true`);
+  }
+  if (idIsDemoted && id) {
+    // Last-resort fallback only: every discriminating clause above already
+    // had first refusal, so this id only ever helps when they've all stopped
+    // matching (e.g. the label itself changed).
+    chain.push(`id=${quoteSelectorValue(id)}`);
   }
 
   const deduped = uniqueStrings(chain);

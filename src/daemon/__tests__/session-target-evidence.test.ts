@@ -466,3 +466,112 @@ test('computeTargetEvidence: a parent cycle records unverifiable, never verified
   assert.ok(evidence);
   assert.equal(evidence.verification, 'unverifiable');
 });
+
+// ---------------------------------------------------------------------------
+// #1269: Android list-row false divergences. `android:id/title` is Android's
+// OWN framework namespace, shared by every titled row on a screen (11 matches
+// on the Settings root in the reported repro); the label-less
+// linearlayout/recyclerview/framelayout ancestry gives disambiguation nothing
+// to work with but sibling/viewportOrder position, so a shifted row binds the
+// wrong element and the identity verifier correctly (but falsely) diverges.
+// The fix demotes a shared framework id below a discriminating label at
+// record time instead of loosening replay-time verification.
+// ---------------------------------------------------------------------------
+
+/** 11 sibling rows under label-less generic containers, each row's title sharing `android:id/title` — the reported Settings-root shape. */
+function androidSettingsRowsFixture(labels: readonly string[]): SnapshotNode[] {
+  const raw: RawSnapshotNode[] = [
+    { index: 0, type: 'FrameLayout', depth: 0 },
+    { index: 1, type: 'RecyclerView', depth: 1, parentIndex: 0 },
+  ];
+  labels.forEach((label, position) => {
+    const rowIndex = 2 + position * 2;
+    const titleIndex = rowIndex + 1;
+    raw.push({ index: rowIndex, type: 'LinearLayout', depth: 2, parentIndex: 1 });
+    raw.push({
+      index: titleIndex,
+      type: 'TextView',
+      identifier: 'android:id/title',
+      label,
+      rect: { x: 0, y: position * 60, width: 400, height: 56 },
+      depth: 3,
+      parentIndex: rowIndex,
+    });
+  });
+  return toSnapshotNodes(raw);
+}
+
+const SETTINGS_ROOT_ROW_LABELS = [
+  'Network & internet',
+  'Connected devices',
+  'Apps',
+  'Notifications',
+  'Battery',
+  'Storage',
+  'Sound',
+  'Display',
+  'Accessibility',
+  'Security',
+  'Privacy',
+];
+
+test('computeTargetEvidence (#1269): a shared android:id/* framework id (matchCount 11) is demoted below a discriminating label', () => {
+  assert.equal(SETTINGS_ROOT_ROW_LABELS.length, 11);
+  const nodes = androidSettingsRowsFixture(SETTINGS_ROOT_ROW_LABELS);
+  const winner = findByLabel(nodes, 'Network & internet');
+  const evidence = computeTargetEvidence({ node: winner, preActionNodes: nodes });
+  assert.ok(evidence);
+  // The shared framework id must not become primary identity now that the
+  // label can discriminate this row from the other 10.
+  assert.equal(evidence.id, undefined);
+  assert.equal(evidence.role, 'textview');
+  assert.equal(evidence.label, 'Network & internet');
+  // Demoting the id narrows record-time self-check's identity set from all
+  // 11 rows down to the single row sharing this label — verified cleanly,
+  // no sibling/viewportOrder position guessing required.
+  assert.equal(evidence.verification, 'verified');
+});
+
+test('computeTargetEvidence (#1269): a unique (non-framework) resource id is still preferred as primary identity', () => {
+  const nodes = toSnapshotNodes([
+    { index: 0, type: 'FrameLayout', depth: 0 },
+    { index: 1, type: 'RecyclerView', depth: 1, parentIndex: 0 },
+    { index: 2, type: 'LinearLayout', depth: 2, parentIndex: 1 },
+    {
+      index: 3,
+      type: 'TextView',
+      identifier: 'com.android.settings:id/network_and_internet_row',
+      label: 'Network & internet',
+      rect: { x: 0, y: 0, width: 400, height: 56 },
+      depth: 3,
+      parentIndex: 2,
+    },
+  ]);
+  const winner = nodes[3]!;
+  const evidence = computeTargetEvidence({ node: winner, preActionNodes: nodes });
+  assert.ok(evidence);
+  assert.equal(evidence.id, 'com.android.settings:id/network_and_internet_row');
+  assert.equal(evidence.label, 'Network & internet');
+  assert.equal(evidence.verification, 'verified');
+});
+
+test('computeTargetEvidence (#1269): a shared framework id with NO label is kept — nothing else can discriminate', () => {
+  const nodes = toSnapshotNodes([
+    { index: 0, type: 'FrameLayout', depth: 0 },
+    { index: 1, type: 'RecyclerView', depth: 1, parentIndex: 0 },
+    { index: 2, type: 'LinearLayout', depth: 2, parentIndex: 1 },
+    {
+      index: 3,
+      type: 'TextView',
+      identifier: 'android:id/title',
+      rect: { x: 0, y: 0, width: 400, height: 56 },
+      depth: 3,
+      parentIndex: 2,
+    },
+  ]);
+  const winner = nodes[3]!;
+  const evidence = computeTargetEvidence({ node: winner, preActionNodes: nodes });
+  assert.ok(evidence);
+  assert.equal(evidence.id, 'android:id/title');
+  assert.equal(evidence.label, undefined);
+});

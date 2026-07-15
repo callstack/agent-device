@@ -21,14 +21,36 @@ import {
   type LocalIdentity,
 } from './target-identity.ts';
 
+/**
+ * #1269: `android:id/*` is Android's OWN framework namespace, assigned by the
+ * OS to the widget roles it supplies (a list row's title/summary/icon, generic
+ * containers, ...) rather than by the app — so unrelated sibling rows
+ * routinely share the exact same id (`android:id/title` matches every titled
+ * row on a Settings screen). A recorded id in this namespace is not
+ * selective; it must never outrank a recorded label as the winning identity.
+ */
+const ANDROID_FRAMEWORK_ID_PREFIX = 'android:id/';
+
+/** True for a shared, OS-assigned Android resource-id that cannot discriminate one sibling from another. */
+export function isNonDiscriminatingAndroidId(id: string | undefined): boolean {
+  return id !== undefined && id.startsWith(ANDROID_FRAMEWORK_ID_PREFIX);
+}
+
 export function readNodeLocalIdentity(
   node: Pick<RawSnapshotNode, 'type' | 'identifier' | 'label'>,
 ): LocalIdentity {
   const role = normalizeRoleField(normalizeType(node.type ?? ''));
   const id = normalizeIdentifierField(node.identifier);
   const label = normalizeLabelField(node.label);
+  // #1269: demote a non-discriminating framework id below a discriminating
+  // label — decision 3's "Local identity" only lets `id` win outright when it
+  // actually IS the recording's discriminator, so a shared `android:id/*` id
+  // is dropped whenever a label can take over instead.
+  const primaryId = isNonDiscriminatingAndroidId(id) && label !== undefined ? undefined : id;
   return {
-    ...(id !== undefined ? { id: truncateToUtf8Bytes(id, TARGET_ANNOTATION_MAX_FIELD_BYTES) } : {}),
+    ...(primaryId !== undefined
+      ? { id: truncateToUtf8Bytes(primaryId, TARGET_ANNOTATION_MAX_FIELD_BYTES) }
+      : {}),
     role: truncateToUtf8Bytes(role, TARGET_ANNOTATION_MAX_FIELD_BYTES),
     ...(label !== undefined
       ? { label: truncateToUtf8Bytes(label, TARGET_ANNOTATION_MAX_FIELD_BYTES) }

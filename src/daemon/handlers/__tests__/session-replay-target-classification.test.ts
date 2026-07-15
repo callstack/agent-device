@@ -1,8 +1,10 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import type { SnapshotNode } from '../../../kernel/snapshot.ts';
+import type { RawSnapshotNode, SnapshotNode } from '../../../kernel/snapshot.ts';
 import type { TargetAnnotationV1 } from '../../../replay/target-identity.ts';
 import { classifyReplayTarget } from '../session-replay-target-classification.ts';
+import { computeTargetEvidence } from '../../session-target-evidence.ts';
+import { buildSelectorChainForNode } from '../../../selectors/build.ts';
 import {
   bottomTabsRealCaptureFixture,
   recordArticleEvidence,
@@ -461,6 +463,101 @@ test('classifyReplayTarget: document-order determinism for equal rect centers', 
     allowDisambiguation: true,
   });
   assertVerified(result, { winnerRef: 'e4', matchCount: 2 });
+});
+
+// ---------------------------------------------------------------------------
+// #1269: Android list-row false divergences. Reproduces the wave-3 E1
+// Settings-root repro end to end — record the recorded selector-chain
+// EXPRESSION (the same "id=... || role=... label=..." text a real `.ad`
+// script stores) against a tree where a row shift moved the recorded row,
+// exactly what the reported divergence's `targetBinding.observed` showed.
+// Before the fix the id clause led the chain, matched all 11 rows, and its
+// own silent position-based disambiguation would resolve some OTHER row
+// (identity-mismatch, "safe" but false). After the fix the id is demoted
+// below the label clause, so the chain resolves via the label — uniquely and
+// correctly — even after the shift.
+// ---------------------------------------------------------------------------
+
+function androidSettingsRowsFixture(labels: readonly string[]): SnapshotNode[] {
+  const raw: RawSnapshotNode[] = [
+    { index: 0, type: 'FrameLayout', depth: 0 },
+    { index: 1, type: 'RecyclerView', depth: 1, parentIndex: 0 },
+  ];
+  labels.forEach((label, position) => {
+    const rowIndex = 2 + position * 2;
+    const titleIndex = rowIndex + 1;
+    raw.push({ index: rowIndex, type: 'LinearLayout', depth: 2, parentIndex: 1 });
+    raw.push({
+      index: titleIndex,
+      type: 'TextView',
+      identifier: 'android:id/title',
+      label,
+      rect: { x: 0, y: position * 60, width: 400, height: 56 },
+      depth: 3,
+      parentIndex: rowIndex,
+    });
+  });
+  return toSnapshotNodes(raw);
+}
+
+test('classifyReplayTarget (#1269): recorded selector-chain expression still resolves the correct row after a shift, with the shared id demoted', () => {
+  const recordNodes = androidSettingsRowsFixture([
+    'Network & internet',
+    'Connected devices',
+    'Apps',
+    'Notifications',
+    'Battery',
+    'Storage',
+    'Sound',
+    'Display',
+    'Accessibility',
+    'Security',
+    'Privacy',
+  ]);
+  const recordedWinner = recordNodes.find((node) => node.label === 'Network & internet');
+  assert.ok(recordedWinner);
+  const recorded = computeTargetEvidence({ node: recordedWinner, preActionNodes: recordNodes });
+  assert.ok(recorded);
+  assert.equal(recorded.id, undefined); // demoted: the shared framework id is not primary identity
+
+  const recordedChain = buildSelectorChainForNode(recordedWinner, 'android', { action: 'get' });
+  // The label clause leads; the demoted framework id survives only as the
+  // very last fallback entry.
+  assert.equal(recordedChain[0], 'role="textview" label="Network & internet"');
+  assert.equal(recordedChain.at(-1), 'id="android:id/title"');
+  const token = recordedChain.join(' || ');
+
+  // Replay tree: a conditional row ("A new conditional row") was inserted
+  // ahead of "Apps", shifting sibling/viewportOrder for every row after it —
+  // the same class of shift the issue's divergence payload showed.
+  const replayNodes = androidSettingsRowsFixture([
+    'Network & internet',
+    'Connected devices',
+    'A new conditional row',
+    'Apps',
+    'Notifications',
+    'Battery',
+    'Storage',
+    'Sound',
+    'Display',
+    'Accessibility',
+    'Security',
+    'Privacy',
+  ]);
+
+  const result = classifyReplayTarget({
+    recorded,
+    token,
+    nodes: replayNodes,
+    platform: 'android',
+    refLabel: undefined,
+    requireRect: false,
+    allowDisambiguation: true,
+  });
+  assertVerified(result, {
+    winnerRef: replayNodes.find((node) => node.label === 'Network & internet')!.ref,
+    matchCount: 1,
+  });
 });
 
 // ---------------------------------------------------------------------------
