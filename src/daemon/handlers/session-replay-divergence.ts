@@ -536,6 +536,7 @@ function resolveSuggestionCandidate(params: {
   return {
     suggestion: buildReplayDivergenceSuggestionForNode({
       node: resolved.node,
+      nodes,
       session,
       action,
       basis,
@@ -548,12 +549,14 @@ function resolveSuggestionCandidate(params: {
 
 export function buildReplayDivergenceSuggestionForNode(params: {
   node: SnapshotNode;
+  /** The record-time tree the node came from, for #1269 non-unique-id demotion in the chain. */
+  nodes: readonly SnapshotNode[];
   session: SessionState;
   action: ReplayReportAction;
   basis: ReplayDivergenceSuggestionBasis;
   sanitize: DivergenceFieldSanitizer;
 }): ReplayDivergenceSuggestion {
-  const { node, session, action, basis, sanitize } = params;
+  const { node, nodes, session, action, basis, sanitize } = params;
   const selectorChain = buildSelectorChainForNode(node, session.device.platform, {
     action:
       action.command === 'fill' ? 'fill' : isTouchTargetCommand(action.command) ? 'click' : 'get',

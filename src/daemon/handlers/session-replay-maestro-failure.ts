@@ -210,6 +210,7 @@ function collectTypedMaestroSuggestions(params: {
   ).map(({ node, basis }) =>
     buildReplayDivergenceSuggestionForNode({
       node,
+      nodes: params.nodes,
       session: params.session,
       action: params.action,
       basis,
