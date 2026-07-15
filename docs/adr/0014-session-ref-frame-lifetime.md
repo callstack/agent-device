@@ -63,9 +63,9 @@ the emitted subset, including ancestors, siblings, overlays, and the viewport. T
 the evidence tree, bounds partial authority. The frame and latest observation share immutable capture
 data when they originate from the same capture; neither transition deep-copies the tree.
 
-The existing `snapshotGeneration`/`snapshotRefsStale` implementation evolves behind one ref-frame
-module. The public name `refsGeneration` and the `@e12~s42` grammar remain unchanged for wire
-compatibility.
+The existing `snapshotGeneration` implementation evolves behind one ref-frame module; the
+`snapshotRefsStale` marker it originally paired with has since been removed (migration step 8). The
+public name `refsGeneration` and the `@e12~s42` grammar remain unchanged for wire compatibility.
 
 ### Frame transitions
 

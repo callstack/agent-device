@@ -153,9 +153,10 @@ export async function dispatchGetViaRuntime(
   });
   if (!resolvedRuntime.ok) return resolvedRuntime.response;
 
-  // #1076: get @ref reads from the stored snapshot; warn when that tree was
-  // replaced since the client last received refs — coarse marker for plain
-  // refs, precise generation mismatch for pinned `@e12~s3` refs.
+  // #1076: get @ref reads from the stored snapshot; warn once the ref frame
+  // has expired (ADR 0014) — any ref then gets the frame-derived warning,
+  // else a pinned `@e12~s3` ref whose epoch no longer matches gets the
+  // precise generation-mismatch warning.
   const staleRefsWarning =
     target.target.kind === 'ref'
       ? resolveRefStalenessWarning({
@@ -257,10 +258,11 @@ export async function dispatchWaitViaRuntime(
     if (directResponse) return directResponse;
   }
   // #1076: wait @ref re-resolves the ref against fresh polling captures; warn
-  // when the stored tree already drifted from the refs the client holds —
-  // coarse marker for plain refs, precise generation mismatch for pinned
-  // `@e12~s3` refs. The pin is split off HERE so the runtime and recording
-  // only ever see the plain `@e12` form.
+  // once the ref frame has expired (ADR 0014) — any ref then gets the
+  // frame-derived warning, else a pinned `@e12~s3` ref whose epoch no longer
+  // matches gets the precise generation-mismatch warning. The pin is split
+  // off HERE so the runtime and recording only ever see the plain `@e12`
+  // form.
   let waitParsed = parsed;
   let staleRefsWarning: string | undefined;
   if (parsed.kind === 'ref') {

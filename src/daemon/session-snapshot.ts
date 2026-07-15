@@ -72,8 +72,9 @@ export function markSessionPartialRefsIssued(session: SessionState, refs: Iterab
     if (body.length > 0) scope.add(body);
   }
   // ADR 0014: an empty partial result does not supersede existing authority — it
-  // leaves ALL session state untouched, including the coarse marker. Build the
-  // scope before touching anything so a no-ref result is a true no-op.
+  // leaves ALL session state untouched, including the ref frame fields set
+  // below. Build the scope before touching anything so a no-ref result is a
+  // true no-op.
   if (scope.size === 0) return;
   session.refFrameState = 'active';
   session.refFrameScope = scope;
