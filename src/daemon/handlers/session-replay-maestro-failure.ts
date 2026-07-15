@@ -243,7 +243,7 @@ function collectTypedMaestroCandidates(
     matches,
     platform,
   });
-  return normalizeMaestroSnapshotMatches(snapshot.nodes, visible.matches, query.selector, platform);
+  return normalizeMaestroSnapshotMatches(snapshot.nodes, visible, query.selector, platform);
 }
 
 type TypedSuggestionQuery = {

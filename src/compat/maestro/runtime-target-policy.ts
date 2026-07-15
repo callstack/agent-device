@@ -4,17 +4,8 @@ import { evaluateIsPredicate } from '../../selectors/predicates.ts';
 import { normalizeText } from '../../selectors/find.ts';
 import { matchesMaestroRegex } from './selector-regex.ts';
 import { extractNodeText } from '../../snapshot/snapshot-processing.ts';
-import {
-  detectReactNativeOverlay,
-  readReactNativeOverlayActionNodes,
-} from '../../core/react-native-overlay.ts';
 
 export type MaestroPlatform = 'ios' | 'android';
-
-export type ReactNativeOverlayFilterResult = {
-  matches: SnapshotNode[];
-  blockedByReactNativeOverlay: boolean;
-};
 
 /**
  * Match the source-preserving selector IR directly. In particular, this does
@@ -56,8 +47,8 @@ export function filterVisibleMaestroMatches(params: {
   nodes: SnapshotState['nodes'];
   matches: SnapshotNode[];
   platform: MaestroPlatform;
-}): ReactNativeOverlayFilterResult {
-  const visibleMatches = params.matches.filter(
+}): SnapshotNode[] {
+  return params.matches.filter(
     (node) =>
       evaluateIsPredicate({
         predicate: 'visible',
@@ -66,50 +57,6 @@ export function filterVisibleMaestroMatches(params: {
         platform: params.platform,
       }).pass,
   );
-  const overlayFilter = filterReactNativeOverlayBlockedMatches(
-    params.nodes,
-    visibleMatches,
-    params.platform,
-  );
-  return {
-    matches: overlayFilter.matches,
-    blockedByReactNativeOverlay: overlayFilter.blockedByReactNativeOverlay,
-  };
-}
-
-function filterReactNativeOverlayBlockedMatches(
-  nodes: SnapshotState['nodes'],
-  matches: SnapshotNode[],
-  platform: MaestroPlatform,
-): ReactNativeOverlayFilterResult {
-  const overlay = detectReactNativeOverlay(nodes);
-  if (!overlay.detected || !overlay.redBox) {
-    return { matches, blockedByReactNativeOverlay: false };
-  }
-
-  const overlayControls = readReactNativeOverlayActionNodes(overlay);
-  const visibleOverlayControls = overlayControls.filter(
-    (node) =>
-      evaluateIsPredicate({
-        predicate: 'visible',
-        node,
-        nodes,
-        platform,
-      }).pass,
-  );
-  if (visibleOverlayControls.length === 0) {
-    if (overlayControls.length === 0) {
-      return { matches: [], blockedByReactNativeOverlay: true };
-    }
-    return { matches, blockedByReactNativeOverlay: false };
-  }
-
-  const overlayNodeIndexes = new Set(visibleOverlayControls.map((node) => node.index));
-  const overlayMatches = matches.filter((node) => overlayNodeIndexes.has(node.index));
-  return {
-    matches: overlayMatches,
-    blockedByReactNativeOverlay: matches.length > 0 && overlayMatches.length === 0,
-  };
 }
 
 function matchesMaestroSelectorValue(value: string | undefined, query: string): boolean {

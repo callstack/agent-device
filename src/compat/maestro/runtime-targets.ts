@@ -69,14 +69,14 @@ export function resolveMaestroTargetFromSnapshot(
   const visible = filterVisibleMaestroMatches({ nodes: snapshot.nodes, matches, platform });
   const rankedMatches = normalizeMaestroSnapshotMatches(
     snapshot.nodes,
-    visible.matches,
+    visible,
     query.selector,
     platform,
   );
   const target = selectMaestroSnapshotMatch(rankedMatches, query.index);
   const evidence = buildMaestroTargetEvidence(query, matches, rankedMatches, target?.node);
   if (!target) {
-    return failedTargetResolution(query, matches, rankedMatches, visible, evidence);
+    return failedTargetResolution(query, matches, rankedMatches, evidence);
   }
   const presentation =
     platform === 'ios' && (options.interactiveBounds || query.allowAtomicSelectorDispatch)
@@ -106,12 +106,8 @@ function failedTargetResolution(
   query: MaestroTargetQuery,
   matches: SnapshotNode[],
   rankedMatches: SnapshotNode[],
-  visibility: { blockedByReactNativeOverlay: boolean },
   evidence: MaestroTargetEvidence,
 ): MaestroTargetResolution {
-  if (visibility.blockedByReactNativeOverlay) {
-    return { ok: false, message: 'React Native overlay is covering app content.', evidence };
-  }
   if (matches.length > 0 && rankedMatches.length === 0) {
     return {
       ok: false,
@@ -142,7 +138,7 @@ function countCanonicalDispatchCandidates(
     nodes: canonicalSnapshot.nodes,
     matches: canonicalMatches,
     platform,
-  }).matches;
+  });
   const canonicalRankedMatches = normalizeMaestroSnapshotMatches(
     canonicalSnapshot.nodes,
     canonicalVisibleMatches,

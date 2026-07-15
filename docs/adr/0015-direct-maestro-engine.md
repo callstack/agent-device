@@ -47,6 +47,10 @@ The engine has five responsibilities:
    test result contracts. Observer telemetry is redacted and best-effort; trace persistence cannot
    change command success or failure.
 
+Maestro `stopApp` terminates its target through a daemon-internal app-only close and preserves the
+owning replay session. Public `close` remains the session finalizer that releases recordings, runner
+state, leases, and stored runtime hints.
+
 The engine does not implement platform input. Absolute and percentage swipes preserve authored
 endpoints without a hierarchy capture. Directional horizontal swipes reuse ADR 0013's shared in-page
 preset geometry so an iOS right swipe does not become an interactive-back gesture; vertical presets
@@ -75,7 +79,8 @@ actions use those bounds. A unique exact, canonically hittable match may be disp
 resolved point so XCTest binds the live selector identity and coordinate delivery atomically; a
 structured live-selector miss, ambiguity, point mismatch, or off-screen result
 falls back to fresh Maestro resolution. All other targets capture fresh geometry before coordinate
-dispatch. Visibility can
+dispatch. Maestro visibility does not apply agent-device's React Native overlay blocking policy;
+debug-overlay handling remains an explicit public-command workflow. Visibility can
 be true while a scroll view or tab strip is still moving, so an observation frame is never authoritative
 for a later interaction, even within the same mutation generation. Every mutating attempt invalidates
 retained evidence before dispatch, including an attempt whose dispatch reports failure, because the

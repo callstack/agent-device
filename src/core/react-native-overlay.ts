@@ -13,7 +13,6 @@ type ReactNativeOverlayNode = Pick<
 
 export type ReactNativeOverlayState = {
   detected: boolean;
-  redBox: boolean;
   dismissNodes: SnapshotNode[];
   minimizeNodes: SnapshotNode[];
   collapsedNodes: SnapshotNode[];
@@ -33,14 +32,11 @@ type ReactNativeOverlayFacts = {
   dismissNodes: SnapshotNode[];
   minimizeNodes: SnapshotNode[];
   collapsedNodes: SnapshotNode[];
-  redBox: boolean;
   detected: boolean;
 };
 
 const KNOWN_OVERLAY_TEXT_PATTERN =
   /\b(logbox|redbox|reload js|copy stack|component stack|call stack|runtime error|open debugger to view warnings)\b/;
-const REDBOX_TEXT_PATTERN =
-  /\b(redbox|runtime error|reload js|copy stack|component stack|call stack)\b/;
 const REACT_NATIVE_STACK_FRAME_PATTERNS = [
   /\b[\w.$<>/-]+\.(?:tsx?|jsx?):\d+(?::\d+)?\b/,
   /\b[\w.$<>/-]+\.(?:tsx?|jsx?)\s+\(\d+:\d+\)/,
@@ -70,28 +66,17 @@ export function formatReactNativeOverlayWarning(nodes: SnapshotNode[]): string |
   ].join('\n');
 }
 
-export function detectReactNativeOverlay(nodes: SnapshotNode[]): ReactNativeOverlayState {
-  return analyzeReactNativeOverlay(nodes);
-}
-
 export function analyzeReactNativeOverlay(nodes: SnapshotNode[]): ReactNativeOverlayState {
   const facts = collectReactNativeOverlayFacts(nodes);
   const primaryAction = facts.detected ? resolveSafeDismissAction(facts) : null;
 
   return {
     detected: facts.detected,
-    redBox: facts.redBox,
     dismissNodes: facts.dismissNodes,
     minimizeNodes: facts.minimizeNodes,
     collapsedNodes: facts.collapsedNodes,
     primaryAction,
   };
-}
-
-export function readReactNativeOverlayActionNodes(
-  overlay: Pick<ReactNativeOverlayState, 'dismissNodes' | 'minimizeNodes' | 'collapsedNodes'>,
-): SnapshotNode[] {
-  return [...overlay.dismissNodes, ...overlay.minimizeNodes, ...overlay.collapsedNodes];
 }
 
 export function isReactNativeCollapsedWarningWrapperCandidate(
@@ -134,7 +119,6 @@ function collectReactNativeOverlayFacts(nodes: SnapshotNode[]): ReactNativeOverl
     dismissNodes,
     minimizeNodes,
     collapsedNodes,
-    redBox: isReactNativeRedBox(text, hasReactNativeStackFrame, hasOverlayControl),
     detected: isReactNativeOverlayDetected({
       text,
       hasReactNativeStackFrame,
@@ -188,18 +172,6 @@ function hasReactNativeOverlayControlText(
 ): boolean {
   return (
     dismissNodes.length > 0 || minimizeNodes.length > 0 || /\b(reload js|copy stack)\b/.test(text)
-  );
-}
-
-function isReactNativeRedBox(
-  text: string,
-  hasReactNativeStackFrame: boolean,
-  hasOverlayControl: boolean,
-): boolean {
-  return (
-    REDBOX_TEXT_PATTERN.test(text) ||
-    hasUnableToDownloadAssetRedBox(text) ||
-    (hasReactNativeStackFrame && hasOverlayControl)
   );
 }
 

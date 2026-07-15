@@ -88,7 +88,11 @@ function projectLaunchApp(
 function projectStopApp(
   operation: Extract<MaestroAppOperation, { kind: 'stopApp' }>,
 ): ProjectedMaestroPublicOperation {
-  return { command: 'close', positionals: operation.appId ? [operation.appId] : [] };
+  return {
+    command: 'close',
+    positionals: operation.appId ? [operation.appId] : [],
+    internal: { closeAppOnly: true },
+  };
 }
 
 function projectOpenLink(

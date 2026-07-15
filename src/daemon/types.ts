@@ -60,6 +60,8 @@ export type DaemonOpenLifecycle = {
 type DaemonRequestInternal = {
   openLifecycle?: DaemonOpenLifecycle;
   admittedLease?: DeviceLease;
+  /** Terminate the targeted app without ending the owning daemon session. */
+  closeAppOnly?: boolean;
   /** Provider-owned viewport already resolved while normalizing a nested gesture command. */
   gestureViewport?: Rect;
   /**

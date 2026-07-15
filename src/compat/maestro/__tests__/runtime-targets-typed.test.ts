@@ -67,6 +67,52 @@ test('typed target resolution applies typed childOf and reports structured misse
   });
 });
 
+test('keeps Maestro-visible app content matchable while a React Native overlay is present', () => {
+  const snapshot = makeSnapshot([
+    {
+      index: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 393, height: 852 },
+    },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Other',
+      label: 'Try Again',
+      rect: { x: 149, y: 464, width: 94, height: 49 },
+    },
+    {
+      index: 2,
+      parentIndex: 0,
+      type: 'Other',
+      label: 'Log 1 of 1',
+      rect: { x: 0, y: 0, width: 393, height: 852 },
+    },
+    {
+      index: 3,
+      parentIndex: 2,
+      type: 'Other',
+      label: 'Dismiss',
+      rect: { x: 0, y: 770, width: 196, height: 48 },
+    },
+    {
+      index: 4,
+      parentIndex: 2,
+      type: 'Other',
+      label: 'Minimize',
+      rect: { x: 196, y: 770, width: 197, height: 48 },
+    },
+  ]);
+
+  expect(
+    resolveMaestroTargetFromSnapshot(snapshot, { selector: { text: 'Try Again' } }, 'ios'),
+  ).toMatchObject({
+    ok: true,
+    node: { index: 1 },
+    evidence: { matched: true, visible: true, candidateCount: 1 },
+  });
+});
+
 test('iOS target resolution selects a matching leaf through duplicate accessibility wrappers', () => {
   const snapshot = makeSnapshot([
     {

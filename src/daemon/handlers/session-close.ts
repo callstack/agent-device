@@ -350,6 +350,9 @@ export async function handleCloseCommand(params: {
   if (!session) {
     return await closeWithoutSession(req, logPath);
   }
+  if (req.internal?.closeAppOnly === true) {
+    return await closeAppWithoutEndingSession({ req, session, logPath });
+  }
   const repairArmed = session.saveScriptBoundary !== undefined;
   const closeIdentity = repairPlatformCloseIdentity(req);
   // ADR 0012 decision 6 (BLOCKER 2): for a repair-armed session, the platform
@@ -466,6 +469,27 @@ export async function handleCloseCommand(params: {
       ...successText(`Closed: ${session.name}`),
       ...savedScript,
       ...(providerData ? { provider: providerData } : {}),
+    },
+  };
+}
+
+async function closeAppWithoutEndingSession(params: {
+  req: DaemonRequest;
+  session: SessionState;
+  logPath: string;
+}): Promise<DaemonResponse> {
+  const { req, session, logPath } = params;
+  const app = req.positionals?.[0];
+  if (!app) {
+    return errorResponse('INVALID_ARGS', 'App-only close requires an app target');
+  }
+  const platformCloseError = await dispatchTargetedPlatformClose({ req, session, logPath });
+  if (platformCloseError) throw platformCloseError;
+  return {
+    ok: true,
+    data: {
+      app,
+      ...successText(`Closed: ${app}`),
     },
   };
 }

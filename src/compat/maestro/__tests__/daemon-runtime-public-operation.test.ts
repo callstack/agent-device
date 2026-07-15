@@ -34,11 +34,15 @@ describe('Maestro public operation projection', () => {
     },
     {
       operation: { kind: 'stopApp', appId: 'com.example' },
-      expected: { command: 'close', positionals: ['com.example'] },
+      expected: {
+        command: 'close',
+        positionals: ['com.example'],
+        internal: { closeAppOnly: true },
+      },
     },
     {
       operation: { kind: 'stopApp' },
-      expected: { command: 'close', positionals: [] },
+      expected: { command: 'close', positionals: [], internal: { closeAppOnly: true } },
     },
     {
       operation: {
