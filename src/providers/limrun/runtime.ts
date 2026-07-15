@@ -13,6 +13,7 @@ import {
 import { AppError } from '../../kernel/errors.ts';
 import { runCmd } from '../../utils/exec.ts';
 import { readVersion } from '../../utils/version.ts';
+import type { DeviceRotation } from '../../contracts/device-rotation.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import type {
   Interactor,
@@ -626,7 +627,13 @@ class LimrunIosInteractor implements Interactor {
     throw unsupported('home', 'Limrun iOS direct sessions do not expose home yet.');
   }
 
-  async rotate(orientation: 'portrait' | 'landscape-left' | 'landscape-right'): Promise<void> {
+  async setOrientation(orientation: DeviceRotation): Promise<void> {
+    if (orientation === 'portrait-upside-down') {
+      throw unsupported(
+        'orientation',
+        'Limrun iOS direct sessions support portrait and landscape orientation, not portrait upside-down.',
+      );
+    }
     await this.session.client.setOrientation(orientation === 'portrait' ? 'Portrait' : 'Landscape');
   }
 

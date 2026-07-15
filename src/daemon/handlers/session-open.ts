@@ -35,6 +35,7 @@ import { resetAndroidFramePerfStats } from '../../platforms/android/perf.ts';
 import { activateAndroidTestIme } from '../../platforms/android/ime-lifecycle.ts';
 import { withKeyedLock } from '../../utils/keyed-lock.ts';
 import { emitDiagnostic, getDiagnosticsMeta } from '../../utils/diagnostics.ts';
+import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import { inferAndroidPackageAfterOpen } from './session-open-target.ts';
 import {
   invalidOpenArgs,
@@ -166,6 +167,22 @@ function buildStartupPerfSample(
   };
 }
 
+function shouldRunRelaunchPreClose(params: {
+  shouldRelaunch: boolean;
+  openTarget: string | undefined;
+  collapseSimulatorRelaunch: boolean;
+  device: DeviceInfo;
+  existingSession: SessionState | undefined;
+}): boolean {
+  if (!params.shouldRelaunch || !params.openTarget || params.collapseSimulatorRelaunch) {
+    return false;
+  }
+  if (!params.existingSession && isActiveProviderDevice(params.device)) {
+    return false;
+  }
+  return true;
+}
+
 // fallow-ignore-next-line complexity
 async function completeOpenCommand(params: {
   req: DaemonRequest;
@@ -255,7 +272,16 @@ async function completeOpenCommand(params: {
     openPositionals.length === 1 &&
     isIosSimulator(device) &&
     req.flags?.clearAppState !== true;
-  if (shouldRelaunch && openTarget && !collapseSimulatorRelaunch) {
+  if (
+    shouldRunRelaunchPreClose({
+      shouldRelaunch,
+      openTarget,
+      collapseSimulatorRelaunch,
+      device,
+      existingSession,
+    }) &&
+    openTarget
+  ) {
     // ADR 0014 side-effect seam: the relaunch close is the FIRST device dispatch
     // against the existing session. Expire its frame before awaiting the close,
     // so a close timeout/failure that may already have torn the app down still

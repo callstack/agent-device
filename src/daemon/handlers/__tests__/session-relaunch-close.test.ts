@@ -2,6 +2,7 @@ import { test, expect, vi } from 'vitest';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { LeaseRegistry } from '../../lease-registry.ts';
+import { setActiveProviderDeviceRuntimes } from '../../../provider-device-runtime.ts';
 import {
   mockDispatch,
   mockResolveTargetDevice,
@@ -101,6 +102,57 @@ test('open --relaunch leaves the old frame expired when the close dispatch fails
   // post-dispatch close failure never restores it (there is no rollback).
   expect(response?.ok ?? false).toBe(false);
   expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+});
+
+test('open --relaunch skips provider pre-close before first provider session exists', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'provider-android-session';
+  const device = {
+    platform: 'android' as const,
+    id: 'provider-android-1',
+    name: 'Provider Android',
+    kind: 'emulator' as const,
+    booted: true,
+  };
+  setActiveProviderDeviceRuntimes([
+    {
+      provider: 'fake-provider',
+      leaseLifecycle: {},
+      deviceInventoryProvider: async () => [device],
+      ownsDevice: (candidate) => candidate.id === device.id,
+      getInteractor: () => undefined,
+      shutdown: async () => {},
+    },
+  ]);
+  mockResolveTargetDevice.mockResolvedValue(device);
+
+  const calls: Array<{ command: string; positionals: string[] }> = [];
+  mockDispatch.mockImplementation(async (_device, command, positionals) => {
+    calls.push({ command, positionals });
+    return {};
+  });
+
+  try {
+    const response = await handleSessionCommands({
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'open',
+        positionals: ['com.example.app'],
+        flags: { relaunch: true, platform: 'android' },
+      },
+      sessionName,
+      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      sessionStore,
+      invoke: noopInvoke,
+    });
+
+    expect(response).toBeTruthy();
+    expect(response?.ok).toBe(true);
+    expect(calls).toEqual([{ command: 'open', positionals: ['com.example.app'] }]);
+  } finally {
+    setActiveProviderDeviceRuntimes([]);
+  }
 });
 
 test('open --relaunch on iOS stops runner before close/open', async () => {

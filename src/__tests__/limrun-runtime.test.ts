@@ -20,6 +20,7 @@ const limrunMockState = vi.hoisted(() => {
       bundleId: 'com.example.ios',
       url: 'https://assets.example/app',
     })),
+    iosSetOrientation: vi.fn(async () => undefined),
     androidOpenUrl: vi.fn(async () => undefined),
     androidDisconnect: vi.fn(),
     androidSendAsset: vi.fn(async () => undefined),
@@ -71,6 +72,7 @@ vi.mock('@limrun/api/ios-client', () => ({
   createInstanceClient: vi.fn(async () => ({
     disconnect: vi.fn(),
     installApp: limrunMockState.iosInstallApp,
+    setOrientation: limrunMockState.iosSetOrientation,
   })),
 }));
 
@@ -325,6 +327,33 @@ test('Limrun iOS installs direct local artifacts through Limrun assets', async (
   } finally {
     await runtime.shutdown();
     fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('Limrun iOS maps supported orientation and rejects unsupported upside-down orientation', async () => {
+  const runtime = new LimrunRuntime({
+    apiKey: 'lim_test_key',
+    version: '9.9.9-test',
+  });
+
+  try {
+    const device = await allocateLimrunDevice(runtime, {
+      ...androidLease(),
+      leaseId: 'lease-ios-orientation',
+      backend: 'ios-instance',
+    });
+    const interactor = runtime.getInteractor(device, {});
+    if (!interactor) throw new Error('Limrun runtime must return an interactor');
+
+    await interactor.setOrientation('landscape-left');
+    await assert.rejects(
+      () => interactor.setOrientation('portrait-upside-down'),
+      /not portrait upside-down/,
+    );
+
+    assert.deepEqual(limrunMockState.iosSetOrientation.mock.calls, [['Landscape']]);
+  } finally {
+    await runtime.shutdown();
   }
 });
 
