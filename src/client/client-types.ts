@@ -252,6 +252,12 @@ export type SessionCloseResult = {
   session: string;
   shutdown?: TargetShutdownResult;
   provider?: CloudProviderSessionResult;
+  /**
+   * #1258: absolute path of the committed session/healed script when this close
+   * published one (`close --save-script`, or a repair-armed session's finalize)
+   * — so a client that requested publication learns where the file landed.
+   */
+  savedScript?: string;
   identifiers: AgentDeviceIdentifiers;
 };
 
@@ -327,6 +333,12 @@ export type AppCloseResult = {
   session: string;
   closedApp?: string;
   shutdown?: TargetShutdownResult;
+  /**
+   * #1258: absolute path of the committed session/healed script when this close
+   * published one (`close --save-script`, or a repair-armed session's finalize)
+   * — so a client that requested publication learns where the file landed.
+   */
+  savedScript?: string;
   identifiers: AgentDeviceIdentifiers;
 };
 

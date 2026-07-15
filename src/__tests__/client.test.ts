@@ -319,6 +319,34 @@ test('client close normalizes target shutdown results', async () => {
   assert.equal(appClose.shutdown, undefined);
 });
 
+test('client close surfaces the daemon savedScript path on both sessions.close and apps.close (#1258)', async () => {
+  const savedScriptPath = '/tmp/agent-device/flows/login.healed.ad';
+  const setup = createTransport(async () => ({
+    ok: true,
+    data: { session: 'qa', savedScript: savedScriptPath },
+  }));
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const sessionClose = await client.sessions.close({ saveScript: true });
+  const appClose = await client.apps.close({ saveScript: true });
+
+  // The committed artifact path round-trips so a Node client that requested
+  // publication learns where the file landed.
+  assert.equal(sessionClose.savedScript, savedScriptPath);
+  assert.equal(appClose.savedScript, savedScriptPath);
+});
+
+test('client close omits savedScript when the daemon published nothing (#1258)', async () => {
+  const setup = createTransport(async () => ({ ok: true, data: { session: 'qa' } }));
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const sessionClose = await client.sessions.close({});
+  const appClose = await client.apps.close({});
+
+  assert.equal(sessionClose.savedScript, undefined);
+  assert.equal(appClose.savedScript, undefined);
+});
+
 test('observability.perf projects structured frame area to daemon positionals', async () => {
   const setup = createTransport(async (req) => {
     if (req.command === 'perf') {

@@ -682,8 +682,8 @@ test('#1258 preflight honors PERSISTED force: a --from continuation without --fo
   expect(sessionStore.get(sessionName)?.saveScriptForce).toBe(true);
 });
 
-test('#1258 preflight is per-target: a --from continuation RETARGETING to an existing <b> WITHOUT live force is refused BEFORE dispatch and leaves the session target unmutated', async () => {
-  const { root, sessionStore, sessionName, logPath } = setup(
+test('#1258 preflight is per-target: a --from continuation RETARGETING to an existing <b> WITHOUT live force is refused BEFORE dispatch, preserves the prior COMPLETE transaction, and a later close still commits the ORIGINAL <a>', async () => {
+  const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
     'agent-device-repair-transaction-preflight-retarget-',
   );
   const filePath = writeReplayFile(root, [
@@ -730,6 +730,12 @@ test('#1258 preflight is per-target: a --from continuation RETARGETING to an exi
     result: { selectorChain: ['id="save-v2"'] },
     targetEvidence: freshEvidence('save-v2', 'Save V2'),
   });
+  // The transaction for <a> has now reached COMPLETE (a resume leg ran to the
+  // end) — set directly here, mirroring `makeCompleteRepairSession`'s
+  // convention, to isolate THIS test's concern: a later retarget REJECTION must
+  // not corrupt this flag (BLOCKER 2 — the C2 `saveScriptComplete = false`
+  // reset must run AFTER the preflight's early-return, never before it).
+  session.saveScriptComplete = true;
   const dispatchesBeforeLeg2 = spy.length;
 
   // Leg 2: `--from N --save-script=<b>` (explicit RETARGET, NO live force) — <b>
@@ -758,7 +764,28 @@ test('#1258 preflight is per-target: a --from continuation RETARGETING to an exi
   // armed/forced for <a>, never retargeted to <b>.
   expect(sessionStore.get(sessionName)?.saveScriptPath).toBe(targetA);
   expect(sessionStore.get(sessionName)?.saveScriptForce).toBe(true);
+  // BLOCKER 2 (a): the prior COMPLETE transaction SURVIVES the rejection — the
+  // C2 completion reset never ran, because the preflight returned first.
+  expect(sessionStore.get(sessionName)?.saveScriptComplete).toBe(true);
   // <b> is byte-for-byte untouched.
+  expect(fs.readFileSync(targetB, 'utf8')).toBe(beforeB);
+
+  // BLOCKER 2 (b): a later bare `close` still COMMITS the ORIGINAL target <a>
+  // (never the rejected <b>) — proof the rejected retarget corrupted neither
+  // the completion flag nor the target path.
+  const closeResponse = await handleCloseCommand({
+    req: { token: 't', session: sessionName, command: 'close', positionals: [], flags: {} },
+    sessionName,
+    logPath,
+    sessionStore,
+    leaseRegistry,
+  });
+  expect(closeResponse.ok).toBe(true);
+  if (closeResponse.ok) expect(closeResponse.data?.savedScript).toBe(targetA);
+  expect(fs.existsSync(targetA)).toBe(true);
+  const committed = parseReplayScriptDetailed(fs.readFileSync(targetA, 'utf8'));
+  expect(committed.actions.map((a) => a.command)).toEqual(['open', 'press', 'close']);
+  // <b> stayed untouched through the commit too.
   expect(fs.readFileSync(targetB, 'utf8')).toBe(beforeB);
 });
 

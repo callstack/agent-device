@@ -246,11 +246,7 @@ export async function runReplayScriptFile(params: {
       // key clears any prior reap tombstone before starting a new transaction.
       sessionStore.clearRepairTombstone(sessionName);
     }
-    // ADR 0012 decision 6 (C2): a repair-armed resume re-opens the completion
-    // window — a leg that re-diverges must not inherit a prior leg's COMPLETE
-    // flag and let a later `close` commit a now-stale transaction.
     const preRunSession = sessionStore.get(sessionName);
-    if (preRunSession?.saveScriptBoundary !== undefined) preRunSession.saveScriptComplete = false;
     // #1258: arm-time EEXIST preflight — fail HERE, before any step of this
     // invocation dispatches, rather than letting the whole run (and, for a
     // fresh repair, its very first `open`) execute only to hit the SAME
@@ -269,6 +265,16 @@ export async function runReplayScriptFile(params: {
       existingSaveScriptPath: preRunSession?.saveScriptPath,
     });
     if (saveScriptPreflight) return saveScriptPreflight;
+    // ADR 0012 decision 6 (C2): a repair-armed resume re-opens the completion
+    // window — a leg that re-diverges must not inherit a prior leg's COMPLETE
+    // flag and let a later `close` commit a now-stale transaction. #1258: this
+    // reset MUST run AFTER the preflight's early-return above — a preflight
+    // REJECTION (a retarget to an existing target without force) leaves the
+    // session untouched, so a prior COMPLETE transaction stays committable at
+    // its ORIGINAL target; resetting before the return would corrupt it (a
+    // later `close` would then refuse to commit the original). The reset is
+    // correct only when this run actually proceeds to re-arm.
+    if (preRunSession?.saveScriptBoundary !== undefined) preRunSession.saveScriptComplete = false;
     const armReplaySaveScriptStep = createReplaySaveScriptArmer({
       saveScript: req.flags?.saveScript,
       force: req.flags?.force,

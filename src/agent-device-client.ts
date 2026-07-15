@@ -187,6 +187,7 @@ export function createAgentDeviceClient(
             session,
             shutdown: normalizeTargetShutdownResult(data.shutdown),
             provider: readObject(data.provider),
+            savedScript: readOptionalString(data, 'savedScript'),
             identifiers: { session },
           };
         } finally {
@@ -259,6 +260,7 @@ export function createAgentDeviceClient(
           session,
           closedApp: options.app,
           shutdown: normalizeTargetShutdownResult(data.shutdown),
+          savedScript: readOptionalString(data, 'savedScript'),
           identifiers: { session },
         };
       },
