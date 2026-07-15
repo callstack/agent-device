@@ -251,19 +251,42 @@ function commandStep(
 }
 
 function opaqueStep(
-  command: Extract<MaestroReplayPlanStep['command'], { kind: 'runFlow' | 'repeat' | 'retry' }>,
+  command: Extract<MaestroCommand, { kind: 'runFlow' | 'repeat' | 'retry' }>,
   scopes: readonly MaestroReplayPlanScope[],
   appId: string | undefined,
   body: readonly MaestroReplayPlanStep[],
 ): MaestroReplayPlanOpaqueStep {
   return {
     kind: 'opaque',
-    command,
+    command: opaqueControlCommand(command),
     source: command.source,
     scopes,
     body,
     ...(appId === undefined ? {} : { appId }),
   };
+}
+
+function opaqueControlCommand(
+  command: Extract<MaestroCommand, { kind: 'runFlow' | 'repeat' | 'retry' }>,
+): MaestroReplayPlanOpaqueStep['command'] {
+  switch (command.kind) {
+    case 'runFlow':
+      return {
+        kind: command.kind,
+        source: command.source,
+        ...(command.when === undefined ? {} : { when: command.when }),
+        ...(command.label === undefined ? {} : { label: command.label }),
+        ...(command.include.kind === 'file' ? { includePath: command.include.path } : {}),
+      };
+    case 'repeat':
+      return { kind: command.kind, source: command.source, times: command.times };
+    case 'retry':
+      return {
+        kind: command.kind,
+        source: command.source,
+        ...(command.maxRetries === undefined ? {} : { maxRetries: command.maxRetries }),
+      };
+  }
 }
 
 function appendScope(

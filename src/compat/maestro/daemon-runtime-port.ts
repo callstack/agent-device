@@ -39,6 +39,7 @@ import {
   observeTypedMaestroCondition,
   resolveTypedMaestroTarget,
   scrollUntilTypedMaestroTarget,
+  sleepWithinBudget,
   waitForTypedSnapshotStability,
   maestroSnapshotSignature,
   type MaestroSnapshotSource,
@@ -78,27 +79,28 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
   };
   const invokeMutation = async (
     operation: MaestroPublicOperation,
+    context: MaestroRuntimeOperationContext,
     stability: 'none' | 'deferred' = 'none',
   ) => {
-    snapshots.invalidate();
+    snapshots.invalidate(context.generation);
     try {
       return await invoke(operation);
     } finally {
-      if (stability === 'deferred') snapshots.requireStability();
+      if (stability === 'deferred') snapshots.requireStability(context.generation);
     }
   };
   const typeTextAndSettle = async (
     text: string,
     context: MaestroRuntimeOperationContext,
   ): Promise<void> => {
-    await invokeMutation({ kind: 'typeText', text });
-    const snapshot = await waitForTypedSnapshotStability({
+    await invokeMutation({ kind: 'typeText', text }, context);
+    const stable = await waitForTypedSnapshotStability({
       timeoutMs: MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,
       context,
       snapshot: snapshots.capture,
       dependencies: options.dependencies,
     });
-    snapshots.prime(context.generation, snapshot);
+    snapshots.prime(context.generation, stable.snapshot);
   };
 
   const operations: MaestroRuntimeOperations = {
@@ -138,12 +140,13 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
           clearState,
           launchArgs,
         },
+        context,
         'deferred',
       );
     },
     stopApp: async (input, context) => {
       const appId = input.appId ?? context.appId;
-      await invokeMutation({ kind: 'stopApp', ...(appId ? { appId } : {}) });
+      await invokeMutation({ kind: 'stopApp', ...(appId ? { appId } : {}) }, context);
     },
     openLink: async (input, context) => {
       await invokeMutation(
@@ -153,6 +156,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
           link: input.link,
           prewarmRunner: platform === 'ios',
         },
+        context,
         'deferred',
       );
     },
@@ -165,25 +169,25 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
         },
         retryIfNoChange: input.retryTapIfNoChange === true,
       }),
-    doubleTapOn: async (input) => {
-      snapshots.invalidate();
+    doubleTapOn: async (input, context) => {
+      snapshots.invalidate(context.generation);
       try {
         await clickTarget(options, input.target.point, {
           doubleTap: true,
           ...(input.delay === undefined ? {} : { intervalMs: input.delay }),
         });
       } finally {
-        snapshots.requireStability();
+        snapshots.requireStability(context.generation);
       }
     },
-    longPressOn: async (input) => {
-      snapshots.invalidate();
+    longPressOn: async (input, context) => {
+      snapshots.invalidate(context.generation);
       try {
         await clickTarget(options, input.target.point, {
           holdMs: MAESTRO_COMPATIBILITY_PRESETS.command.longPressDurationMs,
         });
       } finally {
-        snapshots.requireStability();
+        snapshots.requireStability(context.generation);
       }
     },
     gesture: async (input, context) => {
@@ -193,6 +197,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
           gesture: input,
           ...(context.gestureViewport ? { viewport: context.gestureViewport } : {}),
         },
+        context,
         'deferred',
       );
     },
@@ -204,8 +209,8 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
         ),
         context,
       ),
-    scroll: async (input) => {
-      await invokeMutation({ kind: 'scroll', direction: input.direction }, 'deferred');
+    scroll: async (input, context) => {
+      await invokeMutation({ kind: 'scroll', direction: input.direction }, context, 'deferred');
     },
     scrollUntilVisible: async (input, context) => {
       const match = await scrollUntilTypedMaestroTarget({
@@ -217,17 +222,22 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
         dependencies: options.dependencies,
         platform,
         scroll: async (remainingMs) => {
-          await invokeMutation({
-            kind: 'scroll',
-            direction: input.direction,
-            durationMs: input.durationMs,
-          });
-          return await waitForTypedSnapshotStability({
-            timeoutMs: Math.min(MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS, remainingMs),
+          await invokeMutation(
+            {
+              kind: 'scroll',
+              direction: input.direction,
+              durationMs: input.durationMs,
+            },
             context,
-            snapshot: snapshots.capture,
-            dependencies: options.dependencies,
-          });
+          );
+          return (
+            await waitForTypedSnapshotStability({
+              timeoutMs: Math.min(MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS, remainingMs),
+              context,
+              snapshot: snapshots.capture,
+              dependencies: options.dependencies,
+            })
+          ).snapshot;
         },
       });
       if (
@@ -243,14 +253,14 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
         observation: snapshots.bindObservation(observationFromMatch(input.selector, match)),
       };
     },
-    pressKey: async (input) => {
-      await invokeMutation({ kind: 'pressKey', key: input.key }, 'deferred');
+    pressKey: async (input, context) => {
+      await invokeMutation({ kind: 'pressKey', key: input.key }, context, 'deferred');
     },
-    back: async () => {
-      await invokeMutation({ kind: 'pressKey', key: 'back' }, 'deferred');
+    back: async (_input, context) => {
+      await invokeMutation({ kind: 'pressKey', key: 'back' }, context, 'deferred');
     },
-    hideKeyboard: async () => {
-      await invokeMutation({ kind: 'pressKey', key: 'dismiss' }, 'deferred');
+    hideKeyboard: async (_input, context) => {
+      await invokeMutation({ kind: 'pressKey', key: 'dismiss' }, context, 'deferred');
     },
     waitForAnimationToEnd: async (input, context) => {
       await waitForMaestroAnimationToEnd({
@@ -338,7 +348,11 @@ async function sleepBeforeTargetPoll(
 ): Promise<void> {
   const remaining = deadline - options.dependencies.now();
   if (remaining <= 0) return;
-  await options.dependencies.sleep(Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining), signal);
+  await sleepWithinBudget(
+    options.dependencies,
+    Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining),
+    signal,
+  );
 }
 
 export function createDaemonMaestroRuntimePort(
@@ -374,7 +388,7 @@ async function tapTargetAndSettle(
     try {
       await dispatch();
     } finally {
-      snapshots.requireStability();
+      snapshots.requireStability(context.generation);
     }
     return;
   }
@@ -418,10 +432,12 @@ async function tapTargetWithRetry(
   screenshotBaseline?: MaestroScreenshotBaseline,
 ): Promise<void> {
   const dispatch = async () => await dispatchTapTarget(options, snapshots, target, context, flags);
-
-  const baselineSignature =
-    target.resolution?.surfaceSignature ??
-    maestroSnapshotSignature(await snapshots.capture(context));
+  const baselineSignature = await resolveTapBaselineSignature(
+    target,
+    snapshots,
+    context,
+    screenshotBaseline,
+  );
   const settle = async () =>
     await waitForTypedSnapshotStability({
       timeoutMs: MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,
@@ -431,24 +447,56 @@ async function tapTargetWithRetry(
     });
 
   try {
-    await dispatch();
-    let observed = await settle();
-    let attempts = 1;
-    while (
-      maestroSnapshotSignature(observed) === baselineSignature &&
-      attempts < MAESTRO_COMPATIBILITY_PRESETS.command.retryTapMaxAttempts
-    ) {
-      if (screenshotBaseline && (await screenshotBaseline.matchesCurrent()) !== true) break;
-      metrics.tapRetries += 1;
-      await dispatch();
-      attempts += 1;
-      observed = await settle();
-    }
-    snapshots.prime(context.generation, observed);
+    const observed = await executeTapRetryLoop({
+      baselineSignature,
+      screenshotBaseline,
+      dispatch,
+      settle,
+      onRetry: () => {
+        metrics.tapRetries += 1;
+      },
+    });
+    snapshots.prime(context.generation, observed.snapshot);
   } catch (error) {
-    snapshots.requireStability();
+    snapshots.requireStability(context.generation);
     throw error;
   }
+}
+
+async function resolveTapBaselineSignature(
+  target: Parameters<MaestroRuntimeOperations['tapOn']>[0]['target'],
+  snapshots: MaestroSnapshotSource,
+  context: MaestroRuntimeOperationContext,
+  screenshotBaseline: MaestroScreenshotBaseline | undefined,
+): Promise<string | undefined> {
+  if (target.resolution?.surfaceSignature) return target.resolution.surfaceSignature;
+  if (screenshotBaseline) return undefined;
+  return maestroSnapshotSignature(await snapshots.capture(context));
+}
+
+async function executeTapRetryLoop(params: {
+  readonly baselineSignature?: string;
+  readonly screenshotBaseline?: MaestroScreenshotBaseline;
+  readonly dispatch: () => Promise<void>;
+  readonly settle: () => ReturnType<typeof waitForTypedSnapshotStability>;
+  readonly onRetry: () => void;
+}) {
+  await params.dispatch();
+  let observed = await params.settle();
+  let attempts = 1;
+  while (
+    (params.baselineSignature === undefined || observed.signature === params.baselineSignature) &&
+    attempts < MAESTRO_COMPATIBILITY_PRESETS.command.retryTapMaxAttempts
+  ) {
+    if (params.screenshotBaseline && (await params.screenshotBaseline.matchesCurrent()) !== true) {
+      break;
+    }
+    params.onRetry();
+    await params.dispatch();
+    attempts += 1;
+    observed = await params.settle();
+  }
+  return observed;
 }
 
 async function dispatchTapTarget(
@@ -461,7 +509,7 @@ async function dispatchTapTarget(
   const resolution = target.resolution;
   const dispatchSelector = resolution?.dispatchSelector;
   if (dispatchSelector && target.point) {
-    snapshots.invalidate();
+    snapshots.invalidate(context.generation);
     try {
       await clickSelector(options, dispatchSelector, target.point, flags);
       return;
@@ -475,12 +523,12 @@ async function dispatchTapTarget(
         allowObservationReuse: false,
       });
       if (!isActionableTarget(refreshed)) throw error;
-      snapshots.invalidate();
+      snapshots.invalidate(context.generation);
       await clickTarget(options, pointInsideRect(refreshed.rect), flags);
       return;
     }
   }
-  snapshots.invalidate();
+  snapshots.invalidate(context.generation);
   await clickTarget(options, target.point, flags);
 }
 

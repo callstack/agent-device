@@ -301,6 +301,52 @@ test('does not retry an iOS tap when only the rendered surface changes', async (
   });
 });
 
+test('uses screenshot evidence without a redundant hierarchy baseline for iOS point taps', async () => {
+  const requests: DaemonRequest[] = [];
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      requests.push(request);
+      if (request.command === 'screenshot') {
+        await fs.writeFile(request.positionals[0]!, solidPng(0));
+      }
+      return request.command === 'snapshot'
+        ? { ok: true, data: { nodes: [{ index: 0, type: 'Application' }] } }
+        : { ok: true, data: {} };
+    },
+    dependencies: makeDependencies(),
+    platform: 'ios',
+  });
+
+  await port.execute({
+    command: {
+      kind: 'tapOn',
+      source: { line: 2 },
+      target: { space: 'absolute', x: 120, y: 240 },
+      retryTapIfNoChange: true,
+    },
+    generation: 0,
+    env: {},
+    invalidateObservation() {},
+  });
+
+  expect(requests.map(({ command }) => command)).toEqual([
+    'screenshot',
+    'click',
+    'snapshot',
+    'snapshot',
+    'screenshot',
+    'click',
+    'snapshot',
+    'snapshot',
+  ]);
+  expect(port.readMetrics?.()).toEqual({
+    hierarchyCaptures: 4,
+    screenshotCaptures: 2,
+    tapRetries: 1,
+  });
+});
+
 function solidPng(value: number): Buffer {
   const image = new PNG({ width: 2, height: 2 });
   image.data.fill(value);

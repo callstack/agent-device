@@ -242,8 +242,8 @@ function pointFromPercent(
   yPercent: number,
 ): GesturePoint {
   return {
-    x: Math.round((frame.referenceWidth * xPercent) / 100),
-    y: Math.round((frame.referenceHeight * yPercent) / 100),
+    x: Math.trunc((frame.referenceWidth * xPercent) / 100),
+    y: Math.trunc((frame.referenceHeight * yPercent) / 100),
   };
 }
 

@@ -58,13 +58,17 @@ describe('typed Maestro replay plan', () => {
     ]);
     expect(plan.steps[1]).toMatchObject({
       kind: 'opaque',
+      command: { kind: 'repeat', times: 2 },
       body: [expect.objectContaining({ command: expect.objectContaining({ kind: 'back' }) })],
     });
+    expect(plan.steps[1]?.command).not.toHaveProperty('commands');
     expect(plan.steps[2]?.source.path).toBe('/flows/child.yaml');
     expect(plan.steps[3]).toMatchObject({
       kind: 'opaque',
+      command: { kind: 'retry', maxRetries: 1 },
       body: [expect.objectContaining({ command: expect.objectContaining({ kind: 'inputText' }) })],
     });
+    expect(plan.steps[3]?.command).not.toHaveProperty('commands');
     expect(plan.initialStaticEnv).toEqual({
       BUILTIN: 'default',
       FLOW: 'runtime',

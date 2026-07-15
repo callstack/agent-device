@@ -461,6 +461,34 @@ describe('executeMaestroProgram', () => {
     expect(seenTexts).toEqual(['parent', 'runtime', 'generated', 'runtime']);
   });
 
+  test('resolves script output inside an opaque control body only after the script executes', async () => {
+    const texts: string[] = [];
+    const port = makePort({
+      execute: vi.fn(async (request) => {
+        if (request.command.kind === 'runScript') {
+          return { outputEnv: { 'output.token': 'ready' } };
+        }
+        if (request.command.kind === 'inputText') texts.push(request.command.text);
+        request.invalidateObservation();
+        return {};
+      }),
+    });
+    const program = parseMaestroProgram(
+      [
+        '---',
+        '- repeat:',
+        '    times: 1',
+        '    commands:',
+        '      - runScript: setup.js',
+        '      - inputText: ${output.token}',
+      ].join('\n'),
+    );
+
+    await executeMaestroProgram(program, port);
+
+    expect(texts).toEqual(['ready']);
+  });
+
   test('rejects recursive file includes before loading the child', async () => {
     const loadProgram = vi.fn();
     const program = parseMaestroProgram('---\n- runFlow: ./main.yaml\n', {

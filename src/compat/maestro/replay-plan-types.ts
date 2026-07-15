@@ -1,6 +1,6 @@
 import type { MaestroProgramLoader } from './program-loader.ts';
 import type { MaestroPlatform, MaestroSourceLocation } from './program-ir.ts';
-import type { MaestroControlCommand, MaestroRuntimeCommand } from './engine-types.ts';
+import type { MaestroControlCommandDescriptor, MaestroRuntimeCommand } from './engine-types.ts';
 import type { SessionRuntimeHints } from '../../kernel/contracts.ts';
 
 export type MaestroReplayPlanScope = Readonly<Record<string, string | number | boolean>>;
@@ -18,7 +18,7 @@ export type MaestroReplayPlanCommandStep = MaestroReplayPlanStepBase & {
 
 export type MaestroReplayPlanOpaqueStep = MaestroReplayPlanStepBase & {
   readonly kind: 'opaque';
-  readonly command: MaestroControlCommand;
+  readonly command: MaestroControlCommandDescriptor;
   readonly body: readonly MaestroReplayPlanStep[];
 };
 

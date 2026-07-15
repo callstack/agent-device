@@ -34,7 +34,7 @@ test('reuses bound observations and seeds a pending stability comparison', async
 
   expect(source.reuseObservation({ ...context, cachedObservation: observation })).toBe(snapshot);
 
-  source.requireStability();
+  source.requireStability(0);
   await source.settlePending(context);
 
   expect(requests.map(({ command }) => command)).toEqual(['snapshot', 'snapshot']);
@@ -67,8 +67,8 @@ test('retains invalidated target evidence only as a mutation stability baseline'
   const afterMutation = { generation: 1, env: {} };
 
   await source.capture(beforeMutation);
-  source.invalidate();
-  source.requireStability();
+  source.invalidate(1);
+  source.requireStability(1);
 
   expect(source.reuseObservation(beforeMutation)).toBeUndefined();
   await source.settlePending(afterMutation);
@@ -95,16 +95,32 @@ test('retains a pending stability boundary when settling is canceled', async () 
     dependencies: makeDependencies(clock),
     platform: 'ios',
   });
-  const context = { generation: 0, env: {} };
-  await source.capture(context);
-  source.invalidate();
-  source.requireStability();
+  const beforeMutation = { generation: 0, env: {} };
+  const afterMutation = { generation: 1, env: {} };
+  await source.capture(beforeMutation);
+  source.invalidate(1);
+  source.requireStability(1);
 
-  await expect(source.settlePending({ ...context, signal: AbortSignal.abort() })).rejects.toThrow(
-    'request canceled',
-  );
-  await source.settlePending(context);
+  await expect(
+    source.settlePending({ ...afterMutation, signal: AbortSignal.abort() }),
+  ).rejects.toThrow('request canceled');
+  await source.settlePending(afterMutation);
 
   expect(requests.map(({ command }) => command)).toEqual(['snapshot', 'snapshot']);
   expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS);
+});
+
+test('rejects a deferred stability baseline consumed by another generation', async () => {
+  const source = createDaemonMaestroSnapshotSource({
+    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    invoke: async () => ({ ok: true, data: { nodes: [] } }),
+    dependencies: makeDependencies(),
+    platform: 'ios',
+  });
+
+  source.requireStability(2);
+
+  await expect(source.settlePending({ generation: 3, env: {} })).rejects.toThrow(
+    'stability generation 2 does not match 3',
+  );
 });

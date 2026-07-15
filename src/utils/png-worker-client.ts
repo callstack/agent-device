@@ -9,6 +9,7 @@ import {
   type ScreenshotDiffPixelsJob,
   type ScreenshotDiffPixelsResult,
 } from './screenshot-diff-pixels.ts';
+import { computePngRgbDifference, type PngRgbDifferenceResult } from './png-rgb-difference.ts';
 import {
   toBuffer,
   type PngWorkerJobFor,
@@ -209,6 +210,21 @@ export async function encodePngAsync(png: PNG): Promise<Buffer> {
     () => ({ kind: 'encode', png: PNG.sync.write(png) }),
   );
   return toBuffer(result.png);
+}
+
+export async function computePngRgbDifferenceAsync(
+  firstPng: Buffer,
+  secondPng: Buffer,
+  label: string,
+): Promise<PngRgbDifferenceResult> {
+  const { kind: _kind, ...result } = await runPngJob(
+    { kind: 'rgb-difference', firstPng, secondPng, label },
+    () => ({
+      kind: 'rgb-difference' as const,
+      ...computePngRgbDifference(decodePng(firstPng, label), decodePng(secondPng, label)),
+    }),
+  );
+  return result;
 }
 
 export async function computeScreenshotDiffPixelsAsync(

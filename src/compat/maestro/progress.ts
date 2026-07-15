@@ -1,11 +1,20 @@
 import type { MaestroCommand, MaestroGestureTarget, MaestroSelector } from './program-ir.ts';
+import { isMaestroControlCommandDescriptor, type MaestroEngineEvent } from './engine-types.ts';
 
 export type MaestroCommandProgress = {
   command: string;
   value?: string;
 };
 
-export function formatMaestroCommandProgress(command: MaestroCommand): MaestroCommandProgress {
+export function formatMaestroCommandProgress(
+  command: MaestroEngineEvent['command'],
+): MaestroCommandProgress {
+  if (isMaestroControlCommandDescriptor(command)) {
+    return {
+      command: command.kind,
+      ...(command.kind === 'runFlow' ? valueOf(command.label ?? command.includePath) : {}),
+    };
+  }
   return {
     command: command.kind,
     ...progressValue(command),

@@ -3,6 +3,7 @@ import { normalizeError } from '../kernel/errors.ts';
 import { PNG } from './png-codec.ts';
 import { decodePng } from './png.ts';
 import { computeScreenshotDiffPixels } from './screenshot-diff-pixels.ts';
+import { computePngRgbDifference } from './png-rgb-difference.ts';
 import {
   toBuffer,
   type PngWorkerJobResult,
@@ -29,6 +30,11 @@ function runJob(request: PngWorkerRequest): PngWorkerJobResult {
         data: toBuffer(request.data),
       });
       return { kind: 'encode', png: PNG.sync.write(png) };
+    }
+    case 'rgb-difference': {
+      const first = decodePng(toBuffer(request.firstPng), request.label);
+      const second = decodePng(toBuffer(request.secondPng), request.label);
+      return { kind: 'rgb-difference', ...computePngRgbDifference(first, second) };
     }
     case 'diff-pixels': {
       return { kind: 'diff-pixels', ...computeScreenshotDiffPixels(request) };
@@ -66,6 +72,8 @@ function resultBufferViews(result: PngWorkerJobResult): Uint8Array[] {
       return [result.data];
     case 'encode':
       return [result.png];
+    case 'rgb-difference':
+      return [];
     case 'diff-pixels':
       return [result.diffData, result.diffMask];
   }

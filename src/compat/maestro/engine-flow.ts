@@ -18,7 +18,7 @@ import {
   type MaestroObservationCondition,
 } from './engine-types.ts';
 
-export function resolveCommand<T extends MaestroCommand>(
+export function resolveCommand<T extends { readonly source: MaestroCommand['source'] }>(
   command: T,
   context: MaestroExecutionContext,
 ): T {

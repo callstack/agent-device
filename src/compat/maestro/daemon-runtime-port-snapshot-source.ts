@@ -21,9 +21,9 @@ export function createDaemonMaestroSnapshotSource(
       }
     | undefined;
   let primed: { generation: number; snapshot: SnapshotState } | undefined;
-  let invalidatedBaseline: SnapshotState | undefined;
-  let stabilityBaseline: SnapshotState | undefined;
-  let stabilityRequired = false;
+  let invalidatedBaseline: { generation: number; snapshot: SnapshotState } | undefined;
+  let stabilityBaseline: { generation: number; snapshot: SnapshotState } | undefined;
+  let stabilityRequiredGeneration: number | undefined;
   let nextObservationIdentity = 0;
   let hierarchyCaptures = 0;
 
@@ -66,14 +66,18 @@ export function createDaemonMaestroSnapshotSource(
       return cached.snapshot;
     },
     readMetrics: () => ({ hierarchyCaptures }),
-    invalidate: () => {
-      invalidatedBaseline = cached?.snapshot;
+    invalidate: (generation) => {
+      invalidatedBaseline =
+        cached?.generation === generation - 1
+          ? { generation, snapshot: cached.snapshot }
+          : undefined;
       cached = undefined;
       primed = undefined;
     },
-    requireStability: () => {
-      stabilityRequired = true;
-      stabilityBaseline = invalidatedBaseline;
+    requireStability: (generation) => {
+      stabilityRequiredGeneration = generation;
+      stabilityBaseline =
+        invalidatedBaseline?.generation === generation ? invalidatedBaseline : undefined;
       invalidatedBaseline = undefined;
       primed = undefined;
     },
@@ -81,19 +85,25 @@ export function createDaemonMaestroSnapshotSource(
       primed = { generation, snapshot };
     },
     settlePending: async (context) => {
-      if (!stabilityRequired) return;
+      if (stabilityRequiredGeneration === undefined) return;
+      if (stabilityRequiredGeneration !== context.generation) {
+        throw new AppError(
+          'COMMAND_FAILED',
+          `Maestro stability generation ${stabilityRequiredGeneration} does not match ${context.generation}.`,
+        );
+      }
       const initialSnapshot =
-        cached?.generation === context.generation ? cached.snapshot : stabilityBaseline;
-      const snapshot = await waitForTypedSnapshotStability({
+        cached?.generation === context.generation ? cached.snapshot : stabilityBaseline?.snapshot;
+      const stable = await waitForTypedSnapshotStability({
         timeoutMs: MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,
         context,
         snapshot: captureFresh,
         dependencies: options.dependencies,
         ...(initialSnapshot ? { initialSnapshot } : {}),
       });
-      stabilityRequired = false;
+      stabilityRequiredGeneration = undefined;
       stabilityBaseline = undefined;
-      primed = { generation: context.generation, snapshot };
+      primed = { generation: context.generation, snapshot: stable.snapshot };
     },
   };
 }

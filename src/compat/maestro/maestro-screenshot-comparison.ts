@@ -3,10 +3,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequestCanceledError, isRequestCanceledError } from '../../request/cancel.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { decodePngAsync } from '../../utils/png-worker-client.ts';
+import { computePngRgbDifferenceAsync } from '../../utils/png-worker-client.ts';
+import type { PngRgbDifferenceResult } from '../../utils/png-rgb-difference.ts';
 import { MAESTRO_COMPATIBILITY_PRESETS } from './compatibility-policy.ts';
-
-type DecodedScreenshot = Awaited<ReturnType<typeof decodePngAsync>>;
 
 export type MaestroScreenshotBaseline = {
   readonly matchesCurrent: () => Promise<boolean | undefined>;
@@ -63,12 +62,13 @@ export async function compareMaestroScreenshotFiles(
       fs.readFile(secondPath),
     ]);
     throwIfMaestroScreenshotAborted(signal);
-    const [first, second] = await Promise.all([
-      decodePngAsync(firstBuffer, 'Maestro screenshot'),
-      decodePngAsync(secondBuffer, 'Maestro screenshot'),
-    ]);
+    const comparison = await computePngRgbDifferenceAsync(
+      firstBuffer,
+      secondBuffer,
+      'Maestro screenshot',
+    );
     throwIfMaestroScreenshotAborted(signal);
-    return screenshotsMatch(first, second, purpose);
+    return screenshotsMatch(comparison, purpose);
   } catch (error) {
     rethrowCancellation(error, signal);
     emitDiagnostic({
@@ -101,41 +101,25 @@ export async function captureMaestroScreenshot(
 }
 
 function screenshotsMatch(
-  first: DecodedScreenshot,
-  second: DecodedScreenshot,
+  comparison: PngRgbDifferenceResult,
   purpose: 'animation' | 'tap',
 ): boolean {
-  if (first.width !== second.width || first.height !== second.height) {
-    emitComparison(purpose, 'dimension_mismatch', first, second);
+  if (comparison.status !== 'compared') {
+    emitComparison(purpose, comparison.status, comparison);
     return false;
   }
-  const totalPixels = first.width * first.height;
-  if (first.data.length !== second.data.length || first.data.length !== totalPixels * 4) {
-    emitComparison(purpose, 'data_length_mismatch', first, second);
-    return false;
-  }
-
-  let absoluteRgbDifference = 0;
-  for (let index = 0; index < first.data.length; index += 4) {
-    absoluteRgbDifference += Math.abs(first.data[index]! - second.data[index]!);
-    absoluteRgbDifference += Math.abs(first.data[index + 1]! - second.data[index + 1]!);
-    absoluteRgbDifference += Math.abs(first.data[index + 2]! - second.data[index + 2]!);
-  }
-
-  const differencePercent = (100 * absoluteRgbDifference) / (3 * 255 * totalPixels);
+  const differencePercent = comparison.differencePercent;
   const matches =
     differencePercent <=
     MAESTRO_COMPATIBILITY_PRESETS.command.waitForAnimationToEndDifferencePercent;
-  emitComparison(purpose, matches ? 'stable' : 'changed', first, second, differencePercent);
+  emitComparison(purpose, matches ? 'stable' : 'changed', comparison);
   return matches;
 }
 
 function emitComparison(
   purpose: 'animation' | 'tap',
   result: 'stable' | 'changed' | 'dimension_mismatch' | 'data_length_mismatch',
-  first: DecodedScreenshot,
-  second: DecodedScreenshot,
-  differencePercent?: number,
+  comparison: PngRgbDifferenceResult,
 ): void {
   emitDiagnostic({
     level: 'debug',
@@ -143,9 +127,11 @@ function emitComparison(
     data: {
       purpose,
       result,
-      first: { width: first.width, height: first.height, dataLength: first.data.length },
-      second: { width: second.width, height: second.height, dataLength: second.data.length },
-      ...(differencePercent === undefined ? {} : { differencePercent }),
+      first: comparison.first,
+      second: comparison.second,
+      ...('differencePercent' in comparison
+        ? { differencePercent: comparison.differencePercent }
+        : {}),
     },
   });
 }

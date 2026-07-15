@@ -3,6 +3,7 @@ import type {
   ScreenshotDiffPixelsJob,
   ScreenshotDiffPixelsResult,
 } from './screenshot-diff-pixels.ts';
+import type { PngRgbDifferenceResult } from './png-rgb-difference.ts';
 
 /**
  * Message contract between the daemon-side PNG worker client
@@ -15,11 +16,13 @@ import type {
 export type PngWorkerJob =
   | { kind: 'decode'; png: Uint8Array; label: string }
   | { kind: 'encode'; width: number; height: number; data: Uint8Array }
+  | { kind: 'rgb-difference'; firstPng: Uint8Array; secondPng: Uint8Array; label: string }
   | ({ kind: 'diff-pixels' } & ScreenshotDiffPixelsJob);
 
 export type PngWorkerJobResult =
   | { kind: 'decode'; width: number; height: number; data: Uint8Array }
   | { kind: 'encode'; png: Uint8Array }
+  | ({ kind: 'rgb-difference' } & PngRgbDifferenceResult)
   | ({ kind: 'diff-pixels' } & ScreenshotDiffPixelsResult);
 
 export type PngWorkerJobKind = PngWorkerJob['kind'];

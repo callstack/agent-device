@@ -14,6 +14,39 @@ export type MaestroControlCommand = Extract<
 
 export type MaestroRuntimeCommand = Exclude<MaestroCommand, MaestroControlCommand>;
 
+export type MaestroControlCommandDescriptor =
+  | {
+      readonly kind: 'runFlow';
+      readonly source: MaestroSourceLocation;
+      readonly when?: Extract<MaestroControlCommand, { kind: 'runFlow' }>['when'];
+      readonly label?: string;
+      readonly includePath?: string;
+    }
+  | {
+      readonly kind: 'repeat';
+      readonly source: MaestroSourceLocation;
+      readonly times: number | string;
+    }
+  | {
+      readonly kind: 'retry';
+      readonly source: MaestroSourceLocation;
+      readonly maxRetries?: number | string;
+    };
+
+export function isMaestroControlCommandDescriptor(
+  command: MaestroRuntimeCommand | MaestroControlCommandDescriptor,
+): command is MaestroControlCommandDescriptor {
+  switch (command.kind) {
+    case 'runFlow':
+      return !('include' in command);
+    case 'repeat':
+    case 'retry':
+      return !('commands' in command);
+    default:
+      return false;
+  }
+}
+
 declare const maestroObservationIdentity: unique symbol;
 export type MaestroObservationIdentity = string & {
   readonly [maestroObservationIdentity]: true;
@@ -79,7 +112,7 @@ export type MaestroRuntimePort = {
 };
 
 export type MaestroEngineEvent = {
-  command: MaestroCommand;
+  command: MaestroRuntimeCommand | MaestroControlCommandDescriptor;
   source: MaestroSourceLocation;
   generation: number;
   stepIndex: number;

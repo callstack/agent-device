@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { AppError } from '../../kernel/errors.ts';
 import { PNG } from '../png-codec.ts';
 import {
+  computePngRgbDifferenceAsync,
   computeScreenshotDiffPixelsAsync,
   decodePngAsync,
   encodePngAsync,
@@ -70,6 +71,26 @@ test('computeScreenshotDiffPixelsAsync matches the synchronous diff', async () =
   assert.equal(fromWorker.differentPixels, fromSync.differentPixels);
   assert.deepEqual(fromWorker.diffMask, fromSync.diffMask);
   assert.deepEqual(fromWorker.diffData, fromSync.diffData);
+});
+
+test('computePngRgbDifferenceAsync preserves the normalized absolute RGB metric', async () => {
+  const black = new PNG({ width: 1, height: 1 });
+  black.data.set([0, 0, 0, 255]);
+  const white = new PNG({ width: 1, height: 1 });
+  white.data.set([255, 255, 255, 255]);
+
+  const result = await computePngRgbDifferenceAsync(
+    PNG.sync.write(black),
+    PNG.sync.write(white),
+    'fixture',
+  );
+
+  assert.deepEqual(result, {
+    status: 'compared',
+    differencePercent: 100,
+    first: { width: 1, height: 1, dataLength: 4 },
+    second: { width: 1, height: 1, dataLength: 4 },
+  });
 });
 
 test('decodePngAsync rejects invalid PNG data with the canonical decode AppError', async () => {

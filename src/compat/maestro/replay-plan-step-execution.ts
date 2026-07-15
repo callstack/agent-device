@@ -10,9 +10,10 @@ import {
   resolveMaestroTimingPolicy,
   staticConditionMatches,
 } from './engine-flow.ts';
-import type { MaestroCommand, MaestroRunFlowCondition } from './program-ir.ts';
+import type { MaestroRunFlowCondition } from './program-ir.ts';
 import type {
   MaestroEngineExecutionOptions,
+  MaestroEngineEvent,
   MaestroObservation,
   MaestroObservationCondition,
   MaestroRuntimeCommand,
@@ -40,7 +41,7 @@ type PlanStepFailure = {
   readonly kind: 'maestroPlanStepFailure';
   readonly error: unknown;
   readonly source: MaestroReplayPlanStep['source'];
-  readonly command?: MaestroCommand;
+  readonly command?: MaestroEngineEvent['command'];
 };
 
 export async function executeMaestroReplayPlanStep(
@@ -303,7 +304,7 @@ export function unwrapMaestroReplayPlanStepFailure(error: unknown): unknown {
   return isPlanStepFailure(error) ? error.error : error;
 }
 
-function withSource(error: unknown, command: MaestroCommand | undefined): unknown {
+function withSource(error: unknown, command: MaestroEngineEvent['command'] | undefined): unknown {
   if (!(error instanceof AppError) || !command || /\bline \d+\b/.test(error.message)) return error;
   const path = command.source.path ? `${command.source.path}:` : '';
   return new AppError(

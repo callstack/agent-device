@@ -29,6 +29,21 @@ test('buildInPageSwipeGesturePlan applies one inset lane policy in every directi
   });
 });
 
+test('buildInPageSwipeGesturePlan truncates percentage coordinates on odd viewports', () => {
+  assert.deepEqual(
+    buildInPageSwipeGesturePlan('left', { referenceWidth: 401, referenceHeight: 801 }),
+    {
+      direction: 'left',
+      x1: 340,
+      y1: 400,
+      x2: 60,
+      y2: 400,
+      referenceWidth: 401,
+      referenceHeight: 801,
+    },
+  );
+});
+
 // The buildScrollGesturePlan vectors below are the canonical cross-language parity vectors,
 // mirrored by RunnerTests+ScrollGesture.swift (runnerScrollGesturePlan). If you change the scroll
 // math, update both this suite and the Swift parity test so the two ports cannot drift silently.

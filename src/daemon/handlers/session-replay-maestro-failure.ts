@@ -1,4 +1,7 @@
-import type { MaestroEngineEvent } from '../../compat/maestro/engine-types.ts';
+import {
+  isMaestroControlCommandDescriptor,
+  type MaestroEngineEvent,
+} from '../../compat/maestro/engine-types.ts';
 import { formatMaestroCommandProgress } from '../../compat/maestro/progress.ts';
 import type { MaestroCommand, MaestroSelector } from '../../compat/maestro/program-ir.ts';
 import { evaluateMaestroReplayResume } from '../../compat/maestro/replay-plan.ts';
@@ -52,7 +55,7 @@ export type MaestroFailureReportAction = Pick<
 >;
 
 export type MaestroFailureReportProjection = {
-  readonly authoredCommand: MaestroCommand;
+  readonly authoredCommand: MaestroEngineEvent['command'];
   readonly source: MaestroEngineEvent['source'];
   readonly progress: ReturnType<typeof formatMaestroCommandProgress>;
   readonly action: MaestroFailureReportAction;
@@ -114,7 +117,9 @@ export async function buildTypedMaestroFailureResponse(params: {
         hint: 'The session closed before a post-failure screen could be captured.',
       };
   const suggestions =
-    session && observation.state === 'available'
+    session &&
+    observation.state === 'available' &&
+    !isMaestroControlCommandDescriptor(report.authoredCommand)
       ? collectTypedMaestroSuggestions({
           command: report.authoredCommand,
           platform: plan.platform,
@@ -363,7 +368,9 @@ function collectExpandedScrubVars(values: Readonly<Record<string, string>>): Rep
     .sort((left, right) => right.value.length - left.value.length);
 }
 
-function collectMaestroTextScrubVars(command: MaestroCommand): ReplayVarScrubEntry[] {
+function collectMaestroTextScrubVars(
+  command: MaestroEngineEvent['command'],
+): ReplayVarScrubEntry[] {
   if (command.kind !== 'inputText' || command.text.length === 0) {
     return [];
   }

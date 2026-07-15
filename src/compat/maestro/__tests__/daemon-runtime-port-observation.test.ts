@@ -145,7 +145,7 @@ test('compares snapshots before sleeping and captures once beyond a zero settle 
   });
 
   expect(captureIndex).toBe(2);
-  expect(result.nodes[0]?.value).toBe('settled');
+  expect(result.snapshot.nodes[0]?.value).toBe('settled');
 });
 
 test('confirms an unchanged hierarchy across one polling interval', async () => {

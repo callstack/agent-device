@@ -39,10 +39,15 @@ export type MaestroSnapshotSource = {
   readonly bindObservation: (observation: MaestroObservation) => MaestroObservation;
   readonly reuseObservation: (context: MaestroRuntimeReadContext) => SnapshotState | undefined;
   readonly readMetrics: () => Pick<MaestroRuntimeMetrics, 'hierarchyCaptures'>;
-  readonly invalidate: () => void;
-  readonly requireStability: () => void;
+  readonly invalidate: (generation: number) => void;
+  readonly requireStability: (generation: number) => void;
   readonly prime: (generation: number, snapshot: SnapshotState) => void;
   readonly settlePending: (context: MaestroRuntimeReadContext) => Promise<void>;
+};
+
+export type StableMaestroSnapshot = {
+  readonly snapshot: SnapshotState;
+  readonly signature: string;
 };
 
 type MaestroTargetResolutionMode = 'tap' | 'swipe' | 'observe';
@@ -200,7 +205,7 @@ export async function waitForTypedSnapshotStability(params: {
   readonly snapshot: MaestroSnapshotReader;
   readonly dependencies: DaemonMaestroRuntimeDependencies;
   readonly initialSnapshot?: SnapshotState;
-}): Promise<SnapshotState> {
+}): Promise<StableMaestroSnapshot> {
   validateTimeout(params.timeoutMs, 'waitForAnimationToEnd');
   const deadline = params.dependencies.now() + params.timeoutMs;
   let previous =
@@ -219,11 +224,13 @@ export async function waitForTypedSnapshotStability(params: {
     }
     const snapshot = await captureRetriableMaestroSnapshot(params, deadline);
     const signature = maestroSnapshotSignature(snapshot);
-    if (signature === previousSignature) return snapshot;
+    if (signature === previousSignature) return { snapshot, signature };
     previous = snapshot;
     previousSignature = signature;
 
-    if (params.dependencies.now() >= deadline) return previous;
+    if (params.dependencies.now() >= deadline) {
+      return { snapshot: previous, signature: previousSignature };
+    }
   }
 }
 
@@ -340,7 +347,7 @@ function conditionMatches(
     : !match.matched || !match.visible;
 }
 
-async function sleepWithinBudget(
+export async function sleepWithinBudget(
   dependencies: DaemonMaestroRuntimeDependencies,
   milliseconds: number,
   signal: AbortSignal | undefined,
