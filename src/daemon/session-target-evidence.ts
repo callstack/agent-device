@@ -17,7 +17,11 @@
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { resolveRectCenter } from '../utils/rect-center.ts';
 import { findNearestScrollableContainer } from './snapshot-presentation/tree.ts';
-import { readNodeLocalIdentity, siblingOrdinal } from '../replay/target-identity-node.ts';
+import {
+  idMatchCountInTree,
+  readNodeLocalIdentity,
+  siblingOrdinal,
+} from '../replay/target-identity-node.ts';
 import {
   classifyTargetBindingMatch,
   matchesAncestryPrefix,
@@ -45,7 +49,7 @@ export function computeTargetEvidence(
   const { node, preActionNodes: nodes } = capture;
   if (typeof node.index !== 'number') return undefined;
   const byIndex = buildIndexMap(nodes);
-  const identity = demoteNonUniqueId(boundedLocalIdentity(node), nodes, byIndex);
+  const identity = demoteNonUniqueId(boundedLocalIdentity(node), nodes);
   const ancestryWalk = buildAncestryChain(node, byIndex, TARGET_ANNOTATION_MAX_ANCESTRY);
   const fullAncestry = ancestryWalk.chain;
   const sibling = computeSiblingOrdinal(nodes, node);
@@ -244,23 +248,18 @@ export function filterIdentitySet(
  * (Android's `android:id/title` matching every list row is the measured
  * case — #1269) is not selective: on replay the id-led identity set spans
  * every row, position drifts, and verification correctly refuses a
- * confident bind. Passing an empty `ancestry` to `filterIdentitySet`
- * degrades its ancestry-prefix check to vacuously-true, so it returns
- * exactly the nodes sharing this id anywhere in the tree — the id's own
- * capture-time match count, independent of structural context. When that
- * count is greater than one, fall back to role+label, exactly the identity
- * an unrecorded id already computes. The rule is capture-time uniqueness,
- * not an id-namespace heuristic: a reused RN `FlatList` `testID` hits the
- * same demotion on iOS.
+ * confident bind. `idMatchCountInTree` — the SAME predicate
+ * `buildSelectorChainForNode` uses for the selector chain — counts nodes
+ * sharing this canonical id across the whole tree; when more than one, fall
+ * back to role+label, exactly the identity an unrecorded id already computes.
+ * Both sites sharing one predicate is what keeps the tuple and the chain from
+ * disagreeing (demoting one but not the other). The rule is capture-time
+ * uniqueness, not an id-namespace heuristic: a reused RN `FlatList` `testID`
+ * hits the same demotion on iOS.
  */
-function demoteNonUniqueId(
-  identity: LocalIdentity,
-  nodes: readonly SnapshotNode[],
-  byIndex: Map<number, SnapshotNode>,
-): LocalIdentity {
+function demoteNonUniqueId(identity: LocalIdentity, nodes: readonly SnapshotNode[]): LocalIdentity {
   if (identity.id === undefined) return identity;
-  const idMatchCount = filterIdentitySet(nodes, byIndex, identity, []).length;
-  if (idMatchCount <= 1) return identity;
+  if (idMatchCountInTree(nodes, identity.id) <= 1) return identity;
   const { role, label } = identity;
   return { role, ...(label !== undefined ? { label } : {}) };
 }

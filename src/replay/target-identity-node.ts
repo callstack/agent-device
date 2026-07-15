@@ -42,6 +42,33 @@ export function localIdentitiesEqual(a: LocalIdentity, b: LocalIdentity): boolea
 }
 
 /**
+ * ADR 0012 decision 3 amendment (#1269): how many nodes in `nodes` carry the
+ * canonical identity `id`. THE single uniqueness predicate behind both
+ * id-demotion sites — `computeTargetEvidence`'s `target-v1` identity tuple
+ * and `buildSelectorChainForNode`'s selector chain. Sharing it is the
+ * correctness guarantee: a non-unique id is dropped from BOTH or NEITHER,
+ * never half-demoted (dropped from identity while still leading the chain, or
+ * the reverse — the exact split #1269's fix exists to close).
+ *
+ * `id` is a canonical identity id (`readNodeLocalIdentity(node).id`: NFC +
+ * 256-byte field cap, no trimming), and every candidate is measured through
+ * the SAME reader, so the count is over exactly the identities the replay
+ * verifier keys on. There is deliberately NO ancestry / parent-walk
+ * exclusion: an id is non-selective the moment two nodes anywhere in the tree
+ * carry it, independent of structural context or a broken parent linkage.
+ */
+export function idMatchCountInTree(
+  nodes: readonly Pick<RawSnapshotNode, 'type' | 'identifier' | 'label'>[],
+  id: string,
+): number {
+  let count = 0;
+  for (const node of nodes) {
+    if (readNodeLocalIdentity(node).id === id) count += 1;
+  }
+  return count;
+}
+
+/**
  * ADR 0012 decision 3: the STRUCTURAL denotation of a node within its capture
  * — the discriminators path 6 uses to isolate ONE member among several nodes
  * that share the same local identity.

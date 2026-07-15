@@ -532,8 +532,8 @@ test('computeTargetEvidence: a shared Android framework id (matchCount 3 > 1) is
   assert.equal(evidence.label, 'Network & internet');
   assert.deepEqual(evidence.ancestry[0], { role: 'linearlayout' });
   // With the id demoted, role+label uniquely isolates this row among the
-  // three sharing the id, so the record-time self-check still verifies —
-  // this is the measured "get-only stripped-id: 20/20 clean" fix.
+  // three sharing the id, so the record-time self-check still verifies via
+  // the now-selective label rather than the non-selective id.
   assert.equal(evidence.verification, 'verified');
 });
 

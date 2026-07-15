@@ -1,7 +1,10 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import type { SnapshotNode } from '../../../kernel/snapshot.ts';
+import type { RawSnapshotNode, SnapshotNode } from '../../../kernel/snapshot.ts';
 import type { TargetAnnotationV1 } from '../../../replay/target-identity.ts';
+import { computeTargetEvidence } from '../../session-target-evidence.ts';
+import { buildSelectorChainForNode } from '../../../selectors/build.ts';
+import { parseSelectorChain, resolveSelectorChain } from '../../../selectors/index.ts';
 import { classifyReplayTarget } from '../session-replay-target-classification.ts';
 import {
   bottomTabsRealCaptureFixture,
@@ -461,6 +464,100 @@ test('classifyReplayTarget: document-order determinism for equal rect centers', 
     allowDisambiguation: true,
   });
   assertVerified(result, { winnerRef: 'e4', matchCount: 2 });
+});
+
+// ---------------------------------------------------------------------------
+// #1269 end-to-end mechanism (Ask 2): the load-bearing proof that id-demotion
+// makes replay clean — not just that the id is dropped at record time. Record
+// against a tree whose rows share `android:id/title`, then replay against a
+// DIFFERENT tree where those shared-id rows REORDER (positions drift). The
+// demoted role+label identity binds the correct row; the id path would not.
+// ---------------------------------------------------------------------------
+
+function androidSharedIdListFixture(
+  rows: { id: string; label: string; y: number }[],
+): SnapshotNode[] {
+  const raw: RawSnapshotNode[] = [
+    { index: 0, type: 'FrameLayout', depth: 0 },
+    { index: 1, type: 'RecyclerView', depth: 1, parentIndex: 0 },
+  ];
+  rows.forEach((row, position) => {
+    const wrapperIndex = 2 + position * 2;
+    const titleIndex = wrapperIndex + 1;
+    raw.push({ index: wrapperIndex, type: 'LinearLayout', depth: 2, parentIndex: 1 });
+    raw.push({
+      index: titleIndex,
+      type: 'TextView',
+      identifier: row.id,
+      label: row.label,
+      rect: { x: 0, y: row.y, width: 300, height: 48 },
+      depth: 3,
+      parentIndex: wrapperIndex,
+    });
+  });
+  return toSnapshotNodes(raw);
+}
+
+test('#1269 e2e: a demoted shared-id row rebinds by role+label after the shared-id rows reorder on replay', () => {
+  const ANDROID = 'android' as const;
+  // Record-time Settings root: three rows all carrying the framework id.
+  const recordNodes = androidSharedIdListFixture([
+    { id: 'android:id/title', label: 'Network & internet', y: 100 },
+    { id: 'android:id/title', label: 'Connected devices', y: 148 },
+    { id: 'android:id/title', label: 'Apps', y: 196 },
+  ]);
+  const target = recordNodes.find((node) => node.label === 'Connected devices')!;
+
+  // The writer demotes the non-unique id in BOTH the tuple and the chain.
+  const recorded = computeTargetEvidence({ node: target, preActionNodes: recordNodes })!;
+  assert.equal(recorded.id, undefined);
+  assert.equal(recorded.verification, 'verified');
+  const chain = buildSelectorChainForNode(target, ANDROID, { action: 'get', nodes: recordNodes });
+  assert.ok(!chain.some((entry) => entry.startsWith('id=')));
+  const token = chain.join(' || '); // the recorded selector positional the replay loop re-resolves
+
+  // Replay-time tree: a new conditional row appears at the top and the
+  // shared-id rows are in a DIFFERENT document/viewport order. The recorded
+  // row is now third, at a drifted position.
+  const replayNodes = androidSharedIdListFixture([
+    { id: 'android:id/title', label: 'Wi-Fi', y: 100 },
+    { id: 'android:id/title', label: 'Apps', y: 148 },
+    { id: 'android:id/title', label: 'Connected devices', y: 196 },
+    { id: 'android:id/title', label: 'Network & internet', y: 244 },
+  ]);
+  const expected = replayNodes.find((node) => node.label === 'Connected devices')!;
+
+  const result = classifyReplayTarget({
+    recorded,
+    token,
+    nodes: replayNodes,
+    platform: ANDROID,
+    refLabel: undefined,
+    requireRect: true,
+    allowDisambiguation: true,
+  });
+  assertVerified(result, { winnerRef: expected.ref, matchCount: 1 });
+
+  // Contrast — the reorder is genuinely hostile to the id path: the shared id
+  // matches all four rows (no unique bind → resolution refuses), while the
+  // demoted role+label resolves the correct row uniquely. This is the
+  // FDR 1.0 → 0 difference the demotion buys.
+  const idResolved = resolveSelectorChain(
+    replayNodes,
+    parseSelectorChain('id="android:id/title"'),
+    {
+      platform: ANDROID,
+      requireRect: true,
+      requireUnique: true,
+    },
+  );
+  assert.equal(idResolved, null); // non-unique: refuses to bind
+  const labelResolved = resolveSelectorChain(
+    replayNodes,
+    parseSelectorChain('role="textview" label="Connected devices"'),
+    { platform: ANDROID, requireRect: true, requireUnique: true },
+  );
+  assert.equal(labelResolved?.node.ref, expected.ref);
 });
 
 // ---------------------------------------------------------------------------

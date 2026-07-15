@@ -2,12 +2,31 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { buildNodes } from '../__tests__/test-utils/snapshot-builders.ts';
+import { computeTargetEvidence } from '../daemon/session-target-evidence.ts';
 import { buildSelectorChainForNode } from './build.ts';
 
 function findByLabel(nodes: SnapshotNode[], label: string): SnapshotNode {
   const found = nodes.find((node) => node.label === label);
   if (!found) throw new Error(`fixture missing node with label ${label}`);
   return found;
+}
+
+/**
+ * #1269 cross-invariant: the two writers demote through ONE shared
+ * uniqueness predicate, so for the same node+tree the `target-v1` identity
+ * tuple carries an `id` iff the built selector chain leads with an `id=`
+ * clause — never a half-demoted split (id in one, gone from the other).
+ */
+function assertIdParityAcrossWriters(nodes: SnapshotNode[], node: SnapshotNode): void {
+  const evidence = computeTargetEvidence({ node, preActionNodes: nodes });
+  const chain = buildSelectorChainForNode(node, 'android', { action: 'get', nodes });
+  const evidenceHasId = evidence?.id !== undefined;
+  const chainHasId = chain.some((entry) => entry.startsWith('id='));
+  assert.equal(
+    evidenceHasId,
+    chainHasId,
+    `id parity broken: evidence.id=${JSON.stringify(evidence?.id)} chain=${JSON.stringify(chain)}`,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -144,4 +163,112 @@ test('buildSelectorChainForNode: without a record-time tree, an id is trusted as
   ]);
   const chain = buildSelectorChainForNode(nodes[0]!, 'ios', { action: 'get' });
   assert.deepEqual(chain, ['id="save"', 'role="button" label="Save"', 'label="Save"']);
+});
+
+// ---------------------------------------------------------------------------
+// #1269 cross-invariant (Ask 1): the identity tuple and the selector chain go
+// through ONE shared uniqueness predicate (`idMatchCountInTree`), so they
+// demote in lockstep. The pre-fix bug was two predicates with different
+// normalization/exclusions that could disagree — the non-NFC case below is
+// exactly where a raw `normalizeSelectorText` chain scan kept an id the
+// NFC-normalized identity tuple demoted.
+// ---------------------------------------------------------------------------
+
+test('#1269 cross-invariant: evidence.id present iff chain leads with id= — demoted, unique, and non-NFC edge cases', () => {
+  // Demoted: a shared framework id across 3 rows → both writers drop it.
+  const demoted = buildNodes([
+    { index: 0, type: 'FrameLayout', depth: 0 },
+    { index: 1, type: 'RecyclerView', depth: 1, parentIndex: 0 },
+    { index: 2, type: 'LinearLayout', depth: 2, parentIndex: 1 },
+    {
+      index: 3,
+      type: 'TextView',
+      identifier: 'android:id/title',
+      label: 'Network & internet',
+      rect: { x: 0, y: 100, width: 300, height: 48 },
+      depth: 3,
+      parentIndex: 2,
+    },
+    { index: 4, type: 'LinearLayout', depth: 2, parentIndex: 1 },
+    {
+      index: 5,
+      type: 'TextView',
+      identifier: 'android:id/title',
+      label: 'Apps',
+      rect: { x: 0, y: 148, width: 300, height: 48 },
+      depth: 3,
+      parentIndex: 4,
+    },
+    { index: 6, type: 'LinearLayout', depth: 2, parentIndex: 1 },
+    {
+      index: 7,
+      type: 'TextView',
+      identifier: 'android:id/title',
+      label: 'Battery',
+      rect: { x: 0, y: 196, width: 300, height: 48 },
+      depth: 3,
+      parentIndex: 6,
+    },
+  ]);
+  assertIdParityAcrossWriters(demoted, findByLabel(demoted, 'Network & internet'));
+
+  // Unique: a distinct id → both writers keep it.
+  const unique = buildNodes([
+    { index: 0, type: 'Window', depth: 0 },
+    {
+      index: 1,
+      type: 'Button',
+      identifier: 'save',
+      label: 'Save',
+      rect: { x: 10, y: 10, width: 40, height: 20 },
+      depth: 1,
+      parentIndex: 0,
+    },
+  ]);
+  assertIdParityAcrossWriters(unique, findByLabel(unique, 'Save'));
+
+  // Non-NFC edge: two ids equal under NFC but different raw bytes (decomposed
+  // vs precomposed "é"). The identity tuple always NFC-normalizes, so it sees
+  // one shared id and demotes; the pre-fix raw chain scan compared the raw
+  // bytes, saw two DIFFERENT ids, and kept the id in the chain — the exact
+  // half-demoted split this cross-invariant now forbids.
+  const decomposed = 'cafe\u0301'; // c a f e + U+0301 combining acute accent
+  const precomposed = 'caf\u00e9'; // c a f é (single U+00E9)
+  assert.notEqual(decomposed, precomposed); // distinct raw code-point sequences
+  assert.equal(decomposed.normalize('NFC'), precomposed.normalize('NFC')); // equal under NFC
+  const nonNfc = buildNodes([
+    { index: 0, type: 'RecyclerView', depth: 0 },
+    { index: 1, type: 'LinearLayout', depth: 1, parentIndex: 0 },
+    {
+      index: 2,
+      type: 'TextView',
+      identifier: decomposed,
+      label: 'Coffee',
+      rect: { x: 0, y: 100, width: 300, height: 48 },
+      depth: 2,
+      parentIndex: 1,
+    },
+    { index: 3, type: 'LinearLayout', depth: 1, parentIndex: 0 },
+    {
+      index: 4,
+      type: 'TextView',
+      identifier: precomposed,
+      label: 'Espresso',
+      rect: { x: 0, y: 148, width: 300, height: 48 },
+      depth: 2,
+      parentIndex: 3,
+    },
+  ]);
+  assertIdParityAcrossWriters(nonNfc, findByLabel(nonNfc, 'Coffee'));
+  // And concretely: the id is dropped from BOTH sides (not kept in the chain).
+  const evidence = computeTargetEvidence({
+    node: findByLabel(nonNfc, 'Coffee'),
+    preActionNodes: nonNfc,
+  });
+  assert.equal(evidence?.id, undefined);
+  const chain = buildSelectorChainForNode(findByLabel(nonNfc, 'Coffee'), 'android', {
+    action: 'get',
+    nodes: nonNfc,
+  });
+  assert.ok(!chain.some((entry) => entry.startsWith('id=')));
 });

@@ -2,6 +2,7 @@ import type { Platform, PublicPlatform } from '../kernel/device.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { isNodeVisible } from './node.ts';
 import { extractNodeText, normalizeType } from '../snapshot/snapshot-processing.ts';
+import { idMatchCountInTree, readNodeLocalIdentity } from '../replay/target-identity-node.ts';
 
 export function buildSelectorChainForNode(
   node: SnapshotNode,
@@ -73,10 +74,18 @@ export function buildSelectorChainForNode(
  * `android:id/title` matching every list row is the measured case) resolves
  * the wrong element under positional drift on replay. The rule is
  * capture-time uniqueness, not an id-namespace heuristic: a reused RN
- * `FlatList` `testID` hits the same demotion. `nodes` is the record-time
- * tree the node was captured from; every writer call site passes it. When
- * absent (e.g. a node built in isolation with no tree to check against) the
- * id is trusted as-is.
+ * `FlatList` `testID` hits the same demotion.
+ *
+ * The uniqueness DECISION goes through `idMatchCountInTree` — the SAME
+ * predicate `computeTargetEvidence` uses for the `target-v1` identity tuple,
+ * over the canonical identity id (`readNodeLocalIdentity`: NFC + 256-byte
+ * cap) — so the chain and the tuple demote in lockstep and never disagree.
+ * Only the decision is shared; the kept clause still emits the chain's own
+ * `normalizeSelectorText` id (an id that survives the check keeps its
+ * existing string form — no behavior change for the already-unique path).
+ * `nodes` is the record-time tree; every writer call site passes it. When
+ * absent (a node built in isolation, e.g. a test with no tree) the id is
+ * trusted as-is.
  */
 function selectableId(
   node: SnapshotNode,
@@ -84,12 +93,12 @@ function selectableId(
 ): string | null {
   const id = normalizeSelectorText(node.identifier);
   if (!id || !nodes) return id;
-  let matches = 0;
-  for (const candidate of nodes) {
-    if (normalizeSelectorText(candidate.identifier) === id) matches += 1;
-    if (matches > 1) return null;
-  }
-  return id;
+  // A non-null `normalizeSelectorText` id guarantees a defined canonical id
+  // (NFC/cap never empty a non-whitespace string), so this is always the
+  // identity id the tuple would carry.
+  const canonicalId = readNodeLocalIdentity(node).id;
+  if (canonicalId === undefined) return id;
+  return idMatchCountInTree(nodes, canonicalId) > 1 ? null : id;
 }
 
 function uniqueStrings(values: readonly string[]): string[] {
