@@ -169,14 +169,22 @@ extension RunnerTests {
 
   func activateTarget(bundleId: String, reason: String) -> XCUIApplication {
     let target = XCUIApplication(bundleIdentifier: bundleId)
+    let initialState = target.state
     NSLog(
       "AGENT_DEVICE_RUNNER_ACTIVATE bundle=%@ state=%d reason=%@",
       bundleId,
-      target.state.rawValue,
+      initialState.rawValue,
       reason
     )
     // activate avoids terminating and relaunching the target app
-    target.activate()
+    if initialState == .runningForeground {
+      NSLog(
+        "AGENT_DEVICE_RUNNER_ACTIVATE_SKIPPED bundle=%@ reason=already_foreground",
+        bundleId
+      )
+    } else {
+      target.activate()
+    }
     currentApp = target
     currentBundleId = bundleId
     currentAppProcessIdentifier = Self.processIdentifier(of: target)
