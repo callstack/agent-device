@@ -325,6 +325,7 @@ async function handleScreenshotCommand(
     stabilize: screenshotOptions.stabilize,
     surface: context?.surface,
     skipIosSimulatorBootCheck: context?.skipIosSimulatorBootCheck,
+    captureBackend: context?.screenshotCaptureBackend,
   });
   return { path: screenshotPath, ...successText(`Saved screenshot: ${screenshotPath}`) };
 }

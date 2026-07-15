@@ -8,6 +8,13 @@ test('contextFromFlags propagates back mode into the dispatch context', () => {
   assert.equal(context.backMode, 'system');
 });
 
+test('contextFromFlags forwards the Maestro runner screenshot backend', () => {
+  const context = contextFromFlags('/tmp/agent-device.log', {
+    maestro: { screenshotCaptureBackend: 'runner' },
+  });
+  assert.equal(context.screenshotCaptureBackend, 'runner');
+});
+
 test('contextFromFlags forwards scroll pixels from CLI flags', () => {
   const flags: CommandFlags = { pixels: 240 };
   const context = contextFromFlags('/tmp/agent-device.log', flags);

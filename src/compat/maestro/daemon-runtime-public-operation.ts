@@ -32,7 +32,7 @@ export type MaestroPublicOperation =
   | { kind: 'swipe'; gesture: MaestroSinglePointerGestureInput; viewport?: Rect }
   | { kind: 'scroll'; direction: string; durationMs?: number }
   | { kind: 'pressKey'; key: 'back' | 'home' | 'enter' | 'return' | 'dismiss' }
-  | { kind: 'screenshot'; path: string; stabilize?: boolean }
+  | { kind: 'screenshot'; path: string; stabilize?: boolean; captureBackend?: 'runner' }
   | { kind: 'snapshot' };
 
 export type ProjectedMaestroPublicOperation = Pick<DaemonRequest, 'command' | 'positionals'> & {
@@ -145,7 +145,9 @@ function projectPointClick(
   return {
     command: 'click',
     positionals: [String(operation.point.x), String(operation.point.y)],
-    flags: operation.options,
+    flags: {
+      ...operation.options,
+    },
   };
 }
 
@@ -199,7 +201,16 @@ function projectCaptureOperation(
       return {
         command: 'screenshot',
         positionals: [operation.path],
-        ...(operation.stabilize === false ? { flags: { screenshotNoStabilize: true } } : {}),
+        ...(operation.stabilize === false || operation.captureBackend === 'runner'
+          ? {
+              flags: {
+                ...(operation.stabilize === false ? { screenshotNoStabilize: true } : {}),
+                ...(operation.captureBackend === 'runner'
+                  ? { maestro: { screenshotCaptureBackend: 'runner' as const } }
+                  : {}),
+              },
+            }
+          : {}),
       };
     case 'snapshot':
       return {

@@ -117,7 +117,7 @@ export function isReactNativeCollapsedWarningWrapperWithVisibleBanner(
 function collectReactNativeOverlayFacts(nodes: SnapshotNode[]): ReactNativeOverlayFacts {
   const text = nodes.map(formatNodeSearchText).join('\n').toLowerCase();
   const dismissNodes = collectOverlayNodes(nodes, isDismissControlLabel);
-  const minimizeNodes = collectOverlayNodes(nodes, isMinimizeLabel);
+  const minimizeNodes = collectOverlayNodes(nodes, isReactNativeOverlayMinimizeLabel);
   const collapsedNodes = collectOverlayNodes(
     nodes,
     isReactNativeCollapsedWarningLabel,
@@ -234,10 +234,10 @@ function isReactNativeOpenDebuggerWarningLabel(label: string): boolean {
 }
 
 function isDismissControlLabel(label: string): boolean {
-  return isDismissLabel(label) || isCloseLabel(label) || isCloseIconLabel(label);
+  return isReactNativeOverlayDismissLabel(label) || isCloseLabel(label) || isCloseIconLabel(label);
 }
 
-function isDismissLabel(label: string): boolean {
+export function isReactNativeOverlayDismissLabel(label: string): boolean {
   return /^dismiss(?:\s*\([^)]*\))?$/i.test(label);
 }
 
@@ -249,7 +249,7 @@ function isCloseIconLabel(label: string): boolean {
   return CLOSE_ICON_LABELS.has(label);
 }
 
-function isMinimizeLabel(label: string): boolean {
+export function isReactNativeOverlayMinimizeLabel(label: string): boolean {
   return /^minimi[sz]e(?:\b|\s|\()/i.test(label);
 }
 
@@ -336,7 +336,7 @@ function targetFromNode(
 
 function actionFromDismissNode(node: SnapshotNode): ReactNativeOverlayDismissTarget['action'] {
   const label = readNodeLabel(node)?.trim().toLowerCase();
-  if (label && isDismissLabel(label)) return 'dismiss';
+  if (label && isReactNativeOverlayDismissLabel(label)) return 'dismiss';
   return 'close';
 }
 

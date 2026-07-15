@@ -3,6 +3,7 @@ import type { DaemonRequest } from '../../../daemon/types.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
 import {
   MAESTRO_OBSERVATION_POLL_MS,
+  maestroSnapshotSignature,
   resolveTypedMaestroTarget,
   waitForTypedSnapshotStability,
 } from '../daemon-runtime-port-observation.ts';
@@ -163,4 +164,109 @@ test('confirms an unchanged hierarchy across one polling interval', async () => 
 
   expect(captures).toBe(2);
   expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS);
+});
+
+test('canonicalizes rect key order before comparing snapshot signatures', () => {
+  const first = makeSnapshot([
+    {
+      index: 0,
+      type: 'Button',
+      label: 'Continue',
+      rect: { x: 10, y: 20, width: 100, height: 40 },
+    },
+  ]);
+  const second = makeSnapshot([
+    {
+      index: 0,
+      type: 'Button',
+      label: 'Continue',
+      rect: { height: 40, width: 100, y: 20, x: 10 },
+    },
+  ]);
+
+  expect(maestroSnapshotSignature(first)).toBe(maestroSnapshotSignature(second));
+});
+
+test('compares truncated rect edges like Maestro hierarchy bounds', () => {
+  const first = makeSnapshot([
+    {
+      index: 0,
+      type: 'Button',
+      label: 'Continue',
+      rect: { x: 10.9, y: 20.9, width: 99.2, height: 39.2 },
+    },
+  ]);
+  const second = makeSnapshot([
+    {
+      index: 0,
+      type: 'Button',
+      label: 'Continue',
+      rect: { x: 10.1, y: 20.1, width: 100.8, height: 40.8 },
+    },
+  ]);
+
+  expect(maestroSnapshotSignature(first)).toBe(maestroSnapshotSignature(second));
+});
+
+test('distinguishes subpixel rects whose truncated right or bottom edge changes', () => {
+  const first = makeSnapshot([
+    {
+      index: 0,
+      rect: { x: 10.49, y: 20.49, width: 100.49, height: 40.49 },
+    },
+  ]);
+  const second = makeSnapshot([
+    {
+      index: 0,
+      rect: { x: 10.51, y: 20.51, width: 100.51, height: 40.51 },
+    },
+  ]);
+
+  expect(maestroSnapshotSignature(first)).not.toBe(maestroSnapshotSignature(second));
+});
+
+test('normalizes absent attributes like Maestro iOS hierarchy mapping', () => {
+  const first = makeSnapshot([{ index: 0 }]);
+  const second = makeSnapshot([
+    {
+      index: 0,
+      type: 'Button',
+      identifier: '',
+      label: '',
+      value: '',
+      enabled: false,
+      selected: false,
+      focused: false,
+    },
+  ]);
+
+  expect(maestroSnapshotSignature(first)).toBe(maestroSnapshotSignature(second));
+});
+
+test('excludes agent-device presentation metadata from Maestro hierarchy signatures', () => {
+  const first = makeSnapshot([
+    {
+      index: 0,
+      type: 'Button',
+      label: 'Continue',
+      hittable: false,
+      hiddenContentBelow: true,
+      interactionBlocked: 'covered',
+      presentationHints: ['overlay'],
+      rect: { x: 10, y: 20, width: 100, height: 40 },
+    },
+  ]);
+  const second = makeSnapshot([
+    {
+      index: 0,
+      type: 'Button',
+      label: 'Continue',
+      hittable: true,
+      hiddenContentAbove: true,
+      visibleToUser: true,
+      rect: { x: 10, y: 20, width: 100, height: 40 },
+    },
+  ]);
+
+  expect(maestroSnapshotSignature(first)).toBe(maestroSnapshotSignature(second));
 });

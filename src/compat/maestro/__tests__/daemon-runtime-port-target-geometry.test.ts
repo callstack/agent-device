@@ -137,6 +137,90 @@ test('uses resolved iOS geometry when canonical presentation changes target boun
   ).toEqual([['56', '121']]);
 });
 
+test('uses the selected iOS node interactive bounds without changing raw target matching', async () => {
+  const requests: DaemonRequest[] = [];
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      requests.push(request);
+      if (request.command !== 'snapshot') return { ok: true, data: {} };
+      return {
+        ok: true,
+        data: {
+          createdAt: 0,
+          nodes: [
+            {
+              index: 0,
+              depth: 0,
+              type: 'Application',
+              rect: { x: 0, y: 0, width: 393, height: 852 },
+            },
+            {
+              index: 1,
+              depth: 1,
+              parentIndex: 0,
+              type: 'Other',
+              label: 'Log 1 of 1',
+              rect: { x: 0, y: 0, width: 393, height: 852 },
+            },
+            {
+              index: 2,
+              depth: 2,
+              parentIndex: 1,
+              type: 'Other',
+              label: 'Dismiss',
+              hittable: false,
+              rect: { x: 0, y: 770, width: 393, height: 82 },
+            },
+            {
+              index: 3,
+              depth: 3,
+              parentIndex: 2,
+              type: 'Other',
+              label: 'Dismiss',
+              hittable: false,
+              rect: { x: 0, y: 770, width: 196.6667, height: 82 },
+            },
+            {
+              index: 4,
+              depth: 4,
+              parentIndex: 3,
+              type: 'Other',
+              label: 'Dismiss',
+              hittable: false,
+              rect: { x: 0, y: 770, width: 196.6667, height: 48 },
+            },
+            {
+              index: 5,
+              depth: 3,
+              parentIndex: 2,
+              type: 'Other',
+              label: 'Minimize',
+              rect: { x: 196.6667, y: 770.25, width: 196.0833, height: 81.5 },
+            },
+          ],
+        },
+      };
+    },
+    dependencies: makeDependencies(),
+    platform: 'ios',
+  });
+
+  await port.execute({
+    command: {
+      kind: 'tapOn',
+      source: { line: 2 },
+      target: { space: 'target', selector: { text: 'Dismiss' } },
+    },
+    generation: 0,
+    env: {},
+    invalidateObservation() {},
+  });
+
+  expect(requests.map(({ command }) => command)).toEqual(['snapshot', 'click']);
+  expect(requests[1]?.positionals).toEqual(['98', '794']);
+});
+
 test('atomically dispatches canonical iOS geometry with the same tap point', async () => {
   const requests: DaemonRequest[] = [];
   const port = createDaemonMaestroRuntimePort({

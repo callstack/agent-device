@@ -2,6 +2,7 @@ import { formatMaestroCommandProgress } from '../../compat/maestro/progress.ts';
 import type {
   MaestroEngineEvent,
   MaestroEngineObserver,
+  MaestroRuntimeMetrics,
 } from '../../compat/maestro/engine-types.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { emitRequestProgress, readReplayTestActionProgress } from '../../request/progress.ts';
@@ -54,11 +55,20 @@ function takeTraceStart(
 
 function traceStopEvent(
   start: MaestroEngineEvent | undefined,
-  event: MaestroEngineEvent & { durationMs: number; error?: unknown },
-): MaestroEngineEvent & { durationMs: number; error?: unknown } {
+  event: MaestroEngineEvent & {
+    durationMs: number;
+    runtimeMetrics?: MaestroRuntimeMetrics;
+    error?: unknown;
+  },
+): MaestroEngineEvent & {
+  durationMs: number;
+  runtimeMetrics?: MaestroRuntimeMetrics;
+  error?: unknown;
+} {
   return {
     ...(start ?? event),
     durationMs: event.durationMs,
+    ...(event.runtimeMetrics ? { runtimeMetrics: event.runtimeMetrics } : {}),
     ...(event.error === undefined ? {} : { error: event.error }),
   };
 }
@@ -102,7 +112,11 @@ function appendMaestroTraceStart(
 function appendMaestroTraceStop(
   tracePath: string | undefined,
   replayPath: string,
-  event: MaestroEngineEvent & { durationMs: number; error?: unknown },
+  event: MaestroEngineEvent & {
+    durationMs: number;
+    runtimeMetrics?: MaestroRuntimeMetrics;
+    error?: unknown;
+  },
   ok: boolean,
 ): void {
   appendReplayTraceEvent(tracePath, {
@@ -117,6 +131,7 @@ function appendMaestroTraceStop(
     command: formatMaestroCommandProgress(event.command).command,
     ok,
     durationMs: event.durationMs,
+    ...(event.runtimeMetrics ? { resultTiming: event.runtimeMetrics } : {}),
     ...(!ok && event.error instanceof AppError ? { errorCode: event.error.code } : {}),
   });
 }

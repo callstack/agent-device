@@ -12,7 +12,20 @@ test('delegates lifecycle and coordinate gestures through public daemon commands
   const requests: DaemonRequest[] = [];
   const invoke: DaemonInvokeFn = async (request) => {
     requests.push(request);
-    return { ok: true, data: {} };
+    return request.command === 'snapshot'
+      ? {
+          ok: true,
+          data: {
+            nodes: [
+              {
+                index: 0,
+                type: 'Application',
+                rect: { x: 0, y: 0, width: 393, height: 852 },
+              },
+            ],
+          },
+        }
+      : { ok: true, data: {} };
   };
   const port = createDaemonMaestroRuntimePort({
     baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
@@ -58,6 +71,8 @@ test('delegates lifecycle and coordinate gestures through public daemon commands
         launchArgs: ['seed', '7'],
       }),
     }),
+    expect.objectContaining({ command: 'snapshot' }),
+    expect.objectContaining({ command: 'snapshot' }),
     expect.objectContaining({
       command: 'swipe',
       positionals: [],
@@ -114,16 +129,14 @@ test('uses the direct viewport without snapshot and pairs it with the nested ges
   expect(requests.map(({ command }) => command)).toEqual(['swipe']);
 });
 
-test('settles a gesture before the next observation and reuses the stable snapshot', async () => {
+test('uses an observation as the baseline for a later mutation barrier', async () => {
   const requests: DaemonRequest[] = [];
   const clock = { value: 0 };
-  let snapshots = 0;
   const port = createDaemonMaestroRuntimePort({
     baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command !== 'snapshot') return { ok: true, data: {} };
-      snapshots += 1;
       return {
         ok: true,
         data: {
@@ -131,7 +144,7 @@ test('settles a gesture before the next observation and reuses the stable snapsh
             {
               index: 0,
               identifier: 'pageNumber2',
-              rect: { x: 20, y: snapshots === 1 ? 120 : 100, width: 120, height: 44 },
+              rect: { x: 20, y: 100, width: 120, height: 44 },
             },
           ],
         },
@@ -162,15 +175,35 @@ test('settles a gesture before the next observation and reuses the stable snapsh
     generation: 1,
     env: {},
   });
+  await port.execute({
+    command: {
+      kind: 'swipe',
+      source: { line: 3 },
+      gesture: {
+        kind: 'coordinates',
+        start: { space: 'absolute', x: 360, y: 400 },
+        end: { space: 'absolute', x: 40, y: 400 },
+        duration: 100,
+      },
+    },
+    generation: 1,
+    env: {},
+    invalidateObservation() {},
+  });
 
   expect(observation).toMatchObject({ matched: true });
   expect(requests.map(({ command }) => command)).toEqual([
     'swipe',
     'snapshot',
     'snapshot',
-    'snapshot',
+    'swipe',
   ]);
-  expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS * 2);
+  expect(port.readMetrics?.()).toEqual({
+    hierarchyCaptures: 2,
+    screenshotCaptures: 0,
+    tapRetries: 0,
+  });
+  expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS);
 });
 
 test('settles a gesture before dispatching another gesture', async () => {
@@ -256,7 +289,20 @@ test('preserves the resolved nested-command request context', async () => {
     baseReq,
     invoke: async (request) => {
       requests.push(request);
-      return { ok: true, data: {} };
+      return request.command === 'snapshot'
+        ? {
+            ok: true,
+            data: {
+              nodes: [
+                {
+                  index: 0,
+                  type: 'Application',
+                  rect: { x: 0, y: 0, width: 393, height: 852 },
+                },
+              ],
+            },
+          }
+        : { ok: true, data: {} };
     },
     dependencies: makeDependencies(),
     platform: 'android',
@@ -275,7 +321,7 @@ test('preserves the resolved nested-command request context', async () => {
     invalidateObservation() {},
   });
 
-  expect(requests).toHaveLength(2);
+  expect(requests).toHaveLength(4);
   expect(requests[0]).toMatchObject({
     token: 'nested-token',
     session: 'maestro-nested',
@@ -288,11 +334,19 @@ test('preserves the resolved nested-command request context', async () => {
       relaunch: true,
     },
   });
-  expect(requests[1]?.flags).toEqual({
-    platform: 'android',
-    target: 'mobile',
-    noRecord: true,
-  });
+  for (const request of requests.slice(1)) {
+    expect(request).toMatchObject({
+      token: 'nested-token',
+      session: 'maestro-nested',
+      runtime: baseReq.runtime,
+      meta: baseReq.meta,
+      flags: {
+        platform: 'android',
+        target: 'mobile',
+        noRecord: true,
+      },
+    });
+  }
 });
 
 test('preserves native Enter dispatch failures', async () => {
@@ -489,4 +543,37 @@ test('waitForAnimationToEnd uses two unstabilized screenshot captures', async ()
 
   expect(requests.map(({ command }) => command)).toEqual(['screenshot', 'screenshot']);
   expect(requests.every(({ flags }) => flags?.screenshotNoStabilize === true)).toBe(true);
+  expect(
+    requests.every(({ flags }) => flags?.maestro?.screenshotCaptureBackend === undefined),
+  ).toBe(true);
+});
+
+test('waitForAnimationToEnd uses the persistent runner capture backend on iOS', async () => {
+  const requests: DaemonRequest[] = [];
+  const screenshot = PNG.sync.write(new PNG({ width: 1, height: 1 }));
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      requests.push(request);
+      if (request.command === 'screenshot') {
+        await fs.promises.writeFile(request.positionals[0]!, screenshot);
+      }
+      return { ok: true, data: {} };
+    },
+    dependencies: makeDependencies(),
+    platform: 'ios',
+  });
+
+  await port.execute({
+    command: { kind: 'waitForAnimationToEnd', source: { line: 2 }, timeout: 0 },
+    generation: 0,
+    env: {},
+    invalidateObservation() {},
+  });
+
+  expect(requests).toHaveLength(2);
+  expect(requests.every(({ flags }) => flags?.screenshotNoStabilize === true)).toBe(true);
+  expect(requests.every(({ flags }) => flags?.maestro?.screenshotCaptureBackend === 'runner')).toBe(
+    true,
+  );
 });

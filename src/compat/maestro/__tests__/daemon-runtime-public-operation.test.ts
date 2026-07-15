@@ -132,6 +132,22 @@ describe('Maestro public operation projection', () => {
       },
     },
     {
+      operation: {
+        kind: 'screenshot',
+        path: '/tmp/animation-runner.png',
+        stabilize: false,
+        captureBackend: 'runner',
+      },
+      expected: {
+        command: 'screenshot',
+        positionals: ['/tmp/animation-runner.png'],
+        flags: {
+          screenshotNoStabilize: true,
+          maestro: { screenshotCaptureBackend: 'runner' },
+        },
+      },
+    },
+    {
       operation: { kind: 'snapshot' },
       expected: {
         command: 'snapshot',

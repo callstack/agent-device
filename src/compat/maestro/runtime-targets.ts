@@ -4,7 +4,10 @@ import {
   type SnapshotNode,
   type SnapshotState,
 } from '../../kernel/snapshot.ts';
-import { presentIosInteractiveSnapshot } from '../../daemon/snapshot-presentation/ios/index.ts';
+import {
+  buildIosInteractiveSnapshotPresentation,
+  type IosInteractiveSnapshotPresentation,
+} from '../../daemon/snapshot-presentation/ios/index.ts';
 import type { MaestroSelector } from './program-ir.ts';
 import {
   findMaestroTypedSelectorMatches,
@@ -48,6 +51,7 @@ export function resolveMaestroTargetFromSnapshot(
   snapshot: SnapshotState,
   query: MaestroTargetQuery,
   platform: MaestroPlatform,
+  options: { interactiveBounds?: boolean } = {},
 ): MaestroTargetResolution {
   let matches = findMaestroTypedSelectorMatches(snapshot, query.selector);
   if (query.childOf) {
@@ -72,25 +76,51 @@ export function resolveMaestroTargetFromSnapshot(
   const target = selectMaestroSnapshotMatch(rankedMatches, query.index);
   const evidence = buildMaestroTargetEvidence(query, matches, rankedMatches, target?.node);
   if (!target) {
-    const index = query.index === undefined ? '' : ` index ${query.index}`;
-    return {
-      ok: false,
-      message: visible.blockedByReactNativeOverlay
-        ? 'React Native overlay is covering app content.'
-        : matches.length > 0 && rankedMatches.length === 0
-          ? `Maestro selector matched ${matches.length} element(s), but none were visible.`
-          : `Maestro selector did not match${index}.`,
-      evidence,
-    };
+    return failedTargetResolution(query, matches, rankedMatches, visible, evidence);
   }
+  const presentation =
+    platform === 'ios' && (options.interactiveBounds || query.allowAtomicSelectorDispatch)
+      ? buildIosInteractiveSnapshotPresentation(snapshot.nodes)
+      : undefined;
+  const rect =
+    options.interactiveBounds === true
+      ? (presentation?.sourceNodes.get(target.node.index)?.rect ?? target.rect)
+      : target.rect;
   return {
     ok: true,
     node: target.node,
-    rect: target.rect,
+    rect,
     matches: rankedMatches.length,
-    dispatchCandidates: countCanonicalDispatchCandidates(snapshot, query, platform, target),
+    dispatchCandidates: countCanonicalDispatchCandidates(
+      snapshot,
+      query,
+      platform,
+      { ...target, rect },
+      presentation,
+    ),
     evidence,
   };
+}
+
+function failedTargetResolution(
+  query: MaestroTargetQuery,
+  matches: SnapshotNode[],
+  rankedMatches: SnapshotNode[],
+  visibility: { blockedByReactNativeOverlay: boolean },
+  evidence: MaestroTargetEvidence,
+): MaestroTargetResolution {
+  if (visibility.blockedByReactNativeOverlay) {
+    return { ok: false, message: 'React Native overlay is covering app content.', evidence };
+  }
+  if (matches.length > 0 && rankedMatches.length === 0) {
+    return {
+      ok: false,
+      message: `Maestro selector matched ${matches.length} element(s), but none were visible.`,
+      evidence,
+    };
+  }
+  const index = query.index === undefined ? '' : ` index ${query.index}`;
+  return { ok: false, message: `Maestro selector did not match${index}.`, evidence };
 }
 
 function countCanonicalDispatchCandidates(
@@ -98,11 +128,14 @@ function countCanonicalDispatchCandidates(
   query: MaestroTargetQuery,
   platform: MaestroPlatform,
   target: { node: SnapshotNode; rect: Rect },
+  presentation: IosInteractiveSnapshotPresentation | undefined,
 ): number {
   if (platform !== 'ios' || !query.allowAtomicSelectorDispatch || query.childOf) return 0;
   const canonicalSnapshot = {
     ...snapshot,
-    nodes: attachRefs(presentIosInteractiveSnapshot(snapshot.nodes)),
+    nodes: attachRefs(
+      (presentation ?? buildIosInteractiveSnapshotPresentation(snapshot.nodes)).nodes,
+    ),
   };
   const canonicalMatches = findMaestroTypedSelectorMatches(canonicalSnapshot, query.selector);
   const canonicalVisibleMatches = filterVisibleMaestroMatches({

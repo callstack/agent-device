@@ -196,7 +196,12 @@ extension RunnerTests {
         regularSnapshot: true
       )
 
-      let key = "\(snapshot.elementType)-\(evaluation.label)-\(evaluation.identifier)-\(snapshot.frame.origin.x)-\(snapshot.frame.origin.y)"
+      let key = Self.snapshotTraversalIdentity(
+        elementType: snapshot.elementType,
+        label: evaluation.label,
+        identifier: evaluation.identifier,
+        frame: snapshot.frame
+      )
       let isDuplicate = seen.contains(key)
       if !isDuplicate {
         seen.insert(key)
@@ -1116,6 +1121,15 @@ extension RunnerTests {
       return appFrame
     }
     return .infinite
+  }
+
+  static func snapshotTraversalIdentity(
+    elementType: XCUIElement.ElementType,
+    label: String,
+    identifier: String,
+    frame: CGRect
+  ) -> String {
+    "\(elementType)-\(label)-\(identifier)-\(frame.origin.x)-\(frame.origin.y)-\(frame.width)-\(frame.height)"
   }
 
   private func aggregatedLabel(for snapshot: XCUIElementSnapshot, depth: Int = 0) -> String? {

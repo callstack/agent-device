@@ -50,6 +50,7 @@ export type ScreenshotOptions = {
   stabilize?: boolean;
   surface?: SessionSurface;
   skipIosSimulatorBootCheck?: boolean;
+  captureBackend?: 'runner';
 };
 
 export type ElementSelectorKey = 'id' | 'label' | 'text' | 'value';

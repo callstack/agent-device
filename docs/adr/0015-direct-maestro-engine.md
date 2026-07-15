@@ -66,10 +66,12 @@ are failure/debug artifacts, not happy-path requirements.
 
 The daemon adapter may retain the provider snapshot behind a successful observation without exposing it
 through the engine contract. A following target resolution may use that snapshot only as semantic
-evidence. Maestro selector semantics continue to use the raw provider nodes, except for equivalent iOS
-accessibility wrapper chains described below. On iOS, the adapter derives the provider's canonical
-interactive presentation from that same snapshot solely to determine atomic selector uniqueness; it
-does not perform another capture. A unique exact, canonically hittable match may be dispatched with its
+evidence. Maestro selector semantics use the shared structurally normalized provider snapshot, before
+iOS canonical interactive presentation. They deliberately do not request the public `snapshot --raw`
+shape, whose output contract bypasses shared pruning and overlay annotations. On iOS, the adapter derives the provider's canonical
+interactive presentation from that same snapshot without another capture. Raw matching still selects
+the node and authored index; when that same source node has canonical interactive bounds, tap-like
+actions use those bounds. A unique exact, canonically hittable match may be dispatched with its
 resolved point so XCTest binds the live selector identity and coordinate delivery atomically; a
 structured live-selector miss, ambiguity, point mismatch, or off-screen result
 falls back to fresh Maestro resolution. All other targets capture fresh geometry before coordinate
@@ -87,22 +89,33 @@ matches. It does not adopt the public agent-device command surface's unique-matc
 suppressed by Maestro `optional`; atomic iOS dispatch handles that result by performing fresh Maestro
 resolution, as described above. Cancellation and infrastructure failures are likewise non-optional.
 
-Every `tapOn` waits for hierarchy stability before the next command, matching Maestro's tap boundary.
-`retryTapIfNoChange` defaults to false; when explicitly enabled, the runtime compares the stable hierarchy
-with the target-resolution hierarchy and retries once when nothing changed. The stable result primes the
-next command, so the tap boundary does not add another hierarchy read there.
+Mutations that can leave an in-flight transition record a pending stabilization boundary. Before another
+mutating command, the runtime samples at the compatibility polling cadence until the hierarchy is stable
+and retains that final observation for the next read. Commands with specialized completion semantics settle
+inline instead. Hierarchy signatures project the available semantic attributes, tree topology, and
+fixed-order integer edges while excluding provider-only metadata, object-key order, and subpixel noise.
 
-Successful gestures and scrolls require stabilization before the next command executes. The runtime
-port records that requirement without capturing a hierarchy in the gesture command itself. At the next
-command boundary, it samples at the compatibility polling cadence until the observation is stable, then
-retains that final observation for the immediately following read. This keeps mutation ordering explicit,
-prevents a later gesture or assertion from overtaking an in-flight transition, and avoids paying for the
-same stable observation twice.
+An authored observation after a mutation skips the pending barrier and polls its own condition immediately.
+Its successful snapshot becomes the baseline for the boundary but does not discharge mutation ordering. If
+another mutation follows, the runtime waits one polling interval and compares a fresh hierarchy with that
+baseline, continuing until stable when the UI is still changing. If no later mutation follows, it performs no
+extra capture. This intentionally differs from upstream Maestro, which settles before evaluating an assertion,
+and retains the previous agent-device compatibility engine's faster read behavior without allowing a later
+tap, gesture, scroll, or input to overtake an in-flight transition.
+
+`retryTapIfNoChange` defaults to false. When explicitly enabled, the runtime compares the stable hierarchy
+with the target-resolution hierarchy. On iOS, an unchanged hierarchy triggers the same screenshot comparison
+used by Maestro; the runtime retries once only when both surfaces remain unchanged. Screenshot evidence is
+best-effort because a failed capture cannot prove that repeating a mutation is safe. The stable hierarchy
+primes the next command, so the retry policy does not add another hierarchy read there.
 
 `waitForAnimationToEnd` uses its own screenshot-stability operation, matching upstream's two immediate
 captures per attempt and 0.005% normalized absolute RGB-difference threshold. These captures explicitly
 bypass ordinary screenshot stabilization so the command observes the application rather than
-recursively waiting on another settling policy.
+recursively waiting on another settling policy. Screenshot stability does not discharge a pending
+mutation boundary; a later mutating command still verifies hierarchy stability before dispatch. On iOS,
+comparison captures use the persistent runner's screenshot surface so both frames come from one warmed
+transport and avoid simulator screenshot setup between polls.
 
 Upstream Maestro is a version-pinned development reference, not a production dependency. The current
 opt-in conformance script compares a small checked-in parser corpus against manually captured Maestro
@@ -118,14 +131,15 @@ The migration cannot switch production routing until Android and iOS satisfy all
 and react-navigation corpora:
 
 - total wall time is no slower than the pre-migration compatibility engine;
-- target interactions perform one outcome query after the compatibility polling interval and prime that
-  result for the next command;
+- an observation immediately after a mutation polls its authored condition directly; a later mutation uses
+  that result as its stabilization baseline;
 - no command captures a second hierarchy merely to re-verify evidence produced within that command;
 - absolute coordinate swipes perform one direct viewport query and no accessibility capture;
-- gesture stabilization is deferred to the next command boundary and primes the following observation;
+- mutation-to-mutation stabilization is deferred to the next command boundary and primes the following read;
 - percentage swipe conversion preserves authored endpoints exactly;
 - helper/runner startup remains amortized across a suite;
-- p50/p95 command latency, captures, retries, and transferred hierarchy bytes are reported separately;
+- p50/p95 command latency, hierarchy and screenshot captures, tap retries, and transferred hierarchy
+  bytes are reported separately;
 - failure-only diagnostics are excluded from happy-path latency comparisons.
 
 Android verification must prove the bundled helper backend and version. iOS verification must separate

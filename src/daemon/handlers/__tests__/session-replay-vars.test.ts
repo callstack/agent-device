@@ -703,6 +703,7 @@ test('runReplayScriptFile applies CLI env overrides before Maestro compat mappin
     [
       ['open', ['cli-app']],
       ['snapshot', []],
+      ['snapshot', []],
       ['click', ['80', '62']],
     ],
   );
@@ -1470,7 +1471,6 @@ test('runReplayScriptFile resolves Maestro tapOn index and childOf from snapshot
       ['snapshot', []],
       ['click', ['40', '130']],
       ['snapshot', []],
-      ['snapshot', []],
       ['click', ['220', '310']],
     ],
   );
@@ -1553,7 +1553,6 @@ test('runReplayScriptFile resolves a text-entry target once before typing', asyn
     [
       ['snapshot', []],
       ['click', ['120', '120']],
-      ['snapshot', []],
       ['snapshot', []],
       ['type', ['Saved list']],
       ['snapshot', []],

@@ -68,6 +68,7 @@ const defaultSimulatorScreenshotFlowDeps: SimulatorScreenshotFlowDeps = {
 };
 
 const iosSimulatorMainScreenScaleCache = new Map<string, number>();
+const iosSimulatorRunnerContainerCache = new Map<string, string>();
 
 export async function screenshotIos(
   device: DeviceInfo,
@@ -291,6 +292,17 @@ async function copyRunnerScreenshotFromSimulator(
 ): Promise<void> {
   const deadline = Deadline.fromTimeoutMs(IOS_RUNNER_SCREENSHOT_COPY_TIMEOUT_MS);
   let lastError = 'Unable to locate runner container for simulator screenshot';
+  const cachedContainerPath = iosSimulatorRunnerContainerCache.get(device.id);
+  if (cachedContainerPath) {
+    const cachedCopy = await tryCopySimulatorRunnerScreenshot(
+      cachedContainerPath,
+      remoteFileName,
+      outPath,
+    );
+    if (cachedCopy.copied) return;
+    lastError = cachedCopy.error;
+    iosSimulatorRunnerContainerCache.delete(device.id);
+  }
   for (const bundleId of IOS_RUNNER_CONTAINER_BUNDLE_IDS) {
     const containerResult = await runSimctl(
       device,
@@ -316,20 +328,34 @@ async function copyRunnerScreenshotFromSimulator(
       lastError = 'simctl get_app_container returned empty output';
       continue;
     }
-    const candidateSourcePaths = resolveSimulatorRunnerScreenshotCandidatePaths(
-      containerPath,
-      remoteFileName,
-    );
-    for (const sourcePath of candidateSourcePaths) {
-      try {
-        await fs.copyFile(sourcePath, outPath);
-        return;
-      } catch (error) {
-        lastError = error instanceof Error ? error.message : String(error);
-      }
+    const copy = await tryCopySimulatorRunnerScreenshot(containerPath, remoteFileName, outPath);
+    if (copy.copied) {
+      iosSimulatorRunnerContainerCache.set(device.id, containerPath);
+      return;
     }
+    lastError = copy.error;
   }
   throw new AppError('COMMAND_FAILED', `Failed to capture iOS screenshot: ${lastError}`);
+}
+
+async function tryCopySimulatorRunnerScreenshot(
+  containerPath: string,
+  remoteFileName: string,
+  outPath: string,
+): Promise<{ copied: true } | { copied: false; error: string }> {
+  let lastError = 'Runner screenshot was not found in the simulator container';
+  for (const sourcePath of resolveSimulatorRunnerScreenshotCandidatePaths(
+    containerPath,
+    remoteFileName,
+  )) {
+    try {
+      await fs.copyFile(sourcePath, outPath);
+      return { copied: true };
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  return { copied: false, error: lastError };
 }
 
 function resolveDeadlineTimeoutMs(deadline: Deadline, timeoutMs: number, step: string): number {

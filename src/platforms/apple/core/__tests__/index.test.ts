@@ -1223,6 +1223,39 @@ test('resolveSimulatorRunnerScreenshotCandidatePaths handles empty runner path',
   assert.deepEqual(resolveSimulatorRunnerScreenshotCandidatePaths('/tmp/container', '   '), []);
 });
 
+test('captureScreenshotViaRunner reuses a verified simulator container path', async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-runner-cache-'));
+  const containerPath = path.join(tmpDir, 'container');
+  const runnerImage = path.join(containerPath, 'tmp', 'capture.png');
+  const device = { ...IOS_TEST_SIMULATOR, id: 'sim-runner-container-cache' };
+  await fs.mkdir(path.dirname(runnerImage), { recursive: true });
+  await fs.writeFile(runnerImage, 'runner-image', 'utf8');
+  mockRunAppleRunnerCommand.mockResolvedValue({ message: 'tmp/capture.png' });
+  mockRunCmd.mockImplementation(async (_cmd, args) => {
+    if (args.includes('get_app_container')) {
+      return { exitCode: 0, stdout: `${containerPath}\n`, stderr: '' };
+    }
+    throw new Error(`Unexpected xcrun args: ${args.join(' ')}`);
+  });
+
+  try {
+    const firstPath = path.join(tmpDir, 'first.png');
+    const secondPath = path.join(tmpDir, 'second.png');
+    await captureScreenshotViaRunner(device, firstPath);
+    await captureScreenshotViaRunner(device, secondPath);
+
+    assert.equal(await fs.readFile(firstPath, 'utf8'), 'runner-image');
+    assert.equal(await fs.readFile(secondPath, 'utf8'), 'runner-image');
+    assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 2);
+    assert.equal(
+      mockRunCmd.mock.calls.filter(([, args]) => args.includes('get_app_container')).length,
+      1,
+    );
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test('screenshotIos retries simulator capture timeouts and eventually succeeds', async () => {
   const tmpDir = await fs.mkdtemp(
     path.join(os.tmpdir(), 'agent-device-ios-screenshot-retry-test-'),

@@ -16,8 +16,19 @@ const IOS_PRESENTATION_RULES: Array<
 ];
 
 export function presentIosInteractiveSnapshot(nodes: RawSnapshotNode[]): RawSnapshotNode[] {
+  return buildIosInteractiveSnapshotPresentation(nodes).nodes;
+}
+
+export type IosInteractiveSnapshotPresentation = {
+  nodes: RawSnapshotNode[];
+  sourceNodes: ReadonlyMap<number, RawSnapshotNode>;
+};
+
+export function buildIosInteractiveSnapshotPresentation(
+  nodes: RawSnapshotNode[],
+): IosInteractiveSnapshotPresentation {
   if (nodes.length === 0) {
-    return nodes;
+    return { nodes, sourceNodes: new Map() };
   }
 
   const replacements = new Map<number, RawSnapshotNode>();
@@ -28,14 +39,23 @@ export function presentIosInteractiveSnapshot(nodes: RawSnapshotNode[]): RawSnap
   }
 
   if (suppressedIndexes.size === 0 && replacements.size === 0) {
-    return nodes;
+    return { nodes, sourceNodes: new Map(nodes.map((node) => [node.index, node])) };
   }
 
-  return reindexSnapshotNodesWithSuppressedParents(
-    nodes
-      .filter((node) => !suppressedIndexes.has(node.index))
-      .map((node) => replacements.get(node.index) ?? node),
-    suppressedIndexes,
-    nodes,
-  );
+  const presentedSourceNodes = nodes
+    .filter((node) => !suppressedIndexes.has(node.index))
+    .map((node) => replacements.get(node.index) ?? node);
+  const sourceNodes = new Map(presentedSourceNodes.map((node) => [node.index, node]));
+  for (const sourceIndex of suppressedIndexes) {
+    const replacement = replacements.get(sourceIndex);
+    if (replacement) sourceNodes.set(sourceIndex, replacement);
+  }
+  return {
+    nodes: reindexSnapshotNodesWithSuppressedParents(
+      presentedSourceNodes,
+      suppressedIndexes,
+      nodes,
+    ),
+    sourceNodes,
+  };
 }

@@ -13,6 +13,7 @@ export type MaestroRuntimeFlags = {
   allowNonHittableCoordinateFallback?: boolean;
   expectedTapPoint?: Point;
   prewarmRunnerBeforeOpen?: boolean;
+  screenshotCaptureBackend?: 'runner';
 };
 
 export type CommandFlags = Omit<CliFlags, DaemonExcludedCliFlag> & {
@@ -54,6 +55,7 @@ export type DispatchContext = ScreenshotDispatchFlags & {
   iosXctestDerivedDataPath?: string;
   iosXctestEnvDir?: string;
   runnerLeaseContext?: RunnerLogicalLeaseContext;
+  screenshotCaptureBackend?: 'runner';
   snapshotInteractiveOnly?: boolean;
   snapshotDepth?: number;
   snapshotScope?: string;

@@ -125,7 +125,7 @@ test('Provider-backed integration Android Maestro refreshes action geometry and 
       assert.deepEqual(swipePlan.pointers[0]?.samples[0]?.point, { x: 351, y: 300 });
       assert.deepEqual(swipePlan.pointers[0]?.samples.at(-1)?.point, { x: 39, y: 300 });
       assert.equal(world.gestureViewportCalls, 1);
-      // Assertion, fresh tap geometry, then the two-snapshot stability proof.
+      // Assertion, launch/tap stability comparisons, and fresh tap geometry share retained baselines.
       assert.equal(snapshots, 4);
     },
   );

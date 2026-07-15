@@ -1,4 +1,6 @@
 import { expect, test } from 'vitest';
+import { promises as fs } from 'node:fs';
+import { PNG } from '../../../utils/png.ts';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon/types.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
 import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';
@@ -156,6 +158,7 @@ test('atomically dispatches a unique exact iOS target from same-generation evide
 test('retries an iOS non-hittable coordinate fallback when the hierarchy does not change', async () => {
   const requests: DaemonRequest[] = [];
   let clicks = 0;
+  const screenshot = solidPng(0);
   const port = createDaemonMaestroRuntimePort({
     baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
@@ -166,6 +169,10 @@ test('retries an iOS non-hittable coordinate fallback when the hierarchy does no
           ok: true,
           data: { maestroNonHittableCoordinateFallbackUsed: true },
         };
+      }
+      if (request.command === 'screenshot') {
+        await fs.writeFile(request.positionals[0]!, screenshot);
+        return { ok: true, data: {} };
       }
       return {
         ok: true,
@@ -214,12 +221,88 @@ test('retries an iOS non-hittable coordinate fallback when the hierarchy does no
 
   expect(requests.map(({ command }) => command)).toEqual([
     'snapshot',
+    'screenshot',
     'click',
     'snapshot',
     'snapshot',
+    'screenshot',
     'click',
     'snapshot',
     'snapshot',
   ]);
   expect(clicks).toBe(2);
+  expect(port.readMetrics?.()).toEqual({
+    hierarchyCaptures: 5,
+    screenshotCaptures: 2,
+    tapRetries: 1,
+  });
 });
+
+test('does not retry an iOS tap when only the rendered surface changes', async () => {
+  const requests: DaemonRequest[] = [];
+  let clicks = 0;
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      requests.push(request);
+      if (request.command === 'click') {
+        clicks += 1;
+        return { ok: true, data: {} };
+      }
+      if (request.command === 'screenshot') {
+        await fs.writeFile(request.positionals[0]!, solidPng(clicks === 0 ? 0 : 255));
+        return { ok: true, data: {} };
+      }
+      return {
+        ok: true,
+        data: {
+          nodes: [
+            { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 393, height: 852 } },
+            {
+              index: 1,
+              parentIndex: 0,
+              type: 'Button',
+              label: 'Toggle canvas',
+              rect: { x: 142, y: 110, width: 116, height: 40 },
+            },
+          ],
+        },
+      };
+    },
+    dependencies: makeDependencies(),
+    platform: 'ios',
+  });
+
+  await port.execute({
+    command: {
+      kind: 'tapOn',
+      source: { line: 2 },
+      target: { space: 'target', selector: { text: 'Toggle canvas' } },
+      retryTapIfNoChange: true,
+    },
+    generation: 0,
+    env: {},
+    invalidateObservation() {},
+  });
+
+  expect(requests.map(({ command }) => command)).toEqual([
+    'snapshot',
+    'screenshot',
+    'click',
+    'snapshot',
+    'snapshot',
+    'screenshot',
+  ]);
+  expect(clicks).toBe(1);
+  expect(port.readMetrics?.()).toEqual({
+    hierarchyCaptures: 3,
+    screenshotCaptures: 2,
+    tapRetries: 0,
+  });
+});
+
+function solidPng(value: number): Buffer {
+  const image = new PNG({ width: 2, height: 2 });
+  image.data.fill(value);
+  return PNG.sync.write(image);
+}

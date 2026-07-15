@@ -7,7 +7,11 @@ import {
 import { AppError } from '../../kernel/errors.ts';
 import { isPositiveFiniteRect, rectContains } from '../../kernel/rect.ts';
 import type { Rect, SnapshotState } from '../../kernel/snapshot.ts';
-import type { MaestroObservation, MaestroObservationCondition } from './engine-types.ts';
+import type {
+  MaestroObservation,
+  MaestroObservationCondition,
+  MaestroRuntimeMetrics,
+} from './engine-types.ts';
 import { MAESTRO_COMPATIBILITY_PRESETS } from './compatibility-policy.ts';
 import type { MaestroPlatform, MaestroSelector } from './program-ir.ts';
 import { literalFromMaestroRegex } from './selector-regex.ts';
@@ -34,6 +38,7 @@ export type MaestroSnapshotSource = {
   readonly capture: MaestroSnapshotReader;
   readonly bindObservation: (observation: MaestroObservation) => MaestroObservation;
   readonly reuseObservation: (context: MaestroRuntimeReadContext) => SnapshotState | undefined;
+  readonly readMetrics: () => Pick<MaestroRuntimeMetrics, 'hierarchyCaptures'>;
   readonly invalidate: () => void;
   readonly requireStability: () => void;
   readonly prime: (generation: number, snapshot: SnapshotState) => void;
@@ -92,6 +97,7 @@ function resolveTargetFromSnapshot(params: {
     params.snapshot,
     params.query,
     params.platform,
+    { interactiveBounds: params.mode === 'tap' },
   );
   return targetMatchFromResolution(
     resolution,
@@ -193,10 +199,12 @@ export async function waitForTypedSnapshotStability(params: {
   readonly context: MaestroRuntimeReadContext;
   readonly snapshot: MaestroSnapshotReader;
   readonly dependencies: DaemonMaestroRuntimeDependencies;
+  readonly initialSnapshot?: SnapshotState;
 }): Promise<SnapshotState> {
   validateTimeout(params.timeoutMs, 'waitForAnimationToEnd');
   const deadline = params.dependencies.now() + params.timeoutMs;
-  let previous = await captureRetriableMaestroSnapshot(params, deadline);
+  let previous =
+    params.initialSnapshot ?? (await captureRetriableMaestroSnapshot(params, deadline));
   let previousSignature = maestroSnapshotSignature(previous);
 
   while (true) {
@@ -367,32 +375,29 @@ export function maestroSnapshotSignature(snapshot: SnapshotState): string {
         snapshot.nodes.map((node) => ({
           index: node.index,
           parentIndex: node.parentIndex,
-          depth: node.depth,
-          type: node.type,
-          role: node.role,
-          subrole: node.subrole,
-          identifier: node.identifier,
-          label: node.label,
-          value: node.value,
-          enabled: node.enabled,
-          selected: node.selected,
-          focused: node.focused,
-          visibleToUser: node.visibleToUser,
-          hittable: node.hittable,
-          pid: node.pid,
-          bundleId: node.bundleId,
-          appName: node.appName,
-          windowTitle: node.windowTitle,
-          surface: node.surface,
-          hiddenContentAbove: node.hiddenContentAbove,
-          hiddenContentBelow: node.hiddenContentBelow,
-          interactionBlocked: node.interactionBlocked,
-          presentationHints: node.presentationHints,
-          rect: node.rect,
+          identifier: node.identifier ?? '',
+          label: node.label ?? '',
+          value: node.value ?? '',
+          enabled: node.enabled ?? false,
+          selected: node.selected ?? false,
+          focused: node.focused ?? false,
+          bounds: maestroSnapshotBounds(node.rect),
         })),
       ),
     )
     .digest('hex');
+}
+
+function maestroSnapshotBounds(
+  rect: Rect | undefined,
+): { left: number; top: number; right: number; bottom: number } | undefined {
+  if (!rect) return undefined;
+  return {
+    left: Math.trunc(rect.x),
+    top: Math.trunc(rect.y),
+    right: Math.trunc(rect.x + rect.width),
+    bottom: Math.trunc(rect.y + rect.height),
+  };
 }
 
 function requireObservationResult(match: MaestroTargetMatch | undefined): MaestroTargetMatch {

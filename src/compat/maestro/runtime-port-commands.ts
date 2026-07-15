@@ -72,6 +72,33 @@ const MAESTRO_RUNTIME_COMMAND_HANDLERS = {
   extendedWaitUntil: executeObservationCommand,
 } satisfies MaestroRuntimeCommandHandlers;
 
+const MAESTRO_COMMAND_REQUIRES_SETTLED_PREDECESSOR = {
+  launchApp: true,
+  stopApp: true,
+  openLink: true,
+  tapOn: true,
+  doubleTapOn: true,
+  longPressOn: true,
+  swipe: true,
+  inputText: true,
+  eraseText: true,
+  scroll: true,
+  scrollUntilVisible: true,
+  hideKeyboard: true,
+  pressKey: true,
+  back: true,
+  waitForAnimationToEnd: false,
+  takeScreenshot: false,
+  runScript: false,
+  assertVisible: false,
+  assertNotVisible: false,
+  extendedWaitUntil: false,
+} satisfies Record<MaestroCommandKind, boolean>;
+
+export function maestroCommandRequiresSettledPredecessor(command: MaestroRuntimeCommand): boolean {
+  return MAESTRO_COMMAND_REQUIRES_SETTLED_PREDECESSOR[command.kind];
+}
+
 export async function executeMaestroRuntimeCommand(
   request: MaestroRuntimeRequest,
   operations: MaestroRuntimeOperations,

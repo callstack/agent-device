@@ -122,6 +122,16 @@ test.each(['ios', 'android'] as const)(
                 enabled: true,
                 rect: { x: snapshots === 1 ? 20 : 160, y: 100, width: 120, height: 44 },
               },
+              ...(snapshots === 1
+                ? []
+                : [
+                    {
+                      index: 3,
+                      parentIndex: 0,
+                      type: 'Other',
+                      rect: { x: 0, y: 0, width: 402, height: 874 },
+                    },
+                  ]),
             ],
           },
         };
@@ -152,6 +162,7 @@ test.each(['ios', 'android'] as const)(
     expect(
       requests.filter(({ command }) => command === 'click').map(({ positionals }) => positionals),
     ).toEqual([['220', '122']]);
+    expect(requests.find(({ command }) => command === 'click')?.flags?.maestro).toBeUndefined();
   },
 );
 

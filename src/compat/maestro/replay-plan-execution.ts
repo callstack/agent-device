@@ -4,6 +4,7 @@ import { checkpointMaestroCancellation, resolveMaestroTimingPolicy } from './eng
 import type {
   MaestroEngineExecutionOptions,
   MaestroEngineResult,
+  MaestroRuntimeMetrics,
   MaestroRuntimePort,
 } from './engine-types.ts';
 import type { MaestroReplayPlan } from './replay-plan-types.ts';
@@ -62,6 +63,7 @@ async function executeObservedStep(
   checkpointMaestroCancellation(state.options.signal);
   const now = state.options.now ?? Date.now;
   const startedAt = now();
+  const metricsBefore = state.port.readMetrics?.();
   const generation = state.context.generation;
   const event = {
     command: step.command,
@@ -78,6 +80,7 @@ async function executeObservedStep(
       state.options.observer?.commandCompleted?.({
         ...event,
         durationMs: now() - startedAt,
+        ...runtimeMetricsDelta(metricsBefore, state.port.readMetrics?.()),
       }),
     );
   } catch (error) {
@@ -88,6 +91,7 @@ async function executeObservedStep(
         ...(failure.command ? { command: failure.command } : {}),
         source: failure.source,
         durationMs: now() - startedAt,
+        ...runtimeMetricsDelta(metricsBefore, state.port.readMetrics?.()),
         error: failure.error,
         artifactPaths: [...state.artifacts],
         expandedVariables: state.context.expandedVariables,
@@ -95,6 +99,20 @@ async function executeObservedStep(
     );
     throw failure;
   }
+}
+
+function runtimeMetricsDelta(
+  before: MaestroRuntimeMetrics | undefined,
+  after: MaestroRuntimeMetrics | undefined,
+): { runtimeMetrics?: MaestroRuntimeMetrics } {
+  if (!before || !after) return {};
+  return {
+    runtimeMetrics: {
+      hierarchyCaptures: after.hierarchyCaptures - before.hierarchyCaptures,
+      screenshotCaptures: after.screenshotCaptures - before.screenshotCaptures,
+      tapRetries: after.tapRetries - before.tapRetries,
+    },
+  };
 }
 
 function notifyMaestroObserver(callback: (() => void) | undefined): void {

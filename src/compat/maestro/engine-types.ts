@@ -66,9 +66,16 @@ export type MaestroRuntimeResult = {
   artifactPaths?: string[];
 };
 
+export type MaestroRuntimeMetrics = {
+  hierarchyCaptures: number;
+  screenshotCaptures: number;
+  tapRetries: number;
+};
+
 export type MaestroRuntimePort = {
   execute(request: MaestroRuntimeRequest): Promise<MaestroRuntimeResult>;
   observe(request: MaestroObservationRequest): Promise<MaestroObservation>;
+  readMetrics?(): MaestroRuntimeMetrics;
 };
 
 export type MaestroEngineEvent = {
@@ -81,10 +88,13 @@ export type MaestroEngineEvent = {
 
 export type MaestroEngineObserver = {
   commandStarted?(event: MaestroEngineEvent): void;
-  commandCompleted?(event: MaestroEngineEvent & { durationMs: number }): void;
+  commandCompleted?(
+    event: MaestroEngineEvent & { durationMs: number; runtimeMetrics?: MaestroRuntimeMetrics },
+  ): void;
   commandFailed?(
     event: MaestroEngineEvent & {
       durationMs: number;
+      runtimeMetrics?: MaestroRuntimeMetrics;
       error: unknown;
       artifactPaths: readonly string[];
       expandedVariables: Readonly<Record<string, string>>;

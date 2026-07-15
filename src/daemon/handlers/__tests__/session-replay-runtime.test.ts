@@ -192,6 +192,7 @@ test('typed Maestro writes source-aware redacted step timing traces', async () =
       command: 'inputText',
       ok: true,
       durationMs: expect.any(Number),
+      resultTiming: { hierarchyCaptures: 2, screenshotCaptures: 0, tapRetries: 0 },
     }),
   ]);
   expect(fs.readFileSync(tracePath, 'utf8')).not.toContain('highly-sensitive');
