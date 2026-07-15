@@ -395,13 +395,95 @@ extension RunnerTests {
       #"{"command":"tap","commandId":"tap-1","x":10,"y":20}"#
     )
 
-    let preparation = prepareActiveCommandContext(command: tap)
+    let preparation = prepareActiveCommandContext(
+      command: tap,
+      routeToSpringboard: shouldRouteToSpringboardBlockingSystemModal(tap)
+    )
 
     guard case .context(let context) = preparation else {
       XCTFail("expected command context")
       return
     }
     XCTAssertTrue(context.app === springboard)
+  }
+
+  func testExecuteDispatchedReturnsBusyBeforeBlockingSystemModalProbeDrains() throws {
+    app.launch()
+    currentApp = app
+    currentBundleId = nil
+    defer {
+      currentApp = nil
+      currentBundleId = nil
+      systemModalProbeOverrideForTesting = nil
+      clearSnapshotXCTestChannelPenalty(reason: "test-cleanup")
+      app.terminate()
+    }
+
+    final class ResultBox {
+      var response: Response?
+      var error: Error?
+      var commandRecoveredBeforeRelease = false
+      var wasBusyBeforeRelease = false
+      var hadAbandonedProbeBeforeRelease = false
+      var drained = false
+    }
+    let box = ResultBox()
+    let probeStarted = expectation(description: "system-modal routing probe started")
+    let verificationFinished = expectation(description: "command recovery and modal probe drain verified")
+    let probeReleaseGate = DispatchSemaphore(value: 0)
+    let commandFinishedGate = DispatchSemaphore(value: 0)
+    systemModalProbeOverrideForTesting = { _ in
+      probeStarted.fulfill()
+      _ = probeReleaseGate.wait(timeout: .now() + 15)
+      return DataPayload(message: "late system modal")
+    }
+
+    let command = try runnerCommandFixture(
+      #"{"command":"tap","commandId":"bounded-modal-routing","x":10,"y":20}"#
+    )
+    DispatchQueue(label: "agent-device.runner.tests.modal-routing-probe").async {
+      do {
+        box.response = try self.executeDispatched(command: command)
+      } catch {
+        box.error = error
+      }
+      commandFinishedGate.signal()
+    }
+    DispatchQueue(label: "agent-device.runner.tests.modal-routing-probe-verifier").async {
+      let commandWait = commandFinishedGate.wait(
+        timeout: .now() + self.systemModalProbeBudget + 3
+      )
+      box.commandRecoveredBeforeRelease = commandWait == .success
+        && box.error == nil
+        && box.response?.error?.code == "RUNNER_BUSY"
+      if case .busy = self.currentMainThreadBusyState() {
+        box.wasBusyBeforeRelease = true
+      }
+      box.hadAbandonedProbeBeforeRelease = self.hasAbandonedTreeCapture()
+
+      // The XCTest main thread is blocked inside the injected probe, so this verifier owns the
+      // ordered release after recording the command result and abandoned-work state above.
+      probeReleaseGate.signal()
+      let deadline = Date().addingTimeInterval(5)
+      while self.hasAbandonedTreeCapture(), Date() < deadline {
+        self.sleepFor(0.002)
+      }
+      box.drained = !self.hasAbandonedTreeCapture()
+      verificationFinished.fulfill()
+    }
+
+    wait(for: [probeStarted, verificationFinished], timeout: 15)
+    XCTAssertTrue(
+      box.commandRecoveredBeforeRelease,
+      "the public coordinate tap must return RUNNER_BUSY before the blocked modal probe drains"
+    )
+    XCTAssertTrue(box.wasBusyBeforeRelease)
+    XCTAssertTrue(box.hadAbandonedProbeBeforeRelease)
+    XCTAssertTrue(box.drained)
+    guard case .idle = currentMainThreadBusyState() else {
+      return XCTFail("expected the runner to become idle after the routing probe drained")
+    }
+    XCTAssertFalse(hasAbandonedTreeCapture())
   }
 
   func testSkipAppActivationPreflightRejectsSelectorAndMixedSequenceGestures() throws {
@@ -788,24 +870,42 @@ extension RunnerTests {
     )
   }
 
-  private func executeDispatched(command: Command) throws -> Response {
-    // XCTest work cannot be cancelled mid-flight: once the watchdog abandons a main-queue
-    // block, queueing more main-thread commands behind it only buries the runner deeper.
-    // Refuse fast instead so the daemon backs off while the abandoned work drains; past the
-    // wedge threshold, escalate so the daemon recycles this runner (#1105).
+  private func runnerUnavailableResponse(command: Command) -> Response? {
     switch currentMainThreadBusyState() {
     case .idle:
-      break
+      return nil
     case .busy(let abandonedForSeconds):
       return runnerBusyResponse(command: command, abandonedForSeconds: abandonedForSeconds)
     case .wedged(let abandonedForSeconds):
       return runnerWedgedResponse(command: command, abandonedForSeconds: abandonedForSeconds)
     }
+  }
+
+  private func executeDispatched(command: Command) throws -> Response {
+    // XCTest work cannot be cancelled mid-flight: once the watchdog abandons a main-queue
+    // block, queueing more main-thread commands behind it only buries the runner deeper.
+    // Refuse fast instead so the daemon backs off while the abandoned work drains; past the
+    // wedge threshold, escalate so the daemon recycles this runner (#1105).
+    if let unavailable = runnerUnavailableResponse(command: command) {
+      return unavailable
+    }
     if Thread.isMainThread {
+      let routeToSpringboard = shouldRouteToSpringboardBlockingSystemModal(command)
       let alertDeadline = command.command == .alert
         ? Date().addingTimeInterval(Self.alertCommandTimeout(timeoutMs: command.timeoutMs))
         : nil
-      return try executeOnMainSafely(command: command, alertDeadline: alertDeadline)
+      return try executeOnMainSafely(
+        command: command,
+        alertDeadline: alertDeadline,
+        routeToSpringboard: routeToSpringboard
+      )
+    }
+    // Resolve this before the command's outer main-thread block. If the bounded probe abandons
+    // slow XCTest enumeration, return the established recoverable response instead of queueing
+    // command preparation behind work that may outlive the 30-second command watchdog.
+    let routeToSpringboard = shouldRouteToSpringboardBlockingSystemModal(command)
+    if let unavailable = runnerUnavailableResponse(command: command) {
+      return unavailable
     }
     if command.command == .snapshot {
       return try executeSnapshotDispatched(command: command)
@@ -819,7 +919,11 @@ extension RunnerTests {
         timeout: max(0.001, deadline.timeIntervalSinceNow),
         timeoutError: mainThreadExecutionTimeoutError
       ) {
-        try self.executeOnMainSafely(command: command, alertDeadline: deadline)
+        try self.executeOnMainSafely(
+          command: command,
+          alertDeadline: deadline,
+          routeToSpringboard: routeToSpringboard
+        )
       }
     }
     return try runMainThreadWork(
@@ -827,7 +931,7 @@ extension RunnerTests {
       timeout: mainThreadExecutionTimeout,
       timeoutError: mainThreadExecutionTimeoutError
     ) {
-      try self.executeOnMainSafely(command: command)
+      try self.executeOnMainSafely(command: command, routeToSpringboard: routeToSpringboard)
     }
   }
 
@@ -907,7 +1011,8 @@ extension RunnerTests {
 
   private func executeOnMainSafely(
     command: Command,
-    alertDeadline: Date? = nil
+    alertDeadline: Date? = nil,
+    routeToSpringboard: Bool
   ) throws -> Response {
     var hasRetried = false
     while true {
@@ -916,7 +1021,11 @@ extension RunnerTests {
       let failureCountBefore = currentXCTestFailureCount()
       let exceptionMessage = RunnerObjCExceptionCatcher.catchException({
         do {
-          response = try self.executeOnMain(command: command, alertDeadline: alertDeadline)
+          response = try self.executeOnMain(
+            command: command,
+            alertDeadline: alertDeadline,
+            routeToSpringboard: routeToSpringboard
+          )
         } catch {
           swiftError = error
         }
@@ -1046,7 +1155,7 @@ extension RunnerTests {
       timeout: mainThreadExecutionTimeout,
       timeoutError: mainThreadExecutionTimeoutError
     ) {
-      try self.prepareActiveCommandContextSafely(command: command)
+      try self.prepareActiveCommandContextSafely(command: command, routeToSpringboard: false)
     }
     switch preparation {
     case .response(let response):
@@ -1125,10 +1234,16 @@ extension RunnerTests {
     }
   }
 
-  private func prepareActiveCommandContextSafely(command: Command) throws -> ActiveCommandPreparation {
+  private func prepareActiveCommandContextSafely(
+    command: Command,
+    routeToSpringboard: Bool
+  ) throws -> ActiveCommandPreparation {
     var preparation: ActiveCommandPreparation?
     let exceptionMessage = RunnerObjCExceptionCatcher.catchException({
-      preparation = self.prepareActiveCommandContext(command: command)
+      preparation = self.prepareActiveCommandContext(
+        command: command,
+        routeToSpringboard: routeToSpringboard
+      )
     })
     if let exceptionMessage {
       throw NSError(
@@ -1147,8 +1262,15 @@ extension RunnerTests {
     return preparation
   }
 
-  private func executeOnMain(command: Command, alertDeadline: Date?) throws -> Response {
-    let preparation = prepareActiveCommandContext(command: command)
+  private func executeOnMain(
+    command: Command,
+    alertDeadline: Date?,
+    routeToSpringboard: Bool
+  ) throws -> Response {
+    let preparation = prepareActiveCommandContext(
+      command: command,
+      routeToSpringboard: routeToSpringboard
+    )
     let activeApp: XCUIApplication
     switch preparation {
     case .response(let response):
@@ -1234,9 +1356,12 @@ extension RunnerTests {
     )
   }
 
-  private func prepareActiveCommandContext(command: Command) -> ActiveCommandPreparation {
+  private func prepareActiveCommandContext(
+    command: Command,
+    routeToSpringboard: Bool = false
+  ) -> ActiveCommandPreparation {
     var activeApp = currentApp ?? app
-    if shouldRouteToSpringboardBlockingSystemModal(command) {
+    if routeToSpringboard {
       activeApp = springboard
     } else if shouldSkipAppActivationPreflight(command) {
       activeApp = resolveAppWithoutActivation(command: command)
@@ -2126,8 +2251,18 @@ extension RunnerTests {
       return override
     }
     #endif
-    let deadline = Date().addingTimeInterval(systemModalProbeBudget)
-    return firstBlockingSystemModal(in: springboard, deadline: deadline) != nil
+    // `runMainThreadWork` executes inline for a main-thread caller, so that path cannot use its
+    // timeout machinery. Direct main-thread dispatch keeps the prior synchronous modal check;
+    // normal off-main command dispatch uses the bounded probe and post-probe busy recovery.
+    if Thread.isMainThread {
+      return firstBlockingSystemModal(
+        in: springboard,
+        deadline: Date().addingTimeInterval(systemModalProbeBudget)
+      ) != nil
+    }
+    return boundedBlockingSystemAlertSnapshot(
+      deadline: Date().addingTimeInterval(systemModalProbeBudget)
+    ) != nil
 #else
     return false
 #endif
