@@ -63,7 +63,33 @@ test('typed target resolution applies typed childOf and reports structured misse
   expect(missingParent).toMatchObject({
     ok: false,
     message: 'Maestro childOf parent did not match.',
-    evidence: { matched: true, visible: false, candidateCount: 1 },
+    evidence: { matched: false, visible: false, candidateCount: 0 },
+  });
+});
+
+test('typed childOf reports a scoped miss when only an outside child matches', () => {
+  const snapshot = makeSnapshot([
+    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 320, height: 640 } },
+    { index: 1, parentIndex: 0, identifier: 'row', rect: { x: 0, y: 0, width: 320, height: 80 } },
+    {
+      index: 2,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Delete',
+      rect: { x: 220, y: 96, width: 64, height: 48 },
+    },
+  ]);
+
+  expect(
+    resolveMaestroTargetFromSnapshot(
+      snapshot,
+      { selector: { text: 'Delete' }, childOf: { id: 'row' } },
+      'android',
+    ),
+  ).toMatchObject({
+    ok: false,
+    message: 'Maestro selector did not match.',
+    evidence: { matched: false, visible: false, candidateCount: 0 },
   });
 });
 

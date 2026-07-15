@@ -34,7 +34,7 @@ export function rankMaestroCandidates(
     platform,
   });
   return {
-    matches,
+    matches: scoped.matches,
     visible,
     ranked: normalizeMaestroSnapshotMatches(snapshot.nodes, visible, selector, platform),
     parentMatched: scoped.parentMatched,
