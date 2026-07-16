@@ -1,8 +1,20 @@
 import { test, expect } from 'vitest';
-import { classifyAndroidHelperContentRecovery } from '../snapshot-content-recovery.ts';
+import {
+  classifyAndroidHelperContent,
+  type AndroidHelperContentRecoveryDecision,
+} from '../snapshot-content-recovery.ts';
+
+// Legacy assertions below check the unusable decision (or its absence); outcome-specific tests
+// call classifyAndroidHelperContent directly.
+function unusableDecisionFor(
+  ...args: Parameters<typeof classifyAndroidHelperContent>
+): AndroidHelperContentRecoveryDecision | undefined {
+  const result = classifyAndroidHelperContent(...args);
+  return result.outcome === 'unusable' ? result.decision : undefined;
+}
 
 test('keeps known IME blocking windows instead of falling back to covered app content', () => {
-  const decision = classifyAndroidHelperContentRecovery(
+  const decision = unusableDecisionFor(
     helperXml([
       node({
         windowType: 1,
@@ -40,7 +52,7 @@ test('keeps known IME blocking windows instead of falling back to covered app co
 });
 
 test('rejects helper output with only one meaningful IME node', () => {
-  const decision = classifyAndroidHelperContentRecovery(
+  const decision = unusableDecisionFor(
     helperXml([
       node({
         windowType: 1,
@@ -68,7 +80,7 @@ test('rejects helper output with only one meaningful IME node', () => {
 });
 
 test('rejects helper output with no foreground app or IME content', () => {
-  const decision = classifyAndroidHelperContentRecovery(
+  const decision = unusableDecisionFor(
     helperXml([
       node({
         windowType: 1,
@@ -96,7 +108,7 @@ test('rejects helper output with no foreground app or IME content', () => {
 });
 
 test('keeps a meaningful foreground application surface owned by another package', () => {
-  const decision = classifyAndroidHelperContentRecovery(
+  const decision = unusableDecisionFor(
     helperXml([
       node({
         windowType: 1,
@@ -129,7 +141,7 @@ test('keeps a meaningful foreground application surface owned by another package
 });
 
 test('rejects a status-bar-only capture without window metadata', () => {
-  const decision = classifyAndroidHelperContentRecovery(
+  const decision = unusableDecisionFor(
     helperXml([
       node({
         text: '7:52',
@@ -160,7 +172,7 @@ test('rejects a status-bar-only capture without window metadata', () => {
 });
 
 test('rejects framework-owned content without window metadata', () => {
-  const decision = classifyAndroidHelperContentRecovery(
+  const decision = unusableDecisionFor(
     helperXml([
       node({
         text: 'System dialog',
@@ -184,7 +196,7 @@ test('rejects framework-owned content without window metadata', () => {
 });
 
 test('keeps a recognized system dialog without window metadata', () => {
-  const decision = classifyAndroidHelperContentRecovery(
+  const decision = unusableDecisionFor(
     helperXml([
       node({
         text: "Demo isn't responding",
@@ -225,7 +237,7 @@ test('keeps a recognized system dialog without window metadata', () => {
 });
 
 test('rejects system chrome inherited under an empty application window', () => {
-  const decision = classifyAndroidHelperContentRecovery(
+  const decision = unusableDecisionFor(
     helperXml([
       node({
         windowType: 1,
@@ -258,6 +270,114 @@ test('rejects system chrome inherited under an empty application window', () => 
   expect(decision?.diagnostics.helperNonSystemMeaningfulNodeCount).toBe(0);
 });
 
+test('returns a meaningful active system surface (notification shade) faithfully', () => {
+  const result = classifyAndroidHelperContent(
+    helperXml([
+      node({
+        windowType: 3,
+        windowActive: true,
+        packageName: 'com.android.systemui',
+        className: 'android.widget.FrameLayout',
+      }),
+      node({
+        text: 'Wed, Jul 16',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.TextView',
+      }),
+      node({
+        text: 'Internet',
+        resourceId: 'com.android.systemui:id/qs_tile_internet',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.Switch',
+      }),
+      node({
+        text: 'Manage',
+        resourceId: 'com.android.systemui:id/manage_settings',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.Button',
+      }),
+    ]),
+    {
+      backend: 'android-helper',
+      nodeCount: 4,
+      rootPresent: true,
+      windowCount: 1,
+      captureMode: 'interactive-windows',
+    },
+    { foregroundAppPackage: 'com.android.settings' },
+  );
+
+  expect(result.outcome).toBe('system-surface-only');
+});
+
+test('rejects a sparse active system surface below the meaningful-content floor', () => {
+  const result = classifyAndroidHelperContent(
+    helperXml([
+      node({
+        windowType: 3,
+        windowActive: true,
+        packageName: 'com.android.systemui',
+        className: 'android.widget.FrameLayout',
+      }),
+      node({
+        text: '7:52',
+        resourceId: 'com.android.systemui:id/clock',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.TextView',
+      }),
+    ]),
+    {
+      backend: 'android-helper',
+      nodeCount: 2,
+      rootPresent: true,
+      windowCount: 1,
+      captureMode: 'interactive-windows',
+    },
+    { foregroundAppPackage: 'com.android.settings' },
+  );
+
+  expect(result.outcome).toBe('unusable');
+});
+
+test('rejects a content-rich system window that is neither active nor focused', () => {
+  const result = classifyAndroidHelperContent(
+    helperXml([
+      node({
+        windowType: 3,
+        packageName: 'com.android.systemui',
+        className: 'android.widget.FrameLayout',
+      }),
+      node({
+        text: 'Wed, Jul 16',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.TextView',
+      }),
+      node({
+        text: 'Internet',
+        resourceId: 'com.android.systemui:id/qs_tile_internet',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.Switch',
+      }),
+      node({
+        text: 'Manage',
+        resourceId: 'com.android.systemui:id/manage_settings',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.Button',
+      }),
+    ]),
+    {
+      backend: 'android-helper',
+      nodeCount: 4,
+      rootPresent: true,
+      windowCount: 1,
+      captureMode: 'interactive-windows',
+    },
+    { foregroundAppPackage: 'com.android.settings' },
+  );
+
+  expect(result.outcome).toBe('unusable');
+});
+
 function helperXml(nodes: string[]): string {
   return `<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><hierarchy>${nodes.join('')}</hierarchy>`;
 }
@@ -268,6 +388,10 @@ function node(options: {
   packageName: string;
   className: string;
   windowType?: number;
+  windowActive?: boolean;
 }): string {
-  return `<node index="0"${options.windowType === undefined ? '' : ` window-type="${options.windowType}"`} text="${options.text ?? ''}" resource-id="${options.resourceId ?? ''}" class="${options.className}" package="${options.packageName}" visible-to-user="true" enabled="true" bounds="[0,0][100,100]" />`;
+  const windowAttrs =
+    (options.windowType === undefined ? '' : ` window-type="${options.windowType}"`) +
+    (options.windowActive === undefined ? '' : ` window-active="${options.windowActive}"`);
+  return `<node index="0"${windowAttrs} text="${options.text ?? ''}" resource-id="${options.resourceId ?? ''}" class="${options.className}" package="${options.packageName}" visible-to-user="true" enabled="true" bounds="[0,0][100,100]" />`;
 }

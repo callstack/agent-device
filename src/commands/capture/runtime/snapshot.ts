@@ -243,11 +243,21 @@ function buildSnapshotWarnings(params: {
   const reactNativeOverlayWarning = formatReactNativeOverlayWarning(params.snapshot.nodes);
   if (reactNativeOverlayWarning) warnings.push(reactNativeOverlayWarning);
 
+  const systemSurfaceWarning = formatAndroidSystemSurfaceWarning(params.annotations);
+  if (systemSurfaceWarning) warnings.push(systemSurfaceWarning);
+
   const recentDropWarning = formatRecentSnapshotDropWarning(params);
   if (recentDropWarning) warnings.push(recentDropWarning);
 
   warnings.push(...formatFreshnessWarnings(params.annotations.freshness, params.snapshot.backend));
   return Array.from(new Set(warnings));
+}
+
+function formatAndroidSystemSurfaceWarning(
+  annotations: SnapshotCaptureAnnotations,
+): string | undefined {
+  if (annotations.androidSnapshot?.systemSurfaceOnly !== true) return undefined;
+  return 'A system surface (notification shade, quick settings, or another system overlay) covers the app, so this snapshot shows that surface. Interact with it or dismiss it (press back or swipe up) to reach app content.';
 }
 
 function buildSparseIosInteractiveWarnings(params: {

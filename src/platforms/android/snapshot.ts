@@ -49,7 +49,7 @@ import {
 } from './snapshot-helper.ts';
 import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
 import {
-  classifyAndroidHelperContentRecovery,
+  classifyAndroidHelperContent,
   type AndroidHelperContentRecoveryDecision,
 } from './snapshot-content-recovery.ts';
 
@@ -244,14 +244,22 @@ async function captureAndroidUiHierarchyWithHelper(
       });
     }
 
-    const contentRecovery = classifyAndroidHelperContentRecovery(
-      helperCapture.xml,
-      helperCapture.metadata,
-      { foregroundAppPackage: options.appBundleId },
-    );
-    if (!contentRecovery) return helperCapture;
+    const content = classifyAndroidHelperContent(helperCapture.xml, helperCapture.metadata, {
+      foregroundAppPackage: options.appBundleId,
+    });
+    if (content.outcome === 'system-surface-only') {
+      emitDiagnostic({
+        phase: 'android_snapshot_helper_system_surface',
+        data: { foregroundAppPackage: options.appBundleId },
+      });
+      return {
+        xml: helperCapture.xml,
+        metadata: { ...helperCapture.metadata, systemSurfaceOnly: true },
+      };
+    }
+    if (content.outcome === 'ok') return helperCapture;
     return await rejectAndroidHelperContentUnavailable({
-      contentRecovery,
+      contentRecovery: content.decision,
       helperDeviceKey,
       artifact,
       adb,
