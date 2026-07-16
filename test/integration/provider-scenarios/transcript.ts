@@ -12,7 +12,16 @@ export interface ProviderScenarioProviderEntry<
 > extends ProviderScenarioProviderScope {
   command: string;
   request?: unknown;
-  result?: TResult;
+  /** A factory is invoked per call, so repeated calls can return fresh results. */
+  result?: TResult | (() => TResult);
+  /**
+   * Serves every matching call instead of being consumed by the first, and never
+   * counts as unconsumed. Use it where the call COUNT is not the contract — a
+   * quiet UI returns the same tree to every capture, a busy one returns a fresh
+   * tree per capture (pair with a `result` factory). Scripting an exact count
+   * there would assert the runner's speed rather than the behaviour.
+   */
+  repeat?: boolean;
   error?: Error | string;
 }
 
@@ -59,20 +68,22 @@ export function createProviderTranscript(
         : pending.findIndex((candidate) =>
             providerEntryMatches(candidate, command, request, scope),
           );
-      const entry = entryIndex >= 0 ? pending.splice(entryIndex, 1)[0] : undefined;
+      const entry = entryIndex >= 0 ? pending[entryIndex] : undefined;
       assert.ok(entry, `Unexpected provider call: ${formatCall(command, scope)}`);
+      if (!entry.repeat) pending.splice(entryIndex, 1);
       assert.equal(command, entry.command, 'Provider command mismatch');
       assertScope(scope, entry);
       if (Object.hasOwn(entry, 'request')) {
         assert.deepEqual(request, entry.request, 'Provider request mismatch');
       }
 
+      const result = resolveEntryResult(entry) as TResult;
       const call = {
         command,
         request,
         deviceId: scope.deviceId,
         platform: scope.platform,
-        result: entry.result as TResult,
+        result,
       };
       calls.push(call);
 
@@ -80,13 +91,14 @@ export function createProviderTranscript(
         throw entry.error instanceof Error ? entry.error : new Error(entry.error);
       }
 
-      return entry.result as TResult;
+      return result;
     },
     assertComplete() {
+      const outstanding = pending.filter((entry) => !entry.repeat);
       assert.equal(
-        pending.length,
+        outstanding.length,
         0,
-        `Unconsumed provider transcript entries: ${pending.map(formatEntry).join(', ')}`,
+        `Unconsumed provider transcript entries: ${outstanding.map(formatEntry).join(', ')}`,
       );
     },
   };
@@ -96,6 +108,10 @@ export function createOrderedProviderTranscript(
   entries: readonly ProviderScenarioProviderEntry[],
 ): ProviderScenarioTranscript {
   return createProviderTranscript(entries, { ordered: true });
+}
+
+function resolveEntryResult(entry: ProviderScenarioProviderEntry): unknown {
+  return typeof entry.result === 'function' ? (entry.result as () => unknown)() : entry.result;
 }
 
 function providerEntryMatches(

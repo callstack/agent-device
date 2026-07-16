@@ -130,6 +130,30 @@ function snapshotEntry(nodes: readonly unknown[]): ProviderScenarioProviderEntry
   };
 }
 
+// A UI that has gone quiet: every settle capture sees the same tree. How many
+// captures the loop spends reaching that verdict is wall-clock — it polls on a
+// 25ms floor and settles once two identical captures span the quiet window — so
+// the count is not the contract and is never scripted here.
+function quietSnapshotEntry(nodes: readonly unknown[]): ProviderScenarioProviderEntry {
+  return { ...snapshotEntry(nodes), repeat: true };
+}
+
+// A UI that never goes quiet: every capture returns a fresh tree, so the loop
+// can never settle no matter how many captures fit in the budget.
+function changingSnapshotEntry(nodes: (label: string) => unknown[]): ProviderScenarioProviderEntry {
+  let capture = 0;
+  return {
+    command: 'ios.runner.snapshot',
+    deviceId: DEVICE_ID,
+    platform: 'apple',
+    repeat: true,
+    result: () => {
+      capture += 1;
+      return { nodes: nodes(`Loading ${capture}`), truncated: false };
+    },
+  };
+}
+
 function typeEntry(x: number, y: number): ProviderScenarioProviderEntry {
   return {
     command: 'ios.runner.type',
@@ -155,8 +179,7 @@ test('Provider-backed integration press --settle returns the settled diff and fr
     // press label=Continue --settle: resolution capture, tap, settle captures
     snapshotEntry(BEFORE_NODES),
     tapEntry(200, 322),
-    snapshotEntry(SETTLED_NODES),
-    snapshotEntry(SETTLED_NODES),
+    quietSnapshotEntry(SETTLED_NODES),
     // press @e2 (the Done ref from the settled diff): tap on the stored tree
     tapEntry(200, 522),
   ]);
@@ -212,7 +235,14 @@ test('Provider-backed integration press --settle returns the settled diff and fr
       };
       assert.ok(settle, 'press --settle must return a settle observation');
       assert.equal(settle.settled, true);
-      assert.equal(settle.captures, 2);
+      // Snapshot-floor economy: a quiet UI settles on the two identical
+      // captures the verdict needs, or three when the second lands a hair short
+      // of the quiet window. Anything above that is a regression in what settle
+      // spends; pinning a single number would assert the runner's speed.
+      assert.ok(
+        settle.captures >= 2 && settle.captures <= 3,
+        `settle should cost 2-3 captures, got ${settle.captures}`,
+      );
       assert.equal(typeof settle.refsGeneration, 'number');
       assert.deepEqual(settle.diff?.summary, { additions: 1, removals: 2, unchanged: 1 });
       const added = settle.diff?.lines.find((line) => line.kind === 'added');
@@ -229,11 +259,19 @@ test('Provider-backed integration press --settle returns the settled diff and fr
       // directly on the stored settled tree with no fresh snapshot round trip
       // and no stale-refs warning. The plain `@e2` would require a complete
       // frame.
+      const callsBeforeFollowUp = runnerTranscript.calls.length;
       const followUp = await daemon.callCommand('press', [`@e2~s${settle.refsGeneration}`], {});
       const followUpData = assertRpcOk(followUp);
       assert.equal(followUpData.warning, undefined);
       assert.equal(followUpData.x, 200);
       assert.equal(followUpData.y, 522);
+      // The round trip settle exists to remove: the follow-up spends a tap and
+      // nothing else. Asserted directly, since a quiet-UI entry would happily
+      // serve a stray capture.
+      assert.deepEqual(
+        runnerTranscript.calls.slice(callsBeforeFollowUp).map((call) => call.command),
+        ['ios.runner.tap'],
+      );
 
       runnerTranscript.assertComplete();
     },
@@ -258,13 +296,11 @@ test('Provider-backed integration never-settled press --settle does not issue di
     },
   ];
   const runnerTranscript = createProviderTranscript([
-    // press label=Continue --settle: resolution capture, tap, then a changing
-    // settle stream. The loop times out; the final capture is not actionable.
+    // press label=Continue --settle: resolution capture, tap, then a settle
+    // stream that never repeats itself, so the loop can only ever time out.
     snapshotEntry(BEFORE_NODES),
     tapEntry(200, 322),
-    snapshotEntry(loadingNodes('Loading 1')),
-    snapshotEntry(loadingNodes('Loading 2')),
-    snapshotEntry(SETTLED_NODES),
+    changingSnapshotEntry(loadingNodes),
   ]);
   const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
     runnerTranscript,
@@ -293,7 +329,10 @@ test('Provider-backed integration never-settled press --settle does not issue di
       const press = await daemon.callCommand('press', ['label=Continue'], {
         settle: true,
         settleQuietMs: 25,
-        timeoutMs: 60,
+        // Budget the loop spends without settling. Wide enough that a loaded
+        // runner's capture cannot outlast it — a capture that overruns the
+        // budget reports the stalled hint instead of this one.
+        timeoutMs: 300,
       });
       const pressData = assertRpcOk(press);
       const settle = pressData.settle as {
@@ -324,8 +363,7 @@ test('Provider-backed integration modal-dismiss press --settle attaches the unch
     // no added refs, so the tail is the only actionable-target payload.
     snapshotEntry(MODAL_BEFORE_NODES),
     tapEntry(200, 422),
-    snapshotEntry(MODAL_DISMISSED_NODES),
-    snapshotEntry(MODAL_DISMISSED_NODES),
+    quietSnapshotEntry(MODAL_DISMISSED_NODES),
     // press @e3 (the Continue ref from the tail): tap on the stored tree.
     tapEntry(200, 322),
   ]);
@@ -392,11 +430,16 @@ test('Provider-backed integration modal-dismiss press --settle attaches the unch
       // The tail's ref acts directly on the stored settled tree, same as an
       // added-line ref would — consumed in pinned form from the partial frame
       // (ADR 0014).
+      const callsBeforeFollowUp = runnerTranscript.calls.length;
       const followUp = await daemon.callCommand('press', [`@e3~s${settle.refsGeneration}`], {});
       const followUpData = assertRpcOk(followUp);
       assert.equal(followUpData.warning, undefined);
       assert.equal(followUpData.x, 200);
       assert.equal(followUpData.y, 322);
+      assert.deepEqual(
+        runnerTranscript.calls.slice(callsBeforeFollowUp).map((call) => call.command),
+        ['ios.runner.tap'],
+      );
 
       runnerTranscript.assertComplete();
     },
@@ -651,8 +694,7 @@ test('Provider-backed integration fill --settle summoning the keyboard still att
     // fresh capture), the runner types, then the settle loop captures. The
     // keyboard window appears and the field re-labels itself.
     typeEntry(201, 149),
-    snapshotEntry(FILL_SETTLED_NODES),
-    snapshotEntry(FILL_SETTLED_NODES),
+    quietSnapshotEntry(FILL_SETTLED_NODES),
     // press @e17 (the "Discard and go back" ref from the tail): tap on the
     // stored settled tree.
     tapEntry(201, 202),
@@ -724,11 +766,16 @@ test('Provider-backed integration fill --settle summoning the keyboard still att
       assert.equal(settle.tailTruncated, undefined);
       assert.equal(typeof settle.refsGeneration, 'number');
 
+      const callsBeforeFollowUp = runnerTranscript.calls.length;
       const followUp = await daemon.callCommand('press', [`@e17~s${settle.refsGeneration}`], {});
       const followUpData = assertRpcOk(followUp);
       assert.equal(followUpData.warning, undefined);
       assert.equal(followUpData.x, 201);
       assert.equal(followUpData.y, 202);
+      assert.deepEqual(
+        runnerTranscript.calls.slice(callsBeforeFollowUp).map((call) => call.command),
+        ['ios.runner.tap'],
+      );
 
       runnerTranscript.assertComplete();
     },
