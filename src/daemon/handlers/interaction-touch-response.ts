@@ -3,6 +3,7 @@ import type {
   FillCommandResult,
   LongPressCommandResult,
   PressCommandResult,
+  RecordingTargetOverride,
   ResolutionDisclosure,
   SettleObservation,
 } from '../../contracts/interaction.ts';
@@ -117,12 +118,17 @@ export function buildInteractionResponseData(params: {
     ...settleExtra(result.settle, params.settleRefsGeneration),
     ...(extra ?? {}),
   };
+  // #1280: THE recording boundary. `visualization` below is the recorded
+  // action entry (the .ad writer reads its `selectorChain`; recording
+  // overlays read it too), so it carries the retargeted descendant's
+  // chain/ref-label — while `responseData`, built from `commonExtra` alone,
+  // keeps describing the dispatched container.
   const visualization = buildTouchPayload({
     data: result.backendResult,
     fallbackX: result.point?.x,
     fallbackY: result.point?.y,
     referenceFrame,
-    extra: commonExtra,
+    extra: { ...commonExtra, ...recordingTargetExtra(result) },
   });
   const responseData = buildTouchPayload({
     data: source.publicData,
@@ -145,9 +151,25 @@ export function buildInteractionResponseData(params: {
 function recordedTargetCapture(
   result: InteractionRuntimeResult,
 ): Pick<InteractionResponsePayloads, 'recordedTarget'> {
-  const node = 'node' in result ? result.node : undefined;
+  // #1280: the target-v1 evidence source prefers the recording-only
+  // retargeted descendant, in lockstep with `recordingTargetExtra`'s chain
+  // override — the recorded entry and its evidence always name ONE node.
+  const node = readRecordingTarget(result)?.node ?? ('node' in result ? result.node : undefined);
   const preActionNodes = 'preActionNodes' in result ? result.preActionNodes : undefined;
   return node && preActionNodes ? { recordedTarget: { node, preActionNodes } } : {};
+}
+
+/** The recorded action entry's #1280 overrides: descendant chain + ref-label; empty when no retarget fired. */
+function recordingTargetExtra(result: InteractionRuntimeResult): Record<string, unknown> {
+  const recordingTarget = readRecordingTarget(result);
+  if (!recordingTarget) return {};
+  return { selectorChain: recordingTarget.selectorChain, refLabel: recordingTarget.refLabel };
+}
+
+function readRecordingTarget(
+  result: InteractionRuntimeResult,
+): RecordingTargetOverride | undefined {
+  return 'recordingTarget' in result ? result.recordingTarget : undefined;
 }
 
 // Attaches refsGeneration inside the settle payload when the response is

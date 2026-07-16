@@ -1,8 +1,12 @@
 import { test, expect, vi, beforeEach } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { handleInteractionCommands } from '../interaction.ts';
 import { attachRefs, type RawSnapshotNode } from '../../../kernel/snapshot.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { SessionScriptWriter } from '../../session-script-writer.ts';
 import type { CommandFlags } from '../../../core/dispatch.ts';
 import type { SessionState } from '../../types.ts';
 
@@ -228,4 +232,116 @@ test('get text simple iOS id selector while recording skips the direct runner qu
     ancestry: [{ role: 'application' }],
     verification: 'verified',
   });
+});
+
+// ---------------------------------------------------------------------------
+// #1280 (ADR 0012 decision 3 amendment), the recording-boundary split: a
+// press on an identity-empty container retargets ONLY what gets recorded.
+// The daemon RESPONSE stays entirely container-based (chain, hittability, no
+// side-channel leak), while the recorded action entry (the .ad writer's
+// source) and its target-v1 evidence are descendant-based.
+// ---------------------------------------------------------------------------
+
+const IDENTITY_EMPTY_ROW_NODES: RawSnapshotNode[] = [
+  {
+    index: 0,
+    depth: 0,
+    type: 'FrameLayout',
+    rect: { x: 0, y: 0, width: 400, height: 800 },
+    enabled: true,
+    hittable: true,
+  },
+  {
+    index: 1,
+    depth: 1,
+    parentIndex: 0,
+    type: 'LinearLayout',
+    rect: { x: 0, y: 100, width: 300, height: 48 },
+    enabled: true,
+    hittable: true,
+  },
+  {
+    index: 2,
+    depth: 2,
+    parentIndex: 1,
+    type: 'TextView',
+    label: 'Connected devices',
+    rect: { x: 0, y: 100, width: 300, height: 48 },
+    enabled: true,
+    hittable: false,
+  },
+];
+
+// The wire response describes the dispatched CONTAINER, and the
+// recording-only side channel never leaks into it.
+function expectContainerBasedResponse(data: Record<string, unknown>): void {
+  expect(data.selectorChain).toEqual(['role="linearlayout"']);
+  expect(data.targetHittable).toBeUndefined();
+  expect(data).not.toHaveProperty('recordingTarget');
+  expect(data).not.toHaveProperty('node');
+  expect(data).not.toHaveProperty('preActionNodes');
+}
+
+// The recorded action entry — the .ad writer's source — carries the
+// DESCENDANT chain/ref-label, and its target-v1 evidence names the same
+// descendant (role+label; the container has no selective identity).
+function expectDescendantBasedRecording(session: SessionState): void {
+  const recordedAction = session.actions[0];
+  if (!recordedAction) throw new Error('expected a recorded action');
+  expect(recordedAction.result?.selectorChain).toEqual([
+    'role="textview" label="Connected devices"',
+    'label="Connected devices"',
+  ]);
+  expect(recordedAction.result?.refLabel).toBe('Connected devices');
+  expect(recordedAction.result).not.toHaveProperty('recordingTarget');
+  expect(recordedAction.targetEvidence).toMatchObject({
+    role: 'textview',
+    label: 'Connected devices',
+    verification: 'verified',
+  });
+  expect(recordedAction.targetEvidence?.id).toBeUndefined();
+}
+
+function writeSessionScript(session: SessionState): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-press-retarget-'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const written = writer.write(session);
+  if (!written.written) throw new Error('expected the script to be written');
+  return fs.readFileSync(written.path, 'utf8');
+}
+
+test('press on an identity-empty container: container-based daemon response, descendant-based recorded entry + .ad script', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'recording-press-retarget';
+  // The fixture is the measured Android list-row shape, but the recording
+  // boundary under test is platform-independent — an iOS session keeps this
+  // on the runtime resolution path (the direct-iOS fast path is gated during
+  // recording) without Android's real-adb dialog-readiness probes, which
+  // would burn wall-clock time this unit lane must not spend.
+  const session = makeIosSession(sessionName, { appBundleId: 'com.example.app' });
+  session.recordSession = true;
+  sessionStore.set(sessionName, session);
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command === 'snapshot') {
+      return { backend: 'xctest', nodes: IDENTITY_EMPTY_ROW_NODES };
+    }
+    return {};
+  });
+
+  const response = await runCommand(sessionStore, sessionName, 'press', ['role=linearlayout']);
+
+  expect(response?.ok).toBe(true);
+  if (!response?.ok || !response.data) throw new Error('expected an ok response with data');
+  expectContainerBasedResponse(response.data);
+
+  const recordedSession = sessionStore.get(sessionName);
+  if (!recordedSession) throw new Error('expected the session to persist');
+  expectDescendantBasedRecording(recordedSession);
+
+  // And the WRITTEN .ad line re-resolves the descendant, not the container.
+  const script = writeSessionScript(recordedSession);
+  expect(script).toContain(
+    'press "role=\\"textview\\" label=\\"Connected devices\\" || label=\\"Connected devices\\""',
+  );
+  expect(script).toContain('"role":"textview","label":"Connected devices"');
 });

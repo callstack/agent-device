@@ -69,6 +69,21 @@ export type ResolutionDisclosure =
   | { source: 'ref'; phase: 'pre-action'; kind: 'label-fallback' }
   | { source: 'direct-ios'; kind: 'not-observed' };
 
+/**
+ * #1280 (ADR 0012 decision 3 amendment): recording-only side channel — the
+ * labeled descendant an identity-empty press container was retargeted to.
+ * Consumed exclusively at the recording boundary
+ * (`interaction-touch-response.ts`): the recorded action entry and its
+ * `target-v1` evidence key off this node/chain/ref-label, while every
+ * response payload keeps describing the dispatched container. Never
+ * serialized into a response.
+ */
+export type RecordingTargetOverride = {
+  node: SnapshotNode;
+  selectorChain: string[];
+  refLabel?: string;
+};
+
 export type ResolvedInteractionTarget =
   | {
       kind: 'point';
@@ -86,6 +101,7 @@ export type ResolvedInteractionTarget =
       hint?: string;
       preActionNodes?: SnapshotNode[];
       resolution?: ResolutionDisclosure;
+      recordingTarget?: RecordingTargetOverride;
     }
   | {
       kind: 'selector';
@@ -98,6 +114,7 @@ export type ResolvedInteractionTarget =
       hint?: string;
       preActionNodes?: SnapshotNode[];
       resolution?: ResolutionDisclosure;
+      recordingTarget?: RecordingTargetOverride;
     };
 
 /**

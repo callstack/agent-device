@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { buildNodes } from '../__tests__/test-utils/snapshot-builders.ts';
 import { computeTargetEvidence } from '../daemon/session-target-evidence.ts';
-import { buildSelectorChainForNode } from './build.ts';
-import { parseSelectorChain, resolveSelectorChain } from './index.ts';
+import { buildSelectorChainForNode } from '../selectors/build.ts';
+import { parseSelectorChain, resolveSelectorChain } from '../selectors/index.ts';
 import { readNodeLocalIdentity } from '../replay/target-identity-node.ts';
 import { resolvePressRecordingTarget } from './press-retarget.ts';
 
@@ -325,4 +325,152 @@ test('#1280 cross-invariant: chain and evidence agree on the recorded node — r
     input: findByLabel(normalNodes, 'Apps'),
     platform: 'android',
   });
+});
+
+// ---------------------------------------------------------------------------
+// P2a (#1280 re-review): a container carrying its OWN duplicated id must not
+// bypass retargeting. The id is demoted for non-uniqueness (#1269), so it
+// does not survive into identity — and the text probe must consume the same
+// DEMOTED view rather than resurrecting the raw identifier via
+// extractNodeText's fallback.
+// ---------------------------------------------------------------------------
+
+function duplicatedContainerIdFixture(): SnapshotNode[] {
+  return buildNodes([
+    { index: 0, type: 'RecyclerView', depth: 0 },
+    {
+      index: 1,
+      type: 'LinearLayout',
+      identifier: 'com.example:id/row_container',
+      rect: { x: 0, y: 100, width: 300, height: 48 },
+      depth: 1,
+      parentIndex: 0,
+    },
+    {
+      index: 2,
+      type: 'TextView',
+      label: 'Network & internet',
+      rect: { x: 0, y: 100, width: 300, height: 48 },
+      depth: 2,
+      parentIndex: 1,
+    },
+    {
+      index: 3,
+      type: 'LinearLayout',
+      identifier: 'com.example:id/row_container',
+      rect: { x: 0, y: 148, width: 300, height: 48 },
+      depth: 1,
+      parentIndex: 0,
+    },
+    {
+      index: 4,
+      type: 'TextView',
+      label: 'Connected devices',
+      rect: { x: 0, y: 148, width: 300, height: 48 },
+      depth: 2,
+      parentIndex: 3,
+    },
+  ]);
+}
+
+test('resolvePressRecordingTarget P2a: a container whose own duplicated id was demoted still retargets (no raw-identifier bypass)', () => {
+  const nodes = duplicatedContainerIdFixture();
+  const container = nodes.find(
+    (node) => node.index === 3 && node.identifier === 'com.example:id/row_container',
+  )!;
+  const recorded = resolvePressRecordingTarget(container, nodes);
+  assert.equal(recorded.ref, findByLabel(nodes, 'Connected devices').ref);
+});
+
+test('resolvePressRecordingTarget P2a contrast: a container with a UNIQUE id keeps its identity and does not retarget', () => {
+  const nodes = duplicatedContainerIdFixture();
+  // Make the first container's id unique: it survives demotion, so the
+  // container is identity-bearing and records as itself.
+  const container = nodes.find((node) => node.index === 1)!;
+  container.identifier = 'com.example:id/unique_row';
+  const recorded = resolvePressRecordingTarget(container, nodes);
+  assert.equal(recorded.ref, container.ref);
+});
+
+// ---------------------------------------------------------------------------
+// P2b (#1280 re-review): the guard is built from the canonical interactive
+// classification (`isSemanticTouchTarget`, core/interaction-targeting.ts),
+// not a parallel list — roles the old private fragment list missed must
+// block. And a geometry condition: the selected descendant's rect center
+// must lie INSIDE the container's rect, else the replay tap point is not
+// provably within the original activation region — no retarget.
+// ---------------------------------------------------------------------------
+
+test('resolvePressRecordingTarget P2b: a nested Cell descendant (canonical role the old fragment list missed) blocks retargeting', () => {
+  const nodes = buildNodes([
+    {
+      index: 0,
+      type: 'LinearLayout',
+      rect: { x: 0, y: 0, width: 300, height: 96 },
+      depth: 0,
+    },
+    {
+      index: 1,
+      type: 'TextView',
+      label: 'Recent items',
+      rect: { x: 0, y: 0, width: 300, height: 48 },
+      depth: 1,
+      parentIndex: 0,
+    },
+    {
+      index: 2,
+      // A nested Cell (canonical `SEMANTIC_TOUCH_ROLE_FRAGMENTS` member,
+      // absent from the old private list) — an independently tappable row
+      // inside the container's subtree.
+      type: 'Cell',
+      rect: { x: 0, y: 48, width: 300, height: 48 },
+      depth: 1,
+      parentIndex: 0,
+    },
+  ]);
+  const container = nodes[0]!;
+  const recorded = resolvePressRecordingTarget(container, nodes);
+  assert.equal(recorded.ref, container.ref);
+});
+
+test('resolvePressRecordingTarget P2b: a labeled descendant whose rect center lies OUTSIDE the container rect blocks retargeting', () => {
+  const nodes = buildNodes([
+    {
+      index: 0,
+      type: 'LinearLayout',
+      rect: { x: 0, y: 100, width: 300, height: 48 },
+      depth: 0,
+    },
+    {
+      index: 1,
+      // Overflowing label: its rect center (150, 200) sits below the
+      // container's rect (y 100..148) — a tap there is not provably inside
+      // the recorded activation region.
+      type: 'TextView',
+      label: 'Overflowing title',
+      rect: { x: 0, y: 176, width: 300, height: 48 },
+      depth: 1,
+      parentIndex: 0,
+    },
+  ]);
+  const container = nodes[0]!;
+  const recorded = resolvePressRecordingTarget(container, nodes);
+  assert.equal(recorded.ref, container.ref);
+});
+
+test('resolvePressRecordingTarget P2b: a rect-less container blocks retargeting (geometry fails closed)', () => {
+  const nodes = buildNodes([
+    { index: 0, type: 'LinearLayout', depth: 0 },
+    {
+      index: 1,
+      type: 'TextView',
+      label: 'Connected devices',
+      rect: { x: 0, y: 100, width: 300, height: 48 },
+      depth: 1,
+      parentIndex: 0,
+    },
+  ]);
+  const container = nodes[0]!;
+  const recorded = resolvePressRecordingTarget(container, nodes);
+  assert.equal(recorded.ref, container.ref);
 });

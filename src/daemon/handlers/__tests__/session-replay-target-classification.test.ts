@@ -5,7 +5,7 @@ import type { TargetAnnotationV1 } from '../../../replay/target-identity.ts';
 import { computeTargetEvidence } from '../../session-target-evidence.ts';
 import { buildSelectorChainForNode } from '../../../selectors/build.ts';
 import { parseSelectorChain, resolveSelectorChain } from '../../../selectors/index.ts';
-import { resolvePressRecordingTarget } from '../../../selectors/press-retarget.ts';
+import { resolvePressRecordingTarget } from '../../../core/press-retarget.ts';
 import { classifyReplayTarget } from '../session-replay-target-classification.ts';
 import {
   bottomTabsRealCaptureFixture,
@@ -485,7 +485,13 @@ function androidSharedIdListFixture(
   rows.forEach((row, position) => {
     const wrapperIndex = 2 + position * 2;
     const titleIndex = wrapperIndex + 1;
-    raw.push({ index: wrapperIndex, type: 'LinearLayout', depth: 2, parentIndex: 1 });
+    raw.push({
+      index: wrapperIndex,
+      type: 'LinearLayout',
+      rect: { x: 0, y: row.y, width: 300, height: 48 },
+      depth: 2,
+      parentIndex: 1,
+    });
     raw.push({
       index: titleIndex,
       type: 'TextView',

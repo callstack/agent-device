@@ -16,7 +16,7 @@ import {
   type SelectorResolution,
 } from '../../../selectors/index.ts';
 import { buildSelectorChainForNode } from '../../../selectors/build.ts';
-import { resolvePressRecordingTarget } from '../../../selectors/press-retarget.ts';
+import { resolvePressRecordingTarget } from '../../../core/press-retarget.ts';
 import {
   findNodeByLabel,
   normalizeType,
@@ -32,6 +32,7 @@ import { truncateUtf8 } from '../../../utils/truncate-utf8.ts';
 import type {
   InteractionTarget,
   PointTarget,
+  RecordingTargetOverride,
   ResolutionDiagnosticEntry,
   ResolutionDisclosure,
   ResolvedInteractionTarget,
@@ -383,15 +384,10 @@ function buildResolutionDiagnosticEntry(
   };
 }
 
-// #1280: press/click/fill are the actions whose recorded evidence can
-// substitute an identity-empty container for its labeled descendant (a
-// list-row press is the measured shape); reads (get/find) already have
-// their own #1269 id-demotion treatment and go through selector-read.ts,
-// not this function.
-const PRESS_RETARGET_ACTIONS = new Set<InteractionAction>(['click', 'press', 'fill']);
-
 // Shared tail of a resolved ref/selector interaction target: the node itself
-// plus everything derived from it for the response.
+// plus everything derived from it for the response. Every response field
+// describes the DISPATCHED node — the #1280 retarget rides only on the
+// `recordingTarget` side channel below.
 function describeResolvedInteractionNode(
   runtime: AgentDeviceRuntime,
   node: SnapshotNode,
@@ -406,33 +402,50 @@ function describeResolvedInteractionNode(
   hint?: string;
   preActionNodes: SnapshotState['nodes'];
   resolution: ResolutionDisclosure;
+  recordingTarget?: RecordingTargetOverride;
 } {
-  // #1280: the ONE substitution point feeding both writers — the returned
-  // `node` is what `computeTargetEvidence` records evidence for
-  // (`recordedTargetCapture`, interaction-touch-response.ts), and
-  // `selectorChain` below is built from the same `recordedNode`, so the two
-  // never half-retarget. The live tap point was already resolved against
-  // the ORIGINAL `node` before this function runs (see callers) — this is
-  // recording-time only. The fields split by what they are FOR:
-  // recording-coupled fields (they become the .ad step: `node` as evidence
-  // source, `selectorChain`, `refLabel`) follow the retargeted node;
-  // response-semantic fields (`describeNonHittableTarget`'s targetHittable +
-  // hint) describe the node actually dispatched and stay on the original —
-  // a hittable container's press must never report its non-hittable title
-  // descendant as the tap target.
-  const recordedNode = PRESS_RETARGET_ACTIONS.has(action)
-    ? resolvePressRecordingTarget(node, nodes)
-    : node;
   return {
-    node: recordedNode,
-    selectorChain: buildSelectorChainForNode(recordedNode, runtime.backend.platform, {
+    node,
+    selectorChain: buildSelectorChainForNode(node, runtime.backend.platform, {
       action: action === 'fill' ? 'fill' : 'click',
       nodes,
     }),
-    refLabel: resolveRefLabel(recordedNode, nodes),
+    refLabel: resolveRefLabel(node, nodes),
     ...describeNonHittableTarget(node, action),
     preActionNodes: nodes,
     resolution,
+    ...pressRecordingTargetOverride(runtime, node, nodes, action),
+  };
+}
+
+/**
+ * #1280 (ADR 0012 decision 3 amendment): the recording-only side channel.
+ * When a click/press resolves to an identity-empty container, the RECORDED
+ * step retargets to its first labeled descendant — node, chain, and
+ * ref-label computed together here so the recorded action entry and its
+ * `target-v1` evidence can never half-retarget. The response payloads never
+ * consume this (see `interaction-touch-response.ts`). `fill` is deliberately
+ * excluded: its chain carries `editable=true` constraints a label descendant
+ * cannot satisfy, which would record an unreplayable selector.
+ */
+function pressRecordingTargetOverride(
+  runtime: AgentDeviceRuntime,
+  node: SnapshotNode,
+  nodes: SnapshotState['nodes'],
+  action: InteractionAction,
+): { recordingTarget?: RecordingTargetOverride } {
+  if (action !== 'click' && action !== 'press') return {};
+  const recordingNode = resolvePressRecordingTarget(node, nodes);
+  if (recordingNode === node) return {};
+  return {
+    recordingTarget: {
+      node: recordingNode,
+      selectorChain: buildSelectorChainForNode(recordingNode, runtime.backend.platform, {
+        action: 'click',
+        nodes,
+      }),
+      refLabel: resolveRefLabel(recordingNode, nodes),
+    },
   };
 }
 

@@ -73,7 +73,7 @@ export function idMatchCountInTree(nodes: readonly IdentityTreeNode[], id: strin
  * `idMatchCountInTree` predicate `buildSelectorChainForNode`'s
  * `selectableId` keys off directly. `computeTargetEvidence` uses this
  * whole-identity form; extracted so a third call site (#1280's
- * press-retarget identity-empty check, `src/selectors/press-retarget.ts`)
+ * press-retarget identity-empty check, `src/core/press-retarget.ts`)
  * shares it rather than re-deriving the rule a third way. A demoted id
  * falls back to role+label, the same shape an unrecorded id already
  * computes.

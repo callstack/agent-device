@@ -4,6 +4,7 @@ import type { BackendSnapshotOptions } from '../../../backend.ts';
 import { ref, selector } from './selector-read.ts';
 import { resolveActionableTouchResolution } from '../../../core/interaction-targeting.ts';
 import { tryResolveRefNode } from './resolution.ts';
+import { parseSelectorChain, resolveSelectorChain } from '../../../selectors/index.ts';
 import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
 import type { Point } from '../../../kernel/snapshot.ts';
 import {
@@ -231,15 +232,10 @@ test('runtime press omits targetHittable and hint when the resolved node is hitt
   assert.equal(result.hint, undefined);
 });
 
-test('runtime press #1280 retarget: recording fields follow the labeled descendant, response hittability stays on the dispatched container', async () => {
-  // The #1280 measured shape: a hittable, identity-empty LinearLayout row
-  // container whose title lives on a NON-hittable TextView child. The tap
-  // and the response-semantic fields (targetHittable/hint) must describe
-  // the container actually dispatched — never a false `targetHittable:
-  // false` from the descendant — while the recording-coupled fields
-  // (node-as-evidence-source, selectorChain, refLabel) follow the
-  // retargeted descendant.
-  const snapshot = makeSnapshotState([
+// The #1280 measured shape: a hittable, identity-empty LinearLayout row
+// container whose title lives on a NON-hittable TextView child.
+function identityEmptyRowSnapshot(containerType = 'LinearLayout') {
+  return makeSnapshotState([
     {
       index: 0,
       depth: 0,
@@ -251,7 +247,7 @@ test('runtime press #1280 retarget: recording fields follow the labeled descenda
       index: 1,
       depth: 1,
       parentIndex: 0,
-      type: 'LinearLayout',
+      type: containerType,
       rect: { x: 0, y: 100, width: 300, height: 48 },
       hittable: true,
     },
@@ -265,8 +261,11 @@ test('runtime press #1280 retarget: recording fields follow the labeled descenda
       hittable: false,
     },
   ]);
+}
+
+test('runtime press #1280 retarget: the response is entirely container-based; the descendant rides only the recordingTarget side channel', async () => {
   const calls: Point[] = [];
-  const device = createInteractionDevice(snapshot, {
+  const device = createInteractionDevice(identityEmptyRowSnapshot(), {
     platform: 'android',
     tap: async (_context, point) => {
       calls.push(point);
@@ -280,17 +279,54 @@ test('runtime press #1280 retarget: recording fields follow the labeled descenda
   // Dispatch: the tap lands at the CONTAINER's center.
   assert.deepEqual(calls, [{ x: 150, y: 124 }]);
   assert.equal(result.kind, 'selector');
-  // Recording-coupled fields: the retargeted descendant.
-  assert.equal(result.node?.label, 'Connected devices');
-  assert.deepEqual(result.selectorChain, [
+  // The whole runtime response describes the dispatched container — node,
+  // chain, hittability. The descendant's `hittable: false` must not leak.
+  assert.equal(result.node?.type, 'LinearLayout');
+  assert.deepEqual(result.selectorChain, ['role="linearlayout"']);
+  assert.equal(result.targetHittable, undefined);
+  assert.equal(result.hint, undefined);
+  // The retarget rides ONLY on the recording-only side channel.
+  assert.equal(result.recordingTarget?.node.label, 'Connected devices');
+  assert.deepEqual(result.recordingTarget?.selectorChain, [
     'role="textview" label="Connected devices"',
     'label="Connected devices"',
   ]);
-  assert.equal(result.refLabel, 'Connected devices');
-  // Response-semantic fields: the container is hittable, so no
-  // targetHittable/hint — the descendant's `hittable: false` must not leak.
-  assert.equal(result.targetHittable, undefined);
-  assert.equal(result.hint, undefined);
+  assert.equal(result.recordingTarget?.refLabel, 'Connected devices');
+});
+
+test('runtime fill #1280: fill is excluded from retargeting — the chain stays on the editable container and resolves for replay', async () => {
+  // An identity-empty EDITABLE container (no id/label/value) with a labeled
+  // non-editable TextView child. Retargeting a fill would record a chain
+  // whose `editable=true` constraint the label descendant can never satisfy
+  // — an unreplayable script — so fill must record as before, no retarget.
+  const snapshot = identityEmptyRowSnapshot('EditText');
+  const calls: Array<{ point: Point; text: string }> = [];
+  const device = createInteractionDevice(snapshot, {
+    platform: 'android',
+    fill: async (_context, point, text) => {
+      calls.push({ point, text });
+    },
+  });
+
+  const result = await device.interactions.fill(selector('role=edittext'), 'hello', {
+    session: 'default',
+  });
+
+  assert.equal(result.kind, 'selector');
+  assert.deepEqual(calls, [{ point: { x: 150, y: 124 }, text: 'hello' }]);
+  // No side channel: fill never retargets.
+  assert.equal(result.recordingTarget, undefined);
+  // The recorded chain belongs to the container and carries the editable
+  // constraint...
+  assert.deepEqual(result.selectorChain, ['role="edittext" editable=true']);
+  // ...and it resolves back to the editable container on the record-time
+  // tree — the saved script stays replayable.
+  const resolved = resolveSelectorChain(
+    snapshot.nodes,
+    parseSelectorChain(result.selectorChain!.join(' || ')),
+    { platform: 'android', requireRect: true, requireUnique: true },
+  );
+  assert.equal(resolved?.node.type, 'EditText');
 });
 
 test('runtime fill surfaces targetHittable and a hint for a non-hittable selector match (Maps pin case, #1037)', async () => {

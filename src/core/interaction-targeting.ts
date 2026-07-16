@@ -104,7 +104,14 @@ function findPreferredActionableDescendant(
   return current === node ? null : current;
 }
 
-function isSemanticTouchTarget(node: SnapshotNode): boolean {
+/**
+ * THE canonical interactive-role classification for touch: a node whose
+ * type/role/subrole names a control that independently receives taps. Shared
+ * by the hittable-ancestor promotion above and #1280's press-retarget
+ * competing-descendant guard (`press-retarget.ts`) — one list, never a
+ * parallel copy.
+ */
+export function isSemanticTouchTarget(node: SnapshotNode): boolean {
   const roles = [node.type, node.role, node.subrole].map((value) => normalizeType(value ?? ''));
   return roles.some(isSemanticTouchRole);
 }
