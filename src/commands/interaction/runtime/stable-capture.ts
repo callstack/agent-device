@@ -148,14 +148,13 @@ function isPrivateAxRecovery(verdict: SnapshotQualityVerdict | undefined): boole
  * the window, rather than landing on the boundary where clock skew picks the
  * answer (#1306).
  *
- * The loop only runs again while `now < deadline`, so the wake-up must land
- * strictly inside the budget to be worth anything. Every returned delay is at
- * least `QUIET_DEADLINE_EPSILON_MS`, which is what makes the loop terminate:
- * the same skew this function exists to absorb means a 1ms sleep can advance
- * the clock by 0, and a delay that buys no time would spin here forever. When
- * the budget cannot afford a delay that both progresses and stays inside it,
- * there is no capture left to place — stop rather than burn captures against
- * the device at the deadline.
+ * The loop only runs again while `now < deadline`. Normally the wake-up must
+ * land strictly inside the budget to leave room for another capture. At the
+ * final skew-sized boundary, however, requesting the full remaining budget is
+ * useful: an exact clock lands on the deadline and exits, while an undershooting
+ * clock advances inside the deadline and gets the settling capture. Never
+ * request less than the epsilon — a 1ms sleep can advance the wall clock by 0
+ * and spin forever under the skew this function exists to absorb.
  */
 function stableCaptureDelayMs(params: {
   nowMs: number;
@@ -169,8 +168,11 @@ function stableCaptureDelayMs(params: {
     remainingQuietMs > params.pollMs
       ? params.pollMs
       : Math.max(STABLE_MIN_POLL_MS, remainingQuietMs + QUIET_DEADLINE_EPSILON_MS);
-  const lastUsefulWakeMs = params.deadlineMs - params.nowMs - 1;
-  if (lastUsefulWakeMs < QUIET_DEADLINE_EPSILON_MS) return 0;
+  const remainingBudgetMs = params.deadlineMs - params.nowMs;
+  const lastUsefulWakeMs = remainingBudgetMs - 1;
+  if (lastUsefulWakeMs < QUIET_DEADLINE_EPSILON_MS) {
+    return remainingBudgetMs >= QUIET_DEADLINE_EPSILON_MS ? remainingBudgetMs : 0;
+  }
   return Math.min(cadenceMs, lastUsefulWakeMs);
 }
 
