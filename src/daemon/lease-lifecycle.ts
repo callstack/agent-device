@@ -10,23 +10,24 @@ import type { SessionStore } from './session-store.ts';
 import type { DaemonRequest, SessionState } from './types.ts';
 import type { LeaseLifecycleProvider } from './handlers/lease.ts';
 
+export type ExpiredProviderLeaseRecovery = (lease: DeviceLease) => Promise<void>;
+
 export type SessionTeardown = (session: SessionState, sessionName: string) => Promise<void>;
 
 export async function releaseExpiredProviderLease(
-  leaseLifecycleProvider: LeaseLifecycleProvider | undefined,
+  recoverExpiredLease: ExpiredProviderLeaseRecovery | undefined,
   lease: DeviceLease,
 ): Promise<boolean> {
-  if (!lease.leaseProvider || !leaseLifecycleProvider?.release) return true;
+  if (!lease.leaseProvider || !recoverExpiredLease) return false;
 
   try {
-    const provider = await leaseLifecycleProvider.release(lease);
+    await recoverExpiredLease(lease);
     emitDiagnostic({
       level: 'info',
       phase: 'provider_lease_expired_released',
       data: {
         leaseId: lease.leaseId,
         provider: lease.leaseProvider,
-        ...(provider ? { providerData: provider } : {}),
       },
     });
     return true;

@@ -27,6 +27,7 @@ export type ProviderDeviceInstallOptions = {
 export type ProviderDeviceRuntime = {
   provider: string;
   leaseLifecycle: LeaseLifecycleProvider;
+  recoverExpiredLease?: ProviderExpiredLeaseRecovery;
   cloudArtifacts?: CloudArtifactProvider;
   deviceInventoryProvider: DeviceInventoryProvider;
   ownsDevice(device: DeviceInfo): boolean;
@@ -62,11 +63,15 @@ export type ProviderPortReverseOptions = {
 export type ProviderDeviceRuntimeRequestProviders = {
   providerRuntimeIds: readonly string[];
   providerRuntimeRequiredIds: readonly string[];
+  recoverableProviderIds: readonly string[];
   leaseLifecycleProvider?: LeaseLifecycleProvider;
+  recoverExpiredLease?: ProviderExpiredLeaseRecovery;
   cloudArtifactProvider?: CloudArtifactProvider;
   deviceInventoryProvider?: DeviceInventoryProvider;
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
 };
+
+export type ProviderExpiredLeaseRecovery = (lease: DeviceLease) => Promise<void>;
 
 let activeProviderDeviceRuntimes: ProviderDeviceRuntime[] = [];
 const providerDeviceRuntimeScope = new AsyncLocalStorage<ProviderDeviceRuntime[]>();
@@ -171,10 +176,33 @@ export function createProviderDeviceRuntimeRequestProviders(
       ...(options.providerRuntimeRequiredIds ?? []),
     ]),
     leaseLifecycleProvider: composeLeaseProvider(runtimes),
+    recoverableProviderIds: runtimes
+      .filter((runtime) => runtime.recoverExpiredLease !== undefined)
+      .map((runtime) => runtime.provider),
+    recoverExpiredLease: composeExpiredLeaseRecovery(runtimes),
     cloudArtifactProvider: composeCloudArtifactProvider(runtimes),
     deviceInventoryProvider: composeDeviceInventoryProvider(runtimes),
     providerDeviceRuntimeScope: async (task) =>
       await withProviderDeviceRuntimeScope(runtimes, task),
+  };
+}
+
+function composeExpiredLeaseRecovery(
+  runtimes: ProviderDeviceRuntime[],
+): ProviderExpiredLeaseRecovery | undefined {
+  if (!runtimes.some((runtime) => runtime.recoverExpiredLease !== undefined)) return undefined;
+  return async (lease) => {
+    const runtime = runtimes.find((candidate) =>
+      runtimeMatchesProvider(candidate, lease.leaseProvider),
+    );
+    if (!runtime?.recoverExpiredLease) {
+      throw new AppError(
+        'UNSUPPORTED_OPERATION',
+        `Provider ${lease.leaseProvider ?? 'unknown'} cannot recover an expired lease.`,
+        { provider: lease.leaseProvider, leaseId: lease.leaseId },
+      );
+    }
+    await runtime.recoverExpiredLease(lease);
   };
 }
 

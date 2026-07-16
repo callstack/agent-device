@@ -102,10 +102,9 @@ export async function startDaemonRuntime(
     { providerRuntimeRequiredIds: DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS },
   );
   const expiredProviderLeaseReleaser = createExpiredProviderLeaseReleaser({
-    leaseLifecycleProvider: providerRuntimeProviders.leaseLifecycleProvider,
+    recoverExpiredLease: providerRuntimeProviders.recoverExpiredLease,
     stateDir: baseDir,
-    providerRuntimeIds: providerRuntimeProviders.providerRuntimeIds,
-    providerRuntimeRequiredIds: providerRuntimeProviders.providerRuntimeRequiredIds,
+    recoverableProviderIds: providerRuntimeProviders.recoverableProviderIds,
   });
   void expiredProviderLeaseReleaser.retryPending();
   const leaseRegistry = new LeaseRegistry({

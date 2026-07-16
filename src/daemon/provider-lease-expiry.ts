@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { LeaseLifecycleProvider } from './handlers/lease.ts';
+import type { ProviderExpiredLeaseRecovery } from '../provider-device-runtime.ts';
 import { releaseExpiredProviderLease } from './lease-lifecycle.ts';
 import type { DeviceLease } from './lease-registry.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
@@ -31,43 +31,46 @@ export type ExpiredProviderLeaseReleaser = {
 };
 
 export function createExpiredProviderLeaseReleaser(options: {
-  leaseLifecycleProvider?: LeaseLifecycleProvider;
+  recoverExpiredLease?: ProviderExpiredLeaseRecovery;
   stateDir?: string;
-  providerRuntimeIds?: readonly string[];
-  providerRuntimeRequiredIds?: readonly string[];
+  recoverableProviderIds?: readonly string[];
   retryDelayMs?: number;
 }): ExpiredProviderLeaseReleaser {
   const pendingLeases = loadPendingLeases(options.stateDir);
+  const persistedLeaseIds = new Set(pendingLeases.keys());
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   let retryTimer: Timer | undefined;
   let retrying = false;
 
-  const persistPendingLeases = (): void => {
-    if (!options.stateDir) return;
+  const persistPendingLeases = (): boolean => {
+    if (!options.stateDir) {
+      emitPersistenceFailure(
+        pendingLeases.size,
+        new Error('daemon state directory is unavailable'),
+      );
+      return false;
+    }
     const filePath = pendingReleasesPath(options.stateDir);
     try {
       if (pendingLeases.size === 0) {
         fs.rmSync(filePath, { force: true });
-        return;
+      } else {
+        fs.mkdirSync(options.stateDir, { recursive: true, mode: 0o700 });
+        const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+        const record: PersistedExpiredProviderLeases = {
+          version: PENDING_RELEASES_VERSION,
+          leases: [...pendingLeases.values()],
+        };
+        fs.writeFileSync(temporaryPath, `${JSON.stringify(record)}\n`, { mode: 0o600 });
+        fs.renameSync(temporaryPath, filePath);
+        fs.chmodSync(filePath, 0o600);
       }
-      fs.mkdirSync(options.stateDir, { recursive: true, mode: 0o700 });
-      const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-      const record: PersistedExpiredProviderLeases = {
-        version: PENDING_RELEASES_VERSION,
-        leases: [...pendingLeases.values()],
-      };
-      fs.writeFileSync(temporaryPath, `${JSON.stringify(record)}\n`, { mode: 0o600 });
-      fs.renameSync(temporaryPath, filePath);
-      fs.chmodSync(filePath, 0o600);
+      persistedLeaseIds.clear();
+      for (const leaseId of pendingLeases.keys()) persistedLeaseIds.add(leaseId);
+      return true;
     } catch (error) {
-      emitDiagnostic({
-        level: 'error',
-        phase: 'provider_lease_expiry_record_write_failed',
-        data: {
-          pendingLeaseCount: pendingLeases.size,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
+      emitPersistenceFailure(pendingLeases.size, error);
+      return false;
     }
   };
 
@@ -75,7 +78,7 @@ export function createExpiredProviderLeaseReleaser(options: {
     if (
       retryTimer ||
       ![...pendingLeases.values()].some((lease) =>
-        isProviderRuntimeAvailable(lease, options.providerRuntimeIds),
+        isRecoverableProviderAvailable(lease, options.recoverableProviderIds),
       )
     ) {
       return;
@@ -97,8 +100,9 @@ export function createExpiredProviderLeaseReleaser(options: {
     retrying = true;
     try {
       for (const lease of pendingLeases.values()) {
-        if (!isProviderRuntimeAvailable(lease, options.providerRuntimeIds)) continue;
-        if (await releaseExpiredProviderLease(options.leaseLifecycleProvider, lease)) {
+        if (!isRecoverableProviderAvailable(lease, options.recoverableProviderIds)) continue;
+        if (!persistedLeaseIds.has(lease.leaseId) && !persistPendingLeases()) continue;
+        if (await releaseExpiredProviderLease(options.recoverExpiredLease, lease)) {
           pendingLeases.delete(lease.leaseId);
           persistPendingLeases();
         }
@@ -118,13 +122,16 @@ export function createExpiredProviderLeaseReleaser(options: {
     release: async (lease) => {
       if (
         !lease.leaseProvider ||
-        !options.leaseLifecycleProvider?.release ||
-        !isManagedProviderLease(lease, options.providerRuntimeRequiredIds)
+        !options.recoverExpiredLease ||
+        !isRecoverableProviderAvailable(lease, options.recoverableProviderIds)
       ) {
         return;
       }
       pendingLeases.set(lease.leaseId, lease);
-      persistPendingLeases();
+      if (!persistPendingLeases()) {
+        scheduleRetry();
+        return;
+      }
       await retryPending();
     },
     retryPending,
@@ -135,26 +142,25 @@ export function createExpiredProviderLeaseReleaser(options: {
   };
 }
 
-function isManagedProviderLease(
+function isRecoverableProviderAvailable(
   lease: DeviceLease,
-  providerRuntimeRequiredIds: readonly string[] | undefined,
+  recoverableProviderIds: readonly string[] | undefined,
 ): boolean {
   return (
     lease.leaseProvider !== undefined &&
-    (providerRuntimeRequiredIds === undefined ||
-      providerRuntimeRequiredIds.includes(lease.leaseProvider))
+    recoverableProviderIds?.includes(lease.leaseProvider) === true
   );
 }
 
-function isProviderRuntimeAvailable(
-  lease: DeviceLease,
-  providerRuntimeIds: readonly string[] | undefined,
-): boolean {
-  return (
-    lease.leaseProvider === undefined ||
-    providerRuntimeIds === undefined ||
-    providerRuntimeIds.includes(lease.leaseProvider)
-  );
+function emitPersistenceFailure(pendingLeaseCount: number, error: unknown): void {
+  emitDiagnostic({
+    level: 'error',
+    phase: 'provider_lease_expiry_record_write_failed',
+    data: {
+      pendingLeaseCount,
+      error: error instanceof Error ? error.message : String(error),
+    },
+  });
 }
 
 function loadPendingLeases(stateDir: string | undefined): Map<string, DeviceLease> {

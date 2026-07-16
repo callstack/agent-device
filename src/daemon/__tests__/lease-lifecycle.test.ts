@@ -126,11 +126,11 @@ test('releaseExpiredProviderLease releases a provider-owned lease without a sess
     runId: 'run-1',
     leaseProvider: 'limrun',
   });
-  const release = vi.fn(async () => ({ limrunInstanceId: 'instance-1' }));
+  const recover = vi.fn(async () => undefined);
 
-  await releaseExpiredProviderLease({ release }, lease);
+  await releaseExpiredProviderLease(recover, lease);
 
-  expect(release).toHaveBeenCalledWith(lease);
+  expect(recover).toHaveBeenCalledWith(lease);
 });
 
 test('releaseSessionLease keeps the local lease when the provider release fails', async () => {

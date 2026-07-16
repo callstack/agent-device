@@ -63,6 +63,7 @@ import { cleanupAndroidNativePerfSession } from '../../../platforms/android/perf
 import { stopAndroidSnapshotHelperSessionForDevice } from '../../../platforms/android/snapshot-helper.ts';
 import { stopIosRunnerSession } from '../../../platforms/apple/core/runner/runner-client.ts';
 import { WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/index.ts';
+import { setActiveProviderDeviceRuntimes } from '../../../provider-device-runtime.ts';
 
 const mockShutdownSimulator = vi.mocked(shutdownSimulator);
 const mockRunCmd = vi.mocked(runCmd);
@@ -92,6 +93,7 @@ function makeSession(name: string, device: SessionState['device']): SessionState
 
 beforeEach(() => {
   vi.clearAllMocks();
+  setActiveProviderDeviceRuntimes([]);
 });
 
 test('close --shutdown calls shutdownSimulator for iOS simulator and includes result in response', async () => {
@@ -141,6 +143,47 @@ test('close --shutdown calls shutdownSimulator for iOS simulator and includes re
       stderr: '',
     });
   }
+});
+
+test('close --shutdown leaves provider-owned iOS simulators to their provider', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'provider-ios-shutdown-session';
+  const device = {
+    platform: 'apple' as const,
+    id: 'limrun:ios:lease-a',
+    name: 'Limrun iOS',
+    kind: 'simulator' as const,
+    booted: true,
+  };
+  sessionStore.set(sessionName, makeSession(sessionName, device));
+  setActiveProviderDeviceRuntimes([
+    {
+      provider: 'limrun',
+      leaseLifecycle: {},
+      deviceInventoryProvider: async () => [],
+      ownsDevice: (candidate) => candidate.id === device.id,
+      getInteractor: () => undefined,
+      shutdown: async () => undefined,
+    },
+  ]);
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: [],
+      flags: { shutdown: true },
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(mockShutdownSimulator).not.toHaveBeenCalled();
+  if (response?.ok) expect(response.data?.shutdown).toBeUndefined();
 });
 
 test('close --shutdown calls shutdownAndroidEmulator for Android emulator and includes result in response', async () => {

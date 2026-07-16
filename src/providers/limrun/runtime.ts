@@ -9,6 +9,7 @@ import type {
   ProviderDeviceInstallOptions,
   ProviderDeviceInstallResult,
   ProviderDeviceRuntime,
+  ProviderExpiredLeaseRecovery,
   ProviderPortReverseOptions,
 } from '../../provider-device-runtime.ts';
 import { readVersion } from '../../utils/version.ts';
@@ -72,6 +73,17 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
   readonly leaseLifecycle: LeaseLifecycleProvider = {
     allocate: async (lease) => await this.allocate(lease),
     release: async (lease) => await this.release(lease),
+  };
+
+  readonly recoverExpiredLease: ProviderExpiredLeaseRecovery = async (lease) => {
+    if (lease.leaseProvider !== this.provider || !platformForLimrunLeaseBackend(lease.backend)) {
+      throw new AppError('UNSUPPORTED_OPERATION', 'Limrun cannot recover this expired lease.', {
+        leaseId: lease.leaseId,
+        leaseProvider: lease.leaseProvider,
+        leaseBackend: lease.backend,
+      });
+    }
+    await this.release(lease);
   };
 
   readonly deviceInventoryProvider: DeviceInventoryProvider = async (request) => {

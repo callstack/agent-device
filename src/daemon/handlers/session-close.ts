@@ -2,6 +2,7 @@ import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
 import { scheduleIosRunnerIdleStop } from '../../platforms/apple/core/runner/runner-client.ts';
 import { isApplePlatform, type DeviceInfo } from '../../kernel/device.ts';
+import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import { dispatchCommand } from '../../core/dispatch.ts';
 import { contextFromFlags } from '../context.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
@@ -44,6 +45,7 @@ async function maybeShutdownSessionTarget(params: {
 }): Promise<DeviceTargetShutdownResult | undefined> {
   const { device, shutdownRequested } = params;
   if (!shutdownRequested) return undefined;
+  if (isActiveProviderDevice(device)) return undefined;
   if (!canShutdownDeviceTarget(device)) return undefined;
   return await shutdownDeviceTarget(device);
 }
