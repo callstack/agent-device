@@ -119,9 +119,12 @@ function runScenario(scenario: DifferentialScenario, options: RunnerOptions): Sc
   const platformArgs = options.platform ? ['--platform', options.platform] : [];
 
   const maestro = runEngine('maestro', options.maestroBin, ['test', flowPath, ...platformArgs]);
+  // `--maestro` is required: without it `test` rejects a .yaml flow outright
+  // ("test does not support this file type"). Matches scripts/run-test-app-maestro-suite.mjs.
   const agentDevice = runEngine('agent-device', `node ${options.agentDeviceCli}`, [
     'test',
     flowPath,
+    '--maestro',
     ...platformArgs,
   ]);
 

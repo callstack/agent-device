@@ -1,12 +1,11 @@
-# Layer-3 device flow (bug class 1, runtime half). Percentage endpoints must
-# resolve to the same pixels on both engines (integer division, not rounding).
+# Layer-3 device flow. Percentage swipe endpoints must drive the same gesture on
+# both engines. Deliberately stays on the scrollable home screen: no navigation,
+# no off-screen controls, so the scenario tests the swipe and nothing else.
 appId: com.callstack.agentdevicelab
 ---
 - launchApp:
     clearState: true
-- tapOn:
-    id: home-open-form
-- assertVisible: Checkout form
+- assertVisible: Agent Device Tester
 - swipe:
     start: 50%, 75%
     end: 50%, 35%
