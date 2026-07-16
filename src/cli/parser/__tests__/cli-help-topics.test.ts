@@ -407,10 +407,12 @@ test('usageForCommand resolves remote help topic', async () => {
   assert.match(help, /stores the shared proxy profile and client identity/);
   assert.match(help, /BrowserStack: agent-device connect browserstack/);
   assert.match(help, /AWS Device Farm: agent-device connect aws-device-farm/);
+  assert.match(help, /Limrun: agent-device connect limrun/);
   assert.match(help, /agent-device open com\.example\.app --remote-config \.\/remote-config\.json/);
   assert.match(help, /disconnect --remote-config \.\/remote-config\.json/);
   assert.match(help, /connect browserstack --platform android/);
   assert.match(help, /connect aws-device-farm --platform android/);
+  assert.match(help, /connect limrun --platform android/);
   assert.match(help, /AWS_REGION=us-west-2 AWS_ACCESS_KEY_ID/);
   assert.match(help, /AWS Device Farm uses the AWS CLI credential chain/);
   assert.match(help, /Prefer short-lived AWS role credentials in CI/);
@@ -430,9 +432,11 @@ test('usageForCommand resolves remote help topic', async () => {
   assert.match(help, /Multiple agents can share one proxy/);
   assert.match(help, /disconnect releases local connection state/);
   assert.match(help, /A busy direct-proxy device error means another agent owns the device/);
-  assert.match(help, /BrowserStack and AWS Device Farm through local provider profiles/);
+  assert.match(help, /Limrun, BrowserStack, and AWS Device Farm through local provider profiles/);
+  assert.match(help, /Limrun uses LIMRUN_API_KEY/);
   assert.match(help, /BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY/);
   assert.match(help, /Generated connection profiles store app\/device selectors and ARNs/);
+  assert.match(help, /Limrun Android supports direct ADB port reverse/);
   assert.match(help, /local\/proxy iOS reports that the runner is already owned/);
   assert.match(help, /same --remote-config to every operational command/);
   assert.match(help, /Do not use --config as a remote profile flag/);

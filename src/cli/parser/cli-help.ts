@@ -802,9 +802,10 @@ Providers:
   Direct proxy: agent-device connect proxy --daemon-base-url <proxy-agent-device-url> stores the shared proxy profile and client identity.
   BrowserStack: agent-device connect browserstack stores a local provider profile and creates the App Automate session on first open.
   AWS Device Farm: agent-device connect aws-device-farm stores a local provider profile and creates the remote access session on first open.
+  Limrun: agent-device connect limrun stores a local provider profile and creates a direct iOS or Android instance on first open.
 
 Device cloud interfaces:
-  CLI is the canonical bootstrap path: connect browserstack/aws-device-farm, then use normal open/snapshot/click/close/artifacts/disconnect commands.
+  CLI is the canonical bootstrap path: connect limrun/browserstack/aws-device-farm, then use normal open/snapshot/click/close/artifacts/disconnect commands.
   JavaScript can skip persisted connect state by passing leaseProvider plus provider fields to createAgentDeviceClient or per-command options.
   MCP exposes operational tools such as open, snapshot, click, close, and artifacts. It does not expose connect/disconnect; run CLI connect first in the same state dir before relying on MCP tools.
 
@@ -845,6 +846,14 @@ AWS Device Farm hosted-device flow:
   agent-device artifacts --json
   agent-device disconnect
 
+Limrun direct-device flow:
+  LIMRUN_API_KEY=...
+  agent-device connect limrun --platform android
+  agent-device open com.example.app
+  agent-device snapshot -i
+  agent-device close
+  agent-device disconnect
+
 Local profile flow:
   agent-device connect --remote-config ./remote-config.json
   agent-device open com.example.app
@@ -861,9 +870,10 @@ Rules:
   Use connect without --remote-config when the cloud control plane owns the connection profile.
   Prefer connect --remote-config over --daemon-base-url, --tenant, --run-id, and --lease-id when using a local profile.
   Use agent-device proxy for direct tunnel access to a Mac you control. Expose the printed proxy URL through cloudflared/ngrok, then run agent-device connect proxy with the tunnel URL and printed token before normal commands.
-  Use BrowserStack and AWS Device Farm through local provider profiles; they do not accept a remote agent-device daemon URL.
-  Device cloud credentials must be available before the command starts. BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY. AWS Device Farm uses the AWS CLI credential chain, including CI-provided AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN, AWS profiles, or web identity role variables.
-  Prefer short-lived AWS role credentials in CI. Generated connection profiles store app/device selectors and ARNs, not BrowserStack access keys or AWS credentials.
+  Use Limrun, BrowserStack, and AWS Device Farm through local provider profiles; they do not accept a remote agent-device daemon URL.
+  Device cloud credentials must be available before the command starts. Limrun uses LIMRUN_API_KEY (LIM_API_KEY is accepted as an alias). BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY. AWS Device Farm uses the AWS CLI credential chain, including CI-provided AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN, AWS profiles, or web identity role variables.
+  Prefer short-lived AWS role credentials in CI. Generated connection profiles store app/device selectors and ARNs, not Limrun API keys, BrowserStack access keys, or AWS credentials.
+  Limrun Android supports direct ADB port reverse for local Metro. Limrun iOS requires a public Metro/React DevTools URL because it cannot reach local host ports directly.
   After closing a device cloud session, run agent-device artifacts --json to retrieve provider video/log/dashboard URLs when the provider has made them available.
   connect proxy stores the connection profile and client identity. Device leases are acquired on open and expire after five minutes without commands.
   Multiple agents can share one proxy when each uses connect proxy, open, commands, close, and disconnect.

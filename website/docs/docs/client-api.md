@@ -113,7 +113,7 @@ standalone Simulator app.
 or contacts the daemon. Pass `{ stateDir }` to resolve an explicit override the same way the CLI resolves `--state-dir`.
 
 `client.sessions.artifacts({ provider, providerSessionId })` mirrors `artifacts --provider ... --provider-session ...` and returns provider-hosted `cloudArtifacts`.
-Use it for BrowserStack or AWS Device Farm session videos/logs after a cloud session has stopped, or omit `providerSessionId` when an embedding host has registered a cloud runtime that can infer the active lease.
+Use it for BrowserStack or AWS Device Farm session videos/logs after a cloud session has stopped, or omit `providerSessionId` when an embedding host has registered a provider runtime that can infer the active lease. Limrun does not currently expose provider artifacts through this command.
 
 ```ts
 const result = await client.sessions.artifacts({
@@ -128,7 +128,7 @@ for (const artifact of result.cloudArtifacts) {
 
 ## Device cloud sessions
 
-BrowserStack and AWS Device Farm can be driven through the normal typed client methods. Use the CLI `connect browserstack` / `connect aws-device-farm` flow when you want persisted local connection state. Use direct client config when a Node integration already owns credentials and provider selectors.
+Limrun, BrowserStack, and AWS Device Farm can be driven through the normal typed client methods. Use the corresponding CLI `connect` flow when you want persisted local connection state. Use direct client config when a Node integration already owns credentials and provider selectors.
 
 ```ts
 import { createAgentDeviceClient } from 'agent-device';
@@ -146,7 +146,7 @@ await client.capture.snapshot({ interactiveOnly: true });
 const closed = await client.sessions.close();
 ```
 
-Use `client.sessions.artifacts({ provider, providerSessionId })` with `closed.provider?.providerSessionId` to fetch hosted video/log URLs after close. See [Device Clouds & Farms](/docs/device-clouds) for BrowserStack, AWS Device Farm, CLI, JavaScript, and MCP flows.
+Use `client.sessions.artifacts({ provider, providerSessionId })` with `closed.provider?.providerSessionId` to fetch hosted video/log URLs after close when the provider supports them. See [Device Clouds & Farms](/docs/device-clouds) for Limrun, BrowserStack, AWS Device Farm, CLI, JavaScript, and MCP flows.
 
 ## Web sessions
 
