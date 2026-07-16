@@ -73,6 +73,7 @@ export async function executeAndroidTouchHelperPlan(
       const sessionHeaders = await runAndroidSnapshotHelperSessionTouchCommand({
         deviceKey: prepared.deviceKey,
         action: 'gesture',
+        helper: touchSessionHelperIdentity(prepared.artifact),
         payloadBase64,
         timeoutMs,
       });
@@ -109,6 +110,7 @@ export async function readAndroidTouchHelperViewport(device: DeviceInfo): Promis
     const sessionHeaders = await runAndroidSnapshotHelperSessionTouchCommand({
       deviceKey: prepared.deviceKey,
       action: 'viewport',
+      helper: touchSessionHelperIdentity(prepared.artifact),
       timeoutMs: HELPER_VIEWPORT_TIMEOUT_MS,
     });
     if (sessionHeaders) return readViewportResult(sessionHeaders);
@@ -130,6 +132,22 @@ export async function readAndroidTouchHelperViewport(device: DeviceInfo): Promis
     timeoutMs: HELPER_VIEWPORT_TIMEOUT_MS,
     readResult: readViewportResult,
   });
+}
+
+// Sessions are keyed by device, so reuse must also prove the live session runs the helper binary
+// this command selected; a mismatch stops the session and the command falls back to one-shot.
+function touchSessionHelperIdentity(artifact: AndroidSnapshotHelperArtifact): {
+  packageName: string;
+  runner: string;
+  helperVersion: string;
+  helperVersionCode: number;
+} {
+  return {
+    packageName: artifact.manifest.packageName,
+    runner: artifact.manifest.instrumentationRunner,
+    helperVersion: artifact.manifest.version,
+    helperVersionCode: artifact.manifest.versionCode,
+  };
 }
 
 async function prepareAndroidTouchHelper(device: DeviceInfo): Promise<PreparedAndroidTouchHelper> {

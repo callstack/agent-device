@@ -25,9 +25,17 @@ const SESSION_PROCESS_EXIT_TIMEOUT_MS = 2_000;
 const SESSION_REQUEST_OVERHEAD_MS = 10_000;
 const FORWARD_TIMEOUT_MS = 5_000;
 
+type AndroidSnapshotHelperSessionHelperIdentity = {
+  packageName: string;
+  runner: string;
+  helperVersion?: string;
+  helperVersionCode?: number;
+};
+
 type AndroidSnapshotHelperSession = {
   identity: string;
   deviceKey: string;
+  helper: AndroidSnapshotHelperSessionHelperIdentity;
   port: number;
   adb: AndroidAdbExecutor;
   process: AndroidAdbProcess;
@@ -100,11 +108,28 @@ export async function captureAndroidSnapshotWithHelperSession(
 export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
   deviceKey: string;
   action: 'gesture' | 'viewport';
+  helper: AndroidSnapshotHelperSessionHelperIdentity;
   payloadBase64?: string;
   timeoutMs: number;
 }): Promise<Record<string, string> | undefined> {
   const session = sessions.get(params.deviceKey);
   if (!session) return undefined;
+  if (!matchesSessionHelperIdentity(session.helper, params.helper)) {
+    // A different helper binary was selected for this device (e.g. a provider-supplied artifact).
+    // The live session belongs to the previous helper, so stop it and let the touch command run
+    // one-shot against the selected artifact; the next snapshot restarts the session with it.
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'android_snapshot_helper_session_touch_identity_mismatch',
+      data: {
+        deviceKey: params.deviceKey,
+        sessionHelper: session.helper,
+        requestedHelper: params.helper,
+      },
+    });
+    await stopAndroidSnapshotHelperSession(params.deviceKey);
+    return undefined;
+  }
   const requestId = `${params.action}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const command = params.payloadBase64
     ? `${params.action} ${requestId} ${params.payloadBase64}`
@@ -129,6 +154,22 @@ export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
     );
   }
   return headers;
+}
+
+function matchesSessionHelperIdentity(
+  session: AndroidSnapshotHelperSessionHelperIdentity,
+  requested: AndroidSnapshotHelperSessionHelperIdentity,
+): boolean {
+  return (
+    session.packageName === requested.packageName &&
+    session.runner === requested.runner &&
+    matchesWhenBothDefined(session.helperVersion, requested.helperVersion) &&
+    matchesWhenBothDefined(session.helperVersionCode, requested.helperVersionCode)
+  );
+}
+
+function matchesWhenBothDefined<Value>(a: Value | undefined, b: Value | undefined): boolean {
+  return a === undefined || b === undefined || a === b;
 }
 
 function findSessionHeaderEnd(response: string): number {
@@ -248,6 +289,12 @@ async function startAndroidSnapshotHelperSession(params: {
   const session: AndroidSnapshotHelperSession = {
     identity: params.identity,
     deviceKey: params.deviceKey,
+    helper: {
+      packageName: params.resolved.packageName,
+      runner: params.resolved.runner,
+      helperVersion: params.options.helperVersion,
+      helperVersionCode: params.options.helperVersionCode,
+    },
     port,
     adb: params.options.adb,
     process,

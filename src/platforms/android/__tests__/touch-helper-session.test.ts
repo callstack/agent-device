@@ -258,6 +258,73 @@ test('an APK replacement stops the stale session and the gesture runs one-shot',
   assert.equal(await session.isSessionAlive(), false);
 });
 
+test('a provider artifact that mismatches the live session helper stops it and runs one-shot', async () => {
+  const device = makeIsolatedDevice();
+  let sessionGestureCallCount = 0;
+  const session = await startFakeTouchHelperSession(device, (command, requestId) => {
+    if (command.startsWith('gesture')) {
+      sessionGestureCallCount += 1;
+      return sessionHeaderResponse({
+        agentDeviceProtocol: 'android-snapshot-helper-v1',
+        requestId,
+        ok: 'true',
+        kind: 'swipe',
+        injectedEvents: '6',
+        elapsedMs: '9',
+      });
+    }
+    return sessionHeaderResponse({
+      agentDeviceProtocol: 'android-snapshot-helper-v1',
+      requestId,
+      ok: 'true',
+    });
+  });
+
+  const providerArtifact = {
+    ...ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+    manifest: {
+      ...ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT.manifest,
+      packageName: 'com.example.provider.snapshothelper',
+      instrumentationRunner: 'com.example.provider.snapshothelper/.SnapshotInstrumentation',
+    },
+  };
+
+  let instrumentArgs: string[] | undefined;
+  const result = await withAndroidAdbProvider(
+    {
+      // Artifact B is already current on the device, so no install happens: the session started
+      // by artifact A must be invalidated by the helper-identity guard, not the install path.
+      exec: async (args) => {
+        if (args.includes('--show-versioncode')) {
+          return {
+            exitCode: 0,
+            stdout: `package:${providerArtifact.manifest.packageName} versionCode:999999`,
+            stderr: '',
+          };
+        }
+        instrumentArgs = [...args];
+        return {
+          exitCode: 0,
+          stdout: [
+            resultRecord({ ok: 'true', kind: 'swipe', injectedEvents: '4', elapsedMs: '12' }),
+            'INSTRUMENTATION_CODE: 0',
+          ].join('\n'),
+          stderr: '',
+        };
+      },
+      snapshotHelperArtifact: providerArtifact,
+    },
+    { serial: device.id },
+    async () => await executeAndroidTouchHelperPlan(device, flingPlan()),
+  );
+
+  assert.equal(result.installReason, 'current');
+  assert.equal(result.helperTransport, 'instrumentation');
+  assert.equal(instrumentArgs?.at(-1), providerArtifact.manifest.instrumentationRunner);
+  assert.equal(sessionGestureCallCount, 0);
+  assert.equal(await session.isSessionAlive(), false);
+});
+
 test('a structured ok=false session gesture response throws but leaves the session alive', async () => {
   const device = makeIsolatedDevice();
   const session = await startFakeTouchHelperSession(device, (command, requestId) => {
