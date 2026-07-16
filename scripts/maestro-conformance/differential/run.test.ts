@@ -2,9 +2,14 @@
 // via node --test; the live device comparison itself runs only on the scheduled
 // conformance-differential workflow.
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { DIFFERENTIAL_SCENARIOS } from './scenarios.ts';
+import { DIFFERENTIAL_APP_ID, DIFFERENTIAL_SCENARIOS } from './scenarios.ts';
 import { parseRunnerArgs, selectScenarios, validateScenarios } from './run.ts';
+
+const CONFORMANCE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 test('every differential scenario references an existing corpus flow with a unique id', () => {
   assert.doesNotThrow(() => validateScenarios());
@@ -20,6 +25,36 @@ test('the settle-loop bug class (4) is covered by a differential scenario', () =
 test('--trace-root is accepted so engine-side invariants can be evaluated', () => {
   const options = parseRunnerArgs(['--trace-root', '/tmp/artifacts']);
   assert.equal(options.traceRoot, '/tmp/artifacts');
+});
+
+// The layer-1 corpus exists to be PARSED: its flows name a fictional
+// com.example.app and elements that exist on no device. Pointing a device
+// scenario at one produces a run that fails before it exercises any runtime
+// behavior — which is exactly how the settle detector was silently vacuous.
+test('no differential scenario points at the parse-only layer-1 corpus', () => {
+  const corpusBacked = DIFFERENTIAL_SCENARIOS.filter((s) => s.flow.startsWith('corpus/'));
+  assert.deepEqual(
+    corpusBacked.map((s) => s.id),
+    [],
+    'device scenarios must use differential/flows (real fixture app), not the parse corpus',
+  );
+  for (const scenario of DIFFERENTIAL_SCENARIOS) {
+    assert.ok(
+      scenario.flow.startsWith('differential/flows/'),
+      `${scenario.id}: expected a device flow under differential/flows`,
+    );
+  }
+});
+
+test('every device flow targets the fixture app the workflow installs', () => {
+  for (const scenario of DIFFERENTIAL_SCENARIOS) {
+    const body = fs.readFileSync(path.join(CONFORMANCE_DIR, scenario.flow), 'utf8');
+    assert.match(
+      body,
+      new RegExp(`^appId:\\s*${DIFFERENTIAL_APP_ID}$`, 'm'),
+      `${scenario.id} must target ${DIFFERENTIAL_APP_ID}; a flow against any other app cannot run on the CI simulator`,
+    );
+  }
 });
 
 test('--only selects a single scenario and rejects unknown ids', () => {

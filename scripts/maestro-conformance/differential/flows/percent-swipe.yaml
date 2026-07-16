@@ -1,0 +1,13 @@
+# Layer-3 device flow (bug class 1, runtime half). Percentage endpoints must
+# resolve to the same pixels on both engines (integer division, not rounding).
+appId: com.callstack.agentdevicelab
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: home-open-form
+- assertVisible: Checkout form
+- swipe:
+    start: 50%, 75%
+    end: 50%, 35%
+    duration: 300

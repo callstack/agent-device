@@ -24,6 +24,8 @@ import {
   canonicalizeUpstreamFlow,
 } from './normalize.ts';
 import { LAYER2_REFERENCE_ONLY, UNVERIFIED_COMMANDS } from './expected-divergence.ts';
+// @ts-expect-error -- .mjs helper shared with regenerate.mjs; no type declarations.
+import { checkFixtureSeal } from './fixture-seal.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const CORPUS_DIR = path.join(HERE, 'corpus');
@@ -64,12 +66,29 @@ function readJson<T>(file: string): T {
   return JSON.parse(fs.readFileSync(file, 'utf8')) as T;
 }
 
+export const FIXTURE_FILES = ['layer1-parser.json', 'layer2-semantics.json'] as const;
+
 export function loadLayer1(): Layer1Fixture {
   return readJson(path.join(FIXTURES_DIR, 'layer1-parser.json'));
 }
 
 export function loadLayer2(): Layer2Fixture {
   return readJson(path.join(FIXTURES_DIR, 'layer2-semantics.json'));
+}
+
+export type SealResult = { file: string; sealed: boolean; expected: string; actual?: string };
+
+/**
+ * Recompute each fixture's content seal. This is what makes "generated from
+ * upstream" an enforced property rather than a claim in a README: editing a
+ * captured command or constant by hand changes the content and fails here.
+ */
+export function checkFixtureSeals(): SealResult[] {
+  return FIXTURE_FILES.map((file) => {
+    const parsed = readJson<Record<string, unknown>>(path.join(FIXTURES_DIR, file));
+    const { expected, actual } = checkFixtureSeal(parsed);
+    return { file, sealed: expected === actual, expected, actual: actual as string | undefined };
+  });
 }
 
 /**

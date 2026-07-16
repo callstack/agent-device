@@ -131,11 +131,17 @@ capture against our engine and classifies every flow as identical / both-reject 
 requiring each non-identical outcome to be a declared, on-the-record divergence. Layer 2 reads upstream
 constants (retry cap, animation-wait threshold/timeout, erase cap) and parser-observed defaults (swipe
 duration) straight from the pinned bytecode and cross-checks each against the live `MAESTRO_COMPATIBILITY_PRESETS`
-constant. Both generated layers are checked in and verified in CI via `node --test` with no Java. Layer 3
-runs a small set of app-observable differential scenarios (settle ordering, tap retries, optional
-warned-vs-failed) through both engines on a device; it is scheduled, not per-PR. The four #1217
-regressions (percent rounding/rejection, target-swipe direction default, retry-cap semantics, settle-loop
-ordering) each have a dedicated fixture.
+constant. Both generated layers are checked in and verified in CI via `node --test` with no Java. Because
+per-PR CI cannot re-derive them, each fixture carries a `contentHash` seal that the verifier recomputes,
+so a hand edit to a captured command or constant fails the build; the scheduled `conformance-regenerate`
+job then re-runs the harness against the pinned jars and fails on any byte difference, which is what makes
+"generated from upstream" enforced rather than documented. Layer 3 runs a small set of app-observable
+differential scenarios (settle ordering, tap retries, optional warned-vs-failed) through both engines
+against the real fixture app, pinning the Maestro CLI to the same version as layers 1-2; it is
+dispatch-only until its first supervised run, and never per-PR. The four #1217 regressions (percent
+rounding/rejection, target-swipe direction default, retry-cap semantics, settle-loop ordering) each have a
+dedicated fixture; bug class 4's detector is an engine-side timing invariant, unit-tested against
+synthetic traces, that only executes on the device path.
 
 Documented intentional deviations are encoded as expected-divergence entries rather than silent
 mismatches: the hierarchy-vs-screenshot animation wait (constants match, mechanism differs), the

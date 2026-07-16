@@ -1,0 +1,10 @@
+# Layer-3 device flow (bug class 4). Real tap on a real element of the lab app,
+# so the post-tap settle loop actually runs and the timing invariant is meaningful.
+appId: com.callstack.agentdevicelab
+---
+- launchApp:
+    clearState: true
+- assertVisible: Agent Device Tester
+- tapOn:
+    id: home-open-form
+- assertVisible: Checkout form

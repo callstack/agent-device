@@ -2,15 +2,20 @@ name: Conformance Differential
 
 # Layer 3 of the Maestro conformance oracle: run a small set of flows through
 # BOTH real Maestro and agent-device on a live device and compare app-observable
-# outcomes (settle behavior, tap retries, optional warned-vs-failed). This is the
-# only layer that can catch settle-loop ordering, which has no reflectable
-# upstream constant. Scheduled + manual only — it needs a booted device and the
-# `maestro` CLI, so it is never part of per-PR unit CI (layers 1-2 verify
-# deterministically there via `node --test scripts/maestro-conformance`).
+# outcomes, plus assert engine-side timing invariants over agent-device's own
+# replay trace. This is the only layer that can catch settle-loop ordering, which
+# has no reflectable upstream constant.
+#
+# DISPATCH-ONLY, DELIBERATELY. This path has never executed end-to-end: nothing
+# else in this repo builds or installs the Expo fixture app, so the build/install
+# steps below are new and unproven. A nightly cron that fails at 05:00 every day
+# teaches us nothing and trains people to ignore it. Run it manually, watch it,
+# fix what breaks, and only then add:
+#   schedule:
+#     - cron: "0 5 * * *"
+# Tracked as the follow-up to #1274; layers 1-2 verify per-PR without any device.
 
 on:
-  schedule:
-    - cron: "0 5 * * *"
   workflow_dispatch:
     inputs:
       only:
@@ -32,7 +37,7 @@ jobs:
   differential-ios:
     name: iOS Conformance Differential
     runs-on: macos-26
-    timeout-minutes: 80
+    timeout-minutes: 90
     env:
       IOS_RUNTIME_VERSION: "26.2"
       AGENT_DEVICE_STATE_DIR: ${{ github.workspace }}/.tmp/agent-device-state
@@ -55,11 +60,56 @@ jobs:
 
       - name: Boot simulator
         uses: ./.github/actions/boot-ios-test-simulator
+        with:
+          runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
+          preferred-device-name: iPhone 17 Pro
 
-      - name: Install Maestro
+      # The scenarios drive the real fixture app (com.callstack.agentdevicelab).
+      # Release avoids needing a Metro server for the JS bundle; `expo run:ios`
+      # prebuilds, builds, installs onto the booted simulator, and launches.
+      - name: Build and install the fixture app
         run: |
+          set -euo pipefail
+          pnpm test-app:install
+          pnpm --dir examples/test-app exec expo run:ios \
+            --configuration Release \
+            --device "iPhone 17 Pro" \
+            --no-bundler
+
+      - name: Verify the fixture app is installed
+        run: |
+          set -euo pipefail
+          # Single source of truth: the same constant the scenarios assert against.
+          APP_ID=$(node --experimental-strip-types -e \
+            "import('./scripts/maestro-conformance/differential/scenarios.ts').then(m => console.log(m.DIFFERENTIAL_APP_ID))")
+          if ! xcrun simctl get_app_container booted "$APP_ID" >/dev/null 2>&1; then
+            echo "::error::Fixture app $APP_ID is not installed on the booted simulator; layer-3 scenarios would fail vacuously."
+            exit 1
+          fi
+          echo "Fixture app $APP_ID installed."
+
+      # Pin the Maestro CLI to the SAME version the oracle pins for layers 1-2,
+      # read from pinned-upstream.json so the two can never drift apart. The
+      # installer honours MAESTRO_VERSION; assert what actually landed.
+      - name: Install pinned Maestro CLI
+        run: |
+          set -euo pipefail
+          MAESTRO_VERSION=$(node -p "require('./scripts/maestro-conformance/pinned-upstream.json').version")
+          export MAESTRO_VERSION
+          echo "Pinning Maestro CLI to $MAESTRO_VERSION (from pinned-upstream.json)"
           curl -fsSL "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Verify the Maestro CLI matches the oracle pin
+        run: |
+          set -euo pipefail
+          EXPECTED=$(node -p "require('./scripts/maestro-conformance/pinned-upstream.json').version")
+          ACTUAL=$(maestro --version 2>/dev/null | tr -d '[:space:]')
+          echo "expected=$EXPECTED actual=$ACTUAL"
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::Layer-3 Maestro CLI is $ACTUAL but the oracle pins $EXPECTED. A differential against a different Maestro proves nothing about the pinned behavior."
+            exit 1
+          fi
 
       # --trace-root lets the runner find agent-device's replay-timing.ndjson and
       # assert engine-side invariants (e.g. the settle loop latches instead of

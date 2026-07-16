@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import {
   type FlowResult,
   checkCoverage,
+  checkFixtureSeals,
   checkLayer2,
   classifyAllFlows,
   loadLayer1,
@@ -19,6 +20,8 @@ import {
   FLOW_DIVERGENCES,
   LAYER2_REFERENCE_ONLY,
 } from './expected-divergence.ts';
+// @ts-expect-error -- .mjs helper shared with regenerate.mjs; no type declarations.
+import { checkFixtureSeal } from './fixture-seal.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PIN = JSON.parse(fs.readFileSync(path.join(HERE, 'pinned-upstream.json'), 'utf8'));
@@ -26,6 +29,34 @@ const PIN = JSON.parse(fs.readFileSync(path.join(HERE, 'pinned-upstream.json'), 
 function flowsById(): Map<string, FlowResult> {
   return new Map(classifyAllFlows().map((flow) => [flow.id, flow]));
 }
+
+test('fixture content is sealed against hand editing', () => {
+  for (const result of checkFixtureSeals()) {
+    assert.ok(result.actual, `${result.file} has no contentHash — regenerate it`);
+    assert.equal(
+      result.actual,
+      result.expected,
+      `${result.file} content does not match its seal. Fixtures are generated: run \`pnpm maestro:conformance:regenerate\` rather than editing them by hand.`,
+    );
+  }
+});
+
+// The seal is only worth having if it actually catches an edit. Prove it does,
+// rather than trusting that a hash comparison must work.
+test('the seal rejects an edited capture (proof the check has teeth)', () => {
+  const original = JSON.parse(
+    fs.readFileSync(path.join(HERE, 'fixtures', 'layer2-semantics.json'), 'utf8'),
+  );
+  // Forge the retry cap the way a hand-transcribed fixture would have drifted.
+  const tampered = structuredClone(original);
+  const retryCap = tampered.constants.find((c: { id: string }) => c.id === 'retryMaxRetries');
+  retryCap.value = 99;
+  const { expected, actual } = checkFixtureSeal(tampered);
+  assert.notEqual(expected, actual, 'editing a captured constant must break the seal');
+  // ...and the untouched fixture still verifies, so the check is not just always-fail.
+  const clean = checkFixtureSeal(original);
+  assert.equal(clean.expected, clean.actual);
+});
 
 test('fixtures pin the reviewed upstream Maestro artifacts', () => {
   for (const fixture of [loadLayer1(), loadLayer2()] as Array<{ upstream?: unknown }>) {

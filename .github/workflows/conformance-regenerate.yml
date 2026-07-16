@@ -1,0 +1,66 @@
+name: Conformance Regenerate Verify
+
+# Re-derives the layer-1/layer-2 fixtures from the pinned upstream Maestro
+# artifacts and fails if the checked-in files differ by a single byte.
+#
+# Why this exists as its own job: per-PR CI must stay Java-free (ADR 0015), so it
+# can only recompute the fixtures' content seal. That seal is tamper-EVIDENT — it
+# stops accidental or casual hand-editing — but someone could edit a capture and
+# recompute the hash. This job closes that hole for real: forgery cannot survive
+# an actual re-derivation against the pinned jars. It is what makes "generated
+# from upstream" an enforced property rather than a claim in a README.
+#
+# Scheduled + manual only. It needs a JDK, Gradle, and network access to Maven
+# Central, none of which belong on the per-PR path.
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regenerate-verify:
+    name: Regenerate & Verify Fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # regenerate.mjs itself needs only Node builtins, but the verify step below
+      # parses corpus flows with the live engine, which imports the `yaml`
+      # package — so deps must be installed here.
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Setup JDK
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Verifies the pinned jar SHA-256s against pinned-upstream.json, runs the
+      # harness over the corpus, and rewrites fixtures/ + corpus/manifest.json.
+      - name: Regenerate fixtures from pinned upstream
+        run: node scripts/maestro-conformance/regenerate.mjs
+
+      - name: Fail if regeneration changed anything
+        run: |
+          if ! git diff --exit-code -- scripts/maestro-conformance/fixtures scripts/maestro-conformance/corpus/manifest.json; then
+            echo "::error::Checked-in conformance fixtures do not match a fresh regeneration from the pinned upstream artifacts."
+            echo "The fixtures are generated: run 'pnpm maestro:conformance:regenerate' and commit the result."
+            exit 1
+          fi
+          echo "Fixtures are byte-identical to a fresh regeneration from Maestro ${{ github.sha }}."
+
+      # The seal check also runs per-PR, but assert it here too so a regeneration
+      # that produced an unsealed/mis-sealed fixture cannot pass silently.
+      - name: Verify fixture seals and conformance
+        run: node --experimental-strip-types --test scripts/maestro-conformance/verify.test.ts

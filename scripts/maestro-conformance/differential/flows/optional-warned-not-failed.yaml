@@ -1,0 +1,12 @@
+# Layer-3 device flow. An optional assertion on an element that never exists must
+# be downgraded to a warning and let the flow finish, on both engines. A
+# failed-instead-of-warned classification flips the exit code, so outcome parity
+# genuinely proves this one.
+appId: com.callstack.agentdevicelab
+---
+- launchApp:
+    clearState: true
+- assertVisible:
+    id: this-element-never-exists
+    optional: true
+- assertVisible: Agent Device Tester

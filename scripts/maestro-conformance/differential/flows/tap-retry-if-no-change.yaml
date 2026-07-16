@@ -1,0 +1,11 @@
+# Layer-3 device flow. A tap whose screen may not change exercises the
+# retryIfNoChange path on both engines.
+appId: com.callstack.agentdevicelab
+---
+- launchApp:
+    clearState: true
+- assertVisible: Agent Device Tester
+- tapOn:
+    id: home-open-form
+    retryTapIfNoChange: true
+- assertVisible: Checkout form

@@ -16,10 +16,27 @@ Pinned upstream: `dev.mobile:*:2.5.1` (`v2.5.1` / `a4c7c95f`), see
 |-------|----------------|--------------|---------|
 | 1 — parser | Our parser accepts/rejects/normalizes each flow like upstream | `maestro-orchestra`'s `YamlCommandReader` over the corpus | `node --test`, per-PR |
 | 2 — semantics | Our geometry/retry/timing constants match upstream | ASM-read bytecode constants + parser-observed model defaults | `node --test`, per-PR |
-| 3 — differential | Outcome parity on a device, plus engine-side timing invariants | Real Maestro vs `agent-device test` | scheduled workflow |
+| 3 — differential | Outcome parity on a device, plus engine-side timing invariants | Real Maestro vs `agent-device test` | dispatch-only (see below) |
 
 Layers 1–2 are checked-in generated fixtures (`fixtures/`) verified
 deterministically with **no Java**. Layer 3 needs a device and the `maestro` CLI.
+
+### How "generated from upstream" is enforced
+
+Per-PR CI cannot re-derive the fixtures — that needs Java, and staying Java-free
+on the normal path is a design constraint. So enforcement is two-layered:
+
+1. **Per-PR:** every fixture carries a `contentHash` seal over its generated
+   content, recomputed on each verify run. Editing a captured command or constant
+   by hand breaks the seal. This is tamper-**evident** — it makes casual or
+   accidental hand-editing impossible, but a determined editor could recompute it.
+2. **Scheduled (`conformance-regenerate`):** actually re-runs the JVM harness
+   against the pinned jars and fails if the checked-in fixtures differ by a byte.
+   Forgery cannot survive a real re-derivation.
+
+Without (2), "generated from upstream" would be documentation. Do not weaken
+either half: together they are what stops this oracle from decaying back into the
+hand-typed fixture it replaced.
 
 ### What layer 3 actually proves
 
@@ -28,6 +45,20 @@ only catches a divergence severe enough to fail the flow. It cannot see settle
 latching, retap counts, or a 1px truncation difference. Where finer behavior
 matters we assert it **engine-side** via `engineInvariants` over agent-device's
 own `replay-timing.ndjson`.
+
+Layer-3 flows live in `differential/flows/` and drive the **real fixture app**
+(`examples/test-app`, `com.callstack.agentdevicelab`), which the workflow builds
+and installs. They are deliberately **not** the layer-1 corpus: those flows exist
+only to be *parsed* — they name a fictional `com.example.app` and elements that
+exist on no device — so a device run against them would fail before exercising
+any runtime behavior, making the settle detector silently vacuous. A test
+enforces the separation, and the workflow hard-fails if the app is not installed.
+
+**Layer 3 is dispatch-only and has never executed end-to-end.** Nothing else in
+this repo builds or installs the Expo fixture app, so those steps are new and
+unproven. Run it manually, watch it, fix what breaks, and only then add the cron
+— a nightly job that fails at 05:00 every day teaches nothing and trains people
+to ignore it.
 
 This matters most for **bug class 4** (settle ordering), whose 200ms × 10 loop has
 no reflectable upstream constant, so layer 3 is its only home. Its detector is the
@@ -55,8 +86,12 @@ failure, not a pass.
 - [`normalize.ts`](./normalize.ts) — canonical projection shared by both engines.
 - [`verify.ts`](./verify.ts) / [`verify.test.ts`](./verify.test.ts) — the deterministic verifier.
 - [`expected-divergence.ts`](./expected-divergence.ts) — declared, on-the-record divergences.
-- [`differential/`](./differential) — layer-3 scenarios + runner.
-- [`regenerate.mjs`](./regenerate.mjs) — SHA-verifies the jars and rebuilds the fixtures.
+- [`differential/`](./differential) — layer-3 scenarios, runner, engine-side
+  invariants, and `flows/` (device flows against the fixture app).
+- [`fixture-seal.mjs`](./fixture-seal.mjs) — content seal shared by the generator
+  and the verifier.
+- [`regenerate.mjs`](./regenerate.mjs) — SHA-verifies the jars, rebuilds the
+  corpus manifest and fixtures, and seals them.
 
 ## Verify (per-PR, no Java)
 

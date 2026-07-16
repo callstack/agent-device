@@ -21,6 +21,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { writeManifest } from './build-manifest.mjs';
+import { fixtureContentHash } from './fixture-seal.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const HARNESS_DIR = path.join(HERE, 'jvm-harness');
@@ -77,8 +78,15 @@ function writeFixture(name, pin, content) {
     upstream: { project, version, tag, commit, artifacts: pin.artifacts },
     ...content,
   };
+  // Seal the generated content. Verifying only the embedded upstream pin would
+  // let a hand edit to the captured commands/constants pass CI — which is the
+  // exact transcription failure mode this oracle exists to remove. The seal is
+  // recomputed on every verify run, so an edit must also forge the hash; the
+  // scheduled conformance-regenerate job then re-derives from upstream and fails
+  // on any byte difference, which forgery cannot survive.
+  const wrappedWithSeal = { ...wrapped, contentHash: fixtureContentHash(wrapped) };
   const target = path.join(FIXTURES_DIR, name);
-  fs.writeFileSync(target, `${JSON.stringify(wrapped, null, 2)}\n`);
+  fs.writeFileSync(target, `${JSON.stringify(wrappedWithSeal, null, 2)}\n`);
   console.log(`wrote ${path.relative(HERE, target)}`);
 }
 
