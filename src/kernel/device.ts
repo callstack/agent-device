@@ -143,7 +143,7 @@ export function resolveDeviceAppleOs(
 }
 
 /**
- * @internal Public type guard exposed for unit tests.
+ * @internal Type guard exposed for unit tests.
  */
 export function isPlatform(value: unknown): value is Platform {
   // Internal device-platform membership derived from the canonical PLATFORMS tuple.

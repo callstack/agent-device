@@ -65,8 +65,8 @@ same-file consumer out of this report without weakening the general Fallow audit
 native baseline lives at `fallow-baselines/production-unused-exports.json`.
 
 Fix a finding by wiring the export into production or removing the unnecessary export/code. For
-an intentional test seam, explain why beside the declaration and keep the reviewed entry in the
-production-export baseline. An inline
+an intentional test seam or other non-production consumer, add a JSDoc `@internal` tag with a short
+justification beside the declaration and treat it as a reviewed baseline entry. An inline
 `// fallow-ignore-next-line unused-export` is not suitable here: the general test-inclusive graph
 sees the test consumer and correctly reports that suppression as stale. Run
 `pnpm check:production-exports:baseline` only for a deliberate reviewed baseline migration or to
