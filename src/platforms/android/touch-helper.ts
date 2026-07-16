@@ -141,12 +141,14 @@ function touchSessionHelperIdentity(artifact: AndroidSnapshotHelperArtifact): {
   runner: string;
   helperVersion: string;
   helperVersionCode: number;
+  sha256: string;
 } {
   return {
     packageName: artifact.manifest.packageName,
     runner: artifact.manifest.instrumentationRunner,
     helperVersion: artifact.manifest.version,
     helperVersionCode: artifact.manifest.versionCode,
+    sha256: artifact.manifest.sha256,
   };
 }
 

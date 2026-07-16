@@ -249,6 +249,74 @@ test('ensureAndroidSnapshotHelper replaces same-version helper when APK bytes di
   assert.deepEqual(installs, [apkPath]);
 });
 
+test('installing a same-version different-sha helper evicts the stale install memo', async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapshot-helper-memo-evict-'));
+  const apkPathA = path.join(tmpDir, 'helper-a.apk');
+  const apkPathB = path.join(tmpDir, 'helper-b.apk');
+  await fs.writeFile(apkPathA, 'helper-apk-a');
+  await fs.writeFile(apkPathB, 'helper-apk-b');
+  const manifestA = { ...manifest, sha256: sha256Text('helper-apk-a') };
+  const manifestB = { ...manifest, sha256: sha256Text('helper-apk-b') };
+  const deviceKey = 'android:memo-evict';
+  let installedBytes = 'helper-apk-a';
+  const installs: string[] = [];
+  const adb: AndroidAdbExecutor = async (args) => {
+    if (args.includes('--show-versioncode')) {
+      return {
+        exitCode: 0,
+        stdout: `package:${manifest.packageName} versionCode:${manifest.versionCode}`,
+        stderr: '',
+      };
+    }
+    if (args[0] === 'shell' && args[1] === 'pm' && args[2] === 'path') {
+      return { exitCode: 0, stdout: 'package:/data/app/helper/base.apk\n', stderr: '' };
+    }
+    throw new Error(`unexpected adb call: ${args.join(' ')}`);
+  };
+  const adbProvider = {
+    exec: adb,
+    pull: async (_remotePath: string, localPath: string) => {
+      await fs.writeFile(localPath, installedBytes);
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+    install: async (pathToInstall: string) => {
+      installs.push(pathToInstall);
+      installedBytes = await fs.readFile(pathToInstall, 'utf8');
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+  };
+
+  const first = await ensureAndroidSnapshotHelper({
+    adb,
+    adbProvider,
+    artifact: { apkPath: apkPathA, manifest: manifestA },
+    deviceKey,
+  });
+  assert.equal(first.reason, 'current');
+
+  // B replaces A in place: same packageName/versionCode, different APK bytes.
+  const replaced = await ensureAndroidSnapshotHelper({
+    adb,
+    adbProvider,
+    artifact: { apkPath: apkPathB, manifest: manifestB },
+    deviceKey,
+  });
+  assert.equal(replaced.reason, 'mismatched');
+  assert.equal(replaced.installed, true);
+
+  // Selecting A again must re-inspect against the swapped binary instead of serving A's stale
+  // 'current' memo, and reinstall A.
+  const reinstalled = await ensureAndroidSnapshotHelper({
+    adb,
+    adbProvider,
+    artifact: { apkPath: apkPathA, manifest: manifestA },
+    deviceKey,
+  });
+  assert.equal(reinstalled.reason, 'mismatched');
+  assert.equal(reinstalled.installed, true);
+  assert.deepEqual(installs, [apkPathB, apkPathA]);
+});
+
 test('ensureAndroidSnapshotHelper caches successful install checks per device and helper version', async () => {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapshot-helper-install-cache-'));
   const apkPath = path.join(tmpDir, 'helper.apk');

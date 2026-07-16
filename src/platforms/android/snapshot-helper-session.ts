@@ -30,6 +30,7 @@ type AndroidSnapshotHelperSessionHelperIdentity = {
   runner: string;
   helperVersion?: string;
   helperVersionCode?: number;
+  sha256?: string;
 };
 
 type AndroidSnapshotHelperSession = {
@@ -164,7 +165,8 @@ function matchesSessionHelperIdentity(
     session.packageName === requested.packageName &&
     session.runner === requested.runner &&
     matchesWhenBothDefined(session.helperVersion, requested.helperVersion) &&
-    matchesWhenBothDefined(session.helperVersionCode, requested.helperVersionCode)
+    matchesWhenBothDefined(session.helperVersionCode, requested.helperVersionCode) &&
+    matchesWhenBothDefined(session.sha256, requested.sha256)
   );
 }
 
@@ -294,6 +296,7 @@ async function startAndroidSnapshotHelperSession(params: {
       runner: params.resolved.runner,
       helperVersion: params.options.helperVersion,
       helperVersionCode: params.options.helperVersionCode,
+      sha256: params.options.helperSha256,
     },
     port,
     adb: params.options.adb,
@@ -558,6 +561,7 @@ function createSessionIdentity(
     runner: resolved.runner,
     helperVersion: options.helperVersion,
     helperVersionCode: options.helperVersionCode,
+    helperSha256: options.helperSha256,
     waitForIdleTimeoutMs: resolved.waitForIdleTimeoutMs,
     waitForIdleQuietMs: resolved.waitForIdleQuietMs,
     timeoutMs: resolved.timeoutMs,

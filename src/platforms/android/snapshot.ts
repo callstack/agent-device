@@ -311,6 +311,7 @@ async function captureAndroidUiHierarchyFromHelper(params: {
     deviceKey: helperDeviceKey,
     helperVersion: artifact.manifest.version,
     helperVersionCode: artifact.manifest.versionCode,
+    helperSha256: artifact.manifest.sha256,
     packageName: artifact.manifest.packageName,
     instrumentationRunner: artifact.manifest.instrumentationRunner,
     waitForIdleTimeoutMs:

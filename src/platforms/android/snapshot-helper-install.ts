@@ -47,9 +47,16 @@ function rememberInstalledSnapshotHelper(
   cacheKey: string | undefined,
   installedVersionCode: number,
 ): void {
-  if (cacheKey) {
-    installedSnapshotHelpers.set(cacheKey, installedVersionCode);
+  if (!cacheKey) return;
+  // Same-version replacement changes only the sha, so recording this helper as installed must
+  // evict every other cached decision for the same device+package: a stale 'current' memo for the
+  // previous binary would otherwise skip the sha re-inspection after the swap.
+  const [deviceKey, packageName] = cacheKey.split('\0');
+  const prefix = `${deviceKey}\0${packageName}\0`;
+  for (const key of installedSnapshotHelpers.keys()) {
+    if (key !== cacheKey && key.startsWith(prefix)) installedSnapshotHelpers.delete(key);
   }
+  installedSnapshotHelpers.set(cacheKey, installedVersionCode);
 }
 
 function forgetInstalledSnapshotHelper(cacheKey: string | undefined): void {

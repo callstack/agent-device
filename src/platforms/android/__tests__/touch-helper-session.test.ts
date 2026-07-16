@@ -141,6 +141,11 @@ function createFakeTouchHelperSessionProvider(
 async function startFakeTouchHelperSession(
   device: DeviceInfo,
   handleCommand: TouchSessionCommandHandler,
+  helperIdentity: {
+    helperVersion?: string;
+    helperVersionCode?: number;
+    helperSha256?: string;
+  } = {},
 ): Promise<{ deviceKey: string; isSessionAlive: () => Promise<boolean> }> {
   const deviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
   const provider = createFakeTouchHelperSessionProvider((command, requestId) => {
@@ -152,6 +157,7 @@ async function startFakeTouchHelperSession(
       adb: provider.exec,
       adbProvider: provider,
       deviceKey,
+      ...helperIdentity,
     });
   const output = await capture();
   assert.ok(output, 'expected the fake snapshot helper session to start');
@@ -321,6 +327,77 @@ test('a provider artifact that mismatches the live session helper stops it and r
   assert.equal(result.installReason, 'current');
   assert.equal(result.helperTransport, 'instrumentation');
   assert.equal(instrumentArgs?.at(-1), providerArtifact.manifest.instrumentationRunner);
+  assert.equal(sessionGestureCallCount, 0);
+  assert.equal(await session.isSessionAlive(), false);
+});
+
+test('a same-version artifact with a different sha stops the live session and runs one-shot', async () => {
+  const device = makeIsolatedDevice();
+  // Artifacts A and B share packageName/runner/version/versionCode and differ only in APK bytes
+  // (sha256) — the supported same-version replacement. B owns the live session; a command that
+  // selects A must not be served by B's binary.
+  const artifactA = ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT;
+  const shaB = 'b'.repeat(64);
+  let sessionGestureCallCount = 0;
+  const session = await startFakeTouchHelperSession(
+    device,
+    (command, requestId) => {
+      if (command.startsWith('gesture')) {
+        sessionGestureCallCount += 1;
+        return sessionHeaderResponse({
+          agentDeviceProtocol: 'android-snapshot-helper-v1',
+          requestId,
+          ok: 'true',
+          kind: 'swipe',
+          injectedEvents: '6',
+          elapsedMs: '9',
+        });
+      }
+      return sessionHeaderResponse({
+        agentDeviceProtocol: 'android-snapshot-helper-v1',
+        requestId,
+        ok: 'true',
+      });
+    },
+    {
+      helperVersion: artifactA.manifest.version,
+      helperVersionCode: artifactA.manifest.versionCode,
+      helperSha256: shaB,
+    },
+  );
+
+  let instrumentArgs: string[] | undefined;
+  const result = await withAndroidAdbProvider(
+    {
+      // A is reported already current by versionCode, so no install occurs: only the sha in the
+      // session helper identity can reveal that the live session runs B's binary.
+      exec: async (args) => {
+        if (args.includes('--show-versioncode')) {
+          return {
+            exitCode: 0,
+            stdout: `package:${artifactA.manifest.packageName} versionCode:999999`,
+            stderr: '',
+          };
+        }
+        instrumentArgs = [...args];
+        return {
+          exitCode: 0,
+          stdout: [
+            resultRecord({ ok: 'true', kind: 'swipe', injectedEvents: '4', elapsedMs: '12' }),
+            'INSTRUMENTATION_CODE: 0',
+          ].join('\n'),
+          stderr: '',
+        };
+      },
+      snapshotHelperArtifact: artifactA,
+    },
+    { serial: device.id },
+    async () => await executeAndroidTouchHelperPlan(device, flingPlan()),
+  );
+
+  assert.equal(result.installReason, 'current');
+  assert.equal(result.helperTransport, 'instrumentation');
+  assert.equal(instrumentArgs?.at(-1), artifactA.manifest.instrumentationRunner);
   assert.equal(sessionGestureCallCount, 0);
   assert.equal(await session.isSessionAlive(), false);
 });
