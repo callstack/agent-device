@@ -291,6 +291,9 @@ export async function dispatchWaitViaRuntime(
       mintedGeneration: versionedRef.generation,
     });
   }
+  // Wait builds its runtime directly (no createSelectorRuntime), so the consumed-snapshot slot
+  // must be initialized here too or sessionless waits have nowhere to report the capture from.
+  params.consumedSnapshot ??= {};
   const execute = async () => {
     const runtime = createSelectorRuntimeForDevice({
       ...params,

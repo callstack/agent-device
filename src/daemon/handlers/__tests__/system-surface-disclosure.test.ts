@@ -192,3 +192,51 @@ test('disclosure appends after an existing failure hint instead of replacing it'
     hint.indexOf(ANDROID_SYSTEM_SURFACE_DISCLOSURE),
   );
 });
+
+test('sessionless wait success on shade content still discloses the occluding system surface', async () => {
+  vi.mocked(resolveTargetDevice).mockResolvedValueOnce(ANDROID_EMULATOR);
+  const sessionStore = makeSessionStore();
+
+  const response = await dispatchWaitViaRuntime({
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'wait',
+      positionals: ['Internet', '250'],
+      flags: {},
+    } as DaemonRequest,
+    sessionName: 'default',
+    logPath: '/tmp/test.log',
+    sessionStore,
+  });
+
+  expect(response.ok).toBe(true);
+  if (!response.ok) return;
+  expect(sessionStore.get('default')).toBeUndefined();
+  expect(String((response.data as Record<string, unknown>).warning)).toContain(
+    ANDROID_SYSTEM_SURFACE_DISCLOSURE,
+  );
+});
+
+test('sessionless wait timeout still discloses the occluding system surface', async () => {
+  vi.mocked(resolveTargetDevice).mockResolvedValueOnce(ANDROID_EMULATOR);
+  const sessionStore = makeSessionStore();
+
+  const response = await dispatchWaitViaRuntime({
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'wait',
+      positionals: ['Bakery list', '250'],
+      flags: {},
+    } as DaemonRequest,
+    sessionName: 'default',
+    logPath: '/tmp/test.log',
+    sessionStore,
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(sessionStore.get('default')).toBeUndefined();
+  expect(String(response.error.details?.hint)).toContain(ANDROID_SYSTEM_SURFACE_DISCLOSURE);
+});
