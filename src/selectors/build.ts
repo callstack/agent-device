@@ -109,7 +109,8 @@ function quoteSelectorValue(value: string): string {
   return JSON.stringify(value);
 }
 
-function normalizeSelectorText(value: string | undefined): string | null {
+/** Trim, then treat an all-whitespace/empty string as absent. Shared with #1280's press-retarget identity-empty check so it matches this chain builder's value/text normalization exactly. */
+export function normalizeSelectorText(value: string | undefined): string | null {
   if (!value) return null;
   const trimmed = value.trim();
   if (!trimmed) return null;

@@ -21,6 +21,8 @@ import {
   type LocalIdentity,
 } from './target-identity.ts';
 
+type IdentityTreeNode = Pick<RawSnapshotNode, 'type' | 'identifier' | 'label'>;
+
 export function readNodeLocalIdentity(
   node: Pick<RawSnapshotNode, 'type' | 'identifier' | 'label'>,
 ): LocalIdentity {
@@ -57,15 +59,33 @@ export function localIdentitiesEqual(a: LocalIdentity, b: LocalIdentity): boolea
  * exclusion: an id is non-selective the moment two nodes anywhere in the tree
  * carry it, independent of structural context or a broken parent linkage.
  */
-export function idMatchCountInTree(
-  nodes: readonly Pick<RawSnapshotNode, 'type' | 'identifier' | 'label'>[],
-  id: string,
-): number {
+export function idMatchCountInTree(nodes: readonly IdentityTreeNode[], id: string): number {
   let count = 0;
   for (const node of nodes) {
     if (readNodeLocalIdentity(node).id === id) count += 1;
   }
   return count;
+}
+
+/**
+ * ADR 0012 decision 3 amendment (#1269): `identity` with its `id` demoted
+ * whenever the id is non-unique in `nodes`, built on the SAME
+ * `idMatchCountInTree` predicate `buildSelectorChainForNode`'s
+ * `selectableId` keys off directly. `computeTargetEvidence` uses this
+ * whole-identity form; extracted so a third call site (#1280's
+ * press-retarget identity-empty check, `src/selectors/press-retarget.ts`)
+ * shares it rather than re-deriving the rule a third way. A demoted id
+ * falls back to role+label, the same shape an unrecorded id already
+ * computes.
+ */
+export function demoteNonUniqueLocalIdentity(
+  identity: LocalIdentity,
+  nodes: readonly IdentityTreeNode[],
+): LocalIdentity {
+  if (identity.id === undefined) return identity;
+  if (idMatchCountInTree(nodes, identity.id) <= 1) return identity;
+  const { role, label } = identity;
+  return { role, ...(label !== undefined ? { label } : {}) };
 }
 
 /**

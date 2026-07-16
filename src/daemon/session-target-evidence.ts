@@ -18,7 +18,7 @@ import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { resolveRectCenter } from '../utils/rect-center.ts';
 import { findNearestScrollableContainer } from './snapshot-presentation/tree.ts';
 import {
-  idMatchCountInTree,
+  demoteNonUniqueLocalIdentity,
   readNodeLocalIdentity,
   siblingOrdinal,
 } from '../replay/target-identity-node.ts';
@@ -255,13 +255,12 @@ export function filterIdentitySet(
  * Both sites sharing one predicate is what keeps the tuple and the chain from
  * disagreeing (demoting one but not the other). The rule is capture-time
  * uniqueness, not an id-namespace heuristic: a reused RN `FlatList` `testID`
- * hits the same demotion on iOS.
+ * hits the same demotion on iOS. Delegates to the shared
+ * `demoteNonUniqueLocalIdentity` (`target-identity-node.ts`), which #1280's
+ * press-retarget check also uses.
  */
 function demoteNonUniqueId(identity: LocalIdentity, nodes: readonly SnapshotNode[]): LocalIdentity {
-  if (identity.id === undefined) return identity;
-  if (idMatchCountInTree(nodes, identity.id) <= 1) return identity;
-  const { role, label } = identity;
-  return { role, ...(label !== undefined ? { label } : {}) };
+  return demoteNonUniqueLocalIdentity(identity, nodes);
 }
 
 function computeDisambiguationDomain(params: {
