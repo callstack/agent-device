@@ -123,8 +123,10 @@ test('runtime wait stable still takes its settling capture when the budget barel
 test('runtime wait stable cannot settle when the budget only reaches the quiet deadline', async () => {
   // The other side of the boundary: the window has to ELAPSE inside the budget,
   // so a budget equal to it leaves no instant where two captures span it. The
-  // deadline-aware sleep must not manufacture a settle here.
-  const { device } = createStableCaptureDevice(createFakeClock());
+  // deadline-aware sleep must neither manufacture a settle here nor run past
+  // the budget once no further capture can land inside it.
+  const clock = createFakeClock();
+  const { device } = createStableCaptureDevice(clock);
 
   await assert.rejects(
     () =>
@@ -136,6 +138,7 @@ test('runtime wait stable cannot settle when the budget only reaches the quiet d
       error instanceof Error &&
       (error as { details?: { reason?: string } }).details?.reason === 'wait_stable_timeout',
   );
+  assert.ok(clock.now() <= 300, `loop must not run past its budget, elapsed ${clock.now()}ms`);
 });
 
 test('runtime wait stable hints when it settles on a nearly-empty tree', async () => {

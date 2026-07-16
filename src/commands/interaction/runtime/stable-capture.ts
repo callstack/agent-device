@@ -158,7 +158,12 @@ function stableCaptureDelayMs(params: {
       ? params.pollMs
       : Math.max(STABLE_MIN_POLL_MS, remainingQuietMs + QUIET_DEADLINE_EPSILON_MS);
   const lastUsefulWakeMs = params.deadlineMs - params.nowMs - 1;
-  return lastUsefulWakeMs > 0 ? Math.min(cadenceMs, lastUsefulWakeMs) : cadenceMs;
+  if (lastUsefulWakeMs > 0) return Math.min(cadenceMs, lastUsefulWakeMs);
+  // No further capture can land inside the budget, so sleep out what remains of
+  // it rather than a full cadence past it: the loop is about to exit either
+  // way, and overrunning here would report a wait longer than the caller asked
+  // for.
+  return Math.max(0, params.deadlineMs - params.nowMs);
 }
 
 // Intentionally does not update the session snapshot: the stable loop captures
