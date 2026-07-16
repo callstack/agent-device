@@ -13,7 +13,7 @@ import type { LeaseLifecycleProvider } from '../../../src/daemon/handlers/lease.
 import type { DeviceLease } from '../../../src/daemon/lease-registry.ts';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';
 import type { DeviceInfo } from '../../../src/kernel/device.ts';
-import { assertRpcOk } from './assertions.ts';
+import { assertRpcError, assertRpcOk } from './assertions.ts';
 import {
   createProviderScenarioHarness,
   withProviderScenarioResource,
@@ -55,6 +55,41 @@ test('Provider-backed scenario composes lease, inventory, dispatch, and port rev
     await runFakeProviderScenario(daemon, runtime);
   });
 }, 15_000);
+
+test('provider lease allocation fails when the daemon lacks the requested runtime', async () => {
+  const daemon = await createProviderScenarioHarness({
+    providerRuntimeIds: [FAKE_PROVIDER],
+    deviceInventoryProvider: async () => null,
+  });
+  try {
+    const response = await daemon.callCommand(
+      'lease_allocate',
+      [],
+      {
+        platform: 'ios',
+        tenant: 'team-a',
+        runId: 'run-a',
+        leaseProvider: 'limrun',
+      },
+      {
+        meta: {
+          tenantId: 'team-a',
+          runId: 'run-a',
+          leaseBackend: 'ios-instance',
+          leaseProvider: 'limrun',
+        },
+      },
+    );
+    const error = assertRpcError(
+      response,
+      'UNSUPPORTED_OPERATION',
+      /Provider "limrun" is not available in this daemon runtime/,
+    );
+    assert.match(String(error.hint), /Restart the daemon/);
+  } finally {
+    await daemon.close();
+  }
+});
 
 async function runFakeProviderScenario(
   daemon: Awaited<ReturnType<typeof createProviderScenarioHarness>>,

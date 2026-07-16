@@ -60,6 +60,7 @@ export type ProviderPortReverseOptions = {
 };
 
 export type ProviderDeviceRuntimeRequestProviders = {
+  providerRuntimeIds: readonly string[];
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
   deviceInventoryProvider?: DeviceInventoryProvider;
@@ -164,6 +165,7 @@ export function createProviderDeviceRuntimeRequestProviders(
   runtimes: ProviderDeviceRuntime[],
 ): ProviderDeviceRuntimeRequestProviders {
   return {
+    providerRuntimeIds: runtimes.map((runtime) => runtime.provider),
     leaseLifecycleProvider: composeLeaseProvider(runtimes),
     cloudArtifactProvider: composeCloudArtifactProvider(runtimes),
     deviceInventoryProvider: composeDeviceInventoryProvider(runtimes),

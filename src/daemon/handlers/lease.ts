@@ -40,6 +40,7 @@ type LeaseHandlerArgs = {
   sessionName: string;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
+  providerRuntimeIds?: readonly string[];
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
 };
@@ -50,6 +51,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     sessionName,
     sessionStore,
     leaseRegistry,
+    providerRuntimeIds,
     leaseLifecycleProvider,
     cloudArtifactProvider,
   } = args;
@@ -66,6 +68,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
       };
     }
     case 'lease_allocate': {
+      assertProviderRuntimeAvailable(leaseScope.leaseProvider, providerRuntimeIds);
       const lease = leaseRegistry.allocateLease(leaseScopeToAllocateRequest(leaseScope));
       let providerData: Record<string, unknown> | undefined;
       try {
@@ -112,6 +115,23 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     default:
       return null;
   }
+}
+
+function assertProviderRuntimeAvailable(
+  provider: string | undefined,
+  providerRuntimeIds: readonly string[] | undefined,
+): void {
+  if (!provider || providerRuntimeIds === undefined || providerRuntimeIds.includes(provider)) {
+    return;
+  }
+  throw new AppError(
+    'UNSUPPORTED_OPERATION',
+    `Provider "${provider}" is not available in this daemon runtime.`,
+    {
+      provider,
+      hint: `Restart the daemon with ${provider} configured, then retry lease allocation.`,
+    },
+  );
 }
 
 async function listArtifactsForRequest(

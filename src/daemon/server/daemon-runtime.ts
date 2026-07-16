@@ -115,6 +115,7 @@ export async function startDaemonRuntime(
     leaseLifecycleProvider: providerRuntimeProviders.leaseLifecycleProvider,
     cloudArtifactProvider,
     deviceInventoryProvider: providerRuntimeProviders.deviceInventoryProvider,
+    providerRuntimeIds: providerRuntimeProviders.providerRuntimeIds,
     providerDeviceRuntimeScope: providerRuntimeProviders.providerDeviceRuntimeScope,
     trackDownloadableArtifact,
   });

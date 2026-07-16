@@ -64,6 +64,7 @@ export type RequestRouterDeps = {
   appLogProvider?: AppLogProviderResolver;
   recordingProvider?: RecordingProviderResolver;
   deviceInventoryProvider?: DeviceInventoryProvider;
+  providerRuntimeIds?: readonly string[];
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
@@ -88,6 +89,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     appLogProvider,
     recordingProvider,
     deviceInventoryProvider,
+    providerRuntimeIds,
     leaseLifecycleProvider,
     cloudArtifactProvider,
     providerDeviceRuntimeScope,
@@ -213,6 +215,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       sessionStore,
       leaseRegistry,
       leaseLifecycleProvider,
+      providerRuntimeIds,
       cloudArtifactProvider,
       invoke: handleRequest,
       invokeReplayAction: allowReplayActions
