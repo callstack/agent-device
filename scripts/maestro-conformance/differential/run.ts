@@ -90,6 +90,16 @@ export type ScenarioReport = {
   outcomeDiverged: boolean;
   /** Engine-side invariants over agent-device's own timing trace. */
   invariants: InvariantResult[];
+  /**
+   * ok                  — behaved as expected.
+   * failed              — an UNDECLARED divergence. The signal this exists for.
+   * known-divergence    — failed exactly as declared; tracked, so the run stays green.
+   * stale-declaration   — passed while still declared divergent: remove the
+   *                       declaration (the gap is closed). Fails, so a fix cannot
+   *                       land while leaving the oracle blind to a regression.
+   */
+  status: 'ok' | 'failed' | 'known-divergence' | 'stale-declaration';
+  tracking?: string;
   failed: boolean;
 };
 
@@ -138,6 +148,20 @@ function runScenario(scenario: DifferentialScenario, options: RunnerOptions): Sc
     ? evaluateInvariants(trace ? readTrace(trace) : [], scenario.engineInvariants)
     : [];
   const invariantFailed = invariants.some((result) => result.status !== 'held');
+  const misbehaved = outcomeDiverged || invariantFailed;
+
+  // A declared divergence is an expected, tracked gap: it keeps the run green so
+  // the oracle is not blocked on the engine bug it just found. But a declaration
+  // that no longer reproduces FAILS — the fix PR has to delete it, which is what
+  // turns the differential into the acceptance test for its own findings.
+  const declared = scenario.knownDivergence;
+  const status = declared
+    ? misbehaved
+      ? ('known-divergence' as const)
+      : ('stale-declaration' as const)
+    : misbehaved
+      ? ('failed' as const)
+      : ('ok' as const);
 
   return {
     id: scenario.id,
@@ -146,7 +170,9 @@ function runScenario(scenario: DifferentialScenario, options: RunnerOptions): Sc
     agentDevice,
     outcomeDiverged,
     invariants,
-    failed: outcomeDiverged || invariantFailed,
+    status,
+    ...(declared ? { tracking: declared.tracking } : {}),
+    failed: status === 'failed' || status === 'stale-declaration',
   };
 }
 
@@ -158,11 +184,15 @@ function main(argv: readonly string[]): void {
   if (options.dryRun) {
     for (const scenario of scenarios) {
       const invariants = scenario.engineInvariants?.length ?? 0;
+      const declared = scenario.knownDivergence
+        ? `\tdeclared-divergence=${scenario.knownDivergence.tracking}`
+        : '';
       console.log(
-        `${scenario.id}\t${scenario.flow}\texpect=${scenario.expect}\tinvariants=${invariants}`,
+        `${scenario.id}\t${scenario.flow}\texpect=${scenario.expect}\tinvariants=${invariants}${declared}`,
       );
     }
-    console.log(`\n${scenarios.length} scenario(s) validated.`);
+    const known = scenarios.filter((scenario) => scenario.knownDivergence).length;
+    console.log(`\n${scenarios.length} scenario(s) validated, ${known} declared divergence(s).`);
     return;
   }
 
@@ -176,13 +206,26 @@ function main(argv: readonly string[]): void {
   }
 
   for (const report of reports) {
-    const status = report.failed ? 'FAILED' : 'ok';
     console.log(
-      `${status.padEnd(7)} ${report.id} maestro=${report.maestro.outcome} agent-device=${report.agentDevice.outcome}`,
+      `${report.status.padEnd(17)} ${report.id} maestro=${report.maestro.outcome} agent-device=${report.agentDevice.outcome}`,
     );
     for (const result of report.invariants) {
       console.log(`        invariant ${result.status}: ${result.detail}`);
     }
+    if (report.status === 'known-divergence') {
+      console.log(`        declared divergence, tracked: ${report.tracking}`);
+    }
+    if (report.status === 'stale-declaration') {
+      console.log(
+        `        passed while declared divergent — remove knownDivergence (${report.tracking}) so this stays enforced`,
+      );
+    }
+  }
+
+  // Keep declared gaps visible: a green run must still say what it is not proving.
+  const known = reports.filter((report) => report.status === 'known-divergence');
+  if (known.length > 0) {
+    console.log(`\n${known.length} declared divergence(s), not enforced: ${known.map((r) => r.id).join(', ')}`);
   }
 
   const failed = reports.filter((report) => report.failed);

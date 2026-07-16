@@ -54,11 +54,25 @@ exist on no device — so a device run against them would fail before exercising
 any runtime behavior, making the settle detector silently vacuous. A test
 enforces the separation, and the workflow hard-fails if the app is not installed.
 
-**Layer 3 is dispatch-only and has never executed end-to-end.** Nothing else in
-this repo builds or installs the Expo fixture app, so those steps are new and
-unproven. Run it manually, watch it, fix what breaks, and only then add the cron
-— a nightly job that fails at 05:00 every day teaches nothing and trains people
-to ignore it.
+### Declared divergences (`knownDivergence`)
+
+Layer 3 has the same contract as layer 1: **every divergence is a decision on the
+record.** When the differential catches a real engine bug, the instrument does not
+block on repairing what it just measured — the scenario declares it with a
+`knownDivergence: { reason, tracking }`, the scheduled run stays green on that
+known gap, and only *undeclared* divergences fail.
+
+Two rules keep that from rotting, both enforced by `run.test.ts` / the runner
+rather than by good intentions:
+
+- **`tracking` is required** and must be a real issue URL. A declared divergence
+  with nothing behind it is how "temporarily expected" silently becomes permanent.
+- **A stale declaration fails.** If a declared-divergent scenario starts passing,
+  the run goes red until the declaration is removed — so the fix PR must delete
+  it, and the oracle then enforces that the gap stays closed. The differential is
+  the acceptance test for its own findings.
+
+A green run still prints what it is *not* proving.
 
 This matters most for **bug class 4** (settle ordering), whose 200ms × 10 loop has
 no reflectable upstream constant, so layer 3 is its only home. Its detector is the
@@ -121,11 +135,23 @@ This resolves the pinned jars, **verifies their SHA-256 against
 refresh the vendored corpus flows and their `manifest.json` `sha256`s, regenerate,
 and reconcile any new divergences.
 
-## Layer 3 (scheduled / opt-in)
+## Layer 3 (device)
 
 ```sh
 pnpm maestro:conformance:differential -- --platform ios --out-dir .tmp/diff
 ```
 
-Runs on the `conformance-differential` workflow (scheduled). `--dry-run`
-validates the scenario registry without a device.
+Runs scheduled on the `conformance-differential` workflow, and on demand via
+`workflow_dispatch`. `--dry-run` validates the scenario registry without a device.
+
+The workflow builds and installs the fixture app, verifies its bundle id, pins
+the Maestro CLI to the same version as layers 1-2, and passes `--maestro` so the
+flow routes through the compat engine.
+
+**Investigate locally, not through CI.** A device iteration in CI is ~40 minutes;
+`--only` plus a local simulator is minutes:
+
+```sh
+pnpm test-app:install && pnpm --dir examples/test-app exec expo run:ios --configuration Release
+pnpm maestro:conformance:differential -- --platform ios --only settle-after-tap --trace-root .agent-device
+```

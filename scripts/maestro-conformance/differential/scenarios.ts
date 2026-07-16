@@ -25,6 +25,27 @@ export const DIFFERENTIAL_APP_ID = 'com.callstack.agentdevicelab';
 
 export type DifferentialOutcome = 'pass' | 'fail';
 
+/**
+ * A divergence this scenario is currently EXPECTED to exhibit.
+ *
+ * This is the layer-3 twin of layer 1's FLOW_DIVERGENCES, and it exists for the
+ * same reason: the oracle's contract is that every divergence is a decision on
+ * the record, never a silent one. When the differential catches a real engine
+ * bug, the instrument must not be blocked on repairing what it just measured —
+ * declare it, file it, and let the scheduled run stay green on the known gap
+ * while still failing on anything undeclared.
+ *
+ * `tracking` is REQUIRED and enforced by run.test.ts. A declared divergence with
+ * no issue behind it is exactly how "temporarily expected" becomes permanent
+ * without anyone deciding to make it so.
+ */
+export type KnownDivergence = {
+  /** Why this scenario currently fails, and what it blocks. */
+  reason: string;
+  /** Issue tracking the fix. Required — see above. */
+  tracking: string;
+};
+
 export type DifferentialScenario = {
   id: string;
   /** The #1217 bug class this scenario guards, when applicable. */
@@ -39,6 +60,12 @@ export type DifferentialScenario = {
   engineInvariants?: Invariant[];
   /** What a divergence would indicate. */
   divergenceMeans: string;
+  /**
+   * Declared, tracked failure. The run stays green while this holds — but it
+   * FAILS if the scenario starts passing, so the fix PR must remove the
+   * declaration and the oracle enforces that the gap stays closed.
+   */
+  knownDivergence?: KnownDivergence;
 };
 
 export const DIFFERENTIAL_SCENARIOS: DifferentialScenario[] = [
@@ -61,6 +88,11 @@ export const DIFFERENTIAL_SCENARIOS: DifferentialScenario[] = [
     ],
     divergenceMeans:
       'agent-device settled in a different order than upstream (sleep-before vs sleep-after capture) or never latches within the shared budget.',
+    knownDivergence: {
+      reason:
+        'Caught by this differential on its first working run: our scrollUntilVisible times out finding home-open-form where Maestro 2.5.1 scrolls to it and passes (maestro=pass, agent-device=fail). The flow cannot reach its tapOn step, so bug class 4 has no working device detector until that engine bug is fixed. Declared rather than chased inline — the instrument does not block on repairing what it just measured.',
+      tracking: 'https://github.com/callstack/agent-device/issues/1299',
+    },
   },
   {
     id: 'percent-swipe',
@@ -97,6 +129,11 @@ export const DIFFERENTIAL_SCENARIOS: DifferentialScenario[] = [
       },
     ],
     divergenceMeans: 'agent-device fails a tap upstream completes (or vice versa) under retry-if-no-change.',
+    knownDivergence: {
+      reason:
+        'The invariant caught this scenario being vacuous: both engines pass, but tapRetries was 0, so retryIfNoChange never ran. Tapping the fixture app title does not hold the hierarchy signature still (its ScreenTitle carries a dynamic cart badge), so the no-change path is never forced. Needs an inert fixture control — a defect in the scenario, not the engine.',
+      tracking: 'https://github.com/callstack/agent-device/issues/1300',
+    },
   },
   {
     id: 'optional-warned-not-failed',

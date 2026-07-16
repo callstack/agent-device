@@ -6,16 +6,16 @@ name: Conformance Differential
 # replay trace. This is the only layer that can catch settle-loop ordering, which
 # has no reflectable upstream constant.
 #
-# DISPATCH-ONLY, DELIBERATELY. This path has never executed end-to-end: nothing
-# else in this repo builds or installs the Expo fixture app, so the build/install
-# steps below are new and unproven. A nightly cron that fails at 05:00 every day
-# teaches us nothing and trains people to ignore it. Run it manually, watch it,
-# fix what breaks, and only then add:
-#   schedule:
-#     - cron: "0 5 * * *"
-# Tracked as the follow-up to #1274; layers 1-2 verify per-PR without any device.
+# Scheduled: this path is proven end-to-end (run 29504440599 executed both
+# engines against the real fixture app). Scenarios that currently diverge are
+# DECLARED via `knownDivergence` in differential/scenarios.ts with a tracking
+# issue, so the schedule stays green on known gaps and fails only on undeclared
+# ones — the same contract layer 1 has. A declaration that stops reproducing also
+# fails, so a fix cannot land while leaving the oracle blind.
 
 on:
+  schedule:
+    - cron: "0 5 * * *"
   workflow_dispatch:
     inputs:
       only:

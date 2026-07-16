@@ -46,6 +46,26 @@ test('no differential scenario points at the parse-only layer-1 corpus', () => {
   }
 });
 
+// A declared divergence without an issue behind it is how "temporarily expected"
+// becomes permanent without anyone deciding to. Layer 1 requires `unsupported`
+// on every we-reject entry for the same reason; enforce the twin here, because
+// the lesson of this whole arc is that prose discipline does not survive contact
+// with a two-day debugging session.
+test('every knownDivergence carries a tracking issue', () => {
+  const problems: string[] = [];
+  for (const scenario of DIFFERENTIAL_SCENARIOS) {
+    const declared = scenario.knownDivergence;
+    if (!declared) continue;
+    if (!/^https:\/\/github\.com\/.+\/issues\/\d+$/.test(declared.tracking ?? '')) {
+      problems.push(`${scenario.id}: knownDivergence.tracking must be a GitHub issue URL`);
+    }
+    if (!declared.reason || declared.reason.length < 20) {
+      problems.push(`${scenario.id}: knownDivergence.reason must explain what it blocks`);
+    }
+  }
+  assert.deepEqual(problems, [], problems.join('\n'));
+});
+
 test('every device flow targets the fixture app the workflow installs', () => {
   for (const scenario of DIFFERENTIAL_SCENARIOS) {
     const body = fs.readFileSync(path.join(CONFORMANCE_DIR, scenario.flow), 'utf8');

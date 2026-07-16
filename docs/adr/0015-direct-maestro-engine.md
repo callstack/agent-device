@@ -137,11 +137,17 @@ so a hand edit to a captured command or constant fails the build; the scheduled 
 job then re-runs the harness against the pinned jars and fails on any byte difference, which is what makes
 "generated from upstream" enforced rather than documented. Layer 3 runs a small set of app-observable
 differential scenarios (settle ordering, tap retries, optional warned-vs-failed) through both engines
-against the real fixture app, pinning the Maestro CLI to the same version as layers 1-2; it is
-dispatch-only until its first supervised run, and never per-PR. The four #1217 regressions (percent
+against the real fixture app, pinning the Maestro CLI to the same version as layers 1-2; it is scheduled,
+never per-PR. Layer 3 carries the same declared-divergence contract as layer 1: a scenario that currently
+fails declares a `knownDivergence` with a required tracking issue, the schedule stays green on that known
+gap, and only undeclared divergences fail. A declaration that stops reproducing also fails, so the fix PR
+must remove it and the differential becomes the acceptance test for its own findings. This exists because
+the instrument must not be blocked on repairing what it just measured. The four #1217 regressions (percent
 rounding/rejection, target-swipe direction default, retry-cap semantics, settle-loop ordering) each have a
-dedicated fixture; bug class 4's detector is an engine-side timing invariant, unit-tested against
-synthetic traces, that only executes on the device path.
+dedicated fixture. Percent truncation's runtime half is pinned by a pure unit test rather than a device
+scenario, because a one-pixel delta is not app-observable. Bug class 4's detector is an engine-side timing
+invariant, unit-tested against synthetic traces, that executes on the device path — currently blocked by a
+declared `scrollUntilVisible` divergence (#1299) that the differential itself found on its first working run.
 
 Documented intentional deviations are encoded as expected-divergence entries rather than silent
 mismatches: the hierarchy-vs-screenshot animation wait (constants match, mechanism differs), the
