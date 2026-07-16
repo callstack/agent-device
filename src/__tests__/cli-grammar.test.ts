@@ -1,6 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { readInputFromCli } from '../commands/cli-grammar.ts';
+import type { CommandName } from '../commands/command-metadata.ts';
 import type { CliFlags } from '../commands/cli-grammar/flag-types.ts';
 
 const BASE_FLAGS: CliFlags = {
@@ -136,6 +137,38 @@ test('find and is grammar decodes command action positionals', () => {
   assert.equal(isOptions.predicate, 'text');
   assert.equal(isOptions.selector, 'id=title');
   assert.equal(isOptions.value, 'Welcome');
+});
+
+// --no-record is accepted on every command (COMMON_COMMAND_SUPPORTED_FLAG_KEYS),
+// but it only reaches the daemon if the reader forwards it, so a reader that
+// never names it accepts the flag and silently ignores it. Cover every command
+// whose actions are recorded into a session script.
+test('readers forward --no-record instead of silently dropping it', () => {
+  const recordable: Array<[CommandName, string[]]> = [
+    ['press', ['@e5']],
+    ['click', ['@e5']],
+    ['fill', ['id=email', 'qa@example.com']],
+    ['longpress', ['@e5']],
+    ['swipe', ['up']],
+    ['focus', ['10', '20']],
+    ['type', ['hello']],
+    ['scroll', ['down']],
+    ['get', ['attrs', '@e5']],
+    ['is', ['visible', 'id=title']],
+    ['find', ['label', 'Continue', 'exists']],
+    ['snapshot', []],
+    ['wait', ['Continue']],
+  ];
+
+  for (const [command, positionals] of recordable) {
+    const options = readInputFromCli(command, positionals, { ...BASE_FLAGS, noRecord: true });
+    assert.equal(options.noRecord, true, `${command} dropped --no-record`);
+  }
+});
+
+test('readers omit noRecord entirely when the flag is absent', () => {
+  const options = readInputFromCli('press', ['@e5'], BASE_FLAGS);
+  assert.equal(Object.hasOwn(options, 'noRecord'), false);
 });
 
 test('is grammar accepts the selector-first form with a trailing predicate', () => {

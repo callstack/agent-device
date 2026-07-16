@@ -2,7 +2,11 @@ import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { SNAPSHOT_FLAGS } from '../cli-grammar/flag-groups.ts';
 import { booleanField, integerField, stringField } from '../command-input.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
-import { commonInputFromFlags, direct } from '../cli-grammar/common.ts';
+import {
+  commonInputFromFlags,
+  direct,
+  recordControlInputFromFlags,
+} from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
@@ -41,6 +45,7 @@ const snapshotCliSchema = {
 
 export const snapshotCliReader: CliReader = (_positionals, flags) => ({
   ...commonInputFromFlags(flags),
+  ...recordControlInputFromFlags(flags),
   interactiveOnly: flags.snapshotInteractiveOnly,
   depth: flags.snapshotDepth,
   scope: flags.snapshotScope,

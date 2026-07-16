@@ -66,6 +66,16 @@ export function commonInputFromFlags(flags: CliFlags): Record<string, unknown> {
   });
 }
 
+// --no-record is a common flag, but it only takes effect if the reader forwards
+// it: command-flags.ts maps options.noRecord onto the daemon request, and
+// recordActionEntry reads it from there. A reader that never names it accepts
+// the flag and silently drops it.
+export function recordControlInputFromFlags(flags: CliFlags): Record<string, unknown> {
+  return compactRecord({
+    noRecord: flags.noRecord,
+  });
+}
+
 export function selectionOptionsFromFlags(flags: CliFlags): SelectionOptions {
   return {
     platform: flags.platform,
