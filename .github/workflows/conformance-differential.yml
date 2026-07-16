@@ -78,72 +78,31 @@ jobs:
           runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
           preferred-device-name: iPhone 17 Pro
 
-      # Building the fixture app costs ~22 minutes — 79% of this job — for an app
-      # that changes almost never, so cache the built .app and rebuild only when
-      # its sources or the toolchain change. Mirrors the setup-apple-replay
-      # prebuilt-runner cache. A miss simply falls back to the full build.
-      - name: Resolve Xcode cache key
-        id: xcode
-        run: |
-          set -euo pipefail
-          XCODE_KEY="$(xcodebuild -version | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/[[:space:]]$//' | tr ' ' '-' | tr -cd '[:alnum:]._-')"
-          echo "key=$XCODE_KEY" >> "$GITHUB_OUTPUT"
-
-      - name: Cache fixture app build
-        id: fixture-app-cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.3
+      # Builds or restores the cached fixture app and installs it. Shared with any
+      # other job that needs a controlled app to drive (see #320) — the cache is
+      # repo-wide, so whichever workflow builds it first pays the ~22 minutes and
+      # the rest get a hit.
+      - name: Setup fixture app
+        id: fixture-app
+        uses: ./.github/actions/setup-fixture-app
         with:
-          path: ${{ github.workspace }}/.tmp/fixture-app
-          # Every input that can change the binary: app sources, native config,
-          # dependency graph, the build step itself, and the toolchain.
-          key: fixture-app-ios-${{ env.IOS_RUNTIME_VERSION }}-${{ steps.xcode.outputs.key }}-${{ hashFiles('examples/test-app/src/**', 'examples/test-app/app/**', 'examples/test-app/modules/**', 'examples/test-app/app.config.js', 'examples/test-app/package.json', 'examples/test-app/pnpm-lock.yaml', 'examples/test-app/pnpm-workspace.yaml', '.github/workflows/conformance-differential.yml') }}
+          runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
+          device-name: iPhone 17 Pro
 
-      # The scenarios drive the real fixture app (com.callstack.agentdevicelab).
-      # Release avoids needing a Metro server for the JS bundle; `expo run:ios`
-      # prebuilds, builds, installs onto the booted simulator, and launches.
-      - name: Build the fixture app
-        if: steps.fixture-app-cache.outputs.cache-hit != 'true'
+      # The action guarantees *an* app is installed; this asserts it is the one
+      # the scenarios actually target, so a fixture rename cannot leave the
+      # differential driving the wrong app.
+      - name: Verify the installed app is the one the scenarios target
         run: |
           set -euo pipefail
-          pnpm test-app:install
-          pnpm --dir examples/test-app exec expo run:ios \
-            --configuration Release \
-            --device "iPhone 17 Pro" \
-            --no-bundler
-          # Stash the built bundle at a stable path so the cache has something
-          # deterministic to keep (DerivedData paths are hashed per project).
-          APP_PATH="$(find "$HOME/Library/Developer/Xcode/DerivedData" -type d -name '*.app' -path '*Release-iphonesimulator*' | head -1)"
-          if [ -z "$APP_PATH" ]; then
-            echo "::error::Built the fixture app but could not locate its .app bundle to cache."
-            exit 1
-          fi
-          mkdir -p "${{ github.workspace }}/.tmp/fixture-app"
-          cp -R "$APP_PATH" "${{ github.workspace }}/.tmp/fixture-app/"
-          echo "cached $(basename "$APP_PATH")"
-
-      # On a hit the app was never built this run, so install it explicitly. (On a
-      # miss `expo run:ios` already installed it; installing again is harmless.)
-      - name: Install the fixture app
-        run: |
-          set -euo pipefail
-          APP="$(find "${{ github.workspace }}/.tmp/fixture-app" -maxdepth 1 -type d -name '*.app' | head -1)"
-          if [ -z "$APP" ]; then
-            echo "::error::No fixture app bundle at .tmp/fixture-app (cache restored empty?)."
-            exit 1
-          fi
-          xcrun simctl install booted "$APP"
-
-      - name: Verify the fixture app is installed
-        run: |
-          set -euo pipefail
-          # Single source of truth: the same constant the scenarios assert against.
-          APP_ID=$(node --experimental-strip-types -e \
+          EXPECTED=$(node --experimental-strip-types -e \
             "import('./scripts/maestro-conformance/differential/scenarios.ts').then(m => console.log(m.DIFFERENTIAL_APP_ID))")
-          if ! xcrun simctl get_app_container booted "$APP_ID" >/dev/null 2>&1; then
-            echo "::error::Fixture app $APP_ID is not installed on the booted simulator; layer-3 scenarios would fail vacuously."
+          ACTUAL="${{ steps.fixture-app.outputs.app-id }}"
+          echo "expected=$EXPECTED actual=$ACTUAL (cache-hit=${{ steps.fixture-app.outputs.cache-hit }})"
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::Installed fixture app is $ACTUAL but the scenarios target $EXPECTED; they would fail vacuously."
             exit 1
           fi
-          echo "Fixture app $APP_ID installed."
 
       # Pin the Maestro CLI to the SAME version the oracle pins for layers 1-2,
       # read from pinned-upstream.json so the two can never drift apart. The

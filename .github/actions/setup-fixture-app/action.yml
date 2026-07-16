@@ -1,0 +1,113 @@
+name: "Setup Fixture App"
+description: "Build (or restore from cache) the examples/test-app fixture app and install it on the booted iOS simulator"
+
+# Any job that needs a controlled app to drive can use this instead of an Apple
+# system app. Building it costs ~22 minutes, so the built .app is cached and the
+# build only runs when its sources or the toolchain actually change.
+#
+# The cache is shared: GitHub caches are per-repository and readable across
+# workflows, and a run can restore caches from its own branch or the default
+# branch. So once a run on main populates it, every workflow gets the hit. The
+# key is computed here from a fixed input list, so all callers agree on it —
+# do not fold caller-specific inputs into it, or the cache stops being shared.
+#
+# Relevant to #320 (move replay coverage off system apps onto a stable fixture).
+
+inputs:
+  runtime-version:
+    description: "iOS runtime version (participates in the cache key)"
+    required: true
+  device-name:
+    description: "Simulator device name used for the build destination"
+    required: false
+    default: "iPhone 17 Pro"
+  install:
+    description: "Install the app onto the booted simulator"
+    required: false
+    default: "true"
+
+outputs:
+  app-path:
+    description: "Path to the built .app bundle"
+    value: ${{ steps.locate.outputs.app-path }}
+  app-id:
+    description: "Bundle identifier read from the built app's Info.plist"
+    value: ${{ steps.locate.outputs.app-id }}
+  cache-hit:
+    description: "Whether the build was restored from cache"
+    value: ${{ steps.cache.outputs.cache-hit }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Resolve Xcode cache key
+      id: xcode
+      shell: bash
+      run: |
+        set -euo pipefail
+        XCODE_KEY="$(xcodebuild -version | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/[[:space:]]$//' | tr ' ' '-' | tr -cd '[:alnum:]._-')"
+        echo "key=$XCODE_KEY" >> "$GITHUB_OUTPUT"
+
+    - name: Cache fixture app build
+      id: cache
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.3
+      with:
+        path: ${{ github.workspace }}/.tmp/fixture-app
+        # Everything that can change the binary: app sources, native config,
+        # dependency graph, this action's build logic, and the toolchain.
+        # Deliberately caller-independent so the cache is shared across workflows.
+        key: fixture-app-ios-${{ inputs.runtime-version }}-${{ steps.xcode.outputs.key }}-${{ hashFiles('examples/test-app/src/**', 'examples/test-app/app/**', 'examples/test-app/modules/**', 'examples/test-app/app.config.js', 'examples/test-app/package.json', 'examples/test-app/pnpm-lock.yaml', 'examples/test-app/pnpm-workspace.yaml', '.github/actions/setup-fixture-app/action.yml') }}
+
+    - name: Build fixture app
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Release embeds the JS bundle, so no Metro server is needed in CI.
+        pnpm test-app:install
+        pnpm --dir examples/test-app exec expo run:ios \
+          --configuration Release \
+          --device "${{ inputs.device-name }}" \
+          --no-bundler
+        # Stash the bundle at a stable path: DerivedData paths are hashed per
+        # project, so the cache needs somewhere deterministic to keep it.
+        APP_PATH="$(find "$HOME/Library/Developer/Xcode/DerivedData" -type d -name '*.app' -path '*Release-iphonesimulator*' | head -1)"
+        if [ -z "$APP_PATH" ]; then
+          echo "::error::Built the fixture app but could not locate its .app bundle to cache."
+          exit 1
+        fi
+        mkdir -p "${{ github.workspace }}/.tmp/fixture-app"
+        rm -rf "${{ github.workspace }}/.tmp/fixture-app/"*.app
+        cp -R "$APP_PATH" "${{ github.workspace }}/.tmp/fixture-app/"
+
+    - name: Locate fixture app
+      id: locate
+      shell: bash
+      run: |
+        set -euo pipefail
+        APP="$(find "${{ github.workspace }}/.tmp/fixture-app" -maxdepth 1 -type d -name '*.app' | head -1)"
+        if [ -z "$APP" ]; then
+          echo "::error::No fixture app bundle at .tmp/fixture-app (restored an empty cache?)."
+          exit 1
+        fi
+        # Read the id from the bundle itself rather than duplicating it here, so
+        # this cannot drift from what was actually built.
+        APP_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")"
+        echo "app-path=$APP" >> "$GITHUB_OUTPUT"
+        echo "app-id=$APP_ID" >> "$GITHUB_OUTPUT"
+        echo "fixture app: $(basename "$APP") ($APP_ID)"
+
+    - name: Install fixture app
+      if: inputs.install == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        xcrun simctl install booted "${{ steps.locate.outputs.app-path }}"
+        # Fail loudly rather than let a caller drive a device with no app: a
+        # missing app produces scenarios that fail for the wrong reason, or pass
+        # while proving nothing.
+        if ! xcrun simctl get_app_container booted "${{ steps.locate.outputs.app-id }}" >/dev/null 2>&1; then
+          echo "::error::Fixture app ${{ steps.locate.outputs.app-id }} is not installed on the booted simulator."
+          exit 1
+        fi
+        echo "installed ${{ steps.locate.outputs.app-id }}"
