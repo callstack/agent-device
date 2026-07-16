@@ -239,6 +239,9 @@ async function captureWaitSnapshot(params: SelectorRuntimeDeviceParams) {
     flags: {
       ...params.req.flags,
       snapshotInteractiveOnly: false,
+      // Presence-only wait poll (findText is only called from waitForText):
+      // skip scroll-hint derivation (#1270).
+      snapshotIncludeHiddenContentHints: false,
     },
     cache: {
       forceFresh: true,

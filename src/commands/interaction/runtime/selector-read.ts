@@ -519,8 +519,10 @@ async function waitForSelector(
   const chain = parseSelectorChain(selectorExpression);
   const capturePolicy = deriveSelectorCapturePolicy({ selectorChain: chain });
   while (now(runtime) - start < timeout) {
+    // Presence-only poll: skip scroll-hint derivation (#1270), same as waitForFindMatch.
     const capture = await captureSelectorSnapshot(runtime, options, {
       updateSession: true,
+      includeHiddenContentHints: false,
       ...capturePolicy,
     });
     const match = findSelectorChainMatch(capture.snapshot.nodes, chain, {
@@ -556,7 +558,11 @@ async function snapshotContainsText(
   options: WaitCommandOptions,
   text: string,
 ): Promise<boolean> {
-  const capture = await captureSelectorSnapshot(runtime, options, { updateSession: true });
+  // Presence-only poll: skip scroll-hint derivation (#1270), same as waitForFindMatch.
+  const capture = await captureSelectorSnapshot(runtime, options, {
+    updateSession: true,
+    includeHiddenContentHints: false,
+  });
   return Boolean(findNodeByLabel(capture.snapshot.nodes, text));
 }
 

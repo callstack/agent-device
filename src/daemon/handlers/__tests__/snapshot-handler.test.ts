@@ -1543,6 +1543,79 @@ test('wait selector timeout includes compact current-surface details', async () 
   }
 });
 
+test('wait selector polling skips hidden-content hint derivation on every poll (#1270)', async () => {
+  // The #1270 repro: `wait 'label="Battery"' 8000` on Android. A presence-only wait never
+  // consumes scroll hints, so every per-poll snapshot capture must disable hint derivation —
+  // otherwise a pathological `dumpsys activity top` call is charged against the wait budget.
+  const sessionName = 'android-wait-selector-skips-hints';
+  const withoutBattery = {
+    nodes: locationRequiredNodes,
+    truncated: false,
+    backend: 'android',
+    analysis: { rawNodeCount: 2, maxDepth: 0 },
+  };
+  const withBattery = {
+    nodes: [
+      {
+        index: 0,
+        depth: 0,
+        type: 'android.widget.TextView',
+        label: 'Battery',
+        rect: { x: 252, y: 780, width: 153, height: 65 },
+      },
+    ],
+    truncated: false,
+    backend: 'android',
+    analysis: { rawNodeCount: 1, maxDepth: 0 },
+  };
+  mockDispatch.mockResolvedValueOnce(withoutBattery).mockResolvedValueOnce(withBattery);
+
+  const response = await runWaitCommand(sessionName, androidDevice, ['label="Battery"', '8000']);
+
+  expect(response?.ok).toBe(true);
+  const snapshotCalls = mockDispatch.mock.calls.filter(([, command]) => command === 'snapshot');
+  expect(snapshotCalls.length).toBe(2);
+  for (const call of snapshotCalls) {
+    const context = call[4] as { snapshotIncludeHiddenContentHints?: boolean } | undefined;
+    expect(context?.snapshotIncludeHiddenContentHints).toBe(false);
+  }
+});
+
+test('wait text polling skips hidden-content hint derivation on every poll (#1270)', async () => {
+  const sessionName = 'android-wait-text-skips-hints';
+  const withoutBattery = {
+    nodes: locationRequiredNodes,
+    truncated: false,
+    backend: 'android',
+    analysis: { rawNodeCount: 2, maxDepth: 0 },
+  };
+  const withBattery = {
+    nodes: [
+      {
+        index: 0,
+        depth: 0,
+        type: 'android.widget.TextView',
+        label: 'Battery',
+        rect: { x: 252, y: 780, width: 153, height: 65 },
+      },
+    ],
+    truncated: false,
+    backend: 'android',
+    analysis: { rawNodeCount: 1, maxDepth: 0 },
+  };
+  mockDispatch.mockResolvedValueOnce(withoutBattery).mockResolvedValueOnce(withBattery);
+
+  const response = await runWaitCommand(sessionName, androidDevice, ['Battery', '8000']);
+
+  expect(response?.ok).toBe(true);
+  const snapshotCalls = mockDispatch.mock.calls.filter(([, command]) => command === 'snapshot');
+  expect(snapshotCalls.length).toBe(2);
+  for (const call of snapshotCalls) {
+    const context = call[4] as { snapshotIncludeHiddenContentHints?: boolean } | undefined;
+    expect(context?.snapshotIncludeHiddenContentHints).toBe(false);
+  }
+});
+
 test('wait timeout summary prefers content labels over chrome and identifier noise', async () => {
   const sessionName = 'ios-wait-timeout-surface-summary';
   mockRunnerCommand.mockResolvedValue({ found: false });
