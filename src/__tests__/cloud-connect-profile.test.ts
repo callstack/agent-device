@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { connectCommand } from '../cli/commands/connection.ts';
 import { resolveCloudAccessForConnect } from '../cli/auth-session.ts';
+import { runCliCapture } from './cli-capture.ts';
 import {
   hashRemoteConfigFile,
   readActiveConnectionState,
@@ -12,7 +13,8 @@ import {
 } from '../remote/remote-connection-state.ts';
 import type { AgentDeviceClient } from '../agent-device-client.ts';
 
-vi.mock('../cli/auth-session.ts', () => ({
+vi.mock('../cli/auth-session.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../cli/auth-session.ts')>()),
   resolveCloudAccessForConnect: vi.fn(),
 }));
 
@@ -187,74 +189,28 @@ test('connect limrun requires LIMRUN_API_KEY', async () => {
   }
 });
 
-test('connect limrun accepts only remote mobile simulator and emulator sessions', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-limrun-scope-'));
-  const stateDir = path.join(tempRoot, '.state');
-  vi.stubEnv('LIMRUN_API_KEY', 'lim_test_key');
+test('connect limrun rejects unsupported public device and backend selections', async () => {
+  const environment = { LIMRUN_API_KEY: 'lim_test_key' };
+  const device = await runCliCapture(
+    ['connect', 'limrun', '--platform', 'ios', '--device', 'local-ios', '--json'],
+    { env: environment, stateDirPrefix: 'agent-device-connect-limrun-scope-' },
+  );
+  assert.equal(device.code, 1);
+  assert.match(device.stdout, /does not accept --device/);
 
-  try {
-    await assert.rejects(
-      connectCommand({
-        positionals: ['limrun'],
-        flags: {
-          json: true,
-          help: false,
-          version: false,
-          stateDir,
-          platform: 'ios',
-          udid: '00008110-001234567890801E',
-        },
-        client: {} as AgentDeviceClient,
-      }),
-      /does not accept --udid/,
-    );
-    await assert.rejects(
-      connectCommand({
-        positionals: ['limrun'],
-        flags: {
-          json: true,
-          help: false,
-          version: false,
-          stateDir,
-          platform: 'macos',
-        },
-        client: {} as AgentDeviceClient,
-      }),
-      /requires --platform ios or android/,
-    );
-    await assert.rejects(
-      connectCommand({
-        positionals: ['limrun'],
-        flags: {
-          json: true,
-          help: false,
-          version: false,
-          stateDir,
-          platform: 'ios',
-          target: 'desktop',
-        },
-        client: {} as AgentDeviceClient,
-      }),
-      /supports only mobile simulators and emulators/,
-    );
-    await assert.rejects(
-      connectCommand({
-        positionals: ['limrun'],
-        flags: {
-          json: true,
-          help: false,
-          version: false,
-          stateDir,
-          platform: 'ios',
-          leaseBackend: 'android-instance',
-        },
-        client: {} as AgentDeviceClient,
-      }),
-      /requires --lease-backend ios-instance/,
-    );
-  } finally {
-    fs.rmSync(tempRoot, { recursive: true, force: true });
-  }
+  const platform = await runCliCapture(['connect', 'limrun', '--platform', 'macos', '--json'], {
+    env: environment,
+    stateDirPrefix: 'agent-device-connect-limrun-scope-',
+  });
+  assert.equal(platform.code, 1);
+  assert.match(platform.stdout, /requires --platform ios or android/);
+
+  const backend = await runCliCapture(
+    ['connect', 'limrun', '--platform', 'ios', '--lease-backend', 'android-instance', '--json'],
+    { env: environment, stateDirPrefix: 'agent-device-connect-limrun-scope-' },
+  );
+  assert.equal(backend.code, 1);
+  assert.match(backend.stdout, /requires --lease-backend ios-instance/);
 });
 
 test('connect without remote config rejects legacy remoteConfig string profile response', async () => {
