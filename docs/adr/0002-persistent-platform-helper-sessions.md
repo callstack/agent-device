@@ -59,8 +59,11 @@ automation helper: a live persistent helper session executes touch commands dire
 session socket, and without one the same helper runs one-shot (amended 2026-07, issue #1275,
 consistent with ADR 0013; previously touch synthesis shipped as a separate instrumentation helper,
 so the daemon had to stop the persistent snapshot session before every gesture and let the next
-snapshot restart it lazily). Helper reuse must never turn process ownership into cross-command
-interference.
+snapshot restart it lazily). One-shot retry after a failed session command applies only to
+idempotent reads such as viewport resolution, and only after the failed session has been stopped.
+Gesture injection is not idempotent — events may already be partially injected — so a session
+gesture failure surfaces directly instead of retrying one-shot. Helper reuse must never turn
+process ownership into cross-command interference.
 
 For iOS, keep the XCTest runner session as the reference implementation for lifecycle and
 invalidation behavior. Android does not need to copy iOS internals, but it should reuse the same

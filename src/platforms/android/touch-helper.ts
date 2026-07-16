@@ -134,7 +134,10 @@ export async function readAndroidTouchHelperViewport(device: DeviceInfo): Promis
 
 async function prepareAndroidTouchHelper(device: DeviceInfo): Promise<PreparedAndroidTouchHelper> {
   const adbProvider = resolveAndroidAdbProvider(device);
-  const artifact = await resolveAndroidTouchHelperArtifact();
+  // Same artifact precedence as snapshot capture: a provider-supplied helper artifact overrides
+  // the bundled one so both transports install and run the single shared helper (issue #1275).
+  const artifact =
+    adbProvider.snapshotHelperArtifact ?? (await resolveAndroidTouchHelperArtifact());
   const deviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
   const install = await withDiagnosticTimer(
     'android_touch_helper_install',

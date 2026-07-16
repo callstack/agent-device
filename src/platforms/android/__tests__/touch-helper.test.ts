@@ -11,6 +11,7 @@ import {
   readAndroidTouchHelperFinalRecord,
   readAndroidTouchHelperViewport,
 } from '../touch-helper.ts';
+import { resolveAndroidHelperArtifact } from '../helper-package-install.ts';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../../__tests__/test-utils/android-snapshot-helper.ts';
 import {
   ANDROID_TOUCH_HELPER_MANIFEST as manifest,
@@ -187,6 +188,64 @@ test('one-shot gesture instruments the snapshot-helper runner with the touch-pla
   assert.equal(result.helperKind, 'swipe');
   assert.equal(result.injectedEvents, 4);
   assert.equal(result.elapsedMs, 12);
+});
+
+test('a provider-supplied snapshotHelperArtifact overrides the bundled artifact for touch', async () => {
+  const device = makeIsolatedDevice();
+  const providerArtifact = {
+    ...ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+    manifest: {
+      ...ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT.manifest,
+      packageName: 'com.example.provider.snapshothelper',
+      instrumentationRunner: 'com.example.provider.snapshothelper/.SnapshotInstrumentation',
+    },
+  };
+  vi.mocked(resolveAndroidHelperArtifact).mockClear();
+
+  let probeArgs: string[] | undefined;
+  let installArgs: string[] | undefined;
+  let instrumentArgs: string[] | undefined;
+  const result = await withAndroidAdbProvider(
+    {
+      // ADB-backed provider carrying a helper artifact but no native touch implementation:
+      // gestures must install and run the provider's helper, same as snapshots do, never the
+      // bundled artifact resolver.
+      exec: async (args) => {
+        if (args.includes('--show-versioncode')) {
+          probeArgs = [...args];
+          return {
+            exitCode: 0,
+            stdout: `package:${providerArtifact.manifest.packageName} versionCode:1`,
+            stderr: '',
+          };
+        }
+        if (args[0] === 'install') {
+          installArgs = [...args];
+          return { exitCode: 0, stdout: 'Success', stderr: '' };
+        }
+        instrumentArgs = [...args];
+        return {
+          exitCode: 0,
+          stdout: [
+            resultRecord({ ok: 'true', kind: 'swipe', injectedEvents: '4', elapsedMs: '12' }),
+            'INSTRUMENTATION_CODE: 0',
+          ].join('\n'),
+          stderr: '',
+        };
+      },
+      snapshotHelperArtifact: providerArtifact,
+    },
+    { serial: device.id },
+    async () => await executeAndroidTouchHelperPlan(device, flingPlan()),
+  );
+
+  assert.equal(vi.mocked(resolveAndroidHelperArtifact).mock.calls.length, 0);
+  assert.ok(probeArgs?.includes(providerArtifact.manifest.packageName));
+  assert.equal(installArgs?.at(-1), providerArtifact.apkPath);
+  assert.equal(instrumentArgs?.at(-1), providerArtifact.manifest.instrumentationRunner);
+  assert.equal(result.installReason, 'outdated');
+  assert.equal(result.helperVersion, providerArtifact.manifest.version);
+  assert.equal(result.helperTransport, 'instrumentation');
 });
 
 test('one-shot gesture timeout extends beyond the plan duration for long-running gestures', async () => {

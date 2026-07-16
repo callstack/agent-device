@@ -75,10 +75,10 @@ The `gesture` payload is a base64-encoded JSON object using protocol `android-to
 ## Persistent Session
 
 Passing `-e sessionPort <port>` keeps the instrumentation alive after startup and serves repeated
-commands over a local TCP socket on `127.0.0.1:<port>`, instead of exiting after one snapshot. This
-avoids paying UiAutomation connect/teardown cost per call. Each line sent to the socket is one
-command; the instrumentation replies once per command and keeps the connection open for the next
-one:
+commands over a local TCP server on `127.0.0.1:<port>`, instead of exiting after one snapshot. This
+avoids paying UiAutomation connect/teardown cost per call. Each command uses one short-lived
+connection: the client connects, sends a single command line, reads the response, and the server
+closes that connection; the process stays alive for the next connection:
 
 - `snapshot <requestId>` — capture and return an XML snapshot, same semantics as the default mode
 - `viewport <requestId>` — return interactive-window viewport bounds
