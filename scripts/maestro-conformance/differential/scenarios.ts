@@ -39,11 +39,30 @@ export type DifferentialOutcome = 'pass' | 'fail';
  * no issue behind it is exactly how "temporarily expected" becomes permanent
  * without anyone deciding to make it so.
  */
+/**
+ * The EXACT failure a declaration covers.
+ *
+ * Without this a declaration is blanket amnesty: any failure at all would turn
+ * the scenario green, so while a gap is open the job would also swallow an
+ * unrelated regression — upstream Maestro starting to fail, or a different
+ * invariant breaking. A waiver must cover the one failure it was granted for and
+ * nothing else, so the signature is matched exactly and any deviation is red.
+ */
+export type DivergenceSignature = {
+  /** Outcome each engine is expected to produce while the gap is open. */
+  maestro: DifferentialOutcome;
+  agentDevice: DifferentialOutcome;
+  /** Expected status of each declared engine invariant, in declaration order. */
+  invariants?: Array<'held' | 'violated' | 'no-data'>;
+};
+
 export type KnownDivergence = {
   /** Why this scenario currently fails, and what it blocks. */
   reason: string;
   /** Issue tracking the fix. Required — see above. */
   tracking: string;
+  /** The precise failure this waiver covers. Anything else stays red. */
+  expected: DivergenceSignature;
 };
 
 export type DifferentialScenario = {
@@ -90,8 +109,18 @@ export const DIFFERENTIAL_SCENARIOS: DifferentialScenario[] = [
       'agent-device settled in a different order than upstream (sleep-before vs sleep-after capture) or never latches within the shared budget.',
     knownDivergence: {
       reason:
-        'Caught by this differential on its first working run: our scrollUntilVisible times out finding home-open-form where Maestro 2.5.1 scrolls to it and passes (maestro=pass, agent-device=fail). The flow cannot reach its tapOn step, so bug class 4 has no working device detector until that engine bug is fixed. Declared rather than chased inline — the instrument does not block on repairing what it just measured.',
+        'Caught by this differential on its first working run: our scrollUntilVisible times out finding home-open-form where Maestro 2.5.1 scrolls to it and passes. The flow cannot reach its tapOn step, so bug class 4 has no working device detector until that engine bug is fixed. Declared rather than chased inline — the instrument does not block on repairing what it just measured.',
       tracking: 'https://github.com/callstack/agent-device/issues/1299',
+      // Exactly what runs 29504440599 and 29510020718 observed. If upstream
+      // starts failing too, or the flow fails for a different reason, the
+      // signature stops matching and the job goes red — a waiver for THIS bug
+      // must not silently cover the next one.
+      expected: {
+        maestro: 'pass',
+        agentDevice: 'fail',
+        // The tap step is never reached, so the settle invariant has no data.
+        invariants: ['no-data'],
+      },
     },
   },
   {

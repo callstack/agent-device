@@ -139,10 +139,16 @@ jobs:
             --trace-root "${{ github.workspace }}/.agent-device" \
             ${DIFFERENTIAL_ONLY:+--only "$DIFFERENTIAL_ONLY"}
 
-      - name: Upload report
+      # Keep the trace, not just the verdict: the engine-side invariants are
+      # computed FROM replay-timing.ndjson, so without it a report saying
+      # "invariant violated: tapRetries was 0" cannot be audited or debugged
+      # after the runner is gone.
+      - name: Upload report and trace
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: conformance-differential-ios
-          path: .tmp/conformance-differential/differential-report.json
+          path: |
+            .tmp/conformance-differential/differential-report.json
+            .agent-device/**/replay-timing.ndjson
           if-no-files-found: ignore

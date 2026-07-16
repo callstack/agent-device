@@ -13,7 +13,11 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DIFFERENTIAL_SCENARIOS, type DifferentialScenario } from './scenarios.ts';
+import {
+  DIFFERENTIAL_SCENARIOS,
+  type DifferentialScenario,
+  type DivergenceSignature,
+} from './scenarios.ts';
 import { type InvariantResult, evaluateInvariants, readTrace } from './invariants.ts';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -124,6 +128,24 @@ function findTimingTrace(root: string | undefined): string | undefined {
   return found.sort((a, b) => b.mtimeMs - a.mtimeMs)[0]?.file;
 }
 
+/**
+ * Does the observed failure match the one the waiver was granted for, exactly?
+ * Both engines' outcomes and every declared invariant status must line up; any
+ * deviation means this is a different failure and must stay red.
+ */
+export function matchesSignature(
+  expected: DivergenceSignature,
+  maestro: EngineResult,
+  agentDevice: EngineResult,
+  invariants: InvariantResult[],
+): boolean {
+  if (maestro.outcome !== expected.maestro) return false;
+  if (agentDevice.outcome !== expected.agentDevice) return false;
+  const expectedInvariants = expected.invariants ?? [];
+  if (expectedInvariants.length !== invariants.length) return false;
+  return expectedInvariants.every((status, index) => invariants[index]?.status === status);
+}
+
 function runScenario(scenario: DifferentialScenario, options: RunnerOptions): ScenarioReport {
   const flowPath = path.join(CONFORMANCE_DIR, scenario.flow);
   const platformArgs = options.platform ? ['--platform', options.platform] : [];
@@ -151,17 +173,25 @@ function runScenario(scenario: DifferentialScenario, options: RunnerOptions): Sc
   const misbehaved = outcomeDiverged || invariantFailed;
 
   // A declared divergence is an expected, tracked gap: it keeps the run green so
-  // the oracle is not blocked on the engine bug it just found. But a declaration
-  // that no longer reproduces FAILS — the fix PR has to delete it, which is what
-  // turns the differential into the acceptance test for its own findings.
+  // the oracle is not blocked on the engine bug it just found. But the waiver
+  // covers ONE precise failure — matched exactly below — so while the gap is
+  // open the job still catches anything else (upstream regressing, a different
+  // invariant breaking). And a declaration that no longer reproduces FAILS, so
+  // the fix PR has to delete it; that is what turns the differential into the
+  // acceptance test for its own findings.
   const declared = scenario.knownDivergence;
-  const status = declared
+  const matchesDeclared =
+    declared !== undefined && matchesSignature(declared.expected, maestro, agentDevice, invariants);
+  const status = !declared
     ? misbehaved
-      ? ('known-divergence' as const)
-      : ('stale-declaration' as const)
-    : misbehaved
       ? ('failed' as const)
-      : ('ok' as const);
+      : ('ok' as const)
+    : matchesDeclared
+      ? ('known-divergence' as const)
+      : misbehaved
+        ? // Diverged, but not the way the waiver describes: not covered.
+          ('failed' as const)
+        : ('stale-declaration' as const);
 
   return {
     id: scenario.id,

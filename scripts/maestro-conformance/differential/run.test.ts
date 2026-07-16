@@ -5,9 +5,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { test } from 'node:test';
-import { DIFFERENTIAL_APP_ID, DIFFERENTIAL_SCENARIOS } from './scenarios.ts';
-import { parseRunnerArgs, selectScenarios, validateScenarios } from './run.ts';
+import { describe, test } from 'node:test';
+import {
+  DIFFERENTIAL_APP_ID,
+  DIFFERENTIAL_SCENARIOS,
+  type DivergenceSignature,
+} from './scenarios.ts';
+import { matchesSignature, parseRunnerArgs, selectScenarios, validateScenarios } from './run.ts';
 
 const CONFORMANCE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -64,6 +68,64 @@ test('every knownDivergence carries a tracking issue', () => {
     }
   }
   assert.deepEqual(problems, [], problems.join('\n'));
+});
+
+// A waiver must cover the ONE failure it was granted for. Without an exact
+// signature it is blanket amnesty: while a gap is open the job would also
+// swallow upstream regressing or a different invariant breaking — hiding the
+// next bug behind the last one.
+describe('knownDivergence signature matching', () => {
+  const sig: DivergenceSignature = { maestro: 'pass', agentDevice: 'fail', invariants: ['no-data'] };
+  const engine = (outcome: 'pass' | 'fail') => ({
+    engine: 'maestro' as const,
+    outcome,
+    exitCode: outcome === 'pass' ? 0 : 1,
+  });
+  const inv = (status: 'held' | 'violated' | 'no-data') =>
+    ({ invariant: { kind: 'stepDurationBelow', command: 'tapOn', maxMs: 1, because: 'x' }, status, detail: '' }) as never;
+
+  test('matches the declared failure exactly', () => {
+    assert.equal(matchesSignature(sig, engine('pass'), engine('fail'), [inv('no-data')]), true);
+  });
+
+  test('upstream also failing is NOT covered by the waiver', () => {
+    // The #1299 shape is maestro=pass. If Maestro starts failing too, that is a
+    // different problem and must not ride in green on this declaration.
+    assert.equal(matchesSignature(sig, engine('fail'), engine('fail'), [inv('no-data')]), false);
+  });
+
+  test('our engine unexpectedly passing is NOT covered (declaration is stale)', () => {
+    assert.equal(matchesSignature(sig, engine('pass'), engine('pass'), [inv('no-data')]), false);
+  });
+
+  test('a different invariant outcome is NOT covered', () => {
+    assert.equal(matchesSignature(sig, engine('pass'), engine('fail'), [inv('violated')]), false);
+  });
+
+  test('a new invariant appearing is NOT covered', () => {
+    assert.equal(
+      matchesSignature(sig, engine('pass'), engine('fail'), [inv('no-data'), inv('violated')]),
+      false,
+    );
+  });
+
+  test('every declaration states its expected signature', () => {
+    for (const scenario of DIFFERENTIAL_SCENARIOS) {
+      const declared = scenario.knownDivergence;
+      if (!declared) continue;
+      assert.ok(declared.expected, `${scenario.id}: knownDivergence must declare an expected signature`);
+      assert.ok(
+        ['pass', 'fail'].includes(declared.expected.maestro) &&
+          ['pass', 'fail'].includes(declared.expected.agentDevice),
+        `${scenario.id}: signature must state both engines' outcomes`,
+      );
+      // A waiver that expects both engines to pass is not a divergence at all.
+      assert.ok(
+        !(declared.expected.maestro === 'pass' && declared.expected.agentDevice === 'pass'),
+        `${scenario.id}: a signature where both engines pass describes no divergence`,
+      );
+    }
+  });
 });
 
 test('every device flow targets the fixture app the workflow installs', () => {
