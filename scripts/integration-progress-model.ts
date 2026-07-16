@@ -175,6 +175,7 @@ function summarizeProviderScenarioFlagCoverage(files) {
     ['restart', 'logs clear --restart workflow'],
     ['networkInclude', 'network dump include modes', ['include']],
     ['noRecord', 'action recording suppression'],
+    ['record', 'repair-segment observation-only recording opt-in (ADR 0012)'],
     ['replayUpdate', 'retired --update no-op replays without rewriting (ADR 0012)', ['update']],
     ['replayEnv', 'replay/test variable injection', ['env']],
     ['replayFrom', 'replay resume skips completed steps (ADR 0012)', ['resumeFrom']],
