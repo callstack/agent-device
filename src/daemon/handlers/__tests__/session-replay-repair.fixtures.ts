@@ -8,6 +8,7 @@
  */
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../types.ts';
 import { SessionStore } from '../../session-store.ts';
+import { isInteractiveObservation } from '../../session-action-recorder.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import type { TargetAnnotationV1 } from '../../../replay/target-identity.ts';
 
@@ -63,6 +64,13 @@ export function makeRecordingReplayInvoke(config: RecordingReplayInvokeConfig): 
       flags: req.flags ?? {},
       runtime: req.runtime,
       result: {},
+      // #1271 stage 2: the PRODUCTION classifier, not a mirror of it — this
+      // mock stands in for the real handlers' recording call, so it must make
+      // the same interactive-vs-authored decision they do. It reads
+      // `internal.replayPlanStep`, which the real `invokeReplayAction` stamps
+      // on every plan step, so a replayed observation is correctly treated as
+      // authored here without the fixture knowing anything about provenance.
+      interactiveObservation: isInteractiveObservation(req),
       ...(evidence ? { targetEvidence: evidence } : {}),
     });
     return { ok: true, data: {} };

@@ -60,7 +60,7 @@ const interactionCliSchemas = {
   get: {
     usageOverride: 'get text|attrs <@ref|selector>',
     positionalArgs: ['subcommand', 'target'],
-    allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS],
+    allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS, 'record'],
   },
   find: {
     usageOverride: 'find <locator|text> <action> [value] [--first|--last]',
@@ -68,12 +68,12 @@ const interactionCliSchemas = {
     summary: 'Find an element and act',
     positionalArgs: ['query', 'action', 'value?'],
     allowsExtraPositionals: true,
-    allowedFlags: ['snapshotDepth', 'snapshotRaw', 'findFirst', 'findLast'],
+    allowedFlags: ['snapshotDepth', 'snapshotRaw', 'findFirst', 'findLast', 'record'],
   },
   is: {
     positionalArgs: ['predicate', 'selector', 'value?'],
     allowsExtraPositionals: true,
-    allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS],
+    allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS, 'record'],
   },
   click: {
     usageOverride: 'click <x y|@ref|selector>',

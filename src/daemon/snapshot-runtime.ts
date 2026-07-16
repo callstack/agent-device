@@ -6,6 +6,7 @@ import { AppError } from '../kernel/errors.ts';
 import type { SnapshotDiffSummary } from '../snapshot/snapshot-diff.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } from './types.ts';
 import { SessionStore } from './session-store.ts';
+import { isInteractiveObservation } from './session-action-recorder.ts';
 import { errorResponse, requireCommandSupported } from './handlers/response.ts';
 import { captureSnapshot, resolveSnapshotScope } from './handlers/snapshot-capture.ts';
 import { snapshotCaptureAnnotationsFrom } from '../snapshot-capture-annotations.ts';
@@ -347,6 +348,12 @@ function recordSnapshotRuntimeAction(params: {
     positionals: params.req.positionals ?? [],
     flags: params.req.flags ?? {},
     result: toRecordedSnapshotRuntimeResult(params.result),
+    // #1271 stage 2: `snapshot` is observation-only and subject to the
+    // repair-segment default exclusion; `diff` reaches this same recorder and
+    // is deliberately NOT in the classifier's command set, so it is
+    // unaffected. An authored `snapshot` plan step carries replay provenance
+    // and stays in the heal.
+    interactiveObservation: isInteractiveObservation(params.req),
   });
 }
 

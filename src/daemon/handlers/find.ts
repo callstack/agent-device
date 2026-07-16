@@ -1,6 +1,7 @@
 import { dispatchCommand } from '../../core/dispatch.ts';
 import {
   findBestMatchesByLocator,
+  isReadOnlyFindAction,
   parseFindArgs,
   parseFindSelectorExpression,
   type FindLocator,
@@ -76,6 +77,18 @@ export async function handleFindCommands(params: {
   }
   if (req.flags?.findFirst && req.flags?.findLast) {
     return errorResponse('INVALID_ARGS', 'find accepts only one of --first or --last');
+  }
+  // #1271 stage 2: `--record` only means something for an action the
+  // repair-segment exclusion can drop. `find`'s observe-vs-mutate split is a
+  // POSITIONAL, so unlike snapshot/get/is it cannot be settled by the CLI
+  // grammar's per-command `allowedFlags` — it is validated here instead, before
+  // any device work, so every surface (CLI/Node/MCP) inherits the same refusal
+  // rather than silently ignoring the flag on a mutating find.
+  if (req.flags?.record && !isReadOnlyFindAction(action)) {
+    return errorResponse(
+      'INVALID_ARGS',
+      `find ${action} is a mutating action and is always recorded; --record only applies to a read-only find (exists, wait, get text, get attrs).`,
+    );
   }
   const runtimeResponse = await dispatchFindReadOnlyViaRuntime({
     req,

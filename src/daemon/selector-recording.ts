@@ -1,5 +1,6 @@
 import type { DaemonRequest } from './types.ts';
 import { SessionStore } from './session-store.ts';
+import { isInteractiveObservation } from './session-action-recorder.ts';
 import { computeTargetEvidence, type RecordedTargetCapture } from './session-target-evidence.ts';
 
 export function buildFindRecordResult(
@@ -99,6 +100,11 @@ export function recordIfSession(
     positionals: req.positionals ?? [],
     flags: req.flags ?? {},
     result,
+    // #1271 stage 2: the shared recorder for `get`, `is`, `wait`, and read-only
+    // `find`. `isInteractiveObservation` decides both halves — the command
+    // class AND the provenance — so an authored plan step recorded through
+    // this same path keeps its place in the healed script.
+    interactiveObservation: isInteractiveObservation(req),
     ...(targetEvidence ? { targetEvidence } : {}),
   });
 }

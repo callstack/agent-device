@@ -52,6 +52,7 @@ function buildFlags(options: InternalRequestOptions): CommandFlags {
     deviceHub: options.deviceHub,
     testIme: options.testIme,
     noRecord: options.noRecord,
+    record: options.record,
     backMode: options.backMode,
     metroHost: options.metroHost,
     metroPort: options.metroPort,

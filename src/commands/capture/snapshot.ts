@@ -5,7 +5,8 @@ import { defineExecutableCommand } from '../command-contract.ts';
 import {
   commonInputFromFlags,
   direct,
-  recordControlInputFromFlags,
+  noRecordInputFromFlags,
+  observationRecordInputFromFlags,
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineCommandFacet } from '../family/types.ts';
@@ -40,12 +41,13 @@ const snapshotCliSchema = {
   helpDescription:
     'Capture accessibility tree or diff against the previous session baseline. For iOS raw-coordinate fallback after a no-op ref press, inspect rects with snapshot -i --json, press the rect center, then verify with diff snapshot -i or snapshot --diff.',
   summary: 'Capture accessibility tree or diff against the previous session baseline',
-  allowedFlags: ['snapshotDiff', ...SNAPSHOT_FLAGS, 'snapshotForceFull', 'timeoutMs'],
+  allowedFlags: ['snapshotDiff', ...SNAPSHOT_FLAGS, 'snapshotForceFull', 'timeoutMs', 'record'],
 } as const;
 
 export const snapshotCliReader: CliReader = (_positionals, flags) => ({
   ...commonInputFromFlags(flags),
-  ...recordControlInputFromFlags(flags),
+  ...noRecordInputFromFlags(flags),
+  ...observationRecordInputFromFlags(flags),
   interactiveOnly: flags.snapshotInteractiveOnly,
   depth: flags.snapshotDepth,
   scope: flags.snapshotScope,

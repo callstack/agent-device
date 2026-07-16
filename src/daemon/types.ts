@@ -84,6 +84,27 @@ type DaemonRequestInternal = {
    * side-effect seam and expires the frame).
    */
   findResolvedTarget?: boolean;
+  /**
+   * #1271 stage 2 (ADR 0012 decision 6 amendment): PROVENANCE — set by the
+   * replay runtime (`invokeResolvedReplayAction`,
+   * `session-replay-action-runtime.ts`) on every action it dispatches from a
+   * replay plan, annotated or not. It marks the action as AUTHORED (it came
+   * from the `.ad` under repair) rather than typed out-of-band by the agent
+   * mid-repair.
+   *
+   * The repair-segment exclusion keys off its ABSENCE: an authored
+   * `get`/`is`/`find`/`snapshot` step must survive into its own healed script
+   * (silently dropping it would make the heal quietly stop asserting what the
+   * original flow asserted), while an interactive diagnostic read used only to
+   * LOCATE the repair target must not. Command class alone cannot tell those
+   * apart — they are the same command — so provenance is the discriminator and
+   * `--record` is only for deliberately inserting an interactive read.
+   *
+   * Trustworthy because `internal` is daemon-only: `toDaemonRequest`
+   * (`server/http-server.ts`) never copies it off the wire, so no client can
+   * spoof authored provenance. Same channel as `replayTargetGuard` above.
+   */
+  replayPlanStep?: boolean;
 };
 
 export type DaemonRequest = Omit<PublicDaemonRequest, 'token' | 'session' | 'flags' | 'meta'> & {

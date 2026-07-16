@@ -120,7 +120,14 @@ async function invokeResolvedReplayAction(params: {
     flags,
     runtime: resolved.runtime,
     meta: req.meta,
-    internal: req.internal,
+    // #1271 stage 2: the single point every replay plan step is dispatched, so
+    // the one place authored provenance can be stamped for all of them —
+    // annotated or not, target-binding kinds and plain dispatches alike. The
+    // repair-segment exclusion (`isInteractiveObservation`,
+    // `session-action-recorder.ts`) reads it to keep an authored
+    // `get`/`is`/`find`/`snapshot` step in its own healed script while still
+    // excluding an interactive diagnostic read of the same command.
+    internal: { ...req.internal, replayPlanStep: true },
   };
   return await invoke(buildReplayInteractionRequest(baseReq, resolved));
 }

@@ -23,7 +23,8 @@ import {
   optionalNumber,
   readElementTargetFromPositionals,
   readGetFormat,
-  recordControlInputFromFlags,
+  noRecordInputFromFlags,
+  observationRecordInputFromFlags,
   request,
   requiredDaemonString,
   repeatedInputFromFlags,
@@ -36,7 +37,7 @@ import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 export const interactionCliReaders = {
   click: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
-    ...recordControlInputFromFlags(flags),
+    ...noRecordInputFromFlags(flags),
     ...selectorSnapshotInputFromFlags(flags),
     ...repeatedInputFromFlags(flags),
     ...settleInputFromFlags(flags),
@@ -46,7 +47,7 @@ export const interactionCliReaders = {
   }),
   press: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
-    ...recordControlInputFromFlags(flags),
+    ...noRecordInputFromFlags(flags),
     ...selectorSnapshotInputFromFlags(flags),
     ...repeatedInputFromFlags(flags),
     ...settleInputFromFlags(flags),
@@ -57,7 +58,7 @@ export const interactionCliReaders = {
     const decoded = readLongPressTargetFromPositionals(positionals);
     return {
       ...commonInputFromFlags(flags),
-      ...recordControlInputFromFlags(flags),
+      ...noRecordInputFromFlags(flags),
       ...selectorSnapshotInputFromFlags(flags),
       ...settleInputFromFlags(flags),
       target: targetInputFromClientTarget(decoded),
@@ -66,7 +67,7 @@ export const interactionCliReaders = {
   },
   swipe: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
-    ...recordControlInputFromFlags(flags),
+    ...noRecordInputFromFlags(flags),
     ...swipePayloadFromPositionals(positionals, {
       count: flags.count,
       pauseMs: flags.pauseMs,
@@ -75,13 +76,13 @@ export const interactionCliReaders = {
   }),
   focus: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
-    ...recordControlInputFromFlags(flags),
+    ...noRecordInputFromFlags(flags),
     x: Number(positionals[0]),
     y: Number(positionals[1]),
   }),
   type: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
-    ...recordControlInputFromFlags(flags),
+    ...noRecordInputFromFlags(flags),
     text: positionals.join(' '),
     delayMs: flags.delayMs,
   }),
@@ -89,7 +90,7 @@ export const interactionCliReaders = {
     const decoded = readFillTargetFromPositionals(positionals);
     return {
       ...commonInputFromFlags(flags),
-      ...recordControlInputFromFlags(flags),
+      ...noRecordInputFromFlags(flags),
       ...selectorSnapshotInputFromFlags(flags),
       ...settleInputFromFlags(flags),
       target: targetInputFromClientTarget(decoded.target),
@@ -100,15 +101,20 @@ export const interactionCliReaders = {
   },
   scroll: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
-    ...recordControlInputFromFlags(flags),
+    ...noRecordInputFromFlags(flags),
     direction: readScrollDirection(positionals[0]),
     amount: optionalCliNumber(positionals[1]),
     pixels: flags.pixels,
     durationMs: flags.durationMs,
   }),
+  // The one observation-only reader in this file: `get` can be excluded from a
+  // repair-armed heal by default, so it also takes the `--record` opt-in
+  // (#1271 stage 2). Every other reader here is a mutation and takes only
+  // `--no-record`.
   get: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
-    ...recordControlInputFromFlags(flags),
+    ...noRecordInputFromFlags(flags),
+    ...observationRecordInputFromFlags(flags),
     ...selectorSnapshotInputFromFlags(flags),
     format: readGetFormat(positionals[0]),
     target: targetInputFromClientTarget(readElementTargetFromPositionals(positionals.slice(1))),

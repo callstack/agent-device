@@ -10,7 +10,7 @@ import type { CloudArtifactProvider } from '../cloud-artifacts.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, DaemonResponseData } from './types.ts';
 import { RESPONSE_VIEWS } from './response-views.ts';
 import { SessionStore } from './session-store.ts';
-import { noActiveSessionError } from './handlers/response.ts';
+import { errorResponse, noActiveSessionError } from './handlers/response.ts';
 import {
   type AndroidAdbProviderResolver,
   type AppleRunnerProviderResolver,
@@ -134,6 +134,9 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
   async function runRequestWithinScope(req: DaemonRequest): Promise<DaemonResponse> {
     if (!timingSafeStringEqual(req.token, token)) {
       return unauthorizedResponse();
+    }
+    if (req.flags?.record && req.flags?.noRecord) {
+      return mutuallyExclusiveRecordFlagsResponse();
     }
 
     let scope: RequestExecutionScope | undefined;
@@ -281,6 +284,21 @@ function unauthorizedResponse(): DaemonResponse {
     ok: false,
     error: normalizeError(new AppError('UNAUTHORIZED', 'Invalid token')),
   };
+}
+
+/**
+ * #1271 stage 2 (ADR 0012 amendment): `--record` and `--no-record` express
+ * opposite recording intents for the same action — force it into a
+ * repair-armed heal versus opt it out entirely — so both together is a
+ * contradiction the daemon rejects up front, uniformly for every surface
+ * (CLI/Node client/MCP all funnel through this same request entry point),
+ * rather than silently letting one win.
+ */
+function mutuallyExclusiveRecordFlagsResponse(): DaemonResponse {
+  return errorResponse(
+    'INVALID_ARGS',
+    '--record and --no-record are mutually exclusive; pass at most one.',
+  );
 }
 
 async function dispatchGenericForLockedScope(params: {

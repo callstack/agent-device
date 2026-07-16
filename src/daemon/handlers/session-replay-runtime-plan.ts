@@ -153,6 +153,19 @@ function describeOutOfRangeResumeFrom(params: {
  * `resume.from` stays at the failed step unchanged and is never subject to
  * this check (it never matches `expectedFrom`, which only ever targets
  * `failedIndex + 1`), so the message below is intentionally hint-neutral.
+ *
+ * #1271 stage 2 (ADR 0012 amendment): this same growth check is now also the
+ * repair-segment empty-heal guard. Observation-only actions
+ * (`snapshot`/`get`/`is`/`find`) are, by default, excluded from
+ * `session.actions` while repair-armed (`isExcludedRepairSegmentObservation`,
+ * `session-action-recorder.ts`), so a repair segment containing ONLY
+ * unrecorded diagnostic reads never grows `sessionActionsLength` either —
+ * this check refuses it exactly as it already refused "no corrective press
+ * happened," converting the corrective-read case's one silent-failure mode
+ * (an excluded read silently missing from the heal) into this same loud
+ * rejection. The message therefore names `--record` alongside the existing
+ * `--no-record` mention, since the missing corrective action may have been a
+ * read rather than a press.
  */
 function describeUnperformedRecordAndHeal(params: {
   from: number;
@@ -167,9 +180,10 @@ function describeUnperformedRecordAndHeal(params: {
     return undefined;
   }
   return (
-    `replay --from ${from} continues a record-and-heal-shaped repair, but no corrective action has ` +
-    'been recorded on this session since that divergence; press the correct control via a blessed ' +
-    "@ref from the divergence's screen.refs (recorded, no --no-record) before resuming with " +
+    `replay --from ${from} continues a record-and-heal-shaped repair, but no corrective action was ` +
+    "recorded in this repair segment; press the correct control via a blessed @ref from the divergence's " +
+    'screen.refs (recorded, no --no-record) — or, if your corrective action was a read ' +
+    '(get/is/find/snapshot), re-run it with --record so it lands in the heal — before resuming with ' +
     `--from ${from}.`
   );
 }

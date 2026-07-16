@@ -168,10 +168,22 @@ const scrollFields = {
   }),
 };
 
+// #1271 stage 2: `get`/`is`/`find` are observation-only and excluded from a
+// repair-armed heal by default (ADR 0012 amendment). Both flags are exposed
+// here so the Node SDK's typed options and the MCP tool schema can actually
+// set them, mirroring `--no-record`/`--record` on the CLI.
+const recordControlFields = () => ({
+  noRecord: booleanField('Do not record this action.'),
+  record: booleanField(
+    'Force-record this action even though its command is observation-only and would otherwise be excluded from a repair-armed heal by default (mutually exclusive with noRecord).',
+  ),
+});
+
 const getFields = {
   format: requiredField(enumField(['text', 'attrs'] as const)),
   target: requiredField(elementTargetField()),
   ...selectorSnapshotFields(),
+  ...recordControlFields(),
 };
 
 const isFields = {
@@ -181,6 +193,7 @@ const isFields = {
   selector: requiredField(stringField()),
   value: stringField(),
   ...selectorSnapshotFields(),
+  ...recordControlFields(),
 };
 
 const findFields = {
@@ -193,6 +206,7 @@ const findFields = {
   last: booleanField(),
   depth: integerField(),
   raw: booleanField(),
+  ...recordControlFields(),
 };
 
 const gestureFields = {

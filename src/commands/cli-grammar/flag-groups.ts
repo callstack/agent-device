@@ -81,6 +81,12 @@ export const COMMON_COMMAND_SUPPORTED_FLAG_KEYS = flagKeys(
   'iosXctestEnvDir',
   'androidDeviceAllowlist',
   'session',
+  // `--no-record` is genuinely common: it applies to every recordable command,
+  // mutations included. `--record` is NOT — it only means anything for the
+  // observation-only commands the repair-segment exclusion can drop
+  // (snapshot/get/is/find), so it is scoped per-command via each schema's
+  // `allowedFlags` instead of being accepted everywhere and silently ignored
+  // (#1271 stage 2).
   'noRecord',
 );
 

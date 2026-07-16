@@ -22,6 +22,23 @@ export type FindAction =
   | { kind: 'exists' }
   | { kind: 'wait'; timeoutMs?: number };
 
+export type ReadOnlyFindAction = 'exists' | 'wait' | 'get_text' | 'get_attrs';
+
+/**
+ * `find` is the one command whose observation-vs-mutation split is a
+ * POSITIONAL, not the command name — so it cannot be settled statically by the
+ * CLI grammar the way `snapshot`/`get`/`is` are. Both the read-only dispatch
+ * (`dispatchFindReadOnlyViaRuntime`) and the mutating handler
+ * (`handleFindCommands`) read this one definition, so `--record`'s dynamic
+ * validation (#1271 stage 2) and the read-only routing can never disagree
+ * about which sub-actions observe.
+ */
+export function isReadOnlyFindAction(action: FindAction['kind']): action is ReadOnlyFindAction {
+  return (
+    action === 'exists' || action === 'wait' || action === 'get_text' || action === 'get_attrs'
+  );
+}
+
 type FindMatchOptions = {
   requireRect?: boolean;
 };

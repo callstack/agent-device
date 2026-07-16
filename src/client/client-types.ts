@@ -456,6 +456,13 @@ export type CaptureSnapshotOptions = AgentDeviceRequestOverrides &
     raw?: boolean;
     forceFull?: boolean;
     timeoutMs?: number;
+    /**
+     * #1271 stage 2 (ADR 0012 amendment): `snapshot` is observation-only and
+     * excluded from a repair-armed heal by default; `record` forces it
+     * through. Mutually exclusive with `noRecord`.
+     */
+    noRecord?: boolean;
+    record?: boolean;
   };
 
 export type CaptureSnapshotResult = {
@@ -818,21 +825,35 @@ export type RotateGestureOptions = DeviceCommandBaseOptions & {
 
 export type TransformGestureOptions = DeviceCommandBaseOptions & TransformGestureParams;
 
+/**
+ * #1271 stage 2 (ADR 0012 amendment): `get`/`is`/`find` are observation-only
+ * and excluded from a repair-armed heal by default. `record` forces this
+ * action through (the corrective-read case); `noRecord` continues to opt the
+ * action out entirely. Mutually exclusive.
+ */
+type RecordControlOptions = {
+  noRecord?: boolean;
+  record?: boolean;
+};
+
 export type GetOptions = DeviceCommandBaseOptions &
   SelectorSnapshotCommandOptions &
-  ElementTarget & {
+  ElementTarget &
+  RecordControlOptions & {
     format: 'text' | 'attrs';
   };
 
 type IsTextPredicateOptions = DeviceCommandBaseOptions &
-  SelectorSnapshotCommandOptions & {
+  SelectorSnapshotCommandOptions &
+  RecordControlOptions & {
     predicate: 'text';
     selector: string;
     value: string;
   };
 
 type IsStatePredicateOptions = DeviceCommandBaseOptions &
-  SelectorSnapshotCommandOptions & {
+  SelectorSnapshotCommandOptions &
+  RecordControlOptions & {
     predicate: 'visible' | 'hidden' | 'exists' | 'editable' | 'selected' | 'focused';
     selector: string;
     value?: never;
@@ -841,7 +862,8 @@ type IsStatePredicateOptions = DeviceCommandBaseOptions &
 export type IsOptions = IsTextPredicateOptions | IsStatePredicateOptions;
 
 type FindBaseOptions = DeviceCommandBaseOptions &
-  FindSnapshotCommandOptions & {
+  FindSnapshotCommandOptions &
+  RecordControlOptions & {
     locator?: FindLocator;
     query: string;
     first?: boolean;
@@ -1098,6 +1120,8 @@ export type InternalRequestOptions = AgentDeviceClientConfig &
     deviceHub?: boolean;
     testIme?: boolean;
     noRecord?: boolean;
+    /** #1271 stage 2: force-record this action; mutually exclusive with `noRecord`. */
+    record?: boolean;
     backMode?: BackMode;
     metroHost?: string;
     metroPort?: number;

@@ -680,19 +680,21 @@ test('formatReplayDivergenceReport renders neither caution command when resume i
   assert.match(report!, /cannot currently be resumed automatically/);
 });
 
-// --- #1271 stage 1 (safe interim; default exclusion is stage 2, gated on an
-// ADR-0012 amendment): read-only diagnostics an agent runs mid-repair to
-// LOCATE the target (snapshot -i, get attrs, find, is) are recorded into the
-// healed script by default. The repairHint guidance must teach this — but
-// ONLY when `resume.repairSessionHeld === true` (decision 6, R7 C1's signal
-// that this divergence came from a repair-armed `--save-script` replay).
-// A plain non-repair divergence never carries `repairSessionHeld` and must
-// never render the clause — it would be pure noise. ---
+// --- #1271 stage 2 (ADR-0012 amendment): read-only diagnostics an agent runs
+// mid-repair to LOCATE the target (snapshot -i, get attrs, find, is) are
+// EXCLUDED from the healed script by default (stage 1's interim
+// "use --no-record" guidance is superseded now the daemon enforces this
+// itself). The repairHint guidance must teach the new default AND the
+// `--record` escape hatch for a corrective action that is itself a read —
+// but ONLY when `resume.repairSessionHeld === true` (decision 6, R7 C1's
+// signal that this divergence came from a repair-armed `--save-script`
+// replay). A plain non-repair divergence never carries `repairSessionHeld`
+// and must never render the clause — it would be pure noise. ---
 
 const REPAIR_DIAGNOSTICS_CLAUSE_PATTERN =
-  /Read-only inspection while armed \(snapshot -i, get attrs, find, is\) is recorded too — use --no-record on those commands or they will land in the healed script\./;
+  /Read-only inspection while armed \(snapshot -i, get attrs, find, is\) is excluded from the healed script by default — no --no-record needed\. If the step you are repairing is itself a read, add --record to that command so it lands in the heal\./;
 
-test('formatReplayDivergenceReport appends the diagnostics --no-record clause for record-and-heal when repairSessionHeld is true', async () => {
+test('formatReplayDivergenceReport appends the diagnostics default-exclusion clause for record-and-heal when repairSessionHeld is true', async () => {
   const { formatReplayDivergenceReport } = await import('../divergence.ts');
   const report = formatReplayDivergenceReport({
     divergence: {
@@ -735,7 +737,7 @@ test('formatReplayDivergenceReport OMITS the diagnostics clause for record-and-h
   });
   assert.ok(report);
   assert.doesNotMatch(report!, /Read-only inspection/);
-  assert.doesNotMatch(report!, /--no-record on those commands/);
+  assert.doesNotMatch(report!, /excluded from the healed script by default/);
 });
 
 test('formatReplayDivergenceReport appends the diagnostics clause for state-repair when armed, distinct from the existing app-state --no-record clause', async () => {
@@ -838,7 +840,8 @@ test('formatReplayDivergenceReport appends the diagnostics clause for manual whe
   // `repairSessionHeld` reports the daemon KEPT THE SESSION LIVE, independent
   // of `resume.allowed` (plan-resumability) — the diagnostics clause must
   // still render here: the agent may still inspect the (held) session while
-  // deciding on a manual repair, and any such read is still recorded.
+  // deciding on a manual repair, and any such read is excluded from the heal
+  // by default unless recorded with `--record`.
   const report = formatReplayDivergenceReport({
     divergence: {
       version: 1,

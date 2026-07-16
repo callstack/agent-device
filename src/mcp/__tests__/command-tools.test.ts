@@ -1159,3 +1159,47 @@ test('MCP tool error without a divergence never touches existing pins (merge-onl
   await executor.execute('press', { target: { kind: 'ref', ref: '@e2' } });
   assert.deepEqual(runCalls[2]?.input, { target: { kind: 'ref', ref: '@e2~s7' } });
 });
+
+// --- #1271 stage 2 (ADR 0012 amendment): `record`/`noRecord` on the MCP
+// tool schema for the observation-only commands the repair-segment default
+// exclusion targets. ---
+
+test('MCP get/is/find/snapshot tools expose record and noRecord in their input schema', () => {
+  for (const name of ['get', 'is', 'find', 'snapshot']) {
+    const tool = listCommandTools().find((candidate) => candidate.name === name);
+    assert.ok(tool, `expected an MCP tool named ${name}`);
+    const properties = tool.inputSchema.properties ?? {};
+    assert.equal(
+      (properties.record as { type?: string } | undefined)?.type,
+      'boolean',
+      `${name} tool is missing a boolean 'record' input`,
+    );
+    assert.equal(
+      (properties.noRecord as { type?: string } | undefined)?.type,
+      'boolean',
+      `${name} tool is missing a boolean 'noRecord' input`,
+    );
+  }
+});
+
+test('MCP forwards record/noRecord from a get tool call through to the executed command input', async () => {
+  const calls: unknown[] = [];
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async (_client, name, input) => {
+      calls.push({ name, input });
+      return { text: 'hello' };
+    },
+  });
+  await executor.execute('get', {
+    format: 'text',
+    target: { kind: 'ref', ref: '@e5' },
+    record: true,
+  });
+  assert.deepEqual(calls, [
+    {
+      name: 'get',
+      input: { format: 'text', target: { kind: 'ref', ref: '@e5' }, record: true },
+    },
+  ]);
+});

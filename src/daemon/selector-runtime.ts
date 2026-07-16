@@ -8,7 +8,7 @@ import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { errorResponse, requireCommandSupported } from './handlers/response.ts';
 import { markSessionPartialRefsIssued, resolveRefStalenessWarning } from './session-snapshot.ts';
 import { resolveSessionDevice, withSessionlessRunnerCleanup } from './handlers/snapshot-session.ts';
-import { parseFindArgs, type FindAction } from '../selectors/find.ts';
+import { isReadOnlyFindAction, parseFindArgs } from '../selectors/find.ts';
 import { splitIsSelectorArgs } from '../selectors/index.ts';
 import { refSnapshotFlagGuardResponse } from './handlers/interaction-flags.ts';
 import { parseVersionedRefPositional } from './handlers/interaction-touch-targets.ts';
@@ -610,10 +610,3 @@ async function maybeAndroidForegroundBlockerResponse(
   );
 }
 
-function isReadOnlyFindAction(
-  action: FindAction['kind'],
-): action is 'exists' | 'wait' | 'get_text' | 'get_attrs' {
-  return (
-    action === 'exists' || action === 'wait' || action === 'get_text' || action === 'get_attrs'
-  );
-}

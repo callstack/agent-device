@@ -70,9 +70,32 @@ export function commonInputFromFlags(flags: CliFlags): Record<string, unknown> {
 // it: command-flags.ts maps options.noRecord onto the daemon request, and
 // recordActionEntry reads it from there. A reader that never names it accepts
 // the flag and silently drops it.
-export function recordControlInputFromFlags(flags: CliFlags): Record<string, unknown> {
+//
+// #1271 stage 2: `--record` deliberately does NOT ride along here. It applies
+// only to observation-only commands (snapshot/get/is/find — the ones the
+// repair-segment default exclusion can drop), so it gets its own helper below
+// rather than an `allowRecord` policy argument on this one. The capability is
+// the helper's NAME: a mutating reader physically cannot forward `--record`
+// without spreading a helper whose name says it is for observations, whereas a
+// boolean policy arg would let a future mutating reader opt in by flipping a
+// literal with no schema change — the fail-open this split exists to prevent.
+export function noRecordInputFromFlags(flags: CliFlags): Record<string, unknown> {
   return compactRecord({
     noRecord: flags.noRecord,
+  });
+}
+
+/**
+ * #1271 stage 2 (ADR 0012 decision 6 amendment): the `--record` opt-in that
+ * forces an observation-only action into a repair-armed heal. Spread ONLY by
+ * readers whose command can be excluded by default — `snapshot`, `get`, `is`,
+ * and `find`. Every one of those readers must ALSO spread
+ * `noRecordInputFromFlags`, which stays universal (`--no-record` applies to
+ * every recordable command, mutations included).
+ */
+export function observationRecordInputFromFlags(flags: CliFlags): Record<string, unknown> {
+  return compactRecord({
+    record: flags.record,
   });
 }
 

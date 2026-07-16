@@ -417,12 +417,14 @@ export function formatReplayDivergenceReport(
  * `resume.allowed` is false, a resume command is never rendered for any hint,
  * and the reported `reason` is surfaced instead.
  *
- * #1271 stage 1: whenever `resume.repairSessionHeld` is `true` (this
- * divergence is from a repair-armed `--save-script` replay), every hint's
- * guidance also appends `REPAIR_DIAGNOSTICS_NO_RECORD_CLAUSE` — read-only
- * diagnostics used to locate the repair target are recorded into the healed
- * script by default, so the agent must pass `--no-record` on inspection
- * commands. See `buildRepairHintGuidance`.
+ * #1271 stage 2 (ADR 0012 amendment): whenever `resume.repairSessionHeld` is
+ * `true` (this divergence is from a repair-armed `--save-script` replay),
+ * every hint's guidance also appends
+ * `REPAIR_DIAGNOSTICS_DEFAULT_EXCLUSION_CLAUSE` — read-only diagnostics used
+ * to locate the repair target (`snapshot -i`, `get attrs`, `find`, `is`) are
+ * excluded from the healed script by default (no `--no-record` needed), and
+ * an agent whose CORRECTIVE action is itself a read must pass `--record` on
+ * that one command so it lands in the heal. See `buildRepairHintGuidance`.
  */
 function divergenceRepairHintLine(repairHint: unknown, resume: unknown): string[] {
   if (typeof repairHint !== 'string') return [];
@@ -464,21 +466,23 @@ function formatResumeCommand(from: number, planDigest: string): string {
 }
 
 /**
- * #1271 stage 1 (safe interim; the maintainer's default-exclusion stage 2 is
- * gated on an ADR-0012 amendment): read-only diagnostics an agent runs to
- * LOCATE the repair target (`snapshot -i`, `get attrs`, `find`, `is`) are, by
- * default, recorded into the healed script exactly like the corrective press
- * — the wave-3 E3 experiment measured 0/4 trials producing a clean healed
- * script hands-off, and one recorded `get attrs` caused a second,
- * self-inflicted `identity-mismatch` divergence on fresh replay. Distinct from
- * the existing `--no-record` mentions above (`state-repair`'s "fix app state
- * with --no-record actions", and `buildDualPathRepairHintGuidance`'s
- * state-fix clause), which are about correcting APP STATE, not about
- * inspection reads — both clauses can legitimately apply to the same
- * divergence.
+ * #1271 stage 2 (ADR 0012 amendment; supersedes stage 1's interim
+ * "use --no-record" guidance now that the daemon enforces default
+ * exclusion itself — `isExcludedRepairSegmentObservation`,
+ * `session-action-recorder.ts`): read-only diagnostics an agent runs to
+ * LOCATE the repair target (`snapshot -i`, `get attrs`, `find`, `is`) are,
+ * by default, excluded from the healed script — the wave-3 E3 experiment's
+ * 0/4 clean-heal rate motivated the exclusion, but a blanket "exclude every
+ * read" would silently drop a diverged step whose OWN correction is itself
+ * a read (the E3 case). `--record` is the opt-in that forces exactly that
+ * one action through. Distinct from the existing `--no-record` mentions
+ * above (`state-repair`'s "fix app state with --no-record actions", and
+ * `buildDualPathRepairHintGuidance`'s state-fix clause), which are about
+ * correcting APP STATE via a MUTATING action, not about inspection reads —
+ * both clauses can legitimately apply to the same divergence.
  */
-const REPAIR_DIAGNOSTICS_NO_RECORD_CLAUSE =
-  'Read-only inspection while armed (snapshot -i, get attrs, find, is) is recorded too — use --no-record on those commands or they will land in the healed script.';
+const REPAIR_DIAGNOSTICS_DEFAULT_EXCLUSION_CLAUSE =
+  'Read-only inspection while armed (snapshot -i, get attrs, find, is) is excluded from the healed script by default — no --no-record needed. If the step you are repairing is itself a read, add --record to that command so it lands in the heal.';
 
 /**
  * Gated on `resume.repairSessionHeld === true` (decision 6, R7 C1): that is
@@ -496,7 +500,9 @@ function buildRepairHintGuidance(repairHint: string, resume: unknown): string | 
   const guidance = readResumeGuidance(resume);
   const core = buildRepairHintGuidanceCore(repairHint, guidance);
   if (core === undefined) return undefined;
-  return isRepairSessionHeld(resume) ? `${core} ${REPAIR_DIAGNOSTICS_NO_RECORD_CLAUSE}` : core;
+  return isRepairSessionHeld(resume)
+    ? `${core} ${REPAIR_DIAGNOSTICS_DEFAULT_EXCLUSION_CLAUSE}`
+    : core;
 }
 
 function buildRepairHintGuidanceCore(

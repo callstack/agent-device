@@ -11,7 +11,8 @@ import {
   direct,
   optionalCliNumber,
   optionalNumber,
-  recordControlInputFromFlags,
+  noRecordInputFromFlags,
+  observationRecordInputFromFlags,
   request,
   selectionOptionsFromFlags,
   selectorSnapshotOptionsFromFlags,
@@ -65,7 +66,8 @@ function readFindOptionsFromPositionals(positionals: string[], flags: CliFlags):
   const base = {
     ...findSnapshotOptionsFromFlags(flags),
     ...selectionOptionsFromFlags(flags),
-    ...recordControlInputFromFlags(flags),
+    ...noRecordInputFromFlags(flags),
+    ...observationRecordInputFromFlags(flags),
     first: flags.findFirst,
     last: flags.findLast,
   };
@@ -113,7 +115,8 @@ function readIsOptionsFromPositionals(positionals: string[], flags: CliFlags): I
   const base = {
     ...selectorSnapshotOptionsFromFlags(flags),
     ...selectionOptionsFromFlags(flags),
-    ...recordControlInputFromFlags(flags),
+    ...noRecordInputFromFlags(flags),
+    ...observationRecordInputFromFlags(flags),
   };
   const normalized = normalizeIsPositionals(positionals);
   const predicate = normalized[0];

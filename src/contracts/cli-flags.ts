@@ -116,6 +116,16 @@ export type CliFlags = CloudProviderProfileFields &
     headless?: boolean;
     restart?: boolean;
     noRecord?: boolean;
+    /**
+     * #1271 stage 2 (ADR 0012 amendment): opt-in that forces THIS action into
+     * a repair-armed heal even though its command is observation-only
+     * (`snapshot`/`get`/`is`/`find`) — the corrective-read case, where the
+     * diverged step's repair is itself a read. Mutually exclusive with
+     * `noRecord` (rejected as `INVALID_ARGS` if both are set); a no-op
+     * outside a repair-armed session and on any non-observation-only
+     * command.
+     */
+    record?: boolean;
     retainPaths?: boolean;
     retentionMs?: number;
     replayUpdate?: boolean;

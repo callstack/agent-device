@@ -294,4 +294,12 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--no-record',
     usageDescription: 'Do not record this action',
   },
+  {
+    key: 'record',
+    names: ['--record'],
+    type: 'boolean',
+    usageLabel: '--record',
+    usageDescription:
+      'Force-record this action even though its command is observation-only and would otherwise be excluded from a repair-armed heal by default (mutually exclusive with --no-record)',
+  },
 ];
