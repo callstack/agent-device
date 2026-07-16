@@ -348,9 +348,12 @@ A recorded `id` never matches a node without that id.
 > container the guard blocks, or for which no descendant carries a label, is recorded exactly as before
 > this amendment. This is a **recording-time** substitution only — `resolveSelectorChain` and live
 > press/fill dispatch are unchanged; the action still taps the point resolved against the original
-> container, and only what gets *written* to session history / the `.ad` script retargets to the
-> descendant. The rule is platform-agnostic: an RN `FlatList` row (`Cell`) that is label-less with a
-> labeled `Text` child hits the same substitution on iOS.
+> container. Only the recording-coupled fields retarget (the selector chain, the `target-v1` evidence
+> source, and the recorded ref-label); response-semantic disclosure — the `targetHittable`/hint
+> annotation — keeps describing the container actually dispatched, so a hittable row whose title
+> `TextView` is non-hittable never reports a false `targetHittable: false`. The rule is
+> platform-agnostic: an RN `FlatList` row (`Cell`) that is label-less with a labeled `Text` child hits
+> the same substitution on iOS.
 
 **Ancestry.** The chain is the nearest **K = 8** ancestors of the target, ordered **leaf→root** (nearest
 ancestor first), each entry `{ role, label? }` under the same normalization (`role` may be the empty

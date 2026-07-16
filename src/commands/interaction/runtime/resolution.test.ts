@@ -231,6 +231,68 @@ test('runtime press omits targetHittable and hint when the resolved node is hitt
   assert.equal(result.hint, undefined);
 });
 
+test('runtime press #1280 retarget: recording fields follow the labeled descendant, response hittability stays on the dispatched container', async () => {
+  // The #1280 measured shape: a hittable, identity-empty LinearLayout row
+  // container whose title lives on a NON-hittable TextView child. The tap
+  // and the response-semantic fields (targetHittable/hint) must describe
+  // the container actually dispatched — never a false `targetHittable:
+  // false` from the descendant — while the recording-coupled fields
+  // (node-as-evidence-source, selectorChain, refLabel) follow the
+  // retargeted descendant.
+  const snapshot = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'FrameLayout',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'LinearLayout',
+      rect: { x: 0, y: 100, width: 300, height: 48 },
+      hittable: true,
+    },
+    {
+      index: 2,
+      depth: 2,
+      parentIndex: 1,
+      type: 'TextView',
+      label: 'Connected devices',
+      rect: { x: 0, y: 100, width: 300, height: 48 },
+      hittable: false,
+    },
+  ]);
+  const calls: Point[] = [];
+  const device = createInteractionDevice(snapshot, {
+    platform: 'android',
+    tap: async (_context, point) => {
+      calls.push(point);
+    },
+  });
+
+  const result = await device.interactions.press(selector('role=linearlayout'), {
+    session: 'default',
+  });
+
+  // Dispatch: the tap lands at the CONTAINER's center.
+  assert.deepEqual(calls, [{ x: 150, y: 124 }]);
+  assert.equal(result.kind, 'selector');
+  // Recording-coupled fields: the retargeted descendant.
+  assert.equal(result.node?.label, 'Connected devices');
+  assert.deepEqual(result.selectorChain, [
+    'role="textview" label="Connected devices"',
+    'label="Connected devices"',
+  ]);
+  assert.equal(result.refLabel, 'Connected devices');
+  // Response-semantic fields: the container is hittable, so no
+  // targetHittable/hint — the descendant's `hittable: false` must not leak.
+  assert.equal(result.targetHittable, undefined);
+  assert.equal(result.hint, undefined);
+});
+
 test('runtime fill surfaces targetHittable and a hint for a non-hittable selector match (Maps pin case, #1037)', async () => {
   const calls: Array<{ point: Point; text: string }> = [];
   const device = createInteractionDevice(mapPinAnnotationSnapshot(), {

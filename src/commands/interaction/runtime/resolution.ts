@@ -413,7 +413,13 @@ function describeResolvedInteractionNode(
   // `selectorChain` below is built from the same `recordedNode`, so the two
   // never half-retarget. The live tap point was already resolved against
   // the ORIGINAL `node` before this function runs (see callers) — this is
-  // recording-time only.
+  // recording-time only. The fields split by what they are FOR:
+  // recording-coupled fields (they become the .ad step: `node` as evidence
+  // source, `selectorChain`, `refLabel`) follow the retargeted node;
+  // response-semantic fields (`describeNonHittableTarget`'s targetHittable +
+  // hint) describe the node actually dispatched and stay on the original —
+  // a hittable container's press must never report its non-hittable title
+  // descendant as the tap target.
   const recordedNode = PRESS_RETARGET_ACTIONS.has(action)
     ? resolvePressRecordingTarget(node, nodes)
     : node;
@@ -424,7 +430,7 @@ function describeResolvedInteractionNode(
       nodes,
     }),
     refLabel: resolveRefLabel(recordedNode, nodes),
-    ...describeNonHittableTarget(recordedNode, action),
+    ...describeNonHittableTarget(node, action),
     preActionNodes: nodes,
     resolution,
   };
