@@ -42,6 +42,34 @@ test('one-shot entries still outrank a repeat entry and remain required', () => 
   transcript.assertComplete();
 });
 
+test('a repeat declared before a matching one-shot does not shadow it', () => {
+  // Outranking is a rule, not an accident of declaration order: taking the
+  // first match would serve the repeat forever and strand the one-shot.
+  const transcript = createProviderTranscript([
+    { command: 'ios.runner.snapshot', repeat: true, result: { ok: 'rest' } },
+    { command: 'ios.runner.snapshot', result: { ok: 'first' } },
+  ]);
+
+  assert.deepEqual(transcript.next('ios.runner.snapshot'), { ok: 'first' });
+  assert.deepEqual(transcript.next('ios.runner.snapshot'), { ok: 'rest' });
+  assert.deepEqual(transcript.next('ios.runner.snapshot'), { ok: 'rest' });
+  transcript.assertComplete();
+});
+
+test('ordered transcripts reject repeat entries outright', () => {
+  // Ordered lookup only ever reads entry 0, so a repeat there never advances
+  // and makes every later entry unreachable. Refuse the combination instead of
+  // failing later as a confusing command mismatch.
+  assert.throws(
+    () =>
+      createOrderedProviderTranscript([
+        { command: 'ios.runner.snapshot', repeat: true, result: { ok: 'snapshot' } },
+        { command: 'ios.runner.tap', result: { ok: 'tap' } },
+      ]),
+    /repeat/i,
+  );
+});
+
 test('unconsumed one-shot entries still fail assertComplete alongside a repeat entry', () => {
   const transcript = createProviderTranscript([
     { command: 'ios.runner.snapshot', repeat: true, result: { ok: 'snapshot' } },
