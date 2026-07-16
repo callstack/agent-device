@@ -103,7 +103,11 @@ export async function startDaemonRuntime(
   );
   const expiredProviderLeaseReleaser = createExpiredProviderLeaseReleaser({
     leaseLifecycleProvider: providerRuntimeProviders.leaseLifecycleProvider,
+    stateDir: baseDir,
+    providerRuntimeIds: providerRuntimeProviders.providerRuntimeIds,
+    providerRuntimeRequiredIds: providerRuntimeProviders.providerRuntimeRequiredIds,
   });
+  void expiredProviderLeaseReleaser.retryPending();
   const leaseRegistry = new LeaseRegistry({
     maxActiveSimulatorLeases: parseIntegerEnv(env.AGENT_DEVICE_MAX_SIMULATOR_LEASES),
     defaultLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_TTL_MS),

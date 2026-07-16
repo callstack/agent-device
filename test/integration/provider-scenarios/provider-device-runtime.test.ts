@@ -38,6 +38,7 @@ type FakeProviderCall = {
     | 'inventory'
     | 'install'
     | 'open'
+    | 'close'
     | 'tap'
     | 'snapshot'
     | 'portReverse.ensure'
@@ -75,8 +76,14 @@ test('provider-owned iOS simulators relaunch without local CoreSimulator refresh
       );
 
       assert.deepEqual(
-        runtime.calls.filter((call) => call.type === 'open').map((call) => call.deviceId),
-        [runtime.deviceIdForLease(lease.leaseId), runtime.deviceIdForLease(lease.leaseId)],
+        runtime.calls
+          .filter((call) => call.type === 'open' || call.type === 'close')
+          .map((call) => [call.type, call.deviceId]),
+        [
+          ['open', runtime.deviceIdForLease(lease.leaseId)],
+          ['close', runtime.deviceIdForLease(lease.leaseId)],
+          ['open', runtime.deviceIdForLease(lease.leaseId)],
+        ],
       );
     },
   );
@@ -449,6 +456,9 @@ function createFakeProviderInteractor(device: DeviceInfo, calls: FakeProviderCal
     {
       open: async (app, options) => {
         calls.push({ type: 'open', deviceId: device.id, app, url: options?.url });
+      },
+      close: async (app) => {
+        calls.push({ type: 'close', deviceId: device.id, app });
       },
       tap: async (x, y) => {
         calls.push({ type: 'tap', deviceId: device.id, x, y });

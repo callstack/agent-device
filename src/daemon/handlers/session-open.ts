@@ -260,9 +260,10 @@ async function completeOpenCommand(params: {
     schedulePrewarm();
   }
 
-  // iOS simulators relaunch with one `simctl launch --terminate-running-process`
-  // instead of terminate + settle + launch (~1s per relaunch). Runtime hints
-  // written below are user-defaults reads at that launch, so ordering holds.
+  // Local iOS simulators relaunch with one `simctl launch --terminate-running-process`
+  // instead of terminate + settle + launch (~1s per relaunch). Provider simulators
+  // must dispatch an explicit close because their interactors own app termination.
+  // Runtime hints written below are user-defaults reads at that launch, so ordering holds.
   // Only the single app-launch form collapses: `open <app> <url>` dispatches
   // through the URL path, where a deep-link open never launches the app and
   // so cannot carry the terminate; those keep the close-first ordering, as
@@ -272,6 +273,7 @@ async function completeOpenCommand(params: {
     Boolean(openTarget) &&
     openPositionals.length === 1 &&
     isIosSimulator(device) &&
+    !isActiveProviderDevice(device) &&
     req.flags?.clearAppState !== true;
   if (
     shouldRunRelaunchPreClose({

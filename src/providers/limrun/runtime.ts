@@ -71,7 +71,7 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
 
   readonly leaseLifecycle: LeaseLifecycleProvider = {
     allocate: async (lease) => await this.allocate(lease),
-    release: async (lease) => await this.release(lease.leaseId),
+    release: async (lease) => await this.release(lease),
   };
 
   readonly deviceInventoryProvider: DeviceInventoryProvider = async (request) => {
@@ -232,12 +232,34 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
     };
   }
 
-  private async release(leaseId: string): Promise<Record<string, unknown> | undefined> {
-    const session = this.sessions.get(leaseId);
-    if (!session) return undefined;
+  private async release(lease: DeviceLease): Promise<Record<string, unknown> | undefined> {
+    const session = this.sessions.get(lease.leaseId);
+    if (!session) return await this.releaseRecoveredSession(lease);
     await this.terminateSession(session);
-    this.sessions.delete(leaseId);
+    this.sessions.delete(lease.leaseId);
     return { limrunInstanceId: session.instanceId };
+  }
+
+  private async releaseRecoveredSession(
+    lease: DeviceLease,
+  ): Promise<Record<string, unknown> | undefined> {
+    const platform = platformForLimrunLeaseBackend(lease.backend);
+    if (!platform) return undefined;
+    const labelSelector = `provider=${LIMRUN_PROVIDER},leaseId=${lease.leaseId}`;
+    const instances =
+      platform === 'ios'
+        ? await this.limrun.iosInstances.list({ labelSelector })
+        : await this.limrun.androidInstances.list({ labelSelector });
+    const instanceIds = instances.getPaginatedItems().map((instance) => instance.metadata.id);
+    for (const instanceId of instanceIds) {
+      if (platform === 'ios') {
+        await this.limrun.iosInstances.delete(instanceId);
+      } else {
+        await this.limrun.androidInstances.delete(instanceId);
+      }
+    }
+    if (instanceIds.length === 0) return undefined;
+    return { limrunInstanceId: instanceIds[0], limrunInstanceCount: instanceIds.length };
   }
 
   private async terminateSession(session: LimrunRuntimeSession): Promise<void> {

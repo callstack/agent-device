@@ -8,6 +8,10 @@ import type { SimulatorLease } from '../daemon/lease-registry.ts';
 import type { DeviceInfo } from '../kernel/device.ts';
 import { runCmd } from '../utils/exec.ts';
 
+type LimrunInstancePage = {
+  getPaginatedItems: () => Array<{ metadata: { id: string } }>;
+};
+
 const limrunMockState = vi.hoisted(() => {
   const androidTunnelClose = vi.fn();
   return {
@@ -35,6 +39,9 @@ const limrunMockState = vi.hoisted(() => {
       metadata: { id: 'ios-instance-1' },
       status: { token: 'instance-token', apiUrl: 'https://ios.example' },
     })),
+    iosList: vi.fn<() => Promise<LimrunInstancePage>>(async () => ({
+      getPaginatedItems: () => [],
+    })),
     iosDelete: vi.fn(async () => undefined),
     androidCreate: vi.fn(async () => ({
       metadata: { id: 'android-instance-1' },
@@ -44,6 +51,9 @@ const limrunMockState = vi.hoisted(() => {
         adbWebSocketUrl: 'wss://adb.example',
       },
     })),
+    androidList: vi.fn<() => Promise<LimrunInstancePage>>(async () => ({
+      getPaginatedItems: () => [],
+    })),
     androidDelete: vi.fn(async () => undefined),
   };
 });
@@ -52,11 +62,13 @@ vi.mock('@limrun/api', () => ({
   default: class MockLimrun {
     readonly iosInstances = {
       create: limrunMockState.iosCreate,
+      list: limrunMockState.iosList,
       delete: limrunMockState.iosDelete,
     };
 
     readonly androidInstances = {
       create: limrunMockState.androidCreate,
+      list: limrunMockState.androidList,
       delete: limrunMockState.androidDelete,
     };
 
@@ -160,6 +172,36 @@ test('Limrun iOS uses shared deep-link classification', async () => {
 
     assert.deepEqual(limrunMockState.iosLaunchApp.mock.calls, [['http:malformed']]);
     assert.deepEqual(limrunMockState.iosOpenUrl.mock.calls, [['example://screen']]);
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+test('Limrun reclaims a labeled iOS instance without an in-memory session', async () => {
+  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key', version: '9.9.9-test' });
+  const lease: SimulatorLease = {
+    leaseId: 'lease-recovered-ios',
+    tenantId: 'team-a',
+    runId: 'run-a',
+    backend: 'ios-instance',
+    leaseProvider: 'limrun',
+    createdAt: 1,
+    heartbeatAt: 1,
+    expiresAt: 60_001,
+  };
+  limrunMockState.iosList.mockResolvedValueOnce({
+    getPaginatedItems: () => [{ metadata: { id: 'ios-instance-recovered' } }],
+  });
+
+  try {
+    const releaseLease = runtime.leaseLifecycle.release;
+    if (!releaseLease) throw new Error('Limrun runtime must provide lease release');
+    await releaseLease(lease);
+
+    assert.deepEqual(limrunMockState.iosList.mock.calls, [
+      [{ labelSelector: 'provider=limrun,leaseId=lease-recovered-ios' }],
+    ]);
+    assert.deepEqual(limrunMockState.iosDelete.mock.calls, [['ios-instance-recovered']]);
   } finally {
     await runtime.shutdown();
   }
