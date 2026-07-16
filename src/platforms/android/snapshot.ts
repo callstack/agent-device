@@ -592,6 +592,11 @@ function collectExistingHiddenContentHints(
   return hintsByIndex;
 }
 
+// Cosmetic scroll-hint metadata: healthy latency is ~37ms, but `dumpsys activity top` has been
+// measured up to ~5.9s under contention. Cap it well under a typical caller timeout so one
+// pathological call can't eat a whole `wait`/`get` budget (see #1270).
+const ACTIVITY_TOP_TIMEOUT_MS = 1_500;
+
 async function dumpActivityTop(
   device: DeviceInfo,
   adb = resolveAndroidAdbExecutor(device),
@@ -599,7 +604,7 @@ async function dumpActivityTop(
   try {
     const result = await adb(['shell', 'dumpsys', 'activity', 'top'], {
       allowFailure: true,
-      timeoutMs: 8_000,
+      timeoutMs: ACTIVITY_TOP_TIMEOUT_MS,
     });
     const text = `${result.stdout}\n${result.stderr}`.trim();
     return text.length > 0 ? text : null;

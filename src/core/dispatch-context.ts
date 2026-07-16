@@ -26,6 +26,7 @@ export type CommandFlags = Omit<CliFlags, DaemonExcludedCliFlag> & {
   kind?: string;
   maestro?: MaestroRuntimeFlags;
   postGestureStabilization?: boolean;
+  snapshotIncludeHiddenContentHints?: boolean;
   leaseProvider?: string;
   provider?: string;
   deviceKey?: string;
@@ -61,6 +62,7 @@ export type DispatchContext = ScreenshotDispatchFlags & {
   snapshotScope?: string;
   snapshotRaw?: boolean;
   snapshotIncludeRects?: boolean;
+  snapshotIncludeHiddenContentHints?: boolean;
   skipIosSimulatorBootCheck?: boolean;
   count?: number;
   intervalMs?: number;

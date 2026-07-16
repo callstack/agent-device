@@ -72,6 +72,7 @@ export const MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE = 'tapped via non-hittable co
 export type SnapshotOptions = BaseSnapshotOptions & {
   appBundleId?: string;
   includeRects?: boolean;
+  includeHiddenContentHints?: boolean;
   surface?: SessionSurface;
 };
 

@@ -1133,6 +1133,52 @@ test('snapshotAndroid skips activity dump when snapshot has no scrollable nodes'
   assert.equal(result.nodes[0]?.label, 'Continue');
 });
 
+test('snapshotAndroid caps the activity-top scroll-hint probe at 1.5s', async () => {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<hierarchy rotation="0">
+  <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" clickable="false" focusable="false">
+    <node class="android.widget.ScrollView" bounds="[0,100][390,600]" clickable="false" focusable="false">
+      <node class="android.widget.Button" text="Continue" bounds="[20,120][200,180]" clickable="true" focusable="true" />
+    </node>
+  </node>
+</hierarchy>`;
+  const activityTimeouts: Array<number | undefined> = [];
+  const helperAdb = createHelperAdb({
+    instrument: async () => ({ exitCode: 0, stdout: helperOutput(xml), stderr: '' }),
+    activity: async (_args, options) => {
+      activityTimeouts.push(options?.timeoutMs);
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+  });
+
+  await snapshotAndroidWithHelper(helperAdb);
+
+  assert.deepEqual(activityTimeouts, [1500]);
+});
+
+test('snapshotAndroid skips the activity-top probe when the helper XML already carries scroll-action attributes', async () => {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<hierarchy rotation="0">
+  <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" clickable="false" focusable="false">
+    <node class="android.widget.ScrollView" scrollable="true" can-scroll-forward="true" can-scroll-backward="false" bounds="[0,100][390,600]" clickable="false" focusable="false">
+      <node class="android.widget.Button" text="Continue" bounds="[20,120][200,180]" clickable="true" focusable="true" />
+    </node>
+  </node>
+</hierarchy>`;
+  let activityDumpCalled = false;
+  const helperAdb = createHelperAdb({
+    instrument: async () => ({ exitCode: 0, stdout: helperOutput(xml), stderr: '' }),
+    activity: async () => {
+      activityDumpCalled = true;
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+  });
+
+  await snapshotAndroidWithHelper(helperAdb);
+
+  assert.equal(activityDumpCalled, false);
+});
+
 test('snapshotAndroid skips hidden content hints when disabled', async () => {
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <hierarchy rotation="0">

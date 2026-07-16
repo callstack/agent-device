@@ -63,6 +63,7 @@ export type BackendSnapshotResult = {
 
 export type BackendSnapshotOptions = SnapshotOptions & {
   includeRects?: boolean;
+  includeHiddenContentHints?: boolean;
   outPath?: string;
 };
 

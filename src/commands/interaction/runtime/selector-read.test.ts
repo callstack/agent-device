@@ -406,6 +406,50 @@ test('runtime find wait reports sparse snapshot verdicts on the selector-read ro
   assert.equal(session.snapshot, initialSnapshot);
 });
 
+test('runtime find wait skips hidden-content hint derivation on every poll (#1270)', async () => {
+  // A `wait`'s presence check never consumes scroll hints, so every poll must ask the capture
+  // layer to skip deriving them — otherwise a single pathological `dumpsys activity top` call
+  // can eat the whole wait budget from inside this loop.
+  const snapshot = selectorReadSnapshot();
+  const captureOptionsCalls: Array<BackendSnapshotOptions | undefined> = [];
+  let elapsed = 0;
+  const device = createAgentDevice({
+    backend: {
+      platform: 'android',
+      captureSnapshot: async (_context, options) => {
+        captureOptionsCalls.push(options);
+        return { snapshot };
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
+    policy: localCommandPolicy(),
+    clock: {
+      now: () => elapsed,
+      sleep: async () => {
+        elapsed += 300;
+      },
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      device.selectors.find({
+        session: 'default',
+        locator: 'text',
+        query: 'Never appears',
+        action: 'wait',
+        timeoutMs: 500,
+      }),
+    /find wait timed out/,
+  );
+
+  assert.equal(captureOptionsCalls.length >= 2, true);
+  for (const options of captureOptionsCalls) {
+    assert.equal(options?.includeHiddenContentHints, false);
+  }
+});
+
 test('runtime wait can use backend text search', async () => {
   const device = createSelectorDevice(selectorReadSnapshot(), {
     findText: true,

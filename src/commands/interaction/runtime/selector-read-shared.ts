@@ -51,6 +51,7 @@ export async function captureSelectorSnapshot(
     scope?: string;
     includeRects?: boolean;
     interactiveOnly?: boolean;
+    includeHiddenContentHints?: boolean;
   } = {
     updateSession: true,
   },
@@ -67,6 +68,9 @@ export async function captureSelectorSnapshot(
     scope: captureOptions.scope ?? options.scope,
     raw: options.raw,
     includeRects: captureOptions.includeRects,
+    ...(captureOptions.includeHiddenContentHints !== undefined
+      ? { includeHiddenContentHints: captureOptions.includeHiddenContentHints }
+      : {}),
   });
   const snapshot =
     result.snapshot ??

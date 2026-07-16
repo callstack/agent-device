@@ -448,7 +448,12 @@ async function waitForFindMatch(
   const timeout = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const start = now(runtime);
   while (now(runtime) - start < timeout) {
-    const { match } = await findFirstLocatorMatch(runtime, options, locator);
+    // A presence check never consumes scroll hints, so every poll skips deriving them —
+    // otherwise a single pathological `dumpsys activity top` call can eat the whole wait
+    // budget from inside this loop (#1270).
+    const { match } = await findFirstLocatorMatch(runtime, options, locator, {
+      includeHiddenContentHints: false,
+    });
     if (match) return { kind: 'found', found: true, waitedMs: now(runtime) - start };
     await sleep(runtime, POLL_INTERVAL_MS);
   }
@@ -459,11 +464,13 @@ async function findFirstLocatorMatch(
   runtime: AgentDeviceRuntime,
   options: FindReadCommandOptions,
   locator: FindLocator,
+  captureOverrides?: { includeHiddenContentHints?: boolean },
 ): Promise<{ capture: CapturedSnapshot; match: SnapshotNode | undefined }> {
   const selectorChain = parseFindSelectorExpression(locator, options.query);
   const capture = await captureSelectorSnapshot(runtime, options, {
     updateSession: true,
     scope: findSnapshotScope(runtime, locator, options.query, selectorChain),
+    includeHiddenContentHints: captureOverrides?.includeHiddenContentHints,
     ...deriveSelectorCapturePolicy({ selectorChain }),
   });
   if (isSparseSnapshotQualityVerdict(capture.snapshot.snapshotQuality)) {

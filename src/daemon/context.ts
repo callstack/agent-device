@@ -41,6 +41,7 @@ export function contextFromFlags(
     snapshotDepth: flags?.snapshotDepth,
     snapshotScope: flags?.snapshotScope,
     snapshotRaw: flags?.snapshotRaw,
+    snapshotIncludeHiddenContentHints: flags?.snapshotIncludeHiddenContentHints,
     ...screenshotFlagsFromOptions(flags),
     count: flags?.count,
     intervalMs: flags?.intervalMs,
