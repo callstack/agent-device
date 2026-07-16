@@ -41,6 +41,7 @@ type LeaseHandlerArgs = {
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
   providerRuntimeIds?: readonly string[];
+  providerRuntimeRequiredIds?: readonly string[];
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
 };
@@ -52,6 +53,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     sessionStore,
     leaseRegistry,
     providerRuntimeIds,
+    providerRuntimeRequiredIds,
     leaseLifecycleProvider,
     cloudArtifactProvider,
   } = args;
@@ -68,7 +70,11 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
       };
     }
     case 'lease_allocate': {
-      assertProviderRuntimeAvailable(leaseScope.leaseProvider, providerRuntimeIds);
+      assertProviderRuntimeAvailable(
+        leaseScope.leaseProvider,
+        providerRuntimeIds,
+        providerRuntimeRequiredIds,
+      );
       const lease = leaseRegistry.allocateLease(leaseScopeToAllocateRequest(leaseScope));
       let providerData: Record<string, unknown> | undefined;
       try {
@@ -120,8 +126,15 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
 function assertProviderRuntimeAvailable(
   provider: string | undefined,
   providerRuntimeIds: readonly string[] | undefined,
+  providerRuntimeRequiredIds: readonly string[] | undefined,
 ): void {
-  if (!provider || providerRuntimeIds === undefined || providerRuntimeIds.includes(provider)) {
+  if (
+    !provider ||
+    providerRuntimeIds === undefined ||
+    providerRuntimeRequiredIds === undefined ||
+    !providerRuntimeRequiredIds.includes(provider) ||
+    providerRuntimeIds.includes(provider)
+  ) {
     return;
   }
   throw new AppError(

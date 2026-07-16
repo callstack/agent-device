@@ -59,6 +59,7 @@ test('Provider-backed scenario composes lease, inventory, dispatch, and port rev
 test('provider lease allocation fails when the daemon lacks the requested runtime', async () => {
   const daemon = await createProviderScenarioHarness({
     providerRuntimeIds: [FAKE_PROVIDER],
+    providerRuntimeRequiredIds: ['limrun'],
     deviceInventoryProvider: async () => null,
   });
   try {
@@ -86,6 +87,31 @@ test('provider lease allocation fails when the daemon lacks the requested runtim
       /Provider "limrun" is not available in this daemon runtime/,
     );
     assert.match(String(error.hint), /Restart the daemon/);
+  } finally {
+    await daemon.close();
+  }
+});
+
+test('proxy lease allocation remains daemon-local when direct runtimes are configured', async () => {
+  const daemon = await createProviderScenarioHarness({
+    providerRuntimeIds: [FAKE_PROVIDER],
+    providerRuntimeRequiredIds: ['limrun'],
+    deviceInventoryProvider: async () => null,
+  });
+  try {
+    const response = await daemon.callCommand(
+      'lease_allocate',
+      [],
+      { tenant: 'team-a', runId: 'run-a', leaseProvider: 'proxy' },
+      {
+        meta: {
+          tenantId: 'team-a',
+          runId: 'run-a',
+          leaseProvider: 'proxy',
+        },
+      },
+    );
+    assert.equal(assertRpcOk<{ lease: DeviceLease }>(response).lease.leaseProvider, 'proxy');
   } finally {
     await daemon.close();
   }

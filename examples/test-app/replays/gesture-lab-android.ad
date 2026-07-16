@@ -15,7 +15,7 @@ wait "two-pointer pan activations 0" 5000
 gesture pan 220 700 180 0 500 --pointer-count 2
 wait "two-pointer pan activations 1" 5000
 
-gesture fling left 500 700 300
+gesture fling right 500 700 300
 wait "fling 1" 5000
 
 gesture fling left 500 700 300

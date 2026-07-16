@@ -39,8 +39,8 @@ export async function resolveIosApp(device: DeviceInfo, app: string): Promise<st
   const trimmed = app.trim();
   if (trimmed.includes('.')) return trimmed;
 
-  const alias = ALIASES[trimmed.toLowerCase()];
-  if (alias) return alias;
+  const alias = resolveIosAppAlias(trimmed);
+  if (alias !== trimmed) return alias;
 
   const cacheScope = iosAppResolutionScope(device);
   const cached = iosAppResolutionCache.get(cacheScope, trimmed);
@@ -60,6 +60,11 @@ export async function resolveIosApp(device: DeviceInfo, app: string): Promise<st
   }
 
   throw new AppError('APP_NOT_INSTALLED', `No app found matching "${app}"`);
+}
+
+export function resolveIosAppAlias(app: string): string {
+  const trimmed = app.trim();
+  return ALIASES[trimmed.toLowerCase()] ?? app;
 }
 
 type SimulatorAppMetadata = {

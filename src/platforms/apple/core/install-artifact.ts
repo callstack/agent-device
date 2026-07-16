@@ -81,7 +81,7 @@ export async function prepareIosInstallArtifact(
   }
 }
 
-async function readIosBundleInfo(
+export async function readIosBundleInfo(
   appBundlePath: string,
 ): Promise<{ bundleId?: string; appName?: string }> {
   const infoPlistPath = path.join(appBundlePath, 'Info.plist');

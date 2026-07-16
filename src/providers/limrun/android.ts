@@ -20,7 +20,8 @@ import type {
   ProviderDeviceInstallResult,
   ProviderPortReverseOptions,
 } from '../../provider-device-runtime.ts';
-import { execFailureDetails, runCmd } from '../../utils/exec.ts';
+import { runCmd } from '../../utils/exec.ts';
+import { normalizeOptionalString } from './strings.ts';
 
 type LimrunAdbTunnel = Awaited<ReturnType<LimrunAndroidClient['startAdbTunnel']>>;
 
@@ -158,7 +159,7 @@ async function runLimrunAndroidAdb(
   options?: AndroidAdbExecutorOptions,
 ): Promise<AndroidAdbExecutorResult> {
   const { adbArgs, result } = await executeLimrunAndroidAdb(session, args, options);
-  return requireSuccessfulLimrunAndroidAdb(adbArgs, result, options?.allowFailure);
+  return await requireSuccessfulLimrunAndroidAdb(adbArgs, result, options?.allowFailure);
 }
 
 async function executeLimrunAndroidAdb(
@@ -178,15 +179,15 @@ async function executeLimrunAndroidAdb(
   return { adbArgs, result };
 }
 
-function requireSuccessfulLimrunAndroidAdb(
+async function requireSuccessfulLimrunAndroidAdb(
   adbArgs: string[],
   result: AndroidAdbExecutorResult,
   allowFailure: boolean | undefined,
-): AndroidAdbExecutorResult {
+): Promise<AndroidAdbExecutorResult> {
   if (result.exitCode !== 0 && allowFailure !== true) {
-    throw new AppError('COMMAND_FAILED', 'Limrun Android ADB command failed', {
+    const { androidAdbResultError } = await import('../../platforms/android/adb-executor.ts');
+    throw androidAdbResultError('Limrun Android ADB command failed', result, {
       command: ['adb', ...adbArgs].join(' '),
-      ...execFailureDetails(result),
     });
   }
   return result;
@@ -217,11 +218,6 @@ function tcpEndpoint(port: number): AndroidPortReverseEndpoint {
     throw new AppError('INVALID_ARGS', `Invalid Android tcp reverse port: ${port}`);
   }
   return `tcp:${port}`;
-}
-
-function normalizeOptionalString(value: string | undefined): string | undefined {
-  const normalized = value?.trim();
-  return normalized ? normalized : undefined;
 }
 
 function buildAndroidAssetName(packageName: string | undefined, artifactPath: string): string {

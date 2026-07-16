@@ -20,6 +20,8 @@ const limrunMockState = vi.hoisted(() => {
       bundleId: 'com.example.ios',
       url: 'https://assets.example/app',
     })),
+    iosLaunchApp: vi.fn(async () => undefined),
+    iosOpenUrl: vi.fn(async () => undefined),
     iosSetOrientation: vi.fn(async () => undefined),
     androidOpenUrl: vi.fn(async () => undefined),
     androidDisconnect: vi.fn(),
@@ -72,6 +74,8 @@ vi.mock('@limrun/api/ios-client', () => ({
   createInstanceClient: vi.fn(async () => ({
     disconnect: vi.fn(),
     installApp: limrunMockState.iosInstallApp,
+    launchApp: limrunMockState.iosLaunchApp,
+    openUrl: limrunMockState.iosOpenUrl,
     setOrientation: limrunMockState.iosSetOrientation,
   })),
 }));
@@ -139,6 +143,28 @@ test('Limrun runtime identifies direct CLI usage to the Limrun API', async () =>
   }
 });
 
+test('Limrun iOS uses shared deep-link classification', async () => {
+  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key', version: '9.9.9-test' });
+
+  try {
+    const device = await allocateLimrunDevice(runtime, {
+      ...androidLease(),
+      leaseId: 'lease-ios-deep-link',
+      backend: 'ios-instance',
+    });
+    const interactor = runtime.getInteractor(device);
+    if (!interactor) throw new Error('Limrun runtime must return an interactor');
+
+    await interactor.open('http:malformed');
+    await interactor.open('example://screen');
+
+    assert.deepEqual(limrunMockState.iosLaunchApp.mock.calls, [['http:malformed']]);
+    assert.deepEqual(limrunMockState.iosOpenUrl.mock.calls, [['example://screen']]);
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
 test('Limrun Android reverses localhost URL ports through the persistent ADB tunnel', async () => {
   const runtime = new LimrunRuntime({
     apiKey: 'lim_test_key',
@@ -153,7 +179,7 @@ test('Limrun Android reverses localhost URL ports through the persistent ADB tun
       exitCode: 0,
     }));
     const device = await allocateLimrunDevice(runtime, androidLease());
-    const interactor = runtime.getInteractor(device, {});
+    const interactor = runtime.getInteractor(device);
     if (!interactor) throw new Error('Limrun runtime must return an interactor');
 
     await interactor.open('exp://127.0.0.1:8081');
@@ -368,6 +394,40 @@ test('Limrun iOS installs direct local artifacts through Limrun assets', async (
   }
 });
 
+test('Limrun iOS reads the bundle display name before uploading an app bundle', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-limrun-app-name-'));
+  const appPath = path.join(tempRoot, 'Renamed.app');
+  fs.mkdirSync(appPath);
+  fs.writeFileSync(
+    path.join(appPath, 'Info.plist'),
+    [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<plist version="1.0"><dict>',
+      '<key>CFBundleDisplayName</key><string>Actual App Name</string>',
+      '</dict></plist>',
+    ].join(''),
+  );
+  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key', version: '9.9.9-test' });
+
+  try {
+    const device = await allocateLimrunDevice(runtime, {
+      ...androidLease(),
+      leaseId: 'lease-ios-app-name',
+      backend: 'ios-instance',
+    });
+    const result = await runtime.installApp(
+      device as Parameters<LimrunRuntime['installApp']>[0],
+      'com.example.ios',
+      appPath,
+    );
+
+    assert.equal(result?.appName, 'Actual App Name');
+  } finally {
+    await runtime.shutdown();
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('Limrun iOS maps supported orientation and rejects unsupported upside-down orientation', async () => {
   const runtime = new LimrunRuntime({
     apiKey: 'lim_test_key',
@@ -380,7 +440,7 @@ test('Limrun iOS maps supported orientation and rejects unsupported upside-down 
       leaseId: 'lease-ios-orientation',
       backend: 'ios-instance',
     });
-    const interactor = runtime.getInteractor(device, {});
+    const interactor = runtime.getInteractor(device);
     if (!interactor) throw new Error('Limrun runtime must return an interactor');
 
     await interactor.setOrientation('landscape-left');
@@ -451,6 +511,37 @@ test('Limrun Android configures and removes an explicit port reverse', async () 
       '--remove',
       'tcp:8097',
     ]);
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+test('Limrun Android preserves canonical ADB failure classification', async () => {
+  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key', version: '9.9.9-test' });
+
+  try {
+    await allocateLimrunDevice(runtime, androidLease());
+    vi.mocked(runCmd).mockResolvedValueOnce({
+      stdout: '',
+      stderr: 'error: device offline',
+      exitCode: 1,
+    });
+
+    await assert.rejects(
+      () =>
+        runtime.configurePortReverse({
+          leaseId: 'lease-android',
+          devicePort: 8097,
+          hostPort: 8097,
+          name: 'react-devtools',
+        }),
+      (error) =>
+        typeof error === 'object' &&
+        error !== null &&
+        (error as { details?: { adbFailure?: unknown; retriable?: unknown } }).details
+          ?.adbFailure === 'device_offline' &&
+        (error as { details?: { retriable?: unknown } }).details?.retriable === true,
+    );
   } finally {
     await runtime.shutdown();
   }

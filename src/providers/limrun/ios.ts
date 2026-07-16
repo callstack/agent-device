@@ -7,6 +7,7 @@ import {
   type InstanceClient as LimrunIosClient,
 } from '@limrun/api/ios-client';
 import type { DeviceRotation } from '../../contracts/device-rotation.ts';
+import { isDeepLinkTarget } from '../../contracts/open-target.ts';
 import type { Interactor, SnapshotOptions, SnapshotResult } from '../../core/interactor-types.ts';
 import type { DeviceLease } from '../../daemon/lease-registry.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
@@ -16,7 +17,9 @@ import type {
   ProviderDeviceInstallResult,
 } from '../../provider-device-runtime.ts';
 import { execFailureDetails, runCmd } from '../../utils/exec.ts';
+import { sleep } from '../../utils/timeouts.ts';
 import { flattenIosTree, toIosSelector, writeBase64File, type IosTreeNode } from './snapshot.ts';
+import { normalizeOptionalString } from './strings.ts';
 
 export type LimrunIosSession = {
   platform: 'ios';
@@ -66,7 +69,7 @@ export async function installLimrunIosApp(
     const bundleId = normalizeOptionalString(result.bundleId) ?? options?.appIdentifierHint;
     return {
       ...(bundleId ? { bundleId, launchTarget: bundleId } : {}),
-      appName: inferAppNameFromPath(installablePath),
+      ...(prepared.appName ? { appName: prepared.appName } : {}),
     };
   } finally {
     await prepared.cleanup();
@@ -86,21 +89,21 @@ class LimrunIosInteractor implements Interactor {
 
   async open(app: string, options?: { url?: string }): Promise<void> {
     if (options?.url) {
-      await this.session.client.launchApp(app);
+      await this.session.client.launchApp(await resolveIosTarget(app));
       await this.session.client.openUrl(options.url);
       return;
     }
-    if (looksLikeUrl(app)) {
+    if (isDeepLinkTarget(app)) {
       await this.session.client.openUrl(app);
       return;
     }
-    await this.session.client.launchApp(resolveIosTarget(app));
+    await this.session.client.launchApp(await resolveIosTarget(app));
   }
 
   async openDevice(): Promise<void> {}
 
   async close(app: string): Promise<void> {
-    if (app) await this.session.client.terminateApp(resolveIosTarget(app)).catch(() => {});
+    if (app) await this.session.client.terminateApp(await resolveIosTarget(app)).catch(() => {});
   }
 
   async tap(x: number, y: number): Promise<void> {
@@ -131,7 +134,7 @@ class LimrunIosInteractor implements Interactor {
     if (delayMs && delayMs > 0) {
       for (const char of Array.from(text)) {
         await this.session.client.typeText(char);
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        await sleep(delayMs);
       }
       return;
     }
@@ -214,6 +217,7 @@ class LimrunIosInteractor implements Interactor {
 async function prepareLimrunIosAsset(artifactPath: string): Promise<{
   uploadPath: string;
   assetName: string;
+  appName?: string;
   cleanup: () => Promise<void>;
 }> {
   const stat = await fs.promises.stat(artifactPath);
@@ -221,6 +225,7 @@ async function prepareLimrunIosAsset(artifactPath: string): Promise<{
     return {
       uploadPath: artifactPath,
       assetName: path.basename(artifactPath),
+      appName: inferAppNameFromPath(artifactPath),
       cleanup: async () => {},
     };
   }
@@ -241,19 +246,16 @@ async function prepareLimrunIosAsset(artifactPath: string): Promise<{
   return {
     uploadPath: zipPath,
     assetName: path.basename(zipPath),
+    appName: await readIosBundleAppName(artifactPath),
     cleanup: async () => {
       await fs.promises.rm(tempDir, { recursive: true, force: true });
     },
   };
 }
 
-function resolveIosTarget(app: string): string {
-  return app.trim().toLowerCase() === 'settings' ? 'com.apple.Preferences' : app;
-}
-
-function normalizeOptionalString(value: string | undefined): string | undefined {
-  const normalized = value?.trim();
-  return normalized ? normalized : undefined;
+async function resolveIosTarget(app: string): Promise<string> {
+  const { resolveIosAppAlias } = await import('../../platforms/apple/core/app-resolution.ts');
+  return resolveIosAppAlias(app);
 }
 
 function inferAppNameFromPath(appPath: string): string | undefined {
@@ -261,8 +263,9 @@ function inferAppNameFromPath(appPath: string): string | undefined {
   return base || undefined;
 }
 
-function looksLikeUrl(value: string): boolean {
-  return /^[a-z][a-z0-9+.-]*:/i.test(value.trim());
+async function readIosBundleAppName(appPath: string): Promise<string | undefined> {
+  const { readIosBundleInfo } = await import('../../platforms/apple/core/install-artifact.ts');
+  return (await readIosBundleInfo(appPath)).appName ?? inferAppNameFromPath(appPath);
 }
 
 function unsupported(command: string, message: string): never {

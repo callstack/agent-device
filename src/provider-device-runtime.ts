@@ -4,7 +4,7 @@ import type {
   CloudArtifactsQuery,
   CloudArtifactsResult,
 } from './cloud-artifacts.ts';
-import type { Interactor, RunnerContext } from './core/interactor-types.ts';
+import type { Interactor } from './core/interactor-types.ts';
 import type { DeviceInventoryProvider } from './core/dispatch-resolve.ts';
 import type { LeaseLifecycleContext, LeaseLifecycleProvider } from './daemon/handlers/lease.ts';
 import type { DeviceLease } from './daemon/lease-registry.ts';
@@ -30,7 +30,7 @@ export type ProviderDeviceRuntime = {
   cloudArtifacts?: CloudArtifactProvider;
   deviceInventoryProvider: DeviceInventoryProvider;
   ownsDevice(device: DeviceInfo): boolean;
-  getInteractor(device: DeviceInfo, runnerContext: RunnerContext): Interactor | undefined;
+  getInteractor(device: DeviceInfo): Interactor | undefined;
   installApp?(
     device: DeviceInfo,
     app: string,
@@ -61,6 +61,7 @@ export type ProviderPortReverseOptions = {
 
 export type ProviderDeviceRuntimeRequestProviders = {
   providerRuntimeIds: readonly string[];
+  providerRuntimeRequiredIds: readonly string[];
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
   deviceInventoryProvider?: DeviceInventoryProvider;
@@ -84,13 +85,10 @@ async function withProviderDeviceRuntimeScope<T>(
   return await providerDeviceRuntimeScope.run([...runtimes], task);
 }
 
-export function getProviderDeviceInteractor(
-  device: DeviceInfo,
-  runnerContext: RunnerContext,
-): Interactor | undefined {
+export function getProviderDeviceInteractor(device: DeviceInfo): Interactor | undefined {
   for (const runtime of getActiveProviderDeviceRuntimes()) {
     if (!runtime.ownsDevice(device)) continue;
-    const interactor = runtime.getInteractor(device, runnerContext);
+    const interactor = runtime.getInteractor(device);
     if (interactor) return interactor;
   }
   return undefined;
@@ -163,15 +161,25 @@ function getActiveProviderDeviceRuntimes(): ProviderDeviceRuntime[] {
 
 export function createProviderDeviceRuntimeRequestProviders(
   runtimes: ProviderDeviceRuntime[],
+  options: { providerRuntimeRequiredIds?: readonly string[] } = {},
 ): ProviderDeviceRuntimeRequestProviders {
+  const providerRuntimeIds = runtimes.map((runtime) => runtime.provider);
   return {
-    providerRuntimeIds: runtimes.map((runtime) => runtime.provider),
+    providerRuntimeIds,
+    providerRuntimeRequiredIds: uniqueProviderIds([
+      ...providerRuntimeIds,
+      ...(options.providerRuntimeRequiredIds ?? []),
+    ]),
     leaseLifecycleProvider: composeLeaseProvider(runtimes),
     cloudArtifactProvider: composeCloudArtifactProvider(runtimes),
     deviceInventoryProvider: composeDeviceInventoryProvider(runtimes),
     providerDeviceRuntimeScope: async (task) =>
       await withProviderDeviceRuntimeScope(runtimes, task),
   };
+}
+
+function uniqueProviderIds(providerIds: readonly string[]): string[] {
+  return [...new Set(providerIds)];
 }
 
 export function composeCloudArtifactProviders(

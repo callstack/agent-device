@@ -17,6 +17,7 @@ type RequestHandlerChainParams = {
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
   providerRuntimeIds?: readonly string[];
+  providerRuntimeRequiredIds?: readonly string[];
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
   invoke: DaemonInvokeFn;
@@ -92,6 +93,7 @@ async function runLeaseHandler(
       sessionStore: params.sessionStore,
       leaseRegistry: params.leaseRegistry,
       providerRuntimeIds: params.providerRuntimeIds,
+      providerRuntimeRequiredIds: params.providerRuntimeRequiredIds,
       leaseLifecycleProvider: params.leaseLifecycleProvider,
       cloudArtifactProvider: params.cloudArtifactProvider,
     }),

@@ -1,5 +1,5 @@
 import Limrun from '@limrun/api';
-import type { Interactor, RunnerContext } from '../../core/interactor-types.ts';
+import type { Interactor } from '../../core/interactor-types.ts';
 import type { DeviceInventoryProvider } from '../../core/dispatch-resolve.ts';
 import type { LeaseLifecycleProvider } from '../../daemon/handlers/lease.ts';
 import type { DeviceLease } from '../../daemon/lease-registry.ts';
@@ -97,7 +97,7 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
     return parseLimrunDeviceId(device.id) !== undefined;
   }
 
-  getInteractor(device: DeviceInfo, _runnerContext: RunnerContext): Interactor | undefined {
+  getInteractor(device: DeviceInfo): Interactor | undefined {
     const session = this.getSessionForDevice(device);
     if (!session) return undefined;
     return session.platform === 'ios'
@@ -133,7 +133,7 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
   async configurePortReverse(
     options: ProviderPortReverseOptions,
   ): Promise<Record<string, unknown> | undefined> {
-    const session = this.getAndroidPortReverseSession(options.leaseId, true);
+    const session = this.requireAndroidPortReverseSession(options.leaseId);
     if (!session) return undefined;
     await configureLimrunAndroidPortReverse(session, options);
     return portReverseResult(options);
@@ -142,7 +142,7 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
   async removePortReverse(
     options: ProviderPortReverseOptions,
   ): Promise<Record<string, unknown> | undefined> {
-    const session = this.getAndroidPortReverseSession(options.leaseId, false);
+    const session = this.findAndroidPortReverseSession(options.leaseId);
     if (!session) return undefined;
     await removeLimrunAndroidPortReverse(session, options);
     return portReverseResult(options);
@@ -257,19 +257,18 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
     return session?.platform === parsed.platform ? session : undefined;
   }
 
-  private getAndroidPortReverseSession(
-    leaseId: string,
-    throwOnIos: boolean,
-  ): LimrunAndroidSession | undefined {
+  private requireAndroidPortReverseSession(leaseId: string): LimrunAndroidSession | undefined {
     const session = this.sessions.get(leaseId);
     if (!session || session.platform === 'android') return session;
-    if (throwOnIos) {
-      throw unsupported(
-        'port reverse',
-        'Direct Limrun iOS sessions cannot reach local host ports; use a bridge public URL.',
-      );
-    }
-    return undefined;
+    throw unsupported(
+      'port reverse',
+      'Direct Limrun iOS sessions cannot reach local host ports; use a bridge public URL.',
+    );
+  }
+
+  private findAndroidPortReverseSession(leaseId: string): LimrunAndroidSession | undefined {
+    const session = this.sessions.get(leaseId);
+    return session?.platform === 'android' ? session : undefined;
   }
 }
 

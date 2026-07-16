@@ -5,6 +5,7 @@ import { LeaseRegistry } from '../lease-registry.ts';
 import {
   admitRequestLeaseForLockedScope,
   cleanupExpiredLeasedSession,
+  releaseExpiredProviderLease,
   releaseSessionLease,
   resolveSessionLeaseForRequest,
 } from '../lease-lifecycle.ts';
@@ -117,6 +118,19 @@ test('releaseSessionLease releases with the stored session owner scope', async (
 
   expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
   expect(provider).toEqual({ provider: 'proxy' });
+});
+
+test('releaseExpiredProviderLease releases a provider-owned lease without a session', async () => {
+  const lease = new LeaseRegistry().allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'limrun',
+  });
+  const release = vi.fn(async () => ({ limrunInstanceId: 'instance-1' }));
+
+  await releaseExpiredProviderLease({ release }, lease);
+
+  expect(release).toHaveBeenCalledWith(lease);
 });
 
 test('releaseSessionLease keeps the local lease when the provider release fails', async () => {

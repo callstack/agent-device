@@ -69,22 +69,17 @@ test('provider device interactor receives runner context from core resolution', 
     appBundleId: 'com.example.app',
     requestId: 'request-a',
   };
-  const runnerContexts: RunnerContext[] = [];
   const runtime: ProviderDeviceRuntime = {
     provider: 'provider',
     leaseLifecycle: {},
     deviceInventoryProvider: async () => [device],
     ownsDevice: (candidate) => candidate.id === device.id,
-    getInteractor: (_device, context) => {
-      runnerContexts.push(context);
-      return interactor;
-    },
+    getInteractor: () => interactor,
     shutdown: async () => {},
   };
   setActiveProviderDeviceRuntimes([runtime]);
 
   assert.equal(await getInteractor(device, runnerContext), interactor);
-  assert.deepEqual(runnerContexts, [runnerContext]);
 });
 
 test('ios scroll sends a single fused scroll command and reports planned pixels', async () => {

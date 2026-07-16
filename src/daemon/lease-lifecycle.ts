@@ -1,6 +1,6 @@
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { leaseScopeToReleaseRequest } from '../core/lease-scope.ts';
-import type { LeaseRegistry } from './lease-registry.ts';
+import type { DeviceLease, LeaseRegistry } from './lease-registry.ts';
 import { buildSessionLeaseFromRequest, type SessionLease } from './lease-context.ts';
 import {
   assertRequestLeaseAdmission,
@@ -11,6 +11,36 @@ import type { DaemonRequest, SessionState } from './types.ts';
 import type { LeaseLifecycleProvider } from './handlers/lease.ts';
 
 export type SessionTeardown = (session: SessionState, sessionName: string) => Promise<void>;
+
+export async function releaseExpiredProviderLease(
+  leaseLifecycleProvider: LeaseLifecycleProvider | undefined,
+  lease: DeviceLease,
+): Promise<void> {
+  if (!lease.leaseProvider || !leaseLifecycleProvider?.release) return;
+
+  try {
+    const provider = await leaseLifecycleProvider.release(lease);
+    emitDiagnostic({
+      level: 'info',
+      phase: 'provider_lease_expired_released',
+      data: {
+        leaseId: lease.leaseId,
+        provider: lease.leaseProvider,
+        ...(provider ? { providerData: provider } : {}),
+      },
+    });
+  } catch (error) {
+    emitDiagnostic({
+      level: 'error',
+      phase: 'provider_lease_expiry_release_failed',
+      data: {
+        leaseId: lease.leaseId,
+        provider: lease.leaseProvider,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+  }
+}
 
 export function assertLockedLeaseAdmissionPreflight(req: DaemonRequest): void {
   assertRequestLeaseAdmissionPreflight(req);

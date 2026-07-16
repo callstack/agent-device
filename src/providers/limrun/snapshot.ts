@@ -104,6 +104,8 @@ function readIosNodeChildren(node: IosTreeNode): IosTreeNode[] {
 export function toIosSelector(selector: LimrunSelector) {
   if (selector.key === 'id') return { accessibilityId: selector.value };
   if (selector.key === 'value') return { value: selector.value };
+  // The Limrun iOS tree exposes visible text through AXLabel, so both
+  // agent-device label and text selectors target the provider's label field.
   return { label: selector.value };
 }
 

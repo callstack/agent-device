@@ -10,8 +10,12 @@ import {
   composeCloudArtifactProviders,
   createProviderDeviceRuntimeRequestProviders,
 } from '../../provider-device-runtime.ts';
-import { createDefaultProviderDeviceRuntimes } from '../../provider-device-runtimes.ts';
+import {
+  createDefaultProviderDeviceRuntimes,
+  DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS,
+} from '../../provider-device-runtimes.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
+import { releaseExpiredProviderLease } from '../lease-lifecycle.ts';
 import { createRequestHandler } from '../request-router.ts';
 import { teardownSessionResources } from '../session-teardown.ts';
 import { closeDaemonServers } from './server-shutdown.ts';
@@ -88,19 +92,24 @@ export async function startDaemonRuntime(
   cleanupStaleAppLogProcesses(sessionsDir);
 
   const sessionStore = new SessionStore(sessionsDir);
-  const leaseRegistry = new LeaseRegistry({
-    maxActiveSimulatorLeases: parseIntegerEnv(env.AGENT_DEVICE_MAX_SIMULATOR_LEASES),
-    defaultLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_TTL_MS),
-    minLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MIN_TTL_MS),
-    maxLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MAX_TTL_MS),
-  });
   const version = readVersion();
   const token = crypto.randomBytes(24).toString('hex');
   const daemonProcessStartTime = readProcessStartTime(process.pid) ?? undefined;
   const daemonCodeSignature = resolveDaemonCodeSignature();
   const providerDeviceRuntimes = await createDefaultProviderDeviceRuntimes(env);
-  const providerRuntimeProviders =
-    createProviderDeviceRuntimeRequestProviders(providerDeviceRuntimes);
+  const providerRuntimeProviders = createProviderDeviceRuntimeRequestProviders(
+    providerDeviceRuntimes,
+    { providerRuntimeRequiredIds: DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS },
+  );
+  const leaseRegistry = new LeaseRegistry({
+    maxActiveSimulatorLeases: parseIntegerEnv(env.AGENT_DEVICE_MAX_SIMULATOR_LEASES),
+    defaultLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_TTL_MS),
+    minLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MIN_TTL_MS),
+    maxLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MAX_TTL_MS),
+    onLeaseExpired: (lease) => {
+      void releaseExpiredProviderLease(providerRuntimeProviders.leaseLifecycleProvider, lease);
+    },
+  });
   const cloudArtifactProvider = composeCloudArtifactProviders(
     providerRuntimeProviders.cloudArtifactProvider,
     createDefaultCloudArtifactProvider(env),
@@ -116,6 +125,7 @@ export async function startDaemonRuntime(
     cloudArtifactProvider,
     deviceInventoryProvider: providerRuntimeProviders.deviceInventoryProvider,
     providerRuntimeIds: providerRuntimeProviders.providerRuntimeIds,
+    providerRuntimeRequiredIds: providerRuntimeProviders.providerRuntimeRequiredIds,
     providerDeviceRuntimeScope: providerRuntimeProviders.providerDeviceRuntimeScope,
     trackDownloadableArtifact,
   });
