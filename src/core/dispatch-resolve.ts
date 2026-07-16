@@ -154,7 +154,7 @@ export async function resolveTargetDevice(
             cacheKey,
             await resolveAppleDevice(injectedDevices, selector as AppleDeviceSelector, {
               simulatorSetPath: iosSimulatorSetPath,
-              allowLocalSimulatorFallback: false,
+              allowLocalSimulatorFallback: inventoryRequest.leaseProvider === undefined,
             }),
           );
         }

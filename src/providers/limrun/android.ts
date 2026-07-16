@@ -9,9 +9,7 @@ import type { Interactor } from '../../core/interactor-types.ts';
 import type { DeviceLease } from '../../daemon/lease-registry.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
-import { inferAndroidAppName } from '../../platforms/android/app-lifecycle.ts';
 import {
-  createAndroidPortReverseManager,
   type AndroidAdbExecutorOptions,
   type AndroidAdbExecutorResult,
   type AndroidAdbProvider,
@@ -68,6 +66,8 @@ export async function createLimrunAndroidSession(options: {
       await client.setText(request.target, request.text);
     },
   };
+  const { createAndroidPortReverseManager } =
+    await import('../../platforms/android/adb-executor.ts');
   adbProvider.reverse = createAndroidPortReverseManager(adbProvider);
   return Object.assign(session, { adbProvider });
 }
@@ -93,9 +93,12 @@ export async function installLimrunAndroidApp(
     name: buildAndroidAssetName(packageName, installablePath),
   });
   await session.client.sendAsset(asset.signedDownloadUrl);
+  const appName = packageName
+    ? (await import('../../platforms/android/app-lifecycle.ts')).inferAndroidAppName(packageName)
+    : undefined;
   return {
     ...(packageName ? { packageName, launchTarget: packageName } : {}),
-    ...(packageName ? { appName: inferAndroidAppName(packageName) } : {}),
+    ...(appName ? { appName } : {}),
   };
 }
 
