@@ -238,12 +238,10 @@ test('usageForCommand resolves workflow help topic', async () => {
   assert.match(help, /To hide the keyboard, use keyboard dismiss/);
   assert.match(
     help,
-    /On iOS, if keyboard dismiss returns UNSUPPORTED_OPERATION and you must hide the keyboard, first run snapshot -i/,
+    /On iOS, if it returns UNSUPPORTED_OPERATION, there is no generic app-agnostic blur fallback/,
   );
-  assert.match(
-    help,
-    /Do not use buttons, links, switches, back, home, or coordinate taps solely to hide the keyboard/,
-  );
+  assert.match(help, /On Android, keyboard dismiss first avoids navigation/);
+  assert.match(help, /use back only when normal back behavior is acceptable/);
   assert.match(help, /UNSUPPORTED_OPERATION/);
   assert.match(help, /Stateful commands within one session must run serially/);
   assert.match(
