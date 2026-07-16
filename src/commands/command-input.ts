@@ -30,6 +30,8 @@ export type CommonCommandInput = Pick<
   iosXctestDerivedDataPath?: string;
   iosXctestEnvDir?: string;
   androidDeviceAllowlist?: string;
+  /** `--no-record`: common to every recordable command (see `commonInputFromFlags`). */
+  noRecord?: boolean;
 };
 
 export type InteractionTargetInput =
@@ -292,6 +294,11 @@ export function readCommonInput(
     iosXctestDerivedDataPath: optionalString(record, 'iosXctestDerivedDataPath'),
     iosXctestEnvDir: optionalString(record, 'iosXctestEnvDir'),
     androidDeviceAllowlist: optionalString(record, 'androidDeviceAllowlist'),
+    // Seam 2 of 3 for `--no-record` (see `commonInputFromFlags`). `readFieldInput`
+    // keeps ONLY declared metadata fields plus this common input, so a flag
+    // absent here is filtered out of every field-based command's input before
+    // the client ever sees it.
+    noRecord: optionalBoolean(record, 'noRecord'),
     daemonBaseUrl: optionalString(record, 'daemonBaseUrl'),
     daemonAuthToken: optionalString(record, 'daemonAuthToken'),
     tenant: optionalString(record, 'tenant'),
@@ -432,6 +439,12 @@ export function commonToClientOptions(
   input: CommonCommandInput,
 ): AgentDeviceRequestOverrides & AgentDeviceSelectionOptions {
   return compactRecord({
+    // Seam 3 of 3 for `--no-record` (see `commonInputFromFlags`). Every
+    // `to*Options` projection (`toPressOptions`, `toGetOptions`, ...) rebuilds
+    // the client options object from this helper plus its own named fields, so
+    // a flag absent here is dropped even when the reader forwarded it and
+    // `readCommonInput` kept it.
+    noRecord: input.noRecord,
     session: input.session,
     platform: input.platform,
     target: input.deviceTarget,

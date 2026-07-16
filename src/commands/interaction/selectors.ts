@@ -11,7 +11,6 @@ import {
   direct,
   optionalCliNumber,
   optionalNumber,
-  noRecordInputFromFlags,
   observationRecordInputFromFlags,
   request,
   selectionOptionsFromFlags,
@@ -66,7 +65,6 @@ function readFindOptionsFromPositionals(positionals: string[], flags: CliFlags):
   const base = {
     ...findSnapshotOptionsFromFlags(flags),
     ...selectionOptionsFromFlags(flags),
-    ...noRecordInputFromFlags(flags),
     ...observationRecordInputFromFlags(flags),
     first: flags.findFirst,
     last: flags.findLast,
@@ -115,7 +113,6 @@ function readIsOptionsFromPositionals(positionals: string[], flags: CliFlags): I
   const base = {
     ...selectorSnapshotOptionsFromFlags(flags),
     ...selectionOptionsFromFlags(flags),
-    ...noRecordInputFromFlags(flags),
     ...observationRecordInputFromFlags(flags),
   };
   const normalized = normalizeIsPositionals(positionals);

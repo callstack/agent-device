@@ -75,6 +75,8 @@ export type CommandInput = Omit<InternalRequestOptions, 'batchSteps' | 'target'>
   } & Record<string, unknown>;
 
 export type SelectionOptions = {
+  /** `--no-record`: common to every recordable command (see `selectionOptionsFromFlags`). */
+  noRecord?: boolean;
   platform?: CliFlags['platform'];
   target?: CliFlags['target'];
   device?: string;

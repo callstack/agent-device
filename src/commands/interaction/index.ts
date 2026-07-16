@@ -423,6 +423,14 @@ function toGetOptions(input: GetInput): GetOptions {
     ...toClientElementTarget(input.target),
     ...toSelectorSnapshotOptions(input),
     format: input.format,
+    // `--record` is scoped (ADR 0012 decision 6 amendment), so it does NOT ride
+    // the common seam and each observation-capable projection forwards it
+    // explicitly. `is`/`find`/`snapshot` pass their whole input through, so
+    // `get` — the one that rebuilds its options object — is the only place this
+    // is needed. Without it `get --record` parses, reaches the reader, survives
+    // `readInput`, and is then dropped here (#1303 regression, same re-projection
+    // cause as the `--no-record` gap this change fixes).
+    record: input.record,
   };
 }
 

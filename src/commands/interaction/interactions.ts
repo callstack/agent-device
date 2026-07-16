@@ -23,7 +23,6 @@ import {
   optionalNumber,
   readElementTargetFromPositionals,
   readGetFormat,
-  noRecordInputFromFlags,
   observationRecordInputFromFlags,
   request,
   requiredDaemonString,
@@ -37,7 +36,6 @@ import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 export const interactionCliReaders = {
   click: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
-    ...noRecordInputFromFlags(flags),
     ...selectorSnapshotInputFromFlags(flags),
     ...repeatedInputFromFlags(flags),
     ...settleInputFromFlags(flags),
@@ -47,7 +45,6 @@ export const interactionCliReaders = {
   }),
   press: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
-    ...noRecordInputFromFlags(flags),
     ...selectorSnapshotInputFromFlags(flags),
     ...repeatedInputFromFlags(flags),
     ...settleInputFromFlags(flags),
@@ -58,7 +55,6 @@ export const interactionCliReaders = {
     const decoded = readLongPressTargetFromPositionals(positionals);
     return {
       ...commonInputFromFlags(flags),
-      ...noRecordInputFromFlags(flags),
       ...selectorSnapshotInputFromFlags(flags),
       ...settleInputFromFlags(flags),
       target: targetInputFromClientTarget(decoded),
@@ -67,7 +63,6 @@ export const interactionCliReaders = {
   },
   swipe: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
-    ...noRecordInputFromFlags(flags),
     ...swipePayloadFromPositionals(positionals, {
       count: flags.count,
       pauseMs: flags.pauseMs,
@@ -76,13 +71,11 @@ export const interactionCliReaders = {
   }),
   focus: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
-    ...noRecordInputFromFlags(flags),
     x: Number(positionals[0]),
     y: Number(positionals[1]),
   }),
   type: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
-    ...noRecordInputFromFlags(flags),
     text: positionals.join(' '),
     delayMs: flags.delayMs,
   }),
@@ -90,7 +83,6 @@ export const interactionCliReaders = {
     const decoded = readFillTargetFromPositionals(positionals);
     return {
       ...commonInputFromFlags(flags),
-      ...noRecordInputFromFlags(flags),
       ...selectorSnapshotInputFromFlags(flags),
       ...settleInputFromFlags(flags),
       target: targetInputFromClientTarget(decoded.target),
@@ -101,7 +93,6 @@ export const interactionCliReaders = {
   },
   scroll: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
-    ...noRecordInputFromFlags(flags),
     direction: readScrollDirection(positionals[0]),
     amount: optionalCliNumber(positionals[1]),
     pixels: flags.pixels,
@@ -113,7 +104,6 @@ export const interactionCliReaders = {
   // `--no-record`.
   get: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
-    ...noRecordInputFromFlags(flags),
     ...observationRecordInputFromFlags(flags),
     ...selectorSnapshotInputFromFlags(flags),
     format: readGetFormat(positionals[0]),

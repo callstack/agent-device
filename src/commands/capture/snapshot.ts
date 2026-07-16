@@ -5,7 +5,6 @@ import { defineExecutableCommand } from '../command-contract.ts';
 import {
   commonInputFromFlags,
   direct,
-  noRecordInputFromFlags,
   observationRecordInputFromFlags,
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
@@ -54,7 +53,6 @@ const snapshotCliSchema = {
 
 export const snapshotCliReader: CliReader = (_positionals, flags) => ({
   ...commonInputFromFlags(flags),
-  ...noRecordInputFromFlags(flags),
   ...observationRecordInputFromFlags(flags),
   interactiveOnly: flags.snapshotInteractiveOnly,
   depth: flags.snapshotDepth,

@@ -52,6 +52,20 @@ function readDeviceTarget(value: unknown): InternalRequestOptions['target'] | un
 
 export function commonInputFromFlags(flags: CliFlags): Record<string, unknown> {
   return compactRecord({
+    // `--no-record` is a COMMON flag (`COMMON_COMMAND_SUPPORTED_FLAG_KEYS`): it
+    // is accepted on, and meaningful for, every recordable command. It rides
+    // the common seam every reader already spreads, so a reader cannot forget
+    // it and a new reader inherits it for free. The three seams it must survive
+    // are this one, `readCommonInput`, and `commonToClientOptions`
+    // (`commands/command-input.ts`) — a drop at any one of them silently
+    // disables the flag (#1304/#1305 fixed only the reader layer, so the flag
+    // still never reached the daemon).
+    //
+    // `--record` deliberately does NOT ride here: it is scoped to the
+    // observation-only commands the repair-segment exclusion can drop
+    // (ADR 0012 decision 6 amendment), so it stays on the narrow
+    // `observationRecordInputFromFlags` seam below.
+    noRecord: flags.noRecord,
     session: flags.session,
     platform: flags.platform,
     deviceTarget: flags.target,
@@ -66,32 +80,13 @@ export function commonInputFromFlags(flags: CliFlags): Record<string, unknown> {
   });
 }
 
-// --no-record is a common flag, but it only takes effect if the reader forwards
-// it: command-flags.ts maps options.noRecord onto the daemon request, and
-// recordActionEntry reads it from there. A reader that never names it accepts
-// the flag and silently drops it.
-//
-// #1271 stage 2: `--record` deliberately does NOT ride along here. It applies
-// only to observation-only commands (snapshot/get/is/find — the ones the
-// repair-segment default exclusion can drop), so it gets its own helper below
-// rather than an `allowRecord` policy argument on this one. The capability is
-// the helper's NAME: a mutating reader physically cannot forward `--record`
-// without spreading a helper whose name says it is for observations, whereas a
-// boolean policy arg would let a future mutating reader opt in by flipping a
-// literal with no schema change — the fail-open this split exists to prevent.
-export function noRecordInputFromFlags(flags: CliFlags): Record<string, unknown> {
-  return compactRecord({
-    noRecord: flags.noRecord,
-  });
-}
-
 /**
  * #1271 stage 2 (ADR 0012 decision 6 amendment): the `--record` opt-in that
  * forces an observation-only action into a repair-armed heal. Spread ONLY by
  * readers whose command can be excluded by default — `snapshot`, `get`, `is`,
  * and `find`. Every one of those readers must ALSO spread
- * `noRecordInputFromFlags`, which stays universal (`--no-record` applies to
- * every recordable command, mutations included).
+ * the common `commonInputFromFlags` seam, which carries `--no-record` for every
+ * recordable command, mutations included.
  */
 export function observationRecordInputFromFlags(flags: CliFlags): Record<string, unknown> {
   return compactRecord({
@@ -99,8 +94,18 @@ export function observationRecordInputFromFlags(flags: CliFlags): Record<string,
   });
 }
 
+/**
+ * The reader layer has TWO parallel common seams, not one: this builds the
+ * client-options shape (`target`) for readers that construct a typed Options
+ * object directly (`is`/`find`/`wait`/`settings`), while `commonInputFromFlags`
+ * above builds the reader-input shape (`deviceTarget`). They are different
+ * projections, not duplicates — so `--no-record` has to ride BOTH or the
+ * readers using this one silently drop it (which is what #1304/#1305's
+ * per-reader helper was papering over).
+ */
 export function selectionOptionsFromFlags(flags: CliFlags): SelectionOptions {
   return {
+    noRecord: flags.noRecord,
     platform: flags.platform,
     target: flags.target,
     device: flags.device,

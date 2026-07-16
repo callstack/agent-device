@@ -16,7 +16,6 @@ import { defineExecutableCommand } from '../command-contract.ts';
 import {
   direct,
   optionalNumber,
-  noRecordInputFromFlags,
   selectionOptionsFromFlags,
   selectorSnapshotOptionsFromFlags,
 } from '../cli-grammar/common.ts';
@@ -93,7 +92,6 @@ function readWaitOptionsFromPositionals(
   const base = {
     ...selectionOptionsFromFlags(flags),
     ...selectorSnapshotOptionsFromFlags(flags),
-    ...noRecordInputFromFlags(flags),
   };
   if (parsed.kind === 'sleep') return { ...base, durationMs: parsed.durationMs };
   if (parsed.kind === 'text') {
