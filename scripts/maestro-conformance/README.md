@@ -148,6 +148,13 @@ The workflow builds and installs the fixture app, verifies its bundle id, pins
 the Maestro CLI to the same version as layers 1-2, and passes `--maestro` so the
 flow routes through the compat engine.
 
+The built `.app` is **cached** (keyed on the app's sources, its dependency graph,
+the iOS runtime, and the Xcode version), because building it costs ~22 minutes
+versus ~6 minutes for the differential itself — 79% of the job, for an app that
+changes almost never. A cache hit installs the bundle directly; a miss falls back
+to the full build and repopulates. If you change anything under
+`examples/test-app`, expect the next run to rebuild.
+
 **Investigate locally, not through CI.** A device iteration in CI is ~40 minutes;
 `--only` plus a local simulator is minutes:
 
