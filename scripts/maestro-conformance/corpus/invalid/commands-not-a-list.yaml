@@ -1,0 +1,4 @@
+# The command document must be a sequence.
+appId: com.example.app
+---
+tapOn: "Button"

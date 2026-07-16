@@ -1,0 +1,5 @@
+appId: com.example.app
+---
+- pressKey: Enter
+- pressKey: Home
+- pressKey: Back

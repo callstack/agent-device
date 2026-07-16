@@ -1,0 +1,6 @@
+# Duplicate mapping keys are a YAML-level error.
+appId: com.example.app
+---
+- tapOn:
+    text: "A"
+    text: "B"

@@ -1,0 +1,7 @@
+# Bug class 1 (percent rounding/rejection): decimal percentages must be rejected,
+# never rounded. Upstream `"50.5".toInt()` throws at parse; agent-device rejects too.
+appId: com.example.app
+---
+- swipe:
+    start: "50.5%, 50%"
+    end: "10%, 50%"

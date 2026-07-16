@@ -1,0 +1,7 @@
+# Bug class 2 (target-swipe direction default): a from-element swipe with no
+# direction must be rejected at parse, never silently defaulted to a direction.
+appId: com.example.app
+---
+- swipe:
+    from:
+      id: "row"

@@ -129,6 +129,28 @@ jobs:
       - name: Check affected-selector model
         run: node --experimental-strip-types --test scripts/check-affected/model.test.ts scripts/check-affected/run.test.ts
 
+  maestro-conformance:
+    name: Maestro Conformance Oracle
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # Unlike the layering/affected guards, this job DOES install deps: the
+      # verifier parses corpus flows with the live engine, and the Maestro parser
+      # imports the `yaml` package. Keep install-deps enabled.
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      # Layers 1-2 of the conformance oracle: replay the JVM-generated fixtures
+      # against the live engine. Deterministic and Java-free — the generated
+      # fixtures are checked in and only regenerated on an upstream-pin bump. The
+      # device-backed layer 3 runs on the scheduled conformance-differential
+      # workflow. See scripts/maestro-conformance/README.md.
+      - name: Verify Maestro conformance fixtures
+        run: pnpm maestro:conformance
+
   packaged-cli-node-22-12:
     name: Packaged CLI Node 22.12
     runs-on: ubuntu-latest

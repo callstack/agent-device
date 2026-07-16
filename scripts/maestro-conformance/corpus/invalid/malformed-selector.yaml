@@ -1,0 +1,5 @@
+# Upstream rejects a selector that is a sequence rather than a scalar/map.
+appId: com.example.app
+---
+- tapOn:
+    - text: "Button"

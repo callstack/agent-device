@@ -125,6 +125,16 @@ const COMMAND_VALUE_PARSERS: Readonly<Record<string, CommandValueParser>> = {
     parseMaestroRetryCommand(value, node, context, parseMaestroCommandList),
 };
 
+/**
+ * The exact set of Maestro command names our engine accepts. This is the
+ * authoritative supported surface — any name outside it is rejected by
+ * `parseCommandValue`. The conformance oracle
+ * (`scripts/maestro-conformance/verify.ts`) asserts every entry is either
+ * corpus-covered or explicitly listed as unverified.
+ */
+export const SUPPORTED_MAESTRO_COMMAND_NAMES: readonly string[] =
+  Object.keys(COMMAND_VALUE_PARSERS);
+
 function parseCommandValue(
   name: string,
   value: Node | null,

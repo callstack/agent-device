@@ -1,0 +1,10 @@
+appId: com.example.app
+---
+- extendedWaitUntil:
+    visible:
+      id: "Item"
+    timeout: 1000
+- extendedWaitUntil:
+    notVisible:
+      id: "Another"
+    timeout: 1000

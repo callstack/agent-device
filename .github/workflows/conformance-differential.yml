@@ -1,0 +1,81 @@
+name: Conformance Differential
+
+# Layer 3 of the Maestro conformance oracle: run a small set of flows through
+# BOTH real Maestro and agent-device on a live device and compare app-observable
+# outcomes (settle behavior, tap retries, optional warned-vs-failed). This is the
+# only layer that can catch settle-loop ordering, which has no reflectable
+# upstream constant. Scheduled + manual only — it needs a booted device and the
+# `maestro` CLI, so it is never part of per-PR unit CI (layers 1-2 verify
+# deterministically there via `node --test scripts/maestro-conformance`).
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Single scenario id to run (default: all)"
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AGENT_DEVICE_CLI: "--experimental-strip-types src/bin.ts"
+  DIFFERENTIAL_ONLY: ${{ github.event.inputs.only || '' }}
+
+jobs:
+  differential-ios:
+    name: iOS Conformance Differential
+    runs-on: macos-26
+    timeout-minutes: 80
+    env:
+      IOS_RUNTIME_VERSION: "26.2"
+      AGENT_DEVICE_STATE_DIR: ${{ github.workspace }}/.tmp/agent-device-state
+      AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Setup Apple replay
+        uses: ./.github/actions/setup-apple-replay
+        with:
+          derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
+          cache-key-prefix: ios-runner-prebuilt
+          cache-key-suffix: -ios-${{ env.IOS_RUNTIME_VERSION }}
+          build-command: sh ./scripts/build-xcuitest-apple.sh
+          xcuitest-platform: ios
+
+      - name: Boot simulator
+        uses: ./.github/actions/boot-ios-test-simulator
+
+      - name: Install Maestro
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      # --trace-root lets the runner find agent-device's replay-timing.ndjson and
+      # assert engine-side invariants (e.g. the settle loop latches instead of
+      # burning its budget) — outcome parity alone cannot see that.
+      - name: Run differential
+        run: |
+          node --experimental-strip-types scripts/maestro-conformance/differential/run.ts \
+            --platform ios \
+            --out-dir "${{ github.workspace }}/.tmp/conformance-differential" \
+            --trace-root "${{ github.workspace }}/.agent-device" \
+            ${DIFFERENTIAL_ONLY:+--only "$DIFFERENTIAL_ONLY"}
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: conformance-differential-ios
+          path: .tmp/conformance-differential/differential-report.json
+          if-no-files-found: ignore

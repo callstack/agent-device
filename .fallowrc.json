@@ -28,6 +28,7 @@
     "examples/test-app/**",
     "scripts/perf/**",
     "scripts/layering/**",
+    "scripts/maestro-conformance/**",
     "apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests.xctestplan",
     "scripts/write-xcuitest-cache-metadata.mjs"
   ],
@@ -36,6 +37,11 @@
     {
       "file": "src/__tests__/test-utils/index.ts",
       "exports": ["*"]
+    },
+    {
+      "comment": "Authoritative supported-command list; sole consumer is the conformance oracle (scripts/maestro-conformance, an ignored tooling tree).",
+      "file": "src/compat/maestro/program-ir-command-parser.ts",
+      "exports": ["SUPPORTED_MAESTRO_COMMAND_NAMES"]
     },
     {
       "file": "src/__tests__/test-utils/device-fixtures.ts",

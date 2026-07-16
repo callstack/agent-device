@@ -5,8 +5,9 @@ export type MaestroCompatibilityTimingPolicy = {
   runFlowConditionTimeoutMs: number;
 };
 
-// Maestro 2.5.1 defaults at a4c7c95f; pinned source metadata lives in
-// scripts/maestro-conformance-fixtures/upstream-maestro-2.5.1.json.
+// Maestro 2.5.1 defaults at a4c7c95f. The conformance oracle cross-checks the
+// retry cap, swipe duration, erase cap, and animation-wait constants below
+// against JVM-generated semantic vectors (scripts/maestro-conformance).
 export const MAESTRO_COMPATIBILITY_PRESETS = {
   control: {
     retryMaxRetries: 3,

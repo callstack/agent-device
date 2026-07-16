@@ -1,0 +1,9 @@
+# Bug class 3 (retry-cap semantics): maxRetries above the cap parses verbatim;
+# the clamp to MAX_RETRIES_ALLOWED=3 is a layer-2 semantic vector, not a parse
+# transform. This flow proves parse parity for the raw value.
+appId: com.example.app
+---
+- retry:
+    maxRetries: 99
+    commands:
+      - tapOn: "Retry"

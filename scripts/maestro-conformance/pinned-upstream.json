@@ -1,0 +1,25 @@
+{
+  "project": "mobile-dev-inc/Maestro",
+  "version": "2.5.1",
+  "tag": "v2.5.1",
+  "commit": "a4c7c95f5ba1884858f7e35efa6b8e0165db9448",
+  "sourceUrl": "https://github.com/mobile-dev-inc/Maestro/tree/v2.5.1",
+  "repository": "https://repo1.maven.org/maven2",
+  "artifacts": [
+    {
+      "coordinate": "dev.mobile:maestro-orchestra:2.5.1",
+      "role": "Layer 1 YAML parser (YamlCommandReader) and Layer 2 retry/erase constants (Orchestra).",
+      "sha256": "bbd8e5e35e3c706c6d4760bb1026162474b171155a5fa76f6de1360ab3705468"
+    },
+    {
+      "coordinate": "dev.mobile:maestro-orchestra-models:2.5.1",
+      "role": "Command model classes and parser-observed defaults (Layer 2 model defaults).",
+      "sha256": "0c147f7dff3704e1e04cb728339f2637a6086c234d7984c1434536680f6749ee"
+    },
+    {
+      "coordinate": "dev.mobile:maestro-client:2.5.1",
+      "role": "Layer 2 driver constants (Maestro.SCREENSHOT_DIFF_THRESHOLD/ANIMATION_TIMEOUT_MS, IOSDriver.SCREEN_SETTLE_TIMEOUT_MS).",
+      "sha256": "a6b8c63c0858e8e256752f617fd27b35b0be48e78d367f9cbdffa735a6fcc991"
+    }
+  ]
+}

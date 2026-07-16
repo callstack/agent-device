@@ -24,7 +24,8 @@ export default defineConfig({
           include: [
             'src/**/*.test.ts',
             'scripts/__tests__/help-conformance-bench.test.ts',
-            'scripts/maestro-conformance.test.ts',
+            // The Maestro conformance oracle runs via `node --test` in its own CI
+            // job (scripts/maestro-conformance), like the layering guard.
           ],
           exclude: [ANDROID_ADB_STUB_TESTS],
           setupFiles: ['src/__tests__/process-memo-setup.ts'],

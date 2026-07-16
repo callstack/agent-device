@@ -1,0 +1,4 @@
+# Upstream rejects an unknown command name (typo of tapOn).
+appId: com.example.app
+---
+- tapOnn: "Button"

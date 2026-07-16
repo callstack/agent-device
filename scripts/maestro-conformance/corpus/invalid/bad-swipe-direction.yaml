@@ -1,0 +1,5 @@
+# Upstream rejects an unknown SwipeDirection enum value at parse.
+appId: com.example.app
+---
+- swipe:
+    direction: SIDEWAYS

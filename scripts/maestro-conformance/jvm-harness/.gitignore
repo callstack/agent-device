@@ -1,0 +1,5 @@
+# Gradle/Kotlin build output for the conformance harness. The harness only runs
+# during regeneration (regenerate.mjs); nothing here is checked in except sources
+# and the committed wrapper.
+.gradle/
+build/

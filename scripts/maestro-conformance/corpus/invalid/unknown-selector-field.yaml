@@ -1,0 +1,6 @@
+# Upstream rejects an unknown field inside a selector map.
+appId: com.example.app
+---
+- tapOn:
+    text: "Button"
+    bogusField: true

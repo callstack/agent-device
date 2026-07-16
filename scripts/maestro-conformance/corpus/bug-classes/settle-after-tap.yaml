@@ -1,0 +1,7 @@
+# Bug class 4 (settle-loop ordering): a plain tap parses identically on both
+# engines; the sleep-after vs sleep-before capture ordering and the 200ms x 10
+# loop are app-observable, verified by the layer-3 differential scenario of the
+# same name (no reflectable upstream constant exists).
+appId: com.example.app
+---
+- tapOn: "Submit"
