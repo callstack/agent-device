@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { ref, selector } from '../../index.ts';
+import { ref, selector } from './selector-read.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import {
   createInteractionDevice,

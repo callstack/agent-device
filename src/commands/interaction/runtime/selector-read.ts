@@ -152,10 +152,16 @@ export type IsSelectorCommandOptions = CommandContext &
     target: SelectorTarget;
   };
 
+/**
+ * @internal Target helper used by tests/examples; runtime callers compose `ElementTarget` directly.
+ */
 export function selector(expression: string): SelectorTarget {
   return { kind: 'selector', selector: expression };
 }
 
+/**
+ * @internal Target helper used by tests/examples; runtime callers compose `ElementTarget` directly.
+ */
 export function ref(refInput: string, options: { fallbackLabel?: string } = {}): RefTarget {
   return {
     kind: 'ref',

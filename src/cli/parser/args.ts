@@ -38,6 +38,9 @@ type FinalizeArgsOptions = ParseArgsOptions & {
   defaultFlags?: Partial<CliFlags>;
 };
 
+/**
+ * @internal High-level argv parser used by unit tests and build scripts.
+ */
 export function parseArgs(argv: string[], options?: FinalizeArgsOptions): ParsedArgs {
   return finalizeParsedArgs(parseRawArgs(argv), options);
 }

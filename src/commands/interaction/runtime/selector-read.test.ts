@@ -8,7 +8,7 @@ import {
   localCommandPolicy,
   type CommandSessionStore,
 } from '../../../runtime.ts';
-import { ref, selector } from '../../index.ts';
+import { ref, selector } from './selector-read.ts';
 import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
 import { createSelectorDevice, selectorReadSnapshot } from './__tests__/test-utils/index.ts';
 

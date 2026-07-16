@@ -148,7 +148,9 @@ export function resolveAndroidSnapshotHelperSessionRequestTimeoutMs(params: {
   );
 }
 
-// Tests stop persistent helper processes so cases cannot leak sessions into each other.
+/**
+ * @internal Test isolation hook for persistent snapshot helper sessions.
+ */
 export async function resetAndroidSnapshotHelperSessions(): Promise<void> {
   await Promise.all(
     [...sessions.keys()].map((deviceKey) => stopAndroidSnapshotHelperSession(deviceKey)),

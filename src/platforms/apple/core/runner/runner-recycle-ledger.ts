@@ -98,7 +98,9 @@ export function buildRunnerRecycleBudgetExhaustedError(
   );
 }
 
-// Test isolation requires clearing process-global recycle accounting between cases.
+/**
+ * @internal Test isolation hook for process-global runner recycle accounting.
+ */
 export function resetRunnerRecycleLedgerForTests(): void {
   ledger.clear();
 }

@@ -26,6 +26,9 @@ export function listMcpCommandMetadata(): AnyCommandMetadata[] {
   });
 }
 
+/**
+ * @internal Introspection helper used by command surface parity tests.
+ */
 export function listCommandMetadataNames(): CommandName[] {
   return [...commandMetadataMap.keys()].sort();
 }

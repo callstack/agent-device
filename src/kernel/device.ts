@@ -142,6 +142,9 @@ export function resolveDeviceAppleOs(
   return 'ios';
 }
 
+/**
+ * @internal Public type guard exposed for unit tests.
+ */
 export function isPlatform(value: unknown): value is Platform {
   // Internal device-platform membership derived from the canonical PLATFORMS tuple.
   return (PLATFORMS as readonly unknown[]).includes(value);

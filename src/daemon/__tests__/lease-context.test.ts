@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
-  buildLeaseDiagnosticsContext,
   buildSessionLeaseFromRequest,
   resolveRunnerLogicalLeaseContext,
   resolveRequestOrSessionLeaseScope,
   type SessionLease,
 } from '../lease-context.ts';
+import { buildLeaseDiagnosticsContext } from '../../core/lease-scope.ts';
 import type { DaemonRequest } from '../types.ts';
 
 test('buildSessionLeaseFromRequest captures complete request lease scope', () => {

@@ -100,6 +100,9 @@ export type AwsDeviceFarmWebDriverRuntimeOptions = {
   prepareSession?: CloudWebDriverRuntimeOptions['prepareSession'];
 };
 
+/**
+ * @internal AWS Device Farm capability builder used by integration tests.
+ */
 export function getAwsDeviceFarmWebDriverCapabilities(
   platform: CloudWebDriverPlatform,
 ): CloudWebDriverProviderCapabilities {
@@ -110,6 +113,9 @@ export function getAwsDeviceFarmWebDriverCapabilities(
   });
 }
 
+/**
+ * @internal AWS Device Farm runtime factory used by integration tests.
+ */
 export function createAwsDeviceFarmWebDriverRuntime(
   options: AwsDeviceFarmWebDriverRuntimeOptions,
 ): ProviderDeviceRuntime {

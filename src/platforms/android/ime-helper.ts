@@ -110,6 +110,9 @@ export const ensureAndroidImeHelper = makeEnsureAndroidHelperInstalled<AndroidIm
   helperLabel: HELPER_LABEL,
 });
 
+/**
+ * @internal Test isolation hook for process-global IME helper install cache.
+ */
 export function resetAndroidImeHelperInstallCache(): void {
   installedImeHelpers.clear();
 }

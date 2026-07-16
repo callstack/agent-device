@@ -208,6 +208,9 @@ export function leaseScopeToConnectionMetadata(
   return Object.keys(connection).length > 0 ? connection : undefined;
 }
 
+/**
+ * @internal Lease diagnostics seam exposed for unit tests.
+ */
 export function buildLeaseDiagnosticsContext(
   leaseScope: LeaseScope | undefined,
 ): LeaseDiagnosticsContext | undefined {

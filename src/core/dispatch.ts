@@ -188,6 +188,9 @@ const DISPATCH_HANDLERS: Record<DispatchCommand, DispatchHandler> = {
   read: ({ device, positionals, context }) => handleReadCommand(device, positionals, context),
 };
 
+/**
+ * @internal Introspection helper used by parity tests.
+ */
 export function listRegisteredDispatchCommandNames(): string[] {
   return Object.keys(DISPATCH_HANDLERS).sort();
 }

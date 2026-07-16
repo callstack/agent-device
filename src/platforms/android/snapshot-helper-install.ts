@@ -29,7 +29,9 @@ export function forgetAndroidSnapshotHelperInstall(options: {
   }
 }
 
-// Tests reset the process-global install memo so cases do not share helper state.
+/**
+ * @internal Test isolation hook for process-global snapshot helper install cache.
+ */
 export function resetAndroidSnapshotHelperInstallCache(): void {
   installedSnapshotHelpers.clear();
 }

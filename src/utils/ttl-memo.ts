@@ -74,6 +74,10 @@ export function createTtlMemo<Key, Value>(options: TtlMemoOptions = {}): TtlMemo
   return memo;
 }
 
+/**
+ * Test isolation hook for process-global TTL memos.
+ * @internal
+ */
 export function resetAllProcessMemosForTests(): void {
   for (const reset of processMemoResets) {
     reset();

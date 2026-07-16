@@ -77,6 +77,9 @@ export type BrowserStackCapabilitiesOptions = {
   configured?: Record<string, unknown>;
 };
 
+/**
+ * @internal BrowserStack capability builder used by integration tests.
+ */
 export function getBrowserStackWebDriverCapabilities(
   platform: CloudWebDriverPlatform,
 ): CloudWebDriverProviderCapabilities {
@@ -87,6 +90,9 @@ export function getBrowserStackWebDriverCapabilities(
   });
 }
 
+/**
+ * @internal BrowserStack runtime factory used by integration tests.
+ */
 export function createBrowserStackWebDriverRuntime(
   options: BrowserStackWebDriverRuntimeOptions,
 ): ProviderDeviceRuntime {

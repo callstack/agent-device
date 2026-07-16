@@ -423,7 +423,9 @@ function invalidateDeviceTunnelIpCache(deviceId: string): void {
   deviceTunnelIpCache.delete(deviceId);
 }
 
-// Test isolation requires clearing the process-global device tunnel cache between cases.
+/**
+ * @internal Test isolation hook for the process-global device tunnel IP cache.
+ */
 export function clearDeviceTunnelIpCache(): void {
   deviceTunnelIpCache.clear();
 }

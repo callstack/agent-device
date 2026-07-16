@@ -44,8 +44,6 @@ import {
   type SystemCommands,
 } from './system/runtime/index.ts';
 
-export { ref, selector } from './interaction/runtime/selector-read.ts';
-
 export type {
   BoundRuntimeCommand,
   CommandResult,
@@ -77,6 +75,9 @@ export type BoundAgentDeviceCommands = {
   observability: BoundObservabilityCommands;
 };
 
+/**
+ * @internal Runtime command catalog used by parity/type tests.
+ */
 export const commands: AgentDeviceCommands = {
   capture: captureCommands,
   selectors: selectorCommands,

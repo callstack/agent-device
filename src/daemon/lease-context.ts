@@ -5,7 +5,6 @@ import type { RunnerLogicalLeaseContext } from '../core/runner-lease-context.ts'
 import { stripUndefined } from '../utils/parsing.ts';
 import {
   DEFAULT_PROXY_LEASE_TTL_MS,
-  buildLeaseDiagnosticsContext,
   findMissingProxyLeaseFields,
   isProxyLeaseScope,
   leaseScopeFromRequest,
@@ -13,12 +12,7 @@ import {
   type LeaseScope,
 } from '../core/lease-scope.ts';
 
-export {
-  DEFAULT_PROXY_LEASE_TTL_MS,
-  buildLeaseDiagnosticsContext,
-  findMissingProxyLeaseFields,
-  isProxyLeaseScope,
-};
+export { DEFAULT_PROXY_LEASE_TTL_MS, findMissingProxyLeaseFields, isProxyLeaseScope };
 export type { LeaseDiagnosticsContext, LeaseScope };
 
 export type SessionLease = {

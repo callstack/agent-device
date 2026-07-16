@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { AgentDeviceBackend } from '../../../backend.ts';
-import { ref, selector } from '../../index.ts';
+import { ref, selector } from './selector-read.ts';
 import { createLocalArtifactAdapter } from '../../../io.ts';
 import {
   createAgentDevice,

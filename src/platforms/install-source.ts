@@ -45,6 +45,9 @@ export type MaterializedInstallable = {
 
 const INTERNAL_ARCHIVE_EXTENSIONS = ['.zip', '.tar', '.tar.gz', '.tgz'] as const;
 
+/**
+ * @public Archive extensions accepted by install-source resolution.
+ */
 export const ARCHIVE_EXTENSIONS = Object.freeze([...INTERNAL_ARCHIVE_EXTENSIONS] as const);
 const MAX_INSTALL_SOURCE_SEARCH_DEPTH = 5;
 const DEFAULT_SOURCE_DOWNLOAD_TIMEOUT_MS = 120_000;

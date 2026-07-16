@@ -69,6 +69,9 @@ export type ProviderDeviceRuntimeRequestProviders = {
 let activeProviderDeviceRuntimes: ProviderDeviceRuntime[] = [];
 const providerDeviceRuntimeScope = new AsyncLocalStorage<ProviderDeviceRuntime[]>();
 
+/**
+ * @internal Test isolation hook for the active provider runtime scope.
+ */
 export function setActiveProviderDeviceRuntimes(runtimes: ProviderDeviceRuntime[]): void {
   activeProviderDeviceRuntimes = [...runtimes];
 }

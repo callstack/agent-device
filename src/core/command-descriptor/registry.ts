@@ -1159,6 +1159,9 @@ export const commandDescriptors = RAW_COMMAND_DESCRIPTORS.map((descriptor) => {
 /** The literal union of every registered command name. */
 export type Command = (typeof commandDescriptors)[number]['name'];
 
+/**
+ * @internal Introspection helper used by parity tests.
+ */
 export function listDescriptorCatalogCommandNames<Group extends CommandCatalogGroup>(
   group: Group,
 ): Array<DescriptorCommandNameForCatalogGroup<Group>> {
@@ -1181,6 +1184,9 @@ export function listDescriptorCatalogEntries<Group extends CommandCatalogGroup>(
     );
 }
 
+/**
+ * @internal Introspection helper used by parity tests.
+ */
 export function listDescriptorDispatchCommandNames(): DescriptorDispatchCommandName[] {
   return commandDescriptors
     .filter((descriptor) => 'dispatch' in descriptor && descriptor.dispatch !== undefined)
@@ -1195,6 +1201,9 @@ export function listMcpExposedCommandNames(): DescriptorCliCommandName[] {
     .sort();
 }
 
+/**
+ * @internal Introspection helper used by parity tests.
+ */
 export function listCapabilityCheckedCommandNames(): DescriptorCliCommandName[] {
   return commandDescriptors
     .filter((descriptor) => isCapabilityCheckedCliCommand(descriptor))
@@ -1282,6 +1291,9 @@ export function resolveCommandResponseDataTransform(
   return RESPONSE_DATA_TRANSFORM_BY_COMMAND.get(command);
 }
 
+/**
+ * @internal Introspection helper used by parity tests.
+ */
 export function listCommandResponseDataTransforms(): Array<{
   command: string;
   transform: CommandResponseDataTransform;

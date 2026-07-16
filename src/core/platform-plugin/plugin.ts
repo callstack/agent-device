@@ -185,7 +185,10 @@ export function tryGetPlugin(platform: Platform): PlatformPlugin | undefined {
   return registry.get(platform);
 }
 
-/** The leaf platforms that currently carry a plugin, in registration order. */
+/**
+ * @internal The leaf platforms that currently carry a plugin, in registration order.
+ * Exposed for parity tests.
+ */
 export function registeredPlatforms(): Platform[] {
   return [...registry.keys()];
 }

@@ -405,10 +405,16 @@ export async function listAndroidAdbSerialsQuick(): Promise<string[]> {
   }
 }
 
+/**
+ * @internal Test isolation hook for the active test-IME device set.
+ */
 export function resetAndroidTestImeActivationCacheForTests(): void {
   activeTestImeDevices.clear();
 }
 
+/**
+ * @internal Test seam to force the active test-IME state for a device.
+ */
 export function setAndroidTestImeActiveForTests(device: DeviceInfo, active: boolean): void {
   const key = getAndroidImeHelperDeviceKey(device);
   if (active) {

@@ -43,6 +43,9 @@ const COMMAND_ALIAS_SUGGESTIONS: Record<string, CommandAliasSuggestion> = {
   'close-session': { command: 'close', example: 'close' },
 };
 
+/**
+ * @internal Exposes the curated suggestion map for drift/parity tests.
+ */
 export function listCommandAliasSuggestionEntries(): Array<[string, CommandAliasSuggestion]> {
   return Object.entries(COMMAND_ALIAS_SUGGESTIONS);
 }

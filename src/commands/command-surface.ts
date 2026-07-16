@@ -19,6 +19,9 @@ export async function runCommand(
   return await getCommandDefinition(name).invoke(client, input);
 }
 
+/**
+ * @internal Introspection helper used by command surface parity tests.
+ */
 export function listExecutableCommandNames(): CommandName[] {
   return [...commandMap.keys()].sort();
 }

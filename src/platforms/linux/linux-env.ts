@@ -55,7 +55,9 @@ export async function ensureInputTool(): Promise<{
   );
 }
 
-/** Reset cached tool (for testing). */
+/**
+ * @internal Test isolation hook for the cached Linux input tool.
+ */
 export function resetInputToolCache(): void {
   cachedInputTool = null;
 }
