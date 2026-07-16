@@ -83,7 +83,6 @@ test('legacy iOS sparse recovery retries a full snapshot', async () => {
     recovery: {
       legacyIosSparse: {
         query: 'Search',
-        scope: undefined,
         shouldScope: false,
       },
     },
@@ -110,7 +109,6 @@ test('legacy iOS sparse recovery rethrows full snapshot failure when scoping is 
       recovery: {
         legacyIosSparse: {
           query: 'Search',
-          scope: undefined,
           shouldScope: false,
         },
       },

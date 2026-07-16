@@ -37,7 +37,6 @@ type SelectorCaptureCachePolicy = {
 type SelectorCaptureRecoveryPolicy = {
   legacyIosSparse?: {
     query: string;
-    scope: string | undefined;
     shouldScope: boolean;
   };
   sparseVerdictQueryScope?: {
@@ -133,7 +132,7 @@ async function recoverLegacySparseIosSnapshot(params: {
 }): Promise<SnapshotState> {
   const { runtimeParams, request, policy } = params;
   try {
-    return await runCapture(runtimeParams, request, policy.scope, false);
+    return await runCapture(runtimeParams, request, undefined, false);
   } catch (error) {
     if (!policy.shouldScope) throw error;
     return await runCapture(runtimeParams, request, policy.query, false);
