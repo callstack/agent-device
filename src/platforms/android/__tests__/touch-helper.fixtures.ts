@@ -16,6 +16,7 @@ export const ANDROID_TOUCH_HELPER_MANIFEST = {
   versionCode: 17000,
   instrumentationRunner: 'com.callstack.agentdevice.snapshothelper/.SnapshotInstrumentation',
   statusProtocol: 'android-snapshot-helper-v1' as const,
+  installArgs: ['install', '-r', '-t'],
 };
 
 export function androidTouchHelperResultRecord(values: Record<string, string>): string {
@@ -74,6 +75,25 @@ export function currentVersionAdb(handleInstrument: AndroidAdbExecutor): Android
         stdout: `package:${ANDROID_TOUCH_HELPER_MANIFEST.packageName} versionCode:999999`,
         stderr: '',
       };
+    }
+    return handleInstrument(args, options);
+  };
+}
+
+// Wraps an executor that answers the install-decision probe as "outdated" (an older installed
+// versionCode) and accepts the resulting `adb install`, so ensureAndroidSnapshotHelper actually
+// replaces the APK (install.installed === true) before the wrapped call runs.
+export function outdatedVersionAdb(handleInstrument: AndroidAdbExecutor): AndroidAdbExecutor {
+  return async (args, options) => {
+    if (args.includes('--show-versioncode')) {
+      return {
+        exitCode: 0,
+        stdout: `package:${ANDROID_TOUCH_HELPER_MANIFEST.packageName} versionCode:1`,
+        stderr: '',
+      };
+    }
+    if (args[0] === 'install') {
+      return { exitCode: 0, stdout: 'Success', stderr: '' };
     }
     return handleInstrument(args, options);
   };

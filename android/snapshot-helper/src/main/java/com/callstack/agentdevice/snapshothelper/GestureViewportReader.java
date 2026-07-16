@@ -18,17 +18,30 @@ final class GestureViewportReader {
     } catch (TimeoutException ignored) {
       // Window/root state can still be usable when the app is animating continuously.
     }
+    // UiAutomation.getWindows() transfers recyclable AccessibilityWindowInfo instances, and this
+    // read runs repeatedly inside the persistent helper session: copy the bounds the precedence
+    // below needs, then recycle every window before resolving.
+    Rect activeBounds = null;
+    Rect fallbackBounds = null;
     List<AccessibilityWindowInfo> windows = automation.getWindows();
-    AccessibilityWindowInfo fallback = null;
-    for (AccessibilityWindowInfo window : windows) {
-      if (window.getType() != AccessibilityWindowInfo.TYPE_APPLICATION) continue;
-      if (window.isActive() || window.isFocused()) {
+    try {
+      for (AccessibilityWindowInfo window : windows) {
+        if (window.getType() != AccessibilityWindowInfo.TYPE_APPLICATION) continue;
         Rect bounds = new Rect();
         window.getBoundsInScreen(bounds);
-        if (!bounds.isEmpty()) return bounds;
+        if (activeBounds == null
+            && (window.isActive() || window.isFocused())
+            && !bounds.isEmpty()) {
+          activeBounds = bounds;
+        }
+        if (fallbackBounds == null) fallbackBounds = bounds;
       }
-      if (fallback == null) fallback = window;
+    } finally {
+      for (AccessibilityWindowInfo window : windows) {
+        window.recycle();
+      }
     }
+    if (activeBounds != null) return activeBounds;
     AccessibilityNodeInfo activeRoot = automation.getRootInActiveWindow();
     if (activeRoot != null) {
       try {
@@ -39,11 +52,7 @@ final class GestureViewportReader {
         activeRoot.recycle();
       }
     }
-    if (fallback != null) {
-      Rect bounds = new Rect();
-      fallback.getBoundsInScreen(bounds);
-      if (!bounds.isEmpty()) return bounds;
-    }
+    if (fallbackBounds != null && !fallbackBounds.isEmpty()) return fallbackBounds;
     throw new IllegalStateException("Active application interaction viewport is unavailable");
   }
 }

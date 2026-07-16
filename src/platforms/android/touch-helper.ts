@@ -155,6 +155,11 @@ async function prepareAndroidTouchHelper(device: DeviceInfo): Promise<PreparedAn
     phase: 'android_touch_helper_install_decision',
     data: install,
   });
+  if (install.installed) {
+    // An APK replacement kills the running instrumentation, so a persistent session started
+    // against the previous binary must not serve this command; the next snapshot restarts it.
+    await stopAndroidSnapshotHelperSession(deviceKey);
+  }
   return { adb: adbProvider.exec, artifact, install, deviceKey };
 }
 

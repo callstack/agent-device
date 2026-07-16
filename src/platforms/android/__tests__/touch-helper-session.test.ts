@@ -30,6 +30,7 @@ import {
   currentVersionAdb,
   flingPlan,
   makeIsolatedDevice,
+  outdatedVersionAdb,
 } from './touch-helper.fixtures.ts';
 
 vi.mock('../helper-package-install.ts', async (importOriginal) => {
@@ -202,6 +203,59 @@ test('gesture uses the persistent snapshot-helper session and does not stop it',
   assert.equal(result.elapsedMs, 9);
   assert.equal(gestureCallCount, 1);
   assert.equal(await session.isSessionAlive(), true);
+});
+
+test('an APK replacement stops the stale session and the gesture runs one-shot', async () => {
+  const device = makeIsolatedDevice();
+  let sessionGestureCallCount = 0;
+  const session = await startFakeTouchHelperSession(device, (command, requestId) => {
+    if (command.startsWith('gesture')) {
+      sessionGestureCallCount += 1;
+      return sessionHeaderResponse({
+        agentDeviceProtocol: 'android-snapshot-helper-v1',
+        requestId,
+        ok: 'true',
+        kind: 'swipe',
+        injectedEvents: '6',
+        elapsedMs: '9',
+      });
+    }
+    return sessionHeaderResponse({
+      agentDeviceProtocol: 'android-snapshot-helper-v1',
+      requestId,
+      ok: 'true',
+    });
+  });
+
+  let oneShotArgs: string[] | undefined;
+  const result = await withAndroidAdbProvider(
+    {
+      // The install probe reports an outdated helper, so prepareAndroidTouchHelper replaces the
+      // APK. That replacement kills the instrumentation the live session socket belongs to; the
+      // gesture must not be sent there and must run one-shot against the fresh binary instead.
+      exec: outdatedVersionAdb(async (args) => {
+        assert.ok(args.includes('instrument'), `unexpected adb call: ${args.join(' ')}`);
+        oneShotArgs = args;
+        return {
+          exitCode: 0,
+          stdout: [
+            resultRecord({ ok: 'true', kind: 'swipe', injectedEvents: '4', elapsedMs: '12' }),
+            'INSTRUMENTATION_CODE: 0',
+          ].join('\n'),
+          stderr: '',
+        };
+      }),
+    },
+    { serial: device.id },
+    async () => await executeAndroidTouchHelperPlan(device, flingPlan()),
+  );
+
+  assert.equal(result.installReason, 'outdated');
+  assert.equal(result.helperTransport, 'instrumentation');
+  assert.equal(result.helperKind, 'swipe');
+  assert.ok(oneShotArgs?.includes('gesture'));
+  assert.equal(sessionGestureCallCount, 0);
+  assert.equal(await session.isSessionAlive(), false);
 });
 
 test('a structured ok=false session gesture response throws but leaves the session alive', async () => {
