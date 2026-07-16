@@ -95,10 +95,15 @@ export async function runStableCaptureLoop(
       quietSinceMs = nowMs;
       lastDigest = digest;
       lastNodeCount = capture.snapshot.nodes.length;
-      await sleep(
-        runtime,
-        stableCaptureDelayMs({ nowMs, quietSinceMs, quietMs, pollMs, deadlineMs }),
-      );
+      const recoveryDelayMs = stableCaptureDelayMs({
+        nowMs,
+        quietSinceMs,
+        quietMs,
+        pollMs,
+        deadlineMs,
+      });
+      if (recoveryDelayMs <= 0) break;
+      await sleep(runtime, recoveryDelayMs);
       continue;
     }
     if (digest !== lastDigest) {
@@ -115,10 +120,9 @@ export async function runStableCaptureLoop(
         lastCapture,
       };
     }
-    await sleep(
-      runtime,
-      stableCaptureDelayMs({ nowMs, quietSinceMs, quietMs, pollMs, deadlineMs }),
-    );
+    const delayMs = stableCaptureDelayMs({ nowMs, quietSinceMs, quietMs, pollMs, deadlineMs });
+    if (delayMs <= 0) break;
+    await sleep(runtime, delayMs);
   }
   return {
     settled: false,
@@ -135,15 +139,23 @@ function isPrivateAxRecovery(verdict: SnapshotQualityVerdict | undefined): boole
 }
 
 /**
- * How long to wait before the next capture. While the quiet deadline is still
- * further away than one poll, keep the cadence so a change is noticed promptly.
- * Once it is within reach, sleep to just past it instead — the capture that
- * decides `settled` then always spans the window, rather than landing on the
- * boundary where clock skew picks the answer (#1306).
+ * How long to wait before the next capture, or 0 when there is no wait worth
+ * taking and the loop should stop.
  *
- * Bounded by the loop's own budget: it only runs again while `now < deadline`,
- * so a wake-up past the deadline spends the very capture the epsilon exists to
- * land. Where the budget is the tighter constraint, wake just inside it.
+ * While the quiet deadline is still further away than one poll, keep the
+ * cadence so a change is noticed promptly. Once it is within reach, sleep to
+ * just past it instead — the capture that decides `settled` then always spans
+ * the window, rather than landing on the boundary where clock skew picks the
+ * answer (#1306).
+ *
+ * The loop only runs again while `now < deadline`, so the wake-up must land
+ * strictly inside the budget to be worth anything. Every returned delay is at
+ * least `QUIET_DEADLINE_EPSILON_MS`, which is what makes the loop terminate:
+ * the same skew this function exists to absorb means a 1ms sleep can advance
+ * the clock by 0, and a delay that buys no time would spin here forever. When
+ * the budget cannot afford a delay that both progresses and stays inside it,
+ * there is no capture left to place — stop rather than burn captures against
+ * the device at the deadline.
  */
 function stableCaptureDelayMs(params: {
   nowMs: number;
@@ -158,12 +170,8 @@ function stableCaptureDelayMs(params: {
       ? params.pollMs
       : Math.max(STABLE_MIN_POLL_MS, remainingQuietMs + QUIET_DEADLINE_EPSILON_MS);
   const lastUsefulWakeMs = params.deadlineMs - params.nowMs - 1;
-  if (lastUsefulWakeMs > 0) return Math.min(cadenceMs, lastUsefulWakeMs);
-  // No further capture can land inside the budget, so sleep out what remains of
-  // it rather than a full cadence past it: the loop is about to exit either
-  // way, and overrunning here would report a wait longer than the caller asked
-  // for.
-  return Math.max(0, params.deadlineMs - params.nowMs);
+  if (lastUsefulWakeMs < QUIET_DEADLINE_EPSILON_MS) return 0;
+  return Math.min(cadenceMs, lastUsefulWakeMs);
 }
 
 // Intentionally does not update the session snapshot: the stable loop captures

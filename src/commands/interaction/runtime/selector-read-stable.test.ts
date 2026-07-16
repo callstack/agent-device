@@ -46,7 +46,9 @@ test('runtime wait stable settles after two unchanged captures', async () => {
 // A clock whose sleep lands `undershootMs` short of what was asked, modelling
 // the real defect: `setTimeout(n)` can advance `Date.now()` by only n-1,
 // because libuv times the sleep on the monotonic loop clock while `now()` reads
-// the wall clock.
+// the wall clock. It yields to the event loop like a real sleep does, so a loop
+// that fails to terminate fails the test on its timeout rather than starving
+// the runner on microtasks.
 function createUndershootingClock(undershootMs = 1): {
   now: () => number;
   sleep: (ms: number) => Promise<void>;
@@ -56,6 +58,9 @@ function createUndershootingClock(undershootMs = 1): {
     now: () => elapsed,
     sleep: async (ms: number) => {
       elapsed += Math.max(0, ms - undershootMs);
+      await new Promise((resolve) => {
+        setImmediate(resolve);
+      });
     },
   };
 }
@@ -139,6 +144,29 @@ test('runtime wait stable cannot settle when the budget only reaches the quiet d
       (error as { details?: { reason?: string } }).details?.reason === 'wait_stable_timeout',
   );
   assert.ok(clock.now() <= 300, `loop must not run past its budget, elapsed ${clock.now()}ms`);
+});
+
+test('runtime wait stable stops instead of spinning when an undershooting sleep meets a budget it cannot use', async () => {
+  // The two hazards combined: a budget that leaves a 1ms landing window, and a
+  // sleep that loses 1ms to skew. Asking for that 1ms buys no time, so a loop
+  // that trusts the sleep to carry it past the deadline never gets there and
+  // hammers the device with captures instead. Every delay must buy real time,
+  // and where the budget cannot afford one the loop has to stop.
+  const clock = createUndershootingClock();
+  const { device, counter } = createStableCaptureDevice(clock);
+
+  await assert.rejects(
+    () =>
+      device.selectors.wait({
+        session: 'default',
+        target: { kind: 'stable', quietMs: 300, timeoutMs: 301 },
+      }),
+    (error: unknown) =>
+      error instanceof Error &&
+      (error as { details?: { reason?: string } }).details?.reason === 'wait_stable_timeout',
+  );
+  assert.ok(counter.captures <= 3, `loop must not spin, took ${counter.captures} captures`);
+  assert.ok(clock.now() <= 301, `loop must not run past its budget, elapsed ${clock.now()}ms`);
 });
 
 test('runtime wait stable hints when it settles on a nearly-empty tree', async () => {
