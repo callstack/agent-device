@@ -548,7 +548,7 @@ function androidSnapshotHelperUnavailableError(errorReason: string | undefined):
   const reason = errorReason ?? 'the bundled helper artifact was not found';
   return new AppError('COMMAND_FAILED', `Android snapshot helper is unavailable: ${reason}`, {
     androidSnapshotHelperFailureReason: reason,
-    hint: 'Run `pnpm build:android` to build the full helper dist (android/snapshot-helper/dist: the .apk, .apk.idsig, .apk.sha256, and .manifest.json) for a source checkout. Packaged installs ship this dist automatically via the prepack script — if it is missing from a packaged install, reinstall agent-device.',
+    hint: 'Run `pnpm build:android` to build the helper dist for a source checkout — the runtime needs android/snapshot-helper/dist/agent-device-android-snapshot-helper-<version>.manifest.json and the .apk it references. Packaged installs ship these via the prepack script; if they are missing from a packaged install, reinstall agent-device.',
   });
 }
 

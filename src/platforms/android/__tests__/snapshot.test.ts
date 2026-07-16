@@ -903,9 +903,10 @@ test('snapshotAndroid gives an actionable hint when the helper artifact is missi
         const hint = String((error as { details?: Record<string, unknown> }).details?.hint);
         assert.match(hint, /pnpm build:android/);
         assert.match(hint, /prepack/);
-        assert.match(hint, /\.apk\.idsig/);
-        assert.match(hint, /\.apk\.sha256/);
         assert.match(hint, /\.manifest\.json/);
+        assert.match(hint, /\.apk/);
+        // The npm package excludes *.idsig by design — the hint must never claim it is required.
+        assert.doesNotMatch(hint, /idsig/);
         return true;
       },
     );
