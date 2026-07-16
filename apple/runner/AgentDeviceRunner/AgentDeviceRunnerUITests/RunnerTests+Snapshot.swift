@@ -604,11 +604,15 @@ extension RunnerTests {
   /// assertion instead of racing a fixed-timing guess.
   private func assertBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrain(
     entryPointName: String,
-    callEntryPoint: @escaping (SnapshotOptions) throws -> DataPayload
+    callEntryPoint: @escaping (XCUIApplication, SnapshotOptions) throws -> DataPayload
   ) {
-    currentApp = springboard
-    currentBundleId = Self.springboardBundleId
+    let targetBundleId = "com.callstack.agentdevice.runner.missing.snapshot-timeout-test"
+    let snapshotTarget = XCUIApplication(bundleIdentifier: targetBundleId)
+    let probeReleaseGate = DispatchSemaphore(value: 0)
+    currentApp = snapshotTarget
+    currentBundleId = targetBundleId
     defer {
+      probeReleaseGate.signal()
       currentApp = nil
       currentBundleId = nil
       systemModalProbeOverrideForTesting = nil
@@ -622,11 +626,12 @@ extension RunnerTests {
       var wasPenalizedBeforeDrain = false
     }
     let box = ResultBox()
-    // Bounded so a revert that never actually times out (nothing would ever wait on this gate)
-    // cannot hang the test -- it just leaves `box` at its false/nil defaults, below.
-    let probeReleaseGate = DispatchSemaphore(value: 0)
+    // The test owns release of the injected probe. A fixed timeout races the capture plan's
+    // independent fallback tiers on loaded CI hosts and can drain before the test records the
+    // abandoned-work state. The defer above still releases the probe if an earlier assertion or
+    // expectation fails.
     systemModalProbeOverrideForTesting = { _ in
-      _ = probeReleaseGate.wait(timeout: .now() + 8)
+      probeReleaseGate.wait()
       return nil
     }
 
@@ -636,6 +641,7 @@ extension RunnerTests {
     let drained = expectation(description: "\(entryPointName) modal probe drained")
     DispatchQueue(label: "agent-device.runner.tests.modal-probe-timeout").async {
       box.payload = try? callEntryPoint(
+        snapshotTarget,
         SnapshotOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false)
       )
 
@@ -700,15 +706,15 @@ extension RunnerTests {
 
   func testBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrain() {
     assertBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrain(entryPointName: "snapshotFast") {
-      options in
-      try self.snapshotFast(app: self.springboard, options: options)
+      target, options in
+      try self.snapshotFast(app: target, options: options)
     }
   }
 
   func testBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrainForSnapshotRaw() {
     assertBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrain(entryPointName: "snapshotRaw") {
-      options in
-      try self.snapshotRaw(app: self.springboard, options: options)
+      target, options in
+      try self.snapshotRaw(app: target, options: options)
     }
   }
 
