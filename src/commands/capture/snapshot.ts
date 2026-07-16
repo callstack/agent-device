@@ -27,6 +27,14 @@ const snapshotCommandMetadata = defineFieldCommandMetadata(
     raw: booleanField(),
     forceFull: booleanField(),
     timeoutMs: integerField('Maximum wall-clock time for the snapshot command.'),
+    // #1271 stage 2: `snapshot` is observation-only, so a repair-armed heal
+    // excludes an out-of-band one by default (ADR 0012 amendment). Exposed
+    // here so the Node SDK's typed options and the MCP tool schema can set
+    // both flags, mirroring `--no-record`/`--record` on the CLI.
+    noRecord: booleanField('Do not record this action.'),
+    record: booleanField(
+      'Force-record this out-of-band observation into a repair-armed heal (mutually exclusive with noRecord). Authored replay steps are recorded automatically and never need this.',
+    ),
   },
 );
 

@@ -609,4 +609,3 @@ async function maybeAndroidForegroundBlockerResponse(
     },
   );
 }
-

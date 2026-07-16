@@ -25,6 +25,11 @@ function req(command: string, flags: DaemonRequest['flags'] = {}): DaemonRequest
   return { token: 't', session: 'default', command, positionals: [], flags };
 }
 
+/** A request as the replay runtime dispatches it: authored provenance stamped on `internal`. */
+function planStepReq(command: string, flags: DaemonRequest['flags'] = {}): DaemonRequest {
+  return { ...req(command, flags), internal: { replayPlanStep: true } };
+}
+
 test('a repair-armed session excludes get/is/find by default but keeps recording wait', () => {
   const store = makeStore();
   const session = makeIosSession('default', { saveScriptBoundary: 0 });
@@ -36,6 +41,23 @@ test('a repair-armed session excludes get/is/find by default but keeps recording
   recordIfSession(store, 'default', req('wait'), {});
 
   expect(store.get('default')!.actions.map((a) => a.command)).toEqual(['wait']);
+});
+
+// The P1 the command-class rule got wrong: an AUTHORED get/is/find plan step is
+// the same command as an interactive diagnostic read, but it must survive into
+// its own healed script — otherwise a repaired flow silently stops asserting
+// what it used to assert, and users would have to annotate their own .ad steps
+// with --record to keep them.
+test('a repair-armed session still records get/is/find dispatched as replay plan steps (authored provenance)', () => {
+  const store = makeStore();
+  const session = makeIosSession('default', { saveScriptBoundary: 0 });
+  store.set('default', session);
+
+  recordIfSession(store, 'default', planStepReq('get'), {});
+  recordIfSession(store, 'default', planStepReq('is'), {});
+  recordIfSession(store, 'default', planStepReq('find'), {});
+
+  expect(store.get('default')!.actions.map((a) => a.command)).toEqual(['get', 'is', 'find']);
 });
 
 test('--record forces get/is/find through even while repair-armed', () => {

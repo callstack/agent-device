@@ -1,5 +1,9 @@
 import { expect, test } from 'vitest';
-import { parseFindArgs, parseFindSelectorExpression } from '../../../selectors/find.ts';
+import {
+  isReadOnlyFindAction,
+  parseFindArgs,
+  parseFindSelectorExpression,
+} from '../../../selectors/find.ts';
 
 test('parseFindArgs defaults to click with any locator', () => {
   const parsed = parseFindArgs(['Login']);
@@ -51,4 +55,16 @@ test('parseFindSelectorExpression only treats bare selector-shaped queries as se
 
   expect(parseFindSelectorExpression('text', 'label="Continue"')).toBeNull();
   expect(parseFindSelectorExpression('any', 'a=b')).toBeNull();
+});
+
+// #1271 stage 2: `--record` is statically scoped to snapshot/get/is via each
+// command schema's `allowedFlags`, but `find`'s observe-vs-mutate split is a
+// POSITIONAL, so it is validated dynamically against this shared predicate.
+test('isReadOnlyFindAction separates the find sub-actions --record may accompany', () => {
+  for (const action of ['exists', 'wait', 'get_text', 'get_attrs'] as const) {
+    expect(isReadOnlyFindAction(action)).toBe(true);
+  }
+  for (const action of ['click', 'fill', 'focus', 'type'] as const) {
+    expect(isReadOnlyFindAction(action)).toBe(false);
+  }
 });

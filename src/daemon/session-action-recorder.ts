@@ -115,12 +115,7 @@ export function recordActionEntry(
  * sub-action; `diff` is likewise absent because only `snapshot` is classified
  * at the snapshot-runtime call site.
  */
-const OBSERVATION_ONLY_COMMANDS: ReadonlySet<string> = new Set([
-  'snapshot',
-  'get',
-  'is',
-  'find',
-]);
+const OBSERVATION_ONLY_COMMANDS: ReadonlySet<string> = new Set(['snapshot', 'get', 'is', 'find']);
 
 /**
  * #1271 stage 2 (ADR 0012 amendment): is this request an out-of-band

@@ -42,10 +42,15 @@ test('Provider-backed integration: a repair-armed segment excludes diagnostic re
     assert.equal(open.device?.id, PROVIDER_SCENARIO_ANDROID.id);
 
     // Step 2 diverges: a selector that matches nothing in the current tree.
+    // Step 3 is an AUTHORED observation, deliberately `is visible` — a
+    // different command from the interactive `get` reads below, so the healed
+    // script is unambiguous about which line came from where.
     const repairPath = path.join(tempRoot, 'repair.ad');
     fs.writeFileSync(
       repairPath,
-      ['snapshot -i', 'press label="NoSuchControl"', `get text ${SEARCH_SELECTOR}`, ''].join('\n'),
+      ['snapshot -i', 'press label="NoSuchControl"', `is visible ${SEARCH_SELECTOR}`, ''].join(
+        '\n',
+      ),
     );
 
     // --- Arm the repair transaction (R1): `replay --save-script` before step 1. ---
@@ -121,21 +126,42 @@ test('Provider-backed integration: a repair-armed segment excludes diagnostic re
     assert.equal(fs.existsSync(healedPath), true, 'the completed repair must publish a healed .ad');
     const healedScript = fs.readFileSync(healedPath, 'utf8');
 
-    // The heal carries EXACTLY ONE `get text` line: the `--record`ed corrective
+    // The heal carries EXACTLY ONE `get` line: the `--record`ed corrective
     // read. The identical diagnostic read that ran first is absent — the whole
     // point of the amendment, and the reason a blanket read-exclusion would be
     // unsafe (it would drop this line too, silently).
-    const getLines = healedScript
-      .split('\n')
-      .filter((line) => line.trim().startsWith('get ') || line.trim().startsWith('get\t'));
-    assert.equal(getLines.length, 1, `expected exactly one recorded get, got: ${healedScript}`);
-    assert.match(getLines[0]!, /^get\s+"?text"?\s+/);
+    const getLines = healedLines(healedScript, 'get');
+    assert.equal(getLines.length, 1, `expected exactly one recorded get, got:\n${healedScript}`);
     assert.match(getLines[0]!, /com\.android\.settings:id\/search/);
+
+    // PROVENANCE (the rule the exclusion actually keys off): the AUTHORED
+    // `is visible` plan step must survive into its own healed script. It is
+    // the same command class as the excluded diagnostic read above and carries
+    // no `--record`, so a command-class exclusion would silently drop it —
+    // leaving a healed flow that quietly stopped asserting what the original
+    // asserted. Users must never have to annotate their own `.ad` steps.
+    const isLines = healedLines(healedScript, 'is');
+    assert.equal(
+      isLines.length,
+      1,
+      `the authored 'is visible' step must survive the heal, got:\n${healedScript}`,
+    );
+    assert.match(isLines[0]!, /com\.android\.settings:id\/search/);
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
     await daemon.close();
   }
-});
+  // Matches the provider-scenario convention (android-lifecycle uses the same
+  // budget): this drives a full arm -> diverge -> resume -> commit chain.
+}, 15_000);
+
+/** Recorded action lines for one command, ignoring the context header, `target-v1` annotations, and the sentinel. */
+function healedLines(script: string, command: string): string[] {
+  return script
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line === command || line.startsWith(`${command} `));
+}
 
 function androidRepairAdbResult(args: string[]): {
   stdout: string;

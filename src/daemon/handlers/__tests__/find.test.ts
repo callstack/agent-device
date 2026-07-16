@@ -782,3 +782,22 @@ test('handleFindCommands click omits refsGeneration — a mutating find never is
     expect((response.data as Record<string, unknown>).refsGeneration).toBeUndefined();
   }
 });
+
+// #1271 stage 2: `find`'s observe-vs-mutate split is a positional, so unlike
+// snapshot/get/is it cannot be settled by the CLI grammar's per-command
+// `allowedFlags`. A mutating find always records, so `--record` on one is
+// meaningless — refuse it loudly rather than accept and ignore it. Enforced
+// daemon-side so every surface (CLI/Node/MCP) inherits the same refusal.
+test('find rejects --record on a mutating action before any device work', async () => {
+  const { response, invokeCalls } = await runFindClickScenario({
+    positionals: ['label', 'Apps', 'click'],
+    flags: { record: true },
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('INVALID_ARGS');
+  expect(response.error.message).toMatch(/--record only applies to a read-only find/);
+  // Refused before the action dispatched.
+  expect(invokeCalls).toHaveLength(0);
+});
