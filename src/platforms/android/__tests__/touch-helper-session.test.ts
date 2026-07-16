@@ -1,0 +1,356 @@
+// --- Persistent snapshot-helper session transport ---------------------------------------
+//
+// These fake a live `snapshot-helper-session.ts` session the same way
+// snapshot-helper-session.test.ts does (a spawned fake process plus a local TCP
+// server standing in for the instrumentation's session socket), then drive
+// gesture/viewport calls against it to pin the session transport contract.
+
+import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
+import net from 'node:net';
+import { PassThrough } from 'node:stream';
+import { afterEach, beforeEach, test, vi } from 'vitest';
+import type { DeviceInfo } from '../../../kernel/device.ts';
+import { AppError } from '../../../kernel/errors.ts';
+import {
+  withAndroidAdbProvider,
+  type AndroidAdbProcess,
+  type AndroidAdbProvider,
+} from '../adb-executor.ts';
+import {
+  captureAndroidSnapshotWithHelperSession,
+  getAndroidSnapshotHelperSessionDeviceKey,
+  resetAndroidSnapshotHelperSessions,
+} from '../snapshot-helper-session.ts';
+import { executeAndroidTouchHelperPlan, readAndroidTouchHelperViewport } from '../touch-helper.ts';
+import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../../__tests__/test-utils/android-snapshot-helper.ts';
+import {
+  ANDROID_TOUCH_HELPER_MANIFEST as manifest,
+  androidTouchHelperResultRecord as resultRecord,
+  currentVersionAdb,
+  flingPlan,
+  makeIsolatedDevice,
+} from './touch-helper.fixtures.ts';
+
+vi.mock('../helper-package-install.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../helper-package-install.ts')>();
+  return {
+    ...actual,
+    resolveAndroidHelperArtifact: vi.fn(async () => ({
+      apkPath: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT.apkPath,
+      manifest: {
+        ...manifest,
+        sha256: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT.manifest.sha256,
+      },
+    })),
+  };
+});
+
+beforeEach(async () => {
+  delete process.env.AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION;
+  await resetAndroidSnapshotHelperSessions();
+});
+
+afterEach(async () => {
+  delete process.env.AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION;
+  await resetAndroidSnapshotHelperSessions();
+});
+
+class FakeAndroidProcess extends EventEmitter implements AndroidAdbProcess {
+  stdin = new PassThrough();
+  stdout = new PassThrough();
+  stderr = new PassThrough();
+  killed = false;
+  onKill: (() => void) | undefined;
+
+  kill(): boolean {
+    this.killed = true;
+    this.onKill?.();
+    return true;
+  }
+
+  emitExit(code: number | null, signal: NodeJS.Signals | null): void {
+    this.emit('exit', code, signal);
+    this.emit('close', code, signal);
+  }
+}
+
+type TouchSessionCommandHandler = (command: string, requestId: string) => string;
+
+function readSessionPort(args: string[]): number {
+  const index = args.indexOf('sessionPort');
+  assert.notEqual(index, -1);
+  return Number(args[index + 1]);
+}
+
+function sessionHeaderResponse(headers: Record<string, string>): string {
+  return `${Object.entries(headers)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n')}\n\n`;
+}
+
+function snapshotSessionResponse(requestId: string): string {
+  const body = '<hierarchy><node text="touch-helper-session" /></hierarchy>';
+  const headers = {
+    agentDeviceProtocol: 'android-snapshot-helper-v1',
+    helperApiVersion: '1',
+    outputFormat: 'uiautomator-xml',
+    requestId,
+    ok: 'true',
+    byteLength: String(Buffer.byteLength(body, 'utf8')),
+  };
+  return `${Object.entries(headers)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n')}\n\n${body}`;
+}
+
+function createFakeTouchHelperSessionProvider(
+  handleCommand: TouchSessionCommandHandler,
+): AndroidAdbProvider {
+  return {
+    exec: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+    spawn: (args) => {
+      const port = readSessionPort(args);
+      const process = new FakeAndroidProcess();
+      const server = net.createServer((socket) => {
+        socket.once('data', (chunk) => {
+          const command = chunk.toString('utf8').trim();
+          const [, requestId = ''] = command.split(/\s+/, 2);
+          socket.end(handleCommand(command, requestId));
+        });
+      });
+      server.listen(port, '127.0.0.1', () => {
+        process.stdout.write(
+          [
+            'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
+            'INSTRUMENTATION_STATUS: sessionReady=true',
+            'INSTRUMENTATION_STATUS_CODE: 2',
+            '',
+          ].join('\n'),
+        );
+      });
+      process.onKill = () => {
+        server.close(() => process.emitExit(0, null));
+      };
+      return process;
+    },
+  };
+}
+
+async function startFakeTouchHelperSession(
+  device: DeviceInfo,
+  handleCommand: TouchSessionCommandHandler,
+): Promise<{ deviceKey: string; isSessionAlive: () => Promise<boolean> }> {
+  const deviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
+  const provider = createFakeTouchHelperSessionProvider((command, requestId) => {
+    if (command.startsWith('snapshot')) return snapshotSessionResponse(requestId);
+    return handleCommand(command, requestId);
+  });
+  const capture = async () =>
+    await captureAndroidSnapshotWithHelperSession({
+      adb: provider.exec,
+      adbProvider: provider,
+      deviceKey,
+    });
+  const output = await capture();
+  assert.ok(output, 'expected the fake snapshot helper session to start');
+  return {
+    deviceKey,
+    // A live session serves another capture without restarting; a stopped one must spawn anew.
+    isSessionAlive: async () => (await capture())?.metadata.sessionReused === true,
+  };
+}
+
+test('gesture uses the persistent snapshot-helper session and does not stop it', async () => {
+  const device = makeIsolatedDevice();
+  let gestureCallCount = 0;
+  const session = await startFakeTouchHelperSession(device, (command, requestId) => {
+    if (command.startsWith('gesture')) {
+      gestureCallCount += 1;
+      return sessionHeaderResponse({
+        agentDeviceProtocol: 'android-snapshot-helper-v1',
+        requestId,
+        ok: 'true',
+        kind: 'swipe',
+        helperApiVersion: '1',
+        injectedEvents: '6',
+        elapsedMs: '9',
+      });
+    }
+    return sessionHeaderResponse({
+      agentDeviceProtocol: 'android-snapshot-helper-v1',
+      requestId,
+      ok: 'true',
+    });
+  });
+
+  const result = await withAndroidAdbProvider(
+    {
+      exec: currentVersionAdb(async (args) => {
+        throw new Error(
+          `unexpected instrumentation call while a session is active: ${args.join(' ')}`,
+        );
+      }),
+    },
+    { serial: device.id },
+    async () => await executeAndroidTouchHelperPlan(device, flingPlan()),
+  );
+
+  assert.equal(result.helperTransport, 'persistent-session');
+  assert.equal(result.helperKind, 'swipe');
+  assert.equal(result.injectedEvents, 6);
+  assert.equal(result.elapsedMs, 9);
+  assert.equal(gestureCallCount, 1);
+  assert.equal(await session.isSessionAlive(), true);
+});
+
+test('a structured ok=false session gesture response throws but leaves the session alive', async () => {
+  const device = makeIsolatedDevice();
+  const session = await startFakeTouchHelperSession(device, (command, requestId) => {
+    if (command.startsWith('gesture')) {
+      return sessionHeaderResponse({
+        agentDeviceProtocol: 'android-snapshot-helper-v1',
+        requestId,
+        ok: 'false',
+        errorType: 'java.lang.IllegalStateException',
+        message: 'injectInputEvent returned false',
+      });
+    }
+    return sessionHeaderResponse({
+      agentDeviceProtocol: 'android-snapshot-helper-v1',
+      requestId,
+      ok: 'true',
+    });
+  });
+
+  await assert.rejects(
+    withAndroidAdbProvider(
+      {
+        exec: currentVersionAdb(async (args) => {
+          throw new Error(
+            `unexpected instrumentation call while a session is active: ${args.join(' ')}`,
+          );
+        }),
+      },
+      { serial: device.id },
+      async () => await executeAndroidTouchHelperPlan(device, flingPlan()),
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.message, 'injectInputEvent returned false');
+      return true;
+    },
+  );
+
+  assert.equal(await session.isSessionAlive(), true);
+});
+
+test('a malformed session gesture response stops the session and does not fall back to one-shot', async () => {
+  const device = makeIsolatedDevice();
+  const session = await startFakeTouchHelperSession(device, (command, requestId) => {
+    if (command.startsWith('gesture')) return 'not a session response';
+    return sessionHeaderResponse({
+      agentDeviceProtocol: 'android-snapshot-helper-v1',
+      requestId,
+      ok: 'true',
+    });
+  });
+
+  let instrumentCalled = false;
+  await assert.rejects(
+    withAndroidAdbProvider(
+      {
+        exec: currentVersionAdb(async () => {
+          instrumentCalled = true;
+          return { exitCode: 0, stdout: '', stderr: '' };
+        }),
+      },
+      { serial: device.id },
+      async () => await executeAndroidTouchHelperPlan(device, flingPlan()),
+    ),
+  );
+
+  assert.equal(instrumentCalled, false);
+  assert.equal(await session.isSessionAlive(), false);
+});
+
+test('viewport falls back to one-shot instrumentation after a session error', async () => {
+  const device = makeIsolatedDevice();
+  const session = await startFakeTouchHelperSession(device, (command, requestId) => {
+    if (command.startsWith('viewport')) return 'not a session response';
+    return sessionHeaderResponse({
+      agentDeviceProtocol: 'android-snapshot-helper-v1',
+      requestId,
+      ok: 'true',
+    });
+  });
+
+  let oneShotArgs: string[] | undefined;
+  const viewportResult = await withAndroidAdbProvider(
+    {
+      exec: currentVersionAdb(async (args) => {
+        oneShotArgs = args;
+        return {
+          exitCode: 0,
+          stdout: [
+            resultRecord({ ok: 'true', x: '5', y: '6', width: '300', height: '400' }),
+            'INSTRUMENTATION_CODE: 0',
+          ].join('\n'),
+          stderr: '',
+        };
+      }),
+    },
+    { serial: device.id },
+    async () => await readAndroidTouchHelperViewport(device),
+  );
+
+  assert.deepEqual(viewportResult, { x: 5, y: 6, width: 300, height: 400 });
+  assert.ok(oneShotArgs?.includes('viewport'));
+  assert.equal(await session.isSessionAlive(), false);
+});
+
+test('a structured ok=false viewport response stops the session before the one-shot retry', async () => {
+  const device = makeIsolatedDevice();
+  const session = await startFakeTouchHelperSession(device, (command, requestId) => {
+    if (command.startsWith('viewport')) {
+      return sessionHeaderResponse({
+        agentDeviceProtocol: 'android-snapshot-helper-v1',
+        requestId,
+        ok: 'false',
+        errorType: 'java.lang.IllegalStateException',
+        message: 'Active application interaction viewport is unavailable',
+      });
+    }
+    return sessionHeaderResponse({
+      agentDeviceProtocol: 'android-snapshot-helper-v1',
+      requestId,
+      ok: 'true',
+    });
+  });
+
+  let oneShotArgs: string[] | undefined;
+  const viewportResult = await withAndroidAdbProvider(
+    {
+      exec: currentVersionAdb(async (args) => {
+        // One instrumentation may own UiAutomation: the one-shot retry must only run once the
+        // structurally-failed session has been stopped.
+        assert.equal(await session.isSessionAlive(), false);
+        oneShotArgs = args;
+        return {
+          exitCode: 0,
+          stdout: [
+            resultRecord({ ok: 'true', x: '5', y: '6', width: '300', height: '400' }),
+            'INSTRUMENTATION_CODE: 0',
+          ].join('\n'),
+          stderr: '',
+        };
+      }),
+    },
+    { serial: device.id },
+    async () => await readAndroidTouchHelperViewport(device),
+  );
+
+  assert.deepEqual(viewportResult, { x: 5, y: 6, width: 300, height: 400 });
+  assert.ok(oneShotArgs?.includes('viewport'));
+});
