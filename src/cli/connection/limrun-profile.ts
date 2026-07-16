@@ -15,7 +15,7 @@ export function resolveLimrunConnectProfile(options: {
   env?: EnvMap;
 }): { flags: CliFlags; remoteConfigPath: string } {
   const env = options.env ?? process.env;
-  const apiKey = env.LIMRUN_API_KEY?.trim() || env.LIM_API_KEY?.trim();
+  const apiKey = env.LIMRUN_API_KEY?.trim();
   if (!apiKey) {
     throw new AppError('INVALID_ARGS', 'connect limrun requires LIMRUN_API_KEY.', {
       hint: 'Set LIMRUN_API_KEY in the environment before running agent-device connect limrun.',

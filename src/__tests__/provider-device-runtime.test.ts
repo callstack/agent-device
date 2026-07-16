@@ -5,7 +5,6 @@ import {
   configureProviderPortReverse,
   getProviderDeviceInteractor,
   installProviderDeviceApp,
-  removeProviderPortReverse,
   setActiveProviderDeviceRuntimes,
   type ProviderDeviceRuntime,
 } from '../provider-device-runtime.ts';
@@ -106,16 +105,6 @@ async function assertProviderRuntimeDelegates(world: ReturnType<typeof makeProvi
     }),
     { provider: 'hit' },
   );
-  assert.deepEqual(
-    await removeProviderPortReverse({
-      leaseId: world.lease.leaseId,
-      provider: 'hit',
-      devicePort: 8097,
-      hostPort: 8097,
-      name: 'devtools',
-    }),
-    { provider: 'hit' },
-  );
 }
 
 test('provider device install fails explicitly when an owning provider has no install hook', async () => {
@@ -164,7 +153,6 @@ function makeRuntime(options: {
     getInteractor: () => options.interactor,
     ...(options.installHook === false ? {} : { installApp: async () => options.installResult }),
     configurePortReverse: async () => options.portReverseResult,
-    removePortReverse: async () => options.portReverseResult,
     shutdown: async () => undefined,
   };
 }

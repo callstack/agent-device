@@ -12,11 +12,9 @@ import {
 import {
   configureProviderPortReverse,
   type ProviderPortReverseOptions,
-  removeProviderPortReverse,
 } from '../../provider-device-runtime.ts';
 
 type RuntimeAction = 'set' | 'show' | 'clear';
-type PortReverseAction = 'port-reverse' | 'port-reverse-remove';
 type PortReverseParseResult =
   | { ok: true; options: ProviderPortReverseOptions }
   | { ok: false; response: DaemonResponse };
@@ -34,14 +32,11 @@ export async function handleRuntimeCommand(params: {
 }): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore } = params;
   const action = (req.positionals?.[0] ?? 'show').toLowerCase();
-  if (isPortReverseAction(action)) {
-    return await handlePortReverseCommand(req, action);
+  if (action === 'port-reverse') {
+    return await handlePortReverseCommand(req);
   }
   if (!isRuntimeAction(action)) {
-    return errorResponse(
-      'INVALID_ARGS',
-      'runtime requires set, show, clear, port-reverse, or port-reverse-remove',
-    );
+    return errorResponse('INVALID_ARGS', 'runtime requires set, show, clear, or port-reverse');
   }
   const session = sessionStore.get(sessionName);
   const current = sessionStore.getRuntimeHints(sessionName);
@@ -57,10 +52,6 @@ export async function handleRuntimeCommand(params: {
 
 function isRuntimeAction(action: string): action is RuntimeAction {
   return action === 'set' || action === 'show' || action === 'clear';
-}
-
-function isPortReverseAction(action: string): action is PortReverseAction {
-  return action === 'port-reverse' || action === 'port-reverse-remove';
 }
 
 async function clearRuntimeCommand(
@@ -141,13 +132,10 @@ function setRuntimeCommand(params: {
   };
 }
 
-async function handlePortReverseCommand(
-  req: DaemonRequest,
-  action: PortReverseAction,
-): Promise<DaemonResponse> {
+async function handlePortReverseCommand(req: DaemonRequest): Promise<DaemonResponse> {
   const parsed = readPortReverseOptions(req);
   if (!parsed.ok) return parsed.response;
-  const result = await executePortReverseAction(action, parsed.options);
+  const result = await configureProviderPortReverse(parsed.options);
   if (!result) {
     return errorResponse(
       'UNSUPPORTED_OPERATION',
@@ -157,7 +145,7 @@ async function handlePortReverseCommand(
   return {
     ok: true,
     data: {
-      action,
+      action: 'port-reverse',
       ...result,
     },
   };
@@ -215,16 +203,6 @@ function readPortReversePorts(req: DaemonRequest): PortReversePorts {
     };
   }
   return { ok: true, devicePort, hostPort };
-}
-
-async function executePortReverseAction(
-  action: PortReverseAction,
-  options: ProviderPortReverseOptions,
-): Promise<Record<string, unknown> | undefined> {
-  if (action === 'port-reverse') {
-    return await configureProviderPortReverse(options);
-  }
-  return await removeProviderPortReverse(options);
 }
 
 function readTcpPort(value: unknown): number | undefined {

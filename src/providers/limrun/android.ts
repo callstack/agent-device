@@ -114,13 +114,6 @@ export async function configureLimrunAndroidPortReverse(
   });
 }
 
-export async function removeLimrunAndroidPortReverse(
-  session: LimrunAndroidSession,
-  options: ProviderPortReverseOptions,
-): Promise<void> {
-  await session.adbProvider.reverse?.remove(tcpEndpoint(options.devicePort));
-}
-
 export async function cleanupLimrunAndroidAdbTunnel(session: LimrunAndroidSession): Promise<void> {
   await session.adbTunnelPromise?.catch(() => {});
   const serial = session.adbSerial;

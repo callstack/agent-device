@@ -19,7 +19,6 @@ import {
   createLimrunAndroidInteractor,
   createLimrunAndroidSession,
   installLimrunAndroidApp,
-  removeLimrunAndroidPortReverse,
   type LimrunAndroidSession,
 } from './android.ts';
 import {
@@ -55,11 +54,11 @@ type LimrunRuntimeOptions = {
 const LIMRUN_CLIENT_HEADER = 'agent-device-cli';
 
 export function createLimrunRuntimeFromEnv(env: NodeJS.ProcessEnv): LimrunRuntime | undefined {
-  const apiKey = env.LIMRUN_API_KEY?.trim() || env.LIM_API_KEY?.trim();
+  const apiKey = env.LIMRUN_API_KEY?.trim();
   if (!apiKey) return undefined;
   return new LimrunRuntime({
     apiKey,
-    region: env.LIMRUN_REGION?.trim() || env.LIM_REGION?.trim() || undefined,
+    region: env.LIMRUN_REGION?.trim() || undefined,
     version: readVersion(),
   });
 }
@@ -148,15 +147,6 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
     const session = this.requireAndroidPortReverseSession(options.leaseId);
     if (!session) return undefined;
     await configureLimrunAndroidPortReverse(session, options);
-    return portReverseResult(options);
-  }
-
-  async removePortReverse(
-    options: ProviderPortReverseOptions,
-  ): Promise<Record<string, unknown> | undefined> {
-    const session = this.findAndroidPortReverseSession(options.leaseId);
-    if (!session) return undefined;
-    await removeLimrunAndroidPortReverse(session, options);
     return portReverseResult(options);
   }
 
@@ -298,11 +288,6 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
       'port reverse',
       'Direct Limrun iOS sessions cannot reach local host ports; use a bridge public URL.',
     );
-  }
-
-  private findAndroidPortReverseSession(leaseId: string): LimrunAndroidSession | undefined {
-    const session = this.sessions.get(leaseId);
-    return session?.platform === 'android' ? session : undefined;
   }
 }
 

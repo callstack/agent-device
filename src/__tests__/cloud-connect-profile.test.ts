@@ -168,7 +168,7 @@ test('connect limrun requires LIMRUN_API_KEY', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-limrun-env-'));
   const stateDir = path.join(tempRoot, '.state');
   vi.stubEnv('LIMRUN_API_KEY', '');
-  vi.stubEnv('LIM_API_KEY', '');
+  vi.stubEnv('LIM_API_KEY', 'lim_test_key');
 
   try {
     await assert.rejects(

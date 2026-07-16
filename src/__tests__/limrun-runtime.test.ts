@@ -553,7 +553,7 @@ test('Limrun iOS maps supported orientation and rejects unsupported upside-down 
   }
 });
 
-test('Limrun Android configures and removes an explicit port reverse', async () => {
+test('Limrun Android configures an explicit port reverse', async () => {
   const runtime = new LimrunRuntime({
     apiKey: 'lim_test_key',
     version: '9.9.9-test',
@@ -588,25 +588,11 @@ test('Limrun Android configures and removes an explicit port reverse', async () 
         name: 'react-devtools',
       },
     );
-    await runtime.removePortReverse({
-      leaseId: lease.leaseId,
-      devicePort: 8097,
-      hostPort: 8097,
-      name: 'react-devtools',
-    });
-
     assert.deepEqual(vi.mocked(runCmd).mock.calls[0]?.[1], [
       '-s',
       '127.0.0.1:62001',
       'reverse',
       'tcp:8097',
-      'tcp:8097',
-    ]);
-    assert.deepEqual(vi.mocked(runCmd).mock.calls[1]?.[1], [
-      '-s',
-      '127.0.0.1:62001',
-      'reverse',
-      '--remove',
       'tcp:8097',
     ]);
   } finally {

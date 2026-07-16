@@ -55,7 +55,7 @@ Required environment:
 export LIMRUN_API_KEY=...
 ```
 
-`LIM_API_KEY` is accepted as a compatibility alias. `LIMRUN_REGION` (or `LIM_REGION`) optionally selects a Limrun region.
+`LIMRUN_REGION` optionally selects a Limrun region.
 
 Choose the platform to create a matching instance:
 

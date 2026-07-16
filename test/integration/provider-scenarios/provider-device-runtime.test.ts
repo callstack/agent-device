@@ -41,8 +41,7 @@ type FakeProviderCall = {
     | 'close'
     | 'tap'
     | 'snapshot'
-    | 'portReverse.ensure'
-    | 'portReverse.remove';
+    | 'portReverse.ensure';
   [key: string]: unknown;
 };
 
@@ -222,13 +221,6 @@ function providerScenarioSteps(
       expectData: { action: 'port-reverse', ...portReverse },
     },
     {
-      name: 'port-reverse-remove',
-      command: 'runtime',
-      positionals: ['port-reverse-remove'],
-      flags: DEVTOOLS_PORT_REVERSE,
-      expectData: { action: 'port-reverse-remove', ...portReverse },
-    },
-    {
       name: 'release',
       command: 'lease_release',
       expectData: { released: true, provider: { provider: FAKE_PROVIDER } },
@@ -299,7 +291,6 @@ function assertFakeProviderCallOrder(calls: FakeProviderCall[]): void {
       'tap',
       'snapshot',
       'portReverse.ensure',
-      'portReverse.remove',
       'lease.release',
     ],
   );
@@ -409,14 +400,6 @@ class FakeProviderDeviceRuntime implements ProviderDeviceRuntime {
   ): Promise<Record<string, unknown> | undefined> {
     if (options.provider !== this.provider) return undefined;
     this.calls.push({ type: 'portReverse.ensure', options });
-    return { provider: this.provider, ...options };
-  }
-
-  async removePortReverse(
-    options: ProviderPortReverseOptions,
-  ): Promise<Record<string, unknown> | undefined> {
-    if (options.provider !== this.provider) return undefined;
-    this.calls.push({ type: 'portReverse.remove', options });
     return { provider: this.provider, ...options };
   }
 

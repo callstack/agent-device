@@ -46,9 +46,6 @@ export type ProviderDeviceRuntime = {
   configurePortReverse?(
     options: ProviderPortReverseOptions,
   ): Promise<Record<string, unknown> | undefined>;
-  removePortReverse?(
-    options: ProviderPortReverseOptions,
-  ): Promise<Record<string, unknown> | undefined>;
   shutdown(): Promise<void>;
 };
 
@@ -144,17 +141,6 @@ export async function configureProviderPortReverse(
   for (const runtime of getActiveProviderDeviceRuntimes()) {
     if (!runtimeMatchesProvider(runtime, options.provider)) continue;
     const result = await runtime.configurePortReverse?.(options);
-    if (result) return result;
-  }
-  return undefined;
-}
-
-export async function removeProviderPortReverse(
-  options: ProviderPortReverseOptions,
-): Promise<Record<string, unknown> | undefined> {
-  for (const runtime of getActiveProviderDeviceRuntimes()) {
-    if (!runtimeMatchesProvider(runtime, options.provider)) continue;
-    const result = await runtime.removePortReverse?.(options);
     if (result) return result;
   }
   return undefined;
