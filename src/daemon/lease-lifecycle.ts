@@ -101,17 +101,20 @@ export async function releaseSessionLease(params: {
 }): Promise<Record<string, unknown> | undefined> {
   const lease = params.session.lease;
   if (!lease) return undefined;
-  const result = params.leaseRegistry.releaseLease(
-    leaseScopeToReleaseRequest({
-      leaseId: lease.leaseId,
-      tenantId: lease.tenantId,
-      runId: lease.runId,
-      leaseBackend: lease.leaseBackend,
-      leaseProvider: lease.leaseProvider,
-      deviceKey: lease.deviceKey,
-      clientId: lease.clientId,
-    }),
-  );
+  const releaseRequest = leaseScopeToReleaseRequest({
+    leaseId: lease.leaseId,
+    tenantId: lease.tenantId,
+    runId: lease.runId,
+    leaseBackend: lease.leaseBackend,
+    leaseProvider: lease.leaseProvider,
+    deviceKey: lease.deviceKey,
+    clientId: lease.clientId,
+  });
+  const activeLease = params.leaseRegistry.getLease(releaseRequest);
+  const providerData = activeLease
+    ? await params.leaseLifecycleProvider?.release?.(activeLease)
+    : undefined;
+  const result = params.leaseRegistry.releaseLease(releaseRequest);
   emitDiagnostic({
     level: 'info',
     phase: 'session_lease_released',
@@ -121,5 +124,5 @@ export async function releaseSessionLease(params: {
       released: result.released,
     },
   });
-  return result.lease ? await params.leaseLifecycleProvider?.release?.(result.lease) : undefined;
+  return providerData;
 }

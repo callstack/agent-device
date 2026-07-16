@@ -220,6 +220,7 @@ async function completeOpenCommand(params: {
 
   const shouldPrewarmIosRunner =
     isIosFamily(device) &&
+    !isActiveProviderDevice(device) &&
     surface === 'app' &&
     openPositionals.length > 0 &&
     Boolean(sessionAppBundleId);

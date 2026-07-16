@@ -170,7 +170,7 @@ function toRepairPlatformCloseFailure(error: unknown): AppError {
 // Runs the failure-isolated resource teardown and the targeted platform close
 // (#1225). Returns the preserved platform-close error (if any); best-effort
 // cleanup failures are pushed into `cleanupFailures`. Never throws for a cleanup
-// step so the caller's lease release and session deletion always run.
+// step so the caller can make an explicit decision about lease/session commit.
 async function runSessionCloseTeardown(params: {
   req: DaemonRequest;
   session: SessionState;
@@ -404,32 +404,36 @@ export async function handleCloseCommand(params: {
   let providerData: Record<string, unknown> | undefined;
   // Resource teardown is failure-isolated: a rejected step is collected instead of
   // short-circuiting the rest, so every subsequent resource (and the runner stop)
-  // is still attempted. Lease release and session deletion below run regardless,
-  // and any collected failures are surfaced as an aggregate after cleanup.
+  // is still attempted. The provider lease is committed only after that teardown,
+  // and a failed provider release keeps the session retryable.
   const cleanupFailures: SessionCleanupFailure[] = [];
-  let platformCloseError: unknown;
+  const platformCloseError = await runSessionCloseTeardown({
+    req,
+    session,
+    sessionName,
+    logPath,
+    sessionStore,
+    cleanupFailures,
+    repairArmed,
+    // The platform close for a repair-armed session already ran (and was
+    // confirmed to succeed) above, before the commit — never dispatch it twice.
+    skipPlatformClose: repairArmed,
+  });
   try {
-    platformCloseError = await runSessionCloseTeardown({
-      req,
-      session,
-      sessionName,
-      logPath,
-      sessionStore,
-      cleanupFailures,
-      repairArmed,
-      // The platform close for a repair-armed session already ran (and was
-      // confirmed to succeed) above, before the commit — never dispatch it twice.
-      skipPlatformClose: repairArmed,
-    });
-  } finally {
-    // Always drop the local session, even if provider-side release fails:
-    // a failed close must not strand device ownership until inactivity expiry.
-    try {
-      providerData = await releaseSessionLease({ session, leaseRegistry, leaseLifecycleProvider });
-    } finally {
-      sessionStore.delete(sessionName);
-    }
+    providerData = await releaseSessionLease({ session, leaseRegistry, leaseLifecycleProvider });
+  } catch (error) {
+    const normalized = normalizeError(error);
+    return {
+      ok: false,
+      error: {
+        ...normalized,
+        hint: 'The provider device could not be released. Retry close after the provider is reachable.',
+        details: { ...normalized.details, session: session.name },
+        retriable: true,
+      },
+    };
   }
+  sessionStore.delete(sessionName);
   const cleanupAggregate = reportSessionCleanupFailures({
     sessionName,
     phase: 'session_close_cleanup_failed',

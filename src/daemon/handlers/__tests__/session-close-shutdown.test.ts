@@ -481,7 +481,7 @@ test('close dispatches web session cleanup without a positional target', async (
   expect(sessionStore.get(sessionName)).toBeUndefined();
 });
 
-test('close deletes local session when provider lease release fails', async () => {
+test('close preserves the session and lease when provider release fails so it can be retried', async () => {
   const sessionStore = makeSessionStore();
   const leaseRegistry = new LeaseRegistry();
   const sessionName = 'provider-release-failure-session';
@@ -506,28 +506,49 @@ test('close deletes local session when provider lease release fails', async () =
     },
   });
 
-  await expect(
-    handleSessionCommands({
-      req: {
-        token: 't',
-        session: sessionName,
-        command: 'close',
-        positionals: [],
-        flags: {},
-      },
-      sessionName,
-      logPath: path.join(os.tmpdir(), 'daemon.log'),
-      sessionStore,
-      leaseRegistry,
-      leaseLifecycleProvider: {
-        release: async () => {
+  let releaseAttempts = 0;
+  const request = {
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: [],
+      flags: {},
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    leaseRegistry,
+    leaseLifecycleProvider: {
+      release: async () => {
+        releaseAttempts += 1;
+        if (releaseAttempts === 1) {
           throw new AppError('COMMAND_FAILED', 'provider cleanup failed');
-        },
+        }
+        return { releasedBy: 'provider' };
       },
-      invoke: noopInvoke,
-    }),
-  ).rejects.toThrow('provider cleanup failed');
+    },
+    invoke: noopInvoke,
+  };
 
+  const failed = await handleSessionCommands(request);
+  expect(failed).toMatchObject({
+    ok: false,
+    error: {
+      code: 'COMMAND_FAILED',
+      retriable: true,
+      details: { session: sessionName },
+    },
+  });
+  expect(sessionStore.get(sessionName)?.lease?.leaseId).toBe(lease.leaseId);
+  expect(leaseRegistry.listActiveLeases()).toHaveLength(1);
+
+  const retried = await handleSessionCommands(request);
+  expect(retried).toMatchObject({
+    ok: true,
+    data: { provider: { releasedBy: 'provider' } },
+  });
+  expect(releaseAttempts).toBe(2);
   expect(sessionStore.get(sessionName)).toBeUndefined();
   expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
 });

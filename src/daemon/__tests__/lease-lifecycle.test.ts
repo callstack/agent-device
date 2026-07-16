@@ -119,6 +119,43 @@ test('releaseSessionLease releases with the stored session owner scope', async (
   expect(provider).toEqual({ provider: 'proxy' });
 });
 
+test('releaseSessionLease keeps the local lease when the provider release fails', async () => {
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseBackend: 'ios-instance',
+    leaseProvider: 'proxy',
+    deviceKey: 'ios:SIM-001',
+    clientId: 'client-a',
+  });
+  const session = makeIosSession('default', {
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+      leaseProvider: lease.leaseProvider,
+      deviceKey: lease.deviceKey,
+      clientId: lease.clientId,
+    },
+  });
+
+  await expect(
+    releaseSessionLease({
+      session,
+      leaseRegistry,
+      leaseLifecycleProvider: {
+        release: async () => {
+          throw new Error('provider unavailable');
+        },
+      },
+    }),
+  ).rejects.toThrow('provider unavailable');
+
+  expect(leaseRegistry.listActiveLeases()).toEqual([lease]);
+});
+
 test('resolveSessionLeaseForRequest prefers admitted lease and falls back to existing lease', () => {
   const leaseRegistry = new LeaseRegistry();
   const lease = leaseRegistry.allocateLease({

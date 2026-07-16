@@ -1,4 +1,5 @@
 import { isIosFamily } from '../kernel/device.ts';
+import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 import type { SessionState } from './types.ts';
 import { tryParseSelectorChain } from '../selectors/index.ts';
 import { asAppError } from '../kernel/errors.ts';
@@ -13,6 +14,10 @@ export function readSimpleIosSelectorTarget(params: {
   const { session, selectorExpression } = params;
   if (!session) return null;
   if (!isIosFamily(session.device)) return null;
+  // This fast path talks directly to the local XCTest runner. Provider-owned
+  // iOS devices must resolve through their interactor-backed snapshot runtime
+  // instead, which keeps selectors and interaction guarantees on one backend.
+  if (isActiveProviderDevice(session.device)) return null;
   if (session.postGestureStabilization) return null;
   const chain = tryParseSelectorChain(selectorExpression);
   if (!chain) return null;

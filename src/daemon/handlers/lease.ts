@@ -98,10 +98,12 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
       };
     }
     case 'lease_release': {
-      const result = leaseRegistry.releaseLease(leaseScopeToReleaseRequest(leaseScope));
-      const providerData = result.lease
-        ? await leaseLifecycleProvider?.release?.(result.lease, { req })
+      const releaseRequest = leaseScopeToReleaseRequest(leaseScope);
+      const lease = leaseRegistry.getLease(releaseRequest);
+      const providerData = lease
+        ? await leaseLifecycleProvider?.release?.(lease, { req })
         : undefined;
+      const result = leaseRegistry.releaseLease(releaseRequest);
       return {
         ok: true,
         data: { released: result.released, ...(providerData ? { provider: providerData } : {}) },

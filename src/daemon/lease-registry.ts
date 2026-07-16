@@ -297,17 +297,28 @@ export class LeaseRegistry {
   }
 
   releaseLease(request: ReleaseLeaseRequest): { released: boolean; lease?: DeviceLease } {
-    const leaseId = this.normalizeRequiredLeaseId(request.leaseId);
-    this.cleanupExpiredLeases();
-    const lease = this.leases.get(leaseId);
+    const lease = this.getLease(request);
     if (!lease) {
       return { released: false };
     }
+    this.leases.delete(lease.leaseId);
+    this.unbindLease(lease);
+    return { released: true, lease };
+  }
+
+  /**
+   * Reads a releasable lease without committing its removal. Callers with an
+   * external provider use this to release the remote resource first, so a
+   * transient provider failure leaves the local lease available for retry.
+   */
+  getLease(request: ReleaseLeaseRequest): DeviceLease | undefined {
+    const leaseId = this.normalizeRequiredLeaseId(request.leaseId);
+    this.cleanupExpiredLeases();
+    const lease = this.leases.get(leaseId);
+    if (!lease) return undefined;
     this.assertRequiredScopeForDeviceAwareLease(lease, request);
     this.assertOptionalScopeMatch(lease, request);
-    this.leases.delete(leaseId);
-    this.unbindLease(lease);
-    return { released: true, lease: { ...lease } };
+    return { ...lease };
   }
 
   assertLeaseAdmission(request: AdmissionRequest): void {

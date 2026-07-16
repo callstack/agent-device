@@ -21,6 +21,7 @@ import type { ContextFromFlags } from './handlers/interaction-common.ts';
 import { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { createSelectorCaptureRuntime } from './selector-capture-runtime.ts';
+import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 
 export type SelectorRuntimeParams = {
   req: DaemonRequest;
@@ -199,6 +200,7 @@ function readAppleRunnerFindTextTarget(
   params: SelectorRuntimeDeviceParams,
 ): AppleRunnerFindTextTarget | null {
   if (!isApplePlatform(params.device.platform)) return null;
+  if (isActiveProviderDevice(params.device)) return null;
   if (!params.session?.appBundleId) return null;
   return {
     device: params.device,

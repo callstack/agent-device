@@ -3,6 +3,7 @@ import type { SessionSurface } from '../contracts/session-surface.ts';
 import type { AppleRunnerLifecycleOptions } from '../platforms/apple/core/runner/runner-provider.ts';
 import { prewarmAppleRunnerCache } from '../platforms/apple/core/runner/runner-client.ts';
 import { isIosFamily, type DeviceInfo } from '../kernel/device.ts';
+import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 import { contextFromFlags } from './context.ts';
 import type { DaemonRequest } from './types.ts';
 
@@ -63,7 +64,12 @@ export function createAppleRunnerCachePrewarmOnColdBoot(params: {
   enabled: boolean;
 }): ((device: DeviceInfo) => void) | undefined {
   const { req, logPath, device, traceLogPath, enabled } = params;
-  if (!enabled || !isIosFamily(device) || device.kind !== 'simulator') {
+  if (
+    !enabled ||
+    !isIosFamily(device) ||
+    isActiveProviderDevice(device) ||
+    device.kind !== 'simulator'
+  ) {
     return undefined;
   }
   return (bootingDevice) =>

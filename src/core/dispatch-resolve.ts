@@ -63,11 +63,14 @@ type ResolveTargetDeviceOptions = {
 async function resolveAppleDevice(
   devices: DeviceInfo[],
   selector: AppleDeviceSelector,
-  context: { simulatorSetPath?: string },
+  context: { simulatorSetPath?: string; allowLocalSimulatorFallback?: boolean },
 ): Promise<DeviceInfo> {
   const selected = await resolveAppleDeviceCandidate(devices, selector, context);
 
-  if (shouldUseAppleSimulatorFallback(selector, selected)) {
+  if (
+    context.allowLocalSimulatorFallback !== false &&
+    shouldUseAppleSimulatorFallback(selector, selected)
+  ) {
     const { findBootableIosSimulator } = await import('../platforms/apple/core/devices.ts');
     const simulator = await findBootableIosSimulator({
       simulatorSetPath: context.simulatorSetPath,
@@ -151,6 +154,7 @@ export async function resolveTargetDevice(
             cacheKey,
             await resolveAppleDevice(injectedDevices, selector as AppleDeviceSelector, {
               simulatorSetPath: iosSimulatorSetPath,
+              allowLocalSimulatorFallback: false,
             }),
           );
         }
