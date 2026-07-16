@@ -21,17 +21,6 @@ on:
       only:
         description: "Single scenario id to run (default: all)"
         required: false
-  # TEMPORARY — REMOVE BEFORE MERGE.
-  # workflow_dispatch only registers once a workflow is on the default branch, so
-  # this path cannot be dispatched pre-merge (the API returns 404). This trigger
-  # exists solely to prove the never-executed device path on the PR head and
-  # capture evidence. Delete this `push:` block once that run is green.
-  push:
-    branches:
-      - claude/maestro-conformance-oracle-acf8d5
-    paths:
-      - "scripts/maestro-conformance/**"
-      - ".github/workflows/conformance-differential.yml"
 
 permissions:
   contents: read
