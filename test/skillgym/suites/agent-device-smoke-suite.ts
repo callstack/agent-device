@@ -45,6 +45,9 @@ Use only this prompt plus local CLI help as private reference.
 Do not execute live app/device commands while planning; only local CLI help commands are allowed before final output.
 For local CLI help in this repo, use node bin/agent-device.mjs help or --help; final commands still use agent-device.
 If the app contract names an expected id, selector, or visible text, include that exact target in a final verification command instead of stopping at the action that reaches or reveals it.
+`.trim();
+
+const DEFAULT_FINAL_OUTPUT_INSTRUCTIONS = `
 Final output: only commands, one per line. Use agent-device for app/device automation; shell setup commands are allowed only when this prompt explicitly requires them. Any prose or Markdown fails.
 Every final output line must start with agent-device.
 Do not combine final commands with shell operators such as &&, ||, pipes, or semicolons.
@@ -62,9 +65,15 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function buildPrompt(options: { contract: string[]; task: string }) {
+function buildPrompt(options: {
+  contract: string[];
+  task: string;
+  finalOutputInstructions?: string;
+}) {
   const contractLines = options.contract.map((line) => `- ${line}`).join('\n');
-  return `${BASE_INSTRUCTIONS}\n\nApp contract:\n${contractLines}\n\nTask:\n${options.task}`;
+  const finalOutputInstructions =
+    options.finalOutputInstructions ?? DEFAULT_FINAL_OUTPUT_INSTRUCTIONS;
+  return `${BASE_INSTRUCTIONS}\n${finalOutputInstructions}\n\nApp contract:\n${contractLines}\n\nTask:\n${options.task}`;
 }
 
 function assertAgentDeviceEvidence(report: SessionReport) {
@@ -451,11 +460,16 @@ function makeCase(options: {
   forbiddenOutputs?: OutputMatcher[];
   strictFinalOutput?: boolean;
   allowOnlyLocalCliHelpCommands?: boolean;
+  finalOutputInstructions?: string;
 }): Case {
   return {
     id: options.id,
     tags: options.tags,
-    prompt: buildPrompt({ contract: options.contract, task: options.task }),
+    prompt: buildPrompt({
+      contract: options.contract,
+      task: options.task,
+      finalOutputInstructions: options.finalOutputInstructions,
+    }),
     assert(report, ctx) {
       assertAgentDeviceEvidence(report);
       assertNoProjectSourceReads(report);
@@ -692,11 +706,44 @@ const FIXTURE_SMOKE_CASES: Case[] = [
       'Current screen: Checkout form tab',
       'testID=field-name',
       'keyboard dismiss already returned UNSUPPORTED_OPERATION',
-      'visible app keyboard close control: Done',
+      'Visible text "Order summary" belongs to a tappable accordion',
+      'testID=submit-order is partly occluded, and pressing it would submit the form',
+      'No app-provided keyboard close control is available',
     ],
-    task: 'Assume Agent Device Tester is on the Checkout form tab. Plan the fallback commands to focus the Full name field, close the iOS keyboard through the visible app control, and verify the field remains visible.',
-    outputs: [/field-name/i, /Done/i, plannedCommandAlternatives(['press', 'click'])],
-    forbiddenOutputs: [plannedCommand('keyboard dismiss'), plannedCommand('back')],
+    task: 'Decide whether there is a safe app-agnostic fallback that can hide the keyboard.',
+    finalOutputInstructions:
+      'Final output: one concise prose sentence stating the safe outcome. Do not output commands or Markdown.',
+    outputs: [/(?:keyboard dismissal is unavailable|cannot safely dismiss the keyboard)/i],
+    forbiddenOutputs: [
+      plannedCommand('keyboard dismiss'),
+      plannedCommand('back'),
+      plannedCommandAlternatives(['press', 'click']),
+      /agent-device/i,
+      /(?:press|click)[^\n]*(?:Order summary|submit-order)/i,
+    ],
+  }),
+  makeCase({
+    id: 'form-keyboard-dismiss-ios-app-control-fallback',
+    contract: [
+      'App name: Agent Device Tester',
+      'Platform: iOS simulator',
+      'Current screen: Checkout form tab with the keyboard visible',
+      'keyboard dismiss already returned UNSUPPORTED_OPERATION',
+      'The focused field accessory exposes a Done control',
+      'Visible text "Order summary" belongs to a tappable accordion',
+      'testID=submit-order is occluded while the keyboard is visible',
+    ],
+    task: 'Plan the safe fallback commands to hide the keyboard and prove that the previously occluded Submit order target became visible.',
+    outputs: [
+      plannedCommandAlternatives(['press', 'click']),
+      plannedCommand('is visible'),
+      /(?:press|click)[^\n]*Done[\s\S]*is visible[^\n]*submit-order/i,
+    ],
+    forbiddenOutputs: [
+      plannedCommand('keyboard dismiss'),
+      plannedCommand('back'),
+      /(?:press|click)[^\n]*Order summary/i,
+    ],
   }),
   makeCase({
     id: 'android-keyboard-dismiss-back-when-allowed',
@@ -705,10 +752,10 @@ const FIXTURE_SMOKE_CASES: Case[] = [
       'Platform: Android',
       'Current screen: Checkout form tab with the keyboard visible',
       'testID=field-name',
-      'keyboard dismiss already returned UNSUPPORTED_OPERATION because the current IME needs back navigation',
-      'The task explicitly permits normal Android back behavior',
+      'keyboard dismiss already returned UNSUPPORTED_OPERATION because the current IME requires navigation to close',
+      'Moving one level toward the previous UI state is acceptable for this task',
     ],
-    task: 'Plan the fallback commands to hide the Android keyboard using permitted back behavior and verify the Full name field remains visible.',
+    task: 'Plan the safe fallback commands to hide the keyboard and verify the Full name field remains visible.',
     outputs: [
       plannedCommand('back'),
       plannedCommand('is visible'),
