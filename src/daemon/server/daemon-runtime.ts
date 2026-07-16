@@ -102,6 +102,8 @@ export async function startDaemonRuntime(
     { providerRuntimeRequiredIds: DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS },
   );
   const expiredProviderLeaseReleaser = createExpiredProviderLeaseReleaser({
+    leaseLifecycleProvider: providerRuntimeProviders.leaseLifecycleProvider,
+    providerRuntimeIds: providerRuntimeProviders.providerRuntimeIds,
     recoverExpiredLease: providerRuntimeProviders.recoverExpiredLease,
     stateDir: baseDir,
     recoverableProviderIds: providerRuntimeProviders.recoverableProviderIds,

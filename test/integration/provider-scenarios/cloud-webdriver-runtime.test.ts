@@ -10,6 +10,7 @@ import { parseWebDriverSource } from '../../../src/cloud-webdriver/webdriver-sou
 import { CLOUD_WEBDRIVER_PROVIDERS } from '../../../src/cloud-webdriver/providers.ts';
 import type { CloudArtifact } from '../../../src/cloud-artifacts.ts';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
+import { createExpiredProviderLeaseReleaser } from '../../../src/daemon/provider-lease-expiry.ts';
 import type { DeviceLease } from '../../../src/daemon/lease-registry.ts';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
@@ -104,6 +105,29 @@ test('Cloud WebDriver release still returns artifacts when WebDriver session del
     assert.match(data.provider?.warnings?.[0]?.message ?? '', /stale webdriver session/);
     assert.equal(data.provider?.cloudArtifacts?.status, 'ready');
     assert.equal(data.provider?.cloudArtifacts?.cloudArtifacts?.[0]?.kind, 'video');
+  });
+}, 15_000);
+
+test('Cloud WebDriver expiry releases the live provider session', async () => {
+  await withProviderScenarioResource(createCloudWebDriverWorld, async (world) => {
+    const lease = await allocateWebDriverLease(world.daemon);
+    const releaser = createExpiredProviderLeaseReleaser({
+      leaseLifecycleProvider: world.providers.leaseLifecycleProvider,
+      providerRuntimeIds: world.providers.providerRuntimeIds,
+      recoverableProviderIds: world.providers.recoverableProviderIds,
+    });
+
+    try {
+      await releaser.release(lease);
+      assert.equal(
+        world.server.calls.some(
+          (call) => call.method === 'DELETE' && call.path === '/wd/hub/session/wd-1',
+        ),
+        true,
+      );
+    } finally {
+      releaser.shutdown();
+    }
   });
 }, 15_000);
 
@@ -285,6 +309,7 @@ async function createCloudWebDriverWorld(
   return {
     daemon,
     server,
+    providers,
     failNextArtifactLookup: () => {
       artifactFailuresRemaining += 1;
     },

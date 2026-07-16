@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ProviderExpiredLeaseRecovery } from '../provider-device-runtime.ts';
+import type { LeaseLifecycleProvider } from './handlers/lease.ts';
 import { releaseExpiredProviderLease } from './lease-lifecycle.ts';
 import type { DeviceLease } from './lease-registry.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
@@ -31,13 +32,16 @@ export type ExpiredProviderLeaseReleaser = {
 };
 
 export function createExpiredProviderLeaseReleaser(options: {
+  leaseLifecycleProvider?: LeaseLifecycleProvider;
+  providerRuntimeIds?: readonly string[];
   recoverExpiredLease?: ProviderExpiredLeaseRecovery;
   stateDir?: string;
   recoverableProviderIds?: readonly string[];
   retryDelayMs?: number;
 }): ExpiredProviderLeaseReleaser {
-  const pendingLeases = loadPendingLeases(options.stateDir);
-  const persistedLeaseIds = new Set(pendingLeases.keys());
+  const pendingLiveLeases = new Map<string, DeviceLease>();
+  const pendingRecoveryLeases = loadPendingLeases(options.stateDir);
+  const persistedRecoveryLeaseIds = new Set(pendingRecoveryLeases.keys());
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   let retryTimer: Timer | undefined;
   let retrying = false;
@@ -45,31 +49,33 @@ export function createExpiredProviderLeaseReleaser(options: {
   const persistPendingLeases = (): boolean => {
     if (!options.stateDir) {
       emitPersistenceFailure(
-        pendingLeases.size,
+        pendingRecoveryLeases.size,
         new Error('daemon state directory is unavailable'),
       );
       return false;
     }
     const filePath = pendingReleasesPath(options.stateDir);
     try {
-      if (pendingLeases.size === 0) {
+      if (pendingRecoveryLeases.size === 0) {
         fs.rmSync(filePath, { force: true });
       } else {
         fs.mkdirSync(options.stateDir, { recursive: true, mode: 0o700 });
         const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
         const record: PersistedExpiredProviderLeases = {
           version: PENDING_RELEASES_VERSION,
-          leases: [...pendingLeases.values()],
+          leases: [...pendingRecoveryLeases.values()],
         };
         fs.writeFileSync(temporaryPath, `${JSON.stringify(record)}\n`, { mode: 0o600 });
         fs.renameSync(temporaryPath, filePath);
         fs.chmodSync(filePath, 0o600);
       }
-      persistedLeaseIds.clear();
-      for (const leaseId of pendingLeases.keys()) persistedLeaseIds.add(leaseId);
+      persistedRecoveryLeaseIds.clear();
+      for (const leaseId of pendingRecoveryLeases.keys()) {
+        persistedRecoveryLeaseIds.add(leaseId);
+      }
       return true;
     } catch (error) {
-      emitPersistenceFailure(pendingLeases.size, error);
+      emitPersistenceFailure(pendingRecoveryLeases.size, error);
       return false;
     }
   };
@@ -77,9 +83,8 @@ export function createExpiredProviderLeaseReleaser(options: {
   const scheduleRetry = (): void => {
     if (
       retryTimer ||
-      ![...pendingLeases.values()].some((lease) =>
-        isRecoverableProviderAvailable(lease, options.recoverableProviderIds),
-      )
+      (!hasRetryableLiveLease(pendingLiveLeases, options.providerRuntimeIds) &&
+        !hasRetryableRecoveryLease(pendingRecoveryLeases, options.recoverableProviderIds))
     ) {
       return;
     }
@@ -91,25 +96,43 @@ export function createExpiredProviderLeaseReleaser(options: {
     emitDiagnostic({
       level: 'warn',
       phase: 'provider_lease_expiry_retry_scheduled',
-      data: { pendingLeaseCount: pendingLeases.size, retryDelayMs },
+      data: {
+        pendingLiveLeaseCount: pendingLiveLeases.size,
+        pendingRecoveryLeaseCount: pendingRecoveryLeases.size,
+        retryDelayMs,
+      },
     });
+  };
+
+  const retryPendingLiveLeases = async (): Promise<void> => {
+    for (const lease of pendingLiveLeases.values()) {
+      if (!isProviderRuntimeAvailable(lease, options.providerRuntimeIds)) continue;
+      if (await releaseLiveProviderLease(options.leaseLifecycleProvider, lease)) {
+        pendingLiveLeases.delete(lease.leaseId);
+      }
+    }
+  };
+
+  const retryPendingRecoveryLeases = async (): Promise<void> => {
+    for (const lease of pendingRecoveryLeases.values()) {
+      if (!isRecoverableProviderAvailable(lease, options.recoverableProviderIds)) continue;
+      if (!persistedRecoveryLeaseIds.has(lease.leaseId) && !persistPendingLeases()) continue;
+      if (await releaseExpiredProviderLease(options.recoverExpiredLease, lease)) {
+        pendingRecoveryLeases.delete(lease.leaseId);
+        persistPendingLeases();
+      }
+    }
   };
 
   const retryPending = async (): Promise<void> => {
     if (retrying) return;
     retrying = true;
     try {
-      for (const lease of pendingLeases.values()) {
-        if (!isRecoverableProviderAvailable(lease, options.recoverableProviderIds)) continue;
-        if (!persistedLeaseIds.has(lease.leaseId) && !persistPendingLeases()) continue;
-        if (await releaseExpiredProviderLease(options.recoverExpiredLease, lease)) {
-          pendingLeases.delete(lease.leaseId);
-          persistPendingLeases();
-        }
-      }
+      await retryPendingLiveLeases();
+      await retryPendingRecoveryLeases();
     } finally {
       retrying = false;
-      if (pendingLeases.size === 0 && retryTimer) {
+      if (pendingLiveLeases.size === 0 && pendingRecoveryLeases.size === 0 && retryTimer) {
         clearTimeout(retryTimer);
         retryTimer = undefined;
       } else {
@@ -120,19 +143,23 @@ export function createExpiredProviderLeaseReleaser(options: {
 
   return {
     release: async (lease) => {
-      if (
-        !lease.leaseProvider ||
-        !options.recoverExpiredLease ||
-        !isRecoverableProviderAvailable(lease, options.recoverableProviderIds)
-      ) {
+      if (!lease.leaseProvider) return;
+      if (isRecoverableProviderAvailable(lease, options.recoverableProviderIds)) {
+        pendingRecoveryLeases.set(lease.leaseId, lease);
+        if (persistPendingLeases()) {
+          await retryPending();
+        } else {
+          scheduleRetry();
+        }
         return;
       }
-      pendingLeases.set(lease.leaseId, lease);
-      if (!persistPendingLeases()) {
-        scheduleRetry();
-        return;
-      }
+      if (!isProviderRuntimeAvailable(lease, options.providerRuntimeIds)) return;
+      if (!options.leaseLifecycleProvider?.release) return;
+      pendingLiveLeases.set(lease.leaseId, lease);
       await retryPending();
+      if (pendingLiveLeases.has(lease.leaseId)) {
+        scheduleRetry();
+      }
     },
     retryPending,
     shutdown: () => {
@@ -140,6 +167,47 @@ export function createExpiredProviderLeaseReleaser(options: {
       retryTimer = undefined;
     },
   };
+}
+
+async function releaseLiveProviderLease(
+  leaseLifecycleProvider: LeaseLifecycleProvider | undefined,
+  lease: DeviceLease,
+): Promise<boolean> {
+  return await releaseExpiredProviderLease(
+    leaseLifecycleProvider?.release
+      ? async (expiredLease) => {
+          await leaseLifecycleProvider.release?.(expiredLease);
+        }
+      : undefined,
+    lease,
+  );
+}
+
+function hasRetryableLiveLease(
+  pendingLeases: ReadonlyMap<string, DeviceLease>,
+  providerRuntimeIds: readonly string[] | undefined,
+): boolean {
+  return [...pendingLeases.values()].some((lease) =>
+    isProviderRuntimeAvailable(lease, providerRuntimeIds),
+  );
+}
+
+function hasRetryableRecoveryLease(
+  pendingLeases: ReadonlyMap<string, DeviceLease>,
+  recoverableProviderIds: readonly string[] | undefined,
+): boolean {
+  return [...pendingLeases.values()].some((lease) =>
+    isRecoverableProviderAvailable(lease, recoverableProviderIds),
+  );
+}
+
+function isProviderRuntimeAvailable(
+  lease: DeviceLease,
+  providerRuntimeIds: readonly string[] | undefined,
+): boolean {
+  return (
+    lease.leaseProvider !== undefined && providerRuntimeIds?.includes(lease.leaseProvider) === true
+  );
 }
 
 function isRecoverableProviderAvailable(

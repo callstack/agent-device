@@ -5,9 +5,8 @@ import { expect, test, vi } from 'vitest';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
 import { LeaseRegistry, type DeviceLease } from '../lease-registry.ts';
 
-test('retries an expired provider lease release after a transient failure', async () => {
+test('retries an expired live-only provider lease release after a transient failure', async () => {
   vi.useFakeTimers();
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-expired-provider-lease-'));
   let now = 1_000;
   const leaseRegistry = new LeaseRegistry({
     defaultLeaseTtlMs: 10,
@@ -17,18 +16,15 @@ test('retries an expired provider lease release after a transient failure', asyn
   const lease = leaseRegistry.allocateLease({
     tenantId: 'tenant-a',
     runId: 'run-1',
-    leaseProvider: 'limrun',
+    leaseProvider: 'browserstack',
   });
   const release = vi
     .fn<(lease: DeviceLease) => Promise<Record<string, unknown>>>()
     .mockRejectedValueOnce(new Error('temporary provider outage'))
     .mockResolvedValueOnce({ limrunInstanceId: 'instance-1' });
   const releaser = createExpiredProviderLeaseReleaser({
-    recoverExpiredLease: async (expiredLease) => {
-      await release(expiredLease);
-    },
-    stateDir,
-    recoverableProviderIds: ['limrun'],
+    leaseLifecycleProvider: { release },
+    providerRuntimeIds: ['browserstack'],
     retryDelayMs: 10,
   });
 
@@ -46,7 +42,6 @@ test('retries an expired provider lease release after a transient failure', asyn
   } finally {
     releaser.shutdown();
     vi.useRealTimers();
-    fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
 
