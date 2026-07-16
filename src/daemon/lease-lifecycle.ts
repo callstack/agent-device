@@ -15,8 +15,8 @@ export type SessionTeardown = (session: SessionState, sessionName: string) => Pr
 export async function releaseExpiredProviderLease(
   leaseLifecycleProvider: LeaseLifecycleProvider | undefined,
   lease: DeviceLease,
-): Promise<void> {
-  if (!lease.leaseProvider || !leaseLifecycleProvider?.release) return;
+): Promise<boolean> {
+  if (!lease.leaseProvider || !leaseLifecycleProvider?.release) return true;
 
   try {
     const provider = await leaseLifecycleProvider.release(lease);
@@ -29,6 +29,7 @@ export async function releaseExpiredProviderLease(
         ...(provider ? { providerData: provider } : {}),
       },
     });
+    return true;
   } catch (error) {
     emitDiagnostic({
       level: 'error',
@@ -39,6 +40,7 @@ export async function releaseExpiredProviderLease(
         error: error instanceof Error ? error.message : String(error),
       },
     });
+    return false;
   }
 }
 

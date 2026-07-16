@@ -1,5 +1,6 @@
 import { isIosFamily, type DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
+import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
 import { getRunnerSessionSnapshot } from '../../platforms/apple/core/runner/runner-client.ts';
 import { resolveTargetDevice } from '../../core/dispatch.ts';
@@ -34,7 +35,7 @@ export function hasExplicitSessionFlag(flags: DaemonRequest['flags'] | undefined
 }
 
 export async function settleIosSimulator(device: DeviceInfo, delayMs: number): Promise<void> {
-  if (!isIosSimulator(device) || delayMs <= 0) return;
+  if (isActiveProviderDevice(device) || !isIosSimulator(device) || delayMs <= 0) return;
   await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
 }
 
@@ -58,6 +59,9 @@ export async function resolveCommandDevice(params: {
 }
 
 export async function refreshSessionDeviceIfNeeded(device: DeviceInfo): Promise<DeviceInfo> {
+  if (isActiveProviderDevice(device)) {
+    return device;
+  }
   if (!isIosFamily(device) || device.kind !== 'simulator') {
     return device;
   }

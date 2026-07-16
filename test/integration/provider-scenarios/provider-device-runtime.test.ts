@@ -56,6 +56,32 @@ test('Provider-backed scenario composes lease, inventory, dispatch, and port rev
   });
 }, 15_000);
 
+test('provider-owned iOS simulators relaunch without local CoreSimulator refresh', async () => {
+  await withProviderScenarioResource(
+    async () => await createFakeProviderWorld('ios'),
+    async ({ daemon, runtime }) => {
+      const lease = await allocateIosFakeProviderLease(daemon);
+      const flags = iosLeaseFlags(lease.leaseId);
+      const options = { meta: iosLeaseMeta(lease.leaseId) };
+
+      assertRpcOk(await daemon.callCommand('open', ['com.example.demo'], flags, options));
+      assertRpcOk(
+        await daemon.callCommand(
+          'open',
+          ['com.example.demo'],
+          { ...flags, relaunch: true },
+          options,
+        ),
+      );
+
+      assert.deepEqual(
+        runtime.calls.filter((call) => call.type === 'open').map((call) => call.deviceId),
+        [runtime.deviceIdForLease(lease.leaseId), runtime.deviceIdForLease(lease.leaseId)],
+      );
+    },
+  );
+});
+
 test('provider lease allocation fails when the daemon lacks the requested runtime', async () => {
   const daemon = await createProviderScenarioHarness({
     providerRuntimeIds: [FAKE_PROVIDER],
@@ -138,6 +164,15 @@ async function allocateFakeProviderLease(
 ): Promise<DeviceLease> {
   const allocate = await daemon.callCommand('lease_allocate', [], leaseFlags(), {
     meta: leaseMeta(),
+  });
+  return assertRpcOk<{ lease: DeviceLease }>(allocate).lease;
+}
+
+async function allocateIosFakeProviderLease(
+  daemon: Awaited<ReturnType<typeof createProviderScenarioHarness>>,
+): Promise<DeviceLease> {
+  const allocate = await daemon.callCommand('lease_allocate', [], iosLeaseFlags(), {
+    meta: iosLeaseMeta(),
   });
   return assertRpcOk<{ lease: DeviceLease }>(allocate).lease;
 }
@@ -263,8 +298,8 @@ function assertFakeProviderCallOrder(calls: FakeProviderCall[]): void {
   );
 }
 
-async function createFakeProviderWorld() {
-  const runtime = new FakeProviderDeviceRuntime();
+async function createFakeProviderWorld(platform: 'android' | 'ios' = 'android') {
+  const runtime = new FakeProviderDeviceRuntime(platform);
   const providerRuntimeProviders = createProviderDeviceRuntimeRequestProviders([runtime]);
   const daemon = await createProviderScenarioHarness({
     ...providerRuntimeProviders,
@@ -284,6 +319,11 @@ class FakeProviderDeviceRuntime implements ProviderDeviceRuntime {
   readonly provider = FAKE_PROVIDER;
   readonly calls: FakeProviderCall[] = [];
   private readonly sessionsByLeaseId = new Map<string, FakeProviderSession>();
+  private readonly platform: 'android' | 'ios';
+
+  constructor(platform: 'android' | 'ios' = 'android') {
+    this.platform = platform;
+  }
 
   readonly leaseLifecycle: LeaseLifecycleProvider = {
     allocate: async (lease) => {
@@ -335,7 +375,7 @@ class FakeProviderDeviceRuntime implements ProviderDeviceRuntime {
   };
 
   ownsDevice(device: DeviceInfo): boolean {
-    return device.id.startsWith('fake-provider:android:');
+    return device.id.startsWith(`fake-provider:${this.platform}:`);
   }
 
   getInteractor(device: DeviceInfo): Interactor | undefined {
@@ -378,10 +418,21 @@ class FakeProviderDeviceRuntime implements ProviderDeviceRuntime {
   }
 
   deviceIdForLease(leaseId: string): string {
-    return `fake-provider:android:${leaseId}`;
+    return `fake-provider:${this.platform}:${leaseId}`;
   }
 
   private createDevice(lease: DeviceLease): DeviceInfo {
+    if (this.platform === 'ios') {
+      return {
+        platform: 'apple',
+        appleOs: 'ios',
+        id: this.deviceIdForLease(lease.leaseId),
+        name: 'Fake Provider iOS Simulator',
+        kind: 'simulator',
+        target: 'mobile',
+        booted: true,
+      };
+    }
     return {
       platform: 'android',
       id: this.deviceIdForLease(lease.leaseId),
@@ -462,6 +513,14 @@ function leaseMeta(leaseId?: string): DaemonRequest['meta'] {
     deviceKey: 'android-a',
     clientId: 'client-a',
   };
+}
+
+function iosLeaseFlags(leaseId?: string): DaemonRequest['flags'] {
+  return { ...leaseFlags(leaseId), platform: 'ios' };
+}
+
+function iosLeaseMeta(leaseId?: string): DaemonRequest['meta'] {
+  return { ...leaseMeta(leaseId), leaseBackend: 'ios-instance', deviceKey: 'ios-a' };
 }
 
 function throwUnexpectedProviderInteraction(method: string): never {

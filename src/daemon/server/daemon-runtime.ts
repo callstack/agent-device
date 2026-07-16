@@ -15,7 +15,7 @@ import {
   DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS,
 } from '../../provider-device-runtimes.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { releaseExpiredProviderLease } from '../lease-lifecycle.ts';
+import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
 import { createRequestHandler } from '../request-router.ts';
 import { teardownSessionResources } from '../session-teardown.ts';
 import { closeDaemonServers } from './server-shutdown.ts';
@@ -101,13 +101,16 @@ export async function startDaemonRuntime(
     providerDeviceRuntimes,
     { providerRuntimeRequiredIds: DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS },
   );
+  const expiredProviderLeaseReleaser = createExpiredProviderLeaseReleaser({
+    leaseLifecycleProvider: providerRuntimeProviders.leaseLifecycleProvider,
+  });
   const leaseRegistry = new LeaseRegistry({
     maxActiveSimulatorLeases: parseIntegerEnv(env.AGENT_DEVICE_MAX_SIMULATOR_LEASES),
     defaultLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_TTL_MS),
     minLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MIN_TTL_MS),
     maxLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MAX_TTL_MS),
     onLeaseExpired: (lease) => {
-      void releaseExpiredProviderLease(providerRuntimeProviders.leaseLifecycleProvider, lease);
+      void expiredProviderLeaseReleaser.release(lease);
     },
   });
   const cloudArtifactProvider = composeCloudArtifactProviders(
@@ -299,6 +302,7 @@ export async function startDaemonRuntime(
     idleReap.cancel();
     if (shuttingDown) return;
     shuttingDown = true;
+    expiredProviderLeaseReleaser.shutdown();
     if (shutdownOptions.cause) {
       await emitFatalDiagnostic(shutdownOptions.cause);
     }

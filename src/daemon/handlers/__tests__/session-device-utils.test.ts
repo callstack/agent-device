@@ -7,6 +7,7 @@ import {
 } from '../session-device-utils.ts';
 import { getRunnerSessionSnapshot } from '../../../platforms/apple/core/runner/runner-client.ts';
 import { resolveTargetDevice } from '../../../core/dispatch.ts';
+import { isActiveProviderDevice } from '../../../provider-device-runtime.ts';
 
 vi.mock('../../../platforms/apple/core/runner/runner-client.ts', () => ({
   getRunnerSessionSnapshot: vi.fn(() => null),
@@ -14,14 +15,20 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', () => ({
 vi.mock('../../../core/dispatch.ts', () => ({
   resolveTargetDevice: vi.fn(),
 }));
+vi.mock('../../../provider-device-runtime.ts', () => ({
+  isActiveProviderDevice: vi.fn(() => false),
+}));
 
 const mockGetRunnerSessionSnapshot = vi.mocked(getRunnerSessionSnapshot);
 const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
+const mockIsActiveProviderDevice = vi.mocked(isActiveProviderDevice);
 
 beforeEach(() => {
   mockGetRunnerSessionSnapshot.mockReset();
   mockGetRunnerSessionSnapshot.mockReturnValue(null);
   mockResolveTargetDevice.mockReset();
+  mockIsActiveProviderDevice.mockReset();
+  mockIsActiveProviderDevice.mockReturnValue(false);
 });
 
 const iosSimulatorSession: SessionState = {
@@ -53,6 +60,20 @@ test('refreshSessionDeviceIfNeeded keeps iOS simulator session device on non-mac
   );
 
   expect(device).toBe(iosSimulatorSession.device);
+});
+
+test('refreshSessionDeviceIfNeeded keeps provider-owned iOS simulators out of local refresh', async () => {
+  mockIsActiveProviderDevice.mockReturnValue(true);
+
+  const device = await withMockedPlatform('darwin', async () =>
+    refreshSessionDeviceIfNeeded({
+      ...iosSimulatorSession.device,
+      id: 'limrun:ios:lease-1',
+    }),
+  );
+
+  expect(device.id).toBe('limrun:ios:lease-1');
+  expect(mockResolveTargetDevice).not.toHaveBeenCalled();
 });
 
 test('refreshSessionDeviceIfNeeded skips re-resolve while the iOS runner session is alive', async () => {

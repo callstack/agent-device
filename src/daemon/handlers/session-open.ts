@@ -362,7 +362,11 @@ async function completeOpenCommand(params: {
   } else if (runnerPrewarm && !runnerPrewarmAwaited) {
     timing.runnerPrewarmWaited = false;
   }
-  if (isIosSimulator(device) && (shouldRelaunch || runnerTargetPredatesOpen)) {
+  if (
+    !isActiveProviderDevice(device) &&
+    isIosSimulator(device) &&
+    (shouldRelaunch || runnerTargetPredatesOpen)
+  ) {
     await notifyIosRunnerAppRelaunched(device, runnerPrewarmOptions);
   }
   sessionAppBundleId = await inferAndroidPackageAfterOpen(device, openTarget, sessionAppBundleId);
