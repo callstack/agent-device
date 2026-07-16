@@ -8,12 +8,12 @@ buttons -- unlike the real system keyboard (Gboard et al.), which pulls its visi
 the UIAutomator tree the moment a field is focused.
 
 Text is injected through a dynamically-registered `BroadcastReceiver` carrying base64-encoded
-UTF-8 Intent extras, the same `payloadBase64` convention `android-multitouch-helper` uses for the
+UTF-8 Intent extras, the same `payloadBase64` convention the snapshot helper's gesture mode uses for the
 same reason: `adb shell` re-tokenizes raw spaces, and base64 sidesteps that entirely. This makes
 Unicode/CJK/emoji round-trip exactly, unlike `adb shell input text`, which is ASCII-only.
 
-The helper is a service, not an instrumentation, so it cannot use `android-snapshot-helper`'s and
-`android-multitouch-helper`'s `am instrument` invocation shape. It is installed and its version
+The helper is a service, not an instrumentation, so it cannot use the snapshot helper's
+`am instrument` invocation shape. It is installed and its version
 verified the same way (bundled npm-packaged dist + version-keyed manifest.json), but invoked with
 `adb shell ime enable`/`ime set` (lifecycle) and `adb shell am broadcast` (text entry) instead.
 

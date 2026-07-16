@@ -94,6 +94,70 @@ export async function captureAndroidSnapshotWithHelperSession(
   }
 }
 
+// Touch commands piggyback on a live snapshot session so gestures do not restart instrumentation
+// (Android permits one UiAutomation owner). They never start a session: without one, callers use
+// the same helper APK through a one-shot `am instrument` run instead.
+export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
+  deviceKey: string;
+  action: 'gesture' | 'viewport';
+  payloadBase64?: string;
+  timeoutMs: number;
+}): Promise<Record<string, string> | undefined> {
+  const session = sessions.get(params.deviceKey);
+  if (!session) return undefined;
+  const requestId = `${params.action}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const command = params.payloadBase64
+    ? `${params.action} ${requestId} ${params.payloadBase64}`
+    : `${params.action} ${requestId}`;
+  let headers: Record<string, string>;
+  try {
+    const response = await sendSessionCommand(session, command, params.timeoutMs);
+    headers = parseSessionHeaders(response.slice(0, findSessionHeaderEnd(response)));
+    assertTouchSessionHeaders(headers, requestId);
+  } catch (error) {
+    // Transport-level failure: the session process can no longer be trusted. Stop it so the next
+    // command runs against a fresh helper instead of a wedged socket.
+    await stopAndroidSnapshotHelperSession(params.deviceKey);
+    throw error;
+  }
+  if (headers.ok !== 'true') {
+    // The helper ran and reported a structured failure; the session itself stays healthy.
+    throw new AppError(
+      'COMMAND_FAILED',
+      headers.message || headers.errorType || `Android automation helper ${params.action} failed`,
+      { errorType: headers.errorType, helper: headers },
+    );
+  }
+  return headers;
+}
+
+function findSessionHeaderEnd(response: string): number {
+  const separator = response.indexOf('\n\n');
+  return separator < 0 ? response.length : separator;
+}
+
+function assertTouchSessionHeaders(headers: Record<string, string>, requestId: string): void {
+  if (headers.agentDeviceProtocol !== ANDROID_SNAPSHOT_HELPER_PROTOCOL) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Android automation helper session returned wrong protocol',
+      {
+        headers,
+      },
+    );
+  }
+  if (headers.requestId !== requestId) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Android automation helper session returned stale output',
+      {
+        headers,
+        requestId,
+      },
+    );
+  }
+}
+
 export async function stopAndroidSnapshotHelperSession(deviceKey: string): Promise<void> {
   const session = sessions.get(deviceKey);
   if (!session) return;

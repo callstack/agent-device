@@ -66,9 +66,13 @@ Platform adapters consume the canonical plan:
   the paired provider-owned viewport only for provider-native touch. Android touch execution never
   falls back to `adb input swipe`. Public scroll durations below one 16 ms planner frame normalize
   to that physical minimum and report the executed duration. Scroll evidence reports absolute
-  injected coordinates against zero-origin extents that include the viewport offset. The snapshot helper is stopped
-  before local gesture instrumentation because Android permits only one instrumentation owner of
-  `UiAutomation`.
+  injected coordinates against zero-origin extents that include the viewport offset. Because
+  Android permits only one instrumentation owner of `UiAutomation`, snapshot capture, gesture
+  viewport resolution, and planned-touch injection share one bundled automation helper: a live
+  persistent helper session executes touch commands directly, and without one the same helper runs
+  one-shot. Nothing stops the snapshot session around gestures anymore (amended 2026-07,
+  issue #1275; previously a separate one-shot multi-touch helper forced a session stop/restart
+  around every local gesture).
 - iOS lowers one-contact endpoint-hold plans to the established fast-swipe synthesis profile. That
   profile reaches the endpoint in 100 ms, then holds there for the planned duration before lifting,
   matching Maestro's XCTest driver. Timed-pan and two-contact plans convert every point to native
@@ -107,9 +111,9 @@ selectors or refs and therefore cannot claim element-targeting guarantees.
 - One-finger pan remains the default and explicit two-finger pan retains pan intent.
 - The active viewport is resolved for each gesture, so rotation, keyboard, and window changes do
   not use stale geometry.
-- On bare ADB, Android scroll and long-press require the bundled touch helper and `UiAutomation`;
-  helper installation or runtime failure is surfaced directly rather than degrading to an
-  approximate `adb input swipe`.
+- On bare ADB, Android scroll and long-press require the bundled automation helper (the snapshot
+  helper APK) and `UiAutomation`; helper installation or runtime failure is surfaced directly
+  rather than degrading to an approximate `adb input swipe`.
 - Pointer plans are larger than scalar requests but bounded by duration and the 16 ms sample
   cadence; deleting duplicate scalar executors offsets the package cost.
 

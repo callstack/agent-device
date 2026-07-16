@@ -28,7 +28,8 @@ import java.util.concurrent.TimeoutException;
 public final class SnapshotInstrumentation extends Instrumentation {
   private static final String PROTOCOL = "android-snapshot-helper-v1";
   private static final String OUTPUT_FORMAT = "uiautomator-xml";
-  private static final String HELPER_API_VERSION = "1";
+  private static final String HELPER_API_VERSION = "2";
+  private static final long GESTURE_UI_AUTOMATION_CONNECT_TIMEOUT_MS = 8_000;
   private static final int CHUNK_SIZE = 2 * 1024;
   // Match the host default: bounded wait for microinteraction reliability without the stock
   // uiautomator idle tax. Direct callers can pass 0 when immediate capture is preferred.
@@ -59,10 +60,22 @@ public final class SnapshotInstrumentation extends Instrumentation {
     String outputPath = readStringArgument(arguments, "outputPath");
     boolean emitChunks = readBooleanArgument(arguments, "emitChunks", true);
     int sessionPort = readIntArgument(arguments, "sessionPort", 0);
+    String mode = readStringArgument(arguments, "mode");
     Bundle result = new Bundle();
     putBaseMetadata(result, waitForIdleTimeoutMs, waitForIdleQuietMs, timeoutMs, maxDepth, maxNodes);
 
     try {
+      if ("viewport".equals(mode)) {
+        runOneShotViewport(result);
+        return;
+      }
+      if ("gesture".equals(mode)) {
+        runOneShotGesture(result, readStringArgument(arguments, "payloadBase64"));
+        return;
+      }
+      if (mode != null && !"snapshot".equals(mode)) {
+        throw new IllegalArgumentException("Unsupported mode: " + mode);
+      }
       if (sessionPort > 0) {
         runSnapshotSession(
             sessionPort, waitForIdleQuietMs, waitForIdleTimeoutMs, timeoutMs, maxDepth, maxNodes);
@@ -117,6 +130,41 @@ public final class SnapshotInstrumentation extends Instrumentation {
     result.putString("elapsedMs", Long.toString(elapsedMs));
   }
 
+  private void runOneShotViewport(Bundle result) {
+    android.graphics.Rect viewport =
+        GestureViewportReader.read(getConnectedUiAutomationUnchecked());
+    result.putString("ok", "true");
+    result.putString("kind", "viewport");
+    putViewportMetadata(result, viewport);
+    finishSafely(0, result);
+  }
+
+  private void runOneShotGesture(Bundle result, String payloadBase64) throws Exception {
+    long startedAtMs = System.currentTimeMillis();
+    TouchPlan plan = TouchPlan.parseBase64(payloadBase64);
+    int injectedEvents = TouchPlanInjector.inject(getConnectedUiAutomationUnchecked(), plan);
+    result.putString("ok", "true");
+    result.putString("kind", plan.kind);
+    result.putString("injectedEvents", Integer.toString(injectedEvents));
+    result.putString("elapsedMs", Long.toString(System.currentTimeMillis() - startedAtMs));
+    finishSafely(0, result);
+  }
+
+  private UiAutomation getConnectedUiAutomationUnchecked() {
+    try {
+      return getConnectedUiAutomation(GESTURE_UI_AUTOMATION_CONNECT_TIMEOUT_MS);
+    } catch (TimeoutException error) {
+      throw new IllegalStateException(error.getMessage(), error);
+    }
+  }
+
+  private static void putViewportMetadata(Bundle result, android.graphics.Rect viewport) {
+    result.putString("x", Integer.toString(viewport.left));
+    result.putString("y", Integer.toString(viewport.top));
+    result.putString("width", Integer.toString(viewport.width()));
+    result.putString("height", Integer.toString(viewport.height()));
+  }
+
   private void runSnapshotSession(
       int sessionPort,
       long waitForIdleQuietMs,
@@ -144,12 +192,21 @@ public final class SnapshotInstrumentation extends Instrumentation {
             writeSessionError(socket.getOutputStream(), "", "java.io.EOFException", "empty command");
             continue;
           }
-          String[] parts = command.trim().split("\\s+", 2);
+          String[] parts = command.trim().split("\\s+", 3);
           String action = parts.length > 0 ? parts[0] : "";
           String requestId = parts.length > 1 ? parts[1] : "";
           if ("quit".equals(action)) {
             writeSessionOk(socket.getOutputStream(), requestId);
             return;
+          }
+          if ("viewport".equals(action)) {
+            writeSessionViewport(socket.getOutputStream(), requestId);
+            continue;
+          }
+          if ("gesture".equals(action)) {
+            writeSessionGesture(
+                socket.getOutputStream(), requestId, parts.length > 2 ? parts[2] : "");
+            continue;
           }
           if (!"snapshot".equals(action)) {
             writeSessionError(
@@ -199,6 +256,54 @@ public final class SnapshotInstrumentation extends Instrumentation {
           error.getClass().getName(),
           error.getMessage() == null ? error.getClass().getName() : error.getMessage());
     }
+  }
+
+  private void writeSessionViewport(OutputStream output, String requestId) throws IOException {
+    Bundle result = sessionResponseBundle(requestId);
+    try {
+      android.graphics.Rect viewport =
+          GestureViewportReader.read(getConnectedUiAutomationUnchecked());
+      result.putString("ok", "true");
+      result.putString("kind", "viewport");
+      putViewportMetadata(result, viewport);
+      writeSessionResponse(output, result, "");
+    } catch (Throwable error) {
+      writeSessionError(
+          output,
+          requestId,
+          error.getClass().getName(),
+          error.getMessage() == null ? error.getClass().getName() : error.getMessage());
+    }
+  }
+
+  private void writeSessionGesture(OutputStream output, String requestId, String payloadBase64)
+      throws IOException {
+    Bundle result = sessionResponseBundle(requestId);
+    try {
+      long startedAtMs = System.currentTimeMillis();
+      TouchPlan plan = TouchPlan.parseBase64(payloadBase64);
+      int injectedEvents = TouchPlanInjector.inject(getConnectedUiAutomationUnchecked(), plan);
+      result.putString("ok", "true");
+      result.putString("kind", plan.kind);
+      result.putString("injectedEvents", Integer.toString(injectedEvents));
+      result.putString("elapsedMs", Long.toString(System.currentTimeMillis() - startedAtMs));
+      writeSessionResponse(output, result, "");
+    } catch (Throwable error) {
+      writeSessionError(
+          output,
+          requestId,
+          error.getClass().getName(),
+          error.getMessage() == null ? error.getClass().getName() : error.getMessage());
+    }
+  }
+
+  private static Bundle sessionResponseBundle(String requestId) {
+    Bundle result = new Bundle();
+    result.putString("agentDeviceProtocol", PROTOCOL);
+    result.putString("helperApiVersion", HELPER_API_VERSION);
+    result.putString("outputFormat", OUTPUT_FORMAT);
+    result.putString("requestId", requestId);
+    return result;
   }
 
   private static void writeSessionOk(OutputStream output, String requestId) throws IOException {

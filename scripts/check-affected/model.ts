@@ -251,8 +251,7 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
     rule: 'own:android-helpers',
     detail: 'Android helper packages have their own build',
     owns: (file) =>
-      file.startsWith('android/snapshot-helper/') ||
-      file.startsWith('android/multitouch-helper/'),
+      file.startsWith('android/snapshot-helper/') || file.startsWith('android/ime-helper/'),
   },
   {
     check: 'macos-helper',

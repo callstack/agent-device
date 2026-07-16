@@ -1,10 +1,7 @@
 import type { DeviceInfo } from '../../kernel/device.ts';
 import type { Rect } from '../../kernel/snapshot.ts';
 import { resolveAndroidTouchProvider } from './adb-executor.ts';
-import {
-  executeAndroidMultiTouchHelperPlan,
-  readAndroidMultiTouchHelperViewport,
-} from './multitouch-helper.ts';
+import { executeAndroidTouchHelperPlan, readAndroidTouchHelperViewport } from './touch-helper.ts';
 import { validateAndroidGestureViewport } from './gesture-viewport.ts';
 import type { AndroidTouchPlan } from './touch-plan.ts';
 
@@ -24,11 +21,11 @@ export async function executeAndroidTouchPlan(
     const result = (await provider.touch(providerPlan)) ?? {};
     return { backend: 'provider-native-touch', ...result };
   }
-  return await executeAndroidMultiTouchHelperPlan(device, plan);
+  return await executeAndroidTouchHelperPlan(device, plan);
 }
 
 export async function readAndroidGestureViewport(device: DeviceInfo): Promise<Rect> {
   const provider = resolveAndroidTouchProvider(device);
   if (provider) return validateAndroidGestureViewport(await provider.gestureViewport());
-  return await readAndroidMultiTouchHelperViewport(device);
+  return await readAndroidTouchHelperViewport(device);
 }

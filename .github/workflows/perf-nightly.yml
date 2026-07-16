@@ -101,7 +101,6 @@ jobs:
       - name: Package npm-bundled Android helpers
         run: |
           pnpm package:android-snapshot-helper:npm
-          pnpm package:android-multitouch-helper:npm
           pnpm package:android-ime-helper:npm
 
       - name: Run Android command perf benchmark

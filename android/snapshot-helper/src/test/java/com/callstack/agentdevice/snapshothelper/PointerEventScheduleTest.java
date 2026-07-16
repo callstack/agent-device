@@ -1,4 +1,4 @@
-package com.callstack.agentdevice.multitouchhelper;
+package com.callstack.agentdevice.snapshothelper;
 
 import java.util.List;
 

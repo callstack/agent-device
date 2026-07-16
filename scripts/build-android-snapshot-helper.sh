@@ -47,6 +47,7 @@ VERSION_CODE="$(
 
 BUILD_DIR="$HELPER_DIR/build"
 CLASSES_DIR="$BUILD_DIR/classes"
+TEST_CLASSES_DIR="$BUILD_DIR/test-classes"
 DEX_DIR="$BUILD_DIR/dex"
 KEYSTORE="$HELPER_DIR/debug.keystore"
 UNSIGNED_APK="$BUILD_DIR/helper-unsigned.apk"
@@ -54,13 +55,23 @@ ALIGNED_APK="$BUILD_DIR/helper-aligned.apk"
 APK_PATH="$OUTPUT_DIR/$APK_BASENAME"
 
 rm -rf "$BUILD_DIR"
-mkdir -p "$CLASSES_DIR" "$DEX_DIR" "$OUTPUT_DIR"
+mkdir -p "$CLASSES_DIR" "$TEST_CLASSES_DIR" "$DEX_DIR" "$OUTPUT_DIR"
 
 javac \
   --release 11 \
   -classpath "$ANDROID_JAR" \
   -d "$CLASSES_DIR" \
   $(find "$HELPER_DIR/src/main/java" -name '*.java' | sort)
+
+javac \
+  --release 11 \
+  -classpath "$ANDROID_JAR:$CLASSES_DIR" \
+  -d "$TEST_CLASSES_DIR" \
+  $(find "$HELPER_DIR/src/test/java" -name '*.java' | sort)
+
+java \
+  -classpath "$ANDROID_JAR:$CLASSES_DIR:$TEST_CLASSES_DIR" \
+  com.callstack.agentdevice.snapshothelper.PointerEventScheduleTest
 
 "$BUILD_TOOLS_DIR/d8" \
   --min-api "$MIN_SDK" \

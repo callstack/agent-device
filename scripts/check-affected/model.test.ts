@@ -81,7 +81,7 @@ test('Swift runner change selects the swift-runner build', () => {
 
 test('Android helper change selects the android-helpers build', () => {
   assert.deepEqual(ids(['android/snapshot-helper/src/Main.kt']), ['android-helpers']);
-  assert.deepEqual(ids(['android/multitouch-helper/build.gradle']), ['android-helpers']);
+  assert.deepEqual(ids(['android/ime-helper/AndroidManifest.xml']), ['android-helpers']);
 });
 
 test('MCP metadata change selects the mcp-metadata check', () => {

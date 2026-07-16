@@ -36,7 +36,5 @@ xcuserdata/
 .skillgym-results/
 android/snapshot-helper/build/
 android/snapshot-helper/dist/
-android/multitouch-helper/build/
-android/multitouch-helper/dist/
 android/ime-helper/build/
 android/ime-helper/dist/
