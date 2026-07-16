@@ -82,3 +82,41 @@ test('snapshot reports a device-side install failure when the provider install r
   expect(response.error.hint).not.toMatch(/pnpm build:android/);
   expect(response.error.details?.androidSnapshotHelperInstallFailure).toBe(true);
 });
+
+// ADR 0010 wire contract: a transient-classified install rejection (here the
+// funnel's `connection_dropped` family) must keep its structured `retriable`
+// signal through the capture rewrap onto the public daemon error.
+test('snapshot keeps the transient retry signal when the provider install rejection is retriable', async () => {
+  const sessionStore = makeAndroidSessionStore(
+    'agent-device-request-router-snapshot-helper-install-transient-test',
+  );
+  const provider: AndroidAdbProvider = {
+    exec: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+    install: async () => {
+      throw new AppError('COMMAND_FAILED', 'Failed to install Android snapshot helper', {
+        stderr: 'adb: transport error while pushing helper.apk',
+        stdout: '',
+        exitCode: 1,
+        processExitError: true,
+      });
+    },
+    snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+  };
+  const handler = makeHandler(sessionStore, () => provider);
+
+  const response = await handler({
+    token: 'token',
+    session: 'default',
+    command: 'snapshot',
+    positionals: [],
+    flags: {},
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) throw new Error('Expected snapshot to fail');
+  expect(response.error.message).toMatch(/Android snapshot helper failed/);
+  expect(response.error.hint).toMatch(/connection dropped/);
+  expect(response.error.hint).toMatch(/device-side install failure/);
+  expect(response.error.retriable).toBe(true);
+  expect(response.error.details?.androidSnapshotHelperInstallFailure).toBe(true);
+});

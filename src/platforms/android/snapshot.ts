@@ -474,7 +474,7 @@ function androidSnapshotHelperCaptureError(error: unknown, reason: string): AppE
     `Android snapshot helper failed: ${reason}`,
     {
       ...normalized.details,
-      ...liftedDiagnosticIdentity(normalized),
+      ...liftedWireFields(normalized),
       androidSnapshotHelperFailureReason: reason,
       hint: androidSnapshotHelperCaptureHint(normalized),
     },
@@ -503,13 +503,17 @@ function androidSnapshotHelperCaptureHint(normalized: NormalizedError): string {
   );
 }
 
-// normalizeError lifts these out of details (ADR 0010); a rewrap must put them
-// back so the upstream diagnostic identity survives.
-function liftedDiagnosticIdentity(normalized: NormalizedError): Record<string, string> {
-  const identity: Record<string, string> = {};
-  if (normalized.diagnosticId !== undefined) identity.diagnosticId = normalized.diagnosticId;
-  if (normalized.logPath !== undefined) identity.logPath = normalized.logPath;
-  return identity;
+// normalizeError hoists these wire-contract fields out of details (ADR 0010;
+// the complete set stripDiagnosticMeta removes, minus hint, which
+// androidSnapshotHelperCaptureHint owns). A rewrap must put every one back so
+// upstream diagnostics and typed signals like `retriable` survive.
+function liftedWireFields(normalized: NormalizedError): Record<string, string | boolean> {
+  const fields: Record<string, string | boolean> = {};
+  if (normalized.diagnosticId !== undefined) fields.diagnosticId = normalized.diagnosticId;
+  if (normalized.logPath !== undefined) fields.logPath = normalized.logPath;
+  if (normalized.retriable !== undefined) fields.retriable = normalized.retriable;
+  if (normalized.supportedOn !== undefined) fields.supportedOn = normalized.supportedOn;
+  return fields;
 }
 
 function isKilledHelperInstrumentationFailure(error: {
