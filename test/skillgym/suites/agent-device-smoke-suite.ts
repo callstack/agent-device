@@ -699,7 +699,7 @@ const FIXTURE_SMOKE_CASES: Case[] = [
       /field-name/i,
       /Contact details/i,
       plannedCommandAlternatives(['press', 'click']),
-      /(?:--settle|snapshot)/i,
+      /snapshot/i,
     ],
     forbiddenOutputs: [plannedCommand('keyboard dismiss'), plannedCommand('back'), /\bDone\b/i],
   }),
