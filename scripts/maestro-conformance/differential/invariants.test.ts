@@ -78,6 +78,66 @@ test('readTrace on a missing file returns no events', () => {
 
 test('bug class 4 has a machine-checkable invariant, not just outcome parity', () => {
   const settle = DIFFERENTIAL_SCENARIOS.find((scenario) => scenario.bugClass === 4);
-  assert.ok(settle?.engineInvariants?.length, 'settle scenario must carry an engine-side invariant');
-  assert.equal(settle?.engineInvariants?.[0]?.maxMs, MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS);
+  const invariant = settle?.engineInvariants?.[0];
+  assert.ok(invariant, 'settle scenario must carry an engine-side invariant');
+  assert.equal(invariant?.kind, 'stepDurationBelow');
+  assert.equal(
+    invariant?.kind === 'stepDurationBelow' ? invariant.maxMs : undefined,
+    MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,
+  );
+});
+
+// --- metricAtLeast: proves a code path actually ran, not just that it passed ---
+
+const RETRY_INVARIANT: Invariant = {
+  kind: 'metricAtLeast',
+  command: 'tapOn',
+  metric: 'tapRetries',
+  min: 1,
+  because: 'test',
+};
+
+const stopWithMetrics = (command: string, metrics: Record<string, number>, step = 1) => ({
+  type: 'replay_action_stop',
+  step,
+  command,
+  ok: true,
+  durationMs: 100,
+  resultTiming: metrics,
+});
+
+test('a tap that actually retried holds the retry invariant', () => {
+  const result = evaluateInvariant([stopWithMetrics('tapOn', { tapRetries: 1 })], RETRY_INVARIANT);
+  assert.equal(result.status, 'held');
+});
+
+// The exact vacuity that made this scenario worthless before: the tap succeeded
+// first try (navigating control), so retry never ran — yet the flow passed.
+test('a tap that never retried violates the invariant (catches a vacuous scenario)', () => {
+  const result = evaluateInvariant([stopWithMetrics('tapOn', { tapRetries: 0 })], RETRY_INVARIANT);
+  assert.equal(result.status, 'violated');
+  assert.match(result.detail, /was 0/);
+});
+
+test('a trace whose taps record no metric reports no-data rather than passing', () => {
+  const result = evaluateInvariant([stopWithMetrics('tapOn', {})], RETRY_INVARIANT);
+  assert.equal(result.status, 'no-data');
+});
+
+test('the retry scenario asserts the retry path ran', () => {
+  const retry = DIFFERENTIAL_SCENARIOS.find((s) => s.id === 'tap-retry-if-no-change');
+  const invariant = retry?.engineInvariants?.[0];
+  assert.ok(invariant, 'retry scenario must prove a retry happened, not assume it');
+  assert.equal(invariant?.kind, 'metricAtLeast');
+});
+
+// Truncation-vs-rounding is at most 1px and cannot be observed on a device, so
+// no scenario may claim to guard bug class 1; a unit test pins it instead.
+test('no device scenario claims to prove percent truncation (bug class 1)', () => {
+  const claiming = DIFFERENTIAL_SCENARIOS.filter((s) => s.bugClass === 1);
+  assert.deepEqual(
+    claiming.map((s) => s.id),
+    [],
+    'a 1px truncation delta is not app-observable; keep bug class 1 in runtime-port-geometry.test.ts',
+  );
 });

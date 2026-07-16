@@ -43,6 +43,9 @@ concurrency:
 env:
   AGENT_DEVICE_CLI: "--experimental-strip-types src/bin.ts"
   DIFFERENTIAL_ONLY: ${{ github.event.inputs.only || '' }}
+  # CI should not phone home, and it keeps `maestro --version` to just the
+  # version instead of prefixing an analytics notice.
+  MAESTRO_CLI_NO_ANALYTICS: "1"
 
 jobs:
   differential-ios:
@@ -115,7 +118,10 @@ jobs:
         run: |
           set -euo pipefail
           EXPECTED=$(node -p "require('./scripts/maestro-conformance/pinned-upstream.json').version")
-          ACTUAL=$(maestro --version 2>/dev/null | tr -d '[:space:]')
+          # `maestro --version` can print notices (e.g. the analytics banner)
+          # around the version, so match the semver line rather than the whole
+          # output. Empty ACTUAL fails the comparison below, as it should.
+          ACTUAL=$(maestro --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -1 || true)
           echo "expected=$EXPECTED actual=$ACTUAL"
           if [ "$ACTUAL" != "$EXPECTED" ]; then
             echo "::error::Layer-3 Maestro CLI is $ACTUAL but the oracle pins $EXPECTED. A differential against a different Maestro proves nothing about the pinned behavior."

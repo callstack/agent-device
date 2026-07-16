@@ -63,11 +63,18 @@ export const DIFFERENTIAL_SCENARIOS: DifferentialScenario[] = [
       'agent-device settled in a different order than upstream (sleep-before vs sleep-after capture) or never latches within the shared budget.',
   },
   {
-    id: 'percent-truncation',
-    bugClass: 1,
+    id: 'percent-swipe',
+    // Deliberately NOT tagged bugClass 1. Truncation-vs-rounding is at most a
+    // one-pixel difference: no app-observable outcome on a real device can
+    // distinguish it, so claiming this scenario guards bug class 1 would be a
+    // lie the pass/pass result cannot back up. That half is pinned exactly by a
+    // pure unit test of the conversion
+    // (src/compat/maestro/__tests__/runtime-port-geometry.test.ts), and the
+    // parse-level half by layer 1 (bug-classes/percent-decimal-swipe). What this
+    // scenario adds is only that percentage swipes work end-to-end on both.
     flow: 'differential/flows/percent-swipe.yaml',
     comparesAcrossEngines:
-      'The percentage swipe completes on both engines. NOTE: this does not compare the resolved pixel coordinates — truncation-vs-rounding is a 1px difference that outcome parity cannot see. Parse-level decimal rejection is covered by layer 1 (bug-classes/percent-decimal-swipe).',
+      'A percentage-endpoint swipe completes on both engines. It does NOT compare resolved pixel endpoints — no metric records them and a 1px delta is not app-observable.',
     expect: 'pass',
     divergenceMeans: 'The swipe behaves differently enough on one engine to fail the flow.',
   },
@@ -75,8 +82,20 @@ export const DIFFERENTIAL_SCENARIOS: DifferentialScenario[] = [
     id: 'tap-retry-if-no-change',
     flow: 'differential/flows/tap-retry-if-no-change.yaml',
     comparesAcrossEngines:
-      'A retryTapIfNoChange tap succeeds on both engines. NOTE: the retap COUNT is not compared — the trace does not currently expose per-tap attempt counts.',
+      'A retryTapIfNoChange tap succeeds on both engines. The flow taps a non-interactive title so the screen cannot change and the retry path is forced; the invariant below then proves a retry actually happened.',
     expect: 'pass',
+    // Outcome parity would pass even if retry never ran. tapRetries is recorded
+    // per step as a delta (replay-plan-execution.ts), so assert the path executed.
+    engineInvariants: [
+      {
+        kind: 'metricAtLeast',
+        command: 'tapOn',
+        metric: 'tapRetries',
+        min: 1,
+        because:
+          'a tap on an unchanging screen must re-tap; zero retries means retryIfNoChange never ran and the scenario proved nothing',
+      },
+    ],
     divergenceMeans: 'agent-device fails a tap upstream completes (or vice versa) under retry-if-no-change.',
   },
   {

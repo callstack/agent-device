@@ -21,16 +21,27 @@ export type TraceEvent = {
   command?: string;
   ok?: boolean;
   durationMs?: number;
+  /** Per-step MaestroRuntimeMetrics delta (hierarchyCaptures/screenshotCaptures/tapRetries). */
+  resultTiming?: Record<string, unknown>;
 };
 
-export type Invariant = {
-  kind: 'stepDurationBelow';
-  /** Maestro command name the step must match (e.g. "tapOn"). */
-  command: string;
-  maxMs: number;
-  /** Why this bound means the engine behaved correctly. */
-  because: string;
-};
+export type Invariant =
+  | {
+      kind: 'stepDurationBelow';
+      /** Maestro command name the step must match (e.g. "tapOn"). */
+      command: string;
+      maxMs: number;
+      /** Why this bound means the engine behaved correctly. */
+      because: string;
+    }
+  | {
+      kind: 'metricAtLeast';
+      command: string;
+      /** MaestroRuntimeMetrics key, recorded per step as a delta. */
+      metric: 'tapRetries' | 'hierarchyCaptures' | 'screenshotCaptures';
+      min: number;
+      because: string;
+    };
 
 export type InvariantResult = {
   invariant: Invariant;
@@ -56,12 +67,7 @@ export function readTrace(file: string): TraceEvent[] {
 }
 
 function completedSteps(events: TraceEvent[], command: string): TraceEvent[] {
-  return events.filter(
-    (event) =>
-      event.type === 'replay_action_stop' &&
-      event.command === command &&
-      typeof event.durationMs === 'number',
-  );
+  return events.filter((event) => event.type === 'replay_action_stop' && event.command === command);
 }
 
 export function evaluateInvariant(events: TraceEvent[], invariant: Invariant): InvariantResult {
@@ -73,7 +79,43 @@ export function evaluateInvariant(events: TraceEvent[], invariant: Invariant): I
       detail: `no completed ${invariant.command} steps in the trace`,
     };
   }
-  const worst = Math.max(...steps.map((step) => step.durationMs ?? 0));
+
+  if (invariant.kind === 'metricAtLeast') {
+    const values = steps
+      .map((step) => step.resultTiming?.[invariant.metric])
+      .filter((value): value is number => typeof value === 'number');
+    if (values.length === 0) {
+      return {
+        invariant,
+        status: 'no-data',
+        detail: `no ${invariant.command} step recorded a ${invariant.metric} metric`,
+      };
+    }
+    // Per-step deltas: the strongest single step is what proves the path ran.
+    const best = Math.max(...values);
+    if (best < invariant.min) {
+      return {
+        invariant,
+        status: 'violated',
+        detail: `highest ${invariant.command} ${invariant.metric} was ${best} (< ${invariant.min}): ${invariant.because}`,
+      };
+    }
+    return {
+      invariant,
+      status: 'held',
+      detail: `${invariant.command} ${invariant.metric} reached ${best} (>= ${invariant.min})`,
+    };
+  }
+
+  const timed = steps.filter((step) => typeof step.durationMs === 'number');
+  if (timed.length === 0) {
+    return {
+      invariant,
+      status: 'no-data',
+      detail: `no ${invariant.command} step recorded a duration`,
+    };
+  }
+  const worst = Math.max(...timed.map((step) => step.durationMs ?? 0));
   if (worst >= invariant.maxMs) {
     return {
       invariant,

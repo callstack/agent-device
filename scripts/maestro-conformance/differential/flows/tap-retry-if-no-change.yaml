@@ -1,11 +1,15 @@
-# Layer-3 device flow. A tap whose screen may not change exercises the
-# retryIfNoChange path on both engines.
+# Layer-3 device flow. Taps the app's static title, which is NOT interactive, so
+# the screen cannot change and the retryIfNoChange path is forced to run. A tap on
+# a navigating control (e.g. home-open-form) succeeds on the first attempt and
+# never exercises retry at all — the scenario would pass while proving nothing.
+# The scenario asserts tapRetries >= 1 from the trace, so a retry regression is
+# caught rather than assumed.
 appId: com.callstack.agentdevicelab
 ---
 - launchApp:
     clearState: true
 - assertVisible: Agent Device Tester
 - tapOn:
-    id: home-open-form
+    text: Agent Device Tester
     retryTapIfNoChange: true
-- assertVisible: Checkout form
+- assertVisible: Agent Device Tester
