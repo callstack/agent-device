@@ -187,6 +187,76 @@ test('connect limrun requires LIMRUN_API_KEY', async () => {
   }
 });
 
+test('connect limrun accepts only remote mobile simulator and emulator sessions', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-limrun-scope-'));
+  const stateDir = path.join(tempRoot, '.state');
+  vi.stubEnv('LIMRUN_API_KEY', 'lim_test_key');
+
+  try {
+    await assert.rejects(
+      connectCommand({
+        positionals: ['limrun'],
+        flags: {
+          json: true,
+          help: false,
+          version: false,
+          stateDir,
+          platform: 'ios',
+          udid: '00008110-001234567890801E',
+        },
+        client: {} as AgentDeviceClient,
+      }),
+      /does not accept --udid/,
+    );
+    await assert.rejects(
+      connectCommand({
+        positionals: ['limrun'],
+        flags: {
+          json: true,
+          help: false,
+          version: false,
+          stateDir,
+          platform: 'macos',
+        },
+        client: {} as AgentDeviceClient,
+      }),
+      /requires --platform ios or android/,
+    );
+    await assert.rejects(
+      connectCommand({
+        positionals: ['limrun'],
+        flags: {
+          json: true,
+          help: false,
+          version: false,
+          stateDir,
+          platform: 'ios',
+          target: 'desktop',
+        },
+        client: {} as AgentDeviceClient,
+      }),
+      /supports only mobile simulators and emulators/,
+    );
+    await assert.rejects(
+      connectCommand({
+        positionals: ['limrun'],
+        flags: {
+          json: true,
+          help: false,
+          version: false,
+          stateDir,
+          platform: 'ios',
+          leaseBackend: 'android-instance',
+        },
+        client: {} as AgentDeviceClient,
+      }),
+      /requires --lease-backend ios-instance/,
+    );
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('connect without remote config rejects legacy remoteConfig string profile response', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-cloud-legacy-'));
   const stateDir = path.join(tempRoot, '.state');

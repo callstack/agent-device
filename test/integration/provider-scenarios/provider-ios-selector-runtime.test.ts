@@ -16,9 +16,11 @@ import { createProviderScenarioHarness, withProviderScenarioResource } from './h
 const PROVIDER = 'fake-ios-provider';
 const DEVICE: DeviceInfo = {
   platform: 'apple',
-  id: 'fake-ios-provider:device-1',
-  name: 'Fake Provider iPhone',
-  kind: 'device',
+  appleOs: 'ios',
+  id: 'fake-ios-provider:simulator-1',
+  name: 'Fake Provider iOS Simulator',
+  kind: 'simulator',
+  target: 'mobile',
   booted: true,
 };
 

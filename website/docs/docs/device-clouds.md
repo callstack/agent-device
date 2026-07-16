@@ -63,6 +63,8 @@ Choose the platform to create a matching instance:
 agent-device connect limrun --platform android
 ```
 
+Limrun creates remote iOS simulators and Android emulators only. It does not use local or physical-device selectors such as `--udid`, `--serial`, or `--device`.
+
 Full Android flow:
 
 ```bash

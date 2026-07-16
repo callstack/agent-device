@@ -849,6 +849,8 @@ AWS Device Farm hosted-device flow:
 Limrun direct-device flow:
   LIMRUN_API_KEY=...
   agent-device connect limrun --platform android
+
+  Limrun creates remote iOS simulators and Android emulators only. Do not pass local device selectors such as --udid, --serial, or --device.
   agent-device open com.example.app
   agent-device snapshot -i
   agent-device close

@@ -8,6 +8,13 @@ import { persistAndResolveGeneratedProfile } from './generated-config.ts';
 import { resolveRequestedLeaseBackend } from '../commands/connection-runtime.ts';
 
 const DEFAULT_LIMRUN_TENANT = 'limrun';
+const LIMRUN_LOCAL_DEVICE_SELECTORS = [
+  ['--device', (flags: CliFlags) => flags.device],
+  ['--udid', (flags: CliFlags) => flags.udid],
+  ['--serial', (flags: CliFlags) => flags.serial],
+  ['--ios-simulator-device-set', (flags: CliFlags) => flags.iosSimulatorDeviceSet],
+  ['--android-device-allowlist', (flags: CliFlags) => flags.androidDeviceAllowlist],
+] as const;
 
 export function resolveLimrunConnectProfile(options: {
   flags: CliFlags;
@@ -36,6 +43,7 @@ export function resolveLimrunConnectProfile(options: {
 
 function buildLimrunRemoteProfile(options: { flags: CliFlags }): RemoteConfigProfile {
   const flags = options.flags;
+  const leaseBackend = validateLimrunConnectFlags(flags);
   const daemonPaths = resolveDaemonPaths(flags.stateDir);
   return {
     stateDir: daemonPaths.baseDir,
@@ -43,16 +51,41 @@ function buildLimrunRemoteProfile(options: { flags: CliFlags }): RemoteConfigPro
     tenant: flags.tenant ?? DEFAULT_LIMRUN_TENANT,
     runId: flags.runId ?? `cli-${Date.now().toString(36)}`,
     sessionIsolation: 'tenant',
-    leaseBackend: resolveRequestedLeaseBackend(flags),
+    leaseBackend,
     leaseProvider: 'limrun',
     platform: flags.platform,
     target: flags.target ?? 'mobile',
-    device: flags.device,
-    udid: flags.udid,
-    serial: flags.serial,
-    iosSimulatorDeviceSet: flags.iosSimulatorDeviceSet,
-    androidDeviceAllowlist: flags.androidDeviceAllowlist,
     session: flags.session,
     ...readMetroProfileFields(flags),
   };
+}
+
+function validateLimrunConnectFlags(flags: CliFlags): 'android-instance' | 'ios-instance' {
+  if (flags.platform !== 'android' && flags.platform !== 'ios') {
+    throw new AppError('INVALID_ARGS', 'connect limrun requires --platform ios or android.');
+  }
+  if (flags.target !== undefined && flags.target !== 'mobile') {
+    throw new AppError(
+      'INVALID_ARGS',
+      'connect limrun supports only mobile simulators and emulators.',
+    );
+  }
+  const selector = LIMRUN_LOCAL_DEVICE_SELECTORS.find(
+    ([, value]) => value(flags) !== undefined,
+  )?.[0];
+  if (selector) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `connect limrun does not accept ${selector}; Limrun selects a remote simulator or emulator.`,
+    );
+  }
+  const leaseBackend = resolveRequestedLeaseBackend(flags);
+  const expectedLeaseBackend = flags.platform === 'ios' ? 'ios-instance' : 'android-instance';
+  if (leaseBackend !== expectedLeaseBackend) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `connect limrun --platform ${flags.platform} requires --lease-backend ${expectedLeaseBackend}.`,
+    );
+  }
+  return expectedLeaseBackend;
 }
