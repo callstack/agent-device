@@ -81,7 +81,13 @@ jobs:
       - name: Build and install the fixture app
         run: |
           set -euo pipefail
-          pnpm test-app:install
+          # Not `pnpm test-app:install`: CI implies --frozen-lockfile, and the
+          # fixture app's lockfile is out of sync with its package.json overrides
+          # (ERR_PNPM_LOCKFILE_CONFIG_MISMATCH). No CI job has ever built this app,
+          # so that drift went unnoticed. Install unfrozen here rather than change
+          # the shared script; the fixture app is a device-test dependency, not a
+          # shipped artifact.
+          pnpm install --dir examples/test-app --ignore-workspace --no-frozen-lockfile
           pnpm --dir examples/test-app exec expo run:ios \
             --configuration Release \
             --device "iPhone 17 Pro" \
