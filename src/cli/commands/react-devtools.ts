@@ -11,18 +11,22 @@ const AGENT_REACT_DEVTOOLS_VERSION = '0.4.0';
 export const AGENT_REACT_DEVTOOLS_PACKAGE = `agent-react-devtools@${AGENT_REACT_DEVTOOLS_VERSION}`;
 const AGENT_REACT_DEVTOOLS_BIN = 'agent-react-devtools';
 
+type ReactDevtoolsFlags = Pick<
+  CliFlags,
+  | 'leaseBackend'
+  | 'metroProxyBaseUrl'
+  | 'metroBearerToken'
+  | 'tenant'
+  | 'runId'
+  | 'leaseId'
+  | 'remoteConfig'
+  | 'session'
+> & {
+  leaseProvider?: string;
+};
+
 type ReactDevtoolsCommandOptions = {
-  flags?: Pick<
-    CliFlags,
-    | 'leaseBackend'
-    | 'metroProxyBaseUrl'
-    | 'metroBearerToken'
-    | 'tenant'
-    | 'runId'
-    | 'leaseId'
-    | 'remoteConfig'
-    | 'session'
-  >;
+  flags?: ReactDevtoolsFlags;
   stateDir?: string;
   session?: string;
   cwd?: string;
@@ -164,7 +168,8 @@ function shouldConfigureDirectReverse(
   const { flags } = options;
   if (!flags) return false;
   return (
-    isRemoteBridgeBackend(flags.leaseBackend) &&
+    flags.leaseProvider === 'limrun' &&
+    flags.leaseBackend === 'android-instance' &&
     flags.metroProxyBaseUrl === undefined &&
     options.configureDirectPortReverse !== undefined
   );

@@ -250,6 +250,7 @@ test('react-devtools start configures direct remote port reverse', async () => {
       ...remoteBridgeScope,
       metroProxyBaseUrl: undefined,
       leaseBackend: 'android-instance',
+      leaseProvider: 'limrun',
       remoteConfig: '/tmp/remote.json',
       session: 'default',
     },

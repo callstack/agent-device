@@ -31,18 +31,12 @@ export function buildLimrunDevice(
 
 export function parseLimrunDeviceId(
   value: string,
-): { platform: LimrunPlatform; leaseId: string } | null {
+): { platform: LimrunPlatform; leaseId: string } | undefined {
   const [prefix, platform, leaseId] = value.split(':');
-  if (prefix !== LIMRUN_DEVICE_ID_PREFIX) return null;
-  if (platform !== 'ios' && platform !== 'android') return null;
-  if (!leaseId) return null;
+  if (prefix !== LIMRUN_DEVICE_ID_PREFIX) return undefined;
+  if (platform !== 'ios' && platform !== 'android') return undefined;
+  if (!leaseId) return undefined;
   return { platform, leaseId };
-}
-
-export function readLimrunLeaseIdFromInventoryRequest(request: {
-  leaseId?: string;
-}): string | undefined {
-  return request.leaseId;
 }
 
 function limrunDeviceId(platform: LimrunPlatform, leaseId: string): string {

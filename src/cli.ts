@@ -1,6 +1,7 @@
 import { parseRawArgs, usage, usageForCommand } from './cli/parser/args.ts';
 import { suggestCommandFor } from './cli/parser/command-suggestions.ts';
 import { asAppError, AppError, normalizeError } from './kernel/errors.ts';
+import { throwDaemonError } from './daemon-error.ts';
 import { printHumanError, printJson } from './utils/output.ts';
 import { readVersion } from './utils/version.ts';
 import { pathToFileURL } from 'node:url';
@@ -37,7 +38,7 @@ import {
 import { resolveRemoteAuthForCli } from './cli/auth-session.ts';
 import type { CliFlags, FlagKey } from './commands/cli-grammar/flag-types.ts';
 import type { SessionRuntimeHints } from './kernel/contracts.ts';
-import { isKnownCliCommandName } from './command-catalog.ts';
+import { INTERNAL_COMMANDS, isKnownCliCommandName } from './command-catalog.ts';
 
 type CliDeps = {
   sendToDaemon: typeof sendToDaemon;
@@ -210,11 +211,29 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
       try {
         if (command === 'react-devtools') {
           const exitCode = await runReactDevtoolsCommand(positionals, {
-            flags: effectiveFlags,
+            flags: {
+              ...effectiveFlags,
+              leaseProvider: connectionDefaults?.connection?.leaseProvider,
+            },
             stateDir: daemonPaths.baseDir,
             session: effectiveFlags.session ?? sessionName,
             cwd: process.cwd(),
             env: process.env,
+            configureDirectPortReverse: async () => {
+              const response = await deps.sendToDaemon({
+                command: INTERNAL_COMMANDS.runtime,
+                positionals: ['port-reverse'],
+                flags: {
+                  ...effectiveFlags,
+                  leaseProvider: connectionDefaults?.connection?.leaseProvider,
+                  devicePort: 8097,
+                  hostPort: 8097,
+                  portReverseName: 'react-devtools',
+                },
+                session: effectiveFlags.session ?? sessionName,
+              });
+              if (!response.ok) throwDaemonError(response.error);
+            },
           });
           process.exit(exitCode);
           return;

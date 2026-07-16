@@ -498,9 +498,12 @@ export function createAndroidPortReverseManager(
   provider: AndroidAdbProvider | AndroidAdbExecutor,
 ): AndroidPortReverseProvider {
   const normalized = normalizeAndroidAdbProvider(provider);
+  if (normalized.reverse && managedAndroidPortReverseProviders.has(normalized.reverse)) {
+    return normalized.reverse;
+  }
   const reverse = normalized.reverse ?? createExecAndroidPortReverseProvider(normalized.exec);
   const active = new Map<AndroidPortReverseEndpoint, AndroidPortReverseMapping>();
-  return {
+  const manager: AndroidPortReverseProvider = {
     async ensure(mapping, options) {
       const current = active.get(mapping.local);
       if (current && current.ownerId !== mapping.ownerId) {
@@ -541,6 +544,8 @@ export function createAndroidPortReverseManager(
       return reverse.list ? await reverse.list(options) : [...active.values()];
     },
   };
+  managedAndroidPortReverseProviders.add(manager);
+  return manager;
 }
 
 function normalizeAndroidAdbProvider(
@@ -647,6 +652,8 @@ function stripAdbSerialArgs(args: string[], expectedSerial: string): string[] | 
   if (args[1] !== expectedSerial) return undefined;
   return args.slice(2);
 }
+
+const managedAndroidPortReverseProviders = new WeakSet<AndroidPortReverseProvider>();
 
 function createExecAndroidPortReverseProvider(adb: AndroidAdbExecutor): AndroidPortReverseProvider {
   const owned = new Map<string, Set<AndroidPortReverseEndpoint>>();

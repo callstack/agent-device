@@ -146,6 +146,12 @@ test('Limrun Android reverses localhost URL ports through the persistent ADB tun
   });
 
   try {
+    vi.mocked(runCmd).mockImplementation(async (_command, args) => ({
+      stdout:
+        args[2] === 'reverse' && args[3] === '--list' ? '127.0.0.1:62001 tcp:8081 tcp:8081\n' : '',
+      stderr: '',
+      exitCode: 0,
+    }));
     const device = await allocateLimrunDevice(runtime, androidLease());
     const interactor = runtime.getInteractor(device, {});
     if (!interactor) throw new Error('Limrun runtime must return an interactor');
@@ -212,10 +218,16 @@ function assertAndroidTunnelLifecycle(openUrl: string): void {
     '-s',
     '127.0.0.1:62001',
     'reverse',
+    '--list',
+  ]);
+  assert.deepEqual(vi.mocked(runCmd).mock.calls[3]?.[1], [
+    '-s',
+    '127.0.0.1:62001',
+    'reverse',
     '--remove',
     'tcp:8081',
   ]);
-  assert.deepEqual(vi.mocked(runCmd).mock.calls[3]?.[1], ['disconnect', '127.0.0.1:62001']);
+  assert.deepEqual(vi.mocked(runCmd).mock.calls[4]?.[1], ['disconnect', '127.0.0.1:62001']);
   assert.equal(limrunMockState.androidTunnelClose.mock.calls.length, 1);
 }
 
@@ -266,8 +278,34 @@ test('Limrun Android installs direct local artifacts through Limrun assets', asy
     assert.deepEqual(result, {
       packageName: 'com.example.android',
       launchTarget: 'com.example.android',
-      appName: 'android',
+      appName: 'Example',
     });
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+test('Limrun Android shares an in-flight ADB tunnel across concurrent port reverse requests', async () => {
+  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key', version: '9.9.9-test' });
+
+  try {
+    await allocateLimrunDevice(runtime, androidLease());
+    await Promise.all([
+      runtime.configurePortReverse({
+        leaseId: 'lease-android',
+        devicePort: 8081,
+        hostPort: 8081,
+        name: 'metro',
+      }),
+      runtime.configurePortReverse({
+        leaseId: 'lease-android',
+        devicePort: 8097,
+        hostPort: 8097,
+        name: 'react-devtools',
+      }),
+    ]);
+
+    assert.equal(limrunMockState.androidStartAdbTunnel.mock.calls.length, 1);
   } finally {
     await runtime.shutdown();
   }

@@ -29,6 +29,7 @@ import {
   resolveAndroidAdbExecutor,
   resolveAndroidAdbProvider,
   withAndroidAdbProvider,
+  type AndroidAdbProvider,
 } from '../adb-executor.ts';
 import { runCmd, runCmdBackground } from '../../../utils/exec.ts';
 import { AppError, normalizeError } from '../../../kernel/errors.ts';
@@ -219,6 +220,16 @@ test('createAndroidPortReverseManager rejects mappings owned by another session'
     () => manager.ensure({ local: 'tcp:8081', remote: 'tcp:8082', ownerId: 'session-b' }),
     /already owned by session-a/,
   );
+});
+
+test('createAndroidPortReverseManager reuses a provider-held canonical manager', () => {
+  const provider: AndroidAdbProvider = {
+    exec: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+  };
+  const manager = createAndroidPortReverseManager(provider);
+  provider.reverse = manager;
+
+  assert.strictEqual(createAndroidPortReverseManager(provider), manager);
 });
 
 test('createAndroidPortReverseManager lists parsed reverse mappings with owners', async () => {
