@@ -2532,6 +2532,40 @@ Treat the recovery message as a warning, not a fatal error. Use the exposed Sear
     ],
   }),
   makeCase({
+    id: 'record-and-heal-diagnostics-no-record',
+    contract: [
+      'Replay path: ./replays/checkout-form.ad',
+      'The replay was armed with replay ./replays/checkout-form.ad --save-script before step 1',
+      'A divergence occurred; repairHint: record-and-heal',
+      'resume.repairSessionHeld is true; the repair session is held live',
+      "The divergence screen.refs lists two candidates sharing the recorded 'Submit' label: @e5 and @e9",
+      'The divergence report says: "While armed, read-only inspection (snapshot -i, get attrs, find, is) is recorded too — use --no-record on those commands or they will land in the healed script."',
+      'get attrs @e5 reports disabled: true; get attrs @e9 reports disabled: false',
+      '@e9 is therefore the corrected control to press; pressing it is the one step that SHOULD be recorded, so do not use --no-record on it',
+      'The divergence reports resume.from=6 and resume.planDigest=abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567',
+      'Resume by running replay on the same path again with --from 6 --plan-digest abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567',
+    ],
+    task: 'Plan the commands to inspect both candidate refs and find which one is the corrected control, press the corrected control, then resume the armed repair with the reported values. Follow the record-and-heal repair rules for which of these commands should be recorded and which should not.',
+    outputs: [
+      /(?:^|\n)agent-device\s+get\s+attrs\s+@e5\b(?=[^\n]*--no-record\b)[^\n]*(?:\n|$)/i,
+      /(?:^|\n)agent-device\s+get\s+attrs\s+@e9\b(?=[^\n]*--no-record\b)[^\n]*(?:\n|$)/i,
+      /(?:^|\n)agent-device\s+(?:press|click)\s+@e9\b(?:(?!\n)(?!--no-record))*(?:\n|$)/i,
+      /(?:^|\n)agent-device\s+replay\s+\.\/replays\/checkout-form\.ad(?=[^\n]*--from\s+6\b)(?=[^\n]*--plan-digest\s+abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567\b)[^\n]*(?:\n|$)/i,
+    ],
+    forbiddenOutputs: [
+      // Diagnostic reads used only to locate the target must not be recorded
+      // into the healed script — a bare `get attrs` line (no --no-record)
+      // is exactly the #1271 foot-gun the interim guidance stops.
+      /(?:^|\n)agent-device\s+get\s+attrs\s+@e5\b(?:(?!\n)(?!--no-record))*(?:\n|$)/i,
+      /(?:^|\n)agent-device\s+get\s+attrs\s+@e9\b(?:(?!\n)(?!--no-record))*(?:\n|$)/i,
+      // The corrective press is the one step that SHOULD land in the healed
+      // script, so it must not be suppressed with --no-record.
+      /(?:^|\n)agent-device\s+(?:press|click)\s+@e9\b(?=[^\n]*--no-record\b)[^\n]*(?:\n|$)/i,
+      // Never press the disabled decoy candidate.
+      /(?:^|\n)agent-device\s+(?:press|click)\s+@e5\b/i,
+    ],
+  }),
+  makeCase({
     id: 'replay-maestro-compatibility-flow',
     contract: [
       'Flow path: ./flows/checkout-form.yaml',

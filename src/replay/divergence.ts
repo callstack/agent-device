@@ -416,6 +416,13 @@ export function formatReplayDivergenceReport(
  * structured wire never disagree on the advertised next command. When
  * `resume.allowed` is false, a resume command is never rendered for any hint,
  * and the reported `reason` is surfaced instead.
+ *
+ * #1271 stage 1: whenever `resume.repairSessionHeld` is `true` (this
+ * divergence is from a repair-armed `--save-script` replay), every hint's
+ * guidance also appends `REPAIR_DIAGNOSTICS_NO_RECORD_CLAUSE` — read-only
+ * diagnostics used to locate the repair target are recorded into the healed
+ * script by default, so the agent must pass `--no-record` on inspection
+ * commands. See `buildRepairHintGuidance`.
  */
 function divergenceRepairHintLine(repairHint: unknown, resume: unknown): string[] {
   if (typeof repairHint !== 'string') return [];
@@ -456,8 +463,46 @@ function formatResumeCommand(from: number, planDigest: string): string {
   return `replay --from ${from} --plan-digest ${planDigest}`;
 }
 
+/**
+ * #1271 stage 1 (safe interim; the maintainer's default-exclusion stage 2 is
+ * gated on an ADR-0012 amendment): read-only diagnostics an agent runs to
+ * LOCATE the repair target (`snapshot -i`, `get attrs`, `find`, `is`) are, by
+ * default, recorded into the healed script exactly like the corrective press
+ * — the wave-3 E3 experiment measured 0/4 trials producing a clean healed
+ * script hands-off, and one recorded `get attrs` caused a second,
+ * self-inflicted `identity-mismatch` divergence on fresh replay. Distinct from
+ * the existing `--no-record` mentions above (`state-repair`'s "fix app state
+ * with --no-record actions", and `buildDualPathRepairHintGuidance`'s
+ * state-fix clause), which are about correcting APP STATE, not about
+ * inspection reads — both clauses can legitimately apply to the same
+ * divergence.
+ */
+const REPAIR_DIAGNOSTICS_NO_RECORD_CLAUSE =
+  'Read-only inspection while armed (snapshot -i, get attrs, find, is) is recorded too — use --no-record on those commands or they will land in the healed script.';
+
+/**
+ * Gated on `resume.repairSessionHeld === true` (decision 6, R7 C1): that is
+ * the ONLY signal that this divergence came from a repair-armed
+ * (`--save-script`) replay, where recorded diagnostics can actually pollute a
+ * healed script. It is absent (never `false`) on a plain non-repair
+ * divergence, so the clause must never render there — it would be pure noise.
+ */
+function isRepairSessionHeld(resume: unknown): boolean {
+  const record = resume as Record<string, unknown> | undefined;
+  return record?.repairSessionHeld === true;
+}
+
 function buildRepairHintGuidance(repairHint: string, resume: unknown): string | undefined {
   const guidance = readResumeGuidance(resume);
+  const core = buildRepairHintGuidanceCore(repairHint, guidance);
+  if (core === undefined) return undefined;
+  return isRepairSessionHeld(resume) ? `${core} ${REPAIR_DIAGNOSTICS_NO_RECORD_CLAUSE}` : core;
+}
+
+function buildRepairHintGuidanceCore(
+  repairHint: string,
+  guidance: ResumeGuidance | undefined,
+): string | undefined {
   switch (repairHint) {
     case 'record-and-heal':
       return guidance?.allowed

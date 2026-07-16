@@ -679,3 +679,207 @@ test('formatReplayDivergenceReport renders neither caution command when resume i
   assert.doesNotMatch(report!, /replay --from/);
   assert.match(report!, /cannot currently be resumed automatically/);
 });
+
+// --- #1271 stage 1 (safe interim; default exclusion is stage 2, gated on an
+// ADR-0012 amendment): read-only diagnostics an agent runs mid-repair to
+// LOCATE the target (snapshot -i, get attrs, find, is) are recorded into the
+// healed script by default. The repairHint guidance must teach this — but
+// ONLY when `resume.repairSessionHeld === true` (decision 6, R7 C1's signal
+// that this divergence came from a repair-armed `--save-script` replay).
+// A plain non-repair divergence never carries `repairSessionHeld` and must
+// never render the clause — it would be pure noise. ---
+
+const REPAIR_DIAGNOSTICS_CLAUSE_PATTERN =
+  /Read-only inspection while armed \(snapshot -i, get attrs, find, is\) is recorded too — use --no-record on those commands or they will land in the healed script\./;
+
+test('formatReplayDivergenceReport appends the diagnostics --no-record clause for record-and-heal when repairSessionHeld is true', async () => {
+  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const report = formatReplayDivergenceReport({
+    divergence: {
+      version: 1,
+      kind: 'action-failure',
+      step: { index: 2, source: { path: '/tmp/flow.ad', line: 3 } },
+      action: 'click id="article"',
+      cause: { code: 'COMMAND_FAILED', message: 'not hittable' },
+      screen: { state: 'available', refsGeneration: 1, refs: [{ ref: 'e1', role: 'button' }] },
+      suggestions: [],
+      suggestionCount: 0,
+      resume: { allowed: true, from: 3, planDigest: 'deadbeef', repairSessionHeld: true },
+      repairHint: 'record-and-heal',
+    },
+  });
+  assert.ok(report);
+  assert.match(report!, REPAIR_DIAGNOSTICS_CLAUSE_PATTERN);
+  // The existing resume guidance must still render — the new clause is
+  // additive, not a replacement.
+  assert.match(report!, /then replay --from 3 --plan-digest deadbeef\./);
+});
+
+test('formatReplayDivergenceReport OMITS the diagnostics clause for record-and-heal when repairSessionHeld is absent (plain, non-repair divergence)', async () => {
+  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const report = formatReplayDivergenceReport({
+    divergence: {
+      version: 1,
+      kind: 'action-failure',
+      step: { index: 2, source: { path: '/tmp/flow.ad', line: 3 } },
+      action: 'click id="article"',
+      cause: { code: 'COMMAND_FAILED', message: 'not hittable' },
+      screen: { state: 'available', refsGeneration: 1, refs: [{ ref: 'e1', role: 'button' }] },
+      suggestions: [],
+      suggestionCount: 0,
+      // No `repairSessionHeld` — this divergence is not from a repair-armed
+      // replay, so the diagnostics clause would be pure noise.
+      resume: { allowed: true, from: 3, planDigest: 'deadbeef' },
+      repairHint: 'record-and-heal',
+    },
+  });
+  assert.ok(report);
+  assert.doesNotMatch(report!, /Read-only inspection/);
+  assert.doesNotMatch(report!, /--no-record on those commands/);
+});
+
+test('formatReplayDivergenceReport appends the diagnostics clause for state-repair when armed, distinct from the existing app-state --no-record clause', async () => {
+  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const report = formatReplayDivergenceReport({
+    divergence: {
+      version: 1,
+      kind: 'action-failure',
+      step: { index: 4, source: { path: '/tmp/flow.ad', line: 8 } },
+      action: 'click label="Continue"',
+      cause: { code: 'COMMAND_FAILED', message: 'not hittable' },
+      screen: { state: 'available', refsGeneration: 1, refs: [{ ref: 'e1', role: 'button' }] },
+      suggestions: [],
+      suggestionCount: 0,
+      resume: { allowed: true, from: 4, planDigest: 'cafef00d', repairSessionHeld: true },
+      repairHint: 'state-repair',
+    },
+  });
+  assert.ok(report);
+  // The app-state-fix clause (about correcting APP STATE) still renders...
+  assert.match(report!, /fix app state with --no-record actions, then replay --from 4/);
+  // ...and the diagnostics clause (about inspection READS) is additive, not
+  // a replacement for it — both can be true for the same divergence.
+  assert.match(report!, REPAIR_DIAGNOSTICS_CLAUSE_PATTERN);
+});
+
+test('formatReplayDivergenceReport OMITS the diagnostics clause for state-repair when repairSessionHeld is absent', async () => {
+  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const report = formatReplayDivergenceReport({
+    divergence: {
+      version: 1,
+      kind: 'action-failure',
+      step: { index: 4, source: { path: '/tmp/flow.ad', line: 8 } },
+      action: 'click label="Continue"',
+      cause: { code: 'COMMAND_FAILED', message: 'not hittable' },
+      screen: { state: 'available', refsGeneration: 1, refs: [{ ref: 'e1', role: 'button' }] },
+      suggestions: [],
+      suggestionCount: 0,
+      resume: { allowed: true, from: 4, planDigest: 'cafef00d' },
+      repairHint: 'state-repair',
+    },
+  });
+  assert.ok(report);
+  assert.match(report!, /fix app state with --no-record actions, then replay --from 4/);
+  assert.doesNotMatch(report!, /Read-only inspection/);
+});
+
+test('formatReplayDivergenceReport appends the diagnostics clause for caution when armed, alongside the dual-path resume commands', async () => {
+  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const report = formatReplayDivergenceReport({
+    divergence: {
+      version: 1,
+      kind: 'identity-mismatch',
+      step: { index: 2, source: { path: '/tmp/flow.ad', line: 3 } },
+      action: 'click label="Save"',
+      cause: { code: 'IDENTITY_MISMATCH', message: 'resolved a different element' },
+      screen: { state: 'available', refsGeneration: 1, refs: [{ ref: 'e1', role: 'button' }] },
+      suggestions: [],
+      suggestionCount: 0,
+      resume: {
+        allowed: true,
+        from: 2,
+        planDigest: 'deadbeef',
+        alternateFrom: 3,
+        repairSessionHeld: true,
+      },
+      repairHint: 'caution',
+    },
+  });
+  assert.ok(report);
+  assert.match(
+    report!,
+    /if you performed the step's intent as a recorded action: replay --from 3 --plan-digest deadbeef\./,
+  );
+  assert.match(report!, REPAIR_DIAGNOSTICS_CLAUSE_PATTERN);
+});
+
+test('formatReplayDivergenceReport OMITS the diagnostics clause for caution when repairSessionHeld is absent', async () => {
+  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const report = formatReplayDivergenceReport({
+    divergence: {
+      version: 1,
+      kind: 'identity-mismatch',
+      step: { index: 2, source: { path: '/tmp/flow.ad', line: 3 } },
+      action: 'click label="Save"',
+      cause: { code: 'IDENTITY_MISMATCH', message: 'resolved a different element' },
+      screen: { state: 'available', refsGeneration: 1, refs: [{ ref: 'e1', role: 'button' }] },
+      suggestions: [],
+      suggestionCount: 0,
+      resume: { allowed: true, from: 2, planDigest: 'deadbeef', alternateFrom: 3 },
+      repairHint: 'caution',
+    },
+  });
+  assert.ok(report);
+  assert.doesNotMatch(report!, /Read-only inspection/);
+});
+
+test('formatReplayDivergenceReport appends the diagnostics clause for manual when armed, even when resume is NOT allowed', async () => {
+  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  // `repairSessionHeld` reports the daemon KEPT THE SESSION LIVE, independent
+  // of `resume.allowed` (plan-resumability) — the diagnostics clause must
+  // still render here: the agent may still inspect the (held) session while
+  // deciding on a manual repair, and any such read is still recorded.
+  const report = formatReplayDivergenceReport({
+    divergence: {
+      version: 1,
+      kind: 'action-failure',
+      step: { index: 5, source: { path: '/tmp/flow.ad', line: 9 } },
+      action: 'click label="Confirm"',
+      cause: { code: 'COMMAND_FAILED', message: 'not hittable' },
+      screen: { state: 'available', refsGeneration: 1, refs: [{ ref: 'e1', role: 'button' }] },
+      suggestions: [],
+      suggestionCount: 0,
+      resume: {
+        allowed: false,
+        from: 5,
+        planDigest: 'cafef00d',
+        reason: 'step 4 is inside runtime control flow (retry); skipping it cannot be proven safe.',
+        repairSessionHeld: true,
+      },
+      repairHint: 'manual',
+    },
+  });
+  assert.ok(report);
+  assert.match(report!, /cannot currently be resumed automatically/);
+  assert.match(report!, REPAIR_DIAGNOSTICS_CLAUSE_PATTERN);
+});
+
+test('formatReplayDivergenceReport OMITS the diagnostics clause for manual when repairSessionHeld is absent', async () => {
+  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const report = formatReplayDivergenceReport({
+    divergence: {
+      version: 1,
+      kind: 'action-failure',
+      step: { index: 5, source: { path: '/tmp/flow.ad', line: 9 } },
+      action: 'click label="Confirm"',
+      cause: { code: 'COMMAND_FAILED', message: 'not hittable' },
+      screen: { state: 'available', refsGeneration: 1, refs: [{ ref: 'e1', role: 'button' }] },
+      suggestions: [],
+      suggestionCount: 0,
+      resume: { allowed: true, from: 5, planDigest: 'cafef00d', alternateFrom: 6 },
+      repairHint: 'manual',
+    },
+  });
+  assert.ok(report);
+  assert.doesNotMatch(report!, /Read-only inspection/);
+});
