@@ -599,12 +599,12 @@ extension RunnerTests {
       var error: Error?
       var probeDeadline: Date?
       var observedDeadline: Date?
+      var commandStartedAt: Date?
     }
     let box = ResultBox()
     let releaseResolution = DispatchSemaphore(value: 0)
     let resolutionExited = expectation(description: "bounded alert resolution exited")
     let commandFinished = expectation(description: "alert command respected its deadline")
-    let startedAt = Date()
     let command = try runnerCommandFixture(
       #"{"command":"alert","commandId":"alert-deadline","appBundleId":"com.apple.springboard","action":"get","timeoutMs":500}"#
     )
@@ -629,6 +629,7 @@ extension RunnerTests {
     }
 
     DispatchQueue(label: "agent-device.runner.tests.alert-deadline").async {
+      box.commandStartedAt = Date()
       do {
         _ = try self.executeDispatched(command: command)
       } catch {
@@ -643,10 +644,12 @@ extension RunnerTests {
     XCTAssertEqual(error?.code, RunnerErrorCode.mainThreadExecutionTimedOut)
     XCTAssertNotNil(box.probeDeadline)
     XCTAssertNotNil(box.observedDeadline)
-    if let probeDeadline = box.probeDeadline, let observedDeadline = box.observedDeadline {
+    if let probeDeadline = box.probeDeadline,
+      let observedDeadline = box.observedDeadline,
+      let commandStartedAt = box.commandStartedAt
+    {
       XCTAssertEqual(probeDeadline.timeIntervalSince(observedDeadline), 0, accuracy: 0.01)
-      XCTAssertGreaterThan(observedDeadline.timeIntervalSince(startedAt), 0)
-      XCTAssertLessThan(observedDeadline.timeIntervalSince(startedAt), 0.75)
+      XCTAssertEqual(observedDeadline.timeIntervalSince(commandStartedAt), 0.5, accuracy: 0.05)
     }
 
     releaseResolution.signal()
