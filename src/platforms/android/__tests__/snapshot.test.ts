@@ -892,6 +892,56 @@ test('snapshotAndroid emits unavailable diagnostics when helper artifact is miss
   }
 });
 
+test('snapshotAndroid gives an actionable hint when the helper artifact is missing on disk', async () => {
+  const accessSpy = vi.spyOn(fs, 'access').mockRejectedValueOnce(new Error('helper missing'));
+
+  try {
+    await assert.rejects(
+      () => snapshotAndroid(device),
+      (error) => {
+        assert.match((error as Error).message, /the bundled helper artifact was not found/);
+        const hint = String((error as { details?: Record<string, unknown> }).details?.hint);
+        assert.match(hint, /pnpm build:android/);
+        assert.match(hint, /prepack/);
+        assert.match(hint, /\.apk\.idsig/);
+        assert.match(hint, /\.apk\.sha256/);
+        assert.match(hint, /\.manifest\.json/);
+        return true;
+      },
+    );
+  } finally {
+    accessSpy.mockRestore();
+  }
+});
+
+test('snapshotAndroid distinguishes a device-side install rejection from a missing build artifact', async () => {
+  const helperAdb: AndroidAdbExecutor = async (args) => {
+    if (args.includes('--show-versioncode')) {
+      // No installed package reported, so ensureAndroidSnapshotHelper treats the
+      // helper as missing and attempts a real install.
+      return { exitCode: 0, stdout: '', stderr: '' };
+    }
+    if (args[0] === 'install') {
+      return { exitCode: 1, stdout: '', stderr: 'Failure [INSTALL_FAILED_TEST_ONLY]' };
+    }
+    throw new Error(`unexpected adb args: ${args.join(' ')}`);
+  };
+
+  await assert.rejects(
+    () => snapshotAndroidWithHelper(helperAdb),
+    (error) => {
+      const message = (error as Error).message;
+      assert.match(message, /Android snapshot helper failed/);
+      assert.match(message, /Failed to install Android snapshot helper/);
+      assert.match(message, /INSTALL_FAILED_TEST_ONLY/);
+      const hint = String((error as { details?: Record<string, unknown> }).details?.hint);
+      assert.match(hint, /device-side install failure/);
+      assert.doesNotMatch(hint, /pnpm build:android/);
+      return true;
+    },
+  );
+});
+
 test('snapshotAndroid emits timeout diagnostics when helper capture times out', async () => {
   const helperAdb = createHelperAdb({
     instrument: async () => {

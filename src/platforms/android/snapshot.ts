@@ -467,10 +467,13 @@ function androidSnapshotHelperCaptureError(error: unknown, reason: string): AppE
   const busy =
     isStructuredHelperTimeout(normalized.details?.helper, normalized.message) ||
     isKilledHelperInstrumentationFailure(normalized);
+  const installFailure = normalized.details?.androidSnapshotHelperInstallFailure === true;
   const hint = busy
     ? 'Android accessibility snapshots can be blocked by busy or continuously changing app UI. Use screenshot as visual truth after this timeout and report the busy UI if it persists.'
-    : (normalized.hint ??
-      'Retry once. If the helper still fails, run agent-device doctor and report the diagnostic log; agent-device does not substitute a second snapshot engine.');
+    : installFailure
+      ? `${normalized.hint ? `${normalized.hint} ` : ''}This is a device-side install failure (adb rejection or OEM policy) — the helper artifact itself is present, this is not a missing/unbuilt build.`
+      : (normalized.hint ??
+        'Retry once. If the helper still fails, run agent-device doctor and report the diagnostic log; agent-device does not substitute a second snapshot engine.');
   return new AppError(
     toAppErrorCode(normalized.code),
     `Android snapshot helper failed: ${reason}`,
@@ -545,7 +548,7 @@ function androidSnapshotHelperUnavailableError(errorReason: string | undefined):
   const reason = errorReason ?? 'the bundled helper artifact was not found';
   return new AppError('COMMAND_FAILED', `Android snapshot helper is unavailable: ${reason}`, {
     androidSnapshotHelperFailureReason: reason,
-    hint: 'For a source checkout, run pnpm build:android. For a packaged install, reinstall agent-device; the Android snapshot helper must ship with the package.',
+    hint: 'Run `pnpm build:android` to build the full helper dist (android/snapshot-helper/dist: the .apk, .apk.idsig, .apk.sha256, and .manifest.json) for a source checkout. Packaged installs ship this dist automatically via the prepack script — if it is missing from a packaged install, reinstall agent-device.',
   });
 }
 

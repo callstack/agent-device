@@ -151,6 +151,9 @@ export async function ensureAndroidSnapshotHelper(options: {
     throw androidAdbResultError('Failed to install Android snapshot helper', result, {
       packageName,
       versionCode,
+      // Distinguishes a device-side install rejection (adb/OEM policy) from an
+      // artifact-resolution failure so the capture-layer error can hint accordingly.
+      androidSnapshotHelperInstallFailure: true,
     });
   }
 
