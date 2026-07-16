@@ -95,7 +95,10 @@ export async function runStableCaptureLoop(
       quietSinceMs = nowMs;
       lastDigest = digest;
       lastNodeCount = capture.snapshot.nodes.length;
-      await sleep(runtime, stableCaptureDelayMs({ nowMs, quietSinceMs, quietMs, pollMs }));
+      await sleep(
+        runtime,
+        stableCaptureDelayMs({ nowMs, quietSinceMs, quietMs, pollMs, deadlineMs }),
+      );
       continue;
     }
     if (digest !== lastDigest) {
@@ -112,7 +115,10 @@ export async function runStableCaptureLoop(
         lastCapture,
       };
     }
-    await sleep(runtime, stableCaptureDelayMs({ nowMs, quietSinceMs, quietMs, pollMs }));
+    await sleep(
+      runtime,
+      stableCaptureDelayMs({ nowMs, quietSinceMs, quietMs, pollMs, deadlineMs }),
+    );
   }
   return {
     settled: false,
@@ -134,16 +140,25 @@ function isPrivateAxRecovery(verdict: SnapshotQualityVerdict | undefined): boole
  * Once it is within reach, sleep to just past it instead — the capture that
  * decides `settled` then always spans the window, rather than landing on the
  * boundary where clock skew picks the answer (#1306).
+ *
+ * Bounded by the loop's own budget: it only runs again while `now < deadline`,
+ * so a wake-up past the deadline spends the very capture the epsilon exists to
+ * land. Where the budget is the tighter constraint, wake just inside it.
  */
 function stableCaptureDelayMs(params: {
   nowMs: number;
   quietSinceMs: number;
   quietMs: number;
   pollMs: number;
+  deadlineMs: number;
 }): number {
   const remainingQuietMs = params.quietSinceMs + params.quietMs - params.nowMs;
-  if (remainingQuietMs > params.pollMs) return params.pollMs;
-  return Math.max(STABLE_MIN_POLL_MS, remainingQuietMs + QUIET_DEADLINE_EPSILON_MS);
+  const cadenceMs =
+    remainingQuietMs > params.pollMs
+      ? params.pollMs
+      : Math.max(STABLE_MIN_POLL_MS, remainingQuietMs + QUIET_DEADLINE_EPSILON_MS);
+  const lastUsefulWakeMs = params.deadlineMs - params.nowMs - 1;
+  return lastUsefulWakeMs > 0 ? Math.min(cadenceMs, lastUsefulWakeMs) : cadenceMs;
 }
 
 // Intentionally does not update the session snapshot: the stable loop captures

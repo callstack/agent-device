@@ -43,23 +43,34 @@ test('runtime wait stable settles after two unchanged captures', async () => {
   assert.equal(captures, 3);
 });
 
-test('runtime wait stable wakes past the quiet deadline instead of onto it', async () => {
-  const snapshot = selectorReadSnapshot();
-  const sleeps: number[] = [];
+// A clock whose sleep lands `undershootMs` short of what was asked, modelling
+// the real defect: `setTimeout(n)` can advance `Date.now()` by only n-1,
+// because libuv times the sleep on the monotonic loop clock while `now()` reads
+// the wall clock.
+function createUndershootingClock(undershootMs = 1): {
+  now: () => number;
+  sleep: (ms: number) => Promise<void>;
+} {
   let elapsed = 0;
-  const clock = {
+  return {
     now: () => elapsed,
     sleep: async (ms: number) => {
-      sleeps.push(ms);
-      elapsed += ms;
+      elapsed += Math.max(0, ms - undershootMs);
     },
   };
-  let captures = 0;
+}
+
+function createStableCaptureDevice(clock: {
+  now: () => number;
+  sleep: (ms: number) => Promise<void>;
+}) {
+  const snapshot = selectorReadSnapshot();
+  const counter = { captures: 0 };
   const device = createAgentDevice({
     backend: {
       platform: 'ios',
       captureSnapshot: async () => {
-        captures += 1;
+        counter.captures += 1;
         return { snapshot };
       },
     } satisfies AgentDeviceBackend,
@@ -68,9 +79,15 @@ test('runtime wait stable wakes past the quiet deadline instead of onto it', asy
     policy: localCommandPolicy(),
     clock,
   });
+  return { device, counter };
+}
 
+test('runtime wait stable settles at the second capture even when the sleep undershoots', async () => {
   // A 300ms quiet window equals the poll cadence, so the second capture is the
-  // one that decides `settled`.
+  // one that decides `settled` — and a sleep that lands 1ms short must not
+  // change the verdict (#1306).
+  const { device, counter } = createStableCaptureDevice(createUndershootingClock());
+
   const result = await device.selectors.wait({
     session: 'default',
     target: { kind: 'stable', quietMs: 300, timeoutMs: 10_000 },
@@ -78,11 +95,47 @@ test('runtime wait stable wakes past the quiet deadline instead of onto it', asy
 
   assert.equal(result.kind, 'stable');
   if (result.kind === 'stable') assert.equal(result.captures, 2);
-  // Strictly past the window, never onto it: sleeping exactly 300 would leave
-  // the verdict to ~1ms of setTimeout/Date.now() skew (#1306).
-  assert.equal(sleeps.length, 1);
-  assert.ok(sleeps[0]! > 300, `settling capture must clear the window, slept ${sleeps[0]}ms`);
-  assert.equal(captures, 2);
+  assert.equal(counter.captures, 2);
+});
+
+test('runtime wait stable still takes its settling capture when the budget barely clears the window', async () => {
+  // One millisecond of budget past the quiet window is enough to settle, and
+  // the deadline-aware sleep must not spend it on the epsilon: overshooting the
+  // deadline would drop the settling capture the plain cadence would have taken.
+  const { device, counter } = createStableCaptureDevice(createFakeClock());
+
+  const result = await device.selectors.wait({
+    session: 'default',
+    target: { kind: 'stable', quietMs: 300, timeoutMs: 301 },
+  });
+
+  assert.equal(result.kind, 'stable');
+  if (result.kind === 'stable') {
+    assert.equal(result.captures, 2);
+    assert.ok(
+      result.waitedMs <= 301,
+      `waitedMs must stay within the budget, got ${result.waitedMs}`,
+    );
+  }
+  assert.equal(counter.captures, 2);
+});
+
+test('runtime wait stable cannot settle when the budget only reaches the quiet deadline', async () => {
+  // The other side of the boundary: the window has to ELAPSE inside the budget,
+  // so a budget equal to it leaves no instant where two captures span it. The
+  // deadline-aware sleep must not manufacture a settle here.
+  const { device } = createStableCaptureDevice(createFakeClock());
+
+  await assert.rejects(
+    () =>
+      device.selectors.wait({
+        session: 'default',
+        target: { kind: 'stable', quietMs: 300, timeoutMs: 300 },
+      }),
+    (error: unknown) =>
+      error instanceof Error &&
+      (error as { details?: { reason?: string } }).details?.reason === 'wait_stable_timeout',
+  );
 });
 
 test('runtime wait stable hints when it settles on a nearly-empty tree', async () => {
