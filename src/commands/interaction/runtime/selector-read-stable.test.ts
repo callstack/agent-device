@@ -43,6 +43,48 @@ test('runtime wait stable settles after two unchanged captures', async () => {
   assert.equal(captures, 3);
 });
 
+test('runtime wait stable wakes past the quiet deadline instead of onto it', async () => {
+  const snapshot = selectorReadSnapshot();
+  const sleeps: number[] = [];
+  let elapsed = 0;
+  const clock = {
+    now: () => elapsed,
+    sleep: async (ms: number) => {
+      sleeps.push(ms);
+      elapsed += ms;
+    },
+  };
+  let captures = 0;
+  const device = createAgentDevice({
+    backend: {
+      platform: 'ios',
+      captureSnapshot: async () => {
+        captures += 1;
+        return { snapshot };
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
+    policy: localCommandPolicy(),
+    clock,
+  });
+
+  // A 300ms quiet window equals the poll cadence, so the second capture is the
+  // one that decides `settled`.
+  const result = await device.selectors.wait({
+    session: 'default',
+    target: { kind: 'stable', quietMs: 300, timeoutMs: 10_000 },
+  });
+
+  assert.equal(result.kind, 'stable');
+  if (result.kind === 'stable') assert.equal(result.captures, 2);
+  // Strictly past the window, never onto it: sleeping exactly 300 would leave
+  // the verdict to ~1ms of setTimeout/Date.now() skew (#1306).
+  assert.equal(sleeps.length, 1);
+  assert.ok(sleeps[0]! > 300, `settling capture must clear the window, slept ${sleeps[0]}ms`);
+  assert.equal(captures, 2);
+});
+
 test('runtime wait stable hints when it settles on a nearly-empty tree', async () => {
   const tinySnapshot = makeSnapshotState([
     {

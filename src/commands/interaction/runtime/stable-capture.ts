@@ -19,6 +19,12 @@ import {
  */
 
 const STABLE_POLL_INTERVAL_MS = 300;
+const STABLE_MIN_POLL_MS = 25;
+// Wake PAST the quiet deadline rather than exactly on it. `setTimeout(n)` can
+// advance `Date.now()` by only n-1 — libuv times the sleep on the monotonic
+// loop clock while `now()` reads the wall clock — so a capture landing on the
+// deadline decides `settled` by sub-millisecond skew rather than by the UI.
+const QUIET_DEADLINE_EPSILON_MS = 2;
 export const DEFAULT_STABLE_QUIET_MS = 500;
 export const DEFAULT_STABLE_TIMEOUT_MS = 10_000;
 // Below this node count a settled tree is suspicious: real app surfaces have
@@ -53,7 +59,7 @@ export async function runStableCaptureLoop(
   // Cadence derives from the quiet window (never slower than the default
   // poll): a caller asking for a 50ms quiet window should not be forced onto a
   // 300ms grid — and tests inject the budget instead of waiting real time.
-  const pollMs = Math.min(STABLE_POLL_INTERVAL_MS, Math.max(25, quietMs));
+  const pollMs = Math.min(STABLE_POLL_INTERVAL_MS, Math.max(STABLE_MIN_POLL_MS, quietMs));
   let captures = 0;
   let lastDigest: string | undefined;
   let lastNodeCount = 0;
@@ -89,7 +95,7 @@ export async function runStableCaptureLoop(
       quietSinceMs = nowMs;
       lastDigest = digest;
       lastNodeCount = capture.snapshot.nodes.length;
-      await sleep(runtime, pollMs);
+      await sleep(runtime, stableCaptureDelayMs({ nowMs, quietSinceMs, quietMs, pollMs }));
       continue;
     }
     if (digest !== lastDigest) {
@@ -106,7 +112,7 @@ export async function runStableCaptureLoop(
         lastCapture,
       };
     }
-    await sleep(runtime, pollMs);
+    await sleep(runtime, stableCaptureDelayMs({ nowMs, quietSinceMs, quietMs, pollMs }));
   }
   return {
     settled: false,
@@ -120,6 +126,24 @@ export async function runStableCaptureLoop(
 
 function isPrivateAxRecovery(verdict: SnapshotQualityVerdict | undefined): boolean {
   return verdict?.state === 'recovered' && verdict.backend === 'private-ax';
+}
+
+/**
+ * How long to wait before the next capture. While the quiet deadline is still
+ * further away than one poll, keep the cadence so a change is noticed promptly.
+ * Once it is within reach, sleep to just past it instead — the capture that
+ * decides `settled` then always spans the window, rather than landing on the
+ * boundary where clock skew picks the answer (#1306).
+ */
+function stableCaptureDelayMs(params: {
+  nowMs: number;
+  quietSinceMs: number;
+  quietMs: number;
+  pollMs: number;
+}): number {
+  const remainingQuietMs = params.quietSinceMs + params.quietMs - params.nowMs;
+  if (remainingQuietMs > params.pollMs) return params.pollMs;
+  return Math.max(STABLE_MIN_POLL_MS, remainingQuietMs + QUIET_DEADLINE_EPSILON_MS);
 }
 
 // Intentionally does not update the session snapshot: the stable loop captures
