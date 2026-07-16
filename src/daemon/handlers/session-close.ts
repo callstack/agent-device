@@ -266,6 +266,70 @@ function repairPlatformCloseIdentity(req: DaemonRequest): string {
   return JSON.stringify(req.positionals ?? []);
 }
 
+type RepairClosePreparation =
+  | { repairArmed: boolean; healedScriptPath?: string }
+  | { response: DaemonResponse };
+
+async function prepareRepairClose(params: {
+  req: DaemonRequest;
+  session: SessionState;
+  logPath: string;
+  sessionStore: SessionStore;
+}): Promise<RepairClosePreparation> {
+  const { req, session, logPath, sessionStore } = params;
+  const repairArmed = session.saveScriptBoundary !== undefined;
+  const closeIdentity = repairPlatformCloseIdentity(req);
+  if (
+    repairArmed &&
+    !(session.repairPlatformCloseSucceeded && session.repairPlatformCloseIdentity === closeIdentity)
+  ) {
+    const platformCloseError = await dispatchTargetedPlatformClose({ req, session, logPath });
+    if (platformCloseError) {
+      return {
+        response: buildRepairCloseFailureResponse(
+          session,
+          toRepairPlatformCloseFailure(platformCloseError),
+        ),
+      };
+    }
+    session.repairPlatformCloseSucceeded = true;
+    session.repairPlatformCloseIdentity = closeIdentity;
+  }
+  const repairCommit = commitRepairBeforeClose(sessionStore, session, req);
+  if (repairCommit.kind === 'failed') {
+    return { response: buildRepairCloseFailureResponse(session, repairCommit.error) };
+  }
+  session.repairPlatformCloseSucceeded = false;
+  session.repairPlatformCloseIdentity = undefined;
+  return {
+    repairArmed,
+    ...(repairCommit.kind === 'committed' ? { healedScriptPath: repairCommit.path } : {}),
+  };
+}
+
+async function releaseProviderLeaseForClose(params: {
+  session: SessionState;
+  leaseRegistry: LeaseRegistry;
+  leaseLifecycleProvider: LeaseLifecycleProvider | undefined;
+}): Promise<{ providerData?: Record<string, unknown>; response?: DaemonResponse }> {
+  try {
+    return { providerData: await releaseSessionLease(params) };
+  } catch (error) {
+    const normalized = normalizeError(error);
+    return {
+      response: {
+        ok: false,
+        error: {
+          ...normalized,
+          hint: 'The provider device could not be released. Retry close after the provider is reachable.',
+          details: { ...normalized.details, session: params.session.name },
+          retriable: true,
+        },
+      },
+    };
+  }
+}
+
 async function dispatchTargetedPlatformClose(params: {
   req: DaemonRequest;
   session: SessionState;
@@ -353,8 +417,6 @@ export async function handleCloseCommand(params: {
   if (req.internal?.closeAppOnly === true) {
     return await closeAppWithoutEndingSession({ req, session, logPath });
   }
-  const repairArmed = session.saveScriptBoundary !== undefined;
-  const closeIdentity = repairPlatformCloseIdentity(req);
   // ADR 0012 decision 6 (BLOCKER 2): for a repair-armed session, the platform
   // close must run and SUCCEED before anything is committed or torn down —
   // otherwise a committed healed `.ad` could claim a successful `close` that
@@ -373,35 +435,8 @@ export async function handleCloseCommand(params: {
   // identity DIFFERS (third follow-up: e.g. untargeted -> targeted, or a
   // changed target) never matches — the marker only ever attests to the
   // identity it was recorded under, so the platform close runs (again).
-  if (
-    repairArmed &&
-    !(session.repairPlatformCloseSucceeded && session.repairPlatformCloseIdentity === closeIdentity)
-  ) {
-    const platformCloseError = await dispatchTargetedPlatformClose({ req, session, logPath });
-    if (platformCloseError) {
-      return buildRepairCloseFailureResponse(
-        session,
-        toRepairPlatformCloseFailure(platformCloseError),
-      );
-    }
-    session.repairPlatformCloseSucceeded = true;
-    session.repairPlatformCloseIdentity = closeIdentity;
-  }
-  // Commit the repair transaction BEFORE any destructive teardown. On failure,
-  // return without tearing the session down — it stays addressable so the
-  // agent can fix the cause and retry.
-  const repairCommit = commitRepairBeforeClose(sessionStore, session, req);
-  if (repairCommit.kind === 'failed') {
-    return buildRepairCloseFailureResponse(session, repairCommit.error);
-  }
-  // The transaction has now either committed for real or intentionally
-  // aborted (an incomplete transaction never reaches 'failed') — either way
-  // this close attempt's outcome is settled, so the platform-close-succeeded
-  // marker (BLOCKER 3) has served its purpose and must not linger.
-  session.repairPlatformCloseSucceeded = false;
-  session.repairPlatformCloseIdentity = undefined;
-  const healedScriptPath = repairCommit.kind === 'committed' ? repairCommit.path : undefined;
-  let providerData: Record<string, unknown> | undefined;
+  const repair = await prepareRepairClose({ req, session, logPath, sessionStore });
+  if ('response' in repair) return repair.response;
   // Resource teardown is failure-isolated: a rejected step is collected instead of
   // short-circuiting the rest, so every subsequent resource (and the runner stop)
   // is still attempted. The provider lease is committed only after that teardown,
@@ -414,25 +449,17 @@ export async function handleCloseCommand(params: {
     logPath,
     sessionStore,
     cleanupFailures,
-    repairArmed,
+    repairArmed: repair.repairArmed,
     // The platform close for a repair-armed session already ran (and was
     // confirmed to succeed) above, before the commit — never dispatch it twice.
-    skipPlatformClose: repairArmed,
+    skipPlatformClose: repair.repairArmed,
   });
-  try {
-    providerData = await releaseSessionLease({ session, leaseRegistry, leaseLifecycleProvider });
-  } catch (error) {
-    const normalized = normalizeError(error);
-    return {
-      ok: false,
-      error: {
-        ...normalized,
-        hint: 'The provider device could not be released. Retry close after the provider is reachable.',
-        details: { ...normalized.details, session: session.name },
-        retriable: true,
-      },
-    };
-  }
+  const leaseRelease = await releaseProviderLeaseForClose({
+    session,
+    leaseRegistry,
+    leaseLifecycleProvider,
+  });
+  if (leaseRelease.response) return leaseRelease.response;
   sessionStore.delete(sessionName);
   const cleanupAggregate = reportSessionCleanupFailures({
     sessionName,
@@ -451,7 +478,7 @@ export async function handleCloseCommand(params: {
   // ADR 0012 decision 6 (BLOCKER 2a): positively report the committed healed
   // artifact path so the agent learns the repair published (and where) without
   // an extra round-trip.
-  const savedScript = healedScriptPath ? { savedScript: healedScriptPath } : {};
+  const savedScript = repair.healedScriptPath ? { savedScript: repair.healedScriptPath } : {};
   if (shutdownResult) {
     return {
       ok: true,
@@ -460,7 +487,7 @@ export async function handleCloseCommand(params: {
           session: session.name,
           shutdown: shutdownResult,
           ...savedScript,
-          ...(providerData ? { provider: providerData } : {}),
+          ...(leaseRelease.providerData ? { provider: leaseRelease.providerData } : {}),
         },
         `Closed: ${session.name}`,
       ),
@@ -472,7 +499,7 @@ export async function handleCloseCommand(params: {
       session: session.name,
       ...successText(`Closed: ${session.name}`),
       ...savedScript,
-      ...(providerData ? { provider: providerData } : {}),
+      ...(leaseRelease.providerData ? { provider: leaseRelease.providerData } : {}),
     },
   };
 }
