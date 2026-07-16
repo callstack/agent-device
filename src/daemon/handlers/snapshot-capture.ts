@@ -315,11 +315,15 @@ async function captureSnapshotAttempt(params: CaptureSnapshotParams): Promise<Sn
     // approach (b): emit the PUBLIC leaf platform (ios/macos), never the internal `apple`.
     platform: publicPlatformString(params.device),
   });
-  return {
-    data,
-    snapshot: buildSnapshotState(data, resolveSnapshotStateFlags(params)),
-    annotations: snapshotCaptureAnnotationsFrom(data),
-  };
+  const annotations = snapshotCaptureAnnotationsFrom(data);
+  const snapshot = buildSnapshotState(data, resolveSnapshotStateFlags(params));
+  // The one seam where snapshot state and capture annotations meet: consumers that only keep the
+  // SnapshotState (selector-backed find/wait, session-stored snapshots) must still learn that the
+  // capture is an occluding system surface, so the disclosure is not lost with the annotations.
+  if (annotations.androidSnapshot?.systemSurfaceOnly === true) {
+    snapshot.systemSurfaceOnly = true;
+  }
+  return { data, snapshot, annotations };
 }
 
 function resolveSnapshotStateFlags(

@@ -21,6 +21,7 @@ import type {
   SnapshotVisibility,
 } from '../../../kernel/snapshot.ts';
 import { buildSnapshotVisibility } from '../../../snapshot/snapshot-visibility.ts';
+import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '../../../snapshot/system-surface-disclosure.ts';
 import { formatReactNativeOverlayWarning } from '../../react-native/overlay.ts';
 import {
   buildUnchangedSnapshotMetadata,
@@ -257,7 +258,7 @@ function formatAndroidSystemSurfaceWarning(
   annotations: SnapshotCaptureAnnotations,
 ): string | undefined {
   if (annotations.androidSnapshot?.systemSurfaceOnly !== true) return undefined;
-  return 'A system surface (notification shade, quick settings, or another system overlay) covers the app, so this snapshot shows that surface. Interact with it or dismiss it (press back or swipe up) to reach app content.';
+  return ANDROID_SYSTEM_SURFACE_DISCLOSURE;
 }
 
 function buildSparseIosInteractiveWarnings(params: {

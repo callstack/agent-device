@@ -149,6 +149,27 @@ test('runtime snapshot emits filtered Android guidance from backend analysis', a
   ]);
 });
 
+test('runtime snapshot renders the system-surface disclosure from Android annotations', async () => {
+  const device = createSnapshotOnlyDevice({
+    nodes: [
+      { ref: 'e1', index: 0, depth: 0, type: 'FrameLayout', label: 'Quick settings' },
+      { ref: 'e2', index: 1, depth: 1, parentIndex: 0, type: 'Switch', label: 'Internet' },
+    ],
+    truncated: false,
+    backend: 'android',
+    androidSnapshot: {
+      backend: 'android-helper',
+      systemSurfaceOnly: true,
+    },
+  });
+
+  const result = await device.capture.snapshot({ session: 'default' });
+
+  assert.equal(result.warnings?.length, 1);
+  assert.match(String(result.warnings?.[0]), /system surface \(notification shade, quick settings/);
+  assert.match(String(result.warnings?.[0]), /press back or swipe up/);
+});
+
 test('runtime snapshot warns when iOS interactive output is root-only', async () => {
   const device = createSnapshotOnlyDevice({
     nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Application' }],

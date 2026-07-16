@@ -109,6 +109,12 @@ export type SnapshotState = {
   snapshotQuality?: SnapshotQualityVerdict;
   comparisonSafe?: boolean;
   presentationKey?: string;
+  /**
+   * Android: the capture is an occluding system surface (notification shade, quick settings)
+   * rather than app content. Consumers that surface this tree to the agent must disclose the
+   * occlusion (see snapshot/system-surface-disclosure.ts).
+   */
+  systemSurfaceOnly?: boolean;
 };
 
 export type SnapshotUnchanged = {

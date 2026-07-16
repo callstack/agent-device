@@ -18,6 +18,7 @@ import {
 import { isSnapshotNodeInteractionBlocked } from '../../snapshot/snapshot-occlusion.ts';
 import { readCommandMessage, successText } from '../../utils/success-text.ts';
 import { errorResponse, noActiveSessionError } from './response.ts';
+import { withSystemSurfaceDisclosure } from './system-surface-disclosure.ts';
 import { recordSessionAction } from './handler-utils.ts';
 import { stripInternalInteractionFlags } from '../interaction-outcome-policy.ts';
 import { dispatchFindReadOnlyViaRuntime } from '../selector-runtime.ts';
@@ -129,14 +130,17 @@ export async function handleFindCommands(params: {
     flags: req.flags,
     platform: device.platform,
   });
-  if (!matchResult.ok) return matchResult.response;
+  // Matched and unmatched outcomes both consumed this capture: when it is an occluding system
+  // surface, the response must disclose that app content is occluded.
+  if (!matchResult.ok) return withSystemSurfaceDisclosure(matchResult.response, snapshotResult);
   const node = matchResult.node;
   const resolvedNode = resolveInteractiveMatchNode(nodes, node);
   const ref = `@${resolvedNode.ref}`;
   const actionFlags = { ...(req.flags ?? {}), noRecord: true };
   const match: ResolvedMatch = { node, resolvedNode, ref, nodes, actionFlags };
 
-  return dispatchFindAction(ctx, match, action, value);
+  const response = await dispatchFindAction(ctx, match, action, value);
+  return response ? withSystemSurfaceDisclosure(response, snapshotResult) : response;
 }
 
 /**
@@ -167,6 +171,7 @@ async function dispatchFindAction(
 type FindSnapshotResult = {
   nodes: SnapshotState['nodes'];
   snapshotQuality?: SnapshotQualityVerdict;
+  systemSurfaceOnly?: boolean;
 };
 
 type FindNodeFetcher = () => Promise<FindSnapshotResult>;
@@ -213,6 +218,7 @@ function createFindNodeFetcher(params: {
     return {
       nodes: snapshot.nodes,
       snapshotQuality: snapshot.snapshotQuality,
+      systemSurfaceOnly: snapshot.systemSurfaceOnly,
     };
   };
 }

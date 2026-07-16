@@ -310,6 +310,90 @@ test('returns a meaningful active system surface (notification shade) faithfully
   expect(result.outcome).toBe('system-surface-only');
 });
 
+test('rejects an active navigation-bar window with three-button chrome', () => {
+  // Back + Home + Recents are 3 meaningful nodes, but they are status/nav chrome: an active
+  // nav-bar window is missing-app-content residue, never a usable shade/quick-settings surface.
+  const result = classifyAndroidHelperContent(
+    helperXml([
+      node({
+        windowType: 3,
+        windowActive: true,
+        packageName: 'com.android.systemui',
+        className: 'android.widget.FrameLayout',
+      }),
+      node({
+        text: 'Back',
+        resourceId: 'com.android.systemui:id/back',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.ImageView',
+      }),
+      node({
+        text: 'Home',
+        resourceId: 'com.android.systemui:id/home',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.ImageView',
+      }),
+      node({
+        text: 'Overview',
+        resourceId: 'com.android.systemui:id/recent_apps',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.ImageView',
+      }),
+    ]),
+    {
+      backend: 'android-helper',
+      nodeCount: 4,
+      rootPresent: true,
+      windowCount: 1,
+      captureMode: 'interactive-windows',
+    },
+    { foregroundAppPackage: 'com.android.settings' },
+  );
+
+  expect(result.outcome).toBe('unusable');
+});
+
+test('rejects an active status-chrome window with clock, battery, and signal icons', () => {
+  const result = classifyAndroidHelperContent(
+    helperXml([
+      node({
+        windowType: 3,
+        windowActive: true,
+        packageName: 'com.android.systemui',
+        className: 'android.widget.FrameLayout',
+      }),
+      node({
+        text: '7:52',
+        resourceId: 'com.android.systemui:id/clock',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.TextView',
+      }),
+      node({
+        text: 'Battery 100 percent',
+        resourceId: 'com.android.systemui:id/battery',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.LinearLayout',
+      }),
+      node({
+        text: 'Wifi signal full',
+        resourceId: 'com.android.systemui:id/wifi_signal',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.ImageView',
+      }),
+    ]),
+    {
+      backend: 'android-helper',
+      nodeCount: 4,
+      rootPresent: true,
+      windowCount: 1,
+      captureMode: 'interactive-windows',
+    },
+    { foregroundAppPackage: 'com.android.settings' },
+  );
+
+  expect(result.outcome).toBe('unusable');
+});
+
 test('rejects a sparse active system surface below the meaningful-content floor', () => {
   const result = classifyAndroidHelperContent(
     helperXml([

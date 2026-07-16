@@ -806,6 +806,40 @@ test('snapshotAndroid fails closed when standalone helper sees only an app overl
   );
 });
 
+test('snapshotAndroid returns an occluding system surface and stamps systemSurfaceOnly', async () => {
+  // Notification shade / quick settings own the whole screen: no application window, but the
+  // active system surface carries real content. The capture is returned faithfully and the
+  // public metadata carries the occlusion flag that downstream disclosure warnings key off.
+  const helperXml = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<hierarchy rotation="0">',
+    '  <node window-index="0" window-type="3" window-layer="30" window-active="true" window-focused="true" class="android.widget.FrameLayout" package="com.android.systemui" bounds="[0,0][390,844]" enabled="true" visible-to-user="true">',
+    '    <node text="Wed, Jul 16" class="android.widget.TextView" package="com.android.systemui" bounds="[24,40][200,80]" enabled="true" visible-to-user="true" />',
+    '    <node text="Internet" resource-id="com.android.systemui:id/qs_tile_internet" class="android.widget.Switch" package="com.android.systemui" bounds="[24,120][180,200]" clickable="true" enabled="true" visible-to-user="true" />',
+    '    <node text="Manage" resource-id="com.android.systemui:id/manage_settings" class="android.widget.Button" package="com.android.systemui" bounds="[24,700][180,760]" clickable="true" enabled="true" visible-to-user="true" />',
+    '  </node>',
+    '</hierarchy>',
+  ].join('\n');
+  const helperAdb = createHelperAdb({
+    instrument: async () => ({
+      exitCode: 0,
+      stdout: helperOutput(helperXml, { nodeCount: 4 }),
+      stderr: '',
+    }),
+  });
+
+  const result = await snapshotAndroidWithHelper(helperAdb, {
+    appBundleId: 'com.android.settings',
+  });
+
+  assert.equal(result.androidSnapshot.backend, 'android-helper');
+  assert.equal(result.androidSnapshot.systemSurfaceOnly, true);
+  assert.equal(
+    result.nodes.some((node) => node.label === 'Internet'),
+    true,
+  );
+});
+
 test('snapshotAndroid keeps helper output when application and system windows are both present', async () => {
   const helperXml = [
     '<?xml version="1.0" encoding="UTF-8"?>',

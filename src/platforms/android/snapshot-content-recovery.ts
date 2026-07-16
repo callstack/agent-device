@@ -1,5 +1,6 @@
 import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
 import { isAndroidInputMethodOwnedNode } from '../../contracts/android-input-ownership.ts';
+import { isAndroidSystemChromeResourceId } from '../../contracts/android-system-chrome.ts';
 import { classifyAndroidAlertIdentifier } from './alert-detection.ts';
 import { androidUiNodes, type AndroidUiNodeMetadata } from './ui-hierarchy.ts';
 
@@ -295,7 +296,10 @@ function recordMeaningfulWindowOwnership(
   ) {
     summary.applicationMeaningfulNodeCount += 1;
   }
-  if (isInActiveSystemSurfaceWindow(summary)) {
+  // Status/nav-bar chrome must not satisfy the system-surface floor: an active navigation bar
+  // (Back + Home + Recents) or status chrome (clock, battery, signal icons) is missing-app-content
+  // residue, not a usable shade/quick-settings surface. Only non-chrome nodes count.
+  if (isInActiveSystemSurfaceWindow(summary) && !isAndroidSystemChromeResourceId(node.resourceId)) {
     summary.activeSystemSurfaceMeaningfulNodeCount += 1;
   }
 }
