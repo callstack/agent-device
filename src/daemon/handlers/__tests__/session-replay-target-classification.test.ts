@@ -5,6 +5,7 @@ import type { TargetAnnotationV1 } from '../../../replay/target-identity.ts';
 import { computeTargetEvidence } from '../../session-target-evidence.ts';
 import { buildSelectorChainForNode } from '../../../selectors/build.ts';
 import { parseSelectorChain, resolveSelectorChain } from '../../../selectors/index.ts';
+import { resolvePressRecordingTarget } from '../../../selectors/press-retarget.ts';
 import { classifyReplayTarget } from '../session-replay-target-classification.ts';
 import {
   bottomTabsRealCaptureFixture,
@@ -558,6 +559,87 @@ test('#1269 e2e: a demoted shared-id row rebinds by role+label after the shared-
     { platform: ANDROID, requireRect: true, requireUnique: true },
   );
   assert.equal(labelResolved?.node.ref, expected.ref);
+});
+
+// ---------------------------------------------------------------------------
+// #1280 e2e: a PRESS on a row's clickable CONTAINER (the LinearLayout
+// wrapper, not its title TextView) is identity-empty — no id, no label — so
+// record-time retarget (`resolvePressRecordingTarget`) substitutes the
+// labeled title descendant before either writer runs. Reorder the shared-id
+// rows and insert a new one on replay: the retargeted recording rebinds the
+// descendant by its (#1272-demoted) role+label. Contrast: recording the
+// container itself — today's behavior, no retarget — produces a role-only
+// selector shared by every row's wrapper, which refuses to bind uniquely
+// under the very same reorder.
+// ---------------------------------------------------------------------------
+
+test('#1280 e2e: a retargeted press on a row container rebinds its labeled descendant after reorder + insert; the un-retargeted container recording refuses', () => {
+  const ANDROID = 'android' as const;
+  const recordNodes = androidSharedIdListFixture([
+    { id: 'android:id/title', label: 'Network & internet', y: 100 },
+    { id: 'android:id/title', label: 'Connected devices', y: 148 },
+    { id: 'android:id/title', label: 'Apps', y: 196 },
+  ]);
+  const recordedTitle = recordNodes.find((node) => node.label === 'Connected devices')!;
+  const container = recordNodes.find((node) => node.index === recordedTitle.parentIndex)!;
+  assert.equal(container.type, 'LinearLayout');
+  assert.equal(container.identifier, undefined);
+  assert.equal(container.label, undefined);
+
+  // What #1280 changes: the recorded step is written against the
+  // retargeted descendant, not the label-less container the press hit.
+  const recordedNode = resolvePressRecordingTarget(container, recordNodes);
+  assert.equal(recordedNode.ref, recordedTitle.ref);
+  const recorded = computeTargetEvidence({ node: recordedNode, preActionNodes: recordNodes })!;
+  assert.equal(recorded.id, undefined, 'the shared android:id/title stays demoted per #1272');
+  assert.equal(recorded.role, 'textview');
+  assert.equal(recorded.label, 'Connected devices');
+  const chain = buildSelectorChainForNode(recordedNode, ANDROID, {
+    action: 'click',
+    nodes: recordNodes,
+  });
+  const token = chain.join(' || '); // the recorded selector positional the replay loop re-resolves
+
+  // Replay-time tree: a new conditional row appears at the top and the
+  // shared-id rows are in a DIFFERENT document/viewport order.
+  const replayNodes = androidSharedIdListFixture([
+    { id: 'android:id/title', label: 'Wi-Fi', y: 100 },
+    { id: 'android:id/title', label: 'Apps', y: 148 },
+    { id: 'android:id/title', label: 'Connected devices', y: 196 },
+    { id: 'android:id/title', label: 'Network & internet', y: 244 },
+  ]);
+  const expected = replayNodes.find((node) => node.label === 'Connected devices')!;
+
+  const result = classifyReplayTarget({
+    recorded,
+    token,
+    nodes: replayNodes,
+    platform: ANDROID,
+    refLabel: undefined,
+    requireRect: true,
+    allowDisambiguation: true,
+  });
+  assertVerified(result, { winnerRef: expected.ref, matchCount: 1 });
+
+  // Contrast: recording the CONTAINER itself (no retarget) leaves a
+  // role-only identity — every row's wrapper shares it — that a
+  // requireUnique resolve refuses to bind under the same reorder. This is
+  // the FDR the retarget removes.
+  const containerChain = buildSelectorChainForNode(container, ANDROID, {
+    action: 'click',
+    nodes: recordNodes,
+  });
+  assert.deepEqual(containerChain, ['role="linearlayout"']);
+  const containerResolved = resolveSelectorChain(
+    replayNodes,
+    parseSelectorChain(containerChain.join(' || ')),
+    { platform: ANDROID, requireRect: true, requireUnique: true },
+  );
+  assert.equal(
+    containerResolved,
+    null,
+    'the un-retargeted container selector refuses to bind uniquely',
+  );
 });
 
 // ---------------------------------------------------------------------------

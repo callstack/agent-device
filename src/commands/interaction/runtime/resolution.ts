@@ -16,6 +16,7 @@ import {
   type SelectorResolution,
 } from '../../../selectors/index.ts';
 import { buildSelectorChainForNode } from '../../../selectors/build.ts';
+import { resolvePressRecordingTarget } from '../../../selectors/press-retarget.ts';
 import {
   findNodeByLabel,
   normalizeType,
@@ -382,6 +383,13 @@ function buildResolutionDiagnosticEntry(
   };
 }
 
+// #1280: press/click/fill are the actions whose recorded evidence can
+// substitute an identity-empty container for its labeled descendant (a
+// list-row press is the measured shape); reads (get/find) already have
+// their own #1269 id-demotion treatment and go through selector-read.ts,
+// not this function.
+const PRESS_RETARGET_ACTIONS = new Set<InteractionAction>(['click', 'press', 'fill']);
+
 // Shared tail of a resolved ref/selector interaction target: the node itself
 // plus everything derived from it for the response.
 function describeResolvedInteractionNode(
@@ -399,14 +407,24 @@ function describeResolvedInteractionNode(
   preActionNodes: SnapshotState['nodes'];
   resolution: ResolutionDisclosure;
 } {
+  // #1280: the ONE substitution point feeding both writers — the returned
+  // `node` is what `computeTargetEvidence` records evidence for
+  // (`recordedTargetCapture`, interaction-touch-response.ts), and
+  // `selectorChain` below is built from the same `recordedNode`, so the two
+  // never half-retarget. The live tap point was already resolved against
+  // the ORIGINAL `node` before this function runs (see callers) — this is
+  // recording-time only.
+  const recordedNode = PRESS_RETARGET_ACTIONS.has(action)
+    ? resolvePressRecordingTarget(node, nodes)
+    : node;
   return {
-    node,
-    selectorChain: buildSelectorChainForNode(node, runtime.backend.platform, {
+    node: recordedNode,
+    selectorChain: buildSelectorChainForNode(recordedNode, runtime.backend.platform, {
       action: action === 'fill' ? 'fill' : 'click',
       nodes,
     }),
-    refLabel: resolveRefLabel(node, nodes),
-    ...describeNonHittableTarget(node, action),
+    refLabel: resolveRefLabel(recordedNode, nodes),
+    ...describeNonHittableTarget(recordedNode, action),
     preActionNodes: nodes,
     resolution,
   };
