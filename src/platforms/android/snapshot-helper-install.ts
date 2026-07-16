@@ -1,3 +1,4 @@
+import { asAppError, type AppError } from '../../kernel/errors.ts';
 import { readAndroidSnapshotHelperInstallOptions } from './snapshot-helper-artifact.ts';
 import {
   inspectInstalledAndroidHelper,
@@ -136,25 +137,30 @@ export async function ensureAndroidSnapshotHelper(options: {
     };
   }
 
-  const result = await installAndroidSnapshotHelper(
-    adb,
-    options.adbProvider ?? adb,
-    artifact.apkPath,
-    readAndroidSnapshotHelperInstallOptions(artifact.manifest),
-    {
-      packageName,
-      timeoutMs: options.timeoutMs,
-    },
-  );
+  let result: Awaited<ReturnType<AndroidAdbExecutor>>;
+  try {
+    result = await installAndroidSnapshotHelper(
+      adb,
+      options.adbProvider ?? adb,
+      artifact.apkPath,
+      readAndroidSnapshotHelperInstallOptions(artifact.manifest),
+      {
+        packageName,
+        timeoutMs: options.timeoutMs,
+      },
+    );
+  } catch (error) {
+    forgetInstalledSnapshotHelper(installCacheKey);
+    throw markAndroidSnapshotHelperInstallFailure(error, { packageName, versionCode });
+  }
   if (result.exitCode !== 0) {
     forgetInstalledSnapshotHelper(installCacheKey);
-    throw androidAdbResultError('Failed to install Android snapshot helper', result, {
-      packageName,
-      versionCode,
-      // Distinguishes a device-side install rejection (adb/OEM policy) from an
-      // artifact-resolution failure so the capture-layer error can hint accordingly.
-      androidSnapshotHelperInstallFailure: true,
-    });
+    throw markAndroidSnapshotHelperInstallFailure(
+      androidAdbResultError('Failed to install Android snapshot helper', result, {
+        packageName,
+        versionCode,
+      }),
+    );
   }
 
   rememberInstalledSnapshotHelper(installCacheKey, versionCode);
@@ -166,6 +172,23 @@ export async function ensureAndroidSnapshotHelper(options: {
     installed: true,
     reason,
   };
+}
+
+// Tags every failure of the helper install phase — nonzero results and provider
+// rejections alike — so the capture layer can distinguish a device-side install
+// rejection (adb/OEM policy) from a missing build artifact. Mutates details in
+// place, preserving the original code, message, hint, and cause.
+function markAndroidSnapshotHelperInstallFailure(
+  error: unknown,
+  context?: { packageName: string; versionCode: number },
+): AppError {
+  const appError = asAppError(error, 'COMMAND_FAILED');
+  appError.details = {
+    ...context,
+    ...appError.details,
+    androidSnapshotHelperInstallFailure: true,
+  };
+  return appError;
 }
 
 function normalizeAdbProvider(

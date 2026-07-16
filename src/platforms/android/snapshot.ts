@@ -1,6 +1,11 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { AppError, normalizeError, toAppErrorCode } from '../../kernel/errors.ts';
+import {
+  AppError,
+  normalizeError,
+  toAppErrorCode,
+  type NormalizedError,
+} from '../../kernel/errors.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { findProjectRoot, readVersion } from '../../utils/version.ts';
@@ -464,26 +469,47 @@ function formatAndroidSnapshotHelperFailureReason(error: unknown): string {
 
 function androidSnapshotHelperCaptureError(error: unknown, reason: string): AppError {
   const normalized = normalizeError(error);
-  const busy =
-    isStructuredHelperTimeout(normalized.details?.helper, normalized.message) ||
-    isKilledHelperInstrumentationFailure(normalized);
-  const installFailure = normalized.details?.androidSnapshotHelperInstallFailure === true;
-  const hint = busy
-    ? 'Android accessibility snapshots can be blocked by busy or continuously changing app UI. Use screenshot as visual truth after this timeout and report the busy UI if it persists.'
-    : installFailure
-      ? `${normalized.hint ? `${normalized.hint} ` : ''}This is a device-side install failure (adb rejection or OEM policy) — the helper artifact itself is present, this is not a missing/unbuilt build.`
-      : (normalized.hint ??
-        'Retry once. If the helper still fails, run agent-device doctor and report the diagnostic log; agent-device does not substitute a second snapshot engine.');
   return new AppError(
     toAppErrorCode(normalized.code),
     `Android snapshot helper failed: ${reason}`,
     {
       ...normalized.details,
+      ...liftedDiagnosticIdentity(normalized),
       androidSnapshotHelperFailureReason: reason,
-      hint,
+      hint: androidSnapshotHelperCaptureHint(normalized),
     },
     error,
   );
+}
+
+function androidSnapshotHelperCaptureHint(normalized: NormalizedError): string {
+  const busy =
+    isStructuredHelperTimeout(normalized.details?.helper, normalized.message) ||
+    isKilledHelperInstrumentationFailure(normalized);
+  if (busy) {
+    return 'Android accessibility snapshots can be blocked by busy or continuously changing app UI. Use screenshot as visual truth after this timeout and report the busy UI if it persists.';
+  }
+  if (normalized.details?.androidSnapshotHelperInstallFailure === true) {
+    return [
+      normalized.hint,
+      'This is a device-side install failure (adb rejection or OEM policy) — the helper artifact itself is present, this is not a missing/unbuilt build.',
+    ]
+      .filter(Boolean)
+      .join(' ');
+  }
+  return (
+    normalized.hint ??
+    'Retry once. If the helper still fails, run agent-device doctor and report the diagnostic log; agent-device does not substitute a second snapshot engine.'
+  );
+}
+
+// normalizeError lifts these out of details (ADR 0010); a rewrap must put them
+// back so the upstream diagnostic identity survives.
+function liftedDiagnosticIdentity(normalized: NormalizedError): Record<string, string> {
+  const identity: Record<string, string> = {};
+  if (normalized.diagnosticId !== undefined) identity.diagnosticId = normalized.diagnosticId;
+  if (normalized.logPath !== undefined) identity.logPath = normalized.logPath;
+  return identity;
 }
 
 function isKilledHelperInstrumentationFailure(error: {

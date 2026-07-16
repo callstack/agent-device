@@ -943,6 +943,28 @@ test('snapshotAndroid distinguishes a device-side install rejection from a missi
   );
 });
 
+test('snapshotAndroid preserves upstream diagnosticId and logPath through the capture rewrap', async () => {
+  const helperAdb = createHelperAdb({
+    instrument: async () => {
+      throw new AppError('COMMAND_FAILED', 'helper capture exploded', {
+        diagnosticId: 'diag-upstream',
+        logPath: '/tmp/upstream.ndjson',
+      });
+    },
+  });
+
+  await assert.rejects(
+    () => snapshotAndroidWithHelper(helperAdb),
+    (error) => {
+      assert.match((error as Error).message, /Android snapshot helper failed/);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.diagnosticId, 'diag-upstream');
+      assert.equal(details?.logPath, '/tmp/upstream.ndjson');
+      return true;
+    },
+  );
+});
+
 test('snapshotAndroid emits timeout diagnostics when helper capture times out', async () => {
   const helperAdb = createHelperAdb({
     instrument: async () => {
