@@ -672,3 +672,48 @@ test('viewport falls back to one-shot instrumentation after a session error', as
   assert.ok(oneShotArgs?.includes('viewport'));
   assert.equal(await session.isSessionAlive(), false);
 });
+
+test('a structured ok=false viewport response stops the session before the one-shot retry', async () => {
+  const device = makeIsolatedDevice();
+  const session = await startFakeTouchHelperSession(device, (command, requestId) => {
+    if (command.startsWith('viewport')) {
+      return sessionHeaderResponse({
+        agentDeviceProtocol: 'android-snapshot-helper-v1',
+        requestId,
+        ok: 'false',
+        errorType: 'java.lang.IllegalStateException',
+        message: 'Active application interaction viewport is unavailable',
+      });
+    }
+    return sessionHeaderResponse({
+      agentDeviceProtocol: 'android-snapshot-helper-v1',
+      requestId,
+      ok: 'true',
+    });
+  });
+
+  let oneShotArgs: string[] | undefined;
+  const viewportResult = await withAndroidAdbProvider(
+    {
+      exec: currentVersionAdb(async (args) => {
+        // One instrumentation may own UiAutomation: the one-shot retry must only run once the
+        // structurally-failed session has been stopped.
+        assert.equal(await session.isSessionAlive(), false);
+        oneShotArgs = args;
+        return {
+          exitCode: 0,
+          stdout: [
+            resultRecord({ ok: 'true', x: '5', y: '6', width: '300', height: '400' }),
+            'INSTRUMENTATION_CODE: 0',
+          ].join('\n'),
+          stderr: '',
+        };
+      }),
+    },
+    { serial: device.id },
+    async () => await readAndroidTouchHelperViewport(device),
+  );
+
+  assert.deepEqual(viewportResult, { x: 5, y: 6, width: 300, height: 400 });
+  assert.ok(oneShotArgs?.includes('viewport'));
+});

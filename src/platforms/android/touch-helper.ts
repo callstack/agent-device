@@ -17,6 +17,7 @@ import { ensureAndroidSnapshotHelper } from './snapshot-helper-install.ts';
 import {
   getAndroidSnapshotHelperSessionDeviceKey,
   runAndroidSnapshotHelperSessionTouchCommand,
+  stopAndroidSnapshotHelperSession,
 } from './snapshot-helper-session.ts';
 import {
   ANDROID_SNAPSHOT_HELPER_PROTOCOL,
@@ -112,7 +113,10 @@ export async function readAndroidTouchHelperViewport(device: DeviceInfo): Promis
     });
     if (sessionHeaders) return readViewportResult(sessionHeaders);
   } catch (error) {
-    // Viewport reads are idempotent; after the failed session is stopped, retry one-shot below.
+    // Viewport reads are idempotent, so a fresh one-shot run may still answer. The session must
+    // be stopped first: Android permits one instrumentation owner of UiAutomation, and a helper
+    // left alive after a structured failure would contend with the one-shot instrumentation.
+    await stopAndroidSnapshotHelperSession(prepared.deviceKey);
     emitDiagnostic({
       level: 'warn',
       phase: 'android_touch_helper_viewport_session_fallback',
