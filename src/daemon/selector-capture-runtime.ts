@@ -21,6 +21,9 @@ type SelectorCaptureRuntimeParams = {
   sessionName: string;
   req: DaemonRequest;
   logPath?: string;
+  // Sessionless routes have no session record to read the consumed capture back from, so the
+  // capture runtime reports every consumed snapshot here for response-level disclosures.
+  consumedSnapshot?: { state?: SnapshotState };
 };
 
 /**
@@ -62,6 +65,11 @@ export function createSelectorCaptureRuntime(params: SelectorCaptureRuntimeParam
   let lastSnapshotResult: SelectorCaptureResult | undefined;
   let lastSnapshotCacheKey: string | undefined;
 
+  const remember = (result: SelectorCaptureResult): SelectorCaptureResult => {
+    if (params.consumedSnapshot) params.consumedSnapshot.state = result.snapshot;
+    return result;
+  };
+
   const capture = async (request: SelectorCaptureRequest): Promise<SelectorCaptureResult> => {
     const timestamp = Date.now();
     const cacheKey = selectorCaptureCacheKey(request, params.req.flags?.out);
@@ -75,7 +83,7 @@ export function createSelectorCaptureRuntime(params: SelectorCaptureRuntimeParam
       cacheKey,
     });
     if (reusableLastSnapshot) {
-      return reusableLastSnapshot;
+      return remember(reusableLastSnapshot);
     }
 
     const sessionSnapshot = reusableSessionSnapshot({ session, timestamp, request });
@@ -83,7 +91,7 @@ export function createSelectorCaptureRuntime(params: SelectorCaptureRuntimeParam
       lastSnapshotAt = sessionSnapshot.createdAt;
       lastSnapshotResult = { snapshot: sessionSnapshot };
       lastSnapshotCacheKey = cacheKey;
-      return lastSnapshotResult;
+      return remember(lastSnapshotResult);
     }
 
     const snapshot = await captureSelectorSnapshot({ params, request });
@@ -92,7 +100,7 @@ export function createSelectorCaptureRuntime(params: SelectorCaptureRuntimeParam
     lastSnapshotAt = timestamp;
     lastSnapshotResult = result;
     lastSnapshotCacheKey = cacheKey;
-    return result;
+    return remember(result);
   };
 
   return { capture };

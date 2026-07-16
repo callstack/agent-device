@@ -7,7 +7,7 @@ import { resolveTargetDevice, type CommandFlags } from '../core/dispatch.ts';
 import { createAgentDevice } from '../runtime.ts';
 import { isMacOs, isApplePlatform, publicPlatformString } from '../kernel/device.ts';
 import { noActiveSessionError, requireCommandSupported } from './handlers/response.ts';
-import type { SnapshotNode } from '../kernel/snapshot.ts';
+import type { SnapshotState, SnapshotNode } from '../kernel/snapshot.ts';
 import { findNodeByLabel } from '../snapshot/snapshot-processing.ts';
 import { runAppleRunnerCommand } from '../platforms/apple/core/runner/runner-client.ts';
 import { buildAppleRunnerRequestOptions } from './apple-runner-options.ts';
@@ -29,6 +29,9 @@ export type SelectorRuntimeParams = {
   logPath?: string;
   sessionStore: SessionStore;
   contextFromFlags?: ContextFromFlags;
+  // Filled by the capture runtime with the snapshot each selector command actually consumed;
+  // sessionless routes disclose from here because no session record stores the capture.
+  consumedSnapshot?: { state?: SnapshotState };
 };
 
 type SelectorRuntimeDeviceParams = SelectorRuntimeParams & {
@@ -77,6 +80,7 @@ export async function createSelectorRuntime(
   | { ok: true; runtime: ReturnType<typeof createSelectorRuntimeForDevice> }
   | { ok: false; response: DaemonResponse }
 > {
+  params.consumedSnapshot ??= {};
   const session = params.sessionStore.get(params.sessionName);
   if (!session && options.requireSession) {
     return {
@@ -106,6 +110,7 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
     sessionStore,
     sessionName,
     req,
+    consumedSnapshot: params.consumedSnapshot,
     logPath,
   });
   return {
@@ -236,6 +241,7 @@ async function captureWaitSnapshot(params: SelectorRuntimeDeviceParams) {
     sessionName: params.sessionName,
     req: params.req,
     logPath: params.logPath,
+    consumedSnapshot: params.consumedSnapshot,
   });
   const { snapshot } = await captureRuntime.capture({
     flags: {

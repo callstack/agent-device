@@ -129,7 +129,9 @@ export async function dispatchFindReadOnlyViaRuntime(
 }
 
 function consumedSessionSnapshot(params: SelectorRuntimeParams) {
-  return params.sessionStore.get(params.sessionName)?.snapshot;
+  // The capture runtime reports the consumed snapshot directly; sessionless selector routes have
+  // no session record, so the stored-session read is only a fallback for pre-captured snapshots.
+  return params.consumedSnapshot?.state ?? params.sessionStore.get(params.sessionName)?.snapshot;
 }
 
 export async function dispatchGetViaRuntime(

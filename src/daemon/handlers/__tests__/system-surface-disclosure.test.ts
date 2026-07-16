@@ -11,11 +11,17 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   return {
     ...actual,
     dispatchCommand: vi.fn(async () => ({})),
-    resolveTargetDevice: actual.resolveTargetDevice,
+    resolveTargetDevice: vi.fn(actual.resolveTargetDevice),
   };
 });
 
-import { dispatchCommand } from '../../../core/dispatch.ts';
+vi.mock('../../device-ready.ts', () => ({
+  ensureDeviceReady: vi.fn(async () => {}),
+}));
+
+import { dispatchCommand, resolveTargetDevice } from '../../../core/dispatch.ts';
+import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
+import { withSystemSurfaceDisclosure } from '../system-surface-disclosure.ts';
 
 const mockDispatch = vi.mocked(dispatchCommand);
 
@@ -125,4 +131,64 @@ test('wait timeout for app text hidden behind a system surface discloses the occ
   if (response.ok) return;
   expect(response.error.message).toMatch(/wait timed out for text: Bakery list/);
   expect(String(response.error.details?.hint)).toContain(ANDROID_SYSTEM_SURFACE_DISCLOSURE);
+});
+
+test('sessionless read-only find still discloses the occluding system surface', async () => {
+  vi.mocked(resolveTargetDevice).mockResolvedValueOnce(ANDROID_EMULATOR);
+  const sessionStore = makeSessionStore();
+
+  const response = await dispatchFindReadOnlyViaRuntime({
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'find',
+      positionals: ['Internet', 'exists'],
+      flags: {},
+    } as DaemonRequest,
+    sessionName: 'default',
+    logPath: '/tmp/test.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(true);
+  if (!response?.ok) return;
+  const data = response.data as Record<string, unknown>;
+  expect(data.found).toBe(true);
+  // No session record exists to read the capture back from: the disclosure must come from the
+  // consumed capture itself.
+  expect(sessionStore.get('default')).toBeUndefined();
+  expect(String(data.warning)).toContain(ANDROID_SYSTEM_SURFACE_DISCLOSURE);
+});
+
+test('disclosure appends after an existing success warning instead of replacing it', () => {
+  const response = withSystemSurfaceDisclosure(
+    { ok: true, data: { found: true, warning: 'prior warning text' } },
+    { systemSurfaceOnly: true },
+  );
+  expect(response.ok).toBe(true);
+  if (!response.ok) return;
+  const warning = String((response.data as Record<string, unknown>).warning);
+  expect(warning).toContain('prior warning text');
+  expect(warning).toContain(ANDROID_SYSTEM_SURFACE_DISCLOSURE);
+  expect(warning.indexOf('prior warning text')).toBeLessThan(
+    warning.indexOf(ANDROID_SYSTEM_SURFACE_DISCLOSURE),
+  );
+});
+
+test('disclosure appends after an existing failure hint instead of replacing it', () => {
+  const response = withSystemSurfaceDisclosure(
+    {
+      ok: false,
+      error: { code: 'NOT_FOUND', message: 'no match', details: { hint: 'prior hint text' } },
+    },
+    { systemSurfaceOnly: true },
+  );
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  const hint = String(response.error.details?.hint);
+  expect(hint).toContain('prior hint text');
+  expect(hint).toContain(ANDROID_SYSTEM_SURFACE_DISCLOSURE);
+  expect(hint.indexOf('prior hint text')).toBeLessThan(
+    hint.indexOf(ANDROID_SYSTEM_SURFACE_DISCLOSURE),
+  );
 });
