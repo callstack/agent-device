@@ -69,6 +69,15 @@ export function runnerSnapshotEntry(nodes: readonly unknown[]): ProviderScenario
   };
 }
 
+// A UI that has gone quiet: every settle capture sees the same tree. How many
+// captures the loop spends reaching that verdict is wall-clock, so the count is
+// not the contract and is never scripted.
+export function quietRunnerSnapshotEntry(
+  nodes: readonly unknown[],
+): ProviderScenarioProviderEntry {
+  return { ...runnerSnapshotEntry(nodes), repeat: true };
+}
+
 export function runnerTapEntry(
   result: Record<string, unknown>,
   request?: Record<string, unknown>,

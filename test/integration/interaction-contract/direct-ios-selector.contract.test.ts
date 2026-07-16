@@ -13,6 +13,7 @@ import {
   RUNNER_NON_HITTABLE_NODES,
 } from './fixtures.ts';
 import {
+  quietRunnerSnapshotEntry,
   runnerSnapshotEntry,
   runnerTapEntry,
   runnerTapErrorEntry,
@@ -188,11 +189,10 @@ test(scenario('settleObservation'), async () => {
   await withIosContractDaemon(
     [
       // --settle disables the direct path: runtime tree capture, coordinate
-      // tap, then the settle loop's two stable captures of the changed tree.
+      // tap, then the settle loop captures the changed tree until it goes quiet.
       runnerSnapshotEntry(RUNNER_CONTINUE_NODES),
       runnerTapEntry({ x: 200, y: 322 }),
-      runnerSnapshotEntry(RUNNER_CHANGED_NODES),
-      runnerSnapshotEntry(RUNNER_CHANGED_NODES),
+      quietRunnerSnapshotEntry(RUNNER_CHANGED_NODES),
     ],
     async (daemon, transcript) => {
       const click = await daemon.callCommand('click', ['label=Continue'], {
