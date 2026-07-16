@@ -124,11 +124,22 @@ test('a trace whose taps record no metric reports no-data rather than passing', 
   assert.equal(result.status, 'no-data');
 });
 
-test('the retry scenario asserts the retry path ran', () => {
+// tap-retry-if-no-change is parked (#1300): tapRetries measured 0 then 1 across
+// identical runs, so it is flaky rather than divergent. A knownDivergence
+// declaration assumes the failure reproduces, so declaring a flaky scenario
+// would make the schedule flip red at random. Assert it stays out of the active
+// set until it has an inert control — re-adding it without one silently returns
+// the coin-flip.
+test('the flaky retry scenario is parked, not declared as a divergence', () => {
   const retry = DIFFERENTIAL_SCENARIOS.find((s) => s.id === 'tap-retry-if-no-change');
-  const invariant = retry?.engineInvariants?.[0];
-  assert.ok(invariant, 'retry scenario must prove a retry happened, not assume it');
-  assert.equal(invariant?.kind, 'metricAtLeast');
+  assert.equal(retry, undefined, 'tap-retry-if-no-change must stay parked until #1300 gives it an inert control');
+});
+
+// The invariant itself stays implemented and proven, so the fix PR only has to
+// re-add the scenario rather than rebuild the detector.
+test('the tapRetries invariant remains implemented for when the scenario returns', () => {
+  assert.equal(evaluateInvariant([stopWithMetrics('tapOn', { tapRetries: 1 })], RETRY_INVARIANT).status, 'held');
+  assert.equal(evaluateInvariant([stopWithMetrics('tapOn', { tapRetries: 0 })], RETRY_INVARIANT).status, 'violated');
 });
 
 // Truncation-vs-rounding is at most 1px and cannot be observed on a device, so

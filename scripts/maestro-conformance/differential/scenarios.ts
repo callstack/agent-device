@@ -110,31 +110,19 @@ export const DIFFERENTIAL_SCENARIOS: DifferentialScenario[] = [
     expect: 'pass',
     divergenceMeans: 'The swipe behaves differently enough on one engine to fail the flow.',
   },
-  {
-    id: 'tap-retry-if-no-change',
-    flow: 'differential/flows/tap-retry-if-no-change.yaml',
-    comparesAcrossEngines:
-      'A retryTapIfNoChange tap succeeds on both engines. The flow taps a non-interactive title so the screen cannot change and the retry path is forced; the invariant below then proves a retry actually happened.',
-    expect: 'pass',
-    // Outcome parity would pass even if retry never ran. tapRetries is recorded
-    // per step as a delta (replay-plan-execution.ts), so assert the path executed.
-    engineInvariants: [
-      {
-        kind: 'metricAtLeast',
-        command: 'tapOn',
-        metric: 'tapRetries',
-        min: 1,
-        because:
-          'a tap on an unchanging screen must re-tap; zero retries means retryIfNoChange never ran and the scenario proved nothing',
-      },
-    ],
-    divergenceMeans: 'agent-device fails a tap upstream completes (or vice versa) under retry-if-no-change.',
-    knownDivergence: {
-      reason:
-        'The invariant caught this scenario being vacuous: both engines pass, but tapRetries was 0, so retryIfNoChange never ran. Tapping the fixture app title does not hold the hierarchy signature still (its ScreenTitle carries a dynamic cart badge), so the no-change path is never forced. Needs an inert fixture control — a defect in the scenario, not the engine.',
-      tracking: 'https://github.com/callstack/agent-device/issues/1300',
-    },
-  },
+  // PARKED: tap-retry-if-no-change (flow kept at differential/flows/, invariant
+  // kept implemented and unit-tested) — https://github.com/callstack/agent-device/issues/1300
+  //
+  // It is NOT declared as a knownDivergence, deliberately. tapRetries measured 0
+  // in run 29504440599 and 1 in run 29510020718 with no change to the flow or
+  // commit: the tap sometimes holds the hierarchy signature still and sometimes
+  // does not, because the fixture home screen has live content. A declaration
+  // assumes the divergence REPRODUCES; a flaky one would flip between
+  // known-divergence (green) and stale-declaration (red) at random, which is
+  // worse than no scenario — a coin-flip job teaches people to ignore the
+  // differential. So retryIfNoChange has no device coverage until the fixture
+  // offers an inert control, and that absence is tracked rather than disguised
+  // as a green run.
   {
     id: 'optional-warned-not-failed',
     flow: 'differential/flows/optional-warned-not-failed.yaml',
