@@ -1,5 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import { AppError } from '../../../kernel/errors.ts';
 import { usageForCommand } from '../args.ts';
 
 test('usageForCommand documents open --launch-args', async () => {
@@ -382,12 +383,13 @@ test('orientation command usage is documented', async () => {
   assert.match(help, /Set device orientation on iOS and Android/);
 });
 
-test('deprecated rotate alias resolves to orientation usage', async () => {
-  const help = await usageForCommand('rotate');
-  if (help === null) throw new Error('Expected command help text');
-  assert.match(
-    help,
-    /orientation <portrait\|portrait-upside-down\|landscape-left\|landscape-right>/,
+test('removed rotate alias fails with a migration error', async () => {
+  await assert.rejects(
+    () => usageForCommand('rotate'),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      /rotate was renamed to orientation/.test(String(error.message)),
   );
 });
 

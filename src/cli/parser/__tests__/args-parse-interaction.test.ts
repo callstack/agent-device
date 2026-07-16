@@ -1,5 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import { AppError } from '../../../kernel/errors.ts';
 import { parseArgs } from '../args.ts';
 
 test('parseArgs accepts clipboard subcommands', () => {
@@ -311,10 +312,14 @@ test('parseArgs accepts the orientation command', () => {
   assert.deepEqual(parsed.positionals, ['left']);
 });
 
-test('parseArgs normalizes the deprecated rotate alias to orientation', () => {
-  const parsed = parseArgs(['rotate', 'left'], { strictFlags: true });
-  assert.equal(parsed.command, 'orientation');
-  assert.deepEqual(parsed.positionals, ['left']);
+test('parseArgs rejects the removed rotate alias with a migration error', () => {
+  assert.throws(
+    () => parseArgs(['rotate', 'left'], { strictFlags: true }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      /rotate was renamed to orientation/.test(String(error.message)),
+  );
 });
 
 test('parseArgs recognizes test --record-video flag', () => {

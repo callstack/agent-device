@@ -384,5 +384,8 @@ export async function usageForCommand(command: string): Promise<string | null> {
 }
 
 function normalizeCommandAlias(command: string): string {
+  if (command.toLowerCase() === 'rotate') {
+    throw new AppError('INVALID_ARGS', 'rotate was renamed to orientation');
+  }
   return normalizeCliCommandAlias(command);
 }

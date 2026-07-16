@@ -254,13 +254,11 @@ test('launch dispatches as a plain open without forcing a relaunch', async () =>
   assert.notEqual(result.calls[0]?.flags?.relaunch, true);
 });
 
-test('rotate dispatches as orientation (deprecated alias) with positionals preserved', async () => {
-  const result = await runCliCapture(['rotate', 'landscape-left', '--json']);
-  assert.doesNotMatch(result.stderr, /Unknown command/);
-  // Canonicalization: the daemon call must record orientation, never rotate.
-  assert.equal(result.calls.length, 1);
-  assert.equal(result.calls[0]?.command, 'orientation');
-  assert.deepEqual(result.calls[0]?.positionals, ['landscape-left']);
+test('rotate fails with a migration message pointing to orientation', async () => {
+  const result = await runCliCapture(['rotate', 'landscape-left']);
+  assert.equal(result.code, 1);
+  assert.equal(result.calls.length, 0);
+  assert.match(result.stderr, /rotate was renamed to orientation/);
 });
 
 // From #1052 (credit: @vku2018): the alias must compose with the bare-ref

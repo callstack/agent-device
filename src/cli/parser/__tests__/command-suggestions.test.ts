@@ -43,12 +43,12 @@ test('the keyboard dismiss example uses a real keyboard action', () => {
   assert.doesNotThrow(() => keyboardCliReader(['dismiss'], baseFlags));
 });
 
-// `launch`/`relaunch`, `tap`, and `rotate` are true aliases normalized before
-// the unknown-command check, so they must never appear in the suggestion map —
+// `launch`/`relaunch` and `tap` are true aliases normalized before the
+// unknown-command check, so they must never appear in the suggestion map —
 // a stale entry there would be dead code masking the alias.
 test('true aliases are not listed in the curated suggestion map', () => {
   const guesses = new Set(listCommandAliasSuggestionEntries().map(([guess]) => guess));
-  for (const alias of ['launch', 'relaunch', 'tap', 'rotate']) {
+  for (const alias of ['launch', 'relaunch', 'tap']) {
     assert.ok(!guesses.has(alias), `"${alias}" is a true alias and must not be a suggestion`);
   }
 });

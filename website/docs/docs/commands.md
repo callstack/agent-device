@@ -74,7 +74,7 @@ agent-device app-switcher
 - `back` now defaults to app-owned back navigation. On Apple targets that means visible in-app back UI only. On Android this currently maps to the same back keyevent because Android routes in-app back through that platform event.
 - `back --in-app` is an explicit alias for the default app-owned behavior.
 - `back --system` asks for system back input explicitly. On Android this is the normal back keyevent. On iOS and tvOS it uses the platform back gesture or Siri Remote menu action. On macOS, where there is no generic system back input, `back --system` reports unavailable instead of falling back to app-owned navigation.
-- `orientation <orientation>` forces a mobile device into `portrait`, `portrait-upside-down`, `landscape-left`, or `landscape-right`. `rotate` is accepted as a deprecated alias.
+- `orientation <orientation>` forces a mobile device into `portrait`, `portrait-upside-down`, `landscape-left`, or `landscape-right`.
 - `orientation` is supported on iOS and Android mobile targets. macOS and tvOS do not expose it.
 - On iOS devices, `http(s)://` URLs open in Safari when no app is active. Custom scheme URLs require an active app in the session.
 - Commands that omit `--session` use an implicit `default` session scoped to the caller's current git worktree or working directory. This keeps independent local agents from accidentally attaching to each other's default session.
