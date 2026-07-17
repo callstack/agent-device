@@ -15,7 +15,11 @@ export function deriveDaemonCommandDescriptors(
   const result: DaemonCommandDescriptor[] = [];
   for (const descriptor of descriptors) {
     if (!descriptor.daemon) continue;
-    result.push({ command: descriptor.name, ...descriptor.daemon });
+    result.push({
+      command: descriptor.name,
+      ...descriptor.daemon,
+      replayScopedAction: descriptor.recordsSessionAction,
+    });
   }
   return result;
 }

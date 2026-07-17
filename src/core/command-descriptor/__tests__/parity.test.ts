@@ -22,6 +22,7 @@ import {
   listCapabilityCheckedCommandNames,
   listMcpExposedCommandNames,
   resolveCommandRecordsSessionAction,
+  RAW_COMMAND_DESCRIPTORS,
 } from '../registry.ts';
 
 // Function-valued traits cannot be deep-equaled across re-authored closures, so
@@ -296,9 +297,25 @@ test('capability-checked command list is built from descriptor capabilities', ()
   assert.equal(expectedNames.has('debug'), false, 'local debug command stays capability-exempt');
 });
 
-// #1310: every command is classified as recording (or not) and the command
-// descriptor projection agrees with the daemon registry's replayScopedAction.
-test('recordsSessionAction classifies every command and matches daemon replayScopedAction', () => {
+// #1310: every raw descriptor explicitly decides recording; the daemon
+// replayScopedAction trait and MCP schema projection are both derived from it.
+test('recordsSessionAction is explicit on every raw descriptor and drives daemon replay policy', () => {
+  for (const descriptor of RAW_COMMAND_DESCRIPTORS) {
+    assert.equal(
+      typeof descriptor.recordsSessionAction,
+      'boolean',
+      `${descriptor.name} declares an explicit recordsSessionAction boolean`,
+    );
+    const daemon = ('daemon' in descriptor ? descriptor.daemon : undefined) as
+      | { replayScopedAction?: boolean }
+      | undefined;
+    assert.equal(
+      'replayScopedAction' in (daemon ?? {}),
+      false,
+      `${descriptor.name} does not set replayScopedAction on the daemon trait (it is derived)`,
+    );
+  }
+
   for (const descriptor of commandDescriptors) {
     assert.equal(
       typeof resolveCommandRecordsSessionAction(descriptor.name),
