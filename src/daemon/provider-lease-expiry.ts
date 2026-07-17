@@ -5,6 +5,7 @@ import type { LeaseLifecycleProvider } from './handlers/lease.ts';
 import { releaseExpiredProviderLease } from './lease-lifecycle.ts';
 import type { DeviceLease } from './lease-registry.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
+import { sleep } from '../utils/timeouts.ts';
 
 const DEFAULT_RETRY_DELAY_MS = 1_000;
 const PENDING_RELEASES_FILE = 'expired-provider-leases.json';
@@ -28,6 +29,7 @@ type PersistedExpiredProviderLeases = {
 export type ExpiredProviderLeaseReleaser = {
   release: (lease: DeviceLease) => Promise<void>;
   retryPending: () => Promise<void>;
+  drain: (timeoutMs: number) => Promise<{ pending: DeviceLease[]; released: DeviceLease[] }>;
   shutdown: () => void;
 };
 
@@ -45,6 +47,7 @@ export function createExpiredProviderLeaseReleaser(options: {
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   let retryTimer: Timer | undefined;
   let retrying = false;
+  const releasedLeases = new Map<string, DeviceLease>();
 
   const persistPendingLeases = (): boolean => {
     if (!options.stateDir) {
@@ -109,6 +112,7 @@ export function createExpiredProviderLeaseReleaser(options: {
       if (!isProviderRuntimeAvailable(lease, options.providerRuntimeIds)) continue;
       if (await releaseLiveProviderLease(options.leaseLifecycleProvider, lease)) {
         pendingLiveLeases.delete(lease.leaseId);
+        releasedLeases.set(lease.leaseId, lease);
       }
     }
   };
@@ -119,6 +123,7 @@ export function createExpiredProviderLeaseReleaser(options: {
       if (!persistedRecoveryLeaseIds.has(lease.leaseId) && !persistPendingLeases()) continue;
       if (await releaseExpiredProviderLease(options.recoverExpiredLease, lease)) {
         pendingRecoveryLeases.delete(lease.leaseId);
+        releasedLeases.set(lease.leaseId, lease);
         persistPendingLeases();
       }
     }
@@ -162,6 +167,15 @@ export function createExpiredProviderLeaseReleaser(options: {
       }
     },
     retryPending,
+    drain: async (timeoutMs) => {
+      // Shutdown gets one final, bounded attempt at every pending release. A
+      // provider call that hangs must not keep the daemon alive indefinitely.
+      await Promise.race([retryPending(), sleep(Math.max(0, timeoutMs))]);
+      return {
+        pending: [...pendingLiveLeases.values(), ...pendingRecoveryLeases.values()],
+        released: [...releasedLeases.values()],
+      };
+    },
     shutdown: () => {
       if (retryTimer) clearTimeout(retryTimer);
       retryTimer = undefined;

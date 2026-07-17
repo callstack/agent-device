@@ -120,3 +120,31 @@ test('does not release until the expired lease record is durable', async () => {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
+
+test('final drain reports releases completed during daemon shutdown', async () => {
+  const lease = new LeaseRegistry().allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'browserstack',
+  });
+  const release = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('temporary outage'))
+    .mockResolvedValue({});
+  const releaser = createExpiredProviderLeaseReleaser({
+    leaseLifecycleProvider: { release },
+    providerRuntimeIds: ['browserstack'],
+  });
+
+  try {
+    await releaser.release(lease);
+    const drained = await releaser.drain(10);
+
+    expect(release).toHaveBeenCalledTimes(2);
+    expect(release).toHaveBeenLastCalledWith(lease);
+    expect(drained.released).toEqual([lease]);
+    expect(drained.pending).toEqual([]);
+  } finally {
+    releaser.shutdown();
+  }
+});

@@ -29,6 +29,16 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     positionalArgs: ['status|login|logout'],
     supportedFlags: ['remoteConfig', 'stateDir'],
   },
+  daemon: {
+    usageOverride: 'daemon stop [--state-dir <path>] [--clean]',
+    listUsageOverride: 'daemon stop',
+    helpDescription:
+      'Stop a local daemon after verifying its PID/start-time identity. Use --clean to remove retained Apple runner processes and leases owned by that daemon.',
+    summary: 'Safely stop a local daemon and optionally clean retained runner resources',
+    positionalArgs: ['stop'],
+    allowedFlags: ['clean'],
+    supportedFlags: ['stateDir'],
+  },
   connect: {
     usageOverride:
       'connect [cloud|proxy|limrun|browserstack|aws-device-farm] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]',

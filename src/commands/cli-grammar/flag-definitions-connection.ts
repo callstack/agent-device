@@ -202,6 +202,13 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
       'Force replacement of existing state (connect: replace an active connection; --save-script: overwrite an existing target instead of refusing)',
   },
   {
+    key: 'clean',
+    names: ['--clean'],
+    type: 'boolean',
+    usageLabel: '--clean',
+    usageDescription: 'Daemon stop: remove retained runner processes and leases after stopping',
+  },
+  {
     key: 'noLogin',
     names: ['--no-login'],
     type: 'boolean',

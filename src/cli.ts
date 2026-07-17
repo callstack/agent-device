@@ -75,6 +75,7 @@ const REMOTE_MATERIALIZATION_DEFERRED_COMMANDS = new Set([
   'connect',
   'connection',
   'close',
+  'daemon',
   'disconnect',
   'metro',
   'proxy',
@@ -554,6 +555,7 @@ function resolveActiveConnectionDefaults(options: {
   if (
     options.command === 'connect' ||
     options.command === 'connection' ||
+    options.command === 'daemon' ||
     options.command === 'proxy'
   ) {
     return null;
@@ -577,7 +579,9 @@ function shouldMaterializeRemoteConnection(command: string): boolean {
 }
 
 function shouldResolveRemoteAuth(command: string): boolean {
-  return command !== 'auth' && command !== 'connection' && command !== 'proxy';
+  return (
+    command !== 'auth' && command !== 'connection' && command !== 'daemon' && command !== 'proxy'
+  );
 }
 
 function shouldWarnOpenMayMissRemoteRuntime(options: {

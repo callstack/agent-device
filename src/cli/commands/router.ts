@@ -3,6 +3,7 @@ import type { AgentDeviceClient } from '../../agent-device-client.ts';
 import { isClientBackedCliCommandName, type ClientBackedCliCommandName } from './client-backed.ts';
 import { connectCommand, connectionCommand, disconnectCommand } from './connection.ts';
 import { authCommand } from './auth.ts';
+import { daemonCommand } from './daemon.ts';
 import { proxyCommand } from './proxy.ts';
 import { replayCommand } from './replay.ts';
 import { screenshotCommand, diffCommand } from './screenshot.ts';
@@ -19,6 +20,7 @@ const dedicatedCliCommandHandlers = {
   disconnect: disconnectCommand,
   connection: connectionCommand,
   auth: authCommand,
+  daemon: daemonCommand,
   proxy: proxyCommand,
   replay: replayCommand,
   screenshot: screenshotCommand,
