@@ -29,6 +29,8 @@
     "react-native-web": "^0.21.2"
   },
   "devDependencies": {
+    "@expo/fingerprint": "^0.19.4",
+    "@expo/repack-app": "^0.7.2",
     "@types/react": "~19.2.2",
     "expo-build-disk-cache": "^0.7.4",
     "typescript": "~6.0.3"

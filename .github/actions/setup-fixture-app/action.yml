@@ -1,24 +1,24 @@
 name: "Setup Fixture App"
-description: "Build (or restore from cache) the examples/test-app fixture app and install it on the booted iOS simulator"
+description: "Install a ready Release build of examples/test-app on the booted iOS simulator, from the shared build cache"
 
 # Any job that needs a controlled app to drive can use this instead of an Apple
-# system app. Building it costs ~22 minutes, so the built .app is cached and the
-# build only runs when its sources or the toolchain actually change.
+# system app. It fetches the Release binary that test-app-build-cache.yml
+# published for the current Expo fingerprint, refreshes its JS, and installs it —
+# turning a ~22 minute build into a download plus a seconds-long repack.
 #
-# The cache is shared: GitHub caches are per-repository and readable across
-# workflows, and a run can restore caches from its own branch or the default
-# branch. So once a run on main populates it, every workflow gets the hit. The
-# key is computed here from a fixed input list, so all callers agree on it —
-# do not fold caller-specific inputs into it, or the cache stops being shared.
+# Keyed on the Expo fingerprint, which hashes the native build and nothing else.
+# A hit therefore guarantees only that the native side is current, so the JS the
+# Release build embedded may be stale — @expo/repack-app swaps in a bundle built
+# from the current source. If no artifact exists yet (the producer has not run
+# for this fingerprint), it falls back to building inline, so a caller is never
+# left without an app.
 #
+# The caller's job needs `permissions: actions: read` for the artifact lookup.
 # Relevant to #320 (move replay coverage off system apps onto a stable fixture).
 
 inputs:
-  runtime-version:
-    description: "iOS runtime version (participates in the cache key)"
-    required: true
   device-name:
-    description: "Simulator device name used for the build destination"
+    description: "Simulator device name used for the inline-build fallback"
     required: false
     default: "iPhone 17 Pro"
   install:
@@ -28,57 +28,78 @@ inputs:
 
 outputs:
   app-path:
-    description: "Path to the built .app bundle"
+    description: "Path to the ready .app bundle"
     value: ${{ steps.locate.outputs.app-path }}
   app-id:
-    description: "Bundle identifier read from the built app's Info.plist"
+    description: "Bundle identifier read from the app's Info.plist"
     value: ${{ steps.locate.outputs.app-id }}
-  cache-hit:
-    description: "Whether the build was restored from cache"
-    value: ${{ steps.cache.outputs.cache-hit }}
+  source:
+    description: "Where the binary came from: 'artifact' or 'build'"
+    value: ${{ steps.fetch.outputs.source }}
 
 runs:
   using: "composite"
   steps:
-    - name: Resolve Xcode cache key
-      id: xcode
+    # Installed even on a hit, because the fingerprint is derived from the
+    # dependency graph and cannot be computed without it.
+    - name: Install test app dependencies
+      shell: bash
+      run: pnpm test-app:install
+
+    - name: Fetch the cached Release binary
+      id: fetch
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        HASH="$(pnpm --dir examples/test-app exec fingerprint fingerprint:generate | jq -r .hash)"
+        NAME="fingerprint.${HASH}.ios"
+        DEST="${{ github.workspace }}/.tmp/fixture-app"
+        rm -rf "$DEST"; mkdir -p "$DEST"
+
+        # A lookup failure (API outage, auth, transient 5xx) must not fail the
+        # caller: it degrades to an inline build exactly as a cache miss does. The
+        # assignment sits in an `if` so `set -e` cannot exit on it, and an empty
+        # ART_ID then takes the same path as "no artifact found".
+        if ! ART_ID="$(gh api "repos/${{ github.repository }}/actions/artifacts?name=${NAME}&per_page=1" \
+          --jq '[.artifacts[] | select(.expired == false)][0].id // empty' 2>/dev/null)"; then
+          echo "::warning::Could not query the build cache for $NAME; building inline."
+          ART_ID=""
+        fi
+
+        SOURCE=build
+        if [ -n "$ART_ID" ]; then
+          STAGE="$(mktemp -d)"
+          # Any failure along the download path falls through to an inline build
+          # rather than failing the caller.
+          if gh api "repos/${{ github.repository }}/actions/artifacts/${ART_ID}/zip" > "$STAGE/a.zip" \
+             && unzip -q "$STAGE/a.zip" -d "$STAGE" \
+             && tar -xzf "$STAGE/binary.tar.gz" -C "$DEST"; then
+            SOURCE=artifact
+            echo "restored $NAME from the build cache"
+          else
+            echo "::warning::Could not restore $NAME; building inline."
+            rm -rf "$DEST"/*.app
+          fi
+          rm -rf "$STAGE"
+        else
+          echo "$NAME not in the cache yet; building inline."
+        fi
+        echo "source=$SOURCE" >> "$GITHUB_OUTPUT"
+
+    # Fallback only: the producer builds the same way. `--device generic` avoids
+    # needing a booted simulator; Release embeds the bundle so no Metro is needed.
+    - name: Build the Release app (fallback)
+      if: steps.fetch.outputs.source == 'build'
       shell: bash
       run: |
         set -euo pipefail
-        XCODE_KEY="$(xcodebuild -version | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/[[:space:]]$//' | tr ' ' '-' | tr -cd '[:alnum:]._-')"
-        echo "key=$XCODE_KEY" >> "$GITHUB_OUTPUT"
-
-    - name: Cache fixture app build
-      id: cache
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.3
-      with:
-        path: ${{ github.workspace }}/.tmp/fixture-app
-        # Everything that can change the binary: app sources, native config,
-        # dependency graph, this action's build logic, and the toolchain.
-        # Deliberately caller-independent so the cache is shared across workflows.
-        key: fixture-app-ios-${{ inputs.runtime-version }}-${{ steps.xcode.outputs.key }}-${{ hashFiles('examples/test-app/src/**', 'examples/test-app/app/**', 'examples/test-app/modules/**', 'examples/test-app/app.config.js', 'examples/test-app/package.json', 'examples/test-app/pnpm-lock.yaml', 'examples/test-app/pnpm-workspace.yaml', '.github/actions/setup-fixture-app/action.yml') }}
-
-    - name: Build fixture app
-      if: steps.cache.outputs.cache-hit != 'true'
-      shell: bash
-      run: |
-        set -euo pipefail
-        # Release embeds the JS bundle, so no Metro server is needed in CI.
-        pnpm test-app:install
         pnpm --dir examples/test-app exec expo run:ios \
           --configuration Release \
-          --device "${{ inputs.device-name }}" \
-          --no-bundler
-        # Stash the bundle at a stable path: DerivedData paths are hashed per
-        # project, so the cache needs somewhere deterministic to keep it.
-        APP_PATH="$(find "$HOME/Library/Developer/Xcode/DerivedData" -type d -name '*.app' -path '*Release-iphonesimulator*' | head -1)"
-        if [ -z "$APP_PATH" ]; then
-          echo "::error::Built the fixture app but could not locate its .app bundle to cache."
-          exit 1
-        fi
-        mkdir -p "${{ github.workspace }}/.tmp/fixture-app"
-        rm -rf "${{ github.workspace }}/.tmp/fixture-app/"*.app
-        cp -R "$APP_PATH" "${{ github.workspace }}/.tmp/fixture-app/"
+          --device generic \
+          --no-bundler \
+          --output "${{ github.workspace }}/.tmp/fixture-app"
 
     - name: Locate fixture app
       id: locate
@@ -87,7 +108,7 @@ runs:
         set -euo pipefail
         APP="$(find "${{ github.workspace }}/.tmp/fixture-app" -maxdepth 1 -type d -name '*.app' | head -1)"
         if [ -z "$APP" ]; then
-          echo "::error::No fixture app bundle at .tmp/fixture-app (restored an empty cache?)."
+          echo "::error::No fixture app bundle at .tmp/fixture-app."
           exit 1
         fi
         # Read the id from the bundle itself rather than duplicating it here, so
@@ -95,7 +116,26 @@ runs:
         APP_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")"
         echo "app-path=$APP" >> "$GITHUB_OUTPUT"
         echo "app-id=$APP_ID" >> "$GITHUB_OUTPUT"
-        echo "fixture app: $(basename "$APP") ($APP_ID)"
+        echo "fixture app: $(basename "$APP") ($APP_ID, source=${{ steps.fetch.outputs.source }})"
+
+    # A cached artifact embeds the JS from whenever the producer built it.
+    # --js-bundle-only refreshes exactly the gap the native fingerprint leaves;
+    # an inline build already has current JS, so it is skipped there.
+    - name: Repack the cached app with the current JS
+      if: steps.fetch.outputs.source == 'artifact'
+      shell: bash
+      run: |
+        set -euo pipefail
+        APP="${{ steps.locate.outputs.app-path }}"
+        OUT="${{ github.workspace }}/.tmp/fixture-app-repacked/$(basename "$APP")"
+        rm -rf "$(dirname "$OUT")"; mkdir -p "$(dirname "$OUT")"
+        pnpm --dir examples/test-app exec repack-app \
+          --platform ios \
+          --source-app "$APP" \
+          --output "$OUT" \
+          --js-bundle-only
+        rm -rf "$APP"
+        mv "$OUT" "$APP"
 
     - name: Install fixture app
       if: inputs.install == 'true'

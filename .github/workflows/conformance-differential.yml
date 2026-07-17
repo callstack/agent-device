@@ -24,6 +24,8 @@ on:
 
 permissions:
   contents: read
+  # setup-fixture-app looks up the cached test-app binary via the artifacts API.
+  actions: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -67,15 +69,14 @@ jobs:
           runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
           preferred-device-name: iPhone 17 Pro
 
-      # Builds or restores the cached fixture app and installs it. Shared with any
-      # other job that needs a controlled app to drive (see #320) — the cache is
-      # repo-wide, so whichever workflow builds it first pays the ~22 minutes and
-      # the rest get a hit.
+      # Installs the cached Release test-app and refreshes its JS. Shared with any
+      # other job that needs a controlled app to drive (see #320) — the artifact
+      # is repo-wide, so once the producer builds a fingerprint every workflow
+      # gets it as a download.
       - name: Setup fixture app
         id: fixture-app
         uses: ./.github/actions/setup-fixture-app
         with:
-          runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
           device-name: iPhone 17 Pro
 
       # The action guarantees *an* app is installed; this asserts it is the one
@@ -87,7 +88,7 @@ jobs:
           EXPECTED=$(node --experimental-strip-types -e \
             "import('./scripts/maestro-conformance/differential/scenarios.ts').then(m => console.log(m.DIFFERENTIAL_APP_ID))")
           ACTUAL="${{ steps.fixture-app.outputs.app-id }}"
-          echo "expected=$EXPECTED actual=$ACTUAL (cache-hit=${{ steps.fixture-app.outputs.cache-hit }})"
+          echo "expected=$EXPECTED actual=$ACTUAL (source=${{ steps.fixture-app.outputs.source }})"
           if [ "$ACTUAL" != "$EXPECTED" ]; then
             echo "::error::Installed fixture app is $ACTUAL but the scenarios target $EXPECTED; they would fail vacuously."
             exit 1

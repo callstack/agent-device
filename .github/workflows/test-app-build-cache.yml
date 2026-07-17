@@ -1,0 +1,182 @@
+name: Test App Build Cache
+
+# Builds a Release binary of examples/test-app and publishes it as a workflow
+# artifact keyed by the Expo fingerprint, so CI e2e jobs install a ready binary
+# (via .github/actions/setup-fixture-app) instead of compiling from scratch.
+#
+# Release, not dev-client: the JS bundle is embedded, so a consuming job needs no
+# Metro. Its JS is refreshed on retrieval with @expo/repack-app, so keying on the
+# native-only fingerprint is correct -- a JS-only change reuses the same native
+# binary. Local development does not use this; it caches on disk via the
+# expo-build-disk-cache provider in app.config.js.
+#
+# Only builds when the fingerprint has no artifact yet. Runs on every push to
+# main, and on PRs that touch the cache so a change here is exercised before it
+# merges (workflow_dispatch cannot reach a workflow that is not yet on main).
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - "examples/test-app/**"
+      - ".github/workflows/test-app-build-cache.yml"
+      - ".github/actions/setup-fixture-app/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Look up whether this fingerprint's artifact already exists across runs.
+  actions: read
+
+concurrency:
+  # One producer at a time so a fingerprint is never built twice over; queue
+  # rather than cancel, or a long build could be killed by the next merge and the
+  # cache would never populate. Queued runs are cheap: they find the artifact and
+  # skip the build.
+  group: ci-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 60
+    strategy:
+      # Independent caches; one platform failing must not withhold the other's.
+      fail-fast: false
+      matrix:
+        include:
+          - name: iOS Release
+            platform: ios
+            runs-on: macos-26
+          - name: Android Release
+            platform: android
+            runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Install test app dependencies
+        run: pnpm test-app:install
+
+      - name: Resolve fingerprint and whether it is already cached
+        id: fp
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          HASH="$(pnpm --dir examples/test-app exec fingerprint fingerprint:generate | jq -r .hash)"
+          NAME="fingerprint.${HASH}.${{ matrix.platform }}"
+          # A non-expired artifact under this name means the native inputs are
+          # unchanged; there is nothing to rebuild.
+          COUNT="$(gh api "repos/${{ github.repository }}/actions/artifacts?name=${NAME}&per_page=1" \
+            --jq '[.artifacts[] | select(.expired == false)] | length')"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          if [ "$COUNT" -gt 0 ]; then
+            echo "cached=true" >> "$GITHUB_OUTPUT"
+            echo "$NAME already cached; nothing to build."
+          else
+            echo "cached=false" >> "$GITHUB_OUTPUT"
+            echo "$NAME not cached; building."
+          fi
+
+      # `--device generic` builds for the simulator without booting one or
+      # installing. Release embeds the bundle (no Metro) and links a universal
+      # x86_64+arm64 slice, so the artifact runs on any developer's simulator.
+      - name: Build the iOS Release app
+        if: matrix.platform == 'ios' && steps.fp.outputs.cached == 'false'
+        run: |
+          set -euo pipefail
+          pnpm --dir examples/test-app exec expo run:ios \
+            --configuration Release \
+            --device generic \
+            --no-bundler \
+            --output "${{ github.workspace }}/.tmp/test-app-build"
+
+      - name: Setup Android host
+        if: matrix.platform == 'android' && steps.fp.outputs.cached == 'false'
+        uses: ./.github/actions/setup-android-replay-host
+
+      # Deliberately no `set -o pipefail`, matching android.yml: `yes` is killed
+      # by SIGPIPE once sdkmanager stops reading, and pipefail would report that
+      # 141 as the step's own failure.
+      - name: Install Android SDK packages
+        if: matrix.platform == 'android' && steps.fp.outputs.cached == 'false'
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$SDK_ROOT/cmdline-tools/bin/sdkmanager"
+          fi
+          if [ ! -x "$SDKMANAGER" ]; then
+            echo "sdkmanager not found under $SDK_ROOT" >&2
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+
+      # Android has no build-only mode, so an emulator satisfies device
+      # resolution; it installs the APK as a bonus check that it loads. A Release
+      # build already spans every ABI (the CLI only narrows debug builds to the
+      # device ABI), so no --all-arch and no emulator-architecture coupling.
+      - name: Build the Android Release apk
+        if: matrix.platform == 'android' && steps.fp.outputs.cached == 'false'
+        uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
+        with:
+          api-level: 36
+          arch: x86_64
+          profile: pixel_7
+          target: google_apis_playstore
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
+          # This action runs each line in its own `sh -c`, so every line must be
+          # self-contained: no line continuations, and no variables shared between
+          # lines. `expo run:android` also installs and launches the APK, proving
+          # the Release build loads before it is published.
+          script: |
+            pnpm --dir examples/test-app exec expo run:android --variant release --no-bundler
+            mkdir -p "${{ github.workspace }}/.tmp/test-app-build"
+            cp "$(find examples/test-app/android/app/build/outputs/apk/release -name '*.apk' | head -1)" "${{ github.workspace }}/.tmp/test-app-build/app-release.apk"
+
+      - name: Stage the binary for upload
+        id: stage
+        if: steps.fp.outputs.cached == 'false'
+        run: |
+          set -euo pipefail
+          SRC="${{ github.workspace }}/.tmp/test-app-build"
+          BINARY="$(find "$SRC" -maxdepth 1 \( -name '*.app' -o -name '*.apk' \) | head -1)"
+          if [ -z "$BINARY" ]; then
+            echo "::error::Build produced no .app or .apk under $SRC."
+            exit 1
+          fi
+          # An APK must span both the maintainer's arm64 and CI's x86_64; a
+          # regression here (e.g. an unexpected abiFilter) is otherwise silent.
+          if [ "${{ matrix.platform }}" = "android" ] && ! unzip -l "$BINARY" | grep -q "lib/arm64-v8a/"; then
+            echo "::error::Release APK has no arm64-v8a libraries."
+            exit 1
+          fi
+          # Tar the binary: artifact zips drop the executable bit, which would
+          # leave an installed .app unable to launch.
+          mkdir -p .tmp/test-app-artifact
+          tar -czf .tmp/test-app-artifact/binary.tar.gz -C "$SRC" "$(basename "$BINARY")"
+          echo "publishing ${{ steps.fp.outputs.name }} ($(du -h .tmp/test-app-artifact/binary.tar.gz | cut -f1))"
+
+      # Fork PRs run with a read-only token but can still upload artifacts, and a
+      # consumer serves whatever it finds by name -- so a fork could publish a
+      # tampered binary that CI then executes. Only branches in this repo publish;
+      # a fork's run still builds, which is all the signal a fork PR needs.
+      - name: Publish to the build cache
+        if: |
+          steps.fp.outputs.cached == 'false' &&
+          (github.event_name != 'pull_request' ||
+           github.event.pull_request.head.repo.full_name == github.repository)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ steps.fp.outputs.name }}
+          path: .tmp/test-app-artifact/binary.tar.gz
+          if-no-files-found: error
+          compression-level: 0 # already gzipped

@@ -52,6 +52,30 @@ The app declares `@expo/dom-webview` directly to keep Expo's development runtime
 on the SDK 56 native module; Android verification failed when the dev client
 resolved an older transitive copy.
 
+### Build cache
+
+Local `pnpm test-app:ios` / `test-app:android` cache the native build on disk via
+the [`expo-build-disk-cache`](https://github.com/WookieFPV/expo-build-disk-cache)
+provider (configured in `app.config.js`), keyed by the
+[Expo fingerprint](https://docs.expo.dev/versions/latest/sdk/fingerprint/). A
+second run with no native change reuses the first build instead of recompiling;
+editing screens never needs a rebuild, because Metro serves JavaScript at
+runtime. A fresh checkout still pays for the first native build — the disk cache
+only spares you the repeats.
+
+That fingerprint is why `/ios` and `/android` are gitignored: ignoring the
+prebuild output is what makes @expo/fingerprint treat this app as CNG and skip
+hashing it. Un-ignore them and the fingerprint starts describing your machine
+rather than the project.
+
+CI does not use the disk cache. `.github/workflows/test-app-build-cache.yml`
+builds a **Release** binary (JS embedded, no Metro) per platform when the
+fingerprint has no artifact yet, and publishes it as a GitHub Actions artifact
+named `fingerprint.<hash>.<platform>`. Jobs that drive the app install it through
+`.github/actions/setup-fixture-app`, which downloads that artifact and refreshes
+its JS with `@expo/repack-app` (~seconds) — so a JS-only change reuses the same
+native binary. A consuming job needs `permissions: actions: read`.
+
 ### iOS simulator
 
 From the repo root, install dependencies and run the development build on the

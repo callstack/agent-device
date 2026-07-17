@@ -262,6 +262,12 @@ jobs:
       - name: Check Provider-backed integration architecture progress
         run: pnpm test:integration:progress:check
 
+      # A build-cache lookup outage must degrade setup-fixture-app to an inline
+      # build, not fail the caller. This drives that step's real shell against a
+      # failing `gh`.
+      - name: Setup-fixture-app cache-failure fallback
+        run: sh ./test/scripts/setup-fixture-app-fallback-smoke.sh
+
   web-smoke:
     name: Web Platform Smoke
     runs-on: ubuntu-latest
