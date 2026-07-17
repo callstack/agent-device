@@ -1,21 +1,18 @@
-import fs from 'node:fs';
+// Capture fixtures are real archived device trees: DATA regenerated from a
+// device, never hand-edited (a hand-written id is how a fixture stops proving
+// anything), so they live in `.json` beside this module instead of as inline
+// literals that bury the walkers below. Imported statically rather than read
+// through `fs`: `resolveJsonModule` structurally checks each tree against
+// `RawSnapshotNode[]` at typecheck time, so a fixture that drifts from the node
+// shape fails the build — a `JSON.parse(...) as RawSnapshotNode[]` read would
+// assert that away unchecked.
+import imeCapture from './android-ime-capture.raw.json' with { type: 'json' };
+import qsShadeCapture from './android-qs-shade-capture.raw.json' with { type: 'json' };
 import {
   buildUiHierarchySnapshot,
   type AndroidUiHierarchy,
 } from '../../platforms/android/ui-hierarchy.ts';
 import type { RawSnapshotNode } from '../../kernel/snapshot.ts';
-
-/**
- * Capture fixtures are real archived device trees, so they live in `.json`
- * beside this module rather than as inline literals: they are DATA to be
- * regenerated from a device, not code to be edited by hand, and inlining a few
- * hundred nodes buries the helpers that walk them. Read via `fs` + `import.meta.url`
- * (the `test/output-economy` baseline pattern) so no `resolveJsonModule` /
- * import-attributes support is needed to typecheck them.
- */
-function readCaptureFixture(file: string): RawSnapshotNode[] {
-  return JSON.parse(fs.readFileSync(new URL(file, import.meta.url), 'utf8')) as RawSnapshotNode[];
-}
 
 /**
  * Reconstructs the `AndroidUiHierarchy` tree `buildUiHierarchySnapshot` expects
@@ -90,9 +87,7 @@ export function walkNonRawAndroidFixture(rawNodes: RawSnapshotNode[]): RawSnapsh
  * divergence route test (`daemon/handlers/__tests__/session-replay-divergence.test.ts`)
  * so both exercise the exact same real screen through `walkNonRawAndroidFixture`.
  */
-export const ANDROID_IME_CAPTURE_RAW_NODES: RawSnapshotNode[] = readCaptureFixture(
-  './android-ime-capture.raw.json',
-);
+export const ANDROID_IME_CAPTURE_RAW_NODES: RawSnapshotNode[] = imeCapture;
 
 /**
  * Real device capture (emulator-5556, Pixel 9 Pro XL API 37, deskclock in the
@@ -106,6 +101,4 @@ export const ANDROID_IME_CAPTURE_RAW_NODES: RawSnapshotNode[] = readCaptureFixtu
  * condemn the tiles, so the shape must come from a real capture rather than
  * hand-written ids. `--raw` keeps the structural wrappers a default capture drops.
  */
-export const ANDROID_QS_SHADE_CAPTURE_RAW_NODES: RawSnapshotNode[] = readCaptureFixture(
-  './android-qs-shade-capture.raw.json',
-);
+export const ANDROID_QS_SHADE_CAPTURE_RAW_NODES: RawSnapshotNode[] = qsShadeCapture;
