@@ -54,6 +54,7 @@ vi.mock('../../device-ready.ts', () => ({
 }));
 
 import { handleRecordTraceCommands } from '../record-trace.ts';
+import { stopSessionRecordingForTeardown } from '../record-trace-recording.ts';
 import { deriveRecordingTelemetryPath } from '../../recording-telemetry.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { SessionState } from '../../types.ts';
@@ -984,6 +985,29 @@ test('record stop leaves a short visual tail after iOS simulator gestures', asyn
 
   expect(response?.ok).toBe(true);
   expect(kill).toHaveBeenCalledWith('SIGINT');
+});
+
+test('stopSessionRecordingForTeardown finalizes an active iOS simulator recording and clears session state', async () => {
+  const outPath = path.join(os.tmpdir(), `agent-device-teardown-${Date.now()}.mp4`);
+  fs.writeFileSync(outPath, 'recorded-bytes');
+  const session = makeIosSimulatorRecordingSession('ios-sim-teardown', { outPath });
+  const recording = session.recording;
+  const kill = recording?.platform === 'ios' ? recording.child.kill : undefined;
+
+  await stopSessionRecordingForTeardown(session);
+
+  // Teardown must SIGINT the recorder (which finalizes the mp4) rather than
+  // orphaning the simctl child, and must detach the recording from the session.
+  expect(kill).toHaveBeenCalledWith('SIGINT');
+  expect(session.recording).toBeUndefined();
+});
+
+test('stopSessionRecordingForTeardown is a no-op when the session has no active recording', async () => {
+  const session = makeIosSimulatorSession('ios-sim-teardown-no-recording');
+
+  await expect(stopSessionRecordingForTeardown(session)).resolves.toBeUndefined();
+
+  expect(session.recording).toBeUndefined();
 });
 
 test('record stop reports too-short iOS simulator recordings without leaving invalid output', async () => {

@@ -24,6 +24,7 @@ import {
 import { errorResponse } from './response.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import { recordSessionAction } from './handler-utils.ts';
+import { stopSessionRecordingForTeardown } from './record-trace-recording.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 import { releaseSessionLease } from '../lease-lifecycle.ts';
 import type { LeaseLifecycleProvider } from './lease.ts';
@@ -195,6 +196,10 @@ async function runSessionCloseTeardown(params: {
       cleanupFailures.push({ step, error });
     }
   };
+  // Decide runner retention from the PRE-teardown state: an active recording
+  // defeats retention, and `stopBestEffortSessionResources` below finalizes (and
+  // clears) that recording, so the decision must be captured before it runs.
+  const retainAppleRunner = shouldRetainAppleRunnerAfterClose(req, session);
   await stopBestEffortSessionResources(session, sessionStore, attemptCleanup);
   // The targeted platform close is the primary operation, not best-effort cleanup:
   // its AppError (code/details/hint) is preserved and returned for the caller to
@@ -203,7 +208,7 @@ async function runSessionCloseTeardown(params: {
   const platformCloseError = params.skipPlatformClose
     ? undefined
     : await dispatchTargetedPlatformClose({ req, session, logPath });
-  await stopOrRetainAppleRunnerAfterClose(req, session, attemptCleanup);
+  await stopOrRetainAppleRunnerAfterClose(retainAppleRunner, session, attemptCleanup);
   await clearSessionRuntimeHints(session, sessionStore, sessionName);
   // ADR 0012 decision 6 (BLOCKER 2): a repair-armed session already recorded its
   // finalize `close` and committed (or aborted) its healed `.ad` BEFORE this
@@ -237,6 +242,12 @@ async function stopBestEffortSessionResources(
   sessionStore: SessionStore,
   attemptCleanup: CleanupRunner,
 ): Promise<void> {
+  // Finalize any still-active recording first so closing a session mid-recording
+  // (without an explicit `record stop`) cannot leak the recorder process; must
+  // run before the Apple runner is stopped below since overlay finalization
+  // consults the runner. `shouldRetainAppleRunnerAfterClose` then observes the
+  // now-cleared `session.recording`.
+  await attemptCleanup('recording', () => stopSessionRecordingForTeardown(session));
   await attemptCleanup('app_log', () => stopSessionAppLog(session));
   await attemptCleanup('audio_probe', async () => {
     await stopSessionAudioProbe(session, 'session-close');
@@ -379,12 +390,12 @@ async function clearSessionRuntimeHints(
 }
 
 async function stopOrRetainAppleRunnerAfterClose(
-  req: DaemonRequest,
+  retainAppleRunner: boolean,
   session: SessionState,
   attemptCleanup: CleanupRunner,
 ): Promise<void> {
   if (!isApplePlatform(session.device.platform)) return;
-  if (!shouldRetainAppleRunnerAfterClose(req, session)) {
+  if (!retainAppleRunner) {
     // The targeted close path stops before dispatch to avoid runner/app races.
     // Stop again here for idempotent cleanup, and keep cleanup-sensitive closes explicit.
     await attemptCleanup('apple_runner', () => stopAppleRunnerForClose(session));

@@ -10,6 +10,7 @@ import { stopAndroidSnapshotHelperSessionForDevice } from '../platforms/android/
 import { restoreAndroidTestIme } from '../platforms/android/ime-lifecycle.ts';
 import { cleanupRetainedMaterializedPathsForSession } from './materialized-path-registry.ts';
 import { stopSessionAudioProbe } from './audio-probe.ts';
+import { stopSessionRecordingForTeardown } from './handlers/record-trace-recording.ts';
 import type { SessionState } from './types.ts';
 
 export { stopSessionAudioProbe } from './audio-probe.ts';
@@ -138,6 +139,12 @@ export async function teardownSessionResources(
   stateDir?: string,
 ): Promise<void> {
   const steps: SessionCleanupStep[] = [
+    // Finalize any still-active recording BEFORE the Apple runner is stopped
+    // below: the runner supplies gesture-telemetry for overlay finalization, and
+    // signalling the recorder first prevents a leaked `simctl recordVideo` child
+    // (and its 0-byte, slot-holding mp4) when a session is torn down — including
+    // on daemon shutdown — without an explicit `record stop`.
+    { step: 'recording', run: () => stopSessionRecordingForTeardown(session) },
     { step: 'app_log', run: () => stopSessionAppLog(session) },
     {
       step: 'audio_probe',
