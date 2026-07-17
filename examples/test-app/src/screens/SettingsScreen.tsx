@@ -18,6 +18,7 @@ export interface SettingsScreenProps {
   notificationsEnabled: boolean;
   reducedMotionEnabled: boolean;
   onOpenAccessorySetup: () => void;
+  onOpenInertSurface: () => void;
   onLoadDiagnostics: () => void;
   onRetryDiagnostics: () => void;
   onSetNotificationsEnabled: (value: boolean) => void;
@@ -68,6 +69,17 @@ export function SettingsScreen(props: SettingsScreenProps) {
           label="Open accessory setup lab"
           onPress={props.onOpenAccessorySetup}
           testID="open-accessory-setup-lab"
+        />
+      </SectionCard>
+
+      <SectionCard
+        subtitle="Open a surface where a tap provably changes nothing on screen."
+        title="Inert surface"
+      >
+        <ActionButton
+          label="Open inert surface"
+          onPress={props.onOpenInertSurface}
+          testID="open-inert-surface"
         />
       </SectionCard>
 

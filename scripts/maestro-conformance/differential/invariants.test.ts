@@ -124,22 +124,40 @@ test('a trace whose taps record no metric reports no-data rather than passing', 
   assert.equal(result.status, 'no-data');
 });
 
-// tap-retry-if-no-change is parked (#1300): tapRetries measured 0 then 1 across
-// identical runs, so it is flaky rather than divergent. A knownDivergence
-// declaration assumes the failure reproduces, so declaring a flaky scenario
-// would make the schedule flip red at random. Assert it stays out of the active
-// set until it has an inert control — re-adding it without one silently returns
-// the coin-flip.
-test('the flaky retry scenario is parked, not declared as a divergence', () => {
+// tap-retry-if-no-change was parked while it was a coin flip (#1300): tapRetries
+// measured 0 then 1 across identical runs. It is active again now that it taps
+// the fixture's inert surface, and it carries its own detector — without the
+// tapRetries invariant the scenario is back to proving nothing, because outcome
+// parity passes whether or not the retry ever fires.
+test('the retry scenario is active and carries the invariant that makes it mean something', () => {
   const retry = DIFFERENTIAL_SCENARIOS.find((s) => s.id === 'tap-retry-if-no-change');
-  assert.equal(retry, undefined, 'tap-retry-if-no-change must stay parked until #1300 gives it an inert control');
+  assert.ok(retry, 'tap-retry-if-no-change must stay in the active differential set');
+  const [invariant, ...rest] = retry?.engineInvariants ?? [];
+  assert.equal(rest.length, 0);
+  assert.equal(invariant?.kind, 'metricAtLeast');
+  assert.equal(invariant?.command, 'tapOn');
+  assert.equal(invariant?.kind === 'metricAtLeast' && invariant.metric, 'tapRetries');
+  assert.equal(invariant?.kind === 'metricAtLeast' && invariant.min, 1);
 });
 
-// The invariant itself stays implemented and proven, so the fix PR only has to
-// re-add the scenario rather than rebuild the detector.
-test('the tapRetries invariant remains implemented for when the scenario returns', () => {
-  assert.equal(evaluateInvariant([stopWithMetrics('tapOn', { tapRetries: 1 })], RETRY_INVARIANT).status, 'held');
-  assert.equal(evaluateInvariant([stopWithMetrics('tapOn', { tapRetries: 0 })], RETRY_INVARIANT).status, 'violated');
+// A flaky scenario must be fixed, never waived: knownDivergence assumes the
+// failure reproduces, so declaring this one would make the schedule flip between
+// green and red at random — the trap #1300 was filed to escape.
+test('the retry scenario is not waived by a divergence declaration', () => {
+  const retry = DIFFERENTIAL_SCENARIOS.find((s) => s.id === 'tap-retry-if-no-change');
+  assert.equal(retry?.knownDivergence, undefined);
+});
+
+// The flow only forces the retry if it drives the inert surface. Tapping any
+// live screen is what made this flaky, and that regression is invisible on the
+// unit side — the invariant only goes red on a device.
+test('the retry flow drives the inert surface, not a live screen', () => {
+  const flow = fs.readFileSync(
+    path.join(import.meta.dirname, 'flows/tap-retry-if-no-change.yaml'),
+    'utf8',
+  );
+  assert.match(flow, /id: open-inert-surface/);
+  assert.match(flow, /id: inert-target/);
 });
 
 // Truncation-vs-rounding is at most 1px and cannot be observed on a device, so

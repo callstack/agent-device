@@ -148,19 +148,30 @@ export const DIFFERENTIAL_SCENARIOS: DifferentialScenario[] = [
     ],
     divergenceMeans: 'The swipe behaves differently enough on one engine to fail the flow.',
   },
-  // PARKED: tap-retry-if-no-change (flow kept at differential/flows/, invariant
-  // kept implemented and unit-tested) — https://github.com/callstack/agent-device/issues/1300
-  //
-  // It is NOT declared as a knownDivergence, deliberately. tapRetries measured 0
-  // in run 29504440599 and 1 in run 29510020718 with no change to the flow or
-  // commit: the tap sometimes holds the hierarchy signature still and sometimes
-  // does not, because the fixture home screen has live content. A declaration
-  // assumes the divergence REPRODUCES; a flaky one would flip between
-  // known-divergence (green) and stale-declaration (red) at random, which is
-  // worse than no scenario — a coin-flip job teaches people to ignore the
-  // differential. So retryIfNoChange has no device coverage until the fixture
-  // offers an inert control, and that absence is tracked rather than disguised
-  // as a green run.
+  {
+    id: 'tap-retry-if-no-change',
+    flow: 'differential/flows/tap-retry-if-no-change.yaml',
+    comparesAcrossEngines: 'A tap on an inert target completes on both engines.',
+    expect: 'pass',
+    // The whole point of the scenario. Outcome parity cannot see a retry: a tap
+    // that never re-taps passes just the same, which is how this scenario spent
+    // its first two runs proving nothing (#1300). The flow taps a surface that
+    // provably cannot change, so the retry MUST fire; if it does not, either the
+    // retry path regressed or the fixture stopped being inert, and both are
+    // things we want to hear about.
+    engineInvariants: [
+      {
+        kind: 'metricAtLeast',
+        command: 'tapOn',
+        metric: 'tapRetries',
+        min: 1,
+        because:
+          'a tap on an unchanging screen must re-tap; zero retries means retryIfNoChange never ran and the scenario proved nothing',
+      },
+    ],
+    divergenceMeans:
+      'agent-device stopped re-tapping when the screen holds still (a retryIfNoChange regression), or the fixture surface it taps is no longer inert.',
+  },
   {
     id: 'optional-warned-not-failed',
     flow: 'differential/flows/optional-warned-not-failed.yaml',

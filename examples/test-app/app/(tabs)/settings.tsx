@@ -16,6 +16,7 @@ export default function SettingsRoute() {
         diagnosticsState={state.diagnosticsState}
         notificationsEnabled={state.notificationsEnabled}
         onOpenAccessorySetup={() => router.push('/accessory-setup')}
+        onOpenInertSurface={() => router.push('/inert')}
         onConfirmReset={state.resetLabState}
         onLoadDiagnostics={state.loadDiagnostics}
         onRetryDiagnostics={state.retryDiagnostics}

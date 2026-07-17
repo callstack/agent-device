@@ -1,15 +1,38 @@
-# Layer-3 device flow. Taps the app's static title, which is NOT interactive, so
-# the screen cannot change and the retryIfNoChange path is forced to run. A tap on
-# a navigating control (e.g. home-open-form) succeeds on the first attempt and
-# never exercises retry at all — the scenario would pass while proving nothing.
-# The scenario asserts tapRetries >= 1 from the trace, so a retry regression is
-# caught rather than assumed.
+# Layer-3 device flow for retryTapIfNoChange.
+#
+# The engine re-taps only when the post-tap snapshot signature equals the pre-tap
+# one, and that signature hashes EVERY node on screen — not just the tapped
+# subtree. So a non-interactive target is not enough on its own: any live content
+# anywhere on screen makes the engine see "changed" and skip the retry. Tapping
+# the home screen's title used to look sufficient and was actually a coin flip
+# (#1300) — its gesture lab loads a remote image whose arrival lands on either
+# side of the tap depending on the network.
+#
+# So this drives the fixture's inert surface (examples/test-app/app/inert.tsx),
+# a screen with nothing that loads, animates, or reacts to touch, presented as a
+# full-screen modal so the tab bar's live badges leave the hierarchy too. On a
+# real run the inert screen is 9 nodes against Settings' 55.
+#
+# Reaching it via the Settings TAB is deliberate: home's "Open settings" button
+# sits below the fold, and scrolling to it needs scrollUntilVisible — the engine
+# bug tracked in #1299. The tab is always on screen.
+#
+# There is deliberately no waitForAnimationToEnd before the tap. It is not needed
+# — a navigating tap defers a stability requirement that the next tap settles
+# before resolving its target, so the baseline signature is already captured on a
+# settled screen — and adding one currently FAILS the flow outright (#1326).
 appId: com.callstack.agentdevicelab
 ---
 - launchApp:
     clearState: true
-- assertVisible: Agent Device Tester
 - tapOn:
-    text: Agent Device Tester
+    text: Settings
+- tapOn:
+    id: open-inert-surface
+- assertVisible:
+    id: inert-title
+- tapOn:
+    id: inert-target
     retryTapIfNoChange: true
-- assertVisible: Agent Device Tester
+- assertVisible:
+    id: inert-title
