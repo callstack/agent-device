@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildDaemonHttpAuthHeaders,
   buildDaemonHttpBaseUrl,
+  buildDaemonHttpTenantHeaders,
   buildDaemonHttpUrl,
 } from '../http-contract.ts';
 
@@ -34,4 +35,11 @@ test('buildDaemonHttpAuthHeaders writes both supported daemon auth headers', () 
     'x-agent-device-token': 'token-1',
   });
   assert.deepEqual(buildDaemonHttpAuthHeaders(''), {});
+});
+
+test('buildDaemonHttpTenantHeaders omits blank tenant identities', () => {
+  assert.deepEqual(buildDaemonHttpTenantHeaders(' tenant-a '), {
+    'x-agent-device-tenant': 'tenant-a',
+  });
+  assert.deepEqual(buildDaemonHttpTenantHeaders(''), {});
 });

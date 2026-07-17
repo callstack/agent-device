@@ -1,4 +1,5 @@
 export const DAEMON_HTTP_BASE_PATH = '/agent-device';
+export const DAEMON_HTTP_TENANT_HEADER = 'x-agent-device-tenant';
 
 export function buildDaemonHttpBaseUrl(baseUrl: string): string {
   return buildDaemonHttpUrl(baseUrl, DAEMON_HTTP_BASE_PATH);
@@ -16,4 +17,10 @@ export function buildDaemonHttpAuthHeaders(token: string | undefined): Record<st
     authorization: `Bearer ${normalizedToken}`,
     'x-agent-device-token': normalizedToken,
   };
+}
+
+export function buildDaemonHttpTenantHeaders(tenantId: string | undefined): Record<string, string> {
+  const normalizedTenantId = tenantId?.trim();
+  if (!normalizedTenantId) return {};
+  return { [DAEMON_HTTP_TENANT_HEADER]: normalizedTenantId };
 }

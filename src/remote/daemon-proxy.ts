@@ -7,6 +7,7 @@ import { readNodeHttpRequestBody } from '../utils/node-http.ts';
 import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
 import {
   DAEMON_HTTP_BASE_PATH,
+  DAEMON_HTTP_TENANT_HEADER,
   buildDaemonHttpAuthHeaders,
   buildDaemonHttpUrl,
 } from '../daemon/http-contract.ts';
@@ -31,6 +32,7 @@ const FORWARDED_REQUEST_HEADERS = [
   'x-artifact-filename',
   'x-artifact-hash',
   'x-artifact-hash-algorithm',
+  DAEMON_HTTP_TENANT_HEADER,
 ];
 const FORWARDED_RESPONSE_HEADERS = ['content-type', 'content-disposition', 'x-request-id'];
 

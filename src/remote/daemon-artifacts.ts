@@ -5,7 +5,10 @@ import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '../kernel/errors.ts';
 import type { DaemonArtifact, DaemonRequest, DaemonResponse } from '../daemon/types.ts';
-import { buildDaemonHttpAuthHeaders } from '../daemon/http-contract.ts';
+import {
+  buildDaemonHttpAuthHeaders,
+  buildDaemonHttpTenantHeaders,
+} from '../daemon/http-contract.ts';
 import {
   appendRecordingExtensionWhenMissing,
   recordingExtensionForPlatform,
@@ -312,6 +315,7 @@ export async function materializeRemoteArtifacts(
       artifactId: artifact.artifactId,
       destinationPath: localPath,
       requestId: req.meta?.requestId,
+      tenantId: req.meta?.tenantId,
     });
     nextData[artifact.field] = localPath;
     nextArtifacts.push({
@@ -341,6 +345,7 @@ type DownloadRemoteArtifactParams = {
   artifactId: string;
   destinationPath: string;
   requestId?: string;
+  tenantId?: string;
   timeoutMs?: number;
 };
 
@@ -368,7 +373,10 @@ export async function downloadRemoteArtifact(params: DownloadRemoteArtifactParam
         port: artifactUrl.port,
         method: 'GET',
         path: artifactUrl.pathname + artifactUrl.search,
-        headers: buildDaemonHttpAuthHeaders(params.token),
+        headers: {
+          ...buildDaemonHttpAuthHeaders(params.token),
+          ...buildDaemonHttpTenantHeaders(params.tenantId),
+        },
       },
       (res) => {
         if ((res.statusCode ?? 500) >= 400) {

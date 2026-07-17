@@ -26,6 +26,7 @@ import {
   shouldStreamRequestProgress,
 } from '../request-progress-protocol.ts';
 import { buildDaemonHealthPayload } from '../http-health.ts';
+import { DAEMON_HTTP_TENANT_HEADER } from '../http-contract.ts';
 import { sendRestJsonError, statusCodeForNormalizedError } from '../http-errors.ts';
 import { tryHandleUploadHttpRoute } from '../upload-http.ts';
 import { tryHandleDownloadableArtifactHttpRoute } from '../downloadable-artifact-http.ts';
@@ -753,6 +754,7 @@ async function authorizeAuxiliaryHttpRequest(params: {
 }): Promise<{ tenantId?: string } | null> {
   const { req, res, authHook, expectedToken, daemonRequest } = params;
   const token = resolveToken({}, req.headers);
+  const tenantId = normalizeTenantId(readHeaderValue(req.headers, DAEMON_HTTP_TENANT_HEADER));
   const tokenError = enforceDaemonToken(token, expectedToken);
   if (tokenError) {
     sendRestJsonError(res, tokenError);
@@ -772,6 +774,7 @@ async function authorizeAuxiliaryHttpRequest(params: {
       session: 'default',
       command: daemonRequest.command,
       positionals: daemonRequest.positionals,
+      ...(tenantId ? { meta: { tenantId } } : {}),
     },
   });
   if (!authResult.ok) {
@@ -789,7 +792,12 @@ async function authorizeAuxiliaryHttpRequest(params: {
     return null;
   }
 
-  return { tenantId: authResult.tenantId };
+  return { tenantId: authResult.tenantId ?? tenantId };
+}
+
+function readHeaderValue(headers: IncomingHttpHeaders, name: string): string | undefined {
+  const value = headers[name];
+  return typeof value === 'string' ? value : undefined;
 }
 
 function enforceDaemonToken(
