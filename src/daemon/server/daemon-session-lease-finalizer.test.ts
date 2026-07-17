@@ -48,7 +48,9 @@ test('journals and bounds a hung recoverable session lease release before the fi
     expect(recoverExpiredLease).toHaveBeenCalledWith(lease);
     expect(leaseRegistry.listActiveLeases()).toEqual([]);
     expect(fs.existsSync(path.join(stateDir, 'expired-provider-leases.json'))).toBe(true);
-    await expect(expiredProviderLeaseReleaser.drain(10)).resolves.toEqual({
+    const drain = expiredProviderLeaseReleaser.drain(10);
+    await vi.advanceTimersByTimeAsync(10);
+    await expect(drain).resolves.toEqual({
       pending: [lease],
       released: [],
     });
@@ -56,5 +58,55 @@ test('journals and bounds a hung recoverable session lease release before the fi
     expiredProviderLeaseReleaser.shutdown();
     vi.useRealTimers();
     fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('final drain joins a release that completes after the session timeout', async () => {
+  vi.useFakeTimers();
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'browserstack',
+  });
+  const release = vi.fn(
+    () =>
+      new Promise<Record<string, unknown>>((resolve) => {
+        setTimeout(() => resolve({}), 1_500);
+      }),
+  );
+  const expiredProviderLeaseReleaser = createExpiredProviderLeaseReleaser({
+    leaseLifecycleProvider: { release },
+    providerRuntimeIds: ['browserstack'],
+  });
+  const session = makeIosSession('default', {
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+      leaseProvider: lease.leaseProvider,
+      expiresAt: lease.expiresAt,
+    },
+  });
+
+  try {
+    expiredProviderLeaseReleaser.beginShutdown();
+    const finalization = finalizeDaemonSessionLease({
+      session,
+      leaseRegistry,
+      expiredProviderLeaseReleaser,
+      timeoutMs: 1_000,
+    });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await finalization;
+    const drain = expiredProviderLeaseReleaser.drain(2_000);
+
+    await vi.advanceTimersByTimeAsync(500);
+    await expect(drain).resolves.toEqual({ pending: [], released: [lease] });
+  } finally {
+    expiredProviderLeaseReleaser.shutdown();
+    vi.useRealTimers();
   }
 });

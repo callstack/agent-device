@@ -47,7 +47,7 @@ export function createExpiredProviderLeaseReleaser(options: {
   const persistedRecoveryLeaseIds = new Set(pendingRecoveryLeases.keys());
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   let retryTimer: Timer | undefined;
-  let retrying = false;
+  let activeRetry: Promise<void> | undefined;
   let trackingShutdownReleases = false;
   const shutdownReleasedLeases = new Map<string, DeviceLease>();
 
@@ -135,21 +135,31 @@ export function createExpiredProviderLeaseReleaser(options: {
     }
   };
 
-  const retryPending = async (): Promise<void> => {
-    if (retrying) return;
-    retrying = true;
-    try {
-      await retryPendingLiveLeases();
-      await retryPendingRecoveryLeases();
-    } finally {
-      retrying = false;
-      if (pendingLiveLeases.size === 0 && pendingRecoveryLeases.size === 0 && retryTimer) {
-        clearTimeout(retryTimer);
-        retryTimer = undefined;
-      } else {
-        scheduleRetry();
+  const retryPending = (): Promise<void> => {
+    if (activeRetry) return activeRetry;
+    const retry = (async (): Promise<void> => {
+      try {
+        await retryPendingLiveLeases();
+        await retryPendingRecoveryLeases();
+      } finally {
+        if (pendingLiveLeases.size === 0 && pendingRecoveryLeases.size === 0 && retryTimer) {
+          clearTimeout(retryTimer);
+          retryTimer = undefined;
+        } else {
+          scheduleRetry();
+        }
       }
-    }
+    })();
+    activeRetry = retry;
+    void retry.then(
+      () => {
+        if (activeRetry === retry) activeRetry = undefined;
+      },
+      () => {
+        if (activeRetry === retry) activeRetry = undefined;
+      },
+    );
+    return retry;
   };
 
   return {
