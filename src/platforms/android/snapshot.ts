@@ -15,7 +15,6 @@ import {
   type RawSnapshotNode,
   type SnapshotOptions,
 } from '../../kernel/snapshot.ts';
-import { isScrollableType } from '../../utils/scrollable.ts';
 import { deriveMobileSnapshotHiddenContentHints } from '../../snapshot/mobile-snapshot-semantics.ts';
 import {
   buildUiHierarchySnapshot,
@@ -25,13 +24,8 @@ import {
   type AndroidSnapshotAnalysis,
   type AndroidUiHierarchy,
 } from './ui-hierarchy.ts';
-import {
-  resolveAndroidAdbExecutor,
-  resolveAndroidAdbProvider,
-  type AndroidAdbProvider,
-} from './adb-executor.ts';
+import { resolveAndroidAdbProvider, type AndroidAdbProvider } from './adb-executor.ts';
 import { sleep } from './adb.ts';
-import { deriveAndroidScrollableContentHints } from './scroll-hints.ts';
 import {
   captureAndroidSnapshotWithHelper,
   captureAndroidSnapshotWithHelperSession,
@@ -88,19 +82,9 @@ export async function snapshotAndroid(
   const adb = resolveAndroidAdbProvider(device, options.helperAdb).exec;
   const capture = await captureAndroidUiHierarchy(device, options, adb);
   const xml = capture.xml;
-  const includeHiddenContentHints = options.includeHiddenContentHints !== false;
   if (!options.interactiveOnly) {
     const parsed = parseUiHierarchy(xml, undefined, options);
     const truncated = mergeAndroidSnapshotTruncation(parsed.truncated, capture.metadata);
-    if (includeHiddenContentHints) {
-      const nativeHints = await deriveScrollableContentHintsIfNeeded(
-        device,
-        parsed.nodes,
-        xml,
-        adb,
-      );
-      applyHiddenContentHintsToNodes(nativeHints, parsed.nodes);
-    }
     return {
       ...parsed,
       ...androidSnapshotTruncationFields(truncated),
@@ -111,15 +95,8 @@ export async function snapshotAndroid(
   const tree = parseUiHierarchyTree(xml);
   const interactiveSnapshot = buildUiHierarchySnapshot(tree, undefined, options);
   const truncated = mergeAndroidSnapshotTruncation(interactiveSnapshot.truncated, capture.metadata);
-  if (includeHiddenContentHints) {
-    await applyHiddenContentHintsToInteractiveSnapshot({
-      device,
-      options,
-      tree,
-      xml,
-      adb,
-      interactiveSnapshot,
-    });
+  if (options.includeHiddenContentHints !== false) {
+    applyHiddenContentHintsToInteractiveSnapshot({ options, tree, xml, interactiveSnapshot });
   }
   const { sourceNodes: _sourceNodes, ...snapshot } = interactiveSnapshot;
   return {
@@ -142,14 +119,12 @@ function androidSnapshotTruncationFields(
   return truncated === true ? { truncated: true } : {};
 }
 
-async function applyHiddenContentHintsToInteractiveSnapshot(params: {
-  device: DeviceInfo;
+function applyHiddenContentHintsToInteractiveSnapshot(params: {
   options: AndroidSnapshotOptions;
   tree: AndroidUiHierarchy;
   xml: string;
-  adb: AndroidAdbExecutor;
   interactiveSnapshot: AndroidBuiltSnapshot;
-}): Promise<void> {
+}): void {
   if (
     collectExistingHiddenContentHints(params.interactiveSnapshot.nodes).size > 0 ||
     hasAndroidScrollActionAttributes(params.xml)
@@ -161,23 +136,12 @@ async function applyHiddenContentHintsToInteractiveSnapshot(params: {
     ...params.options,
     interactiveOnly: false,
   });
-  const nativeHints = await deriveScrollableContentHintsIfNeeded(
-    params.device,
-    fullSnapshot.nodes,
-    params.xml,
-    params.adb,
+  const presentationHints = deriveMobileSnapshotHiddenContentHints(attachRefs(fullSnapshot.nodes));
+  applyHiddenContentHintsToInteractiveNodes(
+    presentationHints,
+    fullSnapshot,
+    params.interactiveSnapshot,
   );
-  applyHiddenContentHintsToInteractiveNodes(nativeHints, fullSnapshot, params.interactiveSnapshot);
-  if (nativeHints.size === 0) {
-    const presentationHints = deriveMobileSnapshotHiddenContentHints(
-      attachRefs(fullSnapshot.nodes),
-    );
-    applyHiddenContentHintsToInteractiveNodes(
-      presentationHints,
-      fullSnapshot,
-      params.interactiveSnapshot,
-    );
-  }
 }
 
 async function captureAndroidUiHierarchy(
@@ -590,26 +554,11 @@ function androidSnapshotHelperUnavailableError(errorReason: string | undefined):
   });
 }
 
-async function deriveScrollableContentHintsIfNeeded(
-  device: DeviceInfo,
-  nodes: RawSnapshotNode[],
-  xml: string,
-  adb?: AndroidAdbExecutor,
-): Promise<Map<number, HiddenContentHint>> {
-  if (!nodes.some((node) => isScrollableType(node.type))) {
-    return new Map();
-  }
-  const existingHints = collectExistingHiddenContentHints(nodes);
-  if (existingHints.size > 0 || hasAndroidScrollActionAttributes(xml)) {
-    return existingHints;
-  }
-  const activityTopDump = await dumpActivityTop(device, adb);
-  if (!activityTopDump) {
-    return new Map();
-  }
-  return deriveAndroidScrollableContentHints(nodes, activityTopDump);
-}
-
+// The helper emits `can-scroll-*` for exactly the nodes Android reports as scrollable, so their
+// absence means nothing on screen scrolls rather than that scroll state is unknown. A true result
+// therefore means the hints parsed from those attributes are already authoritative, and callers
+// fall back to guessing hidden content from geometry only when the helper reported no scrollable
+// node at all.
 function hasAndroidScrollActionAttributes(xml: string): boolean {
   return xml.includes(' can-scroll-forward=') || xml.includes(' can-scroll-backward=');
 }
@@ -631,27 +580,6 @@ function collectExistingHiddenContentHints(
     }
   }
   return hintsByIndex;
-}
-
-// Cosmetic scroll-hint metadata: healthy latency is ~37ms, but `dumpsys activity top` has been
-// measured up to ~5.9s under contention. Cap it well under a typical caller timeout so one
-// pathological call can't eat a whole `wait`/`get` budget (see #1270).
-const ACTIVITY_TOP_TIMEOUT_MS = 1_500;
-
-async function dumpActivityTop(
-  device: DeviceInfo,
-  adb = resolveAndroidAdbExecutor(device),
-): Promise<string | null> {
-  try {
-    const result = await adb(['shell', 'dumpsys', 'activity', 'top'], {
-      allowFailure: true,
-      timeoutMs: ACTIVITY_TOP_TIMEOUT_MS,
-    });
-    const text = `${result.stdout}\n${result.stderr}`.trim();
-    return text.length > 0 ? text : null;
-  } catch {
-    return null;
-  }
 }
 
 function applyHiddenContentHintsToInteractiveNodes(
@@ -687,24 +615,6 @@ function applyHiddenContentHintsToInteractiveNodes(
     }
     if (hint.hiddenContentBelow) {
       interactiveNode.hiddenContentBelow = true;
-    }
-  }
-}
-
-function applyHiddenContentHintsToNodes(
-  hintsByIndex: ReadonlyMap<number, HiddenContentHint>,
-  nodes: RawSnapshotNode[],
-): void {
-  for (const [index, hint] of hintsByIndex) {
-    const node = nodes[index];
-    if (!node) {
-      continue;
-    }
-    if (hint.hiddenContentAbove) {
-      node.hiddenContentAbove = true;
-    }
-    if (hint.hiddenContentBelow) {
-      node.hiddenContentBelow = true;
     }
   }
 }

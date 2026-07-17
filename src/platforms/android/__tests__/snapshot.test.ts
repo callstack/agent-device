@@ -1169,10 +1169,11 @@ test('snapshotAndroid re-probes helper install after helper capture failure', as
 });
 
 test('snapshotAndroid preserves hidden scroll content hints in interactive snapshots', async () => {
+  // Mid-scroll: Android offers both scroll actions, so the helper reports both directions.
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <hierarchy rotation="0">
   <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" clickable="false" focusable="false">
-    <node class="android.widget.ScrollView" content-desc="Messages" bounds="[0,100][390,600]" clickable="false" focusable="false">
+    <node class="android.widget.ScrollView" content-desc="Messages" scrollable="true" can-scroll-forward="true" can-scroll-backward="true" bounds="[0,100][390,600]" clickable="false" focusable="false">
       <node class="android.view.ViewGroup" bounds="[0,100][390,600]" clickable="false" focusable="false">
         <node class="android.widget.Button" text="Earlier message" bounds="[0,100][390,268]" clickable="true" focusable="true" />
         <node class="android.widget.Button" text="Visible message" bounds="[0,268][390,436]" clickable="true" focusable="true" />
@@ -1181,15 +1182,8 @@ test('snapshotAndroid preserves hidden scroll content hints in interactive snaps
     </node>
   </node>
 </hierarchy>`;
-  const dump = [
-    '    com.facebook.react.views.scroll.ReactScrollView{d32a800 VFED.V... ........ 0,0-390,500 #4b2}',
-    '      com.facebook.react.views.view.ReactViewGroup{77d31ae V.E...... ........ 0,0-390,1000 #4b0}',
-    '        com.facebook.react.views.view.ReactViewGroup{a V.E...... ........ 0,300-390,468 #1}',
-    '        com.facebook.react.views.view.ReactViewGroup{b V.E...... ........ 0,468-390,636 #2}',
-    '        com.facebook.react.views.view.ReactViewGroup{c V.E...... ........ 0,636-390,804 #3}',
-  ].join('\n');
 
-  const result = await snapshotAndroidWithHelper(androidSnapshotHelperAdb(xml, dump), {
+  const result = await snapshotAndroidWithHelper(androidSnapshotHelperAdb(xml), {
     interactiveOnly: true,
   });
   const scrollArea = result.nodes.find((node) => node.type === 'android.widget.ScrollView');
@@ -1240,7 +1234,11 @@ test('snapshotAndroid skips activity dump when snapshot has no scrollable nodes'
   assert.equal(result.nodes[0]?.label, 'Continue');
 });
 
-test('snapshotAndroid caps the activity-top scroll-hint probe at 1.5s', async () => {
+// A scrollable-typed node that Android does not report as scrollable (a list short enough to fit)
+// is the one shape that still reached `dumpsys activity top` after #1288 capped it. The probe can
+// only ever run when the helper reported no scroll actions at all — which is exactly when there is
+// no scrollable content to describe — so it must not run, at any budget (#1270).
+test('snapshotAndroid never probes the activity dump for scroll hints', async () => {
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <hierarchy rotation="0">
   <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" clickable="false" focusable="false">
@@ -1249,41 +1247,19 @@ test('snapshotAndroid caps the activity-top scroll-hint probe at 1.5s', async ()
     </node>
   </node>
 </hierarchy>`;
-  const activityTimeouts: Array<number | undefined> = [];
+  const activityDumpCalls: string[][] = [];
   const helperAdb = createHelperAdb({
     instrument: async () => ({ exitCode: 0, stdout: helperOutput(xml), stderr: '' }),
-    activity: async (_args, options) => {
-      activityTimeouts.push(options?.timeoutMs);
+    activity: async (args) => {
+      activityDumpCalls.push(args);
       return { exitCode: 0, stdout: '', stderr: '' };
     },
   });
 
   await snapshotAndroidWithHelper(helperAdb);
+  await snapshotAndroidWithHelper(helperAdb, { interactiveOnly: true });
 
-  assert.deepEqual(activityTimeouts, [1500]);
-});
-
-test('snapshotAndroid skips the activity-top probe when the helper XML already carries scroll-action attributes', async () => {
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<hierarchy rotation="0">
-  <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" clickable="false" focusable="false">
-    <node class="android.widget.ScrollView" scrollable="true" can-scroll-forward="true" can-scroll-backward="false" bounds="[0,100][390,600]" clickable="false" focusable="false">
-      <node class="android.widget.Button" text="Continue" bounds="[20,120][200,180]" clickable="true" focusable="true" />
-    </node>
-  </node>
-</hierarchy>`;
-  let activityDumpCalled = false;
-  const helperAdb = createHelperAdb({
-    instrument: async () => ({ exitCode: 0, stdout: helperOutput(xml), stderr: '' }),
-    activity: async () => {
-      activityDumpCalled = true;
-      return { exitCode: 0, stdout: '', stderr: '' };
-    },
-  });
-
-  await snapshotAndroidWithHelper(helperAdb);
-
-  assert.equal(activityDumpCalled, false);
+  assert.deepEqual(activityDumpCalls, []);
 });
 
 test('snapshotAndroid skips hidden content hints when disabled', async () => {
@@ -1412,24 +1388,20 @@ test('snapshotAndroid omits zero-area interactive nodes from interactive snapsho
   );
 });
 
-test('snapshotAndroid preserves bottomed-out hidden-above hints in interactive snapshots from a single aligned block', async () => {
+test('snapshotAndroid preserves bottomed-out hidden-above hints in interactive snapshots', async () => {
+  // Scrolled to the bottom: only the backward action remains, so nothing is hidden below.
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <hierarchy rotation="0">
   <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" clickable="false" focusable="false">
-    <node class="android.widget.ScrollView" content-desc="Messages" bounds="[0,100][390,600]" clickable="false" focusable="false">
+    <node class="android.widget.ScrollView" content-desc="Messages" scrollable="true" can-scroll-forward="false" can-scroll-backward="true" bounds="[0,100][390,600]" clickable="false" focusable="false">
       <node class="android.view.ViewGroup" bounds="[0,100][390,600]" clickable="false" focusable="false">
         <node class="android.widget.Button" text="Last message" bounds="[0,432][390,600]" clickable="true" focusable="true" />
       </node>
     </node>
   </node>
 </hierarchy>`;
-  const dump = [
-    '    com.facebook.react.views.scroll.ReactScrollView{d32a800 VFED.V... ........ 0,0-390,500 #4b2}',
-    '      com.facebook.react.views.view.ReactViewGroup{77d31ae V.E...... ........ 0,0-390,804 #4b0}',
-    '        com.facebook.react.views.view.ReactViewGroup{c V.E...... ........ 0,636-390,804 #3}',
-  ].join('\n');
 
-  const result = await snapshotAndroidWithHelper(androidSnapshotHelperAdb(xml, dump), {
+  const result = await snapshotAndroidWithHelper(androidSnapshotHelperAdb(xml), {
     interactiveOnly: true,
   });
   const scrollArea = result.nodes.find(
