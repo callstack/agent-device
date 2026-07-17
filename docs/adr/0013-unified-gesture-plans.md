@@ -22,9 +22,13 @@ the Android planned-touch executor.
 ## Decision
 
 Public gesture inputs normalize once in `src/contracts/gesture-normalization.ts`. This is the
-explicit compatibility boundary: convenience APIs and deprecated arguments become canonical
-semantic intent before entering the runtime. The private daemon wire is free to evolve with that
-model; compatibility is owed at CLI, Node.js, and MCP.
+explicit public compatibility boundary: canonical semantic intent is produced before entering the
+runtime. Deprecated arguments that have been removed (timed `swipe`, timed `gesture fling`,
+`gesture rotate` `velocity`) are rejected with actionable `INVALID_ARGS` messages rather than
+silently reinterpreted. The private daemon wire remains free to carry compatibility-only hints
+that do not appear on public surfaces; Maestro timed swipes use
+`internal.gestureExecutionProfile: 'endpoint-hold'` to preserve iOS fast-swipe-then-hold behavior
+while still routing through the canonical `pan` input.
 
 The runtime plans canonical intent in `src/contracts/gesture-plan.ts`. Contact topology is separate
 from motion:
@@ -32,12 +36,17 @@ from motion:
 - one contact: pan or fling with a complete pointer trajectory and an explicit execution profile;
 - two contacts: pan, pinch, rotate, or transform with two complete, synchronized trajectories.
 
-`swipe` without a duration is public sugar for a fixed-duration fling. Its historical optional
-duration normalizes to pan intent with an endpoint-hold execution profile and reports a deprecation
-toward explicit pan. Maestro-authored swipes follow the same normalization and materialize
-Maestro's 400 ms default when duration is omitted. A genuine pan uses the timed-pan profile, so
-compatibility aliases retain their release behavior without becoming a new semantic intent. The
-same deprecation-to-pan rule applies to the historical fling duration. Pinch fixes translation and rotation at zero; rotate fixes
+`swipe` without a duration remains public sugar for a fixed-duration fling. Timed public forms
+(`swipe x1 y1 x2 y2 durationMs`, `gesture fling direction x y distance durationMs`,
+`gesture swipe preset durationMs`, and `gesture rotate degrees x y velocity`) are rejected; callers
+must use `gesture pan` for deliberate timed translation and `gesture rotate` without `velocity`.
+Maestro-authored swipes normalize to the canonical `pan` input (origin, delta, durationMs) and carry
+the `endpoint-hold` execution profile through a daemon-internal compatibility seam
+(`internal.gestureExecutionProfile`). This preserves the iOS fast-swipe-then-hold behavior that
+matches Maestro's XCTest driver, without exposing the profile on the public command surface. Maestro
+materializes its 400 ms default when duration is omitted. A genuine public `pan` uses the `timed-pan`
+profile, so compatibility-only paths retain their release behavior without becoming a new semantic
+intent. Pinch fixes translation and rotation at zero; rotate fixes
 translation at zero and scale at one; two-finger pan fixes scale at one and rotation at zero;
 transform can apply all three
 components atomically. Intent remains on the plan even when aliases share an executor.

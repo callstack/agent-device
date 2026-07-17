@@ -21,7 +21,11 @@ Android compatibility is materially faster than native Maestro in the pager and 
 that advantage is a product constraint, not expendable migration headroom.
 
 ADR 0013 separately owns public gesture normalization, contact topology, trajectory planning, and
-native injection. Maestro's supported gesture surface is single-pointer swipe only.
+native injection. Maestro's supported gesture surface is single-pointer swipe only. Maestro swipes
+normalize to ADR 0013's canonical `pan` input (origin, delta, durationMs) and carry the
+`endpoint-hold` execution profile through a daemon-internal compatibility seam
+(`internal.gestureExecutionProfile`), preserving iOS fast-swipe-then-hold behavior without exposing
+the profile on the public command surface.
 
 ## Decision
 
@@ -55,13 +59,17 @@ The engine does not implement platform input. Absolute and percentage swipes pre
 endpoints without a hierarchy capture. Directional horizontal swipes reuse ADR 0013's shared in-page
 preset geometry so an iOS right swipe does not become an interactive-back gesture; vertical presets
 retain Maestro's platform geometry. All viewport-relative swipes resolve the cheapest fresh interaction
-viewport available so ADR 0013 can validate every planned sample.
+viewport available so ADR 0013 can validate every planned sample. Maestro swipes pair that resolved
+viewport with `internal.gestureExecutionProfile: 'endpoint-hold'` on the nested public `gesture` request
+so ADR 0013 produces the iOS fast-swipe-then-hold profile without a public `executionProfile` field.
 When normalization already resolves a viewport, the adapter pairs it with the nested public gesture
 request as daemon-internal metadata. ADR 0013 planning consumes that exact frame instead of probing
 the platform a second time.
+
 Target-relative swipes reuse the target-resolution observation. The resulting typed single-pointer
-motion enters ADR 0013 after public compatibility normalization. Maestro code cannot construct or
-execute two-pointer pan, pinch, rotate, transform, or physical pointer trajectories.
+motion enters ADR 0013 as the canonical `pan` input, with the `endpoint-hold` execution profile carried
+as daemon-internal metadata. Maestro code cannot construct or execute two-pointer pan, pinch, rotate,
+transform, or physical pointer trajectories.
 
 Simple successful target queries return their match, visibility decision, candidate count, and
 observation generation in one response. The daemon may retain the provider snapshot behind that
