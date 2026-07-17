@@ -1010,6 +1010,23 @@ test('stopSessionRecordingForTeardown is a no-op when the session has no active 
   expect(session.recording).toBeUndefined();
 });
 
+test('stopSessionRecordingForTeardown rethrows a typed stop failure for the cleanup-failure channel', async () => {
+  const session = makeIosSimulatorRecordingSession('ios-sim-teardown-stop-failure', {
+    startedAt: Date.now() - 5_000,
+  });
+  const recording = session.recording;
+  if (recording?.platform === 'ios') {
+    recording.wait = Promise.resolve({ stdout: '', stderr: 'recorder crashed', exitCode: 1 });
+  }
+
+  await expect(stopSessionRecordingForTeardown(session)).rejects.toThrow(
+    /failed to stop recording/,
+  );
+
+  // The recording is still detached so a retry cannot double-stop the recorder.
+  expect(session.recording).toBeUndefined();
+});
+
 test('record stop reports too-short iOS simulator recordings without leaving invalid output', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-too-short';

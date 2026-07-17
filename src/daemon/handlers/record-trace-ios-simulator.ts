@@ -10,6 +10,18 @@ export const IOS_SIMULATOR_RECORDING_STOP_TIMEOUT_MS = 5_000;
 
 const IOS_SIMULATOR_RECORDING_FORCE_STOP_TIMEOUT_MS = 2_000;
 
+/**
+ * Worst-case wall-clock time for {@link stopIosSimulatorRecordingProcess} to
+ * conclude: the direct child-handle SIGINT wait plus the three escalating
+ * PID-based retries (SIGINT, SIGTERM, SIGKILL). Any teardown path that bounds
+ * recording finalization with its own timeout (daemon shutdown's per-session
+ * teardown race) must budget at least this long, or a recorder stuck past the
+ * direct-handle wait is abandoned mid-escalation and the simctl child orphans
+ * with an unfinalized 0-byte mp4.
+ */
+export const IOS_SIMULATOR_RECORDING_STOP_ESCALATION_BUDGET_MS =
+  IOS_SIMULATOR_RECORDING_STOP_TIMEOUT_MS + 3 * IOS_SIMULATOR_RECORDING_FORCE_STOP_TIMEOUT_MS;
+
 type IosSimulatorRecording = Extract<NonNullable<SessionState['recording']>, { platform: 'ios' }>;
 
 export async function stopIosSimulatorRecordingProcess(params: {

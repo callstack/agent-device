@@ -39,6 +39,10 @@ vi.mock('../../../platforms/apple/os/macos/helper.ts', async (importOriginal) =>
     await importOriginal<typeof import('../../../platforms/apple/os/macos/helper.ts')>();
   return { ...actual, runMacOsAlertAction: vi.fn(async () => {}) };
 });
+vi.mock('../../../utils/video.ts', () => ({
+  waitForStableFile: vi.fn(async () => {}),
+  isPlayableVideo: vi.fn(async () => true),
+}));
 vi.mock('../../runtime-hints.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../runtime-hints.ts')>();
   return { ...actual, clearRuntimeHintsFromApp: vi.fn(async () => {}) };
@@ -89,6 +93,40 @@ function makeSession(name: string, device: SessionState['device']): SessionState
     createdAt: Date.now(),
     actions: [],
   };
+}
+
+function makeIosSimulatorRecordingSession(
+  name: string,
+  options: { recorderExitCode?: number } = {},
+): SessionState {
+  const session = makeSession(name, {
+    platform: 'apple',
+    id: 'sim-udid-recording',
+    name: 'iPhone 15',
+    kind: 'simulator',
+    booted: true,
+  });
+  session.appBundleId = 'com.example.app';
+  session.recording = {
+    platform: 'ios',
+    outPath: path.join(os.tmpdir(), `${name}.mp4`),
+    startedAt: Date.now() - 5_000,
+    showTouches: false,
+    gestureEvents: [],
+    child: { kill: vi.fn(), pid: 4242 },
+    wait: Promise.resolve({
+      stdout: '',
+      stderr: options.recorderExitCode ? 'recorder crashed' : '',
+      exitCode: options.recorderExitCode ?? 0,
+    }),
+  };
+  return session;
+}
+
+function recordingKillMock(session: SessionState): ReturnType<typeof vi.fn> {
+  const recording = session.recording;
+  if (recording?.platform !== 'ios') throw new Error('expected an iOS simulator recording');
+  return recording.child.kill as ReturnType<typeof vi.fn>;
 }
 
 beforeEach(() => {
@@ -391,6 +429,91 @@ test('daemon session teardown stops active Apple xctrace perf capture', async ()
 
   expect(mockCleanupAppleXctracePerfCapture).toHaveBeenCalledWith(activeCapture);
   expect(session.applePerf?.active).toBeUndefined();
+});
+
+test('close finalizes an active iOS simulator recording before deleting the session', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-active-recording-close-session';
+  const session = makeIosSimulatorRecordingSession(sessionName);
+  const kill = recordingKillMock(session);
+  sessionStore.set(sessionName, session);
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: [],
+      flags: {},
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response?.ok).toBe(true);
+  // The recorder was signaled (SIGINT finalizes the simctl mp4), the recording
+  // was detached, and the session was deleted — no orphaned recordVideo child.
+  expect(kill).toHaveBeenCalledWith('SIGINT');
+  expect(session.recording).toBeUndefined();
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+  // An active recording at close time still defeats iOS runner retention even
+  // though the recording is finalized (and cleared) before the retention step.
+  expect(mockStopIosRunnerSession).toHaveBeenCalledWith(session.device.id);
+});
+
+test('close surfaces a recording finalization failure through the cleanup-failure channel', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-recording-close-failure-session';
+  const session = makeIosSimulatorRecordingSession(sessionName, { recorderExitCode: 1 });
+  const kill = recordingKillMock(session);
+  sessionStore.set(sessionName, session);
+
+  await expect(
+    handleSessionCommands({
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'close',
+        positionals: [],
+        flags: {},
+      },
+      sessionName,
+      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      sessionStore,
+      invoke: noopInvoke,
+    }),
+  ).rejects.toThrow(/recording: .*failed to stop recording/);
+
+  // Cleanup failure is reported, later cleanup still ran, session still deleted.
+  expect(kill).toHaveBeenCalledWith('SIGINT');
+  expect(mockStopIosRunnerSession).toHaveBeenCalledWith(session.device.id);
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+});
+
+test('daemon session teardown finalizes an active iOS simulator recording', async () => {
+  const sessionName = 'ios-active-recording-teardown-session';
+  const session = makeIosSimulatorRecordingSession(sessionName);
+  const kill = recordingKillMock(session);
+
+  await teardownSessionResources(session, sessionName);
+
+  expect(kill).toHaveBeenCalledWith('SIGINT');
+  expect(session.recording).toBeUndefined();
+});
+
+test('daemon session teardown surfaces a recording finalization failure', async () => {
+  const sessionName = 'ios-recording-teardown-failure-session';
+  const session = makeIosSimulatorRecordingSession(sessionName, { recorderExitCode: 1 });
+  const kill = recordingKillMock(session);
+
+  await expect(teardownSessionResources(session, sessionName)).rejects.toThrow(
+    /recording: .*failed to stop recording/,
+  );
+
+  expect(kill).toHaveBeenCalledWith('SIGINT');
+  expect(session.recording).toBeUndefined();
 });
 
 test('close stops active Android native perf capture before deleting session', async () => {

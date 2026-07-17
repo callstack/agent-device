@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { AppError, toAppErrorCode } from '../../kernel/errors.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import { resolveTargetDevice } from '../../core/dispatch.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
@@ -536,8 +537,11 @@ async function releaseRecordOnlySession(
  *
  * The recording is detached from the session first so a late explicit
  * `record stop` (or a second teardown pass) cannot double-stop the same
- * recorder. Never throws: teardown callers treat this as isolated best-effort
- * cleanup and collect failures like every other cleanup step.
+ * recorder. A typed stop failure (the recorder could not be finalized) is
+ * rethrown as an {@link AppError} so both callers' isolated cleanup channels
+ * (`runIsolatedSessionCleanup` / `attemptCleanup`) record it as a `recording`
+ * cleanup failure instead of silently reporting successful cleanup; later
+ * cleanup steps still run because those channels isolate per-step failures.
  */
 export async function stopSessionRecordingForTeardown(
   session: SessionState,
@@ -553,7 +557,7 @@ export async function stopSessionRecordingForTeardown(
     positionals: ['stop'],
     flags: {},
   };
-  await stopActiveRecording({
+  const stopFailure = await stopActiveRecording({
     req,
     activeSession: session,
     device: session.device,
@@ -562,6 +566,9 @@ export async function stopSessionRecordingForTeardown(
     recording,
     stopRequestedAt: Date.now(),
   });
+  if (stopFailure && stopFailure.ok === false) {
+    throw new AppError(toAppErrorCode(stopFailure.error.code), stopFailure.error.message);
+  }
 }
 
 // --- Main command handler ---

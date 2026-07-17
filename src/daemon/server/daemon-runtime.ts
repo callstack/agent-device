@@ -18,6 +18,7 @@ import { LeaseRegistry } from '../lease-registry.ts';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
 import { createRequestHandler } from '../request-router.ts';
 import { teardownSessionResources } from '../session-teardown.ts';
+import { IOS_SIMULATOR_RECORDING_STOP_ESCALATION_BUDGET_MS } from '../handlers/record-trace-ios-simulator.ts';
 import { closeDaemonServers } from './server-shutdown.ts';
 import type { DaemonInvokeFn, SessionState } from '../types.ts';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';
@@ -60,6 +61,57 @@ const DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS = 1_000;
 type WritableOutput = {
   write: (chunk: string) => unknown;
 };
+
+/**
+ * Per-session teardown budget for daemon shutdown. The base budget is enough
+ * for ordinary resource cleanup, but a session with an active recording must be
+ * allowed to run the full recorder-stop escalation (direct-handle SIGINT wait
+ * plus PID-based SIGINT/SIGTERM/SIGKILL retries), which alone exceeds the base
+ * budget — racing that against the base 5s would let shutdown advance to
+ * process exit exactly when fallback cleanup begins, orphaning the recorder
+ * with an unfinalized mp4. The recording budget EXTENDS the base one so the
+ * session's remaining cleanup steps keep their usual allowance.
+ */
+export function resolveDaemonSessionTeardownTimeoutMs(session: SessionState): number {
+  if (!session.recording) return DAEMON_SESSION_TEARDOWN_TIMEOUT_MS;
+  return DAEMON_SESSION_TEARDOWN_TIMEOUT_MS + IOS_SIMULATOR_RECORDING_STOP_ESCALATION_BUDGET_MS;
+}
+
+/**
+ * Daemon-shutdown teardown of one session: bounded resource cleanup (budget
+ * from {@link resolveDaemonSessionTeardownTimeoutMs}, resolved BEFORE cleanup
+ * starts since finalizing the recording detaches `session.recording`), then the
+ * repair-commit finalization and session deletion. Cleanup failures — including
+ * a recorder that could not be finalized — surface on stderr instead of being
+ * silently swallowed.
+ */
+export async function teardownDaemonSessionForShutdown(params: {
+  session: SessionState;
+  sessionStore: SessionStore;
+  stateDir?: string;
+  stderr: WritableOutput;
+}): Promise<void> {
+  const { session, sessionStore, stateDir, stderr } = params;
+  const timeoutMs = resolveDaemonSessionTeardownTimeoutMs(session);
+  const teardown = teardownSessionResources(session, session.name, stateDir).catch((error) => {
+    stderr.write(
+      `Daemon session teardown error (${session.name}): ${
+        error instanceof Error ? error.message : String(error)
+      }\n`,
+    );
+  });
+  await Promise.race([
+    teardown,
+    sleep(timeoutMs).then(() => {
+      stderr.write(`Daemon session teardown timed out (${session.name}).\n`);
+    }),
+  ]);
+  // ADR 0012 decision 6, R7 + commit semantics (C2/C5a): commit the healed
+  // `.ad` iff the repair transaction completed, else leave a bounded
+  // `REPAIR_SESSION_EXPIRED` tombstone for the reaped-before-finalize case.
+  sessionStore.finalizeRepairTeardown(session);
+  sessionStore.delete(session.name);
+}
 
 export type DaemonRuntimeOptions = {
   env?: NodeJS.ProcessEnv;
@@ -154,26 +206,8 @@ export async function startDaemonRuntime(
     );
   };
 
-  const teardownDaemonSession = async (session: SessionState): Promise<void> => {
-    const teardown = teardownSessionResources(session, session.name, baseDir).catch((error) => {
-      stderr.write(
-        `Daemon session teardown error (${session.name}): ${
-          error instanceof Error ? error.message : String(error)
-        }\n`,
-      );
-    });
-    await Promise.race([
-      teardown,
-      sleep(DAEMON_SESSION_TEARDOWN_TIMEOUT_MS).then(() => {
-        stderr.write(`Daemon session teardown timed out (${session.name}).\n`);
-      }),
-    ]);
-    // ADR 0012 decision 6, R7 + commit semantics (C2/C5a): commit the healed
-    // `.ad` iff the repair transaction completed, else leave a bounded
-    // `REPAIR_SESSION_EXPIRED` tombstone for the reaped-before-finalize case.
-    sessionStore.finalizeRepairTeardown(session);
-    sessionStore.delete(session.name);
-  };
+  const teardownDaemonSession = async (session: SessionState): Promise<void> =>
+    await teardownDaemonSessionForShutdown({ session, sessionStore, stateDir: baseDir, stderr });
 
   const teardownDaemonSessions = async (): Promise<void> => {
     const sessionsToStop = sessionStore.toArray();
