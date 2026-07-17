@@ -322,6 +322,10 @@ test('recordsSessionAction is explicit on every raw descriptor and drives daemon
       'boolean',
       `${descriptor.name} has a resolved recordsSessionAction boolean`,
     );
+    // replayScopedAction only exists for daemon-routed commands; the MCP schema
+    // projection uses recordsSessionAction directly and covers commands whose
+    // public surface maps to an internal daemon command (e.g. install-from-source).
+    if (!('daemon' in descriptor)) continue;
     assert.equal(
       resolveCommandRecordsSessionAction(descriptor.name),
       canRunReplayScopedAction(descriptor.name),
@@ -335,5 +339,11 @@ test('recordsSessionAction is explicit on every raw descriptor and drives daemon
     .sort();
   assert.ok(recordable.includes('press'), 'press is classified as recordable');
   assert.ok(recordable.includes('click'), 'click is classified as recordable');
+  assert.ok(recordable.includes('close'), 'close is classified as recordable');
+  assert.ok(recordable.includes('open'), 'open is classified as recordable');
+  assert.ok(
+    recordable.includes('install-from-source'),
+    'install-from-source is classified as recordable',
+  );
   assert.ok(!recordable.includes('devices'), 'devices is not classified as recordable');
 });

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { AgentDeviceClient } from '../../client/client-types.ts';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
+import { resolveCommandRecordsSessionAction } from '../../core/command-descriptor/registry.ts';
 import { COMMAND_OUTPUT_SCHEMAS } from '../command-output-schemas.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { NAVIGATION_COMMAND_PROJECTIONS } from '../../commands/system/navigation-projection.ts';
@@ -1206,36 +1207,30 @@ test('MCP forwards record/noRecord from a get tool call through to the executed 
 
 // --- #1310: `noRecord` on every recordable command's MCP tool schema ---
 
-test('MCP tool schemas advertise noRecord for all recordable commands', () => {
-  for (const name of [
-    'press',
-    'click',
-    'fill',
-    'longpress',
-    'swipe',
-    'type',
-    'scroll',
-    'gesture',
-  ]) {
-    const tool = listCommandTools().find((candidate) => candidate.name === name);
-    assert.ok(tool, `expected an MCP tool named ${name}`);
+test('MCP tool schemas advertise noRecord for every recordable command', () => {
+  for (const tool of listCommandTools()) {
     const properties = tool.inputSchema.properties ?? {};
-    assert.equal(
-      (properties.noRecord as { type?: string } | undefined)?.type,
-      'boolean',
-      `${name} tool is missing a boolean 'noRecord' input`,
-    );
-    // --record is scoped to observation-only commands; mutating actions record by default.
-    assert.equal(properties.record, undefined, `${name} tool should not expose 'record'`);
-  }
-});
-
-test('MCP tool schemas do not advertise noRecord for non-recording commands', () => {
-  for (const name of ['devices', 'apps', 'capabilities', 'doctor']) {
-    const tool = listCommandTools().find((candidate) => candidate.name === name);
-    assert.ok(tool, `expected an MCP tool named ${name}`);
-    const properties = tool.inputSchema.properties ?? {};
-    assert.equal(properties.noRecord, undefined, `${name} tool should not expose 'noRecord'`);
+    if (resolveCommandRecordsSessionAction(tool.name)) {
+      assert.equal(
+        (properties.noRecord as { type?: string } | undefined)?.type,
+        'boolean',
+        `${tool.name} tool is missing a boolean 'noRecord' input`,
+      );
+      // --record is scoped to observation-only commands; mutating actions record by default.
+      if (properties.record !== undefined) {
+        assert.equal(
+          (properties.record as { type?: string } | undefined)?.type,
+          'boolean',
+          `${tool.name} tool has a non-boolean 'record' input`,
+        );
+      }
+    } else {
+      assert.equal(
+        properties.noRecord,
+        undefined,
+        `${tool.name} tool should not expose 'noRecord'`,
+      );
+    }
   }
 });
 
