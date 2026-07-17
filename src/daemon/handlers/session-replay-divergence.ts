@@ -361,6 +361,20 @@ function isForeignOverlayDismissTarget(
 }
 
 /**
+ * Chrome exclusion is a FILTER, never a narrower scoping
+ * (`captureDivergenceObservation`): an expanded quick-settings shade is a SINGLE
+ * systemui run, so the status-bar icons it hosts (clock/wifi/signal) condemn the
+ * whole run — the shade's own tiles included. Excluding chrome would then publish
+ * an empty `screen.refs` while that shade is the only actionable surface on
+ * screen, leaving a divergence NARROWER than the plain `snapshot` of the same
+ * capture. Hittable-only: a label-carrying status clock is not a target an agent
+ * can act on, so a genuinely chrome-only screen still publishes nothing.
+ */
+function hittableChromeCandidates(nodes: SnapshotNode[]): SnapshotNode[] {
+  return nodes.filter((node) => node.ref && node.hittable === true);
+}
+
+/**
  * The single source of truth for which nodes a divergence `screen.refs`
  * publishes, and in what order. Both the rendered `screen.refs` digest
  * (`buildReplayDivergenceScreenRefs`) AND the ADR-0014 partial ref frame the
@@ -378,9 +392,10 @@ function selectDivergenceScreenRefNodes(
   // structural classifier `--settle`'s tail already relies on (#1198/#1200)
   // rather than a second keyboard/IME node-type list.
   const chromeRefs = collectSettleChromeRefs(nodes, appBundleId);
-  const meaningful = nodes.filter(
+  const nonChrome = nodes.filter(
     (node) => node.ref && !chromeRefs.has(node.ref) && isMeaningfulDivergenceTarget(node),
   );
+  const meaningful = nonChrome.length > 0 ? nonChrome : hittableChromeCandidates(nodes);
   // Occlusion fallback (#1264): a `covered` node is normally dropped — an agent
   // cannot tap what an overlay hides. But when a system overlay MASS-COVERS the
   // app, EVERY app node is annotated `covered`; dropping them all would emit an
