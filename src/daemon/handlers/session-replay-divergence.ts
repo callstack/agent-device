@@ -369,6 +369,12 @@ function isForeignOverlayDismissTarget(
  * screen, leaving a divergence NARROWER than the plain `snapshot` of the same
  * capture. Hittable-only: a label-carrying status clock is not a target an agent
  * can act on, so a genuinely chrome-only screen still publishes nothing.
+ *
+ * Boundary: like the `covered` fallback below, this fires ONLY when exclusion
+ * would empty the pool. A marker-bearing overlay over PARTIALLY visible app
+ * content keeps its tiles condemned — the pool is non-empty, so no fallback —
+ * which is deliberate: the full-cover case is the one that strands an agent with
+ * nothing to act on.
  */
 function hittableChromeCandidates(nodes: SnapshotNode[]): SnapshotNode[] {
   return nodes.filter((node) => node.ref && node.hittable === true);
