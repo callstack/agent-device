@@ -213,27 +213,21 @@ export async function startDaemonRuntime(
 
   const finalizeDaemonSessionLease = async (session: SessionState): Promise<void> => {
     if (!session.lease) return;
-    const releaseRequest = leaseScopeToReleaseRequest({
-      leaseId: session.lease.leaseId,
-      tenantId: session.lease.tenantId,
-      runId: session.lease.runId,
-      leaseBackend: session.lease.leaseBackend,
-      leaseProvider: session.lease.leaseProvider,
-      deviceKey: session.lease.deviceKey,
-      clientId: session.lease.clientId,
-    });
-    const activeLease = leaseRegistry.getLease(releaseRequest);
-    if (!activeLease) return;
     try {
+      const releaseRequest = leaseScopeToReleaseRequest({
+        leaseId: session.lease.leaseId,
+        tenantId: session.lease.tenantId,
+        runId: session.lease.runId,
+        leaseBackend: session.lease.leaseBackend,
+        leaseProvider: session.lease.leaseProvider,
+        deviceKey: session.lease.deviceKey,
+        clientId: session.lease.clientId,
+      });
+      const activeLease = leaseRegistry.getLease(releaseRequest);
+      if (!activeLease) return;
       await expiredProviderLeaseReleaser.release(activeLease);
       leaseRegistry.releaseLease(releaseRequest);
     } catch (error) {
-      // The session is about to be removed. Queue the provider allocation while
-      // this daemon can still persist retry state, then release only the local
-      // registry entry. This mirrors expiry recovery without pretending the
-      // external provider release succeeded.
-      if (activeLease) await expiredProviderLeaseReleaser.release(activeLease);
-      leaseRegistry.releaseLease(releaseRequest);
       emitDiagnostic({
         level: 'warn',
         phase: 'daemon_shutdown_session_lease_release_failed',

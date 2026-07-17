@@ -28,7 +28,7 @@ export function isAgentDeviceDaemonProcess(pid: number, expectedStartTime?: stri
   return isAgentDeviceDaemonCommand(command);
 }
 
-function trySignalProcess(pid: number, signal: NodeJS.Signals): boolean {
+export function trySignalProcess(pid: number, signal: NodeJS.Signals): boolean {
   try {
     process.kill(pid, signal);
     return true;

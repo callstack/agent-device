@@ -1,9 +1,11 @@
 import { resolveDaemonPaths } from '../../daemon/config.ts';
-import { readDaemonStopIdentity, stopDaemon } from '../../daemon/daemon-stop.ts';
+import {
+  readDaemonStopIdentity,
+  stopDaemon,
+  type DaemonStopResult,
+} from '../../daemon/daemon-stop.ts';
 import { readDaemonShutdownReport } from '../../daemon/daemon-shutdown-report.ts';
 import { AppError } from '../../kernel/errors.ts';
-import { cleanupRunnerLeasesForOwner } from '../../platforms/apple/core/runner/runner-lease.ts';
-import { runnerLeaseCleanupAdapter } from '../../platforms/apple/core/runner/runner-disposal.ts';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
@@ -19,21 +21,27 @@ export const daemonCommand: ClientCommandHandler = async ({ positionals, flags }
   const result = report
     ? { ...stopped, providerReleases: { status: 'completed' as const, ...report.providerReleases } }
     : stopped;
-  if (flags.clean === true && identity !== null && result.stopped) {
-    await cleanupRunnerLeasesForOwner(identity, runnerLeaseCleanupAdapter);
+  const shouldClean = flags.clean === true && identity !== null && result.stopped;
+  if (shouldClean) {
+    const [{ cleanupRunnerLeasesForOwner }, { runnerLeaseCleanupAdapter }] = await Promise.all([
+      import('../../platforms/apple/core/runner/runner-lease.ts'),
+      import('../../platforms/apple/core/runner/runner-disposal.ts'),
+    ]);
+    await cleanupRunnerLeasesForOwner(
+      { pid: identity.pid, startTime: identity.processStartTime },
+      runnerLeaseCleanupAdapter,
+    );
   }
-  const cleaned = flags.clean === true && identity !== null && result.stopped;
-  const data = { ...result, clean: cleaned };
+  const data = { ...result, clean: shouldClean };
   writeCommandOutput(flags, data, () => renderDaemonStop(data));
   return true;
 };
 
-function renderDaemonStop(result: {
-  stopped: boolean;
-  mode: string;
-  clean: boolean;
-  warnings: readonly string[];
-}): string {
+function renderDaemonStop(
+  result: Pick<DaemonStopResult, 'stopped' | 'mode' | 'warnings'> & {
+    clean: boolean;
+  },
+): string {
   const headline = result.stopped ? `Daemon stopped (${result.mode}).` : 'No running daemon found.';
   return [headline, result.clean ? 'Retained runner cleanup completed.' : null, ...result.warnings]
     .filter((line): line is string => Boolean(line))

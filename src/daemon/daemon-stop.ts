@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { AppError } from '../kernel/errors.ts';
-import { isAgentDeviceDaemonProcess } from './daemon-process.ts';
+import { isAgentDeviceDaemonProcess, trySignalProcess } from './daemon-process.ts';
 import { isProcessAlive, waitForProcessExit } from '../utils/host-process.ts';
 import { sleep } from '../utils/timeouts.ts';
 import type { DaemonPaths } from './config.ts';
@@ -45,7 +45,7 @@ export async function stopDaemon(params: {
     );
   }
 
-  process.kill(info.pid, 'SIGTERM');
+  if (!signalDaemonProcess(info.pid, 'SIGTERM')) return notRunningResult();
   const graceful = await waitForProcessExit(
     info.pid,
     params.graceTimeoutMs ?? DAEMON_STOP_GRACE_TIMEOUT_MS,
@@ -66,7 +66,7 @@ export async function stopDaemon(params: {
   // Re-verify immediately before escalation so a PID cannot be reused between
   // the graceful wait and SIGKILL.
   if (isAgentDeviceDaemonProcess(info.pid, info.processStartTime)) {
-    process.kill(info.pid, 'SIGKILL');
+    signalDaemonProcess(info.pid, 'SIGKILL');
   }
   const stopped = await waitForProcessExit(
     info.pid,
@@ -86,6 +86,15 @@ export async function stopDaemon(params: {
       'The daemon was force-killed before provider lease state could be finalized. Provider allocations may remain active.',
     ],
   };
+}
+
+function signalDaemonProcess(pid: number, signal: NodeJS.Signals): boolean {
+  if (trySignalProcess(pid, signal)) return true;
+  if (!isProcessAlive(pid)) return false;
+  throw new AppError('COMMAND_FAILED', `Daemon could not be signaled with ${signal}.`, {
+    pid,
+    signal,
+  });
 }
 
 export function readDaemonStopIdentity(
