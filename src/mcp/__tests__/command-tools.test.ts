@@ -1203,3 +1203,59 @@ test('MCP forwards record/noRecord from a get tool call through to the executed 
     },
   ]);
 });
+
+// --- #1310: `noRecord` on every recordable command's MCP tool schema ---
+
+test('MCP tool schemas advertise noRecord for all recordable commands', () => {
+  for (const name of [
+    'press',
+    'click',
+    'fill',
+    'longpress',
+    'swipe',
+    'type',
+    'scroll',
+    'gesture',
+  ]) {
+    const tool = listCommandTools().find((candidate) => candidate.name === name);
+    assert.ok(tool, `expected an MCP tool named ${name}`);
+    const properties = tool.inputSchema.properties ?? {};
+    assert.equal(
+      (properties.noRecord as { type?: string } | undefined)?.type,
+      'boolean',
+      `${name} tool is missing a boolean 'noRecord' input`,
+    );
+    // --record is scoped to observation-only commands; mutating actions record by default.
+    assert.equal(properties.record, undefined, `${name} tool should not expose 'record'`);
+  }
+});
+
+test('MCP tool schemas do not advertise noRecord for non-recording commands', () => {
+  for (const name of ['devices', 'apps', 'capabilities', 'doctor']) {
+    const tool = listCommandTools().find((candidate) => candidate.name === name);
+    assert.ok(tool, `expected an MCP tool named ${name}`);
+    const properties = tool.inputSchema.properties ?? {};
+    assert.equal(properties.noRecord, undefined, `${name} tool should not expose 'noRecord'`);
+  }
+});
+
+test('MCP forwards noRecord from a press tool call through to the executed command input', async () => {
+  const calls: unknown[] = [];
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async (_client, name, input) => {
+      calls.push({ name, input });
+      return {};
+    },
+  });
+  await executor.execute('press', {
+    target: { kind: 'ref', ref: '@e5' },
+    noRecord: true,
+  });
+  assert.deepEqual(calls, [
+    {
+      name: 'press',
+      input: { target: { kind: 'ref', ref: '@e5' }, noRecord: true },
+    },
+  ]);
+});

@@ -9,6 +9,7 @@ import {
 import { BASE_COMMAND_CAPABILITY_MATRIX } from '../../capabilities.ts';
 import {
   DAEMON_COMMAND_DESCRIPTORS,
+  canRunReplayScopedAction,
   type DaemonCommandDescriptor,
 } from '../../../daemon/daemon-command-registry.ts';
 import type { DaemonRequest } from '../../../daemon/types.ts';
@@ -20,6 +21,7 @@ import {
   listDescriptorDispatchCommandNames,
   listCapabilityCheckedCommandNames,
   listMcpExposedCommandNames,
+  resolveCommandRecordsSessionAction,
 } from '../registry.ts';
 
 // Function-valued traits cannot be deep-equaled across re-authored closures, so
@@ -292,4 +294,29 @@ test('capability-checked command list is built from descriptor capabilities', ()
     'control-plane capabilities command stays capability-exempt',
   );
   assert.equal(expectedNames.has('debug'), false, 'local debug command stays capability-exempt');
+});
+
+// #1310: every command is classified as recording (or not) and the command
+// descriptor projection agrees with the daemon registry's replayScopedAction.
+test('recordsSessionAction classifies every command and matches daemon replayScopedAction', () => {
+  for (const descriptor of commandDescriptors) {
+    assert.equal(
+      typeof resolveCommandRecordsSessionAction(descriptor.name),
+      'boolean',
+      `${descriptor.name} has a resolved recordsSessionAction boolean`,
+    );
+    assert.equal(
+      resolveCommandRecordsSessionAction(descriptor.name),
+      canRunReplayScopedAction(descriptor.name),
+      `${descriptor.name} recordsSessionAction matches daemon replayScopedAction`,
+    );
+  }
+
+  const recordable = commandDescriptors
+    .filter((descriptor) => resolveCommandRecordsSessionAction(descriptor.name))
+    .map((descriptor) => descriptor.name)
+    .sort();
+  assert.ok(recordable.includes('press'), 'press is classified as recordable');
+  assert.ok(recordable.includes('click'), 'click is classified as recordable');
+  assert.ok(!recordable.includes('devices'), 'devices is not classified as recordable');
 });

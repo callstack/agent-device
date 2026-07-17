@@ -7,6 +7,7 @@ import {
   listMcpCommandMetadata,
   type CommandName,
 } from '../commands/command-metadata.ts';
+import { resolveCommandRecordsSessionAction } from '../core/command-descriptor/registry.ts';
 import { COMMAND_OUTPUT_SCHEMAS } from './command-output-schemas.ts';
 import { AppError } from '../kernel/errors.ts';
 import { formatToolErrorText, normalizeToolError } from './tool-error.ts';
@@ -51,7 +52,7 @@ export function listCommandTools(): Array<{
     return {
       name: definition.name,
       description: definition.description,
-      inputSchema: withMcpConfigSchema(definition.inputSchema),
+      inputSchema: withMcpConfigSchema(definition.name, definition.inputSchema),
       // Only typed commands carry an outputSchema; untyped tools stay
       // byte-identical to today (no key at all), additive-only.
       ...(outputSchema ? { outputSchema } : {}),
@@ -440,11 +441,20 @@ function stripMcpConfigFields(input: unknown): unknown {
   return commandInput;
 }
 
-function withMcpConfigSchema(schema: JsonSchema): JsonSchema {
+function withMcpConfigSchema(name: CommandName, schema: JsonSchema): JsonSchema {
+  const noRecord = resolveCommandRecordsSessionAction(name);
   return {
     ...schema,
     properties: {
       ...schema.properties,
+      ...(noRecord && !schema.properties?.noRecord
+        ? {
+            noRecord: {
+              type: 'boolean',
+              description: 'Do not record this action.',
+            },
+          }
+        : {}),
       stateDir: { type: 'string', description: 'Agent-device state directory.' },
       mcpOutputFormat: {
         type: 'string',

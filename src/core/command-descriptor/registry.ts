@@ -1142,10 +1142,12 @@ const CLI_COMMAND_NAMES = new Set<string>(
  * union below a precise set of command-name literals rather than `string`.
  */
 export const commandDescriptors = RAW_COMMAND_DESCRIPTORS.map((descriptor) => {
+  const recordsSessionAction = resolveRecordsSessionAction(descriptor);
   if (!ownerFilesEnabled) {
     return {
       ...descriptor,
       mcpExposed: resolveMcpExposure(descriptor),
+      recordsSessionAction,
     };
   }
 
@@ -1153,6 +1155,7 @@ export const commandDescriptors = RAW_COMMAND_DESCRIPTORS.map((descriptor) => {
   return {
     ...runtimeDescriptor,
     mcpExposed: resolveMcpExposure(descriptor),
+    recordsSessionAction,
   };
 }) satisfies readonly CommandDescriptor[];
 
@@ -1223,6 +1226,14 @@ function resolveMcpExposure(descriptor: RawCommandDescriptor): boolean {
   return descriptor.mcpExposed ?? CLI_COMMAND_NAMES.has(descriptor.name);
 }
 
+function resolveRecordsSessionAction(descriptor: RawCommandDescriptor): boolean {
+  return (
+    descriptor.recordsSessionAction ??
+    (descriptor.daemon?.replayScopedAction as boolean | undefined) ??
+    false
+  );
+}
+
 function isMcpExposedCliCommand(descriptor: CommandDescriptor): boolean {
   return descriptor.mcpExposed && isCliCommandName(descriptor.name);
 }
@@ -1289,6 +1300,11 @@ export function resolveCommandResponseDataTransform(
 ): CommandResponseDataTransform | undefined {
   if (command === undefined) return undefined;
   return RESPONSE_DATA_TRANSFORM_BY_COMMAND.get(command);
+}
+
+export function resolveCommandRecordsSessionAction(command: string | undefined): boolean {
+  if (command === undefined) return false;
+  return COMMAND_DESCRIPTOR_BY_NAME.get(command)?.recordsSessionAction ?? false;
 }
 
 /**
