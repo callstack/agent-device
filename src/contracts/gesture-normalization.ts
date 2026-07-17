@@ -15,6 +15,23 @@ export type SwipePayload = {
   pattern?: 'one-way' | 'ping-pong';
 };
 
+function assertPositionalCount(
+  args: readonly string[],
+  max: number,
+  usageMessage: string,
+): asserts args is { length: number } & typeof args {
+  if (args.length > max) {
+    throw new AppError('INVALID_ARGS', usageMessage);
+  }
+}
+
+function readOriginDelta(args: readonly string[]): { origin: Point; delta: Point } {
+  return {
+    origin: { x: Number(args[0]), y: Number(args[1]) },
+    delta: { x: Number(args[2]), y: Number(args[3]) },
+  };
+}
+
 /** The explicit parser for the public CLI and `.ad` gesture syntax. */
 // fallow-ignore-next-line complexity
 export function gesturePayloadFromPositionals(
@@ -25,27 +42,26 @@ export function gesturePayloadFromPositionals(
   const args = positionals.slice(1);
   switch (kind) {
     case 'pan': {
-      if (args.length > 5) {
-        throw new AppError(
-          'INVALID_ARGS',
-          'gesture pan accepts at most 5 arguments: x y dx dy [durationMs]',
-        );
-      }
+      assertPositionalCount(
+        args,
+        5,
+        'gesture pan accepts at most 5 arguments: x y dx dy [durationMs]',
+      );
+      const { origin, delta } = readOriginDelta(args);
       return readGesturePayload({
         kind,
-        origin: { x: Number(args[0]), y: Number(args[1]) },
-        delta: { x: Number(args[2]), y: Number(args[3]) },
+        origin,
+        delta,
         pointerCount,
         durationMs: optionalPositionNumber(args[4]),
       });
     }
     case 'fling': {
-      if (args.length > 4) {
-        throw new AppError(
-          'INVALID_ARGS',
-          'gesture fling accepts at most 4 arguments: direction x y [distance]; for timed movement use gesture pan',
-        );
-      }
+      assertPositionalCount(
+        args,
+        4,
+        'gesture fling accepts at most 4 arguments: direction x y [distance]; for timed movement use gesture pan',
+      );
       return readGesturePayload({
         kind,
         direction: args[0],
@@ -54,24 +70,18 @@ export function gesturePayloadFromPositionals(
       });
     }
     case 'swipe': {
-      if (args.length > 1) {
-        throw new AppError(
-          'INVALID_ARGS',
-          'gesture swipe accepts 1 argument: preset; for timed movement use gesture pan',
-        );
-      }
+      assertPositionalCount(
+        args,
+        1,
+        'gesture swipe accepts 1 argument: preset; for timed movement use gesture pan',
+      );
       return readGesturePayload({
         kind,
         preset: args[0],
       });
     }
     case 'pinch': {
-      if (args.length > 3) {
-        throw new AppError(
-          'INVALID_ARGS',
-          'gesture pinch accepts at most 3 arguments: scale [x] [y]',
-        );
-      }
+      assertPositionalCount(args, 3, 'gesture pinch accepts at most 3 arguments: scale [x] [y]');
       return readGesturePayload({
         kind,
         scale: Number(args[0]),
@@ -79,12 +89,7 @@ export function gesturePayloadFromPositionals(
       });
     }
     case 'rotate': {
-      if (args.length > 3) {
-        throw new AppError(
-          'INVALID_ARGS',
-          'gesture rotate accepts at most 3 arguments: degrees [x] [y]',
-        );
-      }
+      assertPositionalCount(args, 3, 'gesture rotate accepts at most 3 arguments: degrees [x] [y]');
       return readGesturePayload({
         kind,
         degrees: Number(args[0]),
@@ -92,16 +97,16 @@ export function gesturePayloadFromPositionals(
       });
     }
     case 'transform': {
-      if (args.length > 7) {
-        throw new AppError(
-          'INVALID_ARGS',
-          'gesture transform accepts at most 7 arguments: x y dx dy scale degrees [durationMs]',
-        );
-      }
+      assertPositionalCount(
+        args,
+        7,
+        'gesture transform accepts at most 7 arguments: x y dx dy scale degrees [durationMs]',
+      );
+      const { origin, delta } = readOriginDelta(args);
       return readGesturePayload({
         kind,
-        origin: { x: Number(args[0]), y: Number(args[1]) },
-        delta: { x: Number(args[2]), y: Number(args[3]) },
+        origin,
+        delta,
         scale: Number(args[4]),
         degrees: Number(args[5]),
         durationMs: optionalPositionNumber(args[6]),

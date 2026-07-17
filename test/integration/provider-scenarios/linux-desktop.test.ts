@@ -121,11 +121,12 @@ test('Provider-backed integration Linux desktop flow uses semantic desktop and i
             positionals: ['42', '84', '1'],
           },
           {
-            name: 'swipe coordinates',
-            command: 'swipe',
+            name: 'pan coordinates',
+            command: 'gesture',
             input: {
-              from: { x: 10, y: 20 },
-              to: { x: 30, y: 40 },
+              kind: 'pan',
+              origin: { x: 10, y: 20 },
+              delta: { x: 20, y: 20 },
               durationMs: 16,
             },
             expectData: {
