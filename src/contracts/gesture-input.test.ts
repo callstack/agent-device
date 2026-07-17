@@ -11,13 +11,6 @@ test('structured gesture input rejects durations outside the planner range', () 
       durationMs: 0,
     },
     {
-      kind: 'fling',
-      direction: 'left',
-      origin: { x: 10, y: 20 },
-      durationMs: 10_001,
-    },
-    { kind: 'swipe', preset: 'left', durationMs: 0 },
-    {
       kind: 'transform',
       origin: { x: 10, y: 20 },
       delta: { x: 30, y: 40 },
@@ -43,19 +36,14 @@ test('structured gesture input rejects durations outside the planner range', () 
   }
 });
 
-test('deprecated rotate velocity accepts finite non-zero compatibility values', () => {
-  for (const velocity of [-2.5, -1, 0.25, 3]) {
-    assert.deepEqual(readGesturePayload({ kind: 'rotate', degrees: 45, velocity }), {
-      kind: 'rotate',
-      degrees: 45,
-      origin: undefined,
-      velocity,
-    });
-  }
+test('rotate does not accept velocity', () => {
+  assert.deepEqual(readGesturePayload({ kind: 'rotate', degrees: 45 }), {
+    kind: 'rotate',
+    degrees: 45,
+    origin: undefined,
+  });
 
-  for (const velocity of [0, Number.NaN, Number.POSITIVE_INFINITY]) {
-    assert.throws(() => readGesturePayload({ kind: 'rotate', degrees: 45, velocity }), {
-      code: 'INVALID_ARGS',
-    });
-  }
+  assert.throws(() => readGesturePayload({ kind: 'rotate', degrees: 45, velocity: 1 }), {
+    code: 'INVALID_ARGS',
+  });
 });

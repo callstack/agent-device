@@ -114,7 +114,7 @@ test('swipe rejects repetition inputs that can monopolize the request', async ()
       message: 'Expected pauseMs to be at most 10000.',
     },
     {
-      input: { count: 7, durationMs: 10_000 },
+      input: { count: 7, pauseMs: 10_000 },
       message: 'Swipe series must fit within 60000ms.',
     },
   ];

@@ -74,11 +74,12 @@ test('delegates lifecycle and coordinate gestures through public daemon commands
     expect.objectContaining({ command: 'snapshot' }),
     expect.objectContaining({ command: 'snapshot' }),
     expect.objectContaining({
-      command: 'swipe',
+      command: 'gesture',
       positionals: [],
       input: {
-        from: { x: 360, y: 400 },
-        to: { x: 40, y: 400 },
+        kind: 'pan',
+        origin: { x: 360, y: 400 },
+        delta: { x: -320, y: 0 },
         durationMs: 240,
       },
     }),
@@ -117,16 +118,17 @@ test('uses the direct viewport without snapshot and pairs it with the nested ges
   });
 
   expect(requests.at(-1)).toMatchObject({
-    command: 'swipe',
+    command: 'gesture',
     input: {
-      from: { x: 370, y: 420 },
-      to: { x: 50, y: 420 },
+      kind: 'pan',
+      origin: { x: 370, y: 420 },
+      delta: { x: -320, y: 0 },
       durationMs: 300,
     },
     internal: { gestureViewport: viewport },
   });
   expect(resolveGestureViewport).toHaveBeenCalledOnce();
-  expect(requests.map(({ command }) => command)).toEqual(['swipe']);
+  expect(requests.map(({ command }) => command)).toEqual(['gesture']);
 });
 
 test('uses an observation as the baseline for a later mutation barrier', async () => {
@@ -193,10 +195,10 @@ test('uses an observation as the baseline for a later mutation barrier', async (
 
   expect(observation).toMatchObject({ matched: true });
   expect(requests.map(({ command }) => command)).toEqual([
-    'swipe',
+    'gesture',
     'snapshot',
     'snapshot',
-    'swipe',
+    'gesture',
   ]);
   expect(port.readMetrics?.()).toEqual({
     hierarchyCaptures: 2,
@@ -252,10 +254,10 @@ test('settles a gesture before dispatching another gesture', async () => {
   await swipe(1);
 
   expect(requests.map(({ command }) => command)).toEqual([
-    'swipe',
+    'gesture',
     'snapshot',
     'snapshot',
-    'swipe',
+    'gesture',
   ]);
   expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS);
 });

@@ -139,10 +139,6 @@ const longPressFields = {
 const swipeFields = {
   from: requiredField(pointField('Swipe start point.')),
   to: requiredField(pointField('Swipe end point.')),
-  durationMs: integerField('Deprecated: timed movement is a pan; omit for swipe.', {
-    min: 16,
-    max: 10_000,
-  }),
   count: integerField('Number of swipe repetitions.', { min: 1, max: SWIPE_REPETITION_MAX }),
   pauseMs: integerField('Pause between repeated swipes.', { min: 0, max: SWIPE_PAUSE_MAX_MS }),
   pattern: enumField(SWIPE_PATTERNS),
@@ -221,11 +217,7 @@ const gestureFields = {
   distance: integerField('Fling distance.', { min: 0 }),
   scale: numberField('Pinch or transform scale.'),
   degrees: numberField('Rotation in degrees.'),
-  velocity: numberField('Deprecated: rotation pacing is derived from degrees; must be non-zero.'),
-  durationMs: integerField(
-    'Pan/transform duration. Deprecated on swipe/fling; timed movement is a pan.',
-    { min: 16, max: 10_000 },
-  ),
+  durationMs: integerField('Pan/transform duration.', { min: 16, max: 10_000 }),
   pointerCount: integerField('Pan touch pointer count (1 or 2).', { min: 1, max: 2 }),
 };
 

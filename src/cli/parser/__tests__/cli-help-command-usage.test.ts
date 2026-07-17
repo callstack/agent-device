@@ -263,7 +263,7 @@ test('command usage shows command flags without global flags', async () => {
   const help = await usageForCommand('swipe');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /Quick coordinate fling with optional repeat pattern/);
-  assert.match(help, /duration positional is accepted as a deprecated alias to pan/);
+  assert.doesNotMatch(help, /duration positional is accepted as a deprecated alias to pan/);
   assert.match(help, /Command flags:/);
   assert.match(help, /--pattern one-way\|ping-pong/);
   assert.doesNotMatch(help, /Global flags:/);

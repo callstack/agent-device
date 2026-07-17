@@ -76,7 +76,7 @@ test.each([
       'click',
       'snapshot',
       'snapshot',
-      'swipe',
+      'gesture',
     ]);
     expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS);
   },
@@ -90,7 +90,7 @@ test('preserves mutation ordering after a failed dispatch is continued', async (
     baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
-      if (request.command === 'swipe' && swipeAttempts++ === 0) {
+      if (request.command === 'gesture' && swipeAttempts++ === 0) {
         throw new Error('dispatch failed after delivery became possible');
       }
       return request.command === 'snapshot'
@@ -132,10 +132,10 @@ test('preserves mutation ordering after a failed dispatch is continued', async (
   await swipe(1);
 
   expect(requests.map(({ command }) => command)).toEqual([
-    'swipe',
+    'gesture',
     'snapshot',
     'snapshot',
-    'swipe',
+    'gesture',
   ]);
   expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS);
 });
@@ -189,15 +189,15 @@ test('defers a pending mutation boundary across non-mutating runtime commands', 
     env: {},
     invalidateObservation() {},
   });
-  expect(requests.map(({ command }) => command)).toEqual(['swipe', 'screenshot']);
+  expect(requests.map(({ command }) => command)).toEqual(['gesture', 'screenshot']);
 
   await swipe(1);
   expect(requests.map(({ command }) => command)).toEqual([
-    'swipe',
+    'gesture',
     'screenshot',
     'snapshot',
     'snapshot',
-    'swipe',
+    'gesture',
   ]);
   expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS);
 });

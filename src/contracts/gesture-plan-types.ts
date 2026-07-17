@@ -28,12 +28,6 @@ export type GestureSemanticInput =
       durationMs?: number;
       executionProfile?: GestureExecutionProfile;
     }
-  | {
-      intent: 'pan';
-      preset: SwipePreset;
-      durationMs: number;
-      executionProfile?: GestureExecutionProfile;
-    }
   | { intent: 'pinch'; origin?: Point; scale: number }
   | { intent: 'rotate'; origin?: Point; degrees: number }
   | {

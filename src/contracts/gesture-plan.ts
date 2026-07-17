@@ -182,18 +182,6 @@ function buildPanPlan(
     DEFAULT_PAN_DURATION_MS,
     'gesture pan durationMs',
   );
-  if ('preset' in input) {
-    const { from, to } = presetGestureEndpoints(input.preset, viewport);
-    return buildSinglePointerPlan(
-      'pan',
-      from,
-      to,
-      durationMs,
-      viewport,
-      input.executionProfile ?? 'timed-pan',
-      profile,
-    );
-  }
   if ((input.pointerCount ?? 1) === 1) {
     const start = finitePoint(input.origin, 'gesture pan origin');
     const delta = finitePoint(input.delta, 'gesture pan delta');

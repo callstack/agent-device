@@ -358,16 +358,12 @@ On Android, `fill` also verifies text and treats IME-owned capture as a terminal
 Android text entry is owned by `agent-device`: provider-native injection when available, then chunk-safe ASCII shell input. Do not switch to raw `adb`, clipboard, or paste as an agent fallback. If non-ASCII is unsupported in the current backend, report the tool/device gap.
 `click --button secondary` is the desktop context-menu flow on macOS.
 `click --button middle` is reserved for future runner support and currently returns an explicit unsupported-operation error on macOS.
-`swipe` is a quick, fixed-duration directional throw. Its historical optional `durationMs` remains
-accepted for compatibility but normalizes to a pan and reports a deprecation; use `gesture pan` for
-deliberate timed movement.
+`swipe` is a quick, fixed-duration directional throw. Use `gesture pan` for deliberate timed movement.
 Repeated coordinate swipes accept at most 200 repetitions and 10000ms pauses, and their combined
 gesture/pause schedule must fit within 60000ms.
 `gesture pan` accepts `x y dx dy [durationMs]` for deliberate drags. It uses one pointer by default. Add `--pointer-count 2` for a parallel two-finger pan with constant contact span and angle; this shares the bounded two-contact synthesizer used by transform while retaining pan intent. Android preserves the requested travel duration; iOS uses XCTest drag primitives for one-pointer pan and private XCTest synthesis for two-pointer pan.
-`gesture fling` accepts `up|down|left|right x y [distance]` for fast directional throws. Its
-historical duration is accepted as a deprecated alias to pan.
-`gesture rotate` accepts `degrees [x] [y]`; the degree sign controls direction. Its historical
-velocity is accepted but deprecated because pacing is derived from the requested rotation.
+`gesture fling` accepts `up|down|left|right x y [distance]` for fast directional throws.
+`gesture rotate` accepts `degrees [x] [y]`; the degree sign controls direction. Pacing is derived from the requested rotation.
 `gesture transform` accepts `x y dx dy scale degrees [durationMs]` for one combined two-finger pan/zoom/rotate gesture on Android and iOS simulators. Pinch, rotate, two-finger pan, and transform use the same viewport-aware pointer planning; impossible paths fail before injection instead of clamping or distorting the requested motion.
 On iOS simulators it uses private XCTest synthesis for a continuous two-finger pan/scale/rotation path, so verify app-level metrics instead of assuming the requested values map exactly to recognizer output.
 On Android, `gesture transform` injects a geometric two-finger path. App recognizers may report non-exact pan, scale, and rotation values, so verify qualitative state such as `pan changed yes`, `pinch changed yes`, and `rotate changed yes` unless the app explicitly promises exact centroid metrics. If exact app-state values matter, prefer isolated `gesture pan`, `gesture pinch`, or `gesture rotate` commands.

@@ -99,9 +99,11 @@ test('Provider-backed integration Android touch provider handles multi-touch ges
         ...world.selection,
       });
 
-      await client.interactions.swipe({
-        from: { x: 340, y: 400 },
-        to: { x: 60, y: 400 },
+      await client.interactions.pan({
+        x: 340,
+        y: 400,
+        dx: -280,
+        dy: 0,
         durationMs: 300,
         ...world.selection,
       });

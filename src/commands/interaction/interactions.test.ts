@@ -5,7 +5,6 @@ test('swipe writes only typed daemon input', () => {
   const request = interactionDaemonWriters.swipe({
     from: { x: 10, y: 20 },
     to: { x: 30, y: 40 },
-    durationMs: 300,
     count: 2,
     pauseMs: 10,
     pattern: 'ping-pong',
@@ -15,7 +14,6 @@ test('swipe writes only typed daemon input', () => {
   expect(request.input).toEqual({
     from: { x: 10, y: 20 },
     to: { x: 30, y: 40 },
-    durationMs: 300,
     count: 2,
     pauseMs: 10,
     pattern: 'ping-pong',

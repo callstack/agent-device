@@ -152,7 +152,7 @@ export function requireGestureSupported(input: GestureSemanticInput, device: Dev
     throw unsupportedGesture(input, gesturePlatformMessage(input, device));
   }
   // Linux can preserve public coordinate/preset swipe through its drag primitive, but cannot
-  // honor the velocity semantics authored by `gesture fling`.
+  // honor the speed semantics authored by `gesture fling`.
   if (input.intent === 'fling' && 'direction' in input && device.platform === 'linux') {
     throw unsupportedGesture(input, 'gesture fling is not supported on Linux');
   }

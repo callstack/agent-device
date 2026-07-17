@@ -137,7 +137,6 @@ export const interactionDaemonWriters = {
     request(PUBLIC_COMMANDS.swipe, [], input, {
       from: input.from,
       to: input.to,
-      durationMs: input.durationMs,
       count: input.count,
       pauseMs: input.pauseMs,
       pattern: input.pattern,

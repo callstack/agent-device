@@ -158,10 +158,16 @@ function projectPointClick(
 function projectSwipe(
   operation: Extract<MaestroInputOperation, { kind: 'swipe' }>,
 ): ProjectedMaestroPublicOperation {
+  const { from, to, durationMs } = operation.gesture;
   return {
-    command: 'swipe',
+    command: 'gesture',
     positionals: [],
-    input: operation.gesture,
+    input: {
+      kind: 'pan',
+      origin: from,
+      delta: { x: to.x - from.x, y: to.y - from.y },
+      durationMs,
+    },
     flags: { postGestureStabilization: false },
     ...(operation.viewport ? { internal: { gestureViewport: operation.viewport } } : {}),
   };

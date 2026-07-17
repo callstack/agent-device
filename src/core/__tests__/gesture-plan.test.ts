@@ -49,14 +49,14 @@ describe('single-pointer plans', () => {
 
   test('planner resolves swipe presets inside the active viewport', () => {
     const viewport = { x: 20, y: 30, width: 400, height: 800 };
-    const fling = buildGesturePlan({ intent: 'fling', preset: 'left' }, viewport);
-    const pan = buildGesturePlan({ intent: 'pan', preset: 'right', durationMs: 400 }, viewport);
+    const leftFling = buildGesturePlan({ intent: 'fling', preset: 'left' }, viewport);
+    const rightFling = buildGesturePlan({ intent: 'fling', preset: 'right' }, viewport);
 
-    assert.deepEqual(fling.pointers[0].samples[0]?.point, { x: 360, y: 430 });
-    assert.deepEqual(fling.pointers[0].samples.at(-1)?.point, { x: 80, y: 430 });
-    assert.equal(pan.durationMs, 400);
-    assert.deepEqual(pan.pointers[0].samples[0]?.point, { x: 80, y: 430 });
-    assert.deepEqual(pan.pointers[0].samples.at(-1)?.point, { x: 360, y: 430 });
+    assert.deepEqual(leftFling.pointers[0].samples[0]?.point, { x: 360, y: 430 });
+    assert.deepEqual(leftFling.pointers[0].samples.at(-1)?.point, { x: 80, y: 430 });
+    assert.equal(rightFling.durationMs, 100);
+    assert.deepEqual(rightFling.pointers[0].samples[0]?.point, { x: 80, y: 430 });
+    assert.deepEqual(rightFling.pointers[0].samples.at(-1)?.point, { x: 360, y: 430 });
   });
 
   test('single-pointer pan preserves its execution profile', () => {

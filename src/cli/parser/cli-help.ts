@@ -282,7 +282,7 @@ Read-only and waits:
   Ambiguous find: add --first or --last. If info is not visible/exposed, report that gap instead of typing/searching/navigating to reveal it.
 
 Navigation and gestures:
-  Use scroll for lists; swipe for quick coordinate gestures/carousels; gesture pan for deliberate timed drags; gesture fling for fast directional throws. Historical swipe/fling duration arguments remain compatibility aliases to pan and are deprecated.
+  Use scroll for lists; swipe for quick coordinate gestures/carousels; gesture pan for deliberate timed drags; gesture fling for fast directional throws.
   For fast macOS desktop list traversal, prefer fixed pixel wheel steps and batch them when no snapshot is needed between passes:
     agent-device scroll down --pixels 200 --duration-ms 50 --platform macos
     agent-device batch --steps '[{"command":"scroll","input":{"direction":"down","pixels":200,"durationMs":50}},{"command":"scroll","input":{"direction":"down","pixels":200,"durationMs":50}}]' --platform macos

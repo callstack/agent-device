@@ -752,8 +752,6 @@ export type LongPressOptions = DeviceCommandBaseOptions &
 export type SwipeOptions = DeviceCommandBaseOptions & {
   from: { x: number; y: number };
   to: { x: number; y: number };
-  /** @deprecated Timed movement is a pan. Omit this field for swipe/fling semantics. */
-  durationMs?: number;
   count?: number;
   pauseMs?: number;
   pattern?: SwipePattern;
@@ -773,14 +771,10 @@ export type FlingOptions = DeviceCommandBaseOptions & {
   x: number;
   y: number;
   distance?: number;
-  /** @deprecated Timed movement is a pan. Omit this field for fling semantics. */
-  durationMs?: number;
 };
 
 export type SwipeGestureOptions = DeviceCommandBaseOptions & {
   preset: SwipePreset;
-  /** @deprecated Timed movement is a pan. Omit this field for swipe/fling semantics. */
-  durationMs?: number;
 };
 
 export type FocusOptions = DeviceCommandBaseOptions & {
@@ -819,8 +813,6 @@ export type RotateGestureOptions = DeviceCommandBaseOptions & {
   degrees: number;
   x?: number;
   y?: number;
-  /** @deprecated Rotation pacing is derived from degrees. */
-  velocity?: number;
 };
 
 export type TransformGestureOptions = DeviceCommandBaseOptions & TransformGestureParams;

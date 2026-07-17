@@ -69,7 +69,6 @@ export type CommandInput = Omit<InternalRequestOptions, 'batchSteps' | 'target'>
     update?: boolean;
     url?: string;
     value?: string;
-    velocity?: number;
     x?: number;
     y?: number;
   } & Record<string, unknown>;

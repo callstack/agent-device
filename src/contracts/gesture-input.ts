@@ -28,13 +28,11 @@ export type FlingGesturePayload = {
   direction: ScrollDirection;
   origin: Point;
   distance?: number;
-  durationMs?: number;
 };
 
 export type SwipeGesturePayload = {
   kind: 'swipe';
   preset: SwipePreset;
-  durationMs?: number;
 };
 
 export type PinchGesturePayload = {
@@ -47,7 +45,6 @@ export type RotateGesturePayload = {
   kind: 'rotate';
   degrees: number;
   origin?: Point;
-  velocity?: number;
 };
 
 export type TransformGesturePayload = {
@@ -85,19 +82,29 @@ export function readGesturePayload(input: unknown): GesturePayload {
     throw new AppError('INVALID_ARGS', 'pointerCount is supported only for gesture pan');
   }
   if (kind === 'fling') {
+    if (record.durationMs !== undefined) {
+      throw new AppError(
+        'INVALID_ARGS',
+        'gesture fling does not accept durationMs; use gesture pan for timed movement',
+      );
+    }
     return {
       kind,
       direction: readEnum(record, 'direction', SCROLL_DIRECTIONS),
       origin: readPoint(record, 'origin'),
       distance: readOptionalInteger(record, 'distance', { min: 0 }),
-      durationMs: readOptionalGestureDuration(record),
     };
   }
   if (kind === 'swipe') {
+    if (record.durationMs !== undefined) {
+      throw new AppError(
+        'INVALID_ARGS',
+        'gesture swipe does not accept durationMs; use gesture pan for timed movement',
+      );
+    }
     return {
       kind,
       preset: readEnum(record, 'preset', SWIPE_PRESETS),
-      durationMs: readOptionalGestureDuration(record),
     };
   }
   if (kind === 'pinch') {
@@ -108,11 +115,16 @@ export function readGesturePayload(input: unknown): GesturePayload {
     };
   }
   if (kind === 'rotate') {
+    if (record.velocity !== undefined) {
+      throw new AppError(
+        'INVALID_ARGS',
+        'gesture rotate does not accept velocity; rotation pacing derives from degrees',
+      );
+    }
     return {
       kind,
       degrees: readNumber(record, 'degrees'),
       origin: readOptionalPoint(record, 'origin'),
-      velocity: readOptionalRotateVelocity(record),
     };
   }
   return {
@@ -123,15 +135,6 @@ export function readGesturePayload(input: unknown): GesturePayload {
     degrees: readNumber(record, 'degrees'),
     durationMs: readOptionalGestureDuration(record),
   };
-}
-
-function readOptionalRotateVelocity(record: Record<string, unknown>): number | undefined {
-  if (record.velocity === undefined) return undefined;
-  const velocity = readNumber(record, 'velocity');
-  if (velocity === 0) {
-    throw new AppError('INVALID_ARGS', 'Expected velocity to be a non-zero finite number.');
-  }
-  return velocity;
 }
 
 function readOptionalGestureDuration(record: Record<string, unknown>): number | undefined {

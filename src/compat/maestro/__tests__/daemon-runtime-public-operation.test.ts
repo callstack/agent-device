@@ -95,9 +95,14 @@ describe('Maestro public operation projection', () => {
         viewport: { x: 0, y: 0, width: 100, height: 200 },
       },
       expected: {
-        command: 'swipe',
+        command: 'gesture',
         positionals: [],
-        input: { from: { x: 90, y: 50 }, to: { x: 10, y: 50 }, durationMs: 400 },
+        input: {
+          kind: 'pan',
+          origin: { x: 90, y: 50 },
+          delta: { x: -80, y: 0 },
+          durationMs: 400,
+        },
         flags: { postGestureStabilization: false },
         internal: { gestureViewport: { x: 0, y: 0, width: 100, height: 200 } },
       },

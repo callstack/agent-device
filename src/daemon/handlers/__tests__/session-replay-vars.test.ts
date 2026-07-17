@@ -513,7 +513,7 @@ test('.ad replay normalizes resolved gesture and swipe syntax into structured da
     script: [
       'env X=10',
       'gesture pan ${X} 20 30 40 500 --pointer-count 2',
-      'swipe ${X} 20 30 40 300 --count 2 --pause-ms 5 --pattern ping-pong',
+      'swipe ${X} 20 30 40 --count 2 --pause-ms 5 --pattern ping-pong',
       '',
     ].join('\n'),
   });
@@ -543,7 +543,6 @@ test('.ad replay normalizes resolved gesture and swipe syntax into structured da
         input: {
           from: { x: 10, y: 20 },
           to: { x: 30, y: 40 },
-          durationMs: 300,
           count: 2,
           pauseMs: 5,
           pattern: 'ping-pong',
@@ -1606,7 +1605,15 @@ test('runReplayScriptFile resolves Maestro swipe.label from a labeled element re
     calls.map((call) => [call.command, call.input]),
     [
       ['snapshot', undefined],
-      ['swipe', { from: { x: 110, y: 250 }, to: { x: 110, y: 40 }, durationMs: 400 }],
+      [
+        'gesture',
+        {
+          kind: 'pan',
+          origin: { x: 110, y: 250 },
+          delta: { x: 0, y: -210 },
+          durationMs: 400,
+        },
+      ],
     ],
   );
 });
@@ -1664,7 +1671,15 @@ test('runReplayScriptFile keeps Maestro swipe.label anchored to the matched labe
     calls.map((call) => [call.command, call.input]),
     [
       ['snapshot', undefined],
-      ['swipe', { from: { x: 100, y: 124 }, to: { x: 100, y: 14 }, durationMs: 400 }],
+      [
+        'gesture',
+        {
+          kind: 'pan',
+          origin: { x: 100, y: 124 },
+          delta: { x: 0, y: -110 },
+          durationMs: 400,
+        },
+      ],
     ],
   );
 });
@@ -1717,16 +1732,25 @@ test('runReplayScriptFile resolves Maestro screen swipes from the direct viewpor
     calls.map((call) => [call.command, call.input]),
     [
       [
-        'swipe',
+        'gesture',
         {
-          from: { x: 340, y: 400 },
-          to: { x: 60, y: 400 },
+          kind: 'pan',
+          origin: { x: 340, y: 400 },
+          delta: { x: -280, y: 0 },
           durationMs: 300,
         },
       ],
       ['snapshot', undefined],
       ['snapshot', undefined],
-      ['swipe', { from: { x: 360, y: 400 }, to: { x: 40, y: 400 }, durationMs: 300 }],
+      [
+        'gesture',
+        {
+          kind: 'pan',
+          origin: { x: 360, y: 400 },
+          delta: { x: -320, y: 0 },
+          durationMs: 300,
+        },
+      ],
     ],
   );
 });
@@ -1779,16 +1803,25 @@ test('runReplayScriptFile delegates Android directional swipes and preserves per
     calls.map((call) => [call.command, call.input]),
     [
       [
-        'swipe',
+        'gesture',
         {
-          from: { x: 340, y: 400 },
-          to: { x: 60, y: 400 },
+          kind: 'pan',
+          origin: { x: 340, y: 400 },
+          delta: { x: -280, y: 0 },
           durationMs: 300,
         },
       ],
       ['snapshot', undefined],
       ['snapshot', undefined],
-      ['swipe', { from: { x: 360, y: 400 }, to: { x: 40, y: 400 }, durationMs: 300 }],
+      [
+        'gesture',
+        {
+          kind: 'pan',
+          origin: { x: 360, y: 400 },
+          delta: { x: -320, y: 0 },
+          durationMs: 300,
+        },
+      ],
     ],
   );
 });
