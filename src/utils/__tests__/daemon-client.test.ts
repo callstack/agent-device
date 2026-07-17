@@ -1460,7 +1460,7 @@ test('downloadRemoteArtifact downloads daemon artifact URL', async (t) => {
       token: 'remote-secret',
       artifactId: 'artifact-download',
       destinationPath,
-      requestId: 'req-remote-artifact-download',
+      requestScope: { requestId: 'req-remote-artifact-download' },
     });
     assert.equal(seenUrl, '/agent-device/artifacts/artifact-download');
     assert.equal(seenAuth, 'Bearer remote-secret');
@@ -1497,7 +1497,7 @@ test('downloadRemoteArtifact times out stalled artifact responses and removes pa
           token: 'remote-secret',
           artifactId: 'artifact-timeout',
           destinationPath,
-          requestId: 'req-remote-artifact-timeout',
+          requestScope: { requestId: 'req-remote-artifact-timeout' },
           timeoutMs: 50,
         }),
       (error: unknown) => {
@@ -1541,7 +1541,7 @@ test('downloadRemoteArtifact removes partial files after mid-stream aborts', asy
           token: 'remote-secret',
           artifactId: 'artifact-abort',
           destinationPath,
-          requestId: 'req-remote-artifact-abort',
+          requestScope: { requestId: 'req-remote-artifact-abort' },
           timeoutMs: 1_000,
         }),
       (error: unknown) => {

@@ -314,8 +314,7 @@ export async function materializeRemoteArtifacts(
       token: info.token,
       artifactId: artifact.artifactId,
       destinationPath: localPath,
-      requestId: req.meta?.requestId,
-      tenantId: req.meta?.tenantId,
+      requestScope: req.meta,
     });
     nextData[artifact.field] = localPath;
     nextArtifacts.push({
@@ -344,8 +343,7 @@ type DownloadRemoteArtifactParams = {
   token: string;
   artifactId: string;
   destinationPath: string;
-  requestId?: string;
-  tenantId?: string;
+  requestScope: DaemonRequest['meta'];
   timeoutMs?: number;
 };
 
@@ -375,7 +373,7 @@ export async function downloadRemoteArtifact(params: DownloadRemoteArtifactParam
         path: artifactUrl.pathname + artifactUrl.search,
         headers: {
           ...buildDaemonHttpAuthHeaders(params.token),
-          ...buildDaemonHttpTenantHeaders(params.tenantId),
+          ...buildDaemonHttpTenantHeaders(params.requestScope?.tenantId),
         },
       },
       (res) => {
@@ -390,7 +388,7 @@ export async function downloadRemoteArtifact(params: DownloadRemoteArtifactParam
               new AppError('COMMAND_FAILED', 'Failed to download remote artifact', {
                 artifactId: params.artifactId,
                 statusCode: res.statusCode,
-                requestId: params.requestId,
+                requestId: params.requestScope?.requestId,
                 body,
               }),
             );
@@ -401,7 +399,7 @@ export async function downloadRemoteArtifact(params: DownloadRemoteArtifactParam
           settle(
             new AppError('COMMAND_FAILED', 'Remote artifact download was interrupted', {
               artifactId: params.artifactId,
-              requestId: params.requestId,
+              requestId: params.requestScope?.requestId,
             }),
           );
         });
@@ -414,7 +412,7 @@ export async function downloadRemoteArtifact(params: DownloadRemoteArtifactParam
     const timeoutHandle = setTimeout(() => {
       const timeoutError = new AppError('COMMAND_FAILED', 'Remote artifact download timed out', {
         artifactId: params.artifactId,
-        requestId: params.requestId,
+        requestId: params.requestScope?.requestId,
         timeoutMs,
       });
       settle(timeoutError);
@@ -431,7 +429,7 @@ export async function downloadRemoteArtifact(params: DownloadRemoteArtifactParam
           'Failed to download remote artifact',
           {
             artifactId: params.artifactId,
-            requestId: params.requestId,
+            requestId: params.requestScope?.requestId,
             timeoutMs,
           },
           error instanceof Error ? error : undefined,

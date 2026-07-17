@@ -71,9 +71,9 @@ test('Provider-backed integration local proxy materializes tenant-scoped screens
         await downloadRemoteArtifact({
           baseUrl: daemonBaseUrl,
           token: 'proxy-token',
-          tenantId: OTHER_TENANT,
           artifactId: protectedArtifactId,
           destinationPath: rejectedScreenshotPath,
+          requestScope: { tenantId: OTHER_TENANT },
         }),
       (error: unknown) => {
         const normalized = normalizeAgentDeviceError(error);
