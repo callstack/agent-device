@@ -16,7 +16,6 @@ import {
 } from '../../provider-device-runtimes.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
-import { leaseScopeToReleaseRequest } from '../../core/lease-scope.ts';
 import { clearDaemonShutdownReport, writeDaemonShutdownReport } from '../daemon-shutdown-report.ts';
 import { createRequestHandler } from '../request-router.ts';
 import { teardownSessionResources } from '../session-teardown.ts';
@@ -24,6 +23,7 @@ import { IOS_SIMULATOR_RECORDING_STOP_ESCALATION_BUDGET_MS } from '../handlers/r
 import { closeDaemonServers } from './server-shutdown.ts';
 import type { DaemonInvokeFn, SessionState } from '../types.ts';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';
+import { finalizeDaemonSessionLease } from './daemon-session-lease-finalizer.ts';
 import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
@@ -58,6 +58,7 @@ import {
 } from '../../platforms/android/ime-lifecycle.ts';
 
 const DAEMON_SESSION_TEARDOWN_TIMEOUT_MS = 5_000;
+const DAEMON_SESSION_LEASE_RELEASE_TIMEOUT_MS = 1_000;
 const DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS = 1_000;
 const DAEMON_PROVIDER_RELEASE_DRAIN_TIMEOUT_MS = 2_000;
 
@@ -211,42 +212,19 @@ export async function startDaemonRuntime(
     );
   };
 
-  const finalizeDaemonSessionLease = async (session: SessionState): Promise<void> => {
-    if (!session.lease) return;
-    try {
-      const releaseRequest = leaseScopeToReleaseRequest({
-        leaseId: session.lease.leaseId,
-        tenantId: session.lease.tenantId,
-        runId: session.lease.runId,
-        leaseBackend: session.lease.leaseBackend,
-        leaseProvider: session.lease.leaseProvider,
-        deviceKey: session.lease.deviceKey,
-        clientId: session.lease.clientId,
-      });
-      const activeLease = leaseRegistry.getLease(releaseRequest);
-      if (!activeLease) return;
-      await expiredProviderLeaseReleaser.release(activeLease);
-      leaseRegistry.releaseLease(releaseRequest);
-    } catch (error) {
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'daemon_shutdown_session_lease_release_failed',
-        data: {
-          session: session.name,
-          leaseId: session.lease.leaseId,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-    }
-  };
-
   const teardownDaemonSession = async (session: SessionState): Promise<void> =>
     await teardownDaemonSessionForShutdown({
       session,
       sessionStore,
       stateDir: baseDir,
       stderr,
-      beforeDelete: finalizeDaemonSessionLease,
+      beforeDelete: async (sessionToFinalize) =>
+        await finalizeDaemonSessionLease({
+          session: sessionToFinalize,
+          leaseRegistry,
+          expiredProviderLeaseReleaser,
+          timeoutMs: DAEMON_SESSION_LEASE_RELEASE_TIMEOUT_MS,
+        }),
     });
 
   const teardownDaemonSessions = async (): Promise<void> => {
@@ -394,6 +372,7 @@ export async function startDaemonRuntime(
     try {
       await detachIosSimulatorRunnerSessionsForShutdown();
     } catch {}
+    expiredProviderLeaseReleaser.beginShutdown();
     await teardownDaemonSessions();
     const providerReleaseDrain = await expiredProviderLeaseReleaser.drain(
       DAEMON_PROVIDER_RELEASE_DRAIN_TIMEOUT_MS,

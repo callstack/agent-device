@@ -121,16 +121,21 @@ test('does not release until the expired lease record is durable', async () => {
   }
 });
 
-test('final drain reports releases completed during daemon shutdown', async () => {
+test('shutdown drain reports releases completed before and during its final retry', async () => {
   const leaseRegistry = new LeaseRegistry();
   const releasedBeforeShutdown = leaseRegistry.allocateLease({
     tenantId: 'tenant-a',
     runId: 'run-0',
     leaseProvider: 'browserstack',
   });
-  const lease = leaseRegistry.allocateLease({
+  const releasedDuringShutdown = leaseRegistry.allocateLease({
     tenantId: 'tenant-a',
     runId: 'run-1',
+    leaseProvider: 'browserstack',
+  });
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-2',
     leaseProvider: 'browserstack',
   });
   const release = vi
@@ -145,12 +150,14 @@ test('final drain reports releases completed during daemon shutdown', async () =
 
   try {
     await releaser.release(releasedBeforeShutdown);
+    releaser.beginShutdown();
+    await releaser.release(releasedDuringShutdown);
     await releaser.release(lease);
     const drained = await releaser.drain(10);
 
-    expect(release).toHaveBeenCalledTimes(3);
+    expect(release).toHaveBeenCalledTimes(4);
     expect(release).toHaveBeenLastCalledWith(lease);
-    expect(drained.released).toEqual([lease]);
+    expect(drained.released).toEqual([releasedDuringShutdown, lease]);
     expect(drained.pending).toEqual([]);
   } finally {
     releaser.shutdown();
