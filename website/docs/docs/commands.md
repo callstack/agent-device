@@ -59,6 +59,7 @@ agent-device app-switcher
 - `shutdown` turns off the selected Apple simulator or Android emulator.
 - `shutdown` must not target an active session device; use `close --shutdown` to end the session and turn it off.
 - `daemon stop --state-dir <path>` verifies the daemon PID/start-time identity, requests graceful shutdown, and reports whether provider-release state is known. Use `daemon stop --clean` to also remove retained Apple runner processes and leases owned by that daemon.
+- `device status` reads host-local advisory device claims without starting or contacting a daemon. Scope it with `--platform` plus `--udid` (Apple) or `--serial` (Android) to inspect one target. Stage 1 claims are observational: a live claim is reported but does not yet block `open` or offer a release command.
 - `--platform apple` is an alias for the Apple automation backend (`ios`, `tvOS`, `macOS` selection).
 - Use `--target mobile|tv|desktop` with `--platform` (required) to select phone/tablet vs TV-class vs desktop-class targets.
 - `boot` is mainly needed when starting a new session and `open` fails because no booted simulator/emulator is available.

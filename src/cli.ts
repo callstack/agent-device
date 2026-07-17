@@ -76,6 +76,7 @@ const REMOTE_MATERIALIZATION_DEFERRED_COMMANDS = new Set([
   'connection',
   'close',
   'daemon',
+  'device',
   'disconnect',
   'metro',
   'proxy',
@@ -580,7 +581,11 @@ function shouldMaterializeRemoteConnection(command: string): boolean {
 
 function shouldResolveRemoteAuth(command: string): boolean {
   return (
-    command !== 'auth' && command !== 'connection' && command !== 'daemon' && command !== 'proxy'
+    command !== 'auth' &&
+    command !== 'connection' &&
+    command !== 'daemon' &&
+    command !== 'device' &&
+    command !== 'proxy'
   );
 }
 

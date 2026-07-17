@@ -1085,6 +1085,15 @@ export const RAW_COMMAND_DESCRIPTORS = [
     mcpExposed: false,
   },
   {
+    name: 'device',
+    ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/device.ts'] as const } : {}),
+    catalog: { group: 'local-cli' },
+    recordsSessionAction: false,
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: false,
+    mcpExposed: false,
+  },
+  {
     name: 'metro',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/metro/index.ts'] as const } : {}),
     catalog: { group: 'local-cli' },

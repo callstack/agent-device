@@ -5,7 +5,8 @@ import path from 'node:path';
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
 import { AppError } from '../../../../kernel/errors.ts';
 import { acquireProcessLock } from '../../../../utils/process-lock.ts';
-import { isProcessAlive, readProcessStartTime } from '../../../../utils/host-process.ts';
+import { readProcessStartTime } from '../../../../utils/host-process.ts';
+import { classifyOwnerLiveness } from '../../../../utils/owner-identity.ts';
 import type { RunnerLogicalLeaseContext } from '../../../../core/runner-lease-context.ts';
 
 const RUNNER_LEASE_SCHEMA_VERSION = 1;
@@ -416,28 +417,21 @@ function readFiniteNumber(value: unknown): number | null {
 // field existed (no ownerStateDir) skip the check and fall back to PID
 // liveness only.
 function isRunnerLeaseOwnerProcessAlive(lease: RunnerLease): boolean {
-  if (!isProcessAlive(lease.ownerPid)) return false;
-  if (lease.ownerStartTime) {
-    return readProcessStartTime(lease.ownerPid) === lease.ownerStartTime;
-  }
-  return true;
+  return (
+    classifyOwnerLiveness({
+      owner: { pid: lease.ownerPid, startTime: lease.ownerStartTime },
+    }) === 'live'
+  );
 }
 
 function isRunnerLeaseOwnerStateDirGone(lease: RunnerLease): boolean {
   if (!lease.ownerStateDir) return false;
-  // statSync, not existsSync: existsSync never throws - it swallows EACCES
-  // and transient IO errors into `false`, which would misclassify a
-  // still-present-but-unreadable state dir as gone and force an unwarranted
-  // takeover of a live owner. Only a proven-missing path (ENOENT, or ENOTDIR
-  // on a parent component) counts as gone; any other stat error fails closed
-  // and treats the owner as alive.
-  try {
-    fs.statSync(lease.ownerStateDir);
-    return false;
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException | null)?.code;
-    return code === 'ENOENT' || code === 'ENOTDIR';
-  }
+  return (
+    classifyOwnerLiveness({
+      owner: { pid: lease.ownerPid, startTime: lease.ownerStartTime },
+      stateDir: lease.ownerStateDir,
+    }) === 'owner-state-dir-gone'
+  );
 }
 
 async function cleanupLeasedRunnerProcesses(

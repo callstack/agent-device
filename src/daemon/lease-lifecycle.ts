@@ -1,5 +1,6 @@
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { leaseScopeToReleaseRequest } from '../core/lease-scope.ts';
+import { clearAdvisoryDeviceClaim } from './device-claims.ts';
 import type { DeviceLease, LeaseRegistry } from './lease-registry.ts';
 import { buildSessionLeaseFromRequest, type SessionLease } from './lease-context.ts';
 import {
@@ -78,6 +79,17 @@ export async function cleanupExpiredLeasedSession(params: {
         reason: 'LEASE_EXPIRED',
         leaseId: lease.leaseId,
         session: session.name,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+  });
+  await clearAdvisoryDeviceClaim(session.deviceClaim).catch((error) => {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'leased_session_expiry_device_claim_clear_failed',
+      data: {
+        session: session.name,
+        deviceKey: session.deviceClaim?.deviceKey,
         error: error instanceof Error ? error.message : String(error),
       },
     });

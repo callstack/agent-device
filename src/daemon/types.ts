@@ -237,6 +237,13 @@ export type SessionState = {
     clientId?: string;
     expiresAt?: number;
   };
+  /** Advisory host-global local-device claim owned by this session, if acquired. */
+  deviceClaim?: {
+    deviceKey: string;
+    ownerToken: string;
+    ownerPid: number;
+    ownerStartTime: string | null;
+  };
   device: DeviceInfo;
   createdAt: number;
   surface?: SessionSurface;

@@ -39,6 +39,15 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     allowedFlags: ['clean'],
     supportedFlags: ['stateDir'],
   },
+  device: {
+    usageOverride: 'device status [--platform <platform>] [--udid <udid>] [--serial <serial>]',
+    listUsageOverride: 'device status',
+    helpDescription:
+      'Inspect advisory host-local device ownership claims without starting or contacting a daemon.',
+    summary: 'Inspect local advisory device ownership without daemon side effects',
+    positionalArgs: ['status'],
+    supportedFlags: ['platform', 'device', 'udid', 'serial'],
+  },
   connect: {
     usageOverride:
       'connect [cloud|proxy|limrun|browserstack|aws-device-farm] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]',

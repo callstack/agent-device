@@ -24,6 +24,7 @@ import { closeDaemonServers } from './server-shutdown.ts';
 import type { DaemonInvokeFn, SessionState } from '../types.ts';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';
 import { finalizeDaemonSessionLease } from './daemon-session-lease-finalizer.ts';
+import { clearAdvisoryDeviceClaim } from '../device-claims.ts';
 import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
@@ -218,13 +219,15 @@ export async function startDaemonRuntime(
       sessionStore,
       stateDir: baseDir,
       stderr,
-      beforeDelete: async (sessionToFinalize) =>
+      beforeDelete: async (sessionToFinalize) => {
         await finalizeDaemonSessionLease({
           session: sessionToFinalize,
           leaseRegistry,
           expiredProviderLeaseReleaser,
           timeoutMs: DAEMON_SESSION_LEASE_RELEASE_TIMEOUT_MS,
-        }),
+        });
+        await clearAdvisoryDeviceClaim(sessionToFinalize.deviceClaim);
+      },
     });
 
   const teardownDaemonSessions = async (): Promise<void> => {

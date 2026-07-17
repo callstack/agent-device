@@ -1104,6 +1104,18 @@ const SKILL_GUIDANCE_CASES: Case[] = [
     allowOnlyLocalCliHelpCommands: true,
   }),
   makeCase({
+    id: 'advisory-device-status-no-daemon',
+    contract: [
+      'Another worktree may have an advisory claim on Android emulator-5554',
+      'Need to inspect local ownership without starting or contacting any daemon',
+      'Stage 1 is observational only: device release and --stale are not available yet',
+    ],
+    task: 'Plan the one command that inspects this Android device claim directly. Do not use ps, daemon commands, or an unavailable release command.',
+    outputs: [plannedCommand('device status')],
+    forbiddenOutputs: [/\bdaemon\b/i, /\bdevice\s+release\b/i, /\bps\b/i],
+    strictFinalOutput: true,
+  }),
+  makeCase({
     id: 'selector-role-filter-not-role-key',
     contract: [
       'App name: Agent Device Tester',

@@ -4,6 +4,7 @@ import { isClientBackedCliCommandName, type ClientBackedCliCommandName } from '.
 import { connectCommand, connectionCommand, disconnectCommand } from './connection.ts';
 import { authCommand } from './auth.ts';
 import { daemonCommand } from './daemon.ts';
+import { deviceCommand } from './device.ts';
 import { proxyCommand } from './proxy.ts';
 import { replayCommand } from './replay.ts';
 import { screenshotCommand, diffCommand } from './screenshot.ts';
@@ -21,6 +22,7 @@ const dedicatedCliCommandHandlers = {
   connection: connectionCommand,
   auth: authCommand,
   daemon: daemonCommand,
+  device: deviceCommand,
   proxy: proxyCommand,
   replay: replayCommand,
   screenshot: screenshotCommand,

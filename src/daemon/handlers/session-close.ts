@@ -39,6 +39,7 @@ import {
   stopSessionAudioProbe,
   type SessionCleanupFailure,
 } from '../session-teardown.ts';
+import { clearAdvisoryDeviceClaim } from '../device-claims.ts';
 
 async function maybeShutdownSessionTarget(params: {
   device: DeviceInfo;
@@ -473,12 +474,15 @@ export async function handleCloseCommand(params: {
     leaseLifecycleProvider,
   });
   if (leaseRelease.response) return leaseRelease.response;
-  sessionStore.delete(sessionName);
   const cleanupAggregate = reportSessionCleanupFailures({
     sessionName,
     phase: 'session_close_cleanup_failed',
     failures: cleanupFailures,
   });
+  if (!platformCloseError && !cleanupAggregate) {
+    await clearAdvisoryDeviceClaim(session.deviceClaim);
+  }
+  sessionStore.delete(sessionName);
   // The platform-close failure is the primary error: rethrow it with its original
   // code/details/hint intact. The cleanup aggregate has already been emitted as a
   // diagnostic above so per-resource failures stay visible.
