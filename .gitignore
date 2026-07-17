@@ -1,5 +1,7 @@
 node_modules/
-examples/test-app/.env.local
+.env
+.env.*
+!.env.example
 scripts/perf/.results/
 .pnpm-store/
 .fallow/
