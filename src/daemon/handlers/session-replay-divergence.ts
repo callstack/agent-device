@@ -361,26 +361,6 @@ function isForeignOverlayDismissTarget(
 }
 
 /**
- * Chrome exclusion is a FILTER, never a narrower scoping
- * (`captureDivergenceObservation`): an expanded quick-settings shade is a SINGLE
- * systemui run, so the status-bar icons it hosts (clock/wifi/signal) condemn the
- * whole run — the shade's own tiles included. Excluding chrome would then publish
- * an empty `screen.refs` while that shade is the only actionable surface on
- * screen, leaving a divergence NARROWER than the plain `snapshot` of the same
- * capture. Hittable-only: a label-carrying status clock is not a target an agent
- * can act on, so a genuinely chrome-only screen still publishes nothing.
- *
- * Boundary: like the `covered` fallback below, this fires ONLY when exclusion
- * would empty the pool. A marker-bearing overlay over PARTIALLY visible app
- * content keeps its tiles condemned — the pool is non-empty, so no fallback —
- * which is deliberate: the full-cover case is the one that strands an agent with
- * nothing to act on.
- */
-function hittableChromeCandidates(nodes: SnapshotNode[]): SnapshotNode[] {
-  return nodes.filter((node) => node.ref && node.hittable === true);
-}
-
-/**
  * The single source of truth for which nodes a divergence `screen.refs`
  * publishes, and in what order. Both the rendered `screen.refs` digest
  * (`buildReplayDivergenceScreenRefs`) AND the ADR-0014 partial ref frame the
@@ -401,7 +381,14 @@ function selectDivergenceScreenRefNodes(
   const nonChrome = nodes.filter(
     (node) => node.ref && !chromeRefs.has(node.ref) && isMeaningfulDivergenceTarget(node),
   );
-  const meaningful = nonChrome.length > 0 ? nonChrome : hittableChromeCandidates(nodes);
+  // Chrome fallback: an expanded shade is a single systemui run, so its own status
+  // icons condemn its tiles with it. Excluding chrome is a FILTER, never a narrower
+  // scoping (`captureDivergenceObservation`), so when the chrome runs ARE the
+  // screen, publish what an agent can still act on rather than a divergence
+  // narrower than a plain `snapshot`. Hittable, not labelled: a status clock is not
+  // a target, so a chrome-only screen still publishes nothing.
+  const meaningful =
+    nonChrome.length > 0 ? nonChrome : nodes.filter((node) => node.ref && node.hittable === true);
   // Occlusion fallback (#1264): a `covered` node is normally dropped — an agent
   // cannot tap what an overlay hides. But when a system overlay MASS-COVERS the
   // app, EVERY app node is annotated `covered`; dropping them all would emit an

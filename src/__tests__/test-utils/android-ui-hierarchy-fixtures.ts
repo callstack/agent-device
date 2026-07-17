@@ -1,11 +1,6 @@
-// Capture fixtures are real archived device trees: DATA regenerated from a
-// device, never hand-edited (a hand-written id is how a fixture stops proving
-// anything), so they live in `.json` beside this module instead of as inline
-// literals that bury the walkers below. Imported statically rather than read
-// through `fs`: `resolveJsonModule` structurally checks each tree against
-// `RawSnapshotNode[]` at typecheck time, so a fixture that drifts from the node
-// shape fails the build — a `JSON.parse(...) as RawSnapshotNode[]` read would
-// assert that away unchecked.
+// Real archived device trees, regenerated from a device and never hand-edited (a
+// hand-written id is how a fixture stops proving anything). Static import, not an
+// `fs` read: it typechecks each tree against `RawSnapshotNode[]`.
 import imeCapture from './android-ime-capture.raw.json' with { type: 'json' };
 import qsShadeCapture from './android-qs-shade-capture.raw.json' with { type: 'json' };
 import {
