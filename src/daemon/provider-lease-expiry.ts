@@ -47,7 +47,7 @@ export function createExpiredProviderLeaseReleaser(options: {
   const persistedRecoveryLeaseIds = new Set(pendingRecoveryLeases.keys());
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   let retryTimer: Timer | undefined;
-  let activeRetry: Promise<void> | undefined;
+  const activeReleaseAttempts = new Map<string, Promise<void>>();
   let trackingShutdownReleases = false;
   const shutdownReleasedLeases = new Map<string, DeviceLease>();
 
@@ -113,53 +113,61 @@ export function createExpiredProviderLeaseReleaser(options: {
     });
   };
 
-  const retryPendingLiveLeases = async (): Promise<void> => {
-    for (const lease of pendingLiveLeases.values()) {
-      if (!isProviderRuntimeAvailable(lease, options.providerRuntimeIds)) continue;
+  const trackReleaseAttempt = (key: string, attempt: Promise<void>): Promise<void> => {
+    activeReleaseAttempts.set(key, attempt);
+    const finish = (): void => {
+      if (activeReleaseAttempts.get(key) === attempt) activeReleaseAttempts.delete(key);
+      if (pendingLiveLeases.size === 0 && pendingRecoveryLeases.size === 0 && retryTimer) {
+        clearTimeout(retryTimer);
+        retryTimer = undefined;
+      } else {
+        scheduleRetry();
+      }
+    };
+    void attempt.then(finish, finish);
+    return attempt;
+  };
+
+  const ensureLiveReleaseAttempt = (lease: DeviceLease): Promise<void> | undefined => {
+    if (!isProviderRuntimeAvailable(lease, options.providerRuntimeIds)) return undefined;
+    const key = `live:${lease.leaseId}`;
+    const activeAttempt = activeReleaseAttempts.get(key);
+    if (activeAttempt) return activeAttempt;
+    const attempt = (async (): Promise<void> => {
       if (await releaseLiveProviderLease(options.leaseLifecycleProvider, lease)) {
         pendingLiveLeases.delete(lease.leaseId);
         recordReleasedLease(lease);
       }
-    }
+    })();
+    return trackReleaseAttempt(key, attempt);
   };
 
-  const retryPendingRecoveryLeases = async (): Promise<void> => {
-    for (const lease of pendingRecoveryLeases.values()) {
-      if (!isRecoverableProviderAvailable(lease, options.recoverableProviderIds)) continue;
-      if (!persistedRecoveryLeaseIds.has(lease.leaseId) && !persistPendingLeases()) continue;
+  const ensureRecoveryReleaseAttempt = (lease: DeviceLease): Promise<void> | undefined => {
+    if (!isRecoverableProviderAvailable(lease, options.recoverableProviderIds)) return undefined;
+    if (!persistedRecoveryLeaseIds.has(lease.leaseId) && !persistPendingLeases()) return undefined;
+    const key = `recovery:${lease.leaseId}`;
+    const activeAttempt = activeReleaseAttempts.get(key);
+    if (activeAttempt) return activeAttempt;
+    const attempt = (async (): Promise<void> => {
       if (await releaseExpiredProviderLease(options.recoverExpiredLease, lease)) {
         pendingRecoveryLeases.delete(lease.leaseId);
         recordReleasedLease(lease);
         persistPendingLeases();
       }
-    }
+    })();
+    return trackReleaseAttempt(key, attempt);
   };
 
-  const retryPending = (): Promise<void> => {
-    if (activeRetry) return activeRetry;
-    const retry = (async (): Promise<void> => {
-      try {
-        await retryPendingLiveLeases();
-        await retryPendingRecoveryLeases();
-      } finally {
-        if (pendingLiveLeases.size === 0 && pendingRecoveryLeases.size === 0 && retryTimer) {
-          clearTimeout(retryTimer);
-          retryTimer = undefined;
-        } else {
-          scheduleRetry();
-        }
-      }
-    })();
-    activeRetry = retry;
-    void retry.then(
-      () => {
-        if (activeRetry === retry) activeRetry = undefined;
-      },
-      () => {
-        if (activeRetry === retry) activeRetry = undefined;
-      },
-    );
-    return retry;
+  const retryPending = async (): Promise<void> => {
+    const attempts = [
+      ...[...pendingLiveLeases.values()].map(ensureLiveReleaseAttempt),
+      ...[...pendingRecoveryLeases.values()].map(ensureRecoveryReleaseAttempt),
+    ].filter((attempt): attempt is Promise<void> => attempt !== undefined);
+    if (attempts.length === 0) {
+      scheduleRetry();
+      return;
+    }
+    await Promise.all(attempts);
   };
 
   return {
@@ -172,7 +180,7 @@ export function createExpiredProviderLeaseReleaser(options: {
       if (isRecoverableProviderAvailable(lease, options.recoverableProviderIds)) {
         pendingRecoveryLeases.set(lease.leaseId, lease);
         if (persistPendingLeases()) {
-          await retryPending();
+          await ensureRecoveryReleaseAttempt(lease);
         } else {
           scheduleRetry();
         }
@@ -181,7 +189,7 @@ export function createExpiredProviderLeaseReleaser(options: {
       if (!isProviderRuntimeAvailable(lease, options.providerRuntimeIds)) return;
       if (!options.leaseLifecycleProvider?.release) return;
       pendingLiveLeases.set(lease.leaseId, lease);
-      await retryPending();
+      await ensureLiveReleaseAttempt(lease);
       if (pendingLiveLeases.has(lease.leaseId)) {
         scheduleRetry();
       }

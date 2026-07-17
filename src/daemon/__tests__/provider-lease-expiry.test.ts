@@ -156,8 +156,9 @@ test('shutdown drain reports releases completed before and during its final retr
     const drained = await releaser.drain(10);
 
     expect(release).toHaveBeenCalledTimes(4);
-    expect(release).toHaveBeenLastCalledWith(lease);
-    expect(drained.released).toEqual([releasedDuringShutdown, lease]);
+    expect(release).toHaveBeenCalledWith(lease);
+    expect(drained.released).toHaveLength(2);
+    expect(drained.released).toEqual(expect.arrayContaining([releasedDuringShutdown, lease]));
     expect(drained.pending).toEqual([]);
   } finally {
     releaser.shutdown();

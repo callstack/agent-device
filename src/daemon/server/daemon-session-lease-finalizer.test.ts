@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
-import { LeaseRegistry } from '../lease-registry.ts';
+import { LeaseRegistry, type DeviceLease } from '../lease-registry.ts';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
 import { finalizeDaemonSessionLease } from './daemon-session-lease-finalizer.ts';
 
@@ -110,3 +110,70 @@ test('final drain joins a release that completes after the session timeout', asy
     vi.useRealTimers();
   }
 });
+
+test('a hung provider release does not starve a later session during shutdown', async () => {
+  vi.useFakeTimers();
+  const leaseRegistry = new LeaseRegistry();
+  const hungLease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'browserstack',
+  });
+  const releasedLease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-2',
+    leaseProvider: 'browserstack',
+  });
+  const release = vi.fn((lease: DeviceLease) =>
+    lease.leaseId === hungLease.leaseId
+      ? new Promise<Record<string, unknown>>(() => {})
+      : Promise.resolve({}),
+  );
+  const expiredProviderLeaseReleaser = createExpiredProviderLeaseReleaser({
+    leaseLifecycleProvider: { release },
+    providerRuntimeIds: ['browserstack'],
+  });
+  const sessions = [
+    makeIosSession('hung', { lease: sessionLease(hungLease) }),
+    makeIosSession('released', { lease: sessionLease(releasedLease) }),
+  ];
+
+  try {
+    expiredProviderLeaseReleaser.beginShutdown();
+    const finalization = Promise.all(
+      sessions.map(
+        async (session) =>
+          await finalizeDaemonSessionLease({
+            session,
+            leaseRegistry,
+            expiredProviderLeaseReleaser,
+            timeoutMs: 1_000,
+          }),
+      ),
+    );
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await finalization;
+
+    expect(release).toHaveBeenCalledWith(hungLease);
+    expect(release).toHaveBeenCalledWith(releasedLease);
+    expect(leaseRegistry.listActiveLeases()).toEqual([]);
+    const drain = expiredProviderLeaseReleaser.drain(2_000);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await expect(drain).resolves.toEqual({ pending: [hungLease], released: [releasedLease] });
+  } finally {
+    expiredProviderLeaseReleaser.shutdown();
+    vi.useRealTimers();
+  }
+});
+
+function sessionLease(lease: DeviceLease) {
+  return {
+    leaseId: lease.leaseId,
+    tenantId: lease.tenantId,
+    runId: lease.runId,
+    leaseBackend: lease.backend,
+    leaseProvider: lease.leaseProvider,
+    expiresAt: lease.expiresAt,
+  };
+}
