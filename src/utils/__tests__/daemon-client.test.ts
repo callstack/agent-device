@@ -20,6 +20,7 @@ import {
   resolveDaemonStartupHint,
 } from '../../daemon/client/daemon-client-metadata.ts';
 import { canConnectSocket } from '../../daemon/client/daemon-client-transport.ts';
+import { DAEMON_RPC_PROTOCOL_VERSION } from '../../daemon/http-health.ts';
 import {
   resolveDaemonRequestTimeoutMs,
   shouldResetDaemonAfterRequestTimeout,
@@ -985,59 +986,68 @@ test('sendToDaemon uses explicit remote daemon base URL and auth token', async (
   }
 });
 
-test('sendToDaemon rejects remote daemon RPC protocol mismatches before RPC', async () => {
-  const seenPaths: string[] = [];
-  let rpcCalled = false;
-  const restoreHttpRequest = mockEventHttpRequest(({ options, res }) => {
-    seenPaths.push(String(options.path ?? ''));
-    if (options.method === 'GET') {
-      res.emit(
-        'data',
-        JSON.stringify({
-          ok: true,
-          service: 'agent-device-proxy',
-          version: '99.0.0',
-          rpcProtocolVersion: 999,
-        }),
-      );
-      res.emit('end');
-      return;
-    }
-
-    rpcCalled = true;
-    emitJsonRpcResult(res, 'req-incompatible', { ok: true, data: {} });
-  });
-
-  try {
-    await withRemoteDaemonEnv(async () => {
-      let error: unknown;
-      try {
-        await sendToDaemon({
-          session: 'default',
-          command: 'remote-smoke',
-          positionals: ['ping'],
-          flags: {},
-          meta: { requestId: 'req-incompatible' },
-        });
-      } catch (caught) {
-        error = caught;
+test.each([
+  ['older', DAEMON_RPC_PROTOCOL_VERSION - 1],
+  ['newer', DAEMON_RPC_PROTOCOL_VERSION + 1],
+] as const)(
+  'sendToDaemon rejects %s remote daemon RPC protocols before RPC',
+  async (_skew, remoteProtocolVersion) => {
+    const seenPaths: string[] = [];
+    let rpcCalled = false;
+    const restoreHttpRequest = mockEventHttpRequest(({ options, res }) => {
+      seenPaths.push(String(options.path ?? ''));
+      if (options.method === 'GET') {
+        res.emit(
+          'data',
+          JSON.stringify({
+            ok: true,
+            service: 'agent-device-proxy',
+            version: '99.0.0',
+            rpcProtocolVersion: remoteProtocolVersion,
+          }),
+        );
+        res.emit('end');
+        return;
       }
 
-      assert.ok(error instanceof Error);
-      assert.equal((error as any).code, 'COMMAND_FAILED');
-      assert.match(error.message, /Remote daemon RPC protocol is incompatible/);
-      assert.equal((error as any).details?.remoteService, 'agent-device-proxy');
-      assert.equal((error as any).details?.remoteVersion, '99.0.0');
-      assert.equal((error as any).details?.remoteRpcProtocolVersion, 999);
-      assert.equal(typeof (error as any).details?.supportedRpcProtocolVersion, 'number');
+      rpcCalled = true;
+      emitJsonRpcResult(res, 'req-incompatible', { ok: true, data: {} });
     });
 
-    assert.deepEqual(seenPaths, ['/agent-device/health']);
-    assert.equal(rpcCalled, false);
-  } finally {
-    restoreHttpRequest();
-  }
-});
+    try {
+      await withRemoteDaemonEnv(async () => {
+        let error: unknown;
+        try {
+          await sendToDaemon({
+            session: 'default',
+            command: 'remote-smoke',
+            positionals: ['ping'],
+            flags: {},
+            meta: { requestId: 'req-incompatible' },
+          });
+        } catch (caught) {
+          error = caught;
+        }
+
+        assert.ok(error instanceof Error);
+        assert.equal((error as any).code, 'COMMAND_FAILED');
+        assert.match(error.message, /Remote daemon RPC protocol is incompatible/);
+        assert.equal((error as any).details?.remoteService, 'agent-device-proxy');
+        assert.equal((error as any).details?.remoteVersion, '99.0.0');
+        assert.equal((error as any).details?.remoteRpcProtocolVersion, remoteProtocolVersion);
+        assert.equal(
+          (error as any).details?.supportedRpcProtocolVersion,
+          DAEMON_RPC_PROTOCOL_VERSION,
+        );
+      });
+
+      assert.deepEqual(seenPaths, ['/agent-device/health']);
+      assert.equal(rpcCalled, false);
+    } finally {
+      restoreHttpRequest();
+    }
+  },
+);
 
 test('sendToDaemon hints to disconnect when a remote daemon is unavailable', async () => {
   const restoreHttpRequest = mockEventHttpRequest(({ res }) => {

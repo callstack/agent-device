@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
+import { DAEMON_RPC_PROTOCOL_VERSION } from '../../src/daemon/http-health.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,
@@ -57,7 +58,7 @@ async function createProviderDaemonFixture(t: TestContext): Promise<ProviderDaem
           ok: true,
           service: 'agent-device-daemon',
           version: '0.0.0-test',
-          rpcProtocolVersion: 1,
+          rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION,
         }),
       );
       return;

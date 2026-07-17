@@ -1,7 +1,7 @@
 import { readVersion } from '../utils/version.ts';
 
 // See docs/adr/0006-daemon-rpc-protocol-version.md before changing this value.
-export const DAEMON_RPC_PROTOCOL_VERSION = 1;
+export const DAEMON_RPC_PROTOCOL_VERSION = 2;
 
 export type DaemonHealthPayload = {
   ok: true;
