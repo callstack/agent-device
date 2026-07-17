@@ -792,6 +792,8 @@ async function authorizeAuxiliaryHttpRequest(params: {
     return null;
   }
 
+  // Auth-hook identity remains authoritative. The header fallback only preserves the
+  // client-declared tenant used by RPC when a deployment does not derive tenant scope in its hook.
   return { tenantId: authResult.tenantId ?? tenantId };
 }
 
