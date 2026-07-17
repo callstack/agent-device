@@ -70,6 +70,23 @@ test('refuses to signal a live process whose daemon identity cannot be verified'
   }
 });
 
+test('refuses to signal a live process when daemon metadata lacks a non-empty start-time identity', async () => {
+  const paths = createDaemonPaths();
+  fs.writeFileSync(paths.infoPath, JSON.stringify({ pid: 123, processStartTime: ' ' }));
+  mocks.isProcessAlive.mockReturnValue(true);
+
+  try {
+    await assert.rejects(
+      async () => await stopDaemon({ paths }),
+      (error: { code?: string }) => error.code === 'COMMAND_FAILED',
+    );
+    expect(mocks.isAgentDeviceDaemonProcess).not.toHaveBeenCalled();
+    expect(mocks.trySignalProcess).not.toHaveBeenCalled();
+  } finally {
+    removeDaemonPaths(paths);
+  }
+});
+
 test('treats an exited daemon between identity verification and SIGTERM as not-running', async () => {
   const paths = createDaemonPaths();
   mocks.isAgentDeviceDaemonProcess.mockReturnValue(true);

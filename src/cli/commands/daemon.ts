@@ -18,9 +18,7 @@ export const daemonCommand: ClientCommandHandler = async ({ positionals, flags }
   const identity = readDaemonStopIdentity(paths.infoPath);
   const stopped = await stopDaemon({ paths });
   const report = stopped.mode === 'graceful' ? readDaemonShutdownReport(paths.baseDir) : null;
-  const result = report
-    ? { ...stopped, providerReleases: { status: 'completed' as const, ...report.providerReleases } }
-    : stopped;
+  const result = mergeShutdownReport(stopped, report);
   const shouldClean = flags.clean === true && identity !== null && result.stopped;
   if (shouldClean) {
     const [{ cleanupRunnerLeasesForOwner }, { runnerLeaseCleanupAdapter }] = await Promise.all([
@@ -36,6 +34,26 @@ export const daemonCommand: ClientCommandHandler = async ({ positionals, flags }
   writeCommandOutput(flags, data, () => renderDaemonStop(data));
   return true;
 };
+
+function mergeShutdownReport(
+  stopped: DaemonStopResult,
+  report: ReturnType<typeof readDaemonShutdownReport>,
+): DaemonStopResult {
+  if (stopped.mode !== 'graceful' || report) {
+    return report
+      ? { ...stopped, providerReleases: { status: 'completed', ...report.providerReleases } }
+      : stopped;
+  }
+  return {
+    ...stopped,
+    cleanupConfidence: 'unknown',
+    providerReleases: { status: 'unknown', released: [], pending: null },
+    warnings: [
+      ...stopped.warnings,
+      'The graceful shutdown report is unavailable, so provider cleanup state is unknown. Provider allocations may remain active.',
+    ],
+  };
+}
 
 function renderDaemonStop(
   result: Pick<DaemonStopResult, 'stopped' | 'mode' | 'warnings'> & {

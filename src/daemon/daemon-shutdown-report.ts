@@ -70,5 +70,20 @@ function isDaemonShutdownReport(value: unknown): value is DaemonShutdownReport {
   const releases = (value as { providerReleases?: unknown }).providerReleases;
   if (!releases || typeof releases !== 'object') return false;
   const records = releases as { released?: unknown; pending?: unknown };
-  return Array.isArray(records.released) && Array.isArray(records.pending);
+  return (
+    Array.isArray(records.released) &&
+    Array.isArray(records.pending) &&
+    records.released.every(isProviderReleaseRecord) &&
+    records.pending.every(isProviderReleaseRecord)
+  );
+}
+
+function isProviderReleaseRecord(value: unknown): value is ProviderReleaseRecord {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as { leaseId?: unknown; provider?: unknown };
+  return (
+    typeof record.leaseId === 'string' &&
+    record.leaseId.trim().length > 0 &&
+    (record.provider === undefined || typeof record.provider === 'string')
+  );
 }

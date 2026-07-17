@@ -320,6 +320,11 @@ function summarizeProviderScenarioFlagExclusions() {
       ],
     },
     {
+      name: 'daemon lifecycle control',
+      owner: 'daemon CLI lifecycle tests',
+      keys: ['clean'],
+    },
+    {
       name: 'platform boot fallback without provider seam',
       owner: 'handler and Android platform unit tests',
       keys: ['headless', 'testIme'],

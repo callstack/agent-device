@@ -103,3 +103,31 @@ test('merges a graceful shutdown report and cleans runner leases with the start-
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
+
+test('reports graceful provider cleanup as unknown when the shutdown report is unavailable', async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-command-'));
+  mocks.readDaemonStopIdentity.mockReturnValue(null);
+  mocks.stopDaemon.mockResolvedValue(GRACEFUL_RESULT);
+  mocks.readDaemonShutdownReport.mockReturnValue(null);
+
+  try {
+    await daemonCommand({
+      positionals: ['stop'],
+      flags: { help: false, json: false, stateDir, version: false },
+      client: {} as never,
+    });
+
+    expect(mocks.writeCommandOutput).toHaveBeenCalledWith(
+      expect.objectContaining({ json: false }),
+      expect.objectContaining({
+        clean: false,
+        cleanupConfidence: 'unknown',
+        providerReleases: { status: 'unknown', released: [], pending: null },
+        warnings: [expect.stringContaining('provider cleanup state is unknown')],
+      }),
+      expect.any(Function),
+    );
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});

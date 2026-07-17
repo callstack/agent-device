@@ -122,13 +122,20 @@ test('does not release until the expired lease record is durable', async () => {
 });
 
 test('final drain reports releases completed during daemon shutdown', async () => {
-  const lease = new LeaseRegistry().allocateLease({
+  const leaseRegistry = new LeaseRegistry();
+  const releasedBeforeShutdown = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-0',
+    leaseProvider: 'browserstack',
+  });
+  const lease = leaseRegistry.allocateLease({
     tenantId: 'tenant-a',
     runId: 'run-1',
     leaseProvider: 'browserstack',
   });
   const release = vi
     .fn()
+    .mockResolvedValueOnce({})
     .mockRejectedValueOnce(new Error('temporary outage'))
     .mockResolvedValue({});
   const releaser = createExpiredProviderLeaseReleaser({
@@ -137,10 +144,11 @@ test('final drain reports releases completed during daemon shutdown', async () =
   });
 
   try {
+    await releaser.release(releasedBeforeShutdown);
     await releaser.release(lease);
     const drained = await releaser.drain(10);
 
-    expect(release).toHaveBeenCalledTimes(2);
+    expect(release).toHaveBeenCalledTimes(3);
     expect(release).toHaveBeenLastCalledWith(lease);
     expect(drained.released).toEqual([lease]);
     expect(drained.pending).toEqual([]);

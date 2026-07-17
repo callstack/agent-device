@@ -36,6 +36,14 @@ export async function stopDaemon(params: {
 }): Promise<DaemonStopResult> {
   const info = readDaemonInfo(params.paths.infoPath);
   if (!info) return notRunningResult();
+  if (!info.processStartTime) {
+    if (!isProcessAlive(info.pid)) return notRunningResult();
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Refusing to stop a daemon without a verified process start-time identity.',
+      { pid: info.pid },
+    );
+  }
   if (!isAgentDeviceDaemonProcess(info.pid, info.processStartTime)) {
     if (!isProcessAlive(info.pid)) return notRunningResult();
     throw new AppError(
@@ -99,8 +107,10 @@ function signalDaemonProcess(pid: number, signal: NodeJS.Signals): boolean {
 
 export function readDaemonStopIdentity(
   infoPath: string,
-): { pid: number; processStartTime?: string } | null {
-  return readDaemonInfo(infoPath);
+): { pid: number; processStartTime: string } | null {
+  const info = readDaemonInfo(infoPath);
+  if (!info?.processStartTime) return null;
+  return { pid: info.pid, processStartTime: info.processStartTime };
 }
 
 function readDaemonInfo(infoPath: string): { pid: number; processStartTime?: string } | null {
@@ -110,13 +120,17 @@ function readDaemonInfo(infoPath: string): { pid: number; processStartTime?: str
     if (typeof pid !== 'number' || !Number.isInteger(pid) || pid <= 0) return null;
     return {
       pid,
-      ...(typeof parsed.processStartTime === 'string'
+      ...(hasProcessStartTime(parsed.processStartTime)
         ? { processStartTime: parsed.processStartTime }
         : {}),
     };
   } catch {
     return null;
   }
+}
+
+function hasProcessStartTime(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
 }
 
 async function waitForDaemonMetadataRemoval(paths: DaemonPaths, timeoutMs: number): Promise<void> {

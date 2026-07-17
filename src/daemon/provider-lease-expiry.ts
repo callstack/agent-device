@@ -47,7 +47,6 @@ export function createExpiredProviderLeaseReleaser(options: {
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   let retryTimer: Timer | undefined;
   let retrying = false;
-  const releasedLeases = new Map<string, DeviceLease>();
 
   const persistPendingLeases = (): boolean => {
     if (!options.stateDir) {
@@ -107,34 +106,38 @@ export function createExpiredProviderLeaseReleaser(options: {
     });
   };
 
-  const retryPendingLiveLeases = async (): Promise<void> => {
+  const retryPendingLiveLeases = async (
+    released: Map<string, DeviceLease> | undefined,
+  ): Promise<void> => {
     for (const lease of pendingLiveLeases.values()) {
       if (!isProviderRuntimeAvailable(lease, options.providerRuntimeIds)) continue;
       if (await releaseLiveProviderLease(options.leaseLifecycleProvider, lease)) {
         pendingLiveLeases.delete(lease.leaseId);
-        releasedLeases.set(lease.leaseId, lease);
+        released?.set(lease.leaseId, lease);
       }
     }
   };
 
-  const retryPendingRecoveryLeases = async (): Promise<void> => {
+  const retryPendingRecoveryLeases = async (
+    released: Map<string, DeviceLease> | undefined,
+  ): Promise<void> => {
     for (const lease of pendingRecoveryLeases.values()) {
       if (!isRecoverableProviderAvailable(lease, options.recoverableProviderIds)) continue;
       if (!persistedRecoveryLeaseIds.has(lease.leaseId) && !persistPendingLeases()) continue;
       if (await releaseExpiredProviderLease(options.recoverExpiredLease, lease)) {
         pendingRecoveryLeases.delete(lease.leaseId);
-        releasedLeases.set(lease.leaseId, lease);
+        released?.set(lease.leaseId, lease);
         persistPendingLeases();
       }
     }
   };
 
-  const retryPending = async (): Promise<void> => {
+  const retryPending = async (released?: Map<string, DeviceLease>): Promise<void> => {
     if (retrying) return;
     retrying = true;
     try {
-      await retryPendingLiveLeases();
-      await retryPendingRecoveryLeases();
+      await retryPendingLiveLeases(released);
+      await retryPendingRecoveryLeases(released);
     } finally {
       retrying = false;
       if (pendingLiveLeases.size === 0 && pendingRecoveryLeases.size === 0 && retryTimer) {
@@ -170,10 +173,11 @@ export function createExpiredProviderLeaseReleaser(options: {
     drain: async (timeoutMs) => {
       // Shutdown gets one final, bounded attempt at every pending release. A
       // provider call that hangs must not keep the daemon alive indefinitely.
-      await Promise.race([retryPending(), sleep(Math.max(0, timeoutMs))]);
+      const released = new Map<string, DeviceLease>();
+      await Promise.race([retryPending(released), sleep(Math.max(0, timeoutMs))]);
       return {
         pending: [...pendingLiveLeases.values(), ...pendingRecoveryLeases.values()],
-        released: [...releasedLeases.values()],
+        released: [...released.values()],
       };
     },
     shutdown: () => {

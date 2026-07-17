@@ -36,7 +36,14 @@ test('ignores malformed shutdown reports and clear removes a prior report', () =
   const reportPath = path.join(stateDir, 'daemon-shutdown.json');
 
   try {
+    expect(readDaemonShutdownReport(stateDir)).toBeNull();
     fs.writeFileSync(reportPath, JSON.stringify({ providerReleases: { released: [] } }));
+    expect(readDaemonShutdownReport(stateDir)).toBeNull();
+
+    fs.writeFileSync(
+      reportPath,
+      JSON.stringify({ providerReleases: { released: [{}], pending: [] } }),
+    );
     expect(readDaemonShutdownReport(stateDir)).toBeNull();
 
     clearDaemonShutdownReport(stateDir);
