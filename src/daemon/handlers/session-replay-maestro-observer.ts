@@ -59,17 +59,20 @@ function traceStopEvent(
   event: MaestroEngineEvent & {
     durationMs: number;
     runtimeMetrics?: MaestroRuntimeMetrics;
+    data?: Record<string, unknown>;
     error?: unknown;
   },
 ): MaestroEngineEvent & {
   durationMs: number;
   runtimeMetrics?: MaestroRuntimeMetrics;
+  data?: Record<string, unknown>;
   error?: unknown;
 } {
   return stripUndefined({
     ...(start ?? event),
     durationMs: event.durationMs,
     runtimeMetrics: event.runtimeMetrics,
+    data: event.data,
     error: event.error,
   });
 }
@@ -116,10 +119,12 @@ function appendMaestroTraceStop(
   event: MaestroEngineEvent & {
     durationMs: number;
     runtimeMetrics?: MaestroRuntimeMetrics;
+    data?: Record<string, unknown>;
     error?: unknown;
   },
   ok: boolean,
 ): void {
+  const resultTiming = maestroResultTiming(event);
   appendReplayTraceEvent(tracePath, {
     type: 'replay_action_stop',
     ts: new Date().toISOString(),
@@ -132,7 +137,29 @@ function appendMaestroTraceStop(
     command: formatMaestroCommandProgress(event.command).command,
     ok,
     durationMs: event.durationMs,
-    ...(event.runtimeMetrics ? { resultTiming: event.runtimeMetrics } : {}),
+    ...(Object.keys(resultTiming).length > 0 ? { resultTiming } : {}),
     ...(!ok && event.error instanceof AppError ? { errorCode: event.error.code } : {}),
   });
+}
+
+function maestroResultTiming(
+  event: MaestroEngineEvent & {
+    runtimeMetrics?: MaestroRuntimeMetrics;
+    data?: Record<string, unknown>;
+  },
+): Record<string, unknown> {
+  const timing = isPlainRecord(event.data?.timing) ? event.data.timing : undefined;
+  return stripUndefined({
+    ...(event.runtimeMetrics ?? {}),
+    ...(typeof timing?.executionProfile === 'string'
+      ? { executionProfile: timing.executionProfile }
+      : {}),
+    ...(typeof timing?.gestureDurationMs === 'number'
+      ? { gestureDurationMs: timing.gestureDurationMs }
+      : {}),
+  });
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
 }

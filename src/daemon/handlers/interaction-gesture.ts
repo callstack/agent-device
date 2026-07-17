@@ -15,6 +15,7 @@ import {
 import { AppError, normalizeError } from '../../kernel/errors.ts';
 import { readOptionalInteger } from '../../kernel/input-validation.ts';
 import type { Point } from '../../kernel/snapshot.ts';
+import type { GestureSemanticInput } from '../../contracts/gesture-plan-types.ts';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
@@ -57,7 +58,9 @@ export async function dispatchGestureViaRuntime(
     return {
       positionals: gesturePayloadToPositionals(input),
       flags: gestureReplayFlags(input, params.req.flags),
-      responseData: gestureResponseData(result),
+      responseData: gestureResponseData(result, {
+        executionProfile: resolveExecutionProfile(normalized.gesture),
+      }),
       ...(input.kind === 'pinch' ? { recordingResultExtra: { scale: input.scale } } : {}),
     };
   });
@@ -86,6 +89,7 @@ export async function dispatchSwipeViaRuntime(
         y2: input.to.y,
         effectiveDurationMs: result.durationMs,
         timingMode: 'direct',
+        executionProfile: 'endpoint-hold',
         count,
         pauseMs,
         pattern,
@@ -149,10 +153,18 @@ async function dispatchGestureInteraction(
   }
 }
 
+function resolveExecutionProfile(gesture: GestureSemanticInput): string | undefined {
+  if (gesture.intent === 'fling') return 'endpoint-hold';
+  if (gesture.intent === 'pan') return gesture.executionProfile ?? 'timed-pan';
+  return undefined;
+}
+
 function gestureResponseData(
   result: GestureRuntimeResult,
   extra: Record<string, unknown> = {},
 ): Record<string, unknown> {
+  const executionProfile =
+    typeof extra.executionProfile === 'string' ? extra.executionProfile : undefined;
   return {
     kind: result.kind,
     durationMs: result.durationMs,
@@ -161,6 +173,14 @@ function gestureResponseData(
     to: result.to,
     ...(result.backendResult ?? {}),
     ...extra,
+    ...(executionProfile
+      ? {
+          timing: {
+            executionProfile,
+            gestureDurationMs: result.durationMs,
+          },
+        }
+      : {}),
     message: result.message,
   };
 }

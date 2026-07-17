@@ -430,6 +430,7 @@ function resultWithArtifacts(
     ...optionalObservation(observation ?? operationObservation),
     ...optionalOutputEnv(result?.outputEnv),
     ...optionalArtifactPaths(defaultArtifacts, result?.artifactPaths),
+    ...optionalData(result?.data),
   };
 }
 
@@ -462,6 +463,12 @@ function optionalArtifactPaths(
 ): Partial<Pick<MaestroRuntimeResult, 'artifactPaths'>> {
   const artifactPaths = [...new Set([...defaultArtifacts, ...(operationArtifacts ?? [])])];
   return artifactPaths.length > 0 ? { artifactPaths } : {};
+}
+
+function optionalData(
+  data: Record<string, unknown> | undefined,
+): Partial<Pick<MaestroRuntimeResult, 'data'>> {
+  return data && Object.keys(data).length > 0 ? { data: { ...data } } : {};
 }
 
 async function resolveInputTarget(

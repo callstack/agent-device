@@ -41,6 +41,12 @@ export type Invariant =
       metric: 'tapRetries' | 'hierarchyCaptures' | 'screenshotCaptures';
       min: number;
       because: string;
+    }
+  | {
+      kind: 'gestureExecutionProfile';
+      command: string;
+      profile: 'endpoint-hold' | 'timed-pan';
+      because: string;
     };
 
 export type InvariantResult = {
@@ -104,6 +110,32 @@ export function evaluateInvariant(events: TraceEvent[], invariant: Invariant): I
       invariant,
       status: 'held',
       detail: `${invariant.command} ${invariant.metric} reached ${best} (>= ${invariant.min})`,
+    };
+  }
+
+  if (invariant.kind === 'gestureExecutionProfile') {
+    const profiles = steps
+      .map((step) => step.resultTiming?.executionProfile)
+      .filter((value): value is string => typeof value === 'string');
+    if (profiles.length === 0) {
+      return {
+        invariant,
+        status: 'no-data',
+        detail: `no ${invariant.command} step recorded an executionProfile`,
+      };
+    }
+    const firstMismatch = profiles.find((profile) => profile !== invariant.profile);
+    if (firstMismatch !== undefined) {
+      return {
+        invariant,
+        status: 'violated',
+        detail: `${invariant.command} executionProfile was ${firstMismatch} (expected ${invariant.profile}): ${invariant.because}`,
+      };
+    }
+    return {
+      invariant,
+      status: 'held',
+      detail: `${invariant.command} executionProfile is ${invariant.profile} on ${profiles.length} step(s)`,
     };
   }
 

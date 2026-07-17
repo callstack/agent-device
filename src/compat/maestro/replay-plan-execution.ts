@@ -75,13 +75,14 @@ async function executeObservedStep(
   };
   notifyMaestroObserver(() => state.options.observer?.commandStarted?.(event));
   try {
-    await executeMaestroReplayPlanStep(step, state);
+    const result = await executeMaestroReplayPlanStep(step, state);
     checkpointMaestroCancellation(state.options.signal);
     notifyMaestroObserver(() =>
       state.options.observer?.commandCompleted?.({
         ...event,
         durationMs: now() - startedAt,
         ...runtimeMetricsDelta(metricsBefore, state.port.readMetrics?.()),
+        ...(result?.data ? { data: result.data } : {}),
       }),
     );
   } catch (error) {

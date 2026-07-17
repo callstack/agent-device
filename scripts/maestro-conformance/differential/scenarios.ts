@@ -137,6 +137,15 @@ export const DIFFERENTIAL_SCENARIOS: DifferentialScenario[] = [
     comparesAcrossEngines:
       'A percentage-endpoint swipe completes on both engines. It does NOT compare resolved pixel endpoints — no metric records them and a 1px delta is not app-observable.',
     expect: 'pass',
+    engineInvariants: [
+      {
+        kind: 'gestureExecutionProfile',
+        command: 'swipe',
+        profile: 'endpoint-hold',
+        because:
+          'Maestro timed swipes are normalized to pan with the endpoint-hold execution profile, which the iOS runner delivers as a fast 100ms move followed by a hold.',
+      },
+    ],
     divergenceMeans: 'The swipe behaves differently enough on one engine to fail the flow.',
   },
   // PARKED: tap-retry-if-no-change (flow kept at differential/flows/, invariant

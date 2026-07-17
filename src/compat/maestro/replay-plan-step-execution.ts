@@ -21,6 +21,7 @@ import type {
   MaestroObservationCondition,
   MaestroRuntimeCommand,
   MaestroRuntimePort,
+  MaestroRuntimeResult,
 } from './engine-types.ts';
 import type {
   MaestroReplayPlan,
@@ -50,37 +51,41 @@ type PlanStepFailure = {
 export async function executeMaestroReplayPlanStep(
   step: MaestroReplayPlanStep,
   state: MaestroReplayPlanExecutionState,
-): Promise<void> {
+): Promise<MaestroRuntimeResult | undefined> {
   checkpointMaestroCancellation(state.options.signal);
   try {
-    await withStepScopes(step, state.context, async () => {
-      await executeStep(step, state);
+    return await withStepScopes(step, state.context, async () => {
+      return await executeStep(step, state);
     });
   } catch (error) {
     throw asMaestroReplayPlanStepFailure(error, step);
   }
 }
 
-async function executeStep(step: MaestroReplayPlanStep, state: MaestroReplayPlanExecutionState) {
+async function executeStep(
+  step: MaestroReplayPlanStep,
+  state: MaestroReplayPlanExecutionState,
+): Promise<MaestroRuntimeResult | undefined> {
   if (step.kind === 'command') {
-    await executeOptionalCommand(step.command, step.appId, state);
-    return;
+    return await executeOptionalCommand(step.command, step.appId, state);
   }
   await executeOpaqueStep(step, state);
+  return undefined;
 }
 
 async function executeOptionalCommand(
   command: MaestroRuntimeCommand,
   appId: string | undefined,
   state: MaestroReplayPlanExecutionState,
-): Promise<void> {
+): Promise<MaestroRuntimeResult | undefined> {
   try {
-    await executeCommand(command, appId, state);
+    return await executeCommand(command, appId, state);
   } catch (error) {
     checkpointMaestroCancellation(state.options.signal);
     if (!isOptionalCommand(command) || !isMaestroTestFailure(error)) throw error;
     state.warnings.push(formatOptionalWarning(command, error));
     state.skipped += 1;
+    return undefined;
   }
 }
 
@@ -98,7 +103,7 @@ async function executeCommand(
   rawCommand: MaestroRuntimeCommand,
   appId: string | undefined,
   state: MaestroReplayPlanExecutionState,
-): Promise<void> {
+): Promise<MaestroRuntimeResult | undefined> {
   const command = resolveCommand(rawCommand, state.context);
   switch (command.kind) {
     case 'assertVisible':
@@ -108,7 +113,7 @@ async function executeCommand(
         state,
       );
       state.executed += 1;
-      return;
+      return undefined;
     case 'assertNotVisible':
       await requireObservation(
         { kind: 'notVisible', selector: command.target },
@@ -116,7 +121,7 @@ async function executeCommand(
         state,
       );
       state.executed += 1;
-      return;
+      return undefined;
     case 'extendedWaitUntil':
       await requireObservation(
         readExtendedWaitCondition(command),
@@ -124,9 +129,9 @@ async function executeCommand(
         state,
       );
       state.executed += 1;
-      return;
+      return undefined;
     default:
-      await executeRuntimeCommand(command, appId, state);
+      return await executeRuntimeCommand(command, appId, state);
   }
 }
 
@@ -134,7 +139,7 @@ async function executeRuntimeCommand(
   command: MaestroRuntimeCommand,
   appId: string | undefined,
   state: MaestroReplayPlanExecutionState,
-): Promise<void> {
+): Promise<MaestroRuntimeResult> {
   const request = stripUndefined({
     command,
     env: state.context.values,
@@ -150,6 +155,7 @@ async function executeRuntimeCommand(
   if (result.outputEnv) state.context.merge(result.outputEnv);
   result.artifactPaths?.forEach((entry) => state.artifacts.add(entry));
   state.executed += 1;
+  return result;
 }
 
 async function executeOpaqueStep(

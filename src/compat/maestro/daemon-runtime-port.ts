@@ -201,7 +201,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
       );
     },
     gesture: async (input, context) => {
-      await invokeMutation(
+      const data = await invokeMutation(
         {
           kind: 'swipe',
           gesture: input,
@@ -210,6 +210,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
         context,
         'deferred',
       );
+      return data ? { data } : undefined;
     },
     inputText: async (input, context) => await typeTextAndSettle(input.text, context),
     eraseText: async (input, context) =>

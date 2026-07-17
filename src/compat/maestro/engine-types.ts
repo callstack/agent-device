@@ -97,6 +97,8 @@ export type MaestroRuntimeResult = {
   observation?: MaestroObservation;
   outputEnv?: Record<string, string>;
   artifactPaths?: string[];
+  /** Daemon response data for gesture/profile evidence in replay traces. */
+  data?: Record<string, unknown>;
 };
 
 export type MaestroRuntimeMetrics = {
@@ -122,7 +124,11 @@ export type MaestroEngineEvent = {
 export type MaestroEngineObserver = {
   commandStarted?(event: MaestroEngineEvent): void;
   commandCompleted?(
-    event: MaestroEngineEvent & { durationMs: number; runtimeMetrics?: MaestroRuntimeMetrics },
+    event: MaestroEngineEvent & {
+      durationMs: number;
+      runtimeMetrics?: MaestroRuntimeMetrics;
+      data?: Record<string, unknown>;
+    },
   ): void;
   commandFailed?(
     event: MaestroEngineEvent & {
