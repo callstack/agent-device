@@ -1,4 +1,8 @@
+import assert from 'node:assert/strict';
 import { describe, expect, test } from 'vitest';
+import { buildGesturePlan } from '../../../contracts/gesture-plan.ts';
+import { readGesturePayload } from '../../../contracts/gesture-input.ts';
+import { normalizePublicGesture } from '../../../contracts/gesture-normalization.ts';
 import {
   projectMaestroPublicOperation,
   type MaestroPublicOperation,
@@ -104,7 +108,10 @@ describe('Maestro public operation projection', () => {
           durationMs: 400,
         },
         flags: { postGestureStabilization: false },
-        internal: { gestureViewport: { x: 0, y: 0, width: 100, height: 200 } },
+        internal: {
+          gestureExecutionProfile: 'endpoint-hold',
+          gestureViewport: { x: 0, y: 0, width: 100, height: 200 },
+        },
       },
     },
     {
@@ -168,15 +175,40 @@ describe('Maestro public operation projection', () => {
     expect(projectMaestroPublicOperation(operation)).toEqual(expected);
   });
 
-  test('omits optional swipe and scroll fields', () => {
+  test('preserves endpoint-hold for swipes without a viewport and omits scroll duration', () => {
     expect(
       projectMaestroPublicOperation({
         kind: 'swipe',
         gesture: { from: { x: 1, y: 2 }, to: { x: 3, y: 4 }, durationMs: 5 },
       }),
-    ).not.toHaveProperty('internal');
+    ).toMatchObject({
+      command: 'gesture',
+      internal: { gestureExecutionProfile: 'endpoint-hold' },
+    });
     expect(projectMaestroPublicOperation({ kind: 'scroll', direction: 'up' })).not.toHaveProperty(
       'input',
     );
+  });
+
+  test('a 400 ms Maestro swipe reaches plan execution with endpoint-hold profile', () => {
+    const viewport = { x: 0, y: 0, width: 400, height: 800 };
+    const projected = projectMaestroPublicOperation({
+      kind: 'swipe',
+      gesture: { from: { x: 360, y: 430 }, to: { x: 40, y: 430 }, durationMs: 400 },
+      viewport,
+    });
+    const input = readGesturePayload(projected.input);
+    const normalized = normalizePublicGesture(input);
+    if (normalized.gesture.intent === 'pan' && projected.internal?.gestureExecutionProfile) {
+      normalized.gesture.executionProfile = projected.internal.gestureExecutionProfile;
+    }
+    const plan = buildGesturePlan(
+      normalized.gesture,
+      projected.internal?.gestureViewport ?? viewport,
+    );
+    assert.equal(plan.topology, 'single');
+    assert.equal(plan.intent, 'pan');
+    assert.equal(plan.executionProfile, 'endpoint-hold');
+    assert.equal(plan.durationMs, 400);
   });
 });

@@ -45,6 +45,9 @@ export async function dispatchGestureViaRuntime(
   return await dispatchGestureInteraction(params, 'gesture', async (session) => {
     const input = readGesturePayload(params.req.input);
     const normalized = normalizePublicGesture(input);
+    if (normalized.gesture.intent === 'pan' && params.req.internal?.gestureExecutionProfile) {
+      normalized.gesture.executionProfile = params.req.internal.gestureExecutionProfile;
+    }
     requireGestureSupported(normalized.gesture, session.device);
     const result = await createGestureRuntime(params).interactions.gesture({
       session: params.sessionName,

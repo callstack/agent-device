@@ -18,6 +18,7 @@ import type { RecordingScope } from '../contracts/recording-scope.ts';
 import type { DeviceInfo, Platform, PlatformSelector } from '../kernel/device.ts';
 import type { ExecBackgroundResult, ExecResult } from '../utils/exec.ts';
 import type { Rect, SnapshotState } from '../kernel/snapshot.ts';
+import type { GestureExecutionProfile } from '../contracts/gesture-plan-types.ts';
 // Type-only import; erased at runtime. ref-frame.ts imports SessionState from
 // here, so this back-edge must stay type-only to avoid a runtime cycle.
 import type { RefFrameScope, RefFrameState } from './ref-frame.ts';
@@ -65,6 +66,8 @@ type DaemonRequestInternal = {
   closeAppOnly?: boolean;
   /** Provider-owned viewport already resolved while normalizing a nested gesture command. */
   gestureViewport?: Rect;
+  /** Maestro-compat execution profile for timed coordinate swipes projected to `gesture pan`. */
+  gestureExecutionProfile?: GestureExecutionProfile;
   /**
    * ADR 0012 step 4 post-resolution guard: the verified target member's
    * normalized local identity AND structural denotation (document order +

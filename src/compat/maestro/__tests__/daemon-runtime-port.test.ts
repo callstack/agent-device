@@ -125,7 +125,10 @@ test('uses the direct viewport without snapshot and pairs it with the nested ges
       delta: { x: -320, y: 0 },
       durationMs: 300,
     },
-    internal: { gestureViewport: viewport },
+    internal: {
+      gestureExecutionProfile: 'endpoint-hold',
+      gestureViewport: viewport,
+    },
   });
   expect(resolveGestureViewport).toHaveBeenCalledOnce();
   expect(requests.map(({ command }) => command)).toEqual(['gesture']);

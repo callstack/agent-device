@@ -169,7 +169,10 @@ function projectSwipe(
       durationMs,
     },
     flags: { postGestureStabilization: false },
-    ...(operation.viewport ? { internal: { gestureViewport: operation.viewport } } : {}),
+    internal: {
+      gestureExecutionProfile: 'endpoint-hold',
+      ...(operation.viewport ? { gestureViewport: operation.viewport } : {}),
+    },
   };
 }
 
