@@ -33,10 +33,11 @@ function setup(): { session: SessionState; sessionStore: SessionStore; stateDir:
   return { session, sessionStore, stateDir };
 }
 
-test('does not run beforeDelete after shutdown teardown rejects', async () => {
+test('finalizes provider state but does not clear a claim after shutdown teardown rejects', async () => {
   const { session, sessionStore, stateDir } = setup();
   mockTeardownSessionResources.mockRejectedValueOnce(new Error('teardown failed'));
   const beforeDelete = vi.fn(async () => {});
+  const afterSuccessfulTeardown = vi.fn(async () => {});
 
   await teardownDaemonSessionForShutdown({
     session,
@@ -44,17 +45,20 @@ test('does not run beforeDelete after shutdown teardown rejects', async () => {
     stateDir,
     stderr: { write: () => {} },
     beforeDelete,
+    afterSuccessfulTeardown,
   });
 
-  expect(beforeDelete).not.toHaveBeenCalled();
+  expect(beforeDelete).toHaveBeenCalledWith(session);
+  expect(afterSuccessfulTeardown).not.toHaveBeenCalled();
   expect(sessionStore.get(session.name)).toBeUndefined();
 });
 
-test('does not run beforeDelete after shutdown teardown times out', async () => {
+test('finalizes provider state but does not clear a claim after shutdown teardown times out', async () => {
   vi.useFakeTimers();
   const { session, sessionStore, stateDir } = setup();
   mockTeardownSessionResources.mockReturnValueOnce(new Promise(() => {}));
   const beforeDelete = vi.fn(async () => {});
+  const afterSuccessfulTeardown = vi.fn(async () => {});
 
   const teardown = teardownDaemonSessionForShutdown({
     session,
@@ -62,10 +66,12 @@ test('does not run beforeDelete after shutdown teardown times out', async () => 
     stateDir,
     stderr: { write: () => {} },
     beforeDelete,
+    afterSuccessfulTeardown,
   });
   await vi.advanceTimersByTimeAsync(5_000);
   await teardown;
 
-  expect(beforeDelete).not.toHaveBeenCalled();
+  expect(beforeDelete).toHaveBeenCalledWith(session);
+  expect(afterSuccessfulTeardown).not.toHaveBeenCalled();
   expect(sessionStore.get(session.name)).toBeUndefined();
 });

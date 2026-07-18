@@ -41,6 +41,8 @@ import {
   restoreOrphanedAndroidTestImeOnDaemonStartup,
   resetAndroidTestImeActivationCacheForTests,
 } from '../ime-lifecycle.ts';
+import { teardownSessionResources } from '../../../daemon/session-teardown.ts';
+import type { SessionState } from '../../../daemon/types.ts';
 
 const LATIN_IME = 'com.google.android.inputmethod.latin/.LatinIME';
 const SERIAL = ANDROID_EMULATOR.id;
@@ -245,6 +247,27 @@ test('a failed restore keeps the recovery value AND the marker for a later retry
     assert.equal(state.getCurrentIme(), LATIN_IME);
     assert.equal(state.getPreviousImeRecord(), undefined);
     assert.equal(await pendingMarkerExists(stateDir, SERIAL), false);
+  });
+});
+
+test('session teardown fails when a real IME restore reports set-failed', async () => {
+  const state = fakeDeviceState(LATIN_IME);
+  const stateDir = await makeStateDir();
+  const session: SessionState = {
+    name: 'ime-restore-failure',
+    device: ANDROID_EMULATOR,
+    createdAt: Date.now(),
+    actions: [],
+  };
+  state.markInstalled();
+
+  await withAndroidAdbProvider(state.adb, { serial: SERIAL }, async () => {
+    await activateAndroidTestIme(ANDROID_EMULATOR, { stateDir });
+    state.blockImeSetTo(LATIN_IME);
+    await assert.rejects(
+      async () => await teardownSessionResources(session, session.name, stateDir),
+      /android_ime: Android test IME could not be restored/,
+    );
   });
 });
 

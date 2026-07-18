@@ -9,8 +9,15 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   return { ...actual, dispatchCommand: vi.fn(), resolveTargetDevice: vi.fn() };
 });
 vi.mock('../../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../../../platforms/android/ime-lifecycle.ts', () => ({
+  activateAndroidTestIme: vi.fn(async () => {}),
+  restoreAndroidTestIme: vi.fn(async () => ({ restored: false, reason: 'no-record' })),
+}));
 
 import { dispatchCommand, resolveTargetDevice } from '../../../core/dispatch.ts';
+import { ensureDeviceReady } from '../../device-ready.ts';
+import { activateAndroidTestIme } from '../../../platforms/android/ime-lifecycle.ts';
+import { clearRequestCanceled, markRequestCanceled } from '../../../request/cancel.ts';
 import { acquireAdvisoryDeviceClaim } from '../../device-claims.ts';
 import { inspectDeviceClaims } from '../../device-claim-inspection.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
@@ -21,10 +28,12 @@ import type { DeviceInfo } from '../../../kernel/device.ts';
 
 const mockDispatch = vi.mocked(dispatchCommand);
 const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
+const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
 const roots: string[] = [];
 
 afterEach(() => {
   vi.clearAllMocks();
+  mockEnsureDeviceReady.mockResolvedValue(undefined);
   delete process.env.AGENT_DEVICE_CLAIMS_DIR;
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
@@ -45,10 +54,10 @@ const android: DeviceInfo = {
   booted: true,
 };
 
-test('failed local open rolls its advisory claim back', async () => {
+test('failed local open before device setup rolls its advisory claim back', async () => {
   const { store, stateDir } = setup();
   mockResolveTargetDevice.mockResolvedValue(android);
-  mockDispatch.mockRejectedValue(new Error('open failed'));
+  mockEnsureDeviceReady.mockRejectedValue(new Error('device not ready'));
 
   await assert.rejects(async () =>
     handleOpenCommand({
@@ -65,6 +74,28 @@ test('failed local open rolls its advisory claim back', async () => {
     }),
   );
   assert.deepEqual(inspectDeviceClaims({ serial: android.id }), []);
+});
+
+test('failed local open after dispatch retains its advisory claim for recovery', async () => {
+  const { store, stateDir } = setup();
+  mockResolveTargetDevice.mockResolvedValue(android);
+  mockDispatch.mockRejectedValue(new Error('open failed'));
+
+  await assert.rejects(async () =>
+    handleOpenCommand({
+      req: {
+        command: 'open',
+        token: 'test',
+        session: 'claim-dispatch-failure',
+        positionals: ['Demo'],
+        flags: { platform: 'android' },
+      },
+      sessionName: 'claim-dispatch-failure',
+      logPath: path.join(stateDir, 'daemon.log'),
+      sessionStore: store,
+    }),
+  );
+  assert.equal(inspectDeviceClaims({ serial: android.id })[0]?.classification, 'live');
 });
 
 test('failed local open response rolls its advisory claim back', async () => {
@@ -87,6 +118,38 @@ test('failed local open response rolls its advisory claim back', async () => {
 
   assert.equal(response.ok, false);
   assert.deepEqual(inspectDeviceClaims({ serial: android.id }), []);
+});
+
+test('cancellation after local device setup retains the advisory claim for recovery', async () => {
+  const { store, stateDir } = setup();
+  const requestId = 'claim-canceled-after-dispatch';
+  mockResolveTargetDevice.mockResolvedValue(android);
+  mockDispatch.mockResolvedValue({});
+  markRequestCanceled(requestId);
+
+  try {
+    const response = await handleOpenCommand({
+      req: {
+        command: 'open',
+        token: 'test',
+        session: 'claim-canceled-after-dispatch',
+        positionals: ['Demo'],
+        flags: { platform: 'android' },
+        meta: { requestId },
+      },
+      sessionName: 'claim-canceled-after-dispatch',
+      logPath: path.join(stateDir, 'daemon.log'),
+      sessionStore: store,
+    });
+
+    assert.equal(response.ok, false);
+    assert.equal(mockDispatch.mock.calls.length, 1);
+    assert.equal(vi.mocked(activateAndroidTestIme).mock.calls.length, 1);
+    assert.equal(inspectDeviceClaims({ serial: android.id })[0]?.classification, 'live');
+    assert.equal(store.get('claim-canceled-after-dispatch'), undefined);
+  } finally {
+    clearRequestCanceled(requestId);
+  }
 });
 
 test('remote open creates no host-local advisory claim', async () => {

@@ -96,8 +96,9 @@ export async function teardownDaemonSessionForShutdown(params: {
   stateDir?: string;
   stderr: WritableOutput;
   beforeDelete?: (session: SessionState) => Promise<void>;
+  afterSuccessfulTeardown?: (session: SessionState) => Promise<void>;
 }): Promise<void> {
-  const { session, sessionStore, stateDir, stderr, beforeDelete } = params;
+  const { session, sessionStore, stateDir, stderr, beforeDelete, afterSuccessfulTeardown } = params;
   const timeoutMs = resolveDaemonSessionTeardownTimeoutMs(session);
   const teardown = teardownSessionResources(session, session.name, stateDir).then(
     () => true,
@@ -121,7 +122,8 @@ export async function teardownDaemonSessionForShutdown(params: {
   // `.ad` iff the repair transaction completed, else leave a bounded
   // `REPAIR_SESSION_EXPIRED` tombstone for the reaped-before-finalize case.
   sessionStore.finalizeRepairTeardown(session);
-  if (teardownSucceeded) await beforeDelete?.(session);
+  await beforeDelete?.(session);
+  if (teardownSucceeded) await afterSuccessfulTeardown?.(session);
   sessionStore.delete(session.name);
 }
 
@@ -231,8 +233,9 @@ export async function startDaemonRuntime(
           expiredProviderLeaseReleaser,
           timeoutMs: DAEMON_SESSION_LEASE_RELEASE_TIMEOUT_MS,
         });
-        await clearAdvisoryDeviceClaim(sessionToFinalize.deviceClaim);
       },
+      afterSuccessfulTeardown: async (sessionToFinalize) =>
+        await clearAdvisoryDeviceClaim(sessionToFinalize.deviceClaim),
     });
 
   const teardownDaemonSessions = async (): Promise<void> => {

@@ -67,7 +67,15 @@ export async function restoreSessionAndroidIme(
   stateDir?: string,
 ): Promise<void> {
   if (session.device.platform !== 'android') return;
-  await restoreAndroidTestIme(session.device, { stateDir }).catch((error) => {
+  try {
+    const result = await restoreAndroidTestIme(session.device, { stateDir });
+    if (result.reason !== 'set-failed') return;
+    throw new AppError(
+      'COMMAND_FAILED',
+      `Android test IME could not be restored on ${session.device.name ?? session.device.id}.`,
+      { reason: 'android_test_ime_restore_incomplete', deviceId: session.device.id },
+    );
+  } catch (error) {
     emitDiagnostic({
       level: 'warn',
       phase: 'android_test_ime_restore_failed',
@@ -76,7 +84,8 @@ export async function restoreSessionAndroidIme(
         error: error instanceof Error ? error.message : String(error),
       },
     });
-  });
+    throw error;
+  }
 }
 
 type SessionCleanupStep = { step: string; run: () => Promise<void> };
