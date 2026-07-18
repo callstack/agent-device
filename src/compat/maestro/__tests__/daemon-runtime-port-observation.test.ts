@@ -1,6 +1,8 @@
 import { expect, test } from 'vitest';
 import type { DaemonRequest } from '../../../daemon/types.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
+import type { MaestroObservation } from '../engine-types.ts';
+import { parseMaestroProgram } from '../program-ir-parser.ts';
 import {
   MAESTRO_OBSERVATION_POLL_MS,
   maestroSnapshotSignature,
@@ -8,6 +10,7 @@ import {
   waitForTypedSnapshotStability,
 } from '../daemon-runtime-port-observation.ts';
 import { makeBaseRequest, makeDependencies, makeSnapshot } from './daemon-runtime-port-fixtures.ts';
+import { executeMaestroProgram } from './runtime-port-fixtures.ts';
 
 test('replaces pre-mutation evidence with the stable post-mutation snapshot', async () => {
   const requests: DaemonRequest[] = [];
@@ -279,4 +282,99 @@ test('excludes agent-device presentation metadata from Maestro hierarchy signatu
   ]);
 
   expect(maestroSnapshotSignature(first)).toBe(maestroSnapshotSignature(second));
+});
+
+test('assertVisible and assertNotVisible scope duplicate matching children by childOf ancestor', async () => {
+  const snapshot = makeSnapshot([
+    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 402, height: 874 } },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Text',
+      identifier: 'parent_id_1',
+      label: 'parent_id_1',
+      rect: { x: 20, y: 40, width: 120, height: 44 },
+    },
+    {
+      index: 2,
+      parentIndex: 1,
+      type: 'Text',
+      identifier: 'child_id',
+      label: 'child_id',
+      rect: { x: 24, y: 44, width: 112, height: 40 },
+    },
+    {
+      index: 3,
+      parentIndex: 0,
+      type: 'Text',
+      identifier: 'parent_id_3',
+      label: 'parent_id_3',
+      rect: { x: 20, y: 200, width: 120, height: 44 },
+    },
+    {
+      index: 4,
+      parentIndex: 0,
+      type: 'Text',
+      identifier: 'child_id',
+      label: 'child_id',
+      rect: { x: 24, y: 300, width: 112, height: 40 },
+    },
+  ]);
+
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      if (request.command === 'snapshot') return { ok: true, data: snapshot };
+      return { ok: true, data: {} };
+    },
+    dependencies: makeDependencies(),
+    platform: 'ios',
+  });
+
+  const observations: MaestroObservation[] = [];
+  const originalObserve = port.observe.bind(port);
+  port.observe = async (request) => {
+    const result = await originalObserve(request);
+    observations.push(result);
+    return result;
+  };
+
+  const program = parseMaestroProgram(
+    [
+      'appId: com.example.app',
+      '---',
+      '- assertVisible:',
+      '    text: child_id',
+      '    childOf:',
+      '      text: parent_id_1',
+      '- assertNotVisible:',
+      '    text: child_id',
+      '    childOf:',
+      '      text: parent_id_3',
+    ].join('\n'),
+  );
+
+  const result = await executeMaestroProgram(program, port);
+
+  expect(result).toMatchObject({ executed: 2, skipped: 0 });
+  expect(observations).toHaveLength(2);
+
+  const visible = observations[0]!;
+  const notVisible = observations[1]!;
+  expect(visible.matched).toBe(true);
+  expect(visible.evidence).toMatchObject({
+    selector: { text: 'child_id' },
+    childOf: { text: 'parent_id_1' },
+    candidateCount: 1,
+    visible: true,
+    ref: 'e3',
+  });
+
+  expect(notVisible.matched).toBe(true);
+  expect(notVisible.evidence).toMatchObject({
+    selector: { text: 'child_id' },
+    childOf: { text: 'parent_id_3' },
+    candidateCount: 0,
+    visible: false,
+  });
 });
