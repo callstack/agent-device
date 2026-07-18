@@ -13,42 +13,17 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-black.svg)](LICENSE)
 [![Glama MCP server](https://glama.ai/mcp/servers/callstack/agent-device/badges/score.svg)](https://glama.ai/mcp/servers/callstack/agent-device)
 
-Mobile app verification for AI agents.
+Verify the app your coding agent changed.
 
-A device automation CLI for real apps on iOS, Android, TV, web, and desktop. Agents get token-efficient snapshots, semantic refs, and evidence captured only when needed.
+`agent-device` is an agent-native CLI for inspecting, interacting with, and verifying real apps on supported iOS, Android, TV, web, and desktop targets. It gives coding agents a live feedback loop through token-efficient accessibility snapshots, semantic refs and selectors, device actions, and reviewable evidence.
 
-`agent-device` lets coding agents open apps, inspect the current UI, interact with visible elements, and collect debugging evidence through one CLI. Use it when an agent needs to verify what actually happens on a device, not just reason about code.
+Your coding agent or QA harness interprets the current state and chooses each next step. `agent-device` provides the session-aware device execution and captures evidence when the task needs it.
 
-The CLI is the agent's hands, eyes, and evidence collector; it is not the brain. Your coding agent or QA harness reads the task, interprets the current screen, chooses the next command, and decides whether the result satisfies the test. `agent-device` keeps that loop grounded in structured accessibility data, deterministic actions, and files an engineer can inspect.
+If you know Vercel's [agent-browser](https://github.com/vercel-labs/agent-browser), `agent-device` brings the same inspect-act-verify model to mobile, TV, and desktop apps. Minimal `--platform web` support reuses `agent-browser` inside the same session and replay workflow.
 
-If you know Vercel's [agent-browser](https://github.com/vercel-labs/agent-browser), `agent-device` is the same idea for mobile, TV, and desktop apps. Minimal `--platform web` support reuses `agent-browser` when a browser session needs to fit into the same command/session/replay loop.
+## Quick start
 
-It works with native iOS and Android apps, plus apps built with Expo, Flutter, and React Native, as long as the target can run on a supported device, simulator, emulator, or desktop environment.
-
-![agent-device demo showing Codex using agent-device to create a new contact in the iOS Contacts app from a simple prompt](./website/docs/public/agent-device-contacts.gif)
-
-## Capabilities
-
-- **Inspect** real app UI through structured accessibility snapshots, interactive refs like `@e3`, selectors, and React Native component trees.
-- **Interact** by opening apps, tapping, typing, scrolling, performing gestures, waiting, asserting state, handling alerts, and closing sessions.
-- **Capture evidence** with screenshots, videos, logs, traces, network traffic, audio-level probes for browser and host-rendered simulator/emulator audio, performance samples, crash context, and React profiles.
-- **Replay workflows** by recording `.ad` scripts for local runs, CI, repeatable e2e checks, and strict Maestro YAML export when a flow needs to run in Maestro.
-- **Run across platforms** with iOS Simulator automation, Android Emulator automation, physical devices, tvOS, Android TV, macOS, Linux, and desktop app automation, so agents can see and feel the app they work on.
-
-## Use Cases
-
-- Verify mobile changes on real devices, simulators, and emulators before review or merge.
-- Give AI coding agents a real app feedback loop while they implement features.
-- Debug regressions with screenshots, logs, traces, network/audio evidence, and crash context.
-- Profile performance issues with CPU/memory samples and React render profiles when needed.
-- Turn exploratory app interactions into replayable e2e checks for CI.
-- Use one agent workflow across native iOS, Android, Expo, Flutter, React Native, TV, and desktop apps.
-
-![Sketch showing agent-device as the live app verification layer in the agentic development loop](./website/docs/public/agentic-development-loop.svg)
-
-## Quick Start
-
-Install the CLI:
+Install the CLI and check setup. It requires Node.js 22.12 or newer; target-specific prerequisites are covered in [Installation](https://oss.callstack.com/agent-device/docs/installation).
 
 ```bash
 npm install -g agent-device@latest
@@ -57,46 +32,58 @@ agent-device --version
 agent-device help workflow
 ```
 
-Run `agent-device doctor` yourself after installation to check local setup before
-handing the CLI to an agent. The installed CLI help is the source of truth for
-agents. Start with `agent-device help workflow`, then follow the topic-specific
-help when a task needs dogfooding, debugging, replay, or React Native profiling.
+Run `agent-device doctor` yourself before handing the CLI to an agent. The installed CLI help is the source of truth; `agent-device help workflow` routes agents to guidance for debugging, replay, React Native profiling, and other tasks.
 
-Prerequisites depend on the target platform: Node.js 22+, Xcode for iOS/tvOS/macOS targets, Android SDK + ADB for Android, and macOS Accessibility permission for desktop automation. Web automation requires Node 24+. See [Installation](https://oss.callstack.com/agent-device/docs/installation) for platform setup.
-
-Try the basic loop:
+Run a short form flow in the built-in iOS Contacts app:
 
 ```bash
-# Find an app.
-agent-device apps --platform ios
-agent-device apps --platform android
-
 # Start a session.
-agent-device open SampleApp --platform ios
+agent-device open Contacts --platform ios
 
-# Inspect the current screen. -i returns interactive elements only.
+# Inspect the screen. Example output is shown below; refs vary.
 agent-device snapshot -i
-# @e1 [heading] "Settings"
-# @e2 [button] "Sign In"
-# @e3 [text-field] "Email"
+# @e2 [button] "Add"
 
-# Act, capture evidence, and close.
-agent-device fill @e3 "test@example.com"
-agent-device screenshot ./artifacts/settings.png
+# Use the ref from the snapshot and continue from the settled diff.
+agent-device press @e2 --settle
+# The settled diff includes:
+# + @e7 [text-field] "First name"
+
+agent-device fill @e7 "Ada" --settle
+# The next settled diff includes changed values and current refs:
+# - @e7 [text-field] "First name"
+# + @e14 [text-field] "Ada"
+# = @e15 [text-field] "Last name"
+
+# Capture evidence and close the session.
+agent-device screenshot ./contact-form.png
 agent-device close
 ```
 
-Snapshots assign refs like `@e1`, `@e2`, and `@e3` to elements on the current screen. Refs from the latest snapshot are immediately actionable; after scrolling or changing screens, take a fresh snapshot.
+Refs belong to the snapshot or settled diff that returned them. Continue with refs from the latest output; do not assume an earlier `@eN` still identifies the same element. A successful settled diff is the next observation, so take another snapshot only when the diff lacks the next target or evidence.
 
 Snapshots come from the app's accessibility tree, so high-quality labels, roles, and test IDs make agent runs far more reliable. Use screenshots and videos as evidence or visual fallback, but prefer refs and selectors for actions and assertions whenever the UI exposes enough structure.
 
-## Next Steps
+![agent-device demo showing Codex using agent-device to create a new contact in the iOS Contacts app from a simple prompt](./website/docs/public/agent-device-contacts.gif)
+
+## What agents can do
+
+- **Inspect app state** through structured accessibility snapshots, interactive refs, selectors, and React Native component trees.
+- **Act on visible UI** by clicking, filling, scrolling, performing gestures, waiting, asserting state, and handling alerts.
+- **Diagnose failures** with evidence including screenshots, video, logs, traces, network traffic, performance samples, crash context, and React profiles.
+- **Repeat successful workflows** by recording `.ad` scripts for local runs and CI, with strict Maestro YAML export when a flow belongs in Maestro.
+
+Command and evidence support varies by target. See [Commands](https://oss.callstack.com/agent-device/docs/commands) for the current platform-specific surface.
+
+![Sketch showing agent-device as the live app verification layer in the agentic development loop](./website/docs/public/agentic-development-loop.svg)
+
+## Next steps
 
 - **Set up your agent**: run the CLI from Cursor, Codex, Claude Code, Windsurf, or another agent terminal. For skills, rules, direct MCP tools, and client-specific setup, see [AI Agent Setup](https://oss.callstack.com/agent-device/docs/agent-setup).
-- **Try the sample app**: clone the repo and run the bundled Expo fixture when you want a guided first dogfood run with screenshots, replay, and performance evidence. See [Quick Start](https://oss.callstack.com/agent-device/docs/quick-start).
-- **Go deeper**: use [Commands](https://oss.callstack.com/agent-device/docs/commands), [Replay & E2E](https://oss.callstack.com/agent-device/docs/replay-e2e), and [Debugging & Profiling](https://oss.callstack.com/agent-device/docs/debugging-profiling) for production workflows.
+- **Try the sample app**: clone the repo and run the bundled Expo fixture for a guided dogfood run with screenshots, replay, and performance evidence. See [Quick Start](https://oss.callstack.com/agent-device/docs/quick-start).
+- **Build production workflows**: use [Replay & E2E](https://oss.callstack.com/agent-device/docs/replay-e2e) and [Debugging & Profiling](https://oss.callstack.com/agent-device/docs/debugging-profiling).
 
-## Articles & Videos
+## Articles and videos
 
 ### Articles
 
@@ -111,7 +98,7 @@ Snapshots come from the app's accessibility tree, so high-quality labels, roles,
 - [Using agent-device in an AI coding workflow](https://youtu.be/dfVG_aNPkW4)
 - [Cloud agents that test mobile apps on real devices](https://youtu.be/r5P0detC4bs?is=_KB6SZbLFRB1au_z)
 
-## Where To Run agent-device
+## Where to run agent-device
 
 | Path | Best for | Start with |
 | --- | --- | --- |
@@ -119,7 +106,7 @@ Snapshots come from the app's accessibility tree, so high-quality labels, roles,
 | CI/CD | Automated PR and merge validation with replay scripts and captured artifacts. | Try the [EAS workflow template](https://github.com/callstackincubator/eas-agent-device/blob/main/.eas/workflows/agent-qa-mobile.yml). GitHub Actions template coming soon. |
 | Cloud / remote execution | Linux runners, managed devices, and remote execution. | Use [Agent Device Cloud](https://agent-device.dev/cloud), see [Commands](https://oss.callstack.com/agent-device/docs/commands) for remote profiles, or [contact Callstack](mailto:hello@callstack.com) for team-scale QA. |
 
-## How It Works
+## How it works
 
 `agent-device` runs session-aware commands through platform backends: XCTest for iOS and tvOS, ADB plus the Android snapshot helper for Android, a local helper for macOS desktop automation, and AT-SPI for Linux desktop targets.
 
@@ -127,21 +114,9 @@ Node consumers can use the typed client and public subpaths for bridge integrati
 
 ## FAQ
 
-### What is agent-device?
-
-`agent-device` is a device automation CLI for AI mobile app testing. It lets AI agents verify real apps on iOS, Android, TV, desktop, simulators, emulators, and physical devices.
-
-### Does it work with React Native, Expo, Flutter, and native apps?
-
-Yes. `agent-device` works with native iOS and Android apps, Expo apps, Flutter apps, React Native apps, TV apps, and desktop apps that run on supported targets.
-
 ### How is it different from Appium, Detox, or Maestro?
 
-Appium, Detox, and Maestro are traditional mobile automation frameworks. `agent-device` is optimized for AI agents that need to inspect app state, interact semantically, capture evidence, debug, profile, and turn useful explorations into replayable checks.
-
-## Used By
-
-Used by teams and developers at Callstack, JPMorgan Chase, Expensify, Shopify, Kindred, Total Wine & More, LegendList, HerLyfe, App & Flow, and more.
+`agent-device` is optimized for an agent that inspects runtime state and chooses each next step through structured CLI output. Established automation frameworks remain a strong fit for teams with authored test suites and existing framework infrastructure; agent-device can complement them by recording explorations as `.ad` scripts or exporting strict Maestro YAML.
 
 ## Documentation
 
