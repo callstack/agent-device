@@ -23,7 +23,7 @@ If you know Vercel's [agent-browser](https://github.com/vercel-labs/agent-browse
 
 ## Quick start
 
-Install the CLI and check setup. It requires Node.js 22.12 or newer; target-specific prerequisites are covered in [Installation](https://oss.callstack.com/agent-device/docs/installation).
+Install the CLI and check setup. It requires Node.js 22.12 or newer; web automation requires Node.js 24 or newer. Target-specific prerequisites are covered in [Installation](https://oss.callstack.com/agent-device/docs/installation).
 
 ```bash
 npm install -g agent-device@latest
@@ -69,7 +69,7 @@ Snapshots come from the app's accessibility tree, so high-quality labels, roles,
 ## What agents can do
 
 - **Inspect app state** through structured accessibility snapshots, interactive refs, selectors, and React Native component trees.
-- **Act on visible UI** by clicking, filling, scrolling, performing gestures, waiting, asserting state, and handling alerts.
+- **Act on visible UI** by tapping or pressing elements, filling fields, scrolling, performing gestures, waiting, asserting state, and handling alerts.
 - **Diagnose failures** with evidence including screenshots, video, logs, traces, network traffic, performance samples, crash context, and React profiles.
 - **Repeat successful workflows** by recording `.ad` scripts for local runs and CI, with strict Maestro YAML export when a flow belongs in Maestro.
 
@@ -114,9 +114,25 @@ Node consumers can use the typed client and public subpaths for bridge integrati
 
 ## FAQ
 
+### What is agent-device?
+
+`agent-device` is a device automation CLI for AI mobile app testing and verification. It lets coding agents inspect real UI state, interact through semantic refs and selectors, and capture reviewable evidence on supported iOS, Android, TV, web, and desktop targets.
+
+### Does it work with React Native, Expo, Flutter, and native apps?
+
+Yes. `agent-device` works with native iOS and Android apps and apps built with React Native, Expo, and Flutter, as long as they run on a supported target. Available commands and evidence vary by target.
+
 ### How is it different from Appium, Detox, or Maestro?
 
-`agent-device` is optimized for an agent that inspects runtime state and chooses each next step through structured CLI output. Established automation frameworks remain a strong fit for teams with authored test suites and existing framework infrastructure; agent-device can complement them by recording explorations as `.ad` scripts or exporting strict Maestro YAML.
+`agent-device` is optimized for an agent that inspects runtime state and chooses each next step through structured CLI output. Appium, Detox, and Maestro remain strong fits for teams with authored test suites and existing framework infrastructure; agent-device can complement them by recording explorations as `.ad` scripts or exporting strict Maestro YAML.
+
+### Can agent-device run in CI?
+
+Yes. Record explorations as `.ad` scripts, replay them locally or in CI, and keep screenshots, logs, and other artifacts for review. See [Replay & E2E](https://oss.callstack.com/agent-device/docs/replay-e2e) or start with the [EAS workflow template](https://github.com/callstackincubator/eas-agent-device/blob/main/.eas/workflows/agent-qa-mobile.yml).
+
+## Used by
+
+Used by teams and developers at Callstack, JPMorgan Chase, Expensify, Shopify, Kindred, Total Wine & More, LegendList, HerLyfe, App & Flow, and more.
 
 ## Documentation
 
