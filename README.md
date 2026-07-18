@@ -132,7 +132,7 @@ Yes. Record explorations as `.ad` scripts, replay them locally or in CI, and kee
 
 ## Used by
 
-Used by teams and developers at Callstack, JPMorgan Chase, Expensify, Shopify, Kindred, Total Wine & More, LegendList, HerLyfe, App & Flow, and more.
+Used by teams and developers at Callstack, JPMorgan Chase, [Expensify](https://www.callstack.com/blog/how-expensify-uses-agent-device-for-mobile-bug-evidence-and-profiling), [Shopify](https://x.com/mustafa01ali/status/2035155157982289998), Kindred, Total Wine & More, LegendList, HerLyfe, App & Flow, and more.
 
 ## Documentation
 
