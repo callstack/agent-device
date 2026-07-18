@@ -58,6 +58,7 @@ export type MaestroObservationEvidence = {
   visible: boolean;
   candidateCount: number;
   ref?: string;
+  childOf?: MaestroSelector;
 };
 
 export type MaestroObservation = {
@@ -69,8 +70,8 @@ export type MaestroObservation = {
 };
 
 export type MaestroObservationCondition =
-  | { kind: 'visible'; selector: MaestroSelector }
-  | { kind: 'notVisible'; selector: MaestroSelector };
+  | { kind: 'visible'; selector: MaestroSelector; childOf?: MaestroSelector }
+  | { kind: 'notVisible'; selector: MaestroSelector; childOf?: MaestroSelector };
 
 export type MaestroRuntimeRequest = {
   command: MaestroRuntimeCommand;

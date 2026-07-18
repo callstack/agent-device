@@ -107,12 +107,6 @@ export const FLOW_DIVERGENCES: Record<string, FlowDivergence> = {
     unsupported: ['doubleTapOn.retryTapIfNoChange'],
     tracking: COMPAT_TRACKER,
   },
-  'upstream/114_child_of_selector': {
-    classification: 'we-reject',
-    reason: 'childOf is supported on tapOn but not on assertVisible/assertNotVisible (structural selector).',
-    unsupported: ['assertVisible.childOf', 'assertNotVisible.childOf'],
-    tracking: COMPAT_TRACKER,
-  },
   'upstream/119_retry_commands': {
     classification: 'we-reject',
     reason: 'retry is supported; the flow uses the unsupported per-command waitToSettleTimeoutMs option on a nested tapOn.',

@@ -345,14 +345,14 @@ function canonicalizeAgentCommand(
         kind: 'assert',
         mode: 'visible',
         timed: false,
-        selector: agentSelector(command.target),
+        selector: agentSelector(command.target, command.childOf),
       });
     case 'assertNotVisible':
       return dropUndefined({
         kind: 'assert',
         mode: 'notVisible',
         timed: false,
-        selector: agentSelector(command.target),
+        selector: agentSelector(command.target, command.childOf),
       });
     case 'extendedWaitUntil':
       return dropUndefined({
@@ -421,13 +421,17 @@ function agentTarget(
   return { point: { x: target.x, y: target.y, unit: target.space === 'percent' ? 'percent' : 'px' } };
 }
 
-function agentSelector(selector: MaestroSelector | undefined): CanonicalSelector | undefined {
+function agentSelector(
+  selector: MaestroSelector | undefined,
+  childOf?: MaestroSelector,
+): CanonicalSelector | undefined {
   if (!selector) return undefined;
   return dropUndefined({
     text: selector.text,
     id: selector.id,
     enabled: selector.enabled,
     selected: selector.selected,
+    childOf: childOf ? agentSelector(childOf) : undefined,
   });
 }
 

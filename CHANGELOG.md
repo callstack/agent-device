@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Maestro compat: `assertVisible` and `assertNotVisible` now accept `childOf` for ancestor scoping, matching `tapOn` (#1294).
 - Breaking: removed deprecated gesture duration and rotate velocity inputs (#1218).
   - `swipe x1 y1 x2 y2` no longer accepts a trailing `durationMs` positional; use `gesture pan x1 y1 (x2-x1) (y2-y1) durationMs` for deliberate timed drags.
   - Maestro `swipe` operations with a duration continue to normalize to `gesture pan` with the `endpoint-hold` execution profile, preserving the Maestro-compatible fast-swipe-then-hold behavior on iOS.

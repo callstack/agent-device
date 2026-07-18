@@ -264,18 +264,27 @@ function parseAssertion(
     return { kind, source, target: parseMaestroSelector(value, kind, context) };
   }
   const entries = readMapEntries(value, kind, context);
-  assertOnlyKeys(entries, kind, ['id', 'text', 'enabled', 'selected', 'optional'], context);
+  assertOnlyKeys(
+    entries,
+    kind,
+    ['id', 'text', 'enabled', 'selected', 'optional', 'childOf'],
+    context,
+  );
   const options = readOptionalCommandOption(entries, kind, context);
-  return {
+  const childOf = hasEntry(entries, 'childOf')
+    ? parseMaestroSelector(entryValue(entries, 'childOf'), `${kind}.childOf`, context)
+    : undefined;
+  return stripUndefined({
     kind,
     source,
     target: parseMaestroSelectorMapEntries(
-      entries.filter((entry) => entry.key !== 'optional'),
+      entries.filter((entry) => entry.key !== 'optional' && entry.key !== 'childOf'),
       kind,
       context,
     ),
     ...options,
-  };
+    childOf,
+  });
 }
 
 function parseExtendedWaitUntil(

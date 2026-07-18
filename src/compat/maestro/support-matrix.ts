@@ -8,7 +8,7 @@ export const MAESTRO_COMPAT_SUPPORTED_CAPABILITIES = [
   'optional target and assertion commands',
   'inputText and focused-field eraseText',
   'openLink',
-  'visibility assertions and extendedWaitUntil',
+  'visibility assertions including childOf and extendedWaitUntil',
   'scroll and scrollUntilVisible',
   'absolute/percentage swipe and swipe.label',
   'screenshots',

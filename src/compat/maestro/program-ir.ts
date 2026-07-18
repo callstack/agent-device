@@ -120,12 +120,14 @@ export type MaestroAssertVisibleCommand = MaestroOptionalCommand & {
   kind: 'assertVisible';
   source: MaestroSourceLocation;
   target: MaestroSelector;
+  childOf?: MaestroSelector;
 };
 
 export type MaestroAssertNotVisibleCommand = MaestroOptionalCommand & {
   kind: 'assertNotVisible';
   source: MaestroSourceLocation;
   target: MaestroSelector;
+  childOf?: MaestroSelector;
 };
 
 export type MaestroExtendedWaitUntilCommand = MaestroOptionalCommand & {

@@ -33,6 +33,7 @@ export async function observeMaestroCondition(
     visible: match.visible,
     candidateCount: match.candidateCount,
     ...(match.ref ? { ref: match.ref } : {}),
+    ...(request.condition.childOf ? { childOf: request.condition.childOf } : {}),
   };
   return {
     generation: request.generation,
@@ -84,6 +85,7 @@ export function observationForTarget(target: MaestroTargetResolution): MaestroOb
     visible: target.visible,
     candidateCount: target.candidateCount,
     ...(target.ref ? { ref: target.ref } : {}),
+    ...(target.query.childOf ? { childOf: target.query.childOf } : {}),
   };
   return {
     generation: target.generation,

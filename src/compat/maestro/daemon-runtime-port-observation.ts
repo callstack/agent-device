@@ -132,7 +132,7 @@ export async function observeTypedMaestroCondition(params: {
     throwIfAborted(params.context.signal);
     const snapshot = await captureRetriableMaestroSnapshot(params, conditionDeadline);
     const match = resolveTargetFromSnapshot({
-      query: { selector: params.condition.selector },
+      query: { selector: params.condition.selector, childOf: params.condition.childOf },
       context: params.context,
       snapshot,
       platform: params.platform,
