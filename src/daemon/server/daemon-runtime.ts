@@ -99,24 +99,29 @@ export async function teardownDaemonSessionForShutdown(params: {
 }): Promise<void> {
   const { session, sessionStore, stateDir, stderr, beforeDelete } = params;
   const timeoutMs = resolveDaemonSessionTeardownTimeoutMs(session);
-  const teardown = teardownSessionResources(session, session.name, stateDir).catch((error) => {
-    stderr.write(
-      `Daemon session teardown error (${session.name}): ${
-        error instanceof Error ? error.message : String(error)
-      }\n`,
-    );
-  });
-  await Promise.race([
+  const teardown = teardownSessionResources(session, session.name, stateDir).then(
+    () => true,
+    (error) => {
+      stderr.write(
+        `Daemon session teardown error (${session.name}): ${
+          error instanceof Error ? error.message : String(error)
+        }\n`,
+      );
+      return false;
+    },
+  );
+  const teardownSucceeded = await Promise.race([
     teardown,
     sleep(timeoutMs).then(() => {
       stderr.write(`Daemon session teardown timed out (${session.name}).\n`);
+      return false;
     }),
   ]);
   // ADR 0012 decision 6, R7 + commit semantics (C2/C5a): commit the healed
   // `.ad` iff the repair transaction completed, else leave a bounded
   // `REPAIR_SESSION_EXPIRED` tombstone for the reaped-before-finalize case.
   sessionStore.finalizeRepairTeardown(session);
-  await beforeDelete?.(session);
+  if (teardownSucceeded) await beforeDelete?.(session);
   sessionStore.delete(session.name);
 }
 

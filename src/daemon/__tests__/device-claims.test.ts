@@ -61,6 +61,26 @@ test('preserves a live foreign advisory claim without blocking or overwriting it
   assert.equal(inspectDeviceClaims({ serial: device.id })[0]?.claim?.session, 'first');
 });
 
+test('does not treat a same-named session in another worktree as its claim owner', async () => {
+  const root = useClaimsRoot();
+  const first = await acquireAdvisoryDeviceClaim({
+    device,
+    session: 'default',
+    workspace: '/worktrees/first',
+    stateDir: root,
+  });
+  assert.ok(first.ownership);
+  const second = await acquireAdvisoryDeviceClaim({
+    device,
+    session: 'default',
+    workspace: '/worktrees/second',
+    stateDir: path.join(root, 'second-state'),
+  });
+  assert.equal(second.ownership, undefined);
+  await clearAdvisoryDeviceClaim(second.ownership);
+  assert.equal(inspectDeviceClaims({ serial: device.id })[0]?.claim?.workspace, '/worktrees/first');
+});
+
 test('clears only the exact owner token and identity, never a successor claim', async () => {
   const root = useClaimsRoot();
   const acquired = await acquireAdvisoryDeviceClaim({
@@ -120,4 +140,36 @@ test('fails closed when claim inspection encounters a permission or transient I/
   });
   const claims = inspectDeviceClaims({});
   assert.equal(claims[0]?.classification, 'unknown');
+});
+
+test('classifies transient claim-file read errors as unknown, not inconsistent', () => {
+  const root = useClaimsRoot();
+  fs.writeFileSync(path.join(root, 'transient.json'), '{}');
+  vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+    const error = new Error('I/O error') as NodeJS.ErrnoException;
+    error.code = 'EIO';
+    throw error;
+  });
+  const claims = inspectDeviceClaims({});
+  assert.equal(claims[0]?.classification, 'unknown');
+});
+
+test('matches public Apple claim records through the shared platform selector semantics', async () => {
+  const root = useClaimsRoot();
+  await acquireAdvisoryDeviceClaim({
+    device: {
+      platform: 'apple',
+      appleOs: 'ios',
+      id: 'ios-claim',
+      name: 'iPhone',
+      kind: 'simulator',
+      booted: true,
+    },
+    session: 'ios',
+    workspace: process.cwd(),
+    stateDir: root,
+  });
+  assert.equal(inspectDeviceClaims({ platform: 'apple' }).length, 1);
+  assert.equal(inspectDeviceClaims({ platform: 'ios' }).length, 1);
+  assert.equal(inspectDeviceClaims({ platform: 'macos' }).length, 0);
 });

@@ -576,7 +576,10 @@ async function openNewSessionWithAdvisoryClaim(params: {
         openTarget,
       }),
     });
-    if (details.type === 'response') return details.response;
+    if (details.type === 'response') {
+      await clearAdvisoryDeviceClaim(localClaim.ownership);
+      return details.response;
+    }
     const response = await completeOpenCommand({
       req,
       sessionName,

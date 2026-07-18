@@ -64,13 +64,10 @@ export async function acquireAdvisoryDeviceClaim(params: {
 }): Promise<{ ownership?: DeviceClaimSessionOwnership; conflict?: InspectedDeviceClaim }> {
   const deviceKey = canonicalLocalDeviceKey(params.device);
   return await withDeviceClaimLock(deviceKey, async () => {
+    const owner = readCurrentOwnerIdentity();
     const existing = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey));
     if (existing) {
-      if (
-        existing.claim &&
-        existing.claim.session === params.session &&
-        existing.classification === 'live'
-      ) {
+      if (existing.claim && isCurrentClaimOwner(existing.claim, params, owner)) {
         return { ownership: ownershipFromClaim(existing.claim) };
       }
       emitDiagnostic({
@@ -85,7 +82,6 @@ export async function acquireAdvisoryDeviceClaim(params: {
       });
       return { conflict: existing };
     }
-    const owner = readCurrentOwnerIdentity();
     const now = Date.now();
     const claim: DeviceClaim = {
       schemaVersion: DEVICE_CLAIM_SCHEMA_VERSION,
@@ -110,6 +106,22 @@ export async function acquireAdvisoryDeviceClaim(params: {
     writeClaim(claim);
     return { ownership: ownershipFromClaim(claim) };
   });
+}
+
+function isCurrentClaimOwner(
+  claim: DeviceClaim,
+  params: Pick<
+    Parameters<typeof acquireAdvisoryDeviceClaim>[0],
+    'session' | 'workspace' | 'stateDir'
+  >,
+  owner: ReturnType<typeof readCurrentOwnerIdentity>,
+): boolean {
+  return (
+    claim.session === params.session &&
+    claim.workspace === params.workspace &&
+    claim.stateDir === params.stateDir &&
+    ownerIdentityMatches({ pid: claim.ownerPid, startTime: claim.ownerStartTime }, owner)
+  );
 }
 
 export async function clearAdvisoryDeviceClaim(

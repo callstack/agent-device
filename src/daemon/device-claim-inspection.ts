@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { PlatformSelector } from '../kernel/device.ts';
+import {
+  deviceFieldsFromPublicPlatform,
+  matchesPlatformSelector,
+  type PlatformSelector,
+} from '../kernel/device.ts';
 import { classifyOwnerLiveness, type OwnerLiveness } from '../utils/owner-identity.ts';
 import { resolveDeviceClaimRoot } from './device-claim-paths.ts';
 import type { DeviceClaim } from './device-claims.ts';
@@ -70,16 +74,30 @@ function matchesClaimDevice(claim: DeviceClaim, device: string | undefined): boo
 }
 
 function matchesClaimPlatform(claim: DeviceClaim, platform: PlatformSelector | undefined): boolean {
-  if (!platform) return true;
-  if (platform === 'ios') return claim.device.platform === 'ios';
-  if (platform === 'macos') return claim.device.platform === 'macos';
-  return claim.device.platform === platform;
+  return matchesPlatformSelector(
+    { ...deviceFieldsFromPublicPlatform(claim.device.platform), appleOs: claim.device.appleOs },
+    platform,
+  );
 }
 
 export function inspectDeviceClaimFile(filePath: string): InspectedDeviceClaim | null {
   const fileName = path.basename(filePath);
   try {
-    const claim = normalizeClaim(JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown);
+    return inspectClaimContents(fileName, fs.readFileSync(filePath, 'utf8'));
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return null;
+    return {
+      fileName,
+      classification: 'unknown',
+      error: String(error),
+    };
+  }
+}
+
+function inspectClaimContents(fileName: string, contents: string): InspectedDeviceClaim {
+  try {
+    const claim = normalizeClaim(JSON.parse(contents) as unknown);
     if (!claim) return { fileName, classification: 'inconsistent' };
     return {
       fileName,
@@ -91,13 +109,7 @@ export function inspectDeviceClaimFile(filePath: string): InspectedDeviceClaim |
       }),
     };
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT' || code === 'ENOTDIR') return null;
-    return {
-      fileName,
-      classification: code === 'EACCES' || code === 'EPERM' ? 'unknown' : 'inconsistent',
-      error: String(error),
-    };
+    return { fileName, classification: 'inconsistent', error: String(error) };
   }
 }
 

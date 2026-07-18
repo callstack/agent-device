@@ -67,6 +67,28 @@ test('failed local open rolls its advisory claim back', async () => {
   assert.deepEqual(inspectDeviceClaims({ serial: android.id }), []);
 });
 
+test('failed local open response rolls its advisory claim back', async () => {
+  const { store, stateDir } = setup();
+  mockResolveTargetDevice.mockResolvedValue(android);
+
+  const response = await handleOpenCommand({
+    req: {
+      command: 'open',
+      token: 'test',
+      session: 'claim-response-rollback',
+      positionals: ['Demo'],
+      flags: { platform: 'android' },
+      runtime: { metroHost: '10.0.0.10', metroPort: 70_000 },
+    },
+    sessionName: 'claim-response-rollback',
+    logPath: path.join(stateDir, 'daemon.log'),
+    sessionStore: store,
+  });
+
+  assert.equal(response.ok, false);
+  assert.deepEqual(inspectDeviceClaims({ serial: android.id }), []);
+});
+
 test('remote open creates no host-local advisory claim', async () => {
   const { store, stateDir } = setup();
   mockResolveTargetDevice.mockResolvedValue(android);
