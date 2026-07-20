@@ -1258,3 +1258,67 @@ test('interactions expose targetKind-discriminated public response data', async 
     [true, true, true, true, true],
   );
 });
+
+test('interaction responses expose additive cost and direct-iOS Maestro fallback fields', async () => {
+  const setup = createTransport(async (req) => {
+    if (req.command === 'press') {
+      return {
+        ok: true,
+        data: {
+          targetKind: 'ref',
+          ref: 'e5',
+          cost: { wallClockMs: 123, runnerRoundTrips: 2, nodeCount: 5 },
+        },
+      };
+    }
+    if (req.command === 'click') {
+      return {
+        ok: true,
+        data: {
+          targetKind: 'selector',
+          selector: 'id=hidden',
+          maestroNonHittableCoordinateFallbackAllowed: true,
+          maestroNonHittableCoordinateFallbackUsed: true,
+          maestroFallbackReason: 'non-hittable-coordinate',
+        },
+      };
+    }
+    if (req.command === 'find') {
+      return {
+        ok: true,
+        data: {
+          ref: '@e5',
+          refsGeneration: 42,
+          text: 'Hello',
+          cost: { wallClockMs: 45, runnerRoundTrips: 0 },
+        },
+      };
+    }
+    throw new Error(`unexpected command: ${req.command}`);
+  });
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const press = await client.interactions.press({ ref: '@e5', cost: true });
+  const click = await client.interactions.click({ selector: 'id=hidden' });
+  const find = await client.interactions.find({
+    locator: 'label',
+    query: 'Foo',
+    action: 'getText',
+    cost: true,
+  });
+
+  assert.equal(press.targetKind, 'ref');
+  assert.equal(press.cost?.wallClockMs, 123);
+  assert.equal(press.cost?.runnerRoundTrips, 2);
+  assert.equal(press.cost?.nodeCount, 5);
+
+  assert.equal(click.targetKind, 'selector');
+  assert.equal(click.selector, 'id=hidden');
+  assert.equal(click.maestroNonHittableCoordinateFallbackAllowed, true);
+  assert.equal(click.maestroNonHittableCoordinateFallbackUsed, true);
+  assert.equal(click.maestroFallbackReason, 'non-hittable-coordinate');
+
+  assert.equal(find.ref, '@e5');
+  assert.equal(find.cost?.wallClockMs, 45);
+  assert.equal(find.cost?.runnerRoundTrips, 0);
+});

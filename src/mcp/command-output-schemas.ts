@@ -57,6 +57,20 @@ function objectSchema(
 }
 
 const stringArraySchema: JsonSchema = { type: 'array', items: { type: 'string' } };
+
+const responseCostSchema: JsonSchema = objectSchema(
+  {
+    wallClockMs: numberSchema('Total wall-clock time for the request in milliseconds.'),
+    runnerRoundTrips: numberSchema(
+      'Number of real runner round-trips made while serving the request.',
+    ),
+    nodeCount: numberSchema(
+      'Number of nodes in the original node tree when the response carries one.',
+    ),
+  },
+  ['wallClockMs', 'runnerRoundTrips'],
+);
+
 const artifactSchema = objectSchema(
   {
     field: stringSchema(),
@@ -101,6 +115,14 @@ function interactionResponseDataSchema(extra: InteractionExtra = {}): JsonSchema
       message: stringSchema(),
       evidence: interactionEvidenceSchema,
       resolution: resolutionDisclosureSchema,
+      cost: responseCostSchema,
+      maestroNonHittableCoordinateFallbackAllowed: booleanSchema(
+        'Whether the direct iOS Maestro coordinate fallback was allowed for this selector.',
+      ),
+      maestroNonHittableCoordinateFallbackUsed: booleanSchema(
+        'Whether the direct iOS Maestro coordinate fallback was actually used.',
+      ),
+      maestroFallbackReason: constSchema('non-hittable-coordinate'),
       ...extraProperties,
     },
     ['targetKind', ...extraRequired],
@@ -329,6 +351,7 @@ export const COMMAND_OUTPUT_SCHEMAS = {
       y: numberSchema('Resolved y coordinate for mutating find actions.'),
       message: stringSchema('Diagnostic message for mutating find actions.'),
       settle: settleObservationSchema,
+      cost: responseCostSchema,
     },
     [],
     'Daemon response data for the find command.',

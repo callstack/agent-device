@@ -247,6 +247,10 @@ type TouchResponseDataBase = {
   settle?: SettleObservation;
   resolution?: ResolutionDisclosure;
   cost?: ResponseCost;
+  /** Direct iOS Maestro coordinate-fallback signals. */
+  maestroNonHittableCoordinateFallbackAllowed?: boolean;
+  maestroNonHittableCoordinateFallbackUsed?: boolean;
+  maestroFallbackReason?: 'non-hittable-coordinate';
 };
 
 type TouchResponsePoint = TouchResponseDataBase & {
@@ -367,4 +371,5 @@ export type FindCommandResponseData = {
   y?: number;
   message?: string;
   settle?: SettleObservation;
+  cost?: ResponseCost;
 };
