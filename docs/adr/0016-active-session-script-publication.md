@@ -25,7 +25,7 @@ interaction execution: recording disables direct selector fast paths when a capt
 required for evidence. That performance and data-retention change has not been measured.
 
 Issue [#1346](https://github.com/callstack/agent-device/issues/1346) and the throwaway
-[`session-save-replay` prototype](https://github.com/callstack/agent-device/tree/agent/prototype-session-save-replay/scripts/prototypes/session-save-replay)
+[`session-save-script` prototype](https://github.com/callstack/agent-device/tree/agent/prototype-session-save-replay/scripts/prototypes/session-save-script)
 record the motivating workflow and API trial. Composable lifecycle-free fragments remain a separate
 decision in [#1336](https://github.com/callstack/agent-device/issues/1336).
 
@@ -37,10 +37,10 @@ Add an explicit publication action for an already-armed ordinary script recordin
 agent-device open com.example.app --relaunch --save-script=screen-x.ad
 # perform the complete journey to screen X
 agent-device wait 'role="heading" label="Screen X"'
-agent-device session save-replay
+agent-device session save-script
 ```
 
-`session save-replay [path] [--force]` publishes the current ordinary script recording without
+`session save-script [path] [--force]` publishes the current ordinary script recording without
 closing the app or deleting the session. An explicit `path` retargets the recording using the existing
 target/force authorization rules. Without it, publication uses the path armed by `open --save-script`
 or the existing generated default.
@@ -51,7 +51,7 @@ Ordinary script recording gains a two-state publication lifecycle:
 
 - **ARMED**: established by `open --save-script[=<path>]` before target-bearing actions run. The session
   records portable action inputs and fresh target identity evidence.
-- **PUBLISHED**: reached only after `session save-replay` atomically commits the complete history from
+- **PUBLISHED**: reached only after `session save-script` atomically commits the complete history from
   the recorded `open` through the current action. The session remains active at the destination, but
   close-time script publication is disarmed.
 
@@ -60,7 +60,7 @@ authorization, so the caller can correct the target or permissions and retry. PU
 that recording: later actions are ordinary session work and a later `close` performs teardown only. V1
 does not re-arm or publish multiple open-to-destination artifacts from one session.
 
-This lifecycle is distinct from ADR 0012's repair transaction. `session save-replay` rejects a session
+This lifecycle is distinct from ADR 0012's repair transaction. `session save-script` rejects a session
 with `saveScriptBoundary` set and directs the caller to finish or abort the repair through its existing
 `replay --from` and teardown commit protocol. Active-session publication never marks a repair COMPLETE,
 commits a healed slice, writes `# agent-device:heal-complete`, or changes repair tombstone semantics.
@@ -70,7 +70,7 @@ commits a healed slice, writes `# agent-device:heal-complete`, or changes repair
 The destination is an authored postcondition, not the last navigation action. Before publication, the
 recorded suffix after the last mutating action must contain a target-bearing `wait` for a landmark that
 identifies the ready destination screen. A duration wait or `wait stable` alone does not qualify, though
-`wait stable` may follow the landmark wait. `session save-replay` refuses publication without this
+`wait stable` may follow the landmark wait. `session save-script` refuses publication without this
 **destination guard** and tells the author to record one. V1 does not infer a screen identity from a
 snapshot or synthesize an implicit guard.
 
@@ -97,7 +97,7 @@ The published `.ad`:
 
 - contains one recorded `open` and every recordable action through the publication request;
 - contains a destination guard after its last mutating action;
-- does not append or serialize `session save-replay` or `close`;
+- does not append or serialize `session save-script` or `close`;
 - uses the ordinary session context header, selector-chain optimization, and canonical `target-v1`
   annotations captured while ARMED;
 - fails loudly rather than emitting an unresolved session-local `@ref` or dropping target evidence that
@@ -114,12 +114,13 @@ explains the recovery action; none degrades to `{ written: false }` success.
 
 V1 extends the existing `session` command and typed session client surface. It does not introduce
 `script start/stop`, marks, or a second replay engine. CLI help makes the two phases explicit: the
-existing `--save-script` flag arms evidence capture, while `session save-replay` publishes without
+existing `--save-script` flag arms evidence capture, while `session save-script` publishes without
 teardown.
 
-This ADR does not rename or deprecate `--save-script`. Renaming the arming flag is a separate compatibility
-decision; `--save-replay` would be misleading if it only armed capture, while `--record-replay` would add
-new vocabulary without improving the v1 workflow.
+This ADR does not rename or deprecate `--save-script`. The flag and session action name the same persisted
+artifact: `open --save-script` configures the armed recording's eventual target, while
+`session save-script` requests publication now. `save-replay` is rejected because replay is the act of
+executing that script, not the artifact being saved.
 
 ## Consequences
 
