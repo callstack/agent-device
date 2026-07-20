@@ -13,7 +13,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-black.svg)](LICENSE)
 [![Glama MCP server](https://glama.ai/mcp/servers/callstack/agent-device/badges/score.svg)](https://glama.ai/mcp/servers/callstack/agent-device)
 
-Verify the app your coding agent changed.
+Let your coding agent verify its changes in the running app.
 
 `agent-device` is an agent-native CLI for inspecting, interacting with, and verifying real apps on supported iOS, Android, TV, web, and desktop targets. It gives coding agents a live feedback loop through token-efficient accessibility snapshots, semantic refs and selectors, device actions, and reviewable evidence.
 
