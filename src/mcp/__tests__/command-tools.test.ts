@@ -610,6 +610,32 @@ test('MCP renders tool text from the unpinned input so the model never sees suff
   assert.doesNotMatch(result.content[0]?.text ?? '', /~s9/);
 });
 
+test('MCP command tool executor pins refs for runCommand while keeping rendered text unpinned', async () => {
+  const runCalls: Array<{ name: string; input: unknown }> = [];
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async (_client, name, input) => {
+      runCalls.push({ name, input });
+      if (name === 'snapshot') {
+        return { nodes: [{ ref: 'e2' }], truncated: false, refsGeneration: 500012 };
+      }
+      return { message: 'Tapped @e2 (10, 20)' };
+    },
+  });
+
+  await executor.execute('snapshot', { session: 'demo' });
+  const result = await executor.execute('press', {
+    session: 'demo',
+    target: { kind: 'ref', ref: '@e2' },
+  });
+
+  assert.deepEqual(runCalls[1], {
+    name: 'press',
+    input: { session: 'demo', target: { kind: 'ref', ref: '@e2~s500012' } },
+  });
+  assert.doesNotMatch(result.content[0]?.text ?? '', /~s500012/);
+});
+
 // --- ADR 0012 migration step 2: replay divergence is a ref-issuing error ---
 
 function replayDivergenceError(): AppError {
