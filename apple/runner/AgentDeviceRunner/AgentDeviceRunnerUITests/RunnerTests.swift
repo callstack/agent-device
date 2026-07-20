@@ -29,6 +29,15 @@ final class RunnerTests: XCTestCase {
   }
 
   static let springboardBundleId = "com.apple.springboard"
+  // SpringBoard hosts blocking system modals on iOS/visionOS; tvOS (PineBoard/HeadBoard)
+  // and macOS have no such host, so there is nothing to probe there.
+  static let hasSpringBoardSystemModalHost: Bool = {
+    #if os(tvOS) || os(macOS)
+      return false
+    #else
+      return true
+    #endif
+  }()
   static let defaultRecordingFps: Int32 = 15
   var listener: NWListener?
   var doneExpectation: XCTestExpectation?

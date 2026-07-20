@@ -16,6 +16,10 @@ extension RunnerTests {
   func resolveBlockingSystemModal(
     deadline: Date
   ) -> BlockingSystemModalResolution {
+    guard Self.hasSpringBoardSystemModalHost else {
+      return .absent
+    }
+
     guard let springboardModal = firstBlockingSystemModal(
       in: springboard,
       deadline: deadline
@@ -90,5 +94,20 @@ extension RunnerTests {
     XCTAssertFalse(RemoteHostedSystemModalPolicy.isEligibleHostState(.notRunning))
     XCTAssertFalse(RemoteHostedSystemModalPolicy.isEligibleHostState(.unknown))
   }
+
+  // tvOS has no SpringBoard host, so both the snapshot and alert-resolution paths
+  // must resolve without probing com.apple.springboard (#1351).
+  #if os(tvOS)
+  func testResolveBlockingSystemModalIsAbsentWithoutSpringBoardOnTvOS() {
+    guard case .absent = resolveBlockingSystemModal(deadline: .distantFuture) else {
+      XCTFail("tvOS blocking system-modal resolution must be .absent")
+      return
+    }
+  }
+
+  func testBlockingSystemAlertSnapshotIsNilOnTvOS() {
+    XCTAssertNil(blockingSystemAlertSnapshot(deadline: .distantFuture))
+  }
+  #endif
 }
 #endif
