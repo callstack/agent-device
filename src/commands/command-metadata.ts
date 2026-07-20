@@ -37,6 +37,8 @@ export function isCommandName(name: string): name is CommandName {
   return commandMetadataMap.has(name as CommandName);
 }
 
+export function findCommandMetadata(name: CommandName): AnyCommandMetadata;
+export function findCommandMetadata(name: string): AnyCommandMetadata | undefined;
 export function findCommandMetadata(name: string): AnyCommandMetadata | undefined {
   return commandMetadataMap.get(name as CommandName);
 }

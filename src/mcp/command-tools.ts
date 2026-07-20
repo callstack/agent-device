@@ -78,8 +78,7 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
         throw new AppError('INVALID_ARGS', `Unknown command tool: ${name}`);
       }
       const metadata = findCommandMetadata(name);
-      if (!metadata) throw new Error(`Missing command metadata: ${name}`);
-      const supportedProperties = withMcpConfigSchema(name, metadata.inputSchema).properties ?? {};
+      const supportedProperties = withMcpConfigSchema(name, metadata.inputSchema).properties;
       const resolvedInput = resolveMcpConfigDefaults(name, input, supportedProperties);
       const config = readMcpToolConfig(resolvedInput);
       const commandInput = stripMcpConfigFields(resolvedInput);
@@ -91,7 +90,7 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
         mergeIssuedRefPins(refPinsByScope, scopeKey, name, result);
         return {
           isError: false,
-          structuredContent: projectStructuredContent(name, commandInput, result),
+          structuredContent: projectStructuredContent(name, result),
           content: [
             {
               type: 'text',
@@ -228,9 +227,9 @@ function mergeIssuedRefPins(
     return;
   }
   if (!REF_ISSUING_TOOLS.has(name)) return;
-  const record = asOptionalRecord(result);
-  const refsGeneration = record?.refsGeneration;
-  if (record === undefined || typeof refsGeneration !== 'number') {
+  const record = result as CommandExecutionResult<'snapshot' | 'find'>;
+  const refsGeneration = record.refsGeneration;
+  if (typeof refsGeneration !== 'number') {
     // ADR 0014: a MUTATING find returns its acted ref as diagnostic pre-action
     // identity WITHOUT `refsGeneration` — it is explicitly non-issuing and must
     // leave remembered pins untouched (forwarding the old pin on a later ref is
@@ -256,11 +255,14 @@ function mergeSettleIssuedRefPins(
   scopeKey: string,
   result: CommandExecutionResult,
 ): void {
-  const settle = asOptionalRecord(asOptionalRecord(result)?.settle);
+  const interactionResult = result as CommandExecutionResult<
+    'press' | 'click' | 'fill' | 'longpress'
+  >;
+  const settle = asOptionalRecord(interactionResult.settle);
   if (!settle) return;
-  const refsGeneration = settle?.refsGeneration;
+  const refsGeneration = settle.refsGeneration;
   if (typeof refsGeneration !== 'number') return;
-  const lines = asOptionalRecord(settle?.diff)?.lines;
+  const lines = asOptionalRecord(settle.diff)?.lines;
   const issuedRefs: string[] = [];
   collectRefBodies(lines, issuedRefs);
   collectRefBodies(settle.refs, issuedRefs);
@@ -292,9 +294,7 @@ function recordIssuedPins(
     pins.set(ref, refsGeneration);
   }
   while (pins.size > MAX_REF_PINS_PER_SCOPE) {
-    const oldest = pins.keys().next().value;
-    if (oldest === undefined) break;
-    pins.delete(oldest);
+    pins.delete(pins.keys().next().value!);
   }
 }
 
@@ -398,16 +398,20 @@ function readClientConfig(record: Record<string, unknown>): AgentDeviceClientCon
   const includeCost = record.includeCost;
   const responseLevel = record.responseLevel;
   const client: AgentDeviceClientConfig = {};
-  if (stateDir !== undefined && (typeof stateDir !== 'string' || stateDir.length === 0)) {
-    throw new AppError('INVALID_ARGS', 'Expected stateDir to be a non-empty string.');
+  if (stateDir !== undefined) {
+    if (typeof stateDir !== 'string' || stateDir.length === 0) {
+      throw new AppError('INVALID_ARGS', 'Expected stateDir to be a non-empty string.');
+    }
+    client.stateDir = stateDir;
   }
-  if (typeof stateDir === 'string') client.stateDir = stateDir;
-  if (includeCost !== undefined && typeof includeCost !== 'boolean') {
-    throw new AppError('INVALID_ARGS', 'Expected includeCost to be a boolean.');
+  if (includeCost !== undefined) {
+    if (typeof includeCost !== 'boolean') {
+      throw new AppError('INVALID_ARGS', 'Expected includeCost to be a boolean.');
+    }
+    // Only set when explicitly true so the default request shape is untouched
+    // (cost rides on response.data → structuredContent only when opted in).
+    if (includeCost) client.cost = true;
   }
-  // Only set when explicitly true so the default request shape is untouched
-  // (cost rides on response.data → structuredContent only when opted in).
-  if (includeCost === true) client.cost = true;
   // Only set when it names a known level so the default request shape is
   // untouched (responseLevel rides on meta.responseLevel only when opted in).
   const level = readResponseLevel(responseLevel);
@@ -445,7 +449,10 @@ function stripMcpConfigFields(input: Record<string, unknown>): Record<string, un
   return commandInput;
 }
 
-function withMcpConfigSchema(name: CommandName, schema: JsonSchema): JsonSchema {
+function withMcpConfigSchema(
+  name: CommandName,
+  schema: JsonSchema,
+): JsonSchema & { properties: Record<string, JsonSchema> } {
   const noRecord = resolveCommandRecordsSessionAction(name);
   return {
     ...schema,
