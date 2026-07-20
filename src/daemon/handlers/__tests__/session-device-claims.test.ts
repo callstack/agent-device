@@ -9,6 +9,14 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   return { ...actual, dispatchCommand: vi.fn(), resolveTargetDevice: vi.fn() };
 });
 vi.mock('../../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../../runtime-hints.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../runtime-hints.ts')>();
+  return { ...actual, applyRuntimeHintsToApp: vi.fn(async () => {}) };
+});
+vi.mock('../session-open-target.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../session-open-target.ts')>();
+  return { ...actual, resolveAndroidPackageForOpen: vi.fn() };
+});
 vi.mock('../../../platforms/android/ime-lifecycle.ts', () => ({
   activateAndroidTestIme: vi.fn(async () => {}),
   restoreAndroidTestIme: vi.fn(async () => ({ restored: false, reason: 'no-record' })),
@@ -16,6 +24,8 @@ vi.mock('../../../platforms/android/ime-lifecycle.ts', () => ({
 
 import { dispatchCommand, resolveTargetDevice } from '../../../core/dispatch.ts';
 import { ensureDeviceReady } from '../../device-ready.ts';
+import { applyRuntimeHintsToApp } from '../../runtime-hints.ts';
+import { resolveAndroidPackageForOpen } from '../session-open-target.ts';
 import { activateAndroidTestIme } from '../../../platforms/android/ime-lifecycle.ts';
 import { clearRequestCanceled, markRequestCanceled } from '../../../request/cancel.ts';
 import { acquireAdvisoryDeviceClaim } from '../../device-claims.ts';
@@ -29,11 +39,15 @@ import type { DeviceInfo } from '../../../kernel/device.ts';
 const mockDispatch = vi.mocked(dispatchCommand);
 const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
+const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintsToApp);
+const mockResolveAndroidPackage = vi.mocked(resolveAndroidPackageForOpen);
 const roots: string[] = [];
 
 afterEach(() => {
   vi.clearAllMocks();
   mockEnsureDeviceReady.mockResolvedValue(undefined);
+  mockApplyRuntimeHints.mockResolvedValue(undefined);
+  mockResolveAndroidPackage.mockResolvedValue(undefined);
   delete process.env.AGENT_DEVICE_CLAIMS_DIR;
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
@@ -96,6 +110,34 @@ test('failed local open after dispatch retains its advisory claim for recovery',
     }),
   );
   assert.equal(inspectDeviceClaims({ serial: android.id })[0]?.classification, 'live');
+});
+
+test('failed local runtime-hint setup retains its advisory claim before open dispatch', async () => {
+  const { store, stateDir } = setup();
+  mockResolveTargetDevice.mockResolvedValue(android);
+  mockResolveAndroidPackage.mockResolvedValue('com.example.demo');
+  mockApplyRuntimeHints.mockRejectedValue(new Error('runtime hints changed before failure'));
+
+  await assert.rejects(async () =>
+    handleOpenCommand({
+      req: {
+        command: 'open',
+        token: 'test',
+        session: 'claim-runtime-hint-failure',
+        positionals: ['Demo'],
+        flags: { platform: 'android' },
+        runtime: { metroHost: '10.0.0.10', metroPort: 8081 },
+      },
+      sessionName: 'claim-runtime-hint-failure',
+      logPath: path.join(stateDir, 'daemon.log'),
+      sessionStore: store,
+    }),
+  );
+
+  assert.equal(mockApplyRuntimeHints.mock.calls.length, 1);
+  assert.equal(mockDispatch.mock.calls.length, 0);
+  assert.equal(inspectDeviceClaims({ serial: android.id })[0]?.classification, 'live');
+  assert.equal(store.get('claim-runtime-hint-failure'), undefined);
 });
 
 test('failed local open response rolls its advisory claim back', async () => {

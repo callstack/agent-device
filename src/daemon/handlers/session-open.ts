@@ -76,7 +76,7 @@ type OpenTiming = {
   postOpenSettleDurationMs?: number;
 };
 
-type NewSessionOpenEffects = { started: boolean };
+type NewSessionOpenEffects = { mayHaveStarted: boolean };
 
 async function relaunchCloseApp(params: {
   device: DeviceInfo;
@@ -207,7 +207,6 @@ async function completeOpenCommand(params: {
   runtime: SessionRuntimeHints | undefined;
   existingSession?: SessionState;
   deviceClaim?: DeviceClaimSessionOwnership;
-  newSessionEffects?: NewSessionOpenEffects;
 }): Promise<DaemonResponse> {
   const {
     req,
@@ -223,7 +222,6 @@ async function completeOpenCommand(params: {
     runtime,
     existingSession,
     deviceClaim,
-    newSessionEffects,
   } = params;
   const shouldRelaunch = req.flags?.relaunch === true;
   const traceLogPath = existingSession?.trace?.outPath;
@@ -352,7 +350,6 @@ async function completeOpenCommand(params: {
   // its visible surface. Expire that session's frame before the first
   // close/launch dispatch; a fresh first open has no prior frame to expire.
   if (openDispatchSession) expireRefFrame(openDispatchSession);
-  if (newSessionEffects) newSessionEffects.started = true;
   await dispatchCommand(device, 'open', openPositionals, req.flags?.out, {
     ...contextFromFlags(logPath, req.flags, sessionAppBundleId),
     ...(collapseSimulatorRelaunch ? { terminateRunningApp: true } : {}),
@@ -565,7 +562,7 @@ async function openNewSessionWithAdvisoryClaim(params: {
   if (conflict) return conflict;
 
   const localClaim = await acquireLocalDeviceClaim({ req, device, sessionName, logPath });
-  const effects: NewSessionOpenEffects = { started: false };
+  const effects: NewSessionOpenEffects = { mayHaveStarted: false };
   try {
     const details = await prepareOpenCommandDetails({
       req,
@@ -586,6 +583,10 @@ async function openNewSessionWithAdvisoryClaim(params: {
       await rollbackNewSessionClaim(localClaim.ownership, effects);
       return details.response;
     }
+    // Preparation above is validation-only. `completeOpenCommand` can prewarm a runner,
+    // relaunch-close an app, or write runtime hints before its main open dispatch, so a
+    // failure from that point cannot prove the device is unchanged.
+    effects.mayHaveStarted = true;
     const response = await completeOpenCommand({
       req,
       sessionName,
@@ -599,7 +600,6 @@ async function openNewSessionWithAdvisoryClaim(params: {
       runtime: details.details.runtime,
       surface,
       deviceClaim: localClaim.ownership,
-      newSessionEffects: effects,
     });
     if (!response.ok) await rollbackNewSessionClaim(localClaim.ownership, effects);
     return response;
@@ -614,7 +614,7 @@ async function rollbackNewSessionClaim(
   effects: NewSessionOpenEffects,
 ): Promise<void> {
   if (!ownership) return;
-  if (effects.started) {
+  if (effects.mayHaveStarted) {
     emitDiagnostic({
       level: 'warn',
       phase: 'device_claim_open_effects_unconfirmed',
