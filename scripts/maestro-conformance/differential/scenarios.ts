@@ -180,4 +180,13 @@ export const DIFFERENTIAL_SCENARIOS: DifferentialScenario[] = [
     expect: 'pass',
     divergenceMeans: 'agent-device failed an optional command upstream would have warned on.',
   },
+  {
+    id: 'wait-animation-between-taps',
+    flow: 'differential/flows/wait-animation-between-taps.yaml',
+    comparesAcrossEngines:
+      'Tapping two tabs with waitForAnimationToEnd between them completes on both engines.',
+    expect: 'pass',
+    divergenceMeans:
+      'agent-device fails the tap/wait/tap sequence with a stability-generation mismatch where upstream passes.',
+  },
 ];

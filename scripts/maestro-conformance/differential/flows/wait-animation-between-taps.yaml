@@ -1,0 +1,9 @@
+appId: com.callstack.agentdevicelab
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    text: Settings
+- waitForAnimationToEnd
+- tapOn:
+    text: Catalog

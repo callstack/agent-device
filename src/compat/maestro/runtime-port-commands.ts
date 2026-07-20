@@ -88,7 +88,7 @@ const MAESTRO_COMMAND_REQUIRES_SETTLED_PREDECESSOR = {
   hideKeyboard: true,
   pressKey: true,
   back: true,
-  waitForAnimationToEnd: false,
+  waitForAnimationToEnd: true,
   takeScreenshot: false,
   runScript: false,
   assertVisible: false,

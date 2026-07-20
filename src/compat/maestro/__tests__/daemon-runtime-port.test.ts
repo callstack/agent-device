@@ -6,7 +6,9 @@ import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon/types.ts';
 import { PNG } from '../../../utils/png.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
 import { MAESTRO_OBSERVATION_POLL_MS } from '../daemon-runtime-port-observation.ts';
-import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';
+import { parseMaestroProgram } from '../program-ir-parser.ts';
+import { executeMaestroProgram } from './runtime-port-fixtures.ts';
+import { makeBaseRequest, makeDependencies, makeSnapshot } from './daemon-runtime-port-fixtures.ts';
 
 test('delegates lifecycle and coordinate gestures through public daemon commands', async () => {
   const requests: DaemonRequest[] = [];
@@ -581,4 +583,58 @@ test('waitForAnimationToEnd uses the persistent runner capture backend on iOS', 
   expect(requests.every(({ flags }) => flags?.maestro?.screenshotCaptureBackend === 'runner')).toBe(
     true,
   );
+});
+
+test('waitForAnimationToEnd between two taps does not throw a stability-generation mismatch', async () => {
+  const requests: DaemonRequest[] = [];
+  const screenshot = PNG.sync.write(new PNG({ width: 1, height: 1 }));
+  const snapshot = makeSnapshot([
+    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 402, height: 874 } },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: 'settings',
+      label: 'Settings',
+      rect: { x: 20, y: 40, width: 120, height: 44 },
+    },
+    {
+      index: 2,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: 'catalog',
+      label: 'Catalog',
+      rect: { x: 20, y: 100, width: 120, height: 44 },
+    },
+  ]);
+
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      requests.push(request);
+      if (request.command === 'snapshot') return { ok: true, data: snapshot };
+      if (request.command === 'screenshot') {
+        await fs.promises.writeFile(request.positionals[0]!, screenshot);
+      }
+      return { ok: true, data: {} };
+    },
+    dependencies: makeDependencies(),
+    platform: 'ios',
+  });
+
+  const program = parseMaestroProgram(
+    [
+      'appId: com.callstack.agentdevicelab',
+      '---',
+      '- tapOn:',
+      '    text: Settings',
+      '- waitForAnimationToEnd: 0',
+      '- tapOn:',
+      '    text: Catalog',
+    ].join('\n'),
+  );
+
+  const result = await executeMaestroProgram(program, port);
+
+  expect(result).toMatchObject({ executed: 3, skipped: 0 });
 });
