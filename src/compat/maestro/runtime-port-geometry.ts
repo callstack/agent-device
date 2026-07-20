@@ -2,6 +2,7 @@ import { AppError } from '../../kernel/errors.ts';
 import { buildInPageSwipeGesturePlan } from '../../contracts/scroll-gesture.ts';
 import { pointInsideRect } from '../../utils/rect-center.ts';
 import { MAESTRO_COMPATIBILITY_PRESETS } from './compatibility-policy.ts';
+import { resolveNumeric } from './engine-flow.ts';
 import type { MaestroRuntimeRequest } from './engine-types.ts';
 import type { MaestroCoordinate, MaestroDirection, MaestroSwipeGesture } from './program-ir.ts';
 import { operationContext } from './runtime-port-context.ts';
@@ -18,6 +19,7 @@ export async function resolveMaestroSwipeOperation(
   request: MaestroRuntimeRequest,
   operations: MaestroRuntimeOperations,
 ): Promise<MaestroSwipeOperation> {
+  const duration = resolveNumeric(authored.duration, 'swipe.duration', {});
   if (authored.kind === 'coordinates') {
     if (authored.start.space !== authored.end.space) {
       throw new AppError(
@@ -33,7 +35,7 @@ export async function resolveMaestroSwipeOperation(
     const end = await resolveMaestroCoordinate(authored.end, request, operations, viewport);
     return {
       authored,
-      gesture: swipeFromEndpoints(start, end, authored.duration),
+      gesture: swipeFromEndpoints(start, end, duration),
       ...(viewport ? { viewport } : {}),
     };
   }
@@ -45,7 +47,7 @@ export async function resolveMaestroSwipeOperation(
     const { start, end } = screenSwipeEndpoints(viewport, authored.direction, operations.platform);
     return {
       authored,
-      gesture: swipeFromEndpoints(start, end, authored.duration),
+      gesture: swipeFromEndpoints(start, end, duration),
       viewport,
     };
   }
@@ -68,7 +70,7 @@ export async function resolveMaestroSwipeOperation(
   const { start, end } = targetSwipeEndpoints(target, authored.direction, viewport);
   return {
     authored,
-    gesture: swipeFromEndpoints(start, end, authored.duration),
+    gesture: swipeFromEndpoints(start, end, duration),
     target,
     viewport,
   };

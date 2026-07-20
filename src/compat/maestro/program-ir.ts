@@ -52,10 +52,10 @@ export type MaestroTapOnCommand = MaestroOptionalCommand & {
   source: MaestroSourceLocation;
   target: MaestroGestureTarget;
   retryTapIfNoChange?: boolean;
-  repeat?: number;
-  delay?: number;
+  repeat?: number | string;
+  delay?: number | string;
   label?: string;
-  index?: number;
+  index?: number | string;
   childOf?: MaestroSelector;
 };
 
@@ -63,7 +63,7 @@ export type MaestroDoubleTapOnCommand = MaestroOptionalCommand & {
   kind: 'doubleTapOn';
   source: MaestroSourceLocation;
   target: MaestroGestureTarget;
-  delay?: number;
+  delay?: number | string;
 };
 
 export type MaestroLongPressOnCommand = MaestroOptionalCommand & {
@@ -77,18 +77,18 @@ export type MaestroSwipeGesture =
       kind: 'coordinates';
       start: MaestroCoordinate;
       end: MaestroCoordinate;
-      duration?: number;
+      duration?: number | string;
     }
   | {
       kind: 'screen';
       direction: MaestroDirection;
-      duration?: number;
+      duration?: number | string;
     }
   | {
       kind: 'target';
       from: MaestroSelector;
       direction: MaestroDirection;
-      duration?: number;
+      duration?: number | string;
       label?: string;
     };
 
@@ -108,7 +108,7 @@ export type MaestroInputTextCommand = {
 export type MaestroEraseTextCommand = {
   kind: 'eraseText';
   source: MaestroSourceLocation;
-  charactersToErase?: number;
+  charactersToErase?: number | string;
 };
 
 export type MaestroOpenLinkCommand = {
@@ -136,7 +136,7 @@ export type MaestroExtendedWaitUntilCommand = MaestroOptionalCommand & {
   source: MaestroSourceLocation;
   visible?: MaestroSelector;
   notVisible?: MaestroSelector;
-  timeout?: number;
+  timeout?: number | string;
 };
 
 export type MaestroTakeScreenshotCommand = {
@@ -155,7 +155,7 @@ export type MaestroScrollUntilVisibleCommand = MaestroOptionalCommand & {
   source: MaestroSourceLocation;
   element: MaestroSelector;
   direction?: MaestroDirection;
-  timeout?: number;
+  timeout?: number | string;
 };
 
 export type MaestroHideKeyboardCommand = {
@@ -177,7 +177,7 @@ export type MaestroBackCommand = {
 export type MaestroWaitForAnimationToEndCommand = {
   kind: 'waitForAnimationToEnd';
   source: MaestroSourceLocation;
-  timeout?: number;
+  timeout?: number | string;
 };
 
 export type MaestroStopAppCommand = {

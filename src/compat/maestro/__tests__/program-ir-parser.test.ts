@@ -463,6 +463,71 @@ describe('parseMaestroProgram', () => {
       /Invalid Maestro YAML flow[\s\S]*\/flows\/includes\/child\.yaml:line 4/i,
     );
   });
+
+  test('parses numeric option fields as literals or variable references', () => {
+    const program = parseMaestroProgram(
+      [
+        '---',
+        '- extendedWaitUntil:',
+        '    visible: Ready',
+        '    timeout: ${TIMEOUT}',
+        '- scrollUntilVisible:',
+        '    element: Item',
+        '    timeout: 1200',
+        '- waitForAnimationToEnd: ${ANIM_TIMEOUT}',
+        '- tapOn:',
+        '    id: button',
+        '    index: ${INDEX}',
+        '    repeat: ${REPEAT}',
+        '    delay: 50',
+        '- doubleTapOn:',
+        '    id: button',
+        '    delay: ${DELAY}',
+        '- swipe:',
+        '    start: 90%, 50%',
+        '    end: 10%, 50%',
+        '    duration: ${DURATION}',
+        '- eraseText: ${CHARS}',
+        '- eraseText:',
+        '    charactersToErase: ${CHARS}',
+      ].join('\n'),
+    );
+
+    const extendedWaitUntil = commandOfKind(program.commands[0], 'extendedWaitUntil');
+    assert.equal(extendedWaitUntil.timeout, '${TIMEOUT}');
+
+    const scrollUntilVisible = commandOfKind(program.commands[1], 'scrollUntilVisible');
+    assert.equal(scrollUntilVisible.timeout, 1200);
+
+    const waitForAnimationToEnd = commandOfKind(program.commands[2], 'waitForAnimationToEnd');
+    assert.equal(waitForAnimationToEnd.timeout, '${ANIM_TIMEOUT}');
+
+    const tapOn = commandOfKind(program.commands[3], 'tapOn');
+    assert.equal(tapOn.index, '${INDEX}');
+    assert.equal(tapOn.repeat, '${REPEAT}');
+    assert.equal(tapOn.delay, 50);
+
+    const doubleTapOn = commandOfKind(program.commands[4], 'doubleTapOn');
+    assert.equal(doubleTapOn.delay, '${DELAY}');
+
+    const swipe = commandOfKind(program.commands[5], 'swipe');
+    assert.equal(swipe.gesture.kind, 'coordinates');
+    assert.equal(swipe.gesture.duration, '${DURATION}');
+
+    const eraseTextScalar = commandOfKind(program.commands[6], 'eraseText');
+    assert.equal(eraseTextScalar.charactersToErase, '${CHARS}');
+    const eraseTextMap = commandOfKind(program.commands[7], 'eraseText');
+    assert.equal(eraseTextMap.charactersToErase, '${CHARS}');
+
+    assert.throws(
+      () => parseMaestroProgram('---\n- tapOn:\n    id: button\n    index: ${0 + 1}\n'),
+      /tapOn\.index.*non-negative integer.*line 4/i,
+    );
+    assert.throws(
+      () => parseMaestroProgram('---\n- eraseText: 0\n'),
+      /eraseText.*positive integer.*line 2/i,
+    );
+  });
 });
 
 function commandOfKind<K extends MaestroCommand['kind']>(

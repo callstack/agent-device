@@ -21,6 +21,42 @@ export function resolveCommand<T extends { readonly source: MaestroCommand['sour
   };
 }
 
+export type ResolveNumericConstraints = {
+  integer?: boolean;
+  nonNegative?: boolean;
+  positive?: boolean;
+};
+
+function resolveNumericDescription(constraints: ResolveNumericConstraints): string {
+  if (constraints.positive) return 'a positive integer';
+  if (constraints.nonNegative) return 'a non-negative integer';
+  if (constraints.integer) return 'an integer';
+  return 'a finite number';
+}
+
+export function resolveNumeric(
+  value: number | string | undefined,
+  name: string,
+  constraints: ResolveNumericConstraints = {},
+): number | undefined {
+  if (value === undefined) return undefined;
+  const num = typeof value === 'number' ? value : Number(value);
+  const description = resolveNumericDescription(constraints);
+  if (!Number.isFinite(num)) {
+    throw new AppError('INVALID_ARGS', `Maestro ${name} must be ${description}.`);
+  }
+  if (constraints.integer && !Number.isInteger(num)) {
+    throw new AppError('INVALID_ARGS', `Maestro ${name} must be ${description}.`);
+  }
+  if (constraints.nonNegative && num < 0) {
+    throw new AppError('INVALID_ARGS', `Maestro ${name} must be ${description}.`);
+  }
+  if (constraints.positive && num <= 0) {
+    throw new AppError('INVALID_ARGS', `Maestro ${name} must be ${description}.`);
+  }
+  return num;
+}
+
 export function readIterationCount(
   value: number | string | undefined,
   fallback: number,
@@ -28,10 +64,7 @@ export function readIterationCount(
   name: string,
 ): number {
   const resolved = value === undefined ? fallback : Number(context.resolve(String(value)));
-  if (!Number.isInteger(resolved) || resolved < 0) {
-    throw new AppError('INVALID_ARGS', `Maestro ${name} must resolve to a non-negative integer.`);
-  }
-  return resolved;
+  return resolveNumeric(resolved, name, { integer: true, nonNegative: true }) ?? fallback;
 }
 
 export function checkpointMaestroCancellation(signal: AbortSignal | undefined): void {

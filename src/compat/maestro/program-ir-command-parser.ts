@@ -46,8 +46,8 @@ import {
   readOptionalBoolean,
   readOptionalCommandOption,
   readOptionalEntry,
-  readOptionalNonNegativeInteger,
   readOptionalNumber,
+  readOptionalPositiveInteger,
   readOptionalString,
   readRequiredPositiveInteger,
   readRequiredString,
@@ -514,15 +514,4 @@ function parseLaunchArguments(
   const value = readScalarValue(node, name, context);
   if (value === null) invalidAt(`${name} expects a scalar, list, or map.`, node, context);
   return { kind: 'scalar', value };
-}
-
-function readOptionalPositiveInteger(
-  node: Node | null | undefined,
-  name: string,
-  context: MaestroProgramParseContext,
-): number | undefined {
-  const value = readOptionalNonNegativeInteger(node, name, context);
-  if (value !== undefined && value === 0)
-    invalidAt(`Maestro ${name} expects a positive integer.`, node, context);
-  return value;
 }

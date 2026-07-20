@@ -73,20 +73,15 @@ export const FLOW_DIVERGENCES: Record<string, FlowDivergence> = {
   // --- Unsupported options on supported commands (parity gaps) ---
   'upstream/032_element_index': {
     classification: 'we-reject',
-    reason: 'A literal tapOn.index is supported; the flow also uses a ${0 + 1} JS-expression index.',
-    unsupported: ['tapOn.index (expression)'],
-    tracking: COMPAT_TRACKER,
+    reason:
+      'tapOn.index supports ${VAR} lookup; the flow uses a ${0 + 1} JS expression, which is not supported.',
+    unsupported: ['tapOn.index (JS expression)'],
+    tracking: 'https://github.com/callstack/agent-device/issues/1292',
   },
   'upstream/034_press_key': {
     classification: 'we-reject',
     reason: 'pressKey supports back/enter/home/return; the flow exercises ~30 Android/TV keycodes.',
     unsupported: ['pressKey (extended keycodes)'],
-    tracking: COMPAT_TRACKER,
-  },
-  'upstream/042_extended_wait': {
-    classification: 'we-reject',
-    reason: 'A literal extendedWaitUntil.timeout is supported; the flow interpolates ${TIMEOUT} from a flow env block (unresolved ${} is fail-loud).',
-    unsupported: ['extendedWaitUntil.timeout (interpolation)'],
     tracking: COMPAT_TRACKER,
   },
   'upstream/076_optional_assertion': {

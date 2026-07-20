@@ -344,4 +344,81 @@ describe('MaestroRuntimePort', () => {
       }),
     ).rejects.toBe(failure);
   });
+
+  test('resolves ${VAR} numeric option fields to numbers at runtime', async () => {
+    const calls: RecordedCall[] = [];
+    const operations = makeOperations({
+      tapOn: vi.fn(async (input, context) => record(calls, 'tapOn', input, context)),
+      doubleTapOn: vi.fn(async (input, context) => record(calls, 'doubleTapOn', input, context)),
+      eraseText: vi.fn(async (input, context) => record(calls, 'eraseText', input, context)),
+      scrollUntilVisible: vi.fn(async (input, context) =>
+        record(calls, 'scrollUntilVisible', input, context),
+      ),
+      waitForAnimationToEnd: vi.fn(async (input, context) =>
+        record(calls, 'waitForAnimationToEnd', input, context),
+      ),
+      gesture: vi.fn(async (input, context) => record(calls, 'gesture', input, context)),
+    });
+    const program = parseMaestroProgram(
+      [
+        '---',
+        '- tapOn:',
+        '    id: button',
+        '    index: ${INDEX}',
+        '    repeat: ${REPEAT}',
+        '    delay: ${DELAY}',
+        '- doubleTapOn:',
+        '    id: button',
+        '    delay: ${DELAY}',
+        '- eraseText:',
+        '    charactersToErase: ${CHARS}',
+        '- scrollUntilVisible:',
+        '    element: Item',
+        '    timeout: ${SCROLL_TIMEOUT}',
+        '- waitForAnimationToEnd: ${ANIM_TIMEOUT}',
+        '- swipe:',
+        '    start: 90%, 50%',
+        '    end: 10%, 50%',
+        '    duration: ${DURATION}',
+      ].join('\n'),
+    );
+
+    await executeMaestroProgram(program, createMaestroRuntimePort(operations), {
+      env: {
+        INDEX: '2',
+        REPEAT: '3',
+        DELAY: '100',
+        CHARS: '4',
+        SCROLL_TIMEOUT: '5000',
+        ANIM_TIMEOUT: '2000',
+        DURATION: '250',
+      },
+    });
+
+    expect(calls).toHaveLength(6);
+    expect(calls[0]).toMatchObject({
+      kind: 'tapOn',
+      input: { target: expect.anything(), repeat: 3, delay: 100 },
+    });
+    expect(calls[1]).toMatchObject({
+      kind: 'doubleTapOn',
+      input: { target: expect.anything(), delay: 100 },
+    });
+    expect(calls[2]).toMatchObject({
+      kind: 'eraseText',
+      input: { charactersToErase: 4 },
+    });
+    expect(calls[3]).toMatchObject({
+      kind: 'scrollUntilVisible',
+      input: { timeoutMs: 5000 },
+    });
+    expect(calls[4]).toMatchObject({
+      kind: 'waitForAnimationToEnd',
+      input: { timeoutMs: 2000 },
+    });
+    expect(calls[5]).toMatchObject({
+      kind: 'gesture',
+      input: { durationMs: 250 },
+    });
+  });
 });

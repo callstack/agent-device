@@ -358,7 +358,7 @@ function canonicalizeAgentCommand(
       return dropUndefined({
         kind: 'assert',
         mode: command.notVisible ? 'notVisible' : 'visible',
-        timed: true,
+        timed: command.timeout != null,
         selector: agentSelector(command.notVisible ?? command.visible),
       });
     case 'swipe':

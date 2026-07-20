@@ -296,7 +296,7 @@ export function parseMaestroSwipeCommand(
 function parseCoordinateSwipe(
   entries: readonly MaestroMapEntry[],
   source: MaestroSourceLocation,
-  duration: number | undefined,
+  duration: number | string | undefined,
   commandNode: Node,
   context: MaestroProgramParseContext,
 ): MaestroSwipeCommand {
@@ -331,7 +331,7 @@ function parseTargetSwipe(
   entries: readonly MaestroMapEntry[],
   source: MaestroSourceLocation,
   direction: MaestroDirection | undefined,
-  duration: number | undefined,
+  duration: number | string | undefined,
   commandNode: Node,
   context: MaestroProgramParseContext,
 ): MaestroSwipeCommand {
@@ -360,7 +360,7 @@ function parseTargetSwipe(
 function parseScreenSwipe(
   source: MaestroSourceLocation,
   direction: MaestroDirection | undefined,
-  duration: number | undefined,
+  duration: number | string | undefined,
   commandNode: Node,
   context: MaestroProgramParseContext,
 ): MaestroSwipeCommand {

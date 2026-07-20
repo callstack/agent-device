@@ -231,7 +231,7 @@ function collectTypedMaestroCandidates(
 
 type TypedSuggestionQuery = {
   selector: MaestroSelector;
-  index?: number;
+  index?: number | string;
   childOf?: MaestroSelector;
 };
 

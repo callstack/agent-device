@@ -11,6 +11,7 @@ import {
   observationConditions,
   readIterationCount,
   resolveCommand,
+  resolveNumeric,
   staticConditionMatches,
 } from './engine-flow.ts';
 import type { MaestroRunFlowCondition } from './program-ir.ts';
@@ -125,7 +126,8 @@ async function executeCommand(
     case 'extendedWaitUntil':
       await requireObservation(
         readExtendedWaitCondition(command),
-        command.timeout ?? state.timing.extendedWaitUntilTimeoutMs,
+        resolveNumeric(command.timeout, 'extendedWaitUntil.timeout', {}) ??
+          state.timing.extendedWaitUntilTimeoutMs,
         state,
       );
       state.executed += 1;
