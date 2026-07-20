@@ -7,10 +7,9 @@ import { mergeDefinedFlags } from '../utils/merge-flags.ts';
 
 export function resolveMcpConfigDefaults(
   name: CommandName,
-  input: unknown,
+  explicitInput: Record<string, unknown>,
   supportedProperties: Readonly<Record<string, JsonSchema>>,
 ): Record<string, unknown> {
-  const explicitInput = asInputRecord(input);
   const defaults = resolveConfigBackedFlagDefaults({
     command: name,
     cwd: process.cwd(),
@@ -26,9 +25,4 @@ export function resolveMcpConfigDefaults(
     }
   }
   return mergeDefinedFlags(applicableDefaults, explicitInput);
-}
-
-function asInputRecord(input: unknown): Record<string, unknown> {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
-  return input as Record<string, unknown>;
 }

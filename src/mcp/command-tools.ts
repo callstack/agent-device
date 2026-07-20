@@ -25,11 +25,15 @@ type CommandToolExecutorDeps = {
   createClient?: (
     config: AgentDeviceClientConfig,
   ) => AgentDeviceClient | Promise<AgentDeviceClient>;
-  runCommand?: (client: AgentDeviceClient, name: CommandName, input: unknown) => Promise<unknown>;
+  runCommand?: (
+    client: AgentDeviceClient,
+    name: CommandName,
+    input: Record<string, unknown>,
+  ) => Promise<unknown>;
 };
 
 type CommandToolExecutor = {
-  execute: (name: string, input: unknown) => Promise<ToolResult>;
+  execute: (name: string, input: Record<string, unknown>) => Promise<ToolResult>;
 };
 
 type McpOutputFormat = 'optimized' | 'json';
@@ -375,17 +379,13 @@ async function createClient(
 async function runCommand(
   client: AgentDeviceClient,
   name: CommandName,
-  input: unknown,
+  input: Record<string, unknown>,
 ): Promise<unknown> {
   const commandSurface = await import('../commands/command-surface.ts');
   return await commandSurface.runCommand(client, name, input);
 }
 
-function readMcpToolConfig(input: unknown): McpToolConfig {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    return { client: {}, outputFormat: 'optimized' };
-  }
-  const record = input as Record<string, unknown>;
+function readMcpToolConfig(record: Record<string, unknown>): McpToolConfig {
   return {
     client: readClientConfig(record),
     outputFormat: readMcpOutputFormat(record.mcpOutputFormat),

@@ -65,7 +65,7 @@ async function callTool(params: unknown): Promise<ToolResult> {
     // Command-level failures are handled (and ref-pinned) by the executor's
     // own catch; this one covers failures outside a resolved command call
     // (unknown tool name, malformed params).
-    return await commandToolExecutor.execute(name, record.arguments);
+    return await commandToolExecutor.execute(name, optionalArguments(record.arguments));
   } catch (error) {
     return textToolResult(formatToolErrorText(normalizeToolError(error)), true);
   }
@@ -95,6 +95,10 @@ function asRecord(value: unknown): Record<string, unknown> {
     throw new AppError('INVALID_ARGS', 'Expected object parameters.');
   }
   return value as Record<string, unknown>;
+}
+
+function optionalArguments(value: unknown): Record<string, unknown> {
+  return value === undefined ? {} : asRecord(value);
 }
 
 function stringField(record: Record<string, unknown>, key: string): string {

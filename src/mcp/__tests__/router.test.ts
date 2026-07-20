@@ -45,6 +45,16 @@ test('MCP exposes every automatable CLI command as a structured direct tool', as
   assert.ok(invalidFillResponse && 'result' in invalidFillResponse);
   assert.equal((invalidFillResponse.result as { isError: boolean }).isError, true);
   assert.match(JSON.stringify(invalidFillResponse.result), /Expected target to be set/);
+
+  const malformedArgumentsResponse = await handleMcpMessage({
+    jsonrpc: '2.0',
+    id: 3,
+    method: 'tools/call',
+    params: { name: 'devices', arguments: [] },
+  });
+  assert.ok(malformedArgumentsResponse && 'result' in malformedArgumentsResponse);
+  assert.equal((malformedArgumentsResponse.result as { isError: boolean }).isError, true);
+  assert.match(JSON.stringify(malformedArgumentsResponse.result), /Expected object parameters/);
 });
 
 test('MCP JSON-RPC batches return responses in request order and skip notifications', async () => {
