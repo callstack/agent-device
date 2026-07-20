@@ -47,7 +47,7 @@ export function createToolRefPinStore(): ToolRefPinStore {
  * (the coarse #1093 warning is the floor). The model never sees or types
  * suffixes.
  */
-const REF_ISSUING_TOOLS: ReadonlySet<CommandName> = new Set(['snapshot', 'find'] as CommandName[]);
+const REF_ISSUING_TOOLS: ReadonlySet<CommandName> = new Set(['snapshot', 'find'] as const);
 
 /**
  * `--settle` (#1101) makes an interaction response CONDITIONALLY ref-issuing:
@@ -63,7 +63,7 @@ const SETTLE_REF_ISSUING_TOOLS: ReadonlySet<CommandName> = new Set([
   'click',
   'fill',
   'longpress',
-] as CommandName[]);
+] as const);
 
 const TARGET_REF_TOOLS: ReadonlySet<CommandName> = new Set([
   'press',
@@ -71,7 +71,7 @@ const TARGET_REF_TOOLS: ReadonlySet<CommandName> = new Set([
   'fill',
   'longpress',
   'get',
-] as CommandName[]);
+] as const);
 
 /**
  * Bound on remembered pins per scope. Refs still alive keep getting re-merged
