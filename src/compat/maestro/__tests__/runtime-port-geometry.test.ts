@@ -90,11 +90,92 @@ test('scrollUntilVisible matches Maestro swipeFromCenter endpoints for an app-si
     ],
   };
 
-  expect(resolveMaestroScrollableGesture(snapshot, { id: 'missing' }, 'up', 601)).toEqual({
+  expect(resolveMaestroScrollableGesture(snapshot, { id: 'missing' }, 'up', 601, 'ios')).toEqual({
     gesture: { from: { x: 201, y: 437 }, to: { x: 201, y: 786 }, durationMs: 601 },
     viewport: { x: 0, y: 0, width: 402, height: 874 },
   });
-  expect(resolveMaestroScrollableGesture(snapshot, { id: 'missing' }, 'down', 601)).toMatchObject({
+  expect(
+    resolveMaestroScrollableGesture(snapshot, { id: 'missing' }, 'down', 601, 'ios'),
+  ).toMatchObject({
     gesture: { from: { x: 201, y: 437 }, to: { x: 201, y: 87 } },
   });
+});
+
+test('excludes an in-viewport Android scrollable that is hidden from the user', () => {
+  const snapshot = {
+    createdAt: 0,
+    nodes: [
+      {
+        index: 0,
+        ref: '@e1',
+        type: 'Application',
+        rect: { x: 0, y: 0, width: 402, height: 874 },
+      },
+      {
+        index: 1,
+        ref: '@e2',
+        parentIndex: 0,
+        type: 'ScrollView',
+        visibleToUser: false,
+        rect: { x: 0, y: 0, width: 402, height: 800 },
+      },
+      {
+        index: 2,
+        ref: '@e3',
+        parentIndex: 0,
+        type: 'ScrollView',
+        visibleToUser: true,
+        rect: { x: 0, y: 100, width: 402, height: 650 },
+      },
+    ],
+  };
+
+  expect(
+    resolveMaestroScrollableGesture(snapshot, { id: 'missing' }, 'down', 601, 'android'),
+  ).toMatchObject({
+    viewport: { x: 0, y: 100, width: 402, height: 650 },
+  });
+});
+
+test('does not associate a selector in an Android hidden scroll subtree', () => {
+  const snapshot = {
+    createdAt: 0,
+    nodes: [
+      {
+        index: 0,
+        ref: '@e1',
+        type: 'Application',
+        rect: { x: 0, y: 0, width: 402, height: 874 },
+      },
+      {
+        index: 1,
+        ref: '@e2',
+        parentIndex: 0,
+        type: 'ScrollView',
+        visibleToUser: false,
+        rect: { x: 0, y: 0, width: 402, height: 800 },
+      },
+      {
+        index: 2,
+        ref: '@e3',
+        parentIndex: 1,
+        type: 'Button',
+        identifier: 'hidden-target',
+        visibleToUser: false,
+        rect: { x: 20, y: 700, width: 180, height: 44 },
+      },
+      {
+        index: 3,
+        ref: '@e4',
+        parentIndex: 0,
+        type: 'ScrollView',
+        visibleToUser: true,
+        rect: { x: 0, y: 100, width: 402, height: 650 },
+      },
+    ],
+  };
+
+  expect(
+    resolveMaestroScrollableGesture(snapshot, { id: 'hidden-target' }, 'down', 601, 'android'),
+  ).toMatchObject({ viewport: { x: 0, y: 100, width: 402, height: 650 } });
 });

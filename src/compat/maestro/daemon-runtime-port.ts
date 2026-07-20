@@ -239,6 +239,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
             input.selector,
             input.direction,
             input.durationMs,
+            platform,
           );
           await invokeMutation(
             gesture

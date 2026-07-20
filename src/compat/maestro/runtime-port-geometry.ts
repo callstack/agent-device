@@ -18,7 +18,11 @@ import type {
 } from './program-ir.ts';
 import { operationContext } from './runtime-port-context.ts';
 import { resolveMaestroTarget } from './runtime-port-observation.ts';
-import { matchesMaestroTypedSelector } from './runtime-target-policy.ts';
+import {
+  filterVisibleMaestroMatches,
+  matchesMaestroTypedSelector,
+  type MaestroPlatform,
+} from './runtime-target-policy.ts';
 import type {
   MaestroRuntimeOperations,
   MaestroSinglePointerGestureInput,
@@ -37,8 +41,9 @@ export function resolveMaestroScrollableGesture(
   selector: MaestroSelector,
   direction: MaestroDirection,
   durationMs: number,
+  platform: MaestroPlatform,
 ): { gesture: MaestroSinglePointerGestureInput; viewport: Rect } | undefined {
-  const viewport = selectMaestroScrollableViewport(snapshot, selector, direction);
+  const viewport = selectMaestroScrollableViewport(snapshot, selector, direction, platform);
   if (!viewport) return undefined;
   const { start, end } = maestroScrollUntilVisibleEndpoints(viewport, direction);
   return {
@@ -55,12 +60,18 @@ function selectMaestroScrollableViewport(
   snapshot: SnapshotState,
   selector: MaestroSelector,
   direction: MaestroDirection,
+  platform: MaestroPlatform,
 ): Rect | undefined {
   const applicationViewport = findLargestViewportRect(snapshot.nodes);
   if (!applicationViewport || !isPositiveFiniteRect(applicationViewport)) return undefined;
   const vertical = direction === 'up' || direction === 'down';
-  const candidates = snapshot.nodes.flatMap((node) => {
-    if (!isScrollableSnapshotType(node.type) || !isPositiveFiniteRect(node.rect)) return [];
+  const scrollable = filterVisibleMaestroMatches({
+    nodes: snapshot.nodes,
+    matches: snapshot.nodes.filter((node) => isScrollableSnapshotType(node.type)),
+    platform,
+  });
+  const candidates = scrollable.flatMap((node) => {
+    if (!isPositiveFiniteRect(node.rect)) return [];
     const viewport = intersectRects(node.rect, applicationViewport);
     if (
       !viewport ||
