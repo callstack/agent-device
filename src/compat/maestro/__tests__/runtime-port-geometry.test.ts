@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
-import { describe, test } from 'vitest';
-import { resolveMaestroCoordinate } from '../runtime-port-geometry.ts';
+import { describe, expect, test } from 'vitest';
+import {
+  resolveMaestroCoordinate,
+  resolveMaestroScrollableGesture,
+} from '../runtime-port-geometry.ts';
 
 // Bug class 1 (#1217), runtime half: upstream Maestro converts percentage
 // coordinates to pixels by integer division (Maestro.kt), so the result is
@@ -61,5 +64,37 @@ describe('resolveMaestroCoordinate percentage conversion', () => {
       viewport(1125, 2436),
     );
     assert.deepEqual(point, { x: 100, y: 200 });
+  });
+});
+
+test('scrollUntilVisible matches Maestro swipeFromCenter endpoints for an app-sized viewport', () => {
+  // Maestro 2.5.1: Orchestra.scrollUntilVisible converts ScrollDirection to the
+  // opposite SwipeDirection, then calls Maestro.swipeFromCenter. Mobile drivers
+  // use 10%/90% axis endpoints.
+  const snapshot = {
+    createdAt: 0,
+    nodes: [
+      {
+        index: 0,
+        ref: '@e1',
+        type: 'Application',
+        rect: { x: 0, y: 0, width: 402, height: 874 },
+      },
+      {
+        index: 1,
+        ref: '@e2',
+        parentIndex: 0,
+        type: 'ScrollView',
+        rect: { x: 0, y: 0, width: 402, height: 874 },
+      },
+    ],
+  };
+
+  expect(resolveMaestroScrollableGesture(snapshot, { id: 'missing' }, 'up', 601)).toEqual({
+    gesture: { from: { x: 201, y: 437 }, to: { x: 201, y: 786 }, durationMs: 601 },
+    viewport: { x: 0, y: 0, width: 402, height: 874 },
+  });
+  expect(resolveMaestroScrollableGesture(snapshot, { id: 'missing' }, 'down', 601)).toMatchObject({
+    gesture: { from: { x: 201, y: 437 }, to: { x: 201, y: 87 } },
   });
 });

@@ -236,6 +236,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
         scroll: async (remainingMs, snapshot) => {
           const gesture = resolveMaestroScrollableGesture(
             snapshot,
+            input.selector,
             input.direction,
             input.durationMs,
           );

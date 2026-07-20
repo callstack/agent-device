@@ -45,6 +45,12 @@ export const MAESTRO_COMPATIBILITY_PRESETS = {
     downStartFraction: 0.2,
     upStartFraction: { android: 0.5, ios: 0.9 },
   },
+  // Maestro.swipeFromCenter delegates to driver.swipe(center, direction).
+  // Both mobile drivers use these axis-edge fractions for that overload.
+  scrollUntilVisibleSwipe: {
+    nearEdgeFraction: 0.1,
+    farEdgeFraction: 0.9,
+  },
 } as const;
 
 export function maestroScrollDurationFromSpeed(speed: number): number {
