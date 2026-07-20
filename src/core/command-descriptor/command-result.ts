@@ -1,5 +1,6 @@
 import type {
   FillCommandResult,
+  FindCommandResult,
   LongPressCommandResult,
   PressCommandResult,
 } from '../../contracts/interaction.ts';
@@ -48,6 +49,7 @@ export interface CommandResultMap {
   click: PressCommandResult;
   fill: FillCommandResult;
   longpress: LongPressCommandResult;
+  find: FindCommandResult;
   boot: BootCommandResult;
   shutdown: ShutdownCommandResult;
   viewport: ViewportCommandResult;

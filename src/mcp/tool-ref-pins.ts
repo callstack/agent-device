@@ -1,5 +1,7 @@
+import type { SnapshotNode } from '../kernel/snapshot.ts';
 import type { CommandName } from '../commands/command-metadata.ts';
 import type { CommandExecutionResult } from '../commands/command-surface.ts';
+import { asOptionalRecord } from '../utils/parsing.ts';
 
 export type ToolRefPinStore = {
   pinInput(
@@ -26,7 +28,7 @@ export function createToolRefPinStore(): ToolRefPinStore {
     pinInput: (name, input, stateDir) =>
       pinPlainRefArguments(name, input, getScopePins(refPinsByScope, stateDir, input.session)),
     mergeCommandResult: (name, result, stateDir, session) =>
-      mergeIssuedRefPins(refPinsByScope, makeScopeKey(stateDir, session), name, result),
+      mergeCommandResult(refPinsByScope, name, result, stateDir, session),
     mergeDivergenceScreen: (details, stateDir, session) =>
       mergeDivergenceScreenRefPins(refPinsByScope, makeScopeKey(stateDir, session), details),
   };
@@ -100,19 +102,28 @@ function makeScopeKey(stateDir: string | undefined, session: unknown): string {
   return `${stateDir ?? ''}\u0000${sessionName}`;
 }
 
-function mergeDivergenceScreenRefPins(
+function mergeCommandResult(
   refPinsByScope: Map<string, Map<string, number>>,
-  scopeKey: string,
-  details: Record<string, unknown> | undefined,
+  name: CommandName,
+  result: CommandExecutionResult,
+  stateDir: string | undefined,
+  session: unknown,
 ): void {
-  const divergence = asOptionalRecord(details?.divergence);
-  const screen = asOptionalRecord(divergence?.screen);
-  if (screen?.state !== 'available') return;
-  const refsGeneration = screen.refsGeneration;
-  if (typeof refsGeneration !== 'number') return;
-  const issuedRefs: string[] = [];
-  collectRefBodies(screen.refs, issuedRefs);
-  mergeIntoScopedPins(refPinsByScope, scopeKey, issuedRefs, refsGeneration);
+  const scopeKey = makeScopeKey(stateDir, session);
+  if (SETTLE_REF_ISSUING_TOOLS.has(name)) {
+    mergeSettleIssuedRefPins(
+      refPinsByScope,
+      scopeKey,
+      result as CommandExecutionResult<'press' | 'click' | 'fill' | 'longpress'>,
+    );
+    return;
+  }
+  if (!REF_ISSUING_TOOLS.has(name)) return;
+  if (name === 'find') {
+    mergeFindRefPins(refPinsByScope, scopeKey, result as CommandExecutionResult<'find'>);
+  } else {
+    mergeSnapshotRefPins(refPinsByScope, scopeKey, result as CommandExecutionResult<'snapshot'>);
+  }
 }
 
 /**
@@ -122,30 +133,48 @@ function mergeDivergenceScreenRefPins(
  * a `refsGeneration` (older daemon, find with no ref match) clears the whole
  * scope — never guess.
  */
-function mergeIssuedRefPins(
+type SnapshotPinView = {
+  refsGeneration?: number;
+  refs?: Array<{ ref: string }>;
+  nodes?: SnapshotNode[];
+};
+
+function mergeSnapshotRefPins(
   refPinsByScope: Map<string, Map<string, number>>,
   scopeKey: string,
-  name: CommandName,
-  result: CommandExecutionResult,
+  result: SnapshotPinView,
 ): void {
-  if (SETTLE_REF_ISSUING_TOOLS.has(name)) {
-    mergeSettleIssuedRefPins(refPinsByScope, scopeKey, result);
-    return;
-  }
-  if (!REF_ISSUING_TOOLS.has(name)) return;
-  const record = result as CommandExecutionResult<'snapshot' | 'find'>;
-  const refsGeneration = record.refsGeneration;
+  const refsGeneration = result.refsGeneration;
   if (typeof refsGeneration !== 'number') {
-    // ADR 0014: a MUTATING find returns its acted ref as diagnostic pre-action
-    // identity WITHOUT `refsGeneration` — it is explicitly non-issuing and must
-    // leave remembered pins untouched (forwarding the old pin on a later ref is
-    // how the daemon produces a precise stale rejection). Only a snapshot that
-    // genuinely issued no generation clears the scope.
-    if (name === 'find') return;
     refPinsByScope.delete(scopeKey);
     return;
   }
-  mergeIntoScopedPins(refPinsByScope, scopeKey, readIssuedRefBodies(record), refsGeneration);
+  const bodies: string[] = [];
+  for (const { ref } of result.refs ?? []) {
+    bodies.push(ref);
+  }
+  for (const node of result.nodes ?? []) {
+    bodies.push(node.ref);
+  }
+  mergeIntoScopedPins(refPinsByScope, scopeKey, bodies, refsGeneration);
+}
+
+function mergeFindRefPins(
+  refPinsByScope: Map<string, Map<string, number>>,
+  scopeKey: string,
+  result: CommandExecutionResult<'find'>,
+): void {
+  // ADR 0014: a MUTATING find returns its acted ref as diagnostic pre-action
+  // identity WITHOUT `refsGeneration` — it is explicitly non-issuing and must
+  // leave remembered pins untouched (forwarding the old pin on a later ref is
+  // how the daemon produces a precise stale rejection). Only a read-only find
+  // that genuinely found a ref with a generation gets pinned.
+  const refsGeneration = result.refsGeneration;
+  const ref = result.ref;
+  if (typeof refsGeneration !== 'number' || typeof ref !== 'string' || !ref.startsWith('@')) {
+    return;
+  }
+  mergeIntoScopedPins(refPinsByScope, scopeKey, [ref.slice(1)], refsGeneration);
 }
 
 /**
@@ -159,21 +188,14 @@ function mergeIssuedRefPins(
 function mergeSettleIssuedRefPins(
   refPinsByScope: Map<string, Map<string, number>>,
   scopeKey: string,
-  result: CommandExecutionResult,
+  result: CommandExecutionResult<'press' | 'click' | 'fill' | 'longpress'>,
 ): void {
-  const interactionResult = result as CommandExecutionResult<
-    'press' | 'click' | 'fill' | 'longpress'
-  >;
-  const settle = asOptionalRecord(interactionResult.settle);
-  if (!settle) return;
-  const refsGeneration = settle.refsGeneration;
-  if (typeof refsGeneration !== 'number') return;
-  const lines = asOptionalRecord(settle.diff)?.lines;
-  const issuedRefs: string[] = [];
-  collectRefBodies(lines, issuedRefs);
-  collectRefBodies(settle.refs, issuedRefs);
-  collectRefBodies(settle.tail, issuedRefs);
-  mergeIntoScopedPins(refPinsByScope, scopeKey, issuedRefs, refsGeneration);
+  const { settle } = result;
+  if (settle?.refsGeneration === undefined) return;
+  const issuedRefs = [...(settle.diff?.lines ?? []), ...(settle.refs ?? []), ...(settle.tail ?? [])]
+    .map((entry) => entry.ref)
+    .filter((ref): ref is string => typeof ref === 'string');
+  mergeIntoScopedPins(refPinsByScope, scopeKey, issuedRefs, settle.refsGeneration);
 }
 
 /** Shared merge-only tail: skip empty issuance, else create-or-reuse the scope's pin map and record. */
@@ -204,23 +226,24 @@ function recordIssuedPins(
   }
 }
 
-/** Ref bodies (`e12`, no `@`) issued by a snapshot/find response. */
-function readIssuedRefBodies(record: Record<string, unknown>): string[] {
-  const bodies: string[] = [];
-  // find: the single returned ref (`@e12`).
-  if (typeof record.ref === 'string' && record.ref.startsWith('@')) {
-    bodies.push(record.ref.slice(1));
-  }
-  // snapshot (default level): every node carries its ref.
-  collectRefBodies(record.nodes, bodies);
-  // snapshot (digest level): the capped `{ ref, label }` list.
-  collectRefBodies(record.refs, bodies);
-  return bodies;
+function mergeDivergenceScreenRefPins(
+  refPinsByScope: Map<string, Map<string, number>>,
+  scopeKey: string,
+  details: Record<string, unknown> | undefined,
+): void {
+  const divergence = asOptionalRecord(details?.divergence);
+  const screen = asOptionalRecord(divergence?.screen);
+  if (screen?.state !== 'available') return;
+  const refsGeneration = screen.refsGeneration;
+  if (typeof refsGeneration !== 'number') return;
+  const issuedRefs: string[] = [];
+  collectDivergenceRefs(screen.refs, issuedRefs);
+  mergeIntoScopedPins(refPinsByScope, scopeKey, issuedRefs, refsGeneration);
 }
 
-function collectRefBodies(entries: unknown, into: string[]): void {
-  if (!Array.isArray(entries)) return;
-  for (const entry of entries) {
+function collectDivergenceRefs(refs: unknown, into: string[]): void {
+  if (!Array.isArray(refs)) return;
+  for (const entry of refs) {
     const ref = asOptionalRecord(entry)?.ref;
     if (typeof ref === 'string' && ref.length > 0) into.push(ref);
   }
@@ -265,12 +288,4 @@ function pinRef(ref: string, pins: Map<string, number>): string {
   if (!ref.startsWith('@') || ref.includes('~')) return ref;
   const generation = pins.get(ref.slice(1));
   return generation === undefined ? ref : `${ref}~s${generation}`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function asOptionalRecord(value: unknown): Record<string, unknown> | undefined {
-  return isRecord(value) ? value : undefined;
 }

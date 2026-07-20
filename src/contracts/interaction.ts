@@ -234,6 +234,15 @@ export type PressCommandResult = ResolvedInteractionTarget & {
   warning?: string;
   evidence?: InteractionEvidence;
   settle?: SettleObservation;
+  // Public response fields added by the daemon response layer.
+  x?: number;
+  y?: number;
+  button?: string;
+  count?: number;
+  intervalMs?: number;
+  holdMs?: number;
+  jitterPx?: number;
+  doubleTap?: boolean;
 };
 
 export type FillCommandResult = ResolvedInteractionTarget & {
@@ -243,6 +252,10 @@ export type FillCommandResult = ResolvedInteractionTarget & {
   message?: string;
   evidence?: InteractionEvidence;
   settle?: SettleObservation;
+  // Public response fields added by the daemon response layer.
+  x?: number;
+  y?: number;
+  delayMs?: number;
 };
 
 export type LongPressCommandResult = ResolvedInteractionTarget & {
@@ -250,5 +263,32 @@ export type LongPressCommandResult = ResolvedInteractionTarget & {
   backendResult?: Record<string, unknown>;
   message?: string;
   warning?: string;
+  settle?: SettleObservation;
+  // Public response fields added by the daemon response layer.
+  x?: number;
+  y?: number;
+  gesture?: 'longpress';
+};
+
+/**
+ * Daemon response data for the `find` command. Read-only actions (`exists`,
+ * `wait`, `get_text`, `get_attrs`) may issue a pinnable ref with
+ * `refsGeneration`; mutating actions (`click`, `fill`, `focus`, `type`) carry
+ * `ref` as diagnostic pre-action identity and intentionally omit `refsGeneration`
+ * (ADR 0014). The shape is intentionally a flat, optional-field record because
+ * the action positional changes which fields are present.
+ */
+export type FindCommandResult = {
+  ref?: string;
+  refsGeneration?: number;
+  found?: true;
+  waitedMs?: number;
+  text?: string;
+  node?: SnapshotNode;
+  locator?: string;
+  query?: string;
+  x?: number;
+  y?: number;
+  message?: string;
   settle?: SettleObservation;
 };

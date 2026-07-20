@@ -480,6 +480,12 @@ export type CaptureSnapshotResult = {
    * token budget); pair a ref with it (`@e12~s<refsGeneration>`) before a mutation.
    */
   refsGeneration?: number;
+  /**
+   * Digest response view only: a capped list of `{ ref, label? }` pairs taken
+   * from the full `nodes` tree so the MCP layer can still pin refs when the
+   * default-level `nodes` payload is intentionally omitted.
+   */
+  refs?: Array<{ ref: string; label?: string }>;
 } & PublicSnapshotCaptureAnnotations;
 
 export type CaptureScreenshotOptions = AgentDeviceRequestOverrides & {
@@ -1190,23 +1196,23 @@ export type AgentDeviceClient = {
     diff: (options: CaptureDiffOptions) => Promise<CommandResult<'diff'>>;
   };
   interactions: {
-    click: (options: ClickOptions) => Promise<CommandRequestResult>;
-    press: (options: PressOptions) => Promise<CommandRequestResult>;
-    longPress: (options: LongPressOptions) => Promise<CommandRequestResult>;
+    click: (options: ClickOptions) => Promise<CommandResult<'click'>>;
+    press: (options: PressOptions) => Promise<CommandResult<'press'>>;
+    longPress: (options: LongPressOptions) => Promise<CommandResult<'longpress'>>;
     swipe: (options: SwipeOptions) => Promise<CommandRequestResult>;
     pan: (options: PanOptions) => Promise<CommandRequestResult>;
     fling: (options: FlingOptions) => Promise<CommandRequestResult>;
     swipeGesture: (options: SwipeGestureOptions) => Promise<CommandRequestResult>;
     focus: (options: FocusOptions) => Promise<CommandRequestResult>;
     type: (options: TypeTextOptions) => Promise<CommandRequestResult>;
-    fill: (options: FillOptions) => Promise<CommandRequestResult>;
+    fill: (options: FillOptions) => Promise<CommandResult<'fill'>>;
     scroll: (options: ScrollOptions) => Promise<CommandRequestResult>;
     pinch: (options: PinchOptions) => Promise<CommandRequestResult>;
     rotateGesture: (options: RotateGestureOptions) => Promise<CommandRequestResult>;
     transformGesture: (options: TransformGestureOptions) => Promise<CommandRequestResult>;
     get: (options: GetOptions) => Promise<CommandRequestResult>;
     is: (options: IsOptions) => Promise<CommandRequestResult>;
-    find: (options: FindOptions) => Promise<CommandRequestResult>;
+    find: (options: FindOptions) => Promise<CommandResult<'find'>>;
   };
   replay: {
     run: (options: ReplayRunOptions) => Promise<CommandResult<'replay'>>;

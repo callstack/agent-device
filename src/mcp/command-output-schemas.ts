@@ -315,6 +315,24 @@ export const COMMAND_OUTPUT_SCHEMAS = {
       gesture: constSchema('longpress'),
     },
   }),
+  find: objectSchema(
+    {
+      ref: stringSchema('Snapshot ref without the @ prefix when the find action returns one.'),
+      refsGeneration: numberSchema('ADR 0014 ref frame epoch for read-only find actions.'),
+      found: booleanSchema('Whether a wait/exists/read-only find satisfied its condition.'),
+      waitedMs: numberSchema('Milliseconds waited for a read-only find condition.'),
+      text: stringSchema('Text value returned by find get_text.'),
+      node: looseObjectSchema('Snapshot node for find get_attrs/get_text.'),
+      locator: stringSchema('Locator kind used for the find action.'),
+      query: stringSchema('Query argument used for the find action.'),
+      x: numberSchema('Resolved x coordinate for mutating find actions.'),
+      y: numberSchema('Resolved y coordinate for mutating find actions.'),
+      message: stringSchema('Diagnostic message for mutating find actions.'),
+      settle: settleObservationSchema,
+    },
+    [],
+    'Daemon response data for the find command.',
+  ),
 
   // src/contracts/device.ts
   boot: objectSchema({ ...deviceHeaderProperties, booted: { type: 'boolean', const: true } }, [
