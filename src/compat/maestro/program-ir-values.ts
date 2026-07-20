@@ -200,8 +200,8 @@ export function readOptionalBoolean(
 }
 
 const VARIABLE_PATTERN = /^\$\{[A-Za-z_][A-Za-z0-9_.]*\}$/;
-const NUMERIC_STRING_PATTERN = /^-?\d+(\.\d+)?$/;
-const INTEGER_STRING_PATTERN = /^-?\d+$/;
+export const NUMERIC_STRING_PATTERN = /^-?\d+(\.\d+)?$/;
+export const INTEGER_STRING_PATTERN = /^-?\d+$/;
 
 type NumericScalarConstraints = {
   integer?: boolean;

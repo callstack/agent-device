@@ -421,4 +421,23 @@ describe('MaestroRuntimePort', () => {
       input: { durationMs: 250 },
     });
   });
+
+  test('rejects blank or whitespace resolved numeric option values with a clear error', async () => {
+    const operations = makeOperations();
+    const program = parseMaestroProgram(
+      '---\n- extendedWaitUntil:\n    visible: Ready\n    timeout: ${TIMEOUT}\n',
+    );
+
+    await expect(
+      executeMaestroProgram(program, createMaestroRuntimePort(operations), {
+        env: { TIMEOUT: '' },
+      }),
+    ).rejects.toThrow(/extendedWaitUntil\.timeout must be a finite number/);
+
+    await expect(
+      executeMaestroProgram(program, createMaestroRuntimePort(operations), {
+        env: { TIMEOUT: '   ' },
+      }),
+    ).rejects.toThrow(/extendedWaitUntil\.timeout must be a finite number/);
+  });
 });

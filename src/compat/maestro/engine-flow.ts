@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { AppError } from '../../kernel/errors.ts';
 import { createRequestCanceledError } from '../../request/cancel.ts';
+import { INTEGER_STRING_PATTERN, NUMERIC_STRING_PATTERN } from './program-ir-values.ts';
 import type {
   MaestroCommand,
   MaestroProgram,
@@ -40,7 +41,10 @@ export function resolveNumeric(
   constraints: ResolveNumericConstraints = {},
 ): number | undefined {
   if (value === undefined) return undefined;
-  const num = typeof value === 'number' ? value : Number(value);
+  const num =
+    typeof value === 'number'
+      ? value
+      : Number(parseResolvedNumericString(value, name, constraints));
   const description = resolveNumericDescription(constraints);
   if (!Number.isFinite(num)) {
     throw new AppError('INVALID_ARGS', `Maestro ${name} must be ${description}.`);
@@ -57,13 +61,26 @@ export function resolveNumeric(
   return num;
 }
 
+function parseResolvedNumericString(
+  value: string,
+  name: string,
+  constraints: ResolveNumericConstraints,
+): string {
+  const description = resolveNumericDescription(constraints);
+  const pattern = constraints.integer ? INTEGER_STRING_PATTERN : NUMERIC_STRING_PATTERN;
+  if (!pattern.test(value)) {
+    throw new AppError('INVALID_ARGS', `Maestro ${name} must be ${description}.`);
+  }
+  return value;
+}
+
 export function readIterationCount(
   value: number | string | undefined,
   fallback: number,
   context: MaestroExecutionContext,
   name: string,
 ): number {
-  const resolved = value === undefined ? fallback : Number(context.resolve(String(value)));
+  const resolved = value === undefined ? fallback : context.resolve(String(value));
   return resolveNumeric(resolved, name, { integer: true, nonNegative: true }) ?? fallback;
 }
 
