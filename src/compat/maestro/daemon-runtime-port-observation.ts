@@ -160,7 +160,7 @@ export async function scrollUntilTypedMaestroTarget(params: {
   readonly timeoutMs: number;
   readonly context: MaestroRuntimeReadContext;
   readonly snapshot: MaestroSnapshotReader;
-  readonly scroll: (remainingMs: number) => Promise<SnapshotState>;
+  readonly scroll: (remainingMs: number, snapshot: SnapshotState) => Promise<SnapshotState>;
   readonly dependencies: DaemonMaestroRuntimeDependencies;
   readonly platform: Extract<MaestroPlatform, 'ios' | 'android'>;
 }): Promise<MaestroTargetMatch> {
@@ -190,7 +190,7 @@ export async function scrollUntilTypedMaestroTarget(params: {
 
     const remaining = deadline - params.dependencies.now();
     if (remaining > 0) {
-      settledSnapshot = await params.scroll(remaining);
+      settledSnapshot = await params.scroll(remaining, snapshot);
     }
   }
 

@@ -112,6 +112,72 @@ test('scrolls until the target is fully visible in the screen viewport', async (
   expect(result.observation?.identity).toMatch(/^maestro-observation-/);
 });
 
+test('scrolls inside the visible vertical container instead of the screen centre', async () => {
+  const requests: DaemonRequest[] = [];
+  let snapshots = 0;
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      requests.push(request);
+      if (request.command !== 'snapshot') return { ok: true, data: {} };
+      snapshots += 1;
+      return {
+        ok: true,
+        data: {
+          createdAt: snapshots,
+          nodes: [
+            { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 402, height: 874 } },
+            {
+              index: 1,
+              parentIndex: 0,
+              type: 'ScrollView',
+              rect: { x: 0, y: 100, width: 402, height: 650 },
+            },
+            ...(snapshots < 3
+              ? []
+              : [
+                  {
+                    index: 2,
+                    parentIndex: 1,
+                    type: 'Button',
+                    identifier: 'home-open-form',
+                    rect: { x: 20, y: 600, width: 180, height: 44 },
+                  },
+                ]),
+          ],
+        },
+      };
+    },
+    dependencies: makeDependencies(),
+    platform: 'ios',
+  });
+
+  await port.execute({
+    command: {
+      kind: 'scrollUntilVisible',
+      source: { line: 2 },
+      element: { id: 'home-open-form' },
+      direction: 'down',
+      timeout: 2_000,
+    },
+    generation: 0,
+    env: {},
+    invalidateObservation() {},
+  });
+
+  const gesture = requests.find(({ command }) => command === 'gesture');
+  expect(gesture).toMatchObject({
+    input: {
+      kind: 'pan',
+      origin: { x: 201, y: 620 },
+      delta: { x: 0, y: -390 },
+      durationMs: 601,
+    },
+    internal: { gestureViewport: { x: 0, y: 100, width: 402, height: 650 } },
+  });
+  expect(requests.some(({ command }) => command === 'scroll')).toBe(false);
+});
+
 test('does not treat a target larger than the viewport as fully visible', async () => {
   const requests: DaemonRequest[] = [];
   let snapshots = 0;

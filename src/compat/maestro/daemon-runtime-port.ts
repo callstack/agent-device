@@ -34,6 +34,7 @@ import type {
   MaestroTargetQuery,
 } from './runtime-port-types.ts';
 import { pointInsideRect } from '../../utils/rect-center.ts';
+import { resolveMaestroScrollableGesture } from './runtime-port-geometry.ts';
 import {
   MAESTRO_OBSERVATION_POLL_MS,
   captureRetriableMaestroSnapshot,
@@ -232,13 +233,20 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
         snapshot: snapshots.capture,
         dependencies: options.dependencies,
         platform,
-        scroll: async (remainingMs) => {
+        scroll: async (remainingMs, snapshot) => {
+          const gesture = resolveMaestroScrollableGesture(
+            snapshot,
+            input.direction,
+            input.durationMs,
+          );
           await invokeMutation(
-            {
-              kind: 'scroll',
-              direction: input.direction,
-              durationMs: input.durationMs,
-            },
+            gesture
+              ? { kind: 'swipe', ...gesture }
+              : {
+                  kind: 'scroll',
+                  direction: input.direction,
+                  durationMs: input.durationMs,
+                },
             context,
           );
           return (

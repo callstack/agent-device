@@ -1,5 +1,11 @@
 import { AppError } from '../../kernel/errors.ts';
-import { buildInPageSwipeGesturePlan } from '../../contracts/scroll-gesture.ts';
+import {
+  buildInPageSwipeGesturePlan,
+  buildScrollGesturePlan,
+} from '../../contracts/scroll-gesture.ts';
+import { isPositiveFiniteRect } from '../../kernel/rect.ts';
+import type { Rect, SnapshotState } from '../../kernel/snapshot.ts';
+import { isScrollableSnapshotType } from '../../daemon/snapshot-presentation/tree.ts';
 import { pointInsideRect } from '../../utils/rect-center.ts';
 import { MAESTRO_COMPATIBILITY_PRESETS } from './compatibility-policy.ts';
 import type { MaestroRuntimeRequest } from './engine-types.ts';
@@ -12,6 +18,50 @@ import type {
   MaestroSwipeOperation,
   MaestroTargetResolution,
 } from './runtime-port-types.ts';
+
+/**
+ * Builds a scroll gesture inside the largest visible container compatible with
+ * the requested axis. A plain screen-centred scroll can start in an unrelated
+ * nested gesture surface, leaving the intended list stationary.
+ */
+export function resolveMaestroScrollableGesture(
+  snapshot: SnapshotState,
+  direction: MaestroDirection,
+  durationMs: number,
+): { gesture: MaestroSinglePointerGestureInput; viewport: Rect } | undefined {
+  const viewport = selectMaestroScrollableViewport(snapshot, direction);
+  if (!viewport) return undefined;
+  const plan = buildScrollGesturePlan({
+    direction,
+    referenceWidth: viewport.width,
+    referenceHeight: viewport.height,
+  });
+  return {
+    gesture: {
+      from: { x: viewport.x + plan.x1, y: viewport.y + plan.y1 },
+      to: { x: viewport.x + plan.x2, y: viewport.y + plan.y2 },
+      durationMs,
+    },
+    viewport,
+  };
+}
+
+function selectMaestroScrollableViewport(
+  snapshot: SnapshotState,
+  direction: MaestroDirection,
+): Rect | undefined {
+  const vertical = direction === 'up' || direction === 'down';
+  const scrollable = snapshot.nodes
+    .filter((node) => isScrollableSnapshotType(node.type))
+    .map((node) => node.rect)
+    .filter((rect): rect is Rect => Boolean(rect && isPositiveFiniteRect(rect)))
+    .filter((rect) => (vertical ? rect.height > rect.width : rect.width >= rect.height));
+  return scrollable.sort(compareRectAreaDescending)[0];
+}
+
+function compareRectAreaDescending(left: Rect, right: Rect): number {
+  return right.width * right.height - left.width * left.height;
+}
 
 export async function resolveMaestroSwipeOperation(
   authored: MaestroSwipeGesture,
