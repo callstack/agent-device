@@ -47,18 +47,30 @@ or the existing generated default.
 
 ### Recording lifecycle
 
-Ordinary script recording gains a two-state publication lifecycle:
+An ordinary recording eligible for active-session publication has three states:
 
-- **ARMED**: established by `open --save-script[=<path>]` before target-bearing actions run. The session
-  records portable action inputs and fresh target identity evidence.
+- **ARMED**: established only when a new session's initial successful
+  `open --save-script[=<path>]` is recorded as action zero. The session records portable action inputs
+  and fresh target identity evidence.
+- **ABORTED**: reached when another plain `open` succeeds while ARMED. The app operation may continue,
+  but the recording is no longer a single-open bootstrap and close-time publication is disarmed. The
+  successful `open` response warns that a fresh session is required to author another script.
 - **PUBLISHED**: reached only after `session save-script` atomically commits the complete history from
-  the recorded `open` through the current action. The session remains active at the destination, but
-  close-time script publication is disarmed.
+  the sole recorded `open` through the current action. The session remains active at the destination,
+  but close-time script publication is disarmed.
 
-A publication failure leaves the recording ARMED, including its path and same-target `--force`
-authorization, so the caller can correct the target or permissions and retry. PUBLISHED is terminal for
-that recording: later actions are ordinary session work and a later `close` performs teardown only. V1
-does not re-arm or publish multiple open-to-destination artifacts from one session.
+A filesystem or target-collision failure leaves the recording ARMED, including its path and same-target
+`--force` authorization, so the caller can correct the target or permissions and retry. ABORTED and
+PUBLISHED are terminal until the session is destroyed. `session save-script` in either state fails
+loudly and never writes.
+
+Every existing arming entry point respects terminality. `open --save-script` on any existing session —
+unarmed, ARMED, ABORTED, or PUBLISHED — is rejected before app dispatch; a plain later `open` is allowed,
+causing ARMED to become ABORTED while leaving ABORTED/PUBLISHED unchanged.
+`close --save-script[=<path>]` in ABORTED or PUBLISHED is rejected before platform close or filesystem
+work, so the caller can retry with plain `close`. Plain `close` tears down ABORTED/PUBLISHED without
+writing; closing an unpublished ARMED recording retains the existing close-time publication behavior. A
+fresh session is the only re-arming boundary.
 
 This lifecycle is distinct from ADR 0012's repair transaction. `session save-script` rejects a session
 with `saveScriptBoundary` set and directs the caller to finish or abort the repair through its existing
@@ -68,19 +80,29 @@ commits a healed slice, writes `# agent-device:heal-complete`, or changes repair
 ### Destination readiness and replay handoff
 
 The destination is an authored postcondition, not the last navigation action. Before publication, the
-recorded suffix after the last mutating action must contain a target-bearing `wait` for a landmark that
-identifies the ready destination screen. A duration wait or `wait stable` alone does not qualify, though
-`wait stable` may follow the landmark wait. `session save-script` refuses publication without this
-**destination guard** and tells the author to record one. V1 does not infer a screen identity from a
-snapshot or synthesize an implicit guard.
+recorded suffix after the last mutating action must contain a `wait` whose target is a portable selector
+or selector chain identifying a landmark on the ready destination screen. A duration wait, `wait stable`,
+or `wait @ref` does not qualify, though `wait stable` may follow the landmark wait. The publisher validates
+the serialized guard before filesystem work and never relies on repair-only bare-ref rejection.
+`session save-script` refuses publication without this **destination guard** and tells the author to
+record one. V1 does not infer a screen identity from a snapshot or synthesize an implicit guard.
 
-The initial guard is selector-level. `wait` does not yet carry ADR 0012 `target-v1` evidence through
-recording and replay verification, so the guard proves that an element matching its selector exists, not
-that it is the same landmark element observed while authoring. Authors must choose a selective
-destination-specific landmark; a reshuffled screen containing the same weak label elsewhere can
-false-pass. [#1349](https://github.com/callstack/agent-device/issues/1349) extends identity annotations
-and replay-time refusal to target-bearing waits, at which point the same guard gains recorded-landmark
-identity verification without changing the ADR 0016 artifact shape.
+The initial guard is selector-level. `wait` does not yet carry recorded-landmark identity through its
+polling resolution, so the guard proves that an element matching its selector exists, not that it is the
+same landmark element observed while authoring. Authors must choose a selective destination-specific
+landmark; a reshuffled screen containing the same weak label elsewhere can false-pass.
+[#1349](https://github.com/callstack/agent-device/issues/1349) owns the identity design for waits and
+remaining read-only steps. It must preserve polling: ADR 0012's current pre-action `target-v1`
+verification cannot be attached to a wait unchanged because a not-yet-present landmark is the expected
+starting condition. Any identity check for a wait happens after its selector resolves, before the wait
+reports success, or uses a distinct guard-specific mechanism.
+
+The phrase "last mutating action" is derived from a request-sensitive recording-effect trait on the
+central `CommandDescriptor`, required for every command that records session actions and guarded by a
+completeness test. It is not a publisher-local command-name set. The trait distinguishes app-state
+mutation from observation for subcommands such as read-only versus mutating `find`, `keyboard`, and
+`alert` actions; the existing conservative `refFrameEffect: may-invalidate` classification is not precise
+enough for this boundary.
 
 On consumption, a script without `close` preserves the existing replay behavior: the named session stays
 active and the successful `ReplayCommandResult` returns its `session` id. The caller binds subsequent
@@ -103,8 +125,10 @@ credentials that are safe to persist. CLI help must state this warning next to t
 
 The published `.ad`:
 
-- contains one recorded `open` and every recordable action through the publication request;
-- contains a destination guard after its last mutating action;
+- contains exactly one recorded `open` as its first action and every recordable action through the
+  publication request;
+- contains a portable selector/selector-chain destination guard after its last descriptor-classified
+  mutating action;
 - does not append or serialize `session save-script` or `close`;
 - uses the ordinary session context header, selector-chain optimization, and canonical `target-v1`
   annotations captured while ARMED;
@@ -114,9 +138,10 @@ The published `.ad`:
   `--force` authorizes atomic replacement.
 
 The success response identifies the final path and session and reports the number of serialized actions.
-The command must fail before writing when there is no active session, recording was not armed, no
-recorded `open` or destination guard exists, or a repair transaction owns the session. Every failure
-explains the recovery action; none degrades to `{ written: false }` success.
+The command must fail before writing when there is no active session, recording was not armed, the
+recording is ABORTED or PUBLISHED, the history does not contain exactly one initial `open`, no portable
+destination guard exists, or a repair transaction owns the session. Every failure explains the recovery
+action; none degrades to `{ written: false }` success.
 
 ### Surface and naming
 
@@ -138,6 +163,8 @@ executing that script, not the artifact being saved.
   the destination is known only when the caller publishes.
 - Normal unarmed interactions keep their current fast paths and retention behavior.
 - A successful active-session publication cannot collide with a later close-time auto-save.
+- A second successful open abandons the in-flight artifact instead of silently publishing a multi-open
+  bootstrap; authoring resumes only in a fresh session.
 - Intermediate lifecycle-free fragments, entry guards, include semantics, composed digests, and shared
   fragment pinning remain entirely under #1336.
 - Secret-bearing authoring remains unsafe until #1348; the initial workflow is limited to journeys that
@@ -167,7 +194,10 @@ executing that script, not the artifact being saved.
 - An unarmed session refuses publication before filesystem work and names `open --save-script` as the
   recovery.
 - An armed session without a destination guard refuses publication before filesystem work and names a
-  target-bearing `wait` as the recovery.
+  selector-targeted `wait` as the recovery; `wait @ref`, duration waits, and `wait stable` are covered
+  refusal cases.
+- A second successful plain `open` transitions ARMED to ABORTED and disables all publication, while
+  `open --save-script` on an existing session is rejected before app dispatch.
 - An armed session publishes `open` plus target-annotated actions without `close`, returns the final path,
   remains active, and can continue accepting commands.
 - The artifact replays from a cold start, completes its destination guard, returns the live session id,
@@ -176,8 +206,14 @@ executing that script, not the artifact being saved.
   unresolved `@ref` reaches disk; the destination guard remains selector-level until #1349 lands.
 - Existing-target refusal preserves the original bytes; `--force` replaces atomically; a failed publish
   remains retryable.
-- Closing after successful publication performs no second write, while closing an unpublished ARMED
-  ordinary recording preserves current close-time publication behavior.
+- After PUBLISHED, later ordinary actions remain usable, repeated `session save-script` fails, plain
+  `open --relaunch` cannot re-arm, and `open --save-script` is rejected before app dispatch.
+- In ABORTED/PUBLISHED, `close --save-script[=<other>]` is rejected before platform close and plain
+  `close` tears down without writing; closing an unpublished ARMED recording preserves current
+  close-time publication behavior.
+- Descriptor completeness tests classify every recordable request's mutation effect, including
+  request-sensitive read-only/mutating subcommands, and destination-guard ordering consumes only that
+  trait.
 - Repair-armed sessions refuse this action without changing repair state.
 - CLI help warns that literal `fill` inputs are persisted and tells authors not to record secret-bearing
   journeys until #1348's parameterized-input mechanism is available.
