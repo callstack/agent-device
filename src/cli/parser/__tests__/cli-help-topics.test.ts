@@ -197,6 +197,21 @@ test('usage includes agent workflows, config, environment, and examples footers'
   assert.match(usageText, /agent-device test \.\/suite --platform android/);
 });
 
+test('usageForCommand resolves Maestro compatibility help topic', async () => {
+  const help = await usageForCommand('maestro');
+  if (help === null) throw new Error('Expected Maestro help text');
+  assert.match(help, /Supported subset:/);
+  assert.match(help, /runFlow file\/inline/);
+  assert.match(help, /tapOn, doubleTapOn, longPressOn/);
+  assert.match(help, /Boundaries:/);
+  assert.match(help, /iOS and Android only/);
+  assert.match(help, /AD_VAR_\* overrides it/);
+  assert.match(help, /may make http\.post network requests/);
+  assert.match(help, /not a security sandbox/);
+  assert.match(help, /0015-direct-maestro-engine\.md/);
+  assert.doesNotMatch(help, /issues\/558/);
+});
+
 test('usageForCommand resolves workflow help topic', async () => {
   const help = await usageForCommand('workflow');
   if (help === null) throw new Error('Expected workflow help text');

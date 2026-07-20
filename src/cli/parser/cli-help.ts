@@ -1,5 +1,10 @@
 import { listCliCommandNames } from '../../command-catalog.ts';
 import {
+  formatMaestroCompatibilityReference,
+  MAESTRO_COMPATIBILITY_ADR_URL,
+  MAESTRO_COMPATIBILITY_ISSUE_URL,
+} from '../../compat/maestro/support-matrix.ts';
+import {
   getCliCommandSchema,
   getCommandSchema,
   getFlagDefinitions,
@@ -172,6 +177,17 @@ Recovery:
   Keyboard visible over the next target: the on-screen keyboard usually does not block presses, so press the target directly instead of dismissing. If the press fails or reports no visible effect, scroll the target into view or use keyboard enter when submission is wanted.
   Sparse or recovered accessibility snapshot: use screenshot as visual truth, leave the bad screen if needed, then retry snapshot -i.
   Non-hittable success hint: verify with the settled diff or snapshot; retarget by a better ref/selector if the UI did not change.`,
+  },
+  maestro: {
+    summary: 'Supported Maestro YAML commands, grammar, and runtime boundaries',
+    body: `agent-device help maestro
+
+Run Maestro compatibility flows with replay <flow.yaml> --maestro or test <path> --maestro. Bind an iOS or Android target with --platform or an existing session.
+
+${formatMaestroCompatibilityReference()}
+
+Unsupported syntax fails loudly rather than being skipped. Architecture, performance tradeoffs, and declared conformance divergences: ${MAESTRO_COMPATIBILITY_ADR_URL}
+Focused compatibility request: ${MAESTRO_COMPATIBILITY_ISSUE_URL}`,
   },
   workflow: {
     summary: 'Normal agent-device bootstrap, exploration, and validation loop',

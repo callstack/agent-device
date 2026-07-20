@@ -1,8 +1,4 @@
 import { SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS } from '../../contracts/screenshot.ts';
-import {
-  MAESTRO_COMPAT_TRACKER_URL,
-  formatMaestroSupportedSubsetForCli,
-} from '../../compat/maestro/support-matrix.ts';
 import type { FlagDefinition } from './flag-types.ts';
 
 export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
@@ -40,8 +36,8 @@ export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--maestro',
     usageDescription:
-      `Replay: treat input as a Maestro YAML compatibility flow. ${formatMaestroSupportedSubsetForCli()} ` +
-      `Unsupported syntax fails loudly with a link to ${MAESTRO_COMPAT_TRACKER_URL}`,
+      'Replay: treat input as a supported Maestro YAML subset; unsupported syntax fails loudly. ' +
+      'See agent-device help maestro for commands and boundaries',
   },
   {
     key: 'replayExportFormat',

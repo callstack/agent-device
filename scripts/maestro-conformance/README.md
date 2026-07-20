@@ -118,7 +118,8 @@ The verifier fails on any **undeclared** divergence: a flow our engine parses
 that upstream rejects (a conformance regression), an undeclared parse mismatch,
 or an undeclared `we-reject`. Every `we-reject` must list the unsupported
 command/option in [`expected-divergence.ts`](./expected-divergence.ts) — that
-list is the mechanical parity backlog.
+list is the mechanical parity record. A focused issue is attached only when
+implementation work is planned.
 
 ## Regenerate (only on an upstream-pin bump)
 

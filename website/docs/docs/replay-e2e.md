@@ -57,16 +57,22 @@ agent-device replay ./flow.yaml --maestro --platform ios --session e2e-run
 agent-device test ./maestro-flows --maestro --platform android --artifacts-dir ./tmp/maestro-artifacts
 ```
 
-Maestro compatibility parses supported YAML into a source-preserving typed program and executes it directly through the Agent Device runtime. It is intended for common mobile flows, not full Maestro parity; it does not lower YAML into generic replay actions. Unsupported Maestro syntax fails loudly with the command or field name and a line number when available. If a missing command matters for your flows, use the compatibility tracker to check current support and share demand:
+Supported subset:
 
-- Supported and unsupported capabilities: https://github.com/callstack/agent-device/issues/558
-- New focused compatibility request: https://github.com/callstack/agent-device/issues/new
+- Flows: `launchApp`; `runFlow` file/inline with platform, visibility, and limited boolean conditions; `onFlowStart`/`onFlowComplete`; `repeat.times` and retry.
+- Interactions: `tapOn`, `doubleTapOn`, `longPressOn`, `inputText`, `eraseText`, `openLink`, `hideKeyboard`, basic `pressKey`, and `back`; targets support `index`, `childOf`, `label`, points, and `optional`.
+- Assertions and navigation: `assertVisible`, `assertNotVisible`, `extendedWaitUntil`, `scroll`, `scrollUntilVisible`, absolute/percentage/target `swipe`, `takeScreenshot`, `waitForAnimationToEnd`, and `stopApp`.
+- Scripts: ordered `runScript` file/env scripts with `http.post`, `json`, and `output` variables.
 
-Currently supported areas include app launch with Apple-platform launch arguments and Android/iOS simulator `clearState`, `runFlow` file/inline with `when.platform`, `when.visible`, `when.notVisible`, and limited `when.true` boolean/platform expressions, `onFlowStart` and `onFlowComplete` hooks, deterministic `repeat.times` and retry blocks, `tapOn` including `index`, `childOf`, `label`, and absolute/percentage point taps, `doubleTapOn` and `longPressOn`, `optional` target, assertion, `scrollUntilVisible`, and `extendedWaitUntil` commands, `inputText` and focused-field `eraseText`, `openLink`, visibility assertions including `childOf` and `extendedWaitUntil`, `scroll` and `scrollUntilVisible`, absolute/percentage `swipe` and `swipe.label`, screenshots, keyboard dismiss, basic `pressKey`, `back`, animation waits, and `stopApp`, and ordered trusted `runScript` file/env scripts with `http.post`, `json`, and `output` variables. `runScript` is supported only as an ordered Maestro compatibility step for trusted file/env scripts; it can make network requests, and is not a native `.ad` command or security sandbox. Script execution uses Node `vm` only for compatibility isolation, not for security; the script timeout bounds synchronous execution, while `http.post` requests are bounded by the helper process timeout. Output keys cannot contain `.` because exported variables are addressed as `output.<key>`.
+Boundaries:
 
-Maestro `env` values use the same replay precedence as `.ad` files: flow `env` is the default, shell `AD_VAR_*` values override it, and CLI `-e KEY=VALUE` wins over both.
+- Runtime: iOS and Android only; `launchApp.clearState` supports Android and iOS simulators, launch arguments are Apple-only, and standalone device utility/state commands are unsupported.
+- Expressions: `when.true` supports boolean literals and `maestro.platform` comparisons; `repeat.while`, `evalScript`, and broader JavaScript expressions are unsupported.
+- Environment: flow `env` is the default, `AD_VAR_*` overrides it, and CLI `-e KEY=VALUE` wins over both.
+- Trust: `runScript` executes trusted scripts, may make `http.post` network requests, and is not a security sandbox; output keys cannot contain a dot.
+- Errors and tracking: unsupported commands and fields fail with source context when available; open a focused issue only when implementation work is planned.
 
-Unsupported Maestro features such as `repeat.while`, full expression predicates beyond boolean literals and `maestro.platform` comparisons, `evalScript`, device utility commands, Android app launch arguments, and Android app state reset are tracked separately because they require neutral Agent Device runtime or device capabilities before they can be mapped safely.
+See [ADR 0015](https://github.com/callstack/agent-device/blob/main/docs/adr/0015-direct-maestro-engine.md) for architecture, performance tradeoffs, and deliberate deviations. If a missing feature matters for your suite, [open a focused issue](https://github.com/callstack/agent-device/issues/new) with a small flow snippet.
 
 ## Export `.ad` scripts to Maestro YAML
 
@@ -357,4 +363,4 @@ Passing `--plan-digest` that no longer matches the current script — because yo
 - Replay file parse error:
   - Validate quoting in `.ad` lines (unclosed quotes are rejected).
 - Maestro compatibility flow fails on unsupported syntax:
-  - Check the linked command or field in https://github.com/callstack/agent-device/issues/558. If it is important to your suite, comment there or open a focused issue with a small flow snippet.
+  - Check [ADR 0015](https://github.com/callstack/agent-device/blob/main/docs/adr/0015-direct-maestro-engine.md). If the missing feature matters to your suite, open a focused issue with a small flow snippet.

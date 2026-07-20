@@ -84,14 +84,10 @@ test('usageForCommand includes Maestro replay flag', async () => {
   assert.match(help, /--format maestro/);
   assert.match(help, /--out <path>/);
   assert.match(help, /--maestro/);
-  assert.match(help, /doubleTapOn/);
-  assert.doesNotMatch(help, /pasteText/);
-  assert.match(help, /runFlow file\/inline/);
-  assert.match(help, /ordered trusted runScript/);
-  assert.match(help, /repeat\.times/);
-  assert.match(help, /stopApp/);
-  assert.match(help, /Unsupported syntax fails loudly/);
-  assert.match(help, /issues\/558/);
+  assert.match(help, /supported Maestro YAML subset/);
+  assert.match(help, /unsupported syntax fails loudly/);
+  assert.match(help, /agent-device help maestro/);
+  assert.doesNotMatch(help, /issues\/558/);
 });
 
 test('usageForCommand includes Maestro test suite flag', async () => {
