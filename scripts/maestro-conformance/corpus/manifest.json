@@ -481,6 +481,54 @@
       }
     },
     {
+      "id": "authored/numeric-variable-doubletap",
+      "file": "authored/numeric-variable-doubletap.yaml",
+      "origin": {
+        "kind": "authored",
+        "note": "Coverage: doubleTapOn delay accepts a ${VAR} token (upstream rejects as integer-typed; agent-device is lenient)."
+      }
+    },
+    {
+      "id": "authored/numeric-variable-erase",
+      "file": "authored/numeric-variable-erase.yaml",
+      "origin": {
+        "kind": "authored",
+        "note": "Coverage: eraseText charactersToErase accepts a ${VAR} token (upstream rejects as integer-typed; agent-device is lenient)."
+      }
+    },
+    {
+      "id": "authored/numeric-variable-swipe",
+      "file": "authored/numeric-variable-swipe.yaml",
+      "origin": {
+        "kind": "authored",
+        "note": "Coverage: swipe duration accepts a ${VAR} token (upstream rejects as integer-typed; agent-device is lenient)."
+      }
+    },
+    {
+      "id": "authored/numeric-variable-tap-index",
+      "file": "authored/numeric-variable-tap-index.yaml",
+      "origin": {
+        "kind": "authored",
+        "note": "Coverage: tapOn index accepts a ${VAR} token and projects identically through the canonical model."
+      }
+    },
+    {
+      "id": "authored/numeric-variable-tap",
+      "file": "authored/numeric-variable-tap.yaml",
+      "origin": {
+        "kind": "authored",
+        "note": "Coverage: tapOn repeat/delay/index numeric option fields accept ${VAR} tokens (upstream rejects repeat/delay as integer-typed; agent-device is lenient)."
+      }
+    },
+    {
+      "id": "authored/numeric-variable-wait",
+      "file": "authored/numeric-variable-wait.yaml",
+      "origin": {
+        "kind": "authored",
+        "note": "Coverage: waitForAnimationToEnd timeout accepts a ${VAR} token and projects identically through the canonical model."
+      }
+    },
+    {
       "id": "authored/presskey",
       "file": "authored/presskey.yaml",
       "origin": {

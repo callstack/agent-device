@@ -18,7 +18,7 @@ import { MAESTRO_COMPATIBILITY_PRESETS } from '../../src/compat/maestro/compatib
 export type CanonicalSelector = {
   text?: string;
   id?: string;
-  index?: number;
+  index?: number | string;
   enabled?: boolean;
   selected?: boolean;
   childOf?: CanonicalSelector;
@@ -32,9 +32,9 @@ export type CanonicalTarget = {
 };
 
 export type CanonicalGesture =
-  | { mode: 'direction'; direction: string; duration?: number }
-  | { mode: 'coordinates'; start?: CanonicalPoint; end?: CanonicalPoint; duration?: number }
-  | { mode: 'element'; from: CanonicalSelector; direction?: string; duration?: number };
+  | { mode: 'direction'; direction: string; duration?: number | string }
+  | { mode: 'coordinates'; start?: CanonicalPoint; end?: CanonicalPoint; duration?: number | string }
+  | { mode: 'element'; from: CanonicalSelector; direction?: string; duration?: number | string };
 
 export type CanonicalCommand =
   | { kind: 'launchApp'; appId?: string; clearState?: boolean; stopApp?: boolean }
@@ -42,19 +42,19 @@ export type CanonicalCommand =
   // COUNT is the canonical field on both sides rather than a `double` variant on
   // one — that keeps our distinct tapOn/doubleTapOn kinds comparable to upstream
   // and preserves conformance signal for tapOn.repeat/delay.
-  | { kind: 'tap'; longPress: boolean; repeat: number; delay?: number; target: CanonicalTarget }
-  | { kind: 'assert'; mode: 'visible' | 'notVisible'; timed: boolean; selector?: CanonicalSelector }
+  | { kind: 'tap'; longPress: boolean; repeat: number | string; delay?: number | string; target: CanonicalTarget }
+  | { kind: 'assert'; mode: 'visible' | 'notVisible'; timed: boolean; timeout?: number | string; selector?: CanonicalSelector }
   | { kind: 'swipe'; gesture: CanonicalGesture }
   | { kind: 'inputText'; text?: string }
-  | { kind: 'eraseText'; count?: number }
+  | { kind: 'eraseText'; count?: number | string }
   | { kind: 'openLink'; link?: string }
   | { kind: 'scroll' }
-  | { kind: 'scrollUntilVisible'; direction?: string; selector?: CanonicalSelector }
+  | { kind: 'scrollUntilVisible'; direction?: string; selector?: CanonicalSelector; timeout?: number | string }
   | { kind: 'pressKey'; key: string }
   | { kind: 'back' }
   | { kind: 'hideKeyboard' }
   | { kind: 'takeScreenshot' }
-  | { kind: 'waitForAnimationToEnd'; timeout?: number }
+  | { kind: 'waitForAnimationToEnd'; timeout?: number | string }
   | { kind: 'stopApp' }
   | { kind: 'repeat'; times: string | number }
   | { kind: 'retry'; maxRetries?: string | number }
@@ -91,8 +91,8 @@ function canonicalizeUpstreamCommand(command: UpstreamCommand): CanonicalCommand
       const repeat = asRecord(f.repeat);
       return canonicalTap({
         longPress: bool(f.longPress) ?? false,
-        repeat: num(repeat?.repeat) ?? 1,
-        delay: num(repeat?.delay),
+        repeat: numLike(repeat?.repeat) ?? str(repeat?.repeat) ?? 1,
+        delay: numLike(repeat?.delay) ?? str(repeat?.delay),
         target: { selector: upstreamSelector(f.selector) },
       });
     }
@@ -106,11 +106,13 @@ function canonicalizeUpstreamCommand(command: UpstreamCommand): CanonicalCommand
     case 'AssertConditionCommand': {
       // Upstream serializes every condition slot; the active one is non-null.
       const condition = asRecord(f.condition) ?? {};
+      const timeout = numLike(f.timeout) ?? str(f.timeout);
       if (condition.visible != null) {
         return dropUndefined({
           kind: 'assert',
           mode: 'visible',
           timed: f.timeout != null,
+          timeout,
           selector: upstreamSelector(condition.visible),
         });
       }
@@ -119,6 +121,7 @@ function canonicalizeUpstreamCommand(command: UpstreamCommand): CanonicalCommand
           kind: 'assert',
           mode: 'notVisible',
           timed: f.timeout != null,
+          timeout,
           selector: upstreamSelector(condition.notVisible),
         });
       }
@@ -133,11 +136,12 @@ function canonicalizeUpstreamCommand(command: UpstreamCommand): CanonicalCommand
         kind: 'scrollUntilVisible',
         direction: lower(str(f.direction)),
         selector: upstreamSelector(f.selector),
+        timeout: numLike(f.timeout) ?? str(f.timeout),
       });
     case 'InputTextCommand':
       return dropUndefined({ kind: 'inputText', text: str(f.text) });
     case 'EraseTextCommand':
-      return dropUndefined({ kind: 'eraseText', count: num(f.charactersToErase) });
+      return dropUndefined({ kind: 'eraseText', count: numLike(f.charactersToErase) ?? str(f.charactersToErase) });
     case 'OpenLinkCommand':
       return dropUndefined({ kind: 'openLink', link: str(f.link) });
     case 'PressKeyCommand':
@@ -149,7 +153,7 @@ function canonicalizeUpstreamCommand(command: UpstreamCommand): CanonicalCommand
     case 'TakeScreenshotCommand':
       return { kind: 'takeScreenshot' };
     case 'WaitForAnimationToEndCommand':
-      return dropUndefined({ kind: 'waitForAnimationToEnd', timeout: numLike(f.timeout) });
+      return dropUndefined({ kind: 'waitForAnimationToEnd', timeout: numLike(f.timeout) ?? str(f.timeout) });
     case 'StopAppCommand':
       return { kind: 'stopApp' };
     case 'RepeatCommand':
@@ -168,19 +172,20 @@ function canonicalizeUpstreamCommand(command: UpstreamCommand): CanonicalCommand
 /**
  * Build a canonical tap from the effective repeat semantics. `delay` only means
  * anything for a repeated tap, so it is dropped for a single tap to keep the two
- * engines' representations comparable.
+ * engines' representations comparable. Unresolved variable tokens are preserved
+ * as strings so the canonical model does not silently default them.
  */
 function canonicalTap(tap: {
   longPress: boolean;
-  repeat: number;
-  delay?: number;
+  repeat: number | string;
+  delay?: number | string;
   target: CanonicalTarget;
 }): CanonicalCommand {
   return dropUndefined({
     kind: 'tap',
     longPress: tap.longPress,
     repeat: tap.repeat,
-    delay: tap.repeat > 1 ? tap.delay : undefined,
+    delay: typeof tap.repeat === 'number' && tap.repeat <= 1 ? undefined : tap.delay,
     target: tap.target,
   });
 }
@@ -191,7 +196,7 @@ function upstreamSelector(value: unknown): CanonicalSelector | undefined {
   return dropUndefined({
     text: str(record.textRegex),
     id: str(record.idRegex),
-    index: numLike(record.index),
+    index: numLike(record.index) ?? str(record.index),
     enabled: bool(record.enabled),
     selected: bool(record.selected),
     childOf: upstreamSelector(record.childOf),
@@ -218,7 +223,7 @@ function upstreamPoint(value: unknown): CanonicalPoint | undefined {
 }
 
 function upstreamGesture(f: Record<string, unknown>): CanonicalGesture {
-  const duration = num(f.duration);
+  const duration = numLike(f.duration) ?? str(f.duration);
   if (f.elementSelector != null) {
     return dropUndefined({
       mode: 'element',
@@ -273,16 +278,19 @@ function str(value: unknown): string | undefined {
 function bool(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
-function num(value: unknown): number | undefined {
-  return typeof value === 'number' ? value : undefined;
-}
 function lower(value: string | undefined): string | undefined {
   return value?.toLowerCase();
 }
-/** Coerce a numeric-or-string field to a number when it is a plain integer. */
-function numLike(value: unknown): number | undefined {
+const VARIABLE_PATTERN = /^\$\{[A-Za-z_][A-Za-z0-9_.]*\}$/;
+
+/** Coerce a literal numeric-or-string field to a number, preserving unresolved ${VAR} tokens. */
+function numLike(value: unknown): number | string | undefined {
   if (typeof value === 'number') return value;
-  if (typeof value === 'string' && /^\d+$/.test(value)) return Number(value);
+  if (typeof value === 'string') {
+    if (VARIABLE_PATTERN.test(value)) return value;
+    const trimmed = value.trim();
+    if (/^-?\d+(\.\d+)?$/.test(trimmed)) return Number(trimmed);
+  }
   return undefined;
 }
 
@@ -322,12 +330,13 @@ function canonicalizeAgentCommand(
         stopApp: command.stopApp,
       });
     case 'tapOn': {
-      const repeat = num(command.repeat) ?? 1;
+      const repeat = numLike(command.repeat) ?? 1;
+      const repeatIsNumber = typeof repeat === 'number';
       return canonicalTap({
         longPress: false,
         repeat,
-        delay: repeat > 1 ? (num(command.delay) ?? AGENT_REPEAT_DELAY_MS) : undefined,
-        target: agentTarget(command.target, num(command.index), command.childOf),
+        delay: repeatIsNumber ? (numLike(command.delay) ?? AGENT_REPEAT_DELAY_MS) : numLike(command.delay),
+        target: agentTarget(command.target, numLike(command.index), command.childOf),
       });
     }
     case 'doubleTapOn':
@@ -335,7 +344,7 @@ function canonicalizeAgentCommand(
       return canonicalTap({
         longPress: false,
         repeat: 2,
-        delay: num(command.delay) ?? AGENT_REPEAT_DELAY_MS,
+        delay: numLike(command.delay) ?? AGENT_REPEAT_DELAY_MS,
         target: agentTarget(command.target),
       });
     case 'longPressOn':
@@ -359,6 +368,7 @@ function canonicalizeAgentCommand(
         kind: 'assert',
         mode: command.notVisible ? 'notVisible' : 'visible',
         timed: command.timeout != null,
+        timeout: numLike(command.timeout),
         selector: agentSelector(command.notVisible ?? command.visible),
       });
     case 'swipe':
@@ -366,7 +376,7 @@ function canonicalizeAgentCommand(
     case 'inputText':
       return dropUndefined({ kind: 'inputText', text: command.text });
     case 'eraseText':
-      return dropUndefined({ kind: 'eraseText', count: num(command.charactersToErase) });
+      return dropUndefined({ kind: 'eraseText', count: numLike(command.charactersToErase) });
     case 'openLink':
       return dropUndefined({ kind: 'openLink', link: command.link });
     case 'scroll':
@@ -376,6 +386,7 @@ function canonicalizeAgentCommand(
         kind: 'scrollUntilVisible',
         direction: command.direction,
         selector: agentSelector(command.element),
+        timeout: numLike(command.timeout),
       });
     case 'pressKey':
       return { kind: 'pressKey', key: command.key.toLowerCase() };
@@ -386,13 +397,13 @@ function canonicalizeAgentCommand(
     case 'takeScreenshot':
       return { kind: 'takeScreenshot' };
     case 'waitForAnimationToEnd':
-      return dropUndefined({ kind: 'waitForAnimationToEnd', timeout: num(command.timeout) });
+      return dropUndefined({ kind: 'waitForAnimationToEnd', timeout: numLike(command.timeout) });
     case 'stopApp':
       return { kind: 'stopApp' };
     case 'repeat':
-      return { kind: 'repeat', times: num(command.times) ?? str(command.times) };
+      return { kind: 'repeat', times: numLike(command.times) ?? str(command.times) };
     case 'retry':
-      return dropUndefined({ kind: 'retry', maxRetries: num(command.maxRetries) ?? str(command.maxRetries) });
+      return dropUndefined({ kind: 'retry', maxRetries: numLike(command.maxRetries) ?? str(command.maxRetries) });
     case 'runFlow':
       return { kind: 'runFlow', source: command.include.kind === 'file' ? 'file' : 'commands' };
     case 'runScript':
@@ -406,7 +417,7 @@ function canonicalizeAgentCommand(
 
 function agentTarget(
   target: MaestroGestureTarget,
-  index?: number,
+  index?: number | string,
   childOf?: MaestroSelector,
 ): CanonicalTarget {
   if (target.space === 'target') {
@@ -436,7 +447,7 @@ function agentSelector(
 }
 
 function agentGesture(gesture: MaestroSwipeGesture): CanonicalGesture {
-  const duration = num(gesture.duration) ?? AGENT_SWIPE_DEFAULT_DURATION;
+  const duration = numLike(gesture.duration) ?? AGENT_SWIPE_DEFAULT_DURATION;
   switch (gesture.kind) {
     case 'screen':
       return { mode: 'direction', direction: gesture.direction, duration };

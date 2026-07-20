@@ -4,7 +4,7 @@
 
 export type FlowDivergence = {
   /** Expected non-identical classification for this corpus flow. */
-  classification: 'we-reject' | 'mismatch';
+  classification: 'we-reject' | 'mismatch' | 'we-are-lenient';
   /** Why the divergence is intentional. */
   reason: string;
   /** Upstream commands/options our engine deliberately does not support. */
@@ -13,10 +13,11 @@ export type FlowDivergence = {
   tracking?: string;
 };
 
-// Keyed by corpus flow id. Every flow the verifier classifies as `we-reject` or
-// `mismatch` must appear here; anything undeclared fails the suite. This is the
-// mechanical parity backlog — the list the old hand-typed fixture could not
-// produce. `tracking` points at the Maestro compat tracker for option-level gaps.
+// Keyed by corpus flow id. Every flow the verifier classifies as `we-reject`,
+// `mismatch`, or `we-are-lenient` must appear here; anything undeclared fails the
+// suite. This is the mechanical parity backlog — the list the old hand-typed
+// fixture could not produce. `tracking` points at the Maestro compat tracker for
+// option-level gaps.
 const COMPAT_TRACKER = 'https://github.com/callstack/agent-device/issues/558';
 
 export const FLOW_DIVERGENCES: Record<string, FlowDivergence> = {
@@ -107,6 +108,31 @@ export const FLOW_DIVERGENCES: Record<string, FlowDivergence> = {
     reason: 'retry is supported; the flow uses the unsupported per-command waitToSettleTimeoutMs option on a nested tapOn.',
     unsupported: ['tapOn.waitToSettleTimeoutMs'],
     tracking: COMPAT_TRACKER,
+  },
+  // --- agent-device supports ${VAR} in integer-typed numeric option fields that the pinned upstream parser rejects ---
+  'authored/numeric-variable-tap': {
+    classification: 'we-are-lenient',
+    reason:
+      'agent-device supports ${VAR} lookup in tapOn.index/repeat/delay; the pinned upstream Maestro 2.5.1 parser only accepts ${VAR} in tapOn.index (string-typed) and rejects repeat/delay as integer-typed.',
+    tracking: 'https://github.com/callstack/agent-device/issues/1293',
+  },
+  'authored/numeric-variable-doubletap': {
+    classification: 'we-are-lenient',
+    reason:
+      'agent-device supports ${VAR} lookup in doubleTapOn.delay; the pinned upstream Maestro 2.5.1 parser rejects it as integer-typed.',
+    tracking: 'https://github.com/callstack/agent-device/issues/1293',
+  },
+  'authored/numeric-variable-swipe': {
+    classification: 'we-are-lenient',
+    reason:
+      'agent-device supports ${VAR} lookup in swipe.duration; the pinned upstream Maestro 2.5.1 parser rejects it as integer-typed.',
+    tracking: 'https://github.com/callstack/agent-device/issues/1293',
+  },
+  'authored/numeric-variable-erase': {
+    classification: 'we-are-lenient',
+    reason:
+      'agent-device supports ${VAR} lookup in eraseText.charactersToErase; the pinned upstream Maestro 2.5.1 parser rejects it as integer-typed.',
+    tracking: 'https://github.com/callstack/agent-device/issues/1293',
   },
 };
 

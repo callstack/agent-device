@@ -1,0 +1,5 @@
+appId: com.example.app
+---
+- doubleTapOn:
+    text: Button
+    delay: ${DELAY}

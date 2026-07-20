@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import {
   type FlowResult,
+  CORPUS_DIR,
   checkCoverage,
   checkFixtureSeals,
   checkLayer2,
@@ -15,6 +16,8 @@ import {
   loadLayer1,
   loadLayer2,
 } from './verify.ts';
+import { parseMaestroProgram } from '../../src/compat/maestro/program-ir-parser.ts';
+import { canonicalizeAgentCommands } from './normalize.ts';
 import {
   DOCUMENTED_DEVIATIONS,
   FLOW_DIVERGENCES,
@@ -68,13 +71,31 @@ test('fixtures pin the reviewed upstream Maestro artifacts', () => {
   }
 });
 
-test('layer 1: our engine never accepts a flow upstream rejects', () => {
+test('layer 1: upstream-rejected flows that agent accepts must be declared as we-are-lenient', () => {
   const lenient = classifyAllFlows().filter((flow) => flow.classification === 'we-are-lenient');
+  const undeclared = lenient.filter((flow) => !FLOW_DIVERGENCES[flow.id]);
   assert.deepEqual(
-    lenient.map((flow) => flow.id),
+    undeclared.map((flow) => flow.id),
     [],
-    'agent-device parsed a flow that upstream Maestro rejects — a conformance regression',
+    'agent-device may only accept an upstream-rejected flow when it is declared as we-are-lenient',
   );
+});
+
+test('layer 1: we-are-lenient flows preserve unresolved ${VAR} tokens in the agent canonical model', () => {
+  const layer1 = loadLayer1();
+  const flowsById = new Map(layer1.flows.map((flow) => [flow.id, flow]));
+  const lenient = classifyAllFlows().filter((flow) => flow.classification === 'we-are-lenient');
+  for (const result of lenient) {
+    const flow = flowsById.get(result.id);
+    assert.ok(flow, `missing layer-1 fixture for ${result.id}`);
+    const script = fs.readFileSync(path.join(CORPUS_DIR, flow.file), 'utf8');
+    const program = parseMaestroProgram(script, { sourcePath: flow.file });
+    const canonical = canonicalizeAgentCommands(program);
+    assert.ok(
+      JSON.stringify(canonical).includes('${'),
+      `${result.id}: canonical model must preserve unresolved \${VAR} numeric tokens instead of substituting defaults`,
+    );
+  }
 });
 
 test('layer 1: every divergence is declared (no silent drift)', () => {

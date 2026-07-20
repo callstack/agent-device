@@ -3370,6 +3370,129 @@
       ]
     },
     {
+      "id": "authored/numeric-variable-doubletap",
+      "file": "authored/numeric-variable-doubletap.yaml",
+      "status": "rejected",
+      "error": {
+        "class": "FlowParseException",
+        "message": "Incorrect Format: delay"
+      }
+    },
+    {
+      "id": "authored/numeric-variable-erase",
+      "file": "authored/numeric-variable-erase.yaml",
+      "status": "rejected",
+      "error": {
+        "class": "SyntaxError",
+        "message": "Failed to parse file: <corpus>/authored/numeric-variable-erase.yaml"
+      }
+    },
+    {
+      "id": "authored/numeric-variable-swipe",
+      "file": "authored/numeric-variable-swipe.yaml",
+      "status": "rejected",
+      "error": {
+        "class": "FlowParseException",
+        "message": "Parsing Failed"
+      }
+    },
+    {
+      "id": "authored/numeric-variable-tap-index",
+      "file": "authored/numeric-variable-tap-index.yaml",
+      "status": "parsed",
+      "commands": [
+        {
+          "type": "ApplyConfigurationCommand",
+          "fields": {
+            "config": {
+              "appId": "com.example.app",
+              "name": null,
+              "tags": [],
+              "ext": {},
+              "onFlowStart": null,
+              "onFlowComplete": null,
+              "properties": {}
+            },
+            "label": null,
+            "optional": false
+          }
+        },
+        {
+          "type": "TapOnElementCommand",
+          "fields": {
+            "selector": {
+              "textRegex": "Button",
+              "idRegex": null,
+              "size": null,
+              "below": null,
+              "above": null,
+              "leftOf": null,
+              "rightOf": null,
+              "containsChild": null,
+              "containsDescendants": null,
+              "traits": null,
+              "index": "${INDEX}",
+              "enabled": null,
+              "optional": false,
+              "selected": null,
+              "checked": null,
+              "focused": null,
+              "childOf": null,
+              "css": null
+            },
+            "retryIfNoChange": false,
+            "waitUntilVisible": false,
+            "longPress": false,
+            "repeat": null,
+            "waitToSettleTimeoutMs": null,
+            "relativePoint": null,
+            "label": null,
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "authored/numeric-variable-tap",
+      "file": "authored/numeric-variable-tap.yaml",
+      "status": "rejected",
+      "error": {
+        "class": "FlowParseException",
+        "message": "Incorrect Format: repeat"
+      }
+    },
+    {
+      "id": "authored/numeric-variable-wait",
+      "file": "authored/numeric-variable-wait.yaml",
+      "status": "parsed",
+      "commands": [
+        {
+          "type": "ApplyConfigurationCommand",
+          "fields": {
+            "config": {
+              "appId": "com.example.app",
+              "name": null,
+              "tags": [],
+              "ext": {},
+              "onFlowStart": null,
+              "onFlowComplete": null,
+              "properties": {}
+            },
+            "label": null,
+            "optional": false
+          }
+        },
+        {
+          "type": "WaitForAnimationToEndCommand",
+          "fields": {
+            "timeout": "${TIMEOUT}",
+            "label": null,
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
       "id": "authored/presskey",
       "file": "authored/presskey.yaml",
       "status": "parsed",
@@ -3919,5 +4042,5 @@
       ]
     }
   ],
-  "contentHash": "7e657d22c33fd784980ca793962fce001d824f2fa9efdc65cf3c95174138b19a"
+  "contentHash": "b81dbe35d8b2b95c6c0c0b9f49514c00a0729f618da693574ef84b6feb05a5b4"
 }
