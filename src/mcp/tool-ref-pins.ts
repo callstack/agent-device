@@ -133,9 +133,9 @@ function mergeIssuedRefPins(
     return;
   }
   if (!REF_ISSUING_TOOLS.has(name)) return;
-  const record = asOptionalRecord(result);
-  const refsGeneration = record?.refsGeneration;
-  if (record === undefined || typeof refsGeneration !== 'number') {
+  const record = result as CommandExecutionResult<'snapshot' | 'find'>;
+  const refsGeneration = record.refsGeneration;
+  if (typeof refsGeneration !== 'number') {
     // ADR 0014: a MUTATING find returns its acted ref as diagnostic pre-action
     // identity WITHOUT `refsGeneration` — it is explicitly non-issuing and must
     // leave remembered pins untouched (forwarding the old pin on a later ref is
@@ -161,11 +161,14 @@ function mergeSettleIssuedRefPins(
   scopeKey: string,
   result: CommandExecutionResult,
 ): void {
-  const settle = asOptionalRecord(asOptionalRecord(result)?.settle);
+  const interactionResult = result as CommandExecutionResult<
+    'press' | 'click' | 'fill' | 'longpress'
+  >;
+  const settle = asOptionalRecord(interactionResult.settle);
   if (!settle) return;
-  const refsGeneration = settle?.refsGeneration;
+  const refsGeneration = settle.refsGeneration;
   if (typeof refsGeneration !== 'number') return;
-  const lines = asOptionalRecord(settle?.diff)?.lines;
+  const lines = asOptionalRecord(settle.diff)?.lines;
   const issuedRefs: string[] = [];
   collectRefBodies(lines, issuedRefs);
   collectRefBodies(settle.refs, issuedRefs);
@@ -197,9 +200,7 @@ function recordIssuedPins(
     pins.set(ref, refsGeneration);
   }
   while (pins.size > MAX_REF_PINS_PER_SCOPE) {
-    const oldest = pins.keys().next().value;
-    if (oldest === undefined) break;
-    pins.delete(oldest);
+    pins.delete(pins.keys().next().value!);
   }
 }
 
