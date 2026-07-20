@@ -330,15 +330,19 @@ function parseExtendedWaitUntil(
     notVisible = withoutOptional;
     notVisibleOptional = selectorOptional;
   }
+  if (visible !== undefined && notVisible !== undefined)
+    invalidAt(
+      'Maestro extendedWaitUntil cannot specify both visible and notVisible.',
+      commandNode,
+      context,
+    );
   if (visible === undefined && notVisible === undefined)
     invalidAt('Maestro extendedWaitUntil requires visible or notVisible.', commandNode, context);
   const timeout = hasEntry(entries, 'timeout')
     ? readOptionalNumber(entryValue(entries, 'timeout'), 'extendedWaitUntil.timeout', context)
     : undefined;
-  const optional =
-    options.optional === true || visibleOptional === true || notVisibleOptional === true
-      ? true
-      : undefined;
+  const selectedOptional = visible !== undefined ? visibleOptional : notVisibleOptional;
+  const optional = options.optional === true || selectedOptional === true ? true : undefined;
   return stripUndefined({
     kind: 'extendedWaitUntil' as const,
     source: sourceAt(commandNode, context),

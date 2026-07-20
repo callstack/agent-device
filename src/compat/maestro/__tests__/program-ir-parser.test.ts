@@ -244,6 +244,42 @@ describe('parseMaestroProgram', () => {
     });
   });
 
+  test('rejects selectors that contain only optional and no matching criteria', () => {
+    assert.throws(
+      () =>
+        parseMaestroProgram(
+          ['---', '- scrollUntilVisible:', '    element:', '      optional: true'].join('\n'),
+        ),
+      /scrollUntilVisible\.element selector must contain a selector value/i,
+    );
+    assert.throws(
+      () =>
+        parseMaestroProgram(
+          ['---', '- extendedWaitUntil:', '    visible:', '      optional: true'].join('\n'),
+        ),
+      /extendedWaitUntil\.visible selector must contain a selector value/i,
+    );
+    assert.throws(
+      () =>
+        parseMaestroProgram(
+          ['---', '- extendedWaitUntil:', '    notVisible:', '      optional: true'].join('\n'),
+        ),
+      /extendedWaitUntil\.notVisible selector must contain a selector value/i,
+    );
+  });
+
+  test('rejects extendedWaitUntil with both visible and notVisible conditions', () => {
+    assert.throws(
+      () =>
+        parseMaestroProgram(
+          ['---', '- extendedWaitUntil:', '    visible: A', '    notVisible:', '      id: B'].join(
+            '\n',
+          ),
+        ),
+      /extendedWaitUntil cannot specify both visible and notVisible/i,
+    );
+  });
+
   test('preserves an include boundary and the authored include path', () => {
     const program = parseMaestroProgram(
       `appId: example.app

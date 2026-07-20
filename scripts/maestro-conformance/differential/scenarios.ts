@@ -189,4 +189,13 @@ export const DIFFERENTIAL_SCENARIOS: DifferentialScenario[] = [
     divergenceMeans:
       'agent-device fails the tap/wait/tap sequence with a stability-generation mismatch where upstream passes.',
   },
+  {
+    id: 'optional-warned-scroll-and-wait',
+    flow: 'differential/flows/optional-scroll-and-wait.yaml',
+    comparesAcrossEngines:
+      'Optional scrollUntilVisible and extendedWaitUntil commands that fail to find their targets are downgraded to warnings and the flow continues to the next step on both engines — a failed-instead-of-warned classification flips the exit code, so outcome parity proves this.',
+    expect: 'pass',
+    divergenceMeans:
+      'agent-device failed an optional scrollUntilVisible or extendedWaitUntil command instead of warning and continuing.',
+  },
 ];

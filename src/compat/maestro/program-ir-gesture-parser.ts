@@ -94,7 +94,8 @@ export function parseMaestroSelectorMapEntries(
     }
     read(selector, entry, name, context);
   }
-  if (Object.keys(selector).length === 0) {
+  const matchingKeys = Object.keys(selector).filter((key) => key !== 'optional');
+  if (matchingKeys.length === 0) {
     invalidAt(
       `Maestro ${name} selector must contain a selector value.`,
       entries[0]?.keyNode,

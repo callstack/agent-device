@@ -1,0 +1,19 @@
+# Layer-3 device flow. Optional scrollUntilVisible and extendedWaitUntil commands
+# that target a missing element must warn and continue to the next step on both
+# engines. A failed-instead-of-warned classification fails the flow.
+appId: com.callstack.agentdevicelab
+---
+- launchApp:
+    clearState: true
+- assertVisible: Agent Device Tester
+- scrollUntilVisible:
+    element:
+      id: this-element-never-exists
+      optional: true
+    timeout: 1000
+- extendedWaitUntil:
+    visible:
+      id: this-element-never-exists
+    optional: true
+    timeout: 1000
+- assertVisible: Agent Device Tester
