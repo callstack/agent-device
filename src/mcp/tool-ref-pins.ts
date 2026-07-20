@@ -1,4 +1,5 @@
 import type { CommandName } from '../commands/command-metadata.ts';
+import type { CommandExecutionResult } from '../commands/command-surface.ts';
 
 export type ToolRefPinStore = {
   pinInput(
@@ -8,7 +9,7 @@ export type ToolRefPinStore = {
   ): Record<string, unknown>;
   mergeCommandResult(
     name: CommandName,
-    result: unknown,
+    result: CommandExecutionResult,
     stateDir: string | undefined,
     session: unknown,
   ): void;
@@ -106,7 +107,7 @@ function mergeDivergenceScreenRefPins(
 ): void {
   const divergence = asOptionalRecord(details?.divergence);
   const screen = asOptionalRecord(divergence?.screen);
-  if (!screen || screen.state !== 'available') return;
+  if (screen?.state !== 'available') return;
   const refsGeneration = screen.refsGeneration;
   if (typeof refsGeneration !== 'number') return;
   const issuedRefs: string[] = [];
@@ -125,7 +126,7 @@ function mergeIssuedRefPins(
   refPinsByScope: Map<string, Map<string, number>>,
   scopeKey: string,
   name: CommandName,
-  result: unknown,
+  result: CommandExecutionResult,
 ): void {
   if (SETTLE_REF_ISSUING_TOOLS.has(name)) {
     mergeSettleIssuedRefPins(refPinsByScope, scopeKey, result);
@@ -158,7 +159,7 @@ function mergeIssuedRefPins(
 function mergeSettleIssuedRefPins(
   refPinsByScope: Map<string, Map<string, number>>,
   scopeKey: string,
-  result: unknown,
+  result: CommandExecutionResult,
 ): void {
   const settle = asOptionalRecord(asOptionalRecord(result)?.settle);
   if (!settle) return;
@@ -265,7 +266,10 @@ function pinRef(ref: string, pins: Map<string, number>): string {
   return generation === undefined ? ref : `${ref}~s${generation}`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function asOptionalRecord(value: unknown): Record<string, unknown> | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  return value as Record<string, unknown>;
+  return isRecord(value) ? value : undefined;
 }
