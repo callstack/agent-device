@@ -649,3 +649,35 @@ export const COMMAND_OUTPUT_SCHEMAS = {
     ],
   },
 } satisfies Record<keyof CommandResultMap, JsonSchema>;
+
+/**
+ * MCP-only envelopes for commands whose public Node results are arrays. MCP
+ * requires structuredContent to be an object, while the Node and CLI contracts
+ * intentionally keep their existing list shapes.
+ */
+const MCP_COLLECTION_OUTPUT_SCHEMAS = {
+  devices: objectSchema(
+    {
+      devices: {
+        type: 'array',
+        items: objectSchema(
+          {
+            platform: enumSchema(PUBLIC_PLATFORMS),
+            target: enumSchema(DEVICE_TARGETS),
+            kind: enumSchema(DEVICE_KINDS),
+            id: stringSchema(),
+            name: stringSchema(),
+          },
+          ['platform', 'target', 'kind', 'id', 'name'],
+        ),
+      },
+    },
+    ['devices'],
+  ),
+  apps: objectSchema({ apps: stringArraySchema }, ['apps']),
+} as const satisfies Record<'devices' | 'apps', JsonSchema>;
+
+export const MCP_COMMAND_OUTPUT_SCHEMAS = {
+  ...COMMAND_OUTPUT_SCHEMAS,
+  ...MCP_COLLECTION_OUTPUT_SCHEMAS,
+} as const;

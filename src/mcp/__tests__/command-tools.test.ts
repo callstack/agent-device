@@ -409,18 +409,13 @@ test('MCP prepare outputSchema stays complete for the typed non-exposed command'
   assert.ok(prepareSchema.required?.includes('timing'));
 });
 
-test('MCP untyped tools stay byte-identical: no outputSchema key', () => {
+test('MCP untyped object tools stay byte-identical: no outputSchema key', () => {
   const tools = listCommandTools();
 
   // snapshot is intentionally absent from the typed registry (dynamic shape).
   const snapshot = tools.find((tool) => tool.name === 'snapshot');
   assert.ok(snapshot);
   assert.equal('outputSchema' in snapshot, false);
-
-  // devices is likewise untyped.
-  const devices = tools.find((tool) => tool.name === 'devices');
-  assert.ok(devices);
-  assert.equal('outputSchema' in devices, false);
 });
 
 test('MCP boot structuredContent is consistent with its advertised outputSchema', async () => {

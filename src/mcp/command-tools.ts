@@ -3,18 +3,21 @@ import type { JsonSchema } from '../commands/command-contract.ts';
 import { RESPONSE_LEVELS, type ResponseLevel } from '../kernel/contracts.ts';
 import { formatCliOutput } from '../commands/cli-output.ts';
 import {
+  findCommandMetadata,
   isCommandName,
   listMcpCommandMetadata,
   type CommandName,
 } from '../commands/command-metadata.ts';
 import { resolveCommandRecordsSessionAction } from '../core/command-descriptor/registry.ts';
-import { COMMAND_OUTPUT_SCHEMAS } from './command-output-schemas.ts';
+import { MCP_COMMAND_OUTPUT_SCHEMAS } from './command-output-schemas.ts';
 import { AppError } from '../kernel/errors.ts';
 import { formatToolErrorText, normalizeToolError } from './tool-error.ts';
+import { resolveMcpConfigDefaults } from './tool-input-config.ts';
+import { projectStructuredContent } from './tool-result.ts';
 
 export type ToolResult = {
   isError: boolean;
-  structuredContent?: unknown;
+  structuredContent?: Record<string, unknown>;
   content: Array<{ type: 'text'; text: string }>;
 };
 
@@ -46,8 +49,8 @@ export function listCommandTools(): Array<{
     // The registry is keyed by the typed-result commands only (CommandResultMap),
     // so guard the lookup; untyped tools resolve to no outputSchema.
     const outputSchema =
-      definition.name in COMMAND_OUTPUT_SCHEMAS
-        ? COMMAND_OUTPUT_SCHEMAS[definition.name as keyof typeof COMMAND_OUTPUT_SCHEMAS]
+      definition.name in MCP_COMMAND_OUTPUT_SCHEMAS
+        ? MCP_COMMAND_OUTPUT_SCHEMAS[definition.name as keyof typeof MCP_COMMAND_OUTPUT_SCHEMAS]
         : undefined;
     return {
       name: definition.name,
@@ -69,8 +72,13 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
       if (!isCommandName(name)) {
         throw new AppError('INVALID_ARGS', `Unknown command tool: ${name}`);
       }
-      const config = readMcpToolConfig(input);
-      const commandInput = stripMcpConfigFields(input);
+      const metadata = findCommandMetadata(name);
+      const supportedProperties = metadata
+        ? (withMcpConfigSchema(name, metadata.inputSchema).properties ?? {})
+        : {};
+      const resolvedInput = resolveMcpConfigDefaults(name, input, supportedProperties);
+      const config = readMcpToolConfig(resolvedInput);
+      const commandInput = stripMcpConfigFields(resolvedInput);
       const scopeKey = readPinScopeKey(config, commandInput);
       const pinnedInput = pinPlainRefArguments(name, commandInput, refPinsByScope.get(scopeKey));
       const client = await createClient(deps, config.client);
@@ -79,7 +87,7 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
         mergeIssuedRefPins(refPinsByScope, scopeKey, name, result);
         return {
           isError: false,
-          structuredContent: result,
+          structuredContent: projectStructuredContent(name, commandInput, result),
           content: [
             {
               type: 'text',
