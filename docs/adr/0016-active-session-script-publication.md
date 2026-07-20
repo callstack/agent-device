@@ -74,6 +74,14 @@ identifies the ready destination screen. A duration wait or `wait stable` alone 
 **destination guard** and tells the author to record one. V1 does not infer a screen identity from a
 snapshot or synthesize an implicit guard.
 
+The initial guard is selector-level. `wait` does not yet carry ADR 0012 `target-v1` evidence through
+recording and replay verification, so the guard proves that an element matching its selector exists, not
+that it is the same landmark element observed while authoring. Authors must choose a selective
+destination-specific landmark; a reshuffled screen containing the same weak label elsewhere can
+false-pass. [#1349](https://github.com/callstack/agent-device/issues/1349) extends identity annotations
+and replay-time refusal to target-bearing waits, at which point the same guard gains recorded-landmark
+identity verification without changing the ADR 0016 artifact shape.
+
 On consumption, a script without `close` preserves the existing replay behavior: the named session stays
 active and the successful `ReplayCommandResult` returns its `session` id. The caller binds subsequent
 commands to that returned id. Replay reports success only after the destination guard completes; the
@@ -164,8 +172,8 @@ executing that script, not the artifact being saved.
   remains active, and can continue accepting commands.
 - The artifact replays from a cold start, completes its destination guard, returns the live session id,
   and accepts a subsequent command on that session.
-- Every supported element-targeting action has canonical identity evidence and no unresolved `@ref`
-  reaches disk.
+- Every action in ADR 0012's existing target-binding command set has canonical identity evidence and no
+  unresolved `@ref` reaches disk; the destination guard remains selector-level until #1349 lands.
 - Existing-target refusal preserves the original bytes; `--force` replaces atomically; a failed publish
   remains retryable.
 - Closing after successful publication performs no second write, while closing an unpublished ARMED
