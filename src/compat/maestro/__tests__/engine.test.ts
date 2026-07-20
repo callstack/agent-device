@@ -128,6 +128,51 @@ describe('executeMaestroProgram', () => {
     );
   });
 
+  test('continues after optional scrollUntilVisible and extendedWaitUntil misses', async () => {
+    const execute = vi.fn(async (request: MaestroRuntimeRequest) => {
+      request.invalidateObservation();
+      return {};
+    });
+    const port = makePort({
+      observe: vi.fn(async ({ generation }) => ({ generation, matched: false })),
+      execute,
+    });
+    const program = parseMaestroProgram(
+      [
+        '---',
+        '- scrollUntilVisible:',
+        '    element:',
+        '      id: missing',
+        '      optional: true',
+        '- extendedWaitUntil:',
+        '    visible:',
+        '      text: Missing',
+        '      optional: true',
+        '    timeout: 1',
+        '- inputText: continued',
+      ].join('\n'),
+    );
+    execute.mockImplementationOnce(async () => {
+      throw maestroTestFailure('Maestro scrollUntilVisible target did not become visible.');
+    });
+
+    const result = await executeMaestroProgram(program, port);
+
+    expect(result).toMatchObject({
+      executed: 1,
+      skipped: 2,
+    });
+    expect(result.warnings).toEqual([
+      expect.stringMatching(/Optional Maestro scrollUntilVisible skipped at line 2/),
+      expect.stringMatching(/Optional Maestro extendedWaitUntil skipped at line 6/),
+    ]);
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: expect.objectContaining({ kind: 'inputText', text: 'continued' }),
+      }),
+    );
+  });
+
   test('propagates AMBIGUOUS_MATCH from an optional target command', async () => {
     const ambiguous = new AppError('AMBIGUOUS_MATCH', 'multiple target matches');
     const execute = vi.fn(async () => {

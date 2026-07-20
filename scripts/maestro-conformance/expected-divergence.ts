@@ -91,9 +91,9 @@ export const FLOW_DIVERGENCES: Record<string, FlowDivergence> = {
   },
   'upstream/076_optional_assertion': {
     classification: 'we-reject',
-    reason: 'optional is supported on tapOn/assertion targets; the flow marks scrollUntilVisible/extendedWaitUntil optional and uses assertTrue.',
-    unsupported: ['optional (scrollUntilVisible/extendedWaitUntil)', 'assertTrue'],
-    tracking: COMPAT_TRACKER,
+    reason: 'assertTrue is outside the supported subset; optional is now supported on scrollUntilVisible and extendedWaitUntil.',
+    unsupported: ['assertTrue'],
+    tracking: 'https://github.com/callstack/agent-device/issues/1295',
   },
   'upstream/079_scroll_until_visible': {
     classification: 'we-reject',

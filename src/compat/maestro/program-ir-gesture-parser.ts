@@ -60,6 +60,8 @@ const SELECTOR_FIELD_READERS: Readonly<Record<string, SelectorFieldReader>> = {
     assignBooleanSelector(selector, 'enabled', entry, name, context),
   selected: (selector, entry, name, context) =>
     assignBooleanSelector(selector, 'selected', entry, name, context),
+  optional: (selector, entry, name, context) =>
+    assignBooleanSelector(selector, 'optional', entry, name, context),
 };
 
 export function parseMaestroSelector(
@@ -411,7 +413,7 @@ function assignStringSelector(
 
 function assignBooleanSelector(
   selector: MaestroSelectorMap,
-  key: 'enabled' | 'selected',
+  key: 'enabled' | 'selected' | 'optional',
   entry: MaestroMapEntry,
   name: string,
   context: MaestroProgramParseContext,

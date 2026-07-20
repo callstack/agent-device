@@ -19,6 +19,7 @@ export type MaestroSelectorMap = {
   label?: string;
   enabled?: boolean;
   selected?: boolean;
+  optional?: boolean;
 };
 
 export type MaestroSelector = MaestroSelectorMap;

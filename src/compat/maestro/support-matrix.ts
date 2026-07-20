@@ -5,7 +5,7 @@ export const MAESTRO_COMPAT_SUPPORTED_CAPABILITIES = [
   'deterministic repeat.times and retry blocks',
   'tapOn including index, childOf, label, and absolute/percentage point taps',
   'doubleTapOn and longPressOn',
-  'optional target and assertion commands',
+  'optional target, assertion, scrollUntilVisible, and extendedWaitUntil commands',
   'inputText and focused-field eraseText',
   'openLink',
   'visibility assertions including childOf and extendedWaitUntil',

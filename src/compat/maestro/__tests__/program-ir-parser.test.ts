@@ -203,6 +203,47 @@ describe('parseMaestroProgram', () => {
     });
   });
 
+  test('parses optional on scrollUntilVisible and extendedWaitUntil element selectors', () => {
+    const program = parseMaestroProgram(
+      [
+        '---',
+        '- scrollUntilVisible:',
+        '    element:',
+        '      id: maybe-visible',
+        '      optional: true',
+        '- extendedWaitUntil:',
+        '    visible:',
+        '      text: Ready',
+        '      optional: true',
+        '    timeout: 1000',
+        '- extendedWaitUntil:',
+        '    notVisible:',
+        '      id: gone',
+        '      optional: true',
+      ].join('\n'),
+    );
+
+    assert.deepEqual(program.commands[0], {
+      kind: 'scrollUntilVisible',
+      source: { line: 2 },
+      element: { id: 'maybe-visible' },
+      optional: true,
+    });
+    assert.deepEqual(program.commands[1], {
+      kind: 'extendedWaitUntil',
+      source: { line: 6 },
+      visible: { text: 'Ready' },
+      timeout: 1000,
+      optional: true,
+    });
+    assert.deepEqual(program.commands[2], {
+      kind: 'extendedWaitUntil',
+      source: { line: 11 },
+      notVisible: { id: 'gone' },
+      optional: true,
+    });
+  });
+
   test('preserves an include boundary and the authored include path', () => {
     const program = parseMaestroProgram(
       `appId: example.app
