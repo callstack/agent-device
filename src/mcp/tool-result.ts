@@ -3,7 +3,7 @@ import type { CommandName } from '../commands/command-metadata.ts';
 
 export function projectStructuredContent(
   name: CommandName,
-  input: unknown,
+  input: Record<string, unknown>,
   result: unknown,
 ): Record<string, unknown> {
   if (result && typeof result === 'object' && !Array.isArray(result)) {

@@ -73,10 +73,10 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
         throw new AppError('INVALID_ARGS', `Unknown command tool: ${name}`);
       }
       const metadata = findCommandMetadata(name);
-      const supportedProperties = metadata
-        ? (withMcpConfigSchema(name, metadata.inputSchema).properties ?? {})
-        : {};
-      const resolvedInput = resolveMcpConfigDefaults(name, input, supportedProperties);
+      const supportedKeys = metadata
+        ? Object.keys(withMcpConfigSchema(name, metadata.inputSchema).properties ?? {})
+        : [];
+      const resolvedInput = resolveMcpConfigDefaults(name, input, supportedKeys);
       const config = readMcpToolConfig(resolvedInput);
       const commandInput = stripMcpConfigFields(resolvedInput);
       const scopeKey = readPinScopeKey(config, commandInput);
@@ -199,9 +199,8 @@ const MAX_REF_PINS_PER_SCOPE = 1000;
  * state dirs — two same-named sessions there are different sessions and must
  * not cross-pollinate generations.
  */
-function readPinScopeKey(config: McpToolConfig, input: unknown): string {
-  const record = asOptionalRecord(input);
-  const session = record?.session;
+function readPinScopeKey(config: McpToolConfig, input: Record<string, unknown>): string {
+  const session = input.session;
   const sessionName = typeof session === 'string' && session.length > 0 ? session : 'default';
   // NUL separator: neither state-dir paths nor session names contain it.
   return `${config.client.stateDir ?? ''}\u0000${sessionName}`;
@@ -319,15 +318,13 @@ function collectRefBodies(entries: unknown, into: string[]): void {
 
 function pinPlainRefArguments(
   name: CommandName,
-  input: unknown,
+  input: Record<string, unknown>,
   pins: Map<string, number> | undefined,
-): unknown {
+): Record<string, unknown> {
   // No remembered pins for this scope → pass refs through unpinned.
   if (pins === undefined || pins.size === 0) return input;
-  const record = asOptionalRecord(input);
-  if (!record) return input;
-  if (name === 'wait') return pinWaitRef(record, pins) ?? input;
-  if (TARGET_REF_TOOLS.has(name)) return pinTargetRef(record, pins) ?? input;
+  if (name === 'wait') return pinWaitRef(input, pins) ?? input;
+  if (TARGET_REF_TOOLS.has(name)) return pinTargetRef(input, pins) ?? input;
   return input;
 }
 
@@ -437,15 +434,14 @@ function readMcpOutputFormat(outputFormat: unknown): McpOutputFormat {
   return outputFormat;
 }
 
-function stripMcpConfigFields(input: unknown): unknown {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return input;
+function stripMcpConfigFields(input: Record<string, unknown>): Record<string, unknown> {
   const {
     stateDir: _stateDir,
     mcpOutputFormat: _mcpOutputFormat,
     includeCost: _includeCost,
     responseLevel: _responseLevel,
     ...commandInput
-  } = input as Record<string, unknown>;
+  } = input;
   return commandInput;
 }
 
@@ -487,7 +483,7 @@ function withMcpConfigSchema(name: CommandName, schema: JsonSchema): JsonSchema 
 
 function renderToolText(params: {
   name: CommandName;
-  input: unknown;
+  input: Record<string, unknown>;
   result: unknown;
   outputFormat: McpOutputFormat;
   responseLevel?: ResponseLevel;

@@ -7,7 +7,7 @@ import { mergeDefinedFlags } from '../utils/merge-flags.ts';
 export function resolveMcpConfigDefaults(
   name: CommandName,
   input: unknown,
-  supportedProperties: Record<string, unknown>,
+  supportedKeys: readonly string[],
 ): Record<string, unknown> {
   const explicitInput = asInputRecord(input);
   const defaults = resolveConfigBackedFlagDefaults({
@@ -17,8 +17,7 @@ export function resolveMcpConfigDefaults(
   });
   const applicableDefaults = Object.fromEntries(
     Object.entries(defaults).filter(
-      ([key]) =>
-        Object.hasOwn(supportedProperties, key) && isFlagSupportedForCommand(key as FlagKey, name),
+      ([key]) => supportedKeys.includes(key) && isFlagSupportedForCommand(key as FlagKey, name),
     ),
   );
   return mergeDefinedFlags(applicableDefaults as Record<string, unknown>, explicitInput);

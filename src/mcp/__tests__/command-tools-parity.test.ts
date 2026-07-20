@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import type { AgentDeviceClient } from '../../client/client-types.ts';
+import { createAgentDeviceClient } from '../../agent-device-client.ts';
+import type { AgentDeviceClient, AgentDeviceDaemonTransport } from '../../client/client-types.ts';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
 import { validateAgainstSchema } from './output-schema-validator.ts';
 
@@ -60,24 +61,22 @@ test('MCP applies config-backed command defaults with explicit-input precedence 
   );
   vi.stubEnv('HOME', home);
 
-  const calls: unknown[] = [];
-  const client = {
-    capture: {
-      snapshot: async (input: unknown) => {
-        calls.push(input);
-        return { nodes: [], truncated: false };
-      },
-    },
-  } as unknown as AgentDeviceClient;
+  const calls: Array<Parameters<AgentDeviceDaemonTransport>[0]> = [];
+  const transport: AgentDeviceDaemonTransport = async (request) => {
+    calls.push(request);
+    return { ok: true, data: { nodes: [], truncated: false } };
+  };
   const executor = createCommandToolExecutor({
-    createClient: () => client,
+    createClient: (config) => createAgentDeviceClient(config, { transport }),
   });
 
   await executor.execute('snapshot', {});
   await executor.execute('snapshot', { iosXctestrunFile: '/explicit/runner.xctestrun' });
 
-  assert.deepEqual(calls, [
-    { iosXctestrunFile: configuredXctestrun },
-    { iosXctestrunFile: '/explicit/runner.xctestrun' },
-  ]);
+  assert.deepEqual(
+    calls.map((request) => request.flags?.iosXctestrunFile),
+    [configuredXctestrun, '/explicit/runner.xctestrun'],
+  );
+  assert.ok(calls.every((request) => request.command === 'snapshot'));
+  assert.ok(calls.every((request) => request.flags?.appsFilter === undefined));
 });
