@@ -9,7 +9,7 @@ import {
   type CommandName,
 } from '../commands/command-metadata.ts';
 import { resolveCommandRecordsSessionAction } from '../core/command-descriptor/registry.ts';
-import { MCP_COMMAND_OUTPUT_SCHEMAS } from './command-output-schemas.ts';
+import { MCP_COMMAND_OUTPUT_SCHEMAS } from './mcp-output-schemas.ts';
 import { AppError } from '../kernel/errors.ts';
 import { formatToolErrorText, normalizeToolError } from './tool-error.ts';
 import { resolveMcpConfigDefaults } from './tool-input-config.ts';
@@ -73,10 +73,9 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
         throw new AppError('INVALID_ARGS', `Unknown command tool: ${name}`);
       }
       const metadata = findCommandMetadata(name);
-      const supportedKeys = metadata
-        ? Object.keys(withMcpConfigSchema(name, metadata.inputSchema).properties ?? {})
-        : [];
-      const resolvedInput = resolveMcpConfigDefaults(name, input, supportedKeys);
+      if (!metadata) throw new Error(`Missing command metadata: ${name}`);
+      const supportedProperties = withMcpConfigSchema(name, metadata.inputSchema).properties ?? {};
+      const resolvedInput = resolveMcpConfigDefaults(name, input, supportedProperties);
       const config = readMcpToolConfig(resolvedInput);
       const commandInput = stripMcpConfigFields(resolvedInput);
       const scopeKey = readPinScopeKey(config, commandInput);

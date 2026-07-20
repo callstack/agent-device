@@ -10,12 +10,13 @@ import { validateAgainstSchema } from './output-schema-validator.ts';
 
 afterEach(() => {
   vi.unstubAllEnvs();
-  for (const directory of temporaryDirectories.splice(0)) {
-    fs.rmSync(directory, { recursive: true, force: true });
+  if (temporaryDirectory) {
+    fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+    temporaryDirectory = undefined;
   }
 });
 
-const temporaryDirectories: string[] = [];
+let temporaryDirectory: string | undefined;
 
 test('MCP collection results use object envelopes without changing object results or text', async () => {
   const results = {
@@ -52,7 +53,7 @@ test('MCP collection results use object envelopes without changing object result
 
 test('MCP applies config-backed command defaults with explicit-input precedence and applicability', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-mcp-config-'));
-  temporaryDirectories.push(home);
+  temporaryDirectory = home;
   const configuredXctestrun = path.join(home, 'configured.xctestrun');
   fs.mkdirSync(path.join(home, '.agent-device'));
   fs.writeFileSync(
