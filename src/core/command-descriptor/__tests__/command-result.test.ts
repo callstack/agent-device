@@ -1,8 +1,9 @@
 import { expect, test } from 'vitest';
 import type {
-  FillCommandResult,
-  LongPressCommandResult,
-  PressCommandResult,
+  FillCommandResponseData,
+  LongPressCommandResponseData,
+  PressCommandResponseData,
+  FindCommandResponseData,
 } from '../../../contracts/interaction.ts';
 import type { BootCommandResult, ShutdownCommandResult } from '../../../contracts/device.ts';
 import type { ViewportCommandResult } from '../../../contracts/viewport.ts';
@@ -36,10 +37,11 @@ type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 test('seeded CommandResult entries resolve to their existing contract result types', () => {
-  const press: Equal<CommandResult<'press'>, PressCommandResult> = true;
-  const click: Equal<CommandResult<'click'>, PressCommandResult> = true;
-  const fill: Equal<CommandResult<'fill'>, FillCommandResult> = true;
-  const longPress: Equal<CommandResult<'longpress'>, LongPressCommandResult> = true;
+  const press: Equal<CommandResult<'press'>, PressCommandResponseData> = true;
+  const click: Equal<CommandResult<'click'>, PressCommandResponseData> = true;
+  const fill: Equal<CommandResult<'fill'>, FillCommandResponseData> = true;
+  const longPress: Equal<CommandResult<'longpress'>, LongPressCommandResponseData> = true;
+  const find: Equal<CommandResult<'find'>, FindCommandResponseData> = true;
   const boot: Equal<CommandResult<'boot'>, BootCommandResult> = true;
   const shutdown: Equal<CommandResult<'shutdown'>, ShutdownCommandResult> = true;
   const viewport: Equal<CommandResult<'viewport'>, ViewportCommandResult> = true;
@@ -69,6 +71,7 @@ test('seeded CommandResult entries resolve to their existing contract result typ
     click,
     fill,
     longPress,
+    find,
     boot,
     shutdown,
     viewport,
@@ -91,6 +94,7 @@ test('seeded CommandResult entries resolve to their existing contract result typ
     record,
     trace,
   ]).toEqual([
+    true,
     true,
     true,
     true,

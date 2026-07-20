@@ -3,6 +3,13 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import type {
+  ClickCommandResponseData,
+  FillCommandResponseData,
+  FindCommandResponseData,
+  LongPressCommandResponseData,
+  PressCommandResponseData,
+} from '../contracts/interaction.ts';
 import {
   createAgentDeviceClient,
   type AgentDeviceClient,
@@ -1139,4 +1146,115 @@ test('capture.snapshot passes a digest (non-default level) payload through unnor
   assert.deepEqual(asRecord, digest);
   assert.equal(asRecord.nodeCount, 3);
   assert.ok(!('identifiers' in asRecord));
+});
+
+test('interactions expose targetKind-discriminated public response data', async () => {
+  const setup = createTransport(async (req) => {
+    if (req.command === 'press') {
+      return {
+        ok: true,
+        data: {
+          targetKind: 'ref',
+          ref: 'e5',
+          x: 88,
+          y: 99,
+          message: 'Tapped @e5 (88, 99)',
+        },
+      };
+    }
+    if (req.command === 'click') {
+      return {
+        ok: true,
+        data: {
+          targetKind: 'point',
+          x: 10,
+          y: 20,
+          button: 'secondary',
+          message: 'Tapped (10, 20)',
+        },
+      };
+    }
+    if (req.command === 'fill') {
+      return {
+        ok: true,
+        data: {
+          targetKind: 'ref',
+          ref: 'e5',
+          x: 88,
+          y: 99,
+          text: 'hello',
+          message: 'Filled 5 chars',
+        },
+      };
+    }
+    if (req.command === 'longpress') {
+      return {
+        ok: true,
+        data: {
+          targetKind: 'selector',
+          selector: 'label=Foo',
+          x: 30,
+          y: 40,
+          gesture: 'longpress',
+          durationMs: 500,
+          message: 'Long pressed label=Foo (30, 40)',
+        },
+      };
+    }
+    if (req.command === 'find') {
+      return {
+        ok: true,
+        data: { ref: '@e5', refsGeneration: 42, text: 'Hello' },
+      };
+    }
+    throw new Error(`unexpected command: ${req.command}`);
+  });
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const press = await client.interactions.press({ ref: '@e5' });
+  const click = await client.interactions.click({ x: 10, y: 20, button: 'secondary' });
+  const fill = await client.interactions.fill({ ref: '@e5', text: 'hello' });
+  const longPress = await client.interactions.longPress({
+    selector: 'label=Foo',
+    durationMs: 500,
+  });
+  const find = await client.interactions.find({
+    locator: 'label',
+    query: 'Foo',
+    action: 'getText',
+  });
+
+  const pressType: Equal<typeof press, PressCommandResponseData> = true;
+  const clickType: Equal<typeof click, ClickCommandResponseData> = true;
+  const fillType: Equal<typeof fill, FillCommandResponseData> = true;
+  const longPressType: Equal<typeof longPress, LongPressCommandResponseData> = true;
+  const findType: Equal<typeof find, FindCommandResponseData> = true;
+
+  assert.equal(press.targetKind, 'ref');
+  assert.equal(press.ref, 'e5');
+  assert.equal(press.x, 88);
+  assert.equal(press.y, 99);
+
+  assert.equal(click.targetKind, 'point');
+  assert.equal(click.x, 10);
+  assert.equal(click.y, 20);
+  assert.equal(click.button, 'secondary');
+
+  assert.equal(fill.targetKind, 'ref');
+  assert.equal(fill.ref, 'e5');
+  assert.equal(fill.text, 'hello');
+
+  assert.equal(longPress.targetKind, 'selector');
+  assert.equal(longPress.selector, 'label=Foo');
+  assert.equal(longPress.gesture, 'longpress');
+  assert.equal(longPress.durationMs, 500);
+
+  assert.equal(find.ref, '@e5');
+  assert.equal(find.refsGeneration, 42);
+  assert.equal(find.text, 'Hello');
+
+  assert.deepEqual(
+    [pressType, clickType, fillType, longPressType, findType],
+    [true, true, true, true, true],
+  );
 });

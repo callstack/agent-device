@@ -1,8 +1,9 @@
 import type {
-  FillCommandResult,
-  FindCommandResult,
-  LongPressCommandResult,
-  PressCommandResult,
+  ClickCommandResponseData,
+  FillCommandResponseData,
+  FindCommandResponseData,
+  LongPressCommandResponseData,
+  PressCommandResponseData,
 } from '../../contracts/interaction.ts';
 import type { BootCommandResult, ShutdownCommandResult } from '../../contracts/device.ts';
 import type { ViewportCommandResult } from '../../contracts/viewport.ts';
@@ -45,11 +46,11 @@ import type { ReplayCommandResult, ReplaySuiteResult } from '../../contracts/rep
  * re-read of the handler's literal return; see the per-type docstrings.
  */
 export interface CommandResultMap {
-  press: PressCommandResult;
-  click: PressCommandResult;
-  fill: FillCommandResult;
-  longpress: LongPressCommandResult;
-  find: FindCommandResult;
+  press: PressCommandResponseData;
+  click: ClickCommandResponseData;
+  fill: FillCommandResponseData;
+  longpress: LongPressCommandResponseData;
+  find: FindCommandResponseData;
   boot: BootCommandResult;
   shutdown: ShutdownCommandResult;
   viewport: ViewportCommandResult;
