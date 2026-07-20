@@ -19,7 +19,7 @@ export async function resolveMaestroSwipeOperation(
   request: MaestroRuntimeRequest,
   operations: MaestroRuntimeOperations,
 ): Promise<MaestroSwipeOperation> {
-  const duration = resolveNumeric(authored.duration, 'swipe.duration', {});
+  const duration = resolveNumeric(authored.duration, 'swipe.duration');
   if (authored.kind === 'coordinates') {
     if (authored.start.space !== authored.end.space) {
       throw new AppError(

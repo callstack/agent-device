@@ -432,12 +432,83 @@ describe('MaestroRuntimePort', () => {
       executeMaestroProgram(program, createMaestroRuntimePort(operations), {
         env: { TIMEOUT: '' },
       }),
-    ).rejects.toThrow(/extendedWaitUntil\.timeout must be a finite number/);
+    ).rejects.toThrow(/extendedWaitUntil\.timeout must be a non-negative finite number/);
 
     await expect(
       executeMaestroProgram(program, createMaestroRuntimePort(operations), {
         env: { TIMEOUT: '   ' },
       }),
-    ).rejects.toThrow(/extendedWaitUntil\.timeout must be a finite number/);
+    ).rejects.toThrow(/extendedWaitUntil\.timeout must be a non-negative finite number/);
+  });
+
+  test('applies the default delay for doubleTapOn when none is specified', async () => {
+    const calls: RecordedCall[] = [];
+    const operations = makeOperations({
+      doubleTapOn: vi.fn(async (input, context) => record(calls, 'doubleTapOn', input, context)),
+    });
+    const program = parseMaestroProgram('---\n- doubleTapOn:\n    id: button\n');
+
+    await executeMaestroProgram(program, createMaestroRuntimePort(operations), {});
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ kind: 'doubleTapOn', input: { delay: 100 } });
+  });
+
+  test('resolves tapOn.index into the target query', async () => {
+    const resolveTarget = vi.fn(
+      async (_input: unknown, context: { generation: number }): Promise<MaestroTargetMatch> => ({
+        generation: context.generation,
+        matched: true,
+        visible: true,
+        candidateCount: 1,
+        rect: { x: 0, y: 0, width: 100, height: 50 },
+        viewport: { x: 0, y: 0, width: 400, height: 800 },
+        ref: 'button',
+      }),
+    );
+    const tapOn = vi.fn();
+    const operations = makeOperations({ resolveTarget, tapOn });
+    const program = parseMaestroProgram('---\n- tapOn:\n    id: button\n    index: ${INDEX}\n');
+
+    await executeMaestroProgram(program, createMaestroRuntimePort(operations), {
+      env: { INDEX: '2' },
+    });
+
+    expect(resolveTarget).toHaveBeenCalledWith(
+      expect.objectContaining({ index: 2 }),
+      expect.anything(),
+    );
+    expect(tapOn).toHaveBeenCalled();
+  });
+
+  test('rejects negative, huge, and accepts whitespace-padded resolved numeric values', async () => {
+    const operations = makeOperations();
+    const negative = parseMaestroProgram(
+      '---\n- extendedWaitUntil:\n    visible: Ready\n    timeout: ${TIMEOUT}\n',
+    );
+
+    await expect(
+      executeMaestroProgram(negative, createMaestroRuntimePort(operations), {
+        env: { TIMEOUT: '-1' },
+      }),
+    ).rejects.toThrow(/extendedWaitUntil\.timeout must be a non-negative finite number/);
+
+    const huge = parseMaestroProgram(
+      '---\n- extendedWaitUntil:\n    visible: Ready\n    timeout: ${TIMEOUT}\n',
+    );
+
+    await expect(
+      executeMaestroProgram(huge, createMaestroRuntimePort(operations), {
+        env: { TIMEOUT: '99999999999999999' },
+      }),
+    ).rejects.toThrow(/extendedWaitUntil\.timeout must be a non-negative finite number/);
+
+    const padded = parseMaestroProgram('---\n- waitForAnimationToEnd: ${TIMEOUT}\n');
+
+    await expect(
+      executeMaestroProgram(padded, createMaestroRuntimePort(operations), {
+        env: { TIMEOUT: '  1000  ' },
+      }),
+    ).resolves.toBeDefined();
   });
 });

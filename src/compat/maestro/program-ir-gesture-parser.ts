@@ -21,10 +21,9 @@ import {
   readOptionalCommandOption,
   readOptionalBoolean,
   readOptionalEntry,
-  readOptionalNonNegativeInteger,
-  readOptionalNumber,
+  readOptionalNumeric,
   readOptionalString,
-  readRequiredPositiveInteger,
+  readRequiredNumeric,
   readRequiredString,
   sourceAt,
   type MaestroMapEntry,
@@ -142,7 +141,7 @@ export function parseMaestroTapOnCommand(
     : undefined;
   const options = tapOptions(parsed.entries, context, false);
   const index = hasEntry(parsed.entries, 'index')
-    ? readOptionalNonNegativeInteger(entryValue(parsed.entries, 'index'), 'tapOn.index', context)
+    ? readOptionalNumeric(entryValue(parsed.entries, 'index'), 'tapOn.index', context)
     : undefined;
   return stripUndefined({
     kind: 'tapOn' as const,
@@ -168,11 +167,7 @@ export function parseMaestroDoubleTapOnCommand(
   });
   const options = readOptionalCommandOption(parsed.entries, 'doubleTapOn', context);
   const delay = hasEntry(parsed.entries, 'delay')
-    ? readOptionalNonNegativeInteger(
-        entryValue(parsed.entries, 'delay'),
-        'doubleTapOn.delay',
-        context,
-      )
+    ? readOptionalNumeric(entryValue(parsed.entries, 'delay'), 'doubleTapOn.delay', context)
     : undefined;
   return stripUndefined({
     kind: 'doubleTapOn' as const,
@@ -276,7 +271,7 @@ export function parseMaestroSwipeCommand(
   );
   const options = readOptionalCommandOption(entries, 'swipe', context);
   const duration = hasEntry(entries, 'duration')
-    ? readOptionalNumber(entryValue(entries, 'duration'), 'swipe.duration', context)
+    ? readOptionalNumeric(entryValue(entries, 'duration'), 'swipe.duration', context)
     : undefined;
   if (hasEntry(entries, 'start') || hasEntry(entries, 'end')) {
     return { ...parseCoordinateSwipe(entries, source, duration, commandNode, context), ...options };
@@ -387,10 +382,10 @@ function tapOptions(
     readOptionalBoolean(entry, 'tapOn.retryTapIfNoChange', context),
   );
   const repeat = readOptionalEntry(entries, 'repeat', (entry) =>
-    readRequiredPositiveInteger(entry, 'tapOn.repeat', context),
+    readRequiredNumeric(entry, 'tapOn.repeat', context),
   );
   const delay = readOptionalEntry(entries, 'delay', (entry) =>
-    readOptionalNonNegativeInteger(entry, 'tapOn.delay', context),
+    readOptionalNumeric(entry, 'tapOn.delay', context),
   );
   const optional = readOptionalCommandOption(entries, 'tapOn', context).optional;
   const label = includeLabel

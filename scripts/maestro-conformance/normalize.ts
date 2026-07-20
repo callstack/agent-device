@@ -322,12 +322,12 @@ function canonicalizeAgentCommand(
         stopApp: command.stopApp,
       });
     case 'tapOn': {
-      const repeat = command.repeat ?? 1;
+      const repeat = num(command.repeat) ?? 1;
       return canonicalTap({
         longPress: false,
         repeat,
-        delay: repeat > 1 ? (command.delay ?? AGENT_REPEAT_DELAY_MS) : undefined,
-        target: agentTarget(command.target, command.index, command.childOf),
+        delay: repeat > 1 ? (num(command.delay) ?? AGENT_REPEAT_DELAY_MS) : undefined,
+        target: agentTarget(command.target, num(command.index), command.childOf),
       });
     }
     case 'doubleTapOn':
@@ -335,7 +335,7 @@ function canonicalizeAgentCommand(
       return canonicalTap({
         longPress: false,
         repeat: 2,
-        delay: command.delay ?? AGENT_REPEAT_DELAY_MS,
+        delay: num(command.delay) ?? AGENT_REPEAT_DELAY_MS,
         target: agentTarget(command.target),
       });
     case 'longPressOn':
@@ -366,7 +366,7 @@ function canonicalizeAgentCommand(
     case 'inputText':
       return dropUndefined({ kind: 'inputText', text: command.text });
     case 'eraseText':
-      return dropUndefined({ kind: 'eraseText', count: command.charactersToErase });
+      return dropUndefined({ kind: 'eraseText', count: num(command.charactersToErase) });
     case 'openLink':
       return dropUndefined({ kind: 'openLink', link: command.link });
     case 'scroll':
@@ -386,13 +386,13 @@ function canonicalizeAgentCommand(
     case 'takeScreenshot':
       return { kind: 'takeScreenshot' };
     case 'waitForAnimationToEnd':
-      return dropUndefined({ kind: 'waitForAnimationToEnd', timeout: command.timeout });
+      return dropUndefined({ kind: 'waitForAnimationToEnd', timeout: num(command.timeout) });
     case 'stopApp':
       return { kind: 'stopApp' };
     case 'repeat':
-      return { kind: 'repeat', times: command.times };
+      return { kind: 'repeat', times: num(command.times) ?? str(command.times) };
     case 'retry':
-      return dropUndefined({ kind: 'retry', maxRetries: command.maxRetries });
+      return dropUndefined({ kind: 'retry', maxRetries: num(command.maxRetries) ?? str(command.maxRetries) });
     case 'runFlow':
       return { kind: 'runFlow', source: command.include.kind === 'file' ? 'file' : 'commands' };
     case 'runScript':
@@ -436,7 +436,7 @@ function agentSelector(
 }
 
 function agentGesture(gesture: MaestroSwipeGesture): CanonicalGesture {
-  const duration = gesture.duration ?? AGENT_SWIPE_DEFAULT_DURATION;
+  const duration = num(gesture.duration) ?? AGENT_SWIPE_DEFAULT_DURATION;
   switch (gesture.kind) {
     case 'screen':
       return { mode: 'direction', direction: gesture.direction, duration };

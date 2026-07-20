@@ -126,7 +126,7 @@ async function executeCommand(
     case 'extendedWaitUntil':
       await requireObservation(
         readExtendedWaitCondition(command),
-        resolveNumeric(command.timeout, 'extendedWaitUntil.timeout', {}) ??
+        resolveNumeric(command.timeout, 'extendedWaitUntil.timeout') ??
           state.timing.extendedWaitUntilTimeoutMs,
         state,
       );

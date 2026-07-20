@@ -13,8 +13,8 @@ import {
   entryValue,
   hasEntry,
   invalidAt,
-  readIntegerValue,
   readMapEntries,
+  readRequiredNumeric,
   readOptionalString,
   readOptionalEntry,
   readRequiredString,
@@ -137,7 +137,7 @@ export function parseMaestroRepeatCommand(
   return {
     kind: 'repeat',
     source,
-    times: readIntegerValue(entryValue(entries, 'times'), 'repeat.times', context),
+    times: readRequiredNumeric(entryValue(entries, 'times'), 'repeat.times', context),
     commands: parseCommands(entryValue(entries, 'commands'), 'repeat.commands', context),
   };
 }
@@ -154,7 +154,7 @@ export function parseMaestroRetryCommand(
   if (!hasEntry(entries, 'commands'))
     invalidAt('Maestro retry requires commands.', commandNode, context);
   const maxRetries = hasEntry(entries, 'maxRetries')
-    ? readIntegerValue(entryValue(entries, 'maxRetries'), 'retry.maxRetries', context)
+    ? readRequiredNumeric(entryValue(entries, 'maxRetries'), 'retry.maxRetries', context)
     : undefined;
   return stripUndefined({
     kind: 'retry' as const,

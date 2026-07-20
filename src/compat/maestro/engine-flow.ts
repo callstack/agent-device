@@ -1,7 +1,11 @@
 import path from 'node:path';
 import { AppError } from '../../kernel/errors.ts';
 import { createRequestCanceledError } from '../../request/cancel.ts';
-import { INTEGER_STRING_PATTERN, NUMERIC_STRING_PATTERN } from './program-ir-values.ts';
+import {
+  MAESTRO_NUMERIC_FIELD_CONSTRAINTS,
+  numericDescription,
+  type NumericScalarConstraints,
+} from './program-ir-values.ts';
 import type {
   MaestroCommand,
   MaestroProgram,
@@ -22,56 +26,37 @@ export function resolveCommand<T extends { readonly source: MaestroCommand['sour
   };
 }
 
-export type ResolveNumericConstraints = {
-  integer?: boolean;
-  nonNegative?: boolean;
-  positive?: boolean;
-};
-
-function resolveNumericDescription(constraints: ResolveNumericConstraints): string {
-  if (constraints.positive) return 'a positive integer';
-  if (constraints.nonNegative) return 'a non-negative integer';
-  if (constraints.integer) return 'an integer';
-  return 'a finite number';
-}
-
 export function resolveNumeric(
   value: number | string | undefined,
   name: string,
-  constraints: ResolveNumericConstraints = {},
+  constraints?: NumericScalarConstraints,
 ): number | undefined {
   if (value === undefined) return undefined;
-  const num =
-    typeof value === 'number'
-      ? value
-      : Number(parseResolvedNumericString(value, name, constraints));
-  const description = resolveNumericDescription(constraints);
-  if (!Number.isFinite(num)) {
+  const effectiveConstraints = constraints ?? MAESTRO_NUMERIC_FIELD_CONSTRAINTS[name] ?? {};
+  const description = numericDescription(effectiveConstraints);
+  let num: number;
+  if (typeof value === 'number') {
+    num = value;
+  } else {
+    const trimmed = value.trim();
+    if (trimmed === '') {
+      throw new AppError('INVALID_ARGS', `Maestro ${name} must be ${description}.`);
+    }
+    num = Number(trimmed);
+  }
+  if (!Number.isFinite(num) || Math.abs(num) > Number.MAX_SAFE_INTEGER) {
     throw new AppError('INVALID_ARGS', `Maestro ${name} must be ${description}.`);
   }
-  if (constraints.integer && !Number.isInteger(num)) {
+  if (effectiveConstraints.integer && !Number.isSafeInteger(num)) {
     throw new AppError('INVALID_ARGS', `Maestro ${name} must be ${description}.`);
   }
-  if (constraints.nonNegative && num < 0) {
+  if (effectiveConstraints.nonNegative && num < 0) {
     throw new AppError('INVALID_ARGS', `Maestro ${name} must be ${description}.`);
   }
-  if (constraints.positive && num <= 0) {
+  if (effectiveConstraints.positive && num <= 0) {
     throw new AppError('INVALID_ARGS', `Maestro ${name} must be ${description}.`);
   }
   return num;
-}
-
-function parseResolvedNumericString(
-  value: string,
-  name: string,
-  constraints: ResolveNumericConstraints,
-): string {
-  const description = resolveNumericDescription(constraints);
-  const pattern = constraints.integer ? INTEGER_STRING_PATTERN : NUMERIC_STRING_PATTERN;
-  if (!pattern.test(value)) {
-    throw new AppError('INVALID_ARGS', `Maestro ${name} must be ${description}.`);
-  }
-  return value;
 }
 
 export function readIterationCount(
@@ -81,7 +66,7 @@ export function readIterationCount(
   name: string,
 ): number {
   const resolved = value === undefined ? fallback : context.resolve(String(value));
-  return resolveNumeric(resolved, name, { integer: true, nonNegative: true }) ?? fallback;
+  return resolveNumeric(resolved, name)!;
 }
 
 export function checkpointMaestroCancellation(signal: AbortSignal | undefined): void {

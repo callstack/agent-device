@@ -46,10 +46,9 @@ import {
   readOptionalBoolean,
   readOptionalCommandOption,
   readOptionalEntry,
-  readOptionalNumber,
-  readOptionalPositiveInteger,
+  readOptionalNumeric,
   readOptionalString,
-  readRequiredPositiveInteger,
+  readRequiredNumeric,
   readRequiredString,
   readScalarMap,
   readScalarValue,
@@ -221,12 +220,12 @@ function parseEraseText(
     return {
       kind: 'eraseText',
       source,
-      charactersToErase: readRequiredPositiveInteger(value, 'eraseText', context),
+      charactersToErase: readRequiredNumeric(value, 'eraseText', context),
     };
   const entries = readMapEntries(value, 'eraseText', context);
   assertOnlyKeys(entries, 'eraseText', ['charactersToErase'], context);
   const charactersToErase = hasEntry(entries, 'charactersToErase')
-    ? readOptionalPositiveInteger(
+    ? readOptionalNumeric(
         entryValue(entries, 'charactersToErase'),
         'eraseText.charactersToErase',
         context,
@@ -354,7 +353,7 @@ function parseExtendedWaitUntil(
   const options = readOptionalCommandOption(entries, 'extendedWaitUntil', context);
   const condition = parseExtendedWaitUntilCondition(entries, commandNode, context);
   const timeout = hasEntry(entries, 'timeout')
-    ? readOptionalNumber(entryValue(entries, 'timeout'), 'extendedWaitUntil.timeout', context)
+    ? readOptionalNumeric(entryValue(entries, 'timeout'), 'extendedWaitUntil.timeout', context)
     : undefined;
   const optional = options.optional === true || condition.optional === true ? true : undefined;
   const command: MaestroExtendedWaitUntilCommand = {
@@ -425,7 +424,7 @@ function parseScrollUntilVisible(
       )
     : undefined;
   const timeout = hasEntry(entries, 'timeout')
-    ? readOptionalNumber(entryValue(entries, 'timeout'), 'scrollUntilVisible.timeout', context)
+    ? readOptionalNumeric(entryValue(entries, 'timeout'), 'scrollUntilVisible.timeout', context)
     : undefined;
   const optional = options.optional === true || parsedElement!.optional === true ? true : undefined;
   return stripUndefined({
@@ -476,13 +475,13 @@ function parseWaitForAnimationToEnd(
   const source = sourceAt(commandNode, context);
   if (isNullNode(value)) return { kind: 'waitForAnimationToEnd', source };
   if (isScalar(value)) {
-    const timeout = readOptionalNumber(value, 'waitForAnimationToEnd', context);
+    const timeout = readOptionalNumeric(value, 'waitForAnimationToEnd', context);
     return stripUndefined({ kind: 'waitForAnimationToEnd' as const, source, timeout });
   }
   const entries = readMapEntries(value, 'waitForAnimationToEnd', context);
   assertOnlyKeys(entries, 'waitForAnimationToEnd', ['timeout'], context);
   const timeout = hasEntry(entries, 'timeout')
-    ? readOptionalNumber(entryValue(entries, 'timeout'), 'waitForAnimationToEnd.timeout', context)
+    ? readOptionalNumeric(entryValue(entries, 'timeout'), 'waitForAnimationToEnd.timeout', context)
     : undefined;
   return stripUndefined({ kind: 'waitForAnimationToEnd' as const, source, timeout });
 }
