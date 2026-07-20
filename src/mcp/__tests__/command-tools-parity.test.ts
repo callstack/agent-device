@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { createAgentDeviceClient } from '../../agent-device-client.ts';
 import type { AgentDeviceClient, AgentDeviceDaemonTransport } from '../../client/client-types.ts';
+import type { CommandExecutionResult } from '../../commands/command-surface.ts';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
 import { validateAgainstSchema } from './output-schema-validator.ts';
 
@@ -21,11 +22,18 @@ let temporaryDirectory: string | undefined;
 test('MCP collection results use object envelopes without changing object results or text', async () => {
   const results = {
     devices: [
-      { id: 'device-1', name: 'iPhone', platform: 'ios', target: 'mobile', kind: 'device' },
+      {
+        id: 'device-1',
+        name: 'iPhone',
+        platform: 'ios',
+        target: 'mobile',
+        kind: 'device',
+        identifiers: {},
+      },
     ],
     apps: ['com.example.app'],
-    wait: { message: 'Wait complete' },
-  } as const;
+    wait: { waitedMs: 10 },
+  } satisfies Record<'devices' | 'apps' | 'wait', CommandExecutionResult>;
   const executor = createCommandToolExecutor({
     createClient: () => ({}) as AgentDeviceClient,
     runCommand: async (_client, name) => results[name as keyof typeof results],
@@ -35,7 +43,11 @@ test('MCP collection results use object envelopes without changing object result
   const apps = await executor.execute('apps', {});
   const wait = await executor.execute('wait', {});
 
-  assert.deepEqual(devices.structuredContent, { devices: results.devices });
+  assert.deepEqual(devices.structuredContent, {
+    devices: [
+      { id: 'device-1', name: 'iPhone', platform: 'ios', target: 'mobile', kind: 'device' },
+    ],
+  });
   assert.deepEqual(apps.structuredContent, { apps: results.apps });
   assert.deepEqual(wait.structuredContent, results.wait);
   assert.equal(devices.content[0]?.text, 'iPhone (ios device target=mobile)');

@@ -209,7 +209,7 @@ test('MCP includeCost:true opts into agent-cost: sets client.cost, strips the ar
     },
     runCommand: async (_client, name, input) => {
       calls.push({ name, input });
-      return { message: `Ran ${name}`, cost: { wallClockMs: 42 } };
+      return { waitedMs: 42, cost: { wallClockMs: 42, runnerRoundTrips: 0 } };
     },
   });
 
@@ -220,7 +220,10 @@ test('MCP includeCost:true opts into agent-cost: sets client.cost, strips the ar
   // includeCost is an MCP-boundary field and must not leak into the command input.
   assert.deepEqual(calls, [{ name: 'wait', input: {} }]);
   // The daemon-provided cost rides through structuredContent unchanged.
-  assert.deepEqual(result.structuredContent, { message: 'Ran wait', cost: { wallClockMs: 42 } });
+  assert.deepEqual(result.structuredContent, {
+    waitedMs: 42,
+    cost: { wallClockMs: 42, runnerRoundTrips: 0 },
+  });
 });
 
 test('MCP includeCost absent/false leaves the request shape untouched (no cost config)', async () => {

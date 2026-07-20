@@ -7,16 +7,28 @@ const commandSurface = listCommandFamilyDefinitions();
 
 export type { BatchCommandName, CommandName };
 
+type CommandDefinitionFor<Name extends CommandName> = Extract<
+  CommandFamilyDefinition,
+  { name: Name }
+>;
+
+export type CommandExecutionResult<Name extends CommandName = CommandName> = Awaited<
+  ReturnType<CommandDefinitionFor<Name>['invoke']>
+>;
+
 const commandMap: ReadonlyMap<CommandName, CommandFamilyDefinition> = new Map(
   commandSurface.map((definition) => [definition.name, definition]),
 );
 
-export async function runCommand(
+export async function runCommand<Name extends CommandName>(
   client: AgentDeviceClient,
-  name: CommandName,
+  name: Name,
   input: unknown,
-): Promise<unknown> {
-  return await getCommandDefinition(name).invoke(client, input);
+): Promise<CommandExecutionResult<Name>> {
+  // The map is total over CommandName, but Map#get cannot retain the correlation
+  // between a runtime key and that definition's return type. Re-establish it at
+  // this single lookup seam; callers keep the per-command result type.
+  return (await getCommandDefinition(name).invoke(client, input)) as CommandExecutionResult<Name>;
 }
 
 /**

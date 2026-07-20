@@ -1,5 +1,6 @@
 import type { AgentDeviceClient, AgentDeviceClientConfig } from '../client/client-types.ts';
 import type { JsonSchema } from '../commands/command-contract.ts';
+import type { CommandExecutionResult } from '../commands/command-surface.ts';
 import { RESPONSE_LEVELS, type ResponseLevel } from '../kernel/contracts.ts';
 import { formatCliOutput } from '../commands/cli-output.ts';
 import {
@@ -29,7 +30,7 @@ type CommandToolExecutorDeps = {
     client: AgentDeviceClient,
     name: CommandName,
     input: Record<string, unknown>,
-  ) => Promise<unknown>;
+  ) => Promise<CommandExecutionResult>;
 };
 
 type CommandToolExecutor = {
@@ -220,7 +221,7 @@ function mergeIssuedRefPins(
   refPinsByScope: Map<string, Map<string, number>>,
   scopeKey: string,
   name: CommandName,
-  result: unknown,
+  result: CommandExecutionResult,
 ): void {
   if (SETTLE_REF_ISSUING_TOOLS.has(name)) {
     mergeSettleIssuedRefPins(refPinsByScope, scopeKey, result);
@@ -253,7 +254,7 @@ function mergeIssuedRefPins(
 function mergeSettleIssuedRefPins(
   refPinsByScope: Map<string, Map<string, number>>,
   scopeKey: string,
-  result: unknown,
+  result: CommandExecutionResult,
 ): void {
   const settle = asOptionalRecord(asOptionalRecord(result)?.settle);
   if (!settle) return;
@@ -380,7 +381,7 @@ async function runCommand(
   client: AgentDeviceClient,
   name: CommandName,
   input: Record<string, unknown>,
-): Promise<unknown> {
+): Promise<CommandExecutionResult> {
   const commandSurface = await import('../commands/command-surface.ts');
   return await commandSurface.runCommand(client, name, input);
 }
@@ -483,7 +484,7 @@ function withMcpConfigSchema(name: CommandName, schema: JsonSchema): JsonSchema 
 function renderToolText(params: {
   name: CommandName;
   input: Record<string, unknown>;
-  result: unknown;
+  result: CommandExecutionResult;
   outputFormat: McpOutputFormat;
   responseLevel?: ResponseLevel;
 }): string {

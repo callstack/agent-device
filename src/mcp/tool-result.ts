@@ -1,10 +1,11 @@
 import { formatCliOutput } from '../commands/cli-output.ts';
 import type { CommandName } from '../commands/command-metadata.ts';
+import type { CommandExecutionResult } from '../commands/command-surface.ts';
 
 export function projectStructuredContent(
   name: CommandName,
   input: Record<string, unknown>,
-  result: unknown,
+  result: CommandExecutionResult,
 ): Record<string, unknown> {
   if (result && typeof result === 'object' && !Array.isArray(result)) {
     return result as Record<string, unknown>;
