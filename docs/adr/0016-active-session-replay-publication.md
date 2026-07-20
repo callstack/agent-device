@@ -1,4 +1,4 @@
-# ADR 0016: Active-Session Replay Publication
+# ADR 0016: Active-Session Script Publication
 
 ## Status
 
@@ -7,9 +7,9 @@ Proposed
 ## Context
 
 The replay repair study found re-recording a drifted journey cheaper than repairing it in two of the
-three measured drift classes. The immediate reusable unit is an **open-to-destination replay**: a
-self-contained `.ad` script that opens the app, performs the complete journey to screen X, and leaves
-the replay session active there so an agent can continue with new work.
+three measured drift classes. The immediate reusable unit is an **open-to-destination script**: a
+self-contained `.ad` script that opens the app, performs the complete journey to screen X, verifies a
+destination landmark, and leaves the app session active there so an agent can continue with new work.
 
 Ordinary script recording currently combines two concerns. `open --save-script[=<path>]` arms
 recording before the first interaction so selector chains and ADR 0012 `target-v1` identity evidence
@@ -36,6 +36,7 @@ Add an explicit publication action for an already-armed ordinary script recordin
 ```sh
 agent-device open com.example.app --relaunch --save-script=screen-x.ad
 # perform the complete journey to screen X
+agent-device wait 'role="heading" label="Screen X"'
 agent-device session save-replay
 ```
 
@@ -64,11 +65,38 @@ with `saveScriptBoundary` set and directs the caller to finish or abort the repa
 `replay --from` and teardown commit protocol. Active-session publication never marks a repair COMPLETE,
 commits a healed slice, writes `# agent-device:heal-complete`, or changes repair tombstone semantics.
 
+### Destination readiness and replay handoff
+
+The destination is an authored postcondition, not the last navigation action. Before publication, the
+recorded suffix after the last mutating action must contain a target-bearing `wait` for a landmark that
+identifies the ready destination screen. A duration wait or `wait stable` alone does not qualify, though
+`wait stable` may follow the landmark wait. `session save-replay` refuses publication without this
+**destination guard** and tells the author to record one. V1 does not infer a screen identity from a
+snapshot or synthesize an implicit guard.
+
+On consumption, a script without `close` preserves the existing replay behavior: the named session stays
+active and the successful `ReplayCommandResult` returns its `session` id. The caller binds subsequent
+commands to that returned id. Replay reports success only after the destination guard completes; the
+absence of `close` changes neither action dispatch nor the success response shape.
+
+### Sensitive inputs
+
+Executable `.ad` artifacts serialize action inputs literally. A recorded `fill` therefore writes its
+text to the published file; diagnostic and event-log redaction cannot protect an input that the replay
+engine must later execute. V1 does not claim secret-bearing login flows are safe to publish.
+
+Native `.ad` replay already supports late-bound `${VAR}` values, but ordinary recording cannot yet
+execute with a real value while publishing only its placeholder. That safe-authoring capability is
+tracked in [#1348](https://github.com/callstack/agent-device/issues/1348). Until it ships, authors must not
+record a journey that enters a secret: use pre-authenticated test state or deliberately non-secret fixture
+credentials that are safe to persist. CLI help must state this warning next to the authoring workflow.
+
 ### Artifact contract
 
 The published `.ad`:
 
 - contains one recorded `open` and every recordable action through the publication request;
+- contains a destination guard after its last mutating action;
 - does not append or serialize `session save-replay` or `close`;
 - uses the ordinary session context header, selector-chain optimization, and canonical `target-v1`
   annotations captured while ARMED;
@@ -79,8 +107,8 @@ The published `.ad`:
 
 The success response identifies the final path and session and reports the number of serialized actions.
 The command must fail before writing when there is no active session, recording was not armed, no
-recorded `open` exists, or a repair transaction owns the session. Every failure explains the recovery
-action; none degrades to `{ written: false }` success.
+recorded `open` or destination guard exists, or a repair transaction owns the session. Every failure
+explains the recovery action; none degrades to `{ written: false }` success.
 
 ### Surface and naming
 
@@ -95,16 +123,16 @@ new vocabulary without improving the v1 workflow.
 
 ## Consequences
 
-- Agents can record login, onboarding, or deep navigation as one self-contained starting state, replay
-  it from scratch, and continue from the resulting live session.
+- Agents can record onboarding or deep navigation as one self-contained starting state, replay it from
+  scratch, and continue from the resulting live session.
 - The workflow has two explicit moments because evidence must be armed before the first target action and
   the destination is known only when the caller publishes.
 - Normal unarmed interactions keep their current fast paths and retention behavior.
 - A successful active-session publication cannot collide with a later close-time auto-save.
 - Intermediate lifecycle-free fragments, entry guards, include semantics, composed digests, and shared
   fragment pinning remain entirely under #1336.
-- Credential handling and arbitrary history ranges remain out of scope. Agents retain responsibility for
-  reviewing recorded inputs before sharing an artifact.
+- Secret-bearing authoring remains unsafe until #1348; the initial workflow is limited to journeys that
+  do not enter secrets. Arbitrary history ranges remain out of scope.
 
 ## Alternatives Considered
 
@@ -121,14 +149,20 @@ new vocabulary without improving the v1 workflow.
   with fragment design.
 - **`replay save`:** rejected because `replay <path>` consumes an artifact while publication consumes a
   live session; the session owns the source data and lifecycle.
+- **Infer a destination fingerprint at publication:** rejected for v1 because screen identity and
+  readiness are app semantics. A caller-authored target wait is explicit, already recordable, and fails
+  at the correct point during cold replay.
 
 ## Validation Required for Implementation
 
 - An unarmed session refuses publication before filesystem work and names `open --save-script` as the
   recovery.
+- An armed session without a destination guard refuses publication before filesystem work and names a
+  target-bearing `wait` as the recovery.
 - An armed session publishes `open` plus target-annotated actions without `close`, returns the final path,
   remains active, and can continue accepting commands.
-- The artifact replays in a fresh session, reaches the destination, and leaves that replay session active.
+- The artifact replays from a cold start, completes its destination guard, returns the live session id,
+  and accepts a subsequent command on that session.
 - Every supported element-targeting action has canonical identity evidence and no unresolved `@ref`
   reaches disk.
 - Existing-target refusal preserves the original bytes; `--force` replaces atomically; a failed publish
@@ -136,5 +170,7 @@ new vocabulary without improving the v1 workflow.
 - Closing after successful publication performs no second write, while closing an unpublished ARMED
   ordinary recording preserves current close-time publication behavior.
 - Repair-armed sessions refuse this action without changing repair state.
+- CLI help warns that literal `fill` inputs are persisted and tells authors not to record secret-bearing
+  journeys until #1348's parameterized-input mechanism is available.
 - Provider-backed integration scenarios cover the public daemon route, and live iOS and Android runs
   prove the saved artifact and post-save session behavior on real backends.
