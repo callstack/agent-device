@@ -17,6 +17,7 @@
 | [0013 Unified Gesture Plans](0013-unified-gesture-plans.md) | gesture API/routing, contact topology, multi-touch geometry, native pointer injection, two-finger pan |
 | [0014 Session Ref-Frame Lifetime](0014-session-ref-frame-lifetime.md) | ref authorization epochs, complete/partial issuance, pre-side-effect expiration, replay/batch compatibility, and cross-platform stale-mutation policy |
 | [0015 Direct Maestro Compatibility Engine](0015-direct-maestro-engine.md) | Maestro YAML parsing/execution, compatibility observation policy, conformance, performance gates, gesture integration |
+| [0016 Active-Session Replay Publication](0016-active-session-replay-publication.md) | publishing an armed open-to-destination `.ad` recording without closing its live session |
 
 ADRs record *why*; the registries and gates they describe are the living source of truth — when
 prose and a registry disagree, the registry wins and the ADR needs a follow-up.

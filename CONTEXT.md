@@ -28,6 +28,11 @@
 - Target: selected automation destination, such as mobile, tv, or desktop.
 - Modality: broad supported device family, such as mobile, tv, or desktop.
 - Session: daemon-owned state for a selected target and opened app or surface.
+- Script recording: opt-in session mode armed before actions so a persisted `.ad` can carry portable
+  action inputs and recording-time target identity evidence. It is distinct from screen/video recording.
+- Open-to-destination replay: self-contained `.ad` recording that starts with `open`, ends before
+  `close`, and leaves a replay session active at its recorded destination. Avoid: fragment (reserved for
+  lifecycle-free composition), partial script.
 - Recording backend: daemon-internal module interface selected per recording target that owns platform recording validation, output path policy, start/stop execution, and record-only cleanup below the daemon recording lifecycle.
 - Device lease: logical remote ownership of one selected device for a
   tenant/run/client and lease provider, separate from platform helper process
