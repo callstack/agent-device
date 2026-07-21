@@ -637,4 +637,12 @@ test('waitForAnimationToEnd between two taps does not throw a stability-generati
   const result = await executeMaestroProgram(program, port);
 
   expect(result).toMatchObject({ executed: 3, skipped: 0 });
+  expect(requests.map(({ command }) => command)).toEqual([
+    'snapshot',
+    'click',
+    'screenshot',
+    'screenshot',
+    'snapshot',
+    'click',
+  ]);
 });

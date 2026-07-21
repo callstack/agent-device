@@ -124,3 +124,22 @@ test('rejects a deferred stability baseline consumed by another generation', asy
     'stability generation 2 does not match 3',
   );
 });
+
+test('consumes deferred hierarchy stability after a same-generation visual wait', async () => {
+  const source = createDaemonMaestroSnapshotSource({
+    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    invoke: async () => ({ ok: true, data: { nodes: [] } }),
+    dependencies: makeDependencies(),
+    platform: 'ios',
+  });
+
+  source.requireStability(2);
+  source.consumeStabilityFromVisualWait({ generation: 2, env: {} });
+
+  await expect(source.settlePending({ generation: 2, env: {} })).resolves.toBeUndefined();
+
+  source.requireStability(2);
+  expect(() => source.consumeStabilityFromVisualWait({ generation: 3, env: {} })).toThrow(
+    'stability generation 2 does not match 3',
+  );
+});

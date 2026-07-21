@@ -75,7 +75,7 @@ final class TouchPlanInjector {
       UiAutomation automation, MotionEvent event, boolean waitForDispatch) {
     try {
       sleepUntil(event.getEventTime());
-      if (!automation.injectInputEvent(event, waitForDispatch)) {
+      if (!UiAutomationInputDispatcher.inject(automation, event, waitForDispatch)) {
         throw new IllegalStateException("injectInputEvent returned false");
       }
     } finally {

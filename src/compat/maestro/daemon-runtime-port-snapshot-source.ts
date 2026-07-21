@@ -81,6 +81,19 @@ export function createDaemonMaestroSnapshotSource(
       invalidatedBaseline = undefined;
       primed = undefined;
     },
+    consumeStabilityFromVisualWait: (context) => {
+      if (stabilityRequiredGeneration === undefined) return;
+      if (stabilityRequiredGeneration !== context.generation) {
+        throw new AppError(
+          'COMMAND_FAILED',
+          `Maestro stability generation ${stabilityRequiredGeneration} does not match ${context.generation}.`,
+        );
+      }
+      stabilityRequiredGeneration = undefined;
+      stabilityBaseline = undefined;
+      invalidatedBaseline = undefined;
+      primed = undefined;
+    },
     prime: (generation, snapshot) => {
       primed = { generation, snapshot };
     },

@@ -42,6 +42,7 @@ export type MaestroSnapshotSource = {
   readonly readMetrics: () => Pick<MaestroRuntimeMetrics, 'hierarchyCaptures'>;
   readonly invalidate: (generation: number) => void;
   readonly requireStability: (generation: number) => void;
+  readonly consumeStabilityFromVisualWait: (context: MaestroRuntimeReadContext) => void;
   readonly prime: (generation: number, snapshot: SnapshotState) => void;
   readonly settlePending: (context: MaestroRuntimeReadContext) => Promise<void>;
 };

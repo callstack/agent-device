@@ -125,8 +125,9 @@ primes the next command, so the retry policy does not add another hierarchy read
 `waitForAnimationToEnd` uses its own screenshot-stability operation, matching upstream's two immediate
 captures per attempt and 0.005% normalized absolute RGB-difference threshold. These captures explicitly
 bypass ordinary screenshot stabilization so the command observes the application rather than
-recursively waiting on another settling policy. Screenshot stability does not discharge a pending
-mutation boundary; a later mutating command still verifies hierarchy stability before dispatch. On iOS,
+recursively waiting on another settling policy. After a successful authored visual wait, screenshot
+stability discharges the same-generation pending mutation boundary instead of preceding the visual
+barrier with a hierarchy capture. A failed visual wait leaves that boundary pending. On iOS,
 comparison captures use the persistent runner's screenshot surface so both frames come from one warmed
 transport and avoid simulator screenshot setup between polls.
 

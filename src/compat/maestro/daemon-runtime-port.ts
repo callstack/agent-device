@@ -373,10 +373,14 @@ export function createDaemonMaestroRuntimePort(
   const { operations, snapshots, readMetrics } = createDaemonMaestroRuntimeParts(options);
   return {
     execute: async (request: MaestroRuntimeRequest): Promise<MaestroRuntimeResult> => {
-      if (maestroCommandRequiresSettledPredecessor(request.command)) {
-        await snapshots.settlePending(operationContext(request, request.command));
+      const context = operationContext(request, request.command);
+      const visualStabilityBarrier = request.command.kind === 'waitForAnimationToEnd';
+      if (maestroCommandRequiresSettledPredecessor(request.command) && !visualStabilityBarrier) {
+        await snapshots.settlePending(context);
       }
-      return await executeMaestroRuntimeCommand(request, operations);
+      const result = await executeMaestroRuntimeCommand(request, operations);
+      if (visualStabilityBarrier) snapshots.consumeStabilityFromVisualWait(context);
+      return result;
     },
     observe: async (request) => {
       const observation = await observeMaestroCondition(request, operations);
