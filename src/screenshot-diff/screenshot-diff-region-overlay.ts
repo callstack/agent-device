@@ -18,21 +18,12 @@ export function annotateDiffRegions(diff: PNG, regions: ScreenshotDiffRegion[]):
 }
 
 function drawRect(diff: PNG, rect: ScreenshotDiffRegion['rect']): void {
-  if (
-    !Number.isFinite(rect.x) ||
-    !Number.isFinite(rect.y) ||
-    !Number.isFinite(rect.width) ||
-    !Number.isFinite(rect.height)
-  ) {
-    return;
-  }
-  const minX = clamp(rect.x, 0, diff.width - 1);
-  const minY = clamp(rect.y, 0, diff.height - 1);
-  const right = rect.x + rect.width - 1;
-  const bottom = rect.y + rect.height - 1;
-  if (!Number.isFinite(right) || !Number.isFinite(bottom)) return;
-  const maxX = clamp(right, 0, diff.width - 1);
-  const maxY = clamp(bottom, 0, diff.height - 1);
+  const bounds = resolveFiniteRectBounds(rect);
+  if (bounds == null) return;
+  const minX = clamp(bounds.x, 0, diff.width - 1);
+  const minY = clamp(bounds.y, 0, diff.height - 1);
+  const maxX = clamp(bounds.right, 0, diff.width - 1);
+  const maxY = clamp(bounds.bottom, 0, diff.height - 1);
   for (let thickness = 0; thickness < REGION_BORDER_THICKNESS; thickness += 1) {
     for (let x = minX; x <= maxX; x += 1) {
       setPixel(diff, x, minY + thickness, REGION_BORDER_COLOR);
@@ -43,6 +34,19 @@ function drawRect(diff: PNG, rect: ScreenshotDiffRegion['rect']): void {
       setPixel(diff, maxX - thickness, y, REGION_BORDER_COLOR);
     }
   }
+}
+
+function resolveFiniteRectBounds(rect: ScreenshotDiffRegion['rect']): {
+  x: number;
+  y: number;
+  right: number;
+  bottom: number;
+} | null {
+  const right = rect.x + rect.width - 1;
+  const bottom = rect.y + rect.height - 1;
+  const values = [rect.x, rect.y, rect.width, rect.height, right, bottom];
+  if (!values.every(Number.isFinite)) return null;
+  return { x: rect.x, y: rect.y, right, bottom };
 }
 
 function setPixel(
