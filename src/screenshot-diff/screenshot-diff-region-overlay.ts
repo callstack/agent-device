@@ -18,10 +18,19 @@ export function annotateDiffRegions(diff: PNG, regions: ScreenshotDiffRegion[]):
 }
 
 function drawRect(diff: PNG, rect: ScreenshotDiffRegion['rect']): void {
+  if (
+    !Number.isFinite(rect.x) ||
+    !Number.isFinite(rect.y) ||
+    !Number.isFinite(rect.width) ||
+    !Number.isFinite(rect.height)
+  ) {
+    return;
+  }
   const minX = clamp(rect.x, 0, diff.width - 1);
   const minY = clamp(rect.y, 0, diff.height - 1);
   const right = rect.x + rect.width - 1;
   const bottom = rect.y + rect.height - 1;
+  if (!Number.isFinite(right) || !Number.isFinite(bottom)) return;
   const maxX = clamp(right, 0, diff.width - 1);
   const maxY = clamp(bottom, 0, diff.height - 1);
   for (let thickness = 0; thickness < REGION_BORDER_THICKNESS; thickness += 1) {
