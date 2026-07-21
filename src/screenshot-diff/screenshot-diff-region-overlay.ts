@@ -20,8 +20,10 @@ export function annotateDiffRegions(diff: PNG, regions: ScreenshotDiffRegion[]):
 function drawRect(diff: PNG, rect: ScreenshotDiffRegion['rect']): void {
   const minX = clamp(rect.x, 0, diff.width - 1);
   const minY = clamp(rect.y, 0, diff.height - 1);
-  const maxX = clamp(rect.x + rect.width - 1, 0, diff.width - 1);
-  const maxY = clamp(rect.y + rect.height - 1, 0, diff.height - 1);
+  const right = rect.x + rect.width - 1;
+  const bottom = rect.y + rect.height - 1;
+  const maxX = clamp(right, 0, diff.width - 1);
+  const maxY = clamp(bottom, 0, diff.height - 1);
   for (let thickness = 0; thickness < REGION_BORDER_THICKNESS; thickness += 1) {
     for (let x = minX; x <= maxX; x += 1) {
       setPixel(diff, x, minY + thickness, REGION_BORDER_COLOR);
@@ -48,6 +50,7 @@ function setPixel(
   diff.data[index + 3] = color[3];
 }
 
-function clamp(value: number, min: number, max: number): number {
+function clamp(value: number | undefined, min: number, max: number): number {
+  if (value === undefined || !Number.isFinite(value)) return min;
   return Math.min(Math.max(value, min), max);
 }

@@ -215,7 +215,13 @@ function scaledSizeToMax(size: AndroidRecordingSize & { maxSize: number }): Andr
   if (longest <= size.maxSize) {
     return { width: size.width, height: size.height };
   }
+  if (longest === 0) {
+    return { width: size.width, height: size.height };
+  }
   const scale = size.maxSize / longest;
+  if (!Number.isFinite(scale)) {
+    return { width: size.width, height: size.height };
+  }
   return {
     width: scaledEvenDimension(size.width, scale),
     height: scaledEvenDimension(size.height, scale),

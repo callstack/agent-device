@@ -15,6 +15,9 @@ importers:
         specifier: ^2.9.0
         version: 2.9.0
     devDependencies:
+      '@chenglou/freerange':
+        specifier: ^0.0.1
+        version: 0.0.1
       '@types/node':
         specifier: ^22.19.21
         version: 22.19.21
@@ -92,6 +95,10 @@ packages:
       '@rspress/core': ^2.0.8
       react: ^19.2.4
       react-dom: ^19.2.4
+
+  '@chenglou/freerange@0.0.1':
+    resolution: {integrity: sha512-RCdvTZX66Dp5roRrld+2GH4tJV+uyo21nEsF/lxwDBjzDFagG9CnJ7go5Qim2ZDHTC40lQWNF1AprDxTDQTxfg==}
+    hasBin: true
 
   '@emnapi/core@1.10.0':
     resolution: {integrity: sha512-yq6OkJ4p82CAfPl0u9mQebQHKPJkY7WrIuk205cTYnYe+k2Z8YBh11FrbRG/H6ihirqcacOgl2BIO8oyMQLeXw==}
@@ -2265,6 +2272,11 @@ packages:
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
+  typescript@6.0.3:
+    resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
   typescript@7.0.2:
     resolution: {integrity: sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA==}
     engines: {node: '>=16.20.0'}
@@ -2485,6 +2497,10 @@ snapshots:
       '@rspress/core': 2.0.12(@rspack/core@2.0.6(@swc/helpers@0.5.23))(@types/mdast@4.0.4)(@types/react@19.2.13)(micromark-util-types@2.0.2)(micromark@4.0.2)
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
+
+  '@chenglou/freerange@0.0.1':
+    dependencies:
+      typescript: 6.0.3
 
   '@emnapi/core@1.10.0':
     dependencies:
@@ -4701,6 +4717,8 @@ snapshots:
       - vue-tsc
 
   tslib@2.8.1: {}
+
+  typescript@6.0.3: {}
 
   typescript@7.0.2:
     optionalDependencies:

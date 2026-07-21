@@ -5,3 +5,5 @@ pmOnFail: warn
 verifyDepsBeforeRun: warn
 allowBuilds:
   fallow: true
+minimumReleaseAgeExclude:
+  - '@chenglou/freerange@0.0.1'

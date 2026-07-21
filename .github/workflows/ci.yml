@@ -240,6 +240,20 @@ jobs:
       - name: Run typecheck
         run: pnpm typecheck
 
+  freerange:
+    name: FreeRange
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Check numeric ranges
+        run: pnpm check:freerange
+
   integration:
     name: Integration Tests
     runs-on: ubuntu-latest

@@ -120,6 +120,7 @@
     "check:layering": "node --experimental-strip-types --test scripts/layering/model.test.ts && node --experimental-strip-types scripts/layering/check.ts",
     "check:production-exports": "fallow dead-code --config fallow-production-exports.json --production --unused-exports --fail-on-issues",
     "check:bundle-owner-files": "node --experimental-strip-types scripts/check-bundle-owner-files.ts",
+    "check:freerange": "fr",
     "check:quick": "pnpm lint && pnpm typecheck",
     "sync:mcp-metadata": "node scripts/sync-mcp-metadata.mjs",
     "check:mcp-metadata": "node scripts/sync-mcp-metadata.mjs --check",
@@ -224,8 +225,8 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
+    "@chenglou/freerange": "^0.0.1",
     "@types/node": "^22.19.21",
-    "typescript": "^7.0.2",
     "@vitest/coverage-v8": "4.1.8",
     "fallow": "^2.95.0",
     "oxc-parser": "^0.138.0",
@@ -233,6 +234,7 @@
     "oxlint": "^1.69.0",
     "skillgym": "^0.9.1",
     "tsdown": "^0.22.4",
+    "typescript": "^7.0.2",
     "vite": "^8.0.16",
     "vitest": "^4.1.8"
   }
