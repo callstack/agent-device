@@ -147,6 +147,7 @@ export function serializeOpenResult(result: AppOpenResult): Record<string, unkno
   return withSuccessText(
     {
       session: result.session,
+      ...(result.warnings?.length ? { warnings: result.warnings } : {}),
       ...(result.sessionStateDir ? { sessionStateDir: result.sessionStateDir } : {}),
       ...(result.runnerLogPath ? { runnerLogPath: result.runnerLogPath } : {}),
       ...(result.requestLogPath ? { requestLogPath: result.requestLogPath } : {}),

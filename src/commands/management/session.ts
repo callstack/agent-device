@@ -24,8 +24,12 @@ const sessionCommandMetadata = defineFieldCommandMetadata(
 const sessionCommandDefinition = defineExecutableCommand(
   sessionCommandMetadata,
   async (client, { action, path, force, ...input }) => {
-    if (action === 'state-dir') return { stateDir: await client.sessions.stateDir(input) };
-    if (action === 'save-script') {
+    const effectiveAction = action ?? 'list';
+    assertSessionActionOptions(effectiveAction, path, force);
+    if (effectiveAction === 'state-dir') {
+      return { stateDir: await client.sessions.stateDir(input) };
+    }
+    if (effectiveAction === 'save-script') {
       return await client.sessions.saveScript({ ...input, path, force });
     }
     return { sessions: await client.sessions.list(input) };
@@ -63,4 +67,17 @@ function readSessionAction(value: string | undefined): 'list' | 'state-dir' | 's
   if (action === 'state-dir') return action;
   if (action === 'save-script') return action;
   throw new AppError('INVALID_ARGS', 'session only supports list, state-dir, or save-script');
+}
+
+function assertSessionActionOptions(
+  action: 'list' | 'state-dir' | 'save-script',
+  path: string | undefined,
+  force: boolean | undefined,
+): void {
+  if (action === 'save-script') return;
+  if (path === undefined && force !== true) return;
+  throw new AppError(
+    'INVALID_ARGS',
+    `session ${action} does not accept a path or --force; use session save-script [path] [--force] to publish a recording.`,
+  );
 }

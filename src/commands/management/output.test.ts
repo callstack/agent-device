@@ -32,6 +32,19 @@ describe('openCliOutput', () => {
 
     expect(output.data).not.toHaveProperty('timing');
   });
+
+  test('preserves open warnings in JSON data and renders them immediately', () => {
+    const warning =
+      'Script publication was aborted by a second successful open; start a fresh session.';
+    const output = openCliOutput({
+      session: 'authoring',
+      warnings: [warning],
+      identifiers: { session: 'authoring' },
+    });
+
+    expect(output.data).toMatchObject({ warnings: [warning] });
+    expect(output.text).toBe(`Opened: authoring\nWarning: ${warning}`);
+  });
 });
 
 describe('artifactsCliOutput', () => {

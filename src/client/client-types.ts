@@ -321,6 +321,7 @@ export type AppOpenOptions = AgentDeviceRequestOverrides &
 
 export type AppOpenResult = {
   session: string;
+  warnings?: string[];
   sessionStateDir?: string;
   runnerLogPath?: string;
   requestLogPath?: string;

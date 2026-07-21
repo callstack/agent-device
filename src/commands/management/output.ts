@@ -98,6 +98,9 @@ export function openCliOutput(result: AppOpenResult): CliOutput {
   if (typeof data.sessionStateDir === 'string') {
     lines.push(`Session state: ${data.sessionStateDir}`);
   }
+  for (const warning of result.warnings ?? []) {
+    lines.push(`Warning: ${warning}`);
+  }
   return { data, text: lines.join('\n') || null };
 }
 

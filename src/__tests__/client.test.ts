@@ -215,6 +215,7 @@ test('apps.open resolves session device identifiers from open response', async (
           kind: 'simulator',
           device_udid: 'SIM-001',
           ios_simulator_device_set: '/tmp/sim-set',
+          warnings: ['Script publication was aborted by a second successful open.', 42],
           startup: {
             durationMs: 1234,
             measuredAt: '2026-03-13T10:00:00.000Z',
@@ -244,6 +245,9 @@ test('apps.open resolves session device identifiers from open response', async (
   assert.equal(result.identifiers.appId, 'com.apple.Preferences');
   assert.equal(result.device?.name, 'iPhone 16');
   assert.equal(result.device?.ios?.simulatorSetPath, '/tmp/sim-set');
+  assert.deepEqual(result.warnings, [
+    'Script publication was aborted by a second successful open.',
+  ]);
 });
 
 test('apps.open forwards explicit runtime hints through the daemon request', async () => {

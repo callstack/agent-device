@@ -54,6 +54,51 @@ test('strict CLI parsing accepts session save-script path and --force', () => {
   expect(parsed.flags.force).toBe(true);
 });
 
+test('typed save-script preserves an explicitly empty path for daemon validation', async () => {
+  const calls: Array<Omit<DaemonRequest, 'token'>> = [];
+  const client = createAgentDeviceClient(
+    { session: 'authoring' },
+    {
+      transport: async (req) => {
+        calls.push(req);
+        return {
+          ok: true,
+          data: { session: 'authoring', savedScript: '/tmp/default.ad', actionCount: 1 },
+        } satisfies DaemonResponse;
+      },
+    },
+  );
+
+  await client.sessions.saveScript({ path: '' });
+
+  expect(calls[0]?.positionals).toEqual(['']);
+});
+
+test.each([
+  { positionals: ['list', './unexpected.ad'], flags: {} },
+  { positionals: ['state-dir'], flags: { force: true } },
+])(
+  'rejects save-script-only options on session siblings',
+  async ({ positionals, flags: inputFlags }) => {
+    const calls: Array<Omit<DaemonRequest, 'token'>> = [];
+    const client = createAgentDeviceClient(
+      {},
+      {
+        transport: async (req) => {
+          calls.push(req);
+          return { ok: true, data: {} } satisfies DaemonResponse;
+        },
+      },
+    );
+    const input = sessionCommandFacet.cliReader(positionals, flags(inputFlags));
+
+    await expect(sessionCommandFacet.definition.invoke(client, input)).rejects.toThrow(
+      /does not accept a path or --force/,
+    );
+    expect(calls).toHaveLength(0);
+  },
+);
+
 test('session and workflow help expose active publication and literal-secret warning', () => {
   expect(buildCommandUsageText('session')).toMatch(/session save-script \[path\] \[--force\]/);
   const workflow = buildCommandUsageText('workflow');

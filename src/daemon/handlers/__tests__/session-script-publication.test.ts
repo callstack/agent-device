@@ -51,7 +51,7 @@ function request(outputPath?: string, force?: boolean): DaemonRequest {
     token: 'test',
     session: 'authoring',
     command: INTERNAL_COMMANDS.sessionSaveScript,
-    positionals: outputPath ? [outputPath] : [],
+    positionals: outputPath !== undefined ? [outputPath] : [],
     flags: force ? { force: true } : {},
   };
 }
@@ -164,6 +164,23 @@ test('refuses unarmed and repair-owned sessions before filesystem work', () => {
   expect(fs.existsSync(path.dirname(outputPath))).toBe(false);
 });
 
+test('rejects an explicitly empty destination path', () => {
+  const session = armedSession();
+  store.set('authoring', session);
+
+  const response = handleSessionScriptPublication({
+    req: request(''),
+    sessionName: 'authoring',
+    sessionStore: store,
+  });
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: { code: 'INVALID_ARGS', message: expect.stringMatching(/path cannot be empty/) },
+  });
+  expect(session.scriptRecordingState).toBe('armed');
+});
+
 test('invalid destination guard remains armed and creates no target directory', () => {
   const outputPath = path.join(root, 'missing', 'screen-x.ad');
   const session = armedSession({
@@ -184,5 +201,99 @@ test('invalid destination guard remains armed and creates no target directory', 
     error: { message: expect.stringMatching(/destination guard/), retriable: true },
   });
   expect(session.scriptRecordingState).toBe('armed');
+  expect(fs.existsSync(path.dirname(outputPath))).toBe(false);
+});
+
+test('missing initial open is non-retriable within the armed session', () => {
+  const outputPath = path.join(root, 'missing', 'screen-x.ad');
+  const session = armedSession({
+    actions: [{ ts: 1, command: 'wait', positionals: ['id="screen-x"'], flags: {} }],
+  });
+  store.set('authoring', session);
+
+  const response = handleSessionScriptPublication({
+    req: request(outputPath),
+    sessionName: 'authoring',
+    sessionStore: store,
+  });
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      message: expect.stringMatching(/exactly one initial recorded open/),
+      hint: expect.stringMatching(/start a fresh one/),
+      retriable: false,
+    },
+  });
+  expect(session.scriptRecordingState).toBe('armed');
+  expect(fs.existsSync(path.dirname(outputPath))).toBe(false);
+});
+
+test('publishes leading-at typed values without mistaking them for session refs', () => {
+  const outputPath = path.join(root, 'social-handle.ad');
+  const session = armedSession({
+    actions: [
+      { ts: 1, command: 'open', positionals: ['Demo'], flags: { saveScript: true } },
+      { ts: 2, command: 'type', positionals: ['@thymikee'], flags: {} },
+      {
+        ts: 3,
+        command: 'fill',
+        positionals: ['id="handle"', '@someone'],
+        flags: {},
+        targetEvidence: TARGET_EVIDENCE,
+      },
+      {
+        ts: 4,
+        command: 'find',
+        positionals: ['text', '@handle', 'get', 'text'],
+        flags: {},
+      },
+      { ts: 5, command: 'wait', positionals: ['id="screen-x"'], flags: {} },
+    ],
+  });
+  store.set('authoring', session);
+
+  const response = handleSessionScriptPublication({
+    req: request(outputPath),
+    sessionName: 'authoring',
+    sessionStore: store,
+  });
+
+  expect(response?.ok).toBe(true);
+  const script = fs.readFileSync(outputPath, 'utf8');
+  expect(script).toContain('@thymikee');
+  expect(script).toContain('@someone');
+  expect(script).toContain('@handle');
+});
+
+test('refuses mutating find steps that cannot enforce target identity on replay', () => {
+  const outputPath = path.join(root, 'missing', 'find-flow.ad');
+  const session = armedSession({
+    actions: [
+      { ts: 1, command: 'open', positionals: ['Demo'], flags: { saveScript: true } },
+      {
+        ts: 2,
+        command: 'find',
+        positionals: ['text', 'Continue', 'click'],
+        flags: {},
+      },
+      { ts: 3, command: 'wait', positionals: ['id="screen-x"'], flags: {} },
+    ],
+  });
+  store.set('authoring', session);
+
+  const response = handleSessionScriptPublication({
+    req: request(outputPath),
+    sessionName: 'authoring',
+    sessionStore: store,
+  });
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      message: expect.stringMatching(/mutating find.*not replay-verifiable/),
+      retriable: false,
+    },
+  });
   expect(fs.existsSync(path.dirname(outputPath))).toBe(false);
 });

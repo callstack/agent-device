@@ -84,4 +84,23 @@ describe('ADR 0016 active publication contract', () => {
       /target identity evidence is missing/,
     );
   });
+
+  test('treats leading-at user text as data rather than a session ref', () => {
+    expect(() =>
+      assertActivePublicationPortability([
+        action('type', ['@thymikee']),
+        {
+          ...action('fill', ['id="handle"', '@someone']),
+          targetEvidence: TARGET_EVIDENCE,
+        },
+        action('find', ['text', '@handle', 'get', 'text']),
+      ]),
+    ).not.toThrow();
+  });
+
+  test('refuses mutating find actions until they record target identity evidence', () => {
+    expect(() =>
+      assertActivePublicationPortability([action('find', ['text', 'Continue', 'click'])]),
+    ).toThrow(/mutating find.*target identity is not replay-verifiable/);
+  });
 });

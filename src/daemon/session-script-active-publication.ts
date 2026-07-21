@@ -13,7 +13,10 @@ export function validateActivePublicationActions(actions: SessionAction[]): void
     throw new AppError(
       'COMMAND_FAILED',
       'Cannot publish this session: an open-to-destination script requires exactly one initial recorded open.',
-      { hint: 'Close this session and start a fresh one with open <app> --save-script[=<path>].' },
+      {
+        retriable: false,
+        hint: 'Close this session and start a fresh one with open <app> --save-script[=<path>].',
+      },
     );
   }
   if (actions.some((action) => action.command === 'close')) {
@@ -21,6 +24,7 @@ export function validateActivePublicationActions(actions: SessionAction[]): void
       'COMMAND_FAILED',
       'Cannot publish an active-session script containing close.',
       {
+        retriable: false,
         hint: 'Close this session and record the journey again from a fresh open --save-script session.',
       },
     );
@@ -43,6 +47,7 @@ export function validateActivePublicationActions(actions: SessionAction[]): void
     'COMMAND_FAILED',
     'Cannot publish this session without a portable destination guard after the final mutating action.',
     {
+      retriable: true,
       hint: 'Record a selective selector-targeted wait, for example wait \'role="heading" label="Screen X"\', then retry session save-script.',
     },
   );
@@ -50,22 +55,35 @@ export function validateActivePublicationActions(actions: SessionAction[]): void
 
 export function assertActivePublicationPortability(actions: SessionAction[]): void {
   for (const action of actions) {
-    const ref = action.positionals.find((positional) => positional.startsWith('@'));
-    if (ref) {
+    const targetToken = readTargetBindingToken(action);
+    const ref = targetToken ?? (action.command === 'wait' ? action.positionals[0] : undefined);
+    if (ref?.startsWith('@')) {
       throw new AppError(
         'COMMAND_FAILED',
         `Cannot publish recorded step "${action.command} ${ref}": the session-local ref was not converted to a portable selector.`,
         {
+          retriable: false,
           hint: 'Close this session and record the journey again using selectors or resolvable refs.',
         },
       );
     }
-    const token = readTargetBindingToken(action);
+    if (action.command === 'find' && resolveCommandRecordingEffect(action) === 'mutates-app') {
+      throw new AppError(
+        'COMMAND_FAILED',
+        'Cannot publish a recorded mutating find step because its target identity is not replay-verifiable.',
+        {
+          retriable: false,
+          hint: 'Close this session and record the journey again with an explicit selector-targeted click, press, fill, or focus action.',
+        },
+      );
+    }
+    const token = targetToken;
     if (!token || !tryParseSelectorChain(token) || action.targetEvidence) continue;
     throw new AppError(
       'COMMAND_FAILED',
       `Cannot publish recorded step "${action.command} ${token}": recording-time target identity evidence is missing.`,
       {
+        retriable: false,
         hint: 'Close this session and record the journey again from open --save-script so target-v1 evidence is captured before each interaction.',
       },
     );
@@ -84,12 +102,15 @@ export function toActivePublicationFailure(
         hint: 'Retry session save-script with another path, or pass --force to replace the existing file. The session remains armed.',
       });
     }
+    const retriable = error.details?.retriable === true;
     return new AppError(error.code, error.message, {
       ...error.details,
-      retriable: true,
+      retriable,
       hint:
         error.details?.hint ??
-        'Fix the recorded journey or target, then retry session save-script. The session remains armed.',
+        (retriable
+          ? 'Fix the recorded journey or target, then retry session save-script. The session remains armed.'
+          : 'Close this session and start a fresh one with open <app> --save-script[=<path>].'),
     });
   }
   const detail = error instanceof Error ? error.message : String(error);

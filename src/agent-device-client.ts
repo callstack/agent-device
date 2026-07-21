@@ -202,7 +202,7 @@ export function createAgentDeviceClient(
       ): Promise<SessionSaveScriptResult> => {
         const data = await execute(
           INTERNAL_COMMANDS.sessionSaveScript,
-          options.path ? [options.path] : [],
+          options.path !== undefined ? [options.path] : [],
           options,
           { force: options.force },
         );
@@ -258,8 +258,12 @@ export function createAgentDeviceClient(
         const device = normalizeOpenDevice(data);
         const appBundleId = readOptionalString(data, 'appBundleId');
         const appId = appBundleId;
+        const warnings = Array.isArray(data.warnings)
+          ? data.warnings.filter((warning): warning is string => typeof warning === 'string')
+          : [];
         return {
           session,
+          ...(warnings.length > 0 ? { warnings } : {}),
           sessionStateDir: readOptionalString(data, 'sessionStateDir'),
           eventLogPath: readOptionalString(data, 'eventLogPath'),
           appName: readOptionalString(data, 'appName'),
