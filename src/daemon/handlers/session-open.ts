@@ -78,6 +78,30 @@ type OpenTiming = {
 
 type NewSessionOpenEffects = { mayHaveStarted: boolean };
 
+function applyOrdinaryScriptRecordingOpenOutcome(params: {
+  session: SessionState;
+  existingSession: SessionState | undefined;
+  saveScriptRequested: boolean;
+  responseData: Record<string, unknown>;
+}): void {
+  const { session, existingSession, saveScriptRequested, responseData } = params;
+  if (!existingSession && saveScriptRequested) {
+    session.scriptRecordingState = 'armed';
+    session.recordSession = true;
+    return;
+  }
+  if (existingSession?.scriptRecordingState !== 'armed') return;
+  session.scriptRecordingState = 'aborted';
+  session.recordSession = false;
+  const warnings = Array.isArray(responseData.warnings)
+    ? responseData.warnings.filter((warning): warning is string => typeof warning === 'string')
+    : [];
+  responseData.warnings = [
+    ...warnings,
+    'Script publication was aborted because this session completed a second open. Start a fresh session with open --save-script to author another script.',
+  ];
+}
+
 async function relaunchCloseApp(params: {
   device: DeviceInfo;
   closeTarget: string;
@@ -448,6 +472,12 @@ async function completeOpenCommand(params: {
     runtimeHintCount: countConfiguredRuntimeHints,
     sessionReused: existingSession !== undefined,
   });
+  applyOrdinaryScriptRecordingOpenOutcome({
+    session: nextSession,
+    existingSession,
+    saveScriptRequested: Boolean(req.flags?.saveScript),
+    responseData: openResult,
+  });
   sessionStore.set(sessionName, nextSession);
   sessionStore.recordAction(nextSession, {
     command: 'open',
@@ -636,6 +666,12 @@ export async function handleOpenCommand(params: {
 
   const session = sessionStore.get(sessionName);
   if (session) {
+    if (req.flags?.saveScript) {
+      return errorResponse(
+        'INVALID_ARGS',
+        'open --save-script can only arm a fresh session. Use the current session without --save-script, or close it and start a fresh session.',
+      );
+    }
     const shouldRelaunch = req.flags?.relaunch === true;
     const requestedOpenTarget = req.positionals?.[0];
     const openTarget = requestedOpenTarget ?? (shouldRelaunch ? session.appName : undefined);

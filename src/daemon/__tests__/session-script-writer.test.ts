@@ -129,7 +129,7 @@ test('a recorded ref that never resolved to a selectorChain throws instead of em
   expect(result.written).toBe(false);
   expect(result.written === false && result.error?.message).toMatch(/never resolved to a selector/);
   expect(fs.existsSync(scriptPath)).toBe(false);
-  expect(fs.readdirSync(path.join(root, 'sessions')).length).toBe(0);
+  expect(fs.existsSync(path.join(root, 'sessions'))).toBe(false);
 });
 
 test('a bare-@ref fill action also fails loud, not just click-like commands', () => {
@@ -168,7 +168,7 @@ test('a bare @ref later in the same session (after a resolved earlier action) st
   const result = writer.write(session);
   expect(result.written).toBe(false);
   expect(result.written === false && result.error?.message).toMatch(/never resolved to a selector/);
-  expect(fs.readdirSync(path.join(root, 'sessions')).length).toBe(0);
+  expect(fs.existsSync(path.join(root, 'sessions'))).toBe(false);
 });
 
 test('an ordinary (non-repair-armed) recording keeps the existing bare-ref fallback, never throws', () => {

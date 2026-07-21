@@ -415,6 +415,17 @@ async function stopOrRetainAppleRunnerAfterClose(
   scheduleIosRunnerIdleStop(session.device.id);
 }
 
+function assertTerminalRecordingCloseAllowed(req: DaemonRequest, session: SessionState): void {
+  if (!req.flags?.saveScript) return;
+  if (session.scriptRecordingState !== 'aborted' && session.scriptRecordingState !== 'published') {
+    return;
+  }
+  throw new AppError(
+    'INVALID_ARGS',
+    `close --save-script cannot ${session.scriptRecordingState === 'published' ? 're-publish' : 'publish'} this terminal recording. Retry with plain close; it will tear down the session without writing.`,
+  );
+}
+
 export async function handleCloseCommand(params: {
   req: DaemonRequest;
   sessionName: string;
@@ -428,6 +439,7 @@ export async function handleCloseCommand(params: {
   if (!session) {
     return await closeWithoutSession(req, logPath);
   }
+  assertTerminalRecordingCloseAllowed(req, session);
   if (req.internal?.closeAppOnly === true) {
     return await closeAppWithoutEndingSession({ req, session, logPath });
   }

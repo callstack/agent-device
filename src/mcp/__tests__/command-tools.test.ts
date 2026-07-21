@@ -576,12 +576,12 @@ test('MCP prepare schema mirrors its PublicPlatform contract', () => {
   );
 });
 
-test('MCP session tool exposes state-dir resolution without a daemon round-trip', async () => {
+test('MCP session tool exposes publication and resolves state-dir without a daemon round-trip', async () => {
   const sessionTool = listCommandTools().find((tool) => tool.name === 'session');
   assert.ok(sessionTool);
   assert.deepEqual(
     (sessionTool.inputSchema.properties?.action as { enum?: unknown[] } | undefined)?.enum,
-    ['list', 'state-dir'],
+    ['list', 'state-dir', 'save-script'],
   );
 
   const executor = createCommandToolExecutor({

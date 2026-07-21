@@ -36,6 +36,7 @@ import { handleSessionInventoryCommands } from './session-inventory.ts';
 import { handleSessionStateCommands } from './session-state.ts';
 import { handleSessionObservabilityCommands } from './session-observability.ts';
 import { handleSessionReplayCommands } from './session-replay.ts';
+import { handleSessionScriptPublication } from './session-script-publication.ts';
 import { handleDoctorCommand } from './session-doctor.ts';
 import { getSessionCommandKind, resolveRefFrameEffect } from '../daemon-command-registry.ts';
 import { expireRefFrame } from '../ref-frame.ts';
@@ -323,6 +324,10 @@ export async function handleSessionCommands(params: {
       logPath,
       sessionStore,
     });
+  }
+
+  if (getSessionCommandKind(req.command) === 'publication') {
+    return handleSessionScriptPublication({ req, sessionName, sessionStore });
   }
 
   if (req.command === PUBLIC_COMMANDS.clipboard) {

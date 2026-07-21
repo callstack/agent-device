@@ -60,6 +60,8 @@ import type {
   SwipeGestureOptions,
   PinchOptions,
   RotateGestureOptions,
+  SessionSaveScriptOptions,
+  SessionSaveScriptResult,
   TransformGestureOptions,
 } from './client/client-types.ts';
 import type { CommandResult } from './core/command-descriptor/command-result.ts';
@@ -194,6 +196,30 @@ export function createAgentDeviceClient(
           // Close is teardown intent: drop the dev-server binding even if the daemon call fails.
           clearMetroSessionHintsQuietly(config, options);
         }
+      },
+      saveScript: async (
+        options: SessionSaveScriptOptions = {},
+      ): Promise<SessionSaveScriptResult> => {
+        const data = await execute(
+          INTERNAL_COMMANDS.sessionSaveScript,
+          options.path ? [options.path] : [],
+          options,
+          { force: options.force },
+        );
+        const actionCount = data.actionCount;
+        if (typeof actionCount !== 'number' || !Number.isInteger(actionCount) || actionCount < 0) {
+          throw new AppError(
+            'COMMAND_FAILED',
+            'Daemon returned an invalid saved-script action count.',
+          );
+        }
+        const publishedSession = readRequiredString(data, 'session');
+        return {
+          session: publishedSession,
+          savedScript: readRequiredString(data, 'savedScript'),
+          actionCount,
+          identifiers: { session: publishedSession },
+        };
       },
       artifacts: async (options = {}) =>
         await executeCommand<AgentArtifactsResult>('artifacts', options),

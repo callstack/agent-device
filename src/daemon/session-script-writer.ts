@@ -18,6 +18,11 @@ import {
   stripRecordedRefGeneration,
 } from '../replay/script-utils.ts';
 import type { SessionAction, SessionState } from './types.ts';
+import {
+  assertActivePublicationPortability,
+  toActivePublicationFailure,
+  validateActivePublicationActions,
+} from './session-script-active-publication.ts';
 
 /**
  * `{ written: true; path }` — committed. `{ written: false }` (no `error`) —
@@ -30,8 +35,14 @@ import type { SessionAction, SessionState } from './types.ts';
  * retry, never swallowed into a silent skip.
  */
 export type SessionScriptWriteResult =
-  | { written: true; path: string }
+  | { written: true; path: string; actionCount: number }
   | { written: false; error?: AppError };
+
+export type SessionScriptWriteOptions = {
+  force?: boolean;
+  /** ADR 0016 publishes an armed ordinary recording while keeping its session live. */
+  publication?: 'teardown' | 'active';
+};
 
 /**
  * ADR 0012 decision 6 (Fix 4, C2): trailer comment marking a healed `.ad` as a
@@ -75,26 +86,40 @@ export class SessionScriptWriter {
     this.sessionsDir = sessionsDir;
   }
 
-  write(session: SessionState, options?: { force?: boolean }): SessionScriptWriteResult {
+  write(session: SessionState, options?: SessionScriptWriteOptions): SessionScriptWriteResult {
     const repairArmed = session.saveScriptBoundary !== undefined;
+    const activePublication = options?.publication === 'active';
     let scriptPath: string | undefined;
     try {
       if (!session.recordSession) return { written: false };
       if (isRepairArmedWriteBlocked(session)) return { written: false };
+      const prepared = prepareSessionScript(session, {
+        appendCompleteSentinel: repairArmed,
+        activePublication,
+      });
       scriptPath = this.resolveScriptPath(session);
       const scriptDir = path.dirname(scriptPath);
       if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir, { recursive: true });
-      const script = formatSessionScript(session, repairArmed);
       // #1258: `options.force` is the caller's already-merged decision
       // (typically `req.flags?.force || session.saveScriptForce` — see
       // `session-close.ts`/`session-store.ts`), not read from `session`
       // directly here, so this stays a pure formatting+publish step.
-      publishHealedScriptAtomically({ scriptPath, script, force: options?.force });
+      publishHealedScriptAtomically({
+        scriptPath,
+        script: prepared.script,
+        force: options?.force,
+      });
       // COMMITTED: idempotent guard above + teardown's abort/tombstone routing.
       if (repairArmed) session.saveScriptCommitted = true;
-      return { written: true, path: scriptPath };
+      return { written: true, path: scriptPath, actionCount: prepared.actionCount };
     } catch (error) {
-      return handleSessionScriptWriteFailure({ session, error, scriptPath, repairArmed });
+      return handleSessionScriptWriteFailure({
+        session,
+        error,
+        scriptPath,
+        repairArmed,
+        activePublication,
+      });
     }
   }
 
@@ -102,11 +127,22 @@ export class SessionScriptWriter {
     if (session.saveScriptPath) {
       return expandSessionPath(session.saveScriptPath);
     }
-    if (!fs.existsSync(this.sessionsDir)) fs.mkdirSync(this.sessionsDir, { recursive: true });
     const safeName = safeSessionName(session.name);
     const timestamp = new Date(session.createdAt).toISOString().replace(/[:.]/g, '-');
     return path.join(this.sessionsDir, `${safeName}-${timestamp}.ad`);
   }
+}
+
+function prepareSessionScript(
+  session: SessionState,
+  options: { appendCompleteSentinel: boolean; activePublication: boolean },
+): { script: string; actionCount: number } {
+  const actions = buildOptimizedActions(session, { strictPortableRefs: options.activePublication });
+  if (options.activePublication) validateActivePublicationActions(actions);
+  return {
+    script: formatScript(session, actions, options.appendCompleteSentinel),
+    actionCount: actions.length,
+  };
 }
 
 /**
@@ -132,8 +168,9 @@ function handleSessionScriptWriteFailure(params: {
   error: unknown;
   scriptPath: string | undefined;
   repairArmed: boolean;
+  activePublication: boolean;
 }): SessionScriptWriteResult {
-  const { session, error, scriptPath, repairArmed } = params;
+  const { session, error, scriptPath, repairArmed, activePublication } = params;
   emitDiagnostic({
     level: 'warn',
     phase: 'session_script_write_failed',
@@ -145,6 +182,9 @@ function handleSessionScriptWriteFailure(params: {
   });
   if (repairArmed) {
     return { written: false, error: toRepairCommitFailure(error, scriptPath) };
+  }
+  if (activePublication) {
+    return { written: false, error: toActivePublicationFailure(error, scriptPath) };
   }
   if (error instanceof AppError) throw error;
   return { written: false };
@@ -167,10 +207,6 @@ function toRepairCommitFailure(error: unknown, scriptPath: string | undefined): 
       hint: 'The repair transaction completed but the healed .ad could not be published; check the target path and permissions, then retry close --save-script.',
     },
   );
-}
-
-function formatSessionScript(session: SessionState, appendCompleteSentinel: boolean): string {
-  return formatScript(session, buildOptimizedActions(session), appendCompleteSentinel);
 }
 
 /**
@@ -229,6 +265,7 @@ function publishHealedScriptAtomically(params: {
     throw new AppError(
       'COMMAND_FAILED',
       `A file already exists at ${scriptPath}; remove it, pass replay --save-script=<other-path>, or pass --force/--overwrite to replace it.`,
+      { reason: 'script_target_exists', path: scriptPath },
     );
   } finally {
     // linkSync leaves the temp hard-link behind on success; an error leaves
@@ -239,7 +276,10 @@ function publishHealedScriptAtomically(params: {
   }
 }
 
-function buildOptimizedActions(session: SessionState): SessionAction[] {
+function buildOptimizedActions(
+  session: SessionState,
+  options: { strictPortableRefs?: boolean } = {},
+): SessionAction[] {
   // ADR 0012 decision 6, R6: a repair-armed session (`saveScriptBoundary` set
   // by `replay --save-script`) serializes only the actions from that
   // watermark onward — the repair run's own execution path — never the
@@ -257,11 +297,12 @@ function buildOptimizedActions(session: SessionState): SessionAction[] {
     }
     // R4 is scoped to a repair-armed session, not the existing refLabel/
     // scoped-snapshot fallback ordinary `open`/`close --save-script` keeps.
-    if (repairArmed) assertNoUnresolvedRefFallback(action);
+    if (repairArmed || options.strictPortableRefs) assertNoUnresolvedRefFallback(action);
     const scopedSnapshot = buildScopedSnapshotAction(session, action);
     if (scopedSnapshot) optimized.push(scopedSnapshot);
     optimized.push(action);
   }
+  if (options.strictPortableRefs) assertActivePublicationPortability(optimized);
   return optimized;
 }
 

@@ -4,7 +4,11 @@ import { emitDiagnostic } from '../utils/diagnostics.ts';
 import type { SessionRuntimeHints, SessionState } from './types.ts';
 import { recordActionEntry, type RecordActionEntry } from './session-action-recorder.ts';
 import { expandSessionPath, safeSessionName } from './session-paths.ts';
-import { SessionScriptWriter, type SessionScriptWriteResult } from './session-script-writer.ts';
+import {
+  SessionScriptWriter,
+  type SessionScriptWriteOptions,
+  type SessionScriptWriteResult,
+} from './session-script-writer.ts';
 import { successText } from '../utils/success-text.ts';
 import {
   appendActionEvent,
@@ -110,7 +114,10 @@ export class SessionStore {
     );
   }
 
-  writeSessionLog(session: SessionState, options?: { force?: boolean }): SessionScriptWriteResult {
+  writeSessionLog(
+    session: SessionState,
+    options?: SessionScriptWriteOptions,
+  ): SessionScriptWriteResult {
     const result = this.scriptWriter.write(session, options);
     if (result.written) {
       emitDiagnostic({

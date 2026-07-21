@@ -644,7 +644,7 @@ test('usage renders concise commands inline with descriptions', async () => {
   );
   assert.match(
     help,
-    /  session\s{2,}List active sessions or print the effective daemon state directory/,
+    /  session\s{2,}List active sessions, print the effective daemon state directory, or publish/,
   );
   assert.doesNotMatch(help, /  metro prepare[^\n]*--project-root/);
   assert.doesNotMatch(help, /\n  batch\s{2,}Run multiple commands/);

@@ -341,6 +341,8 @@ export type SessionState = {
   /** Session was created by record start and should be released when recording stops. */
   recordOnlySession?: boolean;
   recordSession?: boolean;
+  /** ADR 0016 ordinary open-to-destination authoring lifecycle. Repair state is separate. */
+  scriptRecordingState?: 'armed' | 'aborted' | 'published';
   saveScriptPath?: string;
   /**
    * #1258: `--force`/`--overwrite` captured at the moment `--save-script` was

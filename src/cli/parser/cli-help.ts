@@ -228,6 +228,15 @@ Bootstrap:
   CI may cache ~/.agent-device/apple-runner/derived with an exact key that includes the agent-device package and Xcode version. Avoid broad restore-key fallbacks; prepare ios-runner already recovers bad restored runner artifacts and one retryable non-connecting runner launch. Runner build/start output is written to the session's runner.log; daemon.log is for daemon lifecycle/startup issues.
   Do not open artifact paths or invent package ids. If apps lookup misses the target and no URL/artifact is provided, ask or stop.
 
+Reusable open-to-destination scripts:
+  Arm recording on the first open, perform the full journey, verify the ready destination with a selective selector-targeted wait, then publish without closing:
+    agent-device open com.example.app --relaunch --save-script=screen-x.ad
+    agent-device press 'id="continue"' --settle
+    agent-device wait 'role="heading" label="Screen X"'
+    agent-device session save-script
+  session save-script [path] [--force] publishes the sole recorded open through the destination guard, omits close, and leaves the session active. A duration wait, wait stable, or wait @ref is not a destination guard. A second successful open aborts publication; start a fresh session to author again.
+  Recorded fill/type inputs are written literally to the .ad file. Do not record passwords, tokens, or other secrets; use pre-authenticated test state or non-secret fixture credentials until parameterized input authoring is available.
+
 Snapshots and refs:
   snapshot reads visible state. snapshot -i gets current interactive refs only; it is the fast path when the next step is an interaction.
   Default snapshot text is an agent-facing, token-efficient view for planning and targeting actions; use --raw or --json only when you need the full provider tree.

@@ -5,7 +5,7 @@ import type { DaemonRequest } from './types.ts';
 
 export type { DaemonCommandRoute } from './request-handler-chain.ts';
 
-export type SessionCommandKind = 'inventory' | 'state' | 'observability' | 'replay';
+export type SessionCommandKind = 'inventory' | 'state' | 'observability' | 'publication' | 'replay';
 
 /**
  * ADR 0014 session ref-frame lifetime. Declares how a daemon command relates to

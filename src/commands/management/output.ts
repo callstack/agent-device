@@ -16,6 +16,7 @@ import type {
   AppOpenResult,
   CommandRequestResult,
   SessionCloseResult,
+  SessionSaveScriptResult,
 } from '../../client/client-types.ts';
 import type {
   AgentArtifactsResult,
@@ -76,8 +77,14 @@ function appsCliOutput(params: {
 }
 
 function sessionCliOutput(
-  result: { sessions: AgentDeviceSession[] } | { stateDir: string },
+  result: { sessions: AgentDeviceSession[] } | { stateDir: string } | SessionSaveScriptResult,
 ): CliOutput {
+  if ('savedScript' in result) {
+    return {
+      data: result,
+      text: `Published script: ${result.savedScript}\nSession remains active: ${result.session}\nActions: ${result.actionCount}`,
+    };
+  }
   if ('stateDir' in result) {
     return { data: result, text: result.stateDir };
   }

@@ -619,6 +619,15 @@ function prepareSaveScriptSession(params: {
     saveScriptPath: existingSaveScriptPath,
     saveScriptBoundary,
   } = preRunSession ?? {};
+  if (saveScript && preRunSession?.scriptRecordingState !== undefined) {
+    return {
+      ok: false,
+      response: errorResponse(
+        'INVALID_ARGS',
+        `replay --save-script cannot re-arm an ordinary recording in terminal/active state ${preRunSession.scriptRecordingState}. Close this session and use a fresh one for repair authoring.`,
+      ),
+    };
+  }
   const saveScriptPreflight = preflightSaveScriptTarget({
     saveScript,
     liveForce: force,

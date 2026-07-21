@@ -3,6 +3,7 @@ import type { DaemonRequest } from '../../daemon/types.ts';
 // Type-only back-edge, erased at runtime (same pattern as derive.ts importing
 // DaemonCommandDescriptor); no runtime import cycle.
 import type { RefFrameEffect } from '../../daemon/daemon-command-registry.ts';
+import { isReadOnlyFindAction, parseFindArgs } from '../../selectors/find.ts';
 import { resolveWaitBudgetMs } from '../wait-positionals.ts';
 import {
   DEFAULT_TIMEOUT_POLICY,
@@ -14,14 +15,18 @@ import type { PostActionObservationSupport } from './post-action-observation.ts'
 import type {
   CommandCatalogGroup,
   CommandDescriptor,
+  RecordingEffect,
   CommandResponseDataTransform,
   CommandTimeoutPolicy,
 } from './types.ts';
 
-type RawCommandDescriptor = Omit<CommandDescriptor, 'mcpExposed'> & {
-  mcpExposed?: boolean;
-  ownerFiles?: readonly [string, ...string[]];
-};
+type RawCommandDescriptorShape<T> = T extends CommandDescriptor
+  ? Omit<T, 'mcpExposed'> & {
+      mcpExposed?: boolean;
+      ownerFiles?: readonly [string, ...string[]];
+    }
+  : never;
+type RawCommandDescriptor = RawCommandDescriptorShape<CommandDescriptor>;
 
 type RawCommandCatalogGroup<T> = T extends { catalog: { group: infer Group } } ? Group : never;
 
@@ -103,6 +108,25 @@ const ALERT_READ_ONLY_ACTIONS = new Set(['get', 'wait']);
 const alertRefFrameEffect = (req: DaemonRequest): RefFrameEffect =>
   readOnlySubactionRefFrameEffect(req, ALERT_READ_ONLY_ACTIONS, 'get');
 
+type RecordingEffectRequest = Pick<DaemonRequest, 'command' | 'positionals' | 'flags'>;
+
+const keyboardRecordingEffect = (req: RecordingEffectRequest): RecordingEffect =>
+  readOnlySubactionRecordingEffect(req, KEYBOARD_READ_ONLY_ACTIONS, 'status');
+
+const alertRecordingEffect = (req: RecordingEffectRequest): RecordingEffect =>
+  readOnlySubactionRecordingEffect(req, ALERT_READ_ONLY_ACTIONS, 'get');
+
+const findRecordingEffect = (req: RecordingEffectRequest): RecordingEffect => {
+  try {
+    return isReadOnlyFindAction(parseFindArgs(req.positionals ?? []).action)
+      ? 'observes-app'
+      : 'mutates-app';
+  } catch {
+    // Invalid requests never record, but classify the unknown shape conservatively.
+    return 'mutates-app';
+  }
+};
+
 function readOnlySubactionRefFrameEffect(
   req: DaemonRequest,
   readOnlyActions: ReadonlySet<string>,
@@ -111,6 +135,16 @@ function readOnlySubactionRefFrameEffect(
   return readOnlyActions.has((req.positionals?.[0] ?? defaultAction).toLowerCase())
     ? 'preserve'
     : 'may-invalidate';
+}
+
+function readOnlySubactionRecordingEffect(
+  req: RecordingEffectRequest,
+  readOnlyActions: ReadonlySet<string>,
+  defaultAction: string,
+): RecordingEffect {
+  return readOnlyActions.has((req.positionals?.[0] ?? defaultAction).toLowerCase())
+    ? 'observes-app'
+    : 'mutates-app';
 }
 
 // ---------------------------------------------------------------------------
@@ -147,6 +181,29 @@ const APP_INSTALL_CAPABILITY = {
   android: ANDROID_ALL,
   linux: LINUX_NONE,
 } satisfies CommandCapability;
+
+const GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS = {
+  recordsSessionAction: true,
+  recordingEffect: 'mutates-app',
+  daemon: {
+    route: 'generic',
+    refFrameEffect: 'may-invalidate',
+    androidBlockingDialogGuard: true,
+  },
+  dispatch: {},
+  capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
+  timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+  batchable: true,
+} as const satisfies Pick<
+  Extract<CommandDescriptor, { recordsSessionAction: true }>,
+  | 'recordsSessionAction'
+  | 'recordingEffect'
+  | 'daemon'
+  | 'dispatch'
+  | 'capability'
+  | 'timeoutPolicy'
+  | 'batchable'
+>;
 
 // ---------------------------------------------------------------------------
 // Timeout policies — descriptor-owned request-envelope budget source and
@@ -290,6 +347,21 @@ export const RAW_COMMAND_DESCRIPTORS = [
     batchable: false,
   },
   {
+    name: 'session_save_script',
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['src/daemon/handlers/session-script-publication.ts'] as const }
+      : {}),
+    catalog: { group: 'internal', key: 'sessionSaveScript' },
+    recordsSessionAction: false,
+    daemon: {
+      route: 'session',
+      refFrameEffect: 'preserve',
+      sessionKind: 'publication',
+    },
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: false,
+  },
+  {
     name: 'devices',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/device.ts'] as const } : {}),
     catalog: { group: 'public' },
@@ -394,6 +466,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/perf/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'observes-app',
     daemon: { route: 'session', refFrameEffect: 'preserve', sessionKind: 'observability' },
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
@@ -495,6 +568,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'observes-app',
     daemon: { route: 'session', refFrameEffect: 'preserve' },
     dispatch: {},
     capability: {
@@ -510,6 +584,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: keyboardRecordingEffect,
     daemon: {
       route: 'session',
       refFrameEffect: keyboardRefFrameEffect,
@@ -529,6 +604,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/install.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
     daemon: { route: 'session', refFrameEffect: 'may-invalidate' },
     capability: APP_INSTALL_CAPABILITY,
     timeoutPolicy: INSTALL_TIMEOUT_POLICY,
@@ -539,6 +615,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/install.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
     daemon: { route: 'session', refFrameEffect: 'may-invalidate' },
     capability: APP_INSTALL_CAPABILITY,
     timeoutPolicy: INSTALL_TIMEOUT_POLICY,
@@ -551,6 +628,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       : {}),
     catalog: { group: 'internal', key: 'installSource' },
     recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
     daemon: { route: 'session', refFrameEffect: 'may-invalidate' },
     timeoutPolicy: INSTALL_TIMEOUT_POLICY,
     batchable: false,
@@ -571,6 +649,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/push.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
     daemon: { route: 'session', refFrameEffect: 'may-invalidate' },
     dispatch: {},
     capability: {
@@ -586,6 +665,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/push.ts'] as const } : {}),
     catalog: { group: 'public', key: 'triggerAppEvent' },
     recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
     daemon: { route: 'session', refFrameEffect: 'may-invalidate' },
     dispatch: {},
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
@@ -597,6 +677,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/app.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
     daemon: {
       route: 'session',
       refFrameEffect: 'may-invalidate',
@@ -636,6 +717,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/app.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
     daemon: { route: 'session', refFrameEffect: 'may-invalidate', allowInvalidRecording: true },
     dispatch: {},
     capability: APP_RUNTIME_CAPABILITY,
@@ -649,6 +731,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/snapshot.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'observes-app',
     daemon: { route: 'snapshot', refFrameEffect: 'preserve' },
     dispatch: {},
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
@@ -662,6 +745,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/diff.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'observes-app',
     daemon: { route: 'snapshot', refFrameEffect: 'preserve' },
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
@@ -672,6 +756,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/wait.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'observes-app',
     daemon: { route: 'snapshot', refFrameEffect: 'preserve' },
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
     // The wait budget travels as a positional, not a flag; parse it the same
@@ -687,6 +772,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/alert.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: alertRecordingEffect,
     daemon: { route: 'snapshot', refFrameEffect: alertRefFrameEffect },
     capability: {
       apple: APPLE_SIM_AND_DEVICE,
@@ -701,6 +787,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/settings.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
     daemon: { route: 'snapshot', refFrameEffect: 'may-invalidate' },
     dispatch: {},
     capability: {
@@ -718,6 +805,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/react-native/index.ts'] as const } : {}),
     catalog: { group: 'public', key: 'reactNative' },
     recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
     daemon: { route: 'reactNative', refFrameEffect: 'may-invalidate' },
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
@@ -728,6 +816,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/recording/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'observes-app',
     daemon: {
       route: 'recordTrace',
       refFrameEffect: 'preserve',
@@ -743,6 +832,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/recording/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'observes-app',
     daemon: { route: 'recordTrace', refFrameEffect: 'preserve' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
@@ -752,6 +842,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: findRecordingEffect,
     daemon: { route: 'find', refFrameEffect: 'may-invalidate' },
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
     timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
@@ -770,6 +861,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
     daemon: {
       route: 'interaction',
       refFrameEffect: 'may-invalidate',
@@ -786,6 +878,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
     daemon: {
       route: 'interaction',
       refFrameEffect: 'may-invalidate',
@@ -803,6 +896,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public', key: 'longPress' },
     recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
     daemon: {
       route: 'interaction',
       refFrameEffect: 'may-invalidate',
@@ -825,6 +919,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
     daemon: {
       route: 'interaction',
       refFrameEffect: 'may-invalidate',
@@ -842,6 +937,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
     daemon: {
       route: 'interaction',
       refFrameEffect: 'may-invalidate',
@@ -857,6 +953,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'observes-app',
     daemon: { route: 'interaction', refFrameEffect: 'preserve' },
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
     timeoutPolicy: interactionTimeoutPolicy('get'),
@@ -876,6 +973,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'observes-app',
     daemon: { route: 'interaction', refFrameEffect: 'preserve' },
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
     timeoutPolicy: interactionTimeoutPolicy('is'),
@@ -887,22 +985,14 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'back',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public' },
-    recordsSessionAction: true,
-    daemon: {
-      route: 'generic',
-      refFrameEffect: 'may-invalidate',
-      androidBlockingDialogGuard: true,
-    },
-    dispatch: {},
-    capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: true,
+    ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS,
   },
   {
     name: 'gesture',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
     daemon: {
       route: 'interaction',
       refFrameEffect: 'may-invalidate',
@@ -916,26 +1006,14 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'home',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public' },
-    recordsSessionAction: true,
-    daemon: {
-      route: 'generic',
-      refFrameEffect: 'may-invalidate',
-      androidBlockingDialogGuard: true,
-    },
-    dispatch: {},
-    capability: {
-      apple: APPLE_SIM_AND_DEVICE,
-      android: ANDROID_ALL,
-      linux: LINUX_DEVICE,
-    },
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: true,
+    ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS,
   },
   {
     name: 'tv-remote',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public', key: 'tvRemote' },
     recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
     daemon: {
       route: 'generic',
       refFrameEffect: 'may-invalidate',
@@ -955,6 +1033,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
     daemon: {
       route: 'generic',
       refFrameEffect: 'may-invalidate',
@@ -973,22 +1052,14 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'scroll',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
-    recordsSessionAction: true,
-    daemon: {
-      route: 'generic',
-      refFrameEffect: 'may-invalidate',
-      androidBlockingDialogGuard: true,
-    },
-    dispatch: {},
-    capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: true,
+    ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS,
   },
   {
     name: 'swipe',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
     daemon: {
       route: 'interaction',
       refFrameEffect: 'may-invalidate',
@@ -1002,22 +1073,14 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'focus',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'public' },
-    recordsSessionAction: true,
-    daemon: {
-      route: 'generic',
-      refFrameEffect: 'may-invalidate',
-      androidBlockingDialogGuard: true,
-    },
-    dispatch: {},
-    capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: true,
+    ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS,
   },
   {
     name: 'screenshot',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/screenshot.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'observes-app',
     daemon: { route: 'generic', refFrameEffect: 'preserve' },
     dispatch: {},
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
@@ -1029,6 +1092,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/viewport.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
     daemon: { route: 'generic', refFrameEffect: 'may-invalidate' },
     dispatch: {},
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
@@ -1041,6 +1105,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public', key: 'appSwitcher' },
     recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
     // ADR 0014: app-switcher previously reached the generic daemon leaf via the
     // registry's generic fallback with no daemon facet, so it could not be
     // classified. Add the facet (route unchanged) so its device mutation is
@@ -1061,6 +1126,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/install.ts'] as const } : {}),
     catalog: { group: 'public', key: 'installFromSource' },
     recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
     capability: APP_INSTALL_CAPABILITY,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
@@ -1219,12 +1285,10 @@ const CLI_COMMAND_NAMES = new Set<string>(
  * union below a precise set of command-name literals rather than `string`.
  */
 export const commandDescriptors = RAW_COMMAND_DESCRIPTORS.map((descriptor) => {
-  const recordsSessionAction = resolveRecordsSessionAction(descriptor);
   if (!ownerFilesEnabled) {
     return {
       ...descriptor,
       mcpExposed: resolveMcpExposure(descriptor),
-      recordsSessionAction,
     };
   }
 
@@ -1232,7 +1296,6 @@ export const commandDescriptors = RAW_COMMAND_DESCRIPTORS.map((descriptor) => {
   return {
     ...runtimeDescriptor,
     mcpExposed: resolveMcpExposure(descriptor),
-    recordsSessionAction,
   };
 }) satisfies readonly CommandDescriptor[];
 
@@ -1301,10 +1364,6 @@ function isCliCommandName(command: string): command is DescriptorCliCommandName 
 
 function resolveMcpExposure(descriptor: RawCommandDescriptor): boolean {
   return descriptor.mcpExposed ?? CLI_COMMAND_NAMES.has(descriptor.name);
-}
-
-function resolveRecordsSessionAction(descriptor: RawCommandDescriptor): boolean {
-  return descriptor.recordsSessionAction;
 }
 
 function isMcpExposedCliCommand(descriptor: CommandDescriptor): boolean {
@@ -1378,6 +1437,17 @@ export function resolveCommandResponseDataTransform(
 export function resolveCommandRecordsSessionAction(command: string | undefined): boolean {
   if (command === undefined) return false;
   return COMMAND_DESCRIPTOR_BY_NAME.get(command)?.recordsSessionAction ?? false;
+}
+
+/** ADR 0016 request-sensitive app-state effect for one recorded request. */
+export function resolveCommandRecordingEffect(
+  req: Pick<DaemonRequest, 'command' | 'positionals' | 'flags'>,
+): RecordingEffect | undefined {
+  const descriptor = COMMAND_DESCRIPTOR_BY_NAME.get(req.command);
+  if (!descriptor?.recordsSessionAction) return undefined;
+  return typeof descriptor.recordingEffect === 'function'
+    ? descriptor.recordingEffect(req)
+    : descriptor.recordingEffect;
 }
 
 /**

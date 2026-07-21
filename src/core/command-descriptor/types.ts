@@ -1,5 +1,6 @@
 import type { CommandCapability } from '../capabilities.ts';
 import type { DaemonCommandDescriptor } from '../../daemon/daemon-command-registry.ts';
+import type { DaemonRequest } from '../../daemon/types.ts';
 import type { PostActionObservationSupport } from './post-action-observation.ts';
 
 export type ResponseDataFieldTransform = {
@@ -93,6 +94,16 @@ export type CommandDispatchFacet = {
 } & Record<string, never>;
 
 /**
+ * ADR 0016: whether a recorded request changes app-visible state or only
+ * observes it. The resolver form keeps subcommand-sensitive decisions on the
+ * descriptor (for example, `alert get` versus `alert accept`).
+ */
+export type RecordingEffect = 'mutates-app' | 'observes-app';
+export type CommandRecordingEffect =
+  | RecordingEffect
+  | ((req: Pick<DaemonRequest, 'command' | 'positionals' | 'flags'>) => RecordingEffect);
+
+/**
  * The single additive command-descriptor shape (ADR-0008, Phase 1 step 1).
  *
  * Per command this carries, side-by-side, the facts that today live in three
@@ -127,7 +138,7 @@ export type CommandDispatchFacet = {
  * matrix, batch allowlist, and the daemon client's timeout policy are all
  * built from it.
  */
-export type CommandDescriptor = {
+type CommandDescriptorBase = {
   name: string;
   daemon?: DaemonCommandTraits;
   capability?: CommandCapability;
@@ -144,5 +155,17 @@ export type CommandDescriptor = {
    * so the recording decision is explicit; the daemon `replayScopedAction` trait and
    * MCP `noRecord` schema projection are both derived from this value.
    */
-  recordsSessionAction: boolean;
 };
+
+export type CommandDescriptor = CommandDescriptorBase &
+  (
+    | {
+        recordsSessionAction: true;
+        /** Required for every recordable command; publication ordering consumes only this trait. */
+        recordingEffect: CommandRecordingEffect;
+      }
+    | {
+        recordsSessionAction: false;
+        recordingEffect?: never;
+      }
+  );

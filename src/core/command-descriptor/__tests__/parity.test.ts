@@ -22,6 +22,7 @@ import {
   listCapabilityCheckedCommandNames,
   listMcpExposedCommandNames,
   resolveCommandRecordsSessionAction,
+  resolveCommandRecordingEffect,
   RAW_COMMAND_DESCRIPTORS,
 } from '../registry.ts';
 
@@ -306,6 +307,11 @@ test('recordsSessionAction is explicit on every raw descriptor and drives daemon
       'boolean',
       `${descriptor.name} declares an explicit recordsSessionAction boolean`,
     );
+    assert.equal(
+      'recordingEffect' in descriptor,
+      descriptor.recordsSessionAction,
+      `${descriptor.name} classifies app-state effect iff it records session actions`,
+    );
     const daemon = ('daemon' in descriptor ? descriptor.daemon : undefined) as
       | { replayScopedAction?: boolean }
       | undefined;
@@ -346,4 +352,39 @@ test('recordsSessionAction is explicit on every raw descriptor and drives daemon
     'install-from-source is classified as recordable',
   );
   assert.ok(!recordable.includes('devices'), 'devices is not classified as recordable');
+});
+
+test('recordingEffect resolves request-sensitive observation and mutation subcommands', () => {
+  assert.equal(
+    resolveCommandRecordingEffect({ command: 'keyboard', positionals: ['status'], flags: {} }),
+    'observes-app',
+  );
+  assert.equal(
+    resolveCommandRecordingEffect({ command: 'keyboard', positionals: ['dismiss'], flags: {} }),
+    'mutates-app',
+  );
+  assert.equal(
+    resolveCommandRecordingEffect({ command: 'alert', positionals: ['get'], flags: {} }),
+    'observes-app',
+  );
+  assert.equal(
+    resolveCommandRecordingEffect({ command: 'alert', positionals: ['accept'], flags: {} }),
+    'mutates-app',
+  );
+  assert.equal(
+    resolveCommandRecordingEffect({
+      command: 'find',
+      positionals: ['text', 'Ready', 'exists'],
+      flags: {},
+    }),
+    'observes-app',
+  );
+  assert.equal(
+    resolveCommandRecordingEffect({
+      command: 'find',
+      positionals: ['text', 'Continue', 'click'],
+      flags: {},
+    }),
+    'mutates-app',
+  );
 });
