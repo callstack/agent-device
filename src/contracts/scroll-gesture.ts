@@ -244,13 +244,13 @@ function pointFromPercent(
   const x = Math.trunc((frame.referenceWidth * xPercent) / 100);
   const y = Math.trunc((frame.referenceHeight * yPercent) / 100);
   return {
-    x,
-    y,
+    x: Number.isFinite(x) ? x : 0,
+    y: Number.isFinite(y) ? y : 0,
   };
 }
 
 function clampGesturePoint(
-  point: { x: number | undefined; y: number | undefined },
+  point: GesturePoint,
   frame: GestureReferenceFrame,
   marginPx: number,
 ): GesturePoint {
@@ -308,16 +308,12 @@ function normalizeRequestedPixels(pixels: number): number {
   return Math.max(1, Math.round(pixels));
 }
 
-export function clampGestureCoordinate(
-  value: number | undefined,
-  marginPx: number,
-  size: number,
-): number {
+export function clampGestureCoordinate(value: number, marginPx: number, size: number): number {
   const min = Math.round(marginPx);
   if (!Number.isFinite(min)) return 0;
 
   const max = Math.max(min, Math.round(size - marginPx));
-  if (!Number.isFinite(max) || value === undefined || !Number.isFinite(value)) return min;
+  if (!Number.isFinite(max) || !Number.isFinite(value)) return min;
 
   return Math.min(max, Math.max(min, Math.round(value)));
 }

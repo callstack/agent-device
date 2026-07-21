@@ -50,7 +50,7 @@ function setPixel(
   diff.data[index + 3] = color[3];
 }
 
-function clamp(value: number | undefined, min: number, max: number): number {
-  if (value === undefined || !Number.isFinite(value)) return min;
+function clamp(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
   return Math.min(Math.max(value, min), max);
 }
