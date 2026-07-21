@@ -11,6 +11,7 @@ import {
 import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
 import { ref, selector } from './selector-read.ts';
 import { buildSettleTailEntries, NEVER_SETTLED_HINT } from './settle.ts';
+import { isAndroidSystemChromeWindowResourceId } from '../../../contracts/android-system-chrome.ts';
 
 // #1101 --settle: quiet-window settle loop composition on the interaction
 // commands. Budgets are injected (fake clock) — no real waiting.
@@ -696,19 +697,37 @@ const ANDROID_APP_BUNDLE_ID = 'org.reactnavigation.playground';
 const ANDROID_SYSTEM_UI_BUNDLE_ID = 'com.android.systemui';
 const ANDROID_IME_BUNDLE_ID = 'com.google.android.inputmethod.latin';
 
+/**
+ * Stamps `systemChrome` the way the real Android walk does (`walkUiHierarchyNode`),
+ * for tests that build `SnapshotNode`s directly instead of walking a capture. The
+ * container predicate is the production one, so only the descent is re-stated here.
+ */
+function withAndroidSystemChrome<T extends AndroidChromeStampable>(nodes: T[]): T[] {
+  const byIndex = new Map(nodes.map((node) => [node.index, node]));
+  const inChrome = (node: T | undefined): boolean => {
+    if (!node) return false;
+    if (isAndroidSystemChromeWindowResourceId(node.identifier)) return true;
+    return node.parentIndex !== undefined && inChrome(byIndex.get(node.parentIndex));
+  };
+  return nodes.map((node) => (inChrome(node) ? { ...node, systemChrome: true } : node));
+}
+
+type AndroidChromeStampable = { index: number; parentIndex?: number; identifier?: string };
+
 function androidStatusBarNodes(startIndex: number, clockLabel = '12:23') {
   const root = startIndex;
-  return [
+  return withAndroidSystemChrome([
     {
+      // Outermost status-bar node in the real capture: the walk drops the one
+      // truly anonymous wrapper above it, so this is what a capture starts with.
       index: root,
       depth: 0,
       type: 'android.widget.FrameLayout',
+      identifier: 'com.android.systemui:id/status_bar_launch_animation_container',
       bundleId: ANDROID_SYSTEM_UI_BUNDLE_ID,
       rect: { x: 0, y: 0, width: 1344, height: 159 },
     },
     {
-      // The marker every real status-bar capture carries; the window-run
-      // drops as a whole because this member matches the status_bar* prefix.
       index: root + 1,
       depth: 1,
       parentIndex: root,
@@ -746,7 +765,7 @@ function androidStatusBarNodes(startIndex: number, clockLabel = '12:23') {
       bundleId: ANDROID_SYSTEM_UI_BUNDLE_ID,
       rect: { x: 1200, y: 40, width: 60, height: 40 },
     },
-  ];
+  ]);
 }
 
 // Real systemui VolumeDialog window captured live alongside the status bar
@@ -2104,50 +2123,52 @@ test('buildSettleTailEntries drops the keyboard container and its chrome descend
 });
 
 test('buildSettleTailEntries drops Android IME chrome and status-bar chrome (#1198)', () => {
-  const settledNodes = makeSnapshotState([
-    {
-      index: 0,
-      depth: 0,
-      type: 'android.widget.Button',
-      label: 'Send',
-      bundleId: 'org.reactnavigation.playground',
-      rect: { x: 10, y: 20, width: 100, height: 40 },
-      hittable: true,
-    },
-    {
-      // Status-bar marker: this systemui run drops whole.
-      index: 1,
-      depth: 0,
-      type: 'android.widget.FrameLayout',
-      identifier: 'com.android.systemui:id/status_bar',
-      bundleId: 'com.android.systemui',
-    },
-    {
-      index: 2,
-      depth: 1,
-      parentIndex: 1,
-      type: 'android.widget.TextView',
-      identifier: 'com.android.systemui:id/clock',
-      label: '12:23',
-      bundleId: 'com.android.systemui',
-    },
-    {
-      index: 3,
-      depth: 0,
-      type: 'android.widget.FrameLayout',
-      bundleId: 'com.google.android.inputmethod.latin',
-      hittable: true,
-    },
-    {
-      index: 4,
-      depth: 1,
-      parentIndex: 3,
-      type: 'android.widget.FrameLayout',
-      label: 'Delete',
-      bundleId: 'com.google.android.inputmethod.latin',
-      hittable: true,
-    },
-  ]).nodes;
+  const settledNodes = makeSnapshotState(
+    withAndroidSystemChrome([
+      {
+        index: 0,
+        depth: 0,
+        type: 'android.widget.Button',
+        label: 'Send',
+        bundleId: 'org.reactnavigation.playground',
+        rect: { x: 10, y: 20, width: 100, height: 40 },
+        hittable: true,
+      },
+      {
+        // Status-bar marker: this systemui run drops whole.
+        index: 1,
+        depth: 0,
+        type: 'android.widget.FrameLayout',
+        identifier: 'com.android.systemui:id/status_bar',
+        bundleId: 'com.android.systemui',
+      },
+      {
+        index: 2,
+        depth: 1,
+        parentIndex: 1,
+        type: 'android.widget.TextView',
+        identifier: 'com.android.systemui:id/clock',
+        label: '12:23',
+        bundleId: 'com.android.systemui',
+      },
+      {
+        index: 3,
+        depth: 0,
+        type: 'android.widget.FrameLayout',
+        bundleId: 'com.google.android.inputmethod.latin',
+        hittable: true,
+      },
+      {
+        index: 4,
+        depth: 1,
+        parentIndex: 3,
+        type: 'android.widget.FrameLayout',
+        label: 'Delete',
+        bundleId: 'com.google.android.inputmethod.latin',
+        hittable: true,
+      },
+    ]),
+  ).nodes;
 
   const result = buildSettleTailEntries(settledNodes, new Set(), 'org.reactnavigation.playground');
 
@@ -2158,45 +2179,47 @@ test('buildSettleTailEntries keeps unknown-foreign packages and drops only marke
   // Keep-unknown-foreign default: a system dialog's buttons (package
   // `android`) stay tail candidates; only the marked status/nav-bar
   // window-run drops, and that does not depend on knowing the session's app.
-  const settledNodes = makeSnapshotState([
-    {
-      index: 0,
-      depth: 0,
-      type: 'android.widget.Button',
-      label: 'Send',
-      bundleId: 'org.reactnavigation.playground',
-      rect: { x: 10, y: 20, width: 100, height: 40 },
-      hittable: true,
-    },
-    {
-      index: 1,
-      depth: 0,
-      type: 'android.widget.FrameLayout',
-      identifier: 'com.android.systemui:id/status_bar_container',
-      bundleId: 'com.android.systemui',
-      rect: { x: 0, y: 0, width: 1344, height: 159 },
-    },
-    {
-      index: 2,
-      depth: 1,
-      parentIndex: 1,
-      type: 'android.widget.TextView',
-      identifier: 'com.android.systemui:id/clock',
-      label: '12:23',
-      bundleId: 'com.android.systemui',
-      rect: { x: 40, y: 40, width: 80, height: 40 },
-    },
-    {
-      index: 3,
-      depth: 0,
-      type: 'android.widget.Button',
-      label: 'Just once',
-      identifier: 'android:id/button_once',
-      bundleId: 'android',
-      rect: { x: 829, y: 2734, width: 255, height: 162 },
-      hittable: true,
-    },
-  ]).nodes;
+  const settledNodes = makeSnapshotState(
+    withAndroidSystemChrome([
+      {
+        index: 0,
+        depth: 0,
+        type: 'android.widget.Button',
+        label: 'Send',
+        bundleId: 'org.reactnavigation.playground',
+        rect: { x: 10, y: 20, width: 100, height: 40 },
+        hittable: true,
+      },
+      {
+        index: 1,
+        depth: 0,
+        type: 'android.widget.FrameLayout',
+        identifier: 'com.android.systemui:id/status_bar_container',
+        bundleId: 'com.android.systemui',
+        rect: { x: 0, y: 0, width: 1344, height: 159 },
+      },
+      {
+        index: 2,
+        depth: 1,
+        parentIndex: 1,
+        type: 'android.widget.TextView',
+        identifier: 'com.android.systemui:id/clock',
+        label: '12:23',
+        bundleId: 'com.android.systemui',
+        rect: { x: 40, y: 40, width: 80, height: 40 },
+      },
+      {
+        index: 3,
+        depth: 0,
+        type: 'android.widget.Button',
+        label: 'Just once',
+        identifier: 'android:id/button_once',
+        bundleId: 'android',
+        rect: { x: 829, y: 2734, width: 255, height: 162 },
+        hittable: true,
+      },
+    ]),
+  ).nodes;
 
   for (const appBundleId of [undefined, 'org.reactnavigation.playground']) {
     const result = buildSettleTailEntries(settledNodes, new Set(), appBundleId);

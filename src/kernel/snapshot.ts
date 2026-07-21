@@ -66,6 +66,8 @@ export type RawSnapshotNode = {
   hiddenContentBelow?: boolean;
   interactionBlocked?: 'covered';
   presentationHints?: string[];
+  /** Android: node is inside a status-bar/navigation-bar window (see `systemChrome` in ui-hierarchy.ts). */
+  systemChrome?: boolean;
 };
 
 export type HiddenContentHint = {

@@ -2,6 +2,7 @@ import type { RawSnapshotNode, Rect, SnapshotOptions } from '../../kernel/snapsh
 import { parseBounds } from '../../utils/bounds.ts';
 import { isScrollableType } from '../../utils/scrollable.ts';
 import { intersectArea } from '../../utils/screenshot-geometry.ts';
+import { isAndroidSystemChromeWindowResourceId } from '../../contracts/android-system-chrome.ts';
 
 export type AndroidSnapshotAnalysis = {
   rawNodeCount: number;
@@ -32,14 +33,36 @@ export type AndroidUiNodeMetadata = {
   windowActive?: boolean;
   windowFocused?: boolean;
   windowRect?: Rect;
+  /** Inside a status-bar/navigation-bar container (tracked by `androidUiNodes`). */
+  systemChrome?: boolean;
 };
 
+/**
+ * Streams `<node>` metadata in document order, carrying status-bar/nav-bar
+ * provenance on each node. The container id is the only chrome signal in the
+ * tree — its clock/battery/wifi leaves carry no marker of their own — so the
+ * subtree is tracked here rather than re-derived from a list of leaf ids.
+ */
 export function* androidUiNodes(xml: string): IterableIterator<AndroidUiNodeMetadata> {
-  const nodeRegex = /<node\b[^>]*>/g;
-  let match = nodeRegex.exec(xml);
+  const tokenRegex = /<node\b[^>]*>|<\/node>/g;
+  let depth = 0;
+  let chromeDepth: number | undefined;
+  let match = tokenRegex.exec(xml);
   while (match) {
-    yield readAndroidUiNodeMetadata(match[0]);
-    match = nodeRegex.exec(xml);
+    const token = match[0];
+    if (token.startsWith('</node')) {
+      depth -= 1;
+      if (chromeDepth !== undefined && depth <= chromeDepth) chromeDepth = undefined;
+    } else {
+      const metadata = readAndroidUiNodeMetadata(token);
+      if (chromeDepth === undefined && isAndroidSystemChromeWindowResourceId(metadata.resourceId)) {
+        chromeDepth = depth;
+      }
+      yield chromeDepth === undefined ? metadata : { ...metadata, systemChrome: true };
+      if (!token.endsWith('/>')) depth += 1;
+      else if (chromeDepth === depth) chromeDepth = undefined;
+    }
+    match = tokenRegex.exec(xml);
   }
 }
 
@@ -115,6 +138,16 @@ export function buildUiHierarchySnapshot(
   return state.truncated ? { ...snapshot, truncated: true } : snapshot;
 }
 
+/**
+ * Chrome provenance is stamped HERE, while the tree still has the wrapper that
+ * carries it. `shouldIncludeAndroidNode` drops `status_bar*`/`navigation_bar*`
+ * wrappers and re-parents their children upward, so downstream classifiers see
+ * a clock/battery/wifi leaf sitting next to real content with nothing left to
+ * say which region it came from. Recording it on the way down (like
+ * `ancestorHittable`) means the answer is identical in every capture shape —
+ * `--raw` keeps the wrapper, a default capture drops it, both stamp the same
+ * descendants.
+ */
 function walkUiHierarchyNode(
   state: AndroidSnapshotBuildState,
   node: AndroidNode,
@@ -122,6 +155,7 @@ function walkUiHierarchyNode(
   parentIndex?: number,
   ancestorHittable: boolean = false,
   ancestorCollection: boolean = false,
+  ancestorSystemChrome: boolean = false,
 ): void {
   if (state.maxNodes !== undefined && state.nodes.length >= state.maxNodes) {
     state.truncated = true;
@@ -138,8 +172,10 @@ function walkUiHierarchyNode(
         hasInteractiveDescendant(state, node),
         ancestorCollection,
       );
+  const systemChrome =
+    ancestorSystemChrome || isAndroidSystemChromeWindowResourceId(node.identifier);
   const currentIndex = include
-    ? appendAndroidSnapshotNode(state, node, depth, parentIndex)
+    ? appendAndroidSnapshotNode(state, node, depth, parentIndex, systemChrome)
     : parentIndex;
   const nextAncestorHittable = ancestorHittable || Boolean(node.hittable);
   const nextAncestorCollection = ancestorCollection || isCollectionContainerType(node.type);
@@ -151,6 +187,7 @@ function walkUiHierarchyNode(
       currentIndex,
       nextAncestorHittable,
       nextAncestorCollection,
+      systemChrome,
     );
     if (state.truncated) return;
   }
@@ -161,6 +198,7 @@ function appendAndroidSnapshotNode(
   node: AndroidNode,
   depth: number,
   parentIndex?: number,
+  systemChrome?: boolean,
 ): number {
   const currentIndex = state.nodes.length;
   state.sourceNodes.push(node);
@@ -180,6 +218,7 @@ function appendAndroidSnapshotNode(
     parentIndex,
     ...(node.hiddenContentAbove ? { hiddenContentAbove: true } : {}),
     ...(node.hiddenContentBelow ? { hiddenContentBelow: true } : {}),
+    ...(systemChrome ? { systemChrome: true } : {}),
   });
   return currentIndex;
 }

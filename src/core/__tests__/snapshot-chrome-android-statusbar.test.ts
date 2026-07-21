@@ -10,21 +10,9 @@ import {
 } from '../../__tests__/test-utils/android-ui-hierarchy-fixtures.ts';
 
 /**
- * `ANDROID_IME_CAPTURE_RAW_NODES` (shared test util, see its own doc comment)
- * is a real device `--raw` capture: `--raw` keeps every structural wrapper
- * node (`status_bar_container`, `status_bar_contents`, ...) so the OLD
- * prefix-only marker check finds them and drops the whole run.
- *
- * The default (non-raw) walk drops unlabeled/unidentified structural nodes
- * (`shouldIncludeStructuralAndroidNode` in `platforms/android/ui-hierarchy.ts`),
- * re-parenting their children upward — which silently removes every one of
- * those marker-bearing wrappers AND several other anonymous structural nodes
- * that have neither a hittable descendant nor meaningful text/id (a real
- * `android.view.View` example is `com.android.systemui:id/home_handle`, see
- * the nav-bar test below). `walkNonRawAndroidFixture` (shared test util) runs
- * the fixture through the REAL `buildUiHierarchySnapshot({ raw: false })`
- * walk instead of hand-simulating a subset of its drops, so every inclusion
- * decision below is production's, not a guess at which nodes matter.
+ * The `walk*AndroidFixture` helpers run a real `--raw` device capture through
+ * production's own walk, so every inclusion decision below is production's
+ * rather than a hand-simulation of it.
  */
 
 function refForIdentifier(nodes: SnapshotNode[], identifier: string): string {
@@ -33,21 +21,7 @@ function refForIdentifier(nodes: SnapshotNode[], identifier: string): string {
   return node.ref;
 }
 
-/**
- * Status-bar leaf identifiers that SURVIVE the real non-raw walk for this
- * fixture (verified against `buildUiHierarchySnapshot({ raw: false })`
- * directly). Several ids the naive prefix-only simulation used to assert
- * (`notification_icon_area`, `notificationIcons`, `cutout_space_view`,
- * `system_icons`, `statusIcons`, `mobile_group`, `wifi_combo`, `wifi_group`,
- * `start_side_notif_and_chip_container`, `battery`) are unlabeled structural
- * wrappers with a generic resource id and no hittable descendant: production
- * `shouldIncludeStructuralAndroidNode` drops every one of them too, same as
- * the `status_bar*`/`navigation_bar*` wrappers. Their content isn't lost —
- * `battery`'s labeled child ("Battery 100 percent.") re-parents upward and is
- * covered by the "every systemui-owned node is chrome" assertion below — but
- * the WRAPPER identifier itself is gone from the walked tree, so it can't be
- * looked up by id.
- */
+/** Status-bar leaves that survive the non-raw walk for this fixture; none carries a chrome id. */
 const STATUS_BAR_LEAF_IDENTIFIERS = [
   'com.android.systemui:id/clock',
   'com.android.systemui:id/mobile_combo',
@@ -55,7 +29,7 @@ const STATUS_BAR_LEAF_IDENTIFIERS = [
   'com.android.systemui:id/wifi_signal',
 ];
 
-test('Android non-raw capture: status-bar leaves are recognized as chrome once their status_bar*/navigation_bar* marker wrapper is dropped by the walk (#1251)', () => {
+test('Android non-raw capture: status-bar leaves stay chrome after the walk drops the container that identifies them (#1251)', () => {
   const walkedNodes = walkNonRawAndroidFixture(ANDROID_IME_CAPTURE_RAW_NODES);
   const nodes = attachRefs(walkedNodes);
   const chromeRefs = collectSettleChromeRefs(nodes, 'com.callstack.agentdevicelab');
@@ -107,15 +81,9 @@ test('Android non-raw capture: status-bar leaves are recognized as chrome once t
 });
 
 test('Android actionable systemui overlay (volume dialog) still survives the chrome filter (#1251)', () => {
-  // Filter-logic unit test, NOT a live-capture-path claim (#1264 finding 2): this
-  // exercises `collectSettleChromeRefs` in isolation over a synthetic systemui
-  // run appended to an unrelated capture fixture. The leaf ids ARE real,
-  // live-verified volume-dialog ids (`volume_dialog_container`,
-  // `volume_new_ringer_active_icon_container`), but appending them to this
-  // fixture does not reproduce how a live capture reaches the filter — that is
-  // covered separately by the full-capture invariant test below. The point
-  // here is narrower: the status-bar/nav-bar leaf-id set (#1251) must NOT
-  // broaden to "any systemui id" and drop an actionable overlay it is handed.
+  // Real volume-dialog ids grafted onto an unrelated capture (#1264 finding 2:
+  // synthetic placement, real ids). Chrome must stay a status/nav-bar fact and
+  // never widen to "any systemui id", which would swallow this overlay.
   const rawWithVolumeDialog: RawSnapshotNode[] = [
     ...ANDROID_IME_CAPTURE_RAW_NODES,
     {
@@ -239,56 +207,51 @@ test('Android nav-bar leaves are recognized as chrome once their navigation_bar*
 });
 
 /**
- * #1319: `--settle` is NOT blind to a fully expanded quick-settings shade.
- * Live-verified on emulator-5554 (Pixel 9 Pro XL API 37, deskclock) in both
- * directions — opening mid-settle diffs `+28 -25`, closing diffs `+25 -28` —
- * while the shade's own status bar stays stripped from both.
+ * A fully expanded quick-settings shade hosts the status-bar icons and the
+ * quick-settings tiles in ONE window. Chrome classification must split them the
+ * same way whatever shape the capture arrives in — that is what #1318 (raw:
+ * every tile condemned) and #1319 (interactive-only: tiles kept) each hit from
+ * one side.
  *
- * The classification is capture-shape-dependent, which is the real defect
- * (#1319 has the measurements): the same shade is ONE condemned run under the
- * `--raw`/non-raw walk #1318 measured, and separate runs under the
- * `interactiveOnly: true` walk settle captures with, because that walk also
- * drops the systemui spine holding the run together. Settle lands on the right
- * side of that; the divergence layer needed its own fallback to.
- *
- * Until the shape-dependence is fixed upstream, this is what holds the settle
- * side in place: retaining the spine in the interactive walk re-merges the
- * runs and makes `--settle` report a full-cover shade as bare removals with no
- * added content.
+ * Live-verified on emulator-5554 (Pixel 9 Pro XL API 37, deskclock): raising
+ * the shade mid-`--settle` diffs `+28 -25`, closing it `+25 -28`, and the
+ * shade's own status bar is absent from both while `snapshot -i` of the same
+ * screen still lists it.
  */
-test('Android expanded quick-settings shade stays visible to --settle while its status bar is still stripped (#1319)', () => {
+test('Android expanded quick-settings shade: tiles survive and the status bar drops, identically in every capture shape (#1318/#1319)', () => {
   const appBundleId = 'com.google.android.deskclock';
-  const nodes = attachRefs(walkInteractiveOnlyAndroidFixture(ANDROID_QS_SHADE_CAPTURE_RAW_NODES));
-  const kept = withoutSettleChrome(nodes, appBundleId);
-  const keptIdentifiers = new Set(kept.map((node) => node.identifier));
 
-  // The shade's actionable content reaches both diff sides, so opening or
-  // closing it can never read as "nothing changed".
-  assert.equal(keptIdentifiers.has('com.android.systemui:id/expanded_qs_scroll_view'), true);
-  assert.equal(keptIdentifiers.has('com.android.systemui:id/slider'), true);
-  assert.equal(
-    kept.filter((node) => node.identifier?.startsWith('com.android.systemui:id/qs_tile_')).length >
-      0,
-    true,
-    'expected the quick-settings tiles to survive settle chrome stripping',
-  );
+  for (const [shape, walk] of [
+    ['interactive-only (--settle, wait stable)', walkInteractiveOnlyAndroidFixture],
+    ['non-raw (snapshot, replay divergence)', walkNonRawAndroidFixture],
+  ] as const) {
+    const nodes = attachRefs(walk(ANDROID_QS_SHADE_CAPTURE_RAW_NODES));
+    const kept = withoutSettleChrome(nodes, appBundleId);
+    const keptIdentifiers = new Set(kept.map((node) => node.identifier));
 
-  // ...and the run rule still does the job it was written for: the status-bar
-  // run (clock/date/carrier/wifi ticking every second) is the canonical churn
-  // settle exists to ignore, so sparing the shade must not spare that too.
-  const chromeRefs = collectSettleChromeRefs(nodes, appBundleId);
-  for (const identifier of [
-    'com.android.systemui:id/split_shade_status_bar',
-    'com.android.systemui:id/clock',
-    'com.android.systemui:id/wifi_signal',
-  ]) {
-    assert.equal(chromeRefs.has(refForIdentifier(nodes, identifier)), true, identifier);
-    assert.equal(keptIdentifiers.has(identifier), false, identifier);
+    // The shade's actionable content survives, so opening or closing it can
+    // never read as "nothing changed".
+    assert.equal(keptIdentifiers.has('com.android.systemui:id/slider'), true, shape);
+    assert.equal(
+      kept.some((node) => node.identifier?.startsWith('com.android.systemui:id/qs_tile_')),
+      true,
+      `expected the quick-settings tiles to survive chrome stripping — ${shape}`,
+    );
+
+    // ...while the status-bar subtree sharing that window still drops: clock,
+    // date and wifi tick constantly and are the canonical churn settle ignores.
+    const chromeRefs = collectSettleChromeRefs(nodes, appBundleId);
+    for (const identifier of [
+      'com.android.systemui:id/split_shade_status_bar',
+      'com.android.systemui:id/clock',
+      'com.android.systemui:id/wifi_signal',
+    ]) {
+      assert.equal(
+        chromeRefs.has(refForIdentifier(nodes, identifier)),
+        true,
+        `${identifier} ${shape}`,
+      );
+      assert.equal(keptIdentifiers.has(identifier), false, `${identifier} ${shape}`);
+    }
   }
-
-  // The contrast that explains the whole finding: the SAME capture, walked the
-  // way the divergence layer receives it, is one run and loses everything.
-  // This is what #1318 measured; settle escapes it only via the extra drops.
-  const nonRawNodes = attachRefs(walkNonRawAndroidFixture(ANDROID_QS_SHADE_CAPTURE_RAW_NODES));
-  assert.equal(withoutSettleChrome(nonRawNodes, appBundleId).length, 0);
 });

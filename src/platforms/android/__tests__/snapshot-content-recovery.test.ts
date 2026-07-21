@@ -320,24 +320,29 @@ test('rejects an active navigation-bar window with three-button chrome', () => {
         windowActive: true,
         packageName: 'com.android.systemui',
         className: 'android.widget.FrameLayout',
-      }),
-      node({
-        text: 'Back',
-        resourceId: 'com.android.systemui:id/back',
-        packageName: 'com.android.systemui',
-        className: 'android.widget.ImageView',
-      }),
-      node({
-        text: 'Home',
-        resourceId: 'com.android.systemui:id/home',
-        packageName: 'com.android.systemui',
-        className: 'android.widget.ImageView',
-      }),
-      node({
-        text: 'Overview',
-        resourceId: 'com.android.systemui:id/recent_apps',
-        packageName: 'com.android.systemui',
-        className: 'android.widget.ImageView',
+        // Chrome identity lives on the container, as on a device: the leaves
+        // below carry no marker of their own.
+        resourceId: 'com.android.systemui:id/navigation_bar_frame',
+        children: [
+          node({
+            text: 'Back',
+            resourceId: 'com.android.systemui:id/back',
+            packageName: 'com.android.systemui',
+            className: 'android.widget.ImageView',
+          }),
+          node({
+            text: 'Home',
+            resourceId: 'com.android.systemui:id/home',
+            packageName: 'com.android.systemui',
+            className: 'android.widget.ImageView',
+          }),
+          node({
+            text: 'Overview',
+            resourceId: 'com.android.systemui:id/recent_apps',
+            packageName: 'com.android.systemui',
+            className: 'android.widget.ImageView',
+          }),
+        ],
       }),
     ]),
     {
@@ -361,24 +366,27 @@ test('rejects an active status-chrome window with clock, battery, and signal ico
         windowActive: true,
         packageName: 'com.android.systemui',
         className: 'android.widget.FrameLayout',
-      }),
-      node({
-        text: '7:52',
-        resourceId: 'com.android.systemui:id/clock',
-        packageName: 'com.android.systemui',
-        className: 'android.widget.TextView',
-      }),
-      node({
-        text: 'Battery 100 percent',
-        resourceId: 'com.android.systemui:id/battery',
-        packageName: 'com.android.systemui',
-        className: 'android.widget.LinearLayout',
-      }),
-      node({
-        text: 'Wifi signal full',
-        resourceId: 'com.android.systemui:id/wifi_signal',
-        packageName: 'com.android.systemui',
-        className: 'android.widget.ImageView',
+        resourceId: 'com.android.systemui:id/status_bar_container',
+        children: [
+          node({
+            text: '7:52',
+            resourceId: 'com.android.systemui:id/clock',
+            packageName: 'com.android.systemui',
+            className: 'android.widget.TextView',
+          }),
+          node({
+            text: 'Battery 100 percent',
+            resourceId: 'com.android.systemui:id/battery',
+            packageName: 'com.android.systemui',
+            className: 'android.widget.LinearLayout',
+          }),
+          node({
+            text: 'Wifi signal full',
+            resourceId: 'com.android.systemui:id/wifi_signal',
+            packageName: 'com.android.systemui',
+            className: 'android.widget.ImageView',
+          }),
+        ],
       }),
     ]),
     {
@@ -473,9 +481,14 @@ function node(options: {
   className: string;
   windowType?: number;
   windowActive?: boolean;
+  /** Nested children, so chrome leaves can sit inside their status/nav-bar container as on a device. */
+  children?: string[];
 }): string {
   const windowAttrs =
     (options.windowType === undefined ? '' : ` window-type="${options.windowType}"`) +
     (options.windowActive === undefined ? '' : ` window-active="${options.windowActive}"`);
-  return `<node index="0"${windowAttrs} text="${options.text ?? ''}" resource-id="${options.resourceId ?? ''}" class="${options.className}" package="${options.packageName}" visible-to-user="true" enabled="true" bounds="[0,0][100,100]" />`;
+  const open = `<node index="0"${windowAttrs} text="${options.text ?? ''}" resource-id="${options.resourceId ?? ''}" class="${options.className}" package="${options.packageName}" visible-to-user="true" enabled="true" bounds="[0,0][100,100]"`;
+  return options.children === undefined
+    ? `${open} />`
+    : `${open}>${options.children.join('')}</node>`;
 }
