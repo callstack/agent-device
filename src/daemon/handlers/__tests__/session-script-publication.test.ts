@@ -114,6 +114,29 @@ test('no-clobber failure preserves bytes and armed state, then --force retries s
   expect(session.scriptRecordingState).toBe('published');
 });
 
+test('retargeting without --force clears force authorization from the previous target', () => {
+  const originalPath = path.join(root, 'original.ad');
+  const retargetPath = path.join(root, 'retarget.ad');
+  fs.writeFileSync(retargetPath, 'protected\n');
+  const session = armedSession({
+    saveScriptPath: originalPath,
+    saveScriptForce: true,
+  });
+  store.set('authoring', session);
+
+  const response = handleSessionScriptPublication({
+    req: request(retargetPath),
+    sessionName: 'authoring',
+    sessionStore: store,
+  });
+
+  expect(response).toMatchObject({ ok: false, error: { retriable: true } });
+  expect(fs.readFileSync(retargetPath, 'utf8')).toBe('protected\n');
+  expect(session.scriptRecordingState).toBe('armed');
+  expect(session.saveScriptPath).toBe(retargetPath);
+  expect(session.saveScriptForce).toBeUndefined();
+});
+
 test('refuses unarmed and repair-owned sessions before filesystem work', () => {
   const outputPath = path.join(root, 'missing', 'screen-x.ad');
   store.set('authoring', makeIosSession('authoring'));
