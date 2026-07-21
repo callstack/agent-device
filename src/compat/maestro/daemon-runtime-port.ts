@@ -284,7 +284,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
       await invokeMutation({ kind: 'pressKey', key: 'dismiss' }, context, 'deferred');
     },
     waitForAnimationToEnd: async (input, context) => {
-      await waitForMaestroAnimationToEnd({
+      const visualStabilityReached = await waitForMaestroAnimationToEnd({
         timeoutMs:
           input.timeoutMs ?? MAESTRO_COMPATIBILITY_PRESETS.command.waitForAnimationToEndTimeoutMs,
         now: options.dependencies.now,
@@ -298,6 +298,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
           });
         },
       });
+      return { visualStabilityReached };
     },
     takeScreenshot: async (input) => ({
       artifactPaths: artifactPathsFromData(await invoke({ kind: 'screenshot', path: input.path })),
@@ -379,7 +380,10 @@ export function createDaemonMaestroRuntimePort(
         await snapshots.settlePending(context);
       }
       const result = await executeMaestroRuntimeCommand(request, operations);
-      if (visualStabilityBarrier) snapshots.consumeStabilityFromVisualWait(context);
+      if (visualStabilityBarrier && result.visualStabilityReached === true) {
+        snapshots.consumeStabilityFromVisualWait(context);
+      }
+      delete result.visualStabilityReached;
       return result;
     },
     observe: async (request) => {

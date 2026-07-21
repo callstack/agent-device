@@ -9,7 +9,7 @@ test('captures an explicit zero-timeout pair and accepts exactly 0.005% RGB diff
   let captureCount = 0;
   let tempRoot: string | undefined;
 
-  await waitForMaestroAnimationToEnd({
+  const stable = await waitForMaestroAnimationToEnd({
     timeoutMs: 0,
     now: () => 0,
     capture: async (screenshotPath) => {
@@ -18,6 +18,7 @@ test('captures an explicit zero-timeout pair and accepts exactly 0.005% RGB diff
     },
   });
 
+  expect(stable).toBe(true);
   expect(captureCount).toBe(2);
   expect(await exists(tempRoot!)).toBe(false);
 });
@@ -27,7 +28,7 @@ test('retries changed pairs immediately until a matching pair is captured', asyn
   let captureCount = 0;
   let tempRoot: string | undefined;
 
-  await waitForMaestroAnimationToEnd({
+  const stable = await waitForMaestroAnimationToEnd({
     timeoutMs: 2,
     now: () => now,
     capture: async (screenshotPath) => {
@@ -46,6 +47,7 @@ test('retries changed pairs immediately until a matching pair is captured', asyn
     },
   });
 
+  expect(stable).toBe(true);
   expect(captureCount).toBe(4);
   expect(await exists(tempRoot!)).toBe(false);
 });
@@ -55,7 +57,7 @@ test('treats dimension and capture failures as nonmatches before retrying', asyn
   let captureCount = 0;
   let tempRoot: string | undefined;
 
-  await waitForMaestroAnimationToEnd({
+  const stable = await waitForMaestroAnimationToEnd({
     timeoutMs: 10,
     now: () => now,
     capture: async (screenshotPath) => {
@@ -74,8 +76,27 @@ test('treats dimension and capture failures as nonmatches before retrying', asyn
     },
   });
 
+  expect(stable).toBe(true);
   expect(captureCount).toBe(6);
   expect(await exists(tempRoot!)).toBe(false);
+});
+
+test('reports an expired deadline when no screenshot pair is stable', async () => {
+  let captureCount = 0;
+
+  const stable = await waitForMaestroAnimationToEnd({
+    timeoutMs: 0,
+    now: () => 0,
+    capture: async (screenshotPath) => {
+      await fs.writeFile(
+        screenshotPath,
+        makePng(1, 1, [[0, captureCount++ % 2 === 0 ? 0 : 255, 0, 0]]),
+      );
+    },
+  });
+
+  expect(stable).toBe(false);
+  expect(captureCount).toBe(2);
 });
 
 test('propagates cancellation and cleans temporary screenshots', async () => {

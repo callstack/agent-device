@@ -541,7 +541,7 @@ test('waitForAnimationToEnd uses two unstabilized screenshot captures', async ()
     platform: 'android',
   });
 
-  await port.execute({
+  const result = await port.execute({
     command: { kind: 'waitForAnimationToEnd', source: { line: 2 }, timeout: 0 },
     generation: 0,
     env: {},
@@ -553,6 +553,7 @@ test('waitForAnimationToEnd uses two unstabilized screenshot captures', async ()
   expect(
     requests.every(({ flags }) => flags?.maestro?.screenshotCaptureBackend === undefined),
   ).toBe(true);
+  expect(result).not.toHaveProperty('visualStabilityReached');
 });
 
 test('waitForAnimationToEnd uses the persistent runner capture backend on iOS', async () => {
@@ -636,7 +637,80 @@ test('waitForAnimationToEnd between two taps does not throw a stability-generati
 
   const result = await executeMaestroProgram(program, port);
 
-  expect(result).toMatchObject({ executed: 3, skipped: 0 });
+  expect(result).toMatchObject({ executed: 3, skipped: 0, generation: 2 });
+  expect(requests.map(({ command }) => command)).toEqual([
+    'snapshot',
+    'click',
+    'screenshot',
+    'screenshot',
+    'snapshot',
+    'click',
+  ]);
+});
+
+test('timed-out waitForAnimationToEnd retains the pending hierarchy settle', async () => {
+  const requests: DaemonRequest[] = [];
+  const clock = { value: 0 };
+  const firstScreenshot = new PNG({ width: 1, height: 1 });
+  firstScreenshot.data[3] = 255;
+  const secondScreenshot = new PNG({ width: 1, height: 1 });
+  secondScreenshot.data[0] = 255;
+  secondScreenshot.data[3] = 255;
+  const screenshots = [PNG.sync.write(firstScreenshot), PNG.sync.write(secondScreenshot)];
+  let screenshotIndex = 0;
+  const snapshot = makeSnapshot([
+    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 402, height: 874 } },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: 'settings',
+      label: 'Settings',
+      rect: { x: 20, y: 40, width: 120, height: 44 },
+    },
+    {
+      index: 2,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: 'catalog',
+      label: 'Catalog',
+      rect: { x: 20, y: 100, width: 120, height: 44 },
+    },
+  ]);
+
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      requests.push(request);
+      if (request.command === 'snapshot') return { ok: true, data: snapshot };
+      if (request.command === 'screenshot') {
+        await fs.promises.writeFile(
+          request.positionals[0]!,
+          screenshots[screenshotIndex++ % screenshots.length]!,
+        );
+      }
+      return { ok: true, data: {} };
+    },
+    dependencies: makeDependencies(clock),
+    platform: 'ios',
+  });
+
+  const program = parseMaestroProgram(
+    [
+      'appId: com.callstack.agentdevicelab',
+      '---',
+      '- tapOn:',
+      '    text: Settings',
+      '- waitForAnimationToEnd: 0',
+      '- tapOn:',
+      '    text: Catalog',
+    ].join('\n'),
+  );
+
+  const result = await executeMaestroProgram(program, port);
+
+  expect(result).toMatchObject({ executed: 3, skipped: 0, generation: 2 });
+  expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS);
   expect(requests.map(({ command }) => command)).toEqual([
     'snapshot',
     'click',

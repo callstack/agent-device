@@ -100,6 +100,8 @@ export type MaestroRuntimeResult = {
   artifactPaths?: string[];
   /** Daemon response data for gesture/profile evidence in replay traces. */
   data?: Record<string, unknown>;
+  /** Internal completion evidence consumed before the result leaves the daemon runtime port. */
+  visualStabilityReached?: boolean;
 };
 
 export type MaestroRuntimeMetrics = {

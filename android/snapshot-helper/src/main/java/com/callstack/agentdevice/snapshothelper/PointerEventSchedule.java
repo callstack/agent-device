@@ -54,16 +54,14 @@ final class PointerEventSchedule {
           Math.max(1, Math.min(POINTER_TRANSITION_DELAY_MS, sampleOffsetsMs[1] - 1));
       steps.add(new Step(Action.POINTER_DOWN, 0, 2, pointerDownOffset, true));
     }
-    // A one-pointer UP carries the final sample and synchronously flushes earlier queued MOVEs.
-    int finalMoveIndex = pointerCount == 1 ? lastIndex - 1 : lastIndex;
-    for (int sampleIndex = 1; sampleIndex <= finalMoveIndex; sampleIndex += 1) {
+    for (int sampleIndex = 1; sampleIndex <= lastIndex; sampleIndex += 1) {
       steps.add(
           new Step(
               Action.MOVE,
               sampleIndex,
               pointerCount,
               sampleOffsetsMs[sampleIndex],
-              pointerCount == 2 && sampleIndex == lastIndex));
+              pointerCount == 1 || sampleIndex == lastIndex));
     }
     if (pointerCount == 2) {
       steps.add(

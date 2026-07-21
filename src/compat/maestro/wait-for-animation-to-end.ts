@@ -20,18 +20,18 @@ export type MaestroAnimationWaitOptions = {
  */
 export async function waitForMaestroAnimationToEnd(
   options: MaestroAnimationWaitOptions,
-): Promise<void> {
+): Promise<boolean> {
   validateTimeout(options.timeoutMs);
   throwIfMaestroScreenshotAborted(options.signal);
 
   const deadline = options.now() + options.timeoutMs;
-  await withMaestroScreenshotWorkspace('animation', async (tempRoot) => {
+  return await withMaestroScreenshotWorkspace('animation', async (tempRoot) => {
     const firstPath = path.join(tempRoot, 'first.png');
     const secondPath = path.join(tempRoot, 'second.png');
     while (true) {
       throwIfMaestroScreenshotAborted(options.signal);
-      if (await capturePairMatches(options, firstPath, secondPath)) return;
-      if (options.now() >= deadline) return;
+      if (await capturePairMatches(options, firstPath, secondPath)) return true;
+      if (options.now() >= deadline) return false;
     }
   });
 }

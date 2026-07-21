@@ -343,7 +343,7 @@ async function executeNavigationCommand(
         operations.waitForAnimationToEnd,
         waitForAnimationToEndInput(command),
         context,
-        'invalidate',
+        'preserve',
       );
   }
 }
@@ -437,6 +437,9 @@ function resultWithArtifacts(
     ...optionalOutputEnv(result?.outputEnv),
     ...optionalArtifactPaths(defaultArtifacts, result?.artifactPaths),
     ...optionalData(result?.data),
+    ...(result?.visualStabilityReached === undefined
+      ? {}
+      : { visualStabilityReached: result.visualStabilityReached }),
   };
 }
 

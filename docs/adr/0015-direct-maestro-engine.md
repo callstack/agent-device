@@ -127,7 +127,8 @@ captures per attempt and 0.005% normalized absolute RGB-difference threshold. Th
 bypass ordinary screenshot stabilization so the command observes the application rather than
 recursively waiting on another settling policy. After a successful authored visual wait, screenshot
 stability discharges the same-generation pending mutation boundary instead of preceding the visual
-barrier with a hierarchy capture. A failed visual wait leaves that boundary pending. On iOS,
+barrier with a hierarchy capture. Reaching the visual deadline without observing a stable pair leaves
+that boundary pending for the next mutating command's hierarchy settle. On iOS,
 comparison captures use the persistent runner's screenshot surface so both frames come from one warmed
 transport and avoid simulator screenshot setup between polls.
 

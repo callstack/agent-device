@@ -72,7 +72,7 @@ describe('MaestroRuntimePort', () => {
     expect(result).toEqual({
       executed: 12,
       skipped: 0,
-      generation: 10,
+      generation: 9,
       artifactPaths: ['artifact://checkout.png'],
     });
     expect(calls.map(({ kind }) => kind)).toEqual([
@@ -113,16 +113,16 @@ describe('MaestroRuntimePort', () => {
     expect(calls[9]).toMatchObject({
       kind: 'waitForAnimationToEnd',
       input: { timeoutMs: 50 },
-      generation: 10,
+      generation: 9,
     });
     expect(calls[11]).toMatchObject({
       kind: 'runScript',
       input: { file: 'setup.js', env: { SEED: 7 } },
-      generation: 10,
+      generation: 9,
     });
   });
 
-  test('describes observation validity after successful waits and scripts', async () => {
+  test('preserves observation validity after visual waits and scripts', async () => {
     const waitInvalidation = vi.fn();
     const scriptInvalidation = vi.fn();
     const operations = makeOperations({
@@ -147,7 +147,7 @@ describe('MaestroRuntimePort', () => {
         invalidateObservation: scriptInvalidation,
       }),
     ).resolves.toEqual({});
-    expect(waitInvalidation).toHaveBeenCalledOnce();
+    expect(waitInvalidation).not.toHaveBeenCalled();
     expect(scriptInvalidation).not.toHaveBeenCalled();
   });
 

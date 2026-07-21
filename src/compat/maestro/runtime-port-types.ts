@@ -93,6 +93,8 @@ export type MaestroRuntimeOperationResult = {
   readonly artifactPaths?: readonly string[];
   /** Daemon response data surfaced for replay-trace evidence. */
   readonly data?: Record<string, unknown>;
+  /** Internal completion evidence consumed by the daemon Maestro port. */
+  readonly visualStabilityReached?: boolean;
 };
 
 export type MaestroRuntimeOperation<TInput> = (

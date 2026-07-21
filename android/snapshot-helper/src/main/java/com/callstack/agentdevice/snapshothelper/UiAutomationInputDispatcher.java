@@ -36,7 +36,7 @@ final class UiAutomationInputDispatcher {
     try {
       return UiAutomation.class.getMethod(
           "injectInputEvent", InputEvent.class, boolean.class, boolean.class);
-    } catch (NoSuchMethodException error) {
+    } catch (NoSuchMethodException | SecurityException error) {
       return null;
     }
   }
