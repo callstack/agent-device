@@ -62,14 +62,15 @@ function selectMaestroScrollableViewport(
   direction: MaestroDirection,
   platform: MaestroPlatform,
 ): Rect | undefined {
-  const applicationViewport = findLargestViewportRect(snapshot.nodes);
-  if (!applicationViewport || !isPositiveFiniteRect(applicationViewport)) return undefined;
   const vertical = direction === 'up' || direction === 'down';
   const scrollable = filterVisibleMaestroMatches({
     nodes: snapshot.nodes,
     matches: snapshot.nodes.filter((node) => isScrollableSnapshotType(node.type)),
     platform,
   });
+  const applicationViewport =
+    findLargestViewportRect(snapshot.nodes) ?? findLargestPositiveRect(scrollable);
+  if (!applicationViewport || !isPositiveFiniteRect(applicationViewport)) return undefined;
   const candidates = scrollable.flatMap((node) => {
     if (!isPositiveFiniteRect(node.rect)) return [];
     const viewport = intersectRects(node.rect, applicationViewport);
@@ -93,6 +94,21 @@ function selectMaestroScrollableViewport(
     if (candidate) return candidate.viewport;
   }
   return candidates.sort(compareViewportAreaDescending)[0]?.viewport;
+}
+
+function findLargestPositiveRect(
+  nodes: readonly SnapshotState['nodes'][number][],
+): Rect | undefined {
+  let largest: Rect | undefined;
+  for (const node of nodes) {
+    if (
+      isPositiveFiniteRect(node.rect) &&
+      (!largest || node.rect.width * node.rect.height > largest.width * largest.height)
+    ) {
+      largest = node.rect;
+    }
+  }
+  return largest;
 }
 
 function intersectRects(left: Rect, right: Rect): Rect | undefined {

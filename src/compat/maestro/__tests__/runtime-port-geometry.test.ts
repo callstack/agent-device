@@ -137,6 +137,36 @@ test('excludes an in-viewport Android scrollable that is hidden from the user', 
   });
 });
 
+test('derives an Android viewport from visible scroll containers when roots are omitted', () => {
+  const snapshot = {
+    createdAt: 0,
+    nodes: [
+      {
+        index: 0,
+        ref: '@e1',
+        type: 'android.widget.ScrollView',
+        visibleToUser: true,
+        rect: { x: 0, y: 0, width: 1344, height: 2992 },
+      },
+      {
+        index: 1,
+        ref: '@e2',
+        parentIndex: 0,
+        type: 'android.widget.ScrollView',
+        visibleToUser: true,
+        rect: { x: 54, y: 159, width: 1236, height: 2449 },
+      },
+    ],
+  };
+
+  expect(
+    resolveMaestroScrollableGesture(snapshot, { id: 'home-open-form' }, 'down', 600, 'android'),
+  ).toEqual({
+    gesture: { from: { x: 672, y: 1496 }, to: { x: 672, y: 299 }, durationMs: 600 },
+    viewport: { x: 0, y: 0, width: 1344, height: 2992 },
+  });
+});
+
 test('does not associate a selector in an Android hidden scroll subtree', () => {
   const snapshot = {
     createdAt: 0,
