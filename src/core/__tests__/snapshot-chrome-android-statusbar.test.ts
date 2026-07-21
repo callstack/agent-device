@@ -239,43 +239,22 @@ test('Android nav-bar leaves are recognized as chrome once their navigation_bar*
 });
 
 /**
- * #1319: does the run-condemnation rule make `--settle` blind to a fully
- * expanded quick-settings shade? It does NOT, and this pins the reason,
- * because the reason is structural rather than intentional and nothing else
- * guards it.
+ * #1319: `--settle` is NOT blind to a fully expanded quick-settings shade.
+ * Live-verified on emulator-5554 (Pixel 9 Pro XL API 37, deskclock) in both
+ * directions — opening mid-settle diffs `+28 -25`, closing diffs `+25 -28` —
+ * while the shade's own status bar stays stripped from both.
  *
- * #1318 established that under the `--raw` / non-raw walk this exact capture
- * is ONE `legacy_window_root` run whose four status-icon markers condemn all
- * 95 nodes — which is why the divergence layer needed its own fallback. But
- * the settle loop never sees that shape: it captures `interactiveOnly: true`
- * (`stable-capture.ts`), and that walk also drops the structural window spine
- * that merged the shade into a single run. The shade therefore reaches
- * `withoutSettleChrome` as SEPARATE runs, and only the status-bar one carries
- * a marker.
+ * The classification is capture-shape-dependent, which is the real defect
+ * (#1319 has the measurements): the same shade is ONE condemned run under the
+ * `--raw`/non-raw walk #1318 measured, and separate runs under the
+ * `interactiveOnly: true` walk settle captures with, because that walk also
+ * drops the systemui spine holding the run together. Settle lands on the right
+ * side of that; the divergence layer needed its own fallback to.
  *
- * So settle and divergence disagreeing about these nodes (#1318's framing) is
- * not two layers reading one tree differently — they consume different capture
- * shapes. Settle already gets the outcome that layer wants: shade content
- * survives the diff, status-bar churn does not.
- *
- * Revert sensitivity runs through the interactive walk: if
- * `shouldIncludeInteractiveAndroidNode` ever retains the systemui spine, the
- * runs re-merge, every assertion in the first half of this test flips, and
- * `--settle` silently starts reporting a full-cover shade as bare removals
- * with no added content.
- *
- * Live end-to-end confirmation (2026-07-21, emulator-5554 Pixel 9 Pro XL API 37,
- * deskclock), covering both halves this test asserts and both directions #1319
- * asked about:
- *
- * - shade OPENING mid-settle: `settled after 6917ms: +28 -25`, the added lines
- *   being the brightness seekbar and the Wi-Fi/Bluetooth/Mobile data/Quick
- *   Share/Modes/Wallet tiles;
- * - shade CLOSING mid-settle: `settled after 6919ms: +25 -28`, the mirror image;
- * - and in the same runs the shade's OWN status bar (one group labeled
- *   "Tue, Jul 21, Wifi signal full., T-Mobile") is absent from the settle diff
- *   while `snapshot -i` of the identical screen still lists it — so the run rule
- *   is filtering the churn, not sitting inert.
+ * Until the shape-dependence is fixed upstream, this is what holds the settle
+ * side in place: retaining the spine in the interactive walk re-merges the
+ * runs and makes `--settle` report a full-cover shade as bare removals with no
+ * added content.
  */
 test('Android expanded quick-settings shade stays visible to --settle while its status bar is still stripped (#1319)', () => {
   const appBundleId = 'com.google.android.deskclock';

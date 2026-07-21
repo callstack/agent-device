@@ -30,11 +30,26 @@ const ANDROID_SYSTEM_CHROME_MARKER_PREFIXES = [
  * `--raw` keeps the wrapper markers, so the prefix check above stays
  * load-bearing there.
  *
- * A more robust fix would thread the AOSP window-type constants
- * (`TYPE_STATUS_BAR` = 2000, `TYPE_NAVIGATION_BAR` = 2019) already parsed in
- * `readNodeAttributes` (ui-hierarchy.ts) through to the output `SnapshotNode`
- * and key off that instead of resource-ids — deferred until the id-based
- * approach here proves insufficient.
+ * This note previously proposed threading the AOSP window-type constants
+ * (`TYPE_STATUS_BAR` = 2000, `TYPE_NAVIGATION_BAR` = 2019) through to the
+ * output `SnapshotNode` and keying off those instead. Measured against the
+ * helper XML on a live device (2026-07-21, emulator-5554, Pixel 9 Pro XL API
+ * 37), that does not work and should not be attempted:
+ *
+ * - systemui reports `window-type=3` (`TYPE_SYSTEM`) both with the shade
+ *   collapsed and fully expanded; `TYPE_STATUS_BAR` never appears at all;
+ * - the helper stamps window metadata on window ROOT nodes only (1 of 169
+ *   nodes in an expanded-shade capture), not per node;
+ * - an expanded shade is ONE window hosting the status icons AND the
+ *   quick-settings tiles, so no window-level signal separates them.
+ *
+ * The real constraint is upstream: the walk drops the `status_bar*` wrappers —
+ * the only nodes that identify the region — and re-parents chrome leaves next
+ * to unmarked chrome siblings that carry no id (`"Battery 100 percent."`, the
+ * notification-icon summary). Everything here is reconstructing identity the
+ * walk already discarded, which is why classification depends on capture
+ * shape (#1318 raw vs #1319 interactive-only). See #1319 for the measured
+ * dead ends and the provenance-preserving alternative.
  */
 const ANDROID_SYSTEM_CHROME_MARKER_LEAF_IDS: ReadonlySet<string> = new Set(
   [
