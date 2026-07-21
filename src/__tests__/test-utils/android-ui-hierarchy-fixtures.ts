@@ -73,6 +73,27 @@ export function walkNonRawAndroidFixture(rawNodes: RawSnapshotNode[]): RawSnapsh
 }
 
 /**
+ * Runs a `RawSnapshotNode[]` fixture through the REAL interactive-only Android
+ * walk (`buildUiHierarchySnapshot(..., { interactiveOnly: true })`), the shape
+ * `--settle` and `wait stable` actually consume: their loop captures with
+ * `interactiveOnly: true` (`stable-capture.ts`), so the tree reaching
+ * `withoutSettleChrome` is this one, NOT `walkNonRawAndroidFixture`'s.
+ *
+ * The distinction is load-bearing for systemui run classification, not a
+ * detail: `shouldIncludeInteractiveAndroidNode` additionally drops the
+ * structural window spine (`legacy_window_root`, `notification_panel`,
+ * `qs_frame`, the quick-settings ComposeView chain), and those are precisely
+ * the nodes that splice a systemui surface into ONE contiguous run. Verified
+ * live (2026-07-21, emulator-5554 Pixel 9 Pro XL API 37): the same expanded
+ * shade is one 95-node run under the non-raw walk and five runs under this
+ * one.
+ */
+export function walkInteractiveOnlyAndroidFixture(rawNodes: RawSnapshotNode[]): RawSnapshotNode[] {
+  const tree = rawFixtureToAndroidTree(rawNodes);
+  return buildUiHierarchySnapshot(tree, undefined, { raw: false, interactiveOnly: true }).nodes;
+}
+
+/**
  * Real device capture (checkout-form fixture app, Gboard open, status bar
  * visible) archived at `~/.agent-device-bench/replay-runs/android-ime/raw-ime2.json`
  * (#1251). This is the `--raw` tree: `--raw` keeps every structural wrapper

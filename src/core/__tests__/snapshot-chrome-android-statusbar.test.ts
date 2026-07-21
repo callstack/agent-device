@@ -1,9 +1,11 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { attachRefs, type RawSnapshotNode, type SnapshotNode } from '../../kernel/snapshot.ts';
-import { collectSettleChromeRefs } from '../snapshot-chrome.ts';
+import { collectSettleChromeRefs, withoutSettleChrome } from '../snapshot-chrome.ts';
 import {
   ANDROID_IME_CAPTURE_RAW_NODES,
+  ANDROID_QS_SHADE_CAPTURE_RAW_NODES,
+  walkInteractiveOnlyAndroidFixture,
   walkNonRawAndroidFixture,
 } from '../../__tests__/test-utils/android-ui-hierarchy-fixtures.ts';
 
@@ -234,4 +236,80 @@ test('Android nav-bar leaves are recognized as chrome once their navigation_bar*
     false,
     'expected home_handle to be dropped by the real non-raw walk, not retained',
   );
+});
+
+/**
+ * #1319: does the run-condemnation rule make `--settle` blind to a fully
+ * expanded quick-settings shade? It does NOT, and this pins the reason,
+ * because the reason is structural rather than intentional and nothing else
+ * guards it.
+ *
+ * #1318 established that under the `--raw` / non-raw walk this exact capture
+ * is ONE `legacy_window_root` run whose four status-icon markers condemn all
+ * 95 nodes — which is why the divergence layer needed its own fallback. But
+ * the settle loop never sees that shape: it captures `interactiveOnly: true`
+ * (`stable-capture.ts`), and that walk also drops the structural window spine
+ * that merged the shade into a single run. The shade therefore reaches
+ * `withoutSettleChrome` as SEPARATE runs, and only the status-bar one carries
+ * a marker.
+ *
+ * So settle and divergence disagreeing about these nodes (#1318's framing) is
+ * not two layers reading one tree differently — they consume different capture
+ * shapes. Settle already gets the outcome that layer wants: shade content
+ * survives the diff, status-bar churn does not.
+ *
+ * Revert sensitivity runs through the interactive walk: if
+ * `shouldIncludeInteractiveAndroidNode` ever retains the systemui spine, the
+ * runs re-merge, every assertion in the first half of this test flips, and
+ * `--settle` silently starts reporting a full-cover shade as bare removals
+ * with no added content.
+ *
+ * Live end-to-end confirmation (2026-07-21, emulator-5554 Pixel 9 Pro XL API 37,
+ * deskclock), covering both halves this test asserts and both directions #1319
+ * asked about:
+ *
+ * - shade OPENING mid-settle: `settled after 6917ms: +28 -25`, the added lines
+ *   being the brightness seekbar and the Wi-Fi/Bluetooth/Mobile data/Quick
+ *   Share/Modes/Wallet tiles;
+ * - shade CLOSING mid-settle: `settled after 6919ms: +25 -28`, the mirror image;
+ * - and in the same runs the shade's OWN status bar (one group labeled
+ *   "Tue, Jul 21, Wifi signal full., T-Mobile") is absent from the settle diff
+ *   while `snapshot -i` of the identical screen still lists it — so the run rule
+ *   is filtering the churn, not sitting inert.
+ */
+test('Android expanded quick-settings shade stays visible to --settle while its status bar is still stripped (#1319)', () => {
+  const appBundleId = 'com.google.android.deskclock';
+  const nodes = attachRefs(walkInteractiveOnlyAndroidFixture(ANDROID_QS_SHADE_CAPTURE_RAW_NODES));
+  const kept = withoutSettleChrome(nodes, appBundleId);
+  const keptIdentifiers = new Set(kept.map((node) => node.identifier));
+
+  // The shade's actionable content reaches both diff sides, so opening or
+  // closing it can never read as "nothing changed".
+  assert.equal(keptIdentifiers.has('com.android.systemui:id/expanded_qs_scroll_view'), true);
+  assert.equal(keptIdentifiers.has('com.android.systemui:id/slider'), true);
+  assert.equal(
+    kept.filter((node) => node.identifier?.startsWith('com.android.systemui:id/qs_tile_')).length >
+      0,
+    true,
+    'expected the quick-settings tiles to survive settle chrome stripping',
+  );
+
+  // ...and the run rule still does the job it was written for: the status-bar
+  // run (clock/date/carrier/wifi ticking every second) is the canonical churn
+  // settle exists to ignore, so sparing the shade must not spare that too.
+  const chromeRefs = collectSettleChromeRefs(nodes, appBundleId);
+  for (const identifier of [
+    'com.android.systemui:id/split_shade_status_bar',
+    'com.android.systemui:id/clock',
+    'com.android.systemui:id/wifi_signal',
+  ]) {
+    assert.equal(chromeRefs.has(refForIdentifier(nodes, identifier)), true, identifier);
+    assert.equal(keptIdentifiers.has(identifier), false, identifier);
+  }
+
+  // The contrast that explains the whole finding: the SAME capture, walked the
+  // way the divergence layer receives it, is one run and loses everything.
+  // This is what #1318 measured; settle escapes it only via the extra drops.
+  const nonRawNodes = attachRefs(walkNonRawAndroidFixture(ANDROID_QS_SHADE_CAPTURE_RAW_NODES));
+  assert.equal(withoutSettleChrome(nonRawNodes, appBundleId).length, 0);
 });
