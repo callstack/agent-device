@@ -58,7 +58,8 @@ type IosDeviceDiscoveryOptions = {
 };
 
 const XCTRACE_SECTION_HEADER_PATTERN = /^==\s*(.+?)\s*==$/;
-const XCTRACE_DEVICE_LINE_PATTERN = /^(?<name>.+?)\s+\[(?<id>[^[\]]+)\]\s*$/;
+const XCTRACE_DEVICE_LINE_PATTERN =
+  /^(?<name>.+?)(?:\s+\((?<osVersion>[^)]+)\))?\s+(?:\[(?<idBracket>[^[\]]+)\]|\((?<idParen>[^)]+)\))\s*$/;
 
 function normalizeAppleDescriptor(value: string | undefined): string {
   return (value ?? '').trim().toLowerCase();
@@ -271,8 +272,9 @@ export function parseXctracePhysicalAppleDevices(output: string): DeviceInfo[] {
     if (section !== 'Devices') continue;
 
     const deviceMatch = XCTRACE_DEVICE_LINE_PATTERN.exec(line);
-    const id = deviceMatch?.groups?.id?.trim() ?? '';
     const name = deviceMatch?.groups?.name?.trim() ?? '';
+    const id = deviceMatch?.groups?.idBracket?.trim() ?? deviceMatch?.groups?.idParen?.trim() ?? '';
+    const osVersion = deviceMatch?.groups?.osVersion?.trim();
     if (!id || !name) continue;
     const target = resolveAppleTargetFromLabel(name);
     if (!target) continue;
@@ -283,7 +285,7 @@ export function parseXctracePhysicalAppleDevices(output: string): DeviceInfo[] {
       name,
       kind: 'device',
       target,
-      appleOs: resolveAppleOs(target, [name]),
+      appleOs: resolveAppleOs(target, osVersion ? [name, osVersion] : [name]),
       // xctrace lists currently connected devices in the "Devices" section.
       // The "Devices Offline" section is excluded above, so treating these as
       // booted preserves the existing physical-device selection semantics.

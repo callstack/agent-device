@@ -231,6 +231,47 @@ test('parseXctracePhysicalAppleDevices tags Apple Vision devices as visionOS', (
   ]);
 });
 
+test('parseXctracePhysicalAppleDevices parses the parenthesized physical device format', () => {
+  const parsed = parseXctracePhysicalAppleDevices(
+    [
+      '== Devices ==',
+      'iPhone 8 Plus (16.7.16) (00008020-001C2D2234567890)',
+      'Studio iPad Pro (17.0) (ipad-udid-1)',
+      'Living Room Apple TV (16.0) [tv-udid-1]',
+    ].join('\n'),
+  );
+
+  assert.deepEqual(parsed, [
+    {
+      platform: 'apple',
+      id: '00008020-001C2D2234567890',
+      name: 'iPhone 8 Plus',
+      kind: 'device',
+      target: 'mobile',
+      appleOs: 'ios',
+      booted: true,
+    },
+    {
+      platform: 'apple',
+      id: 'ipad-udid-1',
+      name: 'Studio iPad Pro',
+      kind: 'device',
+      target: 'mobile',
+      appleOs: 'ipados',
+      booted: true,
+    },
+    {
+      platform: 'apple',
+      id: 'tv-udid-1',
+      name: 'Living Room Apple TV',
+      kind: 'device',
+      target: 'tv',
+      appleOs: 'tvos',
+      booted: true,
+    },
+  ]);
+});
+
 test('listAppleDevices tags devicectl iPad product types as iPadOS', async () => {
   mockRunCommand = async (_cmd, args) => {
     if (args.join(' ') === 'simctl list devices -j') {
