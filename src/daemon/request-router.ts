@@ -250,6 +250,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       if (!timingSafeStringEqual(req.token, token)) {
         return unauthorizedResponse();
       }
+      registerParameterizedFillDiagnosticValue(req);
 
       let childScope: RequestExecutionScope | undefined;
       try {

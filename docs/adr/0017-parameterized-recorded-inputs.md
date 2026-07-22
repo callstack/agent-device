@@ -52,14 +52,15 @@ The literal exists only on the live request path long enough to execute the inte
 1. The request scope registers it as an explicit diagnostics secret before platform work. This is in
    addition to key-name redaction, because an opaque value need not look secret.
 2. The platform interaction receives the literal.
-3. Before response/event/recording retention, value-bearing interaction-result fields replace every
-   occurrence of the literal with `${VAR}`. Stable selector/ref provenance is preserved byte-for-byte;
-   post-fill selector-chain candidates derived from the new value are dropped rather than serialized.
+3. Before response/event/recording retention, the fill result's semantic `text` field and an exact
+   post-fill `refLabel` become `${VAR}`. Stable selector/ref provenance and unrelated strings are
+   preserved byte-for-byte; post-fill selector-chain candidates are dropped only when a parsed
+   `text`, `label`, or `value` term exactly equals the supplied literal.
 4. At `recordActionEntry`, the recorder reconstructs the fill's literal positional, writes only the
-   placeholder into `SessionAction`, and scrubs value-bearing result strings again. ADR 0012
-   `target-v1` evidence keeps its structure, but any matching string is parameterized as well so a
-   repeated fill cannot leak through a pre-action accessibility label. The `recordAs` control flag
-   itself is not serialized into the script.
+   placeholder into `SessionAction`, and parameterizes the semantic result field again. ADR 0012
+   `target-v1` evidence keeps its structure; exact value-bearing accessibility labels become the
+   placeholder without rewriting identity fragments that merely contain the same characters. The
+   `recordAs` control flag itself is not serialized into the script.
 5. The existing ADR 0012/0016 writer receives an already-parameterized action. Its selector provenance,
    portability checks, same-directory temp write, and atomic publication algorithm are unchanged.
 
@@ -71,9 +72,10 @@ the literal once this pre-publication boundary has run.
 Missing variables retain replay's existing fail-loud behavior: `${VAR}` resolution throws before the
 corresponding action is invoked. When replay dispatches an authored fill whose complete text token is a
 `${VAR}` placeholder, its daemon-only provenance channel derives `recordAs=VAR` for that live request.
-If the replay is itself being recorded or repaired, the recorder therefore retains the original
-placeholder rather than serializing the expanded value. Embedded interpolation remains ordinary script
-input; safe authoring emits one complete placeholder token.
+This derivation uses the unresolved source action, independently of whether the resolved value is empty
+or whitespace. If the replay is itself being recorded or repaired, the recorder therefore retains the
+original placeholder rather than serializing the expanded value. Embedded interpolation remains
+ordinary script input; safe authoring emits one complete placeholder token.
 
 ## Consequences
 

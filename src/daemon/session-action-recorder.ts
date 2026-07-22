@@ -7,9 +7,12 @@ import type { TargetAnnotationV1 } from '../replay/target-identity.ts';
 import { inferFillText } from './action-utils.ts';
 import {
   recordedInputPlaceholder,
-  replaceRecordedInputLiteral,
   validateRecordedInputVariableName,
 } from '../replay/recorded-input.ts';
+import {
+  parameterizeRecordedFillPayload,
+  parameterizeRecordedFillTargetEvidence,
+} from './parameterized-recorded-fill.ts';
 
 export type RecordActionEntry = {
   command: string;
@@ -115,12 +118,11 @@ export function recordActionEntry(
 /**
  * #1348: the recorder is the first durable boundary. The live request keeps
  * the literal fill value through device execution, but the SessionAction gets
- * only `${VAR}`. Value-bearing result strings are scrubbed at the same boundary
- * so backend echoes or settled diffs cannot smuggle the literal into recording
- * state, the event display, or the eventual publication temp/target file;
- * ADR 0012 identity evidence keeps its structure but is scrubbed too, covering
- * repeated fills where the pre-action accessibility label already echoes the
- * same sensitive value.
+ * only `${VAR}`. The result's semantic fill-value field is parameterized at
+ * the same boundary, while selector/ref provenance is preserved byte-for-byte.
+ * Exact value-bearing selector candidates are omitted, and exact accessibility
+ * value labels in ADR 0012 evidence are parameterized without rewriting
+ * unrelated identity fragments.
  */
 function parameterizeRecordedFill(entry: RecordActionEntry): RecordActionEntry {
   if (entry.command !== 'fill' || typeof entry.flags.recordAs !== 'string') return entry;
@@ -132,12 +134,15 @@ function parameterizeRecordedFill(entry: RecordActionEntry): RecordActionEntry {
     positionals: entry.positionals,
     flags: entry.flags,
   });
-  if (!literal) return entry;
   return {
     ...entry,
     positionals: replaceFillText(entry.positionals, placeholder),
-    result: replaceRecordedInputLiteral(entry.result, literal, placeholder),
-    targetEvidence: replaceRecordedInputLiteral(entry.targetEvidence, literal, placeholder),
+    result: parameterizeRecordedFillPayload(entry.result, literal, placeholder),
+    targetEvidence: parameterizeRecordedFillTargetEvidence(
+      entry.targetEvidence,
+      literal,
+      placeholder,
+    ),
   };
 }
 

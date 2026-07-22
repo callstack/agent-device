@@ -52,6 +52,7 @@ type AndroidSettingsWorld = {
 
 export async function createAndroidSettingsWorld(options?: {
   nativeTextInjection?: boolean;
+  onTextInjection?: (request: AndroidSettingsWorld['textInjectionCalls'][number]) => void;
   snapshotXml?: () => string;
   dumpsysWindow?: () => string;
   onAdbExec?: (args: string[]) => void;
@@ -146,6 +147,7 @@ export async function createAndroidSettingsWorld(options?: {
   };
   if (options?.nativeTextInjection) {
     adbProvider.text = async (request) => {
+      options.onTextInjection?.(request);
       textInjectionCalls.push({ ...request });
       shellState.searchText = request.text;
     };

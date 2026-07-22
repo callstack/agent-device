@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { emitDiagnostic } from '../../../src/utils/diagnostics.ts';
 import { test } from 'vitest';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { androidSettingsXml, createAndroidSettingsWorld } from './android-world.ts';
@@ -159,15 +160,28 @@ test('a second successful open aborts publication and terminal save flags fail b
 }, 20_000);
 
 test('parameterized fill publishes only ${VAR} and replay resolves it immediately before fill', async () => {
+  const secret = 'OpaqueProviderValue1348';
   await withProviderScenarioResource(
-    async () => await createAndroidSettingsWorld({ nativeTextInjection: true }),
+    async () =>
+      await createAndroidSettingsWorld({
+        nativeTextInjection: true,
+        onTextInjection: (request) => {
+          emitDiagnostic({
+            phase: 'provider_text_echo_regression',
+            data: { text: request.text },
+          });
+        },
+      }),
     async (world) => {
       const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-parameterized-script-'));
       const scriptPath = path.join(root, 'parameterized-search.ad');
-      const secret = 'OpaqueProviderValue1348';
       const client = world.daemon.client();
       try {
-        await client.apps.open({ app: 'settings', saveScript: scriptPath, ...world.selection });
+        const opened = await client.apps.open({
+          app: 'settings',
+          saveScript: scriptPath,
+          ...world.selection,
+        });
         const snapshot = await client.capture.snapshot({
           interactiveOnly: true,
           ...world.selection,
@@ -222,15 +236,31 @@ test('parameterized fill publishes only ${VAR} and replay resolves it immediatel
         assert.equal(world.textInjectionCalls.length, callsBeforeMissingValue);
         await client.sessions.close();
 
-        const replay = await world.daemon.callCommand('replay', [scriptPath], {
-          ...world.selection,
-          replayEnv: [`SEARCH_TERM=${secret}`],
-        });
+        const replay = await world.daemon.callCommand(
+          'replay',
+          [scriptPath],
+          {
+            ...world.selection,
+            replayEnv: [`SEARCH_TERM=${secret}`],
+            verbose: true,
+          },
+          {
+            meta: { debug: true, requestId: 'parameterized-replay-diagnostics' },
+          },
+        );
         assertRpcOk(replay);
         assert.equal(world.textInjectionCalls.at(-1)?.text, secret);
         const replayState = JSON.stringify(world.daemon.session()?.actions);
-        assert.equal(replayState.includes(secret), false);
+        assert.equal(replayState.includes(secret), false, replayState);
         assert.match(replayState, /\$\{SEARCH_TERM\}/);
+        assert.ok(opened.sessionStateDir);
+        const requestLog = fs.readFileSync(
+          path.join(opened.sessionStateDir, 'requests', 'parameterized-replay-diagnostics.ndjson'),
+          'utf8',
+        );
+        assert.match(requestLog, /provider_text_echo_regression/);
+        assert.match(requestLog, /\[REDACTED\]/);
+        assert.equal(requestLog.includes(secret), false);
         await client.sessions.close();
 
         await client.apps.open({ app: 'settings', ...world.selection });

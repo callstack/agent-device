@@ -97,14 +97,14 @@ test('parameterized fills keep literals out of recording state with deterministi
     flags: { recordAs: 'PASSWORD' },
     result: {
       text: password,
-      message: `Filled ${password}`,
+      message: 'Filled 21 chars',
+      selector: 'id="password"',
       selectorChain: ['id="password"', `value="${password}" editable=true`],
-      settle: { diff: `value=${password}` },
     },
     targetEvidence: {
       role: 'textinput',
-      label: `Current value ${password}`,
-      ancestry: [{ role: 'form', label: `Credential ${password}` }],
+      label: password,
+      ancestry: [{ role: 'form', label: 'Credentials' }],
       sibling: 0,
       viewportOrder: 0,
       verification: 'verified' as const,
@@ -117,7 +117,7 @@ test('parameterized fills keep literals out of recording state with deterministi
     command: 'fill',
     positionals: ['id="token"', token],
     flags: { recordAs: 'API_TOKEN' },
-    result: { text: token, message: `Filled ${token}` },
+    result: { text: token, message: 'Filled 18 chars' },
   });
 
   expect(session.actions.map((action) => action.positionals.at(-1))).toEqual([
@@ -128,8 +128,62 @@ test('parameterized fills keep literals out of recording state with deterministi
   const serialized = JSON.stringify(session.actions);
   expect(serialized).not.toContain(password);
   expect(serialized).not.toContain(token);
-  expect(serialized).toContain('value=${PASSWORD}');
-  expect(session.actions[0]?.targetEvidence?.label).toBe('Current value ${PASSWORD}');
-  expect(session.actions[0]?.targetEvidence?.ancestry[0]?.label).toBe('Credential ${PASSWORD}');
+  expect(session.actions[0]?.result?.text).toBe('${PASSWORD}');
+  expect(session.actions[0]?.result?.selector).toBe('id="password"');
+  expect(session.actions[0]?.targetEvidence?.label).toBe('${PASSWORD}');
+  expect(session.actions[0]?.targetEvidence?.ancestry[0]?.label).toBe('Credentials');
   expect(session.actions[0]?.result?.selectorChain).toEqual(['id="password"']);
 });
+
+test('a one-character parameterized fill preserves unrelated response and selector text', () => {
+  const session = makeIosSession('default');
+  recordActionEntry(session, {
+    command: 'fill',
+    positionals: ['id="password"', 'a'],
+    flags: { recordAs: 'LETTER' },
+    result: {
+      text: 'a',
+      message: 'Already safe',
+      selector: 'id="password"',
+      selectorChain: ['id="password"', 'label="Account"', 'value="a" editable=true'],
+    },
+    targetEvidence: {
+      role: 'textinput',
+      label: 'Password',
+      ancestry: [{ role: 'form', label: 'Credentials area' }],
+      sibling: 0,
+      viewportOrder: 0,
+      verification: 'verified',
+    },
+  });
+
+  expect(session.actions[0]).toMatchObject({
+    positionals: ['id="password"', '${LETTER}'],
+    result: {
+      text: '${LETTER}',
+      message: 'Already safe',
+      selector: 'id="password"',
+      selectorChain: ['id="password"', 'label="Account"'],
+    },
+    targetEvidence: {
+      label: 'Password',
+      ancestry: [{ role: 'form', label: 'Credentials area' }],
+    },
+  });
+});
+
+test.each(['', '   '])(
+  'parameterized fills preserve the placeholder when the resolved value is %j',
+  (value) => {
+    const session = makeIosSession('default');
+    recordActionEntry(session, {
+      command: 'fill',
+      positionals: ['id="password"', value],
+      flags: { recordAs: 'PASSWORD' },
+      result: { text: value },
+    });
+
+    expect(session.actions[0]?.positionals).toEqual(['id="password"', '${PASSWORD}']);
+    expect(session.actions[0]?.result?.text).toBe('${PASSWORD}');
+  },
+);

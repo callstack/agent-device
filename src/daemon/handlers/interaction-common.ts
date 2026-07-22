@@ -15,10 +15,8 @@ import {
 import { markPostGestureStabilization } from '../post-gesture-stabilization.ts';
 import { computeTargetEvidence, type RecordedTargetCapture } from '../session-target-evidence.ts';
 import { inferFillText } from '../action-utils.ts';
-import {
-  recordedInputPlaceholder,
-  replaceRecordedInputLiteral,
-} from '../../replay/recorded-input.ts';
+import { recordedInputPlaceholder } from '../../replay/recorded-input.ts';
+import { parameterizeRecordedFillPayload } from '../parameterized-recorded-fill.ts';
 
 export type ContextFromFlags = (
   flags: CommandFlags | undefined,
@@ -126,10 +124,9 @@ function parameterizeFillPayloads(params: {
     flags: params.flags,
     result: params.result,
   });
-  if (!literal) return [params.result, params.responseData];
   const placeholder = recordedInputPlaceholder(params.flags.recordAs);
   return [
-    replaceRecordedInputLiteral(params.result, literal, placeholder),
-    replaceRecordedInputLiteral(params.responseData, literal, placeholder),
+    parameterizeRecordedFillPayload(params.result, literal, placeholder),
+    parameterizeRecordedFillPayload(params.responseData, literal, placeholder),
   ];
 }

@@ -29,28 +29,3 @@ export function readRecordedInputVariableName(value: string): string | undefined
   if (!match?.[1] || match[1].startsWith('AD_')) return undefined;
   return match[1];
 }
-
-export function replaceRecordedInputLiteral<T>(value: T, literal: string, placeholder: string): T {
-  if (typeof value === 'string') return value.replaceAll(literal, placeholder) as T;
-  if (Array.isArray(value)) {
-    return value.map((entry) => replaceRecordedInputLiteral(entry, literal, placeholder)) as T;
-  }
-  if (!value || typeof value !== 'object') return value;
-  return Object.fromEntries(
-    Object.entries(value).map(([key, entry]) => {
-      if (key === 'ref') return [key, entry];
-      if (key === 'selector' && typeof entry === 'string') {
-        return [key, entry.includes(literal) ? undefined : entry];
-      }
-      if (key === 'selectorChain' && Array.isArray(entry)) {
-        return [
-          key,
-          entry.filter(
-            (candidate) => typeof candidate !== 'string' || !candidate.includes(literal),
-          ),
-        ];
-      }
-      return [key, replaceRecordedInputLiteral(entry, literal, placeholder)];
-    }),
-  ) as T;
-}
