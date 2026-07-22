@@ -59,7 +59,7 @@ type IosDeviceDiscoveryOptions = {
 
 const XCTRACE_SECTION_HEADER_PATTERN = /^==\s*(.+?)\s*==$/;
 const XCTRACE_DEVICE_LINE_PATTERN =
-  /^(?<name>.+?)(?:\s+\((?<osVersion>[^)]+)\))?\s+(?:\[(?<idBracket>[^[\]]+)\]|\((?<idParen>[^)]+)\))\s*$/;
+  /^(?<name>.+?)\s+(?:\[(?<idBracket>[^[\]]+)\]|\((?<osVersion>[^)]+)\)\s+\((?<idParen>[^)]+)\))\s*$/;
 
 function normalizeAppleDescriptor(value: string | undefined): string {
   return (value ?? '').trim().toLowerCase();

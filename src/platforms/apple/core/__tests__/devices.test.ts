@@ -237,7 +237,7 @@ test('parseXctracePhysicalAppleDevices parses the parenthesized physical device 
       '== Devices ==',
       'iPhone 8 Plus (16.7.16) (00008020-001C2D2234567890)',
       'Studio iPad Pro (17.0) (ipad-udid-1)',
-      'Living Room Apple TV (16.0) [tv-udid-1]',
+      'Living Room Apple TV (16.0) (tv-udid-1)',
     ].join('\n'),
   );
 
@@ -267,6 +267,33 @@ test('parseXctracePhysicalAppleDevices parses the parenthesized physical device 
       kind: 'device',
       target: 'tv',
       appleOs: 'tvos',
+      booted: true,
+    },
+  ]);
+});
+
+test('parseXctracePhysicalAppleDevices preserves parentheses in bracket-format names', () => {
+  const parsed = parseXctracePhysicalAppleDevices(
+    ['== Devices ==', "Alex's (iPhone) [alex-udid]", 'Office iPhone (2) [office-udid]'].join('\n'),
+  );
+
+  assert.deepEqual(parsed, [
+    {
+      platform: 'apple',
+      id: 'alex-udid',
+      name: "Alex's (iPhone)",
+      kind: 'device',
+      target: 'mobile',
+      appleOs: 'ios',
+      booted: true,
+    },
+    {
+      platform: 'apple',
+      id: 'office-udid',
+      name: 'Office iPhone (2)',
+      kind: 'device',
+      target: 'mobile',
+      appleOs: 'ios',
       booted: true,
     },
   ]);
