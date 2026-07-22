@@ -16,13 +16,6 @@ const ANDROID_COMPARISON_BASELINE_MAX_AGE_MS = 5_000;
 export const ANDROID_FRESHNESS_RETRY_DEADLINE_MS = 1_500;
 export const ANDROID_FRESHNESS_RETRY_DELAYS_MS = [250, 400, 600] as const;
 
-export type AndroidFreshnessCaptureMeta = {
-  action: string;
-  retryCount: number;
-  staleAfterRetries: boolean;
-  reason?: 'empty-interactive' | 'sharp-drop' | 'stuck-route';
-};
-
 export function markAndroidSnapshotFreshness(
   session: SessionState,
   action: string,

@@ -16,11 +16,6 @@ export function validateAgainstSchema(value: unknown, schema: JsonSchema): strin
   return collectErrors(value, schema, '$');
 }
 
-/** Convenience predicate for the common "does it validate at all" assertion. */
-export function matchesSchema(value: unknown, schema: JsonSchema): boolean {
-  return collectErrors(value, schema, '$').length === 0;
-}
-
 function collectErrors(value: unknown, schema: JsonSchema, path: string): string[] {
   if (schema.oneOf) return oneOfErrors(value, schema.oneOf, path);
 

@@ -14,7 +14,6 @@ export const SPECIAL_CLI_COMMANDS = {
   help: 'help',
 } as const;
 
-export type PublicCommandName = DescriptorCommandNameForCatalogGroup<'public'>;
 export type InternalCommandName = DescriptorCommandNameForCatalogGroup<'internal'>;
 export type LocalCliCommandName = DescriptorCommandNameForCatalogGroup<'local-cli'>;
 export type SpecialCliCommandName =

@@ -1,7 +1,5 @@
 import { isMacOs } from '../../../kernel/device.ts';
 import { expect, vi, beforeEach } from 'vitest';
-export { test } from 'vitest';
-export { expect, vi };
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -101,19 +99,9 @@ vi.mock('../session-deploy.ts', async (importOriginal) => {
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { buildSnapshotSignatures } from '../../android-snapshot-freshness.ts';
-import {
-  retainMaterializedPaths,
-  cleanupRetainedMaterializedPathsForSession,
-} from '../../materialized-path-registry.ts';
-import { LeaseRegistry } from '../../lease-registry.ts';
+import { cleanupRetainedMaterializedPathsForSession } from '../../materialized-path-registry.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
-import { AppError } from '../../../kernel/errors.ts';
-import {
-  IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED,
-  IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_NOTE,
-} from '../../app-log-ios.ts';
 import { dispatchCommand, resolveTargetDevice } from '../../../core/dispatch.ts';
 import { ensureDeviceReady } from '../../device-ready.ts';
 import { applyRuntimeHintsToApp, clearRuntimeHintsFromApp } from '../../runtime-hints.ts';
@@ -141,27 +129,11 @@ import {
 } from '../../../platforms/apple/core/apps.ts';
 import { runAppLogDoctor, startAppLog, stopAppLog } from '../../app-log.ts';
 import { defaultInstallOps, defaultReinstallOps } from '../session-deploy.ts';
-import { clearRequestCanceled, markRequestCanceled } from '../../../request/cancel.ts';
-
-export {
-  fs,
-  os,
-  path,
-  buildSnapshotSignatures,
-  retainMaterializedPaths,
-  LeaseRegistry,
-  SessionStore,
-  AppError,
-  IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED,
-  IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_NOTE,
-  clearRequestCanceled,
-  markRequestCanceled,
-};
 
 export const mockDispatch = vi.mocked(dispatchCommand);
 export const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
 export const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
-export const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintsToApp);
+const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintsToApp);
 export const mockClearRuntimeHints = vi.mocked(clearRuntimeHintsFromApp);
 export const mockPrewarmIosRunnerSession = vi.mocked(prewarmIosRunnerSession);
 export const mockNotifyIosRunnerAppRelaunched = vi.mocked(notifyIosRunnerAppRelaunched);
@@ -185,12 +157,12 @@ export const mockResolveIosSimulatorDeepLinkBundleId = vi.mocked(
 );
 export const mockEnsureAndroidEmulatorBooted = vi.mocked(ensureAndroidEmulatorBooted);
 export const mockStartAppLog = vi.mocked(startAppLog);
-export const mockStopAppLog = vi.mocked(stopAppLog);
+const mockStopAppLog = vi.mocked(stopAppLog);
 export const mockRunAppLogDoctor = vi.mocked(runAppLogDoctor);
-export const mockDefaultInstallOpsIos = vi.mocked(defaultInstallOps.ios);
-export const mockDefaultInstallOpsAndroid = vi.mocked(defaultInstallOps.android);
-export const mockDefaultReinstallOpsIos = vi.mocked(defaultReinstallOps.ios);
-export const mockDefaultReinstallOpsAndroid = vi.mocked(defaultReinstallOps.android);
+const mockDefaultInstallOpsIos = vi.mocked(defaultInstallOps.ios);
+const mockDefaultInstallOpsAndroid = vi.mocked(defaultInstallOps.android);
+const mockDefaultReinstallOpsIos = vi.mocked(defaultReinstallOps.ios);
+const mockDefaultReinstallOpsAndroid = vi.mocked(defaultReinstallOps.android);
 
 beforeEach(() => {
   vi.useRealTimers();

@@ -21,7 +21,6 @@ export type PerfArea = (typeof PERF_AREA_VALUES)[number];
 export type PerfAction = (typeof PERF_ACTION_VALUES)[number];
 export type PerfSubject = (typeof PERF_SUBJECT_VALUES)[number];
 export type PerfKind = (typeof PERF_KIND_VALUES)[number];
-export type PerfMemoryKind = (typeof PERF_MEMORY_KIND_VALUES)[number];
 
 export const PERF_AREA_ERROR_MESSAGE = 'perf area must be metrics, frames, memory, cpu, or trace';
 export const PERF_ACTION_ERROR_MESSAGE =

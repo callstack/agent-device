@@ -13,5 +13,3 @@ export type DiffSnapshotCommandResult = {
   lines: SnapshotDiffLine[];
   warnings?: string[];
 };
-
-export type DiffCommandResult = DiffSnapshotCommandResult | DiffScreenshotCommandResult;

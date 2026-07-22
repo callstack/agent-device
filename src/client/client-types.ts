@@ -54,7 +54,7 @@ export type { BatchRunResult } from '../core/batch.ts';
 import type { TargetShutdownResult } from '../target-shutdown-contract.ts';
 export type { TargetShutdownResult } from '../target-shutdown-contract.ts';
 import type { PerfAction, PerfArea, PerfKind, PerfSubject } from '../contracts/perf.ts';
-import type { AlertAction, AlertInfo } from '../alert-contract.ts';
+import type { AlertAction } from '../alert-contract.ts';
 import type { DebugSymbolsOptions, DebugSymbolsResult } from '../contracts/debug-symbols.ts';
 import type { JsonObject } from '../contracts/json.ts';
 import type {
@@ -64,22 +64,15 @@ import type {
 import type { CommandResult } from '../core/command-descriptor/command-result.ts';
 import type { AgentArtifactsResult, CloudProviderSessionResult } from '../cloud-artifacts.ts';
 
-export type { FindLocator } from '../selectors/find.ts';
-export type { CompanionTunnelScope, MetroBridgeScope } from './client-companion-tunnel-contract.ts';
+export type { MetroBridgeScope } from './client-companion-tunnel-contract.ts';
 export type { AppsFilter } from '../contracts/app-inventory.ts';
-export type { AlertAction, AlertInfo, AlertPlatform, AlertSource } from '../alert-contract.ts';
+export type { AlertAction } from '../alert-contract.ts';
 export type { DebugSymbolsOptions, DebugSymbolsResult } from '../contracts/debug-symbols.ts';
 export type { AppleOS } from '../kernel/device.ts';
-export type { BootCommandResult, ShutdownCommandResult } from '../contracts/device.ts';
-export type { ViewportCommandResult } from '../contracts/viewport.ts';
 export type {
-  AppSwitcherCommandResult,
-  BackCommandResult,
-  HomeCommandResult,
   OrientationCommandResult,
   /** @deprecated Renamed to `OrientationCommandResult`. Retained until the next major. */
   RotateCommandResult,
-  TvRemoteCommandResult,
 } from '../contracts/navigation.ts';
 export type { ClipboardCommandResult } from '../contracts/clipboard.ts';
 export type { AppStateCommandResult } from '../contracts/app-state.ts';
@@ -90,18 +83,9 @@ export type { PushCommandResult } from '../contracts/push.ts';
 export type { TriggerAppEventCommandResult } from '../contracts/app-events.ts';
 export type { DoctorCommandResult } from '../contracts/doctor.ts';
 export type { DiffSnapshotCommandResult } from '../contracts/diff.ts';
-export type {
-  RecordingCommandResult,
-  RecordingStartCommandResult,
-  RecordingStopCommandResult,
-  TraceCommandResult,
-} from '../contracts/recording.ts';
-export type {
-  ReplayCommandResult,
-  ReplaySuiteResult,
-  ReplaySuiteTestResult,
-} from '../contracts/replay.ts';
-export type { JsonObject, JsonPrimitive, JsonValue } from '../contracts/json.ts';
+export type { RecordingCommandResult, TraceCommandResult } from '../contracts/recording.ts';
+export type { ReplayCommandResult, ReplaySuiteResult } from '../contracts/replay.ts';
+export type { JsonObject } from '../contracts/json.ts';
 
 export type AgentDeviceDaemonTransport = (
   req: Omit<DaemonRequest, 'token'>,
@@ -572,20 +556,6 @@ export type WaitCommandOptions = DeviceCommandBaseOptions & WaitCommandTarget;
 export type AlertCommandOptions = DeviceCommandBaseOptions & {
   action?: AlertAction;
   timeoutMs?: number;
-};
-
-export type AlertCommandResult = DaemonResponseData & {
-  kind?: 'alertStatus' | 'alertHandled' | 'alertWait';
-  action?: AlertCommandOptions['action'];
-  alert?: AlertInfo | null;
-  handled?: boolean;
-  button?: string;
-  waitedMs?: number;
-  timedOut?: boolean;
-  platform?: AlertInfo['platform'];
-  accepted?: boolean;
-  dismissed?: boolean;
-  items?: string[];
 };
 
 export type AppStateCommandOptions = DeviceCommandBaseOptions;

@@ -81,6 +81,7 @@ export type PlatformGatedProviderResolverKey =
 // Compile-time: every gated key is a real resolver key (so the facet can never name a
 // resolver the daemon does not compose).
 type AssertTrue<T extends true> = T;
+/** Exported only so `noUnusedLocals` keeps the guard alive. */
 export type GatedKeysAreResolverKeys = AssertTrue<
   [PlatformGatedProviderResolverKey] extends [keyof PlatformProviderResolvers] ? true : false
 >;

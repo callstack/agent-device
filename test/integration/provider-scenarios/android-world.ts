@@ -9,7 +9,10 @@ import type {
   AndroidAdbProvider,
 } from '../../../src/platforms/android/adb-executor.ts';
 import type { DeviceInventoryRequest } from '../../../src/core/dispatch-resolve.ts';
-import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../../src/__tests__/test-utils/index.ts';
+import {
+  ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+  androidSnapshotHelperOutput,
+} from '../../../src/__tests__/test-utils/index.ts';
 import { runCmd } from '../../../src/utils/exec.ts';
 import { validPng } from './assertions.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
@@ -460,21 +463,7 @@ function androidCaptureAdbResult(
   return undefined;
 }
 
-export function androidSnapshotHelperOutput(xml: string): string {
-  return [
-    'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
-    'INSTRUMENTATION_STATUS: helperApiVersion=1',
-    'INSTRUMENTATION_STATUS: outputFormat=uiautomator-xml',
-    'INSTRUMENTATION_STATUS: chunkIndex=0',
-    'INSTRUMENTATION_STATUS: chunkCount=1',
-    `INSTRUMENTATION_STATUS: payloadBase64=${Buffer.from(xml, 'utf8').toString('base64')}`,
-    'INSTRUMENTATION_STATUS_CODE: 1',
-    'INSTRUMENTATION_RESULT: agentDeviceProtocol=android-snapshot-helper-v1',
-    'INSTRUMENTATION_RESULT: helperApiVersion=1',
-    'INSTRUMENTATION_RESULT: ok=true',
-    'INSTRUMENTATION_CODE: 0',
-  ].join('\n');
-}
+export { androidSnapshotHelperOutput };
 
 function androidMultiTouchHelperOutput(): string {
   return [

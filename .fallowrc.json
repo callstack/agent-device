@@ -32,28 +32,30 @@
     "apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests.xctestplan",
     "scripts/write-xcuitest-cache-metadata.mjs"
   ],
-  "ignoreDependencies": ["@theme"],
+  "ignoreDependencies": [
+    "@theme"
+  ],
   "ignoreExports": [
     {
       "file": "src/__tests__/test-utils/index.ts",
-      "exports": ["*"]
+      "exports": [
+        "*"
+      ]
     },
     {
       "comment": "Authoritative supported-command list; sole consumer is the conformance oracle (scripts/maestro-conformance, an ignored tooling tree).",
       "file": "src/compat/maestro/program-ir-command-parser.ts",
-      "exports": ["SUPPORTED_MAESTRO_COMMAND_NAMES"]
+      "exports": [
+        "SUPPORTED_MAESTRO_COMMAND_NAMES"
+      ]
     },
     {
       "file": "src/__tests__/test-utils/device-fixtures.ts",
-      "exports": ["LINUX_DEVICE", "ANDROID_TV_DEVICE", "TVOS_SIMULATOR"]
-    },
-    {
-      "file": "src/__tests__/test-utils/mocked-binaries.ts",
-      "exports": ["withMockedXcrun"]
-    },
-    {
-      "file": "src/daemon/app-log.ts",
-      "exports": ["readRecentAndroidLogcatForPackage"]
+      "exports": [
+        "LINUX_DEVICE",
+        "ANDROID_TV_DEVICE",
+        "TVOS_SIMULATOR"
+      ]
     },
     {
       "file": "src/platforms/android/app-lifecycle.ts",
@@ -66,19 +68,28 @@
     },
     {
       "file": "src/platforms/android/index.ts",
-      "exports": ["installAndroidInstallablePath"]
+      "exports": [
+        "installAndroidInstallablePath"
+      ]
     },
     {
       "file": "src/platforms/apple/core/apps.ts",
-      "exports": ["listSimulatorApps", "uninstallIosApp"]
+      "exports": [
+        "listSimulatorApps",
+        "uninstallIosApp"
+      ]
     },
     {
       "file": "src/platforms/apple/core/runner/runner-contract.ts",
-      "exports": ["resolveRunnerEarlyExitHint"]
+      "exports": [
+        "resolveRunnerEarlyExitHint"
+      ]
     },
     {
       "file": "src/platforms/apple/core/runner/runner-session.ts",
-      "exports": ["stopAllIosRunnerSessions"]
+      "exports": [
+        "stopAllIosRunnerSessions"
+      ]
     },
     {
       "file": "src/platforms/apple/core/runner/runner-xctestrun.ts",
@@ -92,48 +103,102 @@
     },
     {
       "file": "src/cloud-webdriver.ts",
-      "exports": ["CLOUD_WEBDRIVER_PROVIDERS"]
+      "exports": [
+        "CLOUD_WEBDRIVER_PROVIDERS"
+      ]
     },
     {
       "file": "src/daemon/handlers/lease.ts",
-      "exports": ["handleLeaseCommands"]
+      "exports": [
+        "handleLeaseCommands"
+      ]
     },
     {
       "file": "src/daemon/handlers/session.ts",
-      "exports": ["handleSessionCommands"]
+      "exports": [
+        "handleSessionCommands"
+      ]
     },
     {
       "file": "src/daemon/handlers/snapshot.ts",
-      "exports": ["handleSnapshotCommands"]
+      "exports": [
+        "handleSnapshotCommands"
+      ]
     },
     {
       "file": "src/daemon/handlers/react-native.ts",
-      "exports": ["handleReactNativeCommands"]
+      "exports": [
+        "handleReactNativeCommands"
+      ]
     },
     {
       "file": "src/daemon/handlers/record-trace.ts",
-      "exports": ["handleRecordTraceCommands"]
+      "exports": [
+        "handleRecordTraceCommands"
+      ]
     },
     {
       "file": "src/daemon/handlers/find.ts",
-      "exports": ["handleFindCommands"]
+      "exports": [
+        "handleFindCommands"
+      ]
     },
     {
       "file": "src/daemon/handlers/interaction.ts",
-      "exports": ["handleInteractionCommands"]
+      "exports": [
+        "handleInteractionCommands"
+      ]
+    },
+    {
+      "comment": "Published package surface (see package.json#exports); consumed by SDK users, not internally.",
+      "file": "src/sdk/*.ts",
+      "exports": [
+        "*"
+      ]
+    },
+    {
+      "comment": "Tool config default exports, loaded by the tool rather than imported.",
+      "file": "{tsdown.config.ts,website/rspress.config.ts,test/skillgym/skillgym.config.ts,test/skillgym/suites/*.ts}",
+      "exports": [
+        "default"
+      ]
+    },
+    {
+      "comment": "Type-level `AssertTrue<...>` registry-totality guards. Exported only so `noUnusedLocals` keeps them alive; a consumer would defeat the point.",
+      "file": "{src/core/command-descriptor/registry.ts,src/core/interactors/register-builtins.ts,src/core/platform-descriptor/registry.ts,src/daemon/request-platform-providers.ts}",
+      "exports": [
+        "CommandOwnerFileClaimsAreComplete",
+        "BuiltinPluginsCoverAllPlatforms",
+        "PlatformDescriptorsAreTotal",
+        "GatedKeysAreResolverKeys"
+      ]
     }
   ],
-  "usedClassMembers": ["name", "listActiveLeases", "delete", "values", "elapsedMs", "isExpired"],
+  "usedClassMembers": [
+    "name",
+    "listActiveLeases",
+    "delete",
+    "values",
+    "elapsedMs",
+    "isExpired"
+  ],
   "rules": {
-    "unused-types": "off",
+    "unused-types": "warn",
     "duplicate-exports": "off"
   },
   "production": {
     "dupes": true
   },
-  "publicPackages": ["agent-device"],
+  "publicPackages": [
+    "agent-device"
+  ],
   "audit": {
     "deadCodeBaseline": "fallow-baselines/dead-code.json",
     "healthBaseline": "fallow-baselines/health.json"
+  },
+  "includeEntryExports": true,
+  "ignoreExportsUsedInFile": {
+    "type": true,
+    "interface": true
   }
 }

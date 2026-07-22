@@ -2,8 +2,6 @@ import type { DaemonRequest } from '../../../daemon/types.ts';
 import type { SnapshotNode, SnapshotState } from '../../../kernel/snapshot.ts';
 import type { CreateDaemonMaestroRuntimeOperationsOptions } from '../daemon-runtime-port.ts';
 
-export const IOS_FRAME = { x: 0, y: 0, width: 402, height: 874 } as const;
-
 export function makeSnapshot(
   nodes: Array<Omit<SnapshotNode, 'ref'> & { ref?: string }>,
 ): SnapshotState {

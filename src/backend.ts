@@ -20,11 +20,7 @@ import type { TvRemoteButton } from './contracts/tv-remote.ts';
 import type { GesturePlan } from './contracts/gesture-plan-types.ts';
 import type { RecordingExportQuality } from './core/recording-export-quality.ts';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
-import type {
-  SnapshotCaptureAnalysis,
-  SnapshotCaptureAnnotations,
-  SnapshotCaptureFreshness,
-} from './snapshot-capture-annotations.ts';
+import type { SnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
 import type { ScreenshotResultData } from './utils/screenshot-result.ts';
 
 // The backend's public leaf platform (approach b): backends distinguish iOS from
@@ -66,10 +62,6 @@ export type BackendSnapshotOptions = SnapshotOptions & {
   includeHiddenContentHints?: boolean;
   outPath?: string;
 };
-
-export type BackendSnapshotAnalysis = SnapshotCaptureAnalysis;
-
-export type BackendSnapshotFreshness = SnapshotCaptureFreshness;
 
 export type BackendReadTextResult = {
   text: string;

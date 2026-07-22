@@ -21,7 +21,7 @@ export async function extractTarInstallableArtifact(params: {
   return installablePath;
 }
 
-export async function resolveTarArchiveRootName(params: {
+async function resolveTarArchiveRootName(params: {
   archivePath: string;
   platform: 'ios' | 'android';
   expectedRootName?: string;
@@ -72,15 +72,6 @@ export async function resolveTarArchiveRootName(params: {
   }
 
   return rootName;
-}
-
-export async function readZipEntries(archivePath: string): Promise<string[] | null> {
-  const result = await runCmd('unzip', ['-Z1', archivePath], { allowFailure: true });
-  if (result.exitCode !== 0) return null;
-  return result.stdout
-    .split(/\r?\n/)
-    .map((entry) => entry.trim())
-    .filter(Boolean);
 }
 
 function resolveArchiveRootName(entries: string[], platform: 'ios' | 'android'): string {

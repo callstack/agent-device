@@ -23,7 +23,22 @@ import type { RawSnapshotNode } from '../../kernel/snapshot.ts';
  * tracks depth and parent via its own recursion, never `node.depth`), so they
  * are not populated here.
  */
-export function rawFixtureToAndroidTree(rawNodes: RawSnapshotNode[]): AndroidUiHierarchy {
+function rawFixtureToTreeNode(raw: RawSnapshotNode): AndroidUiHierarchy {
+  return {
+    type: raw.type ?? null,
+    label: raw.label ?? null,
+    value: raw.value ?? null,
+    identifier: raw.identifier ?? null,
+    packageName: raw.bundleId ?? null,
+    rect: raw.rect,
+    hittable: raw.hittable,
+    visibleToUser: raw.visibleToUser,
+    depth: 0,
+    children: [],
+  };
+}
+
+function rawFixtureToAndroidTree(rawNodes: RawSnapshotNode[]): AndroidUiHierarchy {
   const root: AndroidUiHierarchy = {
     type: null,
     label: null,
@@ -33,21 +48,9 @@ export function rawFixtureToAndroidTree(rawNodes: RawSnapshotNode[]): AndroidUiH
     depth: -1,
     children: [],
   };
-  const byIndex = new Map<number, AndroidUiHierarchy>();
-  for (const raw of rawNodes) {
-    byIndex.set(raw.index, {
-      type: raw.type ?? null,
-      label: raw.label ?? null,
-      value: raw.value ?? null,
-      identifier: raw.identifier ?? null,
-      packageName: raw.bundleId ?? null,
-      rect: raw.rect,
-      hittable: raw.hittable,
-      visibleToUser: raw.visibleToUser,
-      depth: 0,
-      children: [],
-    });
-  }
+  const byIndex = new Map<number, AndroidUiHierarchy>(
+    rawNodes.map((raw) => [raw.index, rawFixtureToTreeNode(raw)]),
+  );
   for (const raw of rawNodes) {
     const node = byIndex.get(raw.index);
     if (!node) continue;

@@ -17,7 +17,7 @@ const LEGACY_OUTPUT_DIRS = [
 const SKIPPED_DIR_NAMES = new Set(['.build', '.swiftpm', 'xcuserdata']);
 const SKIPPED_ROOT_FILES = new Set(['README.md', 'RUNNER_PROTOCOL.md']);
 
-export function packageAppleRunnerSource(options = {}) {
+function packageAppleRunnerSource(options = {}) {
   const root = path.resolve(options.root ?? process.cwd());
   const sourceRoot = path.join(root, SOURCE_DIR);
   const outputRoot = path.join(root, OUTPUT_DIR);
@@ -40,7 +40,7 @@ export function packageAppleRunnerSource(options = {}) {
   return summary;
 }
 
-export function stripRunnerUnitTestBlocks(source, filePath = '<swift source>') {
+function stripRunnerUnitTestBlocks(source, filePath = '<swift source>') {
   const lines = source.match(/[^\n]*\n|[^\n]+/g) ?? [];
   const state = {
     output: [],

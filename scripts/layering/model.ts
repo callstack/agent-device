@@ -144,7 +144,7 @@ export function topFolder(file: string): string {
   return match ? match[1]! : '(root)';
 }
 
-export function targetDagZone(file: string): string {
+function targetDagZone(file: string): string {
   if (file.startsWith('src/daemon/client/')) return 'daemon-client';
   if (file.startsWith('src/daemon/')) return 'daemon-server';
   return topFolder(file);

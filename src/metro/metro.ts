@@ -87,8 +87,6 @@ export type MetroTunnelResponseMessage =
   | MetroTunnelWebSocketFrameMessage
   | MetroTunnelWebSocketCloseMessage;
 
-export type MetroTunnelMessage = MetroTunnelRequestMessage | MetroTunnelResponseMessage;
-
 export type StopMetroTunnelOptions = {
   projectRoot: string;
   profileKey?: string;

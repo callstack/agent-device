@@ -50,7 +50,7 @@ export function createAndroidSnapshotHelperExecutor(options: {
   };
 }
 
-export function isAndroidSnapshotHelperCapture(args: readonly string[]): boolean {
+function isAndroidSnapshotHelperCapture(args: readonly string[]): boolean {
   return args[0] === 'shell' && args[1] === 'am' && args[2] === 'instrument';
 }
 

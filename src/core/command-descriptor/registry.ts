@@ -1264,6 +1264,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
  * makes this resolve to `false` and fail the `AssertTrue` constraint.
  */
 type AssertTrue<T extends true> = T;
+/** Exported only so `noUnusedLocals` keeps the guard alive. */
 export type CommandOwnerFileClaimsAreComplete = AssertTrue<
   'ownerFiles' extends keyof (typeof RAW_COMMAND_DESCRIPTORS)[number] ? true : false
 >;

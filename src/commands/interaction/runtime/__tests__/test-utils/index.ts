@@ -282,36 +282,6 @@ export function nonTouchableGroupSnapshot(): SnapshotState {
   ]);
 }
 
-export function snapshotWithOffscreenContent(): SnapshotState {
-  return makeSnapshotState([
-    {
-      index: 0,
-      depth: 0,
-      type: 'Application',
-      label: 'Example',
-      rect: { x: 0, y: 0, width: 100, height: 100 },
-    },
-    {
-      index: 1,
-      depth: 1,
-      parentIndex: 0,
-      type: 'Button',
-      label: 'Visible',
-      rect: { x: 10, y: 10, width: 20, height: 20 },
-      hittable: true,
-    },
-    {
-      index: 2,
-      depth: 1,
-      parentIndex: 0,
-      type: 'Button',
-      label: 'Offscreen',
-      rect: { x: 10, y: 900, width: 20, height: 20 },
-      hittable: true,
-    },
-  ]);
-}
-
 export function createInteractionDevice(
   snapshot: SnapshotState,
   overrides: Partial<

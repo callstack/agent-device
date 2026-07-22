@@ -34,6 +34,7 @@ type CoveredPlatform = (typeof platformDescriptors)[number]['platform'];
  * value-level coverage (same order) is asserted by the parity test.
  */
 type AssertTrue<T extends true> = T;
+/** Exported only so `noUnusedLocals` keeps the guard alive. */
 export type PlatformDescriptorsAreTotal = AssertTrue<
   [Platform] extends [CoveredPlatform] ? true : false
 >;

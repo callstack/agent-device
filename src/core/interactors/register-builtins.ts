@@ -124,6 +124,7 @@ type CoveredPlatform = (typeof BUILTIN_PLATFORM_PLUGINS)[number]['platforms'][nu
  * sketch, but type-level so it cannot be satisfied vacuously by a runtime map.)
  */
 type AssertTrue<T extends true> = T;
+/** Exported only so `noUnusedLocals` keeps the guard alive. */
 export type BuiltinPluginsCoverAllPlatforms = AssertTrue<
   [Platform] extends [CoveredPlatform] ? true : false
 >;

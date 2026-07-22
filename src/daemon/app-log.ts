@@ -38,8 +38,7 @@ registerBuiltinPlatformPlugins();
 export type { AppLogResult } from './app-log-process.ts';
 export type { AppLogState } from './app-log-process.ts';
 export type { AppLogFailure } from './app-log-process.ts';
-export { readRecentAndroidLogcatForPackage } from './app-log-android.ts';
-export { runAppLogDoctor, type AppLogDoctorResult } from './app-log-doctor.ts';
+export { runAppLogDoctor } from './app-log-doctor.ts';
 
 export type SessionNetworkCapture = {
   backend: LogBackend;

@@ -4,7 +4,7 @@ import { AppError } from '../kernel/errors.ts';
  * Membership guard for an `as const` string tuple (the single source of truth for
  * a string-literal union). Narrows `value` to the tuple's element union.
  */
-export function isStringMember<const T extends readonly string[]>(
+function isStringMember<const T extends readonly string[]>(
   values: T,
   value: string,
 ): value is T[number] {
