@@ -55,7 +55,7 @@ export async function createProviderScenarioHarness(
     path.join(os.tmpdir(), 'agent-device-provider-scenario-session-'),
   );
   const sessionStore = new SessionStore(sessionDir);
-  const handleRequest = createRequestHandler({
+  const requestHandler = createRequestHandler({
     logPath: path.join(os.tmpdir(), 'agent-device-provider-scenario-daemon.log'),
     token: PROVIDER_SCENARIO_TOKEN,
     sessionStore,
@@ -63,6 +63,11 @@ export async function createProviderScenarioHarness(
     trackDownloadableArtifact,
     ...deps,
   });
+  const handleRequest: typeof requestHandler = async (request) => {
+    const response = await requestHandler(request);
+    assertNoInternalChromeProvenance(response);
+    return response;
+  };
 
   const transport: AgentDeviceDaemonTransport = async (req) =>
     await handleRequest({
@@ -168,7 +173,7 @@ function commandRequest(
 }
 
 function responseToRpcResult(response: DaemonResponse, id: string): ProviderScenarioRpcResult {
-  const rpcResult = {
+  return {
     statusCode: 200,
     json: response.ok
       ? {
@@ -186,10 +191,12 @@ function responseToRpcResult(response: DaemonResponse, id: string): ProviderScen
           },
         },
   };
+}
+
+function assertNoInternalChromeProvenance(response: DaemonResponse): void {
   assert.equal(
-    JSON.stringify(rpcResult).includes('"systemChrome"'),
+    JSON.stringify(response).includes('"systemChrome"'),
     false,
-    'Public RPC responses must not expose Android-internal systemChrome provenance',
+    'Public daemon responses must not expose Android-internal systemChrome provenance',
   );
-  return rpcResult;
 }
