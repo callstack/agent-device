@@ -32,7 +32,7 @@ export type SelectorSnapshotOptions = SelectorSnapshotInput;
 export async function requireSnapshotSession(
   runtime: AgentDeviceRuntime,
   requestedName: string | undefined,
-): Promise<CapturedSnapshot> {
+): Promise<CapturedSnapshot & { session: CommandSessionRecord }> {
   const sessionName = requestedName ?? 'default';
   const session = await runtime.sessions.get(sessionName);
   if (!session) throw new AppError('SESSION_NOT_FOUND', 'No active session. Run open first.');

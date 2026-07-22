@@ -17,6 +17,7 @@ import {
 } from '../../../selectors/index.ts';
 import { buildSelectorChainForNode } from '../../../selectors/build.ts';
 import { resolvePressRecordingTarget } from '../../../core/press-retarget.ts';
+import { requireSnapshotSession } from './selector-read-shared.ts';
 import {
   findNodeByLabel,
   normalizeType,
@@ -584,17 +585,7 @@ async function resolveSnapshotForRef(
   options: CommandContext,
   target: Extract<InteractionTarget, { kind: 'ref' }>,
 ): Promise<CapturedSnapshot & { resolved: ResolvedRefNode }> {
-  const sessionName = options.session ?? 'default';
-  const session = await runtime.sessions.get(sessionName);
-  if (!session) throw new AppError('SESSION_NOT_FOUND', 'No active session. Run open first.');
-  // ADR 0014: a ref resolves against the AUTHORIZED frame tree, not the latest
-  // operational observation. They share the capture object until a read-only
-  // capture (e.g. Android freshness) advances `snapshot` alone; from then on the
-  // frame tree is the identity authority for `@eN`.
-  const frameTree = session.refFrameSnapshot ?? session.snapshot;
-  if (!frameTree) {
-    throw new AppError('INVALID_ARGS', 'No snapshot in session. Run snapshot first.');
-  }
+  const { session, snapshot: frameTree } = await requireSnapshotSession(runtime, options.session);
 
   const fallbackLabel = target.fallbackLabel ?? '';
   const authorized = tryResolveRefNode(frameTree.nodes, target.ref, {

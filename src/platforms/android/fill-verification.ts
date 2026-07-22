@@ -14,7 +14,7 @@ import { isAndroidInputMethodOwnedNode } from '../../contracts/android-input-own
 import { captureAndroidUiHierarchyXml } from './snapshot.ts';
 import { androidUiNodes, type AndroidUiNodeMetadata } from './ui-hierarchy.ts';
 
-export type { AndroidFillVerification, AndroidFillVerificationNode } from './fill-diagnostics.ts';
+export type { AndroidFillVerification } from './fill-diagnostics.ts';
 
 type AndroidFillVerificationCandidate = AndroidFillVerificationNode & {
   editText: boolean;
