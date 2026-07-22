@@ -8,6 +8,7 @@ import {
   walkInteractiveOnlyAndroidFixture,
   walkNonRawAndroidFixture,
 } from '../../__tests__/test-utils/android-ui-hierarchy-fixtures.ts';
+import { isAndroidSystemChromeWindowResourceId } from '../../contracts/android-system-chrome.ts';
 
 /**
  * The `walk*AndroidFixture` helpers run a real `--raw` device capture through
@@ -28,6 +29,24 @@ const STATUS_BAR_LEAF_IDENTIFIERS = [
   'com.android.systemui:id/mobile_signal',
   'com.android.systemui:id/wifi_signal',
 ];
+
+test('Android chrome container ids match complete status/nav-bar segments only', () => {
+  assert.equal(
+    isAndroidSystemChromeWindowResourceId(
+      'com.android.systemui:id/status_bar_launch_animation_container',
+    ),
+    true,
+  );
+  assert.equal(
+    isAndroidSystemChromeWindowResourceId('com.android.systemui:id/split_shade_status_bar'),
+    true,
+  );
+  assert.equal(
+    isAndroidSystemChromeWindowResourceId('com.android.systemui:id/status_barometer'),
+    false,
+  );
+  assert.equal(isAndroidSystemChromeWindowResourceId('com.example:id/status_bar'), false);
+});
 
 test('Android non-raw capture: status-bar leaves stay chrome after the walk drops the container that identifies them (#1251)', () => {
   const walkedNodes = walkNonRawAndroidFixture(ANDROID_IME_CAPTURE_RAW_NODES);

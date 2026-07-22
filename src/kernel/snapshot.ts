@@ -66,22 +66,7 @@ export type RawSnapshotNode = {
   hiddenContentBelow?: boolean;
   interactionBlocked?: 'covered';
   presentationHints?: string[];
-  /** INTERNAL, stripped by `publicSnapshotNodes`: status/nav-bar provenance for the chrome classifiers. */
-  systemChrome?: boolean;
 };
-
-/**
- * Projects captured nodes onto the published contract by dropping internal-only fields,
- * mirroring `publicSnapshotCaptureAnnotations` for capture annotations.
- */
-export function publicSnapshotNodes<T extends { systemChrome?: boolean }>(nodes: T[]): T[] {
-  if (!nodes.some((node) => node.systemChrome !== undefined)) return nodes;
-  return nodes.map((node) => {
-    if (node.systemChrome === undefined) return node;
-    const { systemChrome: _systemChrome, ...published } = node;
-    return published as T;
-  });
-}
 
 export type HiddenContentHint = {
   hiddenContentAbove?: true;

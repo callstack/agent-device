@@ -192,21 +192,3 @@ test('serializeSnapshotResult includes snapshot diagnostics', () => {
     snapshotDiagnostics,
   });
 });
-
-test('serializeSnapshotResult omits internal systemChrome provenance from published nodes', () => {
-  // Internal classifier provenance must not reach CLI --json, SDK or MCP payloads.
-  const data = serializeSnapshotResult({
-    nodes: [
-      { index: 0, ref: 'e1', type: 'android.widget.TextView', label: '7:03', systemChrome: true },
-      { index: 1, ref: 'e2', type: 'android.widget.Button', label: 'Start' },
-    ],
-    truncated: false,
-  } as unknown as Parameters<typeof serializeSnapshotResult>[0]);
-
-  assert.deepEqual(data.nodes, [
-    { index: 0, ref: 'e1', type: 'android.widget.TextView', label: '7:03' },
-    { index: 1, ref: 'e2', type: 'android.widget.Button', label: 'Start' },
-  ]);
-  const serialized = JSON.stringify(data);
-  assert.equal(serialized.includes('systemChrome'), false, serialized);
-});

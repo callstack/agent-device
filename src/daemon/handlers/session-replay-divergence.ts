@@ -381,14 +381,6 @@ function selectDivergenceScreenRefNodes(
   const nonChrome = nodes.filter(
     (node) => node.ref && !chromeRefs.has(node.ref) && isMeaningfulDivergenceTarget(node),
   );
-  // Chrome fallback: an expanded shade is a single systemui run, so its own status
-  // icons condemn its tiles with it. Excluding chrome is a FILTER, never a narrower
-  // scoping (`captureDivergenceObservation`), so when the chrome runs ARE the
-  // screen, publish what an agent can still act on rather than a divergence
-  // narrower than a plain `snapshot`. Hittable, not labelled: a status clock is not
-  // a target, so a chrome-only screen still publishes nothing.
-  const meaningful =
-    nonChrome.length > 0 ? nonChrome : nodes.filter((node) => node.ref && node.hittable === true);
   // Occlusion fallback (#1264): a `covered` node is normally dropped — an agent
   // cannot tap what an overlay hides. But when a system overlay MASS-COVERS the
   // app, EVERY app node is annotated `covered`; dropping them all would emit an
@@ -397,8 +389,8 @@ function selectDivergenceScreenRefNodes(
   // `covered` nodes are excluded only while non-covered candidates remain; if
   // the entire meaningful surface is covered, they are surfaced rather than
   // returning empty.
-  const visible = meaningful.filter((node) => node.interactionBlocked !== 'covered');
-  const pool = visible.length > 0 ? visible : meaningful;
+  const visible = nonChrome.filter((node) => node.interactionBlocked !== 'covered');
+  const pool = visible.length > 0 ? visible : nonChrome;
   // Rank within the cap instead of slicing document order (#1264 cap burial):
   // `SCREEN_REF_CAPTURE_LIMIT` is a BYTE bound, NOT a "first 20 in tree order"
   // policy. A separate-window overlay enumerates AFTER the app window's nodes,

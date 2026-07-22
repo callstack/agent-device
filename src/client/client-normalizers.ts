@@ -2,6 +2,7 @@ import type { DaemonRequest, SessionRuntimeHints } from '../daemon/types.ts';
 import { AppError, type NormalizedError } from '../kernel/errors.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { buildAppIdentifiers, buildDeviceIdentifiers } from '../contracts/result-serialization.ts';
+import { publicAndroidSnapshotNodes } from '../contracts/android-system-chrome.ts';
 import { isAppleOs, isApplePlatform, isPublicPlatform, type AppleOS } from '../kernel/device.ts';
 import { leaseScopeFromOptions, leaseScopeToRequestMeta } from '../core/lease-scope.ts';
 import type {
@@ -266,7 +267,7 @@ function normalizeTargetShutdownError(value: unknown): NormalizedError | undefin
 
 export function readSnapshotNodes(value: unknown): SnapshotNode[] {
   // Snapshot nodes are produced by the daemon snapshot pipeline and treated as trusted here.
-  return Array.isArray(value) ? (value as SnapshotNode[]) : [];
+  return Array.isArray(value) ? publicAndroidSnapshotNodes(value as SnapshotNode[]) : [];
 }
 
 export function buildMeta(options: InternalRequestOptions): DaemonRequest['meta'] {

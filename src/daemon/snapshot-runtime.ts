@@ -21,6 +21,7 @@ import { maybeBuildAndroidSnapshotTimeoutFailure } from './android-snapshot-time
 import { summarizeSnapshotDiagnostics } from '../snapshot-diagnostics.ts';
 import { nextSnapshotGeneration } from './session-snapshot.ts';
 import { activateCompleteRefFrame } from './ref-frame.ts';
+import { publicAndroidSnapshotNodes } from '../contracts/android-system-chrome.ts';
 
 export async function dispatchSnapshotViaRuntime(params: {
   req: DaemonRequest;
@@ -47,8 +48,9 @@ export async function dispatchSnapshotViaRuntime(params: {
       // capture above already stored the next session via setRecord, so the
       // store holds the generation these refs were minted from.
       const refsGeneration = params.sessionStore.get(sessionName)?.snapshotGeneration;
+      const publicResult = { ...result, nodes: publicAndroidSnapshotNodes(result.nodes) };
       return {
-        data: refsGeneration === undefined ? result : { ...result, refsGeneration },
+        data: refsGeneration === undefined ? publicResult : { ...publicResult, refsGeneration },
         record: {
           kind: 'snapshot',
           nodes: result.nodes.length,

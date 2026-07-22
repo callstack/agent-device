@@ -938,6 +938,33 @@ test('client capture.snapshot preserves visibility metadata from daemon response
   });
 });
 
+test('client capture.snapshot drops Android-internal chrome provenance', async () => {
+  const setup = createTransport(async () => ({
+    ok: true,
+    data: {
+      nodes: [
+        {
+          ref: 'e1',
+          index: 0,
+          depth: 0,
+          type: 'android.widget.TextView',
+          label: '7:03',
+          systemChrome: true,
+        },
+      ],
+      truncated: false,
+    },
+  }));
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const result = await client.capture.snapshot();
+
+  assert.deepEqual(result.nodes, [
+    { ref: 'e1', index: 0, depth: 0, type: 'android.widget.TextView', label: '7:03' },
+  ]);
+  assert.equal(JSON.stringify(result).includes('systemChrome'), false);
+});
+
 test('client capture.snapshot preserves refsGeneration from daemon responses (ADR 0014)', async () => {
   const setup = createTransport(async () => ({
     ok: true,

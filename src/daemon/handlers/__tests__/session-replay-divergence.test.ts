@@ -1060,16 +1060,10 @@ test('buildReplayFailureDivergence: divergence capture drops the action snapshot
   expect(context?.snapshotInteractiveOnly).toBe(true);
 });
 
-// Wave-3 leg E (real walked fixture): a FULL-COVER quick-settings shade. Unlike
-// the partial-cover overlay above, the shade owns the whole screen — every node
-// is systemui and the status-bar icons share the shade's own window, so the
-// run-level chrome rule (`collectAndroidSystemChromeRunIndexes`) condemns the
-// ENTIRE capture, tiles included. The chrome filter must stay a FILTER and never
-// become a narrower scoping (`captureDivergenceObservation`): a plain `snapshot`
-// of this exact surface shows the tiles (#1301 `systemSurfaceOnly` carve-out), so
-// a divergence publishing zero refs would be strictly NARROWER than `snapshot` —
-// the invariant that amendment forbids. Live-verified 2026-07-17 on emulator-5556:
-// pre-fix this screen came back with 0 refs.
+// Real walked FULL-COVER quick-settings shade: every node is systemui and the
+// status-bar icons share the shade's window. The provenance classifier must
+// exclude those icons without excluding the actionable tiles; reverting to the
+// old run-level classifier makes this screen empty.
 test('buildReplayFailureDivergence: a full-cover quick-settings shade still publishes its hittable tiles (wave-3 leg E)', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-qsshade-'));
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
@@ -1120,32 +1114,12 @@ test('buildReplayFailureDivergence: a full-cover quick-settings shade still publ
   expect(screen.refs.length).toBe(20); // SCREEN_REF_CAPTURE_LIMIT, from 23 hittable tiles
   expect(screen.truncated).toBe(true);
 
-  // Still a filter, not a blanket chrome dump: EVERY published ref is a node an
-  // agent can actually act on, so the non-hittable status residue in the SAME
-  // condemned run (battery/wifi/mobile icons) never rides along.
+  // Every published ref is actionable; non-hittable status residue in the same
+  // systemui window (battery/wifi/mobile icons) never rides along.
   const published = new Map(
     (sessionStore.get(sessionName)?.snapshot?.nodes ?? []).map((node) => [node.ref, node]),
   );
   expect(screen.refs.every((ref) => published.get(ref.ref)?.hittable === true)).toBe(true);
   expect(screen.refs.some((ref) => ref.label === 'Battery charging, 100 percent.')).toBe(false);
   expect(screen.refs.some((ref) => ref.label === 'Wifi signal full.')).toBe(false);
-});
-
-// The hittable gate on the chrome fallback, pinned against the OTHER real
-// capture: an ordinary COLLAPSED status bar (with app content present) must not
-// be promoted. Its clock is labeled but NOT hittable in the real capture, while
-// the expanded shade's big clock IS — which is exactly why hittability, not
-// label presence, is the gate. Without this the fallback would publish a bare
-// "7:03" as the screen whenever an app tree yielded no meaningful targets.
-test('buildReplayFailureDivergence: the chrome fallback never promotes a non-hittable collapsed status bar', async () => {
-  const collapsedClock = ANDROID_IME_CAPTURE_RAW_NODES.find(
-    (node) => node.identifier === 'com.android.systemui:id/clock',
-  );
-  expect(collapsedClock?.label).toBe('7:03');
-  expect(collapsedClock?.hittable).not.toBe(true);
-
-  const shadeClock = ANDROID_QS_SHADE_CAPTURE_RAW_NODES.find(
-    (node) => node.identifier === 'com.android.systemui:id/clock',
-  );
-  expect(shadeClock?.hittable).toBe(true);
 });

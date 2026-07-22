@@ -2,7 +2,10 @@ import type { RawSnapshotNode, Rect, SnapshotOptions } from '../../kernel/snapsh
 import { parseBounds } from '../../utils/bounds.ts';
 import { isScrollableType } from '../../utils/scrollable.ts';
 import { intersectArea } from '../../utils/screenshot-geometry.ts';
-import { isAndroidSystemChromeWindowResourceId } from '../../contracts/android-system-chrome.ts';
+import {
+  isAndroidSystemChromeWindowResourceId,
+  type AndroidSystemChromeRawSnapshotNode,
+} from '../../contracts/android-system-chrome.ts';
 
 export type AndroidSnapshotAnalysis = {
   rawNodeCount: number;
@@ -34,7 +37,7 @@ export type AndroidUiNodeMetadata = {
   windowFocused?: boolean;
   windowRect?: Rect;
   /** Inside a status-bar/navigation-bar container (tracked by `androidUiNodes`). */
-  systemChrome?: boolean;
+  systemChrome?: true;
 };
 
 /**
@@ -101,14 +104,14 @@ export function parseUiHierarchy(
 }
 
 export type AndroidBuiltSnapshot = {
-  nodes: RawSnapshotNode[];
+  nodes: AndroidSystemChromeRawSnapshotNode[];
   sourceNodes: AndroidUiHierarchy[];
   truncated?: boolean;
   analysis: AndroidSnapshotAnalysis;
 };
 
 type AndroidSnapshotBuildState = {
-  nodes: RawSnapshotNode[];
+  nodes: AndroidSystemChromeRawSnapshotNode[];
   sourceNodes: AndroidUiHierarchy[];
   maxNodes?: number;
   maxDepth: number;

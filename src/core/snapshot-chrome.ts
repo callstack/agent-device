@@ -1,5 +1,6 @@
 import {
   ANDROID_SYSTEM_CHROME_PACKAGE,
+  hasAndroidSystemChromeProvenance,
   isAndroidSystemChromeWindowResourceId,
 } from '../contracts/android-system-chrome.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
@@ -210,7 +211,7 @@ function isAndroidSystemChromeNode(
   byIndex: Map<number, SnapshotNode>,
 ): boolean {
   if (node.bundleId !== ANDROID_SYSTEM_CHROME_PACKAGE) return false;
-  if (node.systemChrome === true) return true;
+  if (hasAndroidSystemChromeProvenance(node)) return true;
   const seen = new Set<number>();
   let current: SnapshotNode | undefined = node;
   while (current?.bundleId === ANDROID_SYSTEM_CHROME_PACKAGE && !seen.has(current.index)) {
