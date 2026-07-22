@@ -42,7 +42,10 @@ export default defineConfig({
             // job (scripts/maestro-conformance), like the layering guard.
           ],
           exclude: SUBPROCESS_STUB_TESTS,
-          setupFiles: ['src/__tests__/process-memo-setup.ts'],
+          setupFiles: [
+            'src/__tests__/hermetic-env-setup.ts',
+            'src/__tests__/process-memo-setup.ts',
+          ],
         },
       },
       {
@@ -54,7 +57,10 @@ export default defineConfig({
         test: {
           name: 'subprocess-stub',
           include: SUBPROCESS_STUB_TESTS,
-          setupFiles: ['src/__tests__/process-memo-setup.ts'],
+          setupFiles: [
+            'src/__tests__/hermetic-env-setup.ts',
+            'src/__tests__/process-memo-setup.ts',
+          ],
           fileParallelism: false,
           isolate: true,
           maxWorkers: 1,
@@ -64,21 +70,30 @@ export default defineConfig({
         test: {
           name: 'provider-integration',
           include: ['test/integration/provider-scenarios/**/*.test.ts'],
-          setupFiles: ['src/__tests__/process-memo-setup.ts'],
+          setupFiles: [
+            'src/__tests__/hermetic-env-setup.ts',
+            'src/__tests__/process-memo-setup.ts',
+          ],
         },
       },
       {
         test: {
           name: 'interaction-contract',
           include: ['test/integration/interaction-contract/**/*.test.ts'],
-          setupFiles: ['src/__tests__/process-memo-setup.ts'],
+          setupFiles: [
+            'src/__tests__/hermetic-env-setup.ts',
+            'src/__tests__/process-memo-setup.ts',
+          ],
         },
       },
       {
         test: {
           name: 'output-economy',
           include: ['test/output-economy/**/*.test.ts'],
-          setupFiles: ['src/__tests__/process-memo-setup.ts'],
+          setupFiles: [
+            'src/__tests__/hermetic-env-setup.ts',
+            'src/__tests__/process-memo-setup.ts',
+          ],
         },
       },
     ],
