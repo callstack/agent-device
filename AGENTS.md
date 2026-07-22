@@ -238,7 +238,7 @@ This repo encodes invariants as self-declaring gates. The correct response to a 
 
 ## PR Readiness Checklist
 - Static gates first: required checks from **Testing Matrix** pass, `pnpm check:fallow --base origin/main` is clean when code quality/dead-code risk is relevant, CI guards are green, and no conflict markers or unmerged paths remain.
-- Do not report a PR as CI-green from a local unit-only run alone: use `pnpm test:unit` for the repo unit bundle, or `vitest run --project unit-core --project android-adb` when invoking Vitest directly. The **Integration Tests** and **Coverage** jobs run the `provider-integration` project, so verify green on the actual PR head across those jobs, not just unit.
+- Do not report a PR as CI-green from a local unit-only run alone: use `pnpm test:unit` for the repo unit bundle, or `vitest run --project unit-core --project subprocess-stub` when invoking Vitest directly. The **Integration Tests** and **Coverage** jobs run the `provider-integration` project, so verify green on the actual PR head across those jobs, not just unit.
 - Command-surface changes preserve CLI, Node.js, daemon, MCP, help, docs, and SkillGym coverage where that surface is affected. Do not duplicate command contracts across layers.
 - Device-facing behavior is not merge-ready until it has real simulator/emulator/device evidence for the changed path. Fixture-backed tests can prove contracts, but they do not replace a live run that creates or observes the artifact/state the feature claims to handle.
 - If live verification is blocked, state the blocker, exact command or device needed, and downgrade the PR to residual risk instead of calling it ready.

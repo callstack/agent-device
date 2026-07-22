@@ -1,8 +1,20 @@
 import { defineConfig } from 'vitest/config';
 import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
 
-const ANDROID_ADB_STUB_TESTS =
-  'src/platforms/android/__tests__/{app-lifecycle-install,app-lifecycle-open,device-input-state,input-actions,notifications,settings}.test.ts';
+// Tests that stub a real binary (adb/xcrun) by mutating process.env.PATH and
+// then spawn it, so each case waits real subprocess/retry/poll time. Run at the
+// unit suite's default ~7x file parallelism they contend for CPU and their stub
+// spawns get starved past an internal budget, so production takes a generic
+// failure path and returns a different error than the assertion expects — a
+// contention flake whose failing subset shifts between runs (see
+// docs/agents/testing.md "tests must not wait real time"). Serialized below with
+// per-file isolation so only one such file spawns stubs at a time, the same
+// execution contract the pre-split android index.test.ts aggregation provided.
+const SUBPROCESS_STUB_TESTS = [
+  'src/platforms/android/__tests__/{app-lifecycle-install,app-lifecycle-open,device-input-state,input-actions,notifications,settings}.test.ts',
+  'src/daemon/__tests__/runtime-hints.test.ts',
+  'src/platforms/apple/core/__tests__/index.test.ts',
+];
 
 export default defineConfig({
   test: {
@@ -27,19 +39,19 @@ export default defineConfig({
             // The Maestro conformance oracle runs via `node --test` in its own CI
             // job (scripts/maestro-conformance), like the layering guard.
           ],
-          exclude: [ANDROID_ADB_STUB_TESTS],
+          exclude: SUBPROCESS_STUB_TESTS,
           setupFiles: ['src/__tests__/process-memo-setup.ts'],
         },
       },
       {
-        // The scripted-adb tests stub the adb binary by mutating process.env
-        // (PATH, AGENT_DEVICE_TEST_ARGS_FILE) and wait real retry/poll time,
-        // so the group runs serialized with per-file isolation — the same
+        // The subprocess-stub tests stub adb/xcrun by mutating process.env
+        // (PATH, AGENT_DEVICE_TEST_ARGS_FILE) and wait real subprocess/retry/poll
+        // time, so the group runs serialized with per-file isolation — the same
         // execution contract the pre-split android index.test.ts aggregation
         // provided without leaking module caches between split files.
         test: {
-          name: 'android-adb',
-          include: [ANDROID_ADB_STUB_TESTS],
+          name: 'subprocess-stub',
+          include: SUBPROCESS_STUB_TESTS,
           setupFiles: ['src/__tests__/process-memo-setup.ts'],
           fileParallelism: false,
           isolate: true,
