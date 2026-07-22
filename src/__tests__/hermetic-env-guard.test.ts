@@ -1,8 +1,8 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runCmd } from '../utils/exec.ts';
 import vitestConfig from '../../vitest.config.ts';
 
 // hermetic-env-setup.ts scrubs ambient AGENT_DEVICE_DAEMON_* vars so a host that
@@ -18,21 +18,22 @@ const HERMETIC_ENV_SETUP = 'src/__tests__/hermetic-env-setup.ts';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '../..');
 const fixtureConfig = path.join(here, '__fixtures__', 'hermetic-env-guard', 'vitest.config.ts');
+// The repo-local vitest CLI, invoked through node so no PATH/npx lookup is involved.
+const vitestCli = path.join(repoRoot, 'node_modules', 'vitest', 'vitest.mjs');
+const PROBE_TIMEOUT_MS = 60_000;
 
-function runProbe(
+async function runProbe(
   extraEnv: Record<string, string>,
-): Promise<{ status: number | null; output: string }> {
-  return new Promise((resolve, reject) => {
-    const child = spawn('npx', ['vitest', 'run', '--config', fixtureConfig], {
-      cwd: repoRoot,
-      env: { ...process.env, ...extraEnv },
-    });
-    let output = '';
-    child.stdout.on('data', (chunk: Buffer) => (output += chunk.toString()));
-    child.stderr.on('data', (chunk: Buffer) => (output += chunk.toString()));
-    child.on('error', reject);
-    child.on('close', (status) => resolve({ status, output }));
+): Promise<{ exitCode: number; output: string }> {
+  // AGENTS.md hard rule: TypeScript process execution goes through src/utils/exec.ts,
+  // not raw spawn. allowFailure keeps the negative control's non-zero exit as data.
+  const result = await runCmd(process.execPath, [vitestCli, 'run', '--config', fixtureConfig], {
+    cwd: repoRoot,
+    env: { ...process.env, ...extraEnv },
+    allowFailure: true,
+    timeoutMs: PROBE_TIMEOUT_MS,
   });
+  return { exitCode: result.exitCode, output: `${result.stdout}${result.stderr}` };
 }
 
 type ProjectShape = { test?: { name?: string; setupFiles?: readonly string[] } };
@@ -61,7 +62,7 @@ test('a wired vitest child scrubs ambient daemon env before tests run', async ()
   };
 
   // Run the wired probe and the unwired negative control concurrently: each is a
-  // real vitest cold start (~1.4s), so serial spawns would exceed the unit
+  // real vitest cold start (~1.4s), so serial runs would exceed the unit
   // wall-clock budget for no reason — they are independent processes.
   const [wired, unwired] = await Promise.all([
     runProbe(dirtyEnv),
@@ -69,7 +70,7 @@ test('a wired vitest child scrubs ambient daemon env before tests run', async ()
   ]);
 
   assert.equal(
-    wired.status,
+    wired.exitCode,
     0,
     `expected the wired probe to pass with the vars scrubbed:\n${wired.output}`,
   );
@@ -77,7 +78,7 @@ test('a wired vitest child scrubs ambient daemon env before tests run', async ()
   // Negative control: same vars, setup NOT wired — the probe must fail, proving
   // it genuinely detects the leak (so the pass above is the setup, not a no-op).
   assert.notEqual(
-    unwired.status,
+    unwired.exitCode,
     0,
     `expected the probe to fail when the setup is not wired (leak must be detectable):\n${unwired.output}`,
   );
