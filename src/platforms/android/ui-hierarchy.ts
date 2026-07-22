@@ -38,34 +38,23 @@ export type AndroidUiNodeMetadata = {
 };
 
 /**
- * Depth-first membership of the status-bar/nav-bar subtree over a `<node>` token
- * stream. The container id is the only chrome signal in the tree — its
- * clock/battery/wifi leaves carry no marker of their own — so membership is
- * tracked while descending rather than re-derived from a list of leaf ids.
+ * Membership of the status-bar/nav-bar subtree over a `<node>` token stream: the
+ * container id is the only chrome signal in the tree, its clock/battery/wifi
+ * leaves carrying no marker of their own.
  */
 function createAndroidChromeSubtreeTracker() {
-  let depth = 0;
-  let chromeDepth: number | undefined;
-  const leave = (): void => {
-    if (chromeDepth !== undefined && depth <= chromeDepth) chromeDepth = undefined;
-  };
+  const openElements: boolean[] = [];
+  const inChromeNow = (): boolean => openElements[openElements.length - 1] === true;
   return {
     /** Enters an opening tag; returns whether that node is inside the chrome subtree. */
     open(resourceId: string | null | undefined, selfClosing: boolean): boolean {
-      if (chromeDepth === undefined && isAndroidSystemChromeWindowResourceId(resourceId)) {
-        chromeDepth = depth;
-      }
-      const inChrome = chromeDepth !== undefined;
-      // A self-closing tag never becomes an ancestor, so it leaves at the depth
-      // it entered; a container tag descends and is left by its `</node>`.
-      if (selfClosing) leave();
-      else depth += 1;
+      const inChrome = inChromeNow() || isAndroidSystemChromeWindowResourceId(resourceId);
+      if (!selfClosing) openElements.push(inChrome);
       return inChrome;
     },
-    /** Handles `</node>`, ending the chrome subtree once its container closes. */
+    /** Handles `</node>`. */
     close(): void {
-      depth -= 1;
-      leave();
+      openElements.pop();
     },
   };
 }

@@ -66,19 +66,13 @@ export type RawSnapshotNode = {
   hiddenContentBelow?: boolean;
   interactionBlocked?: 'covered';
   presentationHints?: string[];
-  /**
-   * INTERNAL. Android status-bar/navigation-bar provenance, stamped by
-   * `walkUiHierarchyNode` for the chrome classifiers. Never part of the public
-   * CLI/MCP node contract — `publicSnapshotNodes` strips it at serialization.
-   */
+  /** INTERNAL, stripped by `publicSnapshotNodes`: status/nav-bar provenance for the chrome classifiers. */
   systemChrome?: boolean;
 };
 
 /**
- * Projects captured nodes onto the published contract by dropping internal-only
- * fields. Mirrors `publicSnapshotCaptureAnnotations`, which does the same for
- * capture annotations: internal derivations stay out of CLI/SDK/MCP payloads
- * rather than every consumer having to know which properties are private.
+ * Projects captured nodes onto the published contract by dropping internal-only fields,
+ * mirroring `publicSnapshotCaptureAnnotations` for capture annotations.
  */
 export function publicSnapshotNodes<T extends { systemChrome?: boolean }>(nodes: T[]): T[] {
   if (!nodes.some((node) => node.systemChrome !== undefined)) return nodes;

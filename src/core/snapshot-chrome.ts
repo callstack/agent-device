@@ -1,4 +1,7 @@
-import { ANDROID_SYSTEM_CHROME_PACKAGE } from '../contracts/android-system-chrome.ts';
+import {
+  ANDROID_SYSTEM_CHROME_PACKAGE,
+  isAndroidSystemChromeWindowResourceId,
+} from '../contracts/android-system-chrome.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { isAndroidInputMethodSnapshotNode } from '../snapshot/android-input-method-overlays.ts';
 import { normalizeType } from '../utils/text-surface.ts';
@@ -199,12 +202,23 @@ function collectSubtreeIndexes(
   return indexes;
 }
 
-// SystemUI hosts BOTH persistent chrome and actionable overlays (volume
-// panel, media/output pickers), so chrome is never a package-level fact.
-// `systemChrome` is stamped per node during the Android walk, from the
-// status-bar/nav-bar container it descends from — see `walkUiHierarchyNode`.
-function isAndroidSystemChromeNode(node: SnapshotNode): boolean {
-  return node.bundleId === ANDROID_SYSTEM_CHROME_PACKAGE && node.systemChrome === true;
+// A node is chrome when it sits in the status-bar/nav-bar container's subtree,
+// read from whichever source still has the container: the tree when it survived
+// the walk, else the `systemChrome` the walk stamped before dropping it.
+function isAndroidSystemChromeNode(
+  node: SnapshotNode,
+  byIndex: Map<number, SnapshotNode>,
+): boolean {
+  if (node.bundleId !== ANDROID_SYSTEM_CHROME_PACKAGE) return false;
+  if (node.systemChrome === true) return true;
+  const seen = new Set<number>();
+  let current: SnapshotNode | undefined = node;
+  while (current?.bundleId === ANDROID_SYSTEM_CHROME_PACKAGE && !seen.has(current.index)) {
+    if (isAndroidSystemChromeWindowResourceId(current.identifier)) return true;
+    seen.add(current.index);
+    current = current.parentIndex === undefined ? undefined : byIndex.get(current.parentIndex);
+  }
+  return false;
 }
 
 /**
@@ -240,7 +254,7 @@ function collectAndroidSettleChrome(
   const systemChromeIndexes =
     appBundleId === ANDROID_SYSTEM_CHROME_PACKAGE
       ? new Set<number>()
-      : collectAndroidSystemChromeIndexes(nodes, imeIndexes);
+      : collectAndroidSystemChromeIndexes(nodes, byIndex, imeIndexes);
   // The one surviving container line per IME run; the rest of the run and all
   // status/nav-bar chrome never spend diff/tail budget.
   const strippedIndexes = new Set(
@@ -266,11 +280,12 @@ function collectAndroidSettleChrome(
  */
 function collectAndroidSystemChromeIndexes(
   nodes: SnapshotNode[],
+  byIndex: Map<number, SnapshotNode>,
   imeIndexes: ReadonlySet<number>,
 ): Set<number> {
   return new Set(
     nodes
-      .filter((node) => !imeIndexes.has(node.index) && isAndroidSystemChromeNode(node))
+      .filter((node) => !imeIndexes.has(node.index) && isAndroidSystemChromeNode(node, byIndex))
       .map((node) => node.index),
   );
 }
