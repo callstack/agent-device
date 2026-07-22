@@ -37,6 +37,7 @@ type DiagnosticsScope = DiagnosticsScopeOptions & {
   // can count phase occurrences for the whole request even in debug mode where
   // events are streamed out and reset mid-flight.
   phaseCounts: Map<string, number>;
+  sensitiveValues: Set<string>;
 };
 
 const diagnosticsStorage = new AsyncLocalStorage<DiagnosticsScope>();
@@ -59,6 +60,7 @@ export async function withDiagnosticsScope<T>(
     events: [],
     liveWrittenEventCount: 0,
     phaseCounts: new Map(),
+    sensitiveValues: new Set(),
   };
   return await diagnosticsStorage.run(scope, fn);
 }
@@ -87,6 +89,12 @@ export function getDiagnosticsMeta(): {
     debug: scope.debug,
     flushOnSuccess: scope.flushOnSuccess,
   };
+}
+
+/** Register a caller-declared literal that must not reach this request's diagnostics. */
+export function registerDiagnosticSensitiveValue(value: string): void {
+  if (!value) return;
+  diagnosticsStorage.getStore()?.sensitiveValues.add(value);
 }
 
 /**
@@ -121,7 +129,7 @@ export function emitDiagnostic(event: {
     requestId: scope.requestId,
     command: scope.command,
     durationMs: event.durationMs,
-    data: event.data ? redactDiagnosticData(event.data) : undefined,
+    data: event.data ? redactScopeData(scope, event.data) : undefined,
   };
   scope.events.push(payload);
   scope.phaseCounts.set(event.phase, (scope.phaseCounts.get(event.phase) ?? 0) + 1);
@@ -182,7 +190,7 @@ export function flushDiagnosticsToSessionFile(options: { force?: boolean } = {})
     if (scope.logPath) {
       const pendingEvents = scope.events.slice(scope.liveWrittenEventCount);
       if (pendingEvents.length > 0) {
-        const lines = pendingEvents.map((entry) => JSON.stringify(redactDiagnosticData(entry)));
+        const lines = pendingEvents.map((entry) => JSON.stringify(redactScopeData(scope, entry)));
         appendDiagnosticLine(scope.logPath, `${lines.join('\n')}\n`);
       }
       const logPath = scope.logPath;
@@ -197,13 +205,38 @@ export function flushDiagnosticsToSessionFile(options: { force?: boolean } = {})
     fs.mkdirSync(baseDir, { recursive: true });
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filePath = path.join(baseDir, `${timestamp}-${scope.diagnosticId}.ndjson`);
-    const lines = scope.events.map((entry) => JSON.stringify(redactDiagnosticData(entry)));
+    const lines = scope.events.map((entry) => JSON.stringify(redactScopeData(scope, entry)));
     fs.writeFileSync(filePath, `${lines.join('\n')}\n`);
     scope.events = [];
     return filePath;
   } catch {
     return null;
   }
+}
+
+function redactScopeData<T>(scope: DiagnosticsScope, input: T): T {
+  const redacted = redactDiagnosticData(input);
+  const values = [...scope.sensitiveValues].sort((left, right) => right.length - left.length);
+  return replaceSensitiveValues(redacted, values) as T;
+}
+
+function replaceSensitiveValues(value: unknown, sensitiveValues: readonly string[]): unknown {
+  if (typeof value === 'string') {
+    return sensitiveValues.reduce(
+      (output, sensitive) => output.replaceAll(sensitive, '[REDACTED]'),
+      value,
+    );
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => replaceSensitiveValues(entry, sensitiveValues));
+  }
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      replaceSensitiveValues(entry, sensitiveValues),
+    ]),
+  );
 }
 
 function sanitizePathPart(value: string): string {

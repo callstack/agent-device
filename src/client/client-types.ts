@@ -783,6 +783,8 @@ export type FillOptions = DeviceCommandBaseOptions &
   SettleCommandOptions & {
     text: string;
     delayMs?: number;
+    /** Publish this fill value as `${VAR}` when script recording is armed. */
+    recordAs?: string;
     verify?: boolean;
   };
 
@@ -1102,6 +1104,8 @@ export type InternalRequestOptions = AgentDeviceClientConfig &
     deviceHub?: boolean;
     testIme?: boolean;
     noRecord?: boolean;
+    /** Fill-only script parameter name used to publish `${VAR}` instead of literal text. */
+    recordAs?: string;
     /** #1271 stage 2: force-record this action; mutually exclusive with `noRecord`. */
     record?: boolean;
     backMode?: BackMode;

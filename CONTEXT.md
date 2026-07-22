@@ -30,6 +30,11 @@
 - Session: daemon-owned state for a selected target and opened app or surface.
 - Script recording: opt-in session mode armed before actions so a persisted `.ad` can carry portable
   action inputs and recording-time target identity evidence. It is distinct from screen/video recording.
+- Recorded input parameterization: explicit fill authoring contract that sends literal text only to the
+  live interaction while the recorder stores `${VAR}` before any durable recording/event/publication
+  boundary. The caller owns the uppercase variable name; no selector or field-name heuristic infers
+  sensitivity. Replay resolves the placeholder immediately before dispatch and preserves the authored
+  placeholder if that run is recorded again.
 - Open-to-destination script: self-contained `.ad` script with exactly one initial `open`, a destination
   guard after its last app-state mutation, no `close`, and an app session left active for subsequent work.
   Avoid: replay (artifact noun), fragment (reserved for lifecycle-free composition), partial script.

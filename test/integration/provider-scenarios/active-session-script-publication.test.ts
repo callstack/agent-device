@@ -157,3 +157,95 @@ test('a second successful open aborts publication and terminal save flags fail b
     }
   });
 }, 20_000);
+
+test('parameterized fill publishes only ${VAR} and replay resolves it immediately before fill', async () => {
+  await withProviderScenarioResource(
+    async () => await createAndroidSettingsWorld({ nativeTextInjection: true }),
+    async (world) => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-parameterized-script-'));
+      const scriptPath = path.join(root, 'parameterized-search.ad');
+      const secret = 'OpaqueProviderValue1348';
+      const client = world.daemon.client();
+      try {
+        await client.apps.open({ app: 'settings', saveScript: scriptPath, ...world.selection });
+        const snapshot = await client.capture.snapshot({
+          interactiveOnly: true,
+          ...world.selection,
+        });
+        const search = snapshot.nodes.find((node) => node.label === 'Search');
+        assert.ok(search?.ref);
+
+        const invalidName = await world.daemon.callCommand('fill', [`@${search.ref}`, secret], {
+          ...world.selection,
+          recordAs: 'password',
+        });
+        assertRpcError(invalidName, 'INVALID_ARGS', /Invalid --record-as variable/);
+        assert.equal(world.textInjectionCalls.length, 0);
+
+        const contradictory = await world.daemon.callCommand('fill', [`@${search.ref}`, secret], {
+          ...world.selection,
+          recordAs: 'SEARCH_TERM',
+          noRecord: true,
+        });
+        assertRpcError(contradictory, 'INVALID_ARGS', /cannot be combined with --no-record/);
+        assert.equal(world.textInjectionCalls.length, 0);
+
+        const fill = await client.interactions.fill({
+          ref: `@${search.ref}`,
+          text: secret,
+          recordAs: 'SEARCH_TERM',
+          ...world.selection,
+        });
+        assert.equal(fill.text, '${SEARCH_TERM}');
+        await client.command.wait({
+          selector: 'id=com.android.settings:id/search',
+          ...world.selection,
+        });
+
+        const recordedState = JSON.stringify(world.daemon.session()?.actions);
+        assert.equal(recordedState.includes(secret), false);
+        assert.match(recordedState, /\$\{SEARCH_TERM\}/);
+        await client.sessions.saveScript({ path: scriptPath });
+        const script = fs.readFileSync(scriptPath, 'utf8');
+        assert.equal(script.includes(secret), false);
+        assert.match(script, /\$\{SEARCH_TERM\}/);
+        assert.equal(world.textInjectionCalls.at(-1)?.text, secret);
+        await client.sessions.close();
+
+        const callsBeforeMissingValue = world.textInjectionCalls.length;
+        const missingValue = await world.daemon.callCommand(
+          'replay',
+          [scriptPath],
+          world.selection,
+        );
+        assertRpcError(missingValue, 'INVALID_ARGS', /Unresolved variable \$\{SEARCH_TERM\}/);
+        assert.equal(world.textInjectionCalls.length, callsBeforeMissingValue);
+        await client.sessions.close();
+
+        const replay = await world.daemon.callCommand('replay', [scriptPath], {
+          ...world.selection,
+          replayEnv: [`SEARCH_TERM=${secret}`],
+        });
+        assertRpcOk(replay);
+        assert.equal(world.textInjectionCalls.at(-1)?.text, secret);
+        const replayState = JSON.stringify(world.daemon.session()?.actions);
+        assert.equal(replayState.includes(secret), false);
+        assert.match(replayState, /\$\{SEARCH_TERM\}/);
+        await client.sessions.close();
+
+        await client.apps.open({ app: 'settings', ...world.selection });
+        const callsBeforeUnarmed = world.textInjectionCalls.length;
+        const unarmed = await world.daemon.callCommand(
+          'fill',
+          ['id=com.android.settings:id/search', secret],
+          { ...world.selection, recordAs: 'SEARCH_TERM' },
+        );
+        assertRpcError(unarmed, 'INVALID_ARGS', /requires an armed script recording/);
+        assert.equal(world.textInjectionCalls.length, callsBeforeUnarmed);
+        await client.sessions.close();
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+}, 20_000);

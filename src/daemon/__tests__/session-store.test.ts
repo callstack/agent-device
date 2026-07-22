@@ -147,6 +147,31 @@ test('saveScript flag enables .ad session log writing', () => {
   assert.equal(listSessionScriptFiles(root).length, 1);
 });
 
+test('parameterized fill publication writes only the placeholder to target and temp content', () => {
+  const fixture = makeFixture('agent-device-session-log-parameterized-fill-');
+  const secret = 'publication-only-live-value-1348';
+  recordOpen(fixture.store, fixture.session);
+  fixture.store.recordAction(fixture.session, {
+    command: 'fill',
+    positionals: ['id="password"', secret],
+    flags: { platform: 'ios', recordAs: 'PASSWORD' },
+    result: {
+      text: secret,
+      message: `Filled ${secret}`,
+      selectorChain: ['id="password"'],
+    },
+  });
+  recordClose(fixture.store, fixture.session);
+
+  const script = writeScript(fixture);
+  assert.equal(script.includes(secret), false);
+  assert.match(script, /fill "id=\\"password\\"" "\$\{PASSWORD\}"/);
+  assert.equal(
+    fs.readdirSync(fixture.root).some((entry) => entry.endsWith('.tmp')),
+    false,
+  );
+});
+
 test('recordAction writes a paged session event log', async () => {
   const { store, session } = makeFixture('agent-device-session-events-');
   recordOpen(store, session, { platform: 'ios' });

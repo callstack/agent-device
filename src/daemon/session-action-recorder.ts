@@ -4,6 +4,12 @@ import { emitDiagnostic } from '../utils/diagnostics.ts';
 import type { DaemonRequest, SessionAction, SessionRuntimeHints, SessionState } from './types.ts';
 import { expandSessionPath } from './session-paths.ts';
 import type { TargetAnnotationV1 } from '../replay/target-identity.ts';
+import { inferFillText } from './action-utils.ts';
+import {
+  recordedInputPlaceholder,
+  replaceRecordedInputLiteral,
+  validateRecordedInputVariableName,
+} from '../replay/recorded-input.ts';
 
 export type RecordActionEntry = {
   command: string;
@@ -84,14 +90,15 @@ export function recordActionEntry(
       session.saveScriptForce = true;
     }
   }
+  const recordedEntry = parameterizeRecordedFill(entry);
   const action: SessionAction = {
     ts: Date.now(),
-    command: entry.command,
-    positionals: entry.positionals,
-    runtime: entry.runtime,
-    flags: sanitizeFlags(entry.flags),
-    result: entry.result,
-    ...(entry.targetEvidence ? { targetEvidence: entry.targetEvidence } : {}),
+    command: recordedEntry.command,
+    positionals: recordedEntry.positionals,
+    runtime: recordedEntry.runtime,
+    flags: sanitizeFlags(recordedEntry.flags),
+    result: recordedEntry.result,
+    ...(recordedEntry.targetEvidence ? { targetEvidence: recordedEntry.targetEvidence } : {}),
   };
   session.actions.push(action);
   emitDiagnostic({
@@ -103,6 +110,50 @@ export function recordActionEntry(
     },
   });
   return action;
+}
+
+/**
+ * #1348: the recorder is the first durable boundary. The live request keeps
+ * the literal fill value through device execution, but the SessionAction gets
+ * only `${VAR}`. Value-bearing result strings are scrubbed at the same boundary
+ * so backend echoes or settled diffs cannot smuggle the literal into recording
+ * state, the event display, or the eventual publication temp/target file;
+ * ADR 0012 identity evidence keeps its structure but is scrubbed too, covering
+ * repeated fills where the pre-action accessibility label already echoes the
+ * same sensitive value.
+ */
+function parameterizeRecordedFill(entry: RecordActionEntry): RecordActionEntry {
+  if (entry.command !== 'fill' || typeof entry.flags.recordAs !== 'string') return entry;
+  const variableName = validateRecordedInputVariableName(entry.flags.recordAs);
+  const placeholder = recordedInputPlaceholder(variableName);
+  const literal = inferFillText({
+    ts: 0,
+    command: entry.command,
+    positionals: entry.positionals,
+    flags: entry.flags,
+  });
+  if (!literal) return entry;
+  return {
+    ...entry,
+    positionals: replaceFillText(entry.positionals, placeholder),
+    result: replaceRecordedInputLiteral(entry.result, literal, placeholder),
+    targetEvidence: replaceRecordedInputLiteral(entry.targetEvidence, literal, placeholder),
+  };
+}
+
+function replaceFillText(positionals: string[], placeholder: string): string[] {
+  const first = positionals[0];
+  if (first?.startsWith('@')) {
+    return positionals.length >= 3 ? [first, positionals[1]!, placeholder] : [first, placeholder];
+  }
+  if (
+    positionals.length >= 3 &&
+    Number.isFinite(Number(positionals[0])) &&
+    Number.isFinite(Number(positionals[1]))
+  ) {
+    return [positionals[0]!, positionals[1]!, placeholder];
+  }
+  return first === undefined ? [placeholder] : [first, placeholder];
 }
 
 /**

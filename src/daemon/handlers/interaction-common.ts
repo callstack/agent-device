@@ -14,6 +14,11 @@ import {
 } from '../interaction-outcome-policy.ts';
 import { markPostGestureStabilization } from '../post-gesture-stabilization.ts';
 import { computeTargetEvidence, type RecordedTargetCapture } from '../session-target-evidence.ts';
+import { inferFillText } from '../action-utils.ts';
+import {
+  recordedInputPlaceholder,
+  replaceRecordedInputLiteral,
+} from '../../replay/recorded-input.ts';
 
 export type ContextFromFlags = (
   flags: CommandFlags | undefined,
@@ -61,13 +66,20 @@ export function finalizeTouchInteraction(params: {
     androidFreshnessBaseline,
   } = params;
   const actionFlags = stripInternalInteractionFlags(flags);
+  const [parameterizedResult, parameterizedResponseData] = parameterizeFillPayloads({
+    command,
+    positionals,
+    flags: actionFlags,
+    result,
+    responseData,
+  });
   const targetEvidence =
     session.recordSession && recordedTarget ? computeTargetEvidence(recordedTarget) : undefined;
   sessionStore.recordAction(session, {
     command,
     positionals,
     flags: actionFlags ?? {},
-    result,
+    result: parameterizedResult,
     ...(targetEvidence ? { targetEvidence } : {}),
   });
   markPendingInteractionOutcome({
@@ -89,10 +101,35 @@ export function finalizeTouchInteraction(params: {
     session,
     actionCommand,
     positionals,
-    result,
+    parameterizedResult,
     (actionFlags ?? {}) as Record<string, unknown>,
     actionStartedAt,
     actionFinishedAt,
   );
-  return { ok: true, data: responseData };
+  return { ok: true, data: parameterizedResponseData };
+}
+
+function parameterizeFillPayloads(params: {
+  command: string;
+  positionals: string[];
+  flags: CommandFlags | undefined;
+  result: Record<string, unknown>;
+  responseData: Record<string, unknown>;
+}): readonly [result: Record<string, unknown>, responseData: Record<string, unknown>] {
+  if (params.command !== 'fill' || typeof params.flags?.recordAs !== 'string') {
+    return [params.result, params.responseData];
+  }
+  const literal = inferFillText({
+    ts: 0,
+    command: 'fill',
+    positionals: params.positionals,
+    flags: params.flags,
+    result: params.result,
+  });
+  if (!literal) return [params.result, params.responseData];
+  const placeholder = recordedInputPlaceholder(params.flags.recordAs);
+  return [
+    replaceRecordedInputLiteral(params.result, literal, placeholder),
+    replaceRecordedInputLiteral(params.responseData, literal, placeholder),
+  ];
 }

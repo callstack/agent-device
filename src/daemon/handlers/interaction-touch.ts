@@ -66,6 +66,7 @@ import {
 } from '../android-system-dialog.ts';
 import { refMutationAdmissionResponse } from './interaction-ref-policy.ts';
 import { expireRefFrame } from '../ref-frame.ts';
+import { assertRecordedFillParameterization } from './interaction-recorded-input.ts';
 
 export async function handleTouchInteractionCommands(
   params: InteractionHandlerParams & {
@@ -576,6 +577,11 @@ async function dispatchFillViaRuntime(
     if (unsupported) return unsupported;
   }
   if (!session) return noActiveSessionError();
+  assertRecordedFillParameterization({
+    session,
+    flags: req.flags,
+    replayPlanStep: req.internal?.replayPlanStep === true,
+  });
   const invalidSettleFlags = settleFlagGuardResponse('fill', req.flags);
   if (invalidSettleFlags) return invalidSettleFlags;
 

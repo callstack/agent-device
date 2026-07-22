@@ -133,7 +133,12 @@ const interactionCliSchemas = {
     usageOverride: 'fill <x> <y> <text> | fill <@ref|selector> <text>',
     positionalArgs: ['targetOrX', 'yOrText', 'text?'],
     allowsExtraPositionals: true,
-    allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS, 'delayMs', ...postActionObservationCliFlags('fill')],
+    allowedFlags: [
+      ...SELECTOR_SNAPSHOT_FLAGS,
+      'delayMs',
+      'recordAs',
+      ...postActionObservationCliFlags('fill'),
+    ],
   },
   scroll: {
     usageOverride: 'scroll <direction|top|bottom> [amount] [--pixels <n>] [--duration-ms <ms>]',
@@ -389,6 +394,7 @@ function toFillOptions(input: FillInput): FillOptions {
     ...toSelectorSnapshotOptions(input),
     text: input.text,
     delayMs: input.delayMs,
+    recordAs: input.recordAs,
     verify: input.verify,
     ...toSettleOptions(input),
   };

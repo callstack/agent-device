@@ -224,6 +224,9 @@ test('usageForCommand resolves workflow help topic', async () => {
   assert.match(help, /snapshot -s @e7/);
   assert.match(help, /Use plain fill\/type first for ordinary login and form fields/);
   assert.match(help, /--delay-ms intentionally paces character entry/);
+  assert.match(help, /agent-device fill 'id="password"' "\$AD_VAR_PASSWORD" --record-as PASSWORD/);
+  assert.match(help, /published script contain only \$\{PASSWORD\}/);
+  assert.match(help, /Do not record passwords, tokens, or other secrets without --record-as/);
   assert.match(help, /Read-only visible\/state question: use snapshot\/get\/is\/find/);
   assert.match(help, /Use snapshot -i only when refs are needed/);
   assert.match(help, /install-from-source --github-actions-artifact org\/repo:app-debug/);

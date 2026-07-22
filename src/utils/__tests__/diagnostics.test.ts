@@ -6,6 +6,7 @@ import path from 'node:path';
 import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
+  registerDiagnosticSensitiveValue,
   withDiagnosticsScope,
 } from '../diagnostics.ts';
 
@@ -66,4 +67,25 @@ test('diagnostics redacts sensitive fields', async () => {
   } finally {
     process.env.HOME = previousHome;
   }
+});
+
+test('diagnostics scrubs caller-declared recorded input literals regardless of field name', async () => {
+  const outputPath = path.join(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-diag-recorded-input-')),
+    'request.ndjson',
+  );
+  const secret = 'opaque-value-without-sensitive-keywords';
+
+  await withDiagnosticsScope({ command: 'fill', logPath: outputPath }, async () => {
+    registerDiagnosticSensitiveValue(secret);
+    emitDiagnostic({
+      phase: 'platform_failure',
+      data: { text: secret, message: `Backend echoed ${secret}` },
+    });
+    flushDiagnosticsToSessionFile({ force: true });
+  });
+
+  const diagnostics = fs.readFileSync(outputPath, 'utf8');
+  assert.equal(diagnostics.includes(secret), false);
+  assert.match(diagnostics, /Backend echoed \[REDACTED\]/);
 });

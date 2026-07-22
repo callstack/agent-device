@@ -175,7 +175,7 @@ test('parseArgs recognizes gesture subcommand positionals', () => {
   assert.deepEqual(transform.positionals, ['transform', '200', '420', '80', '-40', '2', '35']);
 });
 
-test('parseArgs recognizes type and fill delay flags', () => {
+test('parseArgs recognizes type delay and fill recording parameter flags', () => {
   const typeParsed = parseArgs(['type', 'hello', '--delay-ms', '75'], {
     strictFlags: true,
   });
@@ -183,12 +183,14 @@ test('parseArgs recognizes type and fill delay flags', () => {
   assert.deepEqual(typeParsed.positionals, ['hello']);
   assert.equal(typeParsed.flags.delayMs, 75);
 
-  const fillParsed = parseArgs(['fill', '@e5', 'search', '--delay-ms', '40'], {
-    strictFlags: true,
-  });
+  const fillParsed = parseArgs(
+    ['fill', '@e5', 'search', '--delay-ms', '40', '--record-as', 'SEARCH_TERM'],
+    { strictFlags: true },
+  );
   assert.equal(fillParsed.command, 'fill');
   assert.deepEqual(fillParsed.positionals, ['@e5', 'search']);
   assert.equal(fillParsed.flags.delayMs, 40);
+  assert.equal(fillParsed.flags.recordAs, 'SEARCH_TERM');
 });
 
 test('parseArgs recognizes record --fps flag', () => {

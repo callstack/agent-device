@@ -155,6 +155,7 @@ function summarizeProviderScenarioFlagCoverage(files) {
     ['recordingScope', 'recording app vs whole-screen scope', ['scope']],
     ['intervalMs', 'repeated press interval'],
     ['delayMs', 'typing/fill delay'],
+    ['recordAs', 'parameterized fill publication for recorded scripts'],
     ['durationMs', 'scroll, gesture, and TV remote duration'],
     ['holdMs', 'press hold duration'],
     ['jitterPx', 'press jitter'],

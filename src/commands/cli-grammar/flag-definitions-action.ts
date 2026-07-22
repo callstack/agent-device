@@ -73,6 +73,13 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageDescription: 'Delay between typed characters',
   },
   {
+    key: 'recordAs',
+    names: ['--record-as'],
+    type: 'string',
+    usageLabel: '--record-as <VAR>',
+    usageDescription: 'Fill: send the live text but publish ${VAR} in an armed .ad recording',
+  },
+  {
     key: 'durationMs',
     names: ['--duration-ms'],
     type: 'int',

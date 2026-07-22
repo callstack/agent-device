@@ -132,15 +132,14 @@ script's terminal `close` — or a repair-armed run's deferred equivalent — ha
 
 ### Sensitive inputs
 
-Executable `.ad` artifacts serialize action inputs literally. A recorded `fill` therefore writes its
-text to the published file; diagnostic and event-log redaction cannot protect an input that the replay
-engine must later execute. V1 does not claim secret-bearing login flows are safe to publish.
+Executable `.ad` artifacts serialize ordinary action inputs literally; diagnostic and event-log
+redaction cannot protect an input that replay must later execute. ADR 0017 resolves #1348 for explicit
+sensitive fills: `fill ... --record-as PASSWORD` sends the live text to the app while recording only
+`${PASSWORD}`. Replay receives the value through `AD_VAR_PASSWORD` or `--env PASSWORD=<value>`.
 
-Native `.ad` replay already supports late-bound `${VAR}` values, but ordinary recording cannot yet
-execute with a real value while publishing only its placeholder. That safe-authoring capability is
-tracked in [#1348](https://github.com/callstack/agent-device/issues/1348). Until it ships, authors must not
-record a journey that enters a secret: use pre-authenticated test state or deliberately non-secret fixture
-credentials that are safe to persist. CLI help must state this warning next to the authoring workflow.
+This is opt-in and fill-only. Unparameterized fill/type inputs remain literal artifact content, so
+authors must use ADR 0017 for each sensitive fill and avoid secret-bearing `type` steps. CLI help states
+both the safe workflow and the remaining literal-input warning next to publication guidance.
 
 ### Artifact contract
 
@@ -188,8 +187,8 @@ executing that script, not the artifact being saved.
   bootstrap; authoring resumes only in a fresh session.
 - Intermediate lifecycle-free fragments, entry guards, include semantics, composed digests, and shared
   fragment pinning remain entirely under #1336.
-- Secret-bearing authoring remains unsafe until #1348; the initial workflow is limited to journeys that
-  do not enter secrets. Arbitrary history ranges remain out of scope.
+- Secret-bearing fill authoring uses ADR 0017's explicit `--record-as <VAR>` contract. Unparameterized
+  fill/type inputs remain literal script content. Arbitrary history ranges remain out of scope.
 - On consumption (issue #1384), a `replay` whose script has no terminal `close` leaves a live daemon and
   app session behind — including the ordinary one-shot `replay` invocation's own owned/ephemeral daemon,
   which the client keeps alive and reports a `--state-dir` address hint for instead of tearing down. An
@@ -245,7 +244,7 @@ executing that script, not the artifact being saved.
   request-sensitive read-only/mutating subcommands, and destination-guard ordering consumes only that
   trait.
 - Repair-armed sessions refuse this action without changing repair state.
-- CLI help warns that literal `fill` inputs are persisted and tells authors not to record secret-bearing
-  journeys until #1348's parameterized-input mechanism is available.
+- CLI help documents ADR 0017's `--record-as` workflow and warns that unparameterized fill/type inputs
+  remain literal script content.
 - Provider-backed integration scenarios cover the public daemon route, and live iOS and Android runs
   prove the saved artifact and post-save session behavior on real backends.

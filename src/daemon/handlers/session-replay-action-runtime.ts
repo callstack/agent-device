@@ -9,6 +9,8 @@ import {
 } from '../../contracts/gesture-normalization.ts';
 import { buildDisplayPositionals } from '../session-event-action.ts';
 import { appendReplayTraceEvent } from './session-replay-trace.ts';
+import { inferFillText } from '../action-utils.ts';
+import { readRecordedInputVariableName } from '../../replay/recorded-input.ts';
 
 type ReplayBaseRequest = Omit<DaemonRequest, 'command' | 'positionals'>;
 
@@ -50,6 +52,7 @@ export async function invokeReplayAction(params: {
       req,
       sessionName,
       resolved,
+      sourceAction: action,
       scope,
       line,
       step,
@@ -107,13 +110,19 @@ async function invokeResolvedReplayAction(params: {
   req: DaemonRequest;
   sessionName: string;
   resolved: SessionAction;
+  sourceAction: SessionAction;
   scope: ReplayVarScope;
   line: number;
   step: number;
   invoke: DaemonInvokeFn;
 }): Promise<DaemonResponse> {
-  const { req, sessionName, resolved, invoke } = params;
+  const { req, sessionName, resolved, sourceAction, invoke } = params;
   const flags = buildReplayActionFlags(req.flags, resolved.flags);
+  const recordedInputVariable =
+    sourceAction.command === 'fill'
+      ? readRecordedInputVariableName(inferFillText(sourceAction))
+      : undefined;
+  if (recordedInputVariable) flags.recordAs = recordedInputVariable;
   const baseReq: ReplayBaseRequest = {
     token: req.token,
     session: sessionName,

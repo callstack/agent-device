@@ -125,6 +125,9 @@ const fillFields = {
   target: requiredField(interactionTargetField()),
   text: requiredField(stringField('Text to enter into the target.')),
   delayMs: integerField('Delay between typed characters.', { min: 0 }),
+  recordAs: stringField(
+    'When script recording is armed, send text to the live app but publish it as ${VAR}. Use an uppercase replay variable name such as PASSWORD.',
+  ),
   ...selectorSnapshotFields(),
   ...postActionObservationFields('fill'),
 };

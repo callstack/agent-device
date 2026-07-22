@@ -235,7 +235,11 @@ Reusable open-to-destination scripts:
     agent-device wait 'role="heading" label="Screen X"'
     agent-device session save-script
   session save-script [path] [--force] publishes the sole recorded open through the destination guard, omits close, and leaves the session active. The guard is a selector wait on a labeled or id-bearing landmark: its recorded identity is captured while armed, and replay verifies that identity after the wait's selector resolves, so a reshuffled screen with the same label elsewhere fails closed instead of false-passing. A duration wait, wait stable, wait @ref, or a selector wait on an unlabeled element is not a destination guard. A second successful open aborts publication; start a fresh session to author again.
-  Recorded fill/type inputs are written literally to the .ad file. Do not record passwords, tokens, or other secrets; use pre-authenticated test state or non-secret fixture credentials until parameterized input authoring is available.
+  Unparameterized fill/type inputs are literal .ad script content. For a sensitive fill, arm recording first, keep the live value in an environment variable, and name its replay placeholder explicitly:
+    export AD_VAR_PASSWORD='<secret>'
+    agent-device fill 'id="password"' "$AD_VAR_PASSWORD" --record-as PASSWORD
+  The live app receives the value, while recording state and the published script contain only \${PASSWORD}. Reuse the same name for repeated values and choose distinct names for distinct inputs. --record-as accepts uppercase replay variable names, is fill-only, requires an armed recording, and cannot be combined with --no-record.
+  Publish with session save-script, then replay with AD_VAR_PASSWORD still set or pass --env PASSWORD=<value>. A missing value fails before that fill runs. Do not record passwords, tokens, or other secrets without --record-as; their literal text will be written to the .ad target.
 
 Snapshots and refs:
   snapshot reads visible state. snapshot -i gets current interactive refs only; it is the fast path when the next step is an interaction.

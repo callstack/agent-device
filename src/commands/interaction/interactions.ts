@@ -88,6 +88,7 @@ export const interactionCliReaders = {
       target: targetInputFromClientTarget(decoded.target),
       text: decoded.text,
       delayMs: flags.delayMs,
+      recordAs: flags.recordAs,
       verify: flags.verify,
     };
   },

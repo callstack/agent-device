@@ -18,6 +18,7 @@
 | [0014 Session Ref-Frame Lifetime](0014-session-ref-frame-lifetime.md) | ref authorization epochs, complete/partial issuance, pre-side-effect expiration, replay/batch compatibility, and cross-platform stale-mutation policy |
 | [0015 Direct Maestro Compatibility Engine](0015-direct-maestro-engine.md) | Maestro YAML parsing/execution, compatibility observation policy, conformance, performance gates, gesture integration |
 | [0016 Active-Session Script Publication](0016-active-session-script-publication.md) | publishing an armed open-to-destination `.ad` script without closing its live session |
+| [0017 Parameterized Recorded Inputs](0017-parameterized-recorded-inputs.md) | safely authoring sensitive fill inputs as `${VAR}` placeholders across recording, replay, and repair |
 
 ADRs record *why*; the registries and gates they describe are the living source of truth — when
 prose and a registry disagree, the registry wins and the ADR needs a follow-up.

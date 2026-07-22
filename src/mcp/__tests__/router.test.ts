@@ -28,6 +28,7 @@ test('MCP exposes every automatable CLI command as a structured direct tool', as
     .properties;
   assert.ok(!('positionals' in fillProperties));
   assert.ok('target' in fillProperties);
+  assert.ok('recordAs' in fillProperties);
 
   const batchTool = (response.result as { tools: Array<Record<string, unknown>> }).tools.find(
     (tool) => tool.name === 'batch',

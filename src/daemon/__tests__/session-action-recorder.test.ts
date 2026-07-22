@@ -86,3 +86,50 @@ test('--no-record still takes precedence over an observation-only action, repair
   expect(action).toBeUndefined();
   expect(session.actions).toHaveLength(0);
 });
+
+test('parameterized fills keep literals out of recording state with deterministic placeholders', () => {
+  const session = makeIosSession('default');
+  const password = 'literal-password-1348';
+  const token = 'literal-token-1348';
+  const passwordEntry = {
+    command: 'fill',
+    positionals: ['id="password"', password],
+    flags: { recordAs: 'PASSWORD' },
+    result: {
+      text: password,
+      message: `Filled ${password}`,
+      selectorChain: ['id="password"', `value="${password}" editable=true`],
+      settle: { diff: `value=${password}` },
+    },
+    targetEvidence: {
+      role: 'textinput',
+      label: `Current value ${password}`,
+      ancestry: [{ role: 'form', label: `Credential ${password}` }],
+      sibling: 0,
+      viewportOrder: 0,
+      verification: 'verified' as const,
+    },
+  };
+
+  recordActionEntry(session, passwordEntry);
+  recordActionEntry(session, passwordEntry);
+  recordActionEntry(session, {
+    command: 'fill',
+    positionals: ['id="token"', token],
+    flags: { recordAs: 'API_TOKEN' },
+    result: { text: token, message: `Filled ${token}` },
+  });
+
+  expect(session.actions.map((action) => action.positionals.at(-1))).toEqual([
+    '${PASSWORD}',
+    '${PASSWORD}',
+    '${API_TOKEN}',
+  ]);
+  const serialized = JSON.stringify(session.actions);
+  expect(serialized).not.toContain(password);
+  expect(serialized).not.toContain(token);
+  expect(serialized).toContain('value=${PASSWORD}');
+  expect(session.actions[0]?.targetEvidence?.label).toBe('Current value ${PASSWORD}');
+  expect(session.actions[0]?.targetEvidence?.ancestry[0]?.label).toBe('Credential ${PASSWORD}');
+  expect(session.actions[0]?.result?.selectorChain).toEqual(['id="password"']);
+});

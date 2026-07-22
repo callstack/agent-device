@@ -38,3 +38,14 @@ test('scroll reader rejects a @ref in the direction slot with a grammar hint (#1
     expect(appError.details?.hint).toMatch(/no @ref or selector/i);
   }
 });
+
+test('fill projects recordAs through the typed daemon flags', () => {
+  const request = interactionDaemonWriters.fill({
+    selector: 'id="password"',
+    text: 'live-secret',
+    recordAs: 'PASSWORD',
+  });
+
+  expect(request.positionals).toEqual(['id="password"', 'live-secret']);
+  expect(request.options.recordAs).toBe('PASSWORD');
+});
