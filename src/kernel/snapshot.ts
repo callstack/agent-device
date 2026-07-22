@@ -66,9 +66,28 @@ export type RawSnapshotNode = {
   hiddenContentBelow?: boolean;
   interactionBlocked?: 'covered';
   presentationHints?: string[];
-  /** Android: node is inside a status-bar/navigation-bar window (see `systemChrome` in ui-hierarchy.ts). */
+  /**
+   * INTERNAL. Android status-bar/navigation-bar provenance, stamped by
+   * `walkUiHierarchyNode` for the chrome classifiers. Never part of the public
+   * CLI/MCP node contract — `publicSnapshotNodes` strips it at serialization.
+   */
   systemChrome?: boolean;
 };
+
+/**
+ * Projects captured nodes onto the published contract by dropping internal-only
+ * fields. Mirrors `publicSnapshotCaptureAnnotations`, which does the same for
+ * capture annotations: internal derivations stay out of CLI/SDK/MCP payloads
+ * rather than every consumer having to know which properties are private.
+ */
+export function publicSnapshotNodes<T extends { systemChrome?: boolean }>(nodes: T[]): T[] {
+  if (!nodes.some((node) => node.systemChrome !== undefined)) return nodes;
+  return nodes.map((node) => {
+    if (node.systemChrome === undefined) return node;
+    const { systemChrome: _systemChrome, ...published } = node;
+    return published as T;
+  });
+}
 
 export type HiddenContentHint = {
   hiddenContentAbove?: true;

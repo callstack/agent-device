@@ -192,3 +192,24 @@ test('serializeSnapshotResult includes snapshot diagnostics', () => {
     snapshotDiagnostics,
   });
 });
+
+test('serializeSnapshotResult omits internal systemChrome provenance from published nodes', () => {
+  // `systemChrome` is Android status/nav-bar provenance stamped during the walk
+  // for the chrome classifiers. It must never reach CLI --json, SDK, or MCP
+  // payloads: it is a derived internal classification, and publishing it would
+  // both grow every node and imply a contract we do not want to keep.
+  const data = serializeSnapshotResult({
+    nodes: [
+      { index: 0, ref: 'e1', type: 'android.widget.TextView', label: '7:03', systemChrome: true },
+      { index: 1, ref: 'e2', type: 'android.widget.Button', label: 'Start' },
+    ],
+    truncated: false,
+  } as unknown as Parameters<typeof serializeSnapshotResult>[0]);
+
+  assert.deepEqual(data.nodes, [
+    { index: 0, ref: 'e1', type: 'android.widget.TextView', label: '7:03' },
+    { index: 1, ref: 'e2', type: 'android.widget.Button', label: 'Start' },
+  ]);
+  const serialized = JSON.stringify(data);
+  assert.equal(serialized.includes('systemChrome'), false, serialized);
+});

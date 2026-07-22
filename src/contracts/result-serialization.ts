@@ -15,6 +15,7 @@ import {
   type SnapshotCaptureAnnotations,
 } from '../snapshot-capture-annotations.ts';
 import type { PublicPlatform } from '../kernel/device.ts';
+import { publicSnapshotNodes } from '../kernel/snapshot.ts';
 import { successText, withSuccessText } from '../utils/success-text.ts';
 
 export function buildAppIdentifiers(params: {
@@ -174,7 +175,7 @@ export function serializeCloseResult(
 
 export function serializeSnapshotResult(result: CaptureSnapshotResult): Record<string, unknown> {
   return {
-    nodes: result.nodes,
+    nodes: Array.isArray(result.nodes) ? publicSnapshotNodes(result.nodes) : result.nodes,
     truncated: result.truncated,
     ...(result.appName ? { appName: result.appName } : {}),
     ...(result.appBundleId ? { appBundleId: result.appBundleId } : {}),
