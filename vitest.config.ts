@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
 
-// Tests that stub a real binary (adb/xcrun) by mutating process.env.PATH and
+// Tests that stub a real binary (adb/xcrun/npx) by mutating process.env.PATH and
 // then spawn it, so each case waits real subprocess/retry/poll time. Run at the
 // unit suite's default ~7x file parallelism they contend for CPU and their stub
 // spawns get starved past an internal budget, so production takes a generic
@@ -14,6 +14,8 @@ const SUBPROCESS_STUB_TESTS = [
   'src/platforms/android/__tests__/{app-lifecycle-install,app-lifecycle-open,device-input-state,input-actions,notifications,settings}.test.ts',
   'src/daemon/__tests__/runtime-hints.test.ts',
   'src/platforms/apple/core/__tests__/index.test.ts',
+  // Stubs npx + the package managers on PATH and spawns a real Metro dev server per case.
+  'src/__tests__/client-metro.test.ts',
 ];
 
 export default defineConfig({
@@ -44,7 +46,7 @@ export default defineConfig({
         },
       },
       {
-        // The subprocess-stub tests stub adb/xcrun by mutating process.env
+        // The subprocess-stub tests stub adb/xcrun/npx by mutating process.env
         // (PATH, AGENT_DEVICE_TEST_ARGS_FILE) and wait real subprocess/retry/poll
         // time, so the group runs serialized with per-file isolation — the same
         // execution contract the pre-split android index.test.ts aggregation
