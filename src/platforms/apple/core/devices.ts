@@ -255,6 +255,42 @@ function mapDevicectlAppleDevices(payload: DevicectlListDevicesPayload): DeviceI
   return devices;
 }
 
+function parseXctraceDeviceLine(
+  line: string,
+): { name: string; id: string; osVersion?: string } | null {
+  const match = XCTRACE_DEVICE_LINE_PATTERN.exec(line);
+  if (!match?.groups) return null;
+
+  const name = match.groups.name?.trim() ?? '';
+  const id = match.groups.idBracket?.trim() ?? match.groups.idParen?.trim() ?? '';
+  const osVersion = match.groups.osVersion?.trim();
+  if (!name || !id) return null;
+
+  return { name, id, osVersion };
+}
+
+function buildXctracePhysicalDevice(
+  name: string,
+  id: string,
+  osVersion: string | undefined,
+): DeviceInfo | null {
+  const target = resolveAppleTargetFromLabel(name);
+  if (!target) return null;
+
+  return {
+    platform: 'apple',
+    id,
+    name,
+    kind: 'device',
+    target,
+    appleOs: resolveAppleOs(target, osVersion ? [name, osVersion] : [name]),
+    // xctrace lists currently connected devices in the "Devices" section.
+    // The "Devices Offline" section is excluded above, so treating these as
+    // booted preserves the existing physical-device selection semantics.
+    booted: true,
+  };
+}
+
 export function parseXctracePhysicalAppleDevices(output: string): DeviceInfo[] {
   const devices: DeviceInfo[] = [];
   let section: string | null = null;
@@ -271,26 +307,11 @@ export function parseXctracePhysicalAppleDevices(output: string): DeviceInfo[] {
 
     if (section !== 'Devices') continue;
 
-    const deviceMatch = XCTRACE_DEVICE_LINE_PATTERN.exec(line);
-    const name = deviceMatch?.groups?.name?.trim() ?? '';
-    const id = deviceMatch?.groups?.idBracket?.trim() ?? deviceMatch?.groups?.idParen?.trim() ?? '';
-    const osVersion = deviceMatch?.groups?.osVersion?.trim();
-    if (!id || !name) continue;
-    const target = resolveAppleTargetFromLabel(name);
-    if (!target) continue;
+    const parsedLine = parseXctraceDeviceLine(line);
+    if (!parsedLine) continue;
 
-    devices.push({
-      platform: 'apple',
-      id,
-      name,
-      kind: 'device',
-      target,
-      appleOs: resolveAppleOs(target, osVersion ? [name, osVersion] : [name]),
-      // xctrace lists currently connected devices in the "Devices" section.
-      // The "Devices Offline" section is excluded above, so treating these as
-      // booted preserves the existing physical-device selection semantics.
-      booted: true,
-    });
+    const device = buildXctracePhysicalDevice(parsedLine.name, parsedLine.id, parsedLine.osVersion);
+    if (device) devices.push(device);
   }
 
   return devices;
