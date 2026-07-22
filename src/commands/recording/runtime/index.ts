@@ -1,5 +1,4 @@
-import type { AgentDeviceRuntime } from '../../../runtime-contract.ts';
-import type { BoundRuntimeCommand, RuntimeCommand } from '../../runtime-types.ts';
+import type { BoundOf, RuntimeCommand } from '../../runtime-types.ts';
 import {
   recordCommand,
   traceCommand,
@@ -14,19 +13,9 @@ export type RecordingCommands = {
   trace: RuntimeCommand<RecordingTraceCommandOptions, RecordingTraceCommandResult>;
 };
 
-export type BoundRecordingCommands = {
-  record: BoundRuntimeCommand<RecordingRecordCommandOptions, RecordingRecordCommandResult>;
-  trace: BoundRuntimeCommand<RecordingTraceCommandOptions, RecordingTraceCommandResult>;
-};
+export type BoundRecordingCommands = BoundOf<RecordingCommands>;
 
 export const recordingCommands: RecordingCommands = {
   record: recordCommand,
   trace: traceCommand,
 };
-
-export function bindRecordingCommands(runtime: AgentDeviceRuntime): BoundRecordingCommands {
-  return {
-    record: (options) => recordingCommands.record(runtime, options),
-    trace: (options) => recordingCommands.trace(runtime, options),
-  };
-}

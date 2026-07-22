@@ -13,6 +13,26 @@ export type BoundRuntimeCommand<TOptions = Record<string, unknown>, TResult = Co
   options: TOptions,
 ) => Promise<TResult>;
 
+export type BoundOf<T> = {
+  [K in keyof T]: T[K] extends RuntimeCommand<infer TOptions, infer TResult>
+    ? undefined extends TOptions
+      ? (options?: TOptions) => Promise<TResult>
+      : BoundRuntimeCommand<TOptions, TResult>
+    : never;
+};
+
+export function bindRuntimeCommands<T extends Record<string, RuntimeCommand<any, any>>>(
+  commands: T,
+  runtime: AgentDeviceRuntime,
+): BoundOf<T> {
+  return Object.fromEntries(
+    Object.entries(commands).map(([name, command]) => [
+      name,
+      (options: unknown) => command(runtime, options),
+    ]),
+  ) as BoundOf<T>;
+}
+
 export function toBackendResult(result: unknown): Record<string, unknown> | undefined {
   return result && typeof result === 'object' ? (result as Record<string, unknown>) : undefined;
 }

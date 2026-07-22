@@ -1,6 +1,6 @@
 import type { AgentDeviceRuntime } from '../runtime-contract.ts';
+import { bindRuntimeCommands } from './runtime-types.ts';
 import {
-  bindCaptureCommands,
   captureCommands,
   type BoundCaptureCommands,
   type CaptureCommands,
@@ -18,7 +18,6 @@ import {
 import {
   adminCommands,
   appCommands,
-  bindAdminCommands,
   bindAppCommands,
   type AdminCommands,
   type AppCommands,
@@ -26,19 +25,16 @@ import {
   type BoundAppCommands,
 } from './management/runtime/index.ts';
 import {
-  bindObservabilityCommands,
   diagnosticsCommands,
   type BoundObservabilityCommands,
   type DiagnosticsCommands,
 } from './observability/runtime/index.ts';
 import {
-  bindRecordingCommands,
   recordingCommands,
   type BoundRecordingCommands,
   type RecordingCommands,
 } from './recording/runtime/index.ts';
 import {
-  bindSystemCommands,
   systemCommands,
   type BoundSystemCommands,
   type SystemCommands,
@@ -84,13 +80,13 @@ export const commands: AgentDeviceCommands = {
 
 export function bindCommands(runtime: AgentDeviceRuntime): BoundAgentDeviceCommands {
   return {
-    capture: bindCaptureCommands(runtime),
+    capture: bindRuntimeCommands(captureCommands, runtime),
     selectors: bindSelectorCommands(runtime),
     interactions: bindInteractionCommands(runtime),
-    system: bindSystemCommands(runtime),
+    system: bindRuntimeCommands(systemCommands, runtime),
     apps: bindAppCommands(runtime),
-    admin: bindAdminCommands(runtime),
-    recording: bindRecordingCommands(runtime),
-    observability: bindObservabilityCommands(runtime),
+    admin: bindRuntimeCommands(adminCommands, runtime),
+    recording: bindRuntimeCommands(recordingCommands, runtime),
+    observability: bindRuntimeCommands(diagnosticsCommands, runtime),
   };
 }

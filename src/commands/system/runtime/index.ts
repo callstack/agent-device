@@ -1,5 +1,4 @@
-import type { AgentDeviceRuntime } from '../../../runtime-contract.ts';
-import type { BoundRuntimeCommand, RuntimeCommand } from '../../runtime-types.ts';
+import type { BoundOf, RuntimeCommand } from '../../runtime-types.ts';
 import {
   alertCommand,
   appSwitcherCommand,
@@ -45,19 +44,7 @@ export type SystemCommands = {
   tvRemote: RuntimeCommand<SystemTvRemoteCommandOptions, SystemTvRemoteCommandResult>;
 };
 
-export type BoundSystemCommands = {
-  back: (options?: SystemBackCommandOptions) => Promise<SystemBackCommandResult>;
-  home: (options?: SystemHomeCommandOptions) => Promise<SystemHomeCommandResult>;
-  orientation: BoundRuntimeCommand<SystemOrientationCommandOptions, SystemOrientationCommandResult>;
-  keyboard: (options?: SystemKeyboardCommandOptions) => Promise<SystemKeyboardCommandResult>;
-  clipboard: BoundRuntimeCommand<SystemClipboardCommandOptions, SystemClipboardCommandResult>;
-  settings: (options?: SystemSettingsCommandOptions) => Promise<SystemSettingsCommandResult>;
-  alert: (options?: SystemAlertCommandOptions) => Promise<SystemAlertCommandResult>;
-  appSwitcher: (
-    options?: SystemAppSwitcherCommandOptions,
-  ) => Promise<SystemAppSwitcherCommandResult>;
-  tvRemote: BoundRuntimeCommand<SystemTvRemoteCommandOptions, SystemTvRemoteCommandResult>;
-};
+export type BoundSystemCommands = BoundOf<SystemCommands>;
 
 export const systemCommands: SystemCommands = {
   back: backCommand,
@@ -70,17 +57,3 @@ export const systemCommands: SystemCommands = {
   appSwitcher: appSwitcherCommand,
   tvRemote: tvRemoteCommand,
 };
-
-export function bindSystemCommands(runtime: AgentDeviceRuntime): BoundSystemCommands {
-  return {
-    back: (options) => systemCommands.back(runtime, options),
-    home: (options) => systemCommands.home(runtime, options),
-    orientation: (options) => systemCommands.orientation(runtime, options),
-    keyboard: (options) => systemCommands.keyboard(runtime, options),
-    clipboard: (options) => systemCommands.clipboard(runtime, options),
-    settings: (options) => systemCommands.settings(runtime, options),
-    alert: (options) => systemCommands.alert(runtime, options),
-    appSwitcher: (options) => systemCommands.appSwitcher(runtime, options),
-    tvRemote: (options) => systemCommands.tvRemote(runtime, options),
-  };
-}

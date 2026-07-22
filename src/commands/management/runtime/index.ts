@@ -1,5 +1,5 @@
 import type { AgentDeviceRuntime } from '../../../runtime-contract.ts';
-import type { BoundRuntimeCommand, RuntimeCommand } from '../../runtime-types.ts';
+import { bindRuntimeCommands, type BoundOf, type RuntimeCommand } from '../../runtime-types.ts';
 import { resolveAppsFilter } from '../app-inventory-contract.ts';
 import {
   bootCommand,
@@ -61,26 +61,9 @@ export type AdminCommands = {
   >;
 };
 
-export type BoundAppCommands = {
-  open: BoundRuntimeCommand<OpenAppCommandOptions, OpenAppCommandResult>;
-  close: (options?: CloseAppCommandOptions) => Promise<CloseAppCommandResult>;
-  list: (options?: ListAppsCommandOptions) => Promise<ListAppsCommandResult>;
-  state: BoundRuntimeCommand<GetAppStateCommandOptions, GetAppStateCommandResult>;
-  push: BoundRuntimeCommand<PushAppCommandOptions, PushAppCommandResult>;
-  triggerEvent: BoundRuntimeCommand<TriggerAppEventCommandOptions, TriggerAppEventCommandResult>;
-};
+export type BoundAppCommands = BoundOf<AppCommands>;
 
-export type BoundAdminCommands = {
-  devices: (options?: AdminDevicesCommandOptions) => Promise<AdminDevicesCommandResult>;
-  boot: (options?: AdminBootCommandOptions) => Promise<AdminBootCommandResult>;
-  shutdown: (options?: AdminShutdownCommandOptions) => Promise<AdminShutdownCommandResult>;
-  install: BoundRuntimeCommand<AdminInstallCommandOptions, AdminInstallCommandResult>;
-  reinstall: BoundRuntimeCommand<AdminReinstallCommandOptions, AdminInstallCommandResult>;
-  installFromSource: BoundRuntimeCommand<
-    AdminInstallFromSourceCommandOptions,
-    AdminInstallCommandResult
-  >;
-};
+export type BoundAdminCommands = BoundOf<AdminCommands>;
 
 export const appCommands: AppCommands = {
   open: openAppCommand,
@@ -102,26 +85,11 @@ export const adminCommands: AdminCommands = {
 
 export function bindAppCommands(runtime: AgentDeviceRuntime): BoundAppCommands {
   return {
-    open: (options) => appCommands.open(runtime, options),
-    close: (options) => appCommands.close(runtime, options),
+    ...bindRuntimeCommands(appCommands, runtime),
     list: (options = {}) =>
       appCommands.list(runtime, {
         ...options,
         filter: resolveAppsFilter(options.filter),
       }),
-    state: (options) => appCommands.state(runtime, options),
-    push: (options) => appCommands.push(runtime, options),
-    triggerEvent: (options) => appCommands.triggerEvent(runtime, options),
-  };
-}
-
-export function bindAdminCommands(runtime: AgentDeviceRuntime): BoundAdminCommands {
-  return {
-    devices: (options) => adminCommands.devices(runtime, options),
-    boot: (options) => adminCommands.boot(runtime, options),
-    shutdown: (options) => adminCommands.shutdown(runtime, options),
-    install: (options) => adminCommands.install(runtime, options),
-    reinstall: (options) => adminCommands.reinstall(runtime, options),
-    installFromSource: (options) => adminCommands.installFromSource(runtime, options),
   };
 }
