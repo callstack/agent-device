@@ -20,17 +20,24 @@ const repoRoot = path.resolve(here, '../..');
 const fixtureConfig = path.join(here, '__fixtures__', 'hermetic-env-guard', 'vitest.config.ts');
 // The repo-local vitest CLI, invoked through node so no PATH/npx lookup is involved.
 const vitestCli = path.join(repoRoot, 'node_modules', 'vitest', 'vitest.mjs');
-const PROBE_TIMEOUT_MS = 60_000;
+// The child (probe) timeout must fire strictly before the enclosing test timeout: a hung
+// probe is then process-group-killed by runCmd (see detached below) and reaped here,
+// rather than the parent test timing out first and leaving the vitest worker tree orphaned.
+const PROBE_TIMEOUT_MS = 20_000;
+const TEST_TIMEOUT_MS = PROBE_TIMEOUT_MS * 2;
 
 async function runProbe(
   extraEnv: Record<string, string>,
 ): Promise<{ exitCode: number; output: string }> {
   // AGENTS.md hard rule: TypeScript process execution goes through src/utils/exec.ts,
-  // not raw spawn. allowFailure keeps the negative control's non-zero exit as data.
+  // not raw spawn. detached:true makes runCmd's timeout kill the whole process group
+  // (the vitest child *and* its worker descendants), not just the direct child;
+  // allowFailure keeps the negative control's non-zero exit as data rather than throwing.
   const result = await runCmd(process.execPath, [vitestCli, 'run', '--config', fixtureConfig], {
     cwd: repoRoot,
     env: { ...process.env, ...extraEnv },
     allowFailure: true,
+    detached: true,
     timeoutMs: PROBE_TIMEOUT_MS,
   });
   return { exitCode: result.exitCode, output: `${result.stdout}${result.stderr}` };
@@ -51,35 +58,39 @@ test('every vitest project wires the hermetic-env setup', () => {
   }
 });
 
-test('a wired vitest child scrubs ambient daemon env before tests run', async () => {
-  // Both daemon vars set, plus a control var the setup must not touch — its
-  // presence in the probe proves the child inherited the injected environment,
-  // so a scrubbed daemon var is the setup working, not an env that never arrived.
-  const dirtyEnv = {
-    AGENT_DEVICE_DAEMON_BASE_URL: 'https://guard.example.test',
-    AGENT_DEVICE_DAEMON_AUTH_TOKEN: 'hermetic-guard-token',
-    HERMETIC_GUARD_CONTROL: 'present',
-  };
+test(
+  'a wired vitest child scrubs ambient daemon env before tests run',
+  async () => {
+    // Both daemon vars set, plus a control var the setup must not touch — its
+    // presence in the probe proves the child inherited the injected environment,
+    // so a scrubbed daemon var is the setup working, not an env that never arrived.
+    const dirtyEnv = {
+      AGENT_DEVICE_DAEMON_BASE_URL: 'https://guard.example.test',
+      AGENT_DEVICE_DAEMON_AUTH_TOKEN: 'hermetic-guard-token',
+      HERMETIC_GUARD_CONTROL: 'present',
+    };
 
-  // Run the wired probe and the unwired negative control concurrently: each is a
-  // real vitest cold start (~1.4s), so serial runs would exceed the unit
-  // wall-clock budget for no reason — they are independent processes.
-  const [wired, unwired] = await Promise.all([
-    runProbe(dirtyEnv),
-    runProbe({ ...dirtyEnv, HERMETIC_GUARD_DISABLE_SETUP: '1' }),
-  ]);
+    // Run the wired probe and the unwired negative control concurrently: each is a
+    // real vitest cold start (~1.4s), so serial runs would exceed the unit
+    // wall-clock budget for no reason — they are independent processes.
+    const [wired, unwired] = await Promise.all([
+      runProbe(dirtyEnv),
+      runProbe({ ...dirtyEnv, HERMETIC_GUARD_DISABLE_SETUP: '1' }),
+    ]);
 
-  assert.equal(
-    wired.exitCode,
-    0,
-    `expected the wired probe to pass with the vars scrubbed:\n${wired.output}`,
-  );
+    assert.equal(
+      wired.exitCode,
+      0,
+      `expected the wired probe to pass with the vars scrubbed:\n${wired.output}`,
+    );
 
-  // Negative control: same vars, setup NOT wired — the probe must fail, proving
-  // it genuinely detects the leak (so the pass above is the setup, not a no-op).
-  assert.notEqual(
-    unwired.exitCode,
-    0,
-    `expected the probe to fail when the setup is not wired (leak must be detectable):\n${unwired.output}`,
-  );
-});
+    // Negative control: same vars, setup NOT wired — the probe must fail, proving
+    // it genuinely detects the leak (so the pass above is the setup, not a no-op).
+    assert.notEqual(
+      unwired.exitCode,
+      0,
+      `expected the probe to fail when the setup is not wired (leak must be detectable):\n${unwired.output}`,
+    );
+  },
+  TEST_TIMEOUT_MS,
+);
