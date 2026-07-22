@@ -21,7 +21,7 @@ import { maybeBuildAndroidSnapshotTimeoutFailure } from './android-snapshot-time
 import { summarizeSnapshotDiagnostics } from '../snapshot-diagnostics.ts';
 import { nextSnapshotGeneration } from './session-snapshot.ts';
 import { activateCompleteRefFrame } from './ref-frame.ts';
-import { publicAndroidSnapshotNodes } from '../contracts/android-system-chrome.ts';
+import { stripAndroidSystemChromeProvenance } from '../contracts/android-system-chrome.ts';
 
 export async function dispatchSnapshotViaRuntime(params: {
   req: DaemonRequest;
@@ -48,7 +48,11 @@ export async function dispatchSnapshotViaRuntime(params: {
       // capture above already stored the next session via setRecord, so the
       // store holds the generation these refs were minted from.
       const refsGeneration = params.sessionStore.get(sessionName)?.snapshotGeneration;
-      const publicResult = { ...result, nodes: publicAndroidSnapshotNodes(result.nodes) };
+      // ADR 0014: retain provenance in the immutable operational/ref-frame tree;
+      // project only the published copy so settle and replay keep the full evidence.
+      const publicNodes = stripAndroidSystemChromeProvenance(result.nodes);
+      const publicResult =
+        publicNodes === result.nodes ? result : { ...result, nodes: publicNodes };
       return {
         data: refsGeneration === undefined ? publicResult : { ...publicResult, refsGeneration },
         record: {

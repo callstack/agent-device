@@ -1,4 +1,4 @@
-import type { RawSnapshotNode, SnapshotNode } from '../kernel/snapshot.ts';
+import type { SnapshotNode } from '../kernel/snapshot.ts';
 
 /**
  * Android status-bar/navigation-bar chrome identity, shared by the settle-chrome
@@ -27,19 +27,16 @@ export type AndroidSystemChromeProvenance = {
   systemChrome?: true;
 };
 
-export type AndroidSystemChromeRawSnapshotNode = RawSnapshotNode & AndroidSystemChromeProvenance;
-
-export function hasAndroidSystemChromeProvenance(node: RawSnapshotNode): boolean {
-  return (node as AndroidSystemChromeRawSnapshotNode).systemChrome === true;
+export function hasAndroidSystemChromeProvenance(value: object): value is { systemChrome: true } {
+  return 'systemChrome' in value && value.systemChrome === true;
 }
 
-/** Drops Android-internal provenance before snapshot nodes cross a public boundary. */
-export function publicAndroidSnapshotNodes(nodes: SnapshotNode[]): SnapshotNode[] {
-  if (!nodes.some((node) => Object.hasOwn(node, 'systemChrome'))) return nodes;
+/** Drops Android-internal provenance at the daemon's public snapshot seam. */
+export function stripAndroidSystemChromeProvenance(nodes: SnapshotNode[]): SnapshotNode[] {
+  if (!nodes.some(hasAndroidSystemChromeProvenance)) return nodes;
   return nodes.map((node) => {
-    if (!Object.hasOwn(node, 'systemChrome')) return node;
-    const { systemChrome: _systemChrome, ...published } = node as SnapshotNode &
-      AndroidSystemChromeProvenance;
+    if (!hasAndroidSystemChromeProvenance(node)) return node;
+    const { systemChrome: _systemChrome, ...published } = node;
     return published;
   });
 }

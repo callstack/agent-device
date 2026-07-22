@@ -16,6 +16,17 @@ import { createProviderScenarioTempPath, withProviderScenarioResource } from './
 
 type AndroidSettingsWorld = Awaited<ReturnType<typeof createAndroidSettingsWorld>>;
 
+const ANDROID_SYSTEM_SURFACE_XML = `<hierarchy>
+  <node class="android.widget.FrameLayout" package="com.android.systemui" window-type="3" window-active="true" window-focused="true" bounds="[0,0][390,844]">
+    <node class="android.widget.FrameLayout" package="com.android.systemui" resource-id="com.android.systemui:id/status_bar_launch_animation_container" bounds="[0,0][390,80]">
+      <node class="android.widget.TextView" package="com.android.systemui" text="7:03" bounds="[10,10][80,60]"/>
+    </node>
+    <node class="android.widget.SeekBar" package="com.android.systemui" text="Display brightness" clickable="true" bounds="[20,120][370,170]"/>
+    <node class="android.widget.Button" package="com.android.systemui" text="Wi-Fi" clickable="true" bounds="[20,200][180,280]"/>
+    <node class="android.widget.Button" package="com.android.systemui" text="Bluetooth" clickable="true" bounds="[200,200][370,280]"/>
+  </node>
+</hierarchy>`;
+
 test('Provider-backed integration Android Settings flow uses scripted ADB provider', async () => {
   await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {
     const client = world.daemon.client();
@@ -25,6 +36,25 @@ test('Provider-backed integration Android Settings flow uses scripted ADB provid
     assertAndroidProviderContract(world);
   });
 }, 15_000);
+
+test('Provider-backed Android snapshot keeps chrome provenance off the public response', async () => {
+  await withProviderScenarioResource(
+    async () => await createAndroidSettingsWorld({ snapshotXml: () => ANDROID_SYSTEM_SURFACE_XML }),
+    async (world) => {
+      const client = world.daemon.client();
+      await client.apps.open({ app: 'settings', ...world.selection });
+
+      const response = await world.daemon.callCommand('snapshot', [], world.selection);
+      const snapshot = assertRpcOk<{ nodes: Array<{ label?: string }> }>(response);
+
+      assert.equal(
+        snapshot.nodes.some((node) => node.label === 'Display brightness'),
+        true,
+      );
+      assert.equal(JSON.stringify(snapshot).includes('systemChrome'), false);
+    },
+  );
+});
 
 test('Provider-backed integration Android text provider handles Unicode without shell input text', async () => {
   await withProviderScenarioResource(

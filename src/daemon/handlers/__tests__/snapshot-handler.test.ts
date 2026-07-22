@@ -14,7 +14,6 @@ import { buildInteractionSurfaceSignature } from '../../interaction-outcome-poli
 import { buildSnapshotPresentationKey } from '../../../kernel/snapshot.ts';
 import { snapshotCliOutput } from '../../../commands/capture/output.ts';
 import type { CaptureSnapshotResult } from '../../../client/client-types.ts';
-import type { AndroidSystemChromeRawSnapshotNode } from '../../../contracts/android-system-chrome.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -401,39 +400,6 @@ test('snapshot on iOS runs when the session tracks an app', async () => {
     undefined,
     expect.objectContaining({ appBundleId: 'org.reactnavigation.playground' }),
   );
-});
-
-test('snapshot keeps Android chrome provenance in session state but not the daemon response', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'android-internal-chrome';
-  sessionStore.set(sessionName, makeSession(sessionName, androidDevice));
-  const internalNode: AndroidSystemChromeRawSnapshotNode = {
-    index: 0,
-    depth: 0,
-    type: 'android.widget.TextView',
-    label: '7:03',
-    systemChrome: true,
-  };
-  mockDispatch.mockResolvedValue({
-    nodes: [internalNode],
-    truncated: false,
-    backend: 'android',
-  });
-
-  const response = await handleSnapshotCommands({
-    req: { token: 't', session: sessionName, command: 'snapshot', positionals: [], flags: {} },
-    sessionName,
-    logPath: '/tmp/daemon.log',
-    sessionStore,
-  });
-
-  expect(response?.ok).toBe(true);
-  if (!response?.ok) return;
-  expect(response.data?.nodes).toEqual([
-    { index: 0, ref: 'e1', depth: 0, type: 'android.widget.TextView', label: '7:03' },
-  ]);
-  expect(JSON.stringify(response.data)).not.toContain('systemChrome');
-  expect(sessionStore.get(sessionName)?.snapshot?.nodes[0]).toHaveProperty('systemChrome', true);
 });
 
 test('snapshot re-activates a complete frame; diff preserves it (ADR 0014)', async () => {

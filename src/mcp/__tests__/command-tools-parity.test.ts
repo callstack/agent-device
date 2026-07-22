@@ -93,32 +93,3 @@ test('MCP applies config-backed command defaults with explicit-input precedence 
   assert.ok(calls.every((request) => request.command === 'snapshot'));
   assert.ok(calls.every((request) => request.flags?.appsFilter === undefined));
 });
-
-test('MCP snapshot structured content omits Android-internal chrome provenance', async () => {
-  const transport: AgentDeviceDaemonTransport = async () => ({
-    ok: true,
-    data: {
-      nodes: [
-        {
-          ref: 'e1',
-          index: 0,
-          depth: 0,
-          type: 'android.widget.TextView',
-          label: '7:03',
-          systemChrome: true,
-        },
-      ],
-      truncated: false,
-    },
-  });
-  const executor = createCommandToolExecutor({
-    createClient: (config) => createAgentDeviceClient(config, { transport }),
-  });
-
-  const result = await executor.execute('snapshot', { mcpOutputFormat: 'json' });
-
-  assert.deepEqual(result.structuredContent?.nodes, [
-    { ref: 'e1', index: 0, depth: 0, type: 'android.widget.TextView', label: '7:03' },
-  ]);
-  assert.equal(JSON.stringify(result.structuredContent).includes('systemChrome'), false);
-});

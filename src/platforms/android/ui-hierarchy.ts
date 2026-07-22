@@ -3,15 +3,18 @@ import { parseBounds } from '../../utils/bounds.ts';
 import { isScrollableType } from '../../utils/scrollable.ts';
 import { intersectArea } from '../../utils/screenshot-geometry.ts';
 import {
+  type AndroidSystemChromeProvenance,
   isAndroidSystemChromeWindowResourceId,
-  type AndroidSystemChromeRawSnapshotNode,
 } from '../../contracts/android-system-chrome.ts';
+
+type AndroidRawSnapshotNode = RawSnapshotNode & AndroidSystemChromeProvenance;
 
 export type AndroidSnapshotAnalysis = {
   rawNodeCount: number;
   maxDepth: number;
 };
 
+/** Parsed node metadata plus status/navigation subtree provenance when present. */
 export type AndroidUiNodeMetadata = {
   text: string | null;
   desc: string | null;
@@ -36,9 +39,7 @@ export type AndroidUiNodeMetadata = {
   windowActive?: boolean;
   windowFocused?: boolean;
   windowRect?: Rect;
-  /** Inside a status-bar/navigation-bar container (tracked by `androidUiNodes`). */
-  systemChrome?: true;
-};
+} & AndroidSystemChromeProvenance;
 
 /**
  * Membership of the status-bar/nav-bar subtree over a `<node>` token stream: the
@@ -104,14 +105,14 @@ export function parseUiHierarchy(
 }
 
 export type AndroidBuiltSnapshot = {
-  nodes: AndroidSystemChromeRawSnapshotNode[];
+  nodes: AndroidRawSnapshotNode[];
   sourceNodes: AndroidUiHierarchy[];
   truncated?: boolean;
   analysis: AndroidSnapshotAnalysis;
 };
 
 type AndroidSnapshotBuildState = {
-  nodes: AndroidSystemChromeRawSnapshotNode[];
+  nodes: AndroidRawSnapshotNode[];
   sourceNodes: AndroidUiHierarchy[];
   maxNodes?: number;
   maxDepth: number;
@@ -211,8 +212,8 @@ function appendAndroidSnapshotNode(
   state: AndroidSnapshotBuildState,
   node: AndroidNode,
   depth: number,
-  parentIndex?: number,
-  systemChrome?: boolean,
+  parentIndex: number | undefined,
+  systemChrome: boolean,
 ): number {
   const currentIndex = state.nodes.length;
   state.sourceNodes.push(node);
