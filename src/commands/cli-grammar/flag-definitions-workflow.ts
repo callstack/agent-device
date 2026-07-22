@@ -40,14 +40,6 @@ export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
       'See agent-device help maestro for commands and boundaries',
   },
   {
-    key: 'replayExportFormat',
-    names: ['--format'],
-    type: 'enum',
-    enumValues: ['maestro'],
-    usageLabel: '--format maestro',
-    usageDescription: 'Replay export: output format',
-  },
-  {
     key: 'replayEnv',
     names: ['-e', '--env'],
     type: 'string',

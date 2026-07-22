@@ -30,7 +30,7 @@ Public subpath API exposed for Node consumers:
 - `agent-device/contracts`
   - `centerOfRect(rect)`
   - `defaultHintForCode(code)`, `normalizeError(error)`
-  - types: `DaemonError`, `DaemonInstallSource`, `DaemonRequest`, `DaemonResponse`, `DaemonResponseData`, `JsonRpcId`, `JsonRpcRequestEnvelope`, `LeaseAllocatePayload`, `LeaseBackend`, `LeaseHeartbeatPayload`, `LeaseReleasePayload`, `SessionRuntimeHints`
+  - types: `DaemonError`, `DaemonInstallSource`, `DaemonRequest`, `DaemonResponse`, `DaemonResponseData`, `JsonRpcId`, `JsonRpcRequestEnvelope`, `LeaseBackend`, `SessionRuntimeHints`
 - `agent-device/selectors`
   - `parseSelectorChain(expression)`
   - `tryParseSelectorChain(expression)`

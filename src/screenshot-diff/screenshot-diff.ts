@@ -38,7 +38,6 @@ export type ScreenshotDiffResult = {
 export type ScreenshotDiffOptions = {
   threshold?: number;
   outputPath?: string;
-  maxRegions?: number;
   maxPixels?: number;
 };
 
@@ -109,7 +108,6 @@ export async function compareScreenshots(
           current,
           totalPixels,
           differentPixels,
-          maxRegions: options.maxRegions,
         })
       : [];
 

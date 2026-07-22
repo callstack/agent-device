@@ -58,8 +58,6 @@ export const COMMON_COMMAND_SUPPORTED_FLAG_KEYS = flagKeys(
   'leaseId',
   'leaseBackend',
   'sessionLock',
-  'sessionLocked',
-  'sessionLockConflicts',
   'platform',
   'target',
   'device',

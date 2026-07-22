@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import { CLOUD_WEBDRIVER_PROVIDERS } from '../../cloud-webdriver/providers.ts';
 import type { CloudWebDriverKnownProviderName } from '../../cloud-webdriver/providers.ts';
 import type { RemoteConfigProfile } from '../../remote/remote-config-schema.ts';
@@ -9,6 +8,7 @@ import type { EnvMap } from '../../utils/env-map.ts';
 import { readMetroProfileFields } from './profile-fields.ts';
 import { persistAndResolveGeneratedProfile } from './generated-config.ts';
 import { resolveRequestedLeaseBackend } from '../commands/connection-runtime.ts';
+import { buildConnectClientId } from './client-id.ts';
 
 export function resolveCloudWebDriverConnectProfile(options: {
   provider: CloudWebDriverKnownProviderName;
@@ -18,7 +18,7 @@ export function resolveCloudWebDriverConnectProfile(options: {
   env?: EnvMap;
 }): { flags: CliFlags; remoteConfigPath: string } {
   const providerConfig = requireConnectProfileBuilder(options.provider)(options);
-  const clientId = buildCloudWebDriverClientId(
+  const clientId = buildConnectClientId(
     options.provider,
     options.stateDir,
     options.flags.session,
@@ -174,17 +174,4 @@ function readAwsProfileValue(
 ): string | undefined {
   if (flagValue) return flagValue;
   return envNames.map((name) => env?.[name]).find((value): value is string => Boolean(value));
-}
-
-function buildCloudWebDriverClientId(
-  provider: CloudWebDriverKnownProviderName,
-  stateDir: string,
-  session: string | undefined,
-  device: string | undefined,
-): string {
-  return crypto
-    .createHash('sha256')
-    .update(`${provider}\0${stateDir}\0${session ?? ''}\0${device ?? ''}`)
-    .digest('hex')
-    .slice(0, 16);
 }

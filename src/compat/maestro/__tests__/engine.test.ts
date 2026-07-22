@@ -399,7 +399,7 @@ describe('executeMaestroProgram', () => {
     );
   });
 
-  test('uses injected timing and deterministic when.true grammar', async () => {
+  test('uses the default Maestro timing policy and deterministic when.true grammar', async () => {
     const controller = new AbortController();
     const observe = vi.fn(
       async ({ generation, condition }: Parameters<MaestroRuntimePort['observe']>[0]) => ({
@@ -437,16 +437,12 @@ describe('executeMaestroProgram', () => {
 
     await executeMaestroProgram(program, port, {
       platform: 'ios',
-      timing: {
-        assertVisibleTimeoutMs: 101,
-        assertNotVisibleTimeoutMs: 202,
-        extendedWaitUntilTimeoutMs: 303,
-        runFlowConditionTimeoutMs: 404,
-      },
       signal: controller.signal,
     });
 
-    expect(observe.mock.calls.map(([request]) => request.timeoutMs)).toEqual([101, 202, 303, 404]);
+    expect(observe.mock.calls.map(([request]) => request.timeoutMs)).toEqual([
+      17_000, 17_000, 17_000, 7_000,
+    ]);
     expect(observe.mock.calls[0]?.[0].signal).toBe(controller.signal);
     expect(port.execute).toHaveBeenCalledWith(
       expect.objectContaining({

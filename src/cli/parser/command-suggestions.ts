@@ -150,9 +150,17 @@ const POSITIONAL_APP_FLAG_GUESSES = new Set([
   '--pkg',
 ]);
 
+// `--session-locked` and `--session-lock-conflicts` are no longer flags; point
+// callers at the single `--session-lock reject|strip` flag instead of a bare
+// "Unknown flag" error.
+const REMOVED_SESSION_LOCK_ALIASES = new Set(['--session-locked', '--session-lock-conflicts']);
+
 export function formatUnknownFlagMessage(token: string): string {
   if (POSITIONAL_APP_FLAG_GUESSES.has(token.toLowerCase())) {
     return `Unknown flag: ${token}. The app or bundle id is a positional argument, e.g. ${OPEN_RELAUNCH_EXAMPLE}.`;
+  }
+  if (REMOVED_SESSION_LOCK_ALIASES.has(token.toLowerCase())) {
+    return `Unknown flag: ${token}. Use --session-lock reject|strip instead.`;
   }
   return `Unknown flag: ${token}`;
 }

@@ -68,19 +68,3 @@ export const DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY = {
 export const MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS =
   MAESTRO_COMPATIBILITY_PRESETS.observation.pollIntervalMs *
   MAESTRO_COMPATIBILITY_PRESETS.observation.defaultSettleAttempts;
-
-export function resolveMaestroTimingPolicy(
-  overrides: Partial<MaestroCompatibilityTimingPolicy> = {},
-): MaestroCompatibilityTimingPolicy {
-  const policy = { ...DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY, ...overrides };
-  for (const [name, value] of Object.entries(policy)) {
-    if (!Number.isInteger(value) || value < 0) {
-      throw new AppError(
-        'INVALID_ARGS',
-        `Maestro timing policy ${name} must be a non-negative integer.`,
-      );
-    }
-  }
-  return policy;
-}
-import { AppError } from '../../kernel/errors.ts';

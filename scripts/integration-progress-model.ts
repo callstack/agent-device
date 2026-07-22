@@ -3,6 +3,7 @@ import path from 'node:path';
 import { PUBLIC_COMMANDS } from '../src/command-catalog.ts';
 import { listCommandMetadata } from '../src/commands/command-metadata.ts';
 import { getFlagDefinitions } from '../src/commands/cli-grammar/flag-registry.ts';
+import { walkFiles } from './lib/walk-files.ts';
 
 const EMPTY_COVERAGE_METRIC = { pct: 0 };
 const EMPTY_STATEMENT_COVERAGE = { covered: 0, pct: 0, total: 0 };
@@ -11,14 +12,14 @@ export function buildIntegrationProgressModel({ root = process.cwd() } = {}) {
   const coverageSummary = path.join(root, 'coverage/coverage-summary.json');
   const handlerTestDir = path.join(root, 'src/daemon/handlers/__tests__');
   const providerScenarioDir = path.join(root, 'test/integration/provider-scenarios');
-  const commandContractFiles = listFiles(path.join(root, 'src/commands'), (file) =>
+  const commandContractFiles = walkFiles(path.join(root, 'src/commands'), (file) =>
     isCommandContractSource(file),
   );
   const clientCommandMethods = readClientCommandMethods(commandContractFiles);
 
-  const handlerTests = listFiles(handlerTestDir, (file) => file.endsWith('.test.ts'));
-  const providerScenarioTests = listFiles(providerScenarioDir, (file) => file.endsWith('.test.ts'));
-  const providerScenarioSources = listFiles(providerScenarioDir, (file) => file.endsWith('.ts'));
+  const handlerTests = walkFiles(handlerTestDir, (file) => file.endsWith('.test.ts'));
+  const providerScenarioTests = walkFiles(providerScenarioDir, (file) => file.endsWith('.test.ts'));
+  const providerScenarioSources = walkFiles(providerScenarioDir, (file) => file.endsWith('.ts'));
   const providerScenarioSupportSources = providerScenarioSources.filter(
     (file) => !file.endsWith('.test.ts'),
   );
@@ -238,7 +239,7 @@ function summarizeProviderScenarioFlagExclusions() {
     {
       name: 'remote connection and session-lock policy',
       owner: 'connection/runtime/request policy tests',
-      keys: ['force', 'noLogin', 'sessionLock', 'sessionLocked', 'sessionLockConflicts'],
+      keys: ['force', 'noLogin', 'sessionLock'],
     },
     {
       name: 'cloud artifact provider lookup',
@@ -309,7 +310,6 @@ function summarizeProviderScenarioFlagExclusions() {
         'reporter',
         'reportJunit',
         'replayMaestro',
-        'replayExportFormat',
         'recordVideo',
         'shardAll',
         'shardSplit',
@@ -343,16 +343,6 @@ function readPublicCliFlagKeys() {
       .filter((definition) => definition.names.some((name) => name.startsWith('-')))
       .map((definition) => definition.key),
   );
-}
-
-function listFiles(dir, predicate) {
-  if (!fs.existsSync(dir)) return [];
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  return entries.flatMap((entry) => {
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) return listFiles(fullPath, predicate);
-    return predicate(fullPath) ? [fullPath] : [];
-  });
 }
 
 function isCommandContractSource(file) {

@@ -1,14 +1,6 @@
 import { AppError } from '../kernel/errors.ts';
 import { emitDiagnostic } from './diagnostics.ts';
 
-type RetryOptions = {
-  attempts?: number;
-  baseDelayMs?: number;
-  maxDelayMs?: number;
-  jitter?: number;
-  shouldRetry?: (error: unknown, attempt: number) => boolean;
-};
-
 type RetryPolicy = {
   maxAttempts: number;
   baseDelayMs: number;
@@ -38,10 +30,8 @@ export function isEnvTruthy(value: string | undefined): boolean {
   return ['1', 'true', 'yes', 'on'].includes((value ?? '').trim().toLowerCase());
 }
 
-const defaultOptions: Required<
-  Pick<RetryOptions, 'attempts' | 'baseDelayMs' | 'maxDelayMs' | 'jitter'>
-> = {
-  attempts: 3,
+const defaultOptions: Pick<RetryPolicy, 'maxAttempts' | 'baseDelayMs' | 'maxDelayMs' | 'jitter'> = {
+  maxAttempts: 3,
   baseDelayMs: 200,
   maxDelayMs: 2000,
   jitter: 0.2,
@@ -85,7 +75,7 @@ export async function retryWithPolicy<T>(
   } = {},
 ): Promise<T> {
   const merged: RetryPolicy = {
-    maxAttempts: policy.maxAttempts ?? defaultOptions.attempts,
+    maxAttempts: policy.maxAttempts ?? defaultOptions.maxAttempts,
     baseDelayMs: policy.baseDelayMs ?? defaultOptions.baseDelayMs,
     maxDelayMs: policy.maxDelayMs ?? defaultOptions.maxDelayMs,
     jitter: policy.jitter ?? defaultOptions.jitter,
@@ -169,16 +159,6 @@ export async function retryWithPolicy<T>(
   publishRetryEvent(exhaustedEvent);
   if (lastError) throw lastError;
   throw new AppError('COMMAND_FAILED', 'retry failed');
-}
-
-export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
-  return retryWithPolicy(() => fn(), {
-    maxAttempts: options.attempts,
-    baseDelayMs: options.baseDelayMs,
-    maxDelayMs: options.maxDelayMs,
-    jitter: options.jitter,
-    shouldRetry: options.shouldRetry,
-  });
 }
 
 function computeDelay(base: number, max: number, jitter: number, attempt: number): number {

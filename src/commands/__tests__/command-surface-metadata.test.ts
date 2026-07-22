@@ -20,9 +20,6 @@ import {
   listCommandFamilyMetadata,
 } from '../family/registry.ts';
 import { listExecutableCommandNames } from '../command-surface.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
-import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
-import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 
 test('MCP exposed command names have metadata and executable command definitions', () => {
   const mcpExposedNames = listMcpExposedCommandNames().sort();
@@ -141,24 +138,4 @@ test('command family facets keep daemon writers as an explicit projection subset
   for (const name of writerNames) {
     assert.ok(metadataNames.has(name), `${name} daemon writer must belong to command metadata`);
   }
-});
-
-test('command family facets reject duplicate daemon writer keys', () => {
-  const metadata = defineFieldCommandMetadata('example', 'Example command.', {});
-  const definition = defineExecutableCommand(metadata, async () => ({}));
-  const writer = () => ({ command: 'example', positionals: [], options: {} });
-
-  const facet = defineCommandFacet({
-    name: 'example',
-    metadata,
-    definition,
-    cliReader: () => ({}),
-    daemonWriter: writer,
-    extraDaemonWriters: { example: writer },
-  });
-
-  assert.throws(
-    () => defineCommandFamilyFromFacets({ name: 'test', commands: [facet] }),
-    /Duplicate command family daemon writer: example/,
-  );
 });

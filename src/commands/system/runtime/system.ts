@@ -46,18 +46,6 @@ export type SystemOrientationCommandResult = {
   orientation: BackendDeviceOrientation;
 } & BackendResultEnvelope;
 
-/** @deprecated Renamed to {@link SystemOrientationCommandOptions}. Retained until the next major. */
-export type SystemRotateCommandOptions = SystemOrientationCommandOptions;
-
-/**
- * @deprecated Renamed to {@link SystemOrientationCommandResult}. This is the
- * legacy `kind: 'systemRotated'` contract, retained until the next major.
- */
-export type SystemRotateCommandResult = {
-  kind: 'systemRotated';
-  orientation: BackendDeviceOrientation;
-} & BackendResultEnvelope;
-
 export type SystemKeyboardCommandOptions = CommandContext & {
   action?: 'status' | 'get' | 'dismiss' | 'enter' | 'return';
 };
@@ -236,19 +224,6 @@ export const orientationCommand: RuntimeCommand<
     ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
     ...successText(`Rotated to ${orientation}`),
   };
-};
-
-/**
- * @deprecated Renamed to {@link orientationCommand}. Delegates to it and
- * restores the legacy `kind: 'systemRotated'` contract for existing consumers.
- * Retained until the next major version.
- */
-export const rotateCommand: RuntimeCommand<
-  SystemRotateCommandOptions,
-  SystemRotateCommandResult
-> = async (runtime, options): Promise<SystemRotateCommandResult> => {
-  const result = await orientationCommand(runtime, options);
-  return { ...result, kind: 'systemRotated' };
 };
 
 export const keyboardCommand: RuntimeCommand<

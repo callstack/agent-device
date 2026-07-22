@@ -217,12 +217,11 @@ test('parseArgs recognizes command-specific flag combinations', async () => {
     },
     {
       label: 'export replay to maestro yaml',
-      argv: ['replay', 'export', './flow.ad', '--format', 'maestro', '--out', './flow.yaml'],
+      argv: ['replay', 'export', './flow.ad', '--out', './flow.yaml'],
       strictFlags: true,
       assertParsed: (parsed) => {
         assert.equal(parsed.command, 'replay');
         assert.deepEqual(parsed.positionals, ['export', './flow.ad']);
-        assert.equal(parsed.flags.replayExportFormat, 'maestro');
         assert.equal(parsed.flags.out, './flow.yaml');
       },
     },
@@ -815,13 +814,15 @@ test('parseArgs recognizes session lock policy flag', () => {
   assert.equal(parsed.flags.sessionLock, 'strip');
 });
 
-test('parseArgs keeps deprecated session lock aliases for compatibility', () => {
-  const parsed = parseArgs(['snapshot', '--session-locked', '--session-lock-conflicts', 'strip'], {
-    strictFlags: true,
-  });
-  assert.equal(parsed.command, 'snapshot');
-  assert.equal(parsed.flags.sessionLocked, true);
-  assert.equal(parsed.flags.sessionLockConflicts, 'strip');
+test('parseArgs rejects removed session lock aliases with a pointer to --session-lock', () => {
+  assert.throws(
+    () => parseArgs(['snapshot', '--session-locked'], { strictFlags: true }),
+    /Unknown flag: --session-locked\. Use --session-lock reject\|strip instead\./,
+  );
+  assert.throws(
+    () => parseArgs(['snapshot', '--session-lock-conflicts', 'strip'], { strictFlags: true }),
+    /Unknown flag: --session-lock-conflicts\. Use --session-lock reject\|strip instead\./,
+  );
 });
 
 test('batch requires exactly one step source', () => {

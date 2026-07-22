@@ -6,7 +6,8 @@ import type { PerfMetricsSamplerTag } from '../../daemon/handlers/session-perf.t
 import type { PlatformGatedProviderResolverKey } from '../../daemon/request-platform-providers.ts';
 import type { Interactor, RunnerContext } from '../interactor-types.ts';
 import type { DeviceInventoryRequest } from '../../contracts/device-inventory.ts';
-import type { CapabilityBucket } from '../platform-descriptor/types.ts';
+
+type CapabilityBucket = 'apple' | 'android' | 'linux' | 'web';
 
 /**
  * The platform-plugin contract (ADR-0009).
@@ -56,8 +57,7 @@ export type PlatformPlugin = {
   discoverDevices(request: DeviceInventoryRequest): Promise<DeviceInfo[]>;
   /**
    * The capability facet. `bucket` is the {@link CapabilityBucket} this family
-   * reads from a `CommandCapability` (parity-checked against the existing
-   * `platformDescriptors` registry).
+   * reads from a `CommandCapability`.
    *
    * `supportsByDefault` / `unsupportedHintByDefault` carry the per-command
    * `supports()` / `unsupportedHint()` device closures RELOCATED VERBATIM off the

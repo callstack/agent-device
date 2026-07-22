@@ -224,19 +224,4 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageDescription:
       'Lock bound-session device routing for this CLI invocation and nested batch steps',
   },
-  {
-    key: 'sessionLocked',
-    names: ['--session-locked'],
-    type: 'boolean',
-    usageLabel: '--session-locked',
-    usageDescription: 'Deprecated alias for --session-lock reject',
-  },
-  {
-    key: 'sessionLockConflicts',
-    names: ['--session-lock-conflicts'],
-    type: 'enum',
-    enumValues: ['reject', 'strip'],
-    usageLabel: '--session-lock-conflicts reject|strip',
-    usageDescription: 'Deprecated alias for --session-lock',
-  },
 ];

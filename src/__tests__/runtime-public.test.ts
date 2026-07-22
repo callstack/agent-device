@@ -11,7 +11,7 @@ import {
   type AgentDevice,
   type CommandSessionStore,
 } from '../runtime.ts';
-import { BACKEND_CAPABILITY_NAMES, type AgentDeviceBackend } from '../backend.ts';
+import type { AgentDeviceBackend } from '../backend.ts';
 import { commands, type ScreenshotCommandOptions } from '../commands/index.ts';
 import {
   createLocalArtifactAdapter,
@@ -235,7 +235,6 @@ test('internal backend, commands, and io modules are usable', () => {
   const options = {
     out: { kind: 'path', path: '/tmp/screen.png' },
   } satisfies ScreenshotCommandOptions;
-  assert.equal(BACKEND_CAPABILITY_NAMES.includes('android.shell'), true);
   assert.equal(options.out.kind, 'path');
   assert.equal(typeof commands.capture.screenshot, 'function');
   assert.equal(typeof commands.capture.diffScreenshot, 'function');
@@ -259,7 +258,6 @@ test('internal backend, commands, and io modules are usable', () => {
   assert.equal(typeof commands.system.back, 'function');
   assert.equal(typeof commands.system.home, 'function');
   assert.equal(typeof commands.system.orientation, 'function');
-  assert.equal(typeof commands.system.rotate, 'function');
   assert.equal(typeof commands.system.keyboard, 'function');
   assert.equal(typeof commands.system.clipboard, 'function');
   assert.equal(typeof commands.system.settings, 'function');

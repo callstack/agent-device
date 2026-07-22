@@ -18,8 +18,6 @@ import { deriveDaemonCommandDescriptors, deriveStructuredBatchCommandNames } fro
 import {
   commandDescriptors,
   listDescriptorCatalogCommandNames,
-  listDescriptorDispatchCommandNames,
-  listCapabilityCheckedCommandNames,
   listMcpExposedCommandNames,
   resolveCommandRecordsSessionAction,
   resolveCommandRecordingEffect,
@@ -169,12 +167,15 @@ test('descriptor-only commands explicitly declare a non-public catalog group', (
 });
 
 test('platform dispatch command list is built from descriptor dispatch facets', () => {
-  const dispatchCommands = listDescriptorDispatchCommandNames();
+  const dispatchCommands = commandDescriptors
+    .filter((descriptor) => 'dispatch' in descriptor && descriptor.dispatch !== undefined)
+    .map((descriptor) => descriptor.name)
+    .sort();
 
   assert.deepEqual(listRegisteredDispatchCommandNames(), dispatchCommands);
   assert.ok(dispatchCommands.includes('read'), 'read stays dispatch-only');
   assert.equal(
-    (dispatchCommands as readonly string[]).includes(PUBLIC_COMMANDS.gesture),
+    dispatchCommands.includes(PUBLIC_COMMANDS.gesture),
     false,
     'gesture executes through the typed runtime/backend seam',
   );
@@ -287,7 +288,6 @@ test('capability-checked command list is built from descriptor capabilities', ()
     .sort();
   const expectedNames = new Set<string>(expected);
 
-  assert.deepEqual(listCapabilityCheckedCommandNames(), expected);
   assert.ok(expectedNames.has(PUBLIC_COMMANDS.snapshot), 'snapshot remains capability-checked');
   assert.ok(expectedNames.has(PUBLIC_COMMANDS.gesture), 'gesture remains capability-checked');
   assert.equal(

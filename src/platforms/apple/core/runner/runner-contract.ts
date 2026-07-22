@@ -86,10 +86,6 @@ export type RunnerCommand = {
   fullscreen?: boolean;
   synthesized?: boolean;
   steps?: RunnerSequenceStep[];
-  /**
-   * @deprecated Use textEntryMode: 'replace'. Kept for compatibility with older local runner clients.
-   */
-  clearFirst?: boolean;
 };
 
 /**

@@ -38,7 +38,6 @@ export type CommandFacet<TCommandName extends string = string> = {
   clientMethod?: string;
   cliReader: CliReader;
   daemonWriter?: DaemonWriter;
-  extraDaemonWriters?: Readonly<Record<string, DaemonWriter>>;
   cliOutputFormatter?: CliOutputFormatter;
 };
 
@@ -87,11 +86,6 @@ export function defineCommandFamilyFromFacets<
     addRecordEntry(cliReaders, 'CLI reader', command.name, command.cliReader);
     if (command.daemonWriter) {
       addRecordEntry(daemonWriters, 'daemon writer', command.name, command.daemonWriter);
-    }
-    if (command.extraDaemonWriters) {
-      for (const [name, writer] of Object.entries(command.extraDaemonWriters)) {
-        addRecordEntry(daemonWriters, 'daemon writer', name, writer);
-      }
     }
     if (command.cliOutputFormatter) {
       addRecordEntry(

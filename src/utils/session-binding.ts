@@ -7,10 +7,7 @@ export type BindingSettings = {
   lockPolicy?: DaemonLockPolicy;
 };
 
-type BindingPolicyOverrides = Pick<
-  Partial<CliFlags>,
-  'sessionLock' | 'sessionLocked' | 'sessionLockConflicts'
->;
+type BindingPolicyOverrides = Pick<Partial<CliFlags>, 'sessionLock'>;
 
 type LockableFlags = Pick<
   Partial<CliFlags>,
@@ -66,14 +63,11 @@ function resolveLockMode(
   env: NodeJS.ProcessEnv,
   defaultSessionConfigured: boolean,
 ): DaemonLockPolicy | undefined {
-  const explicitPolicy =
-    overrides?.sessionLock ??
-    overrides?.sessionLockConflicts ??
-    readConflictMode(env.AGENT_DEVICE_SESSION_LOCK);
+  const explicitPolicy = overrides?.sessionLock ?? readConflictMode(env.AGENT_DEVICE_SESSION_LOCK);
   if (explicitPolicy) {
     return explicitPolicy;
   }
-  if (overrides?.sessionLocked === true || defaultSessionConfigured) {
+  if (defaultSessionConfigured) {
     return 'reject';
   }
   return undefined;

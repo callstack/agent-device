@@ -1,4 +1,4 @@
-import type { AgentDeviceBackend, BackendCapabilityName } from './backend.ts';
+import type { AgentDeviceBackend } from './backend.ts';
 import type { ArtifactAdapter } from './io.ts';
 import type { SnapshotState } from './kernel/snapshot.ts';
 
@@ -6,7 +6,6 @@ export type CommandPolicy = {
   allowLocalInputPaths: boolean;
   allowLocalOutputPaths: boolean;
   maxImagePixels: number;
-  allowNamedBackendCapabilities: readonly BackendCapabilityName[];
 };
 
 export type CommandSessionRecord = {

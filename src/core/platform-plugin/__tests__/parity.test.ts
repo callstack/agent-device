@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { PLATFORMS, type Platform } from '../../../kernel/device.ts';
 import { AppError } from '../../../kernel/errors.ts';
-import { platformDescriptors } from '../../platform-descriptor/registry.ts';
 import { getPlugin, registeredPlatforms, registerPlatformPlugin, tryGetPlugin } from '../plugin.ts';
 import {
   BUILTIN_PLATFORM_PLUGINS,
@@ -54,15 +53,18 @@ test('registry coverage is byte-for-byte equal to the parsePlatform hand allow-l
   }
 });
 
-test('every plugin capability bucket matches the platform-descriptor registry', () => {
-  // Ties the plugin capability facet to the existing `platformDescriptors`
-  // data registry (which `capabilities.ts` already derives from), so the two
-  // cannot drift.
-  for (const descriptor of platformDescriptors) {
+test('every plugin capability bucket matches the platform -> bucket table', () => {
+  const expectedBuckets: Record<Platform, string> = {
+    apple: 'apple',
+    android: 'android',
+    linux: 'linux',
+    web: 'web',
+  };
+  for (const platform of PLATFORMS) {
     assert.equal(
-      getPlugin(descriptor.platform).capability.bucket,
-      descriptor.capabilityBucket,
-      `bucket for ${descriptor.platform}`,
+      getPlugin(platform).capability.bucket,
+      expectedBuckets[platform],
+      `bucket for ${platform}`,
     );
   }
 });

@@ -11,7 +11,7 @@ import {
   listCliCommandNames,
   SPECIAL_CLI_COMMANDS,
 } from '../command-catalog.ts';
-import { listCapabilityCheckedCommandNames } from '../core/command-descriptor/registry.ts';
+import { commandDescriptors } from '../core/command-descriptor/registry.ts';
 import { getCliCommandSchema } from './command-schema.ts';
 
 test('every public capability command has a parser schema entry', () => {
@@ -57,7 +57,15 @@ test('cli.ts command dispatch checks are recognized by parser-level unknown-comm
 });
 
 test('schema capability mappings match capability source-of-truth', () => {
-  assert.deepEqual(listCapabilityCheckedCommandNames(), listCapabilityCommands());
+  const cliCommands = new Set<string>(listCliCommandNames());
+  const capabilityCheckedCommands = commandDescriptors
+    .filter(
+      (descriptor) =>
+        'capability' in descriptor && descriptor.capability && cliCommands.has(descriptor.name),
+    )
+    .map((descriptor) => descriptor.name)
+    .sort();
+  assert.deepEqual(capabilityCheckedCommands, listCapabilityCommands());
 });
 
 function collectCliDispatchCommandLiterals(): Set<string> {

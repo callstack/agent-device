@@ -32,10 +32,7 @@ export const BROWSERSTACK_APP_UPLOAD_ENDPOINT =
 const BROWSERSTACK_SESSION_DETAILS_ENDPOINT =
   'https://api-cloud.browserstack.com/app-automate/sessions';
 export const BROWSERSTACK_CAPABILITY_OVERRIDES = {
-  install: {
-    support: 'partial',
-    note: 'Local app artifacts are uploaded to BrowserStack App Automate, then installed with Appium.',
-  },
+  install: 'supported',
   portReverse: {
     support: 'unsupported',
     note: 'Use BrowserStack Local for network tunneling; agent-device port reverse is not available.',

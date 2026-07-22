@@ -1,9 +1,9 @@
 import { expect, test } from 'vitest';
-import { resolveMaestroTimingPolicy } from '../compatibility-policy.ts';
+import { DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY } from '../compatibility-policy.ts';
 import { resolveNumeric } from '../engine-flow.ts';
 
 test('uses the Maestro-compatible extended wait default', () => {
-  expect(resolveMaestroTimingPolicy().extendedWaitUntilTimeoutMs).toBe(17_000);
+  expect(DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY.extendedWaitUntilTimeoutMs).toBe(17_000);
 });
 
 test('resolveNumeric coerces valid resolved strings and numbers', () => {

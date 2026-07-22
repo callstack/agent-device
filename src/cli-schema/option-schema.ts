@@ -30,12 +30,7 @@ const CONFIG_EXCLUDED_FLAG_KEYS = new Set<FlagKey>([
   'githubActionsArtifact',
 ]);
 
-const ENV_EXCLUDED_FLAG_KEYS = new Set<FlagKey>([
-  'appsFilter',
-  'iosSimulatorDeviceSet',
-  'sessionLocked',
-  'sessionLockConflicts',
-]);
+const ENV_EXCLUDED_FLAG_KEYS = new Set<FlagKey>(['appsFilter', 'iosSimulatorDeviceSet']);
 
 const optionSpecs = buildOptionSpecs();
 const optionSpecByKey = new Map(optionSpecs.map((spec) => [spec.key, spec]));

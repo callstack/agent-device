@@ -6,10 +6,7 @@ export type {
   DaemonResponseData,
   JsonRpcId,
   JsonRpcRequestEnvelope,
-  LeaseAllocatePayload,
   LeaseBackend,
-  LeaseHeartbeatPayload,
-  LeaseReleasePayload,
   SessionRuntimeHints,
 } from '../kernel/contracts.ts';
 

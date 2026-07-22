@@ -698,7 +698,6 @@ click text="Continue"
         json: false,
         help: false,
         version: false,
-        replayExportFormat: 'maestro',
         out: outPath,
       },
       client,

@@ -54,7 +54,6 @@ export function summarizeDiffRegions(params: {
   current: PNG;
   totalPixels: number;
   differentPixels: number;
-  maxRegions?: number;
 }): ScreenshotDiffRegion[] {
   const rawRegions = findConnectedDiffRegions(params);
   // Avoid quadratic nearby-merge work on extremely noisy diffs; the later ranking
@@ -72,7 +71,7 @@ export function summarizeDiffRegions(params: {
       if (topDelta !== 0) return topDelta;
       return left.minX - right.minX;
     })
-    .slice(0, Math.max(0, params.maxRegions ?? DEFAULT_MAX_DIFF_REGIONS))
+    .slice(0, DEFAULT_MAX_DIFF_REGIONS)
     .map((region, index) =>
       toScreenshotDiffRegion(region, index + 1, {
         width: params.baseline.width,

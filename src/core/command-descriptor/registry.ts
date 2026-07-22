@@ -1328,29 +1328,9 @@ export function listDescriptorCatalogEntries<Group extends CommandCatalogGroup>(
     );
 }
 
-/**
- * @internal Introspection helper used by parity tests.
- */
-export function listDescriptorDispatchCommandNames(): DescriptorDispatchCommandName[] {
-  return commandDescriptors
-    .filter((descriptor) => 'dispatch' in descriptor && descriptor.dispatch !== undefined)
-    .map((descriptor) => descriptor.name as DescriptorDispatchCommandName)
-    .sort();
-}
-
 export function listMcpExposedCommandNames(): DescriptorCliCommandName[] {
   return commandDescriptors
     .filter((descriptor) => isMcpExposedCliCommand(descriptor))
-    .map((descriptor) => descriptor.name as DescriptorCliCommandName)
-    .sort();
-}
-
-/**
- * @internal Introspection helper used by parity tests.
- */
-export function listCapabilityCheckedCommandNames(): DescriptorCliCommandName[] {
-  return commandDescriptors
-    .filter((descriptor) => isCapabilityCheckedCliCommand(descriptor))
     .map((descriptor) => descriptor.name as DescriptorCliCommandName)
     .sort();
 }
@@ -1369,10 +1349,6 @@ function resolveMcpExposure(descriptor: RawCommandDescriptor): boolean {
 
 function isMcpExposedCliCommand(descriptor: CommandDescriptor): boolean {
   return descriptor.mcpExposed && isCliCommandName(descriptor.name);
-}
-
-function isCapabilityCheckedCliCommand(descriptor: CommandDescriptor): boolean {
-  return Boolean(descriptor.capability) && isCliCommandName(descriptor.name);
 }
 
 function readCatalogGroup(descriptor: {

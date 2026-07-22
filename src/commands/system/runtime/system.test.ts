@@ -87,22 +87,6 @@ test('runtime system commands validate options before backend calls', async () =
   assert.deepEqual(calls, []);
 });
 
-test('deprecated device.system.rotate delegates to orientation and keeps the legacy kind', async () => {
-  const calls: unknown[] = [];
-  const device = createAgentDevice({
-    backend: createSystemBackend(calls),
-    artifacts: createLocalArtifactAdapter(),
-    policy: localCommandPolicy(),
-  });
-
-  const rotated = await device.system.rotate({ orientation: 'landscape-left' });
-
-  assert.equal(rotated.kind, 'systemRotated');
-  assert.equal(rotated.orientation, 'landscape-left');
-  // Reaches the same backend seam as the canonical command.
-  assert.deepEqual(calls, [{ command: 'setOrientation', orientation: 'landscape-left' }]);
-});
-
 function createSystemBackend(calls: unknown[]): AgentDeviceBackend {
   return {
     platform: 'ios',

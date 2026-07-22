@@ -81,7 +81,6 @@ test('usageForCommand includes Maestro replay flag', async () => {
   const help = await usageForCommand('replay');
   if (help === null) throw new Error('Expected replay help text');
   assert.match(help, /replay <path> \| replay export <file\.ad>/);
-  assert.match(help, /--format maestro/);
   assert.match(help, /--out <path>/);
   assert.match(help, /--maestro/);
   assert.match(help, /supported Maestro YAML subset/);

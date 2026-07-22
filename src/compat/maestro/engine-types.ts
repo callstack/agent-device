@@ -5,8 +5,6 @@ import type {
   MaestroSelector,
   MaestroSourceLocation,
 } from './program-ir.ts';
-import type { MaestroCompatibilityTimingPolicy } from './compatibility-policy.ts';
-
 export type MaestroControlCommand = Extract<
   MaestroCommand,
   { kind: 'runFlow' | 'repeat' | 'retry' }
@@ -161,7 +159,6 @@ export type MaestroEngineOptions = {
     parentSource?: string,
     signal?: AbortSignal,
   ) => Promise<MaestroProgram>;
-  timing?: Partial<MaestroCompatibilityTimingPolicy>;
   signal?: AbortSignal;
   observer?: MaestroEngineObserver;
   now?: () => number;

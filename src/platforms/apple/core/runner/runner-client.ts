@@ -1,4 +1,4 @@
-import { withRetry } from '../../../../utils/retry.ts';
+import { retryWithPolicy } from '../../../../utils/retry.ts';
 import { isIosFamily, type DeviceInfo } from '../../../../kernel/device.ts';
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
 import {
@@ -42,7 +42,7 @@ export async function runAppleRunnerCommand(
   const runnerCommand = withRunnerCommandId(command);
   const provider = resolveAppleRunnerRuntime(device, options);
   if (isReadOnlyRunnerCommand(runnerCommand.command)) {
-    return withRetry(
+    return retryWithPolicy(
       () => {
         assertRunnerRequestActive(options.requestId);
         return provider.runCommand(device, runnerCommand, options);

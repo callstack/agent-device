@@ -47,8 +47,6 @@ export type CliFlags = CloudProviderProfileFields &
     kind?: string;
     perfTemplate?: string;
     sessionLock?: 'reject' | 'strip';
-    sessionLocked?: boolean;
-    sessionLockConflicts?: 'reject' | 'strip';
     platform?: PlatformSelector;
     target?: DeviceTarget;
     device?: string;
@@ -131,7 +129,6 @@ export type CliFlags = CloudProviderProfileFields &
     retentionMs?: number;
     replayUpdate?: boolean;
     replayMaestro?: boolean;
-    replayExportFormat?: 'maestro';
     replayEnv?: string[];
     replayShellEnv?: Record<string, string>;
     replayFrom?: number;

@@ -8,6 +8,7 @@ import {
   type DeviceInfo,
   type DeviceKind,
   type DeviceTarget,
+  type Platform,
 } from '../../kernel/device.ts';
 import {
   ANDROID_EMULATOR,
@@ -28,18 +29,15 @@ import {
   unsupportedHintForDevice,
   type CommandCapability,
 } from '../capabilities.ts';
-import { deriveCapabilityForPlatform } from '../platform-descriptor/derive.ts';
-import { platformDescriptors } from '../platform-descriptor/registry.ts';
 import { getPlugin } from '../platform-plugin/plugin.ts';
 import { registerBuiltinPlatformPlugins } from '../interactors/register-builtins.ts';
 
 // Phase 3 step (b) parity gate. Independent oracles pin that the migration is
 // byte-for-byte behaviorless:
 //   (b.1) the platform -> capability-bucket selection in `isCommandSupportedOnDevice`
-//         now flows through the PlatformPlugin registry instead of the
-//         `platformDescriptors` fold. `deriveCapabilityForPlatform(platformDescriptors,
-//         ...)` is kept here as the BEFORE-derivation oracle (the production fold was
-//         deleted), so a plugin-vs-descriptor disagreement fails this test.
+//         flows through the PlatformPlugin registry. `CAPABILITY_BUCKET_BY_PLATFORM`
+//         is kept here as an independent hardcoded oracle, so a plugin-bucket
+//         regression fails this test.
 //   (b.2) the per-command `supports()` / `unsupportedHint()` device closures were
 //         RELOCATED VERBATIM off the command-descriptor facet onto the owning
 //         PlatformPlugin's `capability.supportsByDefault` / `unsupportedHintByDefault`
@@ -100,8 +98,7 @@ const SAMPLE_DEVICES: DeviceInfo[] = [
 // ---------------------------------------------------------------------------
 // (b.2) Independent VERBATIM copies of the per-command supports()/unsupportedHint()
 // closures (src/core/command-descriptor/registry.ts). Kept BYTE-FOR-BYTE in sync by
-// hand so this oracle stays INDEPENDENT of the descriptor it pins (mirrors the
-// `selectCapabilityByHandSwitch` copy in platform-descriptor/__tests__/parity.test.ts).
+// hand so this oracle stays INDEPENDENT of the descriptor it pins.
 // ---------------------------------------------------------------------------
 const isNotMacOs = (device: DeviceInfo): boolean => !isMacOs(device);
 const isMacOsOrAppleSimulator = (device: DeviceInfo): boolean =>
@@ -159,15 +156,24 @@ const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
   },
 };
 
+// Independent hardcoded oracle for the platform -> capability-bucket selection
+// (b.1) that `isCommandSupportedOnDevice` reads off the PlatformPlugin registry.
+const CAPABILITY_BUCKET_BY_PLATFORM: Record<Platform, keyof CommandCapability> = {
+  apple: 'apple',
+  android: 'android',
+  linux: 'linux',
+  web: 'web',
+};
+
 // Independent reference for `isCommandSupportedOnDevice` over NON-WEB platforms,
-// reproducing the BEFORE pipeline exactly: descriptor-fold bucket selection (b.1
-// oracle) + the verbatim supports closure (b.2 oracle) + the kind check. For a
-// non-web platform the augmented matrix equals BASE (the web augmentation only adds
-// a `web` key), so BASE is the faithful capability source here.
+// reproducing the BEFORE pipeline exactly: hardcoded bucket selection (b.1 oracle)
+// + the verbatim supports closure (b.2 oracle) + the kind check. For a non-web
+// platform the augmented matrix equals BASE (the web augmentation only adds a
+// `web` key), so BASE is the faithful capability source here.
 function isSupportedReference(command: string, device: DeviceInfo): boolean {
   const capability: CommandCapability | undefined = BASE_COMMAND_CAPABILITY_MATRIX[command];
   if (!capability) return true;
-  const byPlatform = deriveCapabilityForPlatform(platformDescriptors, capability, device.platform);
+  const byPlatform = capability[CAPABILITY_BUCKET_BY_PLATFORM[device.platform]];
   if (!byPlatform) return false;
   const supports = SUPPORTS_REF[command];
   if (supports && !supports(device)) return false;
@@ -175,28 +181,13 @@ function isSupportedReference(command: string, device: DeviceInfo): boolean {
   return byPlatform[kind] === true;
 }
 
-test('(b.1) plugin-bucket selection is byte-identical to the platformDescriptors fold', () => {
-  // Object identities per bucket so a wrong-bucket selection fails ===, plus a
-  // web-bearing shape (BASE never carries a `web` key) so the `web` bucket route is
-  // exercised with a defined value, and a sparse shape for undefined propagation.
-  const shapes: CommandCapability[] = [
-    ...Object.values(BASE_COMMAND_CAPABILITY_MATRIX),
-    {
-      apple: { simulator: true, device: true },
-      android: { emulator: true, device: true, unknown: true },
-      linux: { device: true },
-      web: { device: true },
-    },
-    { apple: { simulator: true } },
-  ];
-  for (const capability of shapes) {
-    for (const platform of PLATFORMS) {
-      assert.deepEqual(
-        capability[getPlugin(platform).capability.bucket],
-        deriveCapabilityForPlatform(platformDescriptors, capability, platform),
-        `bucket selection for ${platform}`,
-      );
-    }
+test('(b.1) plugin-bucket selection matches the platform -> bucket table', () => {
+  for (const platform of PLATFORMS) {
+    assert.equal(
+      getPlugin(platform).capability.bucket,
+      CAPABILITY_BUCKET_BY_PLATFORM[platform],
+      `bucket for ${platform}`,
+    );
   }
 });
 

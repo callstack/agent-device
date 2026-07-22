@@ -3,29 +3,18 @@ import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import type { Rect } from '../../kernel/snapshot.ts';
 import {
   buildFillFailureDetails,
-  type FillFailureDetails,
-  type FillDiagnosticNode,
-  type FillVerification,
   isSensitiveFillDiagnosticNode,
-} from '../fill-diagnostics.ts';
+  type AndroidFillVerification,
+  type AndroidFillVerificationNode,
+  type FillFailureDetails,
+} from './fill-diagnostics.ts';
 import { sleep } from './adb.ts';
 import { getAndroidKeyboardState } from './device-input-state.ts';
 import { isAndroidInputMethodOwnedNode } from '../../contracts/android-input-ownership.ts';
 import { captureAndroidUiHierarchyXml } from './snapshot.ts';
 import { androidUiNodes, type AndroidUiNodeMetadata } from './ui-hierarchy.ts';
 
-export type AndroidFillVerificationNode = FillDiagnosticNode & {
-  className: string | null;
-  resourceId: string | null;
-  packageName: string | null;
-  rect: Rect;
-  focused: boolean;
-  password: boolean;
-  inputMethodOwned: boolean;
-  area: number;
-};
-
-export type AndroidFillVerification = FillVerification<AndroidFillVerificationNode>;
+export type { AndroidFillVerification, AndroidFillVerificationNode } from './fill-diagnostics.ts';
 
 type AndroidFillVerificationCandidate = AndroidFillVerificationNode & {
   editText: boolean;
@@ -138,7 +127,7 @@ export function androidFillFailureMessage(verification: AndroidFillVerification 
 export function androidFillFailureDetails(
   expected: string,
   verification: AndroidFillVerification | null,
-): FillFailureDetails<AndroidFillVerificationNode> {
+): FillFailureDetails {
   const details = buildFillFailureDetails(expected, verification);
   if (verification?.reason === 'ime_capture') {
     details.hint =

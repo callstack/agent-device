@@ -91,7 +91,7 @@ export const testCommandDefinition = defineExecutableCommand(testCommandMetadata
 );
 
 const replayCliSchema = {
-  usageOverride: 'replay <path> | replay export <file.ad> [--format maestro] [--out <path>]',
+  usageOverride: 'replay <path> | replay export <file.ad> [--out <path>]',
   helpDescription:
     'Replay a recorded session. For Maestro YAML compatibility flows, use replay <flow.yaml> --maestro and keep the target binding such as --platform ios on the replay command.',
   summary: replayCommandDescription,
@@ -99,7 +99,6 @@ const replayCliSchema = {
   allowsExtraPositionals: true,
   allowedFlags: [
     'replayMaestro',
-    'replayExportFormat',
     ...REPLAY_FLAGS,
     ...METRO_RELOAD_FLAGS,
     'replayFrom',

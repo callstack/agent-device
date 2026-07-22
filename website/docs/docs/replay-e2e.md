@@ -79,7 +79,7 @@ See [ADR 0015](https://github.com/callstack/agent-device/blob/main/docs/adr/0015
 Replay scripts can be exported to a Maestro YAML subset when you need to hand a recorded Agent Device flow to a Maestro runner:
 
 ```bash
-agent-device replay export ./workflows/checkout.ad --format maestro --out ./maestro/checkout.yaml
+agent-device replay export ./workflows/checkout.ad --out ./maestro/checkout.yaml
 ```
 
 `replay export` is a local file transform. It does not start the daemon or contact a device. If `--out` is omitted, the YAML is printed to stdout.

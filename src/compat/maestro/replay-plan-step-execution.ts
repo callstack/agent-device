@@ -3,7 +3,7 @@ import { stripUndefined } from '../../utils/parsing.ts';
 import { isMaestroTestFailure, maestroTestFailure } from './compatibility-errors.ts';
 import {
   MAESTRO_COMPATIBILITY_PRESETS,
-  resolveMaestroTimingPolicy,
+  type MaestroCompatibilityTimingPolicy,
 } from './compatibility-policy.ts';
 import type { MaestroExecutionContext } from './engine-context.ts';
 import {
@@ -35,7 +35,7 @@ export type MaestroReplayPlanExecutionState = {
   readonly port: MaestroRuntimePort;
   readonly options: MaestroEngineOptions;
   readonly context: MaestroExecutionContext;
-  readonly timing: ReturnType<typeof resolveMaestroTimingPolicy>;
+  readonly timing: MaestroCompatibilityTimingPolicy;
   readonly artifacts: Set<string>;
   readonly warnings: string[];
   executed: number;

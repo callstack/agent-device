@@ -28,16 +28,6 @@ import type { ScreenshotResultData } from './utils/screenshot-result.ts';
 // leaf string, not the internal collapsed `apple`.
 export type AgentDeviceBackendPlatform = PublicPlatform;
 
-export const BACKEND_CAPABILITY_NAMES = [
-  'android.shell',
-  'ios.runnerCommand',
-  'macos.desktopScreenshot',
-] as const;
-
-export type BackendCapabilityName = (typeof BACKEND_CAPABILITY_NAMES)[number];
-
-export type BackendCapabilitySet = readonly BackendCapabilityName[];
-
 export type BackendCommandContext = {
   session?: string;
   requestId?: string;
@@ -419,7 +409,6 @@ export type BackendEscapeHatches = {
 
 export type AgentDeviceBackend = {
   platform: AgentDeviceBackendPlatform;
-  capabilities?: BackendCapabilitySet;
   escapeHatches?: BackendEscapeHatches;
   captureSnapshot?(
     context: BackendCommandContext,

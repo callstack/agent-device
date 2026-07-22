@@ -84,17 +84,14 @@ function addWebCommandCapabilities(
 export function isCommandSupportedOnDevice(command: string, device: DeviceInfo): boolean {
   const capability = COMMAND_CAPABILITY_MATRIX[command];
   if (!capability) return true;
-  // Platform -> capability-bucket selection now flows through the single
+  // Platform -> capability-bucket selection flows through the single
   // PlatformPlugin registry (ADR-0009, Phase 3 step b.1): the bucket a leaf
   // platform reads from a CommandCapability is the owning plugin's
-  // `capability.bucket`. This replaces the former `selectCapabilityForPlatform`
-  // fold over `platformDescriptors`; the plugin bucket is proven byte-for-byte
-  // equal to that derivation by `platform-plugin/__tests__/parity.test.ts`, and
-  // `__tests__/capability-plugin-routing-parity.test.ts` pins that this swap leaves
-  // `isCommandSupportedOnDevice` unchanged across the full command x device matrix.
-  // `tryGetPlugin` returns undefined only for an unregistered platform — the same
-  // "no bucket -> unsupported" fall-through the fold produced for a platform with
-  // no capability family (ADR-0009's plugin registry: `if (!plugin) return false`).
+  // `capability.bucket`, pinned against a hardcoded platform -> bucket table by
+  // `platform-plugin/__tests__/parity.test.ts` and
+  // `__tests__/capability-plugin-routing-parity.test.ts`. `tryGetPlugin` returns
+  // undefined only for an unregistered platform, which falls through to
+  // "no bucket -> unsupported" below.
   const plugin = tryGetPlugin(device.platform);
   if (!plugin) return false;
   const byPlatform = capability[plugin.capability.bucket];

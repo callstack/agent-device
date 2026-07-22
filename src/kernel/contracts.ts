@@ -174,46 +174,6 @@ export type DaemonResponse =
       error: DaemonError;
     };
 
-export type LeaseAllocatePayload = {
-  token?: string;
-  session?: string;
-  tenantId?: string;
-  tenant?: string;
-  runId?: string;
-  ttlMs?: number;
-  backend?: LeaseBackend;
-  leaseProvider?: string;
-  deviceKey?: string;
-  clientId?: string;
-};
-
-export type LeaseHeartbeatPayload = {
-  token?: string;
-  session?: string;
-  tenantId?: string;
-  tenant?: string;
-  runId?: string;
-  leaseId?: string;
-  ttlMs?: number;
-  backend?: LeaseBackend;
-  leaseProvider?: string;
-  deviceKey?: string;
-  clientId?: string;
-};
-
-export type LeaseReleasePayload = {
-  token?: string;
-  session?: string;
-  tenantId?: string;
-  tenant?: string;
-  runId?: string;
-  leaseId?: string;
-  backend?: LeaseBackend;
-  leaseProvider?: string;
-  deviceKey?: string;
-  clientId?: string;
-};
-
 export type JsonRpcId = string | number | null;
 
 export type JsonRpcRequestEnvelope<TParams = unknown> = {

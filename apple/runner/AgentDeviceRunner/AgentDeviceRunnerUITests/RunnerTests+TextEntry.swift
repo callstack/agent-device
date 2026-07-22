@@ -240,7 +240,7 @@ extension RunnerTests {
     case "replace":
       return .replacement
     default:
-      return command.clearFirst == true ? .replacement : .none
+      return .none
     }
   }
 

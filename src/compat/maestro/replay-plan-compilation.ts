@@ -17,12 +17,12 @@ export async function compileMaestroReplayPlan(
     platform: options.platform,
     target: options.target,
     runtimeHints,
-    initialStaticEnv: cloneValue({
+    initialStaticEnv: structuredClone({
       ...(options.defaults ?? {}),
       ...(program.config.env ?? {}),
       ...(options.env ?? {}),
     }),
-    steps: cloneValue(steps),
+    steps: structuredClone(steps),
     total: steps.length,
     compatibility: {
       staticallyExecutedControls,
@@ -39,16 +39,6 @@ function normalizeRuntimeHints(
   if (!hints) return undefined;
   const entries = Object.entries(hints).filter((entry) => entry[1] !== undefined);
   return entries.length === 0 ? undefined : Object.fromEntries(entries);
-}
-
-function cloneValue<T>(value: T): T {
-  if (Array.isArray(value)) return value.map((entry) => cloneValue(entry)) as T;
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [key, cloneValue(entry)]),
-    ) as T;
-  }
-  return value;
 }
 
 function freezeDeep<T>(value: T): T {

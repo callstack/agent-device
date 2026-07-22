@@ -8,7 +8,6 @@ import {
   homeCommand,
   keyboardCommand,
   orientationCommand,
-  rotateCommand,
   settingsCommand,
   tvRemoteCommand,
   type SystemAlertCommandOptions,
@@ -25,8 +24,6 @@ import {
   type SystemKeyboardCommandResult,
   type SystemOrientationCommandOptions,
   type SystemOrientationCommandResult,
-  type SystemRotateCommandOptions,
-  type SystemRotateCommandResult,
   type SystemSettingsCommandOptions,
   type SystemSettingsCommandResult,
   type SystemTvRemoteCommandOptions,
@@ -37,8 +34,6 @@ export type SystemCommands = {
   back: RuntimeCommand<SystemBackCommandOptions | undefined, SystemBackCommandResult>;
   home: RuntimeCommand<SystemHomeCommandOptions | undefined, SystemHomeCommandResult>;
   orientation: RuntimeCommand<SystemOrientationCommandOptions, SystemOrientationCommandResult>;
-  /** @deprecated Renamed to `orientation`. Retained until the next major. */
-  rotate: RuntimeCommand<SystemRotateCommandOptions, SystemRotateCommandResult>;
   keyboard: RuntimeCommand<SystemKeyboardCommandOptions | undefined, SystemKeyboardCommandResult>;
   clipboard: RuntimeCommand<SystemClipboardCommandOptions, SystemClipboardCommandResult>;
   settings: RuntimeCommand<SystemSettingsCommandOptions | undefined, SystemSettingsCommandResult>;
@@ -54,8 +49,6 @@ export type BoundSystemCommands = {
   back: (options?: SystemBackCommandOptions) => Promise<SystemBackCommandResult>;
   home: (options?: SystemHomeCommandOptions) => Promise<SystemHomeCommandResult>;
   orientation: BoundRuntimeCommand<SystemOrientationCommandOptions, SystemOrientationCommandResult>;
-  /** @deprecated Renamed to `orientation`. Retained until the next major. */
-  rotate: BoundRuntimeCommand<SystemRotateCommandOptions, SystemRotateCommandResult>;
   keyboard: (options?: SystemKeyboardCommandOptions) => Promise<SystemKeyboardCommandResult>;
   clipboard: BoundRuntimeCommand<SystemClipboardCommandOptions, SystemClipboardCommandResult>;
   settings: (options?: SystemSettingsCommandOptions) => Promise<SystemSettingsCommandResult>;
@@ -70,7 +63,6 @@ export const systemCommands: SystemCommands = {
   back: backCommand,
   home: homeCommand,
   orientation: orientationCommand,
-  rotate: rotateCommand,
   keyboard: keyboardCommand,
   clipboard: clipboardCommand,
   settings: settingsCommand,
@@ -84,7 +76,6 @@ export function bindSystemCommands(runtime: AgentDeviceRuntime): BoundSystemComm
     back: (options) => systemCommands.back(runtime, options),
     home: (options) => systemCommands.home(runtime, options),
     orientation: (options) => systemCommands.orientation(runtime, options),
-    rotate: (options) => systemCommands.rotate(runtime, options),
     keyboard: (options) => systemCommands.keyboard(runtime, options),
     clipboard: (options) => systemCommands.clipboard(runtime, options),
     settings: (options) => systemCommands.settings(runtime, options),

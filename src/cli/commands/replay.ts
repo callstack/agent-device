@@ -20,11 +20,8 @@ function handleReplayRunCommand({ positionals, flags }: ReplayCommandParams): fa
   if (positionals.length > 1) {
     throw new AppError('INVALID_ARGS', 'replay accepts exactly one input path: replay <path>');
   }
-  if (flags.replayExportFormat !== undefined || flags.out !== undefined) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'replay --format/--out are only supported with replay export.',
-    );
+  if (flags.out !== undefined) {
+    throw new AppError('INVALID_ARGS', 'replay --out is only supported with replay export.');
   }
   return false;
 }
@@ -54,7 +51,7 @@ async function handleReplayExportCommand({
   writeCommandOutput(
     flags,
     {
-      format: flags.replayExportFormat ?? 'maestro',
+      format: 'maestro',
       sourcePath,
       ...(outputPath ? { path: outputPath } : { yaml: result.yaml }),
       warnings: result.warnings,
@@ -82,9 +79,5 @@ function validateReplayExportOptions(
   }
   if (flags.replayEnv?.length) {
     throw new AppError('INVALID_ARGS', 'replay export does not evaluate --env substitutions.');
-  }
-  const format = flags.replayExportFormat ?? 'maestro';
-  if (format !== 'maestro') {
-    throw new AppError('INVALID_ARGS', `Unsupported replay export format: ${format}`);
   }
 }

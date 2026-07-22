@@ -1,7 +1,7 @@
 import { AppError } from '../../kernel/errors.ts';
 import { createMaestroExecutionContext } from './engine-context.ts';
 import { checkpointMaestroCancellation } from './engine-flow.ts';
-import { resolveMaestroTimingPolicy } from './compatibility-policy.ts';
+import { DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY } from './compatibility-policy.ts';
 import type {
   MaestroEngineOptions,
   MaestroEngineResult,
@@ -34,7 +34,7 @@ export async function executeMaestroReplayPlan(
     port,
     options,
     context: createMaestroExecutionContext(options.defaults, options.env ? { ...options.env } : {}),
-    timing: resolveMaestroTimingPolicy(options.timing),
+    timing: DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY,
     artifacts: new Set(),
     warnings: [],
     executed: plan.compatibility.staticallyExecutedControls,
