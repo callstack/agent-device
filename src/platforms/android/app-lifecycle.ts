@@ -28,13 +28,7 @@ import {
   type AndroidForegroundApp,
 } from './app-parsers.ts';
 
-export {
-  parseAndroidForegroundApp,
-  parseAndroidLaunchablePackages,
-  parseAndroidUserInstalledPackages,
-  type AndroidBlockingDialogFocus,
-  type AndroidForegroundApp,
-} from './app-parsers.ts';
+export type { AndroidBlockingDialogFocus, AndroidForegroundApp } from './app-parsers.ts';
 
 const ALIASES: Record<string, { type: 'intent' | 'package'; value: string }> = {
   settings: { type: 'intent', value: 'android.settings.SETTINGS' },

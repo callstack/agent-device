@@ -37,12 +37,6 @@
   ],
   "ignoreExports": [
     {
-      "file": "src/__tests__/test-utils/index.ts",
-      "exports": [
-        "*"
-      ]
-    },
-    {
       "comment": "Authoritative supported-command list; sole consumer is the conformance oracle (scripts/maestro-conformance, an ignored tooling tree).",
       "file": "src/compat/maestro/program-ir-command-parser.ts",
       "exports": [
@@ -50,102 +44,15 @@
       ]
     },
     {
-      "file": "src/__tests__/test-utils/device-fixtures.ts",
+      "comment": "Daemon route handlers are reached only through the dynamic `import()` table in request-handler-chain.ts, which --production analysis cannot follow to a consumer.",
+      "file": "src/daemon/handlers/{lease,session,snapshot,react-native,record-trace,find,interaction}.ts",
       "exports": [
-        "LINUX_DEVICE",
-        "ANDROID_TV_DEVICE",
-        "TVOS_SIMULATOR"
-      ]
-    },
-    {
-      "file": "src/platforms/android/app-lifecycle.ts",
-      "exports": [
-        "parseAndroidForegroundApp",
-        "parseAndroidLaunchablePackages",
-        "parseAndroidUserInstalledPackages",
-        "installAndroidInstallablePath"
-      ]
-    },
-    {
-      "file": "src/platforms/android/index.ts",
-      "exports": [
-        "installAndroidInstallablePath"
-      ]
-    },
-    {
-      "file": "src/platforms/apple/core/apps.ts",
-      "exports": [
-        "listSimulatorApps",
-        "uninstallIosApp"
-      ]
-    },
-    {
-      "file": "src/platforms/apple/core/runner/runner-contract.ts",
-      "exports": [
-        "resolveRunnerEarlyExitHint"
-      ]
-    },
-    {
-      "file": "src/platforms/apple/core/runner/runner-session.ts",
-      "exports": [
-        "stopAllIosRunnerSessions"
-      ]
-    },
-    {
-      "file": "src/platforms/apple/core/runner/runner-xctestrun.ts",
-      "exports": [
-        "resolveRunnerBuildDestination",
-        "resolveRunnerAppBundleId",
-        "resolveRunnerSigningBuildSettings",
-        "resolveRunnerBundleBuildSettings",
-        "assertSafeDerivedCleanup"
-      ]
-    },
-    {
-      "file": "src/cloud-webdriver.ts",
-      "exports": [
-        "CLOUD_WEBDRIVER_PROVIDERS"
-      ]
-    },
-    {
-      "file": "src/daemon/handlers/lease.ts",
-      "exports": [
-        "handleLeaseCommands"
-      ]
-    },
-    {
-      "file": "src/daemon/handlers/session.ts",
-      "exports": [
-        "handleSessionCommands"
-      ]
-    },
-    {
-      "file": "src/daemon/handlers/snapshot.ts",
-      "exports": [
-        "handleSnapshotCommands"
-      ]
-    },
-    {
-      "file": "src/daemon/handlers/react-native.ts",
-      "exports": [
-        "handleReactNativeCommands"
-      ]
-    },
-    {
-      "file": "src/daemon/handlers/record-trace.ts",
-      "exports": [
-        "handleRecordTraceCommands"
-      ]
-    },
-    {
-      "file": "src/daemon/handlers/find.ts",
-      "exports": [
-        "handleFindCommands"
-      ]
-    },
-    {
-      "file": "src/daemon/handlers/interaction.ts",
-      "exports": [
+        "handleLeaseCommands",
+        "handleSessionCommands",
+        "handleSnapshotCommands",
+        "handleReactNativeCommands",
+        "handleRecordTraceCommands",
+        "handleFindCommands",
         "handleInteractionCommands"
       ]
     },
