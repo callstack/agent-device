@@ -16,6 +16,8 @@ const SUBPROCESS_STUB_TESTS = [
   'src/platforms/apple/core/__tests__/index.test.ts',
   // Stubs npx + the package managers on PATH and spawns a real Metro dev server per case.
   'src/__tests__/client-metro.test.ts',
+  // Spawns a real vitest child process to prove the hermetic-env setup is wired.
+  'src/__tests__/hermetic-env-guard.test.ts',
 ];
 
 export default defineConfig({

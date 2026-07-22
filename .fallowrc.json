@@ -65,7 +65,7 @@
     },
     {
       "comment": "Tool config default exports, loaded by the tool rather than imported.",
-      "file": "{tsdown.config.ts,website/rspress.config.ts,test/skillgym/skillgym.config.ts,test/skillgym/suites/*.ts}",
+      "file": "{tsdown.config.ts,website/rspress.config.ts,test/skillgym/skillgym.config.ts,test/skillgym/suites/*.ts,src/__tests__/__fixtures__/hermetic-env-guard/vitest.config.ts}",
       "exports": [
         "default"
       ]
