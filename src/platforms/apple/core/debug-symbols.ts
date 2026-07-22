@@ -7,14 +7,6 @@ import { resolveAppleTools, symbolicateAddresses } from './debug-symbols/symboli
 import type { DebugSymbolsOptions, DebugSymbolsResult } from '../../../contracts/debug-symbols.ts';
 import { AppError } from '../../../kernel/errors.ts';
 
-export type {
-  DebugSymbolsCrashFrame,
-  DebugSymbolsCrashSummary,
-  DebugSymbolsImage,
-  DebugSymbolsOptions,
-  DebugSymbolsResult,
-} from './debug-symbols/types.ts';
-
 const MAX_CRASH_ARTIFACT_BYTES = 64 * 1024 * 1024;
 
 export async function symbolicateCrashArtifact(

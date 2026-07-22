@@ -1,9 +1,6 @@
 export type {
   DebugSymbolsCrashFrame,
   DebugSymbolsCrashSummary,
-  DebugSymbolsImage,
-  DebugSymbolsOptions,
-  DebugSymbolsResult,
 } from '../../../../contracts/debug-symbols.ts';
 
 export type AppleImage = {

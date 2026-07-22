@@ -10,12 +10,9 @@ import type {
 export type {
   AgentDeviceRuntime,
   AgentDeviceRuntimeConfig,
-  CommandClock,
-  CommandContext,
   CommandPolicy,
   CommandSessionRecord,
   CommandSessionStore,
-  DiagnosticsSink,
 } from './runtime-contract.ts';
 
 export type AgentDevice = AgentDeviceRuntime & BoundAgentDeviceCommands;

@@ -48,7 +48,7 @@ import {
   type ReplayTargetGuardDenotation,
 } from '../../../replay/target-identity-node.ts';
 
-export type { InteractionTarget, PointTarget, ResolvedInteractionTarget };
+export type { InteractionTarget, ResolvedInteractionTarget };
 
 /**
  * ADR 0012 migration step 4, post-resolution guard: the LOCAL identity AND

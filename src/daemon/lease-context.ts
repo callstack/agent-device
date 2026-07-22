@@ -8,12 +8,11 @@ import {
   findMissingProxyLeaseFields,
   isProxyLeaseScope,
   leaseScopeFromRequest,
-  type LeaseDiagnosticsContext,
   type LeaseScope,
 } from '../core/lease-scope.ts';
 
 export { DEFAULT_PROXY_LEASE_TTL_MS, findMissingProxyLeaseFields, isProxyLeaseScope };
-export type { LeaseDiagnosticsContext, LeaseScope };
+export type { LeaseScope };
 
 export type SessionLease = {
   tenantId: string;

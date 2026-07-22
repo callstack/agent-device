@@ -15,11 +15,7 @@ export { ANDROID_SNAPSHOT_HELPER_WAIT_FOR_IDLE_TIMEOUT_MS } from './snapshot-hel
 export type {
   AndroidAdbExecutor,
   AndroidSnapshotHelperArtifact,
-  AndroidSnapshotHelperCaptureOptions,
   AndroidSnapshotHelperInstallPolicy,
   AndroidSnapshotHelperInstallResult,
-  AndroidSnapshotHelperManifest,
-  AndroidSnapshotHelperMetadata,
   AndroidSnapshotHelperOutput,
 } from './snapshot-helper-types.ts';
-export type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';

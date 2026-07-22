@@ -1,6 +1,6 @@
 import type { CliCommandName } from '../command-catalog.ts';
 import { listCommandMetadata } from '../commands/command-metadata.ts';
-import type { CommandSchema, CommandSchemaOverride } from './types.ts';
+import type { CommandSchema } from './types.ts';
 import { getCliCommandOverride, getSchemaOnlyCliCommandSchema } from './command-overrides.ts';
 import { getFlagDefinition, getFlagDefinitions } from '../commands/cli-grammar/flag-registry.ts';
 import {
@@ -9,13 +9,12 @@ import {
 } from '../commands/cli-grammar/flag-groups.ts';
 import {
   type CliFlags,
-  type DaemonExcludedCliFlag,
   type FlagDefinition,
   type FlagKey,
 } from '../commands/cli-grammar/flag-types.ts';
 
-export type { CliFlags, DaemonExcludedCliFlag, FlagDefinition, FlagKey };
-export type { CommandSchema, CommandSchemaOverride };
+export type { CliFlags, FlagDefinition, FlagKey };
+export type { CommandSchema };
 export { getFlagDefinition, getFlagDefinitions, GLOBAL_FLAG_KEYS };
 
 const COMMAND_SCHEMA_BASES = new Map<string, CommandSchema>(

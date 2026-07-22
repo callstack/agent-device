@@ -16,8 +16,6 @@ export {
   ANDROID_FRAME_SAMPLE_METHOD,
   resetAndroidFramePerfStats,
   sampleAndroidFramePerf,
-  type AndroidFrameDropWindow,
-  type AndroidFramePerfSample,
 } from './perf-frame.ts';
 export {
   cleanupAndroidNativePerfSession,
@@ -28,10 +26,6 @@ export {
   writeAndroidSimpleperfReport,
   type AndroidNativePerfKind,
   type AndroidNativePerfSession,
-  type AndroidNativePerfStartResult,
-  type AndroidNativePerfStopResult,
-  type AndroidNativePerfType,
-  type AndroidSimpleperfReportResult,
 } from './perf-native.ts';
 
 export const ANDROID_CPU_SAMPLE_METHOD = 'adb-shell-dumpsys-cpuinfo';

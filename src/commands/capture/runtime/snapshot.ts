@@ -34,8 +34,6 @@ import type {
 } from '../../runtime-types.ts';
 import { now } from '../../runtime-common.ts';
 
-export type { SnapshotDiffLine, SnapshotDiffSummary } from '../../../snapshot/snapshot-diff.ts';
-
 export type SnapshotCommandResult = {
   nodes: SnapshotNode[];
   truncated: boolean;

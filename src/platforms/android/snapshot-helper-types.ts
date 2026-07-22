@@ -1,5 +1,4 @@
 import type { AndroidAdbExecutor, AndroidAdbProvider } from './adb-executor.ts';
-import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
 
 export type AndroidSnapshotHelperTransport = 'instrumentation' | 'persistent-session';
 export type AndroidSnapshotCaptureMode = 'interactive-windows' | 'active-window';
@@ -99,5 +98,3 @@ export type AndroidSnapshotHelperOutput = {
   xml: string;
   metadata: AndroidSnapshotHelperMetadata;
 };
-
-export type { AndroidSnapshotBackendMetadata };

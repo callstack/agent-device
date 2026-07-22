@@ -1,9 +1,7 @@
-import type { InteractionTarget, InternalRequestOptions } from '../../client/client-types.ts';
+import type { InternalRequestOptions } from '../../client/client-types.ts';
 import type { CommandFlags } from '../../core/dispatch-context.ts';
 import type { CliFlags } from './flag-types.ts';
 import type { ClickButton } from '../../core/click-button.ts';
-import type { DecodedFillTarget } from '../../core/interaction-positionals.ts';
-import type { WaitParsed } from '../../core/wait-positionals.ts';
 
 export type DaemonCommandRequest = {
   command: string;
@@ -88,5 +86,3 @@ export type SelectionOptions = {
 export type CliInput = Record<string, unknown>;
 export type CliReader = (positionals: string[], flags: CliFlags) => CliInput;
 export type DaemonWriter = (input: CommandInput) => DaemonCommandRequest;
-
-export type { DecodedFillTarget, InteractionTarget, WaitParsed };

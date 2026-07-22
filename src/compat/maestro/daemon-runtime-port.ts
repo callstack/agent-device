@@ -61,11 +61,7 @@ import type {
   MaestroPublicOperation,
 } from './daemon-runtime-public-operation.ts';
 
-export type { DaemonMaestroRuntimeDependencies } from './daemon-runtime-port-observation.ts';
-export type {
-  CreateDaemonMaestroRuntimeOperationsOptions,
-  DaemonMaestroRuntimeBaseRequest,
-} from './daemon-runtime-port-support.ts';
+export type { CreateDaemonMaestroRuntimeOperationsOptions } from './daemon-runtime-port-support.ts';
 
 function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOperationsOptions): {
   operations: MaestroRuntimeOperations;

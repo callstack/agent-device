@@ -10,9 +10,8 @@ import { AppError } from './kernel/errors.ts';
  * literal `batchable`. Extracting the entries whose `batchable` is `true` and
  * indexing their `name` reconstructs this union from the same single source the
  * runtime allowlist below is built from — no hand-maintained list to drift. The
- * downstream contracts (`BatchCommandName`, re-exported from `command-surface.ts`,
- * and the `satisfies readonly DaemonCommandName[]` guard in
- * `commands/batch/projection.ts`) are still enforced by `tsc`.
+ * downstream contracts (`BatchCommandName` in `commands/batch/projection.ts` and
+ * its `satisfies readonly DaemonCommandName[]` guard) are still enforced by `tsc`.
  */
 export type StructuredBatchCommandName = Extract<
   (typeof commandDescriptors)[number],

@@ -183,7 +183,7 @@
     "isExpired"
   ],
   "rules": {
-    "unused-types": "warn",
+    "unused-types": "error",
     "duplicate-exports": "off"
   },
   "production": {

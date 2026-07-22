@@ -1,6 +1,6 @@
 import type { CliFlags } from '../../contracts/cli-flags.ts';
 
-export type { CliFlags, DaemonExcludedCliFlag } from '../../contracts/cli-flags.ts';
+export type { CliFlags } from '../../contracts/cli-flags.ts';
 
 export type FlagKey = keyof CliFlags;
 type FlagType = 'boolean' | 'int' | 'enum' | 'string' | 'booleanOrString';

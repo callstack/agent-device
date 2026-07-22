@@ -1,5 +1,5 @@
-export type { Selector, SelectorChain } from './arguments.ts';
-export type { SelectorDiagnostics, SelectorResolution, SelectorChainMatchList } from './resolve.ts';
+export type { Selector } from './arguments.ts';
+export type { SelectorDiagnostics, SelectorResolution } from './resolve.ts';
 
 export {
   parseSelectorChain,

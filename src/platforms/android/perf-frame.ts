@@ -6,7 +6,6 @@ import { parseAndroidFramePerfSample, type AndroidFramePerfSample } from './perf
 export {
   ANDROID_FRAME_SAMPLE_DESCRIPTION,
   ANDROID_FRAME_SAMPLE_METHOD,
-  type AndroidFrameDropWindow,
   type AndroidFramePerfSample,
 } from './perf-frame-parser.ts';
 

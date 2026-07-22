@@ -1,11 +1,10 @@
 import type { AgentDeviceClient } from '../client/client-types.ts';
 import { listCommandFamilyDefinitions, type CommandFamilyDefinition } from './family/registry.ts';
-import type { BatchCommandName } from './command-projection.ts';
 import type { CommandName } from './command-metadata.ts';
 
 const commandSurface = listCommandFamilyDefinitions();
 
-export type { BatchCommandName, CommandName };
+export type { CommandName };
 
 type CommandDefinitionFor<Name extends CommandName> = Extract<
   CommandFamilyDefinition,

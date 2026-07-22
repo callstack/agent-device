@@ -5,8 +5,6 @@ import { findConnectedMaskComponents } from './screenshot-diff-components.ts';
 import { splitLargeDiffRegions } from './screenshot-diff-region-split.ts';
 import type { MutableDiffRegion } from './screenshot-diff-region-types.ts';
 
-export type { MutableDiffRegion } from './screenshot-diff-region-types.ts';
-
 type ScreenshotDiffColor = {
   r: number;
   g: number;

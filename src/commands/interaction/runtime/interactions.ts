@@ -35,14 +35,12 @@ export { focusCommand, longPressCommand, scrollCommand } from './gestures.ts';
 export type {
   FocusCommandOptions,
   FocusCommandResult,
-  GestureDirection,
   LongPressCommandOptions,
   LongPressCommandResult,
   ScrollCommandOptions,
   ScrollCommandResult,
-  ScrollTarget,
 } from './gestures.ts';
-export type { InteractionTarget, PointTarget, ResolvedInteractionTarget } from './resolution.ts';
+export type { InteractionTarget } from './resolution.ts';
 
 export type PressCommandOptions = CommandContext &
   RepeatedInput & {

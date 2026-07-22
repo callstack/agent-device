@@ -47,7 +47,6 @@ export const batchCommandFamily = defineCommandFamilyFromFacets({
 });
 
 export { createBatchDaemonWriter };
-export type { BatchCommandName } from './projection.ts';
 
 function toBatchOptions(input: BatchInput): BatchRunOptions {
   return {

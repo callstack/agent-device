@@ -44,14 +44,7 @@ import {
   type SystemCommands,
 } from './system/runtime/index.ts';
 
-export type {
-  BoundRuntimeCommand,
-  CommandResult,
-  DiffSnapshotCommandOptions,
-  RuntimeCommand,
-  ScreenshotCommandOptions,
-  SnapshotCommandOptions,
-} from './runtime-types.ts';
+export type { ScreenshotCommandOptions } from './runtime-types.ts';
 
 export type AgentDeviceCommands = {
   capture: CaptureCommands;

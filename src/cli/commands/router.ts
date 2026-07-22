@@ -10,11 +10,7 @@ import { replayCommand } from './replay.ts';
 import { screenshotCommand, diffCommand } from './screenshot.ts';
 import type { ClientCommandHandlerMap, ClientCommandParams } from './router-types.ts';
 
-export type {
-  ClientCommandHandler,
-  ClientCommandHandlerMap,
-  ClientCommandParams,
-} from './router-types.ts';
+export type { ClientCommandParams } from './router-types.ts';
 
 const dedicatedCliCommandHandlers = {
   connect: connectCommand,

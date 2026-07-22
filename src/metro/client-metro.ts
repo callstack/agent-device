@@ -34,10 +34,7 @@ type ResolvedMetroKind = Exclude<MetroPrepareKind, 'auto'>;
 type EnvSource = NodeJS.ProcessEnv | Record<string, string | undefined>;
 type RepackBundlerKind = 'rspack' | 'webpack';
 
-export type {
-  CompanionTunnelScope,
-  MetroBridgeScope,
-} from '../client/client-companion-tunnel-contract.ts';
+export type { MetroBridgeScope } from '../client/client-companion-tunnel-contract.ts';
 
 type PackageManagerConfig = {
   command: string;

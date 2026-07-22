@@ -42,8 +42,6 @@ const IOS_DEVICE_RECORD_MIN_FPS = 1;
 const IOS_DEVICE_RECORD_MAX_FPS = 120;
 const IOS_SIMULATOR_RECORDING_TAIL_SETTLE_MS = 350;
 
-export type { RecordTraceDeps, RecordingBase } from './record-trace-types.ts';
-
 type StartRecordingParams = {
   req: DaemonRequest;
   sessionName: string;

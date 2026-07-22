@@ -1097,8 +1097,6 @@ Report:
   },
 } as const satisfies Record<string, { summary: string; body: string }>;
 
-export type HelpTopicName = keyof typeof HELP_TOPICS;
-
 function formatCommandListArg(commandName: string, schema: CommandSchema, arg: string): string {
   const optional = arg.endsWith('?');
   const name = optional ? arg.slice(0, -1) : arg;

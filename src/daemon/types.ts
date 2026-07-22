@@ -34,13 +34,9 @@ import type {
 import type { AudioProbeSource } from '../audio-probe-result.ts';
 import type { SnapshotDiagnosticsState } from '../snapshot-diagnostics.ts';
 export type {
-  ReplaySuiteAttemptFailure,
   ReplaySuiteResult,
   ReplaySuiteTestFailed,
-  ReplaySuiteTestPassed,
   ReplaySuiteTestResult,
-  ReplaySuiteTestSkipped,
-  ReplaySuiteTestSkipReason,
 } from '../contracts/replay.ts';
 
 export type DaemonInstallSource = PublicDaemonInstallSource;

@@ -9,7 +9,6 @@ export {
 } from './runner-artifact.ts';
 export {
   markRunnerXctestrunArtifactBadForRun,
-  type ExistingXctestrunState,
   type RunnerXctestrunCacheKind,
 } from './runner-cache.ts';
 export {
@@ -17,6 +16,5 @@ export {
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerAppBundleId,
   resolveRunnerDerivedPath,
-  type RunnerXctestrunCacheMetadata,
 } from './runner-cache-metadata.ts';
 export { acquireXcodebuildSimulatorSetRedirect } from './runner-device-set.ts';

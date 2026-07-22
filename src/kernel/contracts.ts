@@ -1,12 +1,5 @@
 export type { AppErrorCode } from './errors.ts';
 export { defaultHintForCode, normalizeError } from './errors.ts';
-export type {
-  DebugSymbolsCrashFrame,
-  DebugSymbolsCrashSummary,
-  DebugSymbolsImage,
-  DebugSymbolsOptions,
-  DebugSymbolsResult,
-} from '../contracts/debug-symbols.ts';
 import type { PlatformSelector } from './device.ts';
 
 export type SessionRuntimeHints = {
