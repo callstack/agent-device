@@ -21,6 +21,7 @@ vi.mock('../../../utils/timeouts.ts', async (importOriginal) => {
 });
 
 import { dispatchCommand } from '../../../core/dispatch.ts';
+import type { RawSnapshotNode } from '../../../kernel/snapshot.ts';
 import {
   makeAndroidSession,
   makeIosSession,
@@ -1061,10 +1062,21 @@ test('buildReplayFailureDivergence: divergence capture drops the action snapshot
 });
 
 // Real walked FULL-COVER quick-settings shade: every node is systemui and the
-// status-bar icons share the shade's window. The provenance classifier must
-// exclude those icons without excluding the actionable tiles; reverting to the
-// old run-level classifier makes this screen empty.
-test('buildReplayFailureDivergence: a full-cover quick-settings shade still publishes its hittable tiles (wave-3 leg E)', async () => {
+// status-bar icons share the shade's window. The second scenario pessimistically
+// marks the whole tree as chrome to model older/OEM layouts whose status-bar
+// container also owns real controls; the last-resort hittable fallback must keep
+// replay repair actionable without promoting non-hittable status residue.
+test.each([
+  {
+    name: 'classifies the shade precisely',
+    prepare: (nodes: RawSnapshotNode[]) => nodes,
+  },
+  {
+    name: 'survives a whole-tree chrome false positive',
+    prepare: (nodes: RawSnapshotNode[]) =>
+      nodes.map((node) => ({ ...node, systemChrome: true as const })),
+  },
+])('buildReplayFailureDivergence: a full-cover quick-settings shade $name', async ({ prepare }) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-qsshade-'));
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
@@ -1073,7 +1085,7 @@ test('buildReplayFailureDivergence: a full-cover quick-settings shade still publ
     makeAndroidSession(sessionName, { appBundleId: 'com.google.android.deskclock' }),
   );
 
-  const walked = walkNonRawAndroidFixture(ANDROID_QS_SHADE_CAPTURE_RAW_NODES);
+  const walked = prepare(walkNonRawAndroidFixture(ANDROID_QS_SHADE_CAPTURE_RAW_NODES));
   mockDispatchCommand.mockResolvedValue({ nodes: walked, truncated: false, backend: 'android' });
 
   const action = {

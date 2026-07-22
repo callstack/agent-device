@@ -1,4 +1,6 @@
 import type { DaemonRequest } from './types.ts';
+import type { SnapshotNode } from '../kernel/snapshot.ts';
+import { stripAndroidSystemChromeProvenanceFromNode } from '../contracts/android-system-chrome.ts';
 import { SessionStore } from './session-store.ts';
 import { isInteractiveObservation } from './session-action-recorder.ts';
 import { computeTargetEvidence, type RecordedTargetCapture } from './session-target-evidence.ts';
@@ -20,7 +22,12 @@ export function buildFindRecordResult(
   };
 }
 
-export function toDaemonFindData(result: Record<string, unknown>): Record<string, unknown> {
+type DaemonFindResult =
+  | { kind: 'found'; waitedMs?: number }
+  | { kind: 'text'; ref: string; text: string; node: SnapshotNode }
+  | { kind: 'attrs'; ref: string; node: SnapshotNode };
+
+export function toDaemonFindData(result: DaemonFindResult): Record<string, unknown> {
   if (result.kind === 'found') {
     return {
       found: true,
@@ -28,9 +35,9 @@ export function toDaemonFindData(result: Record<string, unknown>): Record<string
     };
   }
   return {
-    ...(typeof result.ref === 'string' ? { ref: result.ref } : {}),
-    ...(typeof result.text === 'string' ? { text: result.text } : {}),
-    ...(result.node && typeof result.node === 'object' ? { node: result.node } : {}),
+    ref: result.ref,
+    ...(result.kind === 'text' ? { text: result.text } : {}),
+    node: stripAndroidSystemChromeProvenanceFromNode(result.node),
   };
 }
 
@@ -57,13 +64,19 @@ export function buildGetRecordResult(
   };
 }
 
-export function toDaemonGetData(result: Record<string, unknown>): Record<string, unknown> {
-  const target = getResolvedTarget(result);
+type DaemonGetResult = {
+  target: { kind: 'ref'; ref: string } | { kind: 'selector'; selector: string };
+  text?: string;
+  node: SnapshotNode;
+};
+
+export function toDaemonGetData(result: DaemonGetResult): Record<string, unknown> {
+  const { target } = result;
   return {
-    ...(target?.kind === 'ref' ? { ref: normalizeDaemonRef(target.ref) } : {}),
-    ...(target?.kind === 'selector' ? { selector: target.selector } : {}),
+    ...(target.kind === 'ref' ? { ref: normalizeDaemonRef(target.ref) } : {}),
+    ...(target.kind === 'selector' ? { selector: target.selector } : {}),
     ...(typeof result.text === 'string' ? { text: result.text } : {}),
-    ...(result.node && typeof result.node === 'object' ? { node: result.node } : {}),
+    node: stripAndroidSystemChromeProvenanceFromNode(result.node),
   };
 }
 

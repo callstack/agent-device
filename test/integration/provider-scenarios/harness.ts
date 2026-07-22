@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -167,7 +168,7 @@ function commandRequest(
 }
 
 function responseToRpcResult(response: DaemonResponse, id: string): ProviderScenarioRpcResult {
-  return {
+  const rpcResult = {
     statusCode: 200,
     json: response.ok
       ? {
@@ -185,4 +186,10 @@ function responseToRpcResult(response: DaemonResponse, id: string): ProviderScen
           },
         },
   };
+  assert.equal(
+    JSON.stringify(rpcResult).includes('"systemChrome"'),
+    false,
+    'Public RPC responses must not expose Android-internal systemChrome provenance',
+  );
+  return rpcResult;
 }

@@ -31,12 +31,15 @@ export function hasAndroidSystemChromeProvenance(value: object): value is { syst
   return 'systemChrome' in value && value.systemChrome === true;
 }
 
+/** Drops Android-internal provenance from a node embedded in a public response. */
+export function stripAndroidSystemChromeProvenanceFromNode(node: SnapshotNode): SnapshotNode {
+  if (!hasAndroidSystemChromeProvenance(node)) return node;
+  const { systemChrome: _systemChrome, ...published } = node;
+  return published;
+}
+
 /** Drops Android-internal provenance at the daemon's public snapshot seam. */
 export function stripAndroidSystemChromeProvenance(nodes: SnapshotNode[]): SnapshotNode[] {
   if (!nodes.some(hasAndroidSystemChromeProvenance)) return nodes;
-  return nodes.map((node) => {
-    if (!hasAndroidSystemChromeProvenance(node)) return node;
-    const { systemChrome: _systemChrome, ...published } = node;
-    return published;
-  });
+  return nodes.map(stripAndroidSystemChromeProvenanceFromNode);
 }

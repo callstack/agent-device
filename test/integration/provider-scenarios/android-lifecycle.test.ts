@@ -37,7 +37,7 @@ test('Provider-backed integration Android Settings flow uses scripted ADB provid
   });
 }, 15_000);
 
-test('Provider-backed Android snapshot keeps chrome provenance off the public response', async () => {
+test('Provider-backed Android reads keep chrome provenance internal across public node payloads', async () => {
   await withProviderScenarioResource(
     async () => await createAndroidSettingsWorld({ snapshotXml: () => ANDROID_SYSTEM_SURFACE_XML }),
     async (world) => {
@@ -45,13 +45,21 @@ test('Provider-backed Android snapshot keeps chrome provenance off the public re
       await client.apps.open({ app: 'settings', ...world.selection });
 
       const response = await world.daemon.callCommand('snapshot', [], world.selection);
-      const snapshot = assertRpcOk<{ nodes: Array<{ label?: string }> }>(response);
+      const snapshot = assertRpcOk<{ nodes: Array<{ ref: string; label?: string }> }>(response);
 
       assert.equal(
         snapshot.nodes.some((node) => node.label === 'Display brightness'),
         true,
       );
-      assert.equal(JSON.stringify(snapshot).includes('systemChrome'), false);
+
+      const clock = snapshot.nodes.find((node) => node.label === '7:03');
+      assert.ok(clock?.ref);
+      assertRpcOk(
+        await world.daemon.callCommand('get', ['attrs', `@${clock.ref}`], world.selection),
+      );
+      assertRpcOk(
+        await world.daemon.callCommand('find', ['label', '7:03', 'get', 'attrs'], world.selection),
+      );
     },
   );
 });

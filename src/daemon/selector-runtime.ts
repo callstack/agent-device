@@ -492,16 +492,16 @@ function buildDirectIosGetResult(
   property: 'text' | 'attrs',
   selector: string,
   result: DirectIosSelectorQueryResult,
-): Record<string, unknown> | null {
+) {
   if (!result.found || !result.node) return null;
   const base = {
     target: { kind: 'selector' as const, selector },
     node: result.node,
     selectorChain: [selector],
   };
-  if (property === 'attrs') return { kind: 'attrs', ...base };
+  if (property === 'attrs') return { kind: 'attrs' as const, ...base };
   if (typeof result.text !== 'string') return null;
-  return { kind: 'text', ...base, text: result.text };
+  return { kind: 'text' as const, ...base, text: result.text };
 }
 
 function buildDirectIosIsResult(
