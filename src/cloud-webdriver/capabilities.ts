@@ -33,7 +33,7 @@ export type CloudWebDriverOperation =
   | 'portReverse'
   | 'nativeSnapshotBackend';
 
-export type CloudWebDriverSupportLevel = 'supported' | 'unsupported';
+export type CloudWebDriverSupportLevel = 'supported' | 'partial' | 'unsupported';
 
 export type CloudWebDriverOperationCapability = {
   support: CloudWebDriverSupportLevel;
@@ -62,26 +62,53 @@ const unsupported: CloudWebDriverOperationCapability = { support: 'unsupported' 
 
 const BASE_WEBDRIVER_CAPABILITIES: CloudWebDriverCapabilityMap = {
   lease: supported,
-  inventory: supported,
-  install: supported,
+  inventory: {
+    support: 'partial',
+    note: 'Inventory exposes only the leased cloud device, not the provider catalog.',
+  },
+  install: {
+    support: 'partial',
+    note: 'Requires provider-specific upload or a path visible to the remote Appium server.',
+  },
   open: supported,
   close: supported,
-  snapshot: supported,
+  snapshot: {
+    support: 'partial',
+    note: 'Uses Appium page source XML, not agent-device native snapshot backends.',
+  },
   screenshot: supported,
   tap: supported,
   doubleTap: supported,
   longPress: supported,
   swipe: supported,
-  scroll: supported,
+  scroll: {
+    support: 'partial',
+    note: 'Implemented as viewport-relative W3C pointer gestures.',
+  },
   fill: supported,
   type: supported,
   back: supported,
-  home: supported,
-  orientation: supported,
-  appSwitcher: supported,
+  home: {
+    support: 'partial',
+    note: 'Uses provider/Appium mobile pressButton support where available.',
+  },
+  orientation: {
+    support: 'partial',
+    note: 'Uses provider/Appium mobile rotate support where available.',
+  },
+  appSwitcher: {
+    support: 'partial',
+    note: 'Uses provider/Appium mobile pressButton support where available.',
+  },
   tvRemote: unsupported,
-  'clipboard.read': supported,
-  'clipboard.write': supported,
+  'clipboard.read': {
+    support: 'partial',
+    note: 'Uses provider/Appium clipboard extension support where available.',
+  },
+  'clipboard.write': {
+    support: 'partial',
+    note: 'Uses provider/Appium clipboard extension support where available.',
+  },
   settings: unsupported,
   pinch: unsupported,
   rotateGesture: unsupported,

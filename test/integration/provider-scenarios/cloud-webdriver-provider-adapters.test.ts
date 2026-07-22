@@ -76,14 +76,14 @@ test('BrowserStack adapter prepares App Automate capabilities and uploads instal
 
 test('cloud provider adapters declare command capabilities explicitly', () => {
   const browserStack = getBrowserStackWebDriverCapabilities('android');
-  assert.equal(browserStack.operations.snapshot.support, 'supported');
-  assert.equal(browserStack.operations.install.support, 'supported');
+  assert.equal(browserStack.operations.snapshot.support, 'partial');
+  assert.equal(browserStack.operations.install.support, 'partial');
   assert.equal(browserStack.operations.artifacts.support, 'supported');
   assert.equal(browserStack.operations.nativeSnapshotBackend.support, 'unsupported');
   assert.match(browserStack.operations.portReverse.note ?? '', /BrowserStack Local/);
 
   const aws = getAwsDeviceFarmWebDriverCapabilities('android');
-  assert.equal(aws.operations.snapshot.support, 'supported');
+  assert.equal(aws.operations.snapshot.support, 'partial');
   assert.equal(aws.operations.install.support, 'unsupported');
   assert.equal(aws.operations.artifacts.support, 'supported');
   assert.match(aws.operations.install.note ?? '', /appArn/);

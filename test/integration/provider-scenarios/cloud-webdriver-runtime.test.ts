@@ -333,7 +333,7 @@ async function allocateWebDriverLease(
       capabilities?: { operations?: { snapshot?: { support?: string } } };
     };
   }>(allocate);
-  assert.equal(data.provider?.capabilities?.operations?.snapshot?.support, 'supported');
+  assert.equal(data.provider?.capabilities?.operations?.snapshot?.support, 'partial');
   return data.lease;
 }
 
