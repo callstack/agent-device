@@ -168,6 +168,10 @@ test('runtime press names a direction for a partial clip whose center is off-scr
       assert.equal(details?.reason, 'offscreen_selector');
       assert.equal(details?.scrollDirection, 'down');
       assert.match(String(details?.hint), /scroll down/i);
+      // #1366 recovery must be bounded: a single large (fling) scroll overshoots,
+      // so the hint steers to small steps / a bounded gesture pan.
+      assert.match(String(details?.hint), /small steps/i);
+      assert.match(String(details?.hint), /gesture pan/i);
       return true;
     },
   );

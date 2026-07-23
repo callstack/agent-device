@@ -2593,10 +2593,13 @@ test('press @ref fails fast when the target is off-screen', async () => {
   if (response && !response.ok) {
     expect(response.error.code).toBe('COMMAND_FAILED');
     expect(response.error.message).toMatch(/off-screen/i);
-    // #1366: the hint names the concrete scroll direction and steers to a
-    // selector-based retry (a @ref would be rejected as expired after the scroll).
+    // #1366: the hint names the concrete scroll direction, steers to a
+    // selector-based retry (a @ref would be rejected as expired after the scroll),
+    // and prescribes bounded movement (a large fling scroll overshoots).
     expect(response.error.hint).toMatch(/scroll down/i);
     expect(response.error.hint).toMatch(/selector/i);
+    expect(response.error.hint).toMatch(/small steps/i);
+    expect(response.error.hint).toMatch(/gesture pan/i);
     expect(response.error.details?.reason).toBe('offscreen_ref');
     expect(response.error.details?.scrollDirection).toBe('down');
   }
