@@ -824,8 +824,10 @@ Discovery:
   Use --device <name-or-udid> only when multiple devices are present.
 
 iOS physical-device prerequisites:
-  Xcode and xcrun devicectl must be available from the selected Xcode.
+  Xcode, xcrun xcdevice, and xcrun xctrace must be available from the selected Xcode.
   The device must be paired/trusted, connected, unlocked when needed, and have Developer Mode enabled.
+  Modern devices visible to devicectl use CoreDevice. Older devices visible only to xctrace use the XCTest backend automatically.
+  XCTest-backed devices must already have the target app installed and should be opened by bundle ID; app inventory, install/reinstall, deep links, and launch arguments require CoreDevice.
   The AgentDeviceRunner XCTest host must be signed before commands can run on a physical device.
   Start with Automatic Signing and only these env vars:
     AGENT_DEVICE_IOS_TEAM_ID=ABCDE12345

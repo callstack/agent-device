@@ -38,6 +38,8 @@ export const RUNNER_COMMAND_TRAIT_MANIFEST = {
   recordStop: 'default',
   status: 'readOnlyReadinessProbe',
   uptime: 'readOnlyReadinessProbe',
+  activate: 'readinessPreflightExemptMutation',
+  terminate: 'readinessPreflightExemptMutation',
   targetReset: 'readinessPreflightExemptMutation',
   shutdown: 'default',
 } as const satisfies Record<RunnerCommand['command'], RunnerCommandTraitClass>;

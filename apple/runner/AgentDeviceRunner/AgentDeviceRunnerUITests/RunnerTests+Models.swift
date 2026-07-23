@@ -31,6 +31,8 @@ enum CommandType: String, Codable {
   case recordStop
   case status
   case uptime
+  case activate
+  case terminate
   case targetReset
   case shutdown
 }
@@ -90,7 +92,7 @@ extension CommandType {
       return CommandTraits(isInteraction: false, readOnly: .conditional, isLifecycle: false)
 
     // Runner-lifecycle commands: skip the app-activation preflight.
-    case .recordStop, .uptime, .targetReset, .shutdown:
+    case .recordStop, .uptime, .terminate, .targetReset, .shutdown:
       return CommandTraits(isInteraction: false, readOnly: .never, isLifecycle: true)
 
     case .status:
@@ -101,7 +103,7 @@ extension CommandType {
     // guard interacts with bespoke macOS activation, so classifying it needs a macOS smoke
     // check first (tracked as a follow-up). Also preserved: querySelector is NOT read-only;
     // recordStart is NOT a lifecycle command; home/alert remain non-interaction by design.
-    case .mouseClick, .querySelector, .home, .recordStart:
+    case .mouseClick, .querySelector, .home, .recordStart, .activate:
       return CommandTraits(isInteraction: false, readOnly: .never, isLifecycle: false)
     }
   }
@@ -140,6 +142,7 @@ struct Command: Codable {
   let scope: String?
   let raw: Bool?
   let fullscreen: Bool?
+  let inlineScreenshot: Bool?
   let synthesized: Bool?
   let steps: [SequenceStep]?
 }
@@ -227,6 +230,7 @@ extension Response {
 
 struct DataPayload: Codable {
   let message: String?
+  let imageBase64: String?
   let text: String?
   let found: Bool?
   let items: [String]?
@@ -266,6 +270,7 @@ struct DataPayload: Codable {
 
   init(
     message: String? = nil,
+    imageBase64: String? = nil,
     text: String? = nil,
     found: Bool? = nil,
     items: [String]? = nil,
@@ -304,6 +309,7 @@ struct DataPayload: Codable {
     sequenceResults: [SequenceStepResult]? = nil
   ) {
     self.message = message
+    self.imageBase64 = imageBase64
     self.text = text
     self.found = found
     self.items = items

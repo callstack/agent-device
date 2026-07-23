@@ -58,9 +58,10 @@ export function createAppleInteractor(
         launchArgs: options?.launchArgs,
         terminateRunningApp: options?.terminateRunningApp,
         url: options?.url,
+        runnerOptions: runnerOpts,
       }),
     openDevice: () => openIosDevice(device),
-    close: (app) => closeIosApp(device, app),
+    close: (app) => closeIosApp(device, app, runnerOpts),
     screenshot: (outPath, options) => runAppleScreenshot(device, outPath, options, runnerOpts),
     snapshot: async (options) => {
       const result = readAppleSnapshotResult(

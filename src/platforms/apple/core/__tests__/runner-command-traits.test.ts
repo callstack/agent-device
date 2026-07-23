@@ -47,7 +47,11 @@ test('runner command manifest pins lifecycle-sensitive command groups', () => {
     'snapshot',
   ]);
   assert.deepEqual(commandsForClass('readOnlyReadinessProbe'), ['status', 'uptime']);
-  assert.deepEqual(commandsForClass('readinessPreflightExemptMutation'), ['targetReset']);
+  assert.deepEqual(commandsForClass('readinessPreflightExemptMutation'), [
+    'activate',
+    'targetReset',
+    'terminate',
+  ]);
 });
 
 test('runner command trait helpers read from the shared trait table', () => {

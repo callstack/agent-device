@@ -24,6 +24,7 @@ import { ensureBootedSimulator } from './simulator.ts';
 import { runSimctlForDevice } from './simctl.ts';
 import { extractAppleToolErrorMeta } from './tool-diagnostics.ts';
 import { runXcrun } from './tool-provider.ts';
+import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 
 function runSimctl(device: DeviceInfo, args: string[], options?: ExecOptions) {
   return runSimctlForDevice(device, args, options);
@@ -217,9 +218,16 @@ export async function captureScreenshotViaRunner(
       command: 'screenshot',
       appBundleId,
       fullscreen,
+      inlineScreenshot:
+        device.kind === 'device' && resolveIosPhysicalDeviceControl(device).backend === 'xctest',
     },
     runnerOptions,
   );
+  const inlineImage = result['imageBase64'];
+  if (typeof inlineImage === 'string' && inlineImage.length > 0) {
+    await fs.writeFile(outPath, Buffer.from(inlineImage, 'base64'));
+    return;
+  }
   const remoteFileName = result['message'] as string;
   if (!remoteFileName) {
     throw new AppError(

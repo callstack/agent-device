@@ -13,6 +13,7 @@ import { filterAppleAppsByBundlePrefix } from './app-filter.ts';
 import { listMacApps, resolveMacOsApp } from '../os/macos/apps.ts';
 import { runAppleToolCommand } from './tool-provider.ts';
 import { runSimctl } from './apps-simctl.ts';
+import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 
 const ALIASES: Record<string, string> = {
   settings: 'com.apple.Preferences',
@@ -41,6 +42,17 @@ export async function resolveIosApp(device: DeviceInfo, app: string): Promise<st
 
   const alias = resolveIosAppAlias(trimmed);
   if (alias !== trimmed) return alias;
+  if (device.kind === 'device' && resolveIosPhysicalDeviceControl(device).backend === 'xctest') {
+    throw new AppError(
+      'INVALID_ARGS',
+      `App-name lookup is unavailable for XCTest-backed device "${device.name}".`,
+      {
+        deviceId: device.id,
+        backend: 'xctest',
+        hint: 'Pass the installed app bundle ID, for example com.example.app.',
+      },
+    );
+  }
 
   const cacheScope = iosAppResolutionScope(device);
   const cached = iosAppResolutionCache.get(cacheScope, trimmed);
@@ -138,6 +150,17 @@ export async function listIosApps(device: DeviceInfo, filter: AppsFilter): Promi
   if (device.kind === 'simulator') {
     const apps = await listSimulatorApps(device);
     return filterAppleAppsByBundlePrefix(apps, filter);
+  }
+  if (resolveIosPhysicalDeviceControl(device).backend === 'xctest') {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      'App inventory is unavailable on this XCTest-backed physical iOS device.',
+      {
+        deviceId: device.id,
+        backend: 'xctest',
+        hint: 'Use an installed app bundle ID when opening the device.',
+      },
+    );
   }
   return await listIosDeviceApps(device, filter);
 }

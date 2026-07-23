@@ -49,6 +49,8 @@ export type RunnerCommand = {
     | 'recordStop'
     | 'status'
     | 'uptime'
+    | 'activate'
+    | 'terminate'
     | 'targetReset'
     | 'shutdown';
   commandId?: string;
@@ -84,6 +86,7 @@ export type RunnerCommand = {
   scope?: string;
   raw?: boolean;
   fullscreen?: boolean;
+  inlineScreenshot?: boolean;
   synthesized?: boolean;
   steps?: RunnerSequenceStep[];
 };

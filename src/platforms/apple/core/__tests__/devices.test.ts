@@ -12,12 +12,15 @@ import {
 } from '../devices.ts';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
 import type { ExecResult } from '../../../../utils/exec.ts';
+import { deviceBackendForDevice } from '../../../../core/capabilities.ts';
+import { iosPhysicalDeviceBackendRegistry } from '../physical-device-control-registry.ts';
 
 const toolCalls: Array<[string, string[]]> = [];
 let mockRunCommand: (cmd: string, args: string[]) => Promise<ExecResult>;
 let mockWhichCommand: (cmd: string) => Promise<boolean>;
 
 beforeEach(() => {
+  iosPhysicalDeviceBackendRegistry.clear();
   toolCalls.length = 0;
   mockRunCommand = async () => ({ stdout: '', stderr: '', exitCode: 0 });
   mockWhichCommand = async () => true;
@@ -602,6 +605,7 @@ test('listAppleDevices falls back to xctrace parenthesized devices when devicect
   assert.equal(physicalDevices.length, 1);
   assert.equal(physicalDevices[0]?.id, '00008020-001C2D2234567890');
   assert.equal(physicalDevices[0]?.name, 'iPhone 8 Plus');
+  assert.equal(deviceBackendForDevice(physicalDevices[0]!), 'xctest');
 });
 
 test('listAppleDevices keeps physical discovery disabled for simulator-set scoped runs', async () => {

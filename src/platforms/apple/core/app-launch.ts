@@ -15,7 +15,9 @@ import {
   resolveIosDeviceDeepLinkBundleId,
 } from '../../../contracts/open-target.ts';
 import { IOS_APP_LAUNCH_TIMEOUT_MS, IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from './config.ts';
-import { runIosDevicectl, terminateIosDeviceApp } from './devicectl.ts';
+import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
+import { runAppleRunnerCommand } from './runner/runner-client.ts';
+import type { AppleRunnerCommandOptions } from './runner/runner-provider.ts';
 import {
   isSimulatorLaunchFBSError,
   probeSimulatorLaunchContext,
@@ -42,6 +44,7 @@ export async function openIosApp(
     launchArgs?: string[];
     terminateRunningApp?: boolean;
     url?: string;
+    runnerOptions?: AppleRunnerCommandOptions;
   },
 ): Promise<void> {
   const launchConsole = options?.launchConsole?.trim();
@@ -85,7 +88,11 @@ export async function openIosApp(
         'Deep link open on iOS devices requires an active app bundle ID. Open the app first, then open the URL.',
       );
     }
-    await launchIosDeviceProcess(device, bundleId, { payloadUrl: explicitUrl, launchArgs });
+    await launchIosDeviceProcess(device, bundleId, {
+      payloadUrl: explicitUrl,
+      launchArgs,
+      runnerOptions: options?.runnerOptions,
+    });
     return;
   }
 
@@ -105,7 +112,11 @@ export async function openIosApp(
         'Deep link open on iOS devices requires an active app bundle ID. Open the app first, then open the URL.',
       );
     }
-    await launchIosDeviceProcess(device, bundleId, { payloadUrl: deepLinkTarget, launchArgs });
+    await launchIosDeviceProcess(device, bundleId, {
+      payloadUrl: deepLinkTarget,
+      launchArgs,
+      runnerOptions: options?.runnerOptions,
+    });
     return;
   }
 
@@ -119,7 +130,10 @@ export async function openIosApp(
     return;
   }
 
-  await launchIosDeviceProcess(device, bundleId, { launchArgs });
+  await launchIosDeviceProcess(device, bundleId, {
+    launchArgs,
+    runnerOptions: options?.runnerOptions,
+  });
 }
 
 async function openIosSimulatorUrl(
@@ -145,7 +159,11 @@ export async function openIosDevice(device: DeviceInfo): Promise<void> {
   await ensureBootedSimulator(device);
 }
 
-export async function closeIosApp(device: DeviceInfo, app: string): Promise<void> {
+export async function closeIosApp(
+  device: DeviceInfo,
+  app: string,
+  runnerOptions?: AppleRunnerCommandOptions,
+): Promise<void> {
   if (isMacOs(device)) {
     await closeMacOsApp(device, app);
     return;
@@ -170,7 +188,10 @@ export async function closeIosApp(device: DeviceInfo, app: string): Promise<void
     return;
   }
 
-  await terminateIosDeviceApp(device, bundleId);
+  await resolveIosPhysicalDeviceControl(device).terminateApp(device, bundleId, {
+    runnerOptions,
+    runRunnerCommand: runAppleRunnerCommand,
+  });
 }
 
 async function launchIosSimulatorApp(
@@ -302,16 +323,14 @@ function joinProcessOutput(stdout: string, stderr: string): string {
 async function launchIosDeviceProcess(
   device: DeviceInfo,
   bundleId: string,
-  options?: { payloadUrl?: string; launchArgs?: string[] },
+  options?: {
+    payloadUrl?: string;
+    launchArgs?: string[];
+    runnerOptions?: AppleRunnerCommandOptions;
+  },
 ): Promise<void> {
-  const args = ['device', 'process', 'launch', '--device', device.id, bundleId];
-  if (options?.payloadUrl) {
-    args.push('--payload-url', options.payloadUrl);
-  }
-  if (options?.launchArgs && options.launchArgs.length > 0) {
-    // `devicectl` uses Swift ArgumentParser; without `--` an arg starting with
-    // `-` / `--` could be re-interpreted as one of devicectl's own options.
-    args.push('--', ...options.launchArgs);
-  }
-  await runIosDevicectl(args, { action: 'launch iOS app', deviceId: device.id });
+  await resolveIosPhysicalDeviceControl(device).launchApp(device, bundleId, {
+    ...options,
+    runRunnerCommand: runAppleRunnerCommand,
+  });
 }

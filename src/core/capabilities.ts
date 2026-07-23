@@ -115,6 +115,10 @@ export function unsupportedHintForDevice(command: string, device: DeviceInfo): s
   return tryGetPlugin(device.platform)?.capability.unsupportedHintByDefault?.[command]?.(device);
 }
 
+export function deviceBackendForDevice(device: DeviceInfo): string | undefined {
+  return tryGetPlugin(device.platform)?.capability.deviceBackend?.(device);
+}
+
 export function listCapabilityCommands(): string[] {
   return Object.keys(COMMAND_CAPABILITY_MATRIX).sort();
 }

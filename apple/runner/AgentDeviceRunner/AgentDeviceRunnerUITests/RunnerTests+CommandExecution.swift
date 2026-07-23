@@ -1362,6 +1362,20 @@ extension RunnerTests {
       }
     case .uptime:
       return executeUptime()
+    case .activate:
+      return Response(ok: true, data: DataPayload(message: "app activated"))
+    case .terminate:
+      guard
+        let bundleId = command.appBundleId?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !bundleId.isEmpty
+      else {
+        return Response(ok: false, error: ErrorPayload(message: "terminate requires appBundleId"))
+      }
+      XCUIApplication(bundleIdentifier: bundleId).terminate()
+      if currentBundleId == bundleId {
+        invalidateCachedTarget(reason: "target_terminated")
+      }
+      return Response(ok: true, data: DataPayload(message: "app terminated"))
     default:
       break
     }
@@ -1451,7 +1465,7 @@ extension RunnerTests {
   ) throws -> Response {
     var activeApp = activeApp
     switch command.command {
-    case .status, .targetReset, .shutdown, .recordStart, .recordStop, .uptime:
+    case .status, .activate, .terminate, .targetReset, .shutdown, .recordStart, .recordStop, .uptime:
       return Response(
         ok: false,
         error: ErrorPayload(
@@ -1837,6 +1851,12 @@ extension RunnerTests {
 #endif
       guard let pngData = runnerPngData(for: screenshot.image) else {
         return Response(ok: false, error: ErrorPayload(message: "Failed to encode screenshot as PNG"))
+      }
+      if command.inlineScreenshot == true {
+        return Response(
+          ok: true,
+          data: DataPayload(imageBase64: pngData.base64EncodedString())
+        )
       }
       let fileName = "screenshot-\(Int(Date().timeIntervalSince1970 * 1000)).png"
       let filePath = (NSTemporaryDirectory() as NSString).appendingPathComponent(fileName)

@@ -178,6 +178,8 @@ const runnerProtocolCommandFixtures: Record<RunnerCommand['command'], RunnerComm
   recordStop: { command: 'recordStop' },
   status: { command: 'status', statusCommandId: 'runner-command-1' },
   uptime: { command: 'uptime' },
+  activate: { command: 'activate', appBundleId: 'com.example.app' },
+  terminate: { command: 'terminate', appBundleId: 'com.example.app' },
   targetReset: { command: 'targetReset' },
   shutdown: { command: 'shutdown' },
 };
@@ -319,6 +321,7 @@ test('resolveRunnerDestination uses simulator destination for simulators', () =>
 test('runner protocol fixtures cover every runner command with JSON-safe samples', () => {
   const commands = Object.keys(runnerProtocolCommandFixtures).sort();
   assert.deepEqual(commands, [
+    'activate',
     'alert',
     'appSwitcher',
     'back',
@@ -349,6 +352,7 @@ test('runner protocol fixtures cover every runner command with JSON-safe samples
     'swipe',
     'tap',
     'targetReset',
+    'terminate',
     'type',
     'uptime',
   ]);

@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import { createRequestCanceledError, isRequestCanceledError } from '../../../../request/cancel.ts';
@@ -9,6 +8,7 @@ import { Deadline, retryWithPolicy } from '../../../../utils/retry.ts';
 import type { DeviceInfo } from '../../../../kernel/device.ts';
 import { classifyBootFailure, bootFailureHint } from '../../../boot-diagnostics.ts';
 import { buildSimctlArgsForDevice } from '../simctl.ts';
+import { resolveIosPhysicalDeviceControl } from '../physical-device-control.ts';
 import { runXcrun } from '../tool-provider.ts';
 import {
   buildRunnerConnectError,
@@ -24,7 +24,6 @@ const RUNNER_CONNECT_ATTEMPT_INTERVAL_MS = 250;
 const RUNNER_CONNECT_RETRY_BASE_DELAY_MS = 300;
 const RUNNER_CONNECT_RETRY_MAX_DELAY_MS = 2_000;
 const RUNNER_CONNECT_REQUEST_TIMEOUT_MS = 20_000;
-const RUNNER_DEVICE_INFO_TIMEOUT_MS = 10_000;
 const RUNNER_DEVICE_TUNNEL_IP_CACHE_TTL_MS = 30_000;
 export const RUNNER_DESTINATION_TIMEOUT_SECONDS = 20;
 
@@ -396,7 +395,10 @@ async function getDeviceTunnelIpForRequest(params: {
     if (cached) return { ip: cached, sharedCacheHit: true };
     if (requestTunnelIp !== undefined) return { ip: requestTunnelIp, sharedCacheHit: false };
   }
-  const ip = await resolveDeviceTunnelIp(device.id, timeoutBudgetMs);
+  const ip = await resolveIosPhysicalDeviceControl(device).resolveRunnerTunnelIp(
+    device,
+    timeoutBudgetMs,
+  );
   setRequestTunnelIp(ip);
   if (ip) writeDeviceTunnelIpCache(device.id, ip);
   return { ip, sharedCacheHit: false };
@@ -454,63 +456,6 @@ async function fetchWithTimeout(
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   const signal = requestSignal ? AbortSignal.any([requestSignal, timeoutSignal]) : timeoutSignal;
   return await fetch(url, { ...init, signal });
-}
-
-async function resolveDeviceTunnelIp(
-  deviceId: string,
-  timeoutBudgetMs?: number,
-): Promise<string | null> {
-  if (typeof timeoutBudgetMs === 'number' && timeoutBudgetMs <= 0) {
-    return null;
-  }
-  const timeoutMs =
-    typeof timeoutBudgetMs === 'number'
-      ? Math.max(1, Math.min(RUNNER_DEVICE_INFO_TIMEOUT_MS, timeoutBudgetMs))
-      : RUNNER_DEVICE_INFO_TIMEOUT_MS;
-  const jsonPath = path.join(
-    os.tmpdir(),
-    `agent-device-devicectl-info-${process.pid}-${Date.now()}.json`,
-  );
-  try {
-    const devicectlTimeoutSeconds = Math.max(1, Math.ceil(timeoutMs / 1000));
-    const result = await runXcrun(
-      [
-        'devicectl',
-        'device',
-        'info',
-        'details',
-        '--device',
-        deviceId,
-        '--json-output',
-        jsonPath,
-        '--timeout',
-        String(devicectlTimeoutSeconds),
-      ],
-      { allowFailure: true, timeoutMs },
-    );
-    if (result.exitCode !== 0 || !fs.existsSync(jsonPath)) {
-      return null;
-    }
-    const payload = JSON.parse(fs.readFileSync(jsonPath, 'utf8')) as {
-      info?: { outcome?: string };
-      result?: {
-        connectionProperties?: { tunnelIPAddress?: string };
-        device?: { connectionProperties?: { tunnelIPAddress?: string } };
-      };
-    };
-    if (payload.info?.outcome && payload.info.outcome !== 'success') {
-      return null;
-    }
-    const ip = (
-      payload.result?.connectionProperties?.tunnelIPAddress ??
-      payload.result?.device?.connectionProperties?.tunnelIPAddress
-    )?.trim();
-    return ip && ip.length > 0 ? ip : null;
-  } catch {
-    return null;
-  } finally {
-    cleanupTempFile(jsonPath);
-  }
 }
 
 async function postCommandViaSimulator(
