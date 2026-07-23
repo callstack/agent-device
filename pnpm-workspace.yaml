@@ -7,3 +7,9 @@ allowBuilds:
   fallow: true
 minimumReleaseAgeExclude:
   - '@chenglou/freerange@0.0.1'
+# @limrun/api pins undici to an exact vulnerable version (7.24.7) even in its
+# latest release, so a direct bump can't clear the Dependabot alerts. Override
+# the transitive resolution instead; scoped to major 7 so any future undici 8
+# elsewhere in the tree is untouched.
+overrides:
+  undici@7: '^7.28.0'
