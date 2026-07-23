@@ -238,6 +238,9 @@ function formatEventHints(entry: EventsCliEntry, summary: string): string {
   if (entry.kind !== 'action.recorded') return '';
   const details = entry.details;
   if (!details) return '';
+  // Legacy v1 event files may contain selector values and text lengths. Current
+  // producers intentionally omit both, but retaining these readers keeps older
+  // local event timelines useful.
   const hints = [
     formatActionTargetHint(details, summary),
     formatTextLengthHint(readNumber(details.textLength)),

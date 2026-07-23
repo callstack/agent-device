@@ -111,7 +111,7 @@ function buildDeviceLifecyclePresentation(
   data: Record<string, unknown>,
   booted: boolean,
 ): RequestSuccessEventPresentation {
-  const device = readBoundedString(data.device);
+  const device = readDeviceEventLabel(data);
   if (!device) return {};
   const details = {
     device,
@@ -221,7 +221,8 @@ function readDevicePlatformLabel(
   platform: string | undefined,
 ): string | undefined {
   const key = appleOs ?? platform;
-  return key ? DEVICE_PLATFORM_LABELS[key] : undefined;
+  if (!key || !Object.hasOwn(DEVICE_PLATFORM_LABELS, key)) return undefined;
+  return DEVICE_PLATFORM_LABELS[key];
 }
 
 function readDeviceTraits(value: Record<string, unknown>): Record<string, unknown> {

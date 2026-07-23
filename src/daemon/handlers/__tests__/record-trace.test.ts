@@ -300,13 +300,14 @@ test('record stop derives telemetry artifact local path from client outPath', as
   const runnerCalls: RunnerCall[] = [];
   const runCmdCalls: Array<{ cmd: string; args: string[] }> = [];
   setupRunnerRecordingMocks(runnerCalls, runCmdCalls);
-  const finalOut = path.join(os.tmpdir(), `agent-device-test-record-${Date.now()}.mp4`);
+  const daemonOut = path.join(os.tmpdir(), `agent-device-recording-${Date.now()}-random.mp4`);
+  const clientOut = path.join(os.tmpdir(), `requested-recording-${Date.now()}.mp4`);
 
   await runRecordCommand({
     sessionStore,
     sessionName,
-    positionals: ['start', finalOut],
-    clientArtifactPaths: { outPath: finalOut },
+    positionals: ['start', daemonOut],
+    clientArtifactPaths: { outPath: clientOut },
   });
 
   const responseStop = await runRecordCommand({
@@ -318,9 +319,18 @@ test('record stop derives telemetry artifact local path from client outPath', as
   expect(responseStop?.ok).toBe(true);
   expect((responseStop as any).data?.artifacts?.[1]?.field).toBe('telemetryPath');
   expect((responseStop as any).data?.artifacts?.[1]?.localPath).toBe(
-    deriveRecordingTelemetryPath(finalOut),
+    deriveRecordingTelemetryPath(clientOut),
   );
-  expect((responseStop as any).data?.telemetryPath).toBe(deriveRecordingTelemetryPath(finalOut));
+  expect((responseStop as any).data?.telemetryPath).toBe(deriveRecordingTelemetryPath(daemonOut));
+
+  await sessionStore.flushEvents(sessionName);
+  const summaries = sessionStore
+    .readEvents(sessionName)
+    .events.map((event) => event.summary)
+    .filter((summary): summary is string => summary !== undefined);
+  expect(summaries).toContain(`Started recording ${path.basename(clientOut)}`);
+  expect(summaries).toContain(`Stopped recording ${path.basename(clientOut)}`);
+  expect(JSON.stringify(summaries)).not.toContain(path.basename(daemonOut));
 });
 
 test('record stop releases session created only for recording', async () => {

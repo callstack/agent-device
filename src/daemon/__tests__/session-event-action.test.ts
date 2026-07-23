@@ -152,6 +152,18 @@ test('unknown commands never project arbitrary result messages or paths', () => 
   assert.equal(JSON.stringify(details).includes('customer-private'), false);
 });
 
+test('identity action events project only public result platforms', () => {
+  const publicPlatform = buildActionDetails(
+    action('open', { platform: 'ios', appBundleId: 'com.example.app' }),
+  );
+  const internalPlatform = buildActionDetails(
+    action('open', { platform: 'apple', appBundleId: 'com.example.app' }),
+  );
+
+  assert.equal(publicPlatform.platform, 'ios');
+  assert.equal(internalPlatform.platform, undefined);
+});
+
 test('structural action events preserve navigation, viewport, keyboard, and gesture outcomes', () => {
   const back = action('back', { action: 'back', mode: 'system' });
   const orientation = action('orientation', {

@@ -178,6 +178,52 @@ test('boot and shutdown events preserve safe device traits', () => {
   assert.equal(JSON.stringify(shutdown).includes('private output'), false);
 });
 
+test('boot and shutdown events replace identifier-derived device names', () => {
+  const boot = buildSuccessEvent('boot', {
+    device: 'ANDROID-SERIAL-123',
+    id: 'ANDROID-SERIAL-123',
+    serial: 'ANDROID-SERIAL-123',
+    platform: 'android',
+    kind: 'device',
+    target: 'mobile',
+    booted: true,
+  });
+  const shutdown = buildSuccessEvent('shutdown', {
+    device: 'APPLE-UDID-123',
+    id: 'APPLE-UDID-123',
+    udid: 'APPLE-UDID-123',
+    platform: 'ios',
+    appleOs: 'ios',
+    kind: 'device',
+    target: 'mobile',
+  });
+
+  assert.equal(boot.summary, 'Booted Android device (android, device, mobile)');
+  assert.equal(shutdown.summary, 'Shut down iOS device (ios, device, mobile)');
+  assert.equal(boot.details?.device, 'Android device');
+  assert.equal(shutdown.details?.device, 'iOS device');
+  assert.equal(JSON.stringify([boot, shutdown]).includes('ANDROID-SERIAL-123'), false);
+  assert.equal(JSON.stringify([boot, shutdown]).includes('APPLE-UDID-123'), false);
+});
+
+test('anonymous device labels ignore inherited platform properties', () => {
+  const event = buildSuccessEvent('devices', {
+    devices: [
+      {
+        name: 'provider-device-id',
+        id: 'provider-device-id',
+        platform: 'constructor',
+        kind: 'device',
+        booted: false,
+      },
+    ],
+  });
+
+  assert.ok(Array.isArray(event.details?.devices));
+  assert.equal(event.details.devices[0]?.name, 'Unnamed device');
+  assert.equal(event.summary?.includes('function Object'), false);
+});
+
 test('install events expose the iOS bundle id or Android package name without the binary path', () => {
   const ios = buildSuccessEvent('install', {
     app: '/tmp/Example.app',

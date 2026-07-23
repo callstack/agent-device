@@ -4,7 +4,7 @@ import { RECORDING_SCOPE_VALUES } from '../contracts/recording-scope.ts';
 import { SESSION_SURFACES } from '../contracts/session-surface.ts';
 import { SWIPE_PATTERNS } from '../contracts/scroll-gesture.ts';
 import { CLICK_BUTTONS } from '../core/click-button.ts';
-import { DEVICE_TARGETS, PLATFORM_SELECTORS } from '../kernel/device.ts';
+import { DEVICE_TARGETS, PLATFORM_SELECTORS, PUBLIC_PLATFORMS } from '../kernel/device.ts';
 import type { SessionAction } from './types.ts';
 import {
   buildInstallActionSummary,
@@ -74,7 +74,7 @@ function buildIdentityActionDetails(action: SessionAction): Record<string, unkno
   if (!isIdentityActionCommand(action.command)) return {};
   const result = action.result ?? {};
   return compactDetails({
-    platform: readEnum(result.platform, PLATFORM_SELECTORS),
+    platform: readEnum(result.platform, PUBLIC_PLATFORMS),
     target: readEnum(result.target, DEVICE_TARGETS),
     appName: readString(result.appName),
     appBundleId: readString(result.appBundleId),
@@ -346,8 +346,11 @@ const SAFE_ACTION_FLAG_SPECS: Record<string, SafeFlagSpec> = {
 function buildSafeActionFlags(action: SessionAction): Record<string, unknown> | undefined {
   const flags = (action.flags ?? {}) as Record<string, unknown>;
   const safeFlags: Record<string, unknown> = {};
+  const commandFlagSpec = Object.hasOwn(SAFE_ACTION_FLAG_SPECS, action.command)
+    ? SAFE_ACTION_FLAG_SPECS[action.command]
+    : undefined;
   projectSafeFlags(safeFlags, flags, COMMON_SAFE_FLAG_SPEC);
-  projectSafeFlags(safeFlags, flags, SAFE_ACTION_FLAG_SPECS[action.command]);
+  projectSafeFlags(safeFlags, flags, commandFlagSpec);
   return Object.keys(safeFlags).length > 0 ? safeFlags : undefined;
 }
 

@@ -128,6 +128,13 @@ function buildRecordingBase(params: {
   };
 }
 
+function buildRequestedRecordingEventDetails(
+  recording: Pick<RecordingBase, 'clientOutPath'> | undefined,
+): { requestedFileName?: string } {
+  if (!recording?.clientOutPath) return {};
+  return { requestedFileName: path.basename(recording.clientOutPath) };
+}
+
 // --- Start recording orchestrator ---
 
 async function startRecording(params: StartRecordingParams): Promise<DaemonResponse> {
@@ -216,6 +223,7 @@ function persistStartedRecording(params: {
   const sessionStateDir = sessionStore.ensureSessionDir(sessionName);
   recordSessionAction(sessionStore, activeSession, req, req.command, {
     action: 'start',
+    ...buildRequestedRecordingEventDetails(recording),
     showTouches: recording.showTouches,
   });
 
@@ -627,6 +635,9 @@ export async function handleRecordCommand(params: {
     });
   }
 
+  const requestedRecordingEventDetails = buildRequestedRecordingEventDetails(
+    activeSession.recording,
+  );
   const response = await stopRecording({
     req,
     sessionName,
@@ -644,6 +655,7 @@ export async function handleRecordCommand(params: {
   recordSessionAction(sessionStore, activeSession, req, req.command, {
     action: 'stop',
     outPath: response.data?.outPath,
+    ...requestedRecordingEventDetails,
     showTouches: response.data?.showTouches,
   });
   await releaseRecordOnlySession(sessionStore, sessionName, activeSession, { writeLog: true });
