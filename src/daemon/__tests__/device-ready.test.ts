@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import type { DeviceInfo } from '../../kernel/device.ts';
 
@@ -19,12 +18,7 @@ import { runCmd } from '../../utils/exec.ts';
 import { waitForAndroidBoot } from '../../platforms/android/devices.ts';
 import { ensureBootedSimulator } from '../../platforms/apple/core/simulator.ts';
 import { ANDROID_EMULATOR, IOS_DEVICE, IOS_SIMULATOR } from '../../__tests__/test-utils/index.ts';
-import {
-  DEVICE_READY_CACHE_TTL_MS,
-  ensureDeviceReady,
-  parseIosReadyPayload,
-  resolveIosReadyHint,
-} from '../device-ready.ts';
+import { DEVICE_READY_CACHE_TTL_MS, ensureDeviceReady } from '../device-ready.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 const mockEnsureBootedSimulator = vi.mocked(ensureBootedSimulator);
@@ -129,53 +123,4 @@ test('ensureDeviceReady does not cache failed readiness checks', async () => {
   await ensureDeviceReady(IOS_SIMULATOR);
 
   expect(mockEnsureBootedSimulator).toHaveBeenCalledTimes(2);
-});
-
-test('parseIosReadyPayload reads tunnelState from direct connectionProperties', () => {
-  const parsed = parseIosReadyPayload({
-    result: {
-      connectionProperties: {
-        tunnelState: 'connected',
-      },
-    },
-  });
-  assert.equal(parsed.tunnelState, 'connected');
-});
-
-test('parseIosReadyPayload reads tunnelState from nested device connectionProperties', () => {
-  const parsed = parseIosReadyPayload({
-    result: {
-      device: {
-        connectionProperties: {
-          tunnelState: 'connecting',
-        },
-      },
-    },
-  });
-  assert.equal(parsed.tunnelState, 'connecting');
-});
-
-test('parseIosReadyPayload returns empty payload for malformed input', () => {
-  assert.deepEqual(parseIosReadyPayload(null), {});
-  assert.deepEqual(parseIosReadyPayload({}), {});
-  assert.deepEqual(
-    parseIosReadyPayload({
-      result: { connectionProperties: { tunnelState: 123 } },
-    }),
-    {},
-  );
-});
-
-test('resolveIosReadyHint maps known connection errors', () => {
-  const connecting = resolveIosReadyHint('', 'Device is busy (Connecting to iPhone)');
-  assert.match(connecting, /still connecting/i);
-
-  const coreDeviceTimeout = resolveIosReadyHint('CoreDeviceService timed out', '');
-  assert.match(coreDeviceTimeout, /coredevice service/i);
-});
-
-test('resolveIosReadyHint falls back to generic guidance', () => {
-  const hint = resolveIosReadyHint('unexpected failure', '');
-  assert.match(hint, /unlocked/i);
-  assert.match(hint, /xcode/i);
 });

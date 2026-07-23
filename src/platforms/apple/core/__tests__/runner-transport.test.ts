@@ -6,8 +6,9 @@ import type { ExecBackgroundResult } from '../../../../utils/exec.ts';
 import { AppError } from '../../../../kernel/errors.ts';
 import type { RunnerSession } from '../runner/runner-session-types.ts';
 
-const { mockRunCmd } = vi.hoisted(() => ({
+const { mockRunCmd, mockUsbmuxPostCommand } = vi.hoisted(() => ({
   mockRunCmd: vi.fn(),
+  mockUsbmuxPostCommand: vi.fn(),
 }));
 
 vi.mock('../../../../utils/exec.ts', async () => {
@@ -19,6 +20,12 @@ vi.mock('../../../../utils/exec.ts', async () => {
     runCmd: mockRunCmd,
   };
 });
+
+vi.mock('../runner/runner-usbmux.ts', () => ({
+  usbmuxRunnerTransport: {
+    postCommand: mockUsbmuxPostCommand,
+  },
+}));
 
 import {
   clearDeviceTunnelIpCache,
@@ -42,9 +49,16 @@ const iosDevice: DeviceInfo = {
   booted: true,
 };
 
+const xctestIosDevice: DeviceInfo = {
+  ...iosDevice,
+  backend: 'xctest',
+};
+
 beforeEach(() => {
   clearDeviceTunnelIpCache();
   mockRunCmd.mockReset();
+  mockUsbmuxPostCommand.mockReset();
+  mockUsbmuxPostCommand.mockResolvedValue(new Response('{}'));
 });
 
 afterEach(() => {
@@ -196,6 +210,21 @@ test('sendRunnerCommandOnce does not retry or simulator fallback after request f
 
   assert.equal(vi.mocked(fetch).mock.calls.length, 1);
   assert.equal(mockRunCmd.mock.calls.length, 0);
+});
+
+test('sendRunnerCommandOnce routes xctest physical devices through usbmux', async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+
+  const response = await sendRunnerCommandOnce(xctestIosDevice, 8100, { command: 'uptime' }, 5_000);
+
+  assert.equal(response.status, 200);
+  assert.equal(fetchMock.mock.calls.length, 0);
+  assert.deepEqual(mockUsbmuxPostCommand.mock.calls[0]?.slice(0, 3), [
+    xctestIosDevice.id,
+    8100,
+    { command: 'uptime' },
+  ]);
 });
 
 function stubSuccessfulFetch(): void {

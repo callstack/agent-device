@@ -93,6 +93,12 @@ test('devices omits appleOs for non-Apple devices', async () => {
   expect(ios?.appleOs).toBe('ios');
 });
 
+test('devices omits internal backend evidence', async () => {
+  const devices = await listPublicDevices([{ ...IOS_SIMULATOR, backend: 'xctest' }]);
+
+  expect(devices[0]).not.toHaveProperty('backend');
+});
+
 test('devices drops a stray appleOs on a non-Apple device (gated to Apple platforms)', async () => {
   // Regression: appleOs is Apple-only. A malformed/legacy NON-Apple record carrying a
   // valid Apple OS value must NOT surface it — the projection gates on the platform,

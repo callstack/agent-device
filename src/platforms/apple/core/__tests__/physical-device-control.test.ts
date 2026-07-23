@@ -2,22 +2,13 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, test, vi } from 'vitest';
-import { deviceBackendForDevice } from '../../../../core/capabilities.ts';
+import { test } from 'vitest';
 import { IOS_DEVICE as SHARED_IOS_DEVICE } from '../../../../__tests__/test-utils/index.ts';
 import type { DeviceInfo } from '../../../../kernel/device.ts';
 import { installIosApp } from '../app-install.ts';
 import { closeIosApp, openIosApp } from '../app-launch.ts';
 import { listIosApps } from '../app-resolution.ts';
-import {
-  resolveIosPhysicalDeviceControl,
-  type IosPhysicalDeviceControl,
-} from '../physical-device-control.ts';
-import {
-  createIosPhysicalDeviceBackendRegistry,
-  iosPhysicalDeviceBackendRegistry,
-  recordDiscoveredIosPhysicalDeviceBackends,
-} from '../physical-device-control-registry.ts';
+import { resolveIosPhysicalDeviceControl } from '../physical-device-control.ts';
 import { withAppleRunnerProvider } from '../runner/runner-provider.ts';
 import { captureScreenshotViaRunner } from '../screenshot.ts';
 import { withAppleToolProvider } from '../tool-provider.ts';
@@ -28,75 +19,56 @@ const IOS_DEVICE: DeviceInfo = {
   name: 'Legacy iPhone',
 };
 
-afterEach(() => {
-  iosPhysicalDeviceBackendRegistry.clear();
-});
+const XCTEST_IOS_DEVICE: DeviceInfo = {
+  ...IOS_DEVICE,
+  backend: 'xctest',
+};
 
-test('physical-device backend registry defaults to CoreDevice and records xctrace-only devices', () => {
-  const registry = createIosPhysicalDeviceBackendRegistry();
-  assert.equal(registry.backendForDevice(IOS_DEVICE), 'coredevice');
-
-  registry.recordBackend(IOS_DEVICE.id, 'xctest');
-  assert.equal(registry.backendForDevice(IOS_DEVICE), 'xctest');
-});
-
-test('CoreDevice discovery wins when the same device is also visible to xctrace', () => {
-  recordDiscoveredIosPhysicalDeviceBackends([IOS_DEVICE], [IOS_DEVICE]);
-  assert.equal(deviceBackendForDevice(IOS_DEVICE), 'coredevice');
-
-  recordDiscoveredIosPhysicalDeviceBackends([], [IOS_DEVICE]);
-  assert.equal(deviceBackendForDevice(IOS_DEVICE), 'xctest');
-});
-
-test('physical-device control selection accepts a mocked backend registry', () => {
-  const registry = {
-    backendForDevice: vi.fn(() => 'xctest' as const),
-  };
-  const control: IosPhysicalDeviceControl = resolveIosPhysicalDeviceControl(IOS_DEVICE, registry);
-
-  assert.equal(control.backend, 'xctest');
-  assert.deepEqual(registry.backendForDevice.mock.calls, [[IOS_DEVICE]]);
+test('physical-device backend defaults to CoreDevice and honors discovery evidence', () => {
+  assert.equal(resolveIosPhysicalDeviceControl(IOS_DEVICE).backend, 'coredevice');
+  assert.equal(resolveIosPhysicalDeviceControl(XCTEST_IOS_DEVICE).backend, 'xctest');
 });
 
 test('XCTest readiness uses xcdevice instead of devicectl', async () => {
   const calls: Array<{ cmd: string; args: string[] }> = [];
-  iosPhysicalDeviceBackendRegistry.recordBackend(IOS_DEVICE.id, 'xctest');
 
   await withAppleToolProvider(
     async (cmd, args) => {
       calls.push({ cmd, args });
       return { exitCode: 0, stdout: '', stderr: '' };
     },
-    async () => await resolveIosPhysicalDeviceControl(IOS_DEVICE).ensureReady(IOS_DEVICE),
+    async () =>
+      await resolveIosPhysicalDeviceControl(XCTEST_IOS_DEVICE).ensureReady(XCTEST_IOS_DEVICE),
   );
 
   assert.deepEqual(calls, [
     {
       cmd: 'xcrun',
-      args: ['xcdevice', 'wait', '--both', '--timeout=15', IOS_DEVICE.id],
+      args: ['xcdevice', 'wait', '--both', '--timeout=15', XCTEST_IOS_DEVICE.id],
     },
   ]);
-  assert.equal(
-    await resolveIosPhysicalDeviceControl(IOS_DEVICE).resolveRunnerTunnelIp(IOS_DEVICE),
-    null,
+  assert.deepEqual(
+    await resolveIosPhysicalDeviceControl(XCTEST_IOS_DEVICE).resolveRunnerTransport(
+      XCTEST_IOS_DEVICE,
+    ),
+    { kind: 'usbmux' },
   );
 });
 
 test('app lifecycle uses runner commands for an xctrace-only physical device', async () => {
   const commands: unknown[] = [];
-  iosPhysicalDeviceBackendRegistry.recordBackend(IOS_DEVICE.id, 'xctest');
 
   await withAppleRunnerProvider(
     async (_device, command) => {
       commands.push(command);
       return { message: 'app activated' };
     },
-    { deviceId: IOS_DEVICE.id },
+    { deviceId: XCTEST_IOS_DEVICE.id },
     async () => {
-      await openIosApp(IOS_DEVICE, 'com.example.app', {
+      await openIosApp(XCTEST_IOS_DEVICE, 'com.example.app', {
         appBundleId: 'com.example.app',
       });
-      await closeIosApp(IOS_DEVICE, 'com.example.app');
+      await closeIosApp(XCTEST_IOS_DEVICE, 'com.example.app');
     },
   );
 
@@ -118,16 +90,15 @@ test('runner screenshots stay in-band when CoreDevice file copy is unavailable',
     await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-xctest-screenshot-')),
     'screen.png',
   );
-  iosPhysicalDeviceBackendRegistry.recordBackend(IOS_DEVICE.id, 'xctest');
   try {
     await withAppleRunnerProvider(
       async (_device, command) => {
         assert.equal(command.inlineScreenshot, true);
         return { imageBase64: Buffer.from('png-bytes').toString('base64') };
       },
-      { deviceId: IOS_DEVICE.id },
+      { deviceId: XCTEST_IOS_DEVICE.id },
       async () =>
-        await captureScreenshotViaRunner(IOS_DEVICE, outPath, 'com.example.app', undefined),
+        await captureScreenshotViaRunner(XCTEST_IOS_DEVICE, outPath, 'com.example.app', undefined),
     );
 
     assert.equal(await fs.readFile(outPath, 'utf8'), 'png-bytes');
@@ -137,14 +108,12 @@ test('runner screenshots stay in-band when CoreDevice file copy is unavailable',
 });
 
 test('CoreDevice-only app inventory and install fail with targeted XCTest guidance', async () => {
-  iosPhysicalDeviceBackendRegistry.recordBackend(IOS_DEVICE.id, 'xctest');
-
   await assert.rejects(
-    () => listIosApps(IOS_DEVICE, 'all'),
+    () => listIosApps(XCTEST_IOS_DEVICE, 'all'),
     /App inventory is unavailable on this XCTest-backed physical iOS device/,
   );
   await assert.rejects(
-    () => installIosApp(IOS_DEVICE, '/missing/example.app'),
+    () => installIosApp(XCTEST_IOS_DEVICE, '/missing/example.app'),
     /Installing apps is unavailable on this XCTest-backed physical iOS device/,
   );
 });

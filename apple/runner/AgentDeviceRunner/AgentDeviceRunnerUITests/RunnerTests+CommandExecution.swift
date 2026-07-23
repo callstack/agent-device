@@ -1363,6 +1363,14 @@ extension RunnerTests {
     case .uptime:
       return executeUptime()
     case .activate:
+      guard
+        let bundleId = command.appBundleId?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !bundleId.isEmpty
+      else {
+        return Response(ok: false, error: ErrorPayload(message: "activate requires appBundleId"))
+      }
+      // prepareActiveCommandContext already activated this bundle. Keep this case as the
+      // explicit acknowledgement after that preflight, not as a second activation.
       return Response(ok: true, data: DataPayload(message: "app activated"))
     case .terminate:
       guard

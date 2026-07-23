@@ -1,17 +1,7 @@
 import { isIosFamily, type DeviceInfo } from '../kernel/device.ts';
-import {
-  parseIosDeviceDetailsPayload,
-  resolveIosPhysicalDeviceControl,
-  resolveIosReadyHint,
-} from '../platforms/apple/core/physical-device-control.ts';
+import { resolveIosPhysicalDeviceControl } from '../platforms/apple/core/physical-device-control.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 import { createTtlMemo } from '../utils/ttl-memo.ts';
-
-export { resolveIosReadyHint };
-export function parseIosReadyPayload(payload: unknown): { tunnelState?: string } {
-  const { tunnelState } = parseIosDeviceDetailsPayload(payload);
-  return tunnelState ? { tunnelState } : {};
-}
 
 // Exported so unit tests can assert TTL behavior without duplicating the value.
 export const DEVICE_READY_CACHE_TTL_MS = 5_000;

@@ -12,15 +12,12 @@ import {
 } from '../devices.ts';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
 import type { ExecResult } from '../../../../utils/exec.ts';
-import { deviceBackendForDevice } from '../../../../core/capabilities.ts';
-import { iosPhysicalDeviceBackendRegistry } from '../physical-device-control-registry.ts';
 
 const toolCalls: Array<[string, string[]]> = [];
 let mockRunCommand: (cmd: string, args: string[]) => Promise<ExecResult>;
 let mockWhichCommand: (cmd: string) => Promise<boolean>;
 
 beforeEach(() => {
-  iosPhysicalDeviceBackendRegistry.clear();
   toolCalls.length = 0;
   mockRunCommand = async () => ({ stdout: '', stderr: '', exitCode: 0 });
   mockWhichCommand = async () => true;
@@ -186,6 +183,7 @@ test('parseXctracePhysicalAppleDevices parses only physical devices from the Dev
       kind: 'device',
       target: 'mobile',
       appleOs: 'ios',
+      backend: 'xctest',
       booted: true,
     },
     {
@@ -195,6 +193,7 @@ test('parseXctracePhysicalAppleDevices parses only physical devices from the Dev
       kind: 'device',
       target: 'tv',
       appleOs: 'tvos',
+      backend: 'xctest',
       booted: true,
     },
   ]);
@@ -212,6 +211,7 @@ test('parseXctracePhysicalAppleDevices tags physical iPads as iPadOS', () => {
       kind: 'device',
       target: 'mobile',
       appleOs: 'ipados',
+      backend: 'xctest',
       booted: true,
     },
   ]);
@@ -229,6 +229,7 @@ test('parseXctracePhysicalAppleDevices tags Apple Vision devices as visionOS', (
       kind: 'device',
       target: 'mobile',
       appleOs: 'visionos',
+      backend: 'xctest',
       booted: true,
     },
   ]);
@@ -252,6 +253,7 @@ test('parseXctracePhysicalAppleDevices parses the parenthesized physical device 
       kind: 'device',
       target: 'mobile',
       appleOs: 'ios',
+      backend: 'xctest',
       booted: true,
     },
     {
@@ -261,6 +263,7 @@ test('parseXctracePhysicalAppleDevices parses the parenthesized physical device 
       kind: 'device',
       target: 'mobile',
       appleOs: 'ipados',
+      backend: 'xctest',
       booted: true,
     },
     {
@@ -270,6 +273,7 @@ test('parseXctracePhysicalAppleDevices parses the parenthesized physical device 
       kind: 'device',
       target: 'tv',
       appleOs: 'tvos',
+      backend: 'xctest',
       booted: true,
     },
   ]);
@@ -288,6 +292,7 @@ test('parseXctracePhysicalAppleDevices preserves parentheses in bracket-format n
       kind: 'device',
       target: 'mobile',
       appleOs: 'ios',
+      backend: 'xctest',
       booted: true,
     },
     {
@@ -297,6 +302,7 @@ test('parseXctracePhysicalAppleDevices preserves parentheses in bracket-format n
       kind: 'device',
       target: 'mobile',
       appleOs: 'ios',
+      backend: 'xctest',
       booted: true,
     },
   ]);
@@ -605,7 +611,7 @@ test('listAppleDevices falls back to xctrace parenthesized devices when devicect
   assert.equal(physicalDevices.length, 1);
   assert.equal(physicalDevices[0]?.id, '00008020-001C2D2234567890');
   assert.equal(physicalDevices[0]?.name, 'iPhone 8 Plus');
-  assert.equal(deviceBackendForDevice(physicalDevices[0]!), 'xctest');
+  assert.equal(physicalDevices[0]?.backend, 'xctest');
 });
 
 test('listAppleDevices keeps physical discovery disabled for simulator-set scoped runs', async () => {

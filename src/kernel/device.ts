@@ -38,6 +38,9 @@ export type DeviceInfo = {
   appleOs?: AppleOS;
   booted?: boolean;
   simulatorSetPath?: string;
+  // Internal execution-backend evidence attached by discovery/provider inventory.
+  // Public device projections strip this field.
+  backend?: string;
 };
 
 export type DeviceSelector = {

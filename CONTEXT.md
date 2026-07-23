@@ -35,8 +35,8 @@ task touches:
   not the remote client ownership boundary.
 - iOS physical-device control: Apple-local module selected from discovery evidence. CoreDevice
   devices retain the `devicectl` controller; devices found only by `xctrace` use the XCTest
-  controller for readiness, app activation/termination, and runner transport without claiming
-  unsupported app inventory or installation capabilities.
+  controller for readiness, app activation/termination, and cable-bound usbmux runner transport
+  without claiming unsupported app inventory or installation capabilities.
 - Host process primitive: low-level host PID helpers in `src/utils/host-process.ts` for liveness,
   start-time/command reads, process listing, process-tree expansion, PID de-duplication, and
   best-effort signaling. It must not own domain cleanup policy such as browser ownership markers,

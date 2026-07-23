@@ -9,10 +9,12 @@ import {
   resolveIosDevicectlHint,
   runIosDevicectl,
 } from './devicectl.ts';
+import {
+  IOS_DEVICE_READY_COMMAND_TIMEOUT_BUFFER_MS,
+  IOS_DEVICE_READY_TIMEOUT_MS,
+} from './physical-device-constants.ts';
 import { runXcrun } from './tool-provider.ts';
 
-const IOS_DEVICE_READY_TIMEOUT_MS = 15_000;
-const IOS_DEVICE_READY_COMMAND_TIMEOUT_BUFFER_MS = 3_000;
 const IOS_RUNNER_DEVICE_INFO_TIMEOUT_MS = 10_000;
 
 export async function launchCoreDeviceApp(

@@ -495,6 +495,7 @@ test('usageForCommand resolves physical-device help topic', async () => {
   assert.match(help, /AGENT_DEVICE_IOS_BUNDLE_ID=com\.yourname\.agentdevice\.runner/);
   assert.match(help, /profile name\/specifier, not a file path/);
   assert.match(help, /Older devices visible only to xctrace use the XCTest backend automatically/);
+  assert.match(help, /runner commands travel through macOS usbmuxd/);
   assert.match(help, /app inventory, install\/reinstall, deep links, and launch arguments/);
 });
 

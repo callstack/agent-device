@@ -1,6 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import net from 'node:net';
 import { createRequestCanceledError, isRequestCanceledError } from '../../../../request/cancel.ts';
 import { AppError } from '../../../../kernel/errors.ts';
 import { requireExecSuccess } from '../../../../utils/exec.ts';
@@ -8,8 +5,12 @@ import { Deadline, retryWithPolicy } from '../../../../utils/retry.ts';
 import type { DeviceInfo } from '../../../../kernel/device.ts';
 import { classifyBootFailure, bootFailureHint } from '../../../boot-diagnostics.ts';
 import { buildSimctlArgsForDevice } from '../simctl.ts';
-import { resolveIosPhysicalDeviceControl } from '../physical-device-control.ts';
 import { runXcrun } from '../tool-provider.ts';
+import {
+  createRunnerCommandRouteResolver,
+  invalidateDeviceTunnelIpCache,
+  type RunnerCommandRoute,
+} from './runner-command-route.ts';
 import {
   buildRunnerConnectError,
   buildRunnerEarlyExitError,
@@ -17,6 +18,10 @@ import {
   type RunnerCommand,
 } from './runner-contract.ts';
 import type { RunnerSession } from './runner-session-types.ts';
+import { usbmuxRunnerTransport } from './runner-usbmux.ts';
+
+export { clearDeviceTunnelIpCache } from './runner-command-route.ts';
+export { cleanupTempFile, getFreePort, logChunk } from './runner-io.ts';
 
 export const RUNNER_STARTUP_TIMEOUT_MS = 45_000;
 export const RUNNER_COMMAND_TIMEOUT_MS = 45_000;
@@ -24,15 +29,7 @@ const RUNNER_CONNECT_ATTEMPT_INTERVAL_MS = 250;
 const RUNNER_CONNECT_RETRY_BASE_DELAY_MS = 300;
 const RUNNER_CONNECT_RETRY_MAX_DELAY_MS = 2_000;
 const RUNNER_CONNECT_REQUEST_TIMEOUT_MS = 20_000;
-const RUNNER_DEVICE_TUNNEL_IP_CACHE_TTL_MS = 30_000;
 export const RUNNER_DESTINATION_TIMEOUT_SECONDS = 20;
-
-type DeviceTunnelIpCacheEntry = {
-  ip: string;
-  expiresAt: number;
-};
-
-const deviceTunnelIpCache = new Map<string, DeviceTunnelIpCacheEntry>();
 
 export async function waitForRunner(
   device: DeviceInfo,
@@ -44,8 +41,8 @@ export async function waitForRunner(
   signal?: AbortSignal,
 ): Promise<Response> {
   const deadline = Deadline.fromTimeoutMs(timeoutMs);
-  const { getEndpoints } = createRunnerEndpointResolver(device, port);
-  let { endpoints } = await getEndpoints(deadline.remainingMs());
+  const { resolveRoute } = createRunnerCommandRouteResolver(device, port);
+  let route = await resolveRoute(deadline.remainingMs());
   let lastError: unknown = null;
   const maxAttempts = Math.max(1, Math.ceil(timeoutMs / RUNNER_CONNECT_ATTEMPT_INTERVAL_MS));
   try {
@@ -58,19 +55,24 @@ export async function waitForRunner(
           timeoutMs,
           logPath,
           session,
-          endpoints,
-          getEndpoints,
+          route,
+          resolveRoute,
           signal,
           attemptDeadline,
-          setEndpoints: (nextEndpoints) => {
-            endpoints = nextEndpoints;
+          setRoute: (nextRoute) => {
+            route = nextRoute;
           },
           setLastError: (err) => {
             lastError = err;
           },
         });
         if (response) return response;
-        throw buildRunnerEndpointProbeError({ port, endpoints, lastError, signal });
+        throw buildRunnerEndpointProbeError({
+          port,
+          endpoints: route.endpoints,
+          lastError,
+          signal,
+        });
       },
       {
         maxAttempts,
@@ -97,16 +99,16 @@ export async function waitForRunner(
   if (device.kind === 'simulator') {
     const remainingMs = deadline.remainingMs();
     if (remainingMs <= 0) {
-      throw buildRunnerConnectError({ port, endpoints, logPath, lastError });
+      throw buildRunnerConnectError({ port, endpoints: route.endpoints, logPath, lastError });
     }
     const simResponse = await postCommandViaSimulator(device, port, command, remainingMs, signal);
     return new Response(simResponse.body, { status: simResponse.status });
   }
 
-  throw buildRunnerConnectError({ port, endpoints, logPath, lastError });
+  throw buildRunnerConnectError({ port, endpoints: route.endpoints, logPath, lastError });
 }
 
-type RunnerEndpointResolver = ReturnType<typeof createRunnerEndpointResolver>['getEndpoints'];
+type RunnerRouteResolver = ReturnType<typeof createRunnerCommandRouteResolver>['resolveRoute'];
 
 async function attemptRunnerConnection(params: {
   device: DeviceInfo;
@@ -115,16 +117,16 @@ async function attemptRunnerConnection(params: {
   timeoutMs: number;
   logPath?: string;
   session?: RunnerSession;
-  endpoints: string[];
-  getEndpoints: RunnerEndpointResolver;
+  route: RunnerCommandRoute;
+  resolveRoute: RunnerRouteResolver;
   signal?: AbortSignal;
   attemptDeadline?: Deadline;
-  setEndpoints: (endpoints: string[]) => void;
+  setRoute: (route: RunnerCommandRoute) => void;
   setLastError: (error: unknown) => void;
 }): Promise<Response | null> {
   await ensureRunnerAttemptCanStart(params);
 
-  const primary = await tryPrimaryRunnerEndpoints(params);
+  const primary = await tryPrimaryRunnerRoute(params);
   if (primary.response) return primary.response;
 
   const simulatorFallback = await tryReadySimulatorEndpoint(params);
@@ -155,29 +157,28 @@ async function ensureRunnerAttemptCanStart(params: {
   }
 }
 
-async function tryPrimaryRunnerEndpoints(params: {
+async function tryPrimaryRunnerRoute(params: {
   device: DeviceInfo;
   port: number;
   command: RunnerCommand;
   timeoutMs: number;
-  endpoints: string[];
-  getEndpoints: RunnerEndpointResolver;
+  route: RunnerCommandRoute;
+  resolveRoute: RunnerRouteResolver;
   signal?: AbortSignal;
   attemptDeadline?: Deadline;
-  setEndpoints: (endpoints: string[]) => void;
+  setRoute: (route: RunnerCommandRoute) => void;
   setLastError: (error: unknown) => void;
 }): Promise<{ response: Response | null; usedCachedTunnelIp: boolean }> {
-  let endpoints = params.endpoints;
+  let route = params.route;
   let usedCachedTunnelIp = false;
   if (params.device.kind === 'device') {
-    const resolved = await params.getEndpoints(params.attemptDeadline?.remainingMs());
-    endpoints = resolved.endpoints;
-    usedCachedTunnelIp = resolved.cached;
-    params.setEndpoints(endpoints);
+    route = await params.resolveRoute(params.attemptDeadline?.remainingMs());
+    usedCachedTunnelIp = route.cachedTunnelIp;
+    params.setRoute(route);
   }
 
-  const cachedTunnelEndpoint = usedCachedTunnelIp ? endpoints[0] : null;
-  const response = await tryRunnerEndpoints(endpoints, {
+  const cachedTunnelEndpoint = usedCachedTunnelIp ? route.endpoints[0] : null;
+  const response = await tryRunnerRoute(params.device, route, {
     command: params.command,
     port: params.port,
     timeoutMs: params.timeoutMs,
@@ -216,19 +217,19 @@ async function tryRefreshedDeviceTunnel(
     port: number;
     command: RunnerCommand;
     timeoutMs: number;
-    getEndpoints: RunnerEndpointResolver;
+    resolveRoute: RunnerRouteResolver;
     signal?: AbortSignal;
     attemptDeadline?: Deadline;
-    setEndpoints: (endpoints: string[]) => void;
+    setRoute: (route: RunnerCommandRoute) => void;
     setLastError: (error: unknown) => void;
   },
   usedCachedTunnelIp: boolean,
 ): Promise<Response | null> {
   if (params.device.kind !== 'device' || !usedCachedTunnelIp) return null;
   invalidateDeviceTunnelIpCache(params.device.id);
-  const refreshed = await params.getEndpoints(params.attemptDeadline?.remainingMs(), true);
-  params.setEndpoints(refreshed.endpoints);
-  return await tryRunnerEndpoints(refreshed.endpoints, {
+  const refreshed = await params.resolveRoute(params.attemptDeadline?.remainingMs(), true);
+  params.setRoute(refreshed);
+  return await tryRunnerRoute(params.device, refreshed, {
     command: params.command,
     port: params.port,
     timeoutMs: params.timeoutMs,
@@ -267,18 +268,21 @@ export async function sendRunnerCommandOnce(
     throw createRequestCanceledError();
   }
   const deadline = Deadline.fromTimeoutMs(timeoutMs);
-  const { getEndpoints } = createRunnerEndpointResolver(device, port);
-  const { endpoints } = await getEndpoints(deadline.remainingMs());
-  const endpoint = endpoints[0];
-  if (!endpoint) {
-    throw new AppError('COMMAND_FAILED', 'Runner command endpoint not available', {
-      port,
-      endpoints,
-    });
-  }
+  const { resolveRoute } = createRunnerCommandRouteResolver(device, port);
+  const route = await resolveRoute(deadline.remainingMs());
   const remainingMs = deadline.remainingMs();
   if (remainingMs <= 0) {
     throw new AppError('COMMAND_FAILED', 'Runner command deadline exceeded', { timeoutMs });
+  }
+  if (route.kind === 'usbmux') {
+    return await usbmuxRunnerTransport.postCommand(device.id, port, command, remainingMs, signal);
+  }
+  const endpoint = route.endpoints[0];
+  if (!endpoint) {
+    throw new AppError('COMMAND_FAILED', 'Runner command endpoint not available', {
+      port,
+      endpoints: route.endpoints,
+    });
   }
   return await fetchWithTimeout(
     endpoint,
@@ -292,25 +296,44 @@ export async function sendRunnerCommandOnce(
   );
 }
 
-function createRunnerEndpointResolver(device: DeviceInfo, port: number) {
-  let requestTunnelIp: string | null | undefined;
-  return {
-    getEndpoints: async (timeoutBudgetMs?: number, forceRefresh = false) => {
-      const tunnelIp = await getDeviceTunnelIpForRequest({
-        device,
-        timeoutBudgetMs,
-        forceRefresh,
-        requestTunnelIp,
-        setRequestTunnelIp: (ip) => {
-          requestTunnelIp = ip;
-        },
+async function tryRunnerRoute(
+  device: DeviceInfo,
+  route: RunnerCommandRoute,
+  params: {
+    command: RunnerCommand;
+    port: number;
+    timeoutMs: number;
+    signal?: AbortSignal;
+    attemptDeadline?: Deadline;
+    onError: (endpoint: string, error: unknown) => void;
+  },
+): Promise<Response | null> {
+  if (route.kind === 'network') {
+    return await tryRunnerEndpoints(route.endpoints, params);
+  }
+  const endpoint = route.endpoints[0];
+  try {
+    const remainingMs = params.attemptDeadline?.remainingMs() ?? params.timeoutMs;
+    if (remainingMs <= 0) {
+      throw new AppError('COMMAND_FAILED', 'Runner connection deadline exceeded', {
+        port: params.port,
+        timeoutMs: params.timeoutMs,
       });
-      return {
-        endpoints: resolveRunnerCommandEndpoints(device, port, tunnelIp.ip),
-        cached: tunnelIp.sharedCacheHit,
-      };
-    },
-  };
+    }
+    return await usbmuxRunnerTransport.postCommand(
+      device.id,
+      params.port,
+      params.command,
+      Math.min(RUNNER_CONNECT_REQUEST_TIMEOUT_MS, remainingMs),
+      params.signal,
+    );
+  } catch (error) {
+    if (params.signal?.aborted || isRequestCanceledError(error)) {
+      throw createRequestCanceledError();
+    }
+    params.onError(endpoint, error);
+    return null;
+  }
 }
 
 async function tryRunnerEndpoints(
@@ -379,74 +402,6 @@ async function tryRunnerSimulatorEndpoint(
   }
 }
 
-async function getDeviceTunnelIpForRequest(params: {
-  device: DeviceInfo;
-  timeoutBudgetMs?: number;
-  forceRefresh: boolean;
-  requestTunnelIp: string | null | undefined;
-  setRequestTunnelIp: (ip: string | null) => void;
-}): Promise<{ ip: string | null; sharedCacheHit: boolean }> {
-  const { device, timeoutBudgetMs, forceRefresh, requestTunnelIp, setRequestTunnelIp } = params;
-  if (device.kind !== 'device') {
-    return { ip: null, sharedCacheHit: false };
-  }
-  if (!forceRefresh) {
-    const cached = readDeviceTunnelIpCache(device.id);
-    if (cached) return { ip: cached, sharedCacheHit: true };
-    if (requestTunnelIp !== undefined) return { ip: requestTunnelIp, sharedCacheHit: false };
-  }
-  const ip = await resolveIosPhysicalDeviceControl(device).resolveRunnerTunnelIp(
-    device,
-    timeoutBudgetMs,
-  );
-  setRequestTunnelIp(ip);
-  if (ip) writeDeviceTunnelIpCache(device.id, ip);
-  return { ip, sharedCacheHit: false };
-}
-
-function readDeviceTunnelIpCache(deviceId: string): string | null {
-  const cached = deviceTunnelIpCache.get(deviceId);
-  if (!cached) return null;
-  if (cached.expiresAt <= Date.now()) {
-    deviceTunnelIpCache.delete(deviceId);
-    return null;
-  }
-  return cached.ip;
-}
-
-function writeDeviceTunnelIpCache(deviceId: string, ip: string): void {
-  deviceTunnelIpCache.set(deviceId, {
-    ip,
-    expiresAt: Date.now() + RUNNER_DEVICE_TUNNEL_IP_CACHE_TTL_MS,
-  });
-}
-
-function invalidateDeviceTunnelIpCache(deviceId: string): void {
-  deviceTunnelIpCache.delete(deviceId);
-}
-
-/**
- * @internal Test isolation hook for the process-global device tunnel IP cache.
- */
-export function clearDeviceTunnelIpCache(): void {
-  deviceTunnelIpCache.clear();
-}
-
-function resolveRunnerCommandEndpoints(
-  device: DeviceInfo,
-  port: number,
-  tunnelIp: string | null,
-): string[] {
-  const endpoints = [`http://127.0.0.1:${port}/command`];
-  if (device.kind !== 'device') {
-    return endpoints;
-  }
-  if (tunnelIp) {
-    endpoints.unshift(`http://[${tunnelIp}]:${port}/command`);
-  }
-  return endpoints;
-}
-
 async function fetchWithTimeout(
   url: string,
   init: RequestInit,
@@ -498,58 +453,4 @@ async function postCommandViaSimulator(
   );
   const body = result.stdout as string;
   return { status: 200, body };
-}
-
-export async function getFreePort(): Promise<number> {
-  return await new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (typeof address === 'object' && address?.port) {
-        const port = address.port;
-        server.close(() => resolve(port));
-      } else {
-        server.close(() => reject(new AppError('COMMAND_FAILED', 'Failed to allocate port')));
-      }
-    });
-    server.on('error', reject);
-  });
-}
-
-export function logChunk(
-  chunk: string,
-  logPath?: string,
-  traceLogPath?: string,
-  verbose?: boolean,
-): void {
-  if (logPath) appendLogChunk(logPath, chunk);
-  if (traceLogPath) appendLogChunk(traceLogPath, chunk);
-  if (verbose) {
-    process.stderr.write(chunk);
-  }
-}
-
-const logAppendQueues = new Map<string, Promise<void>>();
-
-function appendLogChunk(logPath: string, chunk: string): void {
-  const previous = logAppendQueues.get(logPath) ?? Promise.resolve();
-  const next = previous
-    .catch(() => {})
-    .then(async () => {
-      await fs.promises.mkdir(path.dirname(logPath), { recursive: true });
-      await fs.promises.appendFile(logPath, chunk);
-    })
-    .catch(() => {});
-  const queued = next.finally(() => {
-    if (logAppendQueues.get(logPath) === queued) {
-      logAppendQueues.delete(logPath);
-    }
-  });
-  logAppendQueues.set(logPath, queued);
-}
-
-export function cleanupTempFile(filePath: string): void {
-  try {
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-  } catch {}
 }

@@ -76,8 +76,6 @@ export type PlatformPlugin = {
     readonly unsupportedHintByDefault?: Readonly<
       Record<string, (device: DeviceInfo) => string | undefined>
     >;
-    /** Device-local execution backend selected from discovery/runtime capability evidence. */
-    readonly deviceBackend?: (device: DeviceInfo) => string | undefined;
   };
   /**
    * The daemon app-log facet (issue #974). `resolveBackend` wraps the platform

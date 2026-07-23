@@ -8,20 +8,19 @@ import {
   resolveCoreDeviceTunnelIp,
 } from './physical-device-coredevice.ts';
 import {
-  iosPhysicalDeviceBackendRegistry,
-  type IosPhysicalDeviceBackend,
-  type IosPhysicalDeviceBackendRegistry,
-} from './physical-device-control-registry.ts';
+  IOS_DEVICE_READY_COMMAND_TIMEOUT_BUFFER_MS,
+  IOS_DEVICE_READY_TIMEOUT_MS,
+} from './physical-device-constants.ts';
 import type {
   AppleRunnerCommandExecutor,
   AppleRunnerCommandOptions,
 } from './runner/runner-provider.ts';
 import { runXcrun } from './tool-provider.ts';
 
-export { parseIosDeviceDetailsPayload, resolveIosReadyHint } from './physical-device-coredevice.ts';
-
-const IOS_DEVICE_READY_TIMEOUT_MS = 15_000;
-const IOS_DEVICE_READY_COMMAND_TIMEOUT_BUFFER_MS = 3_000;
+export type IosPhysicalDeviceBackend = 'coredevice' | 'xctest';
+export type IosPhysicalDeviceRunnerTransport =
+  | { kind: 'network'; tunnelIp: string | null }
+  | { kind: 'usbmux' };
 
 type IosPhysicalDeviceLaunchOptions = {
   payloadUrl?: string;
@@ -46,7 +45,10 @@ export type IosPhysicalDeviceControl = {
       runRunnerCommand: AppleRunnerCommandExecutor;
     },
   ): Promise<void>;
-  resolveRunnerTunnelIp(device: DeviceInfo, timeoutBudgetMs?: number): Promise<string | null>;
+  resolveRunnerTransport(
+    device: DeviceInfo,
+    timeoutBudgetMs?: number,
+  ): Promise<IosPhysicalDeviceRunnerTransport>;
 };
 
 const CONTROLS: Record<IosPhysicalDeviceBackend, IosPhysicalDeviceControl> = {
@@ -55,25 +57,22 @@ const CONTROLS: Record<IosPhysicalDeviceBackend, IosPhysicalDeviceControl> = {
     ensureReady: ensureCoreDeviceReady,
     launchApp: launchCoreDeviceApp,
     terminateApp: async (device, bundleId) => await terminateIosDeviceApp(device, bundleId),
-    resolveRunnerTunnelIp: resolveCoreDeviceTunnelIp,
+    resolveRunnerTransport: async (device, timeoutBudgetMs) => ({
+      kind: 'network',
+      tunnelIp: await resolveCoreDeviceTunnelIp(device, timeoutBudgetMs),
+    }),
   },
   xctest: {
     backend: 'xctest',
     ensureReady: ensureXctestDeviceReady,
     launchApp: launchXctestDeviceApp,
     terminateApp: terminateXctestDeviceApp,
-    resolveRunnerTunnelIp: async () => null,
+    resolveRunnerTransport: async () => ({ kind: 'usbmux' }),
   },
 };
 
-export function resolveIosPhysicalDeviceControl(
-  device: DeviceInfo,
-  registry: Pick<
-    IosPhysicalDeviceBackendRegistry,
-    'backendForDevice'
-  > = iosPhysicalDeviceBackendRegistry,
-): IosPhysicalDeviceControl {
-  return CONTROLS[registry.backendForDevice(device)];
+export function resolveIosPhysicalDeviceControl(device: DeviceInfo): IosPhysicalDeviceControl {
+  return CONTROLS[device.backend === 'xctest' ? 'xctest' : 'coredevice'];
 }
 
 async function ensureXctestDeviceReady(device: DeviceInfo): Promise<void> {

@@ -179,6 +179,7 @@ export async function handleSessionInventoryCommands(params: {
 
 function publicDeviceInfo({
   simulatorSetPath: _simulatorSetPath,
+  backend: _backend,
   appleOs,
   ...device
 }: DeviceInfo): Record<string, unknown> {

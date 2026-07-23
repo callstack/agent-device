@@ -1,0 +1,259 @@
+import net, { type Socket } from 'node:net';
+import { AppError } from '../../../../kernel/errors.ts';
+import { createRequestCanceledError } from '../../../../request/cancel.ts';
+import { Deadline } from '../../../../utils/retry.ts';
+import { parseXmlDocumentSync, type XmlNode } from '../../../../utils/xml.ts';
+import { readSocketResponse } from './runner-socket-response.ts';
+
+const USBMUX_HEADER_BYTES = 16;
+const USBMUX_PROTOCOL_VERSION = 1;
+const USBMUX_MESSAGE_PLIST = 8;
+const USBMUX_MAX_PACKET_BYTES = 4 * 1024 * 1024;
+
+export async function openUsbmuxRunnerSocket(
+  socketPath: string,
+  udid: string,
+  port: number,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<Socket> {
+  const deadline = Deadline.fromTimeoutMs(timeoutMs);
+  const deviceId = await resolveUsbmuxDeviceId(socketPath, udid, deadline.remainingMs(), signal);
+  return await openUsbmuxDeviceSocket(socketPath, deviceId, port, deadline.remainingMs(), signal);
+}
+
+async function resolveUsbmuxDeviceId(
+  socketPath: string,
+  udid: string,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<number> {
+  const socket = await connectUsbmuxd(socketPath, timeoutMs, signal);
+  try {
+    await writePlistPacket(socket, 1, buildPlistMessage('ListDevices'));
+    const packet = await readUsbmuxPacket(socket, timeoutMs, signal);
+    const deviceId = readDeviceIdFromList(packet.payload.toString('utf8'), udid);
+    if (deviceId !== undefined) return deviceId;
+    throw new AppError('DEVICE_NOT_FOUND', 'iOS device is not available through usbmux', {
+      deviceId: udid,
+      backend: 'xctest',
+      hint: 'Connect the device by cable, trust this Mac, keep it unlocked, and retry.',
+    });
+  } finally {
+    socket.destroy();
+  }
+}
+
+async function openUsbmuxDeviceSocket(
+  socketPath: string,
+  deviceId: number,
+  port: number,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<Socket> {
+  const socket = await connectUsbmuxd(socketPath, timeoutMs, signal);
+  try {
+    await writePlistPacket(
+      socket,
+      2,
+      buildPlistMessage('Connect', {
+        DeviceID: deviceId,
+        PortNumber: hostToNetworkPort(port),
+      }),
+    );
+    const packet = await readUsbmuxPacket(socket, timeoutMs, signal);
+    const result = readPlistInteger(packet.payload.toString('utf8'), 'Number');
+    if (result !== 0) {
+      throw new AppError('COMMAND_FAILED', 'Failed to connect to XCTest runner through usbmux', {
+        backend: 'xctest',
+        deviceId,
+        port,
+        usbmuxResult: result,
+        hint: 'Keep the device connected by cable and unlocked, then retry.',
+      });
+    }
+    return socket;
+  } catch (error) {
+    socket.destroy();
+    throw error;
+  }
+}
+
+async function connectUsbmuxd(
+  socketPath: string,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<Socket> {
+  requireTimeRemaining(timeoutMs, 'connect to usbmuxd');
+  if (signal?.aborted) throw createRequestCanceledError();
+  return await new Promise<Socket>((resolve, reject) => {
+    const socket = net.createConnection(socketPath);
+    let settled = false;
+    const timer = setTimeout(() => {
+      finish(
+        new AppError('COMMAND_FAILED', 'Timed out connecting to usbmuxd', {
+          backend: 'xctest',
+          socketPath,
+          timeoutMs,
+        }),
+      );
+    }, timeoutMs);
+    const onConnect = () => finish();
+    const onError = (error: Error) => finish(error);
+    const onAbort = () => finish(createRequestCanceledError());
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      socket.off('connect', onConnect);
+      socket.off('error', onError);
+      signal?.removeEventListener('abort', onAbort);
+      if (error) {
+        socket.destroy();
+        reject(error);
+      } else {
+        resolve(socket);
+      }
+    };
+    socket.once('connect', onConnect);
+    socket.once('error', onError);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+async function writePlistPacket(socket: Socket, tag: number, payload: string): Promise<void> {
+  const body = Buffer.from(payload, 'utf8');
+  const packet = Buffer.alloc(USBMUX_HEADER_BYTES + body.length);
+  packet.writeUInt32LE(packet.length, 0);
+  packet.writeUInt32LE(USBMUX_PROTOCOL_VERSION, 4);
+  packet.writeUInt32LE(USBMUX_MESSAGE_PLIST, 8);
+  packet.writeUInt32LE(tag, 12);
+  body.copy(packet, USBMUX_HEADER_BYTES);
+  if (socket.write(packet)) return;
+  await new Promise<void>((resolve, reject) => {
+    socket.once('drain', resolve);
+    socket.once('error', reject);
+  });
+}
+
+async function readUsbmuxPacket(
+  socket: Socket,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<{ payload: Buffer }> {
+  requireTimeRemaining(timeoutMs, 'read usbmuxd response');
+  return await readSocketResponse<{ payload: Buffer }>({
+    socket,
+    timeoutMs,
+    signal,
+    completion: 'pause',
+    timeoutError: () =>
+      new AppError('COMMAND_FAILED', 'Timed out reading usbmuxd response', {
+        backend: 'xctest',
+        timeoutMs,
+      }),
+    closedError: () => new AppError('COMMAND_FAILED', 'usbmuxd closed the connection unexpectedly'),
+    select: (buffer) => {
+      if (buffer.length < USBMUX_HEADER_BYTES) return;
+      const packetBytes = buffer.readUInt32LE(0);
+      if (packetBytes < USBMUX_HEADER_BYTES || packetBytes > USBMUX_MAX_PACKET_BYTES) {
+        return {
+          error: new AppError('COMMAND_FAILED', 'Invalid usbmuxd response length'),
+        };
+      }
+      if (buffer.length < packetBytes) return;
+      return {
+        value: {
+          payload: buffer.subarray(USBMUX_HEADER_BYTES, packetBytes),
+        },
+      };
+    },
+  });
+}
+
+function buildPlistMessage(
+  messageType: string,
+  fields: Record<string, string | number> = {},
+): string {
+  const entries: Array<[string, string | number]> = [
+    ['BundleID', 'com.callstack.agent-device'],
+    ['ClientVersionString', 'agent-device'],
+    ['MessageType', messageType],
+    ['ProgName', 'agent-device'],
+    ['kLibUSBMuxVersion', 3],
+    ...Object.entries(fields),
+  ];
+  const body = entries
+    .map(([key, value]) =>
+      typeof value === 'number'
+        ? `<key>${escapeXml(key)}</key><integer>${value}</integer>`
+        : `<key>${escapeXml(key)}</key><string>${escapeXml(value)}</string>`,
+    )
+    .join('');
+  return `<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict>${body}</dict></plist>`;
+}
+
+function readDeviceIdFromList(xml: string, udid: string): number | undefined {
+  for (const node of walkXmlNodes(parseXmlDocumentSync(xml))) {
+    const device = readListedDevice(node);
+    if (device?.udid === udid) return device.id;
+  }
+  return undefined;
+}
+
+function readListedDevice(node: XmlNode): { udid: string; id: number } | undefined {
+  if (node.name !== 'dict') return undefined;
+  const properties = readDictEntry(node, 'Properties');
+  if (properties?.name !== 'dict') return undefined;
+  const udid = readDictEntry(properties, 'SerialNumber')?.text;
+  const id = Number(readDictEntry(node, 'DeviceID')?.text);
+  if (!udid || !Number.isSafeInteger(id) || id <= 0) return undefined;
+  return { udid, id };
+}
+
+function readPlistInteger(xml: string, key: string): number | undefined {
+  for (const node of walkXmlNodes(parseXmlDocumentSync(xml))) {
+    if (node.name !== 'dict') continue;
+    const value = readDictEntry(node, key);
+    if (value?.name !== 'integer') continue;
+    const parsed = Number(value.text);
+    if (Number.isSafeInteger(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+function readDictEntry(dict: XmlNode, key: string): XmlNode | undefined {
+  for (let index = 0; index < dict.children.length - 1; index += 1) {
+    const entry = dict.children[index];
+    if (entry?.name === 'key' && entry.text === key) return dict.children[index + 1];
+  }
+  return undefined;
+}
+
+function* walkXmlNodes(nodes: readonly XmlNode[]): Generator<XmlNode> {
+  for (const node of nodes) {
+    yield node;
+    yield* walkXmlNodes(node.children);
+  }
+}
+
+function hostToNetworkPort(port: number): number {
+  return ((port & 0xff) << 8) | ((port >>> 8) & 0xff);
+}
+
+function requireTimeRemaining(timeoutMs: number, action: string): void {
+  if (timeoutMs > 0) return;
+  throw new AppError('COMMAND_FAILED', `No time remaining to ${action}`, {
+    backend: 'xctest',
+    timeoutMs,
+  });
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
+}

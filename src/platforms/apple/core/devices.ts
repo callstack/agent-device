@@ -14,7 +14,6 @@ import { buildHostMacDevice } from '../os/macos/devices.ts';
 import { buildSimctlArgs } from './simctl.ts';
 import { markSimulatorBooted } from './simulator.ts';
 import { resolveAppleToolProvider, runXcrun } from './tool-provider.ts';
-import { recordDiscoveredIosPhysicalDeviceBackends } from './physical-device-control-registry.ts';
 
 const IOS_DEVICECTL_LIST_TIMEOUT_MS = 8_000;
 const APPLE_PRODUCT_TYPE_PATTERN = /^(iphone|ipad|ipod|appletv|realitydevice)/i;
@@ -250,6 +249,7 @@ function mapDevicectlAppleDevices(payload: DevicectlListDevicesPayload): DeviceI
         resolveDevicectlAppleProductType(device),
         ...resolveDevicectlAppleLabels(device),
       ]),
+      backend: 'coredevice',
       booted: true,
     });
   }
@@ -285,6 +285,7 @@ function buildXctracePhysicalDevice(
     kind: 'device',
     target,
     appleOs: resolveAppleOs(target, osVersion ? [name, osVersion] : [name]),
+    backend: 'xctest',
     // xctrace lists currently connected devices in the "Devices" section.
     // The "Devices Offline" section is excluded above, so treating these as
     // booted preserves the existing physical-device selection semantics.
@@ -413,7 +414,6 @@ export async function listAppleDevices(
     listApplePhysicalDevicesFromDevicectl(),
     listApplePhysicalDevicesFromXctrace(),
   ]);
-  recordDiscoveredIosPhysicalDeviceBackends(devicectlDevices, xctraceDevices);
 
   devices = mergeAppleDevices(devices, devicectlDevices);
   return sortAppleDevicesForSelection(mergeAppleDevices(devices, xctraceDevices));
