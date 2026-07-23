@@ -104,6 +104,28 @@ export type CommandRecordingEffect =
   | ((req: Pick<DaemonRequest, 'command' | 'positionals' | 'flags'>) => RecordingEffect);
 
 /**
+ * ADR 0012 / #1349: how replay verifies a recorded `target-v1` annotation on
+ * this command's steps.
+ *
+ * - `pre-dispatch`: the replay step loop verifies the recorded identity
+ *   against a fresh capture BEFORE dispatching the action (decision 3 paths
+ *   2-6), because the command's semantics expect its target present at
+ *   dispatch time (touch/fill/get/is).
+ * - `post-resolution`: the command resolves its own target (wait's polling
+ *   loop) and the identity check runs INSIDE that resolution, after a
+ *   candidate matches and before the command reports success. Pre-dispatch
+ *   verification would refuse the expected starting condition of a wait — a
+ *   landmark that has not appeared yet — so only decision 3 path 1
+ *   (recorded-`unverifiable`, which needs no resolution) runs up front.
+ *
+ * Declared on every command whose recorded steps can carry `target-v1`
+ * evidence; the parity test pins that set so a new evidence-carrying command
+ * must choose a phase explicitly instead of silently entering the generic
+ * pre-dispatch path.
+ */
+export type TargetIdentityVerification = 'pre-dispatch' | 'post-resolution';
+
+/**
  * The single additive command-descriptor shape (ADR-0008, Phase 1 step 1).
  *
  * Per command this carries, side-by-side, the facts that today live in three
@@ -149,6 +171,8 @@ type CommandDescriptorBase = {
   responseDataTransform?: CommandResponseDataTransform;
   catalog: CommandCatalogFacet;
   dispatch?: CommandDispatchFacet;
+  /** ADR 0012 / #1349: present iff this command's recorded steps can carry `target-v1` evidence. */
+  targetIdentityVerification?: TargetIdentityVerification;
   /**
    * Whether the command records an action into the active session replay script
    * by default, making `--no-record` meaningful. Declared on every raw descriptor

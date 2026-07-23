@@ -589,3 +589,88 @@ test('computeTargetEvidence: a unique id is still recorded as identity (already-
   assert.ok(evidence);
   assert.equal(evidence.id, 'save');
 });
+
+// ---------------------------------------------------------------------------
+// #1349: landmark mode — wait's existence-semantics evidence.
+// ---------------------------------------------------------------------------
+
+/** Two identical rows the disambiguation signals cannot fully separate, plus a labeled parent. */
+function twinRowsFixture(): SnapshotNode[] {
+  return toSnapshotNodes([
+    { index: 0, type: 'Window', depth: 0 },
+    { index: 1, type: 'List', label: 'Results', depth: 1, parentIndex: 0 },
+    {
+      index: 2,
+      type: 'StaticText',
+      label: 'Row',
+      rect: { x: 0, y: 10, width: 100, height: 20 },
+      depth: 2,
+      parentIndex: 1,
+    },
+    {
+      index: 3,
+      type: 'StaticText',
+      label: 'Row',
+      rect: { x: 0, y: 40, width: 100, height: 20 },
+      depth: 2,
+      parentIndex: 1,
+    },
+  ]);
+}
+
+test('computeTargetEvidence landmark mode: identity twins stay verified (membership, not isolation)', () => {
+  const nodes = twinRowsFixture();
+  const winner = nodes.find((node) => node.index === 3);
+  assert.ok(winner);
+  const evidence = computeTargetEvidence(
+    { node: winner, preActionNodes: nodes },
+    { mode: 'landmark' },
+  );
+  assert.ok(evidence);
+  assert.equal(evidence.verification, 'verified');
+  assert.equal(evidence.role, 'statictext');
+  assert.equal(evidence.label, 'Row');
+});
+
+test('computeTargetEvidence landmark mode: an identity-empty winner records no annotation', () => {
+  const nodes = toSnapshotNodes([
+    { index: 0, type: 'Window', depth: 0 },
+    {
+      index: 1,
+      type: 'Other',
+      depth: 1,
+      parentIndex: 0,
+      rect: { x: 0, y: 0, width: 100, height: 100 },
+    },
+  ]);
+  const winner = nodes.find((node) => node.index === 1);
+  assert.ok(winner);
+  assert.equal(
+    computeTargetEvidence({ node: winner, preActionNodes: nodes }, { mode: 'landmark' }),
+    undefined,
+  );
+  // Action mode still writes evidence for the same node — the omission is
+  // landmark-specific fail-open behavior.
+  assert.ok(computeTargetEvidence({ node: winner, preActionNodes: nodes }));
+});
+
+test('computeTargetEvidence landmark mode: a broken parent walk still fails closed to unverifiable', () => {
+  const nodes = toSnapshotNodes([
+    {
+      index: 1,
+      type: 'StaticText',
+      label: 'Screen X',
+      depth: 1,
+      parentIndex: 99, // dangling parent: capture anomaly
+      rect: { x: 0, y: 0, width: 100, height: 20 },
+    },
+  ]);
+  const winner = nodes[0];
+  assert.ok(winner);
+  const evidence = computeTargetEvidence(
+    { node: winner, preActionNodes: nodes },
+    { mode: 'landmark' },
+  );
+  assert.ok(evidence);
+  assert.equal(evidence.verification, 'unverifiable');
+});

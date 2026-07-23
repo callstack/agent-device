@@ -76,6 +76,18 @@ type DaemonRequestInternal = {
    */
   replayTargetGuard?: ReplayTargetGuardDenotation;
   /**
+   * ADR 0012 / #1349 deferred (post-resolution) identity verification: the
+   * recorded `target-v1` landmark of an annotated selector `wait`, set ONLY
+   * by the replay step loop. The wait dispatch threads it into the polling
+   * loop as `recordedLandmark`; success then requires a selector match
+   * carrying this identity, and a timeout with rejected candidates surfaces
+   * the `WAIT_LANDMARK_MISMATCH_REASON` refusal the step loop converts into
+   * an identity-mismatch divergence. Never used by the generic pre-dispatch
+   * verification path — a wait's landmark may legitimately be absent when
+   * the step starts.
+   */
+  replayLandmarkGuard?: TargetAnnotationV1;
+  /**
    * ADR 0014: set when a mutating `find` re-enters the interaction leaf with the
    * ref it just resolved by locator against a fresh capture. That ref is find's
    * own diagnostic identity, not a client-supplied ref subject to frame

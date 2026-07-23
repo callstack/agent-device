@@ -53,6 +53,7 @@ import {
   orderByViewportPosition,
 } from '../session-target-evidence.ts';
 import {
+  annotationLocalIdentity,
   classifyTargetBindingMatch,
   type LocalIdentity,
   type TargetAnnotationV1,
@@ -110,7 +111,7 @@ export function classifyReplayTarget(params: {
   });
 
   const byIndex = buildIndexMap(nodes);
-  const identity = identityAsLocalIdentity(recorded);
+  const identity = annotationLocalIdentity(recorded);
   const identitySet = filterIdentitySet(
     matching.matchedNodes,
     byIndex,
@@ -240,14 +241,6 @@ function resolveSelectorTargetMatches(
   return { matchedNodes, winnerRef: resolved.node.ref };
 }
 
-function identityAsLocalIdentity(recorded: TargetAnnotationV1): LocalIdentity {
-  return {
-    ...(recorded.id !== undefined ? { id: recorded.id } : {}),
-    role: recorded.role,
-    ...(recorded.label !== undefined ? { label: recorded.label } : {}),
-  };
-}
-
 type MappedVerificationFailure = Omit<ReplayTargetDivergent, 'verified'>;
 
 /** Decision 3 paths 2/3/5/6 (excluding verified), mapped onto a wire divergence kind. */
@@ -373,7 +366,7 @@ function ancestryEntryMismatches(
 }
 
 /** Leaf-anchored prefix: the first divergence explains everything after it. */
-function firstAncestryMismatch(
+export function firstAncestryMismatch(
   recordedAncestry: readonly { role: string; label?: string }[],
   observedAncestry: readonly { role: string; label?: string }[],
 ): string[] {

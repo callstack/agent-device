@@ -18,6 +18,7 @@ import type {
   RecordingEffect,
   CommandResponseDataTransform,
   CommandTimeoutPolicy,
+  TargetIdentityVerification,
 } from './types.ts';
 
 type RawCommandDescriptorShape<T> = T extends CommandDescriptor
@@ -757,6 +758,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
     catalog: { group: 'public' },
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
+    // #1349: a wait's landmark may legitimately be absent when the step
+    // starts, so identity verification runs inside its polling resolution.
+    targetIdentityVerification: 'post-resolution',
     daemon: { route: 'snapshot', refFrameEffect: 'preserve' },
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
     // The wait budget travels as a positional, not a flag; parse it the same
@@ -859,6 +863,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'click',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
+    targetIdentityVerification: 'pre-dispatch',
     catalog: { group: 'public' },
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
@@ -876,6 +881,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'fill',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
+    targetIdentityVerification: 'pre-dispatch',
     catalog: { group: 'public' },
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
@@ -894,6 +900,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'longpress',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
+    targetIdentityVerification: 'pre-dispatch',
     catalog: { group: 'public', key: 'longPress' },
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
@@ -917,6 +924,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'press',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
+    targetIdentityVerification: 'pre-dispatch',
     catalog: { group: 'public' },
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
@@ -951,6 +959,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'get',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
+    targetIdentityVerification: 'pre-dispatch',
     catalog: { group: 'public' },
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
@@ -971,6 +980,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'is',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
+    targetIdentityVerification: 'pre-dispatch',
     catalog: { group: 'public' },
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
@@ -1414,6 +1424,17 @@ export function resolveCommandResponseDataTransform(
 export function resolveCommandRecordsSessionAction(command: string | undefined): boolean {
   if (command === undefined) return false;
   return COMMAND_DESCRIPTOR_BY_NAME.get(command)?.recordsSessionAction ?? false;
+}
+
+/**
+ * ADR 0012 / #1349: the replay verification phase for one command's recorded
+ * `target-v1` evidence, or `undefined` for a command whose steps never carry
+ * it (an annotation on such a step is inert, exactly like an old reader).
+ */
+export function resolveTargetIdentityVerification(
+  command: string,
+): TargetIdentityVerification | undefined {
+  return COMMAND_DESCRIPTOR_BY_NAME.get(command)?.targetIdentityVerification;
 }
 
 /** ADR 0016 request-sensitive app-state effect for one recorded request. */

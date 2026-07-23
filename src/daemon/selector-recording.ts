@@ -3,7 +3,11 @@ import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { stripAndroidSystemChromeProvenanceFromNode } from '../contracts/android-system-chrome.ts';
 import { SessionStore } from './session-store.ts';
 import { isInteractiveObservation } from './session-action-recorder.ts';
-import { computeTargetEvidence, type RecordedTargetCapture } from './session-target-evidence.ts';
+import {
+  computeTargetEvidence,
+  type RecordedTargetCapture,
+  type TargetEvidenceMode,
+} from './session-target-evidence.ts';
 
 export function buildFindRecordResult(
   result: Record<string, unknown>,
@@ -80,6 +84,16 @@ export function toDaemonGetData(result: DaemonGetResult): Record<string, unknown
   };
 }
 
+/**
+ * #1349: a recorded `wait`/`is` entry without the result's resolution
+ * payload — `node`/`preActionNodes` feed `computeTargetEvidence` once and
+ * must not be retained on `session.actions` for the session's lifetime.
+ */
+export function stripResolutionPayload<T extends Record<string, unknown>>(result: T): T {
+  const { node: _node, preActionNodes: _preActionNodes, ...recordResult } = result;
+  return recordResult as T;
+}
+
 export function toDaemonWaitData(result: Record<string, unknown>): Record<string, unknown> {
   return {
     waitedMs: result.waitedMs,
@@ -103,11 +117,15 @@ export function recordIfSession(
   result: Record<string, unknown>,
   /** ADR 0012 decision 3: record-time input for the `target-v1` annotation. */
   recordedTarget?: RecordedTargetCapture,
+  /** #1349: `landmark` for wait's existence-semantics evidence; defaults to `action`. */
+  evidenceMode?: TargetEvidenceMode,
 ): void {
   const session = sessionStore.get(sessionName);
   if (!session) return;
   const targetEvidence =
-    session.recordSession && recordedTarget ? computeTargetEvidence(recordedTarget) : undefined;
+    session.recordSession && recordedTarget
+      ? computeTargetEvidence(recordedTarget, { mode: evidenceMode })
+      : undefined;
   sessionStore.recordAction(session, {
     command: req.command,
     positionals: req.positionals ?? [],

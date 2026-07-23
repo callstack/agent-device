@@ -801,3 +801,51 @@ test('find rejects --record on a mutating action before any device work', async 
   // Refused before the action dispatched.
   expect(invokeCalls).toHaveLength(0);
 });
+
+test('read-only find while recording is intentionally deferred from target-v1 evidence (#1349)', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'default';
+  const session = makeSession(sessionName);
+  session.recordSession = true;
+  sessionStore.set(sessionName, session);
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command === 'snapshot') {
+      return {
+        nodes: [
+          {
+            index: 0,
+            depth: 0,
+            type: 'Button',
+            label: 'Save',
+            rect: { x: 10, y: 10, width: 40, height: 20 },
+            enabled: true,
+            hittable: true,
+          },
+        ],
+      };
+    }
+    return {};
+  });
+
+  const response = await handleFindCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'find',
+      positionals: ['text', 'Save', 'exists'],
+      flags: {},
+    },
+    sessionName,
+    logPath: '/tmp/test.log',
+    sessionStore,
+    invoke: async () => ({ ok: true, data: {} }),
+  });
+
+  expect(response?.ok).toBe(true);
+  const recordedAction = sessionStore.get(sessionName)?.actions[0];
+  expect(recordedAction?.command).toBe('find');
+  // The fuzzy-locator resolution has no selector-chain identity token for
+  // replay verification, so read-only find records NO annotation in v1 —
+  // an explicit deferral, not an accident.
+  expect(recordedAction?.targetEvidence).toBeUndefined();
+});

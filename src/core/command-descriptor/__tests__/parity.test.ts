@@ -388,3 +388,27 @@ test('recordingEffect resolves request-sensitive observation and mutation subcom
     'mutates-app',
   );
 });
+
+test('targetIdentityVerification pins exactly the evidence-carrying command set (ADR 0012 / #1349)', () => {
+  const declared = new Map(
+    RAW_COMMAND_DESCRIPTORS.filter((descriptor) => descriptor.targetIdentityVerification).map(
+      (descriptor) => [descriptor.name, descriptor.targetIdentityVerification],
+    ),
+  );
+  // A new evidence-carrying command must choose its replay verification phase
+  // here explicitly instead of silently entering the generic pre-dispatch
+  // path — wait is the only command whose target may legitimately be absent
+  // when its step starts.
+  assert.deepEqual(
+    [...declared.entries()].sort(([a], [b]) => a.localeCompare(b)),
+    [
+      ['click', 'pre-dispatch'],
+      ['fill', 'pre-dispatch'],
+      ['get', 'pre-dispatch'],
+      ['is', 'pre-dispatch'],
+      ['longpress', 'pre-dispatch'],
+      ['press', 'pre-dispatch'],
+      ['wait', 'post-resolution'],
+    ],
+  );
+});

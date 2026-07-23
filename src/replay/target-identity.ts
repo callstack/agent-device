@@ -339,6 +339,17 @@ function parseVerificationField(value: unknown): TargetVerification {
 
 export type LocalIdentity = { id?: string; role: string; label?: string };
 
+/** The recorded annotation's identity tier as a bare `LocalIdentity` (drop-empty-keys form). */
+export function annotationLocalIdentity(
+  recorded: Pick<TargetAnnotationV1, 'id' | 'role' | 'label'>,
+): LocalIdentity {
+  return {
+    ...(recorded.id !== undefined ? { id: recorded.id } : {}),
+    role: recorded.role,
+    ...(recorded.label !== undefined ? { label: recorded.label } : {}),
+  };
+}
+
 /**
  * Decision 3 "Local identity": id match wins outright when the recording
  * carries one ("a recorded id never matches a node without that id"); with

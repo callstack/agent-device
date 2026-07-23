@@ -161,3 +161,26 @@ export type ReplayTargetGuardDenotation = {
  * layers can share it without a layering back-edge.
  */
 export const REPLAY_TARGET_GUARD_MISMATCH_REASON = 'replay_target_guard_mismatch';
+
+/**
+ * #1349: `details.reason` marker on the timeout refusal `wait` throws when
+ * candidates matching the recorded selector appeared during polling but none
+ * ever carried the recorded landmark identity (local identity + leaf-anchored
+ * ancestry prefix). The replay step loop converts it into an
+ * identity-mismatch target-binding divergence; the wait never reports
+ * success. Lives here (replay zone) for the same layering reason as the
+ * guard-mismatch marker above.
+ */
+export const WAIT_LANDMARK_MISMATCH_REASON = 'wait_landmark_identity_mismatch';
+
+/**
+ * The compact evidence `wait` retains from its LAST poll whose capture
+ * matched the recorded selector: the domain size and the first match's
+ * identity/ancestry, enough for the daemon to build the divergence's
+ * `targetBinding` payload without shipping node trees through error details.
+ */
+export type WaitLandmarkMismatchEvidence = {
+  matchCount: number;
+  observed: LocalIdentity;
+  observedAncestry: { role: string; label?: string }[];
+};

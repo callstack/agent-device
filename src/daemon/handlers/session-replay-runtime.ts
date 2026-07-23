@@ -46,7 +46,9 @@ import {
 } from './session-replay-runtime-plan.ts';
 import {
   buildReplayTargetGuardMismatchResponse,
+  buildWaitLandmarkMismatchResponse,
   isReplayTargetGuardMismatchResponse,
+  isWaitLandmarkMismatchResponse,
   verifyReplayActionTarget,
 } from './session-replay-target-verification.ts';
 import { buildReplayBuiltinVars } from './session-replay-vars.ts';
@@ -106,12 +108,18 @@ async function resolveReplayStepResponse(
   });
   if (!verification.verified) return verification.response;
   const guard = verification.guard;
+  const deferredLandmark = verification.deferredLandmark;
   const guardedReq = guard
     ? {
         ...ctx.replayReq,
         internal: { ...ctx.replayReq.internal, replayTargetGuard: guard.expected },
       }
-    : ctx.replayReq;
+    : deferredLandmark
+      ? {
+          ...ctx.replayReq,
+          internal: { ...ctx.replayReq.internal, replayLandmarkGuard: deferredLandmark },
+        }
+      : ctx.replayReq;
   const response = await invokeReplayAction({
     req: guardedReq,
     sessionName: ctx.sessionName,
@@ -124,24 +132,44 @@ async function resolveReplayStepResponse(
     tracePath: ctx.actionTracePath,
     invoke: ctx.invoke,
   });
-  if (!guard || !isReplayTargetGuardMismatchResponse(response)) return response;
-  return await buildReplayTargetGuardMismatchResponse({
-    action,
-    scope: ctx.scope,
-    guard,
-    failedResponse: response,
-    sourcePath,
-    sourceLine,
-    replayPath: ctx.resolved,
-    step: index + 1,
-    sessionName: ctx.sessionName,
-    sessionStore: ctx.sessionStore,
-    logPath: ctx.logPath,
-    artifactPaths,
-    responseLevel: ctx.responseLevel,
-    planActions: ctx.actions,
-    planDigest: ctx.planDigest,
-  });
+  if (guard && isReplayTargetGuardMismatchResponse(response)) {
+    return await buildReplayTargetGuardMismatchResponse({
+      action,
+      scope: ctx.scope,
+      guard,
+      failedResponse: response,
+      sourcePath,
+      sourceLine,
+      replayPath: ctx.resolved,
+      step: index + 1,
+      sessionName: ctx.sessionName,
+      sessionStore: ctx.sessionStore,
+      logPath: ctx.logPath,
+      artifactPaths,
+      responseLevel: ctx.responseLevel,
+      planActions: ctx.actions,
+      planDigest: ctx.planDigest,
+    });
+  }
+  if (deferredLandmark && isWaitLandmarkMismatchResponse(response)) {
+    return await buildWaitLandmarkMismatchResponse({
+      action,
+      scope: ctx.scope,
+      failedResponse: response,
+      sourcePath,
+      sourceLine,
+      replayPath: ctx.resolved,
+      step: index + 1,
+      sessionName: ctx.sessionName,
+      sessionStore: ctx.sessionStore,
+      logPath: ctx.logPath,
+      artifactPaths,
+      responseLevel: ctx.responseLevel,
+      planActions: ctx.actions,
+      planDigest: ctx.planDigest,
+    });
+  }
+  return response;
 }
 
 export async function runReplayScriptFile(params: {

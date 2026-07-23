@@ -16,9 +16,25 @@ import { parseSelectorChain, type SelectorChain } from '../../../selectors/parse
 import {
   findSelectorChainMatch,
   formatSelectorFailure,
+  listSelectorChainMatches,
   resolveSelectorChain,
   selectorFailureHint,
 } from '../../../selectors/index.ts';
+import type { SelectorChainMatchList } from '../../../selectors/resolve.ts';
+import {
+  readNodeLocalIdentity,
+  WAIT_LANDMARK_MISMATCH_REASON,
+  type WaitLandmarkMismatchEvidence,
+} from '../../../replay/target-identity-node.ts';
+import {
+  buildAncestryChain,
+  buildIndexMap,
+  filterIdentitySet,
+} from '../../../replay/target-evidence-tree.ts';
+import {
+  annotationLocalIdentity,
+  type TargetAnnotationV1,
+} from '../../../replay/target-identity.ts';
 import { buildSelectorChainForNode } from '../../../selectors/build.ts';
 import {
   evaluateIsPredicate,
@@ -108,6 +124,8 @@ export type IsCommandOptions = CommandContext &
     predicate: 'visible' | 'hidden' | 'exists' | 'editable' | 'selected' | 'focused' | 'text';
     selector: string;
     expectedText?: string;
+    /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
+    expectedResolvedTarget?: ExpectedResolvedTarget;
   };
 
 export type IsCommandResult = {
@@ -117,6 +135,9 @@ export type IsCommandResult = {
   matches?: number;
   text?: string;
   selectorChain?: string[];
+  /** ADR 0012 decision 3 / #1349: the resolved node and its tree, for record-time evidence (absent for `exists`). */
+  node?: SnapshotNode;
+  preActionNodes?: SnapshotNode[];
 };
 
 export type WaitCommandOptions = CommandContext &
@@ -125,14 +146,33 @@ export type WaitCommandOptions = CommandContext &
       | { kind: 'sleep'; durationMs: number }
       | { kind: 'text'; text: string; timeoutMs?: number | null }
       | { kind: 'ref'; ref: string; timeoutMs?: number | null }
-      | { kind: 'selector'; selector: string; timeoutMs?: number | null }
+      | {
+          kind: 'selector';
+          selector: string;
+          timeoutMs?: number | null;
+          /**
+           * ADR 0012 / #1349, replay-only: the recorded landmark identity this
+           * wait must observe before reporting success. Polling is unchanged —
+           * the loop keeps waiting while no selector match carries this
+           * identity, and a timeout with rejected candidates throws the
+           * `WAIT_LANDMARK_MISMATCH_REASON` refusal instead of success.
+           */
+          recordedLandmark?: TargetAnnotationV1;
+        }
       | { kind: 'stable'; quietMs?: number | null; timeoutMs?: number | null };
   };
 
 export type WaitCommandResult =
   | { kind: 'sleep'; waitedMs: number }
   | { kind: 'text'; waitedMs: number; text: string }
-  | { kind: 'selector'; waitedMs: number; selector: string }
+  | {
+      kind: 'selector';
+      waitedMs: number;
+      selector: string;
+      /** ADR 0012 decision 3: the satisfying match and the tree it came from, for record-time evidence. */
+      node?: SnapshotNode;
+      preActionNodes?: SnapshotNode[];
+    }
   | {
       kind: 'stable';
       waitedMs: number;
@@ -343,6 +383,12 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
       hint: selectorFailureHint([]),
     });
   }
+  assertExpectedResolvedTarget(
+    resolved.node,
+    capture.snapshot.nodes,
+    options.expectedResolvedTarget,
+    'is',
+  );
   const result = evaluateIsPredicate({
     predicate: options.predicate,
     node: resolved.node,
@@ -369,6 +415,8 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
     selector: resolved.selector.raw,
     ...(options.predicate === 'text' ? { text: result.actualText } : {}),
     selectorChain: chain.selectors.map((entry) => entry.raw),
+    node: resolved.node,
+    preActionNodes: capture.snapshot.nodes,
   };
 };
 
@@ -417,6 +465,7 @@ export const waitCommand: RuntimeCommand<WaitCommandOptions, WaitCommandResult> 
       options,
       options.target.selector,
       options.target.timeoutMs,
+      options.target.recordedLandmark,
     );
   }
   if (options.target.kind === 'stable') {
@@ -513,11 +562,18 @@ async function waitForSelector(
   options: WaitCommandOptions,
   selectorExpression: string,
   timeoutMs: number | null | undefined,
+  recordedLandmark: TargetAnnotationV1 | undefined,
 ): Promise<WaitCommandResult> {
   const timeout = timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const start = now(runtime);
   const chain = parseSelectorChain(selectorExpression);
   const capturePolicy = deriveSelectorCapturePolicy({ selectorChain: chain });
+  // ADR 0012 / #1349: the LAST poll whose capture matched the recorded
+  // selector without any match carrying the recorded landmark identity. A
+  // transient same-selector impostor (the previous screen mid-transition)
+  // must not abort a wait whose job is to wait through it, so the loop keeps
+  // polling; only the deadline turns this into the fail-closed refusal.
+  let landmarkMismatch: WaitLandmarkMismatchEvidence | undefined;
   while (now(runtime) - start < timeout) {
     // Presence-only poll: skip scroll-hint derivation (#1270), same as waitForFindMatch.
     const capture = await captureSelectorSnapshot(runtime, options, {
@@ -525,14 +581,74 @@ async function waitForSelector(
       includeHiddenContentHints: false,
       ...capturePolicy,
     });
-    const match = findSelectorChainMatch(capture.snapshot.nodes, chain, {
+    const nodes = capture.snapshot.nodes;
+    const matchList = listSelectorChainMatches(nodes, chain, {
       platform: runtime.backend.platform,
     });
-    if (match)
-      return { kind: 'selector', selector: match.selector.raw, waitedMs: now(runtime) - start };
+    if (matchList) {
+      const landmark = resolveLandmarkMatch(nodes, matchList, recordedLandmark);
+      if (landmark.kind === 'satisfied') {
+        return {
+          kind: 'selector',
+          selector: matchList.selector.raw,
+          waitedMs: now(runtime) - start,
+          node: landmark.node,
+          preActionNodes: nodes,
+        };
+      }
+      landmarkMismatch = landmark.evidence;
+    }
     await sleep(runtime, POLL_INTERVAL_MS);
   }
+  if (landmarkMismatch) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      `wait matched selector ${selectorExpression} but no candidate carried the recorded landmark identity`,
+      { reason: WAIT_LANDMARK_MISMATCH_REASON, ...landmarkMismatch },
+    );
+  }
   throw new AppError('COMMAND_FAILED', `wait timed out for selector: ${selectorExpression}`);
+}
+
+type LandmarkMatchOutcome =
+  | { kind: 'satisfied'; node: SnapshotNode }
+  | { kind: 'identity-mismatch'; evidence: WaitLandmarkMismatchEvidence };
+
+/**
+ * #1349 landmark check: the wait is satisfied when SOME selector match
+ * carries the recorded identity (local identity + leaf-anchored ancestry
+ * prefix). Positional disambiguation signals are deliberately not consulted —
+ * a destination guard proves the landmark exists on the ready screen, not
+ * that it kept its list position.
+ */
+function resolveLandmarkMatch(
+  nodes: SnapshotNode[],
+  matchList: SelectorChainMatchList,
+  recorded: TargetAnnotationV1 | undefined,
+): LandmarkMatchOutcome {
+  const firstMatch = matchList.matchedNodes[0]!;
+  if (!recorded) return { kind: 'satisfied', node: firstMatch };
+  const byIndex = buildIndexMap(nodes);
+  const identitySet = filterIdentitySet(
+    matchList.matchedNodes,
+    byIndex,
+    annotationLocalIdentity(recorded),
+    recorded.ancestry,
+  );
+  const member = identitySet[0];
+  if (member) return { kind: 'satisfied', node: member };
+  return {
+    kind: 'identity-mismatch',
+    evidence: {
+      matchCount: matchList.matchedNodes.length,
+      observed: readNodeLocalIdentity(firstMatch),
+      observedAncestry: buildAncestryChain(
+        firstMatch,
+        byIndex,
+        Math.max(recorded.ancestry.length, 1),
+      ).chain,
+    },
+  };
 }
 
 async function waitForText(

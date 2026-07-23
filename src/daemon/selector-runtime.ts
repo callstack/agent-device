@@ -27,11 +27,14 @@ import {
   buildFindRecordResult,
   buildGetRecordResult,
   recordIfSession,
+  stripResolutionPayload,
   stripSelectorChain,
   toDaemonFindData,
   toDaemonGetData,
   toDaemonWaitData,
 } from './selector-recording.ts';
+import type { RecordedTargetCapture } from './session-target-evidence.ts';
+import type { TargetAnnotationV1 } from '../replay/target-identity.ts';
 import { maybeWaitTimeoutSurfaceResponse } from './wait-current-surface.ts';
 import { withSystemSurfaceDisclosure } from './handlers/system-surface-disclosure.ts';
 import {
@@ -220,13 +223,20 @@ export async function dispatchIsViaRuntime(
   if (predicate !== 'text' && split.rest.length > 0) {
     return errorResponse('INVALID_ARGS', `is ${predicate} does not accept trailing values`);
   }
-  const directResponse = await dispatchDirectIosSelectorIs(
-    params,
-    predicate as IsPredicate,
-    split.selectorExpression,
-    expectedText,
-  );
-  if (directResponse) return directResponse;
+  // ADR 0012 decision 3 / #1349: recording and a guarded replay dispatch both
+  // require the snapshot path — evidence and the post-resolution identity
+  // guard are computed from the resolution tree.
+  const replayTargetGuard = req.internal?.replayTargetGuard;
+  const recordingSession = params.sessionStore.get(params.sessionName)?.recordSession === true;
+  if (!replayTargetGuard && !recordingSession) {
+    const directResponse = await dispatchDirectIosSelectorIs(
+      params,
+      predicate as IsPredicate,
+      split.selectorExpression,
+      expectedText,
+    );
+    if (directResponse) return directResponse;
+  }
 
   const resolvedRuntime = await createSelectorRuntime(params, {
     requireSession: true,
@@ -241,9 +251,17 @@ export async function dispatchIsViaRuntime(
       predicate: predicate as IsPredicate,
       selector: split.selectorExpression,
       expectedText,
+      expectedResolvedTarget: replayTargetGuard,
     });
-    recordIfSession(params.sessionStore, params.sessionName, req, result);
-    return stripSelectorChain(result);
+    const recordedTarget = readRecordedResolutionTarget(result);
+    recordIfSession(
+      params.sessionStore,
+      params.sessionName,
+      req,
+      stripResolutionPayload(result),
+      recordedTarget,
+    );
+    return stripSelectorChain(stripResolutionPayload(result));
   });
   return withSystemSurfaceDisclosure(
     await maybeAndroidForegroundBlockerResponse(params, response, `is ${predicate}`),
@@ -262,7 +280,11 @@ export async function dispatchWaitViaRuntime(
     const unsupported = requireCommandSupported('wait', device);
     if (unsupported) return unsupported;
   }
-  if (parsed.kind === 'selector') {
+  // ADR 0012 / #1349: recording and a replayed landmark check both need the
+  // snapshot polling path — evidence and the identity comparison are computed
+  // from the resolution tree the direct runner query never captures.
+  const recordedLandmark = req.internal?.replayLandmarkGuard;
+  if (parsed.kind === 'selector' && !recordedLandmark && !session?.recordSession) {
     const directResponse = await dispatchDirectIosSelectorWait({
       ...params,
       session,
@@ -304,9 +326,17 @@ export async function dispatchWaitViaRuntime(
       const result = await runtime.selectors.wait({
         session: sessionName,
         requestId: req.meta?.requestId,
-        target: toWaitTarget(waitParsed, session),
+        target: toWaitTarget(waitParsed, session, recordedLandmark),
       });
-      recordIfSession(sessionStore, sessionName, req, result);
+      const recordedTarget = readRecordedResolutionTarget(result);
+      recordIfSession(
+        sessionStore,
+        sessionName,
+        req,
+        stripResolutionPayload(result),
+        recordedTarget,
+        'landmark',
+      );
       const data = toDaemonWaitData(result);
       return staleRefsWarning ? { ...data, warning: staleRefsWarning } : data;
     });
@@ -325,6 +355,14 @@ export async function dispatchWaitViaRuntime(
     await withSessionlessRunnerCleanup(session, device, execute),
     consumedSessionSnapshot(params),
   );
+}
+
+/** ADR 0012 decision 3 / #1349: a wait/is result's resolution payload, when the tree path produced one. */
+function readRecordedResolutionTarget(result: Record<string, unknown>): RecordedTargetCapture | undefined {
+  const node = result.node;
+  const preActionNodes = result.preActionNodes;
+  if (!node || typeof node !== 'object' || !Array.isArray(preActionNodes)) return undefined;
+  return { node: node as SnapshotNode, preActionNodes: preActionNodes as SnapshotNode[] };
 }
 
 function readDirectIosGetSelector(
@@ -569,13 +607,18 @@ function parseGetTarget(req: DaemonRequest):
   return { ok: true, target: { kind: 'selector', selector } };
 }
 
-function toWaitTarget(parsed: WaitParsed, session: SessionState | undefined) {
+function toWaitTarget(
+  parsed: WaitParsed,
+  session: SessionState | undefined,
+  recordedLandmark?: TargetAnnotationV1,
+) {
   if (parsed.kind === 'sleep') return { kind: 'sleep' as const, durationMs: parsed.durationMs };
   if (parsed.kind === 'selector') {
     return {
       kind: 'selector' as const,
       selector: parsed.selectorExpression,
       timeoutMs: parsed.timeoutMs,
+      ...(recordedLandmark ? { recordedLandmark } : {}),
     };
   }
   if (parsed.kind === 'ref') {

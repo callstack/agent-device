@@ -345,3 +345,78 @@ test('press on an identity-empty container: container-based daemon response, des
   );
   expect(script).toContain('"role":"textview","label":"Connected devices"');
 });
+
+// ---------------------------------------------------------------------------
+// #1349: `is` joins the evidence-carrying set (get-pattern) — a unique-
+// resolving predicate records target-v1 evidence while recording; `is exists`
+// stays intentionally unannotated; the direct-iOS fast path is gated during
+// recording so the snapshot path supplies the evidence tree.
+// ---------------------------------------------------------------------------
+
+function mockSnapshotWithSaveButton() {
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command === 'snapshot') {
+      return { backend: 'xctest', nodes: SAVE_BUTTON_NODES };
+    }
+    return {};
+  });
+}
+
+test('is visible while recording attaches target-v1 evidence and strips the resolution payload everywhere', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'recording-is';
+  sessionStore.set(sessionName, makeSessionWithSnapshot(sessionName, { recordSession: true }));
+  mockSnapshotWithSaveButton();
+
+  const response = await runCommand(sessionStore, sessionName, 'is', ['visible', 'label="Save"']);
+
+  expect(response?.ok).toBe(true);
+  if (response?.ok) {
+    expect(response.data).not.toHaveProperty('node');
+    expect(response.data).not.toHaveProperty('preActionNodes');
+    expect(response.data).not.toHaveProperty('selectorChain');
+  }
+  // The direct-iOS querySelector fast path must be gated during recording.
+  expect(mockRunAppleRunnerCommand).not.toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({ command: 'querySelector' }),
+    expect.anything(),
+  );
+
+  const recordedAction = sessionStore.get(sessionName)?.actions[0];
+  expect(recordedAction?.targetEvidence).toMatchObject({
+    id: 'save',
+    role: 'button',
+    label: 'Save',
+    verification: 'verified',
+  });
+  expect(recordedAction?.result).not.toHaveProperty('node');
+  expect(recordedAction?.result).not.toHaveProperty('preActionNodes');
+});
+
+test('is exists while recording stays intentionally unannotated (deferred coverage)', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'recording-is-exists';
+  sessionStore.set(sessionName, makeSessionWithSnapshot(sessionName, { recordSession: true }));
+  mockSnapshotWithSaveButton();
+
+  const response = await runCommand(sessionStore, sessionName, 'is', ['exists', 'label="Save"']);
+
+  expect(response?.ok).toBe(true);
+  const recordedAction = sessionStore.get(sessionName)?.actions[0];
+  expect(recordedAction?.command).toBe('is');
+  expect(recordedAction?.targetEvidence).toBeUndefined();
+});
+
+test('is visible without recording never computes target-v1 evidence', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'non-recording-is';
+  sessionStore.set(sessionName, makeSessionWithSnapshot(sessionName, { recordSession: false }));
+  mockSnapshotWithSaveButton();
+
+  const response = await runCommand(sessionStore, sessionName, 'is', ['visible', 'label="Save"']);
+
+  expect(response?.ok).toBe(true);
+  const recordedAction = sessionStore.get(sessionName)?.actions[0];
+  expect(recordedAction?.targetEvidence).toBeUndefined();
+});

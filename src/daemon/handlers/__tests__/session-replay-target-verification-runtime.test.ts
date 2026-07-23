@@ -485,3 +485,280 @@ test('a target-binding divergence carries a real computed resume (step 5 wiring,
   expect((resume.planDigest ?? '').length).toBeGreaterThan(0);
   expect(resume.reason).toBeUndefined();
 });
+
+// ---------------------------------------------------------------------------
+// #1349: wait's post-resolution landmark verification. An annotated selector
+// wait must NEVER enter the generic pre-dispatch resolution path — polling is
+// the command's own job — so the step loop only threads the recorded
+// landmark and converts the loop's timeout refusal afterwards.
+// ---------------------------------------------------------------------------
+
+import { WAIT_LANDMARK_MISMATCH_REASON } from '../../../replay/target-identity-node.ts';
+
+const WAIT_ANNOTATION =
+  '# agent-device:target-v1 {"role":"statictext","label":"Screen X","ancestry":[{"role":"other","label":"Detail Screen"}],"sibling":0,"viewportOrder":0,"verification":"verified"}';
+
+const WAIT_UNVERIFIABLE_ANNOTATION =
+  '# agent-device:target-v1 {"role":"statictext","label":"Screen X","ancestry":[{"role":"other","label":"Detail Screen"}],"sibling":0,"viewportOrder":0,"verification":"unverifiable"}';
+
+test('an annotated selector wait dispatches with the landmark guard and no eager pre-action refusal', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-wait-landmark-thread-'));
+  const { sessionStore, sessionName } = setupSession(root);
+  const filePath = writeReplayFile(root, [WAIT_ANNOTATION, 'wait "label=\\"Screen X\\"" 2000']);
+
+  const invoked: DaemonRequest[] = [];
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      invoked.push(req);
+      return { ok: true, data: { waitedMs: 300, selector: 'label="Screen X"' } };
+    },
+  });
+
+  expect(response.ok).toBe(true);
+  expect(invoked.map((req) => req.command)).toEqual(['wait']);
+  expect(invoked[0]?.internal?.replayLandmarkGuard).toEqual({
+    role: 'statictext',
+    label: 'Screen X',
+    ancestry: [{ role: 'other', label: 'Detail Screen' }],
+    sibling: 0,
+    viewportOrder: 0,
+    verification: 'verified',
+  });
+  expect(invoked[0]?.internal?.replayTargetGuard).toBeUndefined();
+  // The landmark may legitimately be absent when the step starts: no
+  // pre-action capture, no eager refusal.
+  expect(mockDispatchCommand).not.toHaveBeenCalled();
+});
+
+test('a recorded-unverifiable wait annotation refuses before polling with matchCount omitted', async () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'agent-device-replay-wait-landmark-unverifiable-'),
+  );
+  const { sessionStore, sessionName } = setupSession(root);
+  const filePath = writeReplayFile(root, [
+    WAIT_UNVERIFIABLE_ANNOTATION,
+    'wait "label=\\"Screen X\\"" 2000',
+  ]);
+
+  mockDispatchCommand.mockResolvedValue({ nodes: [], truncated: false, backend: 'xctest' });
+
+  const invoked: DaemonRequest[] = [];
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      invoked.push(req);
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(invoked.length).toBe(0);
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  const divergence = response.error.details?.divergence as Record<string, unknown>;
+  expect(divergence.kind).toBe('identity-unverifiable');
+  const targetBinding = divergence.targetBinding as Record<string, unknown>;
+  expect('matchCount' in targetBinding).toBe(false);
+});
+
+test("the wait loop's landmark refusal converts into an identity-mismatch divergence", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-wait-landmark-miss-'));
+  const { sessionStore, sessionName } = setupSession(root);
+  const filePath = writeReplayFile(root, [WAIT_ANNOTATION, 'wait "label=\\"Screen X\\"" 2000']);
+
+  // The divergence screen capture after the refusal.
+  mockDispatchCommand.mockResolvedValue({
+    nodes: [
+      {
+        index: 0,
+        depth: 0,
+        type: 'StaticText',
+        label: 'Screen X',
+        rect: { x: 0, y: 0, width: 100, height: 20 },
+      },
+    ],
+    truncated: false,
+    backend: 'xctest',
+  });
+
+  const invoked: DaemonRequest[] = [];
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      invoked.push(req);
+      return {
+        ok: false,
+        error: {
+          code: 'COMMAND_FAILED',
+          message:
+            'wait matched selector label="Screen X" but no candidate carried the recorded landmark identity',
+          details: {
+            reason: WAIT_LANDMARK_MISMATCH_REASON,
+            matchCount: 2,
+            observed: { role: 'statictext', label: 'Screen X' },
+            observedAncestry: [{ role: 'other', label: 'List Screen' }],
+          },
+        },
+      };
+    },
+  });
+
+  expect(invoked.map((req) => req.command)).toEqual(['wait']);
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('REPLAY_DIVERGENCE');
+  const divergence = response.error.details?.divergence as Record<string, unknown>;
+  expect(divergence.kind).toBe('identity-mismatch');
+  expect(divergence.repairHint).toBe('caution');
+  const targetBinding = divergence.targetBinding as Record<string, unknown>;
+  expect(targetBinding.classification).toBe('identity-mismatch');
+  expect(targetBinding.matchCount).toBe(2);
+  expect(targetBinding.recorded).toEqual({ role: 'statictext', label: 'Screen X' });
+  expect(targetBinding.observed).toEqual({ role: 'statictext', label: 'Screen X' });
+  const mismatches = targetBinding.mismatches as string[];
+  expect(mismatches.some((entry) => entry.startsWith('ancestry[0]'))).toBe(true);
+});
+
+test('a plain wait timeout on an annotated wait stays an action-failure divergence', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-wait-plain-timeout-'));
+  const { sessionStore, sessionName } = setupSession(root);
+  const filePath = writeReplayFile(root, [WAIT_ANNOTATION, 'wait "label=\\"Screen X\\"" 2000']);
+
+  mockDispatchCommand.mockResolvedValue({ nodes: [], truncated: false, backend: 'xctest' });
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => ({
+      ok: false,
+      error: {
+        code: 'COMMAND_FAILED',
+        message: 'wait timed out for selector: label="Screen X"',
+      },
+    }),
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  const divergence = response.error.details?.divergence as Record<string, unknown>;
+  expect(divergence.kind).toBe('action-failure');
+});
+
+test('an annotation on a duration wait is inert (no guard, no refusal)', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-wait-duration-inert-'));
+  const { sessionStore, sessionName } = setupSession(root);
+  const filePath = writeReplayFile(root, [WAIT_UNVERIFIABLE_ANNOTATION, 'wait 500']);
+
+  const invoked: DaemonRequest[] = [];
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      invoked.push(req);
+      return { ok: true, data: { waitedMs: 500 } };
+    },
+  });
+
+  expect(response.ok).toBe(true);
+  expect(invoked.map((req) => req.command)).toEqual(['wait']);
+  expect(invoked[0]?.internal?.replayLandmarkGuard).toBeUndefined();
+  expect(mockDispatchCommand).not.toHaveBeenCalled();
+});
+
+// ---------------------------------------------------------------------------
+// #1349: `is` joins the generic pre-dispatch verification path (get-pattern).
+// ---------------------------------------------------------------------------
+
+const IS_ANNOTATION =
+  '# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"verified"}';
+
+test('an annotated is step verifies pre-dispatch and threads the post-resolution guard', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-is-verified-'));
+  const { sessionStore, sessionName } = setupSession(root);
+  const filePath = writeReplayFile(root, [IS_ANNOTATION, 'is visible id="save"']);
+
+  mockDispatchCommand.mockResolvedValue({
+    nodes: [
+      {
+        index: 0,
+        depth: 0,
+        type: 'Button',
+        identifier: 'save',
+        label: 'Save',
+        rect: { x: 10, y: 10, width: 40, height: 20 },
+      },
+    ],
+    truncated: false,
+    backend: 'xctest',
+  });
+
+  const invoked: DaemonRequest[] = [];
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      invoked.push(req);
+      return { ok: true, data: { predicate: 'visible', pass: true } };
+    },
+  });
+
+  expect(response.ok).toBe(true);
+  expect(invoked.map((req) => req.command)).toEqual(['is']);
+  expect(invoked[0]?.internal?.replayTargetGuard).toMatchObject({
+    identity: { id: 'save', role: 'button', label: 'Save' },
+  });
+});
+
+test('an annotated is step whose recorded identity vanished diverges before dispatch', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-is-mismatch-'));
+  const { sessionStore, sessionName } = setupSession(root);
+  const filePath = writeReplayFile(root, [IS_ANNOTATION, 'is visible label="Save"']);
+
+  mockDispatchCommand.mockResolvedValue({
+    nodes: [
+      {
+        index: 0,
+        depth: 0,
+        type: 'Button',
+        identifier: 'save-v2',
+        label: 'Save',
+        rect: { x: 10, y: 10, width: 40, height: 20 },
+      },
+    ],
+    truncated: false,
+    backend: 'xctest',
+  });
+
+  const invoked: DaemonRequest[] = [];
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      invoked.push(req);
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(invoked.length).toBe(0);
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  const divergence = response.error.details?.divergence as Record<string, unknown>;
+  expect(divergence.kind).toBe('identity-mismatch');
+});
