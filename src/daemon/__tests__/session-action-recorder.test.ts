@@ -146,7 +146,7 @@ test('parameterized fills keep literals out of recording state with deterministi
   });
 });
 
-test('a one-character parameterized fill preserves unrelated response and selector text', () => {
+test('a one-character parameterized fill preserves structural selector provenance', () => {
   const session = makeIosSession('default');
   recordActionEntry(session, {
     command: 'fill',
@@ -172,7 +172,7 @@ test('a one-character parameterized fill preserves unrelated response and select
     positionals: ['id="password"', '${LETTER}'],
     result: {
       text: '${LETTER}',
-      message: 'Already safe',
+      message: 'Alre${LETTER}dy s${LETTER}fe',
       selector: 'id="password"',
       selectorChain: ['id="password"', 'label="Account"'],
     },

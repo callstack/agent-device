@@ -52,11 +52,13 @@ The literal exists only on the live request path long enough to execute the inte
 1. The request scope registers it as an explicit diagnostics secret before platform work. This is in
    addition to key-name redaction, because an opaque value need not look secret.
 2. The platform interaction receives the literal.
-3. Before response/event/recording retention, the fill result's semantic `text` field and an exact
-   post-fill `refLabel` become `${VAR}`. Stable selector/ref provenance is preserved byte-for-byte.
-   Untrusted backend extras and nested settle output parameterize delimited occurrences of the
-   supplied literal; post-fill selector-chain candidates are dropped only when a parsed `text`,
-   `label`, or `value` term semantically contains it.
+3. Before response/event/recording retention, the fill result's semantic `text` field becomes
+   `${VAR}` and every occurrence in a post-fill `refLabel` is parameterized. Stable selector/ref
+   provenance is preserved byte-for-byte.
+   Untrusted backend extras and nested settle output parameterize every occurrence of the supplied
+   literal in both keys and values; post-fill selector-chain candidates are dropped only when a
+   parsed `text`, `label`, or `value` term semantically contains it. Known response and settle
+   schema fields are the explicit structural boundary and retain their names and provenance values.
 4. At `recordActionEntry`, the recorder reconstructs the fill's literal positional, writes only the
    placeholder into `SessionAction`, and parameterizes the semantic result field plus arbitrary
    backend/settle echoes again. ADR 0012 `target-v1` evidence keeps its structure; exact

@@ -2,6 +2,35 @@ import type { TargetAnnotationV1 } from '../replay/target-identity.ts';
 import { tryParseSelectorChain } from '../selectors/parse.ts';
 
 const VALUE_BEARING_SELECTOR_KEYS = new Set(['text', 'label', 'value']);
+const STRUCTURAL_ROOT_OUTPUT_KEYS = new Set([
+  'action',
+  'backend',
+  'cost',
+  'delayMs',
+  'evidence',
+  'gesture',
+  'hint',
+  'kind',
+  'maestroFallbackReason',
+  'maestroNonHittableCoordinateFallbackAllowed',
+  'maestroNonHittableCoordinateFallbackUsed',
+  'message',
+  'platform',
+  'ref',
+  'referenceHeight',
+  'referenceWidth',
+  'refLabel',
+  'resolution',
+  'selector',
+  'selectorChain',
+  'settle',
+  'targetHittable',
+  'targetKind',
+  'text',
+  'warning',
+  'x',
+  'y',
+]);
 const STABLE_ROOT_OUTPUT_STRING_KEYS = new Set([
   'action',
   'backend',
@@ -13,24 +42,72 @@ const STABLE_ROOT_OUTPUT_STRING_KEYS = new Set([
   'targetKind',
 ]);
 const STRUCTURED_OUTPUT_KEYS = new Set(['cost', 'evidence', 'resolution', 'settle']);
-const STRUCTURAL_NESTED_STRING_KEYS = new Set([
-  'digest',
-  'foregroundApp',
-  'id',
-  'kind',
-  'ref',
-  'role',
-  'source',
-  'verification',
+const STRUCTURAL_KEYS_BY_PATH = new Map<string, ReadonlySet<string>>([
+  ['cost', new Set(['nodeCount', 'runnerRoundTrips', 'wallClockMs'])],
+  [
+    'evidence',
+    new Set(['changedFromBefore', 'digest', 'foregroundApp', 'interactiveNodeCount', 'nodeCount']),
+  ],
+  [
+    'resolution',
+    new Set([
+      'alternatives',
+      'kind',
+      'matchCount',
+      'phase',
+      'source',
+      'tiebreak',
+      'winnerDiagnostic',
+    ]),
+  ],
+  ['resolution.alternatives', new Set(['diagnosticRef', 'label', 'role'])],
+  ['resolution.winnerDiagnostic', new Set(['diagnosticRef', 'label', 'role'])],
+  [
+    'settle',
+    new Set([
+      'captures',
+      'diff',
+      'hint',
+      'quietMs',
+      'refs',
+      'refsGeneration',
+      'settled',
+      'tail',
+      'tailTruncated',
+      'timeoutMs',
+      'waitedMs',
+    ]),
+  ],
+  ['settle.diff', new Set(['lines', 'summary', 'truncated'])],
+  ['settle.diff.lines', new Set(['kind', 'ref', 'text'])],
+  ['settle.diff.summary', new Set(['additions', 'removals', 'unchanged'])],
+  ['settle.refs', new Set(['ref'])],
+  ['settle.tail', new Set(['label', 'ref', 'role'])],
 ]);
-const IDENTIFIER_CHAR = /^[A-Za-z0-9_]$/;
+const STABLE_STRUCTURAL_STRING_PATHS = new Set([
+  'evidence.digest',
+  'evidence.foregroundApp',
+  'resolution.alternatives.diagnosticRef',
+  'resolution.alternatives.role',
+  'resolution.kind',
+  'resolution.phase',
+  'resolution.source',
+  'resolution.tiebreak',
+  'resolution.winnerDiagnostic.diagnosticRef',
+  'resolution.winnerDiagnostic.role',
+  'settle.diff.lines.kind',
+  'settle.diff.lines.ref',
+  'settle.refs.ref',
+  'settle.tail.ref',
+  'settle.tail.role',
+]);
 
 /**
  * Parameterize only fields whose contract says they carry the fill value.
  * Stable identity/provenance strings stay byte-for-byte unchanged. Untrusted
- * backend extras and nested settle output are scrubbed recursively; a derived
- * selector candidate is dropped only when a parsed text/label/value term
- * semantically contains the supplied literal.
+ * backend extras and nested settle output keys and values are scrubbed
+ * recursively; a derived selector candidate is dropped only when a parsed
+ * text/label/value term semantically contains the supplied literal.
  */
 export function parameterizeRecordedFillPayload<
   TPayload extends Record<string, unknown> | undefined,
@@ -40,7 +117,6 @@ export function parameterizeRecordedFillPayload<
   return {
     ...parameterizeBackendOutput(payload, literal, placeholder),
     ...(typeof payload.text === 'string' ? { text: placeholder } : {}),
-    ...(payload.refLabel === literal ? { refLabel: placeholder } : {}),
     ...(selectorChain
       ? {
           selectorChain: selectorChain.filter(
@@ -96,10 +172,12 @@ function parameterizeBackendOutput(
   placeholder: string,
 ): Record<string, unknown> {
   return Object.fromEntries(
-    Object.entries(value).map(([key, entry]) => [
-      key,
-      parameterizeRootOutputValue(entry, key, literal, placeholder),
-    ]),
+    Object.entries(value).map(([key, entry]) => {
+      const outputKey = STRUCTURAL_ROOT_OUTPUT_KEYS.has(key)
+        ? key
+        : parameterizeSensitiveString(key, literal, placeholder);
+      return [outputKey, parameterizeRootOutputValue(entry, key, literal, placeholder)];
+    }),
   );
 }
 
@@ -111,48 +189,51 @@ function parameterizeRootOutputValue(
 ): unknown {
   if (typeof value === 'string') {
     if (STABLE_ROOT_OUTPUT_STRING_KEYS.has(key)) return value;
-    if (key === 'refLabel') return value === literal ? placeholder : value;
   }
   if (key === 'selectorChain' && isStringArray(value)) {
     return filterSensitiveSelectorCandidates(value, literal);
   }
   return parameterizeBackendOutputValue(
     value,
-    key,
     literal,
     placeholder,
-    STRUCTURED_OUTPUT_KEYS.has(key),
+    STRUCTURED_OUTPUT_KEYS.has(key) ? key : undefined,
   );
 }
 
 function parameterizeBackendOutputValue(
   value: unknown,
-  key: string,
   literal: string,
   placeholder: string,
-  preserveStructuralStrings: boolean,
+  structuralPath: string | undefined,
 ): unknown {
   if (typeof value === 'string') {
-    if (preserveStructuralStrings && STRUCTURAL_NESTED_STRING_KEYS.has(key)) return value;
+    if (structuralPath && STABLE_STRUCTURAL_STRING_PATHS.has(structuralPath)) return value;
     return parameterizeSensitiveString(value, literal, placeholder);
   }
   if (Array.isArray(value)) {
     return value.map((entry) =>
-      parameterizeBackendOutputValue(entry, key, literal, placeholder, preserveStructuralStrings),
+      parameterizeBackendOutputValue(entry, literal, placeholder, structuralPath),
     );
   }
   if (!value || typeof value !== 'object') return value;
+  const structuralKeys = structuralPath ? STRUCTURAL_KEYS_BY_PATH.get(structuralPath) : undefined;
   return Object.fromEntries(
-    Object.entries(value).map(([nestedKey, entry]) => [
-      nestedKey,
-      parameterizeBackendOutputValue(
-        entry,
-        nestedKey,
-        literal,
-        placeholder,
-        preserveStructuralStrings,
-      ),
-    ]),
+    Object.entries(value).map(([nestedKey, entry]) => {
+      const isStructural = structuralKeys?.has(nestedKey) === true;
+      const outputKey = isStructural
+        ? nestedKey
+        : parameterizeSensitiveString(nestedKey, literal, placeholder);
+      return [
+        outputKey,
+        parameterizeBackendOutputValue(
+          entry,
+          literal,
+          placeholder,
+          isStructural ? `${structuralPath}.${nestedKey}` : undefined,
+        ),
+      ];
+    }),
   );
 }
 
@@ -162,38 +243,7 @@ function filterSensitiveSelectorCandidates(value: string[], literal: string): st
 
 function parameterizeSensitiveString(value: string, literal: string, placeholder: string): string {
   if (!literal.trim()) return value === literal ? placeholder : value;
-  if (!isIdentifierLiteral(literal)) {
-    return value.replaceAll(literal, placeholder);
-  }
-  return parameterizeDelimitedLiteral(value, literal, placeholder);
-}
-
-function isIdentifierLiteral(literal: string): boolean {
-  return Array.from(literal).every((character) => IDENTIFIER_CHAR.test(character));
-}
-
-function parameterizeDelimitedLiteral(value: string, literal: string, placeholder: string): string {
-  let cursor = 0;
-  let result = '';
-  while (cursor < value.length) {
-    const matchIndex = value.indexOf(literal, cursor);
-    if (matchIndex === -1) return result + value.slice(cursor);
-    result += value.slice(cursor, matchIndex);
-    result += isDelimitedMatch(value, literal, matchIndex) ? placeholder : literal;
-    cursor = matchIndex + literal.length;
-  }
-  return result;
-}
-
-function isDelimitedMatch(value: string, literal: string, matchIndex: number): boolean {
-  return (
-    !isIdentifierCharacter(value[matchIndex - 1]) &&
-    !isIdentifierCharacter(value[matchIndex + literal.length])
-  );
-}
-
-function isIdentifierCharacter(value: string | undefined): boolean {
-  return value !== undefined && IDENTIFIER_CHAR.test(value);
+  return value.replaceAll(literal, placeholder);
 }
 
 function isStringArray(value: unknown): value is string[] {

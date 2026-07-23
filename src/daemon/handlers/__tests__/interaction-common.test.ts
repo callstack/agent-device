@@ -1,7 +1,27 @@
-import { expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
+import { attachRefs, type RawSnapshotNode } from '../../../kernel/snapshot.ts';
+import type { CommandFlags } from '../../../core/dispatch.ts';
+import { handleInteractionCommands } from '../interaction.ts';
 import { finalizeTouchInteraction } from '../interaction-common.ts';
+
+vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
+  return {
+    ...actual,
+    dispatchCommand: vi.fn(async () => ({})),
+  };
+});
+
+import { dispatchCommand } from '../../../core/dispatch.ts';
+const mockDispatch = vi.mocked(dispatchCommand);
+const contextFromFlags = (_flags: CommandFlags | undefined) => ({});
+
+beforeEach(() => {
+  mockDispatch.mockReset();
+  mockDispatch.mockResolvedValue({});
+});
 
 test('parameterized fill scrubs backend and nested settle echoes at the response boundary', () => {
   const secret = 'OpaqueValue1348';
@@ -12,13 +32,22 @@ test('parameterized fill scrubs backend and nested settle echoes at the response
   sessionStore.set(session.name, session);
   const payload = {
     text: secret,
-    message: `Backend filled ${secret}`,
+    message: `prefix${secret}suffix`,
+    refLabel: `prefix${secret}suffix`,
     selector: 'id="password"',
-    selectorChain: ['id="password"', `value="${secret}" editable=true`],
+    selectorChain: [
+      'id="password"',
+      `value="prefix${secret}suffix" editable=true`,
+      `label="${secret}4"`,
+    ],
     backendEcho: {
       id: secret,
-      status: `accepted ${secret}`,
+      status: `accepted${secret}suffix`,
       nested: { kind: secret },
+      [secret]: true,
+      [`prefix${secret}suffix`]: {
+        [`${secret}4`]: true,
+      },
     },
     settle: {
       settled: true,
@@ -28,9 +57,14 @@ test('parameterized fill scrubs backend and nested settle echoes at the response
       timeoutMs: 100,
       diff: {
         summary: { additions: 1, removals: 0, unchanged: 0 },
-        lines: [{ kind: 'added', text: `TextField value=${secret}` }],
+        lines: [{ kind: 'added', text: `TextField value=prefix${secret}suffix` }],
       },
-      hint: `Observed ${secret}`,
+      hint: `Observed ${secret}4`,
+      [`echo${secret}key`]: true,
+      backendEcho: {
+        id: secret,
+        [`key${secret}`]: `value${secret}`,
+      },
     },
   };
 
@@ -50,19 +84,29 @@ test('parameterized fill scrubs backend and nested settle echoes at the response
   if (!response.ok) return;
   expect(response.data).toMatchObject({
     text: placeholder,
-    message: `Backend filled ${placeholder}`,
+    message: `prefix${placeholder}suffix`,
+    refLabel: `prefix${placeholder}suffix`,
     selector: 'id="password"',
     selectorChain: ['id="password"'],
     backendEcho: {
       id: placeholder,
-      status: `accepted ${placeholder}`,
+      status: `accepted${placeholder}suffix`,
       nested: { kind: placeholder },
+      [placeholder]: true,
+      [`prefix${placeholder}suffix`]: {
+        [`${placeholder}4`]: true,
+      },
     },
     settle: {
       diff: {
-        lines: [{ kind: 'added', text: `TextField value=${placeholder}` }],
+        lines: [{ kind: 'added', text: `TextField value=prefix${placeholder}suffix` }],
       },
-      hint: `Observed ${placeholder}`,
+      hint: `Observed ${placeholder}4`,
+      [`echo${placeholder}key`]: true,
+      backendEcho: {
+        id: placeholder,
+        [`key${placeholder}`]: `value${placeholder}`,
+      },
     },
   });
   expect(JSON.stringify(response.data)).not.toContain(secret);
@@ -70,4 +114,68 @@ test('parameterized fill scrubs backend and nested settle echoes at the response
   const recordedResult = session.actions[0]?.result;
   expect(recordedResult).toEqual(response.data);
   expect(JSON.stringify(recordedResult)).not.toContain(secret);
+});
+
+test('parameterized fill scrubs concatenated backend values and object keys through the handler route', async () => {
+  const secret = 'TOKEN123';
+  const placeholder = '${PASSWORD}';
+  const sessionStore = makeSessionStore();
+  const sessionName = 'parameterized-fill-handler-route';
+  const session = makeIosSession(sessionName, { appBundleId: 'com.example.app' });
+  const nodes: RawSnapshotNode[] = [
+    {
+      index: 0,
+      type: 'XCUIElementTypeTextField',
+      identifier: 'password',
+      label: 'Password',
+      rect: { x: 20, y: 40, width: 200, height: 44 },
+      enabled: true,
+      hittable: true,
+    },
+  ];
+  session.recordSession = true;
+  session.snapshot = {
+    nodes: attachRefs(nodes),
+    createdAt: Date.now(),
+    backend: 'xctest',
+  };
+  sessionStore.set(sessionName, session);
+  mockDispatch.mockImplementation(async (_device, command) =>
+    command === 'fill'
+      ? {
+          message: `prefix${secret}suffix`,
+          [`prefix${secret}suffix`]: {
+            [`${secret}4`]: `echo${secret}`,
+          },
+        }
+      : {},
+  );
+
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'fill',
+      positionals: ['@e1', secret],
+      flags: { recordAs: 'PASSWORD' },
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+
+  expect(response, JSON.stringify(response)).toMatchObject({ ok: true });
+  if (!response?.ok) return;
+  expect(response.data).toMatchObject({
+    message: 'Filled 8 chars',
+    [`prefix${placeholder}suffix`]: {
+      [`${placeholder}4`]: `echo${placeholder}`,
+    },
+    ref: 'e1',
+    text: placeholder,
+  });
+  expect(JSON.stringify(response.data)).not.toContain(secret);
+  expect(JSON.stringify(session.actions)).not.toContain(secret);
+  expect(mockDispatch.mock.calls[0]?.[1]).toBe('fill');
+  expect(mockDispatch.mock.calls[0]?.[2]).toContain(secret);
 });

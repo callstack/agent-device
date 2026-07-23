@@ -161,15 +161,26 @@ test('a second successful open aborts publication and terminal save flags fail b
 
 test('parameterized fill publishes only ${VAR} and replay resolves it immediately before fill', async () => {
   const secret = 'OpaqueProviderValue1348';
+  let injectedText: string | undefined;
+  let capturesAfterInjection = 0;
   await withProviderScenarioResource(
     async () =>
       await createAndroidSettingsWorld({
         nativeTextInjection: true,
         onTextInjection: (request) => {
+          injectedText = request.text;
+          capturesAfterInjection = 0;
           emitDiagnostic({
             phase: 'provider_text_echo_regression',
             data: { text: request.text },
           });
+        },
+        snapshotXml: () => {
+          if (injectedText === undefined) return androidSettingsXml('');
+          capturesAfterInjection += 1;
+          const visibleText =
+            capturesAfterInjection <= 3 ? injectedText : `prefix${injectedText}suffix`;
+          return androidSettingsXml(visibleText);
         },
       }),
     async (world) => {
@@ -216,7 +227,7 @@ test('parameterized fill publishes only ${VAR} and replay resolves it immediatel
         assert.equal(fill.text, '${SEARCH_TERM}');
         const settleOutput = JSON.stringify(fill.settle);
         assert.equal(settleOutput.includes(secret), false, settleOutput);
-        assert.match(settleOutput, /\$\{SEARCH_TERM\}/);
+        assert.match(settleOutput, /prefix\$\{SEARCH_TERM\}suffix/);
         await client.command.wait({
           selector: 'id=com.android.settings:id/search',
           ...world.selection,
