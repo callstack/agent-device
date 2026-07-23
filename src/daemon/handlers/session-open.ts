@@ -757,7 +757,9 @@ export async function handleOpenCommand(params: {
     return preResolvedValidation;
   }
 
-  const device = await resolveTargetDevice(req.flags ?? {});
+  const device = await resolveTargetDevice(req.flags ?? {}, {
+    appleSimulatorAppTarget: openTarget && !isDeepLinkTarget(openTarget) ? openTarget : undefined,
+  });
   const surfaceResult = resolveOpenSurfaceResponse(device, req.flags?.surface, openTarget);
   if (typeof surfaceResult !== 'string') {
     return surfaceResult;

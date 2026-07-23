@@ -62,6 +62,33 @@ export async function resolveIosApp(device: DeviceInfo, app: string): Promise<st
   throw new AppError('APP_NOT_INSTALLED', `No app found matching "${app}"`);
 }
 
+/**
+ * Resolves an app only when it is installed on this booted simulator.
+ *
+ * Device selection uses this narrower lookup before it has committed to a
+ * simulator, so an exact bundle id must not take resolveIosApp's normal
+ * pass-through path.
+ */
+export async function findIosSimulatorInstalledApp(
+  device: DeviceInfo,
+  app: string,
+): Promise<string | undefined> {
+  if (!isIosFamily(device) || device.kind !== 'simulator' || device.booted !== true) {
+    return undefined;
+  }
+
+  const target = resolveIosAppAlias(app.trim());
+  if (!target) return undefined;
+
+  const apps = await listSimulatorApps(device);
+  if (target.includes('.')) {
+    return apps.find((entry) => entry.bundleId === target)?.bundleId;
+  }
+
+  const matches = apps.filter((entry) => entry.name.toLowerCase() === target.toLowerCase());
+  return matches.length === 1 ? matches[0]?.bundleId : undefined;
+}
+
 export function resolveIosAppAlias(app: string): string {
   const trimmed = app.trim();
   return ALIASES[trimmed.toLowerCase()] ?? app;

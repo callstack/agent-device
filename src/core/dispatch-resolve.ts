@@ -2,6 +2,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { AppError } from '../kernel/errors.ts';
 import {
   isApplePlatform,
+  isIosFamily,
+  matchesDeviceSelector,
   resolveDevice,
   resolveAppleSimulatorSetPathForSelector,
   type DeviceInfo,
@@ -51,6 +53,7 @@ type AppleDeviceSelector = {
 
 type ResolveTargetDeviceOptions = {
   allowStoppedAndroidAvdPlaceholders?: boolean;
+  appleSimulatorAppTarget?: string;
 };
 
 /**
@@ -63,8 +66,15 @@ type ResolveTargetDeviceOptions = {
 async function resolveAppleDevice(
   devices: DeviceInfo[],
   selector: AppleDeviceSelector,
-  context: { simulatorSetPath?: string; allowLocalSimulatorFallback?: boolean },
+  context: {
+    simulatorSetPath?: string;
+    allowLocalSimulatorFallback?: boolean;
+    appleSimulatorAppTarget?: string;
+  },
 ): Promise<DeviceInfo> {
+  const appMatchedSimulator = await findBootedAppleSimulatorWithApp(devices, selector, context);
+  if (appMatchedSimulator) return appMatchedSimulator;
+
   const selected = await resolveAppleDeviceCandidate(devices, selector, context);
 
   if (
@@ -81,6 +91,61 @@ async function resolveAppleDevice(
 
   if (selected) return selected;
   throw new AppError('DEVICE_NOT_FOUND', 'No devices found', { selector });
+}
+
+async function findBootedAppleSimulatorWithApp(
+  devices: DeviceInfo[],
+  selector: AppleDeviceSelector,
+  context: {
+    allowLocalSimulatorFallback?: boolean;
+    appleSimulatorAppTarget?: string;
+  },
+): Promise<DeviceInfo | undefined> {
+  const appTarget = context.appleSimulatorAppTarget?.trim();
+  if (!appTarget || hasExplicitAppleDeviceSelector(selector)) return undefined;
+  if (context.allowLocalSimulatorFallback === false) return undefined;
+
+  const bootedSimulators = devices.filter(
+    (device) =>
+      matchesDeviceSelector(device, selector) &&
+      isIosFamily(device) &&
+      device.kind === 'simulator' &&
+      device.booted === true,
+  );
+  if (bootedSimulators.length < 2) return undefined;
+
+  const { findIosSimulatorInstalledApp } = await import('../platforms/apple/core/apps.ts');
+  const matches = (
+    await Promise.all(
+      bootedSimulators.map(async (device) =>
+        (await findIosSimulatorInstalledApp(device, appTarget)) ? device : undefined,
+      ),
+    )
+  ).filter((device): device is DeviceInfo => device !== undefined);
+
+  if (matches.length === 1) return matches[0];
+
+  const candidates = bootedSimulators.map((device) => ({
+    id: device.id,
+    name: device.name,
+  }));
+  if (matches.length === 0) {
+    throw new AppError('APP_NOT_INSTALLED', `No booted iOS simulator has ${appTarget} installed`, {
+      appTarget,
+      candidates,
+      hint: 'Install the app on a booted simulator, or pass --udid to select the intended device explicitly.',
+    });
+  }
+
+  throw new AppError(
+    'AMBIGUOUS_MATCH',
+    `Multiple booted iOS simulators have ${appTarget} installed`,
+    {
+      appTarget,
+      candidates: matches.map((device) => ({ id: device.id, name: device.name })),
+      hint: 'Pass --udid to select the intended simulator explicitly.',
+    },
+  );
 }
 
 async function resolveAppleDeviceCandidate(
@@ -155,6 +220,7 @@ export async function resolveTargetDevice(
             await resolveAppleDevice(injectedDevices, selector as AppleDeviceSelector, {
               simulatorSetPath: iosSimulatorSetPath,
               allowLocalSimulatorFallback: inventoryRequest.leaseProvider === undefined,
+              appleSimulatorAppTarget: options.appleSimulatorAppTarget,
             }),
           );
         }
@@ -171,6 +237,7 @@ export async function resolveTargetDevice(
           cacheKey,
           await resolveAppleDevice(devices, selector as AppleDeviceSelector, {
             simulatorSetPath: iosSimulatorSetPath,
+            appleSimulatorAppTarget: options.appleSimulatorAppTarget,
           }),
         );
       }
@@ -277,5 +344,9 @@ function buildResolveTargetDeviceCacheKey(
   request: DeviceInventoryRequest,
   options: ResolveTargetDeviceOptions,
 ): string {
-  return JSON.stringify({ request, options });
+  // The app target only informs the first device choice. Once a request has
+  // chosen a device, every later resolution must reuse that same device even
+  // when dispatch has no app target to pass back through this seam.
+  const { appleSimulatorAppTarget: _appleSimulatorAppTarget, ...cacheOptions } = options;
+  return JSON.stringify({ request, options: cacheOptions });
 }

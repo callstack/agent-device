@@ -1,5 +1,6 @@
 export { screenshotIos } from './screenshot.ts';
 export {
+  findIosSimulatorInstalledApp,
   listIosApps,
   resolveIosApp,
   resolveIosSimulatorDeepLinkBundleId,

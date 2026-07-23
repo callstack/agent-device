@@ -1,13 +1,17 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 
-const { mockFindBootableIosSimulator, mockListAppleDevices, mockListAndroidDevices } = vi.hoisted(
-  () => ({
-    mockFindBootableIosSimulator: vi.fn(),
-    mockListAppleDevices: vi.fn(),
-    mockListAndroidDevices: vi.fn(),
-  }),
-);
+const {
+  mockFindBootableIosSimulator,
+  mockFindIosSimulatorInstalledApp,
+  mockListAppleDevices,
+  mockListAndroidDevices,
+} = vi.hoisted(() => ({
+  mockFindBootableIosSimulator: vi.fn(),
+  mockFindIosSimulatorInstalledApp: vi.fn(),
+  mockListAppleDevices: vi.fn(),
+  mockListAndroidDevices: vi.fn(),
+}));
 
 vi.mock('../../platforms/apple/core/devices.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../platforms/apple/core/devices.ts')>();
@@ -23,6 +27,14 @@ vi.mock('../../platforms/android/devices.ts', async (importOriginal) => {
   return {
     ...actual,
     listAndroidDevices: mockListAndroidDevices,
+  };
+});
+
+vi.mock('../../platforms/apple/core/apps.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../platforms/apple/core/apps.ts')>();
+  return {
+    ...actual,
+    findIosSimulatorInstalledApp: mockFindIosSimulatorInstalledApp,
   };
 });
 
@@ -61,6 +73,15 @@ const bootedSimulator: DeviceInfo = {
   booted: true,
 };
 
+const secondBootedSimulator: DeviceInfo = {
+  platform: 'apple',
+  id: 'sim-3',
+  name: 'iPhone 16',
+  kind: 'simulator',
+  target: 'mobile',
+  booted: true,
+};
+
 const webDesktop: DeviceInfo = {
   platform: 'web',
   id: 'agent-browser-chrome',
@@ -82,6 +103,8 @@ const androidEmulator: DeviceInfo = {
 beforeEach(() => {
   mockFindBootableIosSimulator.mockReset();
   mockFindBootableIosSimulator.mockResolvedValue(null);
+  mockFindIosSimulatorInstalledApp.mockReset();
+  mockFindIosSimulatorInstalledApp.mockResolvedValue(undefined);
   mockListAppleDevices.mockReset();
   mockListAndroidDevices.mockReset();
 });
@@ -139,6 +162,87 @@ test('resolveTargetDevice request cache key separates device selectors', async (
   });
 
   assert.equal(mockListAppleDevices.mock.calls.length, 2);
+});
+
+test('resolveTargetDevice selects the unique booted simulator with the requested app', async () => {
+  mockListAppleDevices.mockResolvedValue([bootedSimulator, secondBootedSimulator]);
+  mockFindIosSimulatorInstalledApp.mockImplementation(async (device) =>
+    device.id === secondBootedSimulator.id ? 'com.example.demo' : undefined,
+  );
+
+  const result = await resolveTargetDevice(
+    { platform: 'ios' },
+    { appleSimulatorAppTarget: 'com.example.demo' },
+  );
+
+  assert.equal(result.id, secondBootedSimulator.id);
+  assert.deepEqual(
+    mockFindIosSimulatorInstalledApp.mock.calls.map(([device, app]) => [device.id, app]),
+    [
+      [bootedSimulator.id, 'com.example.demo'],
+      [secondBootedSimulator.id, 'com.example.demo'],
+    ],
+  );
+});
+
+test('resolveTargetDevice reuses an app-aware selection for later request resolution', async () => {
+  mockListAppleDevices.mockResolvedValue([bootedSimulator, secondBootedSimulator]);
+  mockFindIosSimulatorInstalledApp.mockImplementation(async (device) =>
+    device.id === secondBootedSimulator.id ? 'com.example.demo' : undefined,
+  );
+
+  const [appAware, laterResolution] = await withResolveTargetDeviceCacheScope(async () => [
+    await resolveTargetDevice({ platform: 'ios' }, { appleSimulatorAppTarget: 'com.example.demo' }),
+    await resolveTargetDevice({ platform: 'ios' }),
+  ]);
+
+  assert.equal(appAware.id, secondBootedSimulator.id);
+  assert.equal(laterResolution.id, secondBootedSimulator.id);
+  assert.equal(mockListAppleDevices.mock.calls.length, 1);
+});
+
+test('resolveTargetDevice refuses booted simulator selection when the requested app is absent', async () => {
+  mockListAppleDevices.mockResolvedValue([bootedSimulator, secondBootedSimulator]);
+
+  const error = await resolveTargetDevice(
+    { platform: 'ios' },
+    { appleSimulatorAppTarget: 'com.example.demo' },
+  ).catch((cause) => cause);
+
+  assert.ok(error instanceof AppError);
+  assert.equal(error.code, 'APP_NOT_INSTALLED');
+  assert.match(error.message, /No booted iOS simulator has com\.example\.demo installed/);
+  assert.deepEqual(error.details?.candidates, [
+    { id: bootedSimulator.id, name: bootedSimulator.name },
+    { id: secondBootedSimulator.id, name: secondBootedSimulator.name },
+  ]);
+});
+
+test('resolveTargetDevice refuses ambiguous booted simulator app matches', async () => {
+  mockListAppleDevices.mockResolvedValue([bootedSimulator, secondBootedSimulator]);
+  mockFindIosSimulatorInstalledApp.mockResolvedValue('com.example.demo');
+
+  const error = await resolveTargetDevice(
+    { platform: 'ios' },
+    { appleSimulatorAppTarget: 'com.example.demo' },
+  ).catch((cause) => cause);
+
+  assert.ok(error instanceof AppError);
+  assert.equal(error.code, 'AMBIGUOUS_MATCH');
+  assert.match(error.message, /Multiple booted iOS simulators have com\.example\.demo installed/);
+  assert.equal(error.details?.hint, 'Pass --udid to select the intended simulator explicitly.');
+});
+
+test('resolveTargetDevice does not probe when an Apple device is explicitly selected', async () => {
+  mockListAppleDevices.mockResolvedValue([bootedSimulator, secondBootedSimulator]);
+
+  const result = await resolveTargetDevice(
+    { platform: 'ios', udid: bootedSimulator.id },
+    { appleSimulatorAppTarget: 'com.example.demo' },
+  );
+
+  assert.equal(result.id, bootedSimulator.id);
+  assert.equal(mockFindIosSimulatorInstalledApp.mock.calls.length, 0);
 });
 
 test('resolveTargetDevice does not reuse cache across request scopes', async () => {
