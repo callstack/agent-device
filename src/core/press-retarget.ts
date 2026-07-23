@@ -19,6 +19,7 @@ import {
   demoteNonUniqueLocalIdentity,
   readNodeLocalIdentity,
 } from '../replay/target-identity-node.ts';
+import { buildIndexMap } from '../replay/target-evidence-tree.ts';
 import { normalizeSelectorText } from '../selectors/build.ts';
 import { isSemanticTouchTarget } from './interaction-targeting.ts';
 
@@ -45,12 +46,6 @@ function isIdentityEmpty(node: SnapshotNode, nodes: readonly SnapshotNode[]): bo
   const identity = demoteNonUniqueLocalIdentity(readNodeLocalIdentity(node), nodes);
   if (identity.id !== undefined || identity.label !== undefined) return false;
   return normalizeSelectorText(node.value) === null;
-}
-
-function buildIndexMap(nodes: readonly SnapshotNode[]): Map<number, SnapshotNode> {
-  const map = new Map<number, SnapshotNode>();
-  for (const node of nodes) map.set(node.index, node);
-  return map;
 }
 
 /** True when `node` is a proper descendant of `root` — a cycle-safe parent walk, matching `buildAncestryChain`'s guard. */

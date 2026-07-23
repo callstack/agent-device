@@ -41,14 +41,16 @@ import {
   tryParseSelectorChain,
 } from '../../selectors/index.ts';
 import {
-  buildIndexMap,
-  boundedLocalIdentity,
   buildAncestryChain,
+  buildIndexMap,
+  filterIdentitySet,
+} from '../../replay/target-evidence-tree.ts';
+import {
+  boundedLocalIdentity,
   computeSiblingOrdinal,
   computeScrollRegionKey,
   scrollRegionKeysEqual,
   orderByViewportPosition,
-  filterIdentitySet,
 } from '../session-target-evidence.ts';
 import {
   classifyTargetBindingMatch,

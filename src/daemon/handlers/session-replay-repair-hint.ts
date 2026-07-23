@@ -28,12 +28,8 @@ import {
   type TargetAnnotationV1,
   type TargetScrollRegion,
 } from '../../replay/target-identity.ts';
-import {
-  buildAncestryChain,
-  buildIndexMap,
-  computeScrollRegionKey,
-  scrollRegionKeysEqual,
-} from '../session-target-evidence.ts';
+import { buildAncestryChain, buildIndexMap } from '../../replay/target-evidence-tree.ts';
+import { computeScrollRegionKey, scrollRegionKeysEqual } from '../session-target-evidence.ts';
 
 export type ReplayRepairHintCapture =
   | { state: 'available'; nodes: SnapshotNode[] }
