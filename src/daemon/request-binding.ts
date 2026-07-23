@@ -1,6 +1,7 @@
 import { resolveTargetDevice } from '../core/dispatch-resolve.ts';
 import { hasExplicitDeviceSelector } from './device-selector-intent.ts';
 import { applyRequestLockPolicy } from './request-lock-policy.ts';
+import { buildOpenTargetDeviceResolutionOptions } from './open-device-selection.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonRequest, SessionState } from './types.ts';
 
@@ -28,7 +29,10 @@ export async function resolveRequestExecutionLockKeys(params: {
     try {
       // This is advisory lock selection before the request enters the lock; the
       // locked request still resolves and binds the target device authoritatively.
-      const device = await resolveTargetDevice(bindingReq.flags ?? {});
+      const device = await resolveTargetDevice(
+        bindingReq.flags ?? {},
+        buildOpenTargetDeviceResolutionOptions(bindingReq.positionals?.[0]),
+      );
       keys.add(deviceExecutionLockKey(device.id));
     } catch {
       // Fall back to session scoping when device resolution is not yet available.

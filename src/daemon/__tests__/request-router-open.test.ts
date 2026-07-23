@@ -47,12 +47,13 @@ function openRequest(
   flags: Record<string, unknown>,
   requestId: string,
   meta: Record<string, unknown> = {},
+  positionals: string[] = [],
 ) {
   return {
     token: 'test-token',
     session,
     command: 'open',
-    positionals: [],
+    positionals,
     flags,
     meta: { requestId, ...meta },
   };
@@ -97,6 +98,28 @@ test('open returns and creates the session state directory', async () => {
     expect(fs.existsSync(String(response.data?.sessionStateDir))).toBe(true);
     expect(fs.existsSync(String(response.data?.eventLogPath))).toBe(true);
   }
+});
+
+test('fresh open uses app-aware device selection for advisory locking and dispatch', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-open-');
+  const genericDevice = makeIosDevice('SIM-GENERIC');
+  const appDevice = makeIosDevice('SIM-WITH-APP');
+  mockResolveTargetDevice.mockImplementation(async (_flags, options) =>
+    options?.appleSimulatorAppTarget === 'com.example.demo' ? appDevice : genericDevice,
+  );
+
+  const response = await createOpenHandler(sessionStore)(
+    openRequest('session-app-aware', { platform: 'ios' }, 'req-open-app-aware', {}, [
+      'com.example.demo',
+    ]),
+  );
+
+  expect(response.ok).toBe(true);
+  expect(mockResolveTargetDevice.mock.calls).toEqual([
+    [{ platform: 'ios' }, { appleSimulatorAppTarget: 'com.example.demo' }],
+    [{ platform: 'ios' }, { appleSimulatorAppTarget: 'com.example.demo' }],
+  ]);
+  expect(sessionStore.get('session-app-aware')?.device.id).toBe(appDevice.id);
 });
 
 test('open --debug writes bounded open timing diagnostics to requestLogPath', async () => {

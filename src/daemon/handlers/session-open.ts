@@ -38,6 +38,7 @@ import { withKeyedLock } from '../../utils/keyed-lock.ts';
 import { emitDiagnostic, getDiagnosticsMeta } from '../../utils/diagnostics.ts';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import { inferAndroidPackageAfterOpen } from './session-open-target.ts';
+import { buildOpenTargetDeviceResolutionOptions } from '../open-device-selection.ts';
 import {
   invalidOpenArgs,
   prepareOpenCommandDetails,
@@ -757,9 +758,10 @@ export async function handleOpenCommand(params: {
     return preResolvedValidation;
   }
 
-  const device = await resolveTargetDevice(req.flags ?? {}, {
-    appleSimulatorAppTarget: openTarget && !isDeepLinkTarget(openTarget) ? openTarget : undefined,
-  });
+  const device = await resolveTargetDevice(
+    req.flags ?? {},
+    buildOpenTargetDeviceResolutionOptions(openTarget),
+  );
   const surfaceResult = resolveOpenSurfaceResponse(device, req.flags?.surface, openTarget);
   if (typeof surfaceResult !== 'string') {
     return surfaceResult;

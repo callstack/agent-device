@@ -51,7 +51,7 @@ type AppleDeviceSelector = {
   serial?: string;
 };
 
-type ResolveTargetDeviceOptions = {
+export type ResolveTargetDeviceOptions = {
   allowStoppedAndroidAvdPlaceholders?: boolean;
   appleSimulatorAppTarget?: string;
 };
