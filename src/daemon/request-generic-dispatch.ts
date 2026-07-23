@@ -34,6 +34,7 @@ import {
   assertSupportedScreenshotPixelDensity,
   readScreenshotResultMetadata,
 } from '../utils/screenshot-density.ts';
+import { buildActionEventResult } from './session-event-action-presentation.ts';
 
 export async function dispatchGenericCommand(params: {
   req: DaemonRequest;
@@ -108,6 +109,7 @@ export async function dispatchGenericCommand(params: {
     actionStartedAt,
     actionFinishedAt,
     flags: req.flags ?? {},
+    clientArtifactPaths: req.meta?.clientArtifactPaths,
   });
 
   if (isNavigationSensitiveAction(platformCommand)) {
@@ -318,6 +320,7 @@ function recordVisualizationAndAction(params: {
   actionStartedAt: number;
   actionFinishedAt: number;
   flags: Record<string, unknown>;
+  clientArtifactPaths: Record<string, string> | undefined;
 }): void {
   const {
     session,
@@ -330,6 +333,7 @@ function recordVisualizationAndAction(params: {
     actionStartedAt,
     actionFinishedAt,
     flags,
+    clientArtifactPaths,
   } = params;
   const visualizationData = augmentScrollVisualizationResult(
     session,
@@ -350,6 +354,6 @@ function recordVisualizationAndAction(params: {
     command,
     positionals: recordedPositionals,
     flags: recordedFlags,
-    result: data ?? {},
+    result: buildActionEventResult({ command, meta: { clientArtifactPaths } }, data ?? {}),
   });
 }

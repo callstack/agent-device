@@ -1,5 +1,13 @@
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../command-catalog.ts';
 import type { SessionAction } from './types.ts';
+import {
+  buildInstallActionSummary,
+  buildStructuredActionSummary,
+} from './session-event-action-presentation.ts';
+import {
+  readSessionEventNumber as readNumber,
+  readSessionEventString as readString,
+} from './session-event-request.ts';
 
 type ActionTextReplacement = { raw: string; display: string };
 
@@ -21,9 +29,13 @@ export function buildActionSummary(action: SessionAction): string {
     case PUBLIC_COMMANDS.install:
     case PUBLIC_COMMANDS.reinstall:
     case INTERNAL_COMMANDS.installSource:
-      return `Installed ${readActionTargetLabel(action) ?? 'app'}`;
+      return buildInstallActionSummary(action);
     default:
-      return readSafeActionMessage(action) ?? `Ran ${action.command}`;
+      return (
+        buildStructuredActionSummary(action) ??
+        readSafeActionMessage(action) ??
+        `Ran ${action.command}`
+      );
   }
 }
 
@@ -42,10 +54,16 @@ export function buildActionDetails(action: SessionAction): Record<string, unknow
     y: result.y,
     x2: result.x2,
     y2: result.y2,
+    direction: result.direction,
+    edge: result.edge,
+    passes: result.passes,
+    amount: result.amount,
+    pixels: result.pixels,
     durationMs: result.durationMs,
     waitedMs: result.waitedMs,
     found: result.found,
     path: result.path,
+    requestedFileName: result.requestedFileName,
     outPath: result.outPath,
     telemetryPath: result.telemetryPath,
     sessionStateDir: result.sessionStateDir,
@@ -283,15 +301,6 @@ function isFindLocator(value: string | undefined): boolean {
   return (
     value === 'text' || value === 'label' || value === 'value' || value === 'role' || value === 'id'
   );
-}
-
-function readString(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined;
-  return value.trim().length > 0 ? value : undefined;
-}
-
-function readNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 function readStringArray(value: unknown): string[] | undefined {
