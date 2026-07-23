@@ -1,5 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import { buildSnapshotState } from '../../../daemon/handlers/snapshot-capture.ts';
+import { isNodeVisibleOnScreen } from '../../../snapshot/mobile-snapshot-semantics.ts';
 import { androidUiNodes, parseUiHierarchy } from '../ui-hierarchy.ts';
 
 test('parseUiHierarchy does not truncate when no max node count is requested', () => {
@@ -83,6 +85,31 @@ test('parseUiHierarchy keeps visible Android nodes with meaningful test identifi
     result.nodes.some((node) => node.identifier === 'album-0'),
     true,
   );
+});
+
+test('interactive Android snapshots keep a fixed sibling outside filtered scroll content (#1377)', () => {
+  const xml = `<hierarchy>
+  <node class="android.widget.FrameLayout" bounds="[0,0][400,800]" visible-to-user="true">
+    <node class="android.view.View" bounds="[0,0][400,800]" visible-to-user="true">
+      <node class="android.widget.ScrollView" bounds="[0,100][400,800]" scrollable="true" visible-to-user="true">
+        <node class="android.widget.TextView" text="Row 1" bounds="[0,100][400,160]" clickable="true" visible-to-user="true"/>
+      </node>
+      <node class="android.view.View" bounds="[0,0][400,100]" visible-to-user="true">
+        <node class="android.view.View" resource-id="header-action" bounds="[340,20][400,80]" clickable="true" visible-to-user="true"/>
+      </node>
+    </node>
+  </node>
+</hierarchy>`;
+
+  const parsed = parseUiHierarchy(xml, 800, { interactiveOnly: true });
+  const snapshot = buildSnapshotState(
+    { nodes: parsed.nodes, backend: 'android' },
+    { snapshotInteractiveOnly: true },
+  );
+  const header = snapshot.nodes.find((node) => node.identifier === 'header-action');
+
+  assert.equal(header?.parentIndex, undefined);
+  assert.equal(header && isNodeVisibleOnScreen(header, snapshot.nodes), true);
 });
 
 test('parseUiHierarchy reads Android bounds with negative coordinates', () => {

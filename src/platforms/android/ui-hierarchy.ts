@@ -190,7 +190,7 @@ function walkUiHierarchyNode(
   const systemChrome =
     ancestorSystemChrome || isAndroidSystemChromeWindowResourceId(node.identifier);
   const currentIndex = include
-    ? appendAndroidSnapshotNode(state, node, depth, parentIndex, systemChrome)
+    ? appendAndroidSnapshotNode(state, node, parentIndex, systemChrome)
     : parentIndex;
   const nextAncestorHittable = ancestorHittable || Boolean(node.hittable);
   const nextAncestorCollection = ancestorCollection || isCollectionContainerType(node.type);
@@ -211,11 +211,14 @@ function walkUiHierarchyNode(
 function appendAndroidSnapshotNode(
   state: AndroidSnapshotBuildState,
   node: AndroidNode,
-  depth: number,
   parentIndex: number | undefined,
   systemChrome: boolean,
 ): number {
   const currentIndex = state.nodes.length;
+  // Snapshot filtering removes Compose layout wrappers. Keep depth aligned with
+  // the retained parent edge, rather than the source tree's depth: otherwise a
+  // fixed sibling that follows scroll content can be re-parented under the last
+  // retained row by normalizeSnapshotTree's depth fallback (#1377).
   state.sourceNodes.push(node);
   state.nodes.push({
     index: currentIndex,
@@ -229,13 +232,20 @@ function appendAndroidSnapshotNode(
     focused: node.focused,
     visibleToUser: node.visibleToUser,
     hittable: node.hittable,
-    depth,
+    depth: compactedAndroidNodeDepth(state.nodes, parentIndex),
     parentIndex,
     ...(node.hiddenContentAbove ? { hiddenContentAbove: true } : {}),
     ...(node.hiddenContentBelow ? { hiddenContentBelow: true } : {}),
     ...(systemChrome ? { systemChrome: true } : {}),
   });
   return currentIndex;
+}
+
+function compactedAndroidNodeDepth(
+  nodes: AndroidRawSnapshotNode[],
+  parentIndex: number | undefined,
+): number {
+  return parentIndex === undefined ? 0 : (nodes[parentIndex]?.depth ?? -1) + 1;
 }
 
 function hasInteractiveDescendant(state: AndroidSnapshotBuildState, node: AndroidNode): boolean {
