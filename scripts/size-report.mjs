@@ -347,7 +347,7 @@ function formatBytes(value) {
   const absoluteValue = Math.abs(value);
   if (absoluteValue < 1000) return `${value} B`;
   if (absoluteValue < 1000 * 1000) return `${(value / 1000).toFixed(1)} kB`;
-  return `${(value / (1000 * 1000)).toFixed(1)} MB`;
+  return `${(value / (1000 * 1000)).toFixed(2)} MB`;
 }
 
 function formatSignedBytes(value) {
