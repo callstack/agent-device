@@ -20,12 +20,27 @@ function action(command: string, positionals: string[] = []): SessionAction {
   return { ts: 1, command, positionals, flags: {} };
 }
 
+/** #1349: a qualifying guard wait carries verified landmark-mode evidence. */
+function guardWait(positionals: string[]): SessionAction {
+  return {
+    ...action('wait', positionals),
+    targetEvidence: {
+      role: 'heading',
+      label: 'Screen X',
+      ancestry: [],
+      sibling: 0,
+      viewportOrder: 0,
+      verification: 'verified',
+    },
+  };
+}
+
 describe('ADR 0016 active publication contract', () => {
   test('accepts exactly one initial open and a selector guard after the final mutation', () => {
     const actions = [
       action('open', ['Demo']),
       { ...action('press', ['id="continue"']), targetEvidence: TARGET_EVIDENCE },
-      action('wait', ['role="heading" label="Screen X"']),
+      guardWait(['role="heading" label="Screen X"']),
       action('wait', ['stable']),
     ];
 
@@ -44,11 +59,34 @@ describe('ADR 0016 active publication contract', () => {
     ).toThrow(/portable destination guard/);
   });
 
+  // #1349: the guard proves recorded landmark identity, not selector
+  // existence — the ADR 0016 reshuffled-screen false-pass regression begins
+  // at publication: an identity-less guard never ships.
+  test('rejects a selector wait without recorded landmark evidence as the destination guard', () => {
+    expect(() =>
+      validateActivePublicationActions([
+        action('open', ['Demo']),
+        action('wait', ['role="heading" label="Screen X"']),
+      ]),
+    ).toThrow(/portable destination guard/);
+  });
+
+  test('rejects a selector wait whose landmark evidence is unverifiable as the destination guard', () => {
+    const unverifiableGuard = guardWait(['role="heading" label="Screen X"']);
+    unverifiableGuard.targetEvidence = {
+      ...unverifiableGuard.targetEvidence!,
+      verification: 'unverifiable',
+    };
+    expect(() =>
+      validateActivePublicationActions([action('open', ['Demo']), unverifiableGuard]),
+    ).toThrow(/portable destination guard/);
+  });
+
   test('requires the guard after request-sensitive mutations', () => {
     expect(() =>
       validateActivePublicationActions([
         action('open', ['Demo']),
-        action('wait', ['id="screen-x"']),
+        guardWait(['id="screen-x"']),
         action('alert', ['accept']),
       ]),
     ).toThrow(/after the final mutating action/);
@@ -57,7 +95,7 @@ describe('ADR 0016 active publication contract', () => {
       validateActivePublicationActions([
         action('open', ['Demo']),
         action('keyboard', ['status']),
-        action('wait', ['id="screen-x"']),
+        guardWait(['id="screen-x"']),
       ]),
     ).not.toThrow();
   });

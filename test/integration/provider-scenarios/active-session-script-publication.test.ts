@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
-import { createAndroidSettingsWorld } from './android-world.ts';
+import { androidSettingsXml, createAndroidSettingsWorld } from './android-world.ts';
 import { withProviderScenarioResource } from './harness.ts';
 
 test('provider route publishes and replays an open-to-destination script with a live handoff', async () => {
@@ -43,6 +43,68 @@ test('provider route publishes and replays an open-to-destination script with a 
     }
   });
 }, 20_000);
+
+// #1349 / ADR 0016 reshuffled-screen false-pass regression: the destination
+// guard must prove recorded landmark IDENTITY, not selector existence. The
+// replay lands on a reshuffled screen that still contains a node labeled
+// "Search" — under a different id and ancestry — so the selector alone would
+// have passed the old guard. With landmark verification the wait must fail
+// closed through the bounded REPLAY_DIVERGENCE contract instead of
+// reporting the destination ready.
+test('replaying a published script against a reshuffled screen fails closed instead of false-passing the guard', async () => {
+  let phase: 'record' | 'replay' = 'record';
+  const reshuffledXml = () =>
+    [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<hierarchy rotation="0">',
+      '  <node index="0" text="" resource-id="com.android.settings:id/results_panel" class="android.widget.LinearLayout" package="com.android.settings" content-desc="" bounds="[0,0][390,600]" clickable="false" enabled="true">',
+      '    <node index="0" text="Search" resource-id="android:id/summary" class="android.widget.TextView" package="com.android.settings" content-desc="" bounds="[24,124][152,178]" clickable="false" enabled="true" />',
+      '  </node>',
+      '</hierarchy>',
+    ].join('\n');
+  await withProviderScenarioResource(
+    () =>
+      createAndroidSettingsWorld({
+        snapshotXml: () => (phase === 'record' ? androidSettingsXml('') : reshuffledXml()),
+      }),
+    async (world) => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-reshuffle-guard-provider-'));
+      const scriptPath = path.join(root, 'settings-search.ad');
+      const client = world.daemon.client();
+      try {
+        await client.apps.open({
+          app: 'settings',
+          saveScript: scriptPath,
+          ...world.selection,
+        });
+        await client.command.wait({
+          selector: 'label="Search"',
+          timeoutMs: 1500,
+          ...world.selection,
+        });
+        const published = await client.sessions.saveScript({ path: scriptPath });
+        assert.equal(published.savedScript, scriptPath);
+        // The published guard carries recorded landmark identity.
+        assert.match(fs.readFileSync(scriptPath, 'utf8'), /agent-device:target-v1/);
+        await client.sessions.close();
+
+        phase = 'replay';
+        const replay = await world.daemon.callCommand('replay', [scriptPath], world.selection);
+        const errorData = assertRpcError(replay, 'REPLAY_DIVERGENCE', /wait/i);
+        const divergence = (errorData.details as Record<string, unknown> | undefined)?.divergence as
+          | { kind?: string; targetBinding?: { classification?: string; matchCount?: number } }
+          | undefined;
+        assert.equal(divergence?.kind, 'identity-mismatch');
+        // matchCount >= 1 is the false-pass proof: the selector alone DID
+        // match the reshuffled screen; only identity refused it.
+        assert.ok((divergence?.targetBinding?.matchCount ?? 0) >= 1);
+        await world.daemon.callCommand('close');
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+}, 30_000);
 
 test('a second successful open aborts publication and terminal save flags fail before close', async () => {
   await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {

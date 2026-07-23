@@ -19,6 +19,17 @@ const TARGET_EVIDENCE: TargetAnnotationV1 = {
   verification: 'verified',
 };
 
+/** #1349: a destination guard qualifies only with verified landmark evidence. */
+const GUARD_EVIDENCE: TargetAnnotationV1 = {
+  id: 'screen-x',
+  role: 'heading',
+  label: 'Screen X',
+  ancestry: [],
+  sibling: 0,
+  viewportOrder: 0,
+  verification: 'verified',
+};
+
 let root: string;
 let store: SessionStore;
 
@@ -40,7 +51,13 @@ function armedSession(overrides: Partial<SessionState> = {}): SessionState {
         flags: {},
         targetEvidence: TARGET_EVIDENCE,
       },
-      { ts: 3, command: 'wait', positionals: ['id="screen-x"'], flags: {} },
+      {
+        ts: 3,
+        command: 'wait',
+        positionals: ['id="screen-x"'],
+        flags: {},
+        targetEvidence: GUARD_EVIDENCE,
+      },
     ],
     ...overrides,
   });
@@ -207,7 +224,15 @@ test('invalid destination guard remains armed and creates no target directory', 
 test('missing initial open is non-retriable within the armed session', () => {
   const outputPath = path.join(root, 'missing', 'screen-x.ad');
   const session = armedSession({
-    actions: [{ ts: 1, command: 'wait', positionals: ['id="screen-x"'], flags: {} }],
+    actions: [
+      {
+        ts: 1,
+        command: 'wait',
+        positionals: ['id="screen-x"'],
+        flags: {},
+        targetEvidence: GUARD_EVIDENCE,
+      },
+    ],
   });
   store.set('authoring', session);
 
@@ -248,7 +273,13 @@ test('publishes leading-at typed values without mistaking them for session refs'
         positionals: ['text', '@handle', 'get', 'text'],
         flags: {},
       },
-      { ts: 5, command: 'wait', positionals: ['id="screen-x"'], flags: {} },
+      {
+        ts: 5,
+        command: 'wait',
+        positionals: ['id="screen-x"'],
+        flags: {},
+        targetEvidence: GUARD_EVIDENCE,
+      },
     ],
   });
   store.set('authoring', session);
@@ -277,7 +308,13 @@ test('refuses mutating find steps that cannot enforce target identity on replay'
         positionals: ['text', 'Continue', 'click'],
         flags: {},
       },
-      { ts: 3, command: 'wait', positionals: ['id="screen-x"'], flags: {} },
+      {
+        ts: 3,
+        command: 'wait',
+        positionals: ['id="screen-x"'],
+        flags: {},
+        targetEvidence: GUARD_EVIDENCE,
+      },
     ],
   });
   store.set('authoring', session);

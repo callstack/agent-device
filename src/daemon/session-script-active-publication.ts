@@ -48,7 +48,7 @@ export function validateActivePublicationActions(actions: SessionAction[]): void
     'Cannot publish this session without a portable destination guard after the final mutating action.',
     {
       retriable: true,
-      hint: 'Record a selective selector-targeted wait, for example wait \'role="heading" label="Screen X"\', then retry session save-script.',
+      hint: 'Record a selector-targeted wait on a labeled or id-bearing landmark, for example wait \'role="heading" label="Screen X"\', so its recorded identity is captured, then retry session save-script.',
     },
   );
 }
@@ -127,7 +127,15 @@ export function toActivePublicationFailure(
 function isPortableDestinationGuard(action: SessionAction): boolean {
   if (action.command !== 'wait') return false;
   const parsed = parseWaitPositionals(action.positionals);
-  return parsed?.kind === 'selector' && tryParseSelectorChain(parsed.selectorExpression) !== null;
+  if (parsed?.kind !== 'selector' || tryParseSelectorChain(parsed.selectorExpression) === null) {
+    return false;
+  }
+  // #1349: a guard proves recorded landmark identity, not bare selector
+  // existence — a reshuffled screen containing the same label elsewhere must
+  // fail replay closed instead of false-passing. A selector wait recorded
+  // without verified evidence (an identity-empty landmark, or a capture
+  // anomaly) therefore does not qualify.
+  return action.targetEvidence?.verification === 'verified';
 }
 
 function readTargetBindingToken(action: SessionAction): string | undefined {
