@@ -326,7 +326,13 @@ test('visibility is false for node just outside viewport boundary', () => {
 });
 
 function windowRoot(): SnapshotNode {
-  return { ref: 'e1', index: 0, depth: 0, type: 'Window', rect: { x: 0, y: 0, width: 400, height: 800 } };
+  return {
+    ref: 'e1',
+    index: 0,
+    depth: 0,
+    type: 'Window',
+    rect: { x: 0, y: 0, width: 400, height: 800 },
+  };
 }
 
 test('classifyOffscreenScrollDirection names the reveal direction for a fully scrolled-out item', () => {
