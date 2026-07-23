@@ -15,6 +15,9 @@ import {
   readSessionEventString,
 } from './session-event-request.ts';
 
+const SCROLL_DIRECTIONS = ['up', 'down', 'left', 'right'] as const;
+const SCROLL_EDGES = ['top', 'bottom'] as const;
+
 export function buildInstallActionSummary(action: SessionAction): string {
   const verb = action.command === PUBLIC_COMMANDS.reinstall ? 'Reinstalled' : 'Installed';
   return `${verb} ${readInstalledAppLabel(action.result ?? {}) ?? 'app'}`;
@@ -61,8 +64,8 @@ export function buildStructuredActionDetails(action: SessionAction): Record<stri
   switch (action.command) {
     case PUBLIC_COMMANDS.scroll:
       return compactDetails({
-        direction: readEnum(result.direction, ['up', 'down', 'left', 'right']),
-        edge: readEnum(result.edge, ['top', 'bottom']),
+        direction: readEnum(result.direction, SCROLL_DIRECTIONS),
+        edge: readEnum(result.edge, SCROLL_EDGES),
         passes: readSessionEventNumber(result.passes),
         amount: readSessionEventNumber(result.amount),
         pixels: readSessionEventNumber(result.pixels),
@@ -131,8 +134,8 @@ function readActionAppFallback(result: Record<string, unknown>): string | undefi
 }
 
 function buildScrollActionSummary(result: Record<string, unknown>): string {
-  const direction = readSessionEventString(result.direction);
-  const edge = readSessionEventString(result.edge);
+  const direction = readEnum(result.direction, SCROLL_DIRECTIONS);
+  const edge = readEnum(result.edge, SCROLL_EDGES);
   const passes = readSessionEventNumber(result.passes);
   if (edge) return buildScrollEdgeSummary(edge, passes);
   if (!direction) return 'Scrolled';

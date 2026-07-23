@@ -309,6 +309,38 @@ test('recordAction event log omits value-bearing selector details', async () => 
   assert.equal(page.events[0]?.details?.selectorChainLength, 1);
 });
 
+test('recordAction event log rejects malformed provider scroll output', async () => {
+  const { store, session } = makeFixture('agent-device-session-events-malformed-scroll-');
+  const privateValue = 'provider-private-scroll-value';
+  store.recordAction(session, {
+    command: 'scroll',
+    positionals: [privateValue],
+    flags: {},
+    result: {
+      direction: privateValue.repeat(100),
+      edge: { value: privateValue },
+      passes: [privateValue],
+      amount: Number.POSITIVE_INFINITY,
+      pixels: { value: privateValue },
+      durationMs: Number.NaN,
+      x1: [privateValue],
+      y1: { value: privateValue },
+      x2: Number.NEGATIVE_INFINITY,
+      y2: [privateValue],
+      message: privateValue,
+    },
+  });
+  await store.flushEvents(session.name);
+
+  const event = store.readEvents(session.name).events[0];
+  assert.equal(event?.summary, 'Scrolled');
+  assert.deepEqual(event?.details, {
+    command: 'scroll',
+    positionals: ['<arg>'],
+  });
+  assert.equal(JSON.stringify(event).includes(privateValue), false);
+});
+
 test('request failure event log omits raw error message and hint', async () => {
   const { store, session } = makeFixture('agent-device-session-events-error-redaction-');
   const secretPayload = '{"ssn":"123-45-6789"';

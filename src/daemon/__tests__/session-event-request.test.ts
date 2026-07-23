@@ -45,6 +45,70 @@ test('device inventory events include a bounded preview without device identifie
   assert.equal(JSON.stringify(event).includes('sensitive-device-id'), false);
 });
 
+test('device inventory events replace identifier-derived names across discovery shapes', () => {
+  const event = buildSuccessEvent('devices', {
+    devices: [
+      {
+        serial: 'ANDROID-SERIAL-123',
+        name: 'ANDROID-SERIAL-123',
+        platform: 'android',
+        kind: 'device',
+        target: 'mobile',
+        booted: true,
+      },
+      {
+        device_udid: 'APPLE-UDID-123',
+        name: 'APPLE-UDID-123',
+        platform: 'ios',
+        appleOs: 'ios',
+        kind: 'device',
+        target: 'mobile',
+        booted: false,
+      },
+      {
+        deviceId: 'provider-device-123',
+        deviceName: 'PROVIDER-DEVICE-123',
+        platform: 'android',
+        kind: 'emulator',
+        target: 'mobile',
+        booted: false,
+      },
+    ],
+  });
+
+  assert.equal(
+    event.summary,
+    'Found 3 devices: Android device (android, device, mobile, booted), iOS device (ios, device, mobile, stopped), Android emulator (android, emulator, mobile, stopped)',
+  );
+  assert.deepEqual(event.details?.devices, [
+    {
+      name: 'Android device',
+      platform: 'android',
+      kind: 'device',
+      target: 'mobile',
+      booted: true,
+    },
+    {
+      name: 'iOS device',
+      platform: 'ios',
+      appleOs: 'ios',
+      kind: 'device',
+      target: 'mobile',
+      booted: false,
+    },
+    {
+      name: 'Android emulator',
+      platform: 'android',
+      kind: 'emulator',
+      target: 'mobile',
+      booted: false,
+    },
+  ]);
+  assert.equal(JSON.stringify(event).includes('ANDROID-SERIAL-123'), false);
+  assert.equal(JSON.stringify(event).includes('APPLE-UDID-123'), false);
+  assert.equal(JSON.stringify(event).toLowerCase().includes('provider-device-123'), false);
+});
+
 test('app inventory events include the filter and a bounded preview', () => {
   const event = buildSuccessEvent(
     'apps',

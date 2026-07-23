@@ -5,6 +5,27 @@ import type { DaemonRequest, DaemonResponseData } from './types.ts';
 const EVENT_LIST_PREVIEW_LIMIT = 5;
 const EVENT_LIST_SUMMARY_LIMIT = 3;
 const EVENT_LABEL_MAX_LENGTH = 120;
+const DEVICE_IDENTIFIER_KEYS = [
+  'id',
+  'deviceId',
+  'device_id',
+  'serial',
+  'udid',
+  'device_udid',
+  'identifier',
+] as const;
+const DEVICE_PLATFORM_LABELS: Readonly<Record<string, string>> = {
+  ios: 'iOS',
+  ipados: 'iPadOS',
+  tvos: 'tvOS',
+  watchos: 'watchOS',
+  visionos: 'visionOS',
+  macos: 'macOS',
+  apple: 'Apple',
+  android: 'Android',
+  linux: 'Linux',
+  web: 'Web',
+};
 
 type RequestSuccessEventPresentation = {
   summary?: string;
@@ -155,12 +176,52 @@ export function readRequestedScreenshotFileName(
 
 function buildDevicePreview(value: unknown): Record<string, unknown> | undefined {
   if (!isRecord(value)) return undefined;
-  const name = readBoundedString(value.name);
+  const name = readDeviceEventLabel(value);
   if (!name) return undefined;
   return {
     name,
     ...readDeviceTraits(value),
   };
+}
+
+function readDeviceEventLabel(value: Record<string, unknown>): string | undefined {
+  const name = readFirstBoundedString(value, ['name', 'deviceName', 'device']);
+  if (!name || !matchesDeviceIdentifier(value, name)) return name;
+  return buildAnonymousDeviceLabel(value);
+}
+
+function matchesDeviceIdentifier(value: Record<string, unknown>, name: string): boolean {
+  const normalizedName = normalizeDeviceIdentifier(name);
+  return DEVICE_IDENTIFIER_KEYS.some((key) => {
+    const identifier = readBoundedString(value[key]);
+    return identifier !== undefined && normalizeDeviceIdentifier(identifier) === normalizedName;
+  });
+}
+
+function normalizeDeviceIdentifier(value: string): string {
+  return value.toLowerCase();
+}
+
+function buildAnonymousDeviceLabel(value: Record<string, unknown>): string {
+  const appleOs = readBoundedString(value.appleOs);
+  const platform = readBoundedString(value.platform);
+  const kind = readBoundedString(value.kind);
+  const platformLabel = readDevicePlatformLabel(appleOs, platform);
+  if (platformLabel && (kind === 'simulator' || kind === 'emulator')) {
+    return `${platformLabel} ${kind}`;
+  }
+  if (platformLabel) return `${platformLabel} device`;
+  if (kind === 'simulator') return 'Simulator';
+  if (kind === 'emulator') return 'Emulator';
+  return 'Unnamed device';
+}
+
+function readDevicePlatformLabel(
+  appleOs: string | undefined,
+  platform: string | undefined,
+): string | undefined {
+  const key = appleOs ?? platform;
+  return key ? DEVICE_PLATFORM_LABELS[key] : undefined;
 }
 
 function readDeviceTraits(value: Record<string, unknown>): Record<string, unknown> {
