@@ -208,9 +208,15 @@ test('parameterized fill publishes only ${VAR} and replay resolves it immediatel
           ref: `@${search.ref}`,
           text: secret,
           recordAs: 'SEARCH_TERM',
+          settle: true,
+          settleQuietMs: 1,
+          timeoutMs: 1_000,
           ...world.selection,
         });
         assert.equal(fill.text, '${SEARCH_TERM}');
+        const settleOutput = JSON.stringify(fill.settle);
+        assert.equal(settleOutput.includes(secret), false, settleOutput);
+        assert.match(settleOutput, /\$\{SEARCH_TERM\}/);
         await client.command.wait({
           selector: 'id=com.android.settings:id/search',
           ...world.selection,

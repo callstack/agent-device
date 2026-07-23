@@ -53,14 +53,16 @@ The literal exists only on the live request path long enough to execute the inte
    addition to key-name redaction, because an opaque value need not look secret.
 2. The platform interaction receives the literal.
 3. Before response/event/recording retention, the fill result's semantic `text` field and an exact
-   post-fill `refLabel` become `${VAR}`. Stable selector/ref provenance and unrelated strings are
-   preserved byte-for-byte; post-fill selector-chain candidates are dropped only when a parsed
-   `text`, `label`, or `value` term exactly equals the supplied literal.
+   post-fill `refLabel` become `${VAR}`. Stable selector/ref provenance is preserved byte-for-byte.
+   Untrusted backend extras and nested settle output parameterize delimited occurrences of the
+   supplied literal; post-fill selector-chain candidates are dropped only when a parsed `text`,
+   `label`, or `value` term semantically contains it.
 4. At `recordActionEntry`, the recorder reconstructs the fill's literal positional, writes only the
-   placeholder into `SessionAction`, and parameterizes the semantic result field again. ADR 0012
-   `target-v1` evidence keeps its structure; exact value-bearing accessibility labels become the
-   placeholder without rewriting identity fragments that merely contain the same characters. The
-   `recordAs` control flag itself is not serialized into the script.
+   placeholder into `SessionAction`, and parameterizes the semantic result field plus arbitrary
+   backend/settle echoes again. ADR 0012 `target-v1` evidence keeps its structure; exact
+   value-bearing accessibility labels become the placeholder without rewriting identity fragments
+   that merely contain the same characters. The `recordAs` control flag itself is not serialized
+   into the script.
 5. The existing ADR 0012/0016 writer receives an already-parameterized action. Its selector provenance,
    portability checks, same-directory temp write, and atomic publication algorithm are unchanged.
 

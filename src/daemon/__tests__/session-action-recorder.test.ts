@@ -97,9 +97,14 @@ test('parameterized fills keep literals out of recording state with deterministi
     flags: { recordAs: 'PASSWORD' },
     result: {
       text: password,
-      message: 'Filled 21 chars',
+      message: `Filled ${password}`,
       selector: 'id="password"',
       selectorChain: ['id="password"', `value="${password}" editable=true`],
+      settle: {
+        diff: {
+          lines: [{ kind: 'added', text: `value=${password}` }],
+        },
+      },
     },
     targetEvidence: {
       role: 'textinput',
@@ -129,10 +134,16 @@ test('parameterized fills keep literals out of recording state with deterministi
   expect(serialized).not.toContain(password);
   expect(serialized).not.toContain(token);
   expect(session.actions[0]?.result?.text).toBe('${PASSWORD}');
+  expect(session.actions[0]?.result?.message).toBe('Filled ${PASSWORD}');
   expect(session.actions[0]?.result?.selector).toBe('id="password"');
   expect(session.actions[0]?.targetEvidence?.label).toBe('${PASSWORD}');
   expect(session.actions[0]?.targetEvidence?.ancestry[0]?.label).toBe('Credentials');
   expect(session.actions[0]?.result?.selectorChain).toEqual(['id="password"']);
+  expect(session.actions[0]?.result?.settle).toEqual({
+    diff: {
+      lines: [{ kind: 'added', text: 'value=${PASSWORD}' }],
+    },
+  });
 });
 
 test('a one-character parameterized fill preserves unrelated response and selector text', () => {
