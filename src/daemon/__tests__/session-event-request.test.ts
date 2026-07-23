@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { buildRequestFinishedEvent } from '../session-event-log.ts';
+import { buildRequestFinishedEvent, buildRequestStartedEvent } from '../session-event-log.ts';
 import type { DaemonRequest, DaemonResponseData } from '../types.ts';
 
 function buildSuccessEvent(
@@ -156,6 +156,68 @@ test('screenshot events preserve only the requested client filename', () => {
     requestedFileName: 'requested-shot.png',
   });
   assert.equal(JSON.stringify(event).includes('C:\\workspace'), false);
+});
+
+test('screenshot filenames are bounded for durable event rendering', () => {
+  const requestedFileName = `${'customer-'.repeat(30)}shot.png`;
+  const event = buildSuccessEvent(
+    'screenshot',
+    { path: '/tmp/agent-device-screenshot-random.png' },
+    {
+      meta: {
+        clientArtifactPaths: {
+          path: `/private/customer/${requestedFileName}`,
+        },
+      },
+    },
+  );
+  const fileName = event.details?.requestedFileName;
+
+  assert.equal(typeof fileName, 'string');
+  assert.equal(Array.from(fileName as string).length, 120);
+  assert.equal((fileName as string).endsWith('…'), true);
+  assert.equal(JSON.stringify(event).includes('/private/customer'), false);
+});
+
+test('request lifecycle events omit internal diagnostic paths', () => {
+  const started = buildRequestStartedEvent({
+    req: {
+      token: 'test-token',
+      session: 'public-session',
+      command: 'snapshot',
+      positionals: [],
+      meta: {
+        tenantId: 'tenant-a',
+        sessionIsolation: 'tenant',
+      },
+    },
+  });
+  const failed = buildRequestFinishedEvent({
+    req: {
+      token: 'test-token',
+      session: 'public-session',
+      command: 'snapshot',
+      positionals: [],
+    },
+    response: {
+      ok: false,
+      error: {
+        code: 'COMMAND_FAILED',
+        message: 'private failure message',
+        logPath: '/private/customer/request.log',
+      },
+    },
+    durationMs: 12,
+  });
+
+  assert.equal(started.details, undefined);
+  assert.deepEqual(failed.details, {
+    durationMs: 12,
+    code: 'COMMAND_FAILED',
+    diagnosticId: undefined,
+  });
+  assert.equal(JSON.stringify([started, failed]).includes('/private/customer'), false);
+  assert.equal(JSON.stringify([started, failed]).includes('private failure message'), false);
 });
 
 test('unknown commands keep the existing generic completion event', () => {

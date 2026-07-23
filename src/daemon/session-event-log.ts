@@ -134,26 +134,13 @@ export function appendActionEvent(
   });
 }
 
-export function buildRequestStartedEvent(params: {
-  req: DaemonRequest;
-  sessionName: string;
-  requestLogPath: string;
-  runnerLogPath: string;
-}): SessionEventLogInput {
-  const { req, sessionName, requestLogPath, runnerLogPath } = params;
+export function buildRequestStartedEvent(params: { req: DaemonRequest }): SessionEventLogInput {
+  const { req } = params;
   return {
     kind: 'request.started',
     requestId: req.meta?.requestId ?? getDiagnosticsMeta().requestId,
     command: req.command,
     summary: `Started ${req.command}`,
-    details: {
-      publicSession: req.session,
-      effectiveSession: sessionName,
-      tenant: req.meta?.tenantId,
-      isolation: req.meta?.sessionIsolation,
-      requestLogPath,
-      runnerLogPath,
-    },
   };
 }
 
@@ -184,7 +171,6 @@ export function buildRequestFinishedEvent(params: {
       durationMs,
       code: response.error.code,
       diagnosticId: response.error.diagnosticId,
-      logPath: response.error.logPath,
     },
   };
 }

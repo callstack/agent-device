@@ -243,7 +243,8 @@ test('generic replay traces redact typed text', async () => {
   expect(response.ok).toBe(true);
   const trace = fs.readFileSync(tracePath, 'utf8');
   expect(trace).not.toContain(secret);
-  expect(trace).toContain('<text:22 chars>');
+  expect(trace).toContain('<text>');
+  expect(trace).not.toContain('22 chars');
 });
 
 test('Maestro YAML rejects .ad repair recording before executing any command', async () => {

@@ -150,7 +150,7 @@ export function readRequestedScreenshotFileName(
   const requestedPath = readSessionEventString(req.meta?.clientArtifactPaths?.path);
   const outputPath = requestedPath ?? readSessionEventString(data.path);
   if (!outputPath) return undefined;
-  return readSessionEventString(outputPath.split(/[\\/]/).at(-1))?.trim();
+  return readSessionEventFileName(outputPath);
 }
 
 function buildDevicePreview(value: unknown): Record<string, unknown> | undefined {
@@ -238,6 +238,33 @@ function readBoundedString(value: unknown): string | undefined {
   const characters = Array.from(text);
   if (characters.length <= EVENT_LABEL_MAX_LENGTH) return text;
   return `${characters.slice(0, EVENT_LABEL_MAX_LENGTH - 1).join('')}…`;
+}
+
+export function readBoundedSessionEventString(value: unknown): string | undefined {
+  return readBoundedString(value);
+}
+
+export function readSessionEventBoolean(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+export function readSessionEventEnum<const Value extends string>(
+  value: unknown,
+  values: readonly Value[],
+): Value | undefined {
+  const text = readBoundedSessionEventString(value);
+  return text && values.includes(text as Value) ? (text as Value) : undefined;
+}
+
+export function compactSessionEventDetails(
+  value: Record<string, unknown | undefined>,
+): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
+}
+
+export function readSessionEventFileName(value: unknown): string | undefined {
+  const filePath = readSessionEventString(value);
+  return filePath ? readBoundedString(filePath.split(/[\\/]/).at(-1)) : undefined;
 }
 
 export function readSessionEventString(value: unknown): string | undefined {

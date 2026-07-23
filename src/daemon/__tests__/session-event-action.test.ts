@@ -4,13 +4,18 @@ import { buildActionEventResult } from '../session-event-action-presentation.ts'
 import { buildActionDetails, buildActionSummary } from '../session-event-action.ts';
 import type { SessionAction } from '../types.ts';
 
-function action(command: string, result: Record<string, unknown>): SessionAction {
+function action(
+  command: string,
+  result: Record<string, unknown>,
+  overrides: Partial<SessionAction> = {},
+): SessionAction {
   return {
     ts: Date.now(),
     command,
     positionals: [],
     flags: {},
     result,
+    ...overrides,
   };
 }
 
@@ -96,4 +101,134 @@ test('screenshot action events fall back to the daemon output basename', () => {
     buildActionSummary(action('screenshot', result)),
     'Captured screenshot screenshot.png',
   );
+});
+
+test('action events retain only typed command-owned flags', () => {
+  const details = buildActionDetails(
+    action(
+      'open',
+      { appBundleId: 'com.example.app' },
+      {
+        positionals: ['com.example.app'],
+        flags: {
+          platform: 'ios',
+          surface: 'app',
+          relaunch: true,
+          launchArgs: ['plain-private-value'],
+          header: ['X-Customer: private-customer'],
+          replayEnv: ['CUSTOMER=private-customer'],
+          replayShellEnv: { CUSTOMER: 'private-customer' },
+          out: '/private/customer/output',
+        },
+      },
+    ),
+  );
+
+  assert.deepEqual(details.flags, {
+    platform: 'ios',
+    surface: 'app',
+    relaunch: true,
+  });
+  assert.equal(JSON.stringify(details).includes('private-customer'), false);
+  assert.equal(JSON.stringify(details).includes('plain-private-value'), false);
+  assert.equal(JSON.stringify(details).includes('/private/customer'), false);
+});
+
+test('unknown commands never project arbitrary result messages or paths', () => {
+  const details = buildActionDetails(
+    action('future-command', {
+      message: 'customer-private-result',
+      path: '/private/customer/result.txt',
+      outPath: '/private/customer/output.txt',
+      telemetryPath: '/private/customer/telemetry.txt',
+      appName: 'private-customer-app',
+      ref: 'private-customer-ref',
+      x: 123,
+    }),
+  );
+
+  assert.equal(buildActionSummary(action('future-command', {})), 'Ran future-command');
+  assert.deepEqual(details, { command: 'future-command' });
+  assert.equal(JSON.stringify(details).includes('customer-private'), false);
+});
+
+test('structural action events preserve navigation, viewport, keyboard, and gesture outcomes', () => {
+  const back = action('back', { action: 'back', mode: 'system' });
+  const orientation = action('orientation', {
+    action: 'orientation',
+    orientation: 'landscape-left',
+  });
+  const viewport = action('viewport', { width: 402, height: 874 });
+  const keyboard = action('keyboard', {
+    action: 'dismiss',
+    platform: 'ios',
+    wasVisible: true,
+    visible: false,
+    dismissed: true,
+    focusedResourceId: 'private-field-id',
+  });
+  const gesture = action('gesture', {
+    kind: 'pan',
+    durationMs: 500,
+    pointerCount: 2,
+    x1: 10,
+    y1: 20,
+    x2: 30,
+    y2: 40,
+    message: 'private backend message',
+  });
+
+  assert.equal(buildActionSummary(back), 'Went back using system navigation');
+  assert.equal(buildActionSummary(orientation), 'Rotated to landscape-left');
+  assert.equal(buildActionSummary(viewport), 'Set viewport to 402×874');
+  assert.equal(buildActionSummary(keyboard), 'Dismissed keyboard');
+  assert.equal(buildActionSummary(gesture), 'Ran pan gesture');
+  assert.deepEqual(buildActionDetails(keyboard), {
+    command: 'keyboard',
+    platform: 'ios',
+    action: 'dismiss',
+    visible: false,
+    wasVisible: true,
+    dismissed: true,
+  });
+  assert.equal(JSON.stringify(buildActionDetails(keyboard)).includes('private-field-id'), false);
+  assert.deepEqual(buildActionDetails(gesture), {
+    command: 'gesture',
+    x2: 30,
+    y2: 40,
+    durationMs: 500,
+    kind: 'pan',
+    pointerCount: 2,
+    x1: 10,
+    y1: 20,
+  });
+});
+
+test('record and trace events expose only bounded artifact basenames', () => {
+  const trace = action(
+    'trace',
+    { action: 'stop', outPath: '/private/customer/perf.trace' },
+    { positionals: ['stop', '/private/customer/perf.trace'] },
+  );
+  const recording = action(
+    'record',
+    { action: 'stop', outPath: 'C:\\private\\customer\\demo.mp4', showTouches: false },
+    { positionals: ['stop'] },
+  );
+
+  assert.equal(buildActionSummary(trace), 'Stopped trace perf.trace');
+  assert.equal(buildActionSummary(recording), 'Stopped recording demo.mp4');
+  assert.deepEqual(buildActionDetails(trace), {
+    command: 'trace',
+    positionals: ['<arg>', '<arg>'],
+    action: 'stop',
+    fileName: 'perf.trace',
+  });
+  assert.deepEqual(buildActionDetails(recording), {
+    command: 'record',
+    positionals: ['<arg>'],
+    action: 'stop',
+    fileName: 'demo.mp4',
+    showTouches: false,
+  });
 });

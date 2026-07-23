@@ -170,7 +170,7 @@ test('recordAction writes a paged session event log', async () => {
   assert.equal(secondPage.nextCursor, undefined);
 });
 
-test('recordAction event log redacts typed text from display positionals', async () => {
+test('recordAction event log redacts typed text and its length from display positionals', async () => {
   const { store, session } = makeFixture('agent-device-session-events-redaction-');
   store.recordAction(session, {
     command: 'fill',
@@ -185,8 +185,8 @@ test('recordAction event log redacts typed text from display positionals', async
   assert.equal(serialized.includes('super-secret-token'), false);
   assert.equal(page.events[0]?.summary, 'Filled @14');
   assert.equal(page.events[0]?.details?.message, undefined);
-  assert.deepEqual(page.events[0]?.details?.positionals, ['@14', '<text:18 chars>']);
-  assert.equal(page.events[0]?.details?.textLength, 18);
+  assert.deepEqual(page.events[0]?.details?.positionals, ['@14', '<text>']);
+  assert.equal(page.events[0]?.details?.textLength, undefined);
 });
 
 test('recordAction event log redacts payload-bearing and unknown positionals', async () => {
@@ -228,10 +228,10 @@ test('recordAction event log redacts payload-bearing and unknown positionals', a
   assert.equal(serialized.includes(pushPayload), false);
   assert.equal(serialized.includes(eventPayload), false);
   assert.equal(serialized.includes(futurePayload), false);
-  assert.deepEqual(page.events[0]?.details?.positionals, ['write', '<text:18 chars>']);
-  assert.deepEqual(page.events[1]?.details?.positionals, ['com.example.app', '<payload:29 chars>']);
-  assert.deepEqual(page.events[2]?.details?.positionals, ['checkout', '<payload:30 chars>']);
-  assert.deepEqual(page.events[3]?.details?.positionals, ['<arg:10 chars>', '<arg:19 chars>']);
+  assert.deepEqual(page.events[0]?.details?.positionals, ['write', '<text>']);
+  assert.deepEqual(page.events[1]?.details?.positionals, ['<app>', '<payload>']);
+  assert.deepEqual(page.events[2]?.details?.positionals, ['<event>', '<payload>']);
+  assert.deepEqual(page.events[3]?.details?.positionals, ['<arg>', '<arg>']);
   assert.equal(page.events[3]?.summary, 'Ran future-command');
   assert.equal(page.events[3]?.details?.message, undefined);
 });
@@ -260,12 +260,12 @@ test('recordAction event log omits transformed messages for redacted positionals
   assert.equal(serialized.includes('my-arg-123'), false);
   assert.equal(page.events[0]?.summary, 'Ran future-command');
   assert.equal(page.events[0]?.details?.message, undefined);
-  assert.deepEqual(page.events[0]?.details?.positionals, ['<arg:5 chars>', '<arg:12 chars>']);
+  assert.deepEqual(page.events[0]?.details?.positionals, ['<arg>', '<arg>']);
   assert.equal(page.events[1]?.summary, 'Ran future-command');
   assert.equal(page.events[1]?.details?.message, undefined);
 });
 
-test('recordAction event log does not leak short typed text through message replacement', async () => {
+test('recordAction event log does not leak short typed text or its length', async () => {
   const { store, session } = makeFixture('agent-device-session-events-short-text-');
   store.recordAction(session, {
     command: 'type',
@@ -278,9 +278,9 @@ test('recordAction event log does not leak short typed text through message repl
   const page = store.readEvents(session.name);
   const serialized = JSON.stringify(page.events);
   assert.equal(serialized.includes('"e"'), false);
-  assert.equal(page.events[0]?.summary, 'Typed <text:1 chars>');
+  assert.equal(page.events[0]?.summary, 'Typed text');
   assert.equal(page.events[0]?.details?.message, undefined);
-  assert.deepEqual(page.events[0]?.details?.positionals, ['<text:1 chars>']);
+  assert.deepEqual(page.events[0]?.details?.positionals, ['<text>']);
 });
 
 test('recordAction event log omits value-bearing selector details', async () => {

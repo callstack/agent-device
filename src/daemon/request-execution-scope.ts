@@ -124,9 +124,6 @@ export async function createRequestExecutionScope(params: {
       sessionName,
       buildRequestStartedEvent({
         req: scopedReq,
-        sessionName,
-        requestLogPath,
-        runnerLogPath,
       }),
     );
   }
