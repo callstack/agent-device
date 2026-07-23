@@ -7,7 +7,11 @@ import {
   resolveReplayAction,
   type ReplayVarScope,
 } from '../../replay/vars.ts';
-import type { LocalIdentity, TargetAnnotationV1 } from '../../replay/target-identity.ts';
+import {
+  annotationLocalIdentity,
+  type LocalIdentity,
+  type TargetAnnotationV1,
+} from '../../replay/target-identity.ts';
 import {
   createReplayDivergenceSanitizer,
   type ReplayDivergence,
@@ -136,7 +140,7 @@ function buildTargetBindingDivergenceResponse(
   const targetBinding = {
     classification: built.kind,
     ...(built.matchCount !== undefined ? { matchCount: built.matchCount } : {}),
-    recorded: sanitizeIdentity(identityFromAnnotation(recorded), sanitize),
+    recorded: sanitizeIdentity(annotationLocalIdentity(recorded), sanitize),
     ...(built.observed ? { observed: sanitizeIdentity(built.observed, sanitize) } : {}),
     mismatches: built.mismatches.slice(0, 5).map((entry) => sanitize(entry)),
     candidates: built.candidateNodes.slice(0, 5).map((node) => describeCandidate(node, sanitize)),
@@ -398,10 +402,9 @@ export function isReplayTargetGuardMismatchResponse(response: DaemonResponse): b
   return !response.ok && response.error.details?.reason === REPLAY_TARGET_GUARD_MISMATCH_REASON;
 }
 
-export async function buildReplayTargetGuardMismatchResponse(params: {
+type PostDispatchMismatchParams = {
   action: SessionAction;
   scope: ReplayVarScope;
-  guard: ReplayVerifiedTargetGuard;
   failedResponse: DaemonResponse;
   sourcePath: string;
   sourceLine: number;
@@ -414,40 +417,38 @@ export async function buildReplayTargetGuardMismatchResponse(params: {
   responseLevel: ResponseLevel | undefined;
   planActions: SessionAction[];
   planDigest: string;
-}): Promise<DaemonResponse> {
-  const {
-    action,
-    scope,
-    guard,
-    failedResponse,
-    sourcePath,
-    sourceLine,
-    replayPath,
-    step,
-    sessionName,
-    sessionStore,
-    logPath,
-    artifactPaths,
-    responseLevel,
-    planActions,
-    planDigest,
-  } = params;
-  // The guard is only ever attached to an annotated action; fall back to the
-  // original failure if the invariant is somehow violated.
+};
+
+type PostDispatchMismatchEvidence = {
+  matchCount: number | undefined;
+  observed: LocalIdentity | undefined;
+  mismatches: string[];
+  causeMessage: string;
+};
+
+/**
+ * The shared post-dispatch identity-mismatch shaping: both refusal markers —
+ * the guard mismatch and wait's landmark refusal — arrive as a failed dispatch
+ * response whose details carry the observed evidence, and both become the same
+ * bounded identity-mismatch divergence around their marker-specific evidence.
+ */
+async function buildPostDispatchIdentityMismatchResponse(
+  params: PostDispatchMismatchParams,
+  deriveEvidence: (
+    recorded: TargetAnnotationV1,
+    details: Record<string, unknown> | undefined,
+  ) => PostDispatchMismatchEvidence,
+): Promise<DaemonResponse> {
+  const { action, scope, failedResponse, sessionName, sessionStore, logPath } = params;
+  // The refusal markers are only ever attached to an annotated action; fall
+  // back to the original failure if the invariant is somehow violated.
   const recorded = action.targetEvidence;
   if (!recorded) return failedResponse;
 
   const scrubVars = collectReplayScrubbableVarValues(scope);
   const sanitize = createReplayDivergenceSanitizer(scrubVars);
   const details = failedResponse.ok ? undefined : failedResponse.error.details;
-  const observed = readGuardMismatchObservedIdentity(details?.observed);
-  // The guard fires even when local identity is identical (a same-identity
-  // duplicate resolved by structural position) — surface the structural
-  // difference so `mismatches` is never empty on a real divergence.
-  const structuralMismatch = describeStructuralMismatch(
-    details?.expectedStructural,
-    details?.observedStructural,
-  );
+  const evidence = deriveEvidence(recorded, details);
 
   const session = sessionStore.get(sessionName);
   const observation = session
@@ -462,34 +463,55 @@ export async function buildReplayTargetGuardMismatchResponse(params: {
     {
       recorded,
       action,
-      step,
-      sourcePath,
-      sourceLine,
-      replayPath,
-      artifactPaths,
+      step: params.step,
+      sourcePath: params.sourcePath,
+      sourceLine: params.sourceLine,
+      replayPath: params.replayPath,
+      artifactPaths: params.artifactPaths,
       sessionName,
       sessionStore,
-      responseLevel,
+      responseLevel: params.responseLevel,
       scrubVars,
-      planActions,
-      planDigest,
+      planActions: params.planActions,
+      planDigest: params.planDigest,
     },
     {
       kind: 'identity-mismatch',
-      matchCount: guard.matchCount,
-      observed,
+      matchCount: evidence.matchCount,
+      observed: evidence.observed,
       candidateNodes: [],
-      mismatches: [
-        ...(observed ? identityFieldMismatches(recorded, observed) : []),
-        ...(structuralMismatch ? [structuralMismatch] : []),
-      ],
+      mismatches: evidence.mismatches,
       causeCode: 'IDENTITY_MISMATCH',
-      causeMessage:
-        'Dispatch resolution (with occlusion/visibility guards) resolved a different element than pre-action verification isolated; the action was not sent.',
+      causeMessage: evidence.causeMessage,
       screen: buildDivergenceScreen(observation, sanitize),
       repairCapture: toReplayRepairHintCapture(observation),
     },
   );
+}
+
+export async function buildReplayTargetGuardMismatchResponse(
+  params: PostDispatchMismatchParams & { guard: ReplayVerifiedTargetGuard },
+): Promise<DaemonResponse> {
+  return await buildPostDispatchIdentityMismatchResponse(params, (recorded, details) => {
+    const observed = readGuardMismatchObservedIdentity(details?.observed);
+    // The guard fires even when local identity is identical (a same-identity
+    // duplicate resolved by structural position) — surface the structural
+    // difference so `mismatches` is never empty on a real divergence.
+    const structuralMismatch = describeStructuralMismatch(
+      details?.expectedStructural,
+      details?.observedStructural,
+    );
+    return {
+      matchCount: params.guard.matchCount,
+      observed,
+      mismatches: [
+        ...(observed ? identityFieldMismatches(recorded, observed) : []),
+        ...(structuralMismatch ? [structuralMismatch] : []),
+      ],
+      causeMessage:
+        'Dispatch resolution (with occlusion/visibility guards) resolved a different element than pre-action verification isolated; the action was not sent.',
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -506,93 +528,25 @@ export function isWaitLandmarkMismatchResponse(response: DaemonResponse): boolea
   return !response.ok && response.error.details?.reason === WAIT_LANDMARK_MISMATCH_REASON;
 }
 
-export async function buildWaitLandmarkMismatchResponse(params: {
-  action: SessionAction;
-  scope: ReplayVarScope;
-  failedResponse: DaemonResponse;
-  sourcePath: string;
-  sourceLine: number;
-  replayPath: string;
-  step: number;
-  sessionName: string;
-  sessionStore: SessionStore;
-  logPath: string;
-  artifactPaths: string[];
-  responseLevel: ResponseLevel | undefined;
-  planActions: SessionAction[];
-  planDigest: string;
-}): Promise<DaemonResponse> {
-  const {
-    action,
-    scope,
-    failedResponse,
-    sourcePath,
-    sourceLine,
-    replayPath,
-    step,
-    sessionName,
-    sessionStore,
-    logPath,
-    artifactPaths,
-    responseLevel,
-    planActions,
-    planDigest,
-  } = params;
-  // The landmark guard is only ever attached to an annotated wait; fall back
-  // to the original failure if the invariant is somehow violated.
-  const recorded = action.targetEvidence;
-  if (!recorded) return failedResponse;
-
-  const scrubVars = collectReplayScrubbableVarValues(scope);
-  const sanitize = createReplayDivergenceSanitizer(scrubVars);
-  const details = failedResponse.ok ? undefined : failedResponse.error.details;
-  const observed = readGuardMismatchObservedIdentity(details?.observed);
-  const observedAncestry = readAncestryEntries(details?.observedAncestry);
-  const matchCount = typeof details?.matchCount === 'number' ? details.matchCount : undefined;
-
-  const session = sessionStore.get(sessionName);
-  const observation = session
-    ? await captureDivergenceObservation({ session, sessionName, sessionStore, logPath, action })
-    : ({
-        state: 'unavailable',
-        reason: 'no-session',
-        hint: 'The session closed before a post-failure screen could be captured.',
-      } as const);
-
-  return buildTargetBindingDivergenceResponse(
-    {
-      recorded,
-      action,
-      step,
-      sourcePath,
-      sourceLine,
-      replayPath,
-      artifactPaths,
-      sessionName,
-      sessionStore,
-      responseLevel,
-      scrubVars,
-      planActions,
-      planDigest,
-    },
-    {
-      kind: 'identity-mismatch',
-      matchCount,
+export async function buildWaitLandmarkMismatchResponse(
+  params: PostDispatchMismatchParams,
+): Promise<DaemonResponse> {
+  return await buildPostDispatchIdentityMismatchResponse(params, (recorded, details) => {
+    const observed = readGuardMismatchObservedIdentity(details?.observed);
+    const observedAncestry = readAncestryEntries(details?.observedAncestry);
+    return {
+      matchCount: typeof details?.matchCount === 'number' ? details.matchCount : undefined,
       observed,
-      candidateNodes: [],
       mismatches: observed
         ? [
             ...identityFieldMismatches(recorded, observed),
             ...firstAncestryMismatch(recorded.ancestry, observedAncestry),
           ]
         : [],
-      causeCode: 'IDENTITY_MISMATCH',
       causeMessage:
         'Candidates matched the recorded wait selector during polling, but none carried the recorded landmark identity before the timeout; the wait did not report success.',
-      screen: buildDivergenceScreen(observation, sanitize),
-      repairCapture: toReplayRepairHintCapture(observation),
-    },
-  );
+    };
+  });
 }
 
 /** The wait refusal's `observedAncestry` entries, defensively re-read off error details. */
@@ -640,14 +594,6 @@ function readStructuralDenotation(
     return undefined;
   }
   return { documentOrder: record.documentOrder, sibling: record.sibling };
-}
-
-function identityFromAnnotation(recorded: TargetAnnotationV1): ReplayDivergenceTargetIdentity {
-  return {
-    ...(recorded.id !== undefined ? { id: recorded.id } : {}),
-    role: recorded.role,
-    ...(recorded.label !== undefined ? { label: recorded.label } : {}),
-  };
 }
 
 function sanitizeIdentity(

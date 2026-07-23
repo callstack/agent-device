@@ -10,7 +10,14 @@ import {
 } from '../../../runtime.ts';
 import { ref, selector } from './selector-read.ts';
 import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
-import { createSelectorDevice, selectorReadSnapshot } from './__tests__/test-utils/index.ts';
+import {
+  createFakeClock,
+  createSelectorDevice,
+  selectorReadSnapshot,
+} from './__tests__/test-utils/index.ts';
+import { computeTargetEvidence } from '../../../daemon/session-target-evidence.ts';
+import { WAIT_LANDMARK_MISMATCH_REASON } from '../../../replay/target-identity-node.ts';
+import { AppError } from '../../../kernel/errors.ts';
 
 test('runtime get reads text from a selector target', async () => {
   const snapshot = selectorReadSnapshot();
@@ -492,11 +499,6 @@ test('runtime selector convenience methods use explicit target helpers', async (
 // a same-selector impostor never aborts the wait; only the deadline turns
 // rejected candidates into the fail-closed landmark refusal.
 // ---------------------------------------------------------------------------
-
-import { computeTargetEvidence } from '../../../daemon/session-target-evidence.ts';
-import { WAIT_LANDMARK_MISMATCH_REASON } from '../../../replay/target-identity-node.ts';
-import { createFakeClock } from './__tests__/test-utils/index.ts';
-import { AppError } from '../../../kernel/errors.ts';
 
 function landmarkScreen(parentLabel: string) {
   return makeSnapshotState([

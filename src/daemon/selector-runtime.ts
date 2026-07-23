@@ -254,14 +254,9 @@ export async function dispatchIsViaRuntime(
       expectedResolvedTarget: replayTargetGuard,
     });
     const recordedTarget = readRecordedResolutionTarget(result);
-    recordIfSession(
-      params.sessionStore,
-      params.sessionName,
-      req,
-      stripResolutionPayload(result),
-      recordedTarget,
-    );
-    return stripSelectorChain(stripResolutionPayload(result));
+    const strippedResult = stripResolutionPayload(result);
+    recordIfSession(params.sessionStore, params.sessionName, req, strippedResult, recordedTarget);
+    return stripSelectorChain(strippedResult);
   });
   return withSystemSurfaceDisclosure(
     await maybeAndroidForegroundBlockerResponse(params, response, `is ${predicate}`),
@@ -358,7 +353,9 @@ export async function dispatchWaitViaRuntime(
 }
 
 /** ADR 0012 decision 3 / #1349: a wait/is result's resolution payload, when the tree path produced one. */
-function readRecordedResolutionTarget(result: Record<string, unknown>): RecordedTargetCapture | undefined {
+function readRecordedResolutionTarget(
+  result: Record<string, unknown>,
+): RecordedTargetCapture | undefined {
   const node = result.node;
   const preActionNodes = result.preActionNodes;
   if (!node || typeof node !== 'object' || !Array.isArray(preActionNodes)) return undefined;

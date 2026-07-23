@@ -111,12 +111,7 @@ export function computeTargetEvidence(
 
   for (let ancestryLength = fullAncestry.length; ancestryLength >= floor; ancestryLength -= 1) {
     const { candidate, domain } = buildCandidate(ancestryLength);
-    // Size against the longest verification value so the payload fits
-    // whichever one the self-check returns.
-    if (
-      utf8ByteLength(serializeTargetAnnotationV1({ ...candidate, verification: 'unverifiable' })) <=
-      TARGET_ANNOTATION_MAX_PAYLOAD_BYTES
-    ) {
+    if (fitsPayloadCeiling(candidate)) {
       // A broken parent walk is a capture anomaly: fail closed instead of
       // self-checking against structural signals that cannot be trusted.
       candidate.verification = ancestryWalk.broken
@@ -124,19 +119,28 @@ export function computeTargetEvidence(
         : runRecordTimeSelfCheck({ node, domain, mode });
       return candidate;
     }
-    if (ancestryLength === floor) {
-      // Decision 3's terminal fail-closed downgrade; rect is diagnostic-only
-      // and is dropped before ever emitting an over-cap payload.
-      candidate.verification = 'unverifiable';
-      if (
-        utf8ByteLength(serializeTargetAnnotationV1(candidate)) > TARGET_ANNOTATION_MAX_PAYLOAD_BYTES
-      ) {
-        delete candidate.rect;
-      }
-      return candidate;
-    }
+    if (ancestryLength === floor) return finalizeOversizedCandidate(candidate);
   }
   return undefined;
+}
+
+/** Size against the longest verification value so the payload fits whichever one the self-check returns. */
+function fitsPayloadCeiling(candidate: TargetAnnotationV1): boolean {
+  return (
+    utf8ByteLength(serializeTargetAnnotationV1({ ...candidate, verification: 'unverifiable' })) <=
+    TARGET_ANNOTATION_MAX_PAYLOAD_BYTES
+  );
+}
+
+/** Decision 3's terminal fail-closed downgrade; rect is diagnostic-only and dropped before emitting an over-cap payload. */
+function finalizeOversizedCandidate(candidate: TargetAnnotationV1): TargetAnnotationV1 {
+  candidate.verification = 'unverifiable';
+  if (
+    utf8ByteLength(serializeTargetAnnotationV1(candidate)) > TARGET_ANNOTATION_MAX_PAYLOAD_BYTES
+  ) {
+    delete candidate.rect;
+  }
+  return candidate;
 }
 
 // ---------------------------------------------------------------------------

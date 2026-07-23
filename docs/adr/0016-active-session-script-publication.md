@@ -87,15 +87,27 @@ the serialized guard before filesystem work and never relies on repair-only bare
 `session save-script` refuses publication without this **destination guard** and tells the author to
 record one. V1 does not infer a screen identity from a snapshot or synthesize an implicit guard.
 
-The initial guard is selector-level. `wait` does not yet carry recorded-landmark identity through its
-polling resolution, so the guard proves that an element matching its selector exists, not that it is the
-same landmark element observed while authoring. Authors must choose a selective destination-specific
-landmark; a reshuffled screen containing the same weak label elsewhere can false-pass.
-[#1349](https://github.com/callstack/agent-device/issues/1349) owns the identity design for waits and
-remaining read-only steps. It must preserve polling: ADR 0012's current pre-action `target-v1`
+> **Amendment (#1349, shipped).** The guard is now identity-level, not merely selector-level. A
+> selector wait recorded while ARMED captures landmark-mode `target-v1` evidence for the matched
+> element (ADR 0012's read-only-step amendment), and a qualifying destination guard is exactly a
+> selector wait whose annotation is `verification: "verified"` — a selector wait on an identity-empty
+> element (no id and no label) records no annotation and does not qualify, so publication refuses it
+> with a recovery hint naming a labeled/id-bearing landmark. On replay, polling is preserved: the wait
+> keeps polling until a selector match carries the recorded identity (local identity + leaf-anchored
+> ancestry prefix), and a deadline reached with only same-selector impostors fails closed as an
+> `identity-mismatch` `REPLAY_DIVERGENCE` before the wait reports success. The reshuffled-screen
+> false-pass below is covered by a provider-scenario regression (record → publish → replay against a
+> reshuffled tree whose same-label node sits under a different id/ancestry).
+
+The original selector-level caveat, retained as context: the guard proved that an element matching its
+selector exists, not that it is the same landmark element observed while authoring, so a reshuffled
+screen containing the same weak label elsewhere could false-pass.
+[#1349](https://github.com/callstack/agent-device/issues/1349) owned the identity design for waits and
+remaining read-only steps. It preserves polling: ADR 0012's pre-action `target-v1`
 verification cannot be attached to a wait unchanged because a not-yet-present landmark is the expected
-starting condition. Any identity check for a wait happens after its selector resolves, before the wait
-reports success, or uses a distinct guard-specific mechanism.
+starting condition, so the identity check runs after the wait's selector resolves and before the wait
+reports success (see ADR 0012's #1349 amendment for the mechanism and the read-only-step coverage
+classification).
 
 The phrase "last mutating action" is derived from a request-sensitive recording-effect trait on the
 central `CommandDescriptor`, required for every command that records session actions and guarded by a
@@ -203,7 +215,9 @@ executing that script, not the artifact being saved.
 - The artifact replays from a cold start, completes its destination guard, returns the live session id,
   and accepts a subsequent command on that session.
 - Every action in ADR 0012's existing target-binding command set has canonical identity evidence and no
-  unresolved `@ref` reaches disk; the destination guard remains selector-level until #1349 lands.
+  unresolved `@ref` reaches disk; since #1349 the destination guard additionally requires verified
+  recorded landmark identity, with a reshuffled-screen false-pass regression proving replay fails
+  closed.
 - Existing-target refusal preserves the original bytes; `--force` replaces atomically; a failed publish
   remains retryable.
 - After PUBLISHED, later ordinary actions remain usable, repeated `session save-script` fails, plain

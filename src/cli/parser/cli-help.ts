@@ -234,7 +234,7 @@ Reusable open-to-destination scripts:
     agent-device press 'id="continue"' --settle
     agent-device wait 'role="heading" label="Screen X"'
     agent-device session save-script
-  session save-script [path] [--force] publishes the sole recorded open through the destination guard, omits close, and leaves the session active. A duration wait, wait stable, or wait @ref is not a destination guard. A second successful open aborts publication; start a fresh session to author again.
+  session save-script [path] [--force] publishes the sole recorded open through the destination guard, omits close, and leaves the session active. The guard is a selector wait on a labeled or id-bearing landmark: its recorded identity is captured while armed, and replay verifies that identity after the wait's selector resolves, so a reshuffled screen with the same label elsewhere fails closed instead of false-passing. A duration wait, wait stable, wait @ref, or a selector wait on an unlabeled element is not a destination guard. A second successful open aborts publication; start a fresh session to author again.
   Recorded fill/type inputs are written literally to the .ad file. Do not record passwords, tokens, or other secrets; use pre-authenticated test state or non-secret fixture credentials until parameterized input authoring is available.
 
 Snapshots and refs:

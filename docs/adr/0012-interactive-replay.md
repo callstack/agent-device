@@ -38,6 +38,12 @@ Accepted (2026-07-10); partially implemented (last updated 2026-07-16). See [Mig
 - Decision 6 amendment, repair-segment default exclusion of observation-only commands and the `--record`
   opt-in — stage 1 (interim guidance only, #1287) and stage 2 (the semantic default-exclusion fix,
   this amendment) of #1271. See the amendment under decision 6 below.
+- Decision 3 amendment (#1349), read-only step identity — landmark-mode `target-v1` evidence and
+  post-resolution (in-loop) verification for selector `wait`, `get`-pattern coverage for `is` (except
+  `exists`), the `targetIdentityVerification` descriptor trait pinning the evidence-carrying command
+  set, explicit deferral of read-only `find`/`is exists`/non-selector waits, and ADR 0016's destination
+  guard strengthened to require a `verified` landmark annotation, with a provider-level
+  reshuffled-screen false-pass regression. See the amendment under decision 3 below.
 
 **Accepted but NOT yet implemented** (this amendment; tracked by #1235 — repair-transaction lifecycle):
 the R7 repair-transaction keep-alive and its distinct `resume.repairSessionHeld` signal, the ARMED →
@@ -369,6 +375,52 @@ A recorded `id` never matches a node without that id.
 > `.ad` writer's source) and its `target-v1` evidence consume the retargeted descendant. The rule is
 > platform-agnostic: an RN `FlatList` row (`Cell`) that is label-less with a labeled `Text` child hits
 > the same substitution on iOS.
+
+> **Amendment (#1349): read-only step identity — `wait` landmark verification, `is` coverage, and the
+> per-command verification-phase trait.** Decision 3's evidence and machinery extend to the eligible
+> read-only steps without changing their execution semantics. The annotation format is **unchanged**
+> (`target-v1`, same tuple, same bounds, same writer/parser); what is new is a per-command dispatch of
+> WHEN verification runs, declared on the central `CommandDescriptor` as
+> `targetIdentityVerification: 'pre-dispatch' | 'post-resolution'` and pinned by a completeness test —
+> a new evidence-carrying command must choose its phase explicitly rather than silently entering the
+> generic pre-dispatch path.
+>
+> - **`wait <selector>` — covered, `post-resolution`, landmark (existence) semantics.** A wait's
+>   landmark may legitimately be absent when its step starts, so the generic pre-action verification
+>   (paths 2-6) must never run for it; only path 1 (recorded-`unverifiable`, which consults no screen)
+>   refuses up front. The recorded annotation instead travels into the wait's own polling loop
+>   (`internal.replayLandmarkGuard`, the same daemon-only channel as `replayTargetGuard`), which
+>   strengthens the success condition from "the selector matches" to "a selector match carries the
+>   recorded identity" — the identity tier only (local identity + leaf-anchored ancestry prefix). The
+>   positional disambiguation signals are deliberately **not** compared: a destination guard proves the
+>   landmark exists on the ready screen, not that it kept its list position, and requiring position
+>   would produce the inverse false-failure on a legitimately reshuffled-but-correct screen. Polling is
+>   preserved fail-open in time and fail-closed at the deadline: a same-selector impostor never aborts
+>   the wait (a transient look-alike mid-transition is exactly what a wait exists to wait through); at
+>   the deadline, a poll history containing selector matches that never carried the identity surfaces
+>   as an `identity-mismatch` divergence (`matchCount` from the last matching poll, observed identity +
+>   first ancestry mismatch in `mismatches`) BEFORE the wait reports success, while a selector that
+>   never matched at all remains the ordinary wait timeout (`action-failure` — that failure needs a
+>   state repair, not an identity repair, and its `repairHint` routing is already correct).
+>   Record time writes evidence in a **landmark mode**: the step-5 self-check is identity-set
+>   MEMBERSHIP rather than isolation (mirroring what replay will actually verify), and a matched node
+>   with no id and no label after #1269 demotion records **no annotation** — a role-only landmark
+>   identity is near-vacuous, and an unannotated wait keeps its existing selector-existence semantics
+>   instead of failing closed on evidence that never discriminated anything. ADR 0016's destination
+>   guard consumes exactly this: a qualifying guard is a selector wait with a `verified` annotation.
+> - **`get` — unchanged**; already covered by the pre-dispatch path and the post-resolution guard.
+> - **`is` (all predicates except `exists`) — covered, `pre-dispatch`, the `get` pattern end-to-end.**
+>   `is` resolves a unique node immediately, so pre-action verification is semantically valid; the
+>   resolved node/tree feed record-time evidence, and dispatch threads `replayTargetGuard` into
+>   `assertExpectedResolvedTarget` exactly like `get`. The direct-iOS `is`/`wait` fast paths are gated
+>   off during recording and guarded replays, mirroring `get`'s existing recording gate.
+> - **Intentionally deferred, with tests proving no annotation is recorded and no identity check runs:**
+>   `is exists` (existence assertion with no unique winner; wait-like semantics without the
+>   guard-critical role), every read-only `find` variant (fuzzy-locator resolution has no
+>   selector-chain identity token for the classifier, and publication already refuses mutating `find`
+>   as non-verifiable), and `wait text`/`wait stable`/duration waits/`wait @ref` (no element target, or
+>   a session-local ref that ADR 0016 already refuses to publish; `wait @ref` is rejected rather than
+>   converted to a portable selector).
 
 **Ancestry.** The chain is the nearest **K = 8** ancestors of the target, ordered **leaf→root** (nearest
 ancestor first), each entry `{ role, label? }` under the same normalization (`role` may be the empty
@@ -1254,6 +1306,7 @@ not restate or amend the decisions.
 | 8. Agent-supervised re-record repair, base | 6 (R1-R6) | Shipped | #1228 |
 | 9. Repair-transaction lifecycle | 6 (R7) | Shipped | #1235 |
 | 10. Repair-segment default exclusion + `--record` | 6 amendment | Shipped | #1271 stage 2 |
+| 11. Read-only step identity (wait landmark verification, `is` coverage) | 3 amendment (#1349) | Shipped | — |
 
 Step 4 (#1209) added the `selector-miss`/`identity-mismatch`/`identity-unverifiable` divergence kinds
 and a post-resolution target guard that cross-checks the dispatched winner against the verified member.
