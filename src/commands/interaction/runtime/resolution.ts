@@ -118,7 +118,7 @@ export type InteractionAction =
   | 'rotate'
   | 'transform';
 
-export type CapturedSnapshot = {
+export type InteractionSnapshot = {
   snapshot: SnapshotState;
 };
 
@@ -533,7 +533,7 @@ export async function captureInteractionSnapshot(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
   interactiveOnly: boolean,
-): Promise<CapturedSnapshot> {
+): Promise<InteractionSnapshot> {
   if (!runtime.backend.captureSnapshot) {
     throw new AppError('UNSUPPORTED_OPERATION', 'snapshot is not supported by this backend');
   }
@@ -584,7 +584,7 @@ async function resolveSnapshotForRef(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
   target: Extract<InteractionTarget, { kind: 'ref' }>,
-): Promise<CapturedSnapshot & { resolved: ResolvedRefNode }> {
+): Promise<InteractionSnapshot & { resolved: ResolvedRefNode }> {
   const { session, snapshot: frameTree } = await requireSnapshotSession(runtime, options.session);
 
   const fallbackLabel = target.fallbackLabel ?? '';
@@ -626,7 +626,7 @@ function reconcileFreshObservation(params: {
   target: Extract<InteractionTarget, { kind: 'ref' }>;
   fallbackLabel: string;
   authorized: ResolvedRefNode;
-}): CapturedSnapshot & { resolved: ResolvedRefNode } {
+}): InteractionSnapshot & { resolved: ResolvedRefNode } {
   const { session, frameTree, target, fallbackLabel, authorized } = params;
   const observation = session.snapshot;
   if (!observation || observation === frameTree) {
