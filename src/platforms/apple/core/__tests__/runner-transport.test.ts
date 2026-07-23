@@ -51,7 +51,7 @@ const iosDevice: DeviceInfo = {
 
 const xctestIosDevice: DeviceInfo = {
   ...iosDevice,
-  backend: 'xctest',
+  iosPhysicalDeviceBackend: 'xctest',
 };
 
 beforeEach(() => {

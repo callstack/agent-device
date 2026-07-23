@@ -3,7 +3,6 @@ import { AppError } from '../../../../kernel/errors.ts';
 import { createRequestCanceledError } from '../../../../request/cancel.ts';
 import { Deadline } from '../../../../utils/retry.ts';
 import { parseXmlDocumentSync, type XmlNode } from '../../../../utils/xml.ts';
-import { readSocketResponse } from './runner-socket-response.ts';
 
 const USBMUX_HEADER_BYTES = 16;
 const USBMUX_PROTOCOL_VERSION = 1;
@@ -142,32 +141,52 @@ async function readUsbmuxPacket(
   signal?: AbortSignal,
 ): Promise<{ payload: Buffer }> {
   requireTimeRemaining(timeoutMs, 'read usbmuxd response');
-  return await readSocketResponse<{ payload: Buffer }>({
-    socket,
-    timeoutMs,
-    signal,
-    completion: 'pause',
-    timeoutError: () =>
-      new AppError('COMMAND_FAILED', 'Timed out reading usbmuxd response', {
-        backend: 'xctest',
-        timeoutMs,
-      }),
-    closedError: () => new AppError('COMMAND_FAILED', 'usbmuxd closed the connection unexpectedly'),
-    select: (buffer) => {
+  if (signal?.aborted) throw createRequestCanceledError();
+  return await new Promise<{ payload: Buffer }>((resolve, reject) => {
+    let buffer = Buffer.alloc(0);
+    let settled = false;
+    const timer = setTimeout(
+      () =>
+        finish(
+          new AppError('COMMAND_FAILED', 'Timed out reading usbmuxd response', {
+            backend: 'xctest',
+            timeoutMs,
+          }),
+        ),
+      timeoutMs,
+    );
+    const onData = (chunk: Buffer) => {
+      buffer = Buffer.concat([buffer, chunk]);
       if (buffer.length < USBMUX_HEADER_BYTES) return;
       const packetBytes = buffer.readUInt32LE(0);
       if (packetBytes < USBMUX_HEADER_BYTES || packetBytes > USBMUX_MAX_PACKET_BYTES) {
-        return {
-          error: new AppError('COMMAND_FAILED', 'Invalid usbmuxd response length'),
-        };
+        finish(new AppError('COMMAND_FAILED', 'Invalid usbmuxd response length'));
+        return;
       }
       if (buffer.length < packetBytes) return;
-      return {
-        value: {
-          payload: buffer.subarray(USBMUX_HEADER_BYTES, packetBytes),
-        },
-      };
-    },
+      finish(undefined, { payload: buffer.subarray(USBMUX_HEADER_BYTES, packetBytes) });
+    };
+    const onError = (error: Error) => finish(error);
+    const onClose = () =>
+      finish(new AppError('COMMAND_FAILED', 'usbmuxd closed the connection unexpectedly'));
+    const onAbort = () => finish(createRequestCanceledError());
+    const finish = (error?: Error, packet?: { payload: Buffer }) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      socket.off('data', onData);
+      socket.off('error', onError);
+      socket.off('close', onClose);
+      signal?.removeEventListener('abort', onAbort);
+      socket.pause();
+      if (error) reject(error);
+      else resolve(packet as { payload: Buffer });
+    };
+    socket.on('data', onData);
+    socket.once('error', onError);
+    socket.once('close', onClose);
+    signal?.addEventListener('abort', onAbort, { once: true });
+    socket.resume();
   });
 }
 

@@ -38,9 +38,9 @@ export type DeviceInfo = {
   appleOs?: AppleOS;
   booted?: boolean;
   simulatorSetPath?: string;
-  // Internal execution-backend evidence attached by discovery/provider inventory.
+  // Internal physical-iOS execution backend selected during discovery.
   // Public device projections strip this field.
-  backend?: string;
+  iosPhysicalDeviceBackend?: 'coredevice' | 'xctest';
 };
 
 export type DeviceSelector = {

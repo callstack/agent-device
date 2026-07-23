@@ -34,8 +34,9 @@ export function createRunnerCommandRouteResolver(device: DeviceInfo, port: numbe
       }
       const control = resolveIosPhysicalDeviceControl(device);
       if (control.backend === 'xctest') {
+        const transport = await control.resolveRunnerTransport(device, timeoutBudgetMs);
         return {
-          kind: 'usbmux',
+          kind: transport.kind,
           endpoints: [`usbmux://${device.id}:${port}/command`],
           cachedTunnelIp: false,
         };
@@ -48,7 +49,14 @@ export function createRunnerCommandRouteResolver(device: DeviceInfo, port: numbe
         }
       }
       const transport = await control.resolveRunnerTransport(device, timeoutBudgetMs);
-      const tunnelIp = transport.kind === 'network' ? transport.tunnelIp : null;
+      if (transport.kind === 'usbmux') {
+        return {
+          kind: 'usbmux',
+          endpoints: [`usbmux://${device.id}:${port}/command`],
+          cachedTunnelIp: false,
+        };
+      }
+      const tunnelIp = transport.tunnelIp;
       requestTunnelIp = tunnelIp;
       if (tunnelIp) writeDeviceTunnelIpCache(device.id, tunnelIp);
       return buildNetworkRoute(device, port, tunnelIp, false);

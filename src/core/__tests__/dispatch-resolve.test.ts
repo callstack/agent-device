@@ -285,13 +285,13 @@ test('resolveTargetDevice uses injected device inventory without local discovery
   assert.equal(mockListAppleDevices.mock.calls.length, 0);
 });
 
-test('resolveTargetDevice preserves backend evidence from injected inventory', async () => {
+test('resolveTargetDevice preserves physical-device backend evidence from injected inventory', async () => {
   const result = await withDeviceInventoryProvider(
-    async () => [{ ...physical, backend: 'xctest' }],
+    async () => [{ ...physical, iosPhysicalDeviceBackend: 'xctest' }],
     async () => await resolveTargetDevice({ platform: 'ios', udid: physical.id }),
   );
 
-  assert.equal(result.backend, 'xctest');
+  assert.equal(result.iosPhysicalDeviceBackend, 'xctest');
   assert.equal(mockListAppleDevices.mock.calls.length, 0);
 });
 

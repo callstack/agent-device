@@ -249,7 +249,7 @@ function mapDevicectlAppleDevices(payload: DevicectlListDevicesPayload): DeviceI
         resolveDevicectlAppleProductType(device),
         ...resolveDevicectlAppleLabels(device),
       ]),
-      backend: 'coredevice',
+      iosPhysicalDeviceBackend: 'coredevice',
       booted: true,
     });
   }
@@ -285,7 +285,7 @@ function buildXctracePhysicalDevice(
     kind: 'device',
     target,
     appleOs: resolveAppleOs(target, osVersion ? [name, osVersion] : [name]),
-    backend: 'xctest',
+    iosPhysicalDeviceBackend: 'xctest',
     // xctrace lists currently connected devices in the "Devices" section.
     // The "Devices Offline" section is excluded above, so treating these as
     // booted preserves the existing physical-device selection semantics.

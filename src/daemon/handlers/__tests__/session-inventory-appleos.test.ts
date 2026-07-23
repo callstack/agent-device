@@ -93,10 +93,12 @@ test('devices omits appleOs for non-Apple devices', async () => {
   expect(ios?.appleOs).toBe('ios');
 });
 
-test('devices omits internal backend evidence', async () => {
-  const devices = await listPublicDevices([{ ...IOS_SIMULATOR, backend: 'xctest' }]);
+test('devices omits internal physical-device backend evidence', async () => {
+  const devices = await listPublicDevices([
+    { ...IOS_SIMULATOR, iosPhysicalDeviceBackend: 'xctest' },
+  ]);
 
-  expect(devices[0]).not.toHaveProperty('backend');
+  expect(devices[0]).not.toHaveProperty('iosPhysicalDeviceBackend');
 });
 
 test('devices drops a stray appleOs on a non-Apple device (gated to Apple platforms)', async () => {

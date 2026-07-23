@@ -72,7 +72,7 @@ const CONTROLS: Record<IosPhysicalDeviceBackend, IosPhysicalDeviceControl> = {
 };
 
 export function resolveIosPhysicalDeviceControl(device: DeviceInfo): IosPhysicalDeviceControl {
-  return CONTROLS[device.backend === 'xctest' ? 'xctest' : 'coredevice'];
+  return CONTROLS[device.iosPhysicalDeviceBackend === 'xctest' ? 'xctest' : 'coredevice'];
 }
 
 async function ensureXctestDeviceReady(device: DeviceInfo): Promise<void> {

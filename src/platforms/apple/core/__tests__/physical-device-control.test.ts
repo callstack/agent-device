@@ -21,7 +21,7 @@ const IOS_DEVICE: DeviceInfo = {
 
 const XCTEST_IOS_DEVICE: DeviceInfo = {
   ...IOS_DEVICE,
-  backend: 'xctest',
+  iosPhysicalDeviceBackend: 'xctest',
 };
 
 test('physical-device backend defaults to CoreDevice and honors discovery evidence', () => {

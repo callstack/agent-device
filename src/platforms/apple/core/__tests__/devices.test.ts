@@ -183,7 +183,7 @@ test('parseXctracePhysicalAppleDevices parses only physical devices from the Dev
       kind: 'device',
       target: 'mobile',
       appleOs: 'ios',
-      backend: 'xctest',
+      iosPhysicalDeviceBackend: 'xctest',
       booted: true,
     },
     {
@@ -193,7 +193,7 @@ test('parseXctracePhysicalAppleDevices parses only physical devices from the Dev
       kind: 'device',
       target: 'tv',
       appleOs: 'tvos',
-      backend: 'xctest',
+      iosPhysicalDeviceBackend: 'xctest',
       booted: true,
     },
   ]);
@@ -211,7 +211,7 @@ test('parseXctracePhysicalAppleDevices tags physical iPads as iPadOS', () => {
       kind: 'device',
       target: 'mobile',
       appleOs: 'ipados',
-      backend: 'xctest',
+      iosPhysicalDeviceBackend: 'xctest',
       booted: true,
     },
   ]);
@@ -229,7 +229,7 @@ test('parseXctracePhysicalAppleDevices tags Apple Vision devices as visionOS', (
       kind: 'device',
       target: 'mobile',
       appleOs: 'visionos',
-      backend: 'xctest',
+      iosPhysicalDeviceBackend: 'xctest',
       booted: true,
     },
   ]);
@@ -253,7 +253,7 @@ test('parseXctracePhysicalAppleDevices parses the parenthesized physical device 
       kind: 'device',
       target: 'mobile',
       appleOs: 'ios',
-      backend: 'xctest',
+      iosPhysicalDeviceBackend: 'xctest',
       booted: true,
     },
     {
@@ -263,7 +263,7 @@ test('parseXctracePhysicalAppleDevices parses the parenthesized physical device 
       kind: 'device',
       target: 'mobile',
       appleOs: 'ipados',
-      backend: 'xctest',
+      iosPhysicalDeviceBackend: 'xctest',
       booted: true,
     },
     {
@@ -273,7 +273,7 @@ test('parseXctracePhysicalAppleDevices parses the parenthesized physical device 
       kind: 'device',
       target: 'tv',
       appleOs: 'tvos',
-      backend: 'xctest',
+      iosPhysicalDeviceBackend: 'xctest',
       booted: true,
     },
   ]);
@@ -292,7 +292,7 @@ test('parseXctracePhysicalAppleDevices preserves parentheses in bracket-format n
       kind: 'device',
       target: 'mobile',
       appleOs: 'ios',
-      backend: 'xctest',
+      iosPhysicalDeviceBackend: 'xctest',
       booted: true,
     },
     {
@@ -302,7 +302,7 @@ test('parseXctracePhysicalAppleDevices preserves parentheses in bracket-format n
       kind: 'device',
       target: 'mobile',
       appleOs: 'ios',
-      backend: 'xctest',
+      iosPhysicalDeviceBackend: 'xctest',
       booted: true,
     },
   ]);
@@ -611,7 +611,7 @@ test('listAppleDevices falls back to xctrace parenthesized devices when devicect
   assert.equal(physicalDevices.length, 1);
   assert.equal(physicalDevices[0]?.id, '00008020-001C2D2234567890');
   assert.equal(physicalDevices[0]?.name, 'iPhone 8 Plus');
-  assert.equal(physicalDevices[0]?.backend, 'xctest');
+  assert.equal(physicalDevices[0]?.iosPhysicalDeviceBackend, 'xctest');
 });
 
 test('listAppleDevices keeps physical discovery disabled for simulator-set scoped runs', async () => {

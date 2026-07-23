@@ -1,13 +1,12 @@
+import http, { type IncomingMessage } from 'node:http';
 import { type Socket } from 'node:net';
 import { AppError } from '../../../../kernel/errors.ts';
 import { createRequestCanceledError } from '../../../../request/cancel.ts';
 import { Deadline } from '../../../../utils/retry.ts';
 import type { RunnerCommand } from './runner-contract.ts';
-import { readSocketResponse } from './runner-socket-response.ts';
 import { openUsbmuxRunnerSocket } from './runner-usbmux-protocol.ts';
 
 const USBMUXD_SOCKET_PATH = '/var/run/usbmuxd';
-const RUNNER_HTTP_MAX_HEADER_BYTES = 64 * 1024;
 const RUNNER_HTTP_MAX_BODY_BYTES = 64 * 1024 * 1024;
 
 export type UsbmuxRunnerTransport = {
@@ -52,75 +51,73 @@ async function postRunnerHttpCommand(
   requireTimeRemaining(timeoutMs);
   if (signal?.aborted) throw createRequestCanceledError();
   const body = Buffer.from(JSON.stringify(command), 'utf8');
-  const request = Buffer.concat([
-    Buffer.from(
-      [
-        'POST /command HTTP/1.1',
-        'Host: 127.0.0.1',
-        'Content-Type: application/json',
-        `Content-Length: ${body.length}`,
-        'Connection: close',
-        '',
-        '',
-      ].join('\r\n'),
-      'utf8',
-    ),
-    body,
-  ]);
-  const response = readSocketResponse<Response>({
-    socket,
-    timeoutMs,
-    signal,
-    completion: 'destroy',
-    timeoutError: () =>
-      new AppError('COMMAND_FAILED', 'Timed out waiting for XCTest runner over usbmux', {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+  const agent = new http.Agent();
+  agent.createConnection = (_options, callback) => {
+    callback?.(null, socket);
+    return socket;
+  };
+  try {
+    const response = await requestRunnerCommand(agent, socket, body, requestSignal);
+    return new Response((await readBoundedResponseBody(response)).toString('utf8'), {
+      status: response.statusCode ?? 500,
+    });
+  } catch (error) {
+    if (signal?.aborted) throw createRequestCanceledError();
+    if (timeoutSignal.aborted) {
+      throw new AppError('COMMAND_FAILED', 'Timed out waiting for XCTest runner over usbmux', {
         backend: 'xctest',
         timeoutMs,
-      }),
-    closedError: () =>
-      new AppError('COMMAND_FAILED', 'XCTest runner closed usbmux before responding'),
-    select: (buffer) => {
-      const headerEnd = buffer.indexOf('\r\n\r\n');
-      if (headerEnd < 0) {
-        if (buffer.length > RUNNER_HTTP_MAX_HEADER_BYTES) {
-          return {
-            error: new AppError('COMMAND_FAILED', 'XCTest runner returned oversized HTTP headers'),
-          };
-        }
-        return;
-      }
-      const headersText = buffer.subarray(0, headerEnd).toString('utf8');
-      const contentLength = readHttpContentLength(headersText);
-      if (contentLength === undefined) {
-        return {
-          error: new AppError('COMMAND_FAILED', 'XCTest runner response omitted Content-Length'),
-        };
-      }
-      if (contentLength > RUNNER_HTTP_MAX_BODY_BYTES) {
-        return {
-          error: new AppError('COMMAND_FAILED', 'XCTest runner response exceeded size limit'),
-        };
-      }
-      const bodyStart = headerEnd + 4;
-      if (buffer.length < bodyStart + contentLength) return;
-      const status = readHttpStatus(headersText);
-      const responseBody = buffer.subarray(bodyStart, bodyStart + contentLength);
-      return { value: new Response(responseBody.toString('utf8'), { status }) };
-    },
+      });
+    }
+    throw error;
+  } finally {
+    agent.destroy();
+    socket.destroy();
+  }
+}
+
+async function requestRunnerCommand(
+  agent: http.Agent,
+  socket: Socket,
+  body: Buffer,
+  signal: AbortSignal,
+): Promise<IncomingMessage> {
+  return await new Promise<IncomingMessage>((resolve, reject) => {
+    const request = http.request(
+      {
+        method: 'POST',
+        host: '127.0.0.1',
+        path: '/command',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': body.length,
+          Connection: 'close',
+        },
+        agent,
+        signal,
+      },
+      resolve,
+    );
+    request.once('error', reject);
+    socket.resume();
+    request.end(body);
   });
-  socket.write(request);
-  return await response;
 }
 
-function readHttpContentLength(headers: string): number | undefined {
-  const match = /^content-length:\s*(\d+)\s*$/im.exec(headers);
-  const length = Number(match?.[1]);
-  return Number.isSafeInteger(length) && length >= 0 ? length : undefined;
-}
-
-function readHttpStatus(headers: string): number {
-  const status = Number(/^HTTP\/1\.[01]\s+(\d{3})\b/i.exec(headers)?.[1]);
-  return Number.isInteger(status) && status >= 100 && status <= 599 ? status : 500;
+async function readBoundedResponseBody(response: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let bodyBytes = 0;
+  for await (const chunk of response) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    bodyBytes += buffer.length;
+    if (bodyBytes > RUNNER_HTTP_MAX_BODY_BYTES) {
+      throw new AppError('COMMAND_FAILED', 'XCTest runner response exceeded size limit');
+    }
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks);
 }
 
 function requireTimeRemaining(timeoutMs: number): void {
