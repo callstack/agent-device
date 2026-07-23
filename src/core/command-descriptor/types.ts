@@ -104,24 +104,13 @@ export type CommandRecordingEffect =
   | ((req: Pick<DaemonRequest, 'command' | 'positionals' | 'flags'>) => RecordingEffect);
 
 /**
- * ADR 0012 / #1349: how replay verifies a recorded `target-v1` annotation on
- * this command's steps.
- *
- * - `pre-dispatch`: the replay step loop verifies the recorded identity
- *   against a fresh capture BEFORE dispatching the action (decision 3 paths
- *   2-6), because the command's semantics expect its target present at
- *   dispatch time (touch/fill/get/is).
- * - `post-resolution`: the command resolves its own target (wait's polling
- *   loop) and the identity check runs INSIDE that resolution, after a
- *   candidate matches and before the command reports success. Pre-dispatch
- *   verification would refuse the expected starting condition of a wait — a
- *   landmark that has not appeared yet — so only decision 3 path 1
- *   (recorded-`unverifiable`, which needs no resolution) runs up front.
- *
- * Declared on every command whose recorded steps can carry `target-v1`
- * evidence; the parity test pins that set so a new evidence-carrying command
- * must choose a phase explicitly instead of silently entering the generic
- * pre-dispatch path.
+ * ADR 0012 / #1349: when replay verifies a recorded `target-v1` annotation.
+ * `pre-dispatch` — the step loop verifies against a fresh capture before
+ * dispatch (touch/fill/get/is expect their target present). `post-resolution`
+ * — the command's own resolution verifies (wait's polling loop, whose
+ * landmark may legitimately be absent at step start); only decision 3 path 1
+ * runs up front. Declared on every evidence-carrying command and pinned by
+ * the parity test, so a new one must choose a phase explicitly.
  */
 export type TargetIdentityVerification = 'pre-dispatch' | 'post-resolution';
 

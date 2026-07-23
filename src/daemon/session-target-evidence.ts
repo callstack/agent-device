@@ -48,19 +48,11 @@ export type RecordedTargetCapture = {
 };
 
 /**
- * #1349: what the record-time self-check must prove about the evidence.
- *
- * - `action` (decision 3's original contract): replay verification must
- *   ISOLATE exactly the recorded winner — the evidence backs a dispatched
- *   action, so the disambiguation signals must single it out.
- * - `landmark` (wait): replay verification only requires that SOME current
- *   selector match carries the recorded identity — a destination guard proves
- *   the landmark exists on the ready screen, not that it kept its positional
- *   ordinals, so the self-check is identity-set membership. An identity-empty
- *   winner (no id and no label after #1269 demotion) yields NO annotation:
- *   a role-only landmark identity would be near-vacuous, and an unannotated
- *   wait keeps its existing selector-existence semantics instead of failing
- *   closed on evidence that never discriminated anything.
+ * #1349 (ADR 0012 decision 3 amendment): what replay verification will prove.
+ * `action` — isolation of the recorded winner (decision 3's original
+ * contract). `landmark` (wait) — existence of an identity-carrying selector
+ * match; an identity-empty winner (no id, no label after #1269 demotion)
+ * yields no annotation, keeping the wait's selector-existence semantics.
  */
 export type TargetEvidenceMode = 'action' | 'landmark';
 
@@ -112,16 +104,35 @@ export function computeTargetEvidence(
   for (let ancestryLength = fullAncestry.length; ancestryLength >= floor; ancestryLength -= 1) {
     const { candidate, domain } = buildCandidate(ancestryLength);
     if (fitsPayloadCeiling(candidate)) {
-      // A broken parent walk is a capture anomaly: fail closed instead of
-      // self-checking against structural signals that cannot be trusted.
-      candidate.verification = ancestryWalk.broken
-        ? 'unverifiable'
-        : runRecordTimeSelfCheck({ node, domain, mode });
+      candidate.verification = resolveRecordTimeVerification({
+        node,
+        domain,
+        mode,
+        brokenWalk: ancestryWalk.broken,
+      });
       return candidate;
     }
     if (ancestryLength === floor) return finalizeOversizedCandidate(candidate);
   }
   return undefined;
+}
+
+/**
+ * A broken parent walk is a capture anomaly: fail closed instead of
+ * self-checking against structural signals that cannot be trusted. Landmark
+ * evidence needs no isolation self-check — the winner is a member of its own
+ * identity set by construction, so the broken walk is its only record-time
+ * failure mode. Action evidence runs decision 3's step-5 self-check.
+ */
+function resolveRecordTimeVerification(params: {
+  node: SnapshotNode;
+  domain: DisambiguationDomain;
+  mode: TargetEvidenceMode;
+  brokenWalk: boolean;
+}): TargetVerification {
+  if (params.brokenWalk) return 'unverifiable';
+  if (params.mode === 'landmark') return 'verified';
+  return runRecordTimeSelfCheck({ node: params.node, domain: params.domain });
 }
 
 /** Size against the longest verification value so the payload fits whichever one the self-check returns. */
@@ -287,16 +298,8 @@ export function orderByViewportPosition(members: readonly SnapshotNode[]): Snaps
 function runRecordTimeSelfCheck(params: {
   node: SnapshotNode;
   domain: DisambiguationDomain;
-  mode: TargetEvidenceMode;
 }): TargetVerification {
-  const { node, domain, mode } = params;
-  if (mode === 'landmark') {
-    // Landmark verification is identity-set membership, so the self-check
-    // mirrors exactly that: the winner proving its own membership.
-    return domain.identitySet.some((member) => member.index === node.index)
-      ? 'verified'
-      : 'unverifiable';
-  }
+  const { node, domain } = params;
   const winnerRef = node.ref;
   const identitySetRefs = domain.identitySet.map((n) => n.ref);
   const classification = classifyTargetBindingMatch({
