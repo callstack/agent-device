@@ -154,24 +154,68 @@ export function resolveEffectiveViewportRect(
 export type OffscreenScrollDirection = 'up' | 'down' | 'left' | 'right';
 
 /**
- * The direction to `scroll` so an off-screen target comes into view, from its
- * rect and effective viewport. Follows the reveal convention the CLI hints
- * already use (`cli-help.ts`): off-screen below -> scroll down, above -> up, and
- * the horizontal mirror. When a target sits off more than one edge (a diagonal
- * closed drawer), the axis with the largest overshoot wins so the agent's first
- * move is the dominant one. Returns `null` when the rect is not fully past any
- * edge — i.e. it is not off-screen on a single axis — leaving the caller's
- * generic "scroll toward it" phrasing in place.
+ * The direction to `scroll` so an off-screen interaction target comes into view.
+ * Derived from the SAME two boundaries `isNodeVisibleOnScreen` rejects against,
+ * so every rejected target yields a direction (#1366) — not just the subset a
+ * rect-vs-one-viewport check catches:
+ *
+ *  1. The rect has no overlap with its effective (scroll-container) viewport —
+ *     an item scrolled out of an on-screen list. Direction from the container.
+ *  2. The rect still overlaps its container, but the tap-point CENTER is pushed
+ *     outside the ROOT viewport — a child inside an off-screen drawer, or a row
+ *     straddling the viewport edge whose center is past it. The rect-vs-effective
+ *     -viewport form misses both; this reads the boundary that actually failed.
+ *
+ * Direction follows the reveal convention the CLI hints already use
+ * (`cli-help.ts`): off-screen below -> scroll down, above -> up, horizontal
+ * mirror; the axis with the largest center overshoot wins so a corner-off target
+ * gets its dominant move. Returns null only when the node is on-screen.
  */
 export function classifyOffscreenScrollDirection(
-  targetRect: Rect,
-  viewportRect: Rect,
+  node: Pick<SnapshotNode, 'rect' | 'index' | 'parentIndex' | 'type' | 'role' | 'subrole'>,
+  nodes: SnapshotNode[],
+  byIndex: Map<number, SnapshotNode> = buildSnapshotNodeMap(nodes),
 ): OffscreenScrollDirection | null {
+  if (!node.rect) {
+    return null;
+  }
+  // Boundary 1: fully separated from the effective (scroll-container) viewport.
+  const effectiveViewport = resolveEffectiveViewportRect(node, nodes, byIndex);
+  if (effectiveViewport && !isRectVisibleInViewport(node.rect, effectiveViewport)) {
+    const direction = directionOfCenterOutsideViewport(node.rect, effectiveViewport);
+    if (direction) {
+      return direction;
+    }
+  }
+  // Boundary 2: tap-point center outside the root viewport (off-screen container
+  // or an edge-straddling rect whose center is past the frame).
+  const rootViewport = resolveViewportRect(nodes, node.rect);
+  if (rootViewport && !isTapPointInsideViewport(node.rect, rootViewport)) {
+    const direction = directionOfCenterOutsideViewport(node.rect, rootViewport);
+    if (direction) {
+      return direction;
+    }
+  }
+  return null;
+}
+
+/**
+ * The dominant edge the rect's tap-point center sits beyond, or null when the
+ * center is within the viewport on both axes. Uses the same unrounded center as
+ * `isTapPointInsideViewport` so the direction agrees with the rejection at the
+ * pixel boundary.
+ */
+function directionOfCenterOutsideViewport(
+  rect: Rect,
+  viewport: Rect,
+): OffscreenScrollDirection | null {
+  const centerX = rect.x + rect.width / 2;
+  const centerY = rect.y + rect.height / 2;
   const overshoots: Array<{ direction: OffscreenScrollDirection; amount: number }> = [
-    { direction: 'down', amount: targetRect.y - (viewportRect.y + viewportRect.height) },
-    { direction: 'up', amount: viewportRect.y - (targetRect.y + targetRect.height) },
-    { direction: 'right', amount: targetRect.x - (viewportRect.x + viewportRect.width) },
-    { direction: 'left', amount: viewportRect.x - (targetRect.x + targetRect.width) },
+    { direction: 'down', amount: centerY - (viewport.y + viewport.height) },
+    { direction: 'up', amount: viewport.y - centerY },
+    { direction: 'right', amount: centerX - (viewport.x + viewport.width) },
+    { direction: 'left', amount: viewport.x - centerX },
   ];
   let best: { direction: OffscreenScrollDirection; amount: number } | null = null;
   for (const candidate of overshoots) {

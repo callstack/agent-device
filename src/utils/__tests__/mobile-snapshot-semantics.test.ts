@@ -325,40 +325,110 @@ test('visibility is false for node just outside viewport boundary', () => {
   assert.equal(isNodeVisibleInEffectiveViewport(nodes[1]!, nodes), false);
 });
 
-test('classifyOffscreenScrollDirection names the reveal direction per edge', () => {
-  const viewport = { x: 0, y: 0, width: 400, height: 800 };
-  // Below the viewport bottom -> scroll down; above the top -> scroll up.
-  assert.equal(
-    classifyOffscreenScrollDirection({ x: 20, y: 1200, width: 120, height: 44 }, viewport),
-    'down',
-  );
-  assert.equal(
-    classifyOffscreenScrollDirection({ x: 20, y: -100, width: 120, height: 44 }, viewport),
-    'up',
-  );
-  // Horizontal mirror: fully left of the viewport -> scroll left; right -> right.
-  assert.equal(
-    classifyOffscreenScrollDirection({ x: -320, y: 240, width: 300, height: 50 }, viewport),
-    'left',
-  );
-  assert.equal(
-    classifyOffscreenScrollDirection({ x: 500, y: 240, width: 120, height: 44 }, viewport),
-    'right',
-  );
+function windowRoot(): SnapshotNode {
+  return { ref: 'e1', index: 0, depth: 0, type: 'Window', rect: { x: 0, y: 0, width: 400, height: 800 } };
+}
+
+test('classifyOffscreenScrollDirection names the reveal direction for a fully scrolled-out item', () => {
+  const below: SnapshotNode[] = [
+    windowRoot(),
+    {
+      ref: 'e2',
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Far below',
+      rect: { x: 20, y: 1200, width: 120, height: 44 },
+      hittable: true,
+    },
+  ];
+  assert.equal(classifyOffscreenScrollDirection(below[1]!, below), 'down');
+
+  const above: SnapshotNode[] = [
+    windowRoot(),
+    {
+      ref: 'e2',
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Far above',
+      rect: { x: 20, y: -100, width: 120, height: 44 },
+      hittable: true,
+    },
+  ];
+  assert.equal(classifyOffscreenScrollDirection(above[1]!, above), 'up');
 });
 
-test('classifyOffscreenScrollDirection picks the dominant axis and ignores on-screen rects', () => {
-  const viewport = { x: 0, y: 0, width: 400, height: 800 };
-  // Off both the bottom (overshoot 400) and the right (overshoot 100): down wins.
-  assert.equal(
-    classifyOffscreenScrollDirection({ x: 500, y: 1200, width: 120, height: 44 }, viewport),
-    'down',
-  );
-  // Overlapping the viewport on every edge is not off-screen on a single axis.
-  assert.equal(
-    classifyOffscreenScrollDirection({ x: 20, y: 40, width: 120, height: 44 }, viewport),
-    null,
-  );
+test('classifyOffscreenScrollDirection returns null for an on-screen node', () => {
+  const nodes: SnapshotNode[] = [
+    windowRoot(),
+    {
+      ref: 'e2',
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Visible',
+      rect: { x: 20, y: 40, width: 120, height: 44 },
+      hittable: true,
+    },
+  ];
+  assert.equal(classifyOffscreenScrollDirection(nodes[1]!, nodes), null);
+});
+
+test('classifyOffscreenScrollDirection resolves a partial clip whose center is past the viewport (#1366)', () => {
+  // The rect still OVERLAPS the root viewport (top edge inside), so the rect-vs-
+  // viewport form returns null — but the tap-point center sits below the bottom
+  // edge, which is exactly what isNodeVisibleOnScreen rejects. Direction must be down.
+  const nodes: SnapshotNode[] = [
+    windowRoot(),
+    {
+      ref: 'e2',
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Straddling the bottom edge',
+      rect: { x: 20, y: 790, width: 120, height: 44 },
+      hittable: true,
+    },
+  ];
+  // Sanity: this node is genuinely rejected by the interaction visibility guard.
+  assert.equal(isNodeVisibleInEffectiveViewport(nodes[1]!, nodes), true);
+  assert.equal(classifyOffscreenScrollDirection(nodes[1]!, nodes), 'down');
+});
+
+test('classifyOffscreenScrollDirection resolves a child inside an off-screen scrollable ancestor (#1366)', () => {
+  // Closed drawer: the child overlaps its own ScrollView (so boundary 1 passes),
+  // but the container is off the root viewport to the left, so the child's center
+  // is outside the root frame. Direction must come from the root boundary: left.
+  const nodes: SnapshotNode[] = [
+    windowRoot(),
+    {
+      ref: 'e2',
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'ScrollView',
+      label: 'Drawer',
+      rect: { x: -400, y: 0, width: 400, height: 800 },
+    },
+    {
+      ref: 'e3',
+      index: 2,
+      depth: 2,
+      parentIndex: 1,
+      type: 'Button',
+      label: 'Drawer action',
+      rect: { x: -380, y: 300, width: 200, height: 44 },
+      hittable: true,
+    },
+  ];
+  // Boundary 1 passes (child overlaps its container); the root boundary fails.
+  assert.equal(isNodeVisibleInEffectiveViewport(nodes[2]!, nodes), true);
+  assert.equal(classifyOffscreenScrollDirection(nodes[2]!, nodes), 'left');
 });
 
 test('mobile presentation infers hidden content from vertical scroll indicator value at top', () => {

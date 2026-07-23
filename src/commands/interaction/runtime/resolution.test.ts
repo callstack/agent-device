@@ -131,6 +131,49 @@ test('runtime press refuses a selector that resolves to an off-screen element', 
   assert.equal(taps.length, 0);
 });
 
+test('runtime press names a direction for a partial clip whose center is off-screen', async () => {
+  // #1366 regression: the row still OVERLAPS the viewport (top edge inside), so
+  // the rect-vs-viewport form yields no direction — but its tap-point center is
+  // below the bottom edge, which is what the visibility guard rejects. The hint
+  // must still name `scroll down` rather than falling back to the generic phrasing.
+  const partialClipSnapshot = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 2,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Cash',
+      rect: { x: 20, y: 790, width: 200, height: 44 },
+      hittable: true,
+    },
+  ]);
+  const taps: unknown[] = [];
+  const device = createInteractionDevice(partialClipSnapshot, {
+    tap: async (_context, point) => {
+      taps.push(point);
+    },
+  });
+
+  await assert.rejects(
+    () => device.interactions.press(selector('label=Cash'), { session: 'default' }),
+    (error: unknown) => {
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'offscreen_selector');
+      assert.equal(details?.scrollDirection, 'down');
+      assert.match(String(details?.hint), /scroll down/i);
+      return true;
+    },
+  );
+  assert.equal(taps.length, 0);
+});
+
 test('runtime click keeps distinct tab button centers when iOS reports the tab bar as hittable', async () => {
   const calls: Point[] = [];
   const device = createInteractionDevice(iosTabBarSnapshot(), {

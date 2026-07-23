@@ -796,8 +796,10 @@ function throwIfOffscreenInteractionTarget(
   if (!node.rect || !viewport || isNodeVisibleOnScreen(node, nodes)) return;
   // The direction that scrolls this off-screen target into view. Named in the
   // hint (and surfaced as a machine-readable detail) so the recovery is a single
-  // deterministic move instead of a guess (#1366).
-  const scrollDirection = classifyOffscreenScrollDirection(node.rect, viewport);
+  // deterministic move instead of a guess (#1366). Derived from the same
+  // boundary the rejection above used, so partial clips and off-screen
+  // containers get a direction too, not just fully-scrolled-out items.
+  const scrollDirection = classifyOffscreenScrollDirection(node, nodes);
   throw new AppError('COMMAND_FAILED', failure.message, {
     ...failure.details,
     rect: node.rect,
