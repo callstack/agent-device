@@ -27,11 +27,8 @@ vi.mock('../runner/runner-usbmux.ts', () => ({
   },
 }));
 
-import {
-  clearDeviceTunnelIpCache,
-  sendRunnerCommandOnce,
-  waitForRunner,
-} from '../runner/runner-transport.ts';
+import { clearDeviceTunnelIpCache } from '../runner/runner-command-route.ts';
+import { sendRunnerCommandOnce, waitForRunner } from '../runner/runner-transport.ts';
 
 const iosSimulator: DeviceInfo = {
   platform: 'apple',

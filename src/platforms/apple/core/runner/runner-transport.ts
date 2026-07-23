@@ -20,7 +20,6 @@ import {
 import type { RunnerSession } from './runner-session-types.ts';
 import { usbmuxRunnerTransport } from './runner-usbmux.ts';
 
-export { clearDeviceTunnelIpCache } from './runner-command-route.ts';
 export { cleanupTempFile, getFreePort, logChunk } from './runner-io.ts';
 
 export const RUNNER_STARTUP_TIMEOUT_MS = 45_000;
