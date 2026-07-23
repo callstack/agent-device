@@ -2593,8 +2593,12 @@ test('press @ref fails fast when the target is off-screen', async () => {
   if (response && !response.ok) {
     expect(response.error.code).toBe('COMMAND_FAILED');
     expect(response.error.message).toMatch(/off-screen/i);
-    expect(response.error.hint).toMatch(/scroll.*fresh snapshot/i);
+    // #1366: the hint names the concrete scroll direction and steers to a
+    // selector-based retry (a @ref would be rejected as expired after the scroll).
+    expect(response.error.hint).toMatch(/scroll down/i);
+    expect(response.error.hint).toMatch(/selector/i);
     expect(response.error.details?.reason).toBe('offscreen_ref');
+    expect(response.error.details?.scrollDirection).toBe('down');
   }
 });
 
@@ -2715,8 +2719,11 @@ test('fill @ref fails fast when the target is off-screen', async () => {
   if (response && !response.ok) {
     expect(response.error.code).toBe('COMMAND_FAILED');
     expect(response.error.message).toMatch(/off-screen/i);
-    expect(response.error.hint).toMatch(/scroll.*fresh snapshot/i);
+    // #1366: direction-named, selector-first recovery hint (see press test above).
+    expect(response.error.hint).toMatch(/scroll down/i);
+    expect(response.error.hint).toMatch(/selector/i);
     expect(response.error.details?.reason).toBe('offscreen_ref');
+    expect(response.error.details?.scrollDirection).toBe('down');
   }
 });
 

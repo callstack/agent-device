@@ -160,7 +160,10 @@ test('native ref click preflight refuses an off-screen ref without calling the b
       const details = (error as { details?: Record<string, unknown> }).details;
       assert.equal(details?.reason, 'offscreen_ref');
       assert.equal(details?.ref, 'e2');
-      assert.ok(typeof details?.hint === 'string');
+      // #1366: closed drawer sits left of the viewport -> `scroll left`, selector-first.
+      assert.equal(details?.scrollDirection, 'left');
+      assert.match(String(details?.hint), /scroll left/i);
+      assert.match(String(details?.hint), /selector/i);
       return true;
     },
   );

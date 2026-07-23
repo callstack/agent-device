@@ -150,6 +150,38 @@ export function resolveEffectiveViewportRect(
   return resolveViewportRect(nodes, node.rect ?? { x: 0, y: 0, width: 0, height: 0 });
 }
 
+/** The concrete `scroll <direction>` that brings an off-screen target into view. */
+export type OffscreenScrollDirection = 'up' | 'down' | 'left' | 'right';
+
+/**
+ * The direction to `scroll` so an off-screen target comes into view, from its
+ * rect and effective viewport. Follows the reveal convention the CLI hints
+ * already use (`cli-help.ts`): off-screen below -> scroll down, above -> up, and
+ * the horizontal mirror. When a target sits off more than one edge (a diagonal
+ * closed drawer), the axis with the largest overshoot wins so the agent's first
+ * move is the dominant one. Returns `null` when the rect is not fully past any
+ * edge — i.e. it is not off-screen on a single axis — leaving the caller's
+ * generic "scroll toward it" phrasing in place.
+ */
+export function classifyOffscreenScrollDirection(
+  targetRect: Rect,
+  viewportRect: Rect,
+): OffscreenScrollDirection | null {
+  const overshoots: Array<{ direction: OffscreenScrollDirection; amount: number }> = [
+    { direction: 'down', amount: targetRect.y - (viewportRect.y + viewportRect.height) },
+    { direction: 'up', amount: viewportRect.y - (targetRect.y + targetRect.height) },
+    { direction: 'right', amount: targetRect.x - (viewportRect.x + viewportRect.width) },
+    { direction: 'left', amount: viewportRect.x - (targetRect.x + targetRect.width) },
+  ];
+  let best: { direction: OffscreenScrollDirection; amount: number } | null = null;
+  for (const candidate of overshoots) {
+    if (candidate.amount > 0 && (!best || candidate.amount > best.amount)) {
+      best = candidate;
+    }
+  }
+  return best?.direction ?? null;
+}
+
 function deriveContainerHints(
   allNodes: SnapshotNode[],
   offscreenNodes: SnapshotNode[],

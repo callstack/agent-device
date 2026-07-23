@@ -120,7 +120,11 @@ test('runtime press refuses a selector that resolves to an off-screen element', 
       assert.match(error.message, /off-screen element and is not safe to press/);
       const details = (error as { details?: Record<string, unknown> }).details;
       assert.equal(details?.reason, 'offscreen_selector');
-      assert.ok(typeof details?.hint === 'string');
+      // #1366: the closed-drawer shape sits fully left of the viewport, so the
+      // hint names `scroll left` and steers back through the same selector.
+      assert.equal(details?.scrollDirection, 'left');
+      assert.match(String(details?.hint), /scroll left/i);
+      assert.match(String(details?.hint), /selector/i);
       return true;
     },
   );

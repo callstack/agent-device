@@ -24,8 +24,10 @@ import {
   resolveRefLabel,
 } from '../../../snapshot/snapshot-processing.ts';
 import {
+  classifyOffscreenScrollDirection,
   isNodeVisibleOnScreen,
   resolveEffectiveViewportRect,
+  type OffscreenScrollDirection,
 } from '../../../snapshot/mobile-snapshot-semantics.ts';
 import { containsPoint, resolveViewportRect } from '../../../utils/rect-visibility.ts';
 import { isSnapshotNodeInteractionBlocked } from '../../../snapshot/snapshot-occlusion.ts';
@@ -697,7 +699,12 @@ function assertVisibleSelectorTarget(
   throwIfOffscreenInteractionTarget(node, nodes, {
     message: `Selector ${selector} resolved to an off-screen element and is not safe to ${action}`,
     details: { reason: 'offscreen_selector', selector },
-    hint: `The element is outside the visible viewport — likely inside a closed drawer, another tab, or scrolled content. Scroll toward it or open its container, take a fresh snapshot, then retry ${action}.`,
+    // A selector re-resolves against a fresh snapshot on every attempt, so the
+    // recovery is just: scroll the named direction, then retry THIS selector —
+    // no separate snapshot step, and no @ref (a scroll expires the ref frame,
+    // #1366). Naming the direction stops the wrong-way / retry-the-same-ref loop.
+    hint: (direction) =>
+      `${scrollRevealClause(direction)}, then retry ${action} with the same selector — a selector re-resolves against a fresh snapshot, so no separate snapshot is needed. If it is inside a closed drawer or another tab, open that container first.`,
   });
 }
 
@@ -710,8 +717,21 @@ function assertVisibleRefTarget(
   throwIfOffscreenInteractionTarget(node, nodes, {
     message: `Ref ${refInput} is off-screen and not safe to ${action}`,
     details: { reason: 'offscreen_ref', ref: normalizeRef(refInput) },
-    hint: `Use scroll with the direction from the off-screen summary, take a fresh snapshot, then retry ${action} with the new ref or a selector.`,
+    // The scroll that reveals the target expires the ref frame (#1366, ADR
+    // 0014), so retrying this @ref would be rejected next. Steer to a selector,
+    // which re-resolves against a fresh snapshot and bypasses the ref-frame guard.
+    hint: (direction) =>
+      `${scrollRevealClause(direction)}, then retry ${action} with a selector (e.g. text=/id=) rather than this @ref — the scroll expires the ref frame, so re-run snapshot -i before reusing any @ref.`,
   });
+}
+
+// Shared lead-in for both off-screen hints. Names the concrete `scroll <dir>`
+// when the geometry gives one, and falls back to the container-aware phrasing
+// when the target is off more than one edge in a way that has no single reveal.
+function scrollRevealClause(direction: OffscreenScrollDirection | null): string {
+  return direction
+    ? `Scroll ${direction} to bring it on-screen`
+    : 'Scroll toward it (open its container if it is in a closed drawer or another tab)';
 }
 
 /**
@@ -766,14 +786,23 @@ export async function preflightNativeRefInteraction(
 function throwIfOffscreenInteractionTarget(
   node: SnapshotNode,
   nodes: SnapshotState['nodes'],
-  failure: { message: string; details: Record<string, unknown>; hint: string },
+  failure: {
+    message: string;
+    details: Record<string, unknown>;
+    hint: (direction: OffscreenScrollDirection | null) => string;
+  },
 ): void {
   const viewport = node.rect ? resolveEffectiveViewportRect(node, nodes) : null;
   if (!node.rect || !viewport || isNodeVisibleOnScreen(node, nodes)) return;
+  // The direction that scrolls this off-screen target into view. Named in the
+  // hint (and surfaced as a machine-readable detail) so the recovery is a single
+  // deterministic move instead of a guess (#1366).
+  const scrollDirection = classifyOffscreenScrollDirection(node.rect, viewport);
   throw new AppError('COMMAND_FAILED', failure.message, {
     ...failure.details,
     rect: node.rect,
     viewport,
-    hint: failure.hint,
+    ...(scrollDirection ? { scrollDirection } : {}),
+    hint: failure.hint(scrollDirection),
   });
 }

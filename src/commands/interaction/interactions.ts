@@ -177,7 +177,12 @@ function readScrollDirection(value: string | undefined): ScrollInputDirection {
   ) {
     return value;
   }
-  throw new AppError('INVALID_ARGS', `Unknown direction: ${String(value)}`);
+  // #1366: agents recovering from an off-screen target often mis-shape this as
+  // `scroll @ref down` or `scroll down @ref`. scroll takes no target — name the
+  // grammar so the retry lands instead of cycling through arg orders.
+  throw new AppError('INVALID_ARGS', `Unknown direction: ${String(value)}`, {
+    hint: 'scroll takes a direction first, then an optional amount: scroll <up|down|left|right|top|bottom> [amount]. It takes no @ref or selector — scroll the whole viewport, then retry the target with a selector.',
+  });
 }
 
 function readLongPressTargetPositionals(positionals: string[]): {

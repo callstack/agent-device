@@ -2,6 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   buildMobileSnapshotPresentation,
+  classifyOffscreenScrollDirection,
   isNodeVisibleInEffectiveViewport,
 } from '../../snapshot/mobile-snapshot-semantics.ts';
 import type { SnapshotNode } from '../../kernel/snapshot.ts';
@@ -322,6 +323,42 @@ test('visibility is false for node just outside viewport boundary', () => {
   ];
 
   assert.equal(isNodeVisibleInEffectiveViewport(nodes[1]!, nodes), false);
+});
+
+test('classifyOffscreenScrollDirection names the reveal direction per edge', () => {
+  const viewport = { x: 0, y: 0, width: 400, height: 800 };
+  // Below the viewport bottom -> scroll down; above the top -> scroll up.
+  assert.equal(
+    classifyOffscreenScrollDirection({ x: 20, y: 1200, width: 120, height: 44 }, viewport),
+    'down',
+  );
+  assert.equal(
+    classifyOffscreenScrollDirection({ x: 20, y: -100, width: 120, height: 44 }, viewport),
+    'up',
+  );
+  // Horizontal mirror: fully left of the viewport -> scroll left; right -> right.
+  assert.equal(
+    classifyOffscreenScrollDirection({ x: -320, y: 240, width: 300, height: 50 }, viewport),
+    'left',
+  );
+  assert.equal(
+    classifyOffscreenScrollDirection({ x: 500, y: 240, width: 120, height: 44 }, viewport),
+    'right',
+  );
+});
+
+test('classifyOffscreenScrollDirection picks the dominant axis and ignores on-screen rects', () => {
+  const viewport = { x: 0, y: 0, width: 400, height: 800 };
+  // Off both the bottom (overshoot 400) and the right (overshoot 100): down wins.
+  assert.equal(
+    classifyOffscreenScrollDirection({ x: 500, y: 1200, width: 120, height: 44 }, viewport),
+    'down',
+  );
+  // Overlapping the viewport on every edge is not off-screen on a single axis.
+  assert.equal(
+    classifyOffscreenScrollDirection({ x: 20, y: 40, width: 120, height: 44 }, viewport),
+    null,
+  );
 });
 
 test('mobile presentation infers hidden content from vertical scroll indicator value at top', () => {
