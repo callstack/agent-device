@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { sleep } from '../../utils/timeouts.ts';
 import { normalizeError } from '../../kernel/errors.ts';
+import type { AndroidHelperContentRecoveryDecision } from '../../platforms/android/snapshot-content-recovery.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from '../session-snapshot.ts';
 import { isSparseSnapshotQualityVerdict } from '../../snapshot/snapshot-quality.ts';
 import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
@@ -222,11 +223,19 @@ export function toReplayRepairHintCapture(
 // target-verification capture (`verifyReplayActionTarget`) right after an
 // `open --relaunch` step is often just the app still launching/mounting, not
 // a real divergence — the SAME transition `wait`'s keep-polling landmark
-// verification (#1349) rides out on its own (post-resolution) path. Bounded
-// by BOTH a wall-clock deadline and a fixed delay-list length, so a
-// mocked-instant `sleep` in tests cannot turn this into a busy-loop — it just
-// runs the list once (mirrors the Android freshness retry shape in
-// `snapshot-capture.ts`).
+// verification (#1349) rides out on its own (post-resolution) path.
+//
+// The `DIVERGENCE_CAPTURE_RETRY_DEADLINE_MS` budget is a DELAY-ONLY bound: it
+// caps how long this loop SLEEPS between attempts (measured from the first
+// attempt, so a slow first capture eats into the same budget rather than
+// getting a free 12s on top), not how long any individual capture attempt
+// itself may run — a capture already carries its own platform-level bounds
+// (adb/xcodebuild command timeouts) this loop does not re-implement or
+// shorten. The fixed-length `DIVERGENCE_CAPTURE_RETRY_DELAYS_MS` array is a
+// SEPARATE, independent bound: it caps the attempt COUNT regardless of the
+// deadline, so a mocked-instant `sleep` in tests cannot turn this into a
+// busy-loop racing real time — it just runs the list once (mirrors the
+// Android freshness retry shape in `snapshot-capture.ts`).
 //
 // Opt-in via `retryLaunchRace`, NOT the default for every caller: the
 // post-failure diagnostic capture (`buildReplayFailureDivergence`) and the
@@ -248,6 +257,10 @@ export async function captureDivergenceObservation(params: {
 }): Promise<DivergenceObservation> {
   const { session, sessionName, sessionStore, logPath, action, retryLaunchRace = false } = params;
   const flags = divergenceCaptureFlags(action);
+  // Anchored BEFORE the first attempt, not after: a slow first capture
+  // shrinks the retry budget rather than getting a free `DEADLINE_MS` on top
+  // of however long it took.
+  const deadline = Date.now() + DIVERGENCE_CAPTURE_RETRY_DEADLINE_MS;
 
   let attempt = await captureDivergenceObservationAttempt({
     session,
@@ -258,7 +271,6 @@ export async function captureDivergenceObservation(params: {
   });
   if (!retryLaunchRace) return attempt.observation;
 
-  const deadline = Date.now() + DIVERGENCE_CAPTURE_RETRY_DEADLINE_MS;
   for (const delayMs of DIVERGENCE_CAPTURE_RETRY_DELAYS_MS) {
     if (attempt.observation.state === 'available' || !attempt.retryable) break;
     const remainingMs = deadline - Date.now();
@@ -276,20 +288,50 @@ export async function captureDivergenceObservation(params: {
   return attempt.observation;
 }
 
+// The ONLY three reason codes `rejectAndroidHelperContentUnavailable`
+// (`platforms/android/snapshot.ts`) attaches as
+// `androidSnapshotHelperFailureReason` — mirrors
+// `AndroidHelperContentRecoveryDecision['reason']`
+// (`platforms/android/snapshot-content-recovery.ts`), the SOLE site that
+// classifies a structurally-succeeded helper capture as too thin/foreign to
+// trust: the helper produced accessibility XML, but its content doesn't meet
+// the bar. This is deliberately narrower than the error's own `retriable`
+// flag: Android's adb layer (`adb-executor.ts`) ALSO marks transport-level
+// mechanism failures retriable (`connection_dropped`, `device_offline`,
+// `server_version_mismatch`) because an unchanged retry of the SAME adb
+// command can succeed there — a true statement about adb, but not evidence
+// this specific capture failure is a content-quality verdict rather than a
+// genuine mechanism failure (a crashed/timed-out helper invocation, a
+// dropped adb connection, a missing helper artifact) a launch-race retry
+// cannot fix. `androidSnapshotHelperCaptureError`'s generic capture-failure
+// wrap (`rejectAndroidHelperCaptureFailure`) ALSO sets
+// `androidSnapshotHelperFailureReason` — but to an arbitrary formatted
+// failure message, never one of these three literals, so this exact-value
+// membership check does not also catch that unrelated, non-content-quality
+// case.
+const ANDROID_CAPTURE_CONTENT_QUALITY_REASONS: ReadonlySet<
+  AndroidHelperContentRecoveryDecision['reason']
+> = new Set(['empty-helper-output', 'system-window-only', 'content-poor-app-window']);
+
+function isCaptureContentQualityFailure(error: unknown): boolean {
+  const reason = normalizeError(error).details?.androidSnapshotHelperFailureReason;
+  return (
+    typeof reason === 'string' &&
+    ANDROID_CAPTURE_CONTENT_QUALITY_REASONS.has(
+      reason as AndroidHelperContentRecoveryDecision['reason'],
+    )
+  );
+}
+
 type DivergenceCaptureAttempt = {
   observation: DivergenceObservation;
   /**
    * Meaningful only when `observation.state === 'unavailable'`: whether this
    * particular failure is a content-quality verdict a launch-race retry
    * should ride out, versus a mechanism failure that will not resolve itself
-   * (helper artifact missing, device offline). Mirrors #1381's
-   * `isUnreadableCaptureContentError` taxonomy for the wait keep-poll loop —
-   * content verdict retries, mechanism failure fails fast — via the SAME
-   * signal Android's helper capture path already emits for exactly this
-   * distinction: `retriable: true` on a content-poor/system-window-only
-   * rejection (`rejectAndroidHelperContentUnavailable`,
-   * `platforms/android/snapshot.ts`), left unset on a permanent one (the
-   * helper artifact itself missing, `androidSnapshotHelperUnavailableError`).
+   * (helper artifact missing, device offline, adb connection dropped).
+   * Mirrors #1381's `isUnreadableCaptureContentError` taxonomy for the wait
+   * keep-poll loop — content verdict retries, mechanism failure fails fast.
    * The non-throwing `sparse-snapshot` verdict is always retryable — it is
    * already a content-quality signal, never a mechanism failure.
    */
@@ -352,7 +394,7 @@ async function captureDivergenceObservationAttempt(params: {
         reason: 'capture-failed',
         hint: `Post-failure snapshot capture failed (${error instanceof Error ? error.message : String(error)}); the original replay failure is unaffected.`,
       },
-      retryable: normalizeError(error).retriable === true,
+      retryable: isCaptureContentQualityFailure(error),
     };
   }
 }

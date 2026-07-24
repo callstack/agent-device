@@ -500,17 +500,20 @@ test('a target-binding divergence carries a real computed resume (step 5 wiring,
 // #1385: a step-2 press right after `open --relaunch` can capture while the
 // app is still launching/mounting. The bounded retry in
 // `captureDivergenceObservation` (`retryLaunchRace`) only rides out a
-// content-quality verdict — the same `retriable: true` signal Android's
-// helper capture path already emits for a content-poor/system-window-only
-// rejection (`rejectAndroidHelperContentUnavailable`) — not a mechanism
-// failure (helper artifact missing, device offline), which must still fail
-// fast. `throwRetriableCaptureFailure`/`throwPermanentCaptureFailure` below
-// build the two shapes.
-function throwRetriableCaptureFailure(): never {
+// content-quality verdict — Android's helper path attaches
+// `androidSnapshotHelperFailureReason` as one of exactly three literals
+// ('empty-helper-output' | 'system-window-only' | 'content-poor-app-window')
+// on that verdict (`rejectAndroidHelperContentUnavailable`) — never a
+// mechanism failure (helper artifact missing, device offline, adb connection
+// dropped), which must still fail fast even when the underlying error
+// separately carries `retriable: true` for its own (adb-level, same-command)
+// retry semantics. The three `throw*` helpers below build the three shapes
+// this distinction must tell apart.
+function throwContentQualityCaptureFailure(): never {
   throw new AppError(
     'COMMAND_FAILED',
     'Android snapshot helper returned insufficient foreground app content',
-    { retriable: true },
+    { androidSnapshotHelperFailureReason: 'content-poor-app-window', retriable: true },
   );
 }
 
@@ -521,6 +524,19 @@ function throwPermanentCaptureFailure(): never {
   );
 }
 
+function throwAdbMechanismFailureMarkedRetriable(): never {
+  // Mirrors `classifyAdbFailure`'s `connection_dropped` entry
+  // (adb-executor.ts): `retriable: true` at the adb-transport level (retrying
+  // the SAME adb command can succeed), but not evidence of a content-quality
+  // capture verdict — a launch-race retry has no reason to believe THIS
+  // failure resolves itself, and must not be fooled by the bare `retriable`
+  // flag into treating it as one.
+  throw new AppError('COMMAND_FAILED', 'adb: transport error', {
+    adbFailure: 'connection_dropped',
+    retriable: true,
+  });
+}
+
 test('a transient content-quality capture failure right after launch recovers within the bounded retry, and the action still dispatches', async () => {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), 'agent-device-replay-target-verify-launch-race-recover-'),
@@ -528,12 +544,12 @@ test('a transient content-quality capture failure right after launch recovers wi
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
 
-  // First two captures fail closed with a content-quality (retriable) verdict
-  // (mirrors a mid-launch/mid-mount capture); the third lands after the app
-  // settles and finds the recorded target.
+  // First two captures fail closed with a content-quality verdict (mirrors a
+  // mid-launch/mid-mount capture); the third lands after the app settles and
+  // finds the recorded target.
   mockDispatchCommand
-    .mockImplementationOnce(async () => throwRetriableCaptureFailure())
-    .mockImplementationOnce(async () => throwRetriableCaptureFailure())
+    .mockImplementationOnce(async () => throwContentQualityCaptureFailure())
+    .mockImplementationOnce(async () => throwContentQualityCaptureFailure())
     .mockResolvedValue({
       nodes: [
         {
@@ -573,7 +589,7 @@ test('a content-quality capture failure that never recovers still fails closed a
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
 
-  mockDispatchCommand.mockImplementation(async () => throwRetriableCaptureFailure());
+  mockDispatchCommand.mockImplementation(async () => throwContentQualityCaptureFailure());
 
   const invoked: DaemonRequest[] = [];
   const response = await runReplayScriptFile({
@@ -608,9 +624,43 @@ test('a permanent (non-content-quality) capture failure fails fast without retry
   const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
 
   // A missing helper artifact is not something a launch-race retry can fix —
-  // it never carries `retriable: true`, so the capture must fail on the
-  // FIRST attempt, not spend the retry budget on a foregone conclusion.
+  // it never carries `androidSnapshotHelperFailureReason` at all, so the
+  // capture must fail on the FIRST attempt, not spend the retry budget on a
+  // foregone conclusion.
   mockDispatchCommand.mockImplementation(async () => throwPermanentCaptureFailure());
+
+  const invoked: DaemonRequest[] = [];
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      invoked.push(req);
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(invoked.length).toBe(0);
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  const divergence = response.error.details?.divergence as Record<string, unknown>;
+  expect(divergence.kind).toBe('identity-unverifiable');
+  expect(mockDispatchCommand).toHaveBeenCalledTimes(1);
+});
+
+test('an adb mechanism failure marked retriable at the transport level still fails fast (retriable is not a content-quality signal)', async () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'agent-device-replay-target-verify-launch-race-adb-mechanism-'),
+  );
+  const { sessionStore, sessionName } = setupSession(root);
+  const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
+
+  // A dropped adb connection carries `retriable: true` (retrying the SAME adb
+  // command can succeed) but no `androidSnapshotHelperFailureReason` content
+  // verdict — the launch-race retry must not treat the bare `retriable` flag
+  // as proof this is a "the app is still mounting" content-quality failure.
+  mockDispatchCommand.mockImplementation(async () => throwAdbMechanismFailureMarkedRetriable());
 
   const invoked: DaemonRequest[] = [];
   const response = await runReplayScriptFile({

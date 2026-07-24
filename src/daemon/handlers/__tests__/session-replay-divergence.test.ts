@@ -14,7 +14,8 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
 // in `snapshot-capture.ts` (`capturePostActionAwareSnapshot`) awaits; making it
 // instant does not change control flow — the loop still runs, retries, and
 // re-captures — so the test still proves two dispatches and use of the retried
-// tree. No other test in this file triggers a sleep path.
+// tree. The #1385 `retryLaunchRace` retry loop (`captureDivergenceObservation`)
+// awaits this SAME `sleep`, further down in this file.
 vi.mock('../../../utils/timeouts.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/timeouts.ts')>();
   return { ...actual, sleep: vi.fn(async () => {}) };
@@ -22,6 +23,7 @@ vi.mock('../../../utils/timeouts.ts', async (importOriginal) => {
 
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import type { RawSnapshotNode } from '../../../kernel/snapshot.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import {
   makeAndroidSession,
   makeIosSession,
@@ -32,7 +34,10 @@ import {
   walkNonRawAndroidFixture,
 } from '../../../__tests__/test-utils/android-ui-hierarchy-fixtures.ts';
 import { SessionStore } from '../../session-store.ts';
-import { buildReplayFailureDivergence } from '../session-replay-divergence.ts';
+import {
+  buildReplayFailureDivergence,
+  captureDivergenceObservation,
+} from '../session-replay-divergence.ts';
 
 const mockDispatchCommand = vi.mocked(dispatchCommand);
 
@@ -1134,4 +1139,57 @@ test.each([
   expect(screen.refs.every((ref) => published.get(ref.ref)?.hittable === true)).toBe(true);
   expect(screen.refs.some((ref) => ref.label === 'Battery charging, 100 percent.')).toBe(false);
   expect(screen.refs.some((ref) => ref.label === 'Wifi signal full.')).toBe(false);
+});
+
+// #1385 P2: the retry deadline is a DELAY-ONLY budget, not a per-attempt
+// capture timeout — this loop does not itself bound how long a single
+// capture attempt runs, only how much SLEEP time it spends between attempts
+// (measured from the first attempt). This test proves that bound is real
+// wall-clock behavior, not merely "run the fixed 7-entry delay list": each
+// mocked capture attempt here advances the (fake) system clock by 5s to
+// stand in for a slow capture, so the 12s deadline is exhausted after just 3
+// attempts — far short of the 8 attempts (1 + 7 delays) the array alone would
+// allow — proving the deadline, not the array length, is what stopped it.
+test('captureDivergenceObservation retryLaunchRace: the 12s deadline bounds retries even when captures themselves consume wall-clock time', async () => {
+  vi.useFakeTimers();
+  try {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-deadline-'));
+    const sessionStore = new SessionStore(path.join(root, 'sessions'));
+    const sessionName = 'default';
+    sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+
+    mockDispatchCommand.mockImplementation(async () => {
+      vi.setSystemTime(new Date(Date.now() + 5_000));
+      throw new AppError(
+        'COMMAND_FAILED',
+        'Android snapshot helper returned insufficient foreground app content',
+        { androidSnapshotHelperFailureReason: 'content-poor-app-window', retriable: true },
+      );
+    });
+
+    const action = {
+      ts: 0,
+      command: 'click',
+      positionals: ['label="Save"'],
+      flags: {},
+      result: { selectorChain: ['label="Save"', 'id="save"'] },
+    };
+
+    const observation = await captureDivergenceObservation({
+      session: sessionStore.get(sessionName)!,
+      sessionName,
+      sessionStore,
+      logPath: path.join(root, 'daemon.log'),
+      action,
+      retryLaunchRace: true,
+    });
+
+    expect(observation.state).toBe('unavailable');
+    // 1 initial attempt + 2 retries: the 3rd retry's pre-sleep remaining-budget
+    // check sees the deadline already passed (3 x 5s = 15s > 12s) and breaks
+    // BEFORE a 4th capture — not the 8 attempts the delay array alone permits.
+    expect(mockDispatchCommand).toHaveBeenCalledTimes(3);
+  } finally {
+    vi.useRealTimers();
+  }
 });
