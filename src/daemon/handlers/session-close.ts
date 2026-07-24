@@ -175,6 +175,20 @@ function toRepairPlatformCloseFailure(error: unknown): AppError {
   });
 }
 
+type SessionCloseTeardownResult = {
+  platformCloseError: unknown;
+  // #1391: an ordinary (non-repair) session's close-time script write (implicit
+  // from `open --save-script`, or this close's own `--save-script`) can refuse
+  // to publish (no-clobber target-exists, or any other fs AppError). Unlike the
+  // repair-armed commit (which keeps its session alive for a `--force` retry —
+  // ADR 0012 BLOCKER 2b), an ordinary session has no transaction to retry: its
+  // `close` already ran (or was skipped) and its teardown below must still
+  // release the lease/device claim and delete the session, exactly as a
+  // `platformCloseError` does not block them either. Surfaced separately so
+  // `handleCloseCommand` can report it AFTER teardown completes, never before.
+  saveScriptError?: AppError;
+};
+
 // Runs the failure-isolated resource teardown and the targeted platform close
 // (#1225). Returns the preserved platform-close error (if any); best-effort
 // cleanup failures are pushed into `cleanupFailures`. Never throws for a cleanup
@@ -192,7 +206,7 @@ async function runSessionCloseTeardown(params: {
   // see `handleCloseCommand`. Dispatching it again here would be redundant at
   // best and a double-close at worst, so it is skipped for that case only.
   skipPlatformClose: boolean;
-}): Promise<unknown> {
+}): Promise<SessionCloseTeardownResult> {
   const { req, session, sessionName, logPath, sessionStore, cleanupFailures, repairArmed } = params;
   const attemptCleanup = async (step: string, run: () => Promise<void>): Promise<void> => {
     try {
@@ -222,7 +236,9 @@ async function runSessionCloseTeardown(params: {
   // succeed. Only an ordinary (non-repair) session records `close` + writes its
   // session log here, and — per #1225 — a failed platform close is not recorded
   // as `Closed`.
+  let saveScriptError: AppError | undefined;
   if (!repairArmed) {
+    const actionsBeforeClose = session.actions.length;
     if (!platformCloseError) {
       recordSessionAction(sessionStore, session, req, 'close', {
         session: session.name,
@@ -232,12 +248,47 @@ async function runSessionCloseTeardown(params: {
     if (req.flags?.saveScript) {
       session.recordSession = true;
     }
-    sessionStore.writeSessionLog(session, { force: resolveEffectiveSaveScriptForce(req, session) });
+    try {
+      sessionStore.writeSessionLog(session, {
+        force: resolveEffectiveSaveScriptForce(req, session),
+      });
+    } catch (error) {
+      // #1391: never let a failed script publish leak the session/device claim
+      // (item 1) or leave an unrecorded `close` action for a later successful
+      // write to duplicate (item 2) — roll back exactly like the repair path's
+      // `commitRepairBeforeClose` does, then let teardown continue below.
+      session.actions.length = actionsBeforeClose;
+      saveScriptError = toOrdinaryCloseSaveScriptFailure(error);
+    }
   }
   await attemptCleanup('materialized_paths', () =>
     cleanupRetainedMaterializedPathsForSession(sessionName),
   );
-  return platformCloseError;
+  return { platformCloseError, saveScriptError };
+}
+
+/**
+ * #1391: normalizes an ordinary (non-repair) session's close-time script-write
+ * failure. `SessionScriptWriter.write()` only ever throws a genuine `AppError`
+ * here (a non-clobber refusal or another fs AppError — see
+ * `handleSessionScriptWriteFailure`'s non-repair, non-active-publication
+ * branch); anything else is already swallowed into a silent `{written:false}`
+ * there. The message is corrected for THIS call site: the shared
+ * `publishHealedScriptAtomically` wording ("retry close --save-script")
+ * describes the repair-commit retry contract, which does not apply here — by
+ * the time the agent sees this, `close` has already released the device and
+ * deleted the session, so there is nothing left to retry in place.
+ */
+function toOrdinaryCloseSaveScriptFailure(error: unknown): AppError {
+  const detail = error instanceof AppError ? error.message : normalizeError(error).message;
+  return new AppError(
+    'COMMAND_FAILED',
+    `The session was closed, but its script was not saved: ${detail}`,
+    {
+      hint: 'Remove the existing target (or pass --force/--overwrite), then re-record with open --save-script.',
+      retriable: false,
+    },
+  );
 }
 
 type CleanupRunner = (step: string, run: () => Promise<void>) => Promise<void>;
@@ -475,7 +526,7 @@ export async function handleCloseCommand(params: {
   // is still attempted. The provider lease is committed only after that teardown,
   // and a failed provider release keeps the session retryable.
   const cleanupFailures: SessionCleanupFailure[] = [];
-  const platformCloseError = await runSessionCloseTeardown({
+  const { platformCloseError, saveScriptError } = await runSessionCloseTeardown({
     req,
     session,
     sessionName,
@@ -498,6 +549,9 @@ export async function handleCloseCommand(params: {
     phase: 'session_close_cleanup_failed',
     failures: cleanupFailures,
   });
+  // #1391: a failed script save is never a reason to keep the device claimed —
+  // only a genuine platform-close failure (the device may still be busy) or a
+  // resource-cleanup failure withholds it, exactly as before.
   if (!platformCloseError && !cleanupAggregate) {
     await clearAdvisoryDeviceClaim(session.deviceClaim);
   }
@@ -507,6 +561,10 @@ export async function handleCloseCommand(params: {
   // diagnostic above so per-resource failures stay visible.
   if (platformCloseError) throw platformCloseError;
   if (cleanupAggregate) throw cleanupAggregate;
+  // #1391: surfaced last — the session already ended and the device is already
+  // released above, unlike the two failures above it. Nothing left to retry in
+  // place; `toOrdinaryCloseSaveScriptFailure`'s hint reflects that.
+  if (saveScriptError) throw saveScriptError;
   const shutdownResult = await maybeShutdownSessionTarget({
     device: session.device,
     shutdownRequested: req.flags?.shutdown,
