@@ -35,6 +35,7 @@ agent-device help remote
 agent-device help macos
 agent-device help dogfood
 agent-device help tv
+agent-device help ios-system-ui  # iOS SpringBoard, widgets, and system-UI surfaces
 ```
 
 Default loop: `open -> snapshot/-i -> get/is/find or press/fill/scroll/wait -> verify -> close`. When target-specific help says capture or selectors are unsupported, use its control-only loop and the device display as visual truth.

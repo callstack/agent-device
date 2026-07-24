@@ -58,6 +58,10 @@ const AGENT_WORKFLOWS = [
     description: 'Use when using a connected phone/tablet or iOS signing setup',
   },
   {
+    label: 'agent-device help ios-system-ui',
+    description: 'Use when driving iOS SpringBoard, widgets, or other system-UI surfaces',
+  },
+  {
     label: 'agent-device help remote',
     description: 'Use when working through cloud config, tenants, leases, or local tunnels',
   },
@@ -438,7 +442,8 @@ Escalate:
   help react-devtools  React Native performance, profiling, props/state/hooks, slow renders, rerenders
   help react-native   React Native app automation hazards, overlays, Metro/Re.Pack, and routing
   help remote          remote/cloud config, tenant, lease, local service tunnels
-  help macos           desktop, frontmost-app, menu bar surfaces`,
+  help macos           desktop, frontmost-app, menu bar surfaces
+  help ios-system-ui   iOS SpringBoard, widget add/edit/remove, system-UI surfaces`,
   },
   tv: {
     summary: 'Android TV, tvOS, and Vega VVD focus-first remote navigation',
@@ -842,7 +847,39 @@ iOS physical-device prerequisites:
 
 Android physical-device prerequisites:
   Enable USB debugging and confirm the device appears in agent-device devices --platform android.
-  Android does not need the iOS runner signing setup. For React Native/Expo Metro reachability, read help react-native.`,
+  Android does not need the iOS runner signing setup. For React Native/Expo Metro reachability, read help react-native.
+
+For iOS SpringBoard, widget, or other system-UI surfaces, read agent-device help ios-system-ui.`,
+  },
+  'ios-system-ui': {
+    summary: 'iOS SpringBoard, widget, and system-surface workflow',
+    body: `agent-device help ios-system-ui
+
+Use this when a task needs iOS SpringBoard (home screen), widget add/edit/remove, or other system-UI surfaces instead of the app under test.
+
+This works today by opening SpringBoard as the session app; there is no separate widget/system command. System labels vary by iOS version and locale, so discover them from the current snapshot instead of relying on the literal strings shown below.
+
+Core loop:
+  1. Reach the app state you want to prepare (for example, arrange the widget/Live Activity data the app should show) with normal app automation, then agent-device open com.apple.springboard --platform ios. From an existing app session, agent-device home first also lands on the home screen, but open com.apple.springboard is what actually binds the session to SpringBoard for selector-driven commands.
+  2. agent-device snapshot -i to read the current localized SpringBoard controls.
+  3. agent-device longpress <x> <y> on an empty area of the home screen to enter edit mode. This is the one deliberate coordinate step; there is no reliable non-coordinate way to trigger it.
+  4. Re-snapshot and use selectors from the fresh tree to drive the Edit menu -> widget gallery -> search -> size picker -> Add Widget, for example:
+    agent-device snapshot -i
+    agent-device press 'label="Add Widget"'
+    agent-device fill 'label="Search"' "Calendar"
+  5. The widget-gallery search-result rows currently fall back to unlabeled nodes (a known capture gap), so tap the result by coordinates read from a screenshot until that is fixed:
+    agent-device screenshot
+    agent-device press <x> <y>
+  6. Continue with the semantic size picker and agent-device press 'label="Add Widget"' to place it.
+  7. To edit or remove an installed widget, longpress it, then re-snapshot and use the fresh context-menu selectors (Edit Widget / Remove Widget).
+  8. Use screenshots for visual assertions, and as the fallback wherever a system surface exposes sparse accessibility, not only in the gallery step.
+  9. Reopen the app bundle under test (agent-device open <app-id> --platform ios) to return to normal app automation; leaving SpringBoard bound does not resume the app session on its own.
+
+Rules:
+  Do not hard-code Edit/Done/Add Widget or other SpringBoard label text into a plan as a fixed assumption; take them from the latest snapshot -i so the plan survives iOS version/locale differences.
+  A real system permission alert can appear mid-flow; it composes with this workflow normally, so handle it with alert wait/accept/dismiss or by pressing the visible label like any other step.
+  Prefer refs/selectors from the fresh snapshot for every step except the two documented coordinate fallbacks (empty-space long-press to enter edit mode, and the gallery search-result tap).
+  This topic covers what already works by opening SpringBoard as the session app. It does not yet cover keeping an app session open while alternating individual commands against SpringBoard, or Live Activity/Dynamic Island semantics; those land separately.`,
   },
   remote: {
     summary: 'Direct proxy, cloud profiles, and remote config',

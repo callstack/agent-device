@@ -20,6 +20,7 @@ agent-device help remote
 agent-device help web
 agent-device help macos
 agent-device help dogfood
+agent-device help ios-system-ui
 ```
 
 Skills are recommended for auto-routing when your agent runtime supports them, but they are not required. The CLI help topics are the version-matched operating contract.
@@ -1037,3 +1038,12 @@ For CLI-discoverable setup guidance, run `agent-device help physical-device`.
 - If you override the iOS runner derived-data path and also force cleanup, keep `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH` under the project `.tmp/` directory. Other cleanup override paths are rejected with a recovery hint.
 - For daemon startup troubleshooting:
   - follow stale metadata hints for `<state-dir>/daemon.json` and `<state-dir>/daemon.lock` (`state-dir` defaults to `~/.agent-device` for packaged installs, or a worktree-scoped dir under `~/.agent-device/dev/` from source)
+
+## iOS SpringBoard, widgets, and system-UI surfaces
+
+For CLI-discoverable workflow guidance, run `agent-device help ios-system-ui`.
+
+- `agent-device open com.apple.springboard --platform ios` binds the session to SpringBoard on a simulator or physical device today; there is no separate widget/system command.
+- The full widget add/edit/remove flow is selector-driven from a fresh `snapshot -i`, except two coordinate-based steps: the empty-space long-press that enters edit mode, and (until fixed) the widget-gallery search-result rows, which currently return unlabeled accessibility nodes.
+- SpringBoard labels vary by iOS version and locale; discover them from the current snapshot rather than hard-coding strings like `Edit` or `Add Widget`.
+- Reopen the app bundle under test to return to normal app automation after a SpringBoard step.
