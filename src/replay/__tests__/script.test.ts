@@ -183,6 +183,24 @@ test('type and fill replay scripts round-trip typing delay flags', () => {
   assert.equal(parsed[1]?.flags.delayMs, 40);
 });
 
+test('coordinate fill replay scripts preserve both coordinates and parameterized text', () => {
+  const script = formatReplayScriptForTest([
+    {
+      ts: Date.now(),
+      command: 'fill',
+      positionals: ['100', '482', '${PASSWORD}'],
+      flags: {},
+    },
+  ]);
+
+  assert.match(script, /fill 100 482 "\$\{PASSWORD\}"/);
+  assert.deepEqual(parseReplayScriptDetailed(script).actions[0]?.positionals, [
+    '100',
+    '482',
+    '${PASSWORD}',
+  ]);
+});
+
 test('type replay script preserves literal delay flag tokens', () => {
   const parsed = parseReplayScriptDetailed('type "--delay-ms" "abc"\n').actions;
   assert.deepEqual(parsed[0]?.positionals, ['--delay-ms', 'abc']);

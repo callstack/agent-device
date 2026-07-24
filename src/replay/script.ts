@@ -336,6 +336,11 @@ function parseReplayScriptLine(line: string): SessionAction | null {
       action.positionals = parsed.positionals;
       return action;
     }
+    const [maybeX, maybeY, ...coordinateText] = parsed.positionals;
+    if (isNumericToken(maybeX) && isNumericToken(maybeY)) {
+      action.positionals = [maybeX, maybeY, coordinateText.join(' ')];
+      return action;
+    }
     const [target, text, ...textRest] = parsed.positionals;
     if (target.startsWith('@')) {
       const ref = stripRecordedRefGeneration(target);
