@@ -209,7 +209,11 @@ test('capability matrix holds its admission invariants', () => {
 
   for (const [command, capability] of entries) {
     const hasPlatformBucket = Boolean(
-      capability.apple || capability.android || capability.linux || capability.web,
+      capability.apple ||
+      capability.android ||
+      capability.vega ||
+      capability.linux ||
+      capability.web,
     );
     // Every capability entry is now selectable purely by its platform buckets: the
     // per-command `supports()` gate was relocated onto the owning PlatformPlugin

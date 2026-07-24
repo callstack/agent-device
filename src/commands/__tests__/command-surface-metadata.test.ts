@@ -47,7 +47,15 @@ test('common command input accepts web platform selector', () => {
 
   const platformSchema = snapshotMetadata.inputSchema.properties?.platform;
   const input = snapshotMetadata.readInput({ platform: 'web' }) as { platform?: unknown };
-  assert.deepEqual(platformSchema?.enum, ['apple', 'android', 'linux', 'web', 'ios', 'macos']);
+  assert.deepEqual(platformSchema?.enum, [
+    'apple',
+    'android',
+    'vega',
+    'linux',
+    'web',
+    'ios',
+    'macos',
+  ]);
   assert.equal(input.platform, 'web');
 });
 

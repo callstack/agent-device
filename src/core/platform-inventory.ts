@@ -30,6 +30,11 @@ export async function listLocalDeviceInventory(
     });
   }
 
+  if (request.platform === 'vega') {
+    const { vegaPlugin } = await import('../platforms/vega/plugin.ts');
+    return await vegaPlugin.discoverDevices(request);
+  }
+
   if (request.platform) {
     const { listAppleDevices } = await import('../platforms/apple/core/devices.ts');
     return await listAppleDevices({

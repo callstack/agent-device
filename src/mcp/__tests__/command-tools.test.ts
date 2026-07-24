@@ -501,7 +501,7 @@ function prepareResultFor(platform: 'ios' | 'macos') {
 
 test('MCP boot/shutdown schemas advertise public Apple leaves, never internal apple', () => {
   const platformEnum = COMMAND_OUTPUT_SCHEMAS.boot.properties?.platform?.enum;
-  assert.deepEqual(platformEnum, ['ios', 'macos', 'android', 'linux', 'web']);
+  assert.deepEqual(platformEnum, ['ios', 'macos', 'android', 'vega', 'linux', 'web']);
   assert.equal(platformEnum?.includes('apple'), false);
   // shutdown shares the same resolved-device header.
   assert.deepEqual(COMMAND_OUTPUT_SCHEMAS.shutdown.properties?.platform?.enum, platformEnum);
@@ -558,7 +558,7 @@ test('MCP boot schema rejects the internal apple platform and unknown enum value
 
 test('MCP prepare schema mirrors its PublicPlatform contract', () => {
   const platformEnum = COMMAND_OUTPUT_SCHEMAS.prepare.properties?.platform?.enum;
-  assert.deepEqual(platformEnum, ['ios', 'macos', 'android', 'linux', 'web']);
+  assert.deepEqual(platformEnum, ['ios', 'macos', 'android', 'vega', 'linux', 'web']);
   assert.equal(platformEnum?.includes('apple'), false);
 
   for (const platform of ['ios', 'macos'] as const) {

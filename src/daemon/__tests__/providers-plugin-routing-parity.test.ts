@@ -47,6 +47,7 @@ const GATED_KEYS: PlatformGatedProviderResolverKey[] = [
   'androidAdbProvider',
   'appleRunnerProvider',
   'appleToolProvider',
+  'vegaToolProvider',
   'linuxToolProvider',
   'webProvider',
 ];
@@ -60,6 +61,7 @@ function gatedResolversByHand(device: DeviceInfo): Set<PlatformGatedProviderReso
     applies.add('appleRunnerProvider'); // was `!isApplePlatform(...)`
     applies.add('appleToolProvider'); // was `!isApplePlatform(...)`
   }
+  if (device.platform === 'vega') applies.add('vegaToolProvider');
   if (device.platform === 'linux') applies.add('linuxToolProvider'); // was `!== 'linux'`
   if (device.platform === 'web') applies.add('webProvider'); // was `!== 'web'`
   return applies;
@@ -125,6 +127,7 @@ test('every family carries the providers facet with the resolvers it owns', () =
     [...getPlugin('android').providers!.platformGatedResolvers],
     ['androidAdbProvider'],
   );
+  assert.deepEqual([...getPlugin('vega').providers!.platformGatedResolvers], ['vegaToolProvider']);
   assert.deepEqual(
     [...getPlugin('linux').providers!.platformGatedResolvers],
     ['linuxToolProvider'],
@@ -149,6 +152,7 @@ test('withRequestPlatformProviderScope invokes exactly the resolvers the former 
       androidAdbProvider: spy('androidAdbProvider'),
       appleRunnerProvider: spy('appleRunnerProvider'),
       appleToolProvider: spy('appleToolProvider'),
+      vegaToolProvider: spy('vegaToolProvider'),
       linuxToolProvider: spy('linuxToolProvider'),
       webProvider: spy('webProvider'),
       appLogProvider: spy('appLogProvider'),

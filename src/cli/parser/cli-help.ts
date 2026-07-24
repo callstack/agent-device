@@ -39,7 +39,7 @@ const AGENT_WORKFLOWS = [
   },
   {
     label: 'agent-device help tv',
-    description: 'Use when navigating Android TV or tvOS focus-first surfaces',
+    description: 'Use when navigating Android TV, tvOS, or Vega OS focus-first surfaces',
   },
   {
     label: 'agent-device help react-native',
@@ -209,7 +209,7 @@ Command shape:
   Snapshot refs look like @e12. After snapshot -i, use the exact @eN ref from that output.
   If the exact ref is not known yet, first output snapshot -i, then use a concrete example shape like press @e12 in the next command; do not write @<ref>, @ref, @Label_Name, or @eN placeholders.
   Close means agent-device close. App-owned back means back; system back means back --system.
-  Taps are press or click; tap is an alias for press. On Android TV and tvOS, read help tv and use tv-remote press up|down|left|right|select to move D-pad/remote focus before activating controls; use tv-remote longpress <button> for a held remote button. Gestures use swipe, longpress, or gesture <pan|fling|swipe|pinch|rotate|transform>. Use gesture swipe left|right for reliable in-page horizontal swipes, and gesture swipe right-edge for left-edge navigation/back gestures. gesture pan is one finger by default; add --pointer-count 2 for a parallel two-finger pan. Android swipe and multi-touch gestures use provider-native touch injection when available, then the bundled touch helper. iOS simulator multi-touch uses private XCTest synthesis for a continuous two-pointer path; otherwise it reports UNSUPPORTED_OPERATION.
+  Taps are press or click; tap is an alias for press. On Android TV, tvOS, and Vega OS, read help tv and use tv-remote press up|down|left|right|select to move D-pad/remote focus before activating controls; use tv-remote longpress <button> for a held remote button. Gestures use swipe, longpress, or gesture <pan|fling|swipe|pinch|rotate|transform>. Use gesture swipe left|right for reliable in-page horizontal swipes, and gesture swipe right-edge for left-edge navigation/back gestures. gesture pan is one finger by default; add --pointer-count 2 for a parallel two-finger pan. Android swipe and multi-touch gestures use provider-native touch injection when available, then the bundled touch helper. iOS simulator multi-touch uses private XCTest synthesis for a continuous two-pointer path; otherwise it reports UNSUPPORTED_OPERATION.
 
 Bootstrap:
   agent-device devices --platform ios
@@ -430,17 +430,17 @@ Escalate:
   help dogfood         exploratory QA report workflow
   help validate        engineering self-validation loops
   help debugging       logs, network, alerts, traces, flaky runtime failures
-  help tv              Android TV and tvOS focus-first remote navigation
+  help tv              Android TV, tvOS, and Vega OS focus-first remote navigation
   help react-devtools  React Native performance, profiling, props/state/hooks, slow renders, rerenders
   help react-native   React Native app automation hazards, overlays, Metro/Re.Pack, and routing
   help remote          remote/cloud config, tenant, lease, local service tunnels
   help macos           desktop, frontmost-app, menu bar surfaces`,
   },
   tv: {
-    summary: 'Android TV and tvOS focus-first remote navigation',
+    summary: 'Android TV, tvOS, and Vega OS focus-first remote navigation',
     body: `agent-device help tv
 
-Use this when the target is Android TV, Apple TV, or tvOS. TV surfaces are focus-first: move focus with remote/D-pad buttons, then activate the focused control.
+Use this when the target is Android TV, Apple TV/tvOS, or Amazon Fire TV on Vega OS. TV surfaces are focus-first: move focus with remote/D-pad buttons, then activate the focused control.
 
 Core loop:
   agent-device open Settings --platform android --target tv --session tv
@@ -450,13 +450,23 @@ Core loop:
   agent-device tv-remote press select --platform android --target tv --session tv
   agent-device screenshot ./tv-focus.png --overlay-refs --platform android --target tv --session tv
 
+Vega OS:
+  vega virtual-device start
+  agent-device devices --platform vega --target tv
+  agent-device open <component-id> --platform vega --target tv --session vega-tv
+  agent-device tv-remote press down --platform vega --target tv --session vega-tv
+  agent-device tv-remote press select --platform vega --target tv --session vega-tv
+  agent-device close <component-id> --session vega-tv
+  vega virtual-device stop
+
 Buttons:
   tv-remote press up|down|left|right|select|menu|home|back
   tv-remote longpress select
   tv-remote press select --duration-ms 500
   ok, center, and enter are input aliases for select; command output still reports button: "select".
   longpress is CLI sugar for --duration-ms 500. --duration-ms overrides that preset.
-  --duration-ms holds a tvOS remote button for that duration. On Android TV, any positive duration maps to the ADB longpress form because Android input keyevent has no exact hold duration.
+  --duration-ms holds a tvOS or Vega OS remote button for that exact duration. On Android TV, any positive duration maps to the ADB longpress form because Android input keyevent has no exact hold duration.
+  Vega OS uses the exact hold duration through inputd-cli on a developer-mode device.
 
 Android TV:
   Android TV uses ADB keyevents behind agent-device tv-remote. Keep command plans on agent-device; do not switch to raw adb keyevent.
@@ -467,11 +477,20 @@ tvOS:
   back maps to the Menu remote button; home maps to the Home remote button.
   Use --platform ios --target tv for Apple TV simulators and devices.
 
+Vega OS:
+  Vega OS is driven through the SDK-matched Vega CLI and VDA, not ADB.
+  Use --platform vega --target tv for a Vega Virtual Device or physical Vega Fire TV.
+  Use a component ID from the app package or Vega SDK tooling; agent-device app inventory is not yet supported.
+  Use --serial when more than one Vega VVD or physical TV is connected.
+  Start and stop the local emulator with vega virtual-device start|stop; agent-device does not boot the VVD implicitly.
+  Remote-button control requires Developer Mode on the selected device.
+  Initial support covers discovery, app open/close, back, home, and tv-remote. App inventory, snapshot, screenshot, selectors, install, touch/text/gesture, logs, and performance commands report unsupported until their Vega backends are implemented.
+
 Focus and visual truth:
-  If snapshot -i exposes a focused node, verify it with is focused <selector>.
+  On Android TV and tvOS, if snapshot -i exposes a focused node, verify it with is focused <selector>.
   Use wait focused=true only when repeated snapshots preserve focus metadata for the app.
-  If the app exposes only a surface view, or focus metadata is transient, use screenshot --overlay-refs, screenshot, or diff snapshot as visual truth and keep moving focus with tv-remote.
-  Do not assume press/click @ref works on Android TV or tvOS until the desired element is focused.`,
+  If the app exposes only a surface view, or focus metadata is transient, use screenshot --overlay-refs, screenshot, or diff snapshot as visual truth and keep moving focus with tv-remote. On Vega OS, use the VVD or physical display as visual truth until capture support lands.
+  Do not assume press/click @ref works on Android TV, tvOS, or Vega OS until the desired element is focused.`,
   },
   debugging: {
     summary: 'Targeted failure evidence without dumping stale context',
@@ -876,6 +895,7 @@ AWS Device Farm hosted-device flow:
   agent-device close
   agent-device artifacts --json
   agent-device disconnect
+  AWS Device Farm currently supports Android and iOS WebDriver sessions only; Vega OS and Vega Fire TV ARNs are not routed.
 
 Limrun direct-device flow:
   LIMRUN_API_KEY=...

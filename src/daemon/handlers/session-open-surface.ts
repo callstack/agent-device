@@ -65,7 +65,7 @@ export function buildOpenResult(params: {
     result.device = device.name;
     result.id = device.id;
     result.kind = device.kind;
-    if (device.platform === 'android') {
+    if (device.platform === 'android' || device.platform === 'vega') {
       result.serial = device.id;
     }
   }

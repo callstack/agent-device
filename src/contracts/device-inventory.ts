@@ -6,7 +6,12 @@ import {
   type PlatformSelector,
 } from '../kernel/device.ts';
 
-export const LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS = ['android', 'apple', 'linux'] as const;
+export const LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS = [
+  'android',
+  'apple',
+  'vega',
+  'linux',
+] as const;
 
 export type DeviceInventoryRequest = {
   platform?: PlatformSelector;
@@ -22,7 +27,7 @@ export type DeviceInventoryRequest = {
   androidSerialAllowlist?: string[];
 };
 
-export type DeviceInventoryGroup = 'android' | 'apple' | 'linux' | 'web';
+export type DeviceInventoryGroup = 'android' | 'apple' | 'vega' | 'linux' | 'web';
 export type DeviceInventoryGroupCounts = Record<
   DeviceInventoryGroup,
   { available: number; booted: number }
@@ -61,6 +66,7 @@ function emptyDeviceInventoryGroupCounts(): DeviceInventoryGroupCounts {
   return {
     android: { available: 0, booted: 0 },
     apple: { available: 0, booted: 0 },
+    vega: { available: 0, booted: 0 },
     linux: { available: 0, booted: 0 },
     web: { available: 0, booted: 0 },
   };

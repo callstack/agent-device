@@ -155,7 +155,7 @@ function buildClientDevicePlatformFields(
   platform: AgentDeviceDevice['platform'],
   id: string,
   simulatorSetPath?: string | null,
-): Pick<AgentDeviceSessionDevice, 'ios' | 'android'> {
+): Pick<AgentDeviceSessionDevice, 'ios' | 'android' | 'vega'> {
   return {
     ios:
       platform === 'ios'
@@ -165,6 +165,7 @@ function buildClientDevicePlatformFields(
           }
         : undefined,
     android: platform === 'android' ? { serial: id } : undefined,
+    vega: platform === 'vega' ? { serial: id } : undefined,
   };
 }
 
@@ -210,6 +211,7 @@ export function normalizeOpenDevice(
         : undefined,
     android:
       platform === 'android' ? { serial: readOptionalString(value, 'serial') ?? id } : undefined,
+    vega: platform === 'vega' ? { serial: readOptionalString(value, 'serial') ?? id } : undefined,
   };
 }
 

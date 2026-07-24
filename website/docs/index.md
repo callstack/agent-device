@@ -14,13 +14,13 @@ hero:
 
 features:
   - title: One CLI, many app surfaces
-    details: Control iOS, Android, tvOS, Android TV, macOS, and Linux desktop targets with consistent snapshot and interaction commands.
+    details: Control iOS, Android, tvOS, Android TV, Amazon Vega OS TV, macOS, and Linux desktop targets through one CLI.
   - title: Accessibility-first snapshots
-    details: Accessibility trees give agents structured UI context without forcing screenshot-only reasoning.
+    details: On supported targets, accessibility trees give agents structured UI context without forcing screenshot-only reasoning.
   - title: Agent-native interactions
     details: Tap, pan, fling, pinch, rotate, scroll, focus, type, assert, and find visible UI through refs, selectors, and semantic finders.
   - title: Built-in debugging and profiling
-    details: Collect session logs, inspect recent HTTP traffic, capture screenshots and recordings, and sample CPU, memory, startup, and frame-health metrics.
+    details: Use each target's supported backends to collect logs, inspect traffic, capture screens and recordings, and sample performance.
   - title: Session and replay
     details: Open apps, keep stateful context, and replay recorded `.ad` actions to reproduce flows without AI at runtime.
   - title: React Native internals

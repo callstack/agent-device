@@ -258,7 +258,7 @@ export function buildDeviceInventoryRequestFromFlags(
   if (flags.target && !platform) {
     throw new AppError(
       'INVALID_ARGS',
-      'Device target selector requires --platform. Use --platform ios|macos|android|linux|apple with --target mobile|tv|desktop.',
+      'Device target selector requires --platform. Use --platform ios|macos|android|vega|linux|apple with --target mobile|tv|desktop.',
     );
   }
   const iosSimulatorSetPath = resolveAppleSimulatorSetPathForSelector({

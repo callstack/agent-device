@@ -239,7 +239,7 @@ The perfect-shape refactor is complete and merged. Its end-state:
 - Typed result spine. Per-command typed results replaced the ad-hoc `Record`-typed returns across the
   daemon/dispatch path; errors gained machine-readable `retriable`/`supportedOn` signals on
   `DaemonError` (#939). Error-system conventions live in [ADR 0010](docs/adr/0010-error-system.md).
-- Apple platform model. Internally `Platform` is `apple` (plus `android`/`linux`/`web`) with an
+- Apple platform model. Internally `Platform` is `apple` (plus `android`/`vega`/`linux`/`web`) with an
   `appleOs` discriminant (`ios | ipados | tvos | watchos | visionos | macos`); the shared Apple engine
   lives under `src/platforms/apple/core/` with per-OS leaves under `src/platforms/apple/os/<os>/`.
   The public wire stays non-breaking: `PUBLIC_PLATFORMS` (`src/kernel/device.ts`) still emits

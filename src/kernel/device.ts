@@ -12,11 +12,11 @@ const APPLE_OS_VALUES = ['ios', 'ipados', 'tvos', 'watchos', 'visionos', 'macos'
 export type AppleOS = (typeof APPLE_OS_VALUES)[number];
 // Internal device platforms. Apple OSes collapse to a single `apple` platform; the
 // `appleOs` field on DeviceInfo is the sole OS discriminant.
-export const PLATFORMS = ['apple', 'android', 'linux', 'web'] as const;
+export const PLATFORMS = ['apple', 'android', 'vega', 'linux', 'web'] as const;
 export type Platform = (typeof PLATFORMS)[number];
 // The PUBLIC leaf platform strings the daemon emits and clients parse (approach b:
 // output never changes). Equals the pre-collapse `Platform` set.
-export const PUBLIC_PLATFORMS = ['ios', 'macos', 'android', 'linux', 'web'] as const;
+export const PUBLIC_PLATFORMS = ['ios', 'macos', 'android', 'vega', 'linux', 'web'] as const;
 export type PublicPlatform = (typeof PUBLIC_PLATFORMS)[number];
 // Accepted `--platform` selectors: the internal platforms plus the legacy Apple leaf
 // aliases `ios`/`macos`, which still resolve to `apple` devices (read-path back-compat).
@@ -252,10 +252,11 @@ export async function resolveDevice(
 
   if (selector.serial) {
     const match = candidates.find(
-      (device) => device.id === selector.serial && device.platform === 'android',
+      (device) => device.id === selector.serial && isSerialAddressablePlatform(device.platform),
     );
-    if (!match)
-      throw new AppError('DEVICE_NOT_FOUND', `No Android device with serial ${selector.serial}`);
+    if (!match) {
+      throw new AppError('DEVICE_NOT_FOUND', serialDeviceNotFoundMessage(selector));
+    }
     return match;
   }
 
@@ -320,7 +321,10 @@ function matchesExplicitDeviceSelector(device: DeviceInfo, selector: DeviceSelec
   if (selector.udid && !(device.id === selector.udid && isApplePlatform(device.platform))) {
     return false;
   }
-  if (selector.serial && !(device.id === selector.serial && device.platform === 'android')) {
+  if (
+    selector.serial &&
+    !(device.id === selector.serial && isSerialAddressablePlatform(device.platform))
+  ) {
     return false;
   }
   if (
@@ -330,6 +334,20 @@ function matchesExplicitDeviceSelector(device: DeviceInfo, selector: DeviceSelec
     return false;
   }
   return true;
+}
+
+function isSerialAddressablePlatform(platform: Platform): boolean {
+  return platform === 'android' || platform === 'vega';
+}
+
+function serialDeviceNotFoundMessage(selector: DeviceSelector): string {
+  if (selector.platform === 'android') {
+    return `No Android device with serial ${selector.serial}`;
+  }
+  if (selector.platform === 'vega') {
+    return `No Vega device with serial ${selector.serial}`;
+  }
+  return `No Android or Vega device with serial ${selector.serial}`;
 }
 
 function throwNoDevicesFound(selector: DeviceSelector, context: DeviceSelectionContext): never {

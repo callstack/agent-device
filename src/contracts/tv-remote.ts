@@ -6,11 +6,13 @@ type TvRemoteButtonDefinition = {
   aliases: readonly string[];
   androidKeyevent: string;
   appleRemoteButton: string;
+  vegaKey: string;
 };
 
 const TV_REMOTE_DURATION_MODE = {
   android: 'longpress',
   apple: 'exact',
+  vega: 'exact',
 } as const satisfies Record<string, TvRemoteDurationMode>;
 
 const TV_REMOTE_BUTTON_DEFINITIONS = {
@@ -18,41 +20,49 @@ const TV_REMOTE_BUTTON_DEFINITIONS = {
     aliases: [],
     androidKeyevent: 'KEYCODE_DPAD_UP',
     appleRemoteButton: 'up',
+    vegaKey: 'KEY_UP',
   },
   down: {
     aliases: [],
     androidKeyevent: 'KEYCODE_DPAD_DOWN',
     appleRemoteButton: 'down',
+    vegaKey: 'KEY_DOWN',
   },
   left: {
     aliases: [],
     androidKeyevent: 'KEYCODE_DPAD_LEFT',
     appleRemoteButton: 'left',
+    vegaKey: 'KEY_LEFT',
   },
   right: {
     aliases: [],
     androidKeyevent: 'KEYCODE_DPAD_RIGHT',
     appleRemoteButton: 'right',
+    vegaKey: 'KEY_RIGHT',
   },
   select: {
     aliases: ['ok', 'center', 'enter'],
     androidKeyevent: 'KEYCODE_DPAD_CENTER',
     appleRemoteButton: 'select',
+    vegaKey: 'KEY_ENTER',
   },
   menu: {
     aliases: [],
     androidKeyevent: 'KEYCODE_MENU',
     appleRemoteButton: 'menu',
+    vegaKey: 'KEY_MENU',
   },
   home: {
     aliases: [],
     androidKeyevent: 'KEYCODE_HOME',
     appleRemoteButton: 'home',
+    vegaKey: 'KEY_HOMEPAGE',
   },
   back: {
     aliases: [],
     androidKeyevent: 'KEYCODE_BACK',
     appleRemoteButton: 'menu',
+    vegaKey: 'KEY_BACK',
   },
 } as const satisfies Record<string, TvRemoteButtonDefinition>;
 
@@ -66,6 +76,8 @@ export type TvRemoteButton = (typeof TV_REMOTE_BUTTONS)[number];
 
 export type AppleTvRemoteButton =
   (typeof TV_REMOTE_BUTTON_DEFINITIONS)[TvRemoteButton]['appleRemoteButton'];
+
+export type VegaTvRemoteKey = (typeof TV_REMOTE_BUTTON_DEFINITIONS)[TvRemoteButton]['vegaKey'];
 
 export function parseTvRemoteButton(value: string | undefined): TvRemoteButton {
   const normalized = value?.toLowerCase();
@@ -88,6 +100,10 @@ export function toAppleTvRemoteButton(button: TvRemoteButton): AppleTvRemoteButt
 
 export function toAndroidTvRemoteKeyevent(button: TvRemoteButton): string {
   return TV_REMOTE_BUTTON_DEFINITIONS[button].androidKeyevent;
+}
+
+export function toVegaTvRemoteKey(button: TvRemoteButton): VegaTvRemoteKey {
+  return TV_REMOTE_BUTTON_DEFINITIONS[button].vegaKey;
 }
 
 export function tvRemoteDurationMode(

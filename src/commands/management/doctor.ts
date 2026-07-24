@@ -27,7 +27,7 @@ const doctorCommandDefinition = defineExecutableCommand(doctorCommandMetadata, (
 
 const doctorCliSchema = {
   usageOverride:
-    'doctor [--platform ios|android|macos|linux|web|apple] [--app <id-or-name>] [--remote]',
+    'doctor [--platform ios|android|vega|macos|linux|web|apple] [--app <id-or-name>] [--remote]',
   helpDescription:
     'Setup and recovery diagnostic for device, app, dev-server, and RN/Expo readiness issues. Reports local device inventory, active sessions, optional app discovery, scoped toolchain info, and Metro reachability inferred from cwd/runtime. On iOS simulators it also warms the XCTest runner build cache in the background when missing. Pass --app to verify a target app on the one matching booted device without opening a session. Use --remote to check remote connection setup without probing local devices. Default output is compact; use --json for full checks and evidence.',
   summary: 'Diagnose device, app, dev-server, and RN/Expo readiness',

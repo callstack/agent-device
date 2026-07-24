@@ -15,7 +15,7 @@
 
 Let your coding agent verify its changes in the running app.
 
-`agent-device` lets coding agents inspect, control, and verify apps on iOS, Android, TV, web, macOS, and Linux. Agents can read token-efficient accessibility snapshots, find elements by ref or selector, run device actions, and save evidence for review.
+`agent-device` lets coding agents inspect, control, and verify apps on iOS, Android, tvOS, Android TV, Amazon Vega OS TV, web, macOS, and Linux. Agents can read token-efficient accessibility snapshots where supported, find elements by ref or selector, run device actions, and save evidence for review. Vega OS support currently covers discovery, app lifecycle, and complete TV-remote control; its capture and selector backends are still unsupported.
 
 Your coding agent or QA tool reads each result and chooses the next command. `agent-device` runs the command and saves evidence when asked.
 
@@ -30,6 +30,7 @@ npm install -g agent-device@latest
 agent-device doctor
 agent-device --version
 agent-device help workflow
+agent-device help tv
 ```
 
 Run `agent-device doctor` yourself before handing the CLI to an agent. The installed CLI help defines current behavior. `agent-device help workflow` links to guides for debugging, replay, React Native profiling, and other tasks.
@@ -108,7 +109,7 @@ See [Commands](https://oss.callstack.com/agent-device/docs/commands) for the com
 
 ## How it works
 
-`agent-device` keeps device state in sessions. It sends commands to XCTest on iOS and tvOS, ADB and the snapshot helper on Android, a local helper on macOS, and AT-SPI on Linux.
+`agent-device` keeps device state in sessions. It sends commands to XCTest on iOS and tvOS, ADB and the snapshot helper on Android, Vega CLI/VDA on Amazon Vega OS, a local helper on macOS, and AT-SPI on Linux.
 
 Node.js apps can use the typed client or public subpaths. `agent-device/android-adb` provides the Android ADB provider interface, helpers for logcat, the clipboard, the keyboard, and apps, and port reverse management.
 

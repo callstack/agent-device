@@ -55,7 +55,10 @@ export function listSessionSelectorConflicts(
     mismatches.push({ key: 'udid', value: flags.udid });
   }
 
-  if (flags.serial && (device.platform !== 'android' || flags.serial !== device.id)) {
+  if (
+    flags.serial &&
+    ((device.platform !== 'android' && device.platform !== 'vega') || flags.serial !== device.id)
+  ) {
     mismatches.push({ key: 'serial', value: flags.serial });
   }
 

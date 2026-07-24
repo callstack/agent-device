@@ -1,5 +1,6 @@
 import { registerPlatformPlugin, type PlatformPlugin } from '../platform-plugin/plugin.ts';
 import { applePlugin } from '../../platforms/apple/plugin.ts';
+import { vegaPlugin } from '../../platforms/vega/plugin.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { isAudioProbeSupportedDevice } from '../../kernel/audio-probe-support.ts';
 import {
@@ -106,6 +107,7 @@ const webPlugin = {
 export const BUILTIN_PLATFORM_PLUGINS = [
   applePlugin,
   androidPlugin,
+  vegaPlugin,
   linuxPlugin,
   webPlugin,
 ] as const satisfies readonly PlatformPlugin[];

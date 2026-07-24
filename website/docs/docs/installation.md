@@ -26,6 +26,7 @@ agent-device help workflow
 agent-device help debugging
 agent-device help react-devtools
 agent-device help cdp
+agent-device help tv
 ```
 
 Some agent clients run commands in an environment that differs from the user's normal install shell. If `agent-device` is missing in the agent terminal but was installed globally elsewhere, resolve the command the same way the user would from a normal terminal session, then use the absolute binary path for agent commands. This may require inspecting shell startup behavior or package-manager/global bin locations; do not assume the agent process `PATH` is the user's `PATH`.
@@ -67,7 +68,24 @@ One-off `npx` usage is fine for humans and scripts that intentionally fetch from
 - Node.js 22+
 - Xcode for iOS simulator/device automation (`simctl` + `devicectl`)
 - Android SDK / ADB for Android
+- Amazon Vega Developer Tools and an SDK-matched Vega Virtual Device for Vega OS TV
 - On macOS desktop targets, Swift 5.9+ / Xcode command-line tools are used to build the local `agent-device-macos-helper` on first use from source checkouts
+
+## Vega OS TV prerequisites
+
+Install the latest Amazon Vega Developer Tools and matching Vega SDK/VVD through Amazon's supported installer, then load its environment and verify the tools:
+
+```bash
+source ~/vega/env
+vega --version
+vega doctor
+vega device list
+```
+
+- Start and stop the local emulator with `vega virtual-device start` and `vega virtual-device stop`; `agent-device` does not boot it implicitly.
+- Enable Developer Mode before controlling a physical Vega OS Fire TV.
+- Use `agent-device devices --platform vega --target tv`, then select a specific VVD or physical target with `--serial` when more than one is connected.
+- Appium is optional evidence tooling; it is not required for agent-device discovery, app lifecycle, or remote-button control.
 
 ## macOS desktop notes
 

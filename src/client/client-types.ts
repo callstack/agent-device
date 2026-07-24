@@ -188,6 +188,9 @@ export type AgentDeviceDevice = {
   android?: {
     serial: string;
   };
+  vega?: {
+    serial: string;
+  };
 };
 
 export type AgentDeviceCapabilitiesResult = {
@@ -211,6 +214,9 @@ export type AgentDeviceSessionDevice = {
     simulatorSetPath?: string | null;
   };
   android?: {
+    serial: string;
+  };
+  vega?: {
     serial: string;
   };
 };

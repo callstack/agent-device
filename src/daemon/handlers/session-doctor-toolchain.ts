@@ -25,9 +25,54 @@ export async function appendToolchainChecks(
     appendDoctorCheck(checks, await androidToolchainCheck());
     return;
   }
+  if (platform === 'vega') {
+    appendDoctorCheck(checks, await vegaToolchainCheck());
+    return;
+  }
   if (platform === 'ios' || platform === 'macos' || platform === 'apple') {
     appendDoctorCheck(checks, await appleToolchainCheck());
   }
+}
+
+async function vegaToolchainCheck(): Promise<DoctorCheck> {
+  const { resolveVegaToolProvider } = await import('../../platforms/vega/tool-provider.ts');
+  const provider = resolveVegaToolProvider();
+  if (!(await provider.isAvailable())) {
+    return {
+      id: 'toolchain',
+      status: 'info',
+      summary: 'Vega toolchain: Vega CLI not found.',
+      hint: 'Install Vega Developer Tools or ensure ~/vega/bin/vega is executable.',
+      command: 'vega --version',
+    };
+  }
+
+  const version = await provider.version({
+    allowFailure: true,
+    timeoutMs: TOOLCHAIN_TIMEOUT_MS,
+  });
+  const inventory = await provider.listDevices({
+    allowFailure: true,
+    timeoutMs: TOOLCHAIN_TIMEOUT_MS,
+  });
+  const versionLine = firstOutputLine(version.stdout);
+  const hasConnectedDevice =
+    inventory.exitCode === 0 && !/^\s*no devices found\s*$/i.test(inventory.stdout);
+
+  return {
+    id: 'toolchain',
+    status: version.exitCode === 0 ? 'pass' : 'info',
+    summary: versionLine
+      ? `Vega toolchain: ${versionLine}; ${hasConnectedDevice ? 'device connected' : 'no connected device'}.`
+      : 'Vega toolchain: CLI found but version check failed.',
+    hint: hasConnectedDevice
+      ? undefined
+      : 'Start the Vega Virtual Device or connect a developer-mode Vega OS TV.',
+    evidence: {
+      vegaVersion: versionLine ?? null,
+      deviceList: inventory.stdout.trim() || null,
+    },
+  };
 }
 
 async function androidToolchainCheck(): Promise<DoctorCheck> {
@@ -142,11 +187,15 @@ async function commandFirstLine(cmd: string, args: string[]): Promise<string | u
   try {
     const result = await runCmd(cmd, args, { allowFailure: true, timeoutMs: TOOLCHAIN_TIMEOUT_MS });
     if (result.exitCode !== 0) return undefined;
-    return result.stdout
-      .split('\n')
-      .map((line) => line.trim())
-      .find(Boolean);
+    return firstOutputLine(result.stdout);
   } catch {
     return undefined;
   }
+}
+
+function firstOutputLine(output: string): string | undefined {
+  return output
+    .split('\n')
+    .map((line) => line.trim())
+    .find(Boolean);
 }

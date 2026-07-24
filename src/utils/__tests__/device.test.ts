@@ -32,6 +32,8 @@ test('matchesPlatformSelector resolves apple selector across Apple platforms', (
   assert.equal(matchesPlatformSelector({ platform: 'apple', appleOs: 'ios' }, 'apple'), true);
   assert.equal(matchesPlatformSelector({ platform: 'apple', appleOs: 'macos' }, 'apple'), true);
   assert.equal(matchesPlatformSelector({ platform: 'android' }, 'apple'), false);
+  assert.equal(matchesPlatformSelector({ platform: 'vega' }, 'vega'), true);
+  assert.equal(matchesPlatformSelector({ platform: 'vega' }, 'android'), false);
 });
 
 test('isPlatform accepts exactly the canonical PLATFORMS tuple', () => {
@@ -42,8 +44,58 @@ test('isPlatform accepts exactly the canonical PLATFORMS tuple', () => {
   assert.equal(isPlatform('apple'), true);
   assert.equal(isPlatform('ios'), false);
   assert.equal(isPlatform('macos'), false);
+  assert.equal(isPlatform('vega'), true);
   assert.equal(isPlatform('windows'), false);
   assert.equal(isPlatform(undefined), false);
+});
+
+test('resolveDevice accepts serial selection for Android and Vega only', async () => {
+  const android: DeviceInfo = {
+    platform: 'android',
+    id: 'shared-serial',
+    name: 'Android TV',
+    kind: 'device',
+    target: 'tv',
+  };
+  const vega: DeviceInfo = {
+    platform: 'vega',
+    id: 'shared-serial',
+    name: 'Vega TV',
+    kind: 'device',
+    target: 'tv',
+  };
+  const linux: DeviceInfo = {
+    platform: 'linux',
+    id: 'shared-serial',
+    name: 'Linux',
+    kind: 'device',
+    target: 'desktop',
+  };
+
+  assert.equal(
+    (await resolveDevice([android, vega, linux], { platform: 'android', serial: 'shared-serial' }))
+      .platform,
+    'android',
+  );
+  assert.equal(
+    (await resolveDevice([android, vega, linux], { platform: 'vega', serial: 'shared-serial' }))
+      .platform,
+    'vega',
+  );
+
+  const unsupported = await resolveDevice([linux], { serial: 'shared-serial' }).catch(
+    (error) => error,
+  );
+  assert.ok(unsupported instanceof AppError);
+  assert.equal(unsupported.code, 'DEVICE_NOT_FOUND');
+  assert.match(unsupported.message, /Android or Vega device/);
+
+  const missingAndroid = await resolveDevice([], {
+    platform: 'android',
+    serial: 'missing',
+  }).catch((error) => error);
+  assert.ok(missingAndroid instanceof AppError);
+  assert.equal(missingAndroid.message, 'No Android device with serial missing');
 });
 
 test('resolveApplePlatformName resolves tv and desktop targets', () => {

@@ -156,7 +156,7 @@ test('usage includes agent workflows, config, environment, and examples footers'
   );
   assert.match(
     usageText,
-    /agent-device help tv\s+Use when navigating Android TV or tvOS focus-first surfaces/,
+    /agent-device help tv\s+Use when navigating Android TV, tvOS, or Vega OS focus-first surfaces/,
   );
   assert.match(
     usageText,
@@ -335,6 +335,10 @@ test('usageForCommand resolves tv help topic', async () => {
   assert.match(help, /ok, center, and enter are input aliases for select/);
   assert.match(help, /do not switch to raw adb keyevent/);
   assert.match(help, /Use --platform ios --target tv/);
+  assert.match(help, /agent-device devices --platform vega --target tv/);
+  assert.match(help, /Vega OS uses the exact hold duration through inputd-cli/);
+  assert.match(help, /Use --platform vega --target tv/);
+  assert.match(help, /Remote-button control requires Developer Mode/);
 });
 
 test('usageForCommand resolves web help topic', async () => {

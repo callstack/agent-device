@@ -1,0 +1,121 @@
+import assert from 'node:assert/strict';
+import { test } from 'vitest';
+import { AppError } from '../../../kernel/errors.ts';
+import { pressVegaTvRemote } from '../input-actions.ts';
+import { createLocalVegaToolProvider, withVegaToolProvider } from '../tool-provider.ts';
+
+test('pressVegaTvRemote maps every shared button without leaking key names to callers', async () => {
+  const commands: string[][] = [];
+  const provider = createLocalVegaToolProvider({
+    whichCommand: async () => true,
+    runCommand: async (_cmd, args) => {
+      commands.push(args);
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+  });
+
+  await withVegaToolProvider(provider, async () => {
+    for (const button of [
+      'up',
+      'down',
+      'left',
+      'right',
+      'select',
+      'menu',
+      'home',
+      'back',
+    ] as const) {
+      await pressVegaTvRemote({ id: 'VirtualDevice' }, button);
+    }
+  });
+
+  assert.deepEqual(
+    commands.map((args) => args.at(-1)),
+    [
+      'inputd-cli button_press KEY_UP',
+      'inputd-cli button_press KEY_DOWN',
+      'inputd-cli button_press KEY_LEFT',
+      'inputd-cli button_press KEY_RIGHT',
+      'inputd-cli button_press KEY_ENTER',
+      'inputd-cli button_press KEY_MENU',
+      'inputd-cli button_press KEY_HOMEPAGE',
+      'inputd-cli button_press KEY_BACK',
+    ],
+  );
+});
+
+test('pressVegaTvRemote passes exact hold duration boundaries to inputd', async () => {
+  const commands: string[][] = [];
+  const provider = createLocalVegaToolProvider({
+    whichCommand: async () => true,
+    runCommand: async (_cmd, args) => {
+      commands.push(args);
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+  });
+
+  await withVegaToolProvider(provider, async () => {
+    await pressVegaTvRemote({ id: 'VirtualDevice' }, 'select', 0);
+    await pressVegaTvRemote({ id: 'VirtualDevice' }, 'select', 10_000);
+  });
+
+  assert.deepEqual(commands, [
+    [
+      'device',
+      'run-cmd',
+      '--device',
+      'VirtualDevice',
+      '--command',
+      'inputd-cli button_press KEY_ENTER --holdDuration 0',
+    ],
+    [
+      'device',
+      'run-cmd',
+      '--device',
+      'VirtualDevice',
+      '--command',
+      'inputd-cli button_press KEY_ENTER --holdDuration 10000',
+    ],
+  ]);
+});
+
+test('pressVegaTvRemote rejects invalid exact hold durations before execution', async () => {
+  const provider = createLocalVegaToolProvider({
+    whichCommand: async () => true,
+    runCommand: async () => {
+      throw new Error('unexpected command');
+    },
+  });
+
+  for (const durationMs of [-1, 1.5, 10_001]) {
+    await assert.rejects(
+      withVegaToolProvider(provider, async () => {
+        await pressVegaTvRemote({ id: 'emulator-5554' }, 'left', durationMs);
+      }),
+      (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
+      String(durationMs),
+    );
+  }
+});
+
+test('pressVegaTvRemote surfaces unsupported inputd controls as command failures', async () => {
+  const provider = createLocalVegaToolProvider({
+    whichCommand: async () => true,
+    runCommand: async () => ({
+      exitCode: 2,
+      stdout: '',
+      stderr: 'Unsupported key',
+    }),
+  });
+
+  await assert.rejects(
+    withVegaToolProvider(provider, async () => {
+      await pressVegaTvRemote({ id: 'physical-1' }, 'menu');
+    }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'COMMAND_FAILED' &&
+      error.details?.button === 'menu' &&
+      error.details?.processExitError === true,
+  );
+});

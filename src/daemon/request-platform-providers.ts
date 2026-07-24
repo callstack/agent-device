@@ -11,6 +11,7 @@ import type {
   AppleToolProvider,
 } from '../platforms/apple/core/tool-provider.ts';
 import type { LinuxToolProvider } from '../platforms/linux/tool-provider.ts';
+import type { VegaToolProvider } from '../platforms/vega/tool-provider.ts';
 import type { WebProvider } from '../platforms/web/provider.ts';
 import type { DeviceInfo } from '../kernel/device.ts';
 import type { AppLogProvider } from './app-log.ts';
@@ -42,6 +43,8 @@ export type AppleToolProviderResolver = PlatformProviderResolver<
 
 export type LinuxToolProviderResolver = PlatformProviderResolver<LinuxToolProvider | undefined>;
 
+export type VegaToolProviderResolver = PlatformProviderResolver<VegaToolProvider | undefined>;
+
 export type WebProviderResolver = PlatformProviderResolver<WebProvider | undefined>;
 
 export type AppLogProviderResolver = PlatformProviderResolver<AppLogProvider | undefined>;
@@ -53,6 +56,7 @@ export type PlatformProviderResolvers = {
   appleRunnerProvider?: AppleRunnerProviderResolver;
   appleToolProvider?: AppleToolProviderResolver;
   linuxToolProvider?: LinuxToolProviderResolver;
+  vegaToolProvider?: VegaToolProviderResolver;
   webProvider?: WebProviderResolver;
   appLogProvider?: AppLogProviderResolver;
   recordingProvider?: RecordingProviderResolver;
@@ -75,6 +79,7 @@ export type PlatformGatedProviderResolverKey =
   | 'androidAdbProvider'
   | 'appleRunnerProvider'
   | 'appleToolProvider'
+  | 'vegaToolProvider'
   | 'linuxToolProvider'
   | 'webProvider';
 
@@ -136,6 +141,9 @@ type ResolvedRequestPlatformProviders = {
   };
   linuxTool?: {
     provider?: LinuxToolProvider;
+  };
+  vegaTool?: {
+    provider?: VegaToolProvider;
   };
   web?: {
     provider?: WebProvider;
@@ -234,6 +242,20 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
       if (!scopedProviders.appleTool?.provider) return;
       const { withAppleToolProvider } = await import('../platforms/apple/core/tool-provider.ts');
       appendRequestProviderWrapper(wrappers, scopedProviders.appleTool, withAppleToolProvider);
+    },
+  },
+  {
+    resolverKey: 'vegaToolProvider',
+    resolve(providers, context) {
+      const vegaToolProvider = providers.vegaToolProvider;
+      if (!vegaToolProvider || !platformGatedResolverApplies('vegaToolProvider', context.device))
+        return {};
+      return { vegaTool: { provider: vegaToolProvider(context) } };
+    },
+    async appendWrapper(scopedProviders, wrappers) {
+      if (!scopedProviders.vegaTool?.provider) return;
+      const { withVegaToolProvider } = await import('../platforms/vega/tool-provider.ts');
+      appendRequestProviderWrapper(wrappers, scopedProviders.vegaTool, withVegaToolProvider);
     },
   },
   {

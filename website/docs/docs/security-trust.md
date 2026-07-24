@@ -9,7 +9,7 @@ description: Security and trust guidance for agent-device local app automation, 
 
 ## Local control
 
-- Device automation runs through the installed CLI and platform tooling such as Xcode, ADB, macOS accessibility APIs, and Linux AT-SPI.
+- Device automation runs through the installed CLI and platform tooling such as Xcode, ADB, Amazon Vega CLI/VDA, macOS accessibility APIs, and Linux AT-SPI.
 - The MCP server exposes direct structured tools for `agent-device` commands. Tools use command contracts through `AgentDeviceClient`; local-only workflows stay CLI-only rather than subprocess fallbacks. It does not expose generic shell execution over MCP.
 - Mutating commands should run serially against one session. Use separate sessions/devices for parallel work.
 
@@ -36,6 +36,7 @@ Some targets require local permissions or developer setup:
 
 - iOS/tvOS/macOS automation uses Xcode tooling and may require signing or Developer Mode for physical devices.
 - Android automation uses ADB and connected emulator/device trust.
+- Vega OS automation uses Vega CLI/VDA and requires Developer Mode for remote-button control on physical TVs.
 - macOS desktop automation requires Accessibility permission, and screen capture workflows may require Screen Recording permission.
 
 ## Network and updates

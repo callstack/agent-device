@@ -11,13 +11,15 @@ import {
 // Idempotently populate the registry for this test module.
 registerBuiltinPlatformPlugins();
 
-// Independent VERBATIM copy of the hand-authored `parsePlatform` accept-set
-// (src/utils/parsing.ts) — the one truly hand-maintained platform allow-list
-// (the CLI `--platform` enum already derives from `PLATFORM_SELECTORS`). The
-// registry's covered set is proven byte-for-byte equal to THIS reference list,
-// so the assertion stays meaningful even if `parsePlatform` is later derived.
+// Independent copy of the internal platform accept-set. The CLI `--platform`
+// enum derives separately from `PLATFORM_SELECTORS`; this oracle keeps registry
+// coverage meaningful rather than deriving the expected set from the registry.
 function parsePlatformByHand(value: unknown): Platform | undefined {
-  return value === 'apple' || value === 'android' || value === 'linux' || value === 'web'
+  return value === 'apple' ||
+    value === 'android' ||
+    value === 'vega' ||
+    value === 'linux' ||
+    value === 'web'
     ? value
     : undefined;
 }
@@ -36,6 +38,7 @@ test('registry coverage is byte-for-byte equal to the parsePlatform hand allow-l
     'ios',
     'macos',
     'android',
+    'vega',
     'linux',
     'web',
     'apple',
@@ -57,6 +60,7 @@ test('every plugin capability bucket matches the platform -> bucket table', () =
   const expectedBuckets: Record<Platform, string> = {
     apple: 'apple',
     android: 'android',
+    vega: 'vega',
     linux: 'linux',
     web: 'web',
   };
@@ -76,6 +80,7 @@ test('a family plugin resolves to the SAME instance for every leaf it owns', () 
   assert.equal(getPlugin('apple').familySelector, 'apple');
   // Single-platform plugins are distinct objects.
   assert.notEqual(getPlugin('android'), getPlugin('linux'));
+  assert.notEqual(getPlugin('vega'), getPlugin('android'));
 });
 
 test('each registered platform resolves to a plugin that owns it', () => {

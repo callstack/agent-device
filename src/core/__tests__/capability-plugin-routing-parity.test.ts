@@ -161,9 +161,11 @@ const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
 const CAPABILITY_BUCKET_BY_PLATFORM: Record<Platform, keyof CommandCapability> = {
   apple: 'apple',
   android: 'android',
+  vega: 'vega',
   linux: 'linux',
   web: 'web',
 };
+const VEGA_TV_ONLY_COMMANDS_REF = new Set(['open', 'close', 'back', 'home', 'tv-remote']);
 
 // Independent reference for `isCommandSupportedOnDevice` over NON-WEB platforms,
 // reproducing the BEFORE pipeline exactly: hardcoded bucket selection (b.1 oracle)
@@ -175,7 +177,10 @@ function isSupportedReference(command: string, device: DeviceInfo): boolean {
   if (!capability) return true;
   const byPlatform = capability[CAPABILITY_BUCKET_BY_PLATFORM[device.platform]];
   if (!byPlatform) return false;
-  const supports = SUPPORTS_REF[command];
+  const supports =
+    device.platform === 'vega' && VEGA_TV_ONLY_COMMANDS_REF.has(command)
+      ? (candidate: DeviceInfo) => candidate.target === 'tv'
+      : SUPPORTS_REF[command];
   if (supports && !supports(device)) return false;
   const kind = (device.kind ?? 'unknown') as keyof NonNullable<CommandCapability['apple']>;
   return byPlatform[kind] === true;
@@ -213,9 +218,15 @@ test('(b.2) unsupportedHint closures are verbatim across the full device matrix'
   for (const command of commands) {
     const reference = HINT_REF[command];
     for (const device of SAMPLE_DEVICES) {
+      const expected =
+        device.platform === 'vega' && VEGA_TV_ONLY_COMMANDS_REF.has(command)
+          ? device.target === 'tv'
+            ? undefined
+            : `${command} is supported only on Vega TV targets.`
+          : reference?.(device);
       assert.equal(
         unsupportedHintForDevice(command, device),
-        reference ? reference(device) : undefined,
+        expected,
         `${command} hint on ${device.id}`,
       );
     }
@@ -272,6 +283,20 @@ test('(b.2) non-Apple families only carry their own non-portable support gates',
     'tv-remote',
   ]);
   assert.deepEqual(Object.keys(getPlugin('android').capability.unsupportedHintByDefault ?? {}), [
+    'tv-remote',
+  ]);
+  assert.deepEqual(Object.keys(getPlugin('vega').capability.supportsByDefault ?? {}), [
+    'open',
+    'close',
+    'back',
+    'home',
+    'tv-remote',
+  ]);
+  assert.deepEqual(Object.keys(getPlugin('vega').capability.unsupportedHintByDefault ?? {}), [
+    'open',
+    'close',
+    'back',
+    'home',
     'tv-remote',
   ]);
   for (const platform of ['linux', 'web'] as const) {

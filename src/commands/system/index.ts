@@ -110,7 +110,7 @@ const tvRemoteCommandMetadata = defineFieldCommandMetadata(
   {
     button: requiredField(enumField(TV_REMOTE_BUTTONS)),
     durationMs: integerField(
-      `Press duration in milliseconds. tvOS uses the exact hold duration; Android TV maps any positive value to an ADB longpress (${tvRemoteDurationMode('android')}).`,
+      `Press duration in milliseconds. tvOS and Vega OS use the exact hold duration; Android TV maps any positive value to an ADB longpress (${tvRemoteDurationMode('android')}).`,
       {
         min: 0,
       },
@@ -198,7 +198,7 @@ const tvRemoteCliSchema = {
   usageOverride: `tv-remote [press|longpress] ${TV_REMOTE_BUTTON_USAGE} [--duration-ms <ms>]`,
   listUsageOverride: 'tv-remote press|longpress <button> [--duration-ms <ms>]',
   helpDescription:
-    'Press a TV remote/D-pad button on Android TV or tvOS. Use longpress for a 500ms held remote button; --duration-ms overrides the preset. Aliases ok, center, and enter map to select.',
+    'Press a TV remote/D-pad button on Android TV, tvOS, or Vega OS. Use longpress for a 500ms held remote button; --duration-ms overrides the preset. Aliases ok, center, and enter map to select.',
   summary: 'Press a TV remote/D-pad button',
   positionalArgs: ['press|longpress?', 'button'],
   allowedFlags: ['durationMs'],

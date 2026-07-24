@@ -36,7 +36,14 @@ const APPLE_NON_MACOS: DeviceInfo[] = [
   VISIONOS_SIMULATOR,
   TVOS_SIMULATOR,
 ];
-const NON_APPLE: DeviceInfo[] = [ANDROID_EMULATOR, LINUX_DEVICE, WEB_DESKTOP_DEVICE];
+const VEGA_DEVICE: DeviceInfo = {
+  platform: 'vega',
+  id: 'vega-1',
+  name: 'Vega TV',
+  kind: 'device',
+  target: 'tv',
+};
+const NON_APPLE: DeviceInfo[] = [ANDROID_EMULATOR, VEGA_DEVICE, LINUX_DEVICE, WEB_DESKTOP_DEVICE];
 
 test('OUTPUT: publicPlatformString emits the pre-collapse leaf for every fixture', () => {
   for (const device of APPLE_NON_MACOS) {
@@ -44,6 +51,7 @@ test('OUTPUT: publicPlatformString emits the pre-collapse leaf for every fixture
   }
   assert.equal(publicPlatformString(MACOS_DEVICE), 'macos');
   assert.equal(publicPlatformString(ANDROID_EMULATOR), 'android');
+  assert.equal(publicPlatformString(VEGA_DEVICE), 'vega');
   assert.equal(publicPlatformString(LINUX_DEVICE), 'linux');
   assert.equal(publicPlatformString(WEB_DESKTOP_DEVICE), 'web');
 });
@@ -91,7 +99,8 @@ test('deviceFieldsFromPublicPlatform is the inverse projection of publicPlatform
   });
   assert.deepEqual(deviceFieldsFromPublicPlatform('ios'), { platform: 'apple' });
   assert.deepEqual(deviceFieldsFromPublicPlatform('android'), { platform: 'android' });
-  for (const leaf of ['ios', 'macos', 'android', 'linux', 'web'] as const) {
+  assert.deepEqual(deviceFieldsFromPublicPlatform('vega'), { platform: 'vega' });
+  for (const leaf of ['ios', 'macos', 'android', 'vega', 'linux', 'web'] as const) {
     assert.equal(publicPlatformString(deviceFieldsFromPublicPlatform(leaf)), leaf);
   }
 });

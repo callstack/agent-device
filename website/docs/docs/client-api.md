@@ -240,8 +240,18 @@ await client.command.tvRemote({
   button: 'select',
 });
 
+await client.command.tvRemote({
+  platform: 'vega',
+  target: 'tv',
+  serial: 'VirtualDevice',
+  button: 'select',
+  durationMs: 900,
+});
+
 await client.command.appSwitcher();
 ```
+
+Vega OS client support currently covers device discovery, app open/close, `back`, `home`, and `tvRemote`. Capture, selector, install, logging, and performance methods report unsupported for Vega targets.
 
 Supported command methods:
 

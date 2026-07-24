@@ -190,6 +190,8 @@ function targetSelectorsConflict(
     case 'android':
     case 'ios':
       return target === 'desktop';
+    case 'vega':
+      return target !== 'tv';
     case 'macos':
     case 'linux':
     case 'web':
@@ -221,6 +223,8 @@ function freshSessionSelectorKeysForPlatform(
   switch (lockPlatform) {
     case 'android':
       return ['udid', 'iosSimulatorDeviceSet'];
+    case 'vega':
+      return ['udid', 'iosSimulatorDeviceSet', 'androidDeviceAllowlist'];
     case 'ios':
       return ['serial', 'androidDeviceAllowlist'];
     case 'apple':

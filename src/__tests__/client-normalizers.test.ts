@@ -18,7 +18,7 @@ test('normalizeOpenDevice accepts exactly the canonical leaf platforms', () => {
     assert.equal(result.platform, platform);
   }
   // Lock the membership so the derived check cannot silently widen/narrow.
-  assert.deepEqual([...PUBLIC_PLATFORMS], ['ios', 'macos', 'android', 'linux', 'web']);
+  assert.deepEqual([...PUBLIC_PLATFORMS], ['ios', 'macos', 'android', 'vega', 'linux', 'web']);
 });
 
 test('normalizeOpenDevice rejects the apple selector and unknown platforms', () => {
@@ -114,4 +114,14 @@ test('normalizeOpenDevice preserves per-platform identifier shaping', () => {
   });
   assert.deepEqual(android?.android, { serial: 'explicit-serial' });
   assert.equal(android?.ios, undefined);
+
+  const vega = normalizeOpenDevice({
+    platform: 'vega',
+    id: 'VirtualDevice',
+    device: 'Vega Virtual Device',
+    serial: 'explicit-vega-serial',
+  });
+  assert.deepEqual(vega?.vega, { serial: 'explicit-vega-serial' });
+  assert.equal(vega?.ios, undefined);
+  assert.equal(vega?.android, undefined);
 });

@@ -32,6 +32,26 @@ test('accepts matching platform and serial selectors', () => {
   );
 });
 
+test('accepts matching serial selector for a Vega session', () => {
+  const session = makeSession({
+    device: {
+      platform: 'vega',
+      id: 'VirtualDevice',
+      name: 'Vega Virtual Device',
+      kind: 'emulator',
+      target: 'tv',
+      booted: true,
+    },
+  });
+  assert.doesNotThrow(() =>
+    assertSessionSelectorMatches(session, {
+      platform: 'vega',
+      target: 'tv',
+      serial: 'VirtualDevice',
+    }),
+  );
+});
+
 test('rejects mismatched platform selector', () => {
   const session = makeSession();
   assert.throws(

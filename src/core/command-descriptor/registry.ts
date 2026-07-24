@@ -163,6 +163,7 @@ function readOnlySubactionRecordingEffect(
 
 const APPLE_SIM_AND_DEVICE = { simulator: true, device: true };
 const ANDROID_ALL = { emulator: true, device: true, unknown: true };
+const VEGA_ALL = { emulator: true, device: true };
 const LINUX_DEVICE = { device: true };
 const LINUX_NONE = {};
 
@@ -172,6 +173,10 @@ const ALL_DEVICE_COMMAND_CAPABILITY = {
   linux: LINUX_DEVICE,
 } satisfies CommandCapability;
 const APP_RUNTIME_CAPABILITY = ALL_DEVICE_COMMAND_CAPABILITY;
+const VEGA_APP_RUNTIME_CAPABILITY = {
+  ...APP_RUNTIME_CAPABILITY,
+  vega: VEGA_ALL,
+} satisfies CommandCapability;
 const APP_INVENTORY_CAPABILITY = {
   apple: APPLE_SIM_AND_DEVICE,
   android: ANDROID_ALL,
@@ -685,7 +690,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       allowSessionlessDefaultDevice: allowAnyDeviceSessionless,
     },
     dispatch: {},
-    capability: APP_RUNTIME_CAPABILITY,
+    capability: VEGA_APP_RUNTIME_CAPABILITY,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
   },
@@ -721,7 +726,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     recordingEffect: 'mutates-app',
     daemon: { route: 'session', refFrameEffect: 'may-invalidate', allowInvalidRecording: true },
     dispatch: {},
-    capability: APP_RUNTIME_CAPABILITY,
+    capability: VEGA_APP_RUNTIME_CAPABILITY,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
   },
@@ -996,6 +1001,10 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS,
+    capability: {
+      ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS.capability,
+      vega: VEGA_ALL,
+    },
   },
   {
     name: 'gesture',
@@ -1017,6 +1026,10 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS,
+    capability: {
+      ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS.capability,
+      vega: VEGA_ALL,
+    },
   },
   {
     name: 'tv-remote',
@@ -1033,6 +1046,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     capability: {
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
+      vega: VEGA_ALL,
       linux: LINUX_NONE,
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,

@@ -7,7 +7,7 @@ description: Configure Cursor, Codex, Claude Code, Windsurf, Cline, Goose, skill
 
 `agent-device` is built for AI agents, but humans usually install it, grant device permissions, and decide which agent client should use it.
 
-Use this page to wire Cursor, Codex, Claude Code, Windsurf, Cline, Goose, or another coding agent into mobile, TV, desktop, and web app verification. It covers skills, project rules, and MCP setup for React Native QA, Expo app verification, iOS Simulator automation, Android Emulator automation, tvOS checks, Android TV checks, web browser sessions, debugging, profiling, and exploratory QA.
+Use this page to wire Cursor, Codex, Claude Code, Windsurf, Cline, Goose, or another coding agent into mobile, TV, desktop, and web app verification. It covers skills, project rules, and MCP setup for React Native QA, Expo app verification, iOS Simulator automation, Android Emulator automation, tvOS checks, Android TV checks, Vega OS Fire TV control, web browser sessions, debugging, profiling, and exploratory QA.
 
 The short version: install the CLI, make the agent read version-matched help, and let the agent use either MCP tools or CLI commands. MCP tools use command contracts backed by the same `AgentDeviceClient` execution path as the CLI adapters.
 
@@ -47,9 +47,9 @@ The bundled [agent-device skill](https://github.com/callstack/agent-device/blob/
 Add this as a project rule, custom instruction, or skill equivalent when your agent client supports it:
 
 ```text
-Use agent-device only for app/device automation tasks. Before planning commands, run `agent-device --version` and read `agent-device help workflow`. For exploratory QA, read `agent-device help dogfood`. For logs, network, audio, traces, or runtime failures, read `agent-device help debugging`. For React Native component trees, props/state/hooks, slow renders, or rerenders, read `agent-device help react-devtools`. For React Native JavaScript heap growth, heap snapshots, or retained-object leaks, read `agent-device help cdp`. For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to React DevTools or debugging evidence, read `agent-device help react-native`.
+Use agent-device only for app/device automation tasks. Before planning commands, run `agent-device --version` and read `agent-device help workflow`. For TV, Fire TV, or Vega OS tasks, read `agent-device help tv`. For exploratory QA, read `agent-device help dogfood`. For logs, network, audio, traces, or runtime failures, read `agent-device help debugging`. For React Native component trees, props/state/hooks, slow renders, or rerenders, read `agent-device help react-devtools`. For React Native JavaScript heap growth, heap snapshots, or retained-object leaks, read `agent-device help cdp`. For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to React DevTools or debugging evidence, read `agent-device help react-native`.
 
-Use MCP tools or the CLI in the integrated terminal. If `agent-device` is not on PATH but the user installed it globally in another shell, resolve the command the same way the user would from a normal terminal session and run that absolute path instead. This may require inspecting shell startup behavior or package-manager/global bin locations; do not assume the agent process `PATH` is the user's `PATH`. Do not silently fall back to `npx -y agent-device@latest`; ask or use an exact version. MCP exposes structured tools backed by the agent-device client; it does not expose generic shell execution. Prefer `open -> snapshot -i -> act -> re-snapshot -> verify -> close`. Use current refs such as `@e3` for exploration and selectors for durable replay. Keep mutating commands against one session serial. Capture screenshots, logs, network, audio, perf, traces, recordings, and `.ad` replay scripts only when they add evidence.
+Use MCP tools or the CLI in the integrated terminal. If `agent-device` is not on PATH but the user installed it globally in another shell, resolve the command the same way the user would from a normal terminal session and run that absolute path instead. This may require inspecting shell startup behavior or package-manager/global bin locations; do not assume the agent process `PATH` is the user's `PATH`. Do not silently fall back to `npx -y agent-device@latest`; ask or use an exact version. MCP exposes structured tools backed by the agent-device client; it does not expose generic shell execution. Prefer `open -> snapshot -i -> act -> re-snapshot -> verify -> close` where the target supports capture and selectors; otherwise follow target-specific help. Use current refs such as `@e3` for exploration and selectors for durable replay. Keep mutating commands against one session serial. Capture screenshots, logs, network, audio, perf, traces, recordings, and `.ad` replay scripts only when they add evidence.
 ```
 
 ## MCP server
@@ -108,6 +108,7 @@ alwaysApply: true
 
 Use agent-device only for app/device automation tasks.
 Before planning device work, run `agent-device --version` and read `agent-device help workflow`.
+For TV, Fire TV, or Vega OS tasks, read `agent-device help tv`.
 For exploratory QA, read `agent-device help dogfood`.
 For logs, network, audio, traces, or runtime failures, read `agent-device help debugging`.
 For React Native component trees, props/state/hooks, slow renders, or rerenders, read `agent-device help react-devtools`.
@@ -116,7 +117,7 @@ For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to Rea
 
 Use the CLI in Cursor's integrated terminal.
 If `agent-device` is not on PATH but the user installed it globally in another shell, resolve the absolute binary path instead of using `npx -y agent-device@latest`.
-Prefer `open -> snapshot -i -> act -> re-snapshot -> verify -> close`.
+Prefer `open -> snapshot -i -> act -> re-snapshot -> verify -> close` where supported; otherwise follow target-specific help.
 Keep mutating commands against one session serial.
 EOF
 ```
@@ -197,6 +198,7 @@ cat > CLAUDE.md <<'EOF'
 
 Use agent-device only for app/device automation tasks.
 Before planning device work, run `agent-device --version` and read `agent-device help workflow`.
+For TV, Fire TV, or Vega OS tasks, read `agent-device help tv`.
 For exploratory QA, read `agent-device help dogfood`.
 For logs, network, audio, traces, or runtime failures, read `agent-device help debugging`.
 For React Native component trees, props/state/hooks, slow renders, or rerenders, read `agent-device help react-devtools`.
@@ -205,7 +207,7 @@ For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to Rea
 
 Use the CLI in the integrated terminal.
 If `agent-device` is not on PATH but the user installed it globally in another shell, resolve the absolute binary path instead of using `npx -y agent-device@latest`.
-Prefer `open -> snapshot -i -> act -> re-snapshot -> verify -> close`.
+Prefer `open -> snapshot -i -> act -> re-snapshot -> verify -> close` where supported; otherwise follow target-specific help.
 Keep mutating commands against one session serial.
 EOF
 ```

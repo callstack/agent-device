@@ -301,11 +301,12 @@ test('REPLAY_METADATA_PLATFORMS is exactly the non-web leaf platforms', () => {
     'ios',
     'linux',
     'macos',
+    'vega',
   ]);
 });
 
 test('readReplayScriptMetadata accepts every concrete leaf platform', () => {
-  for (const platform of ['ios', 'android', 'macos', 'linux'] as const) {
+  for (const platform of ['ios', 'android', 'vega', 'macos', 'linux'] as const) {
     const metadata = readReplayScriptMetadata(`context platform=${platform}\nopen "Demo"\n`);
 
     assert.equal(metadata.platform, platform);

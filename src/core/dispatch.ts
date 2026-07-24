@@ -384,7 +384,7 @@ async function handleTvRemoteCommand(
 ): Promise<Record<string, unknown>> {
   if (device.target !== 'tv') {
     throw new AppError('UNSUPPORTED_OPERATION', 'tv-remote is supported only on TV targets', {
-      hint: 'Select an Android TV or tvOS target with --target tv.',
+      hint: 'Select an Android TV, tvOS, or Vega OS target with --target tv.',
     });
   }
   if (positionals.length !== 1) {

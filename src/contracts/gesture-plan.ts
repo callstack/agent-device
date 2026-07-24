@@ -49,6 +49,7 @@ const GESTURE_PLATFORM_PROFILES = {
     pinchAxisDegrees: GESTURE_HORIZONTAL_ANGLE_DEGREES,
     frameCount: Math.round,
   },
+  vega: DEFAULT_GESTURE_PLATFORM_PROFILE,
   linux: DEFAULT_GESTURE_PLATFORM_PROFILE,
   web: DEFAULT_GESTURE_PLATFORM_PROFILE,
 } satisfies Record<PublicPlatform, GesturePlatformProfile>;

@@ -25,6 +25,7 @@ type KindMatrix = {
 export type CommandCapability = {
   apple?: KindMatrix;
   android?: KindMatrix;
+  vega?: KindMatrix;
   linux?: KindMatrix;
   web?: KindMatrix;
 };
@@ -128,7 +129,7 @@ export function listCapabilityCommands(): string[] {
 export function supportedPlatformsForCommand(command: string): string[] {
   const capability = COMMAND_CAPABILITY_MATRIX[command];
   if (!capability) return [];
-  const families: Array<keyof CommandCapability> = ['apple', 'android', 'linux', 'web'];
+  const families: Array<keyof CommandCapability> = ['apple', 'android', 'vega', 'linux', 'web'];
   const supported: string[] = [];
   for (const family of families) {
     const kinds = capability[family] as KindMatrix | undefined;

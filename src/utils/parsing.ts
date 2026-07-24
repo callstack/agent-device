@@ -116,6 +116,7 @@ function parsePlatform(value: unknown): PublicPlatform | undefined {
   return value === 'ios' ||
     value === 'macos' ||
     value === 'android' ||
+    value === 'vega' ||
     value === 'linux' ||
     value === 'web'
     ? value

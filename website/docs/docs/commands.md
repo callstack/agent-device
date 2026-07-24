@@ -167,6 +167,7 @@ agent-device devices --platform android --android-device-allowlist emulator-5554
 agent-device devices
 agent-device devices --platform ios
 agent-device devices --platform android
+agent-device devices --platform vega --target tv
 agent-device devices --platform ios --ios-simulator-device-set /tmp/tenant-a/simulators
 agent-device devices --platform android --android-device-allowlist emulator-5554,device-1234
 agent-device capabilities --platform android
@@ -174,7 +175,7 @@ agent-device capabilities --session checkout --json
 ```
 
 - `devices` lists available targets after applying any platform selector or isolation scope flags.
-- Use `--platform` to narrow discovery to Apple-family (`ios`, `tvOS`, `macOS`) or Android targets.
+- Use `--platform` to narrow discovery to Apple-family (`ios`, `tvOS`, `macOS`), Android, or Vega OS targets.
 - Use `--ios-simulator-device-set` and `--android-device-allowlist` when you need tenant- or lab-scoped discovery.
 - `capabilities` reports the command names supported by the selected session device or an explicit `--platform`/`--device`/`--udid`/`--serial` target.
 - In JSON output, `capabilities` returns `{ device, availableCommands }`. Use `availableCommands` for dynamic integrations instead of maintaining a separate platform support table.
@@ -208,15 +209,26 @@ agent-device tv-remote press select --duration-ms 900 --platform android --targe
 agent-device screenshot tv-focus.png --overlay-refs --platform android --target tv
 agent-device open Settings --platform ios --target tv
 agent-device screenshot apple-tv.png --platform ios --target tv
+vega virtual-device start
+agent-device devices --platform vega --target tv
+agent-device open com.example.app.main --platform vega --target tv --session vega-tv
+agent-device tv-remote press down --platform vega --target tv --session vega-tv
+agent-device tv-remote press select --duration-ms 900 --platform vega --target tv --session vega-tv
+agent-device close com.example.app.main --session vega-tv
+vega virtual-device stop
 ```
 
 - AndroidTV app launch and app listing resolve TV launchable activities via `LEANBACK_LAUNCHER`.
-- TV target selection supports both simulator/emulator and connected physical devices (AppleTV + AndroidTV).
+- TV target selection supports simulator/emulator and connected physical devices (Apple TV, Android TV, and developer-mode Vega OS Fire TV).
 - TV targets are focus-first. Use `tv-remote` to move D-pad/remote focus before selecting a control; avoid raw `adb shell input keyevent` in command plans.
 - On Android TV, `tv-remote` maps to ADB keyevents. `tv-remote longpress <button>` is CLI sugar for a 500ms hold; `--duration-ms` overrides the preset and uses Android's longpress keyevent form for any positive duration because the platform command does not expose exact hold timing.
 - tvOS supports the same runner-driven interaction/snapshot flow as iOS (`snapshot`, `wait`, `press`, `fill`, `get`, `scroll`, `back`, `home`, `app-switcher`, `record`, and related selector flows).
 - On tvOS, `tv-remote`, runner `back`/`home`/`app-switcher` map to Siri Remote actions (`back` is Menu, `home` is Home, app switcher is double-home). `--duration-ms` is an exact remote-button hold duration.
-- Use `screenshot --overlay-refs` when visual focus evidence is useful or when focus metadata is unavailable/transient.
+- Vega OS discovery and remote input use the SDK-matched Vega CLI and VDA. Use `--platform vega --target tv`; app IDs are Vega component IDs such as `com.example.app.main`.
+- Use `--serial` when more than one Vega VVD or physical TV is connected.
+- Vega OS supports app open/close, `back`, `home`, and all shared `tv-remote` buttons. Exact holds are sent through `inputd-cli`. The selected device must have Developer Mode enabled.
+- Vega OS app inventory, snapshot, screenshot, selector, install, touch/text/gesture, logs, and performance backends are not part of the initial support and report unsupported.
+- On Android TV and tvOS, use `screenshot --overlay-refs` when visual focus evidence is useful or when focus metadata is unavailable/transient. On Vega OS, use the VVD or physical display as visual truth.
 - tvOS follows iOS simulator-only command semantics for helpers like `gesture pinch`, `settings`, and `push`.
 
 ## Desktop targets
