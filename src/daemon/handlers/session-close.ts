@@ -321,7 +321,9 @@ async function prepareRepairClose(params: {
   session.repairPlatformCloseIdentity = undefined;
   return {
     repairArmed,
-    ...(repairCommit.kind === 'committed' && repairCommit.path ? { healedScriptPath: repairCommit.path } : {}),
+    ...(repairCommit.kind === 'committed' && repairCommit.path
+      ? { healedScriptPath: repairCommit.path }
+      : {}),
     ...(repairCommit.kind === 'aborted' ? { aborted: true } : {}),
   };
 }
