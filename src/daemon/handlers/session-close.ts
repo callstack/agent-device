@@ -89,6 +89,7 @@ function shouldStopAppleRunnerBeforeTargetedClose(session: SessionState): boolea
 type RepairCloseOutcome =
   | { kind: 'not-armed' }
   | { kind: 'committed'; path?: string }
+  | { kind: 'aborted' }
   | { kind: 'failed'; error: AppError };
 
 function commitRepairBeforeClose(
@@ -116,6 +117,9 @@ function commitRepairBeforeClose(
     // not accumulate duplicate `close` lines in the healed slice.
     session.actions.length = actionsBeforeClose;
     return { kind: 'failed', error: result.error };
+  }
+  if (!session.saveScriptComplete) {
+    return { kind: 'aborted' };
   }
   return { kind: 'committed' };
 }
@@ -281,7 +285,7 @@ function repairPlatformCloseIdentity(req: DaemonRequest): string {
 }
 
 type RepairClosePreparation =
-  | { repairArmed: boolean; healedScriptPath?: string }
+  | { repairArmed: boolean; healedScriptPath?: string; aborted?: boolean }
   | { response: DaemonResponse };
 
 async function prepareRepairClose(params: {
@@ -317,7 +321,8 @@ async function prepareRepairClose(params: {
   session.repairPlatformCloseIdentity = undefined;
   return {
     repairArmed,
-    ...(repairCommit.kind === 'committed' ? { healedScriptPath: repairCommit.path } : {}),
+    ...(repairCommit.kind === 'committed' && repairCommit.path ? { healedScriptPath: repairCommit.path } : {}),
+    ...(repairCommit.kind === 'aborted' ? { aborted: true } : {}),
   };
 }
 
@@ -508,6 +513,11 @@ export async function handleCloseCommand(params: {
   // artifact path so the agent learns the repair published (and where) without
   // an extra round-trip.
   const savedScript = repair.healedScriptPath ? { savedScript: repair.healedScriptPath } : {};
+  let text = `Closed: ${session.name}`;
+  if (repair.aborted && req.flags?.saveScript) {
+    text += `\nThe repair was aborted and no script was written. Recovery: replay --from <n> --plan-digest <digest> before closing.`;
+  }
+
   if (shutdownResult) {
     return {
       ok: true,
@@ -518,7 +528,7 @@ export async function handleCloseCommand(params: {
           ...savedScript,
           ...(leaseRelease.providerData ? { provider: leaseRelease.providerData } : {}),
         },
-        `Closed: ${session.name}`,
+        text,
       ),
     };
   }
@@ -526,7 +536,7 @@ export async function handleCloseCommand(params: {
     ok: true,
     data: {
       session: session.name,
-      ...successText(`Closed: ${session.name}`),
+      ...successText(text),
       ...savedScript,
       ...(leaseRelease.providerData ? { provider: leaseRelease.providerData } : {}),
     },
