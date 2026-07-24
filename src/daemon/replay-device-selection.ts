@@ -5,15 +5,21 @@ import type { ResolveTargetDeviceOptions } from '../core/dispatch-resolve.ts';
 import type { MaestroProgram } from '../compat/maestro/program-ir.ts';
 import { appleSimulatorAppTargetForOpenTarget } from './open-device-selection.ts';
 import { SessionStore } from './session-store.ts';
+import type { CommandFlags } from '../core/dispatch.ts';
 import type { DaemonRequest, SessionAction } from './types.ts';
+
+export type ReplayTargetDeviceResolution = {
+  flags: CommandFlags;
+  options: ResolveTargetDeviceOptions | undefined;
+};
 
 /**
  * Finds the first static app target a fresh replay will open.  Request binding
  * uses this before any replay action can cache an unqualified device choice.
  */
-export function buildReplayTargetDeviceResolutionOptions(
+export function buildReplayTargetDeviceResolution(
   req: DaemonRequest,
-): ResolveTargetDeviceOptions | undefined {
+): ReplayTargetDeviceResolution | undefined {
   if (req.command !== 'replay' || req.flags?.replayFrom !== undefined) return undefined;
   const filePath = req.positionals?.[0];
   if (!filePath) return undefined;
@@ -21,10 +27,25 @@ export function buildReplayTargetDeviceResolutionOptions(
   try {
     const resolved = SessionStore.expandHome(filePath, req.meta?.cwd);
     const source = fs.readFileSync(resolved, 'utf8');
-    const appTarget = isMaestroReplay(req, resolved)
-      ? readMaestroReplayAppTarget(parseMaestroProgram(source, { sourcePath: resolved }))
-      : readScriptReplayAppTarget(parseReplayInput(source, req.flags).actions);
-    return appTargetResolutionOptions(appTarget);
+    if (isMaestroReplay(req, resolved)) {
+      return {
+        flags: req.flags ?? {},
+        options: buildMaestroReplayTargetDeviceResolutionOptions(
+          parseMaestroProgram(source, { sourcePath: resolved }),
+          req.flags?.platform,
+        ),
+      };
+    }
+    const parsed = parseReplayInput(source, req.flags);
+    const selection = readScriptReplaySelection(parsed.actions);
+    if (!selection.appTarget) return undefined;
+    const scriptFlags = buildReplayScriptPlatformFlags(req.flags, parsed.actions);
+    const platform = scriptFlags.platform ?? parsed.metadata.platform;
+    return {
+      flags:
+        platform && scriptFlags.platform === undefined ? { ...scriptFlags, platform } : scriptFlags,
+      options: platform === 'ios' ? appTargetResolutionOptions(selection.appTarget) : undefined,
+    };
   } catch {
     // Parsing and validation stay in the replay handler. Lock binding is only
     // advisory, so an unreadable/invalid plan must not mask its real error.
@@ -34,7 +55,9 @@ export function buildReplayTargetDeviceResolutionOptions(
 
 export function buildMaestroReplayTargetDeviceResolutionOptions(
   program: MaestroProgram,
+  platform: CommandFlags['platform'] | undefined,
 ): ResolveTargetDeviceOptions {
+  if (platform !== 'ios') return {};
   const appTarget = readMaestroReplayAppTarget(program);
   return appTargetResolutionOptions(appTarget) ?? {};
 }
@@ -46,9 +69,34 @@ function isMaestroReplay(req: DaemonRequest, filePath: string): boolean {
   );
 }
 
-function readScriptReplayAppTarget(actions: SessionAction[]): string | undefined {
-  const target = actions.find((action) => action.command === 'open')?.positionals?.[0];
-  return isStaticAppTarget(target) ? target : undefined;
+function readScriptReplaySelection(actions: SessionAction[]): {
+  appTarget: string | undefined;
+  platform: CommandFlags['platform'] | undefined;
+} {
+  let platform: CommandFlags['platform'] | undefined;
+  for (const action of actions) {
+    if (action.command === 'runtime' && action.flags.platform) {
+      platform = action.flags.platform;
+      continue;
+    }
+    if (action.command !== 'open') continue;
+    platform = action.runtime?.platform ?? platform;
+    const target = action.positionals?.[0];
+    if (isStaticAppTarget(target)) return { appTarget: target, platform };
+  }
+  return { appTarget: undefined, platform };
+}
+
+/** Applies a platform configured before the first static app open to replay dispatch. */
+export function buildReplayScriptPlatformFlags(
+  flags: CommandFlags | undefined,
+  actions: SessionAction[],
+): CommandFlags {
+  const selection = readScriptReplaySelection(actions);
+  if (flags?.platform !== undefined || !selection.appTarget || !selection.platform) {
+    return flags ?? {};
+  }
+  return { ...flags, platform: selection.platform };
 }
 
 function readMaestroReplayAppTarget(program: MaestroProgram): string | undefined {

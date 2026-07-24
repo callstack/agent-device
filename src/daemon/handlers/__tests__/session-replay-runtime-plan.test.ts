@@ -11,7 +11,10 @@ import path from 'node:path';
 import { runReplayScriptFile } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { dispatchCommand, resolveTargetDevice } from '../../../core/dispatch.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import {
+  makeAndroidSession,
+  makeIosSession,
+} from '../../../__tests__/test-utils/session-factories.ts';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,
@@ -410,7 +413,7 @@ test('fresh typed Maestro replay resolves its configured app before runtime defa
   const response = await runReplayScriptFile({
     req: baseReq({
       positionals: [flowPath],
-      flags: { replayBackend: 'maestro' },
+      flags: { replayBackend: 'maestro', platform: 'ios' },
       runtime: { metroPort: 8081 },
     }),
     sessionName: 'default',
@@ -421,13 +424,72 @@ test('fresh typed Maestro replay resolves its configured app before runtime defa
 
   expect(response.ok).toBe(true);
   expect(mockResolveTargetDevice).toHaveBeenCalledWith(
-    { replayBackend: 'maestro' },
+    { replayBackend: 'maestro', platform: 'ios' },
     { appleSimulatorAppTarget: 'com.example.demo' },
   );
   expect(invoke).toHaveBeenCalledWith(
     expect.objectContaining({
       command: 'open',
       flags: expect.objectContaining({ udid: 'SIM-WITH-APP' }),
+    }),
+  );
+});
+
+test('native replay applies an authored Android platform to its static app open', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-native-android-selection-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const replayPath = path.join(root, 'flow.ad');
+  fs.writeFileSync(
+    replayPath,
+    'runtime set --platform android --metro-port 8081\nopen com.example.demo\n',
+  );
+  const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [replayPath] }),
+    sessionName: 'default',
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+
+  expect(response.ok).toBe(true);
+  expect(invoke).toHaveBeenCalledWith(
+    expect.objectContaining({
+      command: 'open',
+      positionals: ['com.example.demo'],
+      flags: expect.objectContaining({ platform: 'android' }),
+    }),
+  );
+});
+
+test('platform-less typed Maestro replay preserves a resolved Android device', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-android-selection-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const flowPath = path.join(root, 'flow.yaml');
+  fs.writeFileSync(flowPath, 'appId: com.example.demo\n---\n- launchApp\n');
+  const androidDevice = { ...makeAndroidSession('android').device, id: 'ANDROID-EMULATOR' };
+  mockResolveTargetDevice.mockResolvedValue(androidDevice);
+  const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
+
+  const response = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [flowPath],
+      flags: { replayBackend: 'maestro' },
+      runtime: { metroPort: 8081 },
+    }),
+    sessionName: 'default',
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+
+  expect(response.ok).toBe(true);
+  expect(mockResolveTargetDevice).toHaveBeenCalledWith({ replayBackend: 'maestro' }, {});
+  expect(invoke).toHaveBeenCalledWith(
+    expect.objectContaining({
+      command: 'open',
+      flags: expect.objectContaining({ platform: 'android', serial: 'ANDROID-EMULATOR' }),
     }),
   );
 });

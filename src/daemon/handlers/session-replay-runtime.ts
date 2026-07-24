@@ -16,6 +16,7 @@ import {
 } from '../../request/progress.ts';
 import { SessionStore } from '../session-store.ts';
 import { expandSessionPath } from '../session-paths.ts';
+import { buildReplayScriptPlatformFlags } from '../replay-device-selection.ts';
 import { applySaveScriptRetarget } from '../session-action-recorder.ts';
 import { computeReplayPlanDigest } from '../../replay/plan-digest.ts';
 import type { TargetAnnotationV1 } from '../../replay/target-identity.ts';
@@ -534,7 +535,10 @@ function prepareReplayPlan(params: {
   if (!parsedResult.ok) return parsedResult;
   const parsed = parsedResult.value;
   const { metadata, actions, actionLines, actionSourcePaths } = parsed;
-  const replayReq = applyReplayMetadata(req, metadata);
+  const replayReq = applyReplayMetadata(
+    { ...req, flags: buildReplayScriptPlatformFlags(req.flags, actions) },
+    metadata,
+  );
   const planDigest = computeReplayPlanDigest({
     actions,
     actionLines,
