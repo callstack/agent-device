@@ -12,6 +12,11 @@ import { iosRunnerOverrides, resolveAppleBackRunnerCommand } from './interaction
 import { appleRemotePressCommand } from './os/tvos/remote.ts';
 import { runMacOsScreenshotAction } from './os/macos/helper.ts';
 import { runAppleRunnerCommand } from './core/runner/runner-client.ts';
+import {
+  withAppleRunnerProvider,
+  type AppleRunnerCommandExecutor,
+  type AppleRunnerProvider,
+} from './core/runner/runner-provider.ts';
 import { toAppleTvRemoteButton } from '../../contracts/tv-remote.ts';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { isMacOs, isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
@@ -31,6 +36,7 @@ import {
 export function createAppleInteractor(
   device: DeviceInfo,
   runnerContext: RunnerContext,
+  runnerProvider?: AppleRunnerProvider | AppleRunnerCommandExecutor,
 ): Interactor {
   // watchOS unsupported sentinel: XCUITest cannot drive watchOS UI (no
   // XCUIApplication), so a watchOS device has no runner backend. Reject it
@@ -43,7 +49,7 @@ export function createAppleInteractor(
     );
   }
   const { overrides, runnerOpts } = iosRunnerOverrides(device, runnerContext);
-  return {
+  const interactor: Interactor = {
     open: (app, options) =>
       openIosApp(device, app, {
         appBundleId: options?.appBundleId,
@@ -156,6 +162,51 @@ export function createAppleInteractor(
       setIosSetting(device, setting, state, appId, options),
     ...overrides,
   };
+  if (!runnerProvider) return interactor;
+  return withInjectedAppleRunnerTransport(device, runnerContext, interactor, runnerProvider);
+}
+
+/**
+ * Routes every runner-command method through the injected provider transport.
+ * Methods backed by local Apple tooling (simctl/devicectl) have no
+ * provider-neutral transport, so they fail fast until the provider session
+ * composes its own implementation on top.
+ */
+function withInjectedAppleRunnerTransport(
+  device: DeviceInfo,
+  runnerContext: RunnerContext,
+  interactor: Interactor,
+  runnerProvider: AppleRunnerProvider | AppleRunnerCommandExecutor,
+): Interactor {
+  const providerInteractor: Interactor = {
+    ...interactor,
+    open: async () => rejectLocalAppleToolMethod('open'),
+    openDevice: async () => rejectLocalAppleToolMethod('openDevice'),
+    close: async () => rejectLocalAppleToolMethod('close'),
+    screenshot: async () => rejectLocalAppleToolMethod('screenshot'),
+    readClipboard: async () => rejectLocalAppleToolMethod('readClipboard'),
+    writeClipboard: async () => rejectLocalAppleToolMethod('writeClipboard'),
+    setSetting: async () => rejectLocalAppleToolMethod('setSetting'),
+  };
+  return new Proxy(providerInteractor, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (typeof value !== 'function') return value;
+      return (...args: unknown[]) =>
+        withAppleRunnerProvider(
+          runnerProvider,
+          { deviceId: device.id, requestId: runnerContext.requestId },
+          async () => await value.apply(target, args),
+        );
+    },
+  });
+}
+
+function rejectLocalAppleToolMethod(method: string): never {
+  throw new AppError(
+    'UNSUPPORTED_OPERATION',
+    `${method} uses local Apple tooling (simctl/devicectl), which an injected runner transport cannot reach; the provider session must supply its own ${method} implementation.`,
+  );
 }
 
 async function runAppleScreenshot(
