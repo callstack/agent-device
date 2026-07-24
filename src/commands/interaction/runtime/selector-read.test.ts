@@ -723,12 +723,31 @@ test('runtime wait keeps the plain timeout when readable polls simply never matc
   );
 });
 
+function failingWaitDevice(produceError: () => Error): {
+  device: ReturnType<typeof createAgentDevice>;
+  attempts: () => number;
+} {
+  let attempts = 0;
+  const device = createAgentDevice({
+    backend: {
+      platform: 'android',
+      captureSnapshot: async () => {
+        attempts += 1;
+        throw produceError();
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default' }]),
+    policy: localCommandPolicy(),
+    clock: createFakeClock(),
+  });
+  return { device, attempts: () => attempts };
+}
+
 test('runtime wait still fails immediately on a non-content capture failure', async () => {
-  const device = waitDeviceWithCaptures([
-    () => {
-      throw new AppError('COMMAND_FAILED', 'adb device offline');
-    },
-  ]);
+  const { device, attempts } = failingWaitDevice(
+    () => new AppError('COMMAND_FAILED', 'adb device offline'),
+  );
 
   await assert.rejects(
     device.selectors.wait({
@@ -737,27 +756,28 @@ test('runtime wait still fails immediately on a non-content capture failure', as
     }),
     /adb device offline/,
   );
+  // Fail-FAST, not fail-at-deadline: a single capture attempt, no polling.
+  assert.equal(attempts(), 1);
 });
 
 test('runtime wait fails immediately on a helper MECHANISM failure even though it carries androidSnapshotHelperFailureReason', async () => {
   // The realistic wrapper shape: androidSnapshotHelperCaptureError /
   // androidSnapshotHelperUnavailableError stamp the SAME details key as the
   // content verdicts, but with free-form mechanism reasons. Those must not be
-  // polled until the wait deadline.
-  const mechanismError = () =>
-    new AppError(
-      'COMMAND_FAILED',
-      'Android snapshot helper failed: instrumentation run timed out after 120000ms',
-      {
-        androidSnapshotHelperFailureReason: 'instrumentation run timed out after 120000ms',
-        hint: 'The device may be busy; retry once it settles.',
-      },
-    );
-  const device = waitDeviceWithCaptures([
-    () => {
-      throw mechanismError();
-    },
-  ]);
+  // polled until the wait deadline — the broad any-string classifier would
+  // ride this to the deadline and rethrow the same error, so the attempt
+  // count (not the eventual message) is what makes this regression bite.
+  const { device, attempts } = failingWaitDevice(
+    () =>
+      new AppError(
+        'COMMAND_FAILED',
+        'Android snapshot helper failed: instrumentation run timed out after 120000ms',
+        {
+          androidSnapshotHelperFailureReason: 'instrumentation run timed out after 120000ms',
+          hint: 'The device may be busy; retry once it settles.',
+        },
+      ),
+  );
 
   await assert.rejects(
     device.selectors.wait({
@@ -766,4 +786,5 @@ test('runtime wait fails immediately on a helper MECHANISM failure even though i
     }),
     /instrumentation run timed out/,
   );
+  assert.equal(attempts(), 1);
 });
