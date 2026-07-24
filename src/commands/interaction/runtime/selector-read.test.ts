@@ -738,3 +738,32 @@ test('runtime wait still fails immediately on a non-content capture failure', as
     /adb device offline/,
   );
 });
+
+test('runtime wait fails immediately on a helper MECHANISM failure even though it carries androidSnapshotHelperFailureReason', async () => {
+  // The realistic wrapper shape: androidSnapshotHelperCaptureError /
+  // androidSnapshotHelperUnavailableError stamp the SAME details key as the
+  // content verdicts, but with free-form mechanism reasons. Those must not be
+  // polled until the wait deadline.
+  const mechanismError = () =>
+    new AppError(
+      'COMMAND_FAILED',
+      'Android snapshot helper failed: instrumentation run timed out after 120000ms',
+      {
+        androidSnapshotHelperFailureReason: 'instrumentation run timed out after 120000ms',
+        hint: 'The device may be busy; retry once it settles.',
+      },
+    );
+  const device = waitDeviceWithCaptures([
+    () => {
+      throw mechanismError();
+    },
+  ]);
+
+  await assert.rejects(
+    device.selectors.wait({
+      session: 'default',
+      target: { kind: 'selector', selector: 'label="Screen X"', timeoutMs: 5000 },
+    }),
+    /instrumentation run timed out/,
+  );
+});

@@ -1,6 +1,7 @@
 import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
 import { isAndroidInputMethodOwnedNode } from '../../contracts/android-input-ownership.ts';
 import { hasAndroidSystemChromeProvenance } from '../../contracts/android-system-chrome.ts';
+import type { AndroidContentRecoveryReason } from '../../snapshot/snapshot-quality.ts';
 import { classifyAndroidAlertIdentifier } from './alert-detection.ts';
 import { androidUiNodes, type AndroidUiNodeMetadata } from './ui-hierarchy.ts';
 
@@ -14,7 +15,8 @@ const INSUFFICIENT_APP_CONTENT_REASON =
   'Android snapshot helper returned insufficient application window content';
 
 export type AndroidHelperContentRecoveryDecision = {
-  reason: 'empty-helper-output' | 'system-window-only' | 'content-poor-app-window';
+  /** ADR 0012 #1349: waits classify these as ride-out-able content verdicts (`isUnreadableCaptureContentError`). */
+  reason: AndroidContentRecoveryReason;
   failureReason: string;
   diagnostics: {
     helperNodeCount: number;

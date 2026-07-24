@@ -118,18 +118,45 @@ function collapsedLeafWarnings(
 }
 
 /**
+ * The Android helper's content-recovery verdicts: the capture mechanism
+ * worked but judged the current screen's CONTENT unreadable. The single
+ * enumeration behind both `AndroidHelperContentRecoveryDecision['reason']`
+ * (`src/platforms/android/snapshot-content-recovery.ts` derives its union
+ * from this list) and `isUnreadableCaptureContentError` below, so a new
+ * content verdict cannot be added to one without the other.
+ */
+const ANDROID_CONTENT_RECOVERY_REASONS = [
+  'empty-helper-output',
+  'system-window-only',
+  'content-poor-app-window',
+] as const;
+
+export type AndroidContentRecoveryReason = (typeof ANDROID_CONTENT_RECOVERY_REASONS)[number];
+
+const ANDROID_CONTENT_RECOVERY_REASON_SET: ReadonlySet<string> = new Set(
+  ANDROID_CONTENT_RECOVERY_REASONS,
+);
+
+/**
  * True when a thrown capture failure is a CONTENT verdict — the capture
  * mechanism worked but judged the current screen unreadable (the Android
- * helper's content-recovery refusals, `androidSnapshotHelperFailureReason`) —
- * rather than a mechanism failure. A polling wait rides these out exactly
- * like a sparse-verdict capture that returned no match (iOS already yields a
- * verdict instead of throwing): a mid-transition screen is the state a wait
- * exists to wait through. One-shot reads keep failing loudly, and a wait
- * whose screen never becomes readable rethrows the capture failure at its
- * deadline instead of masking it as a generic timeout.
+ * helper's content-recovery refusals) — rather than a mechanism failure. A
+ * polling wait rides these out exactly like a sparse-verdict capture that
+ * returned no match (iOS already yields a verdict instead of throwing): a
+ * mid-transition screen is the state a wait exists to wait through. One-shot
+ * reads keep failing loudly, and a wait whose screen never becomes readable
+ * rethrows the capture failure at its deadline instead of masking it as a
+ * generic timeout.
+ *
+ * Matches ONLY the enumerated content-recovery reasons: Android stamps
+ * `androidSnapshotHelperFailureReason` on mechanism failures too (helper
+ * timeouts, adb failures, a missing helper artifact — with free-form reason
+ * strings), and those must keep failing a wait immediately rather than being
+ * polled until its deadline.
  */
 export function isUnreadableCaptureContentError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const details = (error as { details?: Record<string, unknown> }).details;
-  return typeof details?.androidSnapshotHelperFailureReason === 'string';
+  const reason = details?.androidSnapshotHelperFailureReason;
+  return typeof reason === 'string' && ANDROID_CONTENT_RECOVERY_REASON_SET.has(reason);
 }
