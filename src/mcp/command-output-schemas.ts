@@ -607,11 +607,14 @@ export const COMMAND_OUTPUT_SCHEMAS = {
       replayed: numberSchema(),
       healed: numberSchema(),
       session: stringSchema(),
+      sessionActive: booleanSchema(
+        'True iff the session is still active — the script had no terminal close.',
+      ),
       artifactPaths: stringArraySchema,
       snapshotDiagnostics: looseObjectSchema(),
       message: stringSchema(),
     },
-    ['replayed', 'healed', 'session', 'artifactPaths', 'message'],
+    ['replayed', 'healed', 'session', 'sessionActive', 'artifactPaths', 'message'],
   ),
   test: objectSchema(
     {

@@ -45,6 +45,61 @@ test('a successful replay prints one line with the step count and wall time', as
   expect(data.message).toMatch(/^Replayed 2 steps in \d+\.\ds$/);
 });
 
+// --- ADR 0016 / issue #1384: `sessionActive` is derived from the REAL
+// producer (`completeReplayRun`'s `sessionStore.get(sessionName)` check), not
+// asserted against a hand-crafted fixture — deleting that line would fail
+// these, unlike the client-lifecycle tests in
+// `src/utils/__tests__/daemon-client-lifecycle.test.ts`, which only prove the
+// CLIENT'S reaction to a `sessionActive` value it is handed. ---
+
+test('a close-less replay reports sessionActive: true (real producer, session still in the store)', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-session-active-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => ({ ok: true, data: {} }),
+  });
+
+  expect(response.ok).toBe(true);
+  if (!response.ok) return;
+  expect(sessionStore.get(sessionName)).toBeDefined();
+  expect((response.data as { sessionActive: boolean }).sessionActive).toBe(true);
+});
+
+test('a replay whose terminal close removes the session reports sessionActive: false', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-session-closed-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const filePath = writeReplayFile(root, ['open "Demo"', 'close']);
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    // Mirrors the one real effect of `handleCloseCommand` this test needs:
+    // removing the session from the store. Every other command is a no-op,
+    // same as the rest of this file's `invoke` stubs.
+    invoke: async (req) => {
+      if (req.command === 'close') sessionStore.delete(sessionName);
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(response.ok).toBe(true);
+  if (!response.ok) return;
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+  expect((response.data as { sessionActive: boolean }).sessionActive).toBe(false);
+});
+
 test('Maestro YAML uses the typed engine while .ad remains generic', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-typed-maestro-route-'));
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
@@ -92,6 +147,31 @@ test('Maestro YAML uses the typed engine while .ad remains generic', async () =>
   });
   expect(adResponse).toMatchObject({ ok: true, data: { replayed: 1 } });
   expect(commands).toEqual(['open']);
+});
+
+test('ADR 0016 / #1384: a Maestro replay reports sessionActive: true (real producer, no fake HTTP)', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-session-active-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const yamlPath = path.join(root, 'flow.yaml');
+  fs.writeFileSync(yamlPath, 'appId: com.example.app\n---\n- launchApp\n');
+
+  const response = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [yamlPath],
+      flags: { replayBackend: 'maestro', platform: 'ios' },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => ({ ok: true, data: {} }),
+  });
+
+  expect(response.ok).toBe(true);
+  if (!response.ok) return;
+  expect(sessionStore.get(sessionName)).toBeDefined();
+  expect((response.data as { sessionActive: boolean }).sessionActive).toBe(true);
 });
 
 test('typed Maestro nested commands receive the runtime hints bound into the plan', async () => {

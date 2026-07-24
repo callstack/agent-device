@@ -34,7 +34,15 @@ test('provider route publishes and replays an open-to-destination script with a 
       await client.sessions.close();
 
       const replay = await world.daemon.callCommand('replay', [scriptPath], world.selection);
-      assert.equal(assertRpcOk<{ session?: string }>(replay).session, 'default');
+      const replayData = assertRpcOk<{ session?: string; sessionActive?: boolean }>(replay);
+      assert.equal(replayData.session, 'default');
+      // ADR 0016 / #1384: the published script has no terminal `close`, so the
+      // real (not test-fixture-injected) daemon response reports the session
+      // still active — this is the exact producer line the client-lifecycle
+      // tests in daemon-client-lifecycle.test.ts assume but cannot themselves
+      // exercise, since they inject sessionActive via a fake HTTP fixture.
+      assert.equal(replayData.sessionActive, true);
+      assert.ok(world.daemon.session(), 'a close-less replay must not tear down the session');
       const replaySnapshot = await client.capture.snapshot({ interactiveOnly: true });
       assert.ok(replaySnapshot.nodes.some((node) => node.label === 'Search'));
       await client.sessions.close();

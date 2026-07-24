@@ -107,7 +107,16 @@ enough for this boundary.
 On consumption, a script without `close` preserves the existing replay behavior: the named session stays
 active and the successful `ReplayCommandResult` returns its `session` id. The caller binds subsequent
 commands to that returned id. Replay reports success only after the destination guard completes; the
-absence of `close` changes neither action dispatch nor the success response shape.
+absence of `close` changes neither action dispatch nor when replay reports success.
+
+**Response shape (issue #1384).** `ReplayCommandResult` carries a required `sessionActive: boolean`,
+computed from whether `session` still exists in the daemon's own store when the response is built — never
+by re-parsing the script for `close`. This is what lets the real CLI/IPC client (not just the in-process
+handler) actually honor "the session stays active": without an explicit signal in the response, the
+client's one-shot `replay`/`test` teardown had no way to distinguish a still-active handoff from a
+finished one, and tore the owning daemon down regardless (`src/daemon/client/daemon-client-lifecycle.ts`).
+`sessionActive` is `true` for every close-less run (including a `--from` resume) and `false` once the
+script's terminal `close` — or a repair-armed run's deferred equivalent — has executed.
 
 ### Sensitive inputs
 
