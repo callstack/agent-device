@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { sleep } from '../../utils/timeouts.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from '../session-snapshot.ts';
 import { isSparseSnapshotQualityVerdict } from '../../snapshot/snapshot-quality.ts';
 import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
@@ -216,15 +217,72 @@ export function toReplayRepairHintCapture(
  * (`collectSettleChromeRefs`) and the meaningful-target filter stay layered ON
  * TOP of this full capture as FILTERS, never as a narrower scoping.
  */
+// #1385: a `capture-failed` / `sparse-snapshot` verdict on the PRE-DISPATCH
+// target-verification capture (`verifyReplayActionTarget`) right after an
+// `open --relaunch` step is often just the app still launching/mounting, not
+// a real divergence — the SAME transition `wait`'s keep-polling landmark
+// verification (#1349) rides out on its own (post-resolution) path. Bounded
+// by BOTH a wall-clock deadline and a fixed delay-list length, so a
+// mocked-instant `sleep` in tests cannot turn this into a busy-loop — it just
+// runs the list once (mirrors the Android freshness retry shape in
+// `snapshot-capture.ts`).
+//
+// Opt-in via `retryLaunchRace`, NOT the default for every caller: the
+// post-failure diagnostic capture (`buildReplayFailureDivergence`) and the
+// post-resolution guard-mismatch capture follow an ALREADY-REAL failure, not
+// a launch race, and plenty of unit tests stub a throwing `snapshot` dispatch
+// there expecting an immediate `capture-failed` result (repo convention: unit
+// tests must not wait real time). Retrying unconditionally would force real
+// wall-clock waits onto every one of those.
+const DIVERGENCE_CAPTURE_RETRY_DEADLINE_MS = 12_000;
+const DIVERGENCE_CAPTURE_RETRY_DELAYS_MS = [300, 500, 800, 1200, 2000, 3000, 4000] as const;
+
 export async function captureDivergenceObservation(params: {
   session: SessionState;
   sessionName: string;
   sessionStore: SessionStore;
   logPath: string;
   action: ReplayReportAction;
+  retryLaunchRace?: boolean;
 }): Promise<DivergenceObservation> {
-  const { session, sessionName, sessionStore, logPath, action } = params;
+  const { session, sessionName, sessionStore, logPath, action, retryLaunchRace = false } = params;
   const flags = divergenceCaptureFlags(action);
+
+  let observation = await captureDivergenceObservationAttempt({
+    session,
+    sessionName,
+    sessionStore,
+    logPath,
+    flags,
+  });
+  if (!retryLaunchRace) return observation;
+
+  const deadline = Date.now() + DIVERGENCE_CAPTURE_RETRY_DEADLINE_MS;
+  for (const delayMs of DIVERGENCE_CAPTURE_RETRY_DELAYS_MS) {
+    if (observation.state === 'available') break;
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) break;
+    await sleep(Math.min(delayMs, remainingMs));
+    observation = await captureDivergenceObservationAttempt({
+      session,
+      sessionName,
+      sessionStore,
+      logPath,
+      flags,
+    });
+  }
+
+  return observation;
+}
+
+async function captureDivergenceObservationAttempt(params: {
+  session: SessionState;
+  sessionName: string;
+  sessionStore: SessionStore;
+  logPath: string;
+  flags: CommandFlags;
+}): Promise<DivergenceObservation> {
+  const { session, sessionName, sessionStore, logPath, flags } = params;
   try {
     const capture = await captureSnapshot({
       device: session.device,

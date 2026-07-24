@@ -3,9 +3,9 @@
 ## Status
 
 Accepted (2026-07-10). Implemented on `main`, including the amendments folded into the decisions
-below (#1264, #1269, #1271 stage 2, #1280, #1349); only decision 5's replay benchmark extension
-remains deferred. The per-step landing record (PRs #1193-#1349) and the pre-acceptance migration
-plan live in this file's git history.
+below (#1264, #1269, #1271 stage 2, #1280, #1349, #1385); only decision 5's replay benchmark
+extension remains deferred. The per-step landing record (PRs #1193-#1349) and the pre-acceptance
+migration plan live in this file's git history.
 
 ## Rules at a glance
 
@@ -29,7 +29,9 @@ Normative summary, one entry per decision. The binding contracts, amendments, an
    `identity-unverifiable` divergence, never a silent pick. Amendments: non-unique ids demote to
    role+label (#1269); an identity-empty pressed container records its first labeled descendant,
    double-guarded fail-closed (#1280); `wait` landmark identity and `is` coverage dispatch on the
-   `targetIdentityVerification` descriptor trait (#1349).
+   `targetIdentityVerification` descriptor trait (#1349); the pre-dispatch verification capture
+   bounds-retries a content-quality `capture-failed`/`sparse-snapshot` verdict on an app-launch race,
+   opt-in per call site (#1385).
 4. **Divergence is a structured error, resumable by plan ordinal.** `ok:false` with code
    `REPLAY_DIVERGENCE` and `details.divergence` v1: `kind` (`action-failure` | `selector-miss` |
    `identity-mismatch` | `identity-unverifiable`), a bounded `screen` (same capture scope as plain
@@ -368,6 +370,20 @@ A field present in the recording but absent on the compared node is a mismatch; 
 An old unannotated action remains executable without this check. All three divergence classes are
 target-binding divergences reported before the device action. This is not general outcome verification:
 `--verify` remains post-action change evidence with a different contract.
+
+> **Amendment (#1385).** The capture this verification runs against (`captureDivergenceObservation`) is
+> itself the pre-dispatch gate a step right after `open --relaunch` races: the app can still be
+> launching/mounting when it lands, producing a transient content-quality verdict — `capture-failed`
+> (Android's snapshot helper returns "insufficient foreground app content" while the app is mounting, and
+> the capture path throws) or `sparse-snapshot` (iOS's private-AX fallback under load) — that is not a
+> real divergence, only an unlucky capture. This capture now retries with a bounded backoff (fixed delay
+> list, capped at a 12s wall-clock deadline) before falling through to `identity-unverifiable`, mirroring
+> the keep-polling semantics `wait`'s recorded-landmark identity verification (#1349) already applies on
+> its own (post-resolution) path. The retry is opt-in per call site (`retryLaunchRace`), not a change to
+> every `captureDivergenceObservation` caller: only the pre-dispatch verification gate in
+> `verifyReplayActionTarget` races a launch this way — the post-failure diagnostic capture
+> (`buildReplayFailureDivergence`) and the post-resolution guard-mismatch capture both follow an
+> already-real failure, where retrying would only delay an already-decided divergence.
 
 ### 4. Divergence wire contract and replay-only resume
 

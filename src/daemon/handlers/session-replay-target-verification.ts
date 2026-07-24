@@ -317,12 +317,18 @@ export async function verifyReplayActionTarget(params: {
     return { verified: false, response: await buildRecordedUnverifiableResponse() };
   }
 
+  // #1385: this is the pre-dispatch gate a step right after `open --relaunch`
+  // can race — the app may still be launching/mounting when this capture
+  // lands, producing a transient `capture-failed` / `sparse-snapshot`
+  // verdict that is not a real divergence. Bounded retry rides out that
+  // transition instead of failing closed on the first unlucky capture.
   const observation = await captureDivergenceObservation({
     session,
     sessionName,
     sessionStore,
     logPath,
     action,
+    retryLaunchRace: true,
   });
   if (observation.state !== 'available') {
     return {

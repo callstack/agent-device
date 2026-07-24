@@ -13,6 +13,16 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
 });
 
+// #1385's pre-dispatch launch-race retry (captureDivergenceObservation's
+// `retryLaunchRace`) awaits a real `sleep` between attempts; stub it to a
+// no-op so the retry tests below exercise the retry BRANCH (still runs each
+// mocked capture attempt) without a real wall-clock wait (repo guidance: unit
+// tests must not wait real time).
+vi.mock('../../../utils/timeouts.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../utils/timeouts.ts')>();
+  return { ...actual, sleep: vi.fn(async () => {}) };
+});
+
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -484,6 +494,97 @@ test('a target-binding divergence carries a real computed resume (step 5 wiring,
   expect(typeof resume.planDigest).toBe('string');
   expect((resume.planDigest ?? '').length).toBeGreaterThan(0);
   expect(resume.reason).toBeUndefined();
+});
+
+// #1385: a step-2 press right after `open --relaunch` can capture while the
+// app is still launching/mounting — the pre-dispatch verification capture
+// throws (Android's "insufficient foreground app content" surfaces as a
+// thrown capture failure) or returns sparse on the first attempt(s), then
+// recovers once the app finishes mounting. The bounded retry in
+// `captureDivergenceObservation` (`retryLaunchRace`) must ride that out
+// instead of failing closed on the first unlucky capture.
+test('a transient pre-dispatch capture failure right after launch recovers within the bounded retry, and the action still dispatches', async () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'agent-device-replay-target-verify-launch-race-recover-'),
+  );
+  const { sessionStore, sessionName } = setupSession(root);
+  const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
+
+  // First two captures fail closed (mirrors a mid-launch/mid-mount capture);
+  // the third lands after the app settles and finds the recorded target.
+  mockDispatchCommand
+    .mockImplementationOnce(async () => {
+      throw new Error('Android snapshot helper returned insufficient foreground app content');
+    })
+    .mockImplementationOnce(async () => {
+      throw new Error('Android snapshot helper returned insufficient foreground app content');
+    })
+    .mockResolvedValue({
+      nodes: [
+        {
+          index: 0,
+          depth: 0,
+          type: 'Button',
+          identifier: 'save',
+          label: 'Save',
+          rect: { x: 10, y: 10, width: 40, height: 20 },
+        },
+      ],
+      truncated: false,
+      backend: 'xctest',
+    });
+
+  const invoked: DaemonRequest[] = [];
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      invoked.push(req);
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(response.ok).toBe(true);
+  expect(invoked.map((req) => req.command)).toEqual(['click']);
+  expect(mockDispatchCommand).toHaveBeenCalledTimes(3);
+});
+
+test('a pre-dispatch capture failure that never recovers still fails closed as identity-unverifiable once the bounded retry is exhausted', async () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'agent-device-replay-target-verify-launch-race-exhausted-'),
+  );
+  const { sessionStore, sessionName } = setupSession(root);
+  const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
+
+  mockDispatchCommand.mockImplementation(async () => {
+    throw new Error('Android snapshot helper returned insufficient foreground app content');
+  });
+
+  const invoked: DaemonRequest[] = [];
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      invoked.push(req);
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(invoked.length).toBe(0);
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('REPLAY_DIVERGENCE');
+  const divergence = response.error.details?.divergence as Record<string, unknown>;
+  expect(divergence.kind).toBe('identity-unverifiable');
+  const cause = divergence.cause as { code: string; message: string };
+  expect(cause.code).toBe('IDENTITY_UNVERIFIABLE');
+  expect(cause.message).toContain('capture-failed');
+  // Bounded: the retry gives up after its fixed delay list, not forever.
+  expect(mockDispatchCommand.mock.calls.length).toBeGreaterThan(1);
 });
 
 // ---------------------------------------------------------------------------
