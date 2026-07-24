@@ -410,7 +410,7 @@ test('fresh typed Maestro replay resolves its configured app before runtime defa
   const response = await runReplayScriptFile({
     req: baseReq({
       positionals: [flowPath],
-      flags: { replayBackend: 'maestro', platform: 'ios' },
+      flags: { replayBackend: 'maestro' },
       runtime: { metroPort: 8081 },
     }),
     sessionName: 'default',
@@ -421,7 +421,7 @@ test('fresh typed Maestro replay resolves its configured app before runtime defa
 
   expect(response.ok).toBe(true);
   expect(mockResolveTargetDevice).toHaveBeenCalledWith(
-    { replayBackend: 'maestro', platform: 'ios' },
+    { replayBackend: 'maestro' },
     { appleSimulatorAppTarget: 'com.example.demo' },
   );
   expect(invoke).toHaveBeenCalledWith(

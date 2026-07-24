@@ -185,15 +185,33 @@ test('resolveTargetDevice selects the unique booted simulator with the requested
   );
 });
 
-test('resolveTargetDevice reuses an app-aware selection for later request resolution', async () => {
+test('resolveTargetDevice uses app-aware iOS selection when platform is omitted', async () => {
+  mockListAppleDevices.mockResolvedValue([bootedSimulator, secondBootedSimulator]);
+  mockFindIosSimulatorInstalledApp.mockImplementation(async (device) =>
+    device.id === secondBootedSimulator.id ? 'com.example.demo' : undefined,
+  );
+
+  const result = await resolveTargetDevice({}, { appleSimulatorAppTarget: 'com.example.demo' });
+
+  assert.equal(result.id, secondBootedSimulator.id);
+  assert.deepEqual(
+    mockFindIosSimulatorInstalledApp.mock.calls.map(([device, app]) => [device.id, app]),
+    [
+      [bootedSimulator.id, 'com.example.demo'],
+      [secondBootedSimulator.id, 'com.example.demo'],
+    ],
+  );
+});
+
+test('resolveTargetDevice reuses an app-aware selection for later platform-inferred resolution', async () => {
   mockListAppleDevices.mockResolvedValue([bootedSimulator, secondBootedSimulator]);
   mockFindIosSimulatorInstalledApp.mockImplementation(async (device) =>
     device.id === secondBootedSimulator.id ? 'com.example.demo' : undefined,
   );
 
   const [appAware, laterResolution] = await withResolveTargetDeviceCacheScope(async () => [
-    await resolveTargetDevice({ platform: 'ios' }, { appleSimulatorAppTarget: 'com.example.demo' }),
-    await resolveTargetDevice({ platform: 'ios' }),
+    await resolveTargetDevice({}, { appleSimulatorAppTarget: 'com.example.demo' }),
+    await resolveTargetDevice({}),
   ]);
 
   assert.equal(appAware.id, secondBootedSimulator.id);
@@ -233,11 +251,11 @@ test('resolveTargetDevice refuses ambiguous booted simulator app matches', async
   assert.equal(error.details?.hint, 'Pass --udid to select the intended simulator explicitly.');
 });
 
-test('resolveTargetDevice does not probe when an Apple device is explicitly selected', async () => {
+test('resolveTargetDevice preserves an explicit device selector when platform is omitted', async () => {
   mockListAppleDevices.mockResolvedValue([bootedSimulator, secondBootedSimulator]);
 
   const result = await resolveTargetDevice(
-    { platform: 'ios', udid: bootedSimulator.id },
+    { udid: bootedSimulator.id },
     { appleSimulatorAppTarget: 'com.example.demo' },
   );
 

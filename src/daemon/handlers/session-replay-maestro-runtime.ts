@@ -214,7 +214,10 @@ async function resolveMaestroReplayBinding(params: {
     session?.device ??
     (requestedPlatform === 'android' || requestedPlatform === 'ios'
       ? undefined
-      : await resolveTargetDevice(req.flags ?? {}));
+      : await resolveTargetDevice(
+          req.flags ?? {},
+          buildMaestroReplayTargetDeviceResolutionOptions(program),
+        ));
   const platform = resolveMaestroPlatform(req, device);
   const runtimeHints = resolveEffectiveOpenRuntimeHints({
     req,

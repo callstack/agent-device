@@ -143,7 +143,7 @@ test('fresh replay reserves its authored app simulator before any replay step', 
       session: 'fresh-replay',
       command: 'replay',
       positionals: [replayPath],
-      flags: { platform: 'ios' },
+      flags: {},
       meta: { cwd: root },
     },
     sessionName: 'fresh-replay',
@@ -152,7 +152,7 @@ test('fresh replay reserves its authored app simulator before any replay step', 
 
   expect(keys).toEqual(['session:fresh-replay', 'device:SIM-WITH-APP']);
   expect(mockResolveTargetDevice).toHaveBeenCalledWith(
-    { platform: 'ios' },
+    {},
     { appleSimulatorAppTarget: 'com.example.demo' },
   );
 });

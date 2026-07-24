@@ -214,7 +214,7 @@ export async function resolveTargetDevice(
       }
       const injectedDevices = await readInjectedDeviceInventory(inventoryRequest);
       if (injectedDevices) {
-        if (isAppleResolutionSelector(selector)) {
+        if (shouldUseAppleResolution(selector, options)) {
           return cacheResolvedTargetDevice(
             cacheKey,
             await resolveAppleDevice(injectedDevices, selector as AppleDeviceSelector, {
@@ -232,7 +232,7 @@ export async function resolveTargetDevice(
 
       const devices = await listLocalDeviceInventory(inventoryRequest);
 
-      if (isAppleResolutionSelector(selector)) {
+      if (shouldUseAppleResolution(selector, options)) {
         return cacheResolvedTargetDevice(
           cacheKey,
           await resolveAppleDevice(devices, selector as AppleDeviceSelector, {
@@ -326,6 +326,14 @@ function isAppleResolutionSelector(selector: {
   target?: DeviceTarget;
 }): boolean {
   return isApplePlatform(selector.platform);
+}
+
+function shouldUseAppleResolution(
+  selector: { platform?: PlatformSelector; target?: DeviceTarget },
+  options: ResolveTargetDeviceOptions,
+): boolean {
+  if (isAppleResolutionSelector(selector)) return true;
+  return selector.platform === undefined && options.appleSimulatorAppTarget !== undefined;
 }
 
 function readResolveTargetDeviceCache(cacheKey: string): DeviceInfo | undefined {
