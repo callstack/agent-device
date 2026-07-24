@@ -116,3 +116,20 @@ function collapsedLeafWarnings(
   }
   return warnings;
 }
+
+/**
+ * True when a thrown capture failure is a CONTENT verdict — the capture
+ * mechanism worked but judged the current screen unreadable (the Android
+ * helper's content-recovery refusals, `androidSnapshotHelperFailureReason`) —
+ * rather than a mechanism failure. A polling wait rides these out exactly
+ * like a sparse-verdict capture that returned no match (iOS already yields a
+ * verdict instead of throwing): a mid-transition screen is the state a wait
+ * exists to wait through. One-shot reads keep failing loudly, and a wait
+ * whose screen never becomes readable rethrows the capture failure at its
+ * deadline instead of masking it as a generic timeout.
+ */
+export function isUnreadableCaptureContentError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const details = (error as { details?: Record<string, unknown> }).details;
+  return typeof details?.androidSnapshotHelperFailureReason === 'string';
+}

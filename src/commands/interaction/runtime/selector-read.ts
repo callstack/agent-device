@@ -8,6 +8,7 @@ import type { SnapshotNode } from '../../../kernel/snapshot.ts';
 import { findNodeByRef, normalizeRef } from '../../../kernel/snapshot.ts';
 import {
   isSparseSnapshotQualityVerdict,
+  isUnreadableCaptureContentError,
   type SnapshotQualityVerdict,
 } from '../../../snapshot/snapshot-quality.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
@@ -574,29 +575,34 @@ async function waitForSelector(
   // must not abort a wait whose job is to wait through it, so the loop keeps
   // polling; only the deadline turns this into the fail-closed refusal.
   let landmarkMismatch: WaitLandmarkMismatchEvidence | undefined;
+  const unreadable = createUnreadablePollTracker();
   while (now(runtime) - start < timeout) {
     // Presence-only poll: skip scroll-hint derivation (#1270), same as waitForFindMatch.
-    const capture = await captureSelectorSnapshot(runtime, options, {
-      updateSession: true,
-      includeHiddenContentHints: false,
-      ...capturePolicy,
-    });
-    const nodes = capture.snapshot.nodes;
-    const matchList = listSelectorChainMatches(nodes, chain, {
-      platform: runtime.backend.platform,
-    });
-    if (matchList) {
-      const landmark = resolveLandmarkMatch(nodes, matchList, recordedLandmark);
-      if (landmark.kind === 'satisfied') {
-        return {
-          kind: 'selector',
-          selector: matchList.selector.raw,
-          waitedMs: now(runtime) - start,
-          node: landmark.node,
-          preActionNodes: nodes,
-        };
+    const capture = await unreadable.attempt(() =>
+      captureSelectorSnapshot(runtime, options, {
+        updateSession: true,
+        includeHiddenContentHints: false,
+        ...capturePolicy,
+      }),
+    );
+    if (capture) {
+      const nodes = capture.snapshot.nodes;
+      const matchList = listSelectorChainMatches(nodes, chain, {
+        platform: runtime.backend.platform,
+      });
+      if (matchList) {
+        const landmark = resolveLandmarkMatch(nodes, matchList, recordedLandmark);
+        if (landmark.kind === 'satisfied') {
+          return {
+            kind: 'selector',
+            selector: matchList.selector.raw,
+            waitedMs: now(runtime) - start,
+            node: landmark.node,
+            preActionNodes: nodes,
+          };
+        }
+        landmarkMismatch = landmark.evidence;
       }
-      landmarkMismatch = landmark.evidence;
     }
     await sleep(runtime, POLL_INTERVAL_MS);
   }
@@ -607,7 +613,41 @@ async function waitForSelector(
       { reason: WAIT_LANDMARK_MISMATCH_REASON, ...landmarkMismatch },
     );
   }
+  unreadable.rethrowIfNeverReadable();
   throw new AppError('COMMAND_FAILED', `wait timed out for selector: ${selectorExpression}`);
+}
+
+/**
+ * A wait poll rides out a capture that judged the current screen unreadable
+ * (`isUnreadableCaptureContentError` — the mid-transition state a wait exists
+ * to wait through; iOS surfaces the same state as a sparse verdict with no
+ * matches). Any other capture failure still throws immediately, and a wait
+ * whose screen NEVER became readable rethrows the last content verdict at the
+ * deadline so persistent breakage keeps its capture diagnosis instead of a
+ * generic timeout.
+ */
+function createUnreadablePollTracker(): {
+  attempt: <T>(capture: () => Promise<T>) => Promise<T | undefined>;
+  rethrowIfNeverReadable: () => void;
+} {
+  let sawReadableCapture = false;
+  let lastUnreadableError: unknown;
+  return {
+    attempt: async <T>(capture: () => Promise<T>): Promise<T | undefined> => {
+      try {
+        const result = await capture();
+        sawReadableCapture = true;
+        return result;
+      } catch (error) {
+        if (!isUnreadableCaptureContentError(error)) throw error;
+        lastUnreadableError = error;
+        return undefined;
+      }
+    },
+    rethrowIfNeverReadable: () => {
+      if (!sawReadableCapture && lastUnreadableError !== undefined) throw lastUnreadableError;
+    },
+  };
 }
 
 type LandmarkMatchOutcome =
@@ -659,13 +699,17 @@ async function waitForText(
 ): Promise<WaitCommandResult> {
   const timeout = timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const start = now(runtime);
+  const unreadable = createUnreadablePollTracker();
   while (now(runtime) - start < timeout) {
-    const found = runtime.backend.findText
-      ? (await runtime.backend.findText(toBackendContext(runtime, options), text)).found
-      : await snapshotContainsText(runtime, options, text);
+    const found = await unreadable.attempt(async () =>
+      runtime.backend.findText
+        ? (await runtime.backend.findText(toBackendContext(runtime, options), text)).found
+        : await snapshotContainsText(runtime, options, text),
+    );
     if (found) return { kind: 'text', text, waitedMs: now(runtime) - start };
     await sleep(runtime, POLL_INTERVAL_MS);
   }
+  unreadable.rethrowIfNeverReadable();
   throw new AppError('COMMAND_FAILED', `wait timed out for text: ${text}`);
 }
 

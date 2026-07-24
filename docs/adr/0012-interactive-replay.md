@@ -402,6 +402,12 @@ A recorded `id` never matches a node without that id.
 >   first ancestry mismatch in `mismatches`) BEFORE the wait reports success, while a selector that
 >   never matched at all remains the ordinary wait timeout (`action-failure` — that failure needs a
 >   state repair, not an identity repair, and its `repairHint` routing is already correct).
+>   A wait poll also rides out a capture that judged the current screen UNREADABLE (the Android
+>   helper's content verdicts, `isUnreadableCaptureContentError`; iOS surfaces the same state as a
+>   sparse verdict with no matches): live Android validation showed a guard wait replayed right after
+>   a navigation press deterministically dies on its first mid-transition capture otherwise. A wait
+>   whose screen never became readable rethrows the last capture verdict at the deadline instead of
+>   masking it as a generic timeout.
 >   Record time writes evidence in a **landmark mode**: the step-5 self-check is identity-set
 >   MEMBERSHIP rather than isolation (mirroring what replay will actually verify), and a matched node
 >   with no id and no label after #1269 demotion records **no annotation** — a role-only landmark

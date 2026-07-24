@@ -635,3 +635,106 @@ test('runtime wait without a recorded landmark returns the satisfying match for 
   assert.equal(result.node?.label, 'Screen X');
   assert.equal(result.preActionNodes?.length, 2);
 });
+
+// ---------------------------------------------------------------------------
+// Wait polls ride out captures that judged the screen unreadable (the
+// mid-transition Android helper content verdicts) instead of aborting the
+// wait — the live-validated destination-guard gap from #1349's PR review.
+// ---------------------------------------------------------------------------
+
+function unreadableCaptureError() {
+  return new AppError(
+    'COMMAND_FAILED',
+    'Android snapshot helper returned insufficient foreground app content',
+    {
+      androidSnapshotHelperFailureReason: 'content-poor-app-window',
+      retriable: true,
+    },
+  );
+}
+
+function waitDeviceWithCaptures(captures: Array<() => ReturnType<typeof landmarkScreen>>) {
+  let call = 0;
+  return createAgentDevice({
+    backend: {
+      platform: 'android',
+      captureSnapshot: async () => {
+        const produce = captures[Math.min(call, captures.length - 1)]!;
+        call += 1;
+        return { snapshot: produce() };
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default' }]),
+    policy: localCommandPolicy(),
+    clock: createFakeClock(),
+  });
+}
+
+test('runtime wait rides out an unreadable mid-transition capture and succeeds on the next poll', async () => {
+  const device = waitDeviceWithCaptures([
+    () => {
+      throw unreadableCaptureError();
+    },
+    () => landmarkScreen('Detail Screen'),
+  ]);
+
+  const result = await device.selectors.wait({
+    session: 'default',
+    target: { kind: 'selector', selector: 'label="Screen X"', timeoutMs: 5000 },
+  });
+
+  assert.equal(result.kind, 'selector');
+  if (result.kind !== 'selector') throw new Error('unreachable');
+  assert.equal(result.waitedMs >= 300, true);
+});
+
+test('runtime wait rethrows the capture verdict when the screen never became readable', async () => {
+  const device = waitDeviceWithCaptures([
+    () => {
+      throw unreadableCaptureError();
+    },
+  ]);
+
+  await assert.rejects(
+    device.selectors.wait({
+      session: 'default',
+      target: { kind: 'selector', selector: 'label="Screen X"', timeoutMs: 1000 },
+    }),
+    /insufficient foreground app content/,
+  );
+});
+
+test('runtime wait keeps the plain timeout when readable polls simply never matched', async () => {
+  const empty = () => makeSnapshotState([{ index: 0, depth: 0, type: 'Other', label: 'Loading' }]);
+  const device = waitDeviceWithCaptures([
+    empty,
+    () => {
+      throw unreadableCaptureError();
+    },
+  ]);
+
+  await assert.rejects(
+    device.selectors.wait({
+      session: 'default',
+      target: { kind: 'selector', selector: 'label="Screen X"', timeoutMs: 1000 },
+    }),
+    /wait timed out for selector/,
+  );
+});
+
+test('runtime wait still fails immediately on a non-content capture failure', async () => {
+  const device = waitDeviceWithCaptures([
+    () => {
+      throw new AppError('COMMAND_FAILED', 'adb device offline');
+    },
+  ]);
+
+  await assert.rejects(
+    device.selectors.wait({
+      session: 'default',
+      target: { kind: 'selector', selector: 'label="Screen X"', timeoutMs: 5000 },
+    }),
+    /adb device offline/,
+  );
+});
