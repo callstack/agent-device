@@ -88,5 +88,10 @@
     "name": "known-limitations",
     "type": "file",
     "label": "Known Limitations"
+  },
+  {
+    "name": "migrating-gestures",
+    "type": "file",
+    "label": "Migrating Gestures"
   }
 ]

@@ -43,7 +43,7 @@ screenshot "./artifacts/checkout"
   test('exports coordinate gestures and sleep waits with warnings', () => {
     const result = exportReplayScriptToMaestro(`open com.example.app
 click 120 240
-swipe 200 700 200 200 300 --count 2
+swipe 200 700 200 200 --count 2
 wait 500
 `);
 
@@ -52,8 +52,8 @@ wait 500
       [
         'launchApp',
         { tapOn: { point: '120,240' } },
-        { swipe: { start: '200,700', end: '200,200', duration: 300 } },
-        { swipe: { start: '200,700', end: '200,200', duration: 300 } },
+        { swipe: { start: '200,700', end: '200,200', duration: 100 } },
+        { swipe: { start: '200,700', end: '200,200', duration: 100 } },
         { waitForAnimationToEnd: { timeout: 500 } },
       ],
     ]);

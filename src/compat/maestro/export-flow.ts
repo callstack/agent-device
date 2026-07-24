@@ -1,4 +1,5 @@
 import type { SessionAction } from '../../daemon/types.ts';
+import { GESTURE_FLING_DURATION_MS } from '../../contracts/gesture-plan.ts';
 import { parseSelectorChain, type Selector } from '../../selectors/index.ts';
 import type { SelectorTerm } from '../../selectors/parse.ts';
 import { AppError } from '../../kernel/errors.ts';
@@ -39,7 +40,7 @@ type ActionConverter = (action: SessionAction) => ConvertedAction;
 type SwipeGeometry = {
   start: string;
   end: string;
-  duration?: number;
+  duration: number;
 };
 
 const TEXT_SELECTOR_KEYS = new Set<string>(MAESTRO_TEXT_SELECTOR_KEYS);
@@ -362,13 +363,18 @@ function convertSwipeAction(action: SessionAction): ConvertedAction {
   };
 }
 
+/**
+ * `swipe` carries no duration positional, so the export states the canonical
+ * fling duration rather than letting Maestro apply its own 400 ms default to a
+ * gesture the script runs at 100 ms.
+ */
 function readSwipeGeometry(action: SessionAction): SwipeGeometry | undefined {
-  const [x1, y1, x2, y2, duration] = action.positionals;
+  const [x1, y1, x2, y2] = action.positionals;
   if (!isNumber(x1) || !isNumber(y1) || !isNumber(x2) || !isNumber(y2)) return undefined;
   return {
     start: formatMaestroPoint(x1, y1),
     end: formatMaestroPoint(x2, y2),
-    ...(duration && isNumber(duration) ? { duration: Number(duration) } : {}),
+    duration: GESTURE_FLING_DURATION_MS,
   };
 }
 

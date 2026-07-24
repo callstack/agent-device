@@ -96,9 +96,25 @@ Platform adapters consume the canonical plan:
 The `Interactor` and backend expose one compositional `performGesture(plan)` primitive instead of a
 method per semantic alias. The old scalar Apple and Android multi-touch executors and the
 public-command alias-to-positionals-to-reparse route are deleted. `.ad` keeps its established
-positional syntax through one named replay compatibility codec; CLI, Node.js, and MCP send
-structured input. Providers should compose transport/device bindings with the shared platform
-adapter rather than reimplement the interaction runtime.
+positional syntax through one named codec; CLI, Node.js, and MCP send structured input. Providers
+should compose transport/device bindings with the shared platform adapter rather than reimplement
+the interaction runtime.
+
+That `.ad` codec is the script format's own syntax, not a compatibility shim, and is not scheduled
+for removal (amended 2026-07, issue #1216). Its only remaining callers are the CLI argv parse and
+the `.ad` line parse — both the current public syntax — so there is nothing left to migrate off.
+A structured `.ad` gesture payload was rejected: it would make recordings unreadable and ungreppable
+for no behavioral gain.
+
+Argument arity for both callers comes from one table (`PUBLIC_GESTURE_SYNTAX`), so a form removed
+from the CLI is removed from `.ad` in the same edit. A `.ad` script that still carries a removed
+positional fails when the script is parsed, before the replay executes any device action, with the
+offending line and its rewrite. Arity is the only thing checked at parse time: `${VAR}` tokens
+resolve after planning, and interpolation never splits a token, so the count is decidable while the
+values are not. The removal process these inputs follow — announce, warn for one minor release,
+publish the migration guide, prove the repository is clean, then remove the branch and its tests —
+is documented in the public
+[gesture migration guide](https://agent-device.dev/docs/migrating-gestures).
 
 Repeated coordinate swipes are bounded at the public command contract and daemon trust boundary.
 Individual count and pause limits prevent pathological fields, while the combined planned gesture

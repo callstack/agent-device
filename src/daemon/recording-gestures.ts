@@ -298,11 +298,7 @@ function buildSwipeEvents(
 
   const durationMs = resolveRecordingDurationMs(
     gestureDurationMs,
-    [
-      readRecordingNumber(result.effectiveDurationMs),
-      readRecordingNumber(result.durationMs),
-      readRecordingNumber(positionals[4]),
-    ],
+    [readRecordingNumber(result.effectiveDurationMs), readRecordingNumber(result.durationMs)],
     DEFAULT_SWIPE_DURATION_MS,
   );
   const count = clampInt(readRecordingNumber(result.count), 1) ?? 1;

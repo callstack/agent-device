@@ -1,5 +1,6 @@
 import { AppError } from '../kernel/errors.ts';
 import { recordingQualityInputToExportQuality } from '../core/recording-export-quality.ts';
+import { describeReplayGestureArityError } from '../contracts/gesture-normalization.ts';
 import { readScreenshotScriptFlag } from '../contracts/screenshot.ts';
 import type { DeviceTarget, PlatformSelector } from '../kernel/device.ts';
 import { PLATFORM_SELECTORS } from '../kernel/device.ts';
@@ -99,6 +100,12 @@ export function parseReplayScriptDetailed(script: string): ParsedReplayScript {
       if (pending) rejectUnbound(pending, index, 'did not parse as an action');
       continue;
     }
+    const gestureArityError = describeReplayGestureArityError(
+      parsed.command,
+      parsed.positionals ?? [],
+      `line ${index + 1}`,
+    );
+    if (gestureArityError) throw new AppError('INVALID_ARGS', gestureArityError);
     if (pending) {
       parsed.targetEvidence = pending.evidence;
       pending = undefined;

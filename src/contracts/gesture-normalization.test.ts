@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
+  describeReplayGestureArityError,
   gesturePayloadFromPositionals,
   gesturePayloadToPositionals,
   normalizePublicGesture,
@@ -55,6 +56,62 @@ test('gesture recording codec round-trips fling with distance', () => {
     distance: 180,
   };
   assert.deepEqual(gesturePayloadFromPositionals(gesturePayloadToPositionals(payload)), payload);
+});
+
+test('a retired trailing positional reports its migration, not a bare usage line', () => {
+  assert.throws(() => swipePayloadFromPositionals(['197', '650', '197', '300', '300']), {
+    code: 'INVALID_ARGS',
+    message:
+      'swipe accepts 4 arguments: x1 y1 x2 y2. The trailing durationMs positional was removed: use "gesture pan 197 650 0 -350 300" for the same timed drag, or "swipe 197 650 197 300" for a default-duration swipe.',
+  });
+  assert.throws(() => gesturePayloadFromPositionals(['fling', 'down', '100', '200', '80', '500']), {
+    code: 'INVALID_ARGS',
+    message: /trailing durationMs positional was removed: use "gesture fling down 100 200 80"/,
+  });
+  assert.throws(() => gesturePayloadFromPositionals(['swipe', 'left', '500']), {
+    code: 'INVALID_ARGS',
+    message: /trailing durationMs positional was removed: use "gesture swipe left"/,
+  });
+  assert.throws(() => gesturePayloadFromPositionals(['rotate', '35', '100', '200', '800']), {
+    code: 'INVALID_ARGS',
+    message: /trailing velocity positional was removed: use "gesture rotate 35 100 200"/,
+  });
+});
+
+test('a malformed line is a usage error rather than a migration claim', () => {
+  assert.throws(() => swipePayloadFromPositionals(['1', '2', '3', '4', '5', '6']), {
+    code: 'INVALID_ARGS',
+    message: 'swipe accepts 4 arguments: x1 y1 x2 y2.',
+  });
+  assert.throws(() => swipePayloadFromPositionals(['1', '2', '3', '4', '--unknown']), {
+    code: 'INVALID_ARGS',
+    message: 'swipe accepts 4 arguments: x1 y1 x2 y2.',
+  });
+});
+
+test('the .ad preflight names the offending line and leaves live syntax alone', () => {
+  assert.equal(
+    describeReplayGestureArityError('swipe', ['197', '650', '197', '300', '300'], 'line 6'),
+    'swipe accepts 4 arguments: x1 y1 x2 y2 (line 6). The trailing durationMs positional was removed: use "gesture pan 197 650 0 -350 300" for the same timed drag, or "swipe 197 650 197 300" for a default-duration swipe.',
+  );
+  assert.equal(
+    describeReplayGestureArityError('gesture', ['pan', '110', '443', '48', '0', '500'], 'line 2'),
+    undefined,
+  );
+  assert.equal(describeReplayGestureArityError('click', ['120', '240'], 'line 2'), undefined);
+});
+
+test('the .ad preflight defers to dispatch for values it cannot know yet', () => {
+  // `${VAR}` tokens resolve after planning, and interpolation never splits a
+  // token, so only the argument count is decidable at parse time.
+  assert.equal(
+    describeReplayGestureArityError('swipe', ['${X1}', '${Y1}', '${X2}', '${Y2}'], 'line 3'),
+    undefined,
+  );
+  assert.equal(
+    describeReplayGestureArityError('gesture', ['${KIND}', '1', '2', '3'], 'line 4'),
+    undefined,
+  );
 });
 
 test('pinch and rotate syntax rejects a partial origin', () => {

@@ -133,13 +133,43 @@ test('snapshot replay script writes interactive refresh flags', () => {
   assert.match(script, /snapshot -i -d 2 -s @e1/);
 });
 
+test('a pre-removal gesture line fails the whole script instead of step N', () => {
+  assert.throws(
+    () =>
+      parseReplayScriptDetailed(
+        [
+          'open com.apple.Preferences --relaunch',
+          '',
+          'swipe 197 650 197 300 300',
+          'wait 500',
+          '',
+        ].join('\n'),
+      ),
+    {
+      code: 'INVALID_ARGS',
+      message:
+        'swipe accepts 4 arguments: x1 y1 x2 y2 (line 3). The trailing durationMs positional was removed: use "gesture pan 197 650 0 -350 300" for the same timed drag, or "swipe 197 650 197 300" for a default-duration swipe.',
+    },
+  );
+  assert.throws(
+    () =>
+      parseReplayScriptDetailed(
+        ['open com.example.app', 'gesture rotate 35 195 443 800'].join('\n'),
+      ),
+    {
+      code: 'INVALID_ARGS',
+      message: /gesture rotate accepts at most 3 arguments: degrees \[x\] \[y\] \(line 2\)\./,
+    },
+  );
+});
+
 test('gesture replay script parses pan, fling, swipe, pinch, and rotate gesture commands', () => {
   const parsed = parseReplayScriptDetailed(
     [
       'gesture pan 195 443 80 0 --pointer-count 2',
       'wait "pan changed yes" 5000',
       'gesture fling right 195 443 180',
-      'gesture swipe right-edge 300',
+      'gesture swipe right-edge',
       'gesture pinch 1.25 195 443',
       'gesture rotate 35 195 443',
       '',
@@ -153,7 +183,7 @@ test('gesture replay script parses pan, fling, swipe, pinch, and rotate gesture 
   assert.deepEqual(parsed[0]?.positionals, ['pan', '195', '443', '80', '0']);
   assert.equal(parsed[0]?.flags.pointerCount, 2);
   assert.deepEqual(parsed[2]?.positionals, ['fling', 'right', '195', '443', '180']);
-  assert.deepEqual(parsed[3]?.positionals, ['swipe', 'right-edge', '300']);
+  assert.deepEqual(parsed[3]?.positionals, ['swipe', 'right-edge']);
   assert.deepEqual(parsed[4]?.positionals, ['pinch', '1.25', '195', '443']);
   assert.deepEqual(parsed[5]?.positionals, ['rotate', '35', '195', '443']);
 });
