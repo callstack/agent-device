@@ -114,9 +114,7 @@ function describeGestureArityError(
   const syntax = PUBLIC_GESTURE_SYNTAX[key];
   if (args.length <= syntax.max) return undefined;
   const retired = syntax.retired;
-  // A retired positional was always a number, so a single extra numeric
-  // argument is the pre-removal form rather than a malformed line.
-  if (!retired || args.length !== syntax.max + 1 || !isNumericArgument(args[syntax.max])) {
+  if (!retired || args.length !== syntax.max + 1 || !isRetiredSlotArgument(args[syntax.max])) {
     return { usage: syntax.usage };
   }
   const canonical = `${key} ${args.slice(0, syntax.max).join(' ')}`;
@@ -126,8 +124,30 @@ function describeGestureArityError(
   };
 }
 
-function isNumericArgument(value: string | undefined): boolean {
-  return value !== undefined && value.trim().length > 0 && Number.isFinite(Number(value));
+/**
+ * Whether one extra argument occupies the retired slot. A retired positional was
+ * always a number, and a `.ad` script may hold it as an unresolved `${VAR}`, so
+ * both report the migration while a stray flag or word stays a usage error.
+ */
+function isRetiredSlotArgument(value: string | undefined): boolean {
+  if (value === undefined || value.trim().length === 0) return false;
+  return value.startsWith('${') || Number.isFinite(Number(value));
+}
+
+/**
+ * `swipe` is the one public gesture surface whose structured input has no reader
+ * of its own — the daemon writer projects known fields — so a removed key would
+ * be dropped before the daemon could reject it and a default-duration fling
+ * would run instead. Rejecting here covers the Node and MCP boundaries at the
+ * same point `readGesturePayload` rejects the gesture kinds' removed keys.
+ */
+export function assertNoRemovedSwipeInput(input: unknown): void {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return;
+  if ((input as Record<string, unknown>).durationMs === undefined) return;
+  throw new AppError(
+    'INVALID_ARGS',
+    'swipe does not accept durationMs; use gesture pan for timed movement',
+  );
 }
 
 function formatGestureArityError(error: GestureArityError, source?: string): string {

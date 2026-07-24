@@ -11,7 +11,10 @@ import {
   readInteractionTargetFromPositionals,
 } from '../../core/interaction-positionals.ts';
 import { AppError } from '../../kernel/errors.ts';
-import { swipePayloadFromPositionals } from '../../contracts/gesture-normalization.ts';
+import {
+  assertNoRemovedSwipeInput,
+  swipePayloadFromPositionals,
+} from '../../contracts/gesture-normalization.ts';
 import type { ScrollInputDirection } from './runtime/gestures.ts';
 import {
   commonInputFromFlags,
@@ -124,14 +127,16 @@ export const interactionDaemonWriters = {
   longpress: direct(PUBLIC_COMMANDS.longPress, (input) =>
     longPressPositionals(input as LongPressOptions),
   ),
-  swipe: (input) =>
-    request(PUBLIC_COMMANDS.swipe, [], input, {
+  swipe: (input) => {
+    assertNoRemovedSwipeInput(input);
+    return request(PUBLIC_COMMANDS.swipe, [], input, {
       from: input.from,
       to: input.to,
       count: input.count,
       pauseMs: input.pauseMs,
       pattern: input.pattern,
-    }),
+    });
+  },
   focus: direct(PUBLIC_COMMANDS.focus, (input) => [String(input.x), String(input.y)]),
   type: direct(PUBLIC_COMMANDS.type, (input) => typePositionals(input as TypeTextOptions)),
   fill: direct(PUBLIC_COMMANDS.fill, (input) => fillPositionals(input as FillOptions)),

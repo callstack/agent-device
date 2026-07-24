@@ -4,7 +4,7 @@ title: Migrating Gestures
 
 # Migrating Gestures
 
-`agent-device` 0.21 removed the timed forms of `swipe`, `gesture fling`, and `gesture swipe`, and
+`agent-device` 0.20.0 removed the timed forms of `swipe`, `gesture fling`, and `gesture swipe`, and
 the `velocity` argument of `gesture rotate`. Nothing is silently reinterpreted: every removed form
 now fails with an `INVALID_ARGS` error that names its replacement.
 
@@ -61,7 +61,9 @@ for a default-duration swipe.
 
 `interactions.swipe`, `interactions.fling`, and `interactions.swipeGesture` no longer accept
 `durationMs`; `interactions.rotateGesture` no longer accepts `velocity`. Passing them is a type
-error at compile time and an `INVALID_ARGS` rejection at runtime.
+error at compile time and an `INVALID_ARGS` rejection at runtime — the rejection happens
+client-side, before the request reaches the daemon, so a plain JavaScript caller or a stale
+compiled build gets the error rather than a silently retimed gesture.
 
 ```ts
 // before
@@ -114,10 +116,13 @@ swipe 206 650 206 300 300 --count 2 --pause-ms 200 --pattern one-way
 swipe 206 650 206 300 --count 2 --pause-ms 200 --pattern one-way
 ```
 
+A duration held in a variable (`swipe 197 650 197 300 ${DURATION}`) is reported the same way — the
+preflight counts arguments, so it does not need the value.
+
 To find every affected line across a suite:
 
 ```bash
-grep -rnE '\bswipe +[-0-9.]+ +[-0-9.]+ +[-0-9.]+ +[-0-9.]+ +[-0-9.]+' --include='*.ad' .
+grep -rnE '\bswipe( +([-0-9.]+|\$\{[^}]*\})){5}' --include='*.ad' .
 ```
 
 Re-recording also produces a migrated script: the recorder writes the canonical form, so a fresh
@@ -154,7 +159,7 @@ to clear:
    that can appear in a saved recording, the rejection must fire at parse time and name the line, so
    a stale script never half-executes.
 
-The 0.21 removal completed all five steps.
+The 0.20.0 removal completed all five steps.
 
 ## Positional `.ad` syntax
 

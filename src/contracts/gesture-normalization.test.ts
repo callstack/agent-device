@@ -87,6 +87,10 @@ test('a malformed line is a usage error rather than a migration claim', () => {
     code: 'INVALID_ARGS',
     message: 'swipe accepts 4 arguments: x1 y1 x2 y2.',
   });
+  assert.throws(() => swipePayloadFromPositionals(['1', '2', '3', '4', 'hello']), {
+    code: 'INVALID_ARGS',
+    message: 'swipe accepts 4 arguments: x1 y1 x2 y2.',
+  });
 });
 
 test('the .ad preflight names the offending line and leaves live syntax alone', () => {
@@ -99,6 +103,26 @@ test('the .ad preflight names the offending line and leaves live syntax alone', 
     undefined,
   );
   assert.equal(describeReplayGestureArityError('click', ['120', '240'], 'line 2'), undefined);
+});
+
+test('a variable-backed retired positional still gets the migration', () => {
+  assert.equal(
+    describeReplayGestureArityError('swipe', ['197', '650', '197', '300', '${DURATION}'], 'line 6'),
+    'swipe accepts 4 arguments: x1 y1 x2 y2 (line 6). The trailing durationMs positional was removed: use "gesture pan 197 650 0 -350 ${DURATION}" for the same timed drag, or "swipe 197 650 197 300" for a default-duration swipe.',
+  );
+  assert.equal(
+    describeReplayGestureArityError(
+      'swipe',
+      ['${X1}', '${Y1}', '${X2}', '${Y2}', '${DURATION}'],
+      'line 6',
+    ),
+    'swipe accepts 4 arguments: x1 y1 x2 y2 (line 6). The trailing durationMs positional was removed: use "gesture pan x1 y1 dx dy durationMs" for the same timed drag, or "swipe ${X1} ${Y1} ${X2} ${Y2}" for a default-duration swipe.',
+  );
+  assert.match(
+    describeReplayGestureArityError('gesture', ['rotate', '35', '195', '443', '${V}'], 'line 4') ??
+      '',
+    /trailing velocity positional was removed: use "gesture rotate 35 195 443"/,
+  );
 });
 
 test('the .ad preflight defers to dispatch for values it cannot know yet', () => {

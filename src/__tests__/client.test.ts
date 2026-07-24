@@ -673,6 +673,55 @@ test('interactions.rotateGesture rejects partial centers on the client side', as
   assert.equal(setup.calls.length, 0);
 });
 
+test('removed gesture inputs are rejected client-side, never dropped from the projection', async () => {
+  const setup = createTransport(async () => {
+    throw new Error('transport should not run for invalid input');
+  });
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+  // A JavaScript caller (or a stale compiled build) can still reach these keys
+  // past the removed compile-time fields. `swipe` has no structured reader of
+  // its own, so before #1216 its writer silently dropped `durationMs` and ran a
+  // default-duration fling instead of failing.
+  const removed: Array<[string, () => Promise<unknown>, string]> = [
+    [
+      'swipe durationMs',
+      () =>
+        client.interactions.swipe({
+          from: { x: 197, y: 650 },
+          to: { x: 197, y: 300 },
+          durationMs: 300,
+        } as Parameters<typeof client.interactions.swipe>[0]),
+      'swipe does not accept durationMs; use gesture pan for timed movement',
+    ],
+    [
+      'fling durationMs',
+      () =>
+        client.interactions.fling({ direction: 'down', x: 100, y: 200, durationMs: 300 } as never),
+      'gesture fling does not accept durationMs; use gesture pan for timed movement',
+    ],
+    [
+      'gesture swipe durationMs',
+      () => client.interactions.swipeGesture({ preset: 'left', durationMs: 300 } as never),
+      'gesture swipe does not accept durationMs; use gesture pan for timed movement',
+    ],
+    [
+      'rotate velocity',
+      () => client.interactions.rotateGesture({ degrees: 35, velocity: 800 } as never),
+      'gesture rotate does not accept velocity; rotation pacing derives from degrees',
+    ],
+  ];
+
+  for (const [label, call, message] of removed) {
+    await assert.rejects(
+      call,
+      (error: unknown) =>
+        error instanceof AppError && error.code === 'INVALID_ARGS' && error.message === message,
+      label,
+    );
+  }
+  assert.equal(setup.calls.length, 0);
+});
+
 test('interactions.pan projects one- and two-finger requests through typed gesture input', async () => {
   const setup = createTransport(async () => ({ ok: true, data: { message: 'Panned' } }));
   const client = createAgentDeviceClient(setup.config, { transport: setup.transport });

@@ -1,5 +1,6 @@
 import { readGesturePayload, type GesturePayload } from '../../contracts/gesture-input.ts';
 import {
+  assertNoRemovedSwipeInput,
   gesturePayloadToPositionals,
   normalizePublicGesture,
   normalizePublicSwipeMotion,
@@ -189,13 +190,8 @@ function readSwipeInput(input: unknown): SwipePayload {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new AppError('INVALID_ARGS', 'swipe requires structured object input');
   }
+  assertNoRemovedSwipeInput(input);
   const record = input as Record<string, unknown>;
-  if (record.durationMs !== undefined) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'swipe does not accept durationMs; use gesture pan for timed movement',
-    );
-  }
   const pattern = record.pattern;
   if (pattern !== undefined && pattern !== 'one-way' && pattern !== 'ping-pong') {
     throw new AppError('INVALID_ARGS', 'swipe pattern must be one-way or ping-pong');
