@@ -14,12 +14,11 @@ export function collectIosScrollIndicatorPresentation(
   nodes: RawSnapshotNode[],
   context: SnapshotTreeRuleContext,
 ): void {
-  const byIndex = new Map(nodes.map((node) => [node.index, node]));
   for (const node of nodes) {
     if (!isIosScrollIndicatorNode(node)) {
       continue;
     }
-    collectIosScrollIndicatorNodePresentation(node, byIndex, context);
+    collectIosScrollIndicatorNodePresentation(node, context.sourceNodesByIndex, context);
   }
 }
 
@@ -30,7 +29,7 @@ function isIosScrollIndicatorNode(node: RawSnapshotNode): boolean {
 
 function collectIosScrollIndicatorNodePresentation(
   node: RawSnapshotNode,
-  byIndex: Map<number, RawSnapshotNode>,
+  byIndex: ReadonlyMap<number, RawSnapshotNode>,
   context: SnapshotTreeRuleContext,
 ): void {
   if (!isScrollableSnapshotType(node.type)) {

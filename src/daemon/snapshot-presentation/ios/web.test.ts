@@ -24,10 +24,11 @@ test('projects iOS WebKit heading and text wrappers to semantic roles', () => {
   ).toEqual([
     ['Application', 'Example', undefined, undefined],
     ['WebView', 'Example page', undefined, 0],
-    ['Heading', 'Welcome', '1', 1],
+    ['Heading', 'Welcome', undefined, 1],
     ['StaticText', 'Introduction', undefined, 1],
     ['Link', 'Read more', undefined, 1],
   ]);
+  expect(nodes[3]?.value).toBe('1');
 });
 
 test('recognizes numeric WebView types from retained older runners', () => {

@@ -9,13 +9,13 @@ import { findNearestAncestor, mergeReplacement, type SnapshotTreeRuleContext } f
  *
  * HTML headings use the same pair and expose their level as the wrapper value.
  * XCTest does not publish the level as a dedicated field, so the public role is
- * `Heading` while the existing value remains available in the raw node.
+ * `Heading` while the backend-specific level remains available only in the raw
+ * diagnostic node.
  */
 export function collectIosWebSemanticPresentation(
   nodes: RawSnapshotNode[],
   context: SnapshotTreeRuleContext,
 ): void {
-  const byIndex = new Map(nodes.map((node) => [node.index, node]));
   const repeatedStaticTextByParent = collectRepeatedStaticTextByParent(nodes);
 
   for (const node of nodes) {
@@ -23,29 +23,44 @@ export function collectIosWebSemanticPresentation(
       mergeReplacement(context.replacements, node, { type: 'WebView' });
       continue;
     }
-    const presentation = classifyIosWebTextWrapper(node, byIndex, repeatedStaticTextByParent);
-    if (presentation === 'suppress') {
+    const presentation = classifyIosWebTextWrapper(
+      node,
+      context.sourceNodesByIndex,
+      repeatedStaticTextByParent,
+    );
+    if (presentation?.kind === 'suppress') {
       context.suppressedIndexes.add(node.index);
       continue;
     }
     if (presentation) {
-      mergeReplacement(context.replacements, node, { type: presentation });
+      mergeReplacement(context.replacements, node, {
+        type: presentation.type,
+        ...(presentation.type === 'Heading' ? { value: undefined } : {}),
+      });
+      context.semanticRepresentativeIndexes.add(node.index);
     }
   }
 }
 
+type IosWebTextWrapperPresentation =
+  | { kind: 'semantic'; type: 'Heading' | 'StaticText' }
+  | { kind: 'suppress' };
+
 function classifyIosWebTextWrapper(
   node: RawSnapshotNode,
-  byIndex: Map<number, RawSnapshotNode>,
+  byIndex: ReadonlyMap<number, RawSnapshotNode>,
   repeatedStaticTextByParent: Map<number, Set<string>>,
-): 'Heading' | 'StaticText' | 'suppress' | null {
+): IosWebTextWrapperPresentation | null {
   if (normalizeType(node.type ?? '') !== 'other') return null;
   const webView = findNearestAncestor(node, byIndex, isWebView);
   const label = node.label?.trim();
   if (!webView || !label) return null;
-  if (isDocumentTitleWrapper(node, webView, label)) return 'suppress';
+  if (isDocumentTitleWrapper(node, webView, label)) return { kind: 'suppress' };
   if (!repeatedStaticTextByParent.get(node.index)?.has(label)) return null;
-  return isHtmlHeadingLevel(node.value) ? 'Heading' : 'StaticText';
+  return {
+    kind: 'semantic',
+    type: isHtmlHeadingLevel(node.value) ? 'Heading' : 'StaticText',
+  };
 }
 
 function isDocumentTitleWrapper(

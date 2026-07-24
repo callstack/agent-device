@@ -12,10 +12,9 @@ export function collectIosImplicitScrollableActions(
   nodes: RawSnapshotNode[],
   context: SnapshotTreeRuleContext,
 ): void {
-  const byIndex = new Map(nodes.map((node) => [node.index, node]));
-  const viewport = findLargestViewportRect(byIndex.values());
+  const viewport = findLargestViewportRect(context.sourceNodesByIndex.values());
   for (const node of nodes) {
-    if (!isImplicitScrollableAction(node, byIndex, viewport)) {
+    if (!isImplicitScrollableAction(node, context.sourceNodesByIndex, viewport)) {
       continue;
     }
     mergeReplacement(context.replacements, node, { type: 'Cell' });
@@ -24,7 +23,7 @@ export function collectIosImplicitScrollableActions(
 
 function isImplicitScrollableAction(
   node: RawSnapshotNode,
-  byIndex: Map<number, RawSnapshotNode>,
+  byIndex: ReadonlyMap<number, RawSnapshotNode>,
   viewport: RawSnapshotNode['rect'],
 ): boolean {
   if (normalizeType(node.type ?? '') !== 'other') {

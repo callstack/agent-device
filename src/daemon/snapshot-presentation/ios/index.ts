@@ -11,6 +11,7 @@ import {
 const IOS_PRESENTATION_RULES: Array<
   (nodes: RawSnapshotNode[], context: SnapshotTreeRuleContext) => void
 > = [
+  // Semantic representatives must be collected before duplicate-label suppression.
   collectIosWebSemanticPresentation,
   collectIosPresentationNoiseSuppression,
   collectIosImplicitScrollableActions,
@@ -34,14 +35,22 @@ export function buildIosInteractiveSnapshotPresentation(
   }
 
   const replacements = new Map<number, RawSnapshotNode>();
+  const semanticRepresentativeIndexes = new Set<number>();
+  const sourceNodesByIndex = new Map(nodes.map((node) => [node.index, node]));
   const suppressedIndexes = new Set<number>();
+  const ruleContext: SnapshotTreeRuleContext = {
+    replacements,
+    semanticRepresentativeIndexes,
+    sourceNodesByIndex,
+    suppressedIndexes,
+  };
 
   for (const rule of IOS_PRESENTATION_RULES) {
-    rule(nodes, { replacements, suppressedIndexes });
+    rule(nodes, ruleContext);
   }
 
   if (suppressedIndexes.size === 0 && replacements.size === 0) {
-    return { nodes, sourceNodes: new Map(nodes.map((node) => [node.index, node])) };
+    return { nodes, sourceNodes: sourceNodesByIndex };
   }
 
   const presentedSourceNodes = nodes

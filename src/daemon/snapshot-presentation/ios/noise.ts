@@ -25,14 +25,18 @@ export function collectIosPresentationNoiseSuppression(
   context: SnapshotTreeRuleContext,
 ): void {
   const { suppressedIndexes } = context;
-  collectIosOffscreenKeyboardSuppression(nodes, suppressedIndexes);
+  collectIosOffscreenKeyboardSuppression(nodes, context.sourceNodesByIndex, suppressedIndexes);
   collectIosStructuralIdentifierSuppression(nodes, suppressedIndexes);
   collectIosScrollIndicatorPresentation(nodes, context);
-  collectIosSearchToolbarSuppression(nodes, suppressedIndexes);
+  collectIosSearchToolbarSuppression(nodes, context.sourceNodesByIndex, suppressedIndexes);
   collectIosActionWrapperSuppression(nodes, suppressedIndexes);
   collectIosReactNativeOverlayActionPresentation(nodes, context.replacements);
   collectIosReactNativeOverlayWrapperSuppression(nodes, suppressedIndexes);
-  collectIosRepeatedStaticSuppression(nodes, suppressedIndexes, context.replacements);
+  collectIosRepeatedStaticSuppression(
+    nodes,
+    suppressedIndexes,
+    context.semanticRepresentativeIndexes,
+  );
 }
 
 function collectIosReactNativeOverlayActionPresentation(
@@ -133,7 +137,7 @@ function collectDescendantNodes(nodes: RawSnapshotNode[], position: number): Raw
 function collectIosRepeatedStaticSuppression(
   nodes: RawSnapshotNode[],
   suppressedIndexes: Set<number>,
-  replacements: Map<number, RawSnapshotNode>,
+  semanticRepresentativeIndexes: ReadonlySet<number>,
 ): void {
   for (let position = 0; position < nodes.length; position += 1) {
     const node = nodes[position];
@@ -148,7 +152,7 @@ function collectIosRepeatedStaticSuppression(
       node,
       nodeLabel,
       suppressedIndexes,
-      replacements,
+      semanticRepresentativeIndexes,
     );
   }
 }
@@ -159,11 +163,17 @@ function collectRepeatedStaticSuppressionForNode(
   node: RawSnapshotNode,
   nodeLabel: string,
   suppressedIndexes: Set<number>,
-  replacements: Map<number, RawSnapshotNode>,
+  semanticRepresentativeIndexes: ReadonlySet<number>,
 ): void {
   const type = normalizeType(node.type ?? '');
   if (type === 'statictext' || type === 'link') {
-    suppressRepeatedStaticDescendants(nodes, position, nodeLabel, suppressedIndexes, replacements);
+    suppressRepeatedStaticDescendants(
+      nodes,
+      position,
+      nodeLabel,
+      suppressedIndexes,
+      semanticRepresentativeIndexes,
+    );
     return;
   }
   if (type !== 'other') {
@@ -173,7 +183,13 @@ function collectRepeatedStaticSuppressionForNode(
     suppressedIndexes.add(node.index);
     return;
   }
-  suppressRepeatedStaticDescendants(nodes, position, nodeLabel, suppressedIndexes, replacements);
+  suppressRepeatedStaticDescendants(
+    nodes,
+    position,
+    nodeLabel,
+    suppressedIndexes,
+    semanticRepresentativeIndexes,
+  );
 }
 
 function hasEquivalentSemanticDescendant(
@@ -197,25 +213,16 @@ function suppressRepeatedStaticDescendants(
   position: number,
   label: string,
   suppressedIndexes: Set<number>,
-  replacements: Map<number, RawSnapshotNode>,
+  semanticRepresentativeIndexes: ReadonlySet<number>,
 ): void {
   forEachDescendant(nodes, position, (descendant) => {
     if (
-      !hasWebSemanticReplacement(descendant, replacements.get(descendant.index)) &&
+      !semanticRepresentativeIndexes.has(descendant.index) &&
       isRepeatedStaticNode(descendant, label)
     ) {
       suppressedIndexes.add(descendant.index);
     }
   });
-}
-
-function hasWebSemanticReplacement(
-  source: RawSnapshotNode,
-  replacement: RawSnapshotNode | undefined,
-): boolean {
-  if (normalizeType(source.type ?? '') !== 'other') return false;
-  const replacementType = normalizeType(replacement?.type ?? '');
-  return replacementType === 'heading' || replacementType === 'statictext';
 }
 
 function collectIosActionWrapperSuppression(
@@ -276,6 +283,7 @@ function isFullscreenActionLabelWrapper(
 
 function collectIosOffscreenKeyboardSuppression(
   nodes: RawSnapshotNode[],
+  sourceNodesByIndex: ReadonlyMap<number, RawSnapshotNode>,
   suppressedIndexes: Set<number>,
 ): void {
   const viewport = findLargestViewportRect(nodes);
@@ -289,7 +297,7 @@ function collectIosOffscreenKeyboardSuppression(
       continue;
     }
     suppressedIndexes.add(node.index);
-    suppressOffscreenKeyboardAncestors(node, nodes, suppressedIndexes, screenBottom);
+    suppressOffscreenKeyboardAncestors(node, sourceNodesByIndex, suppressedIndexes, screenBottom);
     forEachDescendant(nodes, position, (descendant) => {
       suppressedIndexes.add(descendant.index);
     });
@@ -305,16 +313,18 @@ function isOffscreenKeyboardNode(node: RawSnapshotNode, screenBottom: number): b
 
 function suppressOffscreenKeyboardAncestors(
   node: RawSnapshotNode,
-  nodes: RawSnapshotNode[],
+  sourceNodesByIndex: ReadonlyMap<number, RawSnapshotNode>,
   suppressedIndexes: Set<number>,
   screenBottom: number,
 ): void {
-  const byIndex = new Map(nodes.map((candidate) => [candidate.index, candidate]));
-  let current = typeof node.parentIndex === 'number' ? byIndex.get(node.parentIndex) : undefined;
+  let current =
+    typeof node.parentIndex === 'number' ? sourceNodesByIndex.get(node.parentIndex) : undefined;
   while (current?.rect && current.rect.y >= screenBottom) {
     suppressedIndexes.add(current.index);
     current =
-      typeof current.parentIndex === 'number' ? byIndex.get(current.parentIndex) : undefined;
+      typeof current.parentIndex === 'number'
+        ? sourceNodesByIndex.get(current.parentIndex)
+        : undefined;
   }
 }
 
@@ -338,6 +348,7 @@ function collectIosStructuralIdentifierSuppression(
 
 function collectIosSearchToolbarSuppression(
   nodes: RawSnapshotNode[],
+  sourceNodesByIndex: ReadonlyMap<number, RawSnapshotNode>,
   suppressedIndexes: Set<number>,
 ): void {
   for (let position = 0; position < nodes.length; position += 1) {
@@ -360,7 +371,7 @@ function collectIosSearchToolbarSuppression(
     }
 
     suppressedIndexes.add(node.index);
-    suppressToolbarAncestors(node, nodes, suppressedIndexes);
+    suppressToolbarAncestors(node, sourceNodesByIndex, suppressedIndexes);
     suppressSearchToolbarDescendants(nodes, position, innerSearch.index, suppressedIndexes);
   }
 }
@@ -392,13 +403,12 @@ function suppressSearchToolbarDescendants(
 
 function suppressToolbarAncestors(
   node: RawSnapshotNode,
-  nodes: RawSnapshotNode[],
+  sourceNodesByIndex: ReadonlyMap<number, RawSnapshotNode>,
   suppressedIndexes: Set<number>,
 ): void {
-  const byIndex = new Map(nodes.map((candidate) => [candidate.index, candidate]));
   let current = node;
   while (typeof current.parentIndex === 'number') {
-    const parent = byIndex.get(current.parentIndex);
+    const parent = sourceNodesByIndex.get(current.parentIndex);
     if (!parent || parent.label !== 'Toolbar') {
       return;
     }

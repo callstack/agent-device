@@ -4,6 +4,9 @@ export { areRectsApproximatelyEqual } from '../../utils/rect-center.ts';
 
 export type SnapshotTreeRuleContext = {
   replacements: Map<number, RawSnapshotNode>;
+  /** Projected label owners that repeated-text suppression must retain. */
+  semanticRepresentativeIndexes: Set<number>;
+  sourceNodesByIndex: ReadonlyMap<number, RawSnapshotNode>;
   suppressedIndexes: Set<number>;
 };
 
@@ -71,7 +74,10 @@ function getDescendantEndPositions(nodes: RawSnapshotNode[]): number[] {
   return endPositions;
 }
 
-function collectAncestors<T extends RawSnapshotNode>(node: T, byIndex: Map<number, T>): T[] {
+function collectAncestors<T extends RawSnapshotNode>(
+  node: T,
+  byIndex: ReadonlyMap<number, T>,
+): T[] {
   const ancestors: T[] = [];
   let current = typeof node.parentIndex === 'number' ? byIndex.get(node.parentIndex) : undefined;
   const visited = new Set<number>();
@@ -86,7 +92,7 @@ function collectAncestors<T extends RawSnapshotNode>(node: T, byIndex: Map<numbe
 
 export function findNearestAncestor<T extends RawSnapshotNode>(
   node: T,
-  byIndex: Map<number, T>,
+  byIndex: ReadonlyMap<number, T>,
   predicate: (ancestor: T) => boolean,
 ): T | null {
   for (const ancestor of collectAncestors(node, byIndex)) {
@@ -99,7 +105,7 @@ export function findNearestAncestor<T extends RawSnapshotNode>(
 
 export function findNearestScrollableContainer<T extends RawSnapshotNode>(
   node: T,
-  byIndex: Map<number, T>,
+  byIndex: ReadonlyMap<number, T>,
   options: { includeSelf?: boolean } = {},
 ): T | null {
   const self = options.includeSelf === true && isScrollableSnapshotType(node.type) ? node : null;
