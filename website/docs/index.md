@@ -14,7 +14,7 @@ hero:
 
 features:
   - title: One CLI, many app surfaces
-    details: Control iOS, Android, tvOS, Android TV, Amazon Vega OS TV, macOS, and Linux desktop targets through one CLI.
+    details: Control iOS, Android, tvOS, Android TV, Amazon Vega OS TV apps in the Vega Virtual Device, macOS, and Linux desktop targets through one CLI.
   - title: Accessibility-first snapshots
     details: On supported targets, accessibility trees give agents structured UI context without forcing screenshot-only reasoning.
   - title: Agent-native interactions

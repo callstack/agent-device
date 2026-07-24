@@ -165,7 +165,7 @@ const CAPABILITY_BUCKET_BY_PLATFORM: Record<Platform, keyof CommandCapability> =
   linux: 'linux',
   web: 'web',
 };
-const VEGA_TV_ONLY_COMMANDS_REF = new Set(['open', 'close', 'back', 'home', 'tv-remote']);
+const VEGA_VVD_ONLY_COMMANDS_REF = new Set(['open', 'close', 'back', 'home', 'tv-remote']);
 
 // Independent reference for `isCommandSupportedOnDevice` over NON-WEB platforms,
 // reproducing the BEFORE pipeline exactly: hardcoded bucket selection (b.1 oracle)
@@ -178,8 +178,8 @@ function isSupportedReference(command: string, device: DeviceInfo): boolean {
   const byPlatform = capability[CAPABILITY_BUCKET_BY_PLATFORM[device.platform]];
   if (!byPlatform) return false;
   const supports =
-    device.platform === 'vega' && VEGA_TV_ONLY_COMMANDS_REF.has(command)
-      ? (candidate: DeviceInfo) => candidate.target === 'tv'
+    device.platform === 'vega' && VEGA_VVD_ONLY_COMMANDS_REF.has(command)
+      ? (candidate: DeviceInfo) => candidate.kind === 'emulator' && candidate.target === 'tv'
       : SUPPORTS_REF[command];
   if (supports && !supports(device)) return false;
   const kind = (device.kind ?? 'unknown') as keyof NonNullable<CommandCapability['apple']>;
@@ -219,10 +219,10 @@ test('(b.2) unsupportedHint closures are verbatim across the full device matrix'
     const reference = HINT_REF[command];
     for (const device of SAMPLE_DEVICES) {
       const expected =
-        device.platform === 'vega' && VEGA_TV_ONLY_COMMANDS_REF.has(command)
-          ? device.target === 'tv'
+        device.platform === 'vega' && VEGA_VVD_ONLY_COMMANDS_REF.has(command)
+          ? device.kind === 'emulator' && device.target === 'tv'
             ? undefined
-            : `${command} is supported only on Vega TV targets.`
+            : `${command} currently supports only Vega Virtual Devices.`
           : reference?.(device);
       assert.equal(
         unsupportedHintForDevice(command, device),

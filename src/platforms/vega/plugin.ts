@@ -4,7 +4,7 @@ import type { Interactor, RunnerContext } from '../../core/interactor-types.ts';
 import type { PlatformPlugin } from '../../core/platform-plugin/plugin.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 
-const VEGA_TV_ONLY_COMMANDS = [
+const VEGA_VVD_ONLY_COMMANDS = [
   PUBLIC_COMMANDS.open,
   PUBLIC_COMMANDS.close,
   PUBLIC_COMMANDS.back,
@@ -13,14 +13,19 @@ const VEGA_TV_ONLY_COMMANDS = [
 ] as const;
 
 const VEGA_SUPPORTS_BY_DEFAULT = Object.fromEntries(
-  VEGA_TV_ONLY_COMMANDS.map((command) => [command, (device: DeviceInfo) => device.target === 'tv']),
+  VEGA_VVD_ONLY_COMMANDS.map((command) => [
+    command,
+    (device: DeviceInfo) => device.kind === 'emulator' && device.target === 'tv',
+  ]),
 );
 
 const VEGA_UNSUPPORTED_HINT_BY_DEFAULT = Object.fromEntries(
-  VEGA_TV_ONLY_COMMANDS.map((command) => [
+  VEGA_VVD_ONLY_COMMANDS.map((command) => [
     command,
     (device: DeviceInfo) =>
-      device.target === 'tv' ? undefined : `${command} is supported only on Vega TV targets.`,
+      device.kind === 'emulator' && device.target === 'tv'
+        ? undefined
+        : `${command} currently supports only Vega Virtual Devices.`,
   ]),
 );
 

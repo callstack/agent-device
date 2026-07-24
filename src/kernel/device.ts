@@ -345,9 +345,9 @@ function serialDeviceNotFoundMessage(selector: DeviceSelector): string {
     return `No Android device with serial ${selector.serial}`;
   }
   if (selector.platform === 'vega') {
-    return `No Vega device with serial ${selector.serial}`;
+    return `No Vega VVD with serial ${selector.serial}`;
   }
-  return `No Android or Vega device with serial ${selector.serial}`;
+  return `No Android device or Vega VVD with serial ${selector.serial}`;
 }
 
 function throwNoDevicesFound(selector: DeviceSelector, context: DeviceSelectionContext): never {

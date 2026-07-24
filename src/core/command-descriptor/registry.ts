@@ -163,7 +163,7 @@ function readOnlySubactionRecordingEffect(
 
 const APPLE_SIM_AND_DEVICE = { simulator: true, device: true };
 const ANDROID_ALL = { emulator: true, device: true, unknown: true };
-const VEGA_ALL = { emulator: true, device: true };
+const VEGA_VVD = { emulator: true };
 const LINUX_DEVICE = { device: true };
 const LINUX_NONE = {};
 
@@ -175,7 +175,7 @@ const ALL_DEVICE_COMMAND_CAPABILITY = {
 const APP_RUNTIME_CAPABILITY = ALL_DEVICE_COMMAND_CAPABILITY;
 const VEGA_APP_RUNTIME_CAPABILITY = {
   ...APP_RUNTIME_CAPABILITY,
-  vega: VEGA_ALL,
+  vega: VEGA_VVD,
 } satisfies CommandCapability;
 const APP_INVENTORY_CAPABILITY = {
   apple: APPLE_SIM_AND_DEVICE,
@@ -1003,7 +1003,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS,
     capability: {
       ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS.capability,
-      vega: VEGA_ALL,
+      vega: VEGA_VVD,
     },
   },
   {
@@ -1028,7 +1028,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS,
     capability: {
       ...GENERIC_MUTATING_LINUX_DEVICE_COMMAND_TRAITS.capability,
-      vega: VEGA_ALL,
+      vega: VEGA_VVD,
     },
   },
   {
@@ -1046,7 +1046,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     capability: {
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
-      vega: VEGA_ALL,
+      vega: VEGA_VVD,
       linux: LINUX_NONE,
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,

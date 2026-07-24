@@ -1369,6 +1369,7 @@ Treat the recovery message as a warning, not a fatal error. Use the exposed Sear
       'The Vega Virtual Device is not running yet',
       'Move focus right, then hold select for exactly 725 ms',
       'Vega capture, selectors, app inventory, and ADB are unsupported',
+      'Initial Vega support is VVD-only; physical Fire TV is unsupported',
       'The VVD must be stopped after the agent-device session is closed',
       'If you inspect CLI help, run it raw; do not pipe it through head, grep, jq, or tail',
     ],
@@ -1388,6 +1389,7 @@ Treat the recovery message as a warning, not a fatal error. Use the exposed Sear
       /\b(?:snapshot|screenshot|apps)\b/i,
       /(?:^|\n)(?:agent-device\s+)?(?:press|click)\s+@/i,
       /tv-remote\s+longpress/i,
+      /\bphysical\b/i,
     ],
     allowOnlyLocalCliHelpCommands: true,
     finalOutputInstructions: `

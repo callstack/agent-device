@@ -36,7 +36,7 @@ Some targets require local permissions or developer setup:
 
 - iOS/tvOS/macOS automation uses Xcode tooling and may require signing or Developer Mode for physical devices.
 - Android automation uses ADB and connected emulator/device trust.
-- Vega OS automation uses Vega CLI/VDA and requires Developer Mode for remote-button control on physical TVs.
+- Initial Vega OS automation uses Vega CLI/VDA only with the local Vega Virtual Device; physical Fire TV control is not yet admitted.
 - macOS desktop automation requires Accessibility permission, and screen capture workflows may require Screen Recording permission.
 
 ## Network and updates

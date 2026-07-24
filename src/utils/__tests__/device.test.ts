@@ -59,9 +59,9 @@ test('resolveDevice accepts serial selection for Android and Vega only', async (
   };
   const vega: DeviceInfo = {
     platform: 'vega',
-    id: 'shared-serial',
-    name: 'Vega TV',
-    kind: 'device',
+    id: 'VirtualDevice',
+    name: 'Vega Virtual Device',
+    kind: 'emulator',
     target: 'tv',
   };
   const linux: DeviceInfo = {
@@ -78,7 +78,7 @@ test('resolveDevice accepts serial selection for Android and Vega only', async (
     'android',
   );
   assert.equal(
-    (await resolveDevice([android, vega, linux], { platform: 'vega', serial: 'shared-serial' }))
+    (await resolveDevice([android, vega, linux], { platform: 'vega', serial: 'VirtualDevice' }))
       .platform,
     'vega',
   );
@@ -88,7 +88,7 @@ test('resolveDevice accepts serial selection for Android and Vega only', async (
   );
   assert.ok(unsupported instanceof AppError);
   assert.equal(unsupported.code, 'DEVICE_NOT_FOUND');
-  assert.match(unsupported.message, /Android or Vega device/);
+  assert.match(unsupported.message, /Android device or Vega VVD/);
 
   const missingAndroid = await resolveDevice([], {
     platform: 'android',

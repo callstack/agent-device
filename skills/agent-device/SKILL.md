@@ -1,6 +1,6 @@
 ---
 name: agent-device
-description: Automates Apple-platform apps (iOS, tvOS, macOS), Android devices, and Amazon Vega OS TVs. Use when navigating apps, taking snapshots/screenshots where supported, driving TV remotes, tapping, typing, scrolling, extracting UI info, collecting evidence, or planning agent-device CLI commands.
+description: Automates Apple-platform apps (iOS, tvOS, macOS), Android devices, and Amazon Vega OS TV apps in Vega Virtual Devices. Use when navigating apps, taking snapshots/screenshots where supported, driving TV remotes, tapping, typing, scrolling, extracting UI info, collecting evidence, or planning agent-device CLI commands.
 ---
 
 # agent-device

@@ -4,7 +4,7 @@ import { requireExecSuccess } from '../../utils/exec.ts';
 import type { VegaDeviceInfo } from './devices.ts';
 import { resolveVegaToolProvider } from './tool-provider.ts';
 
-const VEGA_INPUT_TIMEOUT_MS = 10_000;
+const VEGA_INPUT_TRANSPORT_OVERHEAD_MS = 10_000;
 
 export async function pressVegaTvRemote(
   device: Pick<VegaDeviceInfo, 'id'>,
@@ -26,7 +26,7 @@ export async function pressVegaTvRemote(
   requireExecSuccess(
     await resolveVegaToolProvider().pressRemote(device.id, key, durationMs, {
       allowFailure: true,
-      timeoutMs: VEGA_INPUT_TIMEOUT_MS,
+      timeoutMs: VEGA_INPUT_TRANSPORT_OVERHEAD_MS + (durationMs ?? 0),
     }),
     `Failed to press Vega TV remote ${button}`,
     {

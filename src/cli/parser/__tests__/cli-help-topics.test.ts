@@ -156,7 +156,7 @@ test('usage includes agent workflows, config, environment, and examples footers'
   );
   assert.match(
     usageText,
-    /agent-device help tv\s+Use when navigating Android TV, tvOS, or Vega OS focus-first surfaces/,
+    /agent-device help tv\s+Use when navigating Android TV, tvOS, or Vega VVD focus-first surfaces/,
   );
   assert.match(
     usageText,
@@ -338,7 +338,8 @@ test('usageForCommand resolves tv help topic', async () => {
   assert.match(help, /agent-device devices --platform vega --target tv/);
   assert.match(help, /Vega OS uses the exact hold duration through inputd-cli/);
   assert.match(help, /Use --platform vega --target tv/);
-  assert.match(help, /Remote-button control requires Developer Mode/);
+  assert.match(help, /Initial Vega OS support is VVD-only/);
+  assert.match(help, /Physical Fire TV.*report unsupported/);
 });
 
 test('usageForCommand resolves web help topic', async () => {

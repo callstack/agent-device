@@ -36,14 +36,14 @@ const APPLE_NON_MACOS: DeviceInfo[] = [
   VISIONOS_SIMULATOR,
   TVOS_SIMULATOR,
 ];
-const VEGA_DEVICE: DeviceInfo = {
+const VEGA_VVD: DeviceInfo = {
   platform: 'vega',
-  id: 'vega-1',
-  name: 'Vega TV',
-  kind: 'device',
+  id: 'VirtualDevice',
+  name: 'Vega Virtual Device',
+  kind: 'emulator',
   target: 'tv',
 };
-const NON_APPLE: DeviceInfo[] = [ANDROID_EMULATOR, VEGA_DEVICE, LINUX_DEVICE, WEB_DESKTOP_DEVICE];
+const NON_APPLE: DeviceInfo[] = [ANDROID_EMULATOR, VEGA_VVD, LINUX_DEVICE, WEB_DESKTOP_DEVICE];
 
 test('OUTPUT: publicPlatformString emits the pre-collapse leaf for every fixture', () => {
   for (const device of APPLE_NON_MACOS) {
@@ -51,7 +51,7 @@ test('OUTPUT: publicPlatformString emits the pre-collapse leaf for every fixture
   }
   assert.equal(publicPlatformString(MACOS_DEVICE), 'macos');
   assert.equal(publicPlatformString(ANDROID_EMULATOR), 'android');
-  assert.equal(publicPlatformString(VEGA_DEVICE), 'vega');
+  assert.equal(publicPlatformString(VEGA_VVD), 'vega');
   assert.equal(publicPlatformString(LINUX_DEVICE), 'linux');
   assert.equal(publicPlatformString(WEB_DESKTOP_DEVICE), 'web');
 });

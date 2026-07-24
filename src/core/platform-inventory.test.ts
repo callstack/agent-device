@@ -16,8 +16,8 @@ import { listLocalDeviceInventory } from './platform-inventory.ts';
 
 const VEGA_EMULATOR: DeviceInfo = {
   platform: 'vega',
-  id: 'vega-emulator',
-  name: 'Vega TV Emulator',
+  id: 'VirtualDevice',
+  name: 'Vega Virtual Device',
   kind: 'emulator',
   target: 'tv',
   booted: true,

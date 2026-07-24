@@ -5,7 +5,7 @@ import { resolveVegaToolProvider } from './tool-provider.ts';
 
 export type VegaDeviceInfo = DeviceInfo & {
   platform: 'vega';
-  kind: 'emulator' | 'device';
+  kind: 'emulator';
   target: 'tv';
   booted: true;
 };
@@ -48,13 +48,13 @@ export function parseVegaDeviceList(rawOutput: string): VegaDeviceInfo[] {
     const serial = match[1]?.trim();
     const details = match[2]?.trim();
     if (!serial || !details) continue;
+    if (!isVegaVirtualDevice(serial)) continue;
 
-    const kind = isVegaVirtualDevice(serial) ? 'emulator' : 'device';
     devices.set(serial, {
       platform: 'vega',
       id: serial,
-      name: resolveVegaDeviceName(serial, kind),
-      kind,
+      name: `Vega Virtual Device (${serial})`,
+      kind: 'emulator',
       target: 'tv',
       booted: true,
     });
@@ -65,8 +65,4 @@ export function parseVegaDeviceList(rawOutput: string): VegaDeviceInfo[] {
 
 function isVegaVirtualDevice(serial: string): boolean {
   return serial.toLowerCase() === 'virtualdevice';
-}
-
-function resolveVegaDeviceName(serial: string, kind: VegaDeviceInfo['kind']): string {
-  return kind === 'emulator' ? `Vega Virtual Device (${serial})` : `Vega TV (${serial})`;
 }

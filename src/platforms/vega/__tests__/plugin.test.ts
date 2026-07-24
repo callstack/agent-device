@@ -7,17 +7,23 @@ import { vegaPlugin } from '../plugin.ts';
 
 vi.mock('../devices.ts', () => ({ listVegaDevices: vi.fn() }));
 
-const VEGA_TV = {
+const VEGA_VVD = {
   platform: 'vega',
-  id: 'vega-tv',
-  name: 'Vega TV',
+  id: 'VirtualDevice',
+  name: 'Vega Virtual Device',
   kind: 'emulator',
   target: 'tv',
   booted: true,
 } satisfies VegaDeviceInfo;
 
+const VEGA_PHYSICAL_TV: DeviceInfo = {
+  ...VEGA_VVD,
+  id: 'vega-physical-tv',
+  kind: 'device',
+};
+
 const VEGA_NON_TV: DeviceInfo = {
-  ...VEGA_TV,
+  ...VEGA_VVD,
   id: 'vega-non-tv',
   target: 'mobile',
 };
@@ -35,10 +41,20 @@ test('Vega plugin owns the Vega platform and tv-remote capability bucket', () =>
   const supportsTvRemote = vegaPlugin.capability.supportsByDefault[PUBLIC_COMMANDS.tvRemote];
   const unsupportedHint = vegaPlugin.capability.unsupportedHintByDefault[PUBLIC_COMMANDS.tvRemote];
 
-  assert.equal(supportsTvRemote?.(VEGA_TV), true);
-  assert.equal(supportsTvRemote?.(VEGA_NON_TV), false);
-  assert.equal(unsupportedHint?.(VEGA_TV), undefined);
-  assert.equal(unsupportedHint?.(VEGA_NON_TV), 'tv-remote is supported only on Vega TV targets.');
+  assert.ok(supportsTvRemote);
+  assert.ok(unsupportedHint);
+  assert.equal(supportsTvRemote(VEGA_VVD), true);
+  assert.equal(supportsTvRemote(VEGA_PHYSICAL_TV), false);
+  assert.equal(supportsTvRemote(VEGA_NON_TV), false);
+  assert.equal(unsupportedHint(VEGA_VVD), undefined);
+  assert.equal(
+    unsupportedHint(VEGA_PHYSICAL_TV),
+    'tv-remote currently supports only Vega Virtual Devices.',
+  );
+  assert.equal(
+    unsupportedHint(VEGA_NON_TV),
+    'tv-remote currently supports only Vega Virtual Devices.',
+  );
 
   for (const command of [
     PUBLIC_COMMANDS.open,
@@ -46,13 +62,16 @@ test('Vega plugin owns the Vega platform and tv-remote capability bucket', () =>
     PUBLIC_COMMANDS.back,
     PUBLIC_COMMANDS.home,
   ]) {
-    assert.equal(vegaPlugin.capability.supportsByDefault[command]?.(VEGA_TV), true);
-    assert.equal(vegaPlugin.capability.supportsByDefault[command]?.(VEGA_NON_TV), false);
+    const supports = vegaPlugin.capability.supportsByDefault[command];
+    assert.ok(supports);
+    assert.equal(supports(VEGA_VVD), true);
+    assert.equal(supports(VEGA_PHYSICAL_TV), false);
+    assert.equal(supports(VEGA_NON_TV), false);
   }
 });
 
 test('Vega plugin delegates discovery to the Vega inventory', async () => {
-  const devices = [VEGA_TV];
+  const devices = [VEGA_VVD];
   mockListVegaDevices.mockResolvedValue(devices);
 
   const discovered = await vegaPlugin.discoverDevices({ platform: 'vega', target: 'tv' });
@@ -63,7 +82,7 @@ test('Vega plugin delegates discovery to the Vega inventory', async () => {
 });
 
 test('Vega plugin creates the Vega interactor lazily', async () => {
-  const interactor = await vegaPlugin.createInteractor(VEGA_TV, {});
+  const interactor = await vegaPlugin.createInteractor(VEGA_VVD, {});
 
   assert.equal(typeof interactor.tvRemote, 'function');
   assert.equal(typeof interactor.back, 'function');

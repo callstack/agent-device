@@ -4,7 +4,7 @@ import { AppError } from '../../../kernel/errors.ts';
 import { listVegaDevices, parseVegaDeviceList } from '../devices.ts';
 import { createLocalVegaToolProvider, withVegaToolProvider } from '../tool-provider.ts';
 
-test('parseVegaDeviceList normalizes Vega CLI VVD and physical entries', () => {
+test('parseVegaDeviceList normalizes VVD entries and excludes unvalidated physical TVs', () => {
   const devices = parseVegaDeviceList(`
 Found the following devices:
 G071R20720350DT6 : A1ZZ32RVTQ796E
@@ -12,14 +12,6 @@ VirtualDevice : tv - aarch64 - VegaOS - workstation
 `);
 
   assert.deepEqual(devices, [
-    {
-      platform: 'vega',
-      id: 'G071R20720350DT6',
-      name: 'Vega TV (G071R20720350DT6)',
-      kind: 'device',
-      target: 'tv',
-      booted: true,
-    },
     {
       platform: 'vega',
       id: 'VirtualDevice',

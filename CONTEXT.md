@@ -244,6 +244,11 @@ The perfect-shape refactor is complete and merged. Its end-state:
   lives under `src/platforms/apple/core/` with per-OS leaves under `src/platforms/apple/os/<os>/`.
   The public wire stays non-breaking: `PUBLIC_PLATFORMS` (`src/kernel/device.ts`) still emits
   `ios`/`macos` leaf output. See [ADR 0009](docs/adr/0009-apple-platform-consolidation.md).
+- Vega platform model. Initial Vega OS support is deliberately **VVD-only**: discovery returns
+  `VirtualDevice`, and platform capability admission rejects physical Fire TV devices until durable
+  hardware evidence validates discovery, lifecycle, and the complete remote-control contract.
+  Vega capture, selector, inventory, install, logging, and performance backends remain separate
+  follow-up surfaces.
 - Folder DAG + layering lint. `scripts/layering/check.ts` enforces two different scopes in CI.
   GLOBALLY, across every production source file, it enforces the R1-R3 move rules (kernel-sink,
   commands-floor, platforms-seam) and rejects all production static value-import cycles. Separately,

@@ -14,10 +14,10 @@ vi.mock('../app-lifecycle.ts', () => ({
   openVegaDevice: vi.fn(),
 }));
 
-const VEGA_TV: DeviceInfo = {
+const VEGA_VVD: DeviceInfo = {
   platform: 'vega',
-  id: 'vega-tv',
-  name: 'Vega TV',
+  id: 'VirtualDevice',
+  name: 'Vega Virtual Device',
   kind: 'emulator',
   target: 'tv',
   booted: true,
@@ -40,33 +40,33 @@ beforeEach(() => {
 });
 
 test('tvRemote, back, and home share the Vega remote primitive', async () => {
-  const interactor = createVegaInteractor(VEGA_TV, {});
+  const interactor = createVegaInteractor(VEGA_VVD, {});
 
   await interactor.tvRemote('left', 250);
   await interactor.back('system');
   await interactor.home();
 
   assert.deepEqual(mockPressVegaTvRemote.mock.calls, [
-    [VEGA_TV, 'left', 250],
-    [VEGA_TV, 'back'],
-    [VEGA_TV, 'home'],
+    [VEGA_VVD, 'left', 250],
+    [VEGA_VVD, 'back'],
+    [VEGA_VVD, 'home'],
   ]);
 });
 
 test('open, openDevice, and close use the Vega app lifecycle', async () => {
-  const interactor = createVegaInteractor(VEGA_TV, {});
+  const interactor = createVegaInteractor(VEGA_VVD, {});
 
   await interactor.openDevice();
   await interactor.open('com.example.app.main');
   await interactor.close('com.example.app.main');
 
-  assert.deepEqual(mockOpenVegaDevice.mock.calls, [[VEGA_TV]]);
-  assert.deepEqual(mockOpenVegaApp.mock.calls, [[VEGA_TV, 'com.example.app.main']]);
-  assert.deepEqual(mockCloseVegaApp.mock.calls, [[VEGA_TV, 'com.example.app.main']]);
+  assert.deepEqual(mockOpenVegaDevice.mock.calls, [[VEGA_VVD]]);
+  assert.deepEqual(mockOpenVegaApp.mock.calls, [[VEGA_VVD, 'com.example.app.main']]);
+  assert.deepEqual(mockCloseVegaApp.mock.calls, [[VEGA_VVD, 'com.example.app.main']]);
 });
 
 test('open rejects unsupported Vega launch variants instead of silently dropping them', async () => {
-  const interactor = createVegaInteractor(VEGA_TV, {});
+  const interactor = createVegaInteractor(VEGA_VVD, {});
 
   await assert.rejects(
     interactor.open('com.example.app.main', { launchArgs: ['--debug'] }),
@@ -79,7 +79,7 @@ test('open rejects unsupported Vega launch variants instead of silently dropping
 });
 
 test('every unproven Vega interactor operation throws typed UNSUPPORTED_OPERATION', async () => {
-  const interactor = createVegaInteractor(VEGA_TV, {});
+  const interactor = createVegaInteractor(VEGA_VVD, {});
   const gesturePlan: GesturePlan = {
     topology: 'single',
     intent: 'pan',

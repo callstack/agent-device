@@ -45,11 +45,11 @@ test('pressVegaTvRemote maps every shared button without leaking key names to ca
 });
 
 test('pressVegaTvRemote passes exact hold duration boundaries to inputd', async () => {
-  const commands: string[][] = [];
+  const calls: Array<{ args: string[]; timeoutMs?: number }> = [];
   const provider = createLocalVegaToolProvider({
     whichCommand: async () => true,
-    runCommand: async (_cmd, args) => {
-      commands.push(args);
+    runCommand: async (_cmd, args, options) => {
+      calls.push({ args, timeoutMs: options?.timeoutMs });
       return { exitCode: 0, stdout: '', stderr: '' };
     },
   });
@@ -59,23 +59,29 @@ test('pressVegaTvRemote passes exact hold duration boundaries to inputd', async 
     await pressVegaTvRemote({ id: 'VirtualDevice' }, 'select', 10_000);
   });
 
-  assert.deepEqual(commands, [
-    [
-      'device',
-      'run-cmd',
-      '--device',
-      'VirtualDevice',
-      '--command',
-      'inputd-cli button_press KEY_ENTER --holdDuration 0',
-    ],
-    [
-      'device',
-      'run-cmd',
-      '--device',
-      'VirtualDevice',
-      '--command',
-      'inputd-cli button_press KEY_ENTER --holdDuration 10000',
-    ],
+  assert.deepEqual(calls, [
+    {
+      args: [
+        'device',
+        'run-cmd',
+        '--device',
+        'VirtualDevice',
+        '--command',
+        'inputd-cli button_press KEY_ENTER --holdDuration 0',
+      ],
+      timeoutMs: 10_000,
+    },
+    {
+      args: [
+        'device',
+        'run-cmd',
+        '--device',
+        'VirtualDevice',
+        '--command',
+        'inputd-cli button_press KEY_ENTER --holdDuration 10000',
+      ],
+      timeoutMs: 20_000,
+    },
   ]);
 });
 
@@ -110,7 +116,7 @@ test('pressVegaTvRemote surfaces unsupported inputd controls as command failures
 
   await assert.rejects(
     withVegaToolProvider(provider, async () => {
-      await pressVegaTvRemote({ id: 'physical-1' }, 'menu');
+      await pressVegaTvRemote({ id: 'VirtualDevice' }, 'menu');
     }),
     (error: unknown) =>
       error instanceof AppError &&

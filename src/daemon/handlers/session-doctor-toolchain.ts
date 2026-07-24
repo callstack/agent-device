@@ -56,18 +56,17 @@ async function vegaToolchainCheck(): Promise<DoctorCheck> {
     timeoutMs: TOOLCHAIN_TIMEOUT_MS,
   });
   const versionLine = firstOutputLine(version.stdout);
-  const hasConnectedDevice =
-    inventory.exitCode === 0 && !/^\s*no devices found\s*$/i.test(inventory.stdout);
+  const hasRunningVvd =
+    inventory.exitCode === 0 &&
+    inventory.stdout.split(/\r?\n/).some((line) => /^\s*VirtualDevice\s*:/i.test(line));
 
   return {
     id: 'toolchain',
     status: version.exitCode === 0 ? 'pass' : 'info',
     summary: versionLine
-      ? `Vega toolchain: ${versionLine}; ${hasConnectedDevice ? 'device connected' : 'no connected device'}.`
+      ? `Vega toolchain: ${versionLine}; ${hasRunningVvd ? 'VVD running' : 'no running VVD'}.`
       : 'Vega toolchain: CLI found but version check failed.',
-    hint: hasConnectedDevice
-      ? undefined
-      : 'Start the Vega Virtual Device or connect a developer-mode Vega OS TV.',
+    hint: hasRunningVvd ? undefined : 'Start the Vega Virtual Device and retry doctor.',
     evidence: {
       vegaVersion: versionLine ?? null,
       deviceList: inventory.stdout.trim() || null,

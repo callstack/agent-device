@@ -83,8 +83,8 @@ vega device list
 ```
 
 - Start and stop the local emulator with `vega virtual-device start` and `vega virtual-device stop`; `agent-device` does not boot it implicitly.
-- Enable Developer Mode before controlling a physical Vega OS Fire TV.
-- Use `agent-device devices --platform vega --target tv`, then select a specific VVD or physical target with `--serial` when more than one is connected.
+- Initial Vega OS support is VVD-only; physical Fire TV discovery and control are not admitted until hardware evidence is validated.
+- Use `agent-device devices --platform vega --target tv`, then select the VVD explicitly with `--serial VirtualDevice`.
 - Appium is optional evidence tooling; it is not required for agent-device discovery, app lifecycle, or remote-button control.
 
 ## macOS desktop notes
