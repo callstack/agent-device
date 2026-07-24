@@ -23,7 +23,12 @@ vi.mock('../timeouts.ts', async (importOriginal) => {
 });
 
 import { resolveDaemonPaths, type DaemonPaths } from '../../daemon/config.ts';
-import { sendToDaemon, type DaemonRequest } from '../../daemon/client/daemon-client.ts';
+import {
+  sendToDaemon,
+  type DaemonRequest,
+  type DaemonResponse,
+} from '../../daemon/client/daemon-client.ts';
+import { attachActiveSessionAddressHint } from '../../daemon/client/daemon-client-lifecycle.ts';
 import { computeDaemonCodeSignature } from '../../daemon/code-signature.ts';
 import { sendRequest } from '../../daemon/client/daemon-client-transport.ts';
 import {
@@ -34,6 +39,7 @@ import {
 import { AppError } from '../../kernel/errors.ts';
 import { runCmdDetachedMonitored, runCmdSync } from '../exec.ts';
 import { readProcessStartTime } from '../host-process.ts';
+import { shellQuoteIfNeeded } from '../shell-quote.ts';
 import { sleep } from '../timeouts.ts';
 import { findProjectRoot, readVersion } from '../version.ts';
 
@@ -1106,6 +1112,45 @@ function activeReplaySuccessData(overrides: Record<string, unknown> = {}): Recor
   };
 }
 
+test('attachActiveSessionAddressHint shell-quotes a --state-dir/--session value containing spaces or shell metacharacters', () => {
+  const unsafeStateDir = '/tmp/state dir with $(danger)';
+  const unsafeSession = 'cwd:abc123:my session; rm -rf /';
+  const response: Extract<DaemonResponse, { ok: true }> = {
+    ok: true,
+    data: activeReplaySuccessData({ session: unsafeSession }),
+  };
+
+  const hinted = attachActiveSessionAddressHint(response, unsafeStateDir);
+
+  assert.equal(
+    hinted.data?.hint,
+    "This session's daemon was kept alive because its script left the session active; " +
+      `pass --state-dir ${shellQuoteIfNeeded(unsafeStateDir)} ` +
+      `--session ${shellQuoteIfNeeded(unsafeSession)} on your next command to reach it.`,
+  );
+  // Both values actually needed quoting — this test would pass vacuously
+  // (raw interpolation indistinguishable from quoted) if they didn't.
+  assert.notEqual(shellQuoteIfNeeded(unsafeStateDir), unsafeStateDir);
+  assert.notEqual(shellQuoteIfNeeded(unsafeSession), unsafeSession);
+});
+
+test('attachActiveSessionAddressHint omits --state-dir but still quotes an unsafe --session-only value', () => {
+  const unsafeSession = "cwd:abc123:it's mine";
+  const response: Extract<DaemonResponse, { ok: true }> = {
+    ok: true,
+    data: activeReplaySuccessData({ session: unsafeSession }),
+  };
+
+  const hinted = attachActiveSessionAddressHint(response, undefined);
+
+  assert.equal(
+    hinted.data?.hint,
+    "This session's daemon was kept alive because its script left the session active; " +
+      `pass --session ${shellQuoteIfNeeded(unsafeSession)} on your next command to reach it.`,
+  );
+  assert.doesNotMatch(String(hinted.data?.hint), /--state-dir/);
+});
+
 /** Issues a close-less `replay` against an owned ephemeral daemon spawned at `daemonPort`. */
 async function replayLeavingSessionActive(
   daemonPort: number,
@@ -1316,10 +1361,16 @@ test('issue #1384: sendToDaemon does not stop a client-started daemon at an expl
     assert.equal(response.ok, true);
     if (!response.ok) return;
     assert.equal(response.data?.sessionActive, true);
-    // No address hint here: the caller already knows this state dir — it
-    // passed it explicitly — only an OWNED (randomly generated) state dir
-    // needs a hint to become addressable again.
-    assert.equal(response.data?.hint, undefined);
+    // The hint still names --session (the caller can't rediscover a
+    // cwd-qualified session name any other way, per #1394) but omits
+    // --state-dir — the caller already knows this explicit dir, it passed it
+    // itself, so only an OWNED (randomly generated) state dir needs one.
+    assert.equal(
+      response.data?.hint,
+      "This session's daemon was kept alive because its script left the session active; " +
+        'pass --session default on your next command to reach it.',
+    );
+    assert.doesNotMatch(String(response.data?.hint), /--state-dir/);
     assert.equal(fs.existsSync(paths.infoPath), true);
     assert.equal(fs.existsSync(paths.lockPath), true);
   } finally {

@@ -96,7 +96,7 @@ export async function sendToDaemon(
         ),
       { requestId, command: req.command },
     );
-    return withActiveSessionAddressHintIfOwned(
+    return withActiveSessionAddressHint(
       withRepairSessionAddressHintIfOwned(response, settings),
       req,
       settings,
@@ -160,21 +160,29 @@ function withRepairSessionAddressHintIfOwned(
 }
 
 /**
- * ADR 0016 counterpart to `withRepairSessionAddressHintIfOwned`: the owned
- * ephemeral state dir this SUCCESSFUL response's still-active session now
- * lives on is otherwise unaddressable by a later invocation — hint it here,
- * only when the daemon is actually being kept alive for it
- * (`settings.ownedStateDir` means `daemon.startedByClient` is also true).
+ * ADR 0016 counterpart to `withRepairSessionAddressHintIfOwned` — but unlike
+ * that one, NOT gated on `settings.ownedStateDir`. An owned ephemeral state
+ * dir is unaddressable by a later invocation either way, so it's included
+ * when owned; an explicit `--state-dir`/`AGENT_DEVICE_STATE_DIR` caller
+ * already knows their own dir, so it's omitted then. But the session's own
+ * name is cwd-qualified and, per #1394, `session list` cannot rediscover it
+ * either — so `--session` is still worth hinting even at an explicit state
+ * dir, which is why this runs for every active-session response regardless
+ * of `ownedStateDir` (`attachActiveSessionAddressHint` itself decides what,
+ * if anything, is worth attaching).
  */
-function withActiveSessionAddressHintIfOwned(
+function withActiveSessionAddressHint(
   response: DaemonResponse,
   req: Omit<DaemonRequest, 'token'>,
   settings: DaemonClientSettings,
 ): DaemonResponse {
-  if (!response.ok || !settings.ownedStateDir || !isActiveReplaySessionResponse(req, response)) {
+  if (!response.ok || !isActiveReplaySessionResponse(req, response)) {
     return response;
   }
-  return attachActiveSessionAddressHint(response, settings.paths.baseDir);
+  return attachActiveSessionAddressHint(
+    response,
+    settings.ownedStateDir ? settings.paths.baseDir : undefined,
+  );
 }
 
 function writeInstallInProgressNotice(command: string | undefined): void {

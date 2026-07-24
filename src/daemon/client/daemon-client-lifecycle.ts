@@ -18,6 +18,7 @@ import {
 } from '../config.ts';
 import { computeDaemonCodeSignature } from '../code-signature.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { shellQuoteIfNeeded } from '../../utils/shell-quote.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import {
   cleanupFailedDaemonStartupMetadata,
@@ -508,34 +509,41 @@ export function isActiveReplaySessionResponse(
 }
 
 /**
- * ADR 0016 counterpart to `attachRepairSessionAddressHint`: the owned
- * ephemeral daemon this SUCCESSFUL response's session now lives on is kept
- * alive by the `isActiveReplaySessionResponse` guard above, but stays at a
- * randomly generated `--state-dir` no other invocation knows about. Attached
- * to both a structured `hint` field (for `--json` consumers) and appended to
+ * ADR 0016 counterpart to `attachRepairSessionAddressHint`: a still-active
+ * replay session is only unaddressable by `--state-dir` when it lives on an
+ * OWNED, randomly generated one (`stateDir` undefined otherwise — an explicit
+ * `--state-dir`/`AGENT_DEVICE_STATE_DIR` caller already knows it). But the
+ * SESSION name is always cwd-qualified (`cwd:<hash>:default`) and, per #1394,
+ * `session list` cannot rediscover it either — so `--session` is always
+ * emitted when a name is available, explicit state dir or not. Attached to
+ * both a structured `hint` field (for `--json` consumers) and appended to
  * `message` — the only field the default text renderer surfaces
  * (`src/utils/success-text.ts`) — so the hint reaches a caller in either mode.
  *
- * Also names `--session` using `data.session` verbatim — that value is
- * already the fully-qualified store key `resolveEffectiveSessionName`
- * resolves per request (`session-routing.ts`, e.g. `cwd:<hash>:default`), and
- * an EXPLICIT `--session <value>` is used as-is, skipping cwd-scoping
- * entirely (`hasExplicitSessionFlag`). Passing it back unchanged is what
- * actually reaches the same session from any cwd; a bare `--session default`
- * would only match by coincidence (an implicit, no-`--session` follow-up run
- * from the identical cwd), which isn't safe to bake into a copy-pasteable
- * hint.
+ * `data.session` is used verbatim, never reconstructed as `default`: an
+ * EXPLICIT `--session <value>` is used as-is by `resolveEffectiveSessionName`,
+ * skipping cwd-scoping entirely (`hasExplicitSessionFlag`), so passing the
+ * qualified name back unchanged is what actually reaches the same session
+ * from any cwd — a bare `--session default` would only match by coincidence
+ * (an implicit, no-`--session` follow-up run from the identical cwd). Both
+ * the state dir and the session name are shell-quoted (only when needed) so
+ * the hint stays literally copy-pasteable even if either contains spaces or
+ * shell metacharacters.
  */
 export function attachActiveSessionAddressHint(
   response: Extract<DaemonResponse, { ok: true }>,
-  stateDir: string,
+  stateDir: string | undefined,
 ): Extract<DaemonResponse, { ok: true }> {
   const data = response.data ?? {};
   const sessionName = typeof data.session === 'string' ? data.session : undefined;
+  const addressFlags = [
+    ...(stateDir ? [`--state-dir ${shellQuoteIfNeeded(stateDir)}`] : []),
+    ...(sessionName ? [`--session ${shellQuoteIfNeeded(sessionName)}`] : []),
+  ];
+  if (addressFlags.length === 0) return response;
   const addressHint =
     `This session's daemon was kept alive because its script left the session active; ` +
-    `pass --state-dir ${stateDir}${sessionName ? ` --session ${sessionName}` : ''} on your ` +
-    `next command to reach it.`;
+    `pass ${addressFlags.join(' ')} on your next command to reach it.`;
   const existingMessage = typeof data.message === 'string' ? data.message : undefined;
   return {
     ...response,
