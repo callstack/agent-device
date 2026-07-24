@@ -397,7 +397,7 @@ test('buildSnapshotState uses the innermost iOS RedBox dismiss action geometry',
       index: 4,
       depth: 4,
       parentIndex: 3,
-      type: 'Other',
+      type: 'StaticText',
       label: 'Dismiss',
       rect: { x: 0, y: 770, width: 196.6666717529297, height: 48 },
     },
@@ -419,6 +419,7 @@ test('buildSnapshotState uses the innermost iOS RedBox dismiss action geometry',
     width: 196.6666717529297,
     height: 48,
   });
+  expect(state.nodes.filter((node) => node.label === 'Dismiss')).toHaveLength(1);
 });
 
 test('buildSnapshotState promotes iOS scroll-contained other rows to cells', () => {
@@ -757,7 +758,7 @@ test('buildSnapshotState collapses duplicated iOS search toolbar wrappers', () =
       index: 2,
       depth: 2,
       parentIndex: 1,
-      type: 'SearchField',
+      type: 'Toolbar',
       label: 'Toolbar',
       identifier: 'Toolbar',
       rect: { x: 0, y: 788, width: 402, height: 86 },

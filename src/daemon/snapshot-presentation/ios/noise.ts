@@ -32,7 +32,7 @@ export function collectIosPresentationNoiseSuppression(
   collectIosActionWrapperSuppression(nodes, suppressedIndexes);
   collectIosReactNativeOverlayActionPresentation(nodes, context.replacements);
   collectIosReactNativeOverlayWrapperSuppression(nodes, suppressedIndexes);
-  collectIosRepeatedStaticSuppression(nodes, suppressedIndexes);
+  collectIosRepeatedStaticSuppression(nodes, suppressedIndexes, context.replacements);
 }
 
 function collectIosReactNativeOverlayActionPresentation(
@@ -133,6 +133,7 @@ function collectDescendantNodes(nodes: RawSnapshotNode[], position: number): Raw
 function collectIosRepeatedStaticSuppression(
   nodes: RawSnapshotNode[],
   suppressedIndexes: Set<number>,
+  replacements: Map<number, RawSnapshotNode>,
 ): void {
   for (let position = 0; position < nodes.length; position += 1) {
     const node = nodes[position];
@@ -141,7 +142,14 @@ function collectIosRepeatedStaticSuppression(
       continue;
     }
 
-    collectRepeatedStaticSuppressionForNode(nodes, position, node, nodeLabel, suppressedIndexes);
+    collectRepeatedStaticSuppressionForNode(
+      nodes,
+      position,
+      node,
+      nodeLabel,
+      suppressedIndexes,
+      replacements,
+    );
   }
 }
 
@@ -151,10 +159,11 @@ function collectRepeatedStaticSuppressionForNode(
   node: RawSnapshotNode,
   nodeLabel: string,
   suppressedIndexes: Set<number>,
+  replacements: Map<number, RawSnapshotNode>,
 ): void {
   const type = normalizeType(node.type ?? '');
   if (type === 'statictext' || type === 'link') {
-    suppressRepeatedStaticDescendants(nodes, position, nodeLabel, suppressedIndexes);
+    suppressRepeatedStaticDescendants(nodes, position, nodeLabel, suppressedIndexes, replacements);
     return;
   }
   if (type !== 'other') {
@@ -164,7 +173,7 @@ function collectRepeatedStaticSuppressionForNode(
     suppressedIndexes.add(node.index);
     return;
   }
-  suppressRepeatedStaticDescendants(nodes, position, nodeLabel, suppressedIndexes);
+  suppressRepeatedStaticDescendants(nodes, position, nodeLabel, suppressedIndexes, replacements);
 }
 
 function hasEquivalentSemanticDescendant(
@@ -188,12 +197,25 @@ function suppressRepeatedStaticDescendants(
   position: number,
   label: string,
   suppressedIndexes: Set<number>,
+  replacements: Map<number, RawSnapshotNode>,
 ): void {
   forEachDescendant(nodes, position, (descendant) => {
-    if (isRepeatedStaticNode(descendant, label)) {
+    if (
+      !hasWebSemanticReplacement(descendant, replacements.get(descendant.index)) &&
+      isRepeatedStaticNode(descendant, label)
+    ) {
       suppressedIndexes.add(descendant.index);
     }
   });
+}
+
+function hasWebSemanticReplacement(
+  source: RawSnapshotNode,
+  replacement: RawSnapshotNode | undefined,
+): boolean {
+  if (normalizeType(source.type ?? '') !== 'other') return false;
+  const replacementType = normalizeType(replacement?.type ?? '');
+  return replacementType === 'heading' || replacementType === 'statictext';
 }
 
 function collectIosActionWrapperSuppression(
@@ -320,16 +342,13 @@ function collectIosSearchToolbarSuppression(
 ): void {
   for (let position = 0; position < nodes.length; position += 1) {
     const node = nodes[position];
-    if (!node || normalizeType(node.type ?? '') !== 'searchfield') {
-      continue;
-    }
-    if (node.label === 'Search') {
+    if (!node) continue;
+    if (isExposedSearchField(node)) {
       suppressSearchToolbarDescendants(nodes, position, null, suppressedIndexes);
       continue;
     }
-    if (node.label !== 'Toolbar') {
-      continue;
-    }
+    if (!isSearchToolbar(node)) continue;
+
     const innerSearch = findDescendant(
       nodes,
       position,
@@ -344,6 +363,15 @@ function collectIosSearchToolbarSuppression(
     suppressToolbarAncestors(node, nodes, suppressedIndexes);
     suppressSearchToolbarDescendants(nodes, position, innerSearch.index, suppressedIndexes);
   }
+}
+
+function isExposedSearchField(node: RawSnapshotNode): boolean {
+  return normalizeType(node.type ?? '') === 'searchfield' && node.label === 'Search';
+}
+
+function isSearchToolbar(node: RawSnapshotNode): boolean {
+  const type = normalizeType(node.type ?? '');
+  return node.label === 'Toolbar' && (type === 'toolbar' || type === 'searchfield');
 }
 
 function suppressSearchToolbarDescendants(

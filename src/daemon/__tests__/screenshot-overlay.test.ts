@@ -193,7 +193,7 @@ test('buildScreenshotOverlayRefs skips generic actionable container labels when 
     {
       index: 1,
       parentIndex: 0,
-      type: 'XCUIElementTypeSearchField',
+      type: 'XCUIElementTypeToolbar',
       label: 'Toolbar',
       rect: { x: 0, y: 150, width: 100, height: 30 },
     },

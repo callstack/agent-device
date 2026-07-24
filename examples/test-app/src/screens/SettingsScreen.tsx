@@ -19,6 +19,7 @@ export interface SettingsScreenProps {
   reducedMotionEnabled: boolean;
   onOpenAccessorySetup: () => void;
   onOpenInertSurface: () => void;
+  onOpenWebViewLab: () => void;
   onLoadDiagnostics: () => void;
   onRetryDiagnostics: () => void;
   onSetNotificationsEnabled: (value: boolean) => void;
@@ -80,6 +81,17 @@ export function SettingsScreen(props: SettingsScreenProps) {
           label="Open inert surface"
           onPress={props.onOpenInertSurface}
           testID="open-inert-surface"
+        />
+      </SectionCard>
+
+      <SectionCard
+        subtitle="Inspect native accessibility snapshots for semantic content inside a WebView."
+        title="WebView accessibility"
+      >
+        <ActionButton
+          label="Open WebView accessibility lab"
+          onPress={props.onOpenWebViewLab}
+          testID="open-webview-lab"
         />
       </SectionCard>
 

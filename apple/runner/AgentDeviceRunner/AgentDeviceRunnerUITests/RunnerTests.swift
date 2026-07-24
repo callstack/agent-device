@@ -131,7 +131,8 @@ final class RunnerTests: XCTestCase {
     .tabBar,
     .textField,
     .secureTextField,
-    .textView
+    .textView,
+    .webView
   ]
   // Keep blocker actions narrow to avoid false positives from generic hittable containers.
   let actionableTypes: Set<XCUIElement.ElementType> = [

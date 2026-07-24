@@ -57,12 +57,16 @@ extension RunnerTests {
     case .collectionView: return "CollectionView"
     case .table: return "Table"
     case .scrollView: return "ScrollView"
+    case .toolbar: return "Toolbar"
     case .searchField: return "SearchField"
     case .segmentedControl: return "SegmentedControl"
     case .stepper: return "Stepper"
     case .picker: return "Picker"
+    case .activityIndicator: return "ActivityIndicator"
+    case .progressIndicator: return "ProgressIndicator"
     case .checkBox: return "CheckBox"
     case .menuItem: return "MenuItem"
+    case .webView: return "WebView"
     case .other: return "Other"
     default:
       switch type.rawValue {
@@ -70,8 +74,6 @@ extension RunnerTests {
         return "Keyboard"
       case 20:
         return "Key"
-      case 24:
-        return "SearchField"
       default:
         return "Element(\(type.rawValue))"
       }

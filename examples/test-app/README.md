@@ -17,8 +17,16 @@ It is intentionally small, but each surface is dense with durable accessibility 
 - `Product detail`: back navigation, quantity stepper, multiline notes, save action
 - `Checkout form`: required-field validation, fill vs type, checkbox state, choice groups, keyboard dismiss, success summary
 - `Settings`: switch rows, accordion content, loading and error states, retry flow, destructive-confirm modal
+- `WebView accessibility`: a deterministic semantic fixture plus live websites with varied HTML for native accessibility snapshot verification
 
 Navigation uses Expo Router native bottom tabs, so the tab bar itself is also part of the test surface.
+
+The deterministic WebView fixture is the stable accessibility oracle. On iOS, an interactive
+snapshot should expose its root as `webview`, both titles as `heading`, paragraph and label content
+as `text`, and the form controls as `text-field`, `switch`, and `button`. The live-site buttons are
+exploratory smoke coverage for real-world WebKit trees, not stable assertion targets.
+Use an unscoped snapshot for this oracle: XCTest can detach a scoped WebKit document subtree from
+its `WebView` ancestor, leaving insufficient evidence for safe semantic projection.
 
 ## Coverage map
 

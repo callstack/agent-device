@@ -17,6 +17,7 @@ export default function SettingsRoute() {
         notificationsEnabled={state.notificationsEnabled}
         onOpenAccessorySetup={() => router.push('/accessory-setup')}
         onOpenInertSurface={() => router.push('/inert')}
+        onOpenWebViewLab={() => router.push('/webview')}
         onConfirmReset={state.resetLabState}
         onLoadDiagnostics={state.loadDiagnostics}
         onRetryDiagnostics={state.retryDiagnostics}
