@@ -8,9 +8,11 @@ import { createRequestId, emitDiagnostic, withDiagnosticTimer } from '../../util
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { prepareRemoteRequestArtifacts } from '../../remote/daemon-artifacts.ts';
 import {
+  attachActiveSessionAddressHint,
   attachRepairSessionAddressHint,
   cleanupDaemonAfterRequest,
   ensureDaemon,
+  isActiveReplaySessionResponse,
   isHeldRepairDivergence,
   resolveClientSettings,
   type DaemonClientSettings,
@@ -94,7 +96,11 @@ export async function sendToDaemon(
         ),
       { requestId, command: req.command },
     );
-    return withRepairSessionAddressHintIfOwned(response, settings);
+    return withActiveSessionAddressHintIfOwned(
+      withRepairSessionAddressHintIfOwned(response, settings),
+      req,
+      settings,
+    );
   });
 }
 
@@ -151,6 +157,24 @@ function withRepairSessionAddressHintIfOwned(
     return response;
   }
   return attachRepairSessionAddressHint(response, settings.paths.baseDir);
+}
+
+/**
+ * ADR 0016 counterpart to `withRepairSessionAddressHintIfOwned`: the owned
+ * ephemeral state dir this SUCCESSFUL response's still-active session now
+ * lives on is otherwise unaddressable by a later invocation — hint it here,
+ * only when the daemon is actually being kept alive for it
+ * (`settings.ownedStateDir` means `daemon.startedByClient` is also true).
+ */
+function withActiveSessionAddressHintIfOwned(
+  response: DaemonResponse,
+  req: Omit<DaemonRequest, 'token'>,
+  settings: DaemonClientSettings,
+): DaemonResponse {
+  if (!response.ok || !settings.ownedStateDir || !isActiveReplaySessionResponse(req, response)) {
+    return response;
+  }
+  return attachActiveSessionAddressHint(response, settings.paths.baseDir);
 }
 
 function writeInstallInProgressNotice(command: string | undefined): void {

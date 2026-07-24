@@ -93,7 +93,7 @@ export const testCommandDefinition = defineExecutableCommand(testCommandMetadata
 const replayCliSchema = {
   usageOverride: 'replay <path> | replay export <file.ad> [--out <path>]',
   helpDescription:
-    'Replay a recorded session. For Maestro YAML compatibility flows, use replay <flow.yaml> --maestro and keep the target binding such as --platform ios on the replay command.',
+    'Replay a recorded session. For Maestro YAML compatibility flows, use replay <flow.yaml> --maestro and keep the target binding such as --platform ios on the replay command. A script with no terminal close leaves its session (and daemon) running until you close it or it idle-reaps — no different from a session opened interactively.',
   summary: replayCommandDescription,
   positionalArgs: ['path'],
   allowsExtraPositionals: true,

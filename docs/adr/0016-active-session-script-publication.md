@@ -169,6 +169,13 @@ executing that script, not the artifact being saved.
   fragment pinning remain entirely under #1336.
 - Secret-bearing authoring remains unsafe until #1348; the initial workflow is limited to journeys that
   do not enter secrets. Arbitrary history ranges remain out of scope.
+- On consumption (issue #1384), a `replay` whose script has no terminal `close` leaves a live daemon and
+  app session behind — including the ordinary one-shot `replay` invocation's own owned/ephemeral daemon,
+  which the client keeps alive and reports a `--state-dir` address hint for instead of tearing down. An
+  unattended close-less replay (e.g. in CI) therefore leaks a session exactly like one opened
+  interactively: bounded by ordinary idle-reap or an explicit `close`, never by the one-shot command's own
+  process lifetime. This is the intended shape of "the caller owns close," not an accident, and recorded
+  test flows already end with `close` so `test` runs are unaffected.
 
 ## Alternatives Considered
 

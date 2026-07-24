@@ -342,7 +342,19 @@ export async function cleanupDaemonAfterRequest(
     // `REPAIR_SESSION_EXPIRED` tombstone on reap), so an abandoned repair still
     // cannot leak indefinitely; this only stops the ONE-SHOT-COMMAND teardown
     // below from racing ahead of that window.
-    isHeldRepairDivergence(response)
+    isHeldRepairDivergence(response) ||
+    // ADR 0016: a `replay` whose script had no terminal `close` reports its
+    // session as still active by design (the consumption contract this ADR
+    // defines) — tearing down its owning daemon here would make that contract
+    // unaddressable over the real CLI path the instant the response is sent.
+    // Keyed off the session surviving the run (`sessionActive`), never off
+    // parsing the script for `close`, so a `--from` resume is covered too.
+    // Unlike the repair case, this session has no bounded reap of its own: an
+    // unattended close-less replay leaves a live daemon+app session until
+    // ordinary idle-reap or an explicit `close` ends it — the same lifetime an
+    // interactively opened session already has, and exactly what the ADR's
+    // "caller owns close" contract asks for.
+    isActiveReplaySessionResponse(req, response)
   ) {
     return response;
   }
@@ -474,6 +486,53 @@ export function attachRepairSessionAddressHint(
 
 function isOneShotReplayCommand(command: string | undefined): boolean {
   return command === PUBLIC_COMMANDS.replay || command === PUBLIC_COMMANDS.test;
+}
+
+/**
+ * ADR 0016: true when a successful `replay` response reports its session as
+ * still active (`ReplayCommandResult.sessionActive`, set by the daemon from
+ * whether the session survived in its own store — never derived here by
+ * re-parsing the script). Restricted to `replay` itself, never `test`: a
+ * `test` run's own per-file runner already closes each session before the
+ * suite summary is built, and its `ReplaySuiteResult` carries no such field
+ * anyway, but the explicit command check keeps that carve-out a decision
+ * rather than an accident of the response shape.
+ */
+export function isActiveReplaySessionResponse(
+  req: Omit<DaemonRequest, 'token'>,
+  response: DaemonResponse | undefined,
+): boolean {
+  if (req.command !== PUBLIC_COMMANDS.replay) return false;
+  if (!response || !response.ok) return false;
+  return response.data?.sessionActive === true;
+}
+
+/**
+ * ADR 0016 counterpart to `attachRepairSessionAddressHint`: the owned
+ * ephemeral daemon this SUCCESSFUL response's session now lives on is kept
+ * alive by the `isActiveReplaySessionResponse` guard above, but stays at a
+ * randomly generated `--state-dir` no other invocation knows about. Attached
+ * to both a structured `hint` field (for `--json` consumers) and appended to
+ * `message` — the only field the default text renderer surfaces
+ * (`src/utils/success-text.ts`) — so the hint reaches a caller in either mode.
+ */
+export function attachActiveSessionAddressHint(
+  response: Extract<DaemonResponse, { ok: true }>,
+  stateDir: string,
+): Extract<DaemonResponse, { ok: true }> {
+  const addressHint =
+    `This session's daemon was kept alive because its script left the session ` +
+    `active; pass --state-dir ${stateDir} on your next command to reach it.`;
+  const data = response.data ?? {};
+  const existingMessage = typeof data.message === 'string' ? data.message : undefined;
+  return {
+    ...response,
+    data: {
+      ...data,
+      hint: addressHint,
+      message: existingMessage ? `${existingMessage} ${addressHint}` : addressHint,
+    },
+  };
 }
 
 async function waitForDaemonStartup(

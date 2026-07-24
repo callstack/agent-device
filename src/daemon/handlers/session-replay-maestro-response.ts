@@ -28,6 +28,7 @@ export function buildTypedMaestroSuccessResponse(params: {
       replayed,
       healed: 0,
       session: sessionName,
+      sessionActive: sessionStore.get(sessionName) !== undefined,
       artifactPaths: result.artifactPaths,
       ...(result.warnings ? { warnings: result.warnings } : {}),
       ...(snapshotDiagnostics ? { snapshotDiagnostics } : {}),

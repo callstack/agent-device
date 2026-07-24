@@ -1081,3 +1081,177 @@ test('continuation: sendToDaemon keeps the daemon alive on a held divergence eve
     if (ownedStateDir) fs.rmSync(ownedStateDir, { recursive: true, force: true });
   }
 });
+
+// --- ADR 0016: on consumption, a `replay` whose script had no terminal
+// `close` reports its session as still active (`ReplayCommandResult.
+// sessionActive: true`) by design — the named session stays active and the
+// caller binds subsequent commands to the returned id. Tearing down the
+// owning daemon here (issue #1384) makes that contract unaddressable the
+// instant the response is sent. This mirrors the repair-divergence keep-alive
+// above, but for a SUCCESSFUL response instead of a held divergence, and has
+// no bounded reap of its own (unlike a held repair): an unattended close-less
+// replay leaves a live daemon+app session until ordinary idle-reap or an
+// explicit `close` ends it — the same lifetime an interactively opened
+// session already has. ---
+
+function activeReplaySuccessData(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    replayed: 1,
+    healed: 0,
+    session: 'default',
+    sessionActive: true,
+    artifactPaths: [],
+    message: 'Replayed 1 step in 0.1s',
+    ...overrides,
+  };
+}
+
+test('sendToDaemon keeps an owned ephemeral daemon alive and hints its --state-dir when a close-less replay leaves the session active', async (t) => {
+  if (!(await supportsLoopbackBind())) {
+    t.skip('loopback listeners are not permitted in this environment');
+    return;
+  }
+
+  const daemon = await startHttpDaemonFixture(activeReplaySuccessData());
+  let ownedStateDir = '';
+  installSpawnedHttpDaemonAtOwnedStateDir(daemon.port, (dir) => {
+    ownedStateDir = dir;
+  });
+
+  try {
+    const response = await sendToDaemon({
+      session: 'default',
+      command: 'replay',
+      positionals: ['open-only.ad'],
+      flags: { daemonTransport: 'http' },
+      meta: { requestId: 'req-active-session-keep-alive' },
+    });
+
+    assert.equal(response.ok, true);
+    if (!response.ok) return;
+    assert.equal(response.data?.session, 'default');
+    assert.equal(response.data?.sessionActive, true);
+    assert.ok(ownedStateDir.length > 0);
+    assert.match(String(response.data?.hint), /--state-dir/);
+    assert.ok(String(response.data?.hint).includes(ownedStateDir));
+    assert.match(String(response.data?.message), /--state-dir/);
+
+    // The daemon was NOT torn down: metadata and the owned state dir itself
+    // are still on disk, addressable by a follow-up command's --state-dir.
+    const ownedPaths = resolveDaemonPaths(ownedStateDir);
+    assert.equal(fs.existsSync(ownedPaths.infoPath), true);
+    assert.equal(fs.existsSync(ownedPaths.lockPath), true);
+    assert.equal(fs.existsSync(ownedStateDir), true);
+  } finally {
+    await closeLoopbackServer(daemon.server);
+    if (ownedStateDir) fs.rmSync(ownedStateDir, { recursive: true, force: true });
+  }
+});
+
+test('sendToDaemon tears down an owned ephemeral daemon when replay reports the session was closed (sessionActive: false)', async (t) => {
+  if (!(await supportsLoopbackBind())) {
+    t.skip('loopback listeners are not permitted in this environment');
+    return;
+  }
+
+  const daemon = await startHttpDaemonFixture(activeReplaySuccessData({ sessionActive: false }));
+  let ownedStateDir = '';
+  installSpawnedHttpDaemonAtOwnedStateDir(daemon.port, (dir) => {
+    ownedStateDir = dir;
+  });
+
+  try {
+    const response = await sendToDaemon({
+      session: 'default',
+      command: 'replay',
+      positionals: ['closed.ad'],
+      flags: { daemonTransport: 'http' },
+      meta: { requestId: 'req-closed-session-teardown' },
+    });
+
+    assert.equal(response.ok, true);
+    if (!response.ok) return;
+    assert.equal(response.data?.hint, undefined);
+    assert.ok(ownedStateDir.length > 0);
+    assert.equal(fs.existsSync(ownedStateDir), false);
+  } finally {
+    await closeLoopbackServer(daemon.server);
+    if (ownedStateDir) fs.rmSync(ownedStateDir, { recursive: true, force: true });
+  }
+});
+
+test('issue #1384: sendToDaemon does not stop a client-started daemon at an explicit --state-dir when replay leaves the session active', async (t) => {
+  if (!(await supportsLoopbackBind())) {
+    t.skip('loopback listeners are not permitted in this environment');
+    return;
+  }
+
+  // The literal #1384 repro: an explicit AGENT_DEVICE_STATE_DIR/--state-dir
+  // means `ownedStateDir` is false, but this client still STARTS the daemon
+  // fresh at that fixed dir (`daemon.startedByClient`) since nothing was
+  // running there yet — the teardown branch this guards is reached
+  // regardless of `ownedStateDir`.
+  const stateDir = makeTempStateDir('agent-device-active-session-explicit-dir-');
+  const paths = resolveDaemonPaths(stateDir);
+  const daemon = await startHttpDaemonFixture(activeReplaySuccessData());
+  installSpawnedHttpDaemon(paths, daemon.port);
+
+  try {
+    const response = await sendToDaemon({
+      session: 'default',
+      command: 'replay',
+      positionals: ['open-only.ad'],
+      flags: { stateDir, daemonTransport: 'http' },
+      meta: { requestId: 'req-explicit-dir-active-session' },
+    });
+
+    assert.equal(response.ok, true);
+    if (!response.ok) return;
+    assert.equal(response.data?.sessionActive, true);
+    // No address hint here: the caller already knows this state dir — it
+    // passed it explicitly — only an OWNED (randomly generated) state dir
+    // needs a hint to become addressable again.
+    assert.equal(response.data?.hint, undefined);
+    assert.equal(fs.existsSync(paths.infoPath), true);
+    assert.equal(fs.existsSync(paths.lockPath), true);
+  } finally {
+    await closeLoopbackServer(daemon.server);
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('sendToDaemon still tears down a `test` command owned ephemeral daemon even if its response data carried sessionActive:true', async (t) => {
+  if (!(await supportsLoopbackBind())) {
+    t.skip('loopback listeners are not permitted in this environment');
+    return;
+  }
+
+  // `test` never actually sets this field in practice (its own per-file
+  // runner always closes each session before the suite summary is built) —
+  // this proves the carve-out is an explicit command check, not an accident
+  // of the response shape, should a future response ever carry it by mistake.
+  const daemon = await startHttpDaemonFixture(activeReplaySuccessData({ total: 1 }));
+  let ownedStateDir = '';
+  installSpawnedHttpDaemonAtOwnedStateDir(daemon.port, (dir) => {
+    ownedStateDir = dir;
+  });
+
+  try {
+    const response = await sendToDaemon({
+      session: 'default',
+      command: 'test',
+      positionals: ['suite.ad'],
+      flags: { daemonTransport: 'http' },
+      meta: { requestId: 'req-test-command-teardown' },
+    });
+
+    assert.equal(response.ok, true);
+    assert.ok(ownedStateDir.length > 0);
+    assert.equal(fs.existsSync(ownedStateDir), false);
+  } finally {
+    await closeLoopbackServer(daemon.server);
+    if (ownedStateDir) fs.rmSync(ownedStateDir, { recursive: true, force: true });
+  }
+});

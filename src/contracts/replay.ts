@@ -5,6 +5,14 @@ export type ReplayCommandResult = {
   replayed: number;
   healed: number;
   session: string;
+  /**
+   * True iff `session` still exists in the daemon's session store when the
+   * response is built — i.e. the replayed script had no terminal `close`
+   * (ADR 0016's consumption contract). The client uses this, not script
+   * parsing, to decide whether an owned one-shot daemon must stay alive so
+   * the caller can keep addressing this session.
+   */
+  sessionActive: boolean;
   artifactPaths: string[];
   warnings?: string[];
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
