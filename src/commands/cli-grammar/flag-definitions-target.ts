@@ -42,6 +42,13 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageDescription: 'Android device serial',
   },
   {
+    key: 'stale',
+    names: ['--stale'],
+    type: 'boolean',
+    usageLabel: '--stale',
+    usageDescription: 'Device status: show only claims with a provably stale owner',
+  },
+  {
     key: 'surface',
     names: ['--surface'],
     type: 'enum',

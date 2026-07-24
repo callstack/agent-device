@@ -40,12 +40,14 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     supportedFlags: ['stateDir'],
   },
   device: {
-    usageOverride: 'device status [--platform <platform>] [--udid <udid>] [--serial <serial>]',
+    usageOverride:
+      'device status [--platform <platform>] [--udid <udid>] [--serial <serial>] [--stale]',
     listUsageOverride: 'device status',
     helpDescription:
-      'Inspect advisory host-local device ownership claims without starting or contacting a daemon.',
+      'Inspect advisory host-local device ownership claims without starting or contacting a daemon. --stale only inspects proven-stale claims; it does not reclaim claims or clean platform resources.',
     summary: 'Inspect local advisory device ownership without daemon side effects',
     positionalArgs: ['status'],
+    allowedFlags: ['stale'],
     supportedFlags: ['platform', 'device', 'udid', 'serial'],
   },
   connect: {

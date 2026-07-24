@@ -317,6 +317,7 @@ function summarizeProviderScenarioFlagExclusions() {
         'stepsFile',
         'proxyHost',
         'proxyPort',
+        'stale',
       ],
     },
     {

@@ -52,6 +52,7 @@ export type CliFlags = CloudProviderProfileFields &
     device?: string;
     udid?: string;
     serial?: string;
+    stale?: boolean;
     iosSimulatorDeviceSet?: string;
     iosXctestrunFile?: string;
     iosXctestDerivedDataPath?: string;
