@@ -395,6 +395,43 @@ test('typed Maestro rejects selectors that conflict with an active session', asy
   expect(invoke).not.toHaveBeenCalled();
 });
 
+test('fresh typed Maestro replay resolves its configured app before runtime defaults', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-app-selection-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const flowPath = path.join(root, 'flow.yaml');
+  fs.writeFileSync(flowPath, 'appId: com.example.demo\n---\n- launchApp\n');
+  const genericDevice = { ...makeIosSession('generic').device, id: 'SIM-GENERIC' };
+  const appDevice = { ...makeIosSession('app').device, id: 'SIM-WITH-APP' };
+  mockResolveTargetDevice.mockImplementation(async (_flags, options) =>
+    options?.appleSimulatorAppTarget === 'com.example.demo' ? appDevice : genericDevice,
+  );
+  const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
+
+  const response = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [flowPath],
+      flags: { replayBackend: 'maestro', platform: 'ios' },
+      runtime: { metroPort: 8081 },
+    }),
+    sessionName: 'default',
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+
+  expect(response.ok).toBe(true);
+  expect(mockResolveTargetDevice).toHaveBeenCalledWith(
+    { replayBackend: 'maestro', platform: 'ios' },
+    { appleSimulatorAppTarget: 'com.example.demo' },
+  );
+  expect(invoke).toHaveBeenCalledWith(
+    expect.objectContaining({
+      command: 'open',
+      flags: expect.objectContaining({ udid: 'SIM-WITH-APP' }),
+    }),
+  );
+});
+
 test('typed Maestro resume digest binds effective stored runtime hints', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-session-runtime-'));
   const sessionStore = new SessionStore(path.join(root, 'sessions'));

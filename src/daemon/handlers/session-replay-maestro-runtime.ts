@@ -39,6 +39,7 @@ import {
 } from './session-replay-maestro-response.ts';
 import { resolveEffectiveOpenRuntimeHints } from './session-runtime.ts';
 import { contextFromFlags } from '../context.ts';
+import { buildMaestroReplayTargetDeviceResolutionOptions } from '../replay-device-selection.ts';
 
 type TypedMaestroReplayParams = {
   req: DaemonRequest;
@@ -176,7 +177,13 @@ async function prepareTypedMaestroReplay(
   });
   const session = sessionStore.get(sessionName);
   if (session) assertSessionSelectorMatches(session, req.flags);
-  const binding = await resolveMaestroReplayBinding({ req, sessionStore, sessionName, session });
+  const binding = await resolveMaestroReplayBinding({
+    req,
+    sessionStore,
+    sessionName,
+    session,
+    program,
+  });
   return {
     filePath,
     program,
@@ -199,8 +206,9 @@ async function resolveMaestroReplayBinding(params: {
   sessionStore: SessionStore;
   sessionName: string;
   session: ReturnType<SessionStore['get']>;
+  program: MaestroProgram;
 }): Promise<MaestroReplayBinding> {
-  const { req, sessionStore, sessionName, session } = params;
+  const { req, sessionStore, sessionName, session, program } = params;
   const requestedPlatform = req.flags?.platform;
   const device =
     session?.device ??
@@ -223,6 +231,7 @@ async function resolveMaestroReplayBinding(params: {
     platform,
     target: resolveMaestroTarget(req, device),
     runtimeHints,
+    program,
   });
 }
 
@@ -231,10 +240,14 @@ async function completeMaestroRuntimeBinding(
     req: DaemonRequest;
     sessionStore: SessionStore;
     sessionName: string;
+    program: MaestroProgram;
   } & MaestroReplayBinding,
 ): Promise<MaestroReplayBinding> {
   if (params.device || !requiresDeviceRuntimeDefaults(params.runtimeHints)) return params;
-  const device = await resolveTargetDevice(params.req.flags ?? {});
+  const device = await resolveTargetDevice(
+    params.req.flags ?? {},
+    buildMaestroReplayTargetDeviceResolutionOptions(params.program),
+  );
   return {
     device,
     platform: params.platform,

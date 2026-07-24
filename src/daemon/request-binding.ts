@@ -2,6 +2,7 @@ import { resolveTargetDevice } from '../core/dispatch-resolve.ts';
 import { hasExplicitDeviceSelector } from './device-selector-intent.ts';
 import { applyRequestLockPolicy } from './request-lock-policy.ts';
 import { buildOpenTargetDeviceResolutionOptions } from './open-device-selection.ts';
+import { buildReplayTargetDeviceResolutionOptions } from './replay-device-selection.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonRequest, SessionState } from './types.ts';
 
@@ -25,14 +26,12 @@ export async function resolveRequestExecutionLockKeys(params: {
 
   const keys = new Set<RequestExecutionLockKey>([sessionExecutionLockKey(sessionName)]);
   const bindingReq = resolveFreshSessionBindingRequest(req);
-  if (shouldResolveFreshSessionDeviceLock(bindingReq)) {
+  const resolutionOptions = resolveFreshSessionDeviceLockOptions(bindingReq);
+  if (resolutionOptions) {
     try {
       // This is advisory lock selection before the request enters the lock; the
       // locked request still resolves and binds the target device authoritatively.
-      const device = await resolveTargetDevice(
-        bindingReq.flags ?? {},
-        buildOpenTargetDeviceResolutionOptions(bindingReq.positionals?.[0]),
-      );
+      const device = await resolveTargetDevice(bindingReq.flags ?? {}, resolutionOptions);
       keys.add(deviceExecutionLockKey(device.id));
     } catch {
       // Fall back to session scoping when device resolution is not yet available.
@@ -64,8 +63,19 @@ function resolveFreshSessionBindingRequest(req: DaemonRequest): DaemonRequest {
   }
 }
 
-function shouldResolveFreshSessionDeviceLock(req: DaemonRequest): boolean {
-  return req.command === 'open' || hasExplicitDeviceSelector(req.flags);
+function resolveFreshSessionDeviceLockOptions(
+  req: DaemonRequest,
+): ReturnType<typeof buildOpenTargetDeviceResolutionOptions> | undefined {
+  if (req.command === 'open') {
+    return buildOpenTargetDeviceResolutionOptions(req.positionals?.[0]);
+  }
+  if (req.command === 'replay') {
+    return (
+      buildReplayTargetDeviceResolutionOptions(req) ??
+      (hasExplicitDeviceSelector(req.flags) ? {} : undefined)
+    );
+  }
+  return hasExplicitDeviceSelector(req.flags) ? {} : undefined;
 }
 
 function sessionExecutionLockKey(sessionName: string): RequestExecutionLockKey {

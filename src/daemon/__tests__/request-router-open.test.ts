@@ -8,6 +8,7 @@ vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) 
 
 import { dispatchCommand } from '../../core/dispatch.ts';
 import { createRequestHandler } from '../request-router.ts';
+import { resolveRequestExecutionLockKeys } from '../request-binding.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
@@ -120,6 +121,40 @@ test('fresh open uses app-aware device selection for advisory locking and dispat
     [{ platform: 'ios' }, { appleSimulatorAppTarget: 'com.example.demo' }],
   ]);
   expect(sessionStore.get('session-app-aware')?.device.id).toBe(appDevice.id);
+});
+
+test('fresh replay reserves its authored app simulator before any replay step', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-app-lock-'));
+  const replayPath = path.join(root, 'flow.ad');
+  fs.writeFileSync(
+    replayPath,
+    'runtime set --platform ios --metro-port 8081\nopen com.example.demo\n',
+  );
+  const sessionStore = makeSessionStore('agent-device-router-replay-lock-');
+  const genericDevice = makeIosDevice('SIM-GENERIC');
+  const appDevice = makeIosDevice('SIM-WITH-APP');
+  mockResolveTargetDevice.mockImplementation(async (_flags, options) =>
+    options?.appleSimulatorAppTarget === 'com.example.demo' ? appDevice : genericDevice,
+  );
+
+  const keys = await resolveRequestExecutionLockKeys({
+    req: {
+      token: 'test-token',
+      session: 'fresh-replay',
+      command: 'replay',
+      positionals: [replayPath],
+      flags: { platform: 'ios' },
+      meta: { cwd: root },
+    },
+    sessionName: 'fresh-replay',
+    sessionStore,
+  });
+
+  expect(keys).toEqual(['session:fresh-replay', 'device:SIM-WITH-APP']);
+  expect(mockResolveTargetDevice).toHaveBeenCalledWith(
+    { platform: 'ios' },
+    { appleSimulatorAppTarget: 'com.example.demo' },
+  );
 });
 
 test('open --debug writes bounded open timing diagnostics to requestLogPath', async () => {
