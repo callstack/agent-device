@@ -3,6 +3,7 @@ import { parseReplayInput } from '../compat/replay-input.ts';
 import { parseMaestroProgram } from '../compat/maestro/program-ir-parser.ts';
 import type { ResolveTargetDeviceOptions } from '../core/dispatch-resolve.ts';
 import type { MaestroProgram } from '../compat/maestro/program-ir.ts';
+import { appleSimulatorAppTargetForOpenTarget } from './open-device-selection.ts';
 import { SessionStore } from './session-store.ts';
 import type { DaemonRequest, SessionAction } from './types.ts';
 
@@ -23,7 +24,7 @@ export function buildReplayTargetDeviceResolutionOptions(
     const appTarget = isMaestroReplay(req, resolved)
       ? readMaestroReplayAppTarget(parseMaestroProgram(source, { sourcePath: resolved }))
       : readScriptReplayAppTarget(parseReplayInput(source, req.flags).actions);
-    return appTarget ? { appleSimulatorAppTarget: appTarget } : undefined;
+    return appTargetResolutionOptions(appTarget);
   } catch {
     // Parsing and validation stay in the replay handler. Lock binding is only
     // advisory, so an unreadable/invalid plan must not mask its real error.
@@ -35,7 +36,7 @@ export function buildMaestroReplayTargetDeviceResolutionOptions(
   program: MaestroProgram,
 ): ResolveTargetDeviceOptions {
   const appTarget = readMaestroReplayAppTarget(program);
-  return appTarget ? { appleSimulatorAppTarget: appTarget } : {};
+  return appTargetResolutionOptions(appTarget) ?? {};
 }
 
 function isMaestroReplay(req: DaemonRequest, filePath: string): boolean {
@@ -61,4 +62,11 @@ function readMaestroReplayAppTarget(program: MaestroProgram): string | undefined
 
 function isStaticAppTarget(value: string | undefined): value is string {
   return Boolean(value && value.trim() && !value.includes('$'));
+}
+
+function appTargetResolutionOptions(
+  openTarget: string | undefined,
+): ResolveTargetDeviceOptions | undefined {
+  const appTarget = appleSimulatorAppTargetForOpenTarget(openTarget);
+  return appTarget ? { appleSimulatorAppTarget: appTarget } : undefined;
 }

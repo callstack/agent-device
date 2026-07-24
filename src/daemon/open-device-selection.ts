@@ -5,6 +5,12 @@ export function buildOpenTargetDeviceResolutionOptions(
   openTarget: string | undefined,
 ): ResolveTargetDeviceOptions {
   return {
-    appleSimulatorAppTarget: openTarget && !isDeepLinkTarget(openTarget) ? openTarget : undefined,
+    appleSimulatorAppTarget: appleSimulatorAppTargetForOpenTarget(openTarget),
   };
+}
+
+export function appleSimulatorAppTargetForOpenTarget(
+  openTarget: string | undefined,
+): string | undefined {
+  return openTarget && !isDeepLinkTarget(openTarget) ? openTarget : undefined;
 }
