@@ -26,7 +26,7 @@ test('Provider-backed integration: repair close paths (abort, plain close, commi
   );
 
   // Helper to get divergence report
-  async function armRepair(daemon: any, client: any, selection: any) {
+  async function armRepair(client: any, selection: any) {
     const open = await client.apps.open({ app: 'settings', ...selection });
     assert.equal(open.device?.id, PROVIDER_SCENARIO_ANDROID.id);
 
@@ -49,9 +49,9 @@ test('Provider-backed integration: repair close paths (abort, plain close, commi
       deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
     });
     let client = daemon.client();
-    let selection = { platform: 'android' as const, serial: PROVIDER_SCENARIO_ANDROID.id };
+    const selection = { platform: 'android' as const, serial: PROVIDER_SCENARIO_ANDROID.id };
 
-    await armRepair(daemon, client, selection);
+    await armRepair(client, selection);
 
     const abortedClose = await daemon.callCommand('close', [], { saveScript: true });
     assertRpcError(abortedClose, 'COMMAND_FAILED', /repair was aborted/);
@@ -65,8 +65,8 @@ test('Provider-backed integration: repair close paths (abort, plain close, commi
       deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
     });
     client = daemon.client();
-    
-    await armRepair(daemon, client, selection);
+
+    await armRepair(client, selection);
 
     const plainClose = await daemon.callCommand('close', []);
     assertRpcOk(plainClose);
@@ -80,9 +80,9 @@ test('Provider-backed integration: repair close paths (abort, plain close, commi
       deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
     });
     client = daemon.client();
-    
-    const divergenceReport = await armRepair(daemon, client, selection);
-    
+
+    const divergenceReport = await armRepair(client, selection);
+
     const resumed = await client.replay.run({
       path: repairPath,
       resumeFrom: divergenceReport.resume.from + 1,
@@ -96,7 +96,6 @@ test('Provider-backed integration: repair close paths (abort, plain close, commi
     assert.equal(fs.existsSync(path.join(tempRoot, 'repair.healed.ad')), true);
     assert.equal(daemon.session(), undefined);
     await daemon.close();
-
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }

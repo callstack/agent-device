@@ -515,7 +515,7 @@ export async function handleCloseCommand(params: {
   // artifact path so the agent learns the repair published (and where) without
   // an extra round-trip.
   const savedScript = repair.healedScriptPath ? { savedScript: repair.healedScriptPath } : {};
-  let text = `Closed: ${session.name}`;
+  const text = `Closed: ${session.name}`;
   if (repair.aborted && req.flags?.saveScript) {
     return {
       ok: false,
