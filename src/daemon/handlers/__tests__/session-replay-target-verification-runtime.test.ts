@@ -30,6 +30,7 @@ import { runReplayScriptFile } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest } from '../../types.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 
 const mockDispatchCommand = vi.mocked(dispatchCommand);
@@ -497,28 +498,42 @@ test('a target-binding divergence carries a real computed resume (step 5 wiring,
 });
 
 // #1385: a step-2 press right after `open --relaunch` can capture while the
-// app is still launching/mounting — the pre-dispatch verification capture
-// throws (Android's "insufficient foreground app content" surfaces as a
-// thrown capture failure) or returns sparse on the first attempt(s), then
-// recovers once the app finishes mounting. The bounded retry in
-// `captureDivergenceObservation` (`retryLaunchRace`) must ride that out
-// instead of failing closed on the first unlucky capture.
-test('a transient pre-dispatch capture failure right after launch recovers within the bounded retry, and the action still dispatches', async () => {
+// app is still launching/mounting. The bounded retry in
+// `captureDivergenceObservation` (`retryLaunchRace`) only rides out a
+// content-quality verdict — the same `retriable: true` signal Android's
+// helper capture path already emits for a content-poor/system-window-only
+// rejection (`rejectAndroidHelperContentUnavailable`) — not a mechanism
+// failure (helper artifact missing, device offline), which must still fail
+// fast. `throwRetriableCaptureFailure`/`throwPermanentCaptureFailure` below
+// build the two shapes.
+function throwRetriableCaptureFailure(): never {
+  throw new AppError(
+    'COMMAND_FAILED',
+    'Android snapshot helper returned insufficient foreground app content',
+    { retriable: true },
+  );
+}
+
+function throwPermanentCaptureFailure(): never {
+  throw new AppError(
+    'COMMAND_FAILED',
+    'Android snapshot helper is unavailable: the bundled helper artifact was not found',
+  );
+}
+
+test('a transient content-quality capture failure right after launch recovers within the bounded retry, and the action still dispatches', async () => {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), 'agent-device-replay-target-verify-launch-race-recover-'),
   );
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
 
-  // First two captures fail closed (mirrors a mid-launch/mid-mount capture);
-  // the third lands after the app settles and finds the recorded target.
+  // First two captures fail closed with a content-quality (retriable) verdict
+  // (mirrors a mid-launch/mid-mount capture); the third lands after the app
+  // settles and finds the recorded target.
   mockDispatchCommand
-    .mockImplementationOnce(async () => {
-      throw new Error('Android snapshot helper returned insufficient foreground app content');
-    })
-    .mockImplementationOnce(async () => {
-      throw new Error('Android snapshot helper returned insufficient foreground app content');
-    })
+    .mockImplementationOnce(async () => throwRetriableCaptureFailure())
+    .mockImplementationOnce(async () => throwRetriableCaptureFailure())
     .mockResolvedValue({
       nodes: [
         {
@@ -551,16 +566,14 @@ test('a transient pre-dispatch capture failure right after launch recovers withi
   expect(mockDispatchCommand).toHaveBeenCalledTimes(3);
 });
 
-test('a pre-dispatch capture failure that never recovers still fails closed as identity-unverifiable once the bounded retry is exhausted', async () => {
+test('a content-quality capture failure that never recovers still fails closed as identity-unverifiable once the bounded retry is exhausted', async () => {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), 'agent-device-replay-target-verify-launch-race-exhausted-'),
   );
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
 
-  mockDispatchCommand.mockImplementation(async () => {
-    throw new Error('Android snapshot helper returned insufficient foreground app content');
-  });
+  mockDispatchCommand.mockImplementation(async () => throwRetriableCaptureFailure());
 
   const invoked: DaemonRequest[] = [];
   const response = await runReplayScriptFile({
@@ -585,6 +598,38 @@ test('a pre-dispatch capture failure that never recovers still fails closed as i
   expect(cause.message).toContain('capture-failed');
   // Bounded: the retry gives up after its fixed delay list, not forever.
   expect(mockDispatchCommand.mock.calls.length).toBeGreaterThan(1);
+});
+
+test('a permanent (non-content-quality) capture failure fails fast without retrying', async () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'agent-device-replay-target-verify-launch-race-permanent-'),
+  );
+  const { sessionStore, sessionName } = setupSession(root);
+  const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
+
+  // A missing helper artifact is not something a launch-race retry can fix —
+  // it never carries `retriable: true`, so the capture must fail on the
+  // FIRST attempt, not spend the retry budget on a foregone conclusion.
+  mockDispatchCommand.mockImplementation(async () => throwPermanentCaptureFailure());
+
+  const invoked: DaemonRequest[] = [];
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      invoked.push(req);
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(invoked.length).toBe(0);
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  const divergence = response.error.details?.divergence as Record<string, unknown>;
+  expect(divergence.kind).toBe('identity-unverifiable');
+  expect(mockDispatchCommand).toHaveBeenCalledTimes(1);
 });
 
 // ---------------------------------------------------------------------------

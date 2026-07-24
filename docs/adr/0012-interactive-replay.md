@@ -384,6 +384,16 @@ target-binding divergences reported before the device action. This is not genera
 > `verifyReplayActionTarget` races a launch this way — the post-failure diagnostic capture
 > (`buildReplayFailureDivergence`) and the post-resolution guard-mismatch capture both follow an
 > already-real failure, where retrying would only delay an already-decided divergence.
+>
+> The retry loop is further gated on the SAME content-quality-vs-mechanism-failure taxonomy #1381 draws
+> for the wait keep-poll loop (`isUnreadableCaptureContentError`): the non-throwing `sparse-snapshot`
+> verdict always retries (it is already a content-quality signal), but a thrown `capture-failed` only
+> retries when the underlying error is explicitly marked `retriable: true` — the SAME signal Android's
+> helper capture path already emits for a content-poor/system-window-only rejection
+> (`rejectAndroidHelperContentUnavailable`, `platforms/android/snapshot.ts`) and leaves unset for a
+> permanent one (the helper artifact itself missing, `androidSnapshotHelperUnavailableError`). A
+> mechanism failure — helper artifact missing, device offline — therefore still fails on the first
+> attempt rather than spending the full 12s retry budget on a foregone conclusion.
 
 ### 4. Divergence wire contract and replay-only resume
 

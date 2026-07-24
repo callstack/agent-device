@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { sleep } from '../../utils/timeouts.ts';
+import { normalizeError } from '../../kernel/errors.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from '../session-snapshot.ts';
 import { isSparseSnapshotQualityVerdict } from '../../snapshot/snapshot-quality.ts';
 import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
@@ -248,22 +249,22 @@ export async function captureDivergenceObservation(params: {
   const { session, sessionName, sessionStore, logPath, action, retryLaunchRace = false } = params;
   const flags = divergenceCaptureFlags(action);
 
-  let observation = await captureDivergenceObservationAttempt({
+  let attempt = await captureDivergenceObservationAttempt({
     session,
     sessionName,
     sessionStore,
     logPath,
     flags,
   });
-  if (!retryLaunchRace) return observation;
+  if (!retryLaunchRace) return attempt.observation;
 
   const deadline = Date.now() + DIVERGENCE_CAPTURE_RETRY_DEADLINE_MS;
   for (const delayMs of DIVERGENCE_CAPTURE_RETRY_DELAYS_MS) {
-    if (observation.state === 'available') break;
+    if (attempt.observation.state === 'available' || !attempt.retryable) break;
     const remainingMs = deadline - Date.now();
     if (remainingMs <= 0) break;
     await sleep(Math.min(delayMs, remainingMs));
-    observation = await captureDivergenceObservationAttempt({
+    attempt = await captureDivergenceObservationAttempt({
       session,
       sessionName,
       sessionStore,
@@ -272,8 +273,28 @@ export async function captureDivergenceObservation(params: {
     });
   }
 
-  return observation;
+  return attempt.observation;
 }
+
+type DivergenceCaptureAttempt = {
+  observation: DivergenceObservation;
+  /**
+   * Meaningful only when `observation.state === 'unavailable'`: whether this
+   * particular failure is a content-quality verdict a launch-race retry
+   * should ride out, versus a mechanism failure that will not resolve itself
+   * (helper artifact missing, device offline). Mirrors #1381's
+   * `isUnreadableCaptureContentError` taxonomy for the wait keep-poll loop —
+   * content verdict retries, mechanism failure fails fast — via the SAME
+   * signal Android's helper capture path already emits for exactly this
+   * distinction: `retriable: true` on a content-poor/system-window-only
+   * rejection (`rejectAndroidHelperContentUnavailable`,
+   * `platforms/android/snapshot.ts`), left unset on a permanent one (the
+   * helper artifact itself missing, `androidSnapshotHelperUnavailableError`).
+   * The non-throwing `sparse-snapshot` verdict is always retryable — it is
+   * already a content-quality signal, never a mechanism failure.
+   */
+  retryable: boolean;
+};
 
 async function captureDivergenceObservationAttempt(params: {
   session: SessionState;
@@ -281,7 +302,7 @@ async function captureDivergenceObservationAttempt(params: {
   sessionStore: SessionStore;
   logPath: string;
   flags: CommandFlags;
-}): Promise<DivergenceObservation> {
+}): Promise<DivergenceCaptureAttempt> {
   const { session, sessionName, sessionStore, logPath, flags } = params;
   try {
     const capture = await captureSnapshot({
@@ -293,9 +314,12 @@ async function captureDivergenceObservationAttempt(params: {
     const snapshot = capture.snapshot;
     if (isSparseSnapshotQualityVerdict(snapshot.snapshotQuality)) {
       return {
-        state: 'unavailable',
-        reason: 'sparse-snapshot',
-        hint: 'The post-failure snapshot was sparse or unavailable; run snapshot -i to observe the current screen.',
+        observation: {
+          state: 'unavailable',
+          reason: 'sparse-snapshot',
+          hint: 'The post-failure snapshot was sparse or unavailable; run snapshot -i to observe the current screen.',
+        },
+        retryable: true,
       };
     }
     setSessionSnapshot(session, snapshot);
@@ -313,16 +337,22 @@ async function captureDivergenceObservationAttempt(params: {
     markSessionPartialRefsIssued(session, digestBodies);
     sessionStore.set(sessionName, session);
     return {
-      state: 'available',
-      nodes: snapshot.nodes,
-      refsGeneration: session.snapshotGeneration ?? 0,
-      appBundleId: session.appBundleId,
+      observation: {
+        state: 'available',
+        nodes: snapshot.nodes,
+        refsGeneration: session.snapshotGeneration ?? 0,
+        appBundleId: session.appBundleId,
+      },
+      retryable: false,
     };
   } catch (error) {
     return {
-      state: 'unavailable',
-      reason: 'capture-failed',
-      hint: `Post-failure snapshot capture failed (${error instanceof Error ? error.message : String(error)}); the original replay failure is unaffected.`,
+      observation: {
+        state: 'unavailable',
+        reason: 'capture-failed',
+        hint: `Post-failure snapshot capture failed (${error instanceof Error ? error.message : String(error)}); the original replay failure is unaffected.`,
+      },
+      retryable: normalizeError(error).retriable === true,
     };
   }
 }
