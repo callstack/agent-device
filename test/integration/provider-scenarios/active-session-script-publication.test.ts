@@ -229,12 +229,12 @@ test('parameterized fill publishes only ${VAR} and replay resolves it immediatel
         assert.equal(settleOutput.includes(secret), false, settleOutput);
         assert.match(settleOutput, /prefix\$\{SEARCH_TERM\}suffix/);
         await client.command.wait({
-          selector: 'id=com.android.settings:id/search',
+          selector: 'id=android:id/title',
           ...world.selection,
         });
 
         const recordedState = JSON.stringify(world.daemon.session()?.actions);
-        assert.equal(recordedState.includes(secret), false);
+        assert.equal(recordedState.includes(secret), false, recordedState);
         assert.match(recordedState, /\$\{SEARCH_TERM\}/);
         await client.sessions.saveScript({ path: scriptPath });
         const script = fs.readFileSync(scriptPath, 'utf8');
