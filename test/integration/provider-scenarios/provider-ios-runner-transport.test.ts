@@ -5,14 +5,17 @@ import {
   type ProviderDeviceRuntime,
 } from '../../../src/provider-device-runtime.ts';
 import type { DeviceInventoryProvider } from '../../../src/core/dispatch-resolve.ts';
-import type { Interactor } from '../../../src/core/interactor-types.ts';
+import type { Interactor, RunnerContext } from '../../../src/core/interactor-types.ts';
 import type { LeaseLifecycleProvider } from '../../../src/daemon/handlers/lease.ts';
 import type { DeviceLease } from '../../../src/daemon/lease-registry.ts';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';
 import type { DeviceInfo } from '../../../src/kernel/device.ts';
 import { createAppleInteractor } from '../../../src/platforms/apple/interactor.ts';
 import type { RunnerCommand } from '../../../src/platforms/apple/core/runner/runner-contract.ts';
-import type { AppleRunnerProvider } from '../../../src/platforms/apple/core/runner/runner-provider.ts';
+import type {
+  AppleRunnerCommandOptions,
+  AppleRunnerProvider,
+} from '../../../src/platforms/apple/core/runner/runner-provider.ts';
 import { assertRpcOk } from './assertions.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
 
@@ -26,6 +29,9 @@ const DEVICE: DeviceInfo = {
   target: 'mobile',
   booted: true,
 };
+
+type RecordedRunnerCall = { command: RunnerCommand; options: AppleRunnerCommandOptions };
+type RunnerTransportCalls = { runner: RecordedRunnerCall[]; opens: number };
 
 // Issue #1297 acceptance path: a provider that only supplies an
 // AppleRunnerProvider transport (plus its own `open`) reuses the SHARED Apple
@@ -70,27 +76,70 @@ test('provider-supplied Apple runner transport reuses the shared interactor stac
     assertRpcOk(
       await daemon.callCommand('click', ['label="Provider Ready"'], request.flags, request),
     );
-    const tap = calls.commands.find((command) => command.command === 'tap');
+    const tap = calls.runner.find((call) => call.command.command === 'tap');
     assert.ok(tap, 'expected a runner-protocol tap on the provider transport');
     // The shared runtime resolved the selector against the transport's snapshot
     // and tapped the element center, whichever tap vehicle it picked.
-    assert.deepEqual({ x: tap.x, y: tap.y }, { x: 60, y: 30 });
+    assert.deepEqual({ x: tap.command.x, y: tap.command.y }, { x: 60, y: 30 });
 
     assertRpcOk(
       await daemon.callCommand('fill', ['label="Provider Input"', 'hello'], request.flags, request),
     );
-    const fill = calls.commands.find(
-      (command) => command.command === 'type' && command.textEntryMode === 'replace',
+    const fill = calls.runner.find(
+      (call) => call.command.command === 'type' && call.command.textEntryMode === 'replace',
     );
     assert.ok(fill, 'expected a runner-protocol fill on the provider transport');
-    assert.equal(fill.text, 'hello');
-    assert.deepEqual({ x: fill.x, y: fill.y }, { x: 60, y: 90 });
+    assert.equal(fill.command.text, 'hello');
+    assert.deepEqual({ x: fill.command.x, y: fill.command.y }, { x: 60, y: 90 });
 
-    const snapshots = calls.commands.filter((command) => command.command === 'snapshot');
+    const snapshots = calls.runner.filter((call) => call.command.command === 'snapshot');
     assert.ok(
       snapshots.length >= 4,
       `expected shared snapshot runtime traffic on the transport, got ${snapshots.length}`,
     );
+  });
+});
+
+// Daemon routes that issue runner commands OUTSIDE interactor methods (keyboard,
+// native alert, point read, iOS sequences) must reach the provider transport via
+// the request-boundary `appleRunnerProvider` scope instead of escaping to the
+// local XCTest runtime.
+test('daemon direct runner routes reach the provider transport through the request scope', async () => {
+  await withProviderScenarioResource(createRunnerTransportWorld, async ({ daemon, calls }) => {
+    const lease = await allocateLease(daemon);
+    const request = { flags: leaseFlags(lease.leaseId), meta: leaseMeta(lease.leaseId) };
+    assertRpcOk(await daemon.callCommand('open', ['com.example.app'], request.flags, request));
+
+    calls.runner.length = 0;
+    assertRpcOk(await daemon.callCommand('keyboard', ['dismiss'], request.flags, request));
+    const dismiss = calls.runner.find((call) => call.command.command === 'keyboardDismiss');
+    assert.ok(dismiss, 'expected keyboardDismiss on the provider transport, not local XCTest');
+  });
+});
+
+// Per-request RunnerContext threading: the daemon builds the interactor per
+// request, so runner calls carry the request's id (cancellation/accounting)
+// instead of the construction-time context.
+test('provider transport runner calls carry the per-request id', async () => {
+  await withProviderScenarioResource(createRunnerTransportWorld, async ({ daemon, calls }) => {
+    const lease = await allocateLease(daemon);
+    const flags = leaseFlags(lease.leaseId);
+    const openMeta = { ...leaseMeta(lease.leaseId), requestId: 'req-open-1' };
+    assertRpcOk(await daemon.callCommand('open', ['com.example.app'], flags, { meta: openMeta }));
+
+    calls.runner.length = 0;
+    const clickMeta = { ...leaseMeta(lease.leaseId), requestId: 'req-click-1' };
+    assertRpcOk(
+      await daemon.callCommand('click', ['label="Provider Ready"'], flags, { meta: clickMeta }),
+    );
+    assert.ok(calls.runner.length >= 1, 'expected runner traffic for the click request');
+    for (const call of calls.runner) {
+      assert.equal(
+        call.options.requestId,
+        'req-click-1',
+        `runner ${call.command.command} lost the per-request id`,
+      );
+    }
   });
 });
 
@@ -104,7 +153,7 @@ async function allocateLease(
 }
 
 async function createRunnerTransportWorld() {
-  const calls = { commands: [] as RunnerCommand[], opens: 0 };
+  const calls: RunnerTransportCalls = { runner: [], opens: 0 };
   const runtime = createProviderRuntime(calls);
   const providers = createProviderDeviceRuntimeRequestProviders([runtime]);
   const daemon = await createProviderScenarioHarness({
@@ -121,11 +170,13 @@ async function createRunnerTransportWorld() {
   };
 }
 
-function createProviderRuntime(calls: {
-  commands: RunnerCommand[];
-  opens: number;
-}): ProviderDeviceRuntime {
-  const interactor = createRunnerTransportInteractor(calls);
+function createProviderRuntime(calls: RunnerTransportCalls): ProviderDeviceRuntime {
+  const transport: AppleRunnerProvider = {
+    runCommand: async (_device, command, options) => {
+      calls.runner.push({ command, options });
+      return runnerResultFor(command);
+    },
+  };
   const leaseLifecycle: LeaseLifecycleProvider = {
     allocate: async (lease) =>
       lease.leaseProvider === PROVIDER ? { provider: PROVIDER, deviceId: DEVICE.id } : undefined,
@@ -137,23 +188,22 @@ function createProviderRuntime(calls: {
     leaseLifecycle,
     deviceInventoryProvider,
     ownsDevice: (device) => device.id === DEVICE.id,
-    getInteractor: (device) => (device.id === DEVICE.id ? interactor : undefined),
+    getInteractor: (device, runnerContext) =>
+      device.id === DEVICE.id
+        ? createRunnerTransportInteractor(calls, transport, runnerContext)
+        : undefined,
+    getAppleRunnerProvider: (device) => (device.id === DEVICE.id ? transport : undefined),
     shutdown: async () => undefined,
   };
 }
 
-function createRunnerTransportInteractor(calls: {
-  commands: RunnerCommand[];
-  opens: number;
-}): Interactor {
-  const transport: AppleRunnerProvider = {
-    runCommand: async (_device, command) => {
-      calls.commands.push(command);
-      return runnerResultFor(command);
-    },
-  };
+function createRunnerTransportInteractor(
+  calls: RunnerTransportCalls,
+  transport: AppleRunnerProvider,
+  runnerContext: RunnerContext | undefined,
+): Interactor {
   return {
-    ...createAppleInteractor(DEVICE, {}, transport),
+    ...createAppleInteractor(DEVICE, runnerContext ?? {}, transport),
     // App lifecycle stays provider-owned: the transport seam covers runner
     // commands only, so the provider composes its own `open` on top.
     open: async () => {

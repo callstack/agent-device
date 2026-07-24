@@ -198,6 +198,7 @@ export async function startDaemonRuntime(
     leaseLifecycleProvider: providerRuntimeProviders.leaseLifecycleProvider,
     cloudArtifactProvider,
     deviceInventoryProvider: providerRuntimeProviders.deviceInventoryProvider,
+    appleRunnerProvider: providerRuntimeProviders.appleRunnerProvider,
     providerRuntimeIds: providerRuntimeProviders.providerRuntimeIds,
     providerRuntimeRequiredIds: providerRuntimeProviders.providerRuntimeRequiredIds,
     providerDeviceRuntimeScope: providerRuntimeProviders.providerDeviceRuntimeScope,

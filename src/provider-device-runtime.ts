@@ -4,8 +4,13 @@ import type {
   CloudArtifactsQuery,
   CloudArtifactsResult,
 } from './cloud-artifacts.ts';
-import type { Interactor } from './core/interactor-types.ts';
+import type { Interactor, RunnerContext } from './core/interactor-types.ts';
 import type { DeviceInventoryProvider } from './core/dispatch-resolve.ts';
+import type { AppleRunnerProviderResolver } from './daemon/request-platform-providers.ts';
+import type {
+  AppleRunnerCommandExecutor,
+  AppleRunnerProvider,
+} from './platforms/apple/core/runner/runner-provider.ts';
 import type { LeaseLifecycleContext, LeaseLifecycleProvider } from './daemon/handlers/lease.ts';
 import type { DeviceLease } from './daemon/lease-registry.ts';
 import { publicPlatformString, type DeviceInfo } from './kernel/device.ts';
@@ -31,7 +36,23 @@ export type ProviderDeviceRuntime = {
   cloudArtifacts?: CloudArtifactProvider;
   deviceInventoryProvider: DeviceInventoryProvider;
   ownsDevice(device: DeviceInfo): boolean;
-  getInteractor(device: DeviceInfo): Interactor | undefined;
+  /**
+   * Builds the interactor for an owned device. `runnerContext` carries the
+   * per-request context (requestId for cancellation, appBundleId, log paths);
+   * runtimes composing the shared Apple interactor should thread it through so
+   * runner calls stay attributable to the request that issued them.
+   */
+  getInteractor(device: DeviceInfo, runnerContext?: RunnerContext): Interactor | undefined;
+  /**
+   * Apple runner transport for an owned device. When present, the daemon scopes
+   * the WHOLE request with it (via the `appleRunnerProvider` request resolver),
+   * so daemon routes that issue runner commands outside interactor methods
+   * (keyboard, native alert, point read, iOS sequences) reach the provider
+   * transport instead of the local XCTest runtime.
+   */
+  getAppleRunnerProvider?(
+    device: DeviceInfo,
+  ): AppleRunnerProvider | AppleRunnerCommandExecutor | undefined;
   installApp?(
     device: DeviceInfo,
     app: string,
@@ -65,6 +86,7 @@ export type ProviderDeviceRuntimeRequestProviders = {
   recoverExpiredLease?: ProviderExpiredLeaseRecovery;
   cloudArtifactProvider?: CloudArtifactProvider;
   deviceInventoryProvider?: DeviceInventoryProvider;
+  appleRunnerProvider?: AppleRunnerProviderResolver;
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
 };
 
@@ -87,10 +109,13 @@ async function withProviderDeviceRuntimeScope<T>(
   return await providerDeviceRuntimeScope.run([...runtimes], task);
 }
 
-export function getProviderDeviceInteractor(device: DeviceInfo): Interactor | undefined {
+export function getProviderDeviceInteractor(
+  device: DeviceInfo,
+  runnerContext?: RunnerContext,
+): Interactor | undefined {
   for (const runtime of getActiveProviderDeviceRuntimes()) {
     if (!runtime.ownsDevice(device)) continue;
-    const interactor = runtime.getInteractor(device);
+    const interactor = runtime.getInteractor(device, runnerContext);
     if (interactor) return interactor;
   }
   return undefined;
@@ -168,8 +193,23 @@ export function createProviderDeviceRuntimeRequestProviders(
     recoverExpiredLease: composeExpiredLeaseRecovery(runtimes),
     cloudArtifactProvider: composeCloudArtifactProvider(runtimes),
     deviceInventoryProvider: composeDeviceInventoryProvider(runtimes),
+    appleRunnerProvider: composeAppleRunnerProviderResolver(runtimes),
     providerDeviceRuntimeScope: async (task) =>
       await withProviderDeviceRuntimeScope(runtimes, task),
+  };
+}
+
+function composeAppleRunnerProviderResolver(
+  runtimes: ProviderDeviceRuntime[],
+): AppleRunnerProviderResolver | undefined {
+  if (!runtimes.some((runtime) => runtime.getAppleRunnerProvider !== undefined)) return undefined;
+  return (context) => {
+    for (const runtime of runtimes) {
+      if (!runtime.ownsDevice(context.device)) continue;
+      const provider = runtime.getAppleRunnerProvider?.(context.device);
+      if (provider) return provider;
+    }
+    return undefined;
   };
 }
 
