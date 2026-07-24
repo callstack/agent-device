@@ -1106,6 +1106,32 @@ function activeReplaySuccessData(overrides: Record<string, unknown> = {}): Recor
   };
 }
 
+/** Issues a close-less `replay` against an owned ephemeral daemon spawned at `daemonPort`. */
+async function replayLeavingSessionActive(
+  daemonPort: number,
+  requestId: string,
+): Promise<{ response: Awaited<ReturnType<typeof sendToDaemon>>; ownedStateDir: string }> {
+  let ownedStateDir = '';
+  installSpawnedHttpDaemonAtOwnedStateDir(daemonPort, (dir) => {
+    ownedStateDir = dir;
+  });
+  const response = await sendToDaemon({
+    session: 'default',
+    command: 'replay',
+    positionals: ['open-only.ad'],
+    flags: { daemonTransport: 'http' },
+    meta: { requestId },
+  });
+  return { response, ownedStateDir };
+}
+
+/** Parses a `--state-dir <dir> --session <name>` pair out of an address hint. */
+function parseAddressHint(hint: string): { stateDir: string; session: string } {
+  const match = hint.match(/--state-dir (\S+) --session (\S+)/);
+  assert.ok(match, `hint did not contain a parseable --state-dir/--session pair: ${hint}`);
+  return { stateDir: match[1] ?? '', session: match[2] ?? '' };
+}
+
 test('sendToDaemon keeps an owned ephemeral daemon alive and hints its --state-dir when a close-less replay leaves the session active', async (t) => {
   if (!(await supportsLoopbackBind())) {
     t.skip('loopback listeners are not permitted in this environment');
@@ -1114,31 +1140,24 @@ test('sendToDaemon keeps an owned ephemeral daemon alive and hints its --state-d
 
   const daemon = await startHttpDaemonFixture(activeReplaySuccessData());
   let ownedStateDir = '';
-  installSpawnedHttpDaemonAtOwnedStateDir(daemon.port, (dir) => {
-    ownedStateDir = dir;
-  });
-
   try {
-    const response = await sendToDaemon({
-      session: 'default',
-      command: 'replay',
-      positionals: ['open-only.ad'],
-      flags: { daemonTransport: 'http' },
-      meta: { requestId: 'req-active-session-keep-alive' },
-    });
-
-    assert.equal(response.ok, true);
-    if (!response.ok) return;
-    assert.equal(response.data?.session, 'default');
-    assert.equal(response.data?.sessionActive, true);
+    const result = await replayLeavingSessionActive(daemon.port, 'req-active-session-keep-alive');
+    ownedStateDir = result.ownedStateDir;
+    assert.equal(result.response.ok, true);
+    if (!result.response.ok) return;
+    const data = result.response.data;
+    assert.ok(data);
+    assert.equal(data.session, 'default');
+    assert.equal(data.sessionActive, true);
     assert.ok(ownedStateDir.length > 0);
-    assert.match(String(response.data?.hint), /--state-dir/);
-    assert.ok(String(response.data?.hint).includes(ownedStateDir));
+    const hint = String(data.hint);
+    assert.match(hint, /--state-dir/);
+    assert.ok(hint.includes(ownedStateDir));
     // Names the session verbatim (not just --state-dir): an explicit
     // --session <value> is used as-is by resolveEffectiveSessionName, so the
     // hint must be copy-pasteable into a follow-up command from any cwd.
-    assert.match(String(response.data?.hint), /--session default/);
-    assert.match(String(response.data?.message), /--state-dir/);
+    assert.match(hint, /--session default/);
+    assert.match(String(data.message), /--state-dir/);
 
     // The daemon was NOT torn down: metadata and the owned state dir itself
     // are still on disk, addressable by a follow-up command's --state-dir.
@@ -1160,34 +1179,20 @@ test('closes the loop: a follow-up sendToDaemon using the hinted --state-dir/--s
 
   const daemon = await startHttpDaemonFixture(activeReplaySuccessData());
   let ownedStateDir = '';
-  installSpawnedHttpDaemonAtOwnedStateDir(daemon.port, (dir) => {
-    ownedStateDir = dir;
-  });
-
   try {
-    const response = await sendToDaemon({
-      session: 'default',
-      command: 'replay',
-      positionals: ['open-only.ad'],
-      flags: { daemonTransport: 'http' },
-      meta: { requestId: 'req-active-session-hint-source' },
-    });
-
-    assert.equal(response.ok, true);
-    if (!response.ok) return;
-    const hint = String(response.data?.hint);
-    const match = hint.match(/--state-dir (\S+) --session (\S+)/);
-    assert.ok(match, `hint did not contain a parseable --state-dir/--session pair: ${hint}`);
-    const hintedStateDir = match?.[1] ?? '';
-    const hintedSession = match?.[2] ?? '';
-    assert.equal(hintedStateDir, ownedStateDir);
+    const result = await replayLeavingSessionActive(daemon.port, 'req-active-session-hint-source');
+    ownedStateDir = result.ownedStateDir;
+    assert.equal(result.response.ok, true);
+    if (!result.response.ok) return;
+    const hinted = parseAddressHint(String(result.response.data?.hint));
+    assert.equal(hinted.stateDir, ownedStateDir);
 
     const spawnCallsBeforeFollowUp = mockRunCmdDetached.mock.calls.length;
     const followUp = await sendToDaemon({
-      session: hintedSession,
+      session: hinted.session,
       command: 'press',
       positionals: [],
-      flags: { stateDir: hintedStateDir, daemonTransport: 'http' },
+      flags: { stateDir: hinted.stateDir, daemonTransport: 'http' },
       meta: { requestId: 'req-active-session-followup', sessionExplicit: true },
     });
 
@@ -1197,7 +1202,7 @@ test('closes the loop: a follow-up sendToDaemon using the hinted --state-dir/--s
     assert.equal(mockRunCmdDetached.mock.calls.length, spawnCallsBeforeFollowUp);
     assert.equal(followUp.ok, true);
     assert.equal(daemon.rpcRequests.length, 2);
-    assert.equal(daemon.rpcRequests[1]?.params?.session, hintedSession);
+    assert.equal(daemon.rpcRequests[1]?.params?.session, hinted.session);
     assert.equal(daemon.rpcRequests[1]?.params?.command, 'press');
   } finally {
     await closeLoopbackServer(daemon.server);
