@@ -515,15 +515,27 @@ export function isActiveReplaySessionResponse(
  * to both a structured `hint` field (for `--json` consumers) and appended to
  * `message` — the only field the default text renderer surfaces
  * (`src/utils/success-text.ts`) — so the hint reaches a caller in either mode.
+ *
+ * Also names `--session` using `data.session` verbatim — that value is
+ * already the fully-qualified store key `resolveEffectiveSessionName`
+ * resolves per request (`session-routing.ts`, e.g. `cwd:<hash>:default`), and
+ * an EXPLICIT `--session <value>` is used as-is, skipping cwd-scoping
+ * entirely (`hasExplicitSessionFlag`). Passing it back unchanged is what
+ * actually reaches the same session from any cwd; a bare `--session default`
+ * would only match by coincidence (an implicit, no-`--session` follow-up run
+ * from the identical cwd), which isn't safe to bake into a copy-pasteable
+ * hint.
  */
 export function attachActiveSessionAddressHint(
   response: Extract<DaemonResponse, { ok: true }>,
   stateDir: string,
 ): Extract<DaemonResponse, { ok: true }> {
-  const addressHint =
-    `This session's daemon was kept alive because its script left the session ` +
-    `active; pass --state-dir ${stateDir} on your next command to reach it.`;
   const data = response.data ?? {};
+  const sessionName = typeof data.session === 'string' ? data.session : undefined;
+  const addressHint =
+    `This session's daemon was kept alive because its script left the session active; ` +
+    `pass --state-dir ${stateDir}${sessionName ? ` --session ${sessionName}` : ''} on your ` +
+    `next command to reach it.`;
   const existingMessage = typeof data.message === 'string' ? data.message : undefined;
   return {
     ...response,

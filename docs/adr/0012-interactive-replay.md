@@ -875,6 +875,17 @@ works" and "healed scripts are always valid":
   prevent keep-alive, the armed replay must **fail-fast before step 1** with actionable guidance, never
   proceed and then fail a later `--from` with `SESSION_NOT_FOUND`.
 
+  **Interaction with the CLI client's one-shot teardown (issue #1384).** A repair-armed replay that
+  completes cleanly (no divergence, transaction reaches `COMPLETE`) skips its terminal source `close` by
+  design (above), so the session always survives the run. Once the client keeps a one-shot `replay`'s
+  owning daemon alive whenever the session survives (`ReplayCommandResult.sessionActive`, independent of
+  repair state), that keep-alive now applies here too: the healed `.ad` commit — gated on teardown, not on
+  the replay response — is deferred past the request that completed it, landing only when the agent issues
+  an explicit `close`/`close --save-script` or ordinary idle-reap tears the session down. This is the
+  correct shape of "commit at teardown" (the session stays addressable for inspection immediately after a
+  completed repair, per R7), but it changes observable timing for a scripted caller that previously saw
+  the healed sibling appear the instant the one-shot client process exited.
+
 **Terminal lifecycle steps during a repair-armed `--from` resume.** Verification is scoped, per decision
 3, to *annotated resolved targets* — so a non-target step (a source `close`, or any step carrying no
 `target-v1` `targetEvidence`) is already exempt from target-binding divergence: it may still surface an
