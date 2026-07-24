@@ -517,7 +517,15 @@ export async function handleCloseCommand(params: {
   const savedScript = repair.healedScriptPath ? { savedScript: repair.healedScriptPath } : {};
   let text = `Closed: ${session.name}`;
   if (repair.aborted && req.flags?.saveScript) {
-    text += `\nThe repair was aborted and no script was written. Recovery: replay --from <n> --plan-digest <digest> before closing.`;
+    return {
+      ok: false,
+      error: {
+        code: 'COMMAND_FAILED',
+        message: 'The repair was aborted and no script was written.',
+        hint: 'Recovery: replay --from <n> --plan-digest <digest> before closing.',
+        details: { session: session.name },
+      },
+    };
   }
 
   if (shutdownResult) {
