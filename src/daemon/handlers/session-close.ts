@@ -236,35 +236,51 @@ async function runSessionCloseTeardown(params: {
   // succeed. Only an ordinary (non-repair) session records `close` + writes its
   // session log here, and — per #1225 — a failed platform close is not recorded
   // as `Closed`.
-  let saveScriptError: AppError | undefined;
-  if (!repairArmed) {
-    const actionsBeforeClose = session.actions.length;
-    if (!platformCloseError) {
-      recordSessionAction(sessionStore, session, req, 'close', {
-        session: session.name,
-        ...successText(`Closed: ${session.name}`),
-      });
-    }
-    if (req.flags?.saveScript) {
-      session.recordSession = true;
-    }
-    try {
-      sessionStore.writeSessionLog(session, {
-        force: resolveEffectiveSaveScriptForce(req, session),
-      });
-    } catch (error) {
-      // #1391: never let a failed script publish leak the session/device claim
-      // (item 1) or leave an unrecorded `close` action for a later successful
-      // write to duplicate (item 2) — roll back exactly like the repair path's
-      // `commitRepairBeforeClose` does, then let teardown continue below.
-      session.actions.length = actionsBeforeClose;
-      saveScriptError = toOrdinaryCloseSaveScriptFailure(error);
-    }
-  }
+  const saveScriptError = repairArmed
+    ? undefined
+    : finalizeOrdinaryCloseScript({ req, session, sessionStore, platformCloseError });
   await attemptCleanup('materialized_paths', () =>
     cleanupRetainedMaterializedPathsForSession(sessionName),
   );
   return { platformCloseError, saveScriptError };
+}
+
+/**
+ * ADR 0012 decision 6 (BLOCKER 2): only an ordinary (non-repair) session
+ * records its finalize `close` and writes its session log here — see the
+ * call site's own comment for why a repair-armed session skips this entirely.
+ *
+ * #1391: the write can refuse to publish (no-clobber target-exists, or any
+ * other fs `AppError`). Roll back the just-recorded `close` action on failure
+ * — mirroring `commitRepairBeforeClose`'s own rollback — so neither the
+ * session/device claim leaks (item 1) nor an unrecorded `close` survives for a
+ * later successful write to duplicate (item 2); the caller still completes
+ * teardown regardless of the outcome returned here.
+ */
+function finalizeOrdinaryCloseScript(params: {
+  req: DaemonRequest;
+  session: SessionState;
+  sessionStore: SessionStore;
+  platformCloseError: unknown;
+}): AppError | undefined {
+  const { req, session, sessionStore, platformCloseError } = params;
+  const actionsBeforeClose = session.actions.length;
+  if (!platformCloseError) {
+    recordSessionAction(sessionStore, session, req, 'close', {
+      session: session.name,
+      ...successText(`Closed: ${session.name}`),
+    });
+  }
+  if (req.flags?.saveScript) {
+    session.recordSession = true;
+  }
+  try {
+    sessionStore.writeSessionLog(session, { force: resolveEffectiveSaveScriptForce(req, session) });
+    return undefined;
+  } catch (error) {
+    session.actions.length = actionsBeforeClose;
+    return toOrdinaryCloseSaveScriptFailure(error);
+  }
 }
 
 /**
@@ -521,10 +537,68 @@ export async function handleCloseCommand(params: {
   // identity it was recorded under, so the platform close runs (again).
   const repair = await prepareRepairClose({ req, session, logPath, sessionStore });
   if ('response' in repair) return repair.response;
-  // Resource teardown is failure-isolated: a rejected step is collected instead of
-  // short-circuiting the rest, so every subsequent resource (and the runner stop)
-  // is still attempted. The provider lease is committed only after that teardown,
-  // and a failed provider release keeps the session retryable.
+  const closed = await runCloseTeardownAndRelease({
+    req,
+    session,
+    sessionName,
+    logPath,
+    sessionStore,
+    leaseRegistry,
+    leaseLifecycleProvider,
+    repairArmed: repair.repairArmed,
+  });
+  if (closed.kind === 'response') return closed.response;
+  const shutdownResult = await maybeShutdownSessionTarget({
+    device: session.device,
+    shutdownRequested: req.flags?.shutdown,
+  });
+  return buildCloseSuccessResponse({
+    session,
+    repair,
+    requestedSaveScript: Boolean(req.flags?.saveScript),
+    shutdownResult,
+    providerData: closed.providerData,
+  });
+}
+
+type SessionCloseFinalization =
+  | { kind: 'response'; response: DaemonResponse }
+  | { kind: 'closed'; providerData?: Record<string, unknown> };
+
+/**
+ * Everything between a settled repair decision and a success response: the
+ * failure-isolated resource teardown, the provider lease release, and — only
+ * once both have run — the device-claim clear and session delete. A rejected
+ * cleanup step is collected instead of short-circuiting the rest, so every
+ * subsequent resource (and the runner stop) is still attempted; the provider
+ * lease is released only after that teardown, and a failed release keeps the
+ * session retryable (returned as `{kind:'response'}`, mirroring the
+ * repair-commit-failure path above it). The platform-close failure is thrown
+ * as the primary error with its original code/details/hint intact; the
+ * cleanup aggregate has already been emitted as a diagnostic by this point so
+ * per-resource failures stay visible; a failed script save (#1391) is thrown
+ * last since — unlike the two above it — the session has already ended and
+ * the device is already released by the time it surfaces.
+ */
+async function runCloseTeardownAndRelease(params: {
+  req: DaemonRequest;
+  session: SessionState;
+  sessionName: string;
+  logPath: string;
+  sessionStore: SessionStore;
+  leaseRegistry: LeaseRegistry;
+  leaseLifecycleProvider: LeaseLifecycleProvider | undefined;
+  repairArmed: boolean;
+}): Promise<SessionCloseFinalization> {
+  const {
+    req,
+    session,
+    sessionName,
+    logPath,
+    sessionStore,
+    leaseRegistry,
+    leaseLifecycleProvider,
+  } = params;
   const cleanupFailures: SessionCleanupFailure[] = [];
   const { platformCloseError, saveScriptError } = await runSessionCloseTeardown({
     req,
@@ -533,17 +607,17 @@ export async function handleCloseCommand(params: {
     logPath,
     sessionStore,
     cleanupFailures,
-    repairArmed: repair.repairArmed,
+    repairArmed: params.repairArmed,
     // The platform close for a repair-armed session already ran (and was
     // confirmed to succeed) above, before the commit — never dispatch it twice.
-    skipPlatformClose: repair.repairArmed,
+    skipPlatformClose: params.repairArmed,
   });
   const leaseRelease = await releaseProviderLeaseForClose({
     session,
     leaseRegistry,
     leaseLifecycleProvider,
   });
-  if (leaseRelease.response) return leaseRelease.response;
+  if (leaseRelease.response) return { kind: 'response', response: leaseRelease.response };
   const cleanupAggregate = reportSessionCleanupFailures({
     sessionName,
     phase: 'session_close_cleanup_failed',
@@ -556,25 +630,21 @@ export async function handleCloseCommand(params: {
     await clearAdvisoryDeviceClaim(session.deviceClaim);
   }
   sessionStore.delete(sessionName);
-  // The platform-close failure is the primary error: rethrow it with its original
-  // code/details/hint intact. The cleanup aggregate has already been emitted as a
-  // diagnostic above so per-resource failures stay visible.
   if (platformCloseError) throw platformCloseError;
   if (cleanupAggregate) throw cleanupAggregate;
-  // #1391: surfaced last — the session already ended and the device is already
-  // released above, unlike the two failures above it. Nothing left to retry in
-  // place; `toOrdinaryCloseSaveScriptFailure`'s hint reflects that.
   if (saveScriptError) throw saveScriptError;
-  const shutdownResult = await maybeShutdownSessionTarget({
-    device: session.device,
-    shutdownRequested: req.flags?.shutdown,
-  });
-  // ADR 0012 decision 6 (BLOCKER 2a): positively report the committed healed
-  // artifact path so the agent learns the repair published (and where) without
-  // an extra round-trip.
-  const savedScript = repair.healedScriptPath ? { savedScript: repair.healedScriptPath } : {};
-  const text = `Closed: ${session.name}`;
-  if (repair.aborted && req.flags?.saveScript) {
+  return { kind: 'closed', providerData: leaseRelease.providerData };
+}
+
+function buildCloseSuccessResponse(params: {
+  session: SessionState;
+  repair: Extract<RepairClosePreparation, { repairArmed: boolean }>;
+  requestedSaveScript: boolean;
+  shutdownResult: DeviceTargetShutdownResult | undefined;
+  providerData: Record<string, unknown> | undefined;
+}): DaemonResponse {
+  const { session, repair, requestedSaveScript, shutdownResult, providerData } = params;
+  if (repair.aborted && requestedSaveScript) {
     return {
       ok: false,
       error: {
@@ -585,29 +655,24 @@ export async function handleCloseCommand(params: {
       },
     };
   }
-
+  // ADR 0012 decision 6 (BLOCKER 2a): positively report the committed healed
+  // artifact path so the agent learns the repair published (and where) without
+  // an extra round-trip.
+  const savedScript = repair.healedScriptPath ? { savedScript: repair.healedScriptPath } : {};
+  const provider = providerData ? { provider: providerData } : {};
+  const text = `Closed: ${session.name}`;
   if (shutdownResult) {
     return {
       ok: true,
       data: withSuccessText(
-        {
-          session: session.name,
-          shutdown: shutdownResult,
-          ...savedScript,
-          ...(leaseRelease.providerData ? { provider: leaseRelease.providerData } : {}),
-        },
+        { session: session.name, shutdown: shutdownResult, ...savedScript, ...provider },
         text,
       ),
     };
   }
   return {
     ok: true,
-    data: {
-      session: session.name,
-      ...successText(text),
-      ...savedScript,
-      ...(leaseRelease.providerData ? { provider: leaseRelease.providerData } : {}),
-    },
+    data: { session: session.name, ...successText(text), ...savedScript, ...provider },
   };
 }
 
