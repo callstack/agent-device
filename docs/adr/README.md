@@ -22,3 +22,15 @@
 
 ADRs record *why*; the registries and gates they describe are the living source of truth — when
 prose and a registry disagree, the registry wins and the ADR needs a follow-up.
+
+Shape conventions, so consulting an ADR stays cheap:
+
+- **Normative rules first, terse.** Status, then a "Rules at a glance" summary a reader can stop
+  after; full contracts and rationale below it.
+- **Rationale and refuted alternatives stay in the ADR** — they are what stops re-litigating
+  settled ideas — but below the fold.
+- **Process history is deleted once complete, not archived in-file.** Migration plans, per-step
+  landing tables, and point-in-time status change-logs go to git history; the Status section keeps
+  one line saying so plus any accepted, still-relevant waiver or evidence gap.
+- Once a rule is gate-enforced, the ADR keeps the why and points at the gate rather than restating
+  the rule's details.

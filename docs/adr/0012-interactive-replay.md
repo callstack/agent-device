@@ -2,207 +2,52 @@
 
 ## Status
 
-Accepted (2026-07-10); partially implemented (last updated 2026-07-16). See [Migration progress](#migration-progress) for the per-step landing record.
+Accepted (2026-07-10). Implemented on `main`, including the amendments folded into the decisions
+below (#1264, #1269, #1271 stage 2, #1280, #1349); only decision 5's replay benchmark extension
+remains deferred. The per-step landing record (PRs #1193-#1349) and the pre-acceptance migration
+plan live in this file's git history.
 
-**Implemented and merged to `main`:**
+## Rules at a glance
 
-- Decisions 1-5 and their migration steps 1-7 — resolution disclosure (#1193), structured divergence
-  transport (#1197), `.ad` target annotations and target-binding verification (#1196, #1209), `replay
-  --from`/`--plan-digest` resume and `--update` retirement (#1211), and the selector-miss →
-  `REPLAY_DIVERGENCE` repair-loop fix (#1223).
-- Decision 6, the base agent-supervised re-record repair — `replay --save-script` arming, the
-  post-watermark healed slice, `repairHint`, and the writer's bare-`@ref` fail-loud guard (#1228).
-- Decision 6, R7 + commit state machine (repair-transaction lifecycle) — the ARMED → COMPLETE → COMMITTED
-  commit state machine, keep-alive keyed off the persisted transaction (`resume.repairSessionHeld`, never
-  the per-request `--save-script` flag), terminal-source-`close` skipping, the `REPAIR_SESSION_EXPIRED`
-  tombstone, and race-safe atomic publication via exclusive `linkSync` (#1235).
-- Decision 4 amendment, `screen`'s capture scope and ref selection — the divergence `screen` capture runs
-  through the same `captureSnapshot` wrapper as plain `snapshot` (full-window scope + Android freshness /
-  post-action retry parity) under a clean, fixed capture-flags policy (a failed raw/scoped/`-d` action can
-  no longer narrow the diagnostic tree), with the chrome and meaningful-target filters layered on top as
-  filters, not scopings; and `screen.refs` is ranked within the byte cap (foreign-window dismiss targets
-  ahead of app content; mass-covered app nodes surfaced rather than emptied) instead of sliced in document
-  order, so a captured overlay is never buried past the cap (#1264).
-- Decision 3 amendment, id demotion under non-unique capture-time match — a recorded id no longer serves
-  as identity, or leads the selector chain, unless it is unique in the record-time tree; a non-unique id
-  (a shared Android framework resource id such as `android:id/title`, or a reused RN `FlatList` `testID`)
-  falls back to role+label in both `computeTargetEvidence`'s `target-v1` tuple and
-  `buildSelectorChainForNode`'s chain (#1269).
-- Decision 3 amendment, record-time press retarget to a labeled descendant — a click/press whose
-  resolved winner is an identity-empty container (no surviving id, no label, no value, from the demoted
-  identity view) is recorded against its first labeled descendant via a recording-only side channel, so
-  both writers key off a node with selective identity while the live response stays container-based
-  end-to-end; a container whose subtree holds a competing interactive node (canonical classification or
-  hittable flag), or whose selected descendant's center falls outside the container rect, is recorded
-  unchanged; `fill` is excluded (#1280).
-- Decision 6 amendment, repair-segment default exclusion of observation-only commands and the `--record`
-  opt-in — stage 1 (interim guidance only, #1287) and stage 2 (the semantic default-exclusion fix,
-  this amendment) of #1271. See the amendment under decision 6 below.
-- Decision 3 amendment (#1349), read-only step identity — landmark-mode `target-v1` evidence and
-  post-resolution (in-loop) verification for selector `wait`, `get`-pattern coverage for `is` (except
-  `exists`), the `targetIdentityVerification` descriptor trait pinning the evidence-carrying command
-  set, explicit deferral of read-only `find`/`is exists`/non-selector waits, and ADR 0016's destination
-  guard strengthened to require a `verified` landmark annotation, with a provider-level
-  reshuffled-screen false-pass regression. See the amendment under decision 3 below.
+Normative summary, one entry per decision. The binding contracts, amendments, and edge cases are in
+[Decision](#decision); the registries and tests named there are the living source of truth.
 
-**Accepted but NOT yet implemented** (this amendment; tracked by #1235 — repair-transaction lifecycle):
-the R7 repair-transaction keep-alive and its distinct `resume.repairSessionHeld` signal, the ARMED →
-COMPLETE → COMMITTED commit state machine, terminal-source-`close` skipping, the `REPAIR_SESSION_EXPIRED`
-tombstone, and race-safe atomic publication. Until #1235 lands, `--save-script` on a diverging replay
-does not carry the lifetime, abort-on-incomplete, or atomic-commit guarantees R7 specifies.
-
-## Context (historical baseline)
-
-This section records the repository state audited on 2026-07-10, before the migration steps recorded
-below shipped. Its present-tense observations are historical evidence;
-[Migration progress](#migration-progress) is the authoritative record of current behavior.
-
-At acceptance, replay was deterministic. `.ad` scripts were plain text — one action per line, `#`
-comments, and a `context platform=... device=... theme=...` header (`src/replay/script.ts`) — recorded
-via `open --save-script` (`src/daemon/session-action-recorder.ts`,
-`src/daemon/session-script-writer.ts`) or hand-written, and executed step-by-step by
-`runReplayScriptFile`
-(`src/daemon/handlers/session-replay-runtime.ts`) under the daemon's `replay`/`test` commands
-(`src/daemon/handlers/session-replay.ts`). Recorded touch/fill/get targets are selector chains with
-`||` alternates (`buildSelectorChainForNode(...).join(' || ')`,
-`src/commands/interaction/runtime/resolution.ts:242`, mirrored in
-`src/daemon/handlers/session-replay-heal.ts:131-135`); Maestro YAML flows import through `--maestro`
-(`src/compat/maestro/`); progress is step-indexed (`stepIndex`/`stepTotal` in
-`emitReplayTestActionProgress`, `session-replay-runtime.ts:243-260`).
-
-Recovery was opt-in `--update`/`-u` healing (`replayUpdate` flag,
-`src/commands/cli-grammar/flag-definitions-workflow.ts`). It only fires after a step has already
-returned a hard failure (`session-replay-runtime.ts:118-149`: `if (!shouldUpdate) return failure; ...
-healReplayAction(...)`), and it only retries the SAME recorded selector material —
-`collectReplaySelectorCandidates` (`session-replay-heal.ts:39-81`) gathers the step's originally
-recorded `selectorChain`/positionals, then `resolveSelectorChain` re-resolves those exact candidate
-strings against a freshly captured snapshot (`session-replay-heal.ts:122-135`). If the identifying term
-itself changed — an id or label rename — the same string will not match the new tree either, so heal
-cannot rescue renames; it can only recover drift the ORIGINAL selector still matches (a moved or
-re-rendered node with the same id). PR #297 (closing #279) already trimmed heal once, removing
-`refLabel`-synthesis and numeric `get text` drift healing to keep it "centered on recorded selectors and
-explicit selector expressions" — heal has a maintained history of narrowing, not growing.
-
-**Benchmark evidence** (2026-07-09/10, iOS simulator, react-navigation/RN playground matrix; harness
-follows the `~/.agent-device-bench/rnnav-matrix.py` pattern, external — the key numbers are recorded
-here so the evidence stays durable without the harness directory):
-
-| Measurement | Result |
-| --- | --- |
-| Snapshot captures per interaction, `--settle` off → on | 3.67 → 1.00 (the 1-snapshot floor) |
-| Commands per task, settled arm vs unsettled arms | 14.3 vs 23.3 / 26.7 |
-| react-navigation Maestro suite via deterministic replay | 38/38 flows green in 539 s, zero model turns |
-
-With the settle loop at its snapshot floor, wall time for an agent-driven QA flow is dominated by model
-turn latency, not device I/O. A happy-path agent-driven QA flow costs O(steps) model turns end-to-end; a
-deterministic replay of the same flow costs O(divergences) — the 38/38 sweep is that limit realized at
-zero divergences. The entire economic case for replay is collapsing the per-step model-turn cost toward
-zero on the happy path and paying only where reality diverged from the recording.
-
-**Audit evidence** (2026-07-10) on where that divergence cost actually goes:
-
-- **(a) Heal is narrow and mostly unable to act.** Per the mechanism above, heal only recovers
-  same-selector drift. Most real replay failures are renames or removals heal's candidate-recycling
-  cannot reach.
-- **(b) The real mis-binding surface is not heal — it is silent disambiguation in ORDINARY resolution**,
-  live and replay alike. `resolveSelectorInteractionTarget` calls `resolveSelectorChain(..., {
-  disambiguateAmbiguous: true })` on every press/click/fill (`resolution.ts:170-183`); when a selector
-  matches N>1 nodes, `accumulateDisambiguationCandidate`/`compareDisambiguationCandidates`
-  (`src/selectors/resolve.ts:181-285`) silently pick a winner — visible candidates over
-  off-screen ones, then deepest node, then smallest on-screen area, only an exact tie failing.
-  `describeResolvedInteractionNode` (`resolution.ts:227-249`), the response's entire identity payload,
-  carries `node`/`selectorChain`/`refLabel`/`targetHittable`/`hint` — no match count, no signal a
-  tiebreak happened at all. This was live-reproduced during the audit on an RN playground screen with
-  two identical-rect "Prevent Remove" buttons, where scroll position alone decided which one a selector
-  hit. The general policy is documented (`agent-device help workflow`,
-  `src/cli/parser/cli-help.ts:243,384`: "does not fail by default ... auto-resolves deepest node first
-  ... then smallest on-screen area") but never disclosed per response — an agent that hasn't read the
-  help topic, or whose target moved between recording and replay, gets no signal a heuristic rather than
-  an exact match chose its target.
-- **(c) No target-binding verification existed in this path at acceptance.** `--verify`
-  (`captureEvidenceBaseline`, `resolution.ts:45-58,104-134`; the `verifyEvidence` guarantee cell in ADR
-  0011's registry) attaches a pre/post-action node diff so the caller can see SOMETHING changed — it
-  says nothing about whether the CORRECT node was the one tapped. A wrong-but-plausible pick (the
-  sibling "Prevent Remove" button) produces a real, visible diff and is still the wrong action.
-- **(d) Heal auditability was a bare count.** A successful `--update` run returned
-  `{ replayed, healed, ... }` (`session-replay-runtime.ts:186-195`) — `healed` is a number, nothing
-  else — and rewrote the `.ad` file in place via `writeReplayScript`
-  (`session-replay-runtime.ts:182-184`, `src/replay/script.ts:459-484`) with no diff shown anywhere in
-  the response.
-- **(e) This silent-pick default is in real tension with this repo's general posture toward ambiguity.**
-  Elsewhere, ambiguous input is refused and hinted about rather than silently guessed — `start`/`restart`
-  are deliberately left out of the CLI alias-suggestion table because `start` is "genuinely ambiguous, so
-  a hint beats silently guessing" (`src/cli/parser/command-suggestions.ts:16-17`). Selector resolution
-  took the opposite default, and ADR 0011's own registry records that choice precisely: the
-  `disambiguation` cell for `runtime-selector` is classified `{ kind: 'runtime', via:
-  '...selectors-resolve.ts#resolveSelectorChain' }` (`src/contracts/interaction-guarantees.ts:176-179`)
-  — proving the heuristic runs consistently across paths, not that the caller is told it ran. That
-  default is not being revisited here; see the rejected hard-reject alternative below for why.
-- **(f) Issue #1037 / PR #1040 is the direct, partial precedent.** A UNIQUE-but-wrong match (Apple
-  Maps' `text="Anthropic - Headquarters"` exact-matching a 30x30 map-pin annotation instead of the
-  recents row) now surfaces as `targetHittable:false` plus a hint
-  (`describeNonHittableTarget`, `resolution.ts:259-268`) — disclosed, but not prevented; the tap still
-  lands on the wrong element, just no longer silently. Disambiguation (N>1 matches, as opposed to one
-  unique-but-non-hittable match) has no equivalent disclosure today.
-- **(g) Issues #279/#297 are precedent for trimming heal rather than growing it** when the evidence
-  says a heuristic isn't earning its complexity — see above.
-
-**Live hands-on evidence** (2026-07-10, driving replay by hand on the RN playground, iOS simulator,
-both `.ad` and Maestro paths) grounds the same conclusions from the caller's seat:
-
-- **Successful replay is silent in text mode.** Exit 0, zero output; `replayed: 5` appears only under
-  `--json`. Structurally: replay's success payload (`{ replayed, healed, session, artifactPaths }`,
-  `session-replay-runtime.ts:186-195`) has no `message` field, so the generic CLI success path prints
-  nothing (`writeGenericCliOutput` → `readCommandMessage` → `writeCommandOutput`,
-  `src/cli/commands/generic.ts:68-71`, `src/utils/success-text.ts:12-14`,
-  `src/cli/commands/shared.ts:4-15`). An agent pays a verification turn just to learn what happened.
-- **Failure output today is step + action + selector + a generic hint — no screen evidence.** The live
-  divergence hit was pure app state: the RN example app persists navigation state, so relaunch+deeplink
-  restored the Article screen and a perfectly correct selector legitimately missed. Heal can never fix
-  that class (the selector isn't wrong; reality is), while one line of screen evidence ("current
-  screen: Article") would have made the repair instant. The only recovery available was a full re-run —
-  no `--from` — and re-running earlier steps is precisely what makes state-restoring apps
-  nondeterministic across attempts.
-- **Maestro step indices are untraceable to source today.** Breaking `tapOn: Push Input` — the 4th
-  top-level YAML step — failed as "Replay failed at step 5 (`__maestroTapOn` ...)": the flow's
-  `runFlow file: ../launch.yml` include had expanded into the linear plan and shifted every subsequent
-  index, and no file or line appears anywhere in the failure. Code-verified: `--maestro` input flattens
-  at parse time (`parseReplayInput`, `src/compat/replay-input.ts:47-68`) — `runFlow file:` inlines the
-  included file's actions (`convertRunFlow`/`readRunFlowActions`,
-  `src/compat/maestro/flow-control.ts:40-41,123-124`, via `parseRunFlowFile`,
-  `src/compat/maestro/replay-flow.ts:267-280`), platform/`true` `when` conditions are evaluated at
-  parse time (`flow-control.ts:47-48`), and `repeat.times` expands deterministically
-  (`flow-control.ts:84-87`). Provenance is lost in two stages: every action converted from one root
-  command inherits that PARENT command's YAML line (`convertRootCommands`, `replay-flow.ts:76-83`),
-  and `parseRunFlowFile`'s callers keep only `.actions`, discarding the included file's own line table
-  and path entirely. Even for `.ad`, the tracked line never reaches the caller: `actionLines` flows
-  into the per-action ndjson trace (`appendReplayTraceEvent`,
-  `src/daemon/handlers/session-replay-action-runtime.ts:47-56`) but `withReplayFailureContext`
-  (`session-replay-runtime.ts:349-369`) puts only `replayPath` + `step` in the error details.
-- **The same failure class reports differently per format.** An `.ad` selector miss is
-  `COMMAND_FAILED` with the targeted hint "Run snapshot -i ... or use find ..."
-  (`selectorFailureHint`, `src/selectors/resolve.ts:110-113`, thrown at `resolution.ts:213-217`);
-  the equivalent Maestro miss is `ELEMENT_NOT_FOUND` constructed with no hint
-  (`src/compat/maestro/runtime-interactions.ts:644-652`), falling through to the generic default
-  "Retry with --debug and inspect diagnostics log for details." (`defaultHintForCode`,
-  `src/kernel/errors.ts:253-254`).
-- **Recordings contain zero verification steps.** The script writer strips every recorded `snapshot`
-  action (`buildOptimizedActions`, `src/daemon/session-script-writer.ts:69`: `if (action.command ===
-  'snapshot') continue;` — only synthetic ref-scoped snapshots are re-inserted, as resolution aids, not
-  observations), and the record-time flag allowlist (`SANITIZED_FLAG_KEYS`,
-  `src/daemon/session-action-recorder.ts:46-77`) carries neither `settle`/`settleQuietMs` nor `verify`,
-  so `--settle`/`--verify` are dropped from recorded steps. A recording therefore replays actions with
-  no outcome observation at all — exactly the gap decision 3's record-time identity evidence fills.
-
-A related, currently under-used precedent: recorded `@ref` steps already carry an optional identity
-hint in the `.ad` file. `appendRefLabel` (`src/daemon/session-script-writer.ts:235-240`) writes the
-node's label as a trailing token, parsed back into `action.result.refLabel`
-(`src/replay/script.ts:269,295,315`). Today that label is used only as a fallback LOOKUP key
-(`tryResolveRefNode`'s `fallbackLabel`, `resolution.ts:393,413-430`) when the ref itself fails to
-resolve, and to scope the pre-action snapshot capture (`buildScopedSnapshotAction`,
-`session-script-writer.ts:136-155`) — never as a check against what disambiguation actually picked. It
-establishes the pattern this ADR's decision 3 extends into a verification role: per-step identity
-already travels in the `.ad` file.
+1. **`--update` never rewrites.** Heal's candidate machinery only ranks the bounded `suggestions`
+   list inside a divergence report (identity components, then same `scrollRegion`, then document
+   order; deduplicated by node). No unattended repair path exists.
+2. **Every element resolution discloses how it resolved.** Additive `resolution` response field:
+   `runtime`/`unique` or `runtime`/`disambiguated` (`matchCount`, `tiebreak`, up to 5 alternatives),
+   `ref`/`exact` or `ref`/`label-fallback`, `direct-ios`/`not-observed`; coordinate dispatches and
+   executed maestro-fallbacks carry none. Disclosed alternatives are pre-action diagnostics, never
+   issued refs. Enforced as ADR 0011's `resolutionDisclosure` guarantee row
+   (`src/contracts/interaction-guarantees.ts`).
+3. **Recording writes `target-v1` identity evidence; replay verifies it before acting.** One
+   versioned JSON comment per element-targeting action carries identity (unique id, else
+   role+label, plus a leaf-anchored ancestry prefix), disambiguation signals (`sibling`,
+   region-scoped `viewportOrder`), and never-compared diagnostics (`rect`). Replay classifies every
+   annotated step through six exact verification paths; anything the evidence cannot isolate is an
+   `identity-unverifiable` divergence, never a silent pick. Amendments: non-unique ids demote to
+   role+label (#1269); an identity-empty pressed container records its first labeled descendant,
+   double-guarded fail-closed (#1280); `wait` landmark identity and `is` coverage dispatch on the
+   `targetIdentityVerification` descriptor trait (#1349).
+4. **Divergence is a structured error, resumable by plan ordinal.** `ok:false` with code
+   `REPLAY_DIVERGENCE` and `details.divergence` v1: `kind` (`action-failure` | `selector-miss` |
+   `identity-mismatch` | `identity-unverifiable`), a bounded `screen` (same capture scope as plain
+   `snapshot`, ranked refs — #1264 — activating a partial ref frame per ADR 0014), one `repairHint`
+   enum, and `resume` (`from`, optional `alternateFrom`, `planDigest`, `repairSessionHeld`).
+   Serialized ceilings per response level: 8/24/64 KiB. Resume is `replay --from N --plan-digest
+   <sha>`, replay-only (`test` rejects `--from`), with no state reconstruction: skipped `outputEnv`
+   producers or control flow reject the resume.
+5. **Validation is contractual.** The coverage inventory under decision 5 (guarantee-matrix cells,
+   parser/writer round trips, all six verification paths, wire-projection parity, `--update`
+   no-write) gates acceptance; benchmark evidence alone is insufficient.
+6. **Repair is agent-performed and transactional.** `replay --save-script` opens a persisted
+   ARMED -> COMPLETE -> COMMITTED transaction governed by rules R1-R7: recording armed from step 1,
+   `--from` continuation only, daemon-computed `repairHint` routing, fail-loud on bare `@ref`
+   export, healed slice bounded by the `saveScriptBoundary` watermark, session kept alive until
+   commit or abort, and exclusive-`linkSync` publication that refuses any pre-existing target.
+   Out-of-band observations are excluded from the healed script by provenance
+   (`internal.replayPlanStep`), with `--record` as the per-action opt-in (#1271 stage 2).
 
 ## Decision
 
@@ -218,9 +63,8 @@ recorded-id match outranks a role+label match, which outranks a label-only match
 candidates in the same `scrollRegion` as recorded rank before candidates in other regions; (3) document
 order is the final tie-break. Suggestions are deduplicated by node: a node reachable through several
 recorded selector terms appears once, tagged with its strongest match basis. The list is bounded by
-decision 4's suggestion cap. Response levels affect only report content, never file behavior: before
-retirement lands (migration step 6), `--update` keeps its legacy rewrite semantics regardless of level;
-after retirement, `--update` at any level performs no rewrite and returns the same bounded suggestions
+decision 4's suggestion cap. Response levels affect only report
+content, never file behavior: `--update` at any level performs no rewrite and returns the same bounded suggestions
 object, with `--level digest` omitting suggestion entries but carrying `suggestionCount` per decision 4.
 
 With an agent in the loop, adjudicating a heal
@@ -822,8 +666,7 @@ corrective interactive action(s) land in `session.actions` with fresh `target-v1
 recording is armed and armed recording also disables the direct-iOS fast path (PR #1196) so evidence is
 computable. `formatSessionScript` over `session.actions` from the repair-run boundary (R6 — the slice
 recorded during this repair, not the whole session history) is therefore the healed script: the path that
-actually worked. The only net-new code is flag-threading plus one writer entry point (see Migration
-plan).
+actually worked. The only net-new code is flag-threading plus one writer entry point.
 
 **The two repair sub-flows (routed by the mechanical `repairHint`).** A `selector-miss` with
 `matchCount: 0` (decision 3) is the same wire surface for "label renamed" and "app is on the wrong screen
@@ -1240,95 +1083,155 @@ The tombstone itself expires after its bounded window, after which the key is fu
 - **Silent auto-rewrite (the old `--update`)**: already retired (decision 1) — mis-binding risk;
   selector agreement is not proof of the same target.
 
-## Migration plan
+## Context and evidence at acceptance (2026-07-10)
 
-Steps are ordered so every dependency lands before its consumer; each step is independently useful, and
-each states its dependencies explicitly.
+This section records the repository state audited on 2026-07-10, before the decisions above
+shipped. Its present-tense observations and code pointers are historical evidence; the decisions
+above and the gates they name are the authoritative record of current behavior.
 
-1. **Resolution disclosure** (decision 2) — no dependencies. Update all six matrix cells, the exact
-   waiver list, and provider mutation contracts together. Additive to response data; does not claim
-   direct-iOS selection parity or issue pre-action refs.
-2. **Structured divergence transport** (decision 4, report only) — no dependencies. `REPLAY_DIVERGENCE`
-   with `kind: "action-failure"` attaches to the EXISTING replay failure paths: step provenance (source
-   path + line preserved through Maestro includes), bounded/redacted payloads, actionable-or-unavailable
-   screen semantics, error-path MCP pinning, ranked suggestions (decision 1's candidate machinery,
-   read-only), and the one-line text success summary. Immediately useful on its own — this closes the
-   provenance/evidence gaps the live hands-on evidence documents — and introduces no verification
-   semantics.
-3. **`.ad` target annotations, inert** (decision 3, parser/writer only) — no dependencies. Bounded
-   parser/writer round trips, the writer-parser invariant with root-side reduction, old/new reader
-   compatibility, structural uniqueness, and duplicate detection. Recordings gain annotations; replay
-   parses and preserves them but does not yet enforce.
-4. **Target-binding verification** (decision 3, enforcement) — depends on 2 (reports through the
-   divergence transport, adding the `selector-miss`/`identity-mismatch`/`identity-unverifiable` kinds)
-   and on 3 (consumes the annotations).
-5. **`replay --from` + `--plan-digest` resume** (decision 4, resume) — depends on 2 only (the report
-   supplies `resume` and `planDigest`); may land before, with, or after 3/4. `test` does not expose
-   `--from`.
-6. **`--update` retirement** (decision 1) — depends on 2 (ranked suggestions must be available in the
-   report before the write path is removed), with a no-write regression test.
-7. **Benchmark extension** (decision 5) — follows the mandatory contracts; measures the economic claim
-   (clean replay plus one induced divergence repaired through the allowed `--from` loop).
-8. **Agent-supervised re-record repair, base** (decision 6, R1-R6) — **MERGED (#1228)**; depends on 2
-   and 5 (the repair loop is built entirely on the existing divergence report and `--from`/`--plan-digest`
-   resume machinery) and on 3/4 (corrective actions record fresh `target-v1` evidence, so the healed
-   script is self-consistent). Prerequisite: the selector-miss → `REPLAY_DIVERGENCE` defensive fix
-   (PR #1223) — a thrown per-action selector-miss must route through the same divergence-wrapping path as
-   a returned failure, or the repair loop never sees a divergence report to act on. Delivered: the
-   daemon-side `repairHint` computation over all four `kind`s (R3), `--save-script` arming plus the
-   repair-run boundary watermark on `replay` (R1/R6), the writer's post-watermark slice and bare-`@ref`
-   fail-loud guard (R4/R6) — reusing `close --save-script`'s existing `session.actions` serializer.
-9. **Repair-transaction lifecycle** (decision 6, R7 + commit state machine) — **SHIPPED (#1235)**;
-   depends on 8. Adds: the distinct `resume.repairSessionHeld` divergence signal and
-   R7 keep-alive keyed off the session's **persisted** repair-transaction state (so `--from` continuations
-   need no repeat of `--save-script`), with `fail-fast-before-step-1` when keep-alive is impossible; the
-   `ARMED → COMPLETE → COMMITTED` commit state machine where **any teardown** (explicit `close`,
-   idle-reap, or daemon shutdown) commits atomically when `COMPLETE`, aborts (no prefix) when not, and is
-   idempotent once `COMMITTED`; terminal-source-`close` **skipping** during an armed replay/resume, with a
-   regression proving the session is NOT deleted when the terminal `close` is reached; the
-   `REPAIR_SESSION_EXPIRED` tombstone for an incomplete-transaction reap/shutdown (keyed by session key,
-   owner + bounded expiry, cleared by a fresh `replay --save-script`); and race-safe atomic publication
-   (temp file in the target's own directory, published via a single exclusive `linkSync` that refuses ANY
-   pre-existing target — complete or partial, default or explicit path alike, and uniformly for an
-   ordinary non-repair recording's target too, since the publish primitive is shared — never overwriting
-   one; see "Scope" under Decision 6 above).
-10. **Repair-segment default exclusion of out-of-band observations, and the `--record` opt-in**
-    (decision 6 amendment) — **SHIPPED (#1271 stage 2)**; depends on 9 (`session.saveScriptBoundary`/
-    `repairSessionHeld` are the signals the exclusion and its guidance key off) and on #1304 (the shared
-    reader helper `--record`'s scoped sibling is split from). Adds: the `internal.replayPlanStep`
-    provenance marker stamped by `invokeResolvedReplayAction` (`session-replay-action-runtime.ts`);
-    default exclusion of OUT-OF-BAND `snapshot`/`get`/`is`/read-only `find` from `session.actions` while
-    repair-armed, keyed off that provenance via `isInteractiveObservation`/
-    `isExcludedRepairSegmentObservation` (`session-action-recorder.ts`), so authored plan steps survive
-    their own heal automatically; the `--record` opt-in, statically scoped to `snapshot`/`get`/`is` and
-    dynamically validated for `find`, rejected together with `--no-record` as `INVALID_ARGS`; and an
-    updated `describeUnperformedRecordAndHeal` message naming `--record` for the corrective-read case.
-    Stage 1 (#1287) shipped interim `--no-record` guidance only, gated on this same `repairSessionHeld`
-    signal.
+At acceptance, replay was deterministic. `.ad` scripts were plain text — one action per line, `#`
+comments, and a `context platform=... device=... theme=...` header (`src/replay/script.ts`) — recorded
+via `open --save-script` (`src/daemon/session-action-recorder.ts`,
+`src/daemon/session-script-writer.ts`) or hand-written, and executed step-by-step by
+`runReplayScriptFile`
+(`src/daemon/handlers/session-replay-runtime.ts`) under the daemon's `replay`/`test` commands
+(`src/daemon/handlers/session-replay.ts`). Recorded touch/fill/get targets are selector chains with
+`||` alternates (`buildSelectorChainForNode(...).join(' || ')`,
+`src/commands/interaction/runtime/resolution.ts:242`, mirrored in
+`src/daemon/handlers/session-replay-heal.ts:131-135`); Maestro YAML flows import through `--maestro`
+(`src/compat/maestro/`); progress is step-indexed (`stepIndex`/`stepTotal` in
+`emitReplayTestActionProgress`, `session-replay-runtime.ts:243-260`).
 
-## Migration progress
+Recovery was opt-in `--update`/`-u` healing (`replayUpdate` flag,
+`src/commands/cli-grammar/flag-definitions-workflow.ts`). It only fires after a step has already
+returned a hard failure (`session-replay-runtime.ts:118-149`: `if (!shouldUpdate) return failure; ...
+healReplayAction(...)`), and it only retries the SAME recorded selector material —
+`collectReplaySelectorCandidates` (`session-replay-heal.ts:39-81`) gathers the step's originally
+recorded `selectorChain`/positionals, then `resolveSelectorChain` re-resolves those exact candidate
+strings against a freshly captured snapshot (`session-replay-heal.ts:122-135`). If the identifying term
+itself changed — an id or label rename — the same string will not match the new tree either, so heal
+cannot rescue renames; it can only recover drift the ORIGINAL selector still matches (a moved or
+re-rendered node with the same id). PR #297 (closing #279) already trimmed heal once, removing
+`refLabel`-synthesis and numeric `get text` drift healing to keep it "centered on recorded selectors and
+explicit selector expressions" — heal has a maintained history of narrowing, not growing.
 
-Landing record for the plan above (main as of 2026-07-16). This section tracks progress only; it does
-not restate or amend the decisions.
+**Benchmark evidence** (2026-07-09/10, iOS simulator, react-navigation/RN playground matrix; harness
+follows the `~/.agent-device-bench/rnnav-matrix.py` pattern, external — the key numbers are recorded
+here so the evidence stays durable without the harness directory):
 
-| Step | Decision | Status | Landed in |
-| --- | --- | --- | --- |
-| 1. Resolution disclosure | 2 | Shipped | #1193 |
-| 2. Structured divergence transport | 4 (report) | Shipped | #1197 |
-| 3. `.ad` target annotations, inert | 3 (parser/writer) | Shipped | #1196 |
-| 4. Target-binding verification | 3 (enforcement) | Shipped | #1209 |
-| 5. `replay --from` + `--plan-digest` resume | 4 (resume) | Shipped | #1211 |
-| 6. `--update` retirement | 1 | Shipped | #1211 |
-| 7. Benchmark extension | 5 | Deferred | — |
-| 8. Agent-supervised re-record repair, base | 6 (R1-R6) | Shipped | #1228 |
-| 9. Repair-transaction lifecycle | 6 (R7) | Shipped | #1235 |
-| 10. Repair-segment default exclusion + `--record` | 6 amendment | Shipped | #1271 stage 2 |
-| 11. Read-only step identity (wait landmark verification, `is` coverage) | 3 amendment (#1349) | Shipped | — |
+| Measurement | Result |
+| --- | --- |
+| Snapshot captures per interaction, `--settle` off → on | 3.67 → 1.00 (the 1-snapshot floor) |
+| Commands per task, settled arm vs unsettled arms | 14.3 vs 23.3 / 26.7 |
+| react-navigation Maestro suite via deterministic replay | 38/38 flows green in 539 s, zero model turns |
 
-Step 4 (#1209) added the `selector-miss`/`identity-mismatch`/`identity-unverifiable` divergence kinds
-and a post-resolution target guard that cross-checks the dispatched winner against the verified member.
-Issue #1221 ("Complete ADR 0012 replay target-binding verification") was closed as already implemented:
-its verification scope is covered by step 4. Step 7 remains deferred. Step 8 implements the repair
-design accepted in #1226 and shipped in #1228; step 9 (R7 + commit machine) shipped in #1235. Step 10
-is #1271's two-stage arc: stage 1 (#1287) shipped interim `--no-record` guidance only; stage 2 (this
-amendment) makes exclusion the default and adds the `--record` opt-in.
+With the settle loop at its snapshot floor, wall time for an agent-driven QA flow is dominated by model
+turn latency, not device I/O. A happy-path agent-driven QA flow costs O(steps) model turns end-to-end; a
+deterministic replay of the same flow costs O(divergences) — the 38/38 sweep is that limit realized at
+zero divergences. The entire economic case for replay is collapsing the per-step model-turn cost toward
+zero on the happy path and paying only where reality diverged from the recording.
+
+**Audit evidence** (2026-07-10) on where that divergence cost actually goes:
+
+- **(a) Heal is narrow and mostly unable to act.** Per the mechanism above, heal only recovers
+  same-selector drift. Most real replay failures are renames or removals heal's candidate-recycling
+  cannot reach.
+- **(b) The real mis-binding surface is not heal — it is silent disambiguation in ORDINARY resolution**,
+  live and replay alike. `resolveSelectorInteractionTarget` calls `resolveSelectorChain(..., {
+  disambiguateAmbiguous: true })` on every press/click/fill (`resolution.ts:170-183`); when a selector
+  matches N>1 nodes, `accumulateDisambiguationCandidate`/`compareDisambiguationCandidates`
+  (`src/selectors/resolve.ts:181-285`) silently pick a winner — visible candidates over
+  off-screen ones, then deepest node, then smallest on-screen area, only an exact tie failing.
+  `describeResolvedInteractionNode` (`resolution.ts:227-249`), the response's entire identity payload,
+  carries `node`/`selectorChain`/`refLabel`/`targetHittable`/`hint` — no match count, no signal a
+  tiebreak happened at all. This was live-reproduced during the audit on an RN playground screen with
+  two identical-rect "Prevent Remove" buttons, where scroll position alone decided which one a selector
+  hit. The general policy is documented (`agent-device help workflow`,
+  `src/cli/parser/cli-help.ts:243,384`: "does not fail by default ... auto-resolves deepest node first
+  ... then smallest on-screen area") but never disclosed per response — an agent that hasn't read the
+  help topic, or whose target moved between recording and replay, gets no signal a heuristic rather than
+  an exact match chose its target.
+- **(c) No target-binding verification existed in this path at acceptance.** `--verify`
+  (`captureEvidenceBaseline`, `resolution.ts:45-58,104-134`; the `verifyEvidence` guarantee cell in ADR
+  0011's registry) attaches a pre/post-action node diff so the caller can see SOMETHING changed — it
+  says nothing about whether the CORRECT node was the one tapped. A wrong-but-plausible pick (the
+  sibling "Prevent Remove" button) produces a real, visible diff and is still the wrong action.
+- **(d) Heal auditability was a bare count.** A successful `--update` run returned
+  `{ replayed, healed, ... }` (`session-replay-runtime.ts:186-195`) — `healed` is a number, nothing
+  else — and rewrote the `.ad` file in place via `writeReplayScript`
+  (`session-replay-runtime.ts:182-184`, `src/replay/script.ts:459-484`) with no diff shown anywhere in
+  the response.
+- **(e) This silent-pick default is in real tension with this repo's general posture toward ambiguity.**
+  Elsewhere, ambiguous input is refused and hinted about rather than silently guessed — `start`/`restart`
+  are deliberately left out of the CLI alias-suggestion table because `start` is "genuinely ambiguous, so
+  a hint beats silently guessing" (`src/cli/parser/command-suggestions.ts:16-17`). Selector resolution
+  took the opposite default, and ADR 0011's own registry records that choice precisely: the
+  `disambiguation` cell for `runtime-selector` is classified `{ kind: 'runtime', via:
+  '...selectors-resolve.ts#resolveSelectorChain' }` (`src/contracts/interaction-guarantees.ts:176-179`)
+  — proving the heuristic runs consistently across paths, not that the caller is told it ran. That
+  default is not being revisited here; see the rejected hard-reject alternative below for why.
+- **(f) Issue #1037 / PR #1040 is the direct, partial precedent.** A UNIQUE-but-wrong match (Apple
+  Maps' `text="Anthropic - Headquarters"` exact-matching a 30x30 map-pin annotation instead of the
+  recents row) now surfaces as `targetHittable:false` plus a hint
+  (`describeNonHittableTarget`, `resolution.ts:259-268`) — disclosed, but not prevented; the tap still
+  lands on the wrong element, just no longer silently. Disambiguation (N>1 matches, as opposed to one
+  unique-but-non-hittable match) has no equivalent disclosure today.
+- **(g) Issues #279/#297 are precedent for trimming heal rather than growing it** when the evidence
+  says a heuristic isn't earning its complexity — see above.
+
+**Live hands-on evidence** (2026-07-10, driving replay by hand on the RN playground, iOS simulator,
+both `.ad` and Maestro paths) grounds the same conclusions from the caller's seat:
+
+- **Successful replay is silent in text mode.** Exit 0, zero output; `replayed: 5` appears only under
+  `--json`. Structurally: replay's success payload (`{ replayed, healed, session, artifactPaths }`,
+  `session-replay-runtime.ts:186-195`) has no `message` field, so the generic CLI success path prints
+  nothing (`writeGenericCliOutput` → `readCommandMessage` → `writeCommandOutput`,
+  `src/cli/commands/generic.ts:68-71`, `src/utils/success-text.ts:12-14`,
+  `src/cli/commands/shared.ts:4-15`). An agent pays a verification turn just to learn what happened.
+- **Failure output today is step + action + selector + a generic hint — no screen evidence.** The live
+  divergence hit was pure app state: the RN example app persists navigation state, so relaunch+deeplink
+  restored the Article screen and a perfectly correct selector legitimately missed. Heal can never fix
+  that class (the selector isn't wrong; reality is), while one line of screen evidence ("current
+  screen: Article") would have made the repair instant. The only recovery available was a full re-run —
+  no `--from` — and re-running earlier steps is precisely what makes state-restoring apps
+  nondeterministic across attempts.
+- **Maestro step indices are untraceable to source today.** Breaking `tapOn: Push Input` — the 4th
+  top-level YAML step — failed as "Replay failed at step 5 (`__maestroTapOn` ...)": the flow's
+  `runFlow file: ../launch.yml` include had expanded into the linear plan and shifted every subsequent
+  index, and no file or line appears anywhere in the failure. Code-verified: `--maestro` input flattens
+  at parse time (`parseReplayInput`, `src/compat/replay-input.ts:47-68`) — `runFlow file:` inlines the
+  included file's actions (`convertRunFlow`/`readRunFlowActions`,
+  `src/compat/maestro/flow-control.ts:40-41,123-124`, via `parseRunFlowFile`,
+  `src/compat/maestro/replay-flow.ts:267-280`), platform/`true` `when` conditions are evaluated at
+  parse time (`flow-control.ts:47-48`), and `repeat.times` expands deterministically
+  (`flow-control.ts:84-87`). Provenance is lost in two stages: every action converted from one root
+  command inherits that PARENT command's YAML line (`convertRootCommands`, `replay-flow.ts:76-83`),
+  and `parseRunFlowFile`'s callers keep only `.actions`, discarding the included file's own line table
+  and path entirely. Even for `.ad`, the tracked line never reaches the caller: `actionLines` flows
+  into the per-action ndjson trace (`appendReplayTraceEvent`,
+  `src/daemon/handlers/session-replay-action-runtime.ts:47-56`) but `withReplayFailureContext`
+  (`session-replay-runtime.ts:349-369`) puts only `replayPath` + `step` in the error details.
+- **The same failure class reports differently per format.** An `.ad` selector miss is
+  `COMMAND_FAILED` with the targeted hint "Run snapshot -i ... or use find ..."
+  (`selectorFailureHint`, `src/selectors/resolve.ts:110-113`, thrown at `resolution.ts:213-217`);
+  the equivalent Maestro miss is `ELEMENT_NOT_FOUND` constructed with no hint
+  (`src/compat/maestro/runtime-interactions.ts:644-652`), falling through to the generic default
+  "Retry with --debug and inspect diagnostics log for details." (`defaultHintForCode`,
+  `src/kernel/errors.ts:253-254`).
+- **Recordings contain zero verification steps.** The script writer strips every recorded `snapshot`
+  action (`buildOptimizedActions`, `src/daemon/session-script-writer.ts:69`: `if (action.command ===
+  'snapshot') continue;` — only synthetic ref-scoped snapshots are re-inserted, as resolution aids, not
+  observations), and the record-time flag allowlist (`SANITIZED_FLAG_KEYS`,
+  `src/daemon/session-action-recorder.ts:46-77`) carries neither `settle`/`settleQuietMs` nor `verify`,
+  so `--settle`/`--verify` are dropped from recorded steps. A recording therefore replays actions with
+  no outcome observation at all — exactly the gap decision 3's record-time identity evidence fills.
+
+A related, currently under-used precedent: recorded `@ref` steps already carry an optional identity
+hint in the `.ad` file. `appendRefLabel` (`src/daemon/session-script-writer.ts:235-240`) writes the
+node's label as a trailing token, parsed back into `action.result.refLabel`
+(`src/replay/script.ts:269,295,315`). Today that label is used only as a fallback LOOKUP key
+(`tryResolveRefNode`'s `fallbackLabel`, `resolution.ts:393,413-430`) when the ref itself fails to
+resolve, and to scope the pre-action snapshot capture (`buildScopedSnapshotAction`,
+`session-script-writer.ts:136-155`) — never as a check against what disambiguation actually picked. It
+establishes the pattern this ADR's decision 3 extends into a verification role: per-step identity
+already travels in the `.ad` file.

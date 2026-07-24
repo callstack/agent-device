@@ -2,7 +2,30 @@
 
 ## Status
 
-Accepted
+Accepted; implemented on `main` (`src/daemon/handlers/session-script-publication.ts`,
+`src/daemon/session-script-active-publication.ts`), including the #1349 identity-level
+destination-guard amendment.
+
+## Rules at a glance
+
+Normative summary; the binding contracts and refusal cases are in [Decision](#decision).
+
+- `session save-script [path] [--force]` publishes the current ordinary script recording without
+  closing the app or the session; the session stays live at the destination.
+- Recording lifecycle: **ARMED** (only by a new session's initial `open --save-script`) ->
+  **ABORTED** (a second successful plain `open`) or **PUBLISHED** (successful save). ABORTED and
+  PUBLISHED are terminal until the session is destroyed; a filesystem/target failure leaves the
+  recording ARMED and retryable.
+- Publication requires exactly one initial recorded `open`, a portable selector-`wait` destination
+  guard after the last descriptor-classified mutating action — since #1349 the guard's `target-v1`
+  annotation must be `verification: "verified"` — and no unresolved session-local `@ref`. Every
+  refusal happens before filesystem work and names its recovery.
+- Repair transactions (ADR 0012) are disjoint: a session with `saveScriptBoundary` set refuses this
+  action without changing repair state.
+- `ReplayCommandResult.sessionActive` (from the daemon's session store, never script re-parsing) is
+  what lets a one-shot client keep the daemon alive on a close-less handoff.
+- Literal `fill` inputs persist into the artifact: do not record secret-bearing journeys until
+  #1348's parameterized inputs ship.
 
 ## Context
 
