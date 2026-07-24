@@ -107,7 +107,9 @@ const STABLE_STRUCTURAL_STRING_PATHS = new Set([
  * Stable identity/provenance strings stay byte-for-byte unchanged. Untrusted
  * backend extras and nested settle output keys and values are scrubbed
  * recursively; a derived selector candidate is dropped only when a parsed
- * text/label/value term semantically contains the supplied literal.
+ * text/label/value term semantically contains the supplied literal. Repeated
+ * application preserves placeholders already inserted by an earlier response
+ * boundary.
  */
 export function parameterizeRecordedFillPayload<
   TPayload extends Record<string, unknown> | undefined,
@@ -242,8 +244,18 @@ function filterSensitiveSelectorCandidates(value: string[], literal: string): st
 }
 
 function parameterizeSensitiveString(value: string, literal: string, placeholder: string): string {
-  if (!literal.trim()) return value === literal ? placeholder : value;
-  return value.replaceAll(literal, placeholder);
+  if (!literal) return value === literal ? placeholder : value;
+
+  const unparameterizedSegments = placeholder ? value.split(placeholder) : [value];
+  if (unparameterizedSegments.every((segment) => !segment.includes(literal))) return value;
+
+  // Replacing whitespace inline would make every ordinary separator look like
+  // authored secret data. Collapse the whole untrusted string/key instead.
+  if (!literal.trim()) return placeholder;
+
+  return unparameterizedSegments
+    .map((segment) => segment.replaceAll(literal, placeholder))
+    .join(placeholder);
 }
 
 function isStringArray(value: unknown): value is string[] {

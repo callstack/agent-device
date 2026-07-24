@@ -59,12 +59,17 @@ The literal exists only on the live request path long enough to execute the inte
    literal in both keys and values; post-fill selector-chain candidates are dropped only when a
    parsed `text`, `label`, or `value` term semantically contains it. Known response and settle
    schema fields are the explicit structural boundary and retain their names and provenance values.
+   Because inline whitespace replacement cannot distinguish a sensitive value from ordinary
+   separators, an untrusted string or key containing a whitespace-only literal collapses to the
+   placeholder instead.
 4. At `recordActionEntry`, the recorder reconstructs the fill's literal positional, writes only the
    placeholder into `SessionAction`, and parameterizes the semantic result field plus arbitrary
    backend/settle echoes again. ADR 0012 `target-v1` evidence keeps its structure; exact
    value-bearing accessibility labels become the placeholder without rewriting identity fragments
    that merely contain the same characters. The `recordAs` control flag itself is not serialized
-   into the script.
+   into the script. Parameterization is idempotent: this second pass preserves placeholders inserted
+   at the response boundary even when the literal is part of the placeholder's variable name or is
+   `$`.
 5. The existing ADR 0012/0016 writer receives an already-parameterized action. Its selector provenance,
    portability checks, same-directory temp write, and atomic publication algorithm are unchanged.
 

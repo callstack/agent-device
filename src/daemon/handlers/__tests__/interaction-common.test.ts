@@ -179,3 +179,117 @@ test('parameterized fill scrubs concatenated backend values and object keys thro
   expect(mockDispatch.mock.calls[0]?.[1]).toBe('fill');
   expect(mockDispatch.mock.calls[0]?.[2]).toContain(secret);
 });
+
+test('parameterized fill collapses whitespace-only backend echoes through the handler route', async () => {
+  const secret = '   ';
+  const placeholder = '${SPACES}';
+  const sessionStore = makeSessionStore();
+  const sessionName = 'parameterized-whitespace-fill-handler-route';
+  const session = makeIosSession(sessionName, { appBundleId: 'com.example.app' });
+  session.recordSession = true;
+  session.snapshot = {
+    nodes: attachRefs([
+      {
+        index: 0,
+        type: 'XCUIElementTypeTextField',
+        identifier: 'password',
+        label: 'Password',
+        rect: { x: 20, y: 40, width: 200, height: 44 },
+        enabled: true,
+        hittable: true,
+      },
+    ]),
+    createdAt: Date.now(),
+    backend: 'xctest',
+  };
+  sessionStore.set(sessionName, session);
+  mockDispatch.mockResolvedValue({
+    [`prefix${secret}suffix`]: {
+      [`key${secret}tail`]: `value${secret}tail`,
+    },
+    selectorChain: [`value="prefix${secret}suffix"`],
+  });
+
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'fill',
+      positionals: ['@e1', secret],
+      flags: { recordAs: 'SPACES' },
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+
+  expect(response, JSON.stringify(response)).toMatchObject({ ok: true });
+  if (!response?.ok) return;
+  expect(response.data).toBeDefined();
+  const responseData = response.data!;
+  expect(responseData).toMatchObject({
+    [placeholder]: {
+      [placeholder]: placeholder,
+    },
+    text: placeholder,
+  });
+  expect(responseData.selectorChain).not.toContain(`value="prefix${secret}suffix"`);
+  expect(JSON.stringify(responseData)).not.toContain(secret);
+  expect(session.actions[0]?.result).toMatchObject({
+    [placeholder]: {
+      [placeholder]: placeholder,
+    },
+    text: placeholder,
+  });
+  expect(session.actions[0]?.result?.selectorChain).not.toContain(`value="prefix${secret}suffix"`);
+  expect(JSON.stringify(session.actions)).not.toContain(secret);
+  expect(mockDispatch.mock.calls[0]?.[2]).toContain(secret);
+});
+
+test.each([
+  { literal: 'PASSWORD', recordAs: 'PASSWORD' },
+  { literal: '$', recordAs: 'DOLLAR' },
+])(
+  'parameterization remains stable across response and recorder boundaries for $literal',
+  ({ literal, recordAs }) => {
+    const placeholder = `\${${recordAs}}`;
+    const sessionStore = makeSessionStore();
+    const session = makeIosSession(`parameterized-overlap-${recordAs}`);
+    session.recordSession = true;
+    sessionStore.set(session.name, session);
+    const payload = {
+      text: literal,
+      refLabel: `prefix${literal}suffix`,
+      backendEcho: {
+        [`key${literal}`]: `value${literal}`,
+      },
+      settle: { hint: `hint${literal}` },
+    };
+
+    const response = finalizeTouchInteraction({
+      session,
+      sessionStore,
+      command: 'fill',
+      positionals: ['id="password"', literal],
+      flags: { recordAs },
+      result: payload,
+      responseData: payload,
+      actionStartedAt: 1,
+      actionFinishedAt: 2,
+    });
+
+    expect(response).toEqual({
+      ok: true,
+      data: {
+        text: placeholder,
+        refLabel: `prefix${placeholder}suffix`,
+        backendEcho: {
+          [`key${placeholder}`]: `value${placeholder}`,
+        },
+        settle: { hint: `hint${placeholder}` },
+      },
+    });
+    if (!response.ok) return;
+    expect(session.actions[0]?.result).toEqual(response.data);
+  },
+);

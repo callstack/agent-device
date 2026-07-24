@@ -198,3 +198,31 @@ test.each(['', '   '])(
     expect(session.actions[0]?.result?.text).toBe('${PASSWORD}');
   },
 );
+
+test('whitespace-only fills collapse ambiguous recorder output and keys', () => {
+  const session = makeIosSession('default');
+  const whitespace = '   ';
+  recordActionEntry(session, {
+    command: 'fill',
+    positionals: ['id="password"', whitespace],
+    flags: { recordAs: 'PASSWORD' },
+    result: {
+      text: whitespace,
+      message: `prefix${whitespace}suffix`,
+      backend: {
+        [`key${whitespace}tail`]: `value${whitespace}tail`,
+      },
+      selectorChain: ['id="password"', `value="prefix${whitespace}suffix"`],
+    },
+  });
+
+  expect(session.actions[0]?.result).toEqual({
+    text: '${PASSWORD}',
+    message: '${PASSWORD}',
+    backend: {
+      '${PASSWORD}': '${PASSWORD}',
+    },
+    selectorChain: ['id="password"'],
+  });
+  expect(JSON.stringify(session.actions)).not.toContain(whitespace);
+});
