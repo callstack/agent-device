@@ -16,7 +16,7 @@ export function collectIosWebSemanticPresentation(
   nodes: RawSnapshotNode[],
   context: SnapshotTreeRuleContext,
 ): void {
-  const repeatedStaticTextByParent = collectRepeatedStaticTextByParent(nodes);
+  const childrenByParent = collectChildrenByParent(nodes);
 
   for (const node of nodes) {
     if (normalizeType(node.type ?? '') === 'element(58)') {
@@ -26,7 +26,7 @@ export function collectIosWebSemanticPresentation(
     const presentation = classifyIosWebTextWrapper(
       node,
       context.sourceNodesByIndex,
-      repeatedStaticTextByParent,
+      childrenByParent,
     );
     if (presentation?.kind === 'suppress') {
       context.suppressedIndexes.add(node.index);
@@ -49,18 +49,33 @@ type IosWebTextWrapperPresentation =
 function classifyIosWebTextWrapper(
   node: RawSnapshotNode,
   byIndex: ReadonlyMap<number, RawSnapshotNode>,
-  repeatedStaticTextByParent: Map<number, Set<string>>,
+  childrenByParent: ReadonlyMap<number, RawSnapshotNode[]>,
 ): IosWebTextWrapperPresentation | null {
   if (normalizeType(node.type ?? '') !== 'other') return null;
   const webView = findNearestAncestor(node, byIndex, isWebView);
   const label = node.label?.trim();
   if (!webView || !label) return null;
   if (isDocumentTitleWrapper(node, webView, label)) return { kind: 'suppress' };
-  if (!repeatedStaticTextByParent.get(node.index)?.has(label)) return null;
+  if (!isWebTextLeafWrapper(node, label, childrenByParent)) return null;
   return {
     kind: 'semantic',
     type: isHtmlHeadingLevel(node.value) ? 'Heading' : 'StaticText',
   };
+}
+
+function isWebTextLeafWrapper(
+  node: RawSnapshotNode,
+  label: string,
+  childrenByParent: ReadonlyMap<number, RawSnapshotNode[]>,
+): boolean {
+  const children = childrenByParent.get(node.index);
+  if (children?.length !== 1) return false;
+  const text = children[0]!;
+  return (
+    normalizeType(text.type ?? '') === 'statictext' &&
+    text.label?.trim() === label &&
+    !childrenByParent.has(text.index)
+  );
 }
 
 function isDocumentTitleWrapper(
@@ -75,19 +90,15 @@ function isDocumentTitleWrapper(
   );
 }
 
-function collectRepeatedStaticTextByParent(nodes: RawSnapshotNode[]): Map<number, Set<string>> {
-  const labelsByParent = new Map<number, Set<string>>();
+function collectChildrenByParent(nodes: RawSnapshotNode[]): Map<number, RawSnapshotNode[]> {
+  const childrenByParent = new Map<number, RawSnapshotNode[]>();
   for (const node of nodes) {
-    if (typeof node.parentIndex !== 'number' || normalizeType(node.type ?? '') !== 'statictext') {
-      continue;
-    }
-    const label = node.label?.trim();
-    if (!label) continue;
-    const labels = labelsByParent.get(node.parentIndex) ?? new Set<string>();
-    labels.add(label);
-    labelsByParent.set(node.parentIndex, labels);
+    if (typeof node.parentIndex !== 'number') continue;
+    const children = childrenByParent.get(node.parentIndex) ?? [];
+    children.push(node);
+    childrenByParent.set(node.parentIndex, children);
   }
-  return labelsByParent;
+  return childrenByParent;
 }
 
 function isWebView(node: RawSnapshotNode): boolean {

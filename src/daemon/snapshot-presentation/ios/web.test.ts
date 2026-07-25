@@ -104,6 +104,21 @@ test('does not infer text from a nested same-label descendant', () => {
   ]);
 });
 
+test('keeps a labelled WebKit container with additional semantic content', () => {
+  const nodes: RawSnapshotNode[] = [
+    { index: 0, depth: 0, type: 'WebView', label: 'Example' },
+    { index: 1, depth: 1, parentIndex: 0, type: 'Other', label: 'News' },
+    { index: 2, depth: 2, parentIndex: 1, type: 'StaticText', label: 'News' },
+    { index: 3, depth: 2, parentIndex: 1, type: 'Link', label: 'Read more' },
+  ];
+
+  expect(presentIosInteractiveSnapshot(nodes).map((node) => [node.type, node.label])).toEqual([
+    ['WebView', 'Example'],
+    ['Other', 'News'],
+    ['Link', 'Read more'],
+  ]);
+});
+
 test('does not infer semantic roles for matching wrappers outside a WebView', () => {
   const nodes: RawSnapshotNode[] = [
     { index: 0, depth: 0, type: 'Application', label: 'Example' },
