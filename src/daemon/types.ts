@@ -58,6 +58,11 @@ export type DaemonOpenLifecycle = {
 type DaemonRequestInternal = {
   openLifecycle?: DaemonOpenLifecycle;
   admittedLease?: DeviceLease;
+  /**
+   * Implicit caller scope resolved before a nested dispatch replaces the
+   * public session name with its effective scoped key.
+   */
+  resolvedSessionScope?: SessionState['sessionScope'];
   /** Terminate the targeted app without ending the owning daemon session. */
   closeAppOnly?: boolean;
   /** Provider-owned viewport already resolved while normalizing a nested gesture command. */

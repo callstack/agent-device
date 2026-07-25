@@ -11,6 +11,7 @@ import { buildDisplayPositionals } from '../session-event-action.ts';
 import { appendReplayTraceEvent } from './session-replay-trace.ts';
 import { inferFillText } from '../action-utils.ts';
 import { readRecordedInputVariableName } from '../../replay/recorded-input.ts';
+import { resolveImplicitSessionScope } from '../session-routing.ts';
 
 type ReplayBaseRequest = Omit<DaemonRequest, 'command' | 'positionals'>;
 
@@ -136,7 +137,16 @@ async function invokeResolvedReplayAction(params: {
     // `session-action-recorder.ts`) reads it to keep an authored
     // `get`/`is`/`find`/`snapshot` step in its own healed script while still
     // excluding an interactive diagnostic read of the same command.
-    internal: { ...req.internal, replayPlanStep: true },
+    internal: {
+      ...req.internal,
+      replayPlanStep: true,
+      ...(resolved.command === 'open'
+        ? {
+            resolvedSessionScope:
+              req.internal?.resolvedSessionScope ?? resolveImplicitSessionScope(req),
+          }
+        : {}),
+    },
   };
   return await invoke(buildReplayInteractionRequest(baseReq, resolved));
 }

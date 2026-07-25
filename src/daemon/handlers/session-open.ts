@@ -79,6 +79,10 @@ type OpenTiming = {
 
 type NewSessionOpenEffects = { mayHaveStarted: boolean };
 
+function resolveOpenSessionScope(req: DaemonRequest): SessionState['sessionScope'] | undefined {
+  return req.internal?.resolvedSessionScope ?? resolveImplicitSessionScope(req);
+}
+
 function applyOrdinaryScriptRecordingOpenOutcome(params: {
   session: SessionState;
   existingSession: SessionState | undefined;
@@ -430,7 +434,7 @@ async function completeOpenCommand(params: {
   const nextSession = buildNextOpenSession({
     existingSession: openDispatchSession,
     sessionName: existingSession?.name ?? resolvePublicSessionName(req),
-    sessionScope: existingSession?.sessionScope ?? resolveImplicitSessionScope(req),
+    sessionScope: existingSession?.sessionScope ?? resolveOpenSessionScope(req),
     device,
     surface,
     appBundleId: sessionAppBundleId,
@@ -517,7 +521,7 @@ async function prepareOpenDispatchSession(params: {
   const provisionalSession = buildNextOpenSession({
     existingSession,
     sessionName: existingSession?.name ?? resolvePublicSessionName(req),
-    sessionScope: existingSession?.sessionScope ?? resolveImplicitSessionScope(req),
+    sessionScope: existingSession?.sessionScope ?? resolveOpenSessionScope(req),
     device,
     surface,
     appBundleId: sessionAppBundleId,
