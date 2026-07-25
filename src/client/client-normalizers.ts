@@ -2,7 +2,13 @@ import type { DaemonRequest, SessionRuntimeHints } from '../daemon/types.ts';
 import { AppError, type NormalizedError } from '../kernel/errors.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { buildAppIdentifiers, buildDeviceIdentifiers } from '../contracts/result-serialization.ts';
-import { isAppleOs, isApplePlatform, isPublicPlatform, type AppleOS } from '../kernel/device.ts';
+import {
+  isAppleOs,
+  isApplePlatform,
+  isPublicPlatform,
+  isSerialAddressablePlatform,
+  type AppleOS,
+} from '../kernel/device.ts';
 import { leaseScopeFromOptions, leaseScopeToRequestMeta } from '../core/lease-scope.ts';
 import type {
   AgentDeviceDevice,
@@ -125,11 +131,9 @@ export function normalizeSession(value: unknown): AgentDeviceSession {
       // Additive Apple-OS discriminant; present only when the daemon emits it (Apple devices).
       ...(appleOs ? { appleOs } : {}),
       identifiers,
-      ...buildClientDevicePlatformFields(
-        platform,
-        id,
-        readNullableString(record, 'ios_simulator_device_set'),
-      ),
+      ...buildClientDevicePlatformFields(platform, id, {
+        simulatorSetPath: readNullableString(record, 'ios_simulator_device_set'),
+      }),
     },
     identifiers,
   };
@@ -154,19 +158,21 @@ function readClientDeviceIdentity(value: unknown, nameField: string) {
 function buildClientDevicePlatformFields(
   platform: AgentDeviceDevice['platform'],
   id: string,
-  simulatorSetPath?: string | null,
+  options: { simulatorSetPath?: string | null; serial?: string } = {},
 ): Pick<AgentDeviceSessionDevice, 'ios' | 'android' | 'vega'> {
-  return {
-    ios:
-      platform === 'ios'
-        ? {
-            udid: id,
-            ...(simulatorSetPath !== undefined ? { simulatorSetPath } : {}),
-          }
-        : undefined,
-    android: platform === 'android' ? { serial: id } : undefined,
-    vega: platform === 'vega' ? { serial: id } : undefined,
-  };
+  if (platform === 'ios') {
+    return {
+      ios: {
+        udid: id,
+        ...(options.simulatorSetPath !== undefined
+          ? { simulatorSetPath: options.simulatorSetPath }
+          : {}),
+      },
+    };
+  }
+  if (!isSerialAddressablePlatform(platform)) return {};
+  const serial = options.serial ?? id;
+  return platform === 'android' ? { android: { serial } } : { vega: { serial } };
 }
 
 export function normalizeRuntimeHints(value: unknown): SessionRuntimeHints | undefined {
@@ -195,23 +201,27 @@ export function normalizeOpenDevice(
     return undefined;
   }
   const target = readDeviceTarget(value, 'target');
-  const identifiers = buildDeviceIdentifiers(platform, id, name);
+  const serial = isSerialAddressablePlatform(platform)
+    ? (readOptionalString(value, 'serial') ?? id)
+    : undefined;
+  const identifiers = {
+    ...buildDeviceIdentifiers(platform, id, name),
+    ...(serial ? { serial } : {}),
+  };
   return {
     platform,
     target,
     id,
     name,
     identifiers,
-    ios:
-      platform === 'ios'
-        ? {
-            udid: readOptionalString(value, 'device_udid') ?? id,
-            simulatorSetPath: readNullableString(value, 'ios_simulator_device_set'),
-          }
-        : undefined,
-    android:
-      platform === 'android' ? { serial: readOptionalString(value, 'serial') ?? id } : undefined,
-    vega: platform === 'vega' ? { serial: readOptionalString(value, 'serial') ?? id } : undefined,
+    ...buildClientDevicePlatformFields(
+      platform,
+      platform === 'ios' ? (readOptionalString(value, 'device_udid') ?? id) : id,
+      {
+        simulatorSetPath: readNullableString(value, 'ios_simulator_device_set'),
+        serial,
+      },
+    ),
   };
 }
 

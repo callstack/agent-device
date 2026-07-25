@@ -179,7 +179,7 @@ function isSupportedReference(command: string, device: DeviceInfo): boolean {
   if (!byPlatform) return false;
   const supports =
     device.platform === 'vega' && VEGA_VVD_ONLY_COMMANDS_REF.has(command)
-      ? (candidate: DeviceInfo) => candidate.kind === 'emulator' && candidate.target === 'tv'
+      ? (candidate: DeviceInfo) => candidate.target === 'tv'
       : SUPPORTS_REF[command];
   if (supports && !supports(device)) return false;
   const kind = (device.kind ?? 'unknown') as keyof NonNullable<CommandCapability['apple']>;

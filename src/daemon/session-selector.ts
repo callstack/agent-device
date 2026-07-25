@@ -1,7 +1,11 @@
 import { AppError } from '../kernel/errors.ts';
 import type { CommandFlags } from '../core/dispatch.ts';
 import type { SessionState } from './types.ts';
-import { isIosFamily, matchesPlatformSelector } from '../kernel/device.ts';
+import {
+  isIosFamily,
+  isSerialAddressablePlatform,
+  matchesPlatformSelector,
+} from '../kernel/device.ts';
 import { parseSerialAllowlist } from '../utils/device-isolation.ts';
 import { buildSessionRecoveryHint, describeSessionDevice } from './session-recovery-hints.ts';
 
@@ -57,7 +61,7 @@ export function listSessionSelectorConflicts(
 
   if (
     flags.serial &&
-    ((device.platform !== 'android' && device.platform !== 'vega') || flags.serial !== device.id)
+    (!isSerialAddressablePlatform(device.platform) || flags.serial !== device.id)
   ) {
     mismatches.push({ key: 'serial', value: flags.serial });
   }

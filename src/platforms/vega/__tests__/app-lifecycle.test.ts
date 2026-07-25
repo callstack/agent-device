@@ -6,8 +6,8 @@ import { createLocalVegaToolProvider, withVegaToolProvider } from '../tool-provi
 test('Vega app lifecycle uses the SDK device commands with an explicit serial', async () => {
   const commands: string[][] = [];
   const provider = createLocalVegaToolProvider({
-    whichCommand: async () => true,
-    runCommand: async (_cmd, args) => {
+    isAvailable: async () => true,
+    run: async (args) => {
       commands.push(args);
       return { exitCode: 0, stdout: '', stderr: '' };
     },

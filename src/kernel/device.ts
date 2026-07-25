@@ -336,7 +336,9 @@ function matchesExplicitDeviceSelector(device: DeviceInfo, selector: DeviceSelec
   return true;
 }
 
-function isSerialAddressablePlatform(platform: Platform): boolean {
+export function isSerialAddressablePlatform(
+  platform: Platform | PublicPlatform,
+): platform is 'android' | 'vega' {
   return platform === 'android' || platform === 'vega';
 }
 

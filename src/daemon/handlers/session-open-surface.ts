@@ -3,6 +3,7 @@ import { resolveFrontmostMacOsApp } from '../../platforms/apple/os/macos/helper.
 import {
   isIosFamily,
   isMacOs,
+  isSerialAddressablePlatform,
   publicPlatformString,
   type DeviceInfo,
 } from '../../kernel/device.ts';
@@ -65,7 +66,7 @@ export function buildOpenResult(params: {
     result.device = device.name;
     result.id = device.id;
     result.kind = device.kind;
-    if (device.platform === 'android' || device.platform === 'vega') {
+    if (isSerialAddressablePlatform(device.platform)) {
       result.serial = device.id;
     }
   }

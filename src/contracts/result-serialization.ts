@@ -14,7 +14,7 @@ import {
   publicSnapshotCaptureAnnotations,
   type SnapshotCaptureAnnotations,
 } from '../snapshot-capture-annotations.ts';
-import type { PublicPlatform } from '../kernel/device.ts';
+import { isSerialAddressablePlatform, type PublicPlatform } from '../kernel/device.ts';
 import { successText, withSuccessText } from '../utils/success-text.ts';
 
 export function buildAppIdentifiers(params: {
@@ -40,7 +40,7 @@ export function buildDeviceIdentifiers(
   return {
     deviceId: id,
     deviceName: name,
-    ...(platform === 'android' || platform === 'vega'
+    ...(isSerialAddressablePlatform(platform)
       ? { serial: id }
       : platform === 'ios'
         ? { udid: id }
@@ -70,9 +70,9 @@ function serializeSessionDevice(
 }
 
 function sessionDeviceSerial(device: AgentDeviceSessionDevice): string | undefined {
-  if (device.platform === 'android') return device.android?.serial ?? device.id;
-  if (device.platform === 'vega') return device.vega?.serial ?? device.id;
-  return undefined;
+  return isSerialAddressablePlatform(device.platform)
+    ? (device.identifiers.serial ?? device.id)
+    : undefined;
 }
 
 export function serializeSessionListEntry(session: AgentDeviceSession): Record<string, unknown> {

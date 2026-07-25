@@ -1,62 +1,67 @@
-import { closeVegaApp, openVegaApp, openVegaDevice } from './app-lifecycle.ts';
-import { pressVegaTvRemote } from './input-actions.ts';
-import { unsupportedVegaOperation } from './unsupported.ts';
+import { isDeepLinkTarget } from '../../contracts/open-target.ts';
 import type { Interactor, RunnerContext } from '../../core/interactor-types.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
+import { AppError } from '../../kernel/errors.ts';
+import { createUnsupportedInteractor } from '../unsupported-interactor.ts';
+import { closeVegaApp, openVegaApp, openVegaDevice } from './app-lifecycle.ts';
+import { pressVegaTvRemote } from './input-actions.ts';
+
+type VegaOpenOptions = Parameters<Interactor['open']>[1];
+
+const UNSUPPORTED_VEGA_OPEN_VARIANTS = [
+  {
+    matches: (app: string, options: VegaOpenOptions) =>
+      isDeepLinkTarget(app) || Boolean(options?.url),
+    message: 'Vega open does not support URLs or deep links.',
+    hint: 'Use open <component-id> with an installed Vega app component ID.',
+  },
+  {
+    matches: (_app: string, options: VegaOpenOptions) => Boolean(options?.activity),
+    message: 'Vega open does not support Android activity selection.',
+    hint: 'Remove --activity and use the Vega component ID as the open target.',
+  },
+  {
+    matches: (_app: string, options: VegaOpenOptions) => Boolean(options?.launchConsole),
+    message: 'Vega open does not support launch-console output.',
+    hint: 'Remove --launch-console and open the Vega component ID directly.',
+  },
+  {
+    matches: (_app: string, options: VegaOpenOptions) => Boolean(options?.terminateRunningApp),
+    message: 'Vega open does not support terminating the running app before launch.',
+    hint: 'Close the Vega component explicitly before opening it again.',
+  },
+  {
+    matches: (_app: string, options: VegaOpenOptions) => Boolean(options?.launchArgs?.length),
+    message: 'Vega open does not support launch arguments.',
+    hint: 'Remove --launch-arg values and open the Vega component ID directly.',
+  },
+] as const;
 
 export function createVegaInteractor(
   device: DeviceInfo,
   _runnerContext: RunnerContext,
 ): Interactor {
   return {
+    ...createUnsupportedInteractor('Vega OS'),
     open: async (app, options) => {
       assertVegaOpenSupported(app, options);
       await openVegaApp(device, app);
     },
     openDevice: () => openVegaDevice(device),
     close: (app) => closeVegaApp(device, app),
-    tap: () => unsupportedVegaOperation('tap'),
-    tapElementSelector: () => unsupportedVegaOperation('tapElementSelector'),
-    doubleTap: () => unsupportedVegaOperation('doubleTap'),
-    longPress: () => unsupportedVegaOperation('longPress'),
-    focus: () => unsupportedVegaOperation('focus'),
-    type: () => unsupportedVegaOperation('type'),
-    fillElementSelector: () => unsupportedVegaOperation('fillElementSelector'),
-    fill: () => unsupportedVegaOperation('fill'),
-    scroll: () => unsupportedVegaOperation('scroll'),
-    screenshot: () => unsupportedVegaOperation('screenshot'),
-    setViewport: () => unsupportedVegaOperation('setViewport'),
-    snapshot: () => unsupportedVegaOperation('snapshot'),
-    gestureViewport: () => unsupportedVegaOperation('gestureViewport'),
     back: () => pressVegaTvRemote(device, 'back'),
     home: () => pressVegaTvRemote(device, 'home'),
-    setOrientation: () => unsupportedVegaOperation('setOrientation'),
-    performGesture: () => unsupportedVegaOperation('performGesture'),
-    appSwitcher: () => unsupportedVegaOperation('appSwitcher'),
     tvRemote: (button, durationMs) => pressVegaTvRemote(device, button, durationMs),
-    readClipboard: () => unsupportedVegaOperation('readClipboard'),
-    writeClipboard: () => unsupportedVegaOperation('writeClipboard'),
-    setSetting: () => unsupportedVegaOperation('setSetting'),
   };
 }
 
-function assertVegaOpenSupported(app: string, options?: Parameters<Interactor['open']>[1]): void {
-  const unsupportedVariant = [
-    isDeepLinkTarget(app),
-    Boolean(options?.url),
-    Boolean(options?.activity),
-    Boolean(options?.launchConsole),
-    Boolean(options?.terminateRunningApp),
-    Boolean(options?.launchArgs?.length),
-  ].some(Boolean);
-  if (!unsupportedVariant) return;
-  throw new AppError(
-    'UNSUPPORTED_OPERATION',
-    'Vega open currently supports installed app component IDs only.',
-    {
-      hint: 'Use open <component-id> without a URL, activity, launch arguments, or launch-console options.',
-    },
+function assertVegaOpenSupported(app: string, options?: VegaOpenOptions): void {
+  const unsupportedVariant = UNSUPPORTED_VEGA_OPEN_VARIANTS.find(({ matches }) =>
+    matches(app, options),
   );
+  if (unsupportedVariant) {
+    throw new AppError('UNSUPPORTED_OPERATION', unsupportedVariant.message, {
+      hint: unsupportedVariant.hint,
+    });
+  }
 }
-import { isDeepLinkTarget } from '../../contracts/open-target.ts';
-import { AppError } from '../../kernel/errors.ts';

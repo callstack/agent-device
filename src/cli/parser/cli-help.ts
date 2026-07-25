@@ -451,6 +451,9 @@ Core loop:
   agent-device screenshot ./tv-focus.png --overlay-refs --platform android --target tv --session tv
 
 Vega OS:
+  Vega OS is driven through the SDK-matched Vega CLI and VDA, not ADB.
+  Initial support is VVD-only. Physical Fire TV devices remain unsupported until their discovery, lifecycle, and remote controls have durable hardware evidence.
+  Use --platform vega --target tv for the running Vega Virtual Device.
   vega virtual-device start
   agent-device devices --platform vega --target tv
   agent-device open <component-id> --platform vega --target tv --session vega-tv
@@ -458,6 +461,10 @@ Vega OS:
   agent-device tv-remote press select --platform vega --target tv --session vega-tv
   agent-device close <component-id> --session vega-tv
   vega virtual-device stop
+  Use a component ID from the app package or Vega SDK tooling; agent-device app inventory is not yet supported.
+  Use --serial VirtualDevice for explicit VVD selection.
+  agent-device does not boot the VVD implicitly.
+  Snapshot, screenshot, selectors, install, touch/text/gesture, logs, and performance commands remain unsupported until their Vega backends are implemented.
 
 Buttons:
   tv-remote press up|down|left|right|select|menu|home|back
@@ -476,14 +483,6 @@ tvOS:
   tvOS is driven by the Siri Remote focus engine, not coordinate taps.
   back maps to the Menu remote button; home maps to the Home remote button.
   Use --platform ios --target tv for Apple TV simulators and devices.
-
-Vega OS:
-  Vega OS is driven through the SDK-matched Vega CLI and VDA, not ADB.
-  Initial Vega OS support is VVD-only. Use --platform vega --target tv for a running Vega Virtual Device.
-  Use a component ID from the app package or Vega SDK tooling; agent-device app inventory is not yet supported.
-  Use --serial VirtualDevice for explicit VVD selection.
-  Start and stop the local emulator with vega virtual-device start|stop; agent-device does not boot the VVD implicitly.
-  Initial support covers VVD discovery, app open/close, back, home, and tv-remote. Physical Fire TV, app inventory, snapshot, screenshot, selectors, install, touch/text/gesture, logs, and performance commands report unsupported until their Vega backends are validated and implemented.
 
 Focus and visual truth:
   On Android TV and tvOS, if snapshot -i exposes a focused node, verify it with is focused <selector>.

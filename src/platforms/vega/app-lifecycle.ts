@@ -1,44 +1,33 @@
 import type { DeviceInfo } from '../../kernel/device.ts';
-import { requireExecSuccess, type ExecResult } from '../../utils/exec.ts';
+import { requireExecSuccess, type ExecOptions } from '../../utils/exec.ts';
 import { resolveVegaToolProvider } from './tool-provider.ts';
 
 const VEGA_APP_COMMAND_TIMEOUT_MS = 30_000;
+const VEGA_APP_COMMAND_OPTIONS = {
+  allowFailure: true,
+  timeoutMs: VEGA_APP_COMMAND_TIMEOUT_MS,
+} satisfies ExecOptions;
 
 export async function openVegaApp(device: Pick<DeviceInfo, 'id'>, appName: string): Promise<void> {
-  await runVegaDeviceCommand(
-    resolveVegaToolProvider().launchApp(device.id, appName, commandOptions()),
+  requireExecSuccess(
+    await resolveVegaToolProvider().launchApp(device.id, appName, VEGA_APP_COMMAND_OPTIONS),
     `Failed to launch Vega app ${appName}`,
     { appName, deviceId: device.id },
   );
 }
 
 export async function openVegaDevice(device: Pick<DeviceInfo, 'id'>): Promise<void> {
-  await runVegaDeviceCommand(
-    resolveVegaToolProvider().checkConnected(device.id, commandOptions()),
+  requireExecSuccess(
+    await resolveVegaToolProvider().checkConnected(device.id, VEGA_APP_COMMAND_OPTIONS),
     'Vega device is not connected',
     { deviceId: device.id },
   );
 }
 
 export async function closeVegaApp(device: Pick<DeviceInfo, 'id'>, appName: string): Promise<void> {
-  await runVegaDeviceCommand(
-    resolveVegaToolProvider().terminateApp(device.id, appName, commandOptions()),
+  requireExecSuccess(
+    await resolveVegaToolProvider().terminateApp(device.id, appName, VEGA_APP_COMMAND_OPTIONS),
     `Failed to terminate Vega app ${appName}`,
     { appName, deviceId: device.id },
   );
-}
-
-async function runVegaDeviceCommand(
-  result: Promise<ExecResult>,
-  failureMessage: string,
-  details: Record<string, unknown>,
-): Promise<void> {
-  requireExecSuccess(await result, failureMessage, details);
-}
-
-function commandOptions() {
-  return {
-    allowFailure: true,
-    timeoutMs: VEGA_APP_COMMAND_TIMEOUT_MS,
-  };
 }

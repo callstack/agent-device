@@ -45,8 +45,8 @@ VirtualDevice : tv - aarch64 - VegaOS - workstation
 test('listVegaDevices invokes VDA through Vega with a bounded discovery call', async () => {
   const calls: Array<{ args: string[]; allowFailure?: boolean; timeoutMs?: number }> = [];
   const provider = createLocalVegaToolProvider({
-    whichCommand: async (cmd) => cmd === 'vega',
-    runCommand: async (_cmd, args, options) => {
+    isAvailable: async () => true,
+    run: async (args, options) => {
       calls.push({ args, allowFailure: options?.allowFailure, timeoutMs: options?.timeoutMs });
       return {
         exitCode: 0,
@@ -70,8 +70,8 @@ test('listVegaDevices invokes VDA through Vega with a bounded discovery call', a
 
 test('listVegaDevices reports a typed tool-missing error', async () => {
   const provider = createLocalVegaToolProvider({
-    whichCommand: async () => false,
-    runCommand: async () => {
+    isAvailable: async () => false,
+    run: async () => {
       throw new Error('unexpected command');
     },
   });
@@ -85,10 +85,32 @@ test('listVegaDevices reports a typed tool-missing error', async () => {
   );
 });
 
+test('listVegaDevices explains when only unsupported physical devices are attached', async () => {
+  const provider = createLocalVegaToolProvider({
+    isAvailable: async () => true,
+    run: async () => ({
+      exitCode: 0,
+      stdout: 'G071R20720350DT6 : A1ZZ32RVTQ796E\n',
+      stderr: '',
+    }),
+  });
+
+  await assert.rejects(
+    withVegaToolProvider(provider, async () => await listVegaDevices()),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'DEVICE_NOT_FOUND' &&
+      error.message ===
+        'Vega CLI found devices, but no supported Vega Virtual Device is running.' &&
+      error.details?.hint ===
+        'Start the Vega Virtual Device, then retry with --platform vega --target tv.',
+  );
+});
+
 test('listVegaDevices preserves structured process failure details', async () => {
   const provider = createLocalVegaToolProvider({
-    whichCommand: async () => true,
-    runCommand: async () => ({
+    isAvailable: async () => true,
+    run: async () => ({
       exitCode: 17,
       stdout: '',
       stderr: 'VDA transport unavailable',

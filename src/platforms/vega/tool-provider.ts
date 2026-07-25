@@ -3,22 +3,8 @@ import { access } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { VegaTvRemoteKey } from '../../contracts/tv-remote.ts';
-import {
-  coerceExecResult,
-  runCmd,
-  whichCmd,
-  type ExecOptions,
-  type ExecResult,
-} from '../../utils/exec.ts';
+import { runCmd, whichCmd, type ExecOptions, type ExecResult } from '../../utils/exec.ts';
 import { createScopedProvider } from '../../utils/scoped-provider.ts';
-
-type VegaToolCommandExecutor = (
-  cmd: string,
-  args: string[],
-  options?: ExecOptions,
-) => Promise<ExecResult>;
-
-type VegaToolAvailabilityChecker = (cmd: string) => Promise<boolean>;
 
 export type VegaToolProvider = {
   isAvailable(): Promise<boolean>;
@@ -35,43 +21,41 @@ export type VegaToolProvider = {
   ): Promise<ExecResult>;
 };
 
-type VegaCliAdapter = {
-  runCommand: VegaToolCommandExecutor;
-  whichCommand: VegaToolAvailabilityChecker;
+export type VegaCliAdapter = {
+  run(args: string[], options?: ExecOptions): Promise<ExecResult>;
+  isAvailable(): Promise<boolean>;
 };
 
 const localVegaCliAdapter: VegaCliAdapter = {
-  runCommand: async (cmd, args, options) =>
-    await runCmd(cmd === 'vega' ? ((await resolveVegaCliExecutable()) ?? cmd) : cmd, args, options),
-  whichCommand: async (cmd) =>
-    cmd === 'vega' ? Boolean(await resolveVegaCliExecutable()) : await whichCmd(cmd),
+  run: async (args, options) =>
+    await runCmd((await resolveVegaCliExecutable()) ?? 'vega', args, options),
+  isAvailable: async () => Boolean(await resolveVegaCliExecutable()),
 };
 
 const localVegaToolProvider = createLocalVegaToolProvider();
 const vegaToolProviderScope = createScopedProvider(localVegaToolProvider);
 
 export function createLocalVegaToolProvider(
-  adapterOverrides: Partial<VegaCliAdapter> = {},
+  adapter: VegaCliAdapter = localVegaCliAdapter,
 ): VegaToolProvider {
-  const adapter: VegaCliAdapter = {
-    runCommand: coerceRunCommand(adapterOverrides.runCommand ?? localVegaCliAdapter.runCommand),
-    whichCommand: adapterOverrides.whichCommand ?? localVegaCliAdapter.whichCommand,
-  };
-  const run = async (args: string[], options?: ExecOptions) =>
-    await adapter.runCommand('vega', args, options);
-
   return {
-    isAvailable: async () => await adapter.whichCommand('vega'),
-    version: async (options) => await run(['--version'], options),
-    listDevices: async (options) => await run(['device', 'list'], options),
+    isAvailable: async () => await adapter.isAvailable(),
+    version: async (options) => await adapter.run(['--version'], options),
+    listDevices: async (options) => await adapter.run(['device', 'list'], options),
     checkConnected: async (deviceId, options) =>
-      await run(['device', 'is-connected', '--device', deviceId], options),
+      await adapter.run(['device', 'is-connected', '--device', deviceId], options),
     launchApp: async (deviceId, appName, options) =>
-      await run(['device', 'launch-app', '--device', deviceId, '--appName', appName], options),
+      await adapter.run(
+        ['device', 'launch-app', '--device', deviceId, '--appName', appName],
+        options,
+      ),
     terminateApp: async (deviceId, appName, options) =>
-      await run(['device', 'terminate-app', '--device', deviceId, '--appName', appName], options),
+      await adapter.run(
+        ['device', 'terminate-app', '--device', deviceId, '--appName', appName],
+        options,
+      ),
     pressRemote: async (deviceId, key, durationMs, options) =>
-      await run(
+      await adapter.run(
         [
           'device',
           'run-cmd',
@@ -101,17 +85,20 @@ export async function withVegaToolProvider<T>(
   return await vegaToolProviderScope.run(provider, fn);
 }
 
-function coerceRunCommand(runCommand: VegaToolCommandExecutor): VegaToolCommandExecutor {
-  return async (cmd, args, options) => coerceExecResult(await runCommand(cmd, args, options));
-}
+let cachedVegaCliExecutable: string | undefined;
 
 async function resolveVegaCliExecutable(): Promise<string | undefined> {
-  if (await whichCmd('vega')) return 'vega';
+  if (cachedVegaCliExecutable) return cachedVegaCliExecutable;
+  if (await whichCmd('vega')) {
+    cachedVegaCliExecutable = 'vega';
+    return cachedVegaCliExecutable;
+  }
   const defaultInstall = path.join(os.homedir(), 'vega', 'bin', 'vega');
   try {
     await access(defaultInstall, constants.X_OK);
-    return defaultInstall;
+    cachedVegaCliExecutable = defaultInstall;
   } catch {
     return undefined;
   }
+  return cachedVegaCliExecutable;
 }

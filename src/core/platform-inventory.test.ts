@@ -2,14 +2,12 @@ import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import type { DeviceInfo } from '../kernel/device.ts';
 
-const { discoverVegaDevices } = vi.hoisted(() => ({
-  discoverVegaDevices: vi.fn(),
+const { listVegaDevices } = vi.hoisted(() => ({
+  listVegaDevices: vi.fn(),
 }));
 
-vi.mock('../platforms/vega/plugin.ts', () => ({
-  vegaPlugin: {
-    discoverDevices: discoverVegaDevices,
-  },
+vi.mock('../platforms/vega/devices.ts', () => ({
+  listVegaDevices,
 }));
 
 import { listLocalDeviceInventory } from './platform-inventory.ts';
@@ -23,8 +21,8 @@ const VEGA_EMULATOR: DeviceInfo = {
   booted: true,
 };
 
-test('explicit Vega inventory delegates to the Vega plugin discovery seam', async () => {
-  discoverVegaDevices.mockResolvedValueOnce([VEGA_EMULATOR]);
+test('explicit Vega inventory delegates to the Vega device module', async () => {
+  listVegaDevices.mockResolvedValueOnce([VEGA_EMULATOR]);
 
   const result = await listLocalDeviceInventory({
     platform: 'vega',
@@ -33,11 +31,5 @@ test('explicit Vega inventory delegates to the Vega plugin discovery seam', asyn
   });
 
   assert.deepEqual(result, [VEGA_EMULATOR]);
-  assert.deepEqual(discoverVegaDevices.mock.calls[0], [
-    {
-      platform: 'vega',
-      target: 'tv',
-      serial: VEGA_EMULATOR.id,
-    },
-  ]);
+  assert.deepEqual(listVegaDevices.mock.calls[0], []);
 });

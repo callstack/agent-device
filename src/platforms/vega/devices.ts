@@ -3,16 +3,10 @@ import type { DeviceInfo } from '../../kernel/device.ts';
 import { requireExecSuccess } from '../../utils/exec.ts';
 import { resolveVegaToolProvider } from './tool-provider.ts';
 
-export type VegaDeviceInfo = DeviceInfo & {
-  platform: 'vega';
-  kind: 'emulator';
-  target: 'tv';
-  booted: true;
-};
-
 const VEGA_DISCOVERY_TIMEOUT_MS = 10_000;
+const VEGA_VVD_SERIAL = 'VirtualDevice';
 
-export async function listVegaDevices(): Promise<VegaDeviceInfo[]> {
+export async function listVegaDevices(): Promise<DeviceInfo[]> {
   const provider = resolveVegaToolProvider();
   if (!(await provider.isAvailable())) {
     throw new AppError('TOOL_MISSING', 'Vega CLI not found in PATH', {
@@ -27,42 +21,45 @@ export async function listVegaDevices(): Promise<VegaDeviceInfo[]> {
     }),
     'Failed to list Vega devices',
   );
-  return parseVegaDeviceList(result.stdout);
+  const devices = parseVegaDeviceList(result.stdout);
+  const listedSerials = parseListedVegaSerials(result.stdout);
+  if (devices.length === 0 && listedSerials.length > 0) {
+    throw new AppError(
+      'DEVICE_NOT_FOUND',
+      'Vega CLI found devices, but no supported Vega Virtual Device is running.',
+      {
+        listedSerials,
+        hint: 'Start the Vega Virtual Device, then retry with --platform vega --target tv.',
+      },
+    );
+  }
+  return devices;
 }
 
-export function parseVegaDeviceList(rawOutput: string): VegaDeviceInfo[] {
-  const devices = new Map<string, VegaDeviceInfo>();
-
-  for (const rawLine of rawOutput.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (
-      !line ||
-      /^no devices found$/i.test(line) ||
-      /^found the following devices?:$/i.test(line)
-    ) {
-      continue;
-    }
-
-    const match = /^([^:]+?)\s*:\s*(.+)$/.exec(line);
-    if (!match) continue;
-    const serial = match[1]?.trim();
-    const details = match[2]?.trim();
-    if (!serial || !details) continue;
-    if (!isVegaVirtualDevice(serial)) continue;
-
-    devices.set(serial, {
+export function parseVegaDeviceList(rawOutput: string): DeviceInfo[] {
+  if (!parseListedVegaSerials(rawOutput).some(isVegaVirtualDevice)) return [];
+  return [
+    {
       platform: 'vega',
-      id: serial,
-      name: `Vega Virtual Device (${serial})`,
+      id: VEGA_VVD_SERIAL,
+      name: `Vega Virtual Device (${VEGA_VVD_SERIAL})`,
       kind: 'emulator',
       target: 'tv',
       booted: true,
-    });
-  }
-
-  return [...devices.values()];
+    },
+  ];
 }
 
 function isVegaVirtualDevice(serial: string): boolean {
-  return serial.toLowerCase() === 'virtualdevice';
+  return serial.toLowerCase() === VEGA_VVD_SERIAL.toLowerCase();
+}
+
+function parseListedVegaSerials(rawOutput: string): string[] {
+  const serials = new Set<string>();
+  for (const rawLine of rawOutput.split(/\r?\n/)) {
+    const match = /^\s*([^\s:]+)\s*:\s*\S/.exec(rawLine);
+    const serial = match?.[1]?.trim();
+    if (serial) serials.add(serial);
+  }
+  return [...serials];
 }

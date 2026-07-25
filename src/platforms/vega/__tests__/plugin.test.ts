@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
 import type { DeviceInfo } from '../../../kernel/device.ts';
-import { listVegaDevices, type VegaDeviceInfo } from '../devices.ts';
+import { listVegaDevices } from '../devices.ts';
 import { vegaPlugin } from '../plugin.ts';
 
 vi.mock('../devices.ts', () => ({ listVegaDevices: vi.fn() }));
@@ -14,7 +14,7 @@ const VEGA_VVD = {
   kind: 'emulator',
   target: 'tv',
   booted: true,
-} satisfies VegaDeviceInfo;
+} satisfies DeviceInfo;
 
 const VEGA_PHYSICAL_TV: DeviceInfo = {
   ...VEGA_VVD,
@@ -44,7 +44,8 @@ test('Vega plugin owns the Vega platform and tv-remote capability bucket', () =>
   assert.ok(supportsTvRemote);
   assert.ok(unsupportedHint);
   assert.equal(supportsTvRemote(VEGA_VVD), true);
-  assert.equal(supportsTvRemote(VEGA_PHYSICAL_TV), false);
+  // Device kind is owned by the descriptor bucket; the plugin adds only the TV-target gate.
+  assert.equal(supportsTvRemote(VEGA_PHYSICAL_TV), true);
   assert.equal(supportsTvRemote(VEGA_NON_TV), false);
   assert.equal(unsupportedHint(VEGA_VVD), undefined);
   assert.equal(
@@ -65,7 +66,7 @@ test('Vega plugin owns the Vega platform and tv-remote capability bucket', () =>
     const supports = vegaPlugin.capability.supportsByDefault[command];
     assert.ok(supports);
     assert.equal(supports(VEGA_VVD), true);
-    assert.equal(supports(VEGA_PHYSICAL_TV), false);
+    assert.equal(supports(VEGA_PHYSICAL_TV), true);
     assert.equal(supports(VEGA_NON_TV), false);
   }
 });

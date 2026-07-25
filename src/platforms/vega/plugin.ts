@@ -12,20 +12,21 @@ const VEGA_VVD_ONLY_COMMANDS = [
   PUBLIC_COMMANDS.tvRemote,
 ] as const;
 
+// The descriptor's `vega.emulator` bucket owns device kind; this plugin adds the
+// semantic TV-target gate. The full predicate remains necessary for the physical-device hint.
+const isVegaTvTarget = (device: DeviceInfo): boolean => device.target === 'tv';
+const isVegaVvd = (device: DeviceInfo): boolean =>
+  device.kind === 'emulator' && isVegaTvTarget(device);
+
 const VEGA_SUPPORTS_BY_DEFAULT = Object.fromEntries(
-  VEGA_VVD_ONLY_COMMANDS.map((command) => [
-    command,
-    (device: DeviceInfo) => device.kind === 'emulator' && device.target === 'tv',
-  ]),
+  VEGA_VVD_ONLY_COMMANDS.map((command) => [command, isVegaTvTarget]),
 );
 
 const VEGA_UNSUPPORTED_HINT_BY_DEFAULT = Object.fromEntries(
   VEGA_VVD_ONLY_COMMANDS.map((command) => [
     command,
     (device: DeviceInfo) =>
-      device.kind === 'emulator' && device.target === 'tv'
-        ? undefined
-        : `${command} currently supports only Vega Virtual Devices.`,
+      isVegaVvd(device) ? undefined : `${command} currently supports only Vega Virtual Devices.`,
   ]),
 );
 

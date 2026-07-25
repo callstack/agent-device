@@ -338,8 +338,9 @@ test('usageForCommand resolves tv help topic', async () => {
   assert.match(help, /agent-device devices --platform vega --target tv/);
   assert.match(help, /Vega OS uses the exact hold duration through inputd-cli/);
   assert.match(help, /Use --platform vega --target tv/);
-  assert.match(help, /Initial Vega OS support is VVD-only/);
-  assert.match(help, /Physical Fire TV.*report unsupported/);
+  assert.match(help, /Initial support is VVD-only/);
+  assert.match(help, /Physical Fire TV devices remain unsupported/);
+  assert.equal(help.match(/\nVega OS:/g)?.length, 1);
 });
 
 test('usageForCommand resolves web help topic', async () => {

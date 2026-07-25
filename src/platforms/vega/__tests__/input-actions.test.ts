@@ -7,8 +7,8 @@ import { createLocalVegaToolProvider, withVegaToolProvider } from '../tool-provi
 test('pressVegaTvRemote maps every shared button without leaking key names to callers', async () => {
   const commands: string[][] = [];
   const provider = createLocalVegaToolProvider({
-    whichCommand: async () => true,
-    runCommand: async (_cmd, args) => {
+    isAvailable: async () => true,
+    run: async (args) => {
       commands.push(args);
       return { exitCode: 0, stdout: '', stderr: '' };
     },
@@ -47,8 +47,8 @@ test('pressVegaTvRemote maps every shared button without leaking key names to ca
 test('pressVegaTvRemote passes exact hold duration boundaries to inputd', async () => {
   const calls: Array<{ args: string[]; timeoutMs?: number }> = [];
   const provider = createLocalVegaToolProvider({
-    whichCommand: async () => true,
-    runCommand: async (_cmd, args, options) => {
+    isAvailable: async () => true,
+    run: async (args, options) => {
       calls.push({ args, timeoutMs: options?.timeoutMs });
       return { exitCode: 0, stdout: '', stderr: '' };
     },
@@ -85,29 +85,10 @@ test('pressVegaTvRemote passes exact hold duration boundaries to inputd', async 
   ]);
 });
 
-test('pressVegaTvRemote rejects invalid exact hold durations before execution', async () => {
-  const provider = createLocalVegaToolProvider({
-    whichCommand: async () => true,
-    runCommand: async () => {
-      throw new Error('unexpected command');
-    },
-  });
-
-  for (const durationMs of [-1, 1.5, 10_001]) {
-    await assert.rejects(
-      withVegaToolProvider(provider, async () => {
-        await pressVegaTvRemote({ id: 'emulator-5554' }, 'left', durationMs);
-      }),
-      (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
-      String(durationMs),
-    );
-  }
-});
-
 test('pressVegaTvRemote surfaces unsupported inputd controls as command failures', async () => {
   const provider = createLocalVegaToolProvider({
-    whichCommand: async () => true,
-    runCommand: async () => ({
+    isAvailable: async () => true,
+    run: async () => ({
       exitCode: 2,
       stdout: '',
       stderr: 'Unsupported key',

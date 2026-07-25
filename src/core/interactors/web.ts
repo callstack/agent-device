@@ -2,16 +2,16 @@ import type { Interactor } from '../interactor-types.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { resolveWebProvider } from '../../platforms/web/provider.ts';
+import { createUnsupportedInteractor } from '../../platforms/unsupported-interactor.ts';
 
 export function createWebInteractor(): Interactor {
   const provider = () => resolveWebProvider();
   return {
+    ...createUnsupportedInteractor('web'),
     open: (target, options) => provider().open(options?.url ?? target, { url: options?.url }),
     openDevice: () => provider().open('about:blank'),
     close: (target) => provider().close(target),
     tap: (x, y) => provider().click(x, y),
-    doubleTap: () => unsupportedWebOperation('doubleTap'),
-    longPress: () => unsupportedWebOperation('longPress'),
     focus: (x, y) => provider().click(x, y),
     type: (text, delayMs) => provider().typeText(text, { delayMs }),
     fill: (x, y, text, delayMs) => provider().fill(x, y, text, { delayMs }),
@@ -30,17 +30,8 @@ export function createWebInteractor(): Interactor {
         backend: 'web',
       };
     },
-    back: () => unsupportedWebOperation('back'),
-    home: () => unsupportedWebOperation('home'),
-    setOrientation: () => unsupportedWebOperation('orientation'),
-    appSwitcher: () => unsupportedWebOperation('appSwitcher'),
-    tvRemote: () => unsupportedWebOperation('tvRemote'),
-    readClipboard: () => unsupportedWebOperation('readClipboard'),
-    writeClipboard: () => unsupportedWebOperation('writeClipboard'),
-    setSetting: () => unsupportedWebOperation('setSetting'),
+    setOrientation: async () => {
+      throw new AppError('UNSUPPORTED_OPERATION', 'orientation is not supported on web');
+    },
   };
-}
-
-async function unsupportedWebOperation(operation: string): Promise<never> {
-  throw new AppError('UNSUPPORTED_OPERATION', `${operation} is not supported on web`);
 }

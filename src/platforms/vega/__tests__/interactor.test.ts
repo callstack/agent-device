@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
-import type { GesturePlan } from '../../../contracts/gesture-plan-types.ts';
+import type { Interactor } from '../../../core/interactor-types.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import type { DeviceInfo } from '../../../kernel/device.ts';
 import { createVegaInteractor } from '../interactor.ts';
@@ -68,56 +68,68 @@ test('open, openDevice, and close use the Vega app lifecycle', async () => {
 test('open rejects unsupported Vega launch variants instead of silently dropping them', async () => {
   const interactor = createVegaInteractor(VEGA_VVD, {});
 
-  await assert.rejects(
-    interactor.open('com.example.app.main', { launchArgs: ['--debug'] }),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.code === 'UNSUPPORTED_OPERATION' &&
-      error.message === 'Vega open currently supports installed app component IDs only.',
-  );
+  const variants: Array<{
+    app: string;
+    options?: Parameters<Interactor['open']>[1];
+    message: string;
+  }> = [
+    {
+      app: 'https://example.com/app',
+      message: 'Vega open does not support URLs or deep links.',
+    },
+    {
+      app: 'com.example.app.main',
+      options: { url: 'https://example.com/app' },
+      message: 'Vega open does not support URLs or deep links.',
+    },
+    {
+      app: 'com.example.app.main',
+      options: { activity: '.MainActivity' },
+      message: 'Vega open does not support Android activity selection.',
+    },
+    {
+      app: 'com.example.app.main',
+      options: { launchConsole: '/tmp/vega.log' },
+      message: 'Vega open does not support launch-console output.',
+    },
+    {
+      app: 'com.example.app.main',
+      options: { terminateRunningApp: true },
+      message: 'Vega open does not support terminating the running app before launch.',
+    },
+    {
+      app: 'com.example.app.main',
+      options: { launchArgs: ['--debug'] },
+      message: 'Vega open does not support launch arguments.',
+    },
+  ];
+
+  for (const variant of variants) {
+    await assert.rejects(
+      interactor.open(variant.app, variant.options),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'UNSUPPORTED_OPERATION' &&
+        error.message === variant.message,
+      variant.message,
+    );
+  }
   assert.equal(mockOpenVegaApp.mock.calls.length, 0);
 });
 
-test('every unproven Vega interactor operation throws typed UNSUPPORTED_OPERATION', async () => {
+test('required unproven Vega operations share typed unsupported behavior', async () => {
   const interactor = createVegaInteractor(VEGA_VVD, {});
-  const gesturePlan: GesturePlan = {
-    topology: 'single',
-    intent: 'pan',
-    executionProfile: 'timed-pan',
-    durationMs: 100,
-    viewport: { x: 0, y: 0, width: 1920, height: 1080 },
-    pointers: [
-      {
-        pointerId: 0,
-        samples: [
-          { offsetMs: 0, point: { x: 0, y: 0 } },
-          { offsetMs: 100, point: { x: 100, y: 100 } },
-        ],
-      },
-    ],
-  };
   const unsupportedCalls: ReadonlyArray<readonly [string, () => Promise<unknown>]> = [
     ['tap', () => interactor.tap(10, 20)],
-    [
-      'tapElementSelector',
-      () => interactor.tapElementSelector!({ key: 'text', value: 'Continue' }),
-    ],
     ['doubleTap', () => interactor.doubleTap(10, 20)],
     ['longPress', () => interactor.longPress(10, 20, 500)],
     ['focus', () => interactor.focus(10, 20)],
     ['type', () => interactor.type('text')],
-    [
-      'fillElementSelector',
-      () => interactor.fillElementSelector!({ key: 'text', value: 'Email' }, 'user@example.com'),
-    ],
     ['fill', () => interactor.fill(10, 20, 'text')],
     ['scroll', () => interactor.scroll('down')],
     ['screenshot', () => interactor.screenshot('/tmp/vega.png')],
-    ['setViewport', () => interactor.setViewport!(1920, 1080)],
     ['snapshot', () => interactor.snapshot()],
-    ['gestureViewport', () => interactor.gestureViewport!()],
     ['setOrientation', () => interactor.setOrientation('portrait')],
-    ['performGesture', () => interactor.performGesture!(gesturePlan)],
     ['appSwitcher', () => interactor.appSwitcher()],
     ['readClipboard', () => interactor.readClipboard()],
     ['writeClipboard', () => interactor.writeClipboard('text')],
@@ -135,4 +147,20 @@ test('every unproven Vega interactor operation throws typed UNSUPPORTED_OPERATIO
     );
   }
   assert.equal(mockPressVegaTvRemote.mock.calls.length, 0);
+});
+
+test('optional Vega operations stay absent so shared dispatch keeps its fallback semantics', async () => {
+  const interactor = createVegaInteractor(VEGA_VVD, {});
+  const optionalOperations: Array<keyof Interactor> = [
+    'tapElementSelector',
+    'fillElementSelector',
+    'setViewport',
+    'gestureViewport',
+    'performGesture',
+  ];
+
+  for (const operation of optionalOperations) {
+    assert.equal(interactor[operation], undefined, operation);
+  }
+  assert.equal(await interactor.gestureViewport?.(), undefined);
 });

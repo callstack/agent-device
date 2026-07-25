@@ -35,6 +35,7 @@ export async function appendToolchainChecks(
 }
 
 async function vegaToolchainCheck(): Promise<DoctorCheck> {
+  const { parseVegaDeviceList } = await import('../../platforms/vega/devices.ts');
   const { resolveVegaToolProvider } = await import('../../platforms/vega/tool-provider.ts');
   const provider = resolveVegaToolProvider();
   if (!(await provider.isAvailable())) {
@@ -57,8 +58,7 @@ async function vegaToolchainCheck(): Promise<DoctorCheck> {
   });
   const versionLine = firstOutputLine(version.stdout);
   const hasRunningVvd =
-    inventory.exitCode === 0 &&
-    inventory.stdout.split(/\r?\n/).some((line) => /^\s*VirtualDevice\s*:/i.test(line));
+    inventory.exitCode === 0 && parseVegaDeviceList(inventory.stdout).length > 0;
 
   return {
     id: 'toolchain',

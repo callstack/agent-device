@@ -31,8 +31,8 @@ export async function listLocalDeviceInventory(
   }
 
   if (request.platform === 'vega') {
-    const { vegaPlugin } = await import('../platforms/vega/plugin.ts');
-    return await vegaPlugin.discoverDevices(request);
+    const { listVegaDevices } = await import('../platforms/vega/devices.ts');
+    return await listVegaDevices();
   }
 
   if (request.platform) {
