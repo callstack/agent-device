@@ -39,7 +39,12 @@ test('keeps normal status compact while retaining proven-stale claims for explic
       JSON.stringify({
         schemaVersion: 1,
         deviceKey: 'local:android:none:stale',
-        device: { platform: 'android', id: 'stale', name: 'Stale Pixel', kind: 'emulator' },
+        device: {
+          platform: 'android',
+          id: 'stale',
+          name: 'Stale Pixel; echo no',
+          kind: 'emulator',
+        },
         session: 'stale-session',
         workspace: '/worktrees/stale',
         stateDir: process.cwd(),
@@ -70,13 +75,16 @@ test('keeps normal status compact while retaining proven-stale claims for explic
     assert.equal(stale.calls.length, 0);
     const payload = JSON.parse(stale.stdout);
     assert.equal(payload.data.claims.length, 1);
-    assert.equal(payload.data.claims[0].device.name, 'Stale Pixel');
+    assert.equal(payload.data.claims[0].device.name, 'Stale Pixel; echo no');
     assert.equal(payload.data.claims[0].recovery, undefined);
 
-    const scoped = await runCliCapture(['device', 'status', '--serial', 'stale'], {
+    const scoped = await runCliCapture(['device', 'status', '--device', 'Stale Pixel; echo no'], {
       env: { AGENT_DEVICE_CLAIMS_DIR: claimsDir },
     });
-    assert.match(scoped.stdout, /inspect with: agent-device device status --serial stale --stale/);
+    assert.match(
+      scoped.stdout,
+      /inspect with: agent-device device status --device 'Stale Pixel; echo no' --stale/,
+    );
   } finally {
     fs.rmSync(claimsDir, { recursive: true, force: true });
   }

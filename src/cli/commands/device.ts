@@ -3,6 +3,7 @@ import {
   inspectDeviceClaims,
   type InspectedDeviceClaim,
 } from '../../daemon/device-claim-inspection.ts';
+import { shellQuoteIfNeeded } from '../../utils/shell-quote.ts';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
@@ -104,10 +105,10 @@ function buildStaleInspectionCommand(flags: {
   serial?: string;
 }): string {
   const selectors = [
-    flags.platform ? `--platform ${flags.platform}` : null,
-    flags.device ? `--device ${flags.device}` : null,
-    flags.udid ? `--udid ${flags.udid}` : null,
-    flags.serial ? `--serial ${flags.serial}` : null,
+    flags.platform ? `--platform ${shellQuoteIfNeeded(flags.platform)}` : null,
+    flags.device ? `--device ${shellQuoteIfNeeded(flags.device)}` : null,
+    flags.udid ? `--udid ${shellQuoteIfNeeded(flags.udid)}` : null,
+    flags.serial ? `--serial ${shellQuoteIfNeeded(flags.serial)}` : null,
   ].filter((part): part is string => Boolean(part));
   return ['agent-device device status', ...selectors, '--stale'].join(' ');
 }
