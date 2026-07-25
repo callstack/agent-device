@@ -15,8 +15,8 @@ export type ReplayTargetDeviceResolution = {
 };
 
 /**
- * Finds the first static app target a fresh replay will open.  Request binding
- * uses this before any replay action can cache an unqualified device choice.
+ * Finds a static first app target for fresh replay binding. Request binding
+ * must leave a first deep-link or dynamic open to normal device resolution.
  */
 export function buildReplayTargetDeviceResolution(
   req: DaemonRequest,
@@ -84,6 +84,7 @@ function readScriptReplaySelection(actions: SessionAction[]): {
     platform = action.runtime?.platform ?? platform;
     const target = action.positionals?.[0];
     if (isStaticAppTarget(target)) return { appTarget: target, platform };
+    return { appTarget: undefined, platform };
   }
   return { appTarget: undefined, platform };
 }

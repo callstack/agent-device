@@ -168,6 +168,32 @@ test('fresh replay reserves its authored app simulator before any replay step', 
   );
 });
 
+test('fresh replay leaves a first deep-link open unbound when a later app target exists', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-deep-link-lock-'));
+  const replayPath = path.join(root, 'flow.ad');
+  fs.writeFileSync(
+    replayPath,
+    'runtime set --platform ios --metro-port 8081\nopen demo://checkout\nopen com.example.demo\n',
+  );
+  const sessionStore = makeSessionStore('agent-device-router-replay-deep-link-lock-');
+
+  const keys = await resolveRequestExecutionLockKeys({
+    req: {
+      token: 'test-token',
+      session: 'fresh-replay-deep-link',
+      command: 'replay',
+      positionals: [replayPath],
+      flags: {},
+      meta: { cwd: root },
+    },
+    sessionName: 'fresh-replay-deep-link',
+    sessionStore,
+  });
+
+  expect(keys).toEqual(['session:fresh-replay-deep-link']);
+  expect(mockResolveTargetDevice).not.toHaveBeenCalled();
+});
+
 test('fresh replay preserves an authored Android platform before advisory locking', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-android-lock-'));
   const replayPath = path.join(root, 'flow.ad');
