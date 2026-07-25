@@ -86,8 +86,12 @@ await device.interactions.swipe({ from: { x: 197, y: 650 }, to: { x: 197, y: 300
 
 The `swipe`, `gesture` (`fling`, `swipe` kinds), and `gesture rotate` tool schemas no longer
 advertise `durationMs` or `velocity`, so an agent reading the schema will not produce the removed
-form. An agent that sends one anyway — from a cached schema or a memorized example — gets the same
-`INVALID_ARGS` message as the CLI, with the concrete replacement command in it.
+form. An agent that sends one anyway — from a cached schema or a memorized example — gets an
+`INVALID_ARGS` rejection that names the removed key and the command to use instead, for example
+`gesture fling does not accept durationMs; use gesture pan for timed movement`. This is the
+structured-input equivalent of the CLI error; it names the replacement command but, unlike the CLI
+and `.ad` messages, does not echo a fully-substituted rewrite, because the structured request
+carries no positional string to rewrite.
 
 No MCP server configuration changes.
 
@@ -119,10 +123,18 @@ swipe 206 650 206 300 --count 2 --pause-ms 200 --pattern one-way
 A duration held in a variable (`swipe 197 650 197 300 ${DURATION}`) is reported the same way — the
 preflight counts arguments, so it does not need the value.
 
-To find every affected line across a suite:
+To find every affected line across a suite — one pattern per retired form, where a token is a
+number or a `${VAR}`:
 
 ```bash
+# swipe x1 y1 x2 y2 durationMs
 grep -rnE '\bswipe( +([-0-9.]+|\$\{[^}]*\})){5}' --include='*.ad' .
+# gesture fling <direction> x y distance durationMs
+grep -rnE '\bgesture +fling +[a-z]+( +([-0-9.]+|\$\{[^}]*\})){4}' --include='*.ad' .
+# gesture swipe <preset> durationMs
+grep -rnE '\bgesture +swipe +[a-z-]+ +([-0-9.]+|\$\{[^}]*\})' --include='*.ad' .
+# gesture rotate degrees x y velocity
+grep -rnE '\bgesture +rotate( +([-0-9.]+|\$\{[^}]*\})){4}' --include='*.ad' .
 ```
 
 Re-recording also produces a migrated script: the recorder writes the canonical form, so a fresh
