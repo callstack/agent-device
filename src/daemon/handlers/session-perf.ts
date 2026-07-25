@@ -1,4 +1,3 @@
-import type { PerfMetricsSamplerTag } from '../../contracts/perf.ts';
 import path from 'node:path';
 import type { SessionAction, SessionState } from '../types.ts';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
@@ -30,7 +29,7 @@ import {
   sampleAppleFramePerf,
   sampleApplePerfMetrics,
 } from '../../platforms/apple/core/perf.ts';
-import type { PerfKind } from '../../contracts/perf.ts';
+import type { PerfKind, PerfMetricsSamplerTag } from '../../contracts/perf.ts';
 import { SessionStore } from '../session-store.ts';
 import {
   PERF_STARTUP_SAMPLE_LIMIT,

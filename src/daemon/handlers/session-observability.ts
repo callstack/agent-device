@@ -39,11 +39,11 @@ import { errorResponse, requireCommandSupported, type DaemonFailureResponse } fr
 import { handleAudioCommand } from './session-audio.ts';
 import { handleNativePerfCommand as handleAppleNativePerfCommand } from './session-perf-xctrace.ts';
 import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '../../kernel/contracts.ts';
-import type { LogBackend } from '../../contracts/logs.ts';
 import { uniqueStrings } from '../../kernel/collections.ts';
 import {
   LOG_ACTION_VALUES as LOG_ACTIONS,
   type LogAction as LogsAction,
+  type LogBackend,
 } from '../../contracts/logs.ts';
 
 const LOG_ACTIONS_MESSAGE = `logs requires ${LOG_ACTIONS.slice(0, -1).join(', ')}, or ${LOG_ACTIONS.at(-1)}`;
