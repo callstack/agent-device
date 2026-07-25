@@ -123,18 +123,28 @@ swipe 206 650 206 300 --count 2 --pause-ms 200 --pattern one-way
 A duration held in a variable (`swipe 197 650 197 300 ${DURATION}`) is reported the same way — the
 preflight counts arguments, so it does not need the value.
 
-To find every affected line across a suite — one pattern per retired form, where a token is a
-number or a `${VAR}`:
+**The authoritative check is the parser itself.** Every retired form is rejected when the script is
+parsed, before the replay runs any device action, so running the suite (`agent-device test <glob>`,
+or `agent-device replay <file>.ad`) finds every stale line by construction and names it — a missed
+grep can never let one reach execution. The patterns below are a bulk pre-flight to locate them
+without a device. They follow the `.ad` tokenizer: tokens are separated by any whitespace (space or
+tab), and the numeric slots accept a bare or double-quoted number or `${VAR}` — so
+`swipe\t…\t"300"` is flagged like `swipe … 300`. They still stop short of the tokenizer's rarer
+encodings (a quoted command word, backslash escapes inside a quoted token), which is why the parser,
+not the grep, is the gate.
 
 ```bash
+# a numeric slot: bare/quoted number (optionally signed) or ${VAR}. Requiring a
+# digit keeps a following flag like --count from being read as the retired slot.
+num='("-?[0-9][0-9.]*"|"\$\{[^}]*\}"|-?[0-9][0-9.]*|\$\{[^}]*\})'
 # swipe x1 y1 x2 y2 durationMs
-grep -rnE '\bswipe( +([-0-9.]+|\$\{[^}]*\})){5}' --include='*.ad' .
+grep -rnE "\\bswipe([[:space:]]+$num){5}" --include='*.ad' .
 # gesture fling <direction> x y distance durationMs
-grep -rnE '\bgesture +fling +[a-z]+( +([-0-9.]+|\$\{[^}]*\})){4}' --include='*.ad' .
+grep -rnE "\\bgesture[[:space:]]+fling[[:space:]]+\"?[a-z]+\"?([[:space:]]+$num){4}" --include='*.ad' .
 # gesture swipe <preset> durationMs
-grep -rnE '\bgesture +swipe +[a-z-]+ +([-0-9.]+|\$\{[^}]*\})' --include='*.ad' .
+grep -rnE "\\bgesture[[:space:]]+swipe[[:space:]]+\"?[a-z-]+\"?[[:space:]]+$num" --include='*.ad' .
 # gesture rotate degrees x y velocity
-grep -rnE '\bgesture +rotate( +([-0-9.]+|\$\{[^}]*\})){4}' --include='*.ad' .
+grep -rnE "\\bgesture[[:space:]]+rotate([[:space:]]+$num){4}" --include='*.ad' .
 ```
 
 Re-recording also produces a migrated script: the recorder writes the canonical form, so a fresh
