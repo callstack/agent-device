@@ -172,6 +172,14 @@ statically enumerable, greppable, no dynamic subscription API. Semantics, normat
   `updateDiagnosticsScope` rebinds (`session`, `logPath` in `createRequestExecutionScope`) remain:
   they run once during sequential request setup, before any concurrency fan-out; new routing
   context for parallel or attempt-scoped work must use forks.
+- **Scope identity (exporter readiness):** every scope — request, teardown, and fork — carries a
+  `scopeId`, and a fork records its parent's as `parentScopeId`; both ride the event envelope.
+  This is deliberately minimal span plumbing: forks already form a tree, so a future exporter sink
+  (e.g. OpenTelemetry) can emit real parent-child spans from envelope fields alone, without
+  retrofitting the envelope or touching emit sites. Cross-process correlation stays `requestId`
+  (already stamped on both sides of the RPC); a W3C `traceparent`-style request-meta field is
+  additive under ADR 0006 and deferred to whatever ADR introduces an exporter. No exporter is part
+  of this ADR.
 
 **Registered sinks:**
 
