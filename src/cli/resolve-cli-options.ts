@@ -1,4 +1,4 @@
-import type { CliFlags } from '../commands/cli-grammar/flag-types.ts';
+import type { CliFlags } from '../contracts/cli-flags.ts';
 import { mergeDefinedFlags } from '../utils/merge-flags.ts';
 import { finalizeParsedArgs, parseRawArgs } from './parser/args.ts';
 import { resolveConfigBackedFlagDefaults } from '../cli-schema/cli-config.ts';

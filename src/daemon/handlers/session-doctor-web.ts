@@ -1,7 +1,7 @@
 import { inspectManagedAgentBrowserProcesses } from '../../platforms/web/agent-browser-lifecycle.ts';
 import { getManagedAgentBrowserStatus } from '../../platforms/web/agent-browser-tool.ts';
 import { appendDoctorCheck } from './session-doctor-output.ts';
-import type { DoctorCheck } from './session-doctor-types.ts';
+import type { DoctorCheck } from '../../contracts/doctor.ts';
 
 export async function appendWebBrowserLifecycleCheck(
   checks: DoctorCheck[],

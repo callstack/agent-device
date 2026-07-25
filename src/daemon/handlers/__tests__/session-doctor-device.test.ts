@@ -6,7 +6,7 @@ import type { DeviceInfo } from '../../../kernel/device.ts';
 import { attachAdbFailureHint } from '../../../platforms/android/adb-executor.ts';
 import type { DaemonRequest } from '../../types.ts';
 import { appendDeviceInventoryCheck } from '../session-doctor-device.ts';
-import type { DoctorCheck } from '../session-doctor-types.ts';
+import type { DoctorCheck } from '../../../contracts/doctor.ts';
 
 const BOOTED_IOS_SIMULATOR: DeviceInfo = {
   platform: 'apple',

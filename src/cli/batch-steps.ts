@@ -3,7 +3,7 @@ import { type SessionRuntimeHints } from '../kernel/contracts.ts';
 import { parseBatchStepRuntime } from '../contracts/batch-contract.ts';
 import { readInputFromCli } from '../commands/cli-grammar.ts';
 import { isCommandName, type CommandName } from '../commands/command-metadata.ts';
-import type { CliFlags } from '../commands/cli-grammar/flag-types.ts';
+import type { CliFlags } from '../contracts/cli-flags.ts';
 import { AppError } from '../kernel/errors.ts';
 import { isRecord } from '../utils/parsing.ts';
 

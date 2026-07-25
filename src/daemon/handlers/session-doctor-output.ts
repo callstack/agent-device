@@ -3,7 +3,7 @@ import {
   formatDoctorCheckDetailLines,
   formatDoctorCheckSummaryLine,
 } from '../../contracts/doctor-output.ts';
-import type { DoctorCheck, DoctorStatus } from './session-doctor-types.ts';
+import type { DoctorCheck, DoctorStatus } from '../../contracts/doctor.ts';
 
 export function summarizeDoctorStatus(checks: DoctorCheck[]): 'pass' | 'warn' | 'fail' {
   if (checks.some((check) => check.status === 'fail')) return 'fail';

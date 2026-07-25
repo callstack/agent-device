@@ -36,7 +36,8 @@ import {
   type RemoteConnectionRequestMetadata,
 } from './remote/remote-connection-state.ts';
 import { resolveRemoteAuthForCli } from './cli/auth-session.ts';
-import type { CliFlags, FlagKey } from './commands/cli-grammar/flag-types.ts';
+import type { FlagKey } from './commands/cli-grammar/flag-types.ts';
+import type { CliFlags } from './contracts/cli-flags.ts';
 import type { SessionRuntimeHints } from './kernel/contracts.ts';
 import { INTERNAL_COMMANDS, isKnownCliCommandName } from './command-catalog.ts';
 

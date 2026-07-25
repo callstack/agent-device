@@ -1,6 +1,6 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { compactRecord } from '../command-input.ts';
-import type { CliFlags } from '../cli-grammar/flag-types.ts';
+import type { CliFlags } from '../../contracts/cli-flags.ts';
 import { commonInputFromFlags, request } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { readGestureInput } from './metadata.ts';

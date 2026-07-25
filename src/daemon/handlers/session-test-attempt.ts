@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { emitRequestProgress } from '../../request/progress.ts';
-import type { DaemonResponse, ReplaySuiteTestFailed, ReplaySuiteTestResult } from '../types.ts';
+import type { DaemonResponse } from '../types.ts';
+import type { ReplaySuiteTestFailed, ReplaySuiteTestResult } from '../../contracts/replay.ts';
 import {
   buildReplayTestArtifactSlug,
   materializeReplayTestAttemptArtifacts,

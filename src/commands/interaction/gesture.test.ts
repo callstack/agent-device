@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import type { CliFlags } from '../cli-grammar/flag-types.ts';
+import type { CliFlags } from '../../contracts/cli-flags.ts';
 import { gestureCliReaders, gestureDaemonWriters } from './gesture.ts';
 
 const NO_FLAGS = {} as CliFlags;

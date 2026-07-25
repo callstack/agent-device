@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { PLATFORMS, type Platform } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
-import { getPlugin, registeredPlatforms, registerPlatformPlugin, tryGetPlugin } from '../platform-plugin.ts';
+import {
+  getPlugin,
+  registeredPlatforms,
+  registerPlatformPlugin,
+  tryGetPlugin,
+} from '../platform-plugin.ts';
 import {
   BUILTIN_PLATFORM_PLUGINS,
   registerBuiltinPlatformPlugins,

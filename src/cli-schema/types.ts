@@ -1,4 +1,5 @@
-import type { CliFlags, FlagKey } from '../commands/cli-grammar/flag-types.ts';
+import type { FlagKey } from '../commands/cli-grammar/flag-types.ts';
+import type { CliFlags } from '../contracts/cli-flags.ts';
 
 export type CommandSchema = {
   helpDescription: string;

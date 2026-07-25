@@ -1,5 +1,5 @@
 import type { RequestProgressEvent } from '../../request/progress.ts';
-import type { ReplaySuiteResult } from '../../daemon/types.ts';
+import type { ReplaySuiteResult } from '../../contracts/replay.ts';
 import {
   getReplayTestReporterExitCode,
   resolveReplayTestReporters,

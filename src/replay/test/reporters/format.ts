@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { ReplaySuiteTestResult } from '../../../daemon/types.ts';
+import type { ReplaySuiteTestResult } from '../../../contracts/replay.ts';
 
 export type PassedReplayTestResult = Extract<ReplaySuiteTestResult, { status: 'passed' }>;
 export type FailedReplayTestResult = Extract<ReplaySuiteTestResult, { status: 'failed' }>;

@@ -28,8 +28,8 @@ import {
   summarizeDoctorStatus,
 } from './session-doctor-output.ts';
 import { appendToolchainChecks } from './session-doctor-toolchain.ts';
-import type { DoctorCheck, DoctorOptions } from './session-doctor-types.ts';
-import type { DoctorCommandResult } from '../../contracts/doctor.ts';
+import type { DoctorOptions } from './session-doctor-types.ts';
+import type { DoctorCheck, DoctorCommandResult } from '../../contracts/doctor.ts';
 import {
   hasCachedAppleRunnerArtifact,
   prewarmAppleRunnerCache,

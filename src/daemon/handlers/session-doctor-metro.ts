@@ -1,4 +1,4 @@
-import type { DoctorCheck, DoctorKind } from './session-doctor-types.ts';
+import type { DoctorCheck, DoctorKind } from '../../contracts/doctor.ts';
 import { runCmd } from '../../utils/exec.ts';
 
 const METRO_PROBE_TIMEOUT_MS = 1500;

@@ -124,13 +124,52 @@ function normalizeRole(value: string): string {
   return normalized;
 }
 
-export function parseFindArgs(args: string[]): {
+export type ParsedFindArgs = {
   locator: FindLocator;
   query: string;
   action: FindAction['kind'];
   value?: string;
   timeoutMs?: number;
-} {
+};
+
+export type FindArgumentCheck =
+  | { ok: true; parsed: ParsedFindArgs }
+  | { ok: false; code: 'INVALID_ARGS'; message: string };
+
+/**
+ * `find`'s positional and flag validation, in one place for the same reason
+ * {@link isReadOnlyFindAction} is: both daemon entry points (the read-only
+ * `dispatchFindReadOnlyViaRuntime` fast path and the mutating `handleFindCommands`) ran
+ * their own copies of these three checks with hand-repeated messages, so a rule change
+ * had to be made twice to hold. The caller decides how to surface a failure — the
+ * daemon returns it as a response, other surfaces may throw — so this returns the
+ * refusal instead of choosing a mechanism.
+ *
+ * Action-token validation still comes from {@link parseFindArgs}, which throws; that is
+ * unchanged and callers see it exactly as before.
+ */
+export function checkFindArgs(
+  args: readonly string[],
+  flags?: { findFirst?: boolean; findLast?: boolean },
+): FindArgumentCheck {
+  if (args.length === 0) {
+    return { ok: false, code: 'INVALID_ARGS', message: 'find requires a locator or text' };
+  }
+  const parsed = parseFindArgs([...args]);
+  if (!parsed.query) {
+    return { ok: false, code: 'INVALID_ARGS', message: 'find requires a value' };
+  }
+  if (flags?.findFirst && flags?.findLast) {
+    return {
+      ok: false,
+      code: 'INVALID_ARGS',
+      message: 'find accepts only one of --first or --last',
+    };
+  }
+  return { ok: true, parsed };
+}
+
+export function parseFindArgs(args: string[]): ParsedFindArgs {
   let locator: FindLocator = 'any';
   let queryIndex = 0;
   if (FIND_LOCATOR_TOKENS.includes(args[0] as (typeof FIND_LOCATOR_TOKENS)[number])) {

@@ -3,7 +3,7 @@ import { formatCliOutput } from './cli-output.ts';
 import { readInputFromCli } from './cli-grammar.ts';
 import { runCommand, type CommandName } from './command-surface.ts';
 import type { CliOutput } from './command-contract.ts';
-import type { CliFlags } from './cli-grammar/flag-types.ts';
+import type { CliFlags } from '../contracts/cli-flags.ts';
 
 type CliRunOptions = {
   client: AgentDeviceClient;

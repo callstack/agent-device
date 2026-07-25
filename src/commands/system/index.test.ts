@@ -7,7 +7,7 @@ import type {
   TvRemoteCommandOptions,
 } from '../../client/client-types.ts';
 import type { CommandResult } from '../../core/command-descriptor/command-result.ts';
-import type { CliFlags } from '../cli-grammar/flag-types.ts';
+import type { CliFlags } from '../../contracts/cli-flags.ts';
 import {
   appStateCliReader,
   appStateDaemonWriter,

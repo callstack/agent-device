@@ -2,7 +2,7 @@ import { dispatchCommand } from '../../core/dispatch.ts';
 import {
   findBestMatchesByLocator,
   isReadOnlyFindAction,
-  parseFindArgs,
+  checkFindArgs,
   parseFindSelectorExpression,
   type FindLocator,
 } from '../../selectors/find.ts';
@@ -69,16 +69,9 @@ export async function handleFindCommands(params: {
   if (command !== 'find') return null;
 
   const args = req.positionals ?? [];
-  if (args.length === 0) {
-    return errorResponse('INVALID_ARGS', 'find requires a locator or text');
-  }
-  const { locator, query, action, value } = parseFindArgs(args);
-  if (!query) {
-    return errorResponse('INVALID_ARGS', 'find requires a value');
-  }
-  if (req.flags?.findFirst && req.flags?.findLast) {
-    return errorResponse('INVALID_ARGS', 'find accepts only one of --first or --last');
-  }
+  const checked = checkFindArgs(args, req.flags);
+  if (!checked.ok) return errorResponse(checked.code, checked.message);
+  const { locator, query, action, value } = checked.parsed;
   // #1271 stage 2: `--record` only means something for an action the
   // repair-segment exclusion can drop. `find`'s observe-vs-mutate split is a
   // POSITIONAL, so unlike snapshot/get/is it cannot be settled by the CLI

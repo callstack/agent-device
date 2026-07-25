@@ -1,6 +1,6 @@
 import { AppError } from '../kernel/errors.ts';
-import type { CliFlags } from '../commands/cli-grammar/flag-types.ts';
-import type { DaemonLockPolicy } from '../daemon/types.ts';
+import type { CliFlags } from '../contracts/cli-flags.ts';
+import type { DaemonLockPolicy } from '../kernel/contracts.ts';
 
 export type BindingSettings = {
   defaultPlatform?: CliFlags['platform'];

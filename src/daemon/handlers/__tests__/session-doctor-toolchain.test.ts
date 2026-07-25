@@ -3,7 +3,7 @@ import { test } from 'vitest';
 import type { VegaToolProvider } from '../../../platforms/vega/tool-provider.ts';
 import { withVegaToolProvider } from '../../../platforms/vega/tool-provider.ts';
 import { appendToolchainChecks } from '../session-doctor-toolchain.ts';
-import type { DoctorCheck } from '../session-doctor-types.ts';
+import type { DoctorCheck } from '../../../contracts/doctor.ts';
 
 test('Vega doctor reports CLI version and connected-device readiness through semantic provider', async () => {
   const provider = makeVegaProvider('VirtualDevice : tv - aarch64 - VegaOS\n');

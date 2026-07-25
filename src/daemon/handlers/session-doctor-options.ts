@@ -2,7 +2,8 @@ import { detectProjectRuntimeKind } from '../../utils/project-runtime.ts';
 import { publicPlatformString } from '../../kernel/device.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';
-import type { DoctorCheck, DoctorKind, DoctorOptions } from './session-doctor-types.ts';
+import type { DoctorOptions } from './session-doctor-types.ts';
+import type { DoctorCheck, DoctorKind } from '../../contracts/doctor.ts';
 
 const DEFAULT_METRO_HOST = '127.0.0.1';
 const DEFAULT_METRO_PORT = 8081;

@@ -23,7 +23,6 @@ import type { LogBackend } from '../contracts/logs.ts';
 import type { NetworkEntry } from '../contracts/network-log.ts';
 export type { NetworkIncludeMode };
 
-
 export type NetworkDump = {
   path: string;
   exists: boolean;

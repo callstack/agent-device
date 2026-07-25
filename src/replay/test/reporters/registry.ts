@@ -1,4 +1,4 @@
-import type { ReplaySuiteResult } from '../../../daemon/types.ts';
+import type { ReplaySuiteResult } from '../../../contracts/replay.ts';
 import type { RequestProgressEvent } from '../../../request/progress.ts';
 import { createCustomReplayTestReporter } from './custom.ts';
 import { createDefaultReplayTestReporter } from './default.ts';

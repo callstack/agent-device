@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { replayTestStepLines } from './trace.ts';
-import type { ReplaySuiteTestResult } from '../../daemon/types.ts';
+import type { ReplaySuiteTestResult } from '../../contracts/replay.ts';
 import type {
   ReplayTestReporterProgressEvent,
   ReplayTestResult,

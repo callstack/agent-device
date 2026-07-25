@@ -4,7 +4,7 @@ import type {
   InternalRequestOptions,
 } from '../../client/client-types.ts';
 import { splitSelectorFromArgs } from '../../selectors/parse.ts';
-import type { CliFlags } from './flag-types.ts';
+import type { CliFlags } from '../../contracts/cli-flags.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { compactRecord, type SelectorSnapshotInput } from '../command-input.ts';
 import type {

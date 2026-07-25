@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ReplaySuiteResult, ReplaySuiteTestResult } from '../../../daemon/types.ts';
+import type { ReplaySuiteResult, ReplaySuiteTestResult } from '../../../contracts/replay.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import type { ReplayTestReporter } from './types.ts';
 import {

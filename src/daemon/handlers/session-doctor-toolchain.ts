@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { PlatformSelector } from '../../kernel/device.ts';
 import { runCmd } from '../../utils/exec.ts';
 import { appendDoctorCheck } from './session-doctor-output.ts';
-import type { DoctorCheck } from './session-doctor-types.ts';
+import type { DoctorCheck } from '../../contracts/doctor.ts';
 
 const TOOLCHAIN_TIMEOUT_MS = 3_000;
 type AndroidLicenseState = 'accepted' | 'missing' | 'unknown';

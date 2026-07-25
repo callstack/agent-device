@@ -3,7 +3,7 @@ import { createAgentDeviceClient } from '../../agent-device-client.ts';
 import { parseArgs } from '../../cli/parser/args.ts';
 import { buildCommandUsageText } from '../../cli/parser/cli-help.ts';
 import type { DaemonRequest, DaemonResponse } from '../../kernel/contracts.ts';
-import type { CliFlags } from '../cli-grammar/flag-types.ts';
+import type { CliFlags } from '../../contracts/cli-flags.ts';
 import { sessionCommandFacet } from './session.ts';
 
 function flags(overrides: Partial<CliFlags> = {}): CliFlags {

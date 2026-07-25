@@ -1,5 +1,4 @@
-import type { SnapshotNode } from '../../../kernel/snapshot.ts';
-import type { SnapshotQualityVerdict } from '../../../snapshot/snapshot-quality.ts';
+import type { SnapshotNode, SnapshotQualityVerdict } from '../../../kernel/snapshot.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { now, sleep } from '../../runtime-common.ts';
 import {

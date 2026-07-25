@@ -8,7 +8,7 @@ import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { errorResponse, requireCommandSupported } from './handlers/response.ts';
 import { markSessionPartialRefsIssued, resolveRefStalenessWarning } from './session-snapshot.ts';
 import { resolveSessionDevice, withSessionlessRunnerCleanup } from './handlers/snapshot-session.ts';
-import { isReadOnlyFindAction, parseFindArgs } from '../selectors/find.ts';
+import { checkFindArgs, isReadOnlyFindAction } from '../selectors/find.ts';
 import { splitIsSelectorArgs } from '../selectors/index.ts';
 import { refSnapshotFlagGuardResponse } from './handlers/interaction-flags.ts';
 import { parseVersionedRefPositional } from './handlers/interaction-touch-targets.ts';
@@ -76,12 +76,9 @@ export async function dispatchFindReadOnlyViaRuntime(
   const { req } = params;
   if (req.command !== 'find') return null;
   const args = req.positionals ?? [];
-  if (args.length === 0) return errorResponse('INVALID_ARGS', 'find requires a locator or text');
-  const parsed = parseFindArgs(args);
-  if (!parsed.query) return errorResponse('INVALID_ARGS', 'find requires a value');
-  if (req.flags?.findFirst && req.flags?.findLast) {
-    return errorResponse('INVALID_ARGS', 'find accepts only one of --first or --last');
-  }
+  const checked = checkFindArgs(args, req.flags);
+  if (!checked.ok) return errorResponse(checked.code, checked.message);
+  const parsed = checked.parsed;
   const action = parsed.action;
   if (!isReadOnlyFindAction(action)) return null;
 

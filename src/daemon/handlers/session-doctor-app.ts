@@ -7,7 +7,7 @@ import {
 import { AppError, normalizeError } from '../../kernel/errors.ts';
 import type { SessionState } from '../types.ts';
 import { appendDoctorCheck } from './session-doctor-output.ts';
-import type { DoctorCheck } from './session-doctor-types.ts';
+import type { DoctorCheck } from '../../contracts/doctor.ts';
 
 export async function appendAppChecks(
   checks: DoctorCheck[],

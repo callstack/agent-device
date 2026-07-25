@@ -1,6 +1,6 @@
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { DaemonInstallSource } from '../../kernel/contracts.ts';
-import type { CliFlags } from '../cli-grammar/flag-types.ts';
+import type { CliFlags } from '../../contracts/cli-flags.ts';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { parseGitHubActionsArtifactInstallSourceSpec } from '../../utils/install-source-config.ts';
