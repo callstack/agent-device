@@ -111,7 +111,7 @@ test('replay parses inline open runtime flags and replays open with runtime payl
   expect(response?.ok).toBe(true);
   expect(invoked[0]?.command).toBe('open');
   expect(invoked[0]?.positionals).toEqual(['Demo']);
-  expect(invoked[0]?.flags).toEqual({ relaunch: true });
+  expect(invoked[0]?.flags).toEqual({ relaunch: true, platform: 'android' });
   expect(invoked[0]?.runtime).toEqual({
     platform: 'android',
     metroHost: '10.0.0.10',
