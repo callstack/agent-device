@@ -42,6 +42,11 @@ it through the barrel.
 
 Keep tests behavioral. Do not assert shapes or cases TypeScript already proves.
 
+Test through public interfaces where practical, and do not add unrelated production exports solely
+to make a test easier — widening the public surface for a test is a product change, and the exports
+outlive the test that motivated them. If a seam is genuinely missing, add it as a real one rather
+than as a test affordance (the workflow separately forbids test-only `typeof` DI params).
+
 ## Affected-check selector (`pnpm check:affected`)
 
 `pnpm check:affected --base <ref>` derives which local checks a diff needs, so

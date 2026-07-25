@@ -10,7 +10,7 @@ situational lives one hop away — load it when the task calls for it.
 | When the task involves | Read |
 | --- | --- |
 | Domain vocabulary, architecture language, capture-reliability contract | `CONTEXT.md` |
-| Accepted architecture decisions | `docs/adr/` |
+| Accepted architecture decisions | `docs/adr/README.md` (a "read when you touch…" index) |
 | Which gates to run, test speed rules, shared fixtures | `docs/agents/testing.md` |
 | Adding or changing a CLI flag | `docs/agents/cli-flags.md` |
 | Opening a PR, or reviewing one | `docs/agents/pull-requests.md` |
@@ -219,6 +219,10 @@ connect errors, retry policy, or command typing, start in
 
 ## Docs & skills
 
+- Before adding guidance, examples, schemas, or command metadata anywhere, decide which layer owns
+  it: the command surface, CLI grammar, CLI help, MCP projection, or daemon runtime. Picking the
+  layer after writing is how the same contract ends up duplicated across two of them.
+  `docs/agents/cli-flags.md` walks the layers for the flag case.
 - Decide docs impact with the change, not after. For behavior/CLI-surface changes: update
   help/metadata, README or `website/docs/**` when user-facing, and a SkillGym case in
   `test/skillgym/suites/agent-device-smoke-suite.ts` when command-planning guidance changes.
