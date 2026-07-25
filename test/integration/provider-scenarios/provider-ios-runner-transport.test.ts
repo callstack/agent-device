@@ -103,17 +103,28 @@ test('provider-supplied Apple runner transport reuses the shared interactor stac
 // Daemon routes that issue runner commands OUTSIDE interactor methods (keyboard,
 // native alert, point read, iOS sequences) must reach the provider transport via
 // the request-boundary `appleRunnerProvider` scope instead of escaping to the
-// local XCTest runtime.
+// local XCTest runtime — and that scope must preserve the request's id, since
+// scoped-provider resolution requires the scope and call requestIds to match.
 test('daemon direct runner routes reach the provider transport through the request scope', async () => {
   await withProviderScenarioResource(createRunnerTransportWorld, async ({ daemon, calls }) => {
     const lease = await allocateLease(daemon);
-    const request = { flags: leaseFlags(lease.leaseId), meta: leaseMeta(lease.leaseId) };
-    assertRpcOk(await daemon.callCommand('open', ['com.example.app'], request.flags, request));
+    const flags = leaseFlags(lease.leaseId);
+    assertRpcOk(
+      await daemon.callCommand('open', ['com.example.app'], flags, {
+        meta: leaseMeta(lease.leaseId),
+      }),
+    );
 
     calls.runner.length = 0;
-    assertRpcOk(await daemon.callCommand('keyboard', ['dismiss'], request.flags, request));
+    const keyboardMeta = { ...leaseMeta(lease.leaseId), requestId: 'req-keyboard-1' };
+    assertRpcOk(await daemon.callCommand('keyboard', ['dismiss'], flags, { meta: keyboardMeta }));
     const dismiss = calls.runner.find((call) => call.command.command === 'keyboardDismiss');
     assert.ok(dismiss, 'expected keyboardDismiss on the provider transport, not local XCTest');
+    assert.equal(
+      dismiss.options.requestId,
+      'req-keyboard-1',
+      'direct-route runner call lost the per-request id across the request-boundary scope',
+    );
   });
 });
 
