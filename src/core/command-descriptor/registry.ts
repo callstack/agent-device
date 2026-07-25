@@ -90,13 +90,6 @@ const isShardedTestRequest = (req: DaemonRequest): boolean =>
   req.command === 'test' &&
   (typeof req.flags?.shardAll === 'number' || typeof req.flags?.shardSplit === 'number');
 
-// Lease-route requests manage lease lifecycle/artifacts, not a device session:
-// resolving a default device for provider scoping would spuriously trigger
-// local device discovery before any lease exists.
-const LEASE_ROUTE_NO_PROVIDER_DEVICE = {
-  skipSessionlessProviderDevice: () => true,
-} as const;
-
 // ADR 0014 request-sensitive ref-frame resolvers. The action is the leading
 // positional (see keyboard/alert daemon writers in src/commands/system/index.ts
 // and src/commands/capture/alert.ts). Only the read-only status probes preserve
@@ -304,12 +297,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/daemon/handlers/lease.ts'] as const } : {}),
     catalog: { group: 'internal', key: 'leaseAllocate' },
     recordsSessionAction: false,
-    daemon: {
-      route: 'lease',
-      refFrameEffect: 'preserve',
-      ...ADMISSION_AND_LOCK_EXEMPT,
-      ...LEASE_ROUTE_NO_PROVIDER_DEVICE,
-    },
+    daemon: { route: 'lease', refFrameEffect: 'preserve', ...ADMISSION_AND_LOCK_EXEMPT },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
   },
@@ -318,12 +306,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/daemon/handlers/lease.ts'] as const } : {}),
     catalog: { group: 'internal', key: 'leaseHeartbeat' },
     recordsSessionAction: false,
-    daemon: {
-      route: 'lease',
-      refFrameEffect: 'preserve',
-      ...ADMISSION_AND_LOCK_EXEMPT,
-      ...LEASE_ROUTE_NO_PROVIDER_DEVICE,
-    },
+    daemon: { route: 'lease', refFrameEffect: 'preserve', ...ADMISSION_AND_LOCK_EXEMPT },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
   },
@@ -332,12 +315,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/daemon/handlers/lease.ts'] as const } : {}),
     catalog: { group: 'internal', key: 'leaseRelease' },
     recordsSessionAction: false,
-    daemon: {
-      route: 'lease',
-      refFrameEffect: 'preserve',
-      ...ADMISSION_AND_LOCK_EXEMPT,
-      ...LEASE_ROUTE_NO_PROVIDER_DEVICE,
-    },
+    daemon: { route: 'lease', refFrameEffect: 'preserve', ...ADMISSION_AND_LOCK_EXEMPT },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
   },
@@ -346,12 +324,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/artifacts.ts'] as const } : {}),
     catalog: { group: 'public' },
     recordsSessionAction: false,
-    daemon: {
-      route: 'lease',
-      refFrameEffect: 'preserve',
-      ...ADMISSION_AND_LOCK_EXEMPT,
-      ...LEASE_ROUTE_NO_PROVIDER_DEVICE,
-    },
+    daemon: { route: 'lease', refFrameEffect: 'preserve', ...ADMISSION_AND_LOCK_EXEMPT },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
   },

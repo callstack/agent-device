@@ -216,6 +216,27 @@ test('daemon command registry preserves provider device resolution traits', () =
   );
 });
 
+test('every lease-route command skips sessionless provider-device resolution', () => {
+  // Enumerated from the registry route, not a hand list: lease-route requests
+  // manage lease lifecycle/artifacts, never a device session, so sessionless
+  // provider scoping must not trigger local device discovery for them.
+  const leaseRouteCommands = [
+    ...Object.values(PUBLIC_COMMANDS),
+    ...Object.values(INTERNAL_COMMANDS),
+  ].filter((command) => getDaemonCommandRoute(command) === 'lease');
+  assert.ok(leaseRouteCommands.length >= 4, 'expected the lease route to enumerate its commands');
+  for (const command of leaseRouteCommands) {
+    assert.equal(
+      resolveProviderDeviceResolutionIntent(makeRequest(command), {
+        hasExistingSession: false,
+        hasExplicitDeviceSelector: true,
+      }),
+      'skip',
+      `${command} must not resolve a provider device sessionless`,
+    );
+  }
+});
+
 function makeRequest(command: string, positionals: string[] = []): DaemonRequest {
   return {
     command,

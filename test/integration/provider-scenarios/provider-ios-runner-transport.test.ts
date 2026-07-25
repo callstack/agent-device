@@ -37,8 +37,11 @@ type RunnerTransportCalls = { runner: RecordedRunnerCall[]; opens: number };
 // AppleRunnerProvider transport (plus its own `open`) reuses the SHARED Apple
 // interactor — selector resolution, tap, fill, and snapshot all arrive at the
 // provider transport as runner-protocol commands instead of local XCTest.
+// This world has NO request-boundary resolver, so the interactor's injected
+// transport is the only thing keeping runner traffic off the local runtime:
+// removing the createAppleInteractor provider param fails this test.
 test('provider-supplied Apple runner transport reuses the shared interactor stack', async () => {
-  await withProviderScenarioResource(createRunnerTransportWorld, async ({ daemon, calls }) => {
+  await withProviderScenarioResource(createInteractorSeamWorld, async ({ daemon, calls }) => {
     const lease = await allocateLease(daemon);
     const request = { flags: leaseFlags(lease.leaseId), meta: leaseMeta(lease.leaseId) };
 
@@ -106,7 +109,7 @@ test('provider-supplied Apple runner transport reuses the shared interactor stac
 // local XCTest runtime — and that scope must preserve the request's id, since
 // scoped-provider resolution requires the scope and call requestIds to match.
 test('daemon direct runner routes reach the provider transport through the request scope', async () => {
-  await withProviderScenarioResource(createRunnerTransportWorld, async ({ daemon, calls }) => {
+  await withProviderScenarioResource(createRequestScopeWorld, async ({ daemon, calls }) => {
     const lease = await allocateLease(daemon);
     const flags = leaseFlags(lease.leaseId);
     assertRpcOk(
@@ -130,9 +133,10 @@ test('daemon direct runner routes reach the provider transport through the reque
 
 // Per-request RunnerContext threading: the daemon builds the interactor per
 // request, so runner calls carry the request's id (cancellation/accounting)
-// instead of the construction-time context.
+// instead of the construction-time context. Runs without the request-boundary
+// resolver so the id can only arrive via getInteractor's runnerContext.
 test('provider transport runner calls carry the per-request id', async () => {
-  await withProviderScenarioResource(createRunnerTransportWorld, async ({ daemon, calls }) => {
+  await withProviderScenarioResource(createInteractorSeamWorld, async ({ daemon, calls }) => {
     const lease = await allocateLease(daemon);
     const flags = leaseFlags(lease.leaseId);
     const openMeta = { ...leaseMeta(lease.leaseId), requestId: 'req-open-1' };
@@ -163,9 +167,21 @@ async function allocateLease(
   return assertRpcOk<{ lease: DeviceLease }>(response).lease;
 }
 
-async function createRunnerTransportWorld() {
+// The interactor seam alone: no getAppleRunnerProvider, so nothing scopes the
+// request — only the transport injected into createAppleInteractor routes.
+async function createInteractorSeamWorld() {
+  return await createRunnerTransportWorld({ requestScope: false });
+}
+
+// The request-boundary seam: getAppleRunnerProvider scopes the whole request,
+// covering runner commands issued outside interactor methods.
+async function createRequestScopeWorld() {
+  return await createRunnerTransportWorld({ requestScope: true });
+}
+
+async function createRunnerTransportWorld(options: { requestScope: boolean }) {
   const calls: RunnerTransportCalls = { runner: [], opens: 0 };
-  const runtime = createProviderRuntime(calls);
+  const runtime = createProviderRuntime(calls, options);
   const providers = createProviderDeviceRuntimeRequestProviders([runtime]);
   const daemon = await createProviderScenarioHarness({
     ...providers,
@@ -181,7 +197,10 @@ async function createRunnerTransportWorld() {
   };
 }
 
-function createProviderRuntime(calls: RunnerTransportCalls): ProviderDeviceRuntime {
+function createProviderRuntime(
+  calls: RunnerTransportCalls,
+  options: { requestScope: boolean },
+): ProviderDeviceRuntime {
   const transport: AppleRunnerProvider = {
     runCommand: async (_device, command, options) => {
       calls.runner.push({ command, options });
@@ -203,7 +222,12 @@ function createProviderRuntime(calls: RunnerTransportCalls): ProviderDeviceRunti
       device.id === DEVICE.id
         ? createRunnerTransportInteractor(calls, transport, runnerContext)
         : undefined,
-    getAppleRunnerProvider: (device) => (device.id === DEVICE.id ? transport : undefined),
+    ...(options.requestScope
+      ? {
+          getAppleRunnerProvider: (device: DeviceInfo) =>
+            device.id === DEVICE.id ? transport : undefined,
+        }
+      : {}),
     shutdown: async () => undefined,
   };
 }

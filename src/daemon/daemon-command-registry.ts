@@ -156,6 +156,12 @@ function buildDaemonCommandRegistry(descriptors: readonly DaemonCommandDescripto
 }
 
 function shouldSkipSessionlessProviderDevice(req: DaemonRequest): boolean {
-  const skip = getDaemonCommandDescriptor(req.command)?.skipSessionlessProviderDevice;
+  const descriptor = getDaemonCommandDescriptor(req.command);
+  // Lease-route requests manage lease lifecycle/artifacts, not a device
+  // session: resolving a default device for provider scoping would spuriously
+  // trigger local device discovery before any lease exists. Derived from the
+  // route so a new lease-route command cannot regress it.
+  if (descriptor?.route === 'lease') return true;
+  const skip = descriptor?.skipSessionlessProviderDevice;
   return typeof skip === 'function' ? skip(req) : false;
 }

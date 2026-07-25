@@ -21,6 +21,7 @@ import { toAppleTvRemoteButton } from '../../contracts/tv-remote.ts';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { isMacOs, isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
+import { withProviderScopedInteractor } from '../../core/interactor-scope.ts';
 import type { RawSnapshotNode } from '../../kernel/snapshot.ts';
 import type {
   Interactor,
@@ -167,10 +168,13 @@ export function createAppleInteractor(
 }
 
 /**
- * Routes every runner-command method through the injected provider transport.
- * Methods backed by local Apple tooling (simctl/devicectl) have no
- * provider-neutral transport, so they fail fast until the provider session
- * composes its own implementation on top.
+ * Partitions the interactor for an injected provider transport. Its unique
+ * jobs are the local-tooling rejection and in-process scoping for interactors
+ * composed OUTSIDE a daemon request (on daemon requests the request-boundary
+ * `appleRunnerProvider` resolver scopes the same transport around everything):
+ * runner-command methods run inside the provider scope, while methods backed
+ * by local Apple tooling (simctl/devicectl) have no provider-neutral transport
+ * and fail fast until the provider session composes its own on top.
  */
 function withInjectedAppleRunnerTransport(
   device: DeviceInfo,
@@ -188,18 +192,13 @@ function withInjectedAppleRunnerTransport(
     writeClipboard: async () => rejectLocalAppleToolMethod('writeClipboard'),
     setSetting: async () => rejectLocalAppleToolMethod('setSetting'),
   };
-  return new Proxy(providerInteractor, {
-    get(target, property, receiver) {
-      const value = Reflect.get(target, property, receiver);
-      if (typeof value !== 'function') return value;
-      return (...args: unknown[]) =>
-        withAppleRunnerProvider(
-          runnerProvider,
-          { deviceId: device.id, requestId: runnerContext.requestId },
-          async () => await value.apply(target, args),
-        );
-    },
-  });
+  return withProviderScopedInteractor(providerInteractor, (task) =>
+    withAppleRunnerProvider(
+      runnerProvider,
+      { deviceId: device.id, requestId: runnerContext.requestId },
+      task,
+    ),
+  );
 }
 
 function rejectLocalAppleToolMethod(method: string): never {

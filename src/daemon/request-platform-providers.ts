@@ -350,7 +350,14 @@ async function resolveScopedProviderDevice(
       return existingSession?.device;
     case 'explicit-device':
     case 'sessionless-default-device':
-      return await resolveTargetDevice(req.flags ?? {});
+      // Provider-scope plumbing only: an unresolvable device means "no provider
+      // scope for this request", never a failed request — the command's own
+      // device resolution still reports its errors downstream.
+      try {
+        return await resolveTargetDevice(req.flags ?? {});
+      } catch {
+        return undefined;
+      }
     case 'skip':
       return undefined;
   }
