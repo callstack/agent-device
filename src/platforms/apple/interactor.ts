@@ -21,7 +21,7 @@ import { toAppleTvRemoteButton } from '../../contracts/tv-remote.ts';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { isMacOs, isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
-import { withProviderScopedInteractor } from '../../core/interactor-scope.ts';
+import { withMethodScope } from '../../utils/method-scope.ts';
 import type { RawSnapshotNode } from '../../kernel/snapshot.ts';
 import type {
   Interactor,
@@ -192,7 +192,7 @@ function withInjectedAppleRunnerTransport(
     writeClipboard: async () => rejectLocalAppleToolMethod('writeClipboard'),
     setSetting: async () => rejectLocalAppleToolMethod('setSetting'),
   };
-  return withProviderScopedInteractor(providerInteractor, (task) =>
+  return withMethodScope(providerInteractor, (task) =>
     withAppleRunnerProvider(
       runnerProvider,
       { deviceId: device.id, requestId: runnerContext.requestId },
