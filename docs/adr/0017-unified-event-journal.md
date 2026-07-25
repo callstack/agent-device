@@ -29,8 +29,8 @@ Normative summary of the proposal; contracts and rationale below.
 - Every consumer is a **sink**: explicitly registered at scope construction, invoked synchronously
   in registration order, individually best-effort (a sink error is swallowed and must not affect
   other sinks or the request). Sinks with dynamic destinations (the per-attempt replay trace) read
-  routing context that the owning lifecycle binds onto the scope, mirroring today's mid-request
-  `logPath` rebinding.
+  **immutable routing bindings carried by a forked child scope** — concurrent sub-work (sharded
+  test attempts run under `Promise.allSettled`) forks, never rebinds shared scope state.
 - **Progress streaming is not journal-owned.** `src/request/progress.ts` and its typed
   `RequestProgressEvent` union remain the transport's channel, unchanged.
 - **Existing formats do not change, with one declared exception.** `events.ndjson` v1 entries,
@@ -158,12 +158,20 @@ statically enumerable, greppable, no dynamic subscription API. Semantics, normat
   the request.
 - **Flushing:** flush remains journal-owned (`flushDiagnosticsToSessionFile` semantics unchanged);
   sinks that buffer expose flush hooks the journal calls on request finalization and fatal paths.
-- **Dynamic destinations:** a sink whose output path is not known at scope construction reads
-  routing context bound onto the scope by the owning lifecycle. Precedent:
-  `createRequestExecutionScope` already rebinds `logPath` mid-request. The replay trace sink works
-  the same way: `prepareReplayTestTimingTrace` binds the current attempt's trace path onto the
-  scope (and clears it at attempt end); the sink drops trace-kind events while no destination is
-  bound. Multiple attempts in one request therefore route to their own files, exactly as today.
+- **Dynamic destinations — fork, never rebind:** a sink whose output path is not known at scope
+  construction reads **immutable routing bindings** carried by the current scope. The journal
+  gains a fork primitive: `journal.fork(bindings, fn)` runs `fn` inside a new AsyncLocalStorage
+  scope object that shares the parent's buffer, `phaseCounts`, envelope, and sink list, but
+  carries its own **frozen** bindings. Sharded `test` runs execute attempts concurrently
+  (`Promise.allSettled` in `runReplayTestShards`, `src/daemon/handlers/session-test.ts`) under one
+  inherited request scope, so mutating shared scope state to route traces would let one attempt
+  overwrite or clear another's destination after an `await`. Instead, each attempt's lifecycle
+  wraps its work — including all nested replay dispatch — in a fork binding that attempt's
+  `replay-timing.ndjson` path; the binding dies with the fork, so no clearing step exists to race.
+  The sink drops trace-kind events emitted with no bound destination. The existing
+  `updateDiagnosticsScope` rebinds (`session`, `logPath` in `createRequestExecutionScope`) remain:
+  they run once during sequential request setup, before any concurrency fan-out; new routing
+  context for parallel or attempt-scoped work must use forks.
 
 **Registered sinks:**
 
@@ -282,7 +290,9 @@ opt-in decision.
   no request active.
 - Per-attempt routing: a multi-attempt `test` run writes each attempt's trace to its own file with
   legacy `type` values; trace-kind events emitted with no bound destination are dropped, not
-  misrouted.
+  misrouted. A **concurrent-shard regression** runs sharded attempts in parallel and proves each
+  `replay-timing.ndjson` contains only its own attempt's events — no cross-writes, no drops —
+  including events emitted from nested replay work after `await` points.
 - Sink isolation: a sink that throws does not affect the buffer, other sinks, or the response;
   ordering across sinks is registration order.
 - `cost.runnerRoundTrips` parity: the trait-derived set equals the current literal list; the
@@ -307,6 +317,7 @@ Each step lands green and independently useful:
    the journal; the `events.ndjson` writer becomes a sink; idle-reap/shutdown finalizers open
    session-scoped teardown scopes so out-of-request `action.recorded` events keep flowing; the
    `events` command and pagination untouched.
-4. **Replay trace as sink** — both trace helpers replaced by one sink with scope-bound per-attempt
-   routing and legacy `type` mapping; the declared redaction change ships here with its fixture and
-   changelog entry.
+4. **Replay trace as sink** — the journal fork primitive lands with its concurrent-shard
+   regression; both trace helpers are replaced by one sink with fork-bound per-attempt routing and
+   legacy `type` mapping; the declared redaction change ships here with its fixture and changelog
+   entry.
