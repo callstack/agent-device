@@ -299,6 +299,11 @@ test('#1391: a close-time script save failure still clears the advisory claim an
   assert.equal(error.code, 'COMMAND_FAILED');
   assert.match(error.message, /session was closed, but its script was not saved/);
   assert.equal(error.details?.retriable, false);
+  // The original write failure's machine-readable details survive the
+  // close-specific hint/retriable override, so a caller dispatching on them
+  // (e.g. `reason === 'script_target_exists'`) still can.
+  assert.equal(error.details?.reason, 'script_target_exists');
+  assert.equal(error.details?.path, targetPath);
   assert.equal(store.get('close-save-script-failure'), undefined);
   assert.deepEqual(inspectDeviceClaims({ serial: android.id }), []);
   assert.equal(fs.readFileSync(targetPath, 'utf8'), 'pre-existing\n');

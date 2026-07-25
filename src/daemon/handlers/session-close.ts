@@ -289,21 +289,33 @@ function finalizeOrdinaryCloseScript(params: {
  * here (a non-clobber refusal or another fs AppError — see
  * `handleSessionScriptWriteFailure`'s non-repair, non-active-publication
  * branch); anything else is already swallowed into a silent `{written:false}`
- * there. The message is corrected for THIS call site: the shared
- * `publishHealedScriptAtomically` wording ("retry close --save-script")
+ * there. Only the message/hint/retriable are corrected for THIS call site (the
+ * shared `publishHealedScriptAtomically` wording, "retry close --save-script",
  * describes the repair-commit retry contract, which does not apply here — by
  * the time the agent sees this, `close` has already released the device and
- * deleted the session, so there is nothing left to retry in place.
+ * deleted the session, so there is nothing left to retry in place); the
+ * original error's machine-readable `details` (e.g. `reason:
+ * "script_target_exists"`, `path`) are preserved so a caller dispatching on
+ * them still can.
  */
 function toOrdinaryCloseSaveScriptFailure(error: unknown): AppError {
-  const detail = error instanceof AppError ? error.message : normalizeError(error).message;
+  const overrides = {
+    hint: 'Remove the existing target (or pass --force/--overwrite), then re-record with open --save-script.',
+    retriable: false,
+  };
+  if (error instanceof AppError) {
+    return new AppError(
+      'COMMAND_FAILED',
+      `The session was closed, but its script was not saved: ${error.message}`,
+      { ...error.details, ...overrides },
+      error.cause,
+    );
+  }
+  const detail = normalizeError(error).message;
   return new AppError(
     'COMMAND_FAILED',
     `The session was closed, but its script was not saved: ${detail}`,
-    {
-      hint: 'Remove the existing target (or pass --force/--overwrite), then re-record with open --save-script.',
-      retriable: false,
-    },
+    overrides,
   );
 }
 
