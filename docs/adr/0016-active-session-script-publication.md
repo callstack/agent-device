@@ -24,8 +24,9 @@ Normative summary; the binding contracts and refusal cases are in [Decision](#de
   action without changing repair state.
 - `ReplayCommandResult.sessionActive` (from the daemon's session store, never script re-parsing) is
   what lets a one-shot client keep the daemon alive on a close-less handoff.
-- Literal `fill` inputs persist into the artifact: do not record secret-bearing journeys until
-  #1348's parameterized inputs ship.
+- Sensitive `fill` inputs must be recorded as placeholders via `fill --record-as <VAR>`
+  (ADR 0017, shipped for #1348); unparameterized `fill`/`type` values persist literally into the
+  artifact, so a secret entered without `--record-as` is published.
 
 ## Context
 

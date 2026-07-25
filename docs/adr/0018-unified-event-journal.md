@@ -1,4 +1,4 @@
-# ADR 0017: Unified Request Event Journal
+# ADR 0018: Unified Request Event Journal
 
 ## Status
 
@@ -28,9 +28,10 @@ Normative summary of the proposal; contracts and rationale below.
   subscription.
 - Every consumer is a **sink**: explicitly registered at scope construction, invoked synchronously
   in registration order, individually best-effort (a sink error is swallowed and must not affect
-  other sinks or the request). Sinks with dynamic destinations (the per-attempt replay trace) read
-  **immutable routing bindings carried by a forked child scope** — concurrent sub-work (sharded
-  test attempts run under `Promise.allSettled`) forks, never rebinds shared scope state.
+  other sinks or the request). Concurrent sub-work (sharded test attempts run under
+  `Promise.allSettled`) runs in **forked child scopes that clone every mutable binding** —
+  envelope, log path, routing — and share only concurrency-safe aggregation state; nothing mutable
+  is ever shared across concurrent scopes.
 - **Progress streaming is not journal-owned.** `src/request/progress.ts` and its typed
   `RequestProgressEvent` union remain the transport's channel, unchanged.
 - **Existing formats do not change, with one declared exception.** `events.ndjson` v1 entries,
@@ -158,20 +159,23 @@ statically enumerable, greppable, no dynamic subscription API. Semantics, normat
   the request.
 - **Flushing:** flush remains journal-owned (`flushDiagnosticsToSessionFile` semantics unchanged);
   sinks that buffer expose flush hooks the journal calls on request finalization and fatal paths.
-- **Dynamic destinations — fork, never rebind:** a sink whose output path is not known at scope
-  construction reads **immutable routing bindings** carried by the current scope. The journal
-  gains a fork primitive: `journal.fork(bindings, fn)` runs `fn` inside a new AsyncLocalStorage
-  scope object that shares the parent's buffer, `phaseCounts`, envelope, and sink list, but
-  carries its own **frozen** bindings. Sharded `test` runs execute attempts concurrently
-  (`Promise.allSettled` in `runReplayTestShards`, `src/daemon/handlers/session-test.ts`) under one
-  inherited request scope, so mutating shared scope state to route traces would let one attempt
-  overwrite or clear another's destination after an `await`. Instead, each attempt's lifecycle
-  wraps its work — including all nested replay dispatch — in a fork binding that attempt's
-  `replay-timing.ndjson` path; the binding dies with the fork, so no clearing step exists to race.
-  The sink drops trace-kind events emitted with no bound destination. The existing
-  `updateDiagnosticsScope` rebinds (`session`, `logPath` in `createRequestExecutionScope`) remain:
-  they run once during sequential request setup, before any concurrency fan-out; new routing
-  context for parallel or attempt-scoped work must use forks.
+- **Concurrency — fork, never rebind; forks clone all mutable state:** the journal gains a fork
+  primitive: `journal.fork(bindings, fn)` runs `fn` inside a new AsyncLocalStorage scope object
+  that **clones every mutable field of the parent scope** — the envelope (`session`, `command`,
+  `debug`), `logPath`, and all routing bindings — applies the fork's own frozen `bindings` on top,
+  and owns its own event buffer, flushed against the fork's bindings when the fork ends. Shared
+  with the parent are only the sink list and concurrency-safe aggregation state: the `phaseCounts`
+  tally stays request-global (single-threaded atomic increments; agent-cost must span shards).
+  Sharded `test` runs execute attempts concurrently (`Promise.allSettled` in
+  `runReplayTestShards`, `src/daemon/handlers/session-test.ts`) and their **nested dispatch calls
+  `createRequestExecutionScope` (`request-router.ts` child scopes), which rebinds `session` and
+  `logPath` mid-flight** — so a shared mutable envelope would cross-route debug and session-log
+  events between shards even with frozen trace bindings. Therefore: `updateDiagnosticsScope`
+  mutates only the innermost (current) scope, each shard/attempt lifecycle wraps its work —
+  including all nested replay dispatch — in a fork, and every mid-flight rebind lands on that
+  shard's clone. The fork's trace binding (the attempt's `replay-timing.ndjson` path) dies with
+  the fork, so no clearing step exists to race; the replay trace sink drops trace-kind events
+  emitted with no bound destination.
 - **Scope identity (exporter readiness):** every scope — request, teardown, and fork — carries a
   `scopeId`, and a fork records its parent's as `parentScopeId`; both ride the event envelope.
   This is deliberately minimal span plumbing: forks already form a tree, so a future exporter sink
@@ -298,9 +302,11 @@ opt-in decision.
   no request active.
 - Per-attempt routing: a multi-attempt `test` run writes each attempt's trace to its own file with
   legacy `type` values; trace-kind events emitted with no bound destination are dropped, not
-  misrouted. A **concurrent-shard regression** runs sharded attempts in parallel and proves each
-  `replay-timing.ndjson` contains only its own attempt's events — no cross-writes, no drops —
-  including events emitted from nested replay work after `await` points.
+  misrouted. A **concurrent nested-action regression** runs sharded attempts in parallel — each
+  performing nested dispatch that rebinds `session`/`logPath` via `createRequestExecutionScope` —
+  and proves per-fork isolation across **all three routed outputs**: each `replay-timing.ndjson`,
+  each per-request diagnostics ndjson, and each session's `events.ndjson` contain only their own
+  shard's events — no cross-writes, no drops — including events emitted after `await` points.
 - Sink isolation: a sink that throws does not affect the buffer, other sinks, or the response;
   ordering across sinks is registration order.
 - `cost.runnerRoundTrips` parity: the trait-derived set equals the current literal list; the
