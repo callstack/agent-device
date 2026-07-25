@@ -1,5 +1,47 @@
 # Testing Notes
 
+## Which gates a change needs
+
+Default for code changes: `pnpm check:affected --base origin/main --run`. It derives the gate set
+from repository sources of truth, so prefer it over interpreting the table below by hand. GitHub CI
+stays authoritative.
+
+The mapping it encodes, for when you need to run a gate directly or reason about coverage:
+
+| Change | Gate |
+| --- | --- |
+| Any TypeScript | `pnpm typecheck` or `pnpm check:quick` |
+| Daemon handler / shared module | `pnpm check:unit` |
+| Tooling/config (`package.json`, `tsconfig*.json`, `.oxlintrc.json`, `.oxfmtrc.json`) | `pnpm check:tooling` |
+| Platform/device response — anything emitting `platform`/`appleOs` on the wire, or shaping a daemon response | `pnpm test:integration:provider` **and** `pnpm test:coverage` |
+| Cross-platform behavior | `pnpm test:integration` |
+| iOS runner / Swift | `pnpm build:xcuitest` |
+| CLI help/guidance (`src/cli/parser/cli-help.ts`, `src/cli-schema/`) | `pnpm exec vitest run src/cli/parser/__tests__ src/cli-schema/command-schema-guards.test.ts` |
+| SkillGym prompts/assertions | `pnpm test:skillgym:case <case-id>` (broad: `pnpm test:skillgym`, filter with `-- --tag fixture-smoke` or `-- --tag skill-guidance`) |
+| Anything in `src/`, `test/`, `skills/` | `pnpm format` |
+
+Two traps worth naming:
+
+- The platform/device-response row is the one agents miss. `pnpm check:unit` does **not** exercise the
+  `provider-integration` project, and that project holds the apple-platform-output leak guard.
+  Internal `apple` must never reach a command response — project through `publicPlatformString`.
+- Fallow CI failures reproduce with `pnpm check:fallow --base origin/main`. Do not estimate
+  complexity or dead-code impact by hand.
+
+Docs/skills-only and non-TS changes with no behavior impact need no tests. Test-only DI seam CI
+failures are enforced by the workflow — do not add optional `typeof` DI params to production code to
+satisfy a test.
+
+## Shared test utilities
+
+Before writing a new test, inspect `src/__tests__/test-utils/index.ts`:
+`rg -n "export .*make|export .*DEVICE|withMocked" src/__tests__/test-utils`. Import through the
+barrel and prefer named shared fixtures over inlining new `DeviceInfo`, `SessionState`, snapshot,
+store, or mocked-binary objects. If a helper is missing, add it near the concept it serves and export
+it through the barrel.
+
+Keep tests behavioral. Do not assert shapes or cases TypeScript already proves.
+
 ## Affected-check selector (`pnpm check:affected`)
 
 `pnpm check:affected --base <ref>` derives which local checks a diff needs, so
