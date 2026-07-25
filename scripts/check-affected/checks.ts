@@ -145,9 +145,10 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
     id: 'skillgym',
     label: 'SkillGym command-planning suite',
     kind: { type: 'script', script: 'test:skillgym' },
-    // No GitHub workflow runs SkillGym; per the AGENTS.md testing matrix it is
-    // a local-only gate (`pnpm test:skillgym`). Keep it locally runnable rather
-    // than claiming a CI job that does not exist and silently skipping it.
+    // No GitHub workflow runs SkillGym; per the Testing Matrix in
+    // docs/agents/testing.md it is a local-only gate (`pnpm test:skillgym`).
+    // Keep it locally runnable rather than claiming a CI job that does not
+    // exist and silently skipping it.
     ciJobs: [],
     localRunnable: true,
   },

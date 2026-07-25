@@ -135,7 +135,9 @@ test('workflow/tooling and selector-owning changes fail open', () => {
     plan(['scripts/check-affected/model.ts']).failOpenReasons[0]?.rule,
     'selector-owning',
   );
-  assert.equal(plan(['AGENTS.md']).failOpenReasons[0]?.rule, 'selector-owning');
+  // The Testing Matrix lives here; a matrix edit must outrank the docs-only
+  // short-circuit that its `docs/` path would otherwise take.
+  assert.equal(plan(['docs/agents/testing.md']).failOpenReasons[0]?.rule, 'selector-owning');
 });
 
 test('a fail-open path in a mixed changeset forces the full set', () => {

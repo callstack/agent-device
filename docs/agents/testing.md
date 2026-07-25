@@ -86,8 +86,12 @@ sides of a rename are classified (a moved file cannot look docs-only by its
 destination alone).
 
 Anything the selector cannot classify — unknown, ambiguous, workflow/tooling, or
-a change to the selector's own sources (including the `AGENTS.md` Testing
-Matrix) — **fails open to the full check set**.
+a change to the selector's own sources — **fails open to the full check set**.
+That includes this file: the Testing Matrix above is the prose the ownership
+rules mirror, so `docs/agents/testing.md` is selector-owning
+(`SELECTOR_OWNING_DOCS` in `scripts/check-affected/model.ts`) and outranks the
+docs-only short-circuit its path would otherwise take. If the matrix moves
+again, move that entry with it.
 The plan documents the rule and changed path behind every selected check.
 
 Model and catalog live under `scripts/check-affected/`; the derivation is guarded

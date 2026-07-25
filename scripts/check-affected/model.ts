@@ -106,9 +106,17 @@ const ROOT_TOOLING = new Set([
   '.npmrc',
 ]);
 
+// Prose that specifies this selector's own behavior — the Testing Matrix these
+// ownership rules mirror. It is docs by path, but editing it can invalidate the
+// derivation below, and the selector cannot tell whether it did. Keep this in
+// sync when the matrix moves; the docs short-circuit would otherwise treat it as
+// inert Markdown.
+const SELECTOR_OWNING_DOCS = new Set(['docs/agents/testing.md']);
+
 function isSelectorOwning(file: string): boolean {
   return (
-    file === 'AGENTS.md' || (file.startsWith('scripts/check-affected/') && !file.endsWith('.md'))
+    SELECTOR_OWNING_DOCS.has(file) ||
+    (file.startsWith('scripts/check-affected/') && !file.endsWith('.md'))
   );
 }
 
@@ -221,7 +229,8 @@ const nodeIntegrationOwnership: OwnershipRule = ({ file }) =>
     : [];
 
 // SkillGym validates skill guidance (`skills/`) and owns its harness
-// (`test/skillgym/`); AGENTS.md routes skill-prompt/assertion changes here.
+// (`test/skillgym/`); the Testing Matrix in docs/agents/testing.md routes
+// skill-prompt/assertion changes here.
 const skillgymOwnership: OwnershipRule = ({ file, underSkills }) =>
   underSkills || file.startsWith('test/skillgym/')
     ? [
