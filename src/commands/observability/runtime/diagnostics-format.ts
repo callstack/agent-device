@@ -12,7 +12,7 @@ import type {
 import {
   redactNetworkLogText as redactText,
   redactNetworkUrl,
-} from '../../../observability-redaction.ts';
+} from '../../../kernel/observability-redaction.ts';
 
 const PAYLOAD_MAX_CHARS = 2048;
 const MESSAGE_MAX_CHARS = 4096;

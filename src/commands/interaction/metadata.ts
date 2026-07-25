@@ -20,7 +20,7 @@ import {
   type InferCommandInput,
 } from '../command-input.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
-import { CLICK_BUTTONS } from '../../core/click-button.ts';
+import { CLICK_BUTTONS } from '../../contracts/click-button.ts';
 import { SCROLL_DURATION_MAX_MS } from '../../contracts/scroll-command.ts';
 import {
   SCROLL_DIRECTIONS,

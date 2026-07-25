@@ -1,5 +1,5 @@
 import type { RecordOptions } from '../../client/client-types.ts';
-import { RECORDING_EXPORT_QUALITIES } from '../../core/recording-export-quality.ts';
+import { RECORDING_EXPORT_QUALITIES } from '../../contracts/recording-export-quality.ts';
 import { RECORDING_SCOPE_VALUES } from '../../contracts/recording-scope.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';

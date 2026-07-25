@@ -1,9 +1,9 @@
 import type { CliFlags } from '../commands/cli-grammar/flag-types.ts';
-import { mergeDefinedFlags } from './merge-flags.ts';
-import { finalizeParsedArgs, parseRawArgs } from '../cli/parser/args.ts';
-import { resolveConfigBackedFlagDefaults } from './cli-config.ts';
-import { resolveRemoteConfigDefaults } from './remote-config.ts';
-import type { EnvMap } from './env-map.ts';
+import { mergeDefinedFlags } from '../utils/merge-flags.ts';
+import { finalizeParsedArgs, parseRawArgs } from './parser/args.ts';
+import { resolveConfigBackedFlagDefaults } from '../cli-schema/cli-config.ts';
+import { resolveRemoteConfigDefaults } from '../utils/remote-config.ts';
+import type { EnvMap } from '../utils/env-map.ts';
 
 export function resolveCliOptions(
   argv: string[],

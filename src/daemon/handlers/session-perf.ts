@@ -1,8 +1,9 @@
+import type { PerfMetricsSamplerTag } from '../../contracts/perf.ts';
 import path from 'node:path';
 import type { SessionAction, SessionState } from '../types.ts';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
 import { isApplePlatform, publicPlatformString } from '../../kernel/device.ts';
-import { tryGetPlugin } from '../../core/platform-plugin/plugin.ts';
+import { tryGetPlugin } from '../../contracts/platform-plugin.ts';
 import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import {
@@ -80,17 +81,6 @@ type BuildPerfMemoryResponseOptions = BuildPerfResponseOptions & {
 };
 
 const RELATED_PERF_ACTION_LIMIT = 12;
-
-/**
- * The daemon-owned `perf metrics` sampler discriminant. A PLATFORM-NEUTRAL string tag
- * naming which family owns a device's `perf metrics` sampler; the daemon maps it back to
- * the concrete sampler via {@link PERF_METRICS_SAMPLERS_BY_TAG}. The
- * {@link PlatformPlugin.perf} facet returns this tag (type-only in the plugin, exactly
- * like {@link RecordingBackendTag} for recording), so core/platforms never carry the
- * daemon-owned sampling composition. Only families that expose perf metrics carry the tag
- * (Apple + Android); it is consulted solely after the support gate admits the platform.
- */
-export type PerfMetricsSamplerTag = 'apple' | 'android';
 
 type SampledPerfMetrics = {
   memory: SettledMetricResult;

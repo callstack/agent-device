@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { CloudArtifact, CloudArtifactsResult } from '../cloud-artifacts.ts';
+import type { CloudArtifact, CloudArtifactsResult } from '../contracts/cloud-artifacts.ts';
 import {
   createCloudWebDriverCapabilities,
   type CloudWebDriverCapabilityOverrides,

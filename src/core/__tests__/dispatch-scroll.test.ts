@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { dispatchCommand } from '../dispatch.ts';
 import { handleLongPressCommand, handleScrollCommand } from '../dispatch-interactions.ts';
 import { AppError } from '../../kernel/errors.ts';
-import type { Interactor } from '../interactor-types.ts';
+import type { Interactor } from '../../contracts/interactor-types.ts';
 import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 
 test('dispatch scroll rejects mixing amount and --pixels', async () => {

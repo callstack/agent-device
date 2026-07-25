@@ -14,7 +14,7 @@ import {
   recordingExtensionForPlatform,
 } from '../recording/output-path.ts';
 import { uploadArtifact } from './upload-client.ts';
-import { createStderrUploadProgressReporter, type UploadProgressSink } from '../upload-progress.ts';
+import { createStderrUploadProgressReporter, type UploadProgressSink } from './upload-progress.ts';
 
 // Mirrors the current daemon RPC timeout, but artifact download timeouts may diverge.
 const REMOTE_ARTIFACT_DOWNLOAD_TIMEOUT_MS = 90_000;

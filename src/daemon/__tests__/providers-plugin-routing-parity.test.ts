@@ -1,3 +1,4 @@
+import type { PlatformGatedProviderResolverKey } from '../../contracts/platform-providers.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
@@ -21,11 +22,10 @@ import {
   VISIONOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
 } from '../../__tests__/test-utils/index.ts';
-import { getPlugin, tryGetPlugin } from '../../core/platform-plugin/plugin.ts';
+import { getPlugin, tryGetPlugin } from '../../contracts/platform-plugin.ts';
 import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';
 import {
   withRequestPlatformProviderScope,
-  type PlatformGatedProviderResolverKey,
   type PlatformProviderResolvers,
 } from '../request-platform-providers.ts';
 import type { DaemonRequest } from '../types.ts';

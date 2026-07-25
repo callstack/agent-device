@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { isAudioProbeSupportedDevice } from '../../../kernel/audio-probe-support.ts';
+import { isAudioProbeSupportedDevice } from '../../kernel/audio-probe-support.ts';
 import {
   isIosFamily,
   isMacOs,
@@ -11,7 +11,7 @@ import {
   type DeviceInfo,
   type DeviceKind,
   type DeviceTarget,
-} from '../../../kernel/device.ts';
+} from '../../kernel/device.ts';
 import {
   ANDROID_EMULATOR,
   ANDROID_TV_DEVICE,
@@ -23,10 +23,10 @@ import {
   TVOS_SIMULATOR,
   VISIONOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
-} from '../../../__tests__/test-utils/index.ts';
-import { APPLE_OS_CAPABILITIES } from '../../../platforms/apple/capabilities.ts';
-import { getPlugin } from '../plugin.ts';
-import { registerBuiltinPlatformPlugins } from '../../interactors/register-builtins.ts';
+} from '../../__tests__/test-utils/index.ts';
+import { APPLE_OS_CAPABILITIES } from '../../platforms/apple/capabilities.ts';
+import { getPlugin } from '../platform-plugin.ts';
+import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';
 
 // Phase 3 step d.5 table-equivalence gate. The AppleOS-axis predicates
 // (`target !== 'tv'` / `platform !== 'macos'` / `isTvOsDevice`) that used to be

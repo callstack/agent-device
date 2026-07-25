@@ -1,5 +1,5 @@
 import { listCliCommandNames } from '../command-catalog.ts';
-import { cliAliasesForCommand, normalizeCliCommandAlias } from '../cli-command-aliases.ts';
+import { cliAliasesForCommand, normalizeCliCommandAlias } from './cli-command-aliases.ts';
 import { buildCommandUsage } from '../cli-schema/usage.ts';
 import type { DaemonCommandRoute } from '../daemon/daemon-command-registry.ts';
 import { commandDescriptors, type Command } from '../core/command-descriptor/registry.ts';

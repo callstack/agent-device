@@ -8,7 +8,11 @@ import {
 } from '@limrun/api/ios-client';
 import type { DeviceRotation } from '../../contracts/device-rotation.ts';
 import { isDeepLinkTarget } from '../../contracts/open-target.ts';
-import type { Interactor, SnapshotOptions, SnapshotResult } from '../../core/interactor-types.ts';
+import type {
+  Interactor,
+  SnapshotOptions,
+  SnapshotResult,
+} from '../../contracts/interactor-types.ts';
 import type { DeviceLease } from '../../daemon/lease-registry.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';

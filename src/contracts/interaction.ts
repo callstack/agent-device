@@ -1,6 +1,6 @@
 import type { Point, SnapshotNode } from '../kernel/snapshot.ts';
 import type { ResponseCost } from '../kernel/contracts.ts';
-import type { ClickButton } from '../core/click-button.ts';
+import type { ClickButton } from './click-button.ts';
 
 export type SelectorTarget = {
   kind: 'selector';

@@ -1,6 +1,6 @@
 import { scrubReplayVarValues, type ReplayVarScrubEntry } from '../../replay/divergence.ts';
 import { formatDivergenceActionLabel } from '../../replay/script-utils.ts';
-import type { SnapshotDiagnosticsSummary } from '../../snapshot-diagnostics.ts';
+import type { SnapshotDiagnosticsSummary } from '../../contracts/snapshot-diagnostics.ts';
 import { buildDisplayPositionals } from '../session-event-action.ts';
 import type { DaemonResponse, SessionAction } from '../types.ts';
 

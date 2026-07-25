@@ -1,4 +1,4 @@
-import type { AlertAction, AlertInfo } from './alert-contract.ts';
+import type { AlertAction, AlertInfo } from './contracts/alert-contract.ts';
 import type { AppsFilter } from './contracts/app-inventory.ts';
 import type { JsonObject } from './contracts/json.ts';
 import type {
@@ -12,15 +12,15 @@ import type { NetworkIncludeMode } from './kernel/contracts.ts';
 import type { DeviceTarget, Platform, PlatformSelector, PublicPlatform } from './kernel/device.ts';
 import type { BackMode } from './contracts/back-mode.ts';
 import type { RepeatedInput } from './commands/command-input.ts';
-import type { ClickButton } from './core/click-button.ts';
+import type { ClickButton } from './contracts/click-button.ts';
 import type { DeviceRotation } from './contracts/device-rotation.ts';
 import type { ScrollDirection } from './contracts/scroll-gesture.ts';
 import type { SessionSurface } from './contracts/session-surface.ts';
 import type { TvRemoteButton } from './contracts/tv-remote.ts';
 import type { GesturePlan } from './contracts/gesture-plan-types.ts';
-import type { RecordingExportQuality } from './core/recording-export-quality.ts';
-import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
-import type { SnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
+import type { RecordingExportQuality } from './contracts/recording-export-quality.ts';
+import type { SnapshotDiagnosticsSummary } from './contracts/snapshot-diagnostics.ts';
+import type { SnapshotCaptureAnnotations } from './contracts/snapshot-capture-annotations.ts';
 import type { ScreenshotResultData } from './utils/screenshot-result.ts';
 
 // The backend's public leaf platform (approach b): backends distinguish iOS from

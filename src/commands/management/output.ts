@@ -22,14 +22,14 @@ import type {
   AgentArtifactsResult,
   CloudArtifactsResult,
   DaemonArtifactsResult,
-} from '../../cloud-artifacts.ts';
+} from '../../contracts/cloud-artifacts.ts';
 import { readCommandMessage } from '../../utils/success-text.ts';
 import type { CliOutput } from '../command-contract.ts';
 import {
   consumeDoctorProgressRendered,
   formatDoctorCheckDetailLines,
   formatDoctorCheckSummaryLine,
-} from '../../cli-doctor-output.ts';
+} from '../../contracts/cli-doctor-output.ts';
 import {
   messageCliOutput,
   messageOutput,

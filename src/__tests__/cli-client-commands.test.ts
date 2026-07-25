@@ -15,7 +15,7 @@ import type {
 } from '../agent-device-client.ts';
 import type { SettingsUpdateOptions } from '../client/client-types.ts';
 import { AppError } from '../kernel/errors.ts';
-import { resolveCliOptions } from '../utils/cli-options.ts';
+import { resolveCliOptions } from '../cli/resolve-cli-options.ts';
 
 test('install-from-source forwards URL and repeated headers to client.apps.installFromSource', async () => {
   let observed: AppInstallFromSourceOptions | undefined;

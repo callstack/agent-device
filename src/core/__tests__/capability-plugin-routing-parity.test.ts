@@ -29,7 +29,7 @@ import {
   unsupportedHintForDevice,
   type CommandCapability,
 } from '../capabilities.ts';
-import { getPlugin } from '../platform-plugin/plugin.ts';
+import { getPlugin } from '../../contracts/platform-plugin.ts';
 import { registerBuiltinPlatformPlugins } from '../interactors/register-builtins.ts';
 
 // Phase 3 step (b) parity gate. Independent oracles pin that the migration is

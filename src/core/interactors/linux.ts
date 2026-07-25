@@ -20,7 +20,7 @@ import {
 import { singlePointerPlanEndpoints } from '../../contracts/gesture-plan.ts';
 import { screenshotLinux } from '../../platforms/linux/screenshot.ts';
 import { snapshotLinux } from '../../platforms/linux/snapshot.ts';
-import type { Interactor } from '../interactor-types.ts';
+import type { Interactor } from '../../contracts/interactor-types.ts';
 
 export function createLinuxInteractor(): Interactor {
   return {

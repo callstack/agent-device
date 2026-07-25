@@ -1,4 +1,4 @@
-import type { DaemonArtifactType } from './kernel/contracts.ts';
+import type { DaemonArtifactType } from '../kernel/contracts.ts';
 
 const CLOUD_ARTIFACT_KINDS = [
   'video',

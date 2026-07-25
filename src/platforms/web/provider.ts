@@ -3,7 +3,7 @@ import type { SessionSurface } from '../../contracts/session-surface.ts';
 import { createScopedProvider } from '../../utils/scoped-provider.ts';
 import type { RawSnapshotNode } from '../../kernel/snapshot.ts';
 import type { BackendDumpNetworkOptions, BackendDumpNetworkResult } from '../../backend.ts';
-import type { AudioProbeResult } from '../../audio-probe-result.ts';
+import type { AudioProbeResult } from '../../contracts/audio-probe-result.ts';
 import { createAgentBrowserWebProvider } from './agent-browser-provider.ts';
 
 export type WebOpenOptions = {

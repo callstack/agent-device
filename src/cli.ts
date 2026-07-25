@@ -1,7 +1,7 @@
 import { parseRawArgs, usage, usageForCommand } from './cli/parser/args.ts';
 import { suggestCommandFor } from './cli/parser/command-suggestions.ts';
 import { asAppError, AppError, normalizeError } from './kernel/errors.ts';
-import { throwDaemonError } from './daemon-error.ts';
+import { throwDaemonError } from './kernel/daemon-error.ts';
 import { printHumanError, printJson } from './utils/output.ts';
 import { readVersion } from './utils/version.ts';
 import { pathToFileURL } from 'node:url';
@@ -29,7 +29,7 @@ import {
 } from './utils/diagnostics.ts';
 import { resolveDaemonPaths } from './daemon/config.ts';
 import { applyDefaultPlatformBinding, resolveBindingSettings } from './utils/session-binding.ts';
-import { resolveCliOptions } from './utils/cli-options.ts';
+import { resolveCliOptions } from './cli/resolve-cli-options.ts';
 import { maybeRunUpgradeNotifier } from './utils/update-check.ts';
 import {
   resolveRemoteConnectionDefaults,

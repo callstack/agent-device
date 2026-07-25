@@ -1,6 +1,6 @@
 import { deriveCapabilityMatrix } from './command-descriptor/derive.ts';
 import { commandDescriptors } from './command-descriptor/registry.ts';
-import { tryGetPlugin } from './platform-plugin/plugin.ts';
+import { tryGetPlugin } from '../contracts/platform-plugin.ts';
 import { registerBuiltinPlatformPlugins } from './interactors/register-builtins.ts';
 import type { DeviceInfo } from '../kernel/device.ts';
 import { AppError } from '../kernel/errors.ts';

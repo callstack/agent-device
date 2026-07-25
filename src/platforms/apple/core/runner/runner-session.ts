@@ -7,7 +7,7 @@ import {
 import { withKeyedLock } from '../../../../utils/keyed-lock.ts';
 import { Deadline } from '../../../../utils/retry.ts';
 import { isIosFamily, isApplePlatform, type DeviceInfo } from '../../../../kernel/device.ts';
-import type { RunnerLogicalLeaseContext } from '../../../../core/runner-lease-context.ts';
+import type { RunnerLogicalLeaseContext } from '../../../../contracts/runner-lease-context.ts';
 import type { AppleRunnerLifecycleOptions } from './runner-provider.ts';
 import { emitRequestProgress } from '../../../../request/progress.ts';
 import { createRequestCanceledError, getRequestSignal } from '../../../../request/cancel.ts';

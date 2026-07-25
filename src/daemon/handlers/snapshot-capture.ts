@@ -47,8 +47,8 @@ import { presentIosInteractiveSnapshot } from '../snapshot-presentation/ios/inde
 import {
   snapshotCaptureAnnotationsFrom,
   type SnapshotCaptureAnnotations,
-} from '../../snapshot-capture-annotations.ts';
-import { recordSnapshotTiming } from '../../snapshot-diagnostics.ts';
+} from '../../contracts/snapshot-capture-annotations.ts';
+import { recordSnapshotTiming } from '../../contracts/snapshot-diagnostics.ts';
 
 type CaptureSnapshotParams = {
   device: SessionState['device'];

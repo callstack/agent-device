@@ -26,7 +26,7 @@ import type {
   Interactor,
   RunnerCallOptions,
   RunnerContext,
-} from '../../core/interactor-types.ts';
+} from '../../contracts/interactor-types.ts';
 
 export type AppleBackRunnerCommand = 'backInApp' | 'backSystem';
 type RunAppleRunnerCommand = typeof runAppleRunnerCommand;

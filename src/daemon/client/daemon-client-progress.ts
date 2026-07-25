@@ -4,7 +4,7 @@ import { AppError } from '../../kernel/errors.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import type { RequestProgressEvent, RequestProgressSink } from '../../request/progress.ts';
 import { consumeTextLines } from '../../utils/line-stream.ts';
-import { markDoctorProgressRendered } from '../../cli-doctor-output.ts';
+import { markDoctorProgressRendered } from '../../contracts/cli-doctor-output.ts';
 import {
   isDaemonProgressEnvelope,
   isDaemonResponseEnvelope,

@@ -3,7 +3,7 @@ import pathModule from 'node:path';
 import { AppError } from '../kernel/errors.ts';
 import { isIosFamily, type DeviceInfo } from '../kernel/device.ts';
 import { getInteractor } from './interactors.ts';
-import type { Interactor, RunnerContext } from './interactor-types.ts';
+import type { Interactor, RunnerContext } from '../contracts/interactor-types.ts';
 import { isDeepLinkTarget } from '../contracts/open-target.ts';
 import { parseTriggerAppEventArgs, resolveAppEventUrl } from './app-events.ts';
 import {

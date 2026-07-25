@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import type { CloudArtifact, CloudProviderSessionResult } from '../../cloud-artifacts.ts';
+import type { CloudArtifact, CloudProviderSessionResult } from '../../contracts/cloud-artifacts.ts';
 import { resolveDaemonPaths } from '../../daemon/config.ts';
 import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
 import {

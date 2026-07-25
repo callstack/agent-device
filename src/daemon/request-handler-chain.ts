@@ -1,5 +1,5 @@
 import type { CommandFlags } from '../core/dispatch.ts';
-import type { CloudArtifactProvider } from '../cloud-artifacts.ts';
+import type { CloudArtifactProvider } from '../contracts/cloud-artifacts.ts';
 import type { AndroidAdbExecutor } from '../platforms/android/adb-executor.ts';
 import { AppError } from '../kernel/errors.ts';
 import { getDaemonCommandRoute } from './daemon-command-registry.ts';

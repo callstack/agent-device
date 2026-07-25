@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import type { RunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
-import type { Interactor, RunnerContext } from '../../core/interactor-types.ts';
+import type { Interactor, RunnerContext } from '../../contracts/interactor-types.ts';
 import {
   setActiveProviderDeviceRuntimes,
   type ProviderDeviceRuntime,

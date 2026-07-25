@@ -1,5 +1,5 @@
 import type { AppleOS, DeviceKind, DeviceTarget, PublicPlatform } from '../kernel/device.ts';
-import type { TargetShutdownResult } from '../target-shutdown-contract.ts';
+import type { TargetShutdownResult } from './target-shutdown-contract.ts';
 
 /**
  * Closed result of the `boot` command. Mirrors the daemon handler's only

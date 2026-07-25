@@ -5,13 +5,13 @@ import {
   parseBatchStepRuntime,
   readBatchStepInputObject,
   readBatchStepRecord,
-} from '../../batch-contract.ts';
+} from '../../contracts/batch-contract.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { type SessionRuntimeHints } from '../../kernel/contracts.ts';
 import {
   STRUCTURED_BATCH_COMMAND_NAMES,
   readStructuredBatchCommandName,
-} from '../../batch-policy.ts';
+} from '../../core/batch-policy.ts';
 import {
   defineCommandMetadata,
   type CommandMetadata,

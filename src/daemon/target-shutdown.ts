@@ -1,6 +1,6 @@
 import { runAndroidAdb } from '../platforms/android/adb.ts';
 import { getSimulatorState, shutdownSimulator } from '../platforms/apple/core/simulator.ts';
-import type { TargetShutdownResult } from '../target-shutdown-contract.ts';
+import type { TargetShutdownResult } from '../contracts/target-shutdown-contract.ts';
 import type { DeviceInfo } from '../kernel/device.ts';
 import { normalizeError } from '../kernel/errors.ts';
 import { isAndroidEmulator, isIosSimulator } from './device-targets.ts';

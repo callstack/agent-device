@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { PLATFORMS, type Platform } from '../../../kernel/device.ts';
-import { AppError } from '../../../kernel/errors.ts';
-import { getPlugin, registeredPlatforms, registerPlatformPlugin, tryGetPlugin } from '../plugin.ts';
+import { PLATFORMS, type Platform } from '../../kernel/device.ts';
+import { AppError } from '../../kernel/errors.ts';
+import { getPlugin, registeredPlatforms, registerPlatformPlugin, tryGetPlugin } from '../platform-plugin.ts';
 import {
   BUILTIN_PLATFORM_PLUGINS,
   registerBuiltinPlatformPlugins,
-} from '../../interactors/register-builtins.ts';
+} from '../../core/interactors/register-builtins.ts';
 
 // Idempotently populate the registry for this test module.
 registerBuiltinPlatformPlugins();

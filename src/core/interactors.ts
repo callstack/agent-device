@@ -1,8 +1,8 @@
 import { publicPlatformString, type DeviceInfo } from '../kernel/device.ts';
 import { AppError } from '../kernel/errors.ts';
 import { getProviderDeviceInteractor, isActiveProviderDevice } from '../provider-device-runtime.ts';
-import type { Interactor, RunnerContext } from './interactor-types.ts';
-import { getPlugin } from './platform-plugin/plugin.ts';
+import type { Interactor, RunnerContext } from '../contracts/interactor-types.ts';
+import { getPlugin } from '../contracts/platform-plugin.ts';
 import { registerBuiltinPlatformPlugins } from './interactors/register-builtins.ts';
 
 // Populate the platform-plugin registry once, at module load (only registers

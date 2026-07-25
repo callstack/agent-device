@@ -19,8 +19,8 @@ import type {
   InternalRequestOptions,
   MaterializationReleaseResult,
   StartupPerfSample,
-  TargetShutdownResult,
 } from './client-types.ts';
+import type { TargetShutdownResult } from '../contracts/target-shutdown-contract.ts';
 import {
   asRecord,
   isRecord,

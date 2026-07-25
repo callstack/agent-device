@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { throwDaemonError } from '../daemon-error.ts';
+import { throwDaemonError } from '../kernel/daemon-error.ts';
 import { AppError, normalizeError } from '../kernel/errors.ts';
 import type { DaemonError } from '../kernel/contracts.ts';
 

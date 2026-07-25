@@ -9,7 +9,7 @@ import {
   buttonTag,
   getClickButtonValidationError,
   resolveClickButton,
-} from '../../core/click-button.ts';
+} from '../../contracts/click-button.ts';
 import type {
   FillCommandResult,
   InteractionTarget,

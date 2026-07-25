@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { STRUCTURED_BATCH_COMMAND_NAMES } from '../../../batch-policy.ts';
+import { STRUCTURED_BATCH_COMMAND_NAMES } from '../../batch-policy.ts';
 import {
   INTERNAL_COMMANDS,
   listCliCommandNames,

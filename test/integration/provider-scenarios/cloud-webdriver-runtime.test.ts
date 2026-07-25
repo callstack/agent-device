@@ -8,7 +8,7 @@ import { createDefaultCloudWebDriverProviderRuntimes } from '../../../src/cloud-
 import { scrollFrameFromWebDriverSource } from '../../../src/cloud-webdriver/webdriver-scroll-frame.ts';
 import { parseWebDriverSource } from '../../../src/cloud-webdriver/webdriver-source.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS } from '../../../src/cloud-webdriver/providers.ts';
-import type { CloudArtifact } from '../../../src/cloud-artifacts.ts';
+import type { CloudArtifact } from '../../../src/contracts/cloud-artifacts.ts';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
 import { createExpiredProviderLeaseReleaser } from '../../../src/daemon/provider-lease-expiry.ts';
 import type { DeviceLease } from '../../../src/daemon/lease-registry.ts';

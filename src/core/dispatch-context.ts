@@ -2,11 +2,11 @@ import type { CliFlags, DaemonExcludedCliFlag } from '../contracts/cli-flags.ts'
 import type { ScreenshotDispatchFlags } from '../contracts/screenshot.ts';
 import type { DaemonBatchStep } from './batch.ts';
 import type { BackMode } from '../contracts/back-mode.ts';
-import type { ClickButton } from './click-button.ts';
-import type { ElementSelectorKey } from './interactor-types.ts';
+import type { ClickButton } from '../contracts/click-button.ts';
+import type { ElementSelectorKey } from '../contracts/interactor-types.ts';
 import type { SwipePattern } from '../contracts/scroll-gesture.ts';
 import type { SessionSurface } from '../contracts/session-surface.ts';
-import type { RunnerLogicalLeaseContext } from './runner-lease-context.ts';
+import type { RunnerLogicalLeaseContext } from '../contracts/runner-lease-context.ts';
 import type { Point } from '../kernel/snapshot.ts';
 
 export type MaestroRuntimeFlags = {

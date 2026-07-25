@@ -4,7 +4,7 @@ import {
   RECORDING_EXPORT_QUALITIES,
   isRecordingExportQuality,
   recordingQualityInputToExportQuality,
-} from '../recording-export-quality.ts';
+} from '../../contracts/recording-export-quality.ts';
 
 describe('recording export quality', () => {
   test('defaults to the fast medium export to preserve existing behavior', () => {

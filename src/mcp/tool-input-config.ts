@@ -2,7 +2,7 @@ import { isFlagSupportedForCommand } from '../cli-schema/option-schema.ts';
 import type { CliFlags, FlagKey } from '../commands/cli-grammar/flag-types.ts';
 import type { JsonSchema } from '../commands/command-contract.ts';
 import type { CommandName } from '../commands/command-metadata.ts';
-import { resolveConfigBackedFlagDefaults } from '../utils/cli-config.ts';
+import { resolveConfigBackedFlagDefaults } from '../cli-schema/cli-config.ts';
 import { mergeDefinedFlags } from '../utils/merge-flags.ts';
 
 export function resolveMcpConfigDefaults(

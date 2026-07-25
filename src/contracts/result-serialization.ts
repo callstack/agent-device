@@ -13,7 +13,7 @@ import type {
 import {
   publicSnapshotCaptureAnnotations,
   type SnapshotCaptureAnnotations,
-} from '../snapshot-capture-annotations.ts';
+} from './snapshot-capture-annotations.ts';
 import { isSerialAddressablePlatform, type PublicPlatform } from '../kernel/device.ts';
 import { successText, withSuccessText } from '../utils/success-text.ts';
 

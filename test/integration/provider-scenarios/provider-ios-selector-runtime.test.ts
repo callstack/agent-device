@@ -5,7 +5,7 @@ import {
   type ProviderDeviceRuntime,
 } from '../../../src/provider-device-runtime.ts';
 import type { DeviceInventoryProvider } from '../../../src/core/dispatch-resolve.ts';
-import type { Interactor, SnapshotResult } from '../../../src/core/interactor-types.ts';
+import type { Interactor, SnapshotResult } from '../../../src/contracts/interactor-types.ts';
 import type { LeaseLifecycleProvider } from '../../../src/daemon/handlers/lease.ts';
 import type { DeviceLease } from '../../../src/daemon/lease-registry.ts';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';

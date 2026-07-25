@@ -1,11 +1,11 @@
-import { AppError } from '../../kernel/errors.ts';
-import type { DeviceInfo, Platform, PlatformSelector } from '../../kernel/device.ts';
-import type { LogBackend } from '../../daemon/network-log.ts';
-import type { RecordingBackendTag } from '../../daemon/handlers/record-trace-recording-backends.ts';
-import type { PerfMetricsSamplerTag } from '../../daemon/handlers/session-perf.ts';
-import type { PlatformGatedProviderResolverKey } from '../../daemon/request-platform-providers.ts';
-import type { Interactor, RunnerContext } from '../interactor-types.ts';
-import type { DeviceInventoryRequest } from '../../contracts/device-inventory.ts';
+import { AppError } from '../kernel/errors.ts';
+import type { DeviceInfo, Platform, PlatformSelector } from '../kernel/device.ts';
+import type { LogBackend } from './logs.ts';
+import type { RecordingBackendTag } from './recording.ts';
+import type { PerfMetricsSamplerTag } from './perf.ts';
+import type { PlatformGatedProviderResolverKey } from './platform-providers.ts';
+import type { Interactor, RunnerContext } from './interactor-types.ts';
+import type { DeviceInventoryRequest } from './device-inventory.ts';
 
 type CapabilityBucket = 'apple' | 'android' | 'vega' | 'linux' | 'web';
 

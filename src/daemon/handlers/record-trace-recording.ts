@@ -20,7 +20,7 @@ import {
   DEFAULT_RECORDING_EXPORT_QUALITY,
   RECORDING_EXPORT_QUALITIES,
   recordingQualityInputToExportQuality,
-} from '../../core/recording-export-quality.ts';
+} from '../../contracts/recording-export-quality.ts';
 import {
   RECORDING_SCOPE_VALUES,
   type RecordingScope,

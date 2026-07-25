@@ -1,16 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '../kernel/errors.ts';
-import { mergeDefinedFlags } from './merge-flags.ts';
+import { mergeDefinedFlags } from '../utils/merge-flags.ts';
 import { type CliFlags, type FlagKey } from '../commands/cli-grammar/flag-types.ts';
-import { expandUserHomePath, resolveUserPath } from './path-resolution.ts';
+import { expandUserHomePath, resolveUserPath } from '../utils/path-resolution.ts';
 import {
   getConfigurableOptionSpecs,
   getOptionSpec,
   parseOptionValueFromSource,
-} from '../cli-schema/option-schema.ts';
-import { parseInstallSourceConfig } from './install-source-config.ts';
-import type { EnvMap } from './env-map.ts';
+} from './option-schema.ts';
+import { parseInstallSourceConfig } from '../utils/install-source-config.ts';
+import type { EnvMap } from '../utils/env-map.ts';
 
 export function resolveConfigBackedFlagDefaults(options: {
   command: string | null;

@@ -1,5 +1,5 @@
 import type { CommandFlags, DispatchContext } from '../core/dispatch-context.ts';
-import { resolveClickButton } from '../core/click-button.ts';
+import { resolveClickButton } from '../contracts/click-button.ts';
 import {
   screenshotFlagsFromOptions,
   type ScreenshotRuntimeFlags,

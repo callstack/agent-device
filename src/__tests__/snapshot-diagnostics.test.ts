@@ -3,7 +3,7 @@ import {
   mergeSnapshotDiagnostics,
   recordSnapshotTiming,
   summarizeSnapshotDiagnostics,
-} from '../snapshot-diagnostics.ts';
+} from '../contracts/snapshot-diagnostics.ts';
 
 test('records session snapshot timing stats', () => {
   const session = {};

@@ -3,7 +3,7 @@ import { BACK_MODES } from '../contracts/back-mode.ts';
 import { RECORDING_SCOPE_VALUES } from '../contracts/recording-scope.ts';
 import { SESSION_SURFACES } from '../contracts/session-surface.ts';
 import { SWIPE_PATTERNS } from '../contracts/scroll-gesture.ts';
-import { CLICK_BUTTONS } from '../core/click-button.ts';
+import { CLICK_BUTTONS } from '../contracts/click-button.ts';
 import { DEVICE_TARGETS, PLATFORM_SELECTORS, PUBLIC_PLATFORMS } from '../kernel/device.ts';
 import type { SessionAction } from './types.ts';
 import {

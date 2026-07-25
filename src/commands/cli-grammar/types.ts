@@ -1,7 +1,7 @@
 import type { InternalRequestOptions } from '../../client/client-types.ts';
 import type { CommandFlags } from '../../core/dispatch-context.ts';
 import type { CliFlags } from './flag-types.ts';
-import type { ClickButton } from '../../core/click-button.ts';
+import type { ClickButton } from '../../contracts/click-button.ts';
 
 export type DaemonCommandRequest = {
   command: string;

@@ -3,7 +3,7 @@ import type {
   ScreenshotOptions,
   SnapshotOptions,
   SnapshotResult,
-} from '../core/interactor-types.ts';
+} from '../contracts/interactor-types.ts';
 import type { BackMode } from '../contracts/back-mode.ts';
 import type { DeviceRotation } from '../contracts/device-rotation.ts';
 import type { ScrollDirection } from '../contracts/scroll-gesture.ts';

@@ -6,7 +6,7 @@ import type {
   ReplayTestResult,
   ReplayTestStep,
 } from './reporters/types.ts';
-import { formatCliStatusMarker } from '../../cli-status-markers.ts';
+import { formatCliStatusMarker } from '../../contracts/cli-status-markers.ts';
 import { formatDurationSeconds } from '../../utils/duration-format.ts';
 import { colorize, supportsColor } from '../../utils/output.ts';
 

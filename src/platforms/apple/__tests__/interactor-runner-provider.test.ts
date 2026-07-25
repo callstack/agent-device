@@ -4,7 +4,7 @@ import { IOS_SIMULATOR } from '../../../__tests__/test-utils/index.ts';
 import { createAppleInteractor } from '../interactor.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import type { GesturePlan } from '../../../contracts/gesture-plan-types.ts';
-import type { Interactor, RunnerContext } from '../../../core/interactor-types.ts';
+import type { Interactor, RunnerContext } from '../../../contracts/interactor-types.ts';
 import type {
   AppleRunnerCommandOptions,
   AppleRunnerProvider,

@@ -11,7 +11,7 @@ import {
 } from '../../cli-schema/command-schema.ts';
 import { isFlagSupportedForCommand } from '../../cli-schema/option-schema.ts';
 import { isKnownCliCommandName } from '../../command-catalog.ts';
-import { cliCommandAlias, normalizeCliCommandAlias } from '../../cli-command-aliases.ts';
+import { cliCommandAlias, normalizeCliCommandAlias } from '../../commands/cli-command-aliases.ts';
 import { formatUnknownFlagMessage, suggestCommandFor } from './command-suggestions.ts';
 
 type ParsedArgs = {

@@ -1,6 +1,7 @@
+import type { RecordingBackendTag } from '../../contracts/recording.ts';
 import fs from 'node:fs';
 import path from 'node:path';
-import { tryGetPlugin } from '../../core/platform-plugin/plugin.ts';
+import { tryGetPlugin } from '../../contracts/platform-plugin.ts';
 import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import type { SessionStore } from '../session-store.ts';
@@ -32,23 +33,6 @@ import type { RecordTraceDeps, RecordingBase } from './record-trace-types.ts';
 // register the builtin plugins on load so the lookup is populated (idempotent,
 // mirrors src/daemon/app-log.ts and src/daemon/handlers/session-perf.ts).
 registerBuiltinPlatformPlugins();
-
-/**
- * The daemon-owned recording-backend discriminant (issue #974). A PLATFORM-NEUTRAL
- * string tag naming which recording backend a device resolves to; the daemon maps it
- * back to the concrete {@link RecordingBackend} instance via `RECORDING_BACKENDS_BY_TAG`.
- * The {@link PlatformPlugin.recording} facet returns this tag (type-only in the plugin,
- * exactly like {@link LogBackend} for app-log), so core/platforms never construct the
- * daemon-owned backend objects. `'unsupported'` is the fallthrough for families that
- * carry no recording facet (linux) and any unregistered platform.
- */
-export type RecordingBackendTag =
-  | 'web'
-  | 'android'
-  | 'macos'
-  | 'ios-device'
-  | 'ios-simulator'
-  | 'unsupported';
 
 type ActiveRecording = NonNullable<SessionState['recording']>;
 type RecordingPlatform = ActiveRecording['platform'];

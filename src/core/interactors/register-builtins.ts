@@ -1,4 +1,4 @@
-import { registerPlatformPlugin, type PlatformPlugin } from '../platform-plugin/plugin.ts';
+import { registerPlatformPlugin, type PlatformPlugin } from '../../contracts/platform-plugin.ts';
 import { applePlugin } from '../../platforms/apple/plugin.ts';
 import { vegaPlugin } from '../../platforms/vega/plugin.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';

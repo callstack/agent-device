@@ -26,6 +26,7 @@ export type BackEdgeMap = Record<string, string[]>;
 const TARGET_DAG_RANK = new Map([
   ['kernel', 0],
   ['contracts', 1],
+  ['utils', 1],
   ['request', 1],
   ['selectors', 1],
   ['platforms', 1],
@@ -62,7 +63,6 @@ export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   'screenshot-diff',
   'sdk',
   'snapshot',
-  'utils',
 ]);
 
 export type ZoneClassification = 'ranked' | 'unranked' | 'unclassified';

@@ -1,5 +1,8 @@
 import { emitRequestProgress } from '../../request/progress.ts';
-import { formatDoctorCheckDetailLines, formatDoctorCheckSummaryLine } from '../../doctor-output.ts';
+import {
+  formatDoctorCheckDetailLines,
+  formatDoctorCheckSummaryLine,
+} from '../../contracts/doctor-output.ts';
 import type { DoctorCheck, DoctorStatus } from './session-doctor-types.ts';
 
 export function summarizeDoctorStatus(checks: DoctorCheck[]): 'pass' | 'warn' | 'fail' {

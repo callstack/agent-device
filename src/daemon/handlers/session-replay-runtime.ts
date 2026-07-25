@@ -34,7 +34,7 @@ import {
 import {
   summarizeSnapshotTimingSamples,
   type SnapshotTimingSample,
-} from '../../snapshot-diagnostics.ts';
+} from '../../contracts/snapshot-diagnostics.ts';
 import type { ReplayCommandResult } from '../../contracts/replay.ts';
 import type { ReplayDivergenceResume } from '../../replay/divergence.ts';
 import { isRecord } from '../../utils/parsing.ts';

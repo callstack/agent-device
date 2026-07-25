@@ -1,4 +1,4 @@
-import { colorize, supportsColor } from './utils/output.ts';
+import { colorize, supportsColor } from '../utils/output.ts';
 
 export type CliStatusMarkerStatus = 'pass' | 'fail' | 'warn' | 'skip';
 

@@ -40,3 +40,14 @@ export const isPerfSubject = PERF_SUBJECTS.is;
 export const isPerfKind = PERF_KINDS.is;
 
 export const isPerfMemoryKind = PERF_MEMORY_KINDS.is;
+
+/**
+ * The daemon-owned `perf metrics` sampler discriminant. A PLATFORM-NEUTRAL string tag
+ * naming which family owns a device's `perf metrics` sampler; the daemon maps it back to
+ * the concrete sampler via {@link PERF_METRICS_SAMPLERS_BY_TAG}. The
+ * {@link PlatformPlugin.perf} facet returns this tag (type-only in the plugin, exactly
+ * like {@link RecordingBackendTag} for recording), so core/platforms never carry the
+ * daemon-owned sampling composition. Only families that expose perf metrics carry the tag
+ * (Apple + Android); it is consulted solely after the support gate admits the platform.
+ */
+export type PerfMetricsSamplerTag = 'apple' | 'android';

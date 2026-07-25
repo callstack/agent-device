@@ -16,7 +16,7 @@ import { runReplayTestAttempt } from './session-test-runtime.ts';
 import type { ReplayTestRuntimeDependencies } from './session-test-types.ts';
 import type { ReplayTestShardContext } from './session-test-sharding.ts';
 import { isRequestCanceled } from '../../request/cancel.ts';
-import { readSnapshotDiagnosticsSummary } from '../../snapshot-diagnostics.ts';
+import { readSnapshotDiagnosticsSummary } from '../../contracts/snapshot-diagnostics.ts';
 
 type ReplayTestCaseResult = Extract<ReplaySuiteTestResult, { status: 'passed' | 'failed' }>;
 type ReplayTestAttemptFailure = NonNullable<

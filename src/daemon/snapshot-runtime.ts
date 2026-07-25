@@ -9,7 +9,7 @@ import { SessionStore } from './session-store.ts';
 import { isInteractiveObservation } from './session-action-recorder.ts';
 import { errorResponse, requireCommandSupported } from './handlers/response.ts';
 import { captureSnapshot, resolveSnapshotScope } from './handlers/snapshot-capture.ts';
-import { snapshotCaptureAnnotationsFrom } from '../snapshot-capture-annotations.ts';
+import { snapshotCaptureAnnotationsFrom } from '../contracts/snapshot-capture-annotations.ts';
 import {
   buildSnapshotSession,
   resolveSessionDevice,
@@ -18,7 +18,7 @@ import {
 import { createDaemonRuntimePolicy } from './runtime-policy.ts';
 import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
 import { maybeBuildAndroidSnapshotTimeoutFailure } from './android-snapshot-timeout-evidence.ts';
-import { summarizeSnapshotDiagnostics } from '../snapshot-diagnostics.ts';
+import { summarizeSnapshotDiagnostics } from '../contracts/snapshot-diagnostics.ts';
 import { nextSnapshotGeneration } from './session-snapshot.ts';
 import { activateCompleteRefFrame } from './ref-frame.ts';
 import { stripAndroidSystemChromeProvenance } from '../contracts/android-system-chrome.ts';

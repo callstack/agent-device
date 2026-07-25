@@ -5,7 +5,7 @@ import {
   type InstanceClient as LimrunAndroidClient,
 } from '@limrun/api/instance-client';
 import { createAndroidInteractor } from '../../core/interactors/android.ts';
-import type { Interactor } from '../../core/interactor-types.ts';
+import type { Interactor } from '../../contracts/interactor-types.ts';
 import type { DeviceLease } from '../../daemon/lease-registry.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';

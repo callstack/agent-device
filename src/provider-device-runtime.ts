@@ -3,8 +3,8 @@ import type {
   CloudArtifactProvider,
   CloudArtifactsQuery,
   CloudArtifactsResult,
-} from './cloud-artifacts.ts';
-import type { Interactor, RunnerContext } from './core/interactor-types.ts';
+} from './contracts/cloud-artifacts.ts';
+import type { Interactor, RunnerContext } from './contracts/interactor-types.ts';
 import type { DeviceInventoryProvider } from './core/dispatch-resolve.ts';
 import type { AppleRunnerProviderResolver } from './daemon/request-platform-providers.ts';
 import type {

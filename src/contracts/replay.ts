@@ -1,5 +1,5 @@
 import type { DaemonError } from '../kernel/contracts.ts';
-import type { SnapshotDiagnosticsSummary } from '../snapshot-diagnostics.ts';
+import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
 
 export type ReplayCommandResult = {
   replayed: number;

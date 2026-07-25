@@ -18,7 +18,7 @@ import {
   type ReplayVarScrubEntry,
 } from '../../replay/divergence.ts';
 import { formatScriptArg } from '../../replay/script-utils.ts';
-import type { SnapshotDiagnosticsSummary } from '../../snapshot-diagnostics.ts';
+import type { SnapshotDiagnosticsSummary } from '../../contracts/snapshot-diagnostics.ts';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import type { ReplayReportAction } from './session-replay-report-action.ts';

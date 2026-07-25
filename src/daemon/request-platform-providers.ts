@@ -1,6 +1,7 @@
+import type { PlatformGatedProviderResolverKey } from '../contracts/platform-providers.ts';
 import { resolveTargetDevice } from '../core/dispatch-resolve.ts';
 import { registerBuiltinPlatformPlugins } from '../core/interactors/register-builtins.ts';
-import { tryGetPlugin } from '../core/platform-plugin/plugin.ts';
+import { tryGetPlugin } from '../contracts/platform-plugin.ts';
 import type { AndroidAdbExecutor, AndroidAdbProvider } from '../platforms/android/adb-executor.ts';
 import type {
   AppleRunnerCommandExecutor,
@@ -61,27 +62,6 @@ export type PlatformProviderResolvers = {
   appLogProvider?: AppLogProviderResolver;
   recordingProvider?: RecordingProviderResolver;
 };
-
-/**
- * The request provider resolvers whose application is PLATFORM-GATED — each ran behind
- * a hand `device.platform === …` predicate inside its descriptor's `resolve`. The
- * PlatformPlugin `providers` facet (issue #974) declares, per family, which of these
- * apply to that family's devices (data-only: a plain string list, type-only in the
- * plugin), and `platformGatedResolverApplies` routes the gate through it. The daemon
- * still OWNS the resolver invocation, wrapper composition, and request-scope
- * concurrency isolation — only the platform GATE moved to data.
- *
- * `appLogProvider` / `recordingProvider` are deliberately ABSENT: they carry no
- * platform gate (they apply on every platform), so they stay ungated in the daemon and
- * are not part of the facet.
- */
-export type PlatformGatedProviderResolverKey =
-  | 'androidAdbProvider'
-  | 'appleRunnerProvider'
-  | 'appleToolProvider'
-  | 'vegaToolProvider'
-  | 'linuxToolProvider'
-  | 'webProvider';
 
 // Compile-time: every gated key is a real resolver key (so the facet can never name a
 // resolver the daemon does not compose).

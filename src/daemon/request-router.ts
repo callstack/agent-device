@@ -6,7 +6,7 @@ import { AppError, normalizeError, retriableForErrorCode } from '../kernel/error
 import { supportedPlatformsForCommand } from '../core/capabilities.ts';
 import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
 import type { DaemonArtifactType, DaemonError, ResponseCost } from '../kernel/contracts.ts';
-import type { CloudArtifactProvider } from '../cloud-artifacts.ts';
+import type { CloudArtifactProvider } from '../contracts/cloud-artifacts.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, DaemonResponseData } from './types.ts';
 import { RESPONSE_VIEWS } from './response-views.ts';
 import { SessionStore } from './session-store.ts';

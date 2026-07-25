@@ -14,7 +14,7 @@ import {
 } from './commands/command-projection.ts';
 import { systemCommandFamily } from './commands/system/index.ts';
 import { buildRequestFlags } from './commands/command-flags.ts';
-import { throwDaemonError } from './daemon-error.ts';
+import { throwDaemonError } from './kernel/daemon-error.ts';
 import {
   buildMeta,
   normalizeDeployResult,
@@ -53,7 +53,6 @@ import type {
   MaterializationReleaseOptions,
   MetroPrepareOptions,
   MetroPrepareResult,
-  OrientationCommandResult,
   PanOptions,
   FlingOptions,
   RotateCommandResult,
@@ -64,16 +63,17 @@ import type {
   SessionSaveScriptResult,
   TransformGestureOptions,
 } from './client/client-types.ts';
+import type { OrientationCommandResult } from './contracts/navigation.ts';
 import type { CommandResult } from './core/command-descriptor/command-result.ts';
 import {
   isNonDefaultResponseLevel,
   type ResponseLevel,
   type SessionRuntimeHints,
 } from './kernel/contracts.ts';
-import { readSerializedSnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
-import { readSnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
+import { readSerializedSnapshotCaptureAnnotations } from './contracts/snapshot-capture-annotations.ts';
+import { readSnapshotDiagnosticsSummary } from './contracts/snapshot-diagnostics.ts';
 import type { CommandFlags } from './core/dispatch-context.ts';
-import type { AgentArtifactsResult } from './cloud-artifacts.ts';
+import type { AgentArtifactsResult } from './contracts/cloud-artifacts.ts';
 import type { ProjectedNavigationCommandClient } from './commands/system/navigation-projection.ts';
 import { AppError } from './kernel/errors.ts';
 

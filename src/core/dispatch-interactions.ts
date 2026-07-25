@@ -19,7 +19,7 @@ import {
   getClickButtonValidationError,
   resolveClickButton,
   type ClickButton,
-} from './click-button.ts';
+} from '../contracts/click-button.ts';
 import {
   captureScrollEdgeState,
   formatScrollEdgeMessage,
@@ -40,7 +40,7 @@ import {
   MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE,
   type Interactor,
   type RunnerCallOptions,
-} from './interactor-types.ts';
+} from '../contracts/interactor-types.ts';
 
 type ScrollTarget = {
   direction: ScrollDirection;

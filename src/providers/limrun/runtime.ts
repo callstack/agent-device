@@ -1,5 +1,5 @@
 import Limrun from '@limrun/api';
-import type { Interactor } from '../../core/interactor-types.ts';
+import type { Interactor } from '../../contracts/interactor-types.ts';
 import type { DeviceInventoryProvider } from '../../core/dispatch-resolve.ts';
 import type { LeaseLifecycleProvider } from '../../daemon/handlers/lease.ts';
 import type { DeviceLease } from '../../daemon/lease-registry.ts';

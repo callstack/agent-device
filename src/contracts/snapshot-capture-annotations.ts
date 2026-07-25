@@ -1,8 +1,8 @@
-import type { AndroidSnapshotBackendMetadata } from './platforms/android/snapshot-types.ts';
+import type { AndroidSnapshotBackendMetadata } from '../platforms/android/snapshot-types.ts';
 import {
   readSnapshotQualityVerdict,
   type SnapshotQualityVerdict,
-} from './snapshot/snapshot-quality.ts';
+} from '../snapshot/snapshot-quality.ts';
 
 export type SnapshotCaptureAnalysis = {
   rawNodeCount: number;

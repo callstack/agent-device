@@ -1,4 +1,4 @@
-import type { CloudArtifactsQuery, CloudArtifactsResult } from '../cloud-artifacts.ts';
+import type { CloudArtifactsQuery, CloudArtifactsResult } from '../contracts/cloud-artifacts.ts';
 import {
   findCloudWebDriverProviderDefinition,
   type DefaultCloudWebDriverArtifactEnv,

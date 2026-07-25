@@ -25,7 +25,7 @@ import {
   type ReplayTestShardPlan,
 } from './session-test-sharding.ts';
 import { isRequestCanceled } from '../../request/cancel.ts';
-import { mergeSnapshotDiagnostics } from '../../snapshot-diagnostics.ts';
+import { mergeSnapshotDiagnostics } from '../../contracts/snapshot-diagnostics.ts';
 
 type ReplayTestEntry = ReturnType<typeof discoverReplayTestEntries>[number];
 type ReplayTestQueuedEntry = {

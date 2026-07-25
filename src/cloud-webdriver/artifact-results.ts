@@ -1,4 +1,4 @@
-import type { CloudArtifact, CloudArtifactsResult } from '../cloud-artifacts.ts';
+import type { CloudArtifact, CloudArtifactsResult } from '../contracts/cloud-artifacts.ts';
 
 export function cloudArtifactsReadyOrPending(options: {
   provider: string;

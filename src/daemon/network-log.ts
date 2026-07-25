@@ -19,22 +19,10 @@ const ANDROID_PACKET_SCAN_RADIUS = 12;
 const NETWORK_LOG_MEMORY_PATH = '<memory>';
 
 import type { NetworkIncludeMode } from '../kernel/contracts.ts';
+import type { LogBackend } from '../contracts/logs.ts';
+import type { NetworkEntry } from '../contracts/network-log.ts';
 export type { NetworkIncludeMode };
-export type LogBackend = 'ios-simulator' | 'ios-device' | 'android' | 'macos';
 
-export type NetworkEntry = {
-  method?: string;
-  url: string;
-  status?: number;
-  timestamp?: string;
-  durationMs?: number;
-  packetId?: string;
-  headers?: string;
-  requestBody?: string;
-  responseBody?: string;
-  raw: string;
-  line: number;
-};
 
 export type NetworkDump = {
   path: string;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
-import type { Interactor } from '../../../core/interactor-types.ts';
+import type { Interactor } from '../../../contracts/interactor-types.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import type { DeviceInfo } from '../../../kernel/device.ts';
 import { createVegaInteractor } from '../interactor.ts';

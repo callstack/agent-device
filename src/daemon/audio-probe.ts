@@ -4,7 +4,7 @@ import {
   emptyAudioProbeResult,
   normalizeAudioProbeRecord,
   type AudioProbeResult,
-} from '../audio-probe-result.ts';
+} from '../contracts/audio-probe-result.ts';
 import type { HostAudioProbeBackend } from '../platforms/audio-probe-backend.ts';
 import { AppError } from '../kernel/errors.ts';
 import { sleep } from '../utils/timeouts.ts';

@@ -28,7 +28,7 @@ import type {
   RunnerCallOptions,
   RunnerContext,
   ScreenshotOptions,
-} from '../../core/interactor-types.ts';
+} from '../../contracts/interactor-types.ts';
 import {
   readSnapshotQualityVerdict,
   type SnapshotQualityVerdict,

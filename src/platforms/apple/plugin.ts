@@ -1,5 +1,5 @@
 import { appleOsCapabilities } from './capabilities.ts';
-import type { PlatformPlugin } from '../../core/platform-plugin/plugin.ts';
+import type { PlatformPlugin } from '../../contracts/platform-plugin.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { isAudioProbeSupportedDevice } from '../../kernel/audio-probe-support.ts';
 import {
@@ -12,7 +12,7 @@ import {
   resolveDeviceAppleOs,
   type DeviceInfo,
 } from '../../kernel/device.ts';
-import type { RunnerContext } from '../../core/interactor-types.ts';
+import type { RunnerContext } from '../../contracts/interactor-types.ts';
 
 // ---------------------------------------------------------------------------
 // Apple family per-command capability closures. Originally RELOCATED VERBATIM from

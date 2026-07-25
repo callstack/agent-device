@@ -1,5 +1,8 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { AgentArtifactsResult, CloudArtifactProvider } from '../../cloud-artifacts.ts';
+import type {
+  AgentArtifactsResult,
+  CloudArtifactProvider,
+} from '../../contracts/cloud-artifacts.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import type { DeviceLease, LeaseRegistry } from '../lease-registry.ts';
 import type { SessionStore } from '../session-store.ts';

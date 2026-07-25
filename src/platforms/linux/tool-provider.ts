@@ -3,7 +3,7 @@ import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { createScopedProvider } from '../../utils/scoped-provider.ts';
 import { sleep } from '../../utils/timeouts.ts';
-import type { ClickButton } from '../../core/click-button.ts';
+import type { ClickButton } from '../../contracts/click-button.ts';
 import type {
   LinuxAccessibilityTree,
   LinuxSnapshotSurface,

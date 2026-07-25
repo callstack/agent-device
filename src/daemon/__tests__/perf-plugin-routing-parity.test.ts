@@ -1,3 +1,4 @@
+import type { PerfMetricsSamplerTag } from '../../contracts/perf.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '../../kernel/errors.ts';
@@ -22,9 +23,9 @@ import {
   TVOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
 } from '../../__tests__/test-utils/index.ts';
-import { getPlugin } from '../../core/platform-plugin/plugin.ts';
+import { getPlugin } from '../../contracts/platform-plugin.ts';
 import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';
-import { buildPerfResponseData, type PerfMetricsSamplerTag } from '../handlers/session-perf.ts';
+import { buildPerfResponseData } from '../handlers/session-perf.ts';
 import { PERF_UNAVAILABLE_REASON } from '../handlers/session-startup-metrics.ts';
 
 // Phase 3 step b.3 (issue #974) parity gate for the daemon perf facet. The

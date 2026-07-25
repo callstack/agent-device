@@ -67,7 +67,7 @@ test('back-edge identities follow the documented target spine', () => {
       ['src/core/platform-plugin.ts', 'export const plugin = true;'],
       ['src/commands/help.ts', "import '../cli/parser.ts';"],
       ['src/cli/parser.ts', 'export const parser = true;'],
-      ['src/utils/shared.ts', "import '../core/platform-plugin.ts';"],
+      ['src/mcp/shared.ts', "import '../core/platform-plugin.ts';"],
     ]),
   );
   const actual = collectBackEdges(edges);
@@ -110,7 +110,7 @@ test('classifyZone separates the ranked spine from intentionally-unranked zones'
   assert.equal(classifyZone('kernel'), 'ranked');
   assert.equal(classifyZone('daemon-server'), 'ranked');
   assert.equal(classifyZone('(root)'), 'unranked');
-  assert.equal(classifyZone('utils'), 'unranked');
+  assert.equal(classifyZone('utils'), 'ranked');
   assert.equal(classifyZone('mcp'), 'unranked');
   // A zone that is neither ranked nor listed peripheral must be flagged, never
   // silently treated as back-edge-free.

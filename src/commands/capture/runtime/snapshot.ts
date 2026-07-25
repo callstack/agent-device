@@ -1,13 +1,13 @@
 import type { BackendSnapshotResult } from '../../../backend.ts';
 import type { DiffSnapshotCommandResult } from '../../../contracts/diff.ts';
-import type { SnapshotDiagnosticsSummary } from '../../../snapshot-diagnostics.ts';
+import type { SnapshotDiagnosticsSummary } from '../../../contracts/snapshot-diagnostics.ts';
 import type { AgentDeviceRuntime, CommandSessionRecord } from '../../../runtime-contract.ts';
 import {
   publicSnapshotCaptureAnnotations,
   snapshotCaptureAnnotationsFrom,
   type PublicSnapshotCaptureAnnotations,
   type SnapshotCaptureAnnotations,
-} from '../../../snapshot-capture-annotations.ts';
+} from '../../../contracts/snapshot-capture-annotations.ts';
 import { renderSnapshotQualityWarnings } from '../../../snapshot/snapshot-quality.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import {

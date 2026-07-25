@@ -11,13 +11,13 @@ import {
   assertBatchStepCount,
   isValidBatchMaxSteps,
   parseBatchStepRuntime,
-} from '../batch-contract.ts';
+} from '../contracts/batch-contract.ts';
 import {
   BATCH_DAEMON_STEP_KEYS,
   INHERITED_PARENT_FLAG_KEYS,
   assertBatchRuntimeCommandAllowed,
   normalizeBatchCommandName,
-} from '../batch-policy.ts';
+} from './batch-policy.ts';
 
 const batchAllowedStepKeys = new Set<string>(BATCH_DAEMON_STEP_KEYS);
 

@@ -1,5 +1,5 @@
 import { AppError } from '../kernel/errors.ts';
-import { recordingQualityInputToExportQuality } from '../core/recording-export-quality.ts';
+import { recordingQualityInputToExportQuality } from '../contracts/recording-export-quality.ts';
 import { describeReplayGestureArityError } from '../contracts/gesture-normalization.ts';
 import { readScreenshotScriptFlag } from '../contracts/screenshot.ts';
 import type { DeviceTarget, PlatformSelector } from '../kernel/device.ts';
