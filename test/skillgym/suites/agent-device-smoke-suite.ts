@@ -69,11 +69,15 @@ function buildPrompt(options: {
   contract: string[];
   task: string;
   finalOutputInstructions?: string;
+  requireLocalCliHelp?: boolean;
 }) {
   const contractLines = options.contract.map((line) => `- ${line}`).join('\n');
   const finalOutputInstructions =
     options.finalOutputInstructions ?? DEFAULT_FINAL_OUTPUT_INSTRUCTIONS;
-  return `${BASE_INSTRUCTIONS}\n${finalOutputInstructions}\n\nApp contract:\n${contractLines}\n\nTask:\n${options.task}`;
+  const helpRequirement = options.requireLocalCliHelp
+    ? '\nBefore planning, run node bin/agent-device.mjs --help and use that output as the command contract.'
+    : '';
+  return `${BASE_INSTRUCTIONS}${helpRequirement}\n${finalOutputInstructions}\n\nApp contract:\n${contractLines}\n\nTask:\n${options.task}`;
 }
 
 function assertAgentDeviceEvidence(report: SessionReport) {
@@ -366,6 +370,14 @@ function assertOnlyLocalCliHelpCommands(report: SessionReport) {
   );
 }
 
+function assertLocalCliHelpUsed(report: SessionReport) {
+  const commandEvents = extractCommandEvents(report);
+  assert.ok(
+    commandEvents.some(isLocalCliHelpCommand),
+    'Expected the planning run to inspect local CLI help before answering.',
+  );
+}
+
 function extractCommandEvents(report: SessionReport): string[] {
   const events = (report as { events?: unknown[] }).events ?? [];
   return events.flatMap(commandFromEvent);
@@ -393,12 +405,12 @@ function directCommandEvent(record: CommandEventRecord): string | undefined {
 }
 
 function toolCallCommandEvent(record: CommandEventRecord): string | undefined {
-  const command = record.args?.command ?? record.args?.cmd;
-  if (record.type === 'toolCall' && typeof command === 'string') {
-    return command;
-  }
+  if (record.type !== 'toolCall') return undefined;
+  return firstString([record.args?.command, record.args?.cmd]);
+}
 
-  return undefined;
+function firstString(values: unknown[]): string | undefined {
+  return values.find((value): value is string => typeof value === 'string');
 }
 
 function isLocalCliHelpCommand(command: string) {
@@ -433,7 +445,7 @@ const RAW_COORDINATE_TARGET =
 const PSEUDO_ASSERTION_COMMAND = /(?:^|\n)\s*(?:assert|assertVisible|waitFor|waitForText)\b/i;
 const RAW_RECT_SNAPSHOT = /snapshot\b(?=[^\n]*-i\b)(?=[^\n]*(?:--json|--raw))/i;
 const SHELL_OUTPUT_PROJECTION = /(?:2>\s*\/dev\/null|\|\s*(?:jq|grep|head|tail)\b)/i;
-const ROLE_NAME_SELECTOR_KEY = /(?:^|[\s'"])button\s*=/i;
+const UNSUPPORTED_SELECTOR_KEY = /(?:^|[\s'"])(?:button|placeholder|index|key)\s*=/i;
 const BOUNDED_PROFILE_SLOW = /react-devtools\s+profile\s+slow\b[^\n]*--limit\s+(?:5|10)\b/i;
 const BOUNDED_PROFILE_RERENDERS =
   /react-devtools\s+profile\s+rerenders\b[^\n]*--limit\s+(?:5|10)\b/i;
@@ -460,6 +472,7 @@ function makeCase(options: {
   forbiddenOutputs?: OutputMatcher[];
   strictFinalOutput?: boolean;
   allowOnlyLocalCliHelpCommands?: boolean;
+  requireLocalCliHelp?: boolean;
   finalOutputInstructions?: string;
 }): Case {
   return {
@@ -469,6 +482,7 @@ function makeCase(options: {
       contract: options.contract,
       task: options.task,
       finalOutputInstructions: options.finalOutputInstructions,
+      requireLocalCliHelp: options.requireLocalCliHelp,
     }),
     assert(report, ctx) {
       assertAgentDeviceEvidence(report);
@@ -478,14 +492,23 @@ function makeCase(options: {
       });
       assertExpectedOutput(report, ctx, options.outputs);
       assertNoOutputs(ctx.finalOutput(), options.forbiddenOutputs ?? []);
-      if (options.strictFinalOutput) {
-        assertFinalOutputAgentDeviceCommandsOnly(ctx.finalOutput());
-      }
-      if (options.allowOnlyLocalCliHelpCommands) {
-        assertOnlyLocalCliHelpCommands(report);
-      }
+      assertOptionalCasePolicies(report, ctx, options);
     },
   };
+}
+
+function assertOptionalCasePolicies(
+  report: SessionReport,
+  ctx: AssertionContext,
+  options: {
+    strictFinalOutput?: boolean;
+    allowOnlyLocalCliHelpCommands?: boolean;
+    requireLocalCliHelp?: boolean;
+  },
+) {
+  if (options.strictFinalOutput) assertFinalOutputAgentDeviceCommandsOnly(ctx.finalOutput());
+  if (options.allowOnlyLocalCliHelpCommands) assertOnlyLocalCliHelpCommands(report);
+  if (options.requireLocalCliHelp) assertLocalCliHelpUsed(report);
 }
 
 function withTags(tags: string[], cases: Case[]): Case[] {
@@ -1122,7 +1145,7 @@ const SKILL_GUIDANCE_CASES: Case[] = [
       'Current screen: Feed directory',
       'Fresh interactive snapshot shows @e37 [button] "Search for more feeds"',
       'If a role filter is needed, the supported selector shape is role=button label="Search for more feeds"',
-      'button="Search for more feeds" is not a valid selector key',
+      'button=, placeholder=, index=, and key= are not valid selector keys',
       'Need the resulting UI after pressing this control',
     ],
     task: 'Plan the command to press Search for more feeds with settle. Prefer the visible @e37 ref or a valid selector; do not invent a role-name selector key.',
@@ -1131,7 +1154,7 @@ const SKILL_GUIDANCE_CASES: Case[] = [
       /(?:@e37|label=(?:["']Search for more feeds["']|Search for more feeds)|role=button)/i,
       /--settle\b/i,
     ],
-    forbiddenOutputs: [ROLE_NAME_SELECTOR_KEY, RAW_COORDINATE_TARGET],
+    forbiddenOutputs: [UNSUPPORTED_SELECTOR_KEY, RAW_COORDINATE_TARGET],
     strictFinalOutput: true,
     allowOnlyLocalCliHelpCommands: true,
   }),
@@ -1145,7 +1168,7 @@ const SKILL_GUIDANCE_CASES: Case[] = [
       'The task was to confirm the feed-search UI and close the session',
       'No more refs or visible evidence are needed',
     ],
-    task: 'Plan the next command. Do not take another snapshot just to re-read evidence that was already present in the settled diff.',
+    task: 'Use the previous command output to determine whether the task is complete, then plan the next command.',
     outputs: [plannedCommand('close')],
     forbiddenOutputs: [
       plannedCommand('snapshot'),
@@ -1155,6 +1178,8 @@ const SKILL_GUIDANCE_CASES: Case[] = [
       plannedCommand('is'),
       plannedCommandAlternatives(['press', 'click']),
     ],
+    allowOnlyLocalCliHelpCommands: true,
+    requireLocalCliHelp: true,
   }),
   makeCase({
     id: 'sample-output-settled-diff-next-target',
@@ -1163,6 +1188,7 @@ const SKILL_GUIDANCE_CASES: Case[] = [
       'Previous command output is from agent-device, not a task description',
       'Need to continue from the settled diff without taking another snapshot',
       'Need to open the matching account result',
+      'Need the resulting account UI from the same command, without a separate observation',
     ],
     task: `Read this previous agent-device output, then plan the next command:
 
@@ -1173,10 +1199,10 @@ Changed:
 + @e64 [button] "@callstack.com"
 + @e65 [text] "Callstack"
 
-Use the result ref exposed by the settled diff to open the account with settle. Do not re-read the same screen first.`,
+The task is to open the matching account result and return its resulting UI state in the same command. What command should run next?`,
     outputs: [
       plannedCommandAlternatives(['press', 'click', 'tap']),
-      /@e64(?:~s12)?\b|label=(?:["']@callstack\.com["']|@callstack\.com)/i,
+      /@e64(?:~s12)?\b|(?:label|text)=(?:["']@callstack\.com["']|@callstack\.com)/i,
       /--settle\b/i,
     ],
     forbiddenOutputs: [
@@ -1186,6 +1212,7 @@ Use the result ref exposed by the settled diff to open the account with settle. 
       RAW_COORDINATE_TARGET,
     ],
     allowOnlyLocalCliHelpCommands: true,
+    requireLocalCliHelp: true,
   }),
   makeCase({
     id: 'sample-output-not-settled-needs-observe',
@@ -1202,7 +1229,7 @@ Pressed @e12
 not settled after 10000ms
 Hint: UI kept changing. Run agent-device wait stable or agent-device snapshot -i before the next ref-based action.
 
-Follow the output hint before attempting another ref-based action.`,
+What command should run next?`,
     outputs: [/(?:^|\n)(?:agent-device\s+)?(?:wait\s+stable|snapshot\b[^\n]*-i\b)/i],
     forbiddenOutputs: [
       /(?:^|\n)(?:agent-device\s+)?(?:press|click|fill|longpress)\s+@e\d+/i,
@@ -1210,6 +1237,7 @@ Follow the output hint before attempting another ref-based action.`,
       SHELL_OUTPUT_PROJECTION,
     ],
     allowOnlyLocalCliHelpCommands: true,
+    requireLocalCliHelp: true,
   }),
   makeCase({
     id: 'sample-output-private-ax-recovery-continues',
@@ -1243,6 +1271,7 @@ Treat the recovery message as a warning, not a fatal error. Use the exposed Sear
       RAW_COORDINATE_TARGET,
     ],
     allowOnlyLocalCliHelpCommands: true,
+    requireLocalCliHelp: true,
   }),
   makeCase({
     id: 'text-replace-uses-fill',

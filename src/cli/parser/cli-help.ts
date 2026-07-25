@@ -73,14 +73,18 @@ const AGENT_WORKFLOWS = [
 
 const AGENT_START_LINES = [
   'Write full command lines starting with agent-device; do not output pseudo commands, helper prose, pipes, grep, jq, or hidden stderr.',
-  // Benchmarked 2026-07-05 (#1101): agents that only read --help skipped the
-  // help-workflow pointer and fell into plain-snapshot loops; stating the loop
-  // here is what makes small models pick snapshot -i and --settle unprompted.
-  'Default app loop: agent-device open <app> -> agent-device snapshot -i -> agent-device press/fill/click <target> --settle -> continue from that settled diff -> agent-device close.',
-  'Use --settle on every mutating app action that supports it: press, click, fill, longpress.',
-  'The settled diff is the next snapshot. Do not run wait stable or snapshot after settled:true unless the diff lacks the next target/evidence.',
-  'If --settle prints not settled, follow its hint before the next ref-based action.',
-  'Use refs or selectors as targets: @e12, label="Search", role=button label="Follow".',
+  // Benchmarked 2026-07-25 with scripts/help-conformance-bench.mjs: keeping the
+  // loop explicit plus a closed target grammar made GPT-mini reliable and moved
+  // Haiku from 0/2 baseline to 4/4; generic structured-hint recovery passed 8/8
+  // uncoached output cases versus 7/8 with the longer special-case prose.
+  'Default app loop: agent-device open <app> -> agent-device snapshot -i -> mutate a current target with --settle -> continue from that settled diff -> agent-device close.',
+  'Use --settle only on planned press, click, fill, or longpress commands; never add it to open, snapshot, or close.',
+  'Follow structured command hints before choosing a recovery action.',
+  'Targets are concrete refs or selectors: @e12, label="Query", role=button label="Submit".',
+  'Selector keys are only: id, role, text, label, value, appname, windowtitle, visible, hidden, editable, selected, focused, enabled, hittable. placeholder, index, and key are not selector keys.',
+  'A literal @ handle is a label such as label="@account.example", never a bare @ref.',
+  'Boundary shapes: agent-device fill \'label="Query"\' "text" --settle; agent-device press \'role=button label="Submit"\' --settle.',
+  'fill takes a target then text. press targets an accessible element; key=Enter is not a supported target.',
   'Pick the help mode below when the task is manual QA, dogfooding, engineering validation, or debugging.',
 ] as const;
 
@@ -1075,6 +1079,8 @@ Report shape:
 Rules:
   Findings must come from observed runtime behavior, not source reads.
   After each mutation, use the --settle diff as evidence when available; otherwise re-snapshot.
+  Wait timeouts are integer milliseconds in the trailing positional: agent-device wait 'role=tab' 10000. Do not write duration suffixes such as 10s.
+  scroll takes direction then amount and does not support a selector or --settle: agent-device scroll down 3.
   Keep commands in the report reproducible; use selectors or refs from fresh snapshots, not guessed coordinates.
   Prefer refs for exploration and selectors for deterministic replay.
   Use logs, network, screenshot --overlay-refs, trace, perf metrics, perf frames, or react-devtools only when they add evidence to a specific issue.
@@ -1091,9 +1097,10 @@ Contract:
   Prove the changed behavior through public agent-device surfaces. Do not validate against stale dist output, a retained stale daemon, or a runner built before the change.
   Keep evidence reproducible: exact commands, target device/app, observed output, artifact paths, and cleanup status.
 
-Before device verification:
-  If TypeScript runtime or CLI output changed, run pnpm build first, then pnpm clean:daemon so bin/agent-device.mjs uses current dist and no stale daemon is serving old code.
-  If Apple runner code changed, run pnpm build:xcuitest and avoid inherited retained runners from older source.
+Required freshness gate before device verification:
+  For a TypeScript runtime or CLI output change, start with pnpm build. For non-Android device verification, run pnpm clean:daemon next.
+  Before local Android verification, run pnpm build:android before pnpm clean:daemon so the bundled helpers match current source.
+  For an Apple runner change, run pnpm build:xcuitest and avoid inherited retained runners from older source. Do not build the Apple runner for TypeScript-only changes.
   Use open --relaunch when startup state matters. Use a purpose-specific --session for multi-step validation.
 
 Loop:

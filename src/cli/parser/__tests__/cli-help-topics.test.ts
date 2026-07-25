@@ -88,11 +88,24 @@ test('usage includes agent workflows, config, environment, and examples footers'
   assert.match(usageText, /Agent Starting Point:/);
   assert.match(usageText, /Write full command lines starting with agent-device/);
   assert.match(usageText, /Default app loop: agent-device open <app>/);
-  assert.match(usageText, /Use --settle on every mutating app action that supports it/);
-  assert.match(usageText, /The settled diff is the next snapshot/);
-  assert.match(usageText, /If --settle prints not settled, follow its hint/);
-  assert.match(usageText, /Use refs or selectors as targets/);
+  assert.match(
+    usageText,
+    /Use --settle only on planned press, click, fill, or longpress commands; never add it to open, snapshot, or close/,
+  );
+  assert.match(usageText, /Follow structured command hints before choosing a recovery action/);
+  assert.match(usageText, /Targets are concrete refs or selectors/);
+  assert.match(usageText, /Selector keys are only: id, role, text, label, value/);
+  assert.match(usageText, /placeholder, index, and key are not selector keys/);
+  assert.match(usageText, /A literal @ handle is a label/);
+  assert.match(usageText, /agent-device fill 'label="Query"' "text" --settle/);
+  assert.match(usageText, /key=Enter is not a supported target/);
   assert.match(usageText, /Pick the help mode below/);
+  const firstThirtyLines = usageText.split('\n').slice(0, 30).join('\n');
+  assert.match(
+    firstThirtyLines,
+    /agent-device help macos/,
+    'Every workflow pointer must remain in the 30-line first-screen benchmark slice.',
+  );
   assert.match(usageText, /Agent Quickstart:/);
   assert.match(usageText, /Planning output contract/);
   assert.match(
@@ -497,8 +510,12 @@ test('usageForCommand resolves validate help topic', async () => {
   if (help === null) throw new Error('Expected validate help text');
   assert.match(help, /agent-device help validate/);
   assert.match(help, /validating a code change/);
-  assert.match(help, /pnpm build first, then pnpm clean:daemon/);
+  assert.match(help, /Required freshness gate before device verification/);
+  assert.match(help, /For a TypeScript runtime or CLI output change, start with pnpm build/);
+  assert.match(help, /For non-Android device verification, run pnpm clean:daemon next/);
+  assert.match(help, /run pnpm build:android before pnpm clean:daemon/);
   assert.match(help, /pnpm build:xcuitest/);
+  assert.match(help, /Do not build the Apple runner for TypeScript-only changes/);
   assert.match(help, /Use the settled diff as evidence/);
   assert.match(help, /Close sessions and release leases/);
 });
@@ -523,6 +540,11 @@ test('usageForCommand resolves dogfood help topic', async () => {
   assert.match(help, /Expo Go\/dev-client shells/);
   assert.match(help, /direct Android localhost URL opens with a port auto-configure/);
   assert.match(help, /Keep stateful commands serial within the same session/);
+  assert.match(help, /agent-device wait 'role=tab' 10000/);
+  assert.match(
+    help,
+    /scroll takes direction then amount and does not support a selector or --settle/,
+  );
   assert.match(help, /prefer agent-device open "Expo Go" <url>/);
   assert.match(help, /dogfood-output\/report\.md/);
   assert.match(help, /ID, severity, category, title, affected flow\/screen/);

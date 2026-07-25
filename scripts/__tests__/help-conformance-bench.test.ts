@@ -5,6 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { test } from 'vitest';
+import { validateAgentDeviceCommand } from '../help-conformance-command-validator.ts';
+import { validatePlanCommands } from '../help-conformance-plan-validator.mjs';
+import { summarizeResults } from '../help-conformance-summary.mjs';
 
 const execFileAsync = promisify(execFile);
 const SCRIPT = join(import.meta.dirname, '..', 'help-conformance-bench.mjs');
@@ -23,14 +26,22 @@ async function runBench(args: string[]): Promise<{ code: number; stdout: string;
   }
 }
 
-async function readDryRunPrompt(outDir: string): Promise<string> {
+async function readDryRunReport(
+  outDir: string,
+): Promise<Array<{ prompt: string; runner: string; caseId: string; trial: number }>> {
   const reportName = (await readdir(outDir)).find((name) => name.startsWith('report-'));
   assert.ok(reportName, 'dry-run must write a report file');
-  const report = JSON.parse(await readFile(join(outDir, reportName), 'utf8')) as Array<{
-    prompt: string;
-  }>;
+  const report = JSON.parse(await readFile(join(outDir, reportName), 'utf8'));
   assert.ok(report.length > 0 && typeof report[0]?.prompt === 'string');
-  return report[0].prompt;
+  return report;
+}
+
+async function readDryRunPrompts(outDir: string): Promise<string[]> {
+  return (await readDryRunReport(outDir)).map(({ prompt }) => prompt);
+}
+
+async function readDryRunPrompt(outDir: string): Promise<string> {
+  return (await readDryRunPrompts(outDir))[0]!;
 }
 
 // Guards the --override-doc contract: an override swaps only WHERE the doc
@@ -121,4 +132,244 @@ test('repeated overrides for the same topic id are last-wins', async () => {
   const prompt = await readDryRunPrompt(dir);
   assert.ok(prompt.includes('second draft body'));
   assert.ok(!prompt.includes('first draft body'));
+});
+
+test('--repeat expands each runner x case pair into numbered independent trials', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'help-bench-'));
+  const draftPath = join(dir, 'first-screen.txt');
+  await writeFile(draftPath, 'minimal first-screen help');
+  const run = await runBench([
+    '--dry-run',
+    '--case',
+    'metamorphic-community-search',
+    '--runner',
+    'claude:test-model',
+    '--repeat',
+    '3',
+    '--override-doc',
+    `--help:first30=${draftPath}`,
+    '--out',
+    dir,
+  ]);
+  assert.equal(run.code, 0, run.stderr);
+  const report = await readDryRunReport(dir);
+  assert.deepEqual(
+    report.map(({ runner, caseId, trial }) => ({ runner, caseId, trial })),
+    [1, 2, 3].map((trial) => ({
+      runner: 'claude:test-model',
+      caseId: 'metamorphic-community-search',
+      trial,
+    })),
+  );
+});
+
+test('invalid repeat counts and mixed known/unknown case ids fail before a report is written', async () => {
+  for (const args of [
+    ['--repeat', '0', '--case', 'raw-first-screen-bluesky'],
+    ['--repeat', 'many', '--case', 'raw-first-screen-bluesky'],
+    ['--cases', 'raw-first-screen-bluesky,typo-case'],
+  ]) {
+    const dir = await mkdtemp(join(tmpdir(), 'help-bench-'));
+    const run = await runBench(['--dry-run', ...args, '--out', dir]);
+    assert.notEqual(run.code, 0);
+    assert.equal(
+      (await readdir(dir)).some((name) => name.startsWith('report-')),
+      false,
+    );
+  }
+});
+
+test('metamorphic case changes domain nouns without leaking the original benchmark answer', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'help-bench-'));
+  const draftPath = join(dir, 'first-screen.txt');
+  await writeFile(draftPath, 'minimal first-screen help');
+  const run = await runBench([
+    '--dry-run',
+    '--case',
+    'metamorphic-community-search',
+    '--runner',
+    'claude:test-model',
+    '--override-doc',
+    `--help:first30=${draftPath}`,
+    '--out',
+    dir,
+  ]);
+  assert.equal(run.code, 0, run.stderr);
+  const prompt = await readDryRunPrompt(dir);
+  assert.match(prompt, /com\.example\.community/);
+  assert.match(prompt, /@react\.dev/);
+  assert.doesNotMatch(prompt, /bluesky|callstack|@e64/i);
+});
+
+test('runtime-output cases do not coach the command that their output should imply', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'help-bench-'));
+  const draftPath = join(dir, 'first-screen.txt');
+  await writeFile(draftPath, 'minimal first-screen help');
+  const run = await runBench([
+    '--dry-run',
+    '--cases',
+    [
+      'settle-diff-is-observation',
+      'sample-output-settled-diff-next-target',
+      'sample-output-not-settled-needs-observe',
+      'sample-output-recoverable-failure-retries-in-session',
+    ].join(','),
+    '--runner',
+    'claude:test-model',
+    '--override-doc',
+    `--help:first30=${draftPath}`,
+    '--out',
+    dir,
+  ]);
+  assert.equal(run.code, 0, run.stderr);
+  const prompts = (await readDryRunPrompts(dir)).join('\n');
+  assert.doesNotMatch(prompts, /Do not take another snapshot/i);
+  assert.doesNotMatch(prompts, /Use the ref exposed by the settled diff/i);
+  assert.doesNotMatch(prompts, /Follow the output hint/i);
+  assert.doesNotMatch(prompts, /Retry the same target/i);
+});
+
+test('command validator accepts production flags and interaction grammar', () => {
+  assert.deepEqual(validateAgentDeviceCommand(['--version']), { valid: true });
+  assert.deepEqual(validateAgentDeviceCommand(['fill', 'label=Search', 'callstack', '--settle']), {
+    valid: true,
+  });
+  assert.deepEqual(
+    validateAgentDeviceCommand(['fill', 'label=Search', '@callstack.com', '--settle']),
+    { valid: true },
+  );
+  assert.deepEqual(validateAgentDeviceCommand(['is', 'visible', 'label=Following']), {
+    valid: true,
+  });
+});
+
+test('command validator rejects unsupported flags and malformed interaction grammar', () => {
+  for (const argv of [
+    ['close', '--settle'],
+    ['wait', '--selector', 'role=button'],
+    ['press', 'key=Enter', '--settle'],
+    ['is', 'role=button', 'label=Following'],
+  ]) {
+    const result = validateAgentDeviceCommand(argv);
+    assert.equal(result.valid, false, `${argv.join(' ')} should fail`);
+    assert.ok(result.error);
+  }
+});
+
+test('command validator rejects pseudo refs and ignored snapshot positionals', () => {
+  for (const argv of [
+    ['press', '@<search-ref>', '--settle'],
+    ['fill', '@search_field', 'callstack', '--settle'],
+    ['get', 'text', '@search-field'],
+    ['focus', '@search-field', '10'],
+    ['scroll', '@down'],
+    ['snapshot', '-i', './evidence.json'],
+  ]) {
+    const result = validateAgentDeviceCommand(argv);
+    assert.equal(result.valid, false, `${argv.join(' ')} should fail`);
+    assert.ok(result.error);
+  }
+});
+
+test('plan validator rejects shell projection and non-permitted executables', async () => {
+  const [redirected, piped, shellCommand] = await validatePlanCommands([
+    'agent-device snapshot -i > evidence.json',
+    'agent-device snapshot -i | tee evidence.txt',
+    'echo done',
+  ]);
+  assert.equal(redirected.issues[0]?.kind, 'shell-projection');
+  assert.equal(piped.issues[0]?.kind, 'shell-projection');
+  assert.equal(shellCommand.issues[0]?.kind, 'executable-policy');
+
+  const [placeholder] = await validatePlanCommands(['agent-device press @<search-ref> --settle']);
+  assert.ok(placeholder.issues.some(({ kind }) => kind === 'pseudo-ref'));
+  assert.ok(placeholder.issues.some(({ kind }) => kind === 'shell-projection'));
+});
+
+test('plan validator applies narrow grammar to permitted external commands', async () => {
+  const results = await validatePlanCommands(
+    [
+      'mkdir -p dogfood-output',
+      'mkdir dogfood-output',
+      'pnpm build',
+      'pnpm run build:android',
+      'pnpm clean:daemon --prune-dev',
+      'pnpm test',
+    ],
+    { allowedExternalCommands: ['mkdir', 'pnpm'] },
+  );
+  assert.equal(results[0].issues.length, 0);
+  assert.equal(results[1].issues[0]?.kind, 'external-command-grammar');
+  assert.equal(results[2].issues.length, 0);
+  assert.equal(results[3].issues.length, 0);
+  assert.equal(results[4].issues.length, 0);
+  assert.equal(results[5].issues[0]?.kind, 'external-command-grammar');
+});
+
+test('plan validator strips shell comments without mutating command arguments', async () => {
+  const [snapshot, press] = await validatePlanCommands([
+    'agent-device snapshot -i # capture evidence',
+    'agent-device press @e64 --settle # tap result',
+  ]);
+  assert.equal(snapshot.issues.length, 0);
+  assert.deepEqual(snapshot.tokens, ['agent-device', 'snapshot', '-i']);
+  assert.equal(press.issues.length, 0);
+  assert.deepEqual(press.tokens, ['agent-device', 'press', '@e64', '--settle']);
+});
+
+test('plan validator keeps agent result alignment across skipped and external lines', async () => {
+  const results = await validatePlanCommands(
+    [
+      'agent-device snapshot -i > evidence.json',
+      'mkdir -p evidence',
+      'agent-device snapshot -i',
+      'pnpm build',
+      'agent-device get text @search-field',
+    ],
+    { allowedExternalCommands: ['mkdir', 'pnpm'] },
+  );
+  assert.equal(results[0].issues[0]?.kind, 'shell-projection');
+  assert.equal(results[1].issues.length, 0);
+  assert.equal(results[2].issues.length, 0);
+  assert.equal(results[3].issues.length, 0);
+  assert.equal(results[4].issues[0]?.kind, 'pseudo-ref');
+});
+
+test('aggregate summary exposes stability and failure taxonomy per runner x case', () => {
+  const summary = summarizeResults([
+    {
+      runner: 'claude:haiku',
+      caseId: 'metamorphic',
+      passed: true,
+      checks: { validPlanCommands: true, usesSettle: true },
+      commandValidation: [],
+    },
+    {
+      runner: 'claude:haiku',
+      caseId: 'metamorphic',
+      passed: false,
+      checks: { validPlanCommands: false, usesSettle: true },
+      commandValidation: [
+        {
+          issues: [
+            { kind: 'pseudo-ref', error: 'bad ref' },
+            { kind: 'shell-projection', error: 'bad shell' },
+          ],
+        },
+      ],
+      runnerError: 'failed',
+    },
+  ]);
+  assert.deepEqual(summary, [
+    {
+      runner: 'claude:haiku',
+      caseId: 'metamorphic',
+      trials: 2,
+      passed: 1,
+      failedChecks: { validPlanCommands: 1 },
+      validationIssues: { 'pseudo-ref': 1, 'shell-projection': 1 },
+      runnerErrors: 1,
+      passRate: 0.5,
+    },
+  ]);
 });
