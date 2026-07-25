@@ -42,6 +42,10 @@ Normative summary of the proposal; contracts and rationale below.
 - **Redaction happens once, at the journal boundary**, for every journal-owned output.
 - The journal is an observability spine, **not** a source of truth: `session.actions` and all other
   session state remain owned by their stores. No state is ever rebuilt from journal events.
+- Anything that leaves the machine goes through a **closed, allowlist-by-construction schema**
+  (the usage sink's `UsageRecord`): every field drawn from a registry-enumerated vocabulary —
+  command names, typed error codes, flag names, durations — with positionals, selectors, labels,
+  and messages unrepresentable by type, not merely redacted.
 
 ## Context
 
@@ -83,6 +87,10 @@ is `countDiagnosticEventsByPhase(['ios_runner_command_send', 'ios_runner_readine
 (`src/daemon/request-router.ts`) — a hand-picked name list a new runner phase can silently drift
 from. That violates two established repo rules: *what enumerates N?* (nothing enumerates
 round-trip phases), and *categories come from recorded fields, never parsed names*.
+
+The near-term consumer motivating the unification is opt-in usage analytics over agent behavior —
+command frequencies, failure codes, and outcome sequences that trip agents — under a hard privacy
+constraint: request metadata only, never request content (decision 4).
 
 ADR 0008 solved the same shape of problem for commands: one declaration registry, behavior derived
 by parity-tested projection. This ADR applies that thesis to events — to the channels that are
@@ -222,6 +230,32 @@ timeline), the correct shape is a **mirror emit** — the progress emitter addit
 cataloged journal kind — never rerouting the wire path through the journal. That is a separate,
 opt-in decision.
 
+### 4. First planned consumer: the usage sink (privacy by construction)
+
+The motivating consumer for this architecture is opt-in **usage analytics over agent behavior**:
+which commands run, how often, what fails with which error codes, and outcome sequences that trip
+agents (consecutive full snapshots, screenshot-after-snapshot, repeated same-command failures).
+The unit of observation is request **metadata**, never request **content**.
+
+The privacy rule is therefore **allowlist by construction, not redaction**. Redaction is a
+blocklist over rich data and one missed field leaks a selector or label; the usage sink instead
+projects `session-lifecycle` events into a closed `UsageRecord` schema in which every field draws
+from an enumerated vocabulary:
+
+- `command`/action — enumerated by the CommandDescriptor registry;
+- outcome — `ok` or the typed error **code** (ADR 0010's closed set); never the error message;
+- `durationMs`, cost fields (`runnerRoundTrips`, `nodeCount`), `platform`/`appleOs`;
+- flag **names** present on the request — never flag values;
+- a hashed session identity plus per-session sequence number, so command bigrams are computable
+  downstream.
+
+Positionals, selectors, labels, fill text, snapshot content, and error messages are unrepresentable
+in the schema — there is nothing to scrub. Sequence/anti-pattern detection is downstream analysis
+over the record stream (a local stats read first; opt-in export later), never emission-side logic.
+The sink itself is a follow-up landing after migration step 3 (it consumes the
+`session-lifecycle` kinds); this ADR fixes only its schema discipline so no richer interim export
+gets built.
+
 ## Invariants
 
 - **Byte compatibility, one declared exception.** `events.ndjson` v1, per-request diagnostics
@@ -313,6 +347,10 @@ opt-in decision.
   existing `request-router-cost` test keeps passing unchanged.
 - Redaction: a fixture proves a sensitive value emitted in `data` never reaches any journal-owned
   sink output, including the replay timing trace.
+- Usage schema gate: a type/test check proves every `UsageRecord` field's vocabulary source — a
+  field is either numeric, an enum imported from the owning registry (command names, error codes,
+  flag keys), or a hash — and that no open-string field exists; adding one is a failing gate, not
+  a review comment.
 - Layering: `scripts/layering/check.ts` stays green — catalog in `contracts`, runtime in `utils`,
   no new back-edges.
 
