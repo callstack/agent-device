@@ -4,7 +4,11 @@ import {
   createProviderDeviceRuntimeRequestProviders,
   type ProviderDeviceRuntime,
 } from '../../../src/provider-device-runtime.ts';
-import type { DeviceInventoryProvider, DeviceLease, LeaseLifecycleProvider } from '../../../src/contracts/device-provider.ts';
+import type {
+  DeviceInventoryProvider,
+  DeviceLease,
+  LeaseLifecycleProvider,
+} from '../../../src/contracts/device-provider.ts';
 import type { Interactor, RunnerContext } from '../../../src/contracts/interactor-types.ts';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';
 import type { DeviceInfo } from '../../../src/kernel/device.ts';
