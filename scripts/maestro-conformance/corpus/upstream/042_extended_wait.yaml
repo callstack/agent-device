@@ -1,6 +1,6 @@
 appId: com.example.app
 env:
-  TIMEOUT: 1000
+    TIMEOUT: 1000
 ---
 - extendedWaitUntil:
     visible: Item

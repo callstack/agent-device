@@ -42,7 +42,7 @@ asked or when the work is intentionally incomplete.
 ## Reviewing
 
 - Review against the linked issue, not only the diff. State the issue's motivating behavior and
-  verify the PR fixes _that_.
+  verify the PR fixes *that*.
 - Check relevant ADRs before reviewing architecture, routing, command-surface, platform-boundary,
   diagnostics, or testing-strategy changes. An ADR conflict is a review finding unless the PR updates
   or supersedes the ADR explicitly.

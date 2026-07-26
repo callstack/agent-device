@@ -11,14 +11,14 @@ read/wait surfaces built on the same resolution machinery) reach the device
 through several dispatch paths, each of which chose its latency-vs-semantics
 trade-offs independently:
 
-| Path                    | What it is                                                             | Why it exists                                 |
-| ----------------------- | ---------------------------------------------------------------------- | --------------------------------------------- |
-| `runtime-selector`      | daemon tree capture → `resolveSelectorChain` → guards → coordinate tap | full semantics                                |
-| `runtime-ref`           | session snapshot → ref lookup → guards → coordinate tap                | full semantics                                |
-| `direct-ios-selector`   | selector sent to the XCTest runner, which queries and taps natively    | saves a full snapshot round trip              |
-| `native-ref`            | `backend.tapTarget`/`fillTarget` for `click @ref` / `fill @ref`        | saves resolution round trips                  |
-| `coordinate`            | raw x/y tap                                                            | escape hatch; semantics intentionally minimal |
-| replay/maestro variants | `allowNonHittableCoordinateFallback`, replay-heal                      | third-party compat                            |
+| Path | What it is | Why it exists |
+| --- | --- | --- |
+| `runtime-selector` | daemon tree capture → `resolveSelectorChain` → guards → coordinate tap | full semantics |
+| `runtime-ref` | session snapshot → ref lookup → guards → coordinate tap | full semantics |
+| `direct-ios-selector` | selector sent to the XCTest runner, which queries and taps natively | saves a full snapshot round trip |
+| `native-ref` | `backend.tapTarget`/`fillTarget` for `click @ref` / `fill @ref` | saves resolution round trips |
+| `coordinate` | raw x/y tap | escape hatch; semantics intentionally minimal |
+| replay/maestro variants | `allowNonHittableCoordinateFallback`, replay-heal | third-party compat |
 
 Over one week of fixes, every interaction bug we shipped or caught was the same
 shape — a guarantee enforced on one path and silently absent on a sibling:
@@ -36,8 +36,8 @@ shape — a guarantee enforced on one path and silently absent on a sibling:
   `snapshot` — same failure mode — preserved the daemon (#1075).
 
 The guarantees themselves are small and well-implemented. What is missing is
-any structure that _knows the full set of paths and the full set of
-guarantees_ and can therefore notice an unfilled cell. Reviews catch cells
+any structure that *knows the full set of paths and the full set of
+guarantees* and can therefore notice an unfilled cell. Reviews catch cells
 only when a reviewer happens to hold both axes in their head; dogfooding
 catches them one production incident at a time.
 
@@ -63,14 +63,14 @@ every cell to be classified:
 
 ```ts
 export const INTERACTION_GUARANTEES = [
-  'disambiguation', // visible > deepest > smallest; ties fail
-  'occlusion', // covered targets are refused
-  'offscreen', // tap point (rect center) must lie in the root viewport
-  'nonHittable', // promotion + targetHittable/hint annotation
-  'responseConstruction', // one shared response construction site (Layer 2)
-  'responseIdentity', // refLabel/selectorChain availability on this path
-  'verifyEvidence', // --verify baseline + post-action digest
-  'errorTaxonomy', // no-match/ambiguous/offscreen codes, messages, hints
+  'disambiguation',        // visible > deepest > smallest; ties fail
+  'occlusion',             // covered targets are refused
+  'offscreen',             // tap point (rect center) must lie in the root viewport
+  'nonHittable',           // promotion + targetHittable/hint annotation
+  'responseConstruction',  // one shared response construction site (Layer 2)
+  'responseIdentity',      // refLabel/selectorChain availability on this path
+  'verifyEvidence',        // --verify baseline + post-action digest
+  'errorTaxonomy',         // no-match/ambiguous/offscreen codes, messages, hints
 ] as const;
 ```
 
@@ -89,10 +89,11 @@ selector diagnostics and hints — because direct runner paths can close codes
 long before full diagnostics.
 
 ```ts
+
 export type GuaranteeEnforcement =
-  | { kind: 'runtime'; via: string } // shared TS implementation (symbol name)
+  | { kind: 'runtime'; via: string }                    // shared TS implementation (symbol name)
   | { kind: 'runner'; via: string; parityTable?: string } // Swift twin; parityTable optional until Layer 3, required once the cell claims parity
-  | { kind: 'delegated'; to: InteractionPathId } // path defers (e.g. direct → runtime on ELEMENT_OFFSCREEN)
+  | { kind: 'delegated'; to: InteractionPathId }        // path defers (e.g. direct → runtime on ELEMENT_OFFSCREEN)
   | { kind: 'waived'; reason: string; trackingIssue?: string }; // explicit, reviewed waiver; gap waivers must carry a tracking issue
 
 export const INTERACTION_DISPATCH_PATHS: Record<
@@ -102,9 +103,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<
     commands: readonly string[];
     guarantees: Record<InteractionGuarantee, GuaranteeEnforcement>;
   }
-> = {
-  /* every path, every cell */
-};
+> = { /* every path, every cell */ };
 ```
 
 Because `guarantees` is a `Record` over the guarantee union, **tsc fails** the
@@ -194,7 +193,7 @@ guarantee needs:
   prove the success path too.
 - **A shared runtime preflight for the native-ref path**: the ref came from a
   daemon snapshot, so the node is already in hand — check offscreen /
-  occlusion / non-hittable against it _before_ calling
+  occlusion / non-hittable against it *before* calling
   `tapTarget`/`fillTarget`. A backend fast path can silently "succeed", so
   delegation-on-error would never trigger there.
 
@@ -222,7 +221,7 @@ the daemon there destroyed every healthy app session the daemon owned.
 
 ## Consequences
 
-- Adding a dispatch path or a guarantee becomes a _forced_ whole-matrix
+- Adding a dispatch path or a guarantee becomes a *forced* whole-matrix
   decision: tsc will not compile an unclassified cell, and the gate will not
   pass an untested one. Silent erosion is structurally impossible; explicit
   waivers remain possible but visible and linkable to issues.

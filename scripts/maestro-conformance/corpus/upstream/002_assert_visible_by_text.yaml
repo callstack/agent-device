@@ -1,4 +1,4 @@
 appId: com.example.app
 ---
 - assertVisible:
-    text: 'Element Text'
+    text: "Element Text"

@@ -85,8 +85,8 @@ The channels overlap but share nothing: no common envelope, no shared kind vocab
 consumers couple to emit sites by string. The sharpest instance: agent-cost's `runnerRoundTrips`
 is `countDiagnosticEventsByPhase(['ios_runner_command_send', 'ios_runner_readiness_preflight'])`
 (`src/daemon/request-router.ts`) — a hand-picked name list a new runner phase can silently drift
-from. That violates two established repo rules: _what enumerates N?_ (nothing enumerates
-round-trip phases), and _categories come from recorded fields, never parsed names_.
+from. That violates two established repo rules: *what enumerates N?* (nothing enumerates
+round-trip phases), and *categories come from recorded fields, never parsed names*.
 
 The near-term consumer motivating the unification is opt-in usage analytics over agent behavior —
 command frequencies, failure codes, and outcome sequences that trip agents — under a hard privacy
@@ -106,18 +106,8 @@ kind, keyed by today's diagnostics phase strings (no renames in this ADR):
 ```ts
 type EventDescriptor = {
   /** Grouping for docs/filtering; not parsed from the kind name. */
-  subsystem:
-    | 'apple-runner'
-    | 'android'
-    | 'daemon'
-    | 'request'
-    | 'record'
-    | 'replay'
-    | 'snapshot'
-    | 'cli'
-    | 'web'
-    | 'compat'
-    | 'util';
+  subsystem: 'apple-runner' | 'android' | 'daemon' | 'request' | 'record' | 'replay'
+    | 'snapshot' | 'cli' | 'web' | 'compat' | 'util';
   level: 'info' | 'warn' | 'error' | 'debug';
   /** Derivation traits — the only way a consumer may select kind sets. */
   traits?: readonly EventTrait[]; // e.g. 'runner-round-trip', 'session-lifecycle', 'replay-trace'
