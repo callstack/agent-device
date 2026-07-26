@@ -89,13 +89,13 @@ function readScriptReplaySelection(actions: SessionAction[]): {
   return { appTarget: undefined, platform };
 }
 
-/** Applies a platform configured before the first static app open to replay dispatch. */
+/** Applies a platform configured before the first open to replay dispatch. */
 export function buildReplayScriptPlatformFlags(
   flags: CommandFlags | undefined,
   actions: SessionAction[],
 ): CommandFlags {
   const selection = readScriptReplaySelection(actions);
-  if (flags?.platform !== undefined || !selection.appTarget || !selection.platform) {
+  if (flags?.platform !== undefined || !selection.platform) {
     return flags ?? {};
   }
   return { ...flags, platform: selection.platform };

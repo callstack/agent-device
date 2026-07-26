@@ -2,7 +2,11 @@ import { test, expect } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { buildReplayTargetDeviceResolution } from '../replay-device-selection.ts';
+import { parseReplayInput } from '../../compat/replay-input.ts';
+import {
+  buildReplayScriptPlatformFlags,
+  buildReplayTargetDeviceResolution,
+} from '../replay-device-selection.ts';
 
 test('replay leaves deep-link opens to normal device resolution', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-device-selection-'));
@@ -18,6 +22,18 @@ test('replay leaves deep-link opens to normal device resolution', () => {
       meta: { cwd: root },
     }),
   ).toBeUndefined();
+});
+
+test('native replay applies its authored platform before a first deep link', () => {
+  expect(
+    buildReplayScriptPlatformFlags(
+      undefined,
+      parseReplayInput(
+        'runtime set --platform ios --metro-port 8081\nopen demo://checkout\nopen com.example.demo\n',
+        undefined,
+      ).actions,
+    ),
+  ).toEqual({ platform: 'ios' });
 });
 
 test('native replay uses its authored Android runtime setting without an iOS app probe', () => {
