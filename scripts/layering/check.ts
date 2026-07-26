@@ -7,7 +7,7 @@
 //         ◄ { client, daemon-server } ◄ daemon-client ◄ cli
 // (authoritative ranks: `TARGET_DAG_RANK` in model.ts)
 //
-// This gate enforces three things, with two different scopes:
+// This gate enforces four things, across three scopes:
 //   - GLOBALLY, across every production source file: the R1-R3 move rules and
 //     rejection of all production static value-import cycles (R4).
 //   - Over the RANKED SPINE only: rejection of every spine back-edge (R5), i.e.
@@ -15,10 +15,10 @@
 //     same inversion measured over TYPE-ONLY edges (R6).
 //   - Over the DAEMON only: SessionState field ownership (R7), because the session
 //     record is store-owned mutable state that any daemon module can write.
-// Root and peripheral zones (see `UNRANKED_ZONES` in model.ts) are deliberately
-// NOT ranked: they still participate in R1-R4, but the gate makes no back-edge
-// claim about them. It is not a claim that every folder is arranged in one total
-// order — only the ranked spine is.
+// Only `(root)` is unranked (see `UNRANKED_ZONES` in model.ts): it holds the
+// entrypoints and the composition roots that wire the command surface into the
+// daemon, which R2 forbids the daemon from importing, so they sit outside the
+// spine by construction. Every other zone is ranked.
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -178,13 +178,17 @@ function checkBackEdges(edges: readonly ResolvedImportEdge[]): Violation[] {
 // is still a boundary claim, and ranking type edges surfaced 61 of them. Two clusters
 // remain, each needing its own change rather than a file move:
 //
-//   commands/contracts -> client   the per-command Options/Result vocabulary is declared
-//                                  inside the 1.2k-line public Node-client surface
-//                                  (client/client-types.ts) instead of in contracts/,
-//                                  where the 24 types it already re-exports live.
+//   commands/contracts/mcp        the per-command Options/Result vocabulary, plus the client
+//     -> client                   facade itself, are declared inside the 1.2k-line public
+//                                 Node-client surface (client/client-types.ts) instead of in
+//                                 contracts/, where the 24 types it already re-exports live.
 //   core/commands -> daemon-server the ADR 0003 daemon facet: core's descriptor registry
 //                                  composes a shape the daemon owns. The daemon keeps the
 //                                  VALUES; only the shape needs to move below core.
+//   replay -> daemon-server        `SessionAction`, the recorded-action shape replay reads and
+//                                  writes. It belongs in contracts/, but it references
+//                                  `CommandFlags` (core) which references `DaemonBatchStep`
+//                                  (core), so it moves as a chain of three, not one file.
 //
 // The counts may only go DOWN. Fixing edges without lowering the number fails too, so the
 // baseline cannot quietly stop describing the tree.
@@ -193,6 +197,8 @@ const TYPE_INVERSION_BASELINE: Readonly<Record<string, number>> = {
   'commands -> daemon-server': 1,
   'contracts -> client': 1,
   'core -> daemon-server': 5,
+  'mcp -> client': 1,
+  'replay -> daemon-server': 6,
 };
 
 function checkTypeInversions(edges: readonly ResolvedImportEdge[]): Violation[] {
@@ -278,6 +284,18 @@ function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Viola
     const seen = seenOwners.get(write.field) ?? new Set<string>();
     seen.add(write.file);
     seenOwners.set(write.field, seen);
+    if (write.field === '[computed]') {
+      violations.push({
+        rule: 'R7 session-state-ownership',
+        file: write.file,
+        line: write.line,
+        message:
+          'computed write to a session field (`session[key] = …`). The field cannot be ' +
+          'attributed to an owner, so write the field by name, or move the write into the ' +
+          'module that owns the fields it can reach.',
+      });
+      continue;
+    }
     if (owners === undefined) {
       violations.push({
         rule: 'R7 session-state-ownership',
@@ -326,7 +344,7 @@ function report(files: readonly string[], violations: readonly Violation[]): num
     process.stdout.write(
       `Layering guard: OK — ${files.length} source files satisfy R1-R3 and contain no ` +
         `value-import cycles (both checked globally); the ranked target spine contains no ` +
-        `back-edges (root/peripheral zones are intentionally unranked), and its type-only ` +
+        `back-edges (only the composition root is unranked), and its type-only ` +
         `inversions match the R6 ratchet (${Object.values(TYPE_INVERSION_BASELINE).reduce((sum, count) => sum + count, 0)} remaining); ` +
         `every SessionState write is inside its declared owner (R7).\n`,
     );

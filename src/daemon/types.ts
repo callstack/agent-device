@@ -8,7 +8,6 @@ import type {
   LeaseBackend,
   SessionRuntimeHints as PublicSessionRuntimeHints,
 } from '../kernel/contracts.ts';
-export type { DaemonLockPolicy } from '../kernel/contracts.ts';
 import type { CommandFlags } from '../core/dispatch.ts';
 import type { GestureReferenceFrame, ScrollDirection } from '../contracts/scroll-gesture.ts';
 import type { LogBackend } from '../contracts/logs.ts';
@@ -25,7 +24,7 @@ import type { RefFrameScope, RefFrameState } from './ref-frame.ts';
 import type { TargetAnnotationV1 } from '../replay/target-identity.ts';
 import type { ReplayTargetGuardDenotation } from '../replay/target-identity-node.ts';
 import type { AppLogFailure, AppLogState } from './app-log-process.ts';
-import type { DeviceLease } from './lease-registry.ts';
+import type { DeviceLease } from '../contracts/device-provider.ts';
 import type { AndroidNativePerfSession } from '../platforms/android/perf.ts';
 import type {
   AppleXctracePerfCapture,
@@ -33,12 +32,6 @@ import type {
 } from '../platforms/apple/core/perf-xctrace.ts';
 import type { AudioProbeSource } from '../contracts/audio-probe-result.ts';
 import type { SnapshotDiagnosticsState } from '../contracts/snapshot-diagnostics.ts';
-export type {
-  ReplaySuiteResult,
-  ReplaySuiteTestFailed,
-  ReplaySuiteTestResult,
-} from '../contracts/replay.ts';
-
 export type DaemonInstallSource = PublicDaemonInstallSource;
 export type SessionRuntimeHints = PublicSessionRuntimeHints;
 export type DaemonArtifact = PublicDaemonArtifact;

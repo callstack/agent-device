@@ -1,3 +1,7 @@
+import type {
+  CloudProviderProfileFields,
+  RemoteConfigMetroOptions,
+} from '../contracts/remote-config-fields.ts';
 import { buildPrimaryEnvVarName } from '../utils/source-value.ts';
 import type {
   DaemonServerMode,
@@ -6,24 +10,6 @@ import type {
   SessionIsolationMode,
 } from '../kernel/contracts.ts';
 import { PLATFORM_SELECTORS, type DeviceTarget, type PlatformSelector } from '../kernel/device.ts';
-import type { MetroPrepareKind } from '../metro/client-metro.ts';
-
-export type RemoteConfigMetroOptions = {
-  metroProjectRoot?: string;
-  metroKind?: MetroPrepareKind;
-  metroPublicBaseUrl?: string;
-  metroProxyBaseUrl?: string;
-  metroBearerToken?: string;
-  metroPreparePort?: number;
-  metroListenHost?: string;
-  metroStatusHost?: string;
-  metroStartupTimeoutMs?: number;
-  metroProbeTimeoutMs?: number;
-  metroRuntimeFile?: string;
-  metroNoReuseExisting?: boolean;
-  metroNoInstallDeps?: boolean;
-  launchUrl?: string;
-};
 
 export type RemoteConnectionProfileFields = {
   stateDir?: string;
@@ -39,19 +25,6 @@ export type RemoteConnectionProfileFields = {
   leaseProvider?: string;
   deviceKey?: string;
   clientId?: string;
-};
-
-export type CloudProviderProfileFields = {
-  providerApp?: string;
-  providerOsVersion?: string;
-  providerProject?: string;
-  providerBuild?: string;
-  providerSessionName?: string;
-  awsProjectArn?: string;
-  awsDeviceArn?: string;
-  awsAppArn?: string;
-  awsRegion?: string;
-  awsInteractionMode?: 'INTERACTIVE' | 'NO_VIDEO' | 'VIDEO_ONLY';
 };
 
 export type RemoteConfigProfile = RemoteConfigMetroOptions &

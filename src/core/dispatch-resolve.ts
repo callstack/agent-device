@@ -1,3 +1,4 @@
+import type { DeviceInventoryProvider } from '../contracts/device-provider.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { AppError } from '../kernel/errors.ts';
 import {
@@ -38,10 +39,6 @@ const resolveTargetDeviceCacheScope = new AsyncLocalStorage<Map<string, DeviceIn
 const deviceInventoryProviderScope = new AsyncLocalStorage<DeviceInventoryProvider>();
 
 export type { DeviceInventoryRequest };
-
-export type DeviceInventoryProvider = (
-  request: DeviceInventoryRequest,
-) => Promise<DeviceInfo[] | null | undefined>;
 
 type AppleDeviceSelector = {
   platform?: 'ios' | 'macos' | 'apple';

@@ -22,7 +22,9 @@ export type IsPredicate =
   | 'focused'
   | 'text';
 
-export function isSupportedPredicate(input: string): input is IsPredicate {
+// Module-private since `checkIsPredicate` became the admission API: a caller that tests the
+// vocabulary without going through admission is how the case-normalization drift started.
+function isSupportedPredicate(input: string): input is IsPredicate {
   return ['visible', 'hidden', 'exists', 'editable', 'selected', 'focused', 'text'].includes(input);
 }
 

@@ -1,3 +1,4 @@
+import type { MetroPrepareKind } from '../contracts/metro.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { sleep } from '../utils/timeouts.ts';
@@ -29,7 +30,6 @@ const DEV_SERVER_STATUS_READY_TEXT = 'packager-status:running';
 const METRO_TERM_TIMEOUT_MS = 1_000;
 const METRO_KILL_TIMEOUT_MS = 1_000;
 
-export type MetroPrepareKind = 'auto' | 'react-native' | 'expo' | 'repack';
 type ResolvedMetroKind = Exclude<MetroPrepareKind, 'auto'>;
 type EnvSource = NodeJS.ProcessEnv | Record<string, string | undefined>;
 type RepackBundlerKind = 'rspack' | 'webpack';

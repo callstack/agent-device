@@ -41,11 +41,8 @@ import type { SessionSurface } from '../contracts/session-surface.ts';
 import type { FindLocator } from '../selectors/find.ts';
 import type { SnapshotNode, SnapshotUnchanged, SnapshotVisibility } from '../kernel/snapshot.ts';
 import type { ScreenshotResultData } from '../utils/screenshot-result.ts';
-import type {
-  MetroPrepareKind,
-  PrepareMetroRuntimeResult,
-  ReloadMetroResult,
-} from '../metro/client-metro.ts';
+import type { PrepareMetroRuntimeResult, ReloadMetroResult } from '../metro/client-metro.ts';
+import type { MetroPrepareKind } from '../contracts/metro.ts';
 import type { MetroBridgeScope } from './client-companion-tunnel-contract.ts';
 import type { AppsFilter } from '../contracts/app-inventory.ts';
 import type { ScreenshotRequestFlags } from '../contracts/screenshot.ts';
@@ -57,10 +54,8 @@ import type { PerfAction, PerfArea, PerfKind, PerfSubject } from '../contracts/p
 import type { AlertAction } from '../contracts/alert-contract.ts';
 import type { DebugSymbolsOptions, DebugSymbolsResult } from '../contracts/debug-symbols.ts';
 import type { JsonObject } from '../contracts/json.ts';
-import type {
-  CloudProviderProfileFields,
-  RemoteConnectionProfileFields,
-} from '../remote/remote-config-schema.ts';
+import type { RemoteConnectionProfileFields } from '../remote/remote-config-schema.ts';
+import type { CloudProviderProfileFields } from '../contracts/remote-config-fields.ts';
 import type { CommandResult } from '../core/command-descriptor/command-result.ts';
 import type {
   AgentArtifactsResult,
@@ -73,13 +68,9 @@ export type { AlertAction } from '../contracts/alert-contract.ts';
 export type { DebugSymbolsOptions, DebugSymbolsResult } from '../contracts/debug-symbols.ts';
 export type { AppleOS } from '../kernel/device.ts';
 export type {
-  OrientationCommandResult,
   /** @deprecated Renamed to `OrientationCommandResult`. Retained until the next major. */
   RotateCommandResult,
 } from '../contracts/navigation.ts';
-export type { ClipboardCommandResult } from '../contracts/clipboard.ts';
-export type { AppStateCommandResult } from '../contracts/app-state.ts';
-export type { KeyboardCommandResult } from '../contracts/keyboard.ts';
 export type { WaitCommandResult } from '../contracts/wait.ts';
 export type { PrepareCommandResult } from '../contracts/prepare.ts';
 export type { PushCommandResult } from '../contracts/push.ts';

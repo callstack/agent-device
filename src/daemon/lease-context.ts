@@ -1,6 +1,6 @@
 import type { DaemonRequest } from './types.ts';
 import type { LeaseBackend } from '../kernel/contracts.ts';
-import type { DeviceLease } from './lease-registry.ts';
+import type { DeviceLease } from '../contracts/device-provider.ts';
 import type { RunnerLogicalLeaseContext } from '../contracts/runner-lease-context.ts';
 import { stripUndefined } from '../utils/parsing.ts';
 import {

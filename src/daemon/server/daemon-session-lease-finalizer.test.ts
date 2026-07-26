@@ -3,7 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
-import { LeaseRegistry, type DeviceLease } from '../lease-registry.ts';
+import { LeaseRegistry } from '../lease-registry.ts';
+import type { DeviceLease } from '../../contracts/device-provider.ts';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
 import { finalizeDaemonSessionLease } from './daemon-session-lease-finalizer.ts';
 

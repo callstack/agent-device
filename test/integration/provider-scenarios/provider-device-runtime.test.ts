@@ -7,10 +7,12 @@ import {
   type ProviderDeviceRuntime,
   type ProviderPortReverseOptions,
 } from '../../../src/provider-device-runtime.ts';
-import type { DeviceInventoryProvider } from '../../../src/core/dispatch-resolve.ts';
+import type {
+  DeviceInventoryProvider,
+  DeviceLease,
+  LeaseLifecycleProvider,
+} from '../../../src/contracts/device-provider.ts';
 import type { Interactor, SnapshotResult } from '../../../src/contracts/interactor-types.ts';
-import type { LeaseLifecycleProvider } from '../../../src/daemon/handlers/lease.ts';
-import type { DeviceLease } from '../../../src/daemon/lease-registry.ts';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';
 import type { DeviceInfo } from '../../../src/kernel/device.ts';
 import { assertRpcError, assertRpcOk } from './assertions.ts';

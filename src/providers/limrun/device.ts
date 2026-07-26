@@ -1,4 +1,4 @@
-import type { DeviceLease } from '../../daemon/lease-registry.ts';
+import type { DeviceLease } from '../../contracts/device-provider.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 
 export type LimrunPlatform = 'ios' | 'android';

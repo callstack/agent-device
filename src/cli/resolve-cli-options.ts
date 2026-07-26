@@ -2,7 +2,7 @@ import type { CliFlags } from '../contracts/cli-flags.ts';
 import { mergeDefinedFlags } from '../utils/merge-flags.ts';
 import { finalizeParsedArgs, parseRawArgs } from './parser/args.ts';
 import { resolveConfigBackedFlagDefaults } from '../cli-schema/cli-config.ts';
-import { resolveRemoteConfigDefaults } from '../utils/remote-config.ts';
+import { resolveRemoteConfigDefaults } from './remote-config-flags.ts';
 import type { EnvMap } from '../utils/env-map.ts';
 
 export function resolveCliOptions(

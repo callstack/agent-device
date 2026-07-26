@@ -25,45 +25,45 @@ export type BackEdgeMap = Record<string, string[]>;
 // that no zone is silently unclassified.
 const TARGET_DAG_RANK = new Map([
   ['kernel', 0],
+  ['cloud-webdriver', 1],
   ['contracts', 1],
-  ['utils', 1],
-  ['request', 1],
-  ['selectors', 1],
   ['platforms', 1],
+  ['recording', 1],
+  ['replay', 1],
+  ['request', 1],
+  ['screenshot-diff', 1],
+  ['selectors', 1],
+  ['snapshot', 1],
+  ['utils', 1],
   ['core', 2],
-  ['commands', 3],
+  ['providers', 2],
   ['cli-schema', 3],
+  ['commands', 3],
+  ['mcp', 3],
   ['client', 4],
+  ['compat', 4],
   ['daemon-server', 4],
+  ['metro', 4],
+  ['remote', 4],
+  ['sdk', 4],
   ['daemon-client', 5],
   ['cli', 6],
 ]);
 
 export const RANKED_ZONES: ReadonlySet<string> = new Set(TARGET_DAG_RANK.keys());
 
-// Zones deliberately left OUT of the ranked spine. They are NOT unenforced: every file
-// in them is still subject to the global production value-import cycle rejection (R4)
-// and the R1-R3 move rules. They only opt out of spine back-edge ranking, for one of
-// two deliberate reasons:
-//   - root: `(root)` entrypoints (src/cli.ts, src/backend.ts, …) compose the spine from
-//     above rather than sitting inside it.
-//   - peripheral: satellite feature/adapter zones the spine does not depend on in a
-//     fixed rank order. Assigning them a rank would invent a back-edge direction the
-//     architecture does not commit to.
-export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
-  '(root)',
-  'cloud-webdriver',
-  'compat',
-  'mcp',
-  'metro',
-  'providers',
-  'recording',
-  'remote',
-  'replay',
-  'screenshot-diff',
-  'sdk',
-  'snapshot',
-]);
+// The one zone deliberately left OUT of the ranked spine. It is NOT unenforced: every file
+// in it is still subject to the global production value-import cycle rejection (R4) and the
+// R1-R3 move rules. It opts out of spine back-edge ranking because `(root)` holds the
+// entrypoints and the composition roots that wire the command surface into the daemon —
+// and R2 forbids `daemon/` from importing `commands/`, so those files must sit outside the
+// spine by construction, composing it from above.
+//
+// The satellite zones used to be listed here too, on the grounds that ranking them would
+// invent an order the architecture had not committed to. Once `utils` joined the spine and
+// `(root)` was emptied of shared contracts, every one of them turned out to have a
+// consistent rank already — so the order was there, just unasserted.
+export const UNRANKED_ZONES: ReadonlySet<string> = new Set(['(root)']);
 
 export type ZoneClassification = 'ranked' | 'unranked' | 'unclassified';
 

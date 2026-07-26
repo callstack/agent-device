@@ -1,4 +1,4 @@
-import type { DeviceLease } from '../daemon/lease-registry.ts';
+import type { DeviceLease } from '../contracts/device-provider.ts';
 
 export type LeaseValue<T> = T | ((lease: DeviceLease) => T);
 

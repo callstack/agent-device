@@ -13,7 +13,15 @@
 // a new module fails until that module is either declared an owner or, better, calls the
 // owner instead. ADR 0014's ref frame is the worked example — its four fields moved together
 // across two modules until `activateRefFrame` took the transition.
+//
+// Detection is AST-based (`oxc-parser`, already a devDependency) rather than a line regex. A
+// regex has to enumerate assignment operators, and the ones it forgets are exactly the ones
+// that slip through: `??=` on an optional field is the natural way to write a default, and a
+// computed `session[key] =` hides the field name entirely. The parser reports every
+// assignment and update form for free, and a `session.a.b = …` sub-object write is reported
+// as what it is rather than mistaken for a write to `a`.
 
+import { parseSync } from 'oxc-parser';
 import path from 'node:path';
 
 export type SessionStateWrite = {
@@ -97,9 +105,51 @@ export function sessionStateFields(typesSource: string): string[] {
   );
 }
 
+/** A member expression being assigned to, or updated with `++`/`--`. */
+type WriteTarget = {
+  object: string | undefined;
+  field: string | undefined;
+  computed: boolean;
+  offset: number;
+};
+
+function writeTarget(node: Record<string, unknown>): WriteTarget | null {
+  const type = node['type'];
+  const member =
+    type === 'AssignmentExpression'
+      ? (node['left'] as Record<string, unknown> | undefined)
+      : type === 'UpdateExpression'
+        ? (node['argument'] as Record<string, unknown> | undefined)
+        : undefined;
+  if (!member || member['type'] !== 'MemberExpression') return null;
+  const object = member['object'] as Record<string, unknown> | undefined;
+  const property = member['property'] as Record<string, unknown> | undefined;
+  return {
+    // Only a direct `<identifier>.field` write is a session write; `a.b.c = …` writes into a
+    // sub-object and its `object` is a MemberExpression, so it has no identifier name here.
+    object: object?.['type'] === 'Identifier' ? (object['name'] as string) : undefined,
+    field: property?.['type'] === 'Identifier' ? (property['name'] as string) : undefined,
+    computed: member['computed'] === true,
+    offset: typeof member['start'] === 'number' ? member['start'] : 0,
+  };
+}
+
+function lineOf(source: string, offset: number): number {
+  let line = 1;
+  for (let index = 0; index < offset && index < source.length; index++) {
+    if (source[index] === '\n') line++;
+  }
+  return line;
+}
+
 /**
- * Every `session.<field> = …` (or `+=`/`++`) write to a declared `SessionState` field.
- * `session-store.ts` is excluded: it owns the record and may write anything on it.
+ * Every write to a declared `SessionState` field through a binding named `session`, in any
+ * assignment or update form. `session-store.ts` is excluded: it owns the record and may write
+ * anything on it.
+ *
+ * A computed write (`session[key] = …`) cannot be attributed to a field, so it is reported
+ * against the sentinel field name `[computed]` — which has no owner and therefore fails,
+ * rather than passing unnoticed.
  */
 export function findSessionStateWrites(
   sources: ReadonlyMap<string, string>,
@@ -107,19 +157,33 @@ export function findSessionStateWrites(
 ): SessionStateWrite[] {
   const declared = new Set(fields);
   const writes: SessionStateWrite[] = [];
+
   for (const [file, source] of sources) {
     if (!file.startsWith('src/daemon/')) continue;
     if (path.posix.basename(file) === 'session-store.ts') continue;
-    const lines = source.split('\n');
-    for (let index = 0; index < lines.length; index++) {
-      for (const match of lines[index]!.matchAll(
-        /\bsession\.([a-zA-Z][A-Za-z0-9]*)\s*(?:=[^=]|\+\+|--|\+=)/g,
-      )) {
-        const field = match[1]!;
-        if (!declared.has(field)) continue;
-        writes.push({ file, line: index + 1, field });
+
+    const parsed = parseSync(file, source);
+    const visit = (node: unknown): void => {
+      if (node === null || typeof node !== 'object') return;
+      if (Array.isArray(node)) {
+        for (const child of node) visit(child);
+        return;
       }
-    }
+      const record = node as Record<string, unknown>;
+      const target = writeTarget(record);
+      if (target && target.object === 'session') {
+        if (target.computed) {
+          writes.push({ file, line: lineOf(source, target.offset), field: '[computed]' });
+        } else if (target.field !== undefined && declared.has(target.field)) {
+          writes.push({ file, line: lineOf(source, target.offset), field: target.field });
+        }
+      }
+      for (const key of Object.keys(record)) visit(record[key]);
+    };
+    visit(parsed.program);
   }
-  return writes;
+
+  return writes.sort(
+    (left, right) => left.file.localeCompare(right.file) || left.line - right.line,
+  );
 }

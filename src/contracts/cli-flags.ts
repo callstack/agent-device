@@ -17,7 +17,7 @@ import type {
 import type {
   CloudProviderProfileFields,
   RemoteConfigMetroOptions,
-} from '../remote/remote-config-schema.ts';
+} from './remote-config-fields.ts';
 import type { ScreenshotRequestFlags } from './screenshot.ts';
 import type { RecordingScope } from './recording-scope.ts';
 

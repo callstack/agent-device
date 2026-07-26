@@ -27,7 +27,7 @@ import { recordSessionAction } from './handler-utils.ts';
 import { stopSessionRecordingForTeardown } from './record-trace-recording.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 import { releaseSessionLease } from '../lease-lifecycle.ts';
-import type { LeaseLifecycleProvider } from './lease.ts';
+import type { LeaseLifecycleProvider } from '../../contracts/device-provider.ts';
 import {
   reportSessionCleanupFailures,
   restoreSessionAndroidIme,

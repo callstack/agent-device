@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { CloudArtifactsResult } from '../contracts/cloud-artifacts.ts';
-import type { DaemonRequest } from '../daemon/types.ts';
+import type { DaemonRequest } from '../kernel/contracts.ts';
 import { AppError } from '../kernel/errors.ts';
 import type { ProviderDeviceRuntime } from '../provider-device-runtime.ts';
 import {

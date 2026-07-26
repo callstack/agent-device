@@ -11,7 +11,7 @@ import { CLOUD_WEBDRIVER_PROVIDERS } from '../../../src/cloud-webdriver/provider
 import type { CloudArtifact } from '../../../src/contracts/cloud-artifacts.ts';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
 import { createExpiredProviderLeaseReleaser } from '../../../src/daemon/provider-lease-expiry.ts';
-import type { DeviceLease } from '../../../src/daemon/lease-registry.ts';
+import type { DeviceLease } from '../../../src/contracts/device-provider.ts';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import {

@@ -1,10 +1,11 @@
+import type { LeaseLifecycleProvider } from '../../contracts/device-provider.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type {
   AgentArtifactsResult,
   CloudArtifactProvider,
 } from '../../contracts/cloud-artifacts.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
-import type { DeviceLease, LeaseRegistry } from '../lease-registry.ts';
+import type { LeaseRegistry } from '../lease-registry.ts';
 import type { SessionStore } from '../session-store.ts';
 import {
   isProxyLeaseScope,
@@ -18,25 +19,6 @@ import {
 } from '../../core/lease-scope.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { listDownloadableArtifacts } from '../artifact-tracking.ts';
-
-export type LeaseLifecycleProvider = {
-  allocate?: (
-    lease: DeviceLease,
-    context?: LeaseLifecycleContext,
-  ) => Promise<Record<string, unknown> | undefined>;
-  heartbeat?: (
-    lease: DeviceLease,
-    context?: LeaseLifecycleContext,
-  ) => Promise<Record<string, unknown> | undefined>;
-  release?: (
-    lease: DeviceLease,
-    context?: LeaseLifecycleContext,
-  ) => Promise<Record<string, unknown> | undefined>;
-};
-
-export type LeaseLifecycleContext = {
-  req: DaemonRequest;
-};
 
 type LeaseHandlerArgs = {
   req: DaemonRequest;

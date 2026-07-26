@@ -1,7 +1,8 @@
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { leaseScopeToReleaseRequest } from '../core/lease-scope.ts';
 import { clearAdvisoryDeviceClaim } from './device-claims.ts';
-import type { DeviceLease, LeaseRegistry } from './lease-registry.ts';
+import type { LeaseRegistry } from './lease-registry.ts';
+import type { DeviceLease, LeaseLifecycleProvider } from '../contracts/device-provider.ts';
 import { buildSessionLeaseFromRequest, type SessionLease } from './lease-context.ts';
 import {
   assertRequestLeaseAdmission,
@@ -9,7 +10,6 @@ import {
 } from './request-admission.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonRequest, SessionState } from './types.ts';
-import type { LeaseLifecycleProvider } from './handlers/lease.ts';
 
 export type ExpiredProviderLeaseRecovery = (lease: DeviceLease) => Promise<void>;
 

@@ -20,7 +20,7 @@ import {
   type RemoteConnectionState,
   type RemoteConnectionRequestMetadata,
 } from '../../remote/remote-connection-state.ts';
-import { profileToCliFlags } from '../../utils/remote-config.ts';
+import { profileToCliFlags } from '../remote-config-flags.ts';
 import type { BatchStep } from '../../client/client-types.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { LeaseBackend, SessionRuntimeHints } from '../../kernel/contracts.ts';

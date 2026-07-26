@@ -1,4 +1,4 @@
-import type { RemoteConfigMetroOptions } from '../../remote/remote-config-schema.ts';
+import type { RemoteConfigMetroOptions } from '../../contracts/remote-config-fields.ts';
 import type { CliFlags } from '../../contracts/cli-flags.ts';
 
 export function readMetroProfileFields(flags: CliFlags): RemoteConfigMetroOptions {

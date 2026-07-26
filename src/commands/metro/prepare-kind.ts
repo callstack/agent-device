@@ -1,5 +1,5 @@
 import { AppError } from '../../kernel/errors.ts';
-import type { MetroPrepareKind } from '../../metro/client-metro.ts';
+import type { MetroPrepareKind } from '../../contracts/metro.ts';
 
 const METRO_PREPARE_KIND_VALUES: readonly MetroPrepareKind[] = [
   'auto',

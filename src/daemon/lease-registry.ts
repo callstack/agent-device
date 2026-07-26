@@ -1,20 +1,8 @@
+import type { DeviceLease } from '../contracts/device-provider.ts';
 import crypto from 'node:crypto';
 import type { LeaseBackend } from '../kernel/contracts.ts';
 import { AppError } from '../kernel/errors.ts';
 import { normalizeTenantId } from './config.ts';
-
-export type DeviceLease = {
-  leaseId: string;
-  tenantId: string;
-  runId: string;
-  backend: LeaseBackend;
-  leaseProvider?: string;
-  deviceKey?: string;
-  clientId?: string;
-  createdAt: number;
-  heartbeatAt: number;
-  expiresAt: number;
-};
 
 export type SimulatorLease = DeviceLease;
 

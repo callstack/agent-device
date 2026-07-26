@@ -5,7 +5,7 @@ import { AppError } from '../kernel/errors.ts';
 import { getDaemonCommandRoute } from './daemon-command-registry.ts';
 import * as genericRequestHandlerModule from './request-generic-dispatch.ts';
 import type { DaemonCommandContext } from './context.ts';
-import type { LeaseLifecycleProvider } from './handlers/lease.ts';
+import type { LeaseLifecycleProvider } from '../contracts/device-provider.ts';
 import type { LeaseRegistry } from './lease-registry.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from './types.ts';

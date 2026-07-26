@@ -5,14 +5,17 @@ import type {
   CloudArtifactsResult,
 } from './contracts/cloud-artifacts.ts';
 import type { Interactor, RunnerContext } from './contracts/interactor-types.ts';
-import type { DeviceInventoryProvider } from './core/dispatch-resolve.ts';
+import type {
+  DeviceInventoryProvider,
+  DeviceLease,
+  LeaseLifecycleContext,
+  LeaseLifecycleProvider,
+} from './contracts/device-provider.ts';
 import type { AppleRunnerProviderResolver } from './daemon/request-platform-providers.ts';
 import type {
   AppleRunnerCommandExecutor,
   AppleRunnerProvider,
 } from './platforms/apple/core/runner/runner-provider.ts';
-import type { LeaseLifecycleContext, LeaseLifecycleProvider } from './daemon/handlers/lease.ts';
-import type { DeviceLease } from './daemon/lease-registry.ts';
 import { publicPlatformString, type DeviceInfo } from './kernel/device.ts';
 import { AppError } from './kernel/errors.ts';
 

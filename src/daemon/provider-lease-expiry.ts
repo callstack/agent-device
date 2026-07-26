@@ -1,9 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ProviderExpiredLeaseRecovery } from '../provider-device-runtime.ts';
-import type { LeaseLifecycleProvider } from './handlers/lease.ts';
+import type { DeviceLease, LeaseLifecycleProvider } from '../contracts/device-provider.ts';
 import { releaseExpiredProviderLease } from './lease-lifecycle.ts';
-import type { DeviceLease } from './lease-registry.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { sleep } from '../utils/timeouts.ts';
 

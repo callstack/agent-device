@@ -73,7 +73,7 @@ test('back-edge identities follow the documented target spine', () => {
       ['src/core/platform-plugin.ts', 'export const plugin = true;'],
       ['src/commands/help.ts', "import '../cli/parser.ts';"],
       ['src/cli/parser.ts', 'export const parser = true;'],
-      ['src/mcp/shared.ts', "import '../core/platform-plugin.ts';"],
+      ['src/(root-fixture)/shared.ts', "import './core/platform-plugin.ts';"],
     ]),
   );
   const actual = collectBackEdges(edges);
@@ -141,7 +141,10 @@ test('classifyZone separates the ranked spine from intentionally-unranked zones'
   assert.equal(classifyZone('daemon-server'), 'ranked');
   assert.equal(classifyZone('(root)'), 'unranked');
   assert.equal(classifyZone('utils'), 'ranked');
-  assert.equal(classifyZone('mcp'), 'unranked');
+  // Every satellite zone joined the spine; only the composition root stays out, because R2
+  // forbids daemon/ from importing commands/ so the files that wire them cannot be ranked.
+  assert.equal(classifyZone('mcp'), 'ranked');
+  assert.equal(classifyZone('snapshot'), 'ranked');
   // A zone that is neither ranked nor listed peripheral must be flagged, never
   // silently treated as back-edge-free.
   assert.equal(classifyZone('not-a-real-zone'), 'unclassified');
@@ -203,6 +206,10 @@ test('session-state writes are found by field, and non-daemon or undeclared name
       ['src/daemon/audio-probe.ts', 'session.somethingElse = 1;'],
       // reads and comparisons are not writes
       ['src/daemon/handlers/find.ts', "if (session.refFrameState === 'active') return;"],
+      // a write into a sub-object is not a write to the field itself
+      ['src/daemon/handlers/session-open.ts', 'session.refFrameState.inner = 1;'],
+      // a different binding that happens to have a matching property
+      ['src/daemon/handlers/session-close.ts', "other.refFrameState = 'expired';"],
     ]),
     ['refFrameState', 'snapshotGeneration'],
   );
@@ -211,6 +218,46 @@ test('session-state writes are found by field, and non-daemon or undeclared name
     writes.map(({ file, field }) => `${file}:${field}`),
     ['src/daemon/ref-frame.ts:refFrameState', 'src/daemon/session-snapshot.ts:snapshotGeneration'],
   );
+});
+
+test('every assignment form is a write, including the ones a regex forgets', () => {
+  // A line-based matcher has to enumerate operators, and the ones it misses are the natural
+  // ways to write these: `??=` for a default on an optional field, `||=`/`&&=` for a flag.
+  const forms = [
+    'session.refFrameState = 1;',
+    'session.refFrameState ??= 1;',
+    'session.refFrameState ||= 1;',
+    'session.refFrameState &&= 1;',
+    'session.refFrameState += 1;',
+    'session.refFrameState -= 1;',
+    'session.refFrameState++;',
+    '--session.refFrameState;',
+    'session\n  .refFrameState = 1;',
+  ];
+  for (const form of forms) {
+    const writes = findSessionStateWrites(new Map([['src/daemon/probe.ts', form]]), [
+      'refFrameState',
+    ]);
+    assert.deepEqual(
+      writes.map(({ field }) => field),
+      ['refFrameState'],
+      `expected ${JSON.stringify(form)} to count as a write`,
+    );
+  }
+});
+
+test('a computed session write is reported rather than silently unattributed', () => {
+  const writes = findSessionStateWrites(
+    new Map([['src/daemon/probe.ts', 'session[key] = 1;\nsession[`refFrameState`] = 2;']]),
+    ['refFrameState'],
+  );
+  // `[computed]` has no entry in SESSION_STATE_FIELD_OWNERS, so R7 fails on it by
+  // construction — a computed write can never pass as an owned one.
+  assert.deepEqual(
+    writes.map(({ field }) => field),
+    ['[computed]', '[computed]'],
+  );
+  assert.equal(SESSION_STATE_FIELD_OWNERS['[computed]'], undefined);
 });
 
 test('every declared session-state owner is a real file path under src/daemon', () => {

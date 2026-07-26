@@ -18,6 +18,11 @@
         "count": 1
       }
     },
+    "src/cli-schema/cli-config.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
     "src/cli-schema/option-schema.ts": {
       "complexity_moderate": {
         "count": 1
@@ -485,11 +490,6 @@
       }
     },
     "src/snapshot/snapshot-lines.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "src/utils/cli-config.ts": {
       "crap_moderate": {
         "count": 1
       }
