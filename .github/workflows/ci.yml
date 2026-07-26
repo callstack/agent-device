@@ -96,16 +96,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      # This job used to run with install-deps: false, and R8 still holds every
+      # remaining zero-dep job to that contract. The layering guard itself opted out
+      # when R7 (SessionState ownership) started parsing the daemon with `oxc-parser`
+      # instead of matching assignment operators with a regex: a regex cannot see
+      # `??=` or a computed `session[key] =` write, so the choice was a real parser or
+      # a rule with holes in it. Keep install-deps enabled.
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
-        with:
-          install-deps: false
 
       - name: Check import-direction DAG
         # Generalizes the former inline commands/-import grep into a structured
         # import-direction lint over the resolved graph. See scripts/layering/check.ts
-        # and CONTEXT.md (Architecture: folder DAG + layering lint). Invoked directly
-        # (no deps needed) so the job stays fast and does not require a pnpm install.
+        # and CONTEXT.md (Architecture: folder DAG + layering lint).
         run: |
           node --experimental-strip-types --test scripts/layering/model.test.ts
           node --experimental-strip-types scripts/layering/check.ts

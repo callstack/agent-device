@@ -249,23 +249,25 @@ The perfect-shape refactor is complete and merged. Its end-state:
   hardware evidence validates discovery, lifecycle, and the complete remote-control contract.
   Vega capture, selector, inventory, install, logging, and performance backends remain separate
   follow-up surfaces.
-- Folder DAG + layering lint. `scripts/layering/check.ts` enforces four different scopes in CI.
+- Folder DAG + layering lint. `scripts/layering/check.ts` enforces five rules across four scopes in CI.
   GLOBALLY, across every production source file, it enforces the R1-R3 move rules (kernel-sink,
   commands-floor, platforms-seam) and rejects all production static value-import cycles. Separately,
   it ranks an explicit target spine — as rank groups, lowest (kernel sink) to highest, where `A ◄ B`
   means B may not be outranked by A (the back-edge order the gate rejects), NOT that every displayed
   import exists:
-  `kernel ◄ { contracts, request, selectors, platforms, utils } ◄ core ◄ { commands, cli-schema } ◄ { client, daemon-server } ◄ daemon-client ◄ cli` —
-  and rejects every back-edge within it. Root entrypoints and peripheral zones (`mcp`, `compat`,
-  `remote`, `metro`, `replay`, `recording`, `snapshot`, `screenshot-diff`, `cloud-webdriver`, `sdk`)
-  are deliberately unranked (`UNRANKED_ZONES` in `scripts/layering/model.ts`): they still
-  obey R1-R4, but the gate asserts no total back-edge order over them. It is not a claim that every
-  folder is arranged in one DAG. `model.test.ts` guards that no new zone escapes this classification
-  silently. Thirdly, R6 ratchets the SAME inversion measured over TYPE-ONLY edges, which R5 ignores
-  by design: a type-only import is free at runtime, but "zone A is declared in terms of zone B" is
-  still a boundary claim, and ranking type edges surfaced 61 inversions the gate had never seen.
-  `TYPE_INVERSION_BASELINE` in `check.ts` holds the remaining pairs with their counts; the numbers
-  may only shrink, and a new pair fails outright.
+  `kernel ◄ { contracts, request, selectors, platforms, utils, replay, recording, snapshot, screenshot-diff, cloud-webdriver } ◄ { core, providers } ◄ { commands, cli-schema, mcp } ◄ { client, daemon-server, compat, remote, metro, sdk } ◄ daemon-client ◄ cli` —
+  and rejects every back-edge within it. Only `(root)` is unranked (`UNRANKED_ZONES` in
+  `scripts/layering/model.ts`): it holds the entrypoints and the composition roots that wire the
+  command surface into the daemon, and R2 forbids `daemon/` from importing `commands/`, so those
+  files sit outside the spine by construction. The satellite zones used to be unranked too, on the
+  grounds that ranking them would invent an order the architecture had not committed to; once
+  `utils` joined the spine and `(root)` was emptied of shared contracts, every one of them turned
+  out to have a consistent rank already. `model.test.ts` guards that no new zone escapes this
+  classification silently. Thirdly, R6 ratchets the SAME inversion measured over TYPE-ONLY edges,
+  which R5 ignores by design: a type-only import is free at runtime, but "zone A is declared in
+  terms of zone B" is still a boundary claim, and ranking type edges surfaced 61 inversions the gate
+  had never seen. `TYPE_INVERSION_BASELINE` in `check.ts` holds the remaining pairs with their
+  counts; the numbers may only shrink, and a new pair fails outright.
 - SessionState ownership (R7). `SessionStore.get()` returns the live record out of a private Map
   and `set()` re-puts the same reference, so any `session.<field> = …` in the daemon is a durable
   write to store-owned state — persistence depends on aliasing, not on an API call. That is
@@ -276,6 +278,16 @@ The perfect-shape refactor is complete and merged. Its end-state:
   read out of the `SessionState` declaration, so a daemon module with an unrelated local named
   `session` cannot trip it. ADR 0014's ref frame is the worked example — its four fields moved
   together across two modules until `activateRefFrame` took the transition.
+- Zero-dep CI jobs (R8). Some jobs run scripts straight from a checkout with `install-deps: false`,
+  so they have no `node_modules`. Nothing local can feel that constraint — every dev machine has
+  `node_modules` sitting right there — so a script grows a package import, passes locally, and fails
+  the runner on the resolve. R8 reads the zero-dep job list out of `.github/workflows/` (declaring a
+  job zero-dep is what puts it under the rule; there is no second list to update), walks each job's
+  entry scripts and their whole relative-import closure, and requires every specifier to be a Node
+  builtin or another repo file. A zero-dep job whose entry scripts the scan cannot identify fails
+  too, so the rule cannot be escaped by changing how the job invokes them. Specifiers come from
+  `oxc-parser`'s module record rather than a line scan, because these closures include `--test`
+  files whose fixtures legitimately contain import syntax inside strings.
 - Agent-cost. Responses carry a cost block and MCP `outputSchema`, rendered through a leveled
   `ResponseView`.
 

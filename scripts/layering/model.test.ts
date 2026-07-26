@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
 import { listSourceFiles } from './check.ts';
 import {
@@ -6,6 +8,7 @@ import {
   sessionStateFields,
   SESSION_STATE_FIELD_OWNERS,
 } from './session-state.ts';
+import { uninstallableImports, zeroDepJobs } from './zero-dep-jobs.ts';
 import {
   RANKED_ZONES,
   typeInversionPair,
@@ -271,5 +274,128 @@ test('every declared session-state owner is a real file path under src/daemon', 
       );
     }
     assert.deepEqual([...owners], [...owners].sort(), `${field} owners must be sorted`);
+  }
+});
+
+// R8: the zero-dep CI job contract. These tests use synthetic workflows and a synthetic tree,
+// because the point of the rule is to catch a shape that does not exist in the repo yet.
+
+const ZERO_DEP_WORKFLOW = `
+name: CI
+jobs:
+  installs-deps:
+    steps:
+      - uses: ./.github/actions/setup-node-pnpm
+      - run: node scripts/needs-packages/entry.ts
+  zero-dep:
+    steps:
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          install-deps: false
+      - run: |
+          node --experimental-strip-types --test scripts/probe/entry.test.ts
+          node --experimental-strip-types scripts/probe/entry.ts
+`;
+
+test('a zero-dep job is discovered from the workflow, and a dep-installing one is not', () => {
+  const present = new Set(['scripts/probe/entry.ts', 'scripts/probe/entry.test.ts']);
+  const jobs = zeroDepJobs(new Map([['.github/workflows/probe.yml', ZERO_DEP_WORKFLOW]]), (file) =>
+    present.has(file),
+  );
+  assert.deepEqual(jobs, [
+    {
+      workflow: '.github/workflows/probe.yml',
+      job: 'zero-dep',
+      // Sorted, deduplicated, and filtered to paths that exist — `scripts/needs-packages`
+      // belongs to the job that installs deps and must not leak in.
+      entries: ['scripts/probe/entry.test.ts', 'scripts/probe/entry.ts'],
+    },
+  ]);
+});
+
+test('install-deps: false counts whether YAML parsed it as a boolean or a string', () => {
+  const quoted = ZERO_DEP_WORKFLOW.replace('install-deps: false', "install-deps: 'false'");
+  const jobs = zeroDepJobs(new Map([['w.yml', quoted]]), () => true);
+  assert.deepEqual(
+    jobs.map(({ job }) => job),
+    ['zero-dep'],
+  );
+});
+
+test('a job with no recognizable entry script is reported rather than exempted', () => {
+  // Fail-closed: `entries: []` is what check.ts turns into a violation, so a job that
+  // invokes its script in some way the scan cannot read never escapes the rule silently.
+  const jobs = zeroDepJobs(new Map([['w.yml', ZERO_DEP_WORKFLOW]]), () => false);
+  assert.deepEqual(jobs, [{ workflow: 'w.yml', job: 'zero-dep', entries: [] }]);
+});
+
+test('a package import anywhere in a zero-dep closure is rejected, builtins are not', () => {
+  const tree = new Map([
+    [
+      'scripts/probe/entry.ts',
+      "import fs from 'node:fs';\nimport path from 'path';\nimport { helper } from './helper.ts';\n",
+    ],
+    // One hop deeper than the entry: the failure that motivated R8 was exactly this shape —
+    // the entry script itself imported nothing external, its helper did.
+    ['scripts/probe/helper.ts', "import { parseSync } from 'oxc-parser';\nimport './deep.js';\n"],
+    ['scripts/probe/deep.ts', "const lazy = await import('yaml');\n"],
+  ]);
+  const found = uninstallableImports(
+    { workflow: 'w.yml', job: 'zero-dep', entries: ['scripts/probe/entry.ts'] },
+    (file) => tree.get(file) ?? null,
+    (file) => tree.has(file),
+  );
+  assert.deepEqual(
+    found.map(({ file, spec }) => `${file}:${spec}`),
+    // `node:fs` and bare `path` are builtins; `./helper.ts` and `./deep.js` resolve into the
+    // tree (including the .js -> .ts rewrite); a dynamic package import fails just the same.
+    ['scripts/probe/deep.ts:yaml', 'scripts/probe/helper.ts:oxc-parser'],
+  );
+});
+
+test('an import written inside a string is not a package import', () => {
+  // A zero-dep job runs test files, and a test about imports naturally embeds import syntax as
+  // a fixture string. R8 parses instead of scanning lines precisely so those stay invisible —
+  // this file itself contains such fixtures, and reported two phantom violations before the
+  // switch. A type-only package import, by contrast, is still a resolve at runtime under
+  // --experimental-strip-types only because the type is erased; it is listed to prove the
+  // parser sees it, since erasure is a compiler detail and not something to lean on.
+  const tree = new Map([
+    [
+      'scripts/probe/entry.ts',
+      [
+        'const fixture = "import real from \'not-a-package\'";',
+        "const also = ['export { x } from \\'nope\\''];",
+        "import type { T } from 'is-a-package';",
+        'export type Alias = T;',
+      ].join('\n'),
+    ],
+  ]);
+  const found = uninstallableImports(
+    { workflow: 'w.yml', job: 'zero-dep', entries: ['scripts/probe/entry.ts'] },
+    (file) => tree.get(file) ?? null,
+    (file) => tree.has(file),
+  );
+  assert.deepEqual(
+    found.map(({ spec, line }) => `${line}:${spec}`),
+    ['3:is-a-package'],
+  );
+});
+
+test("the repo's own zero-dep jobs resolve without node_modules", () => {
+  const repoRoot = path.resolve(import.meta.dirname, '../..');
+  const read = (file: string): string | null => {
+    const absolute = path.join(repoRoot, file);
+    return existsSync(absolute) && statSync(absolute).isFile()
+      ? readFileSync(absolute, 'utf8')
+      : null;
+  };
+  const exists = (file: string): boolean => read(file) !== null;
+
+  const jobs = zeroDepJobs(new Map([['.github/workflows/ci.yml', read('.github/workflows/ci.yml')!]]), exists);
+  assert.ok(jobs.length > 0, 'expected ci.yml to still declare at least one zero-dep job');
+  for (const job of jobs) {
+    assert.ok(job.entries.length > 0, `${job.job} must name an entry script`);
+    assert.deepEqual(uninstallableImports(job, read, exists), [], `${job.job} must reach no package`);
   }
 });

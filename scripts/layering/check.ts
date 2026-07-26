@@ -7,7 +7,7 @@
 //         ◄ { client, daemon-server } ◄ daemon-client ◄ cli
 // (authoritative ranks: `TARGET_DAG_RANK` in model.ts)
 //
-// This gate enforces four things, across three scopes:
+// This gate enforces five things, across four scopes:
 //   - GLOBALLY, across every production source file: the R1-R3 move rules and
 //     rejection of all production static value-import cycles (R4).
 //   - Over the RANKED SPINE only: rejection of every spine back-edge (R5), i.e.
@@ -15,6 +15,9 @@
 //     same inversion measured over TYPE-ONLY edges (R6).
 //   - Over the DAEMON only: SessionState field ownership (R7), because the session
 //     record is store-owned mutable state that any daemon module can write.
+//   - Over the ZERO-DEP CI JOBS only: their scripts may import nothing that needs
+//     installing (R8), a constraint no local run can feel because `node_modules` is
+//     always there locally and never there in those jobs.
 // Only `(root)` is unranked (see `UNRANKED_ZONES` in model.ts): it holds the
 // entrypoints and the composition roots that wire the command surface into the
 // daemon, which R2 forbids the daemon from importing, so they sit outside the
@@ -29,6 +32,7 @@ import {
   sessionStateFields,
   SESSION_STATE_FIELD_OWNERS,
 } from './session-state.ts';
+import { uninstallableImports, zeroDepJobs } from './zero-dep-jobs.ts';
 import {
   backEdgePair,
   findValueImportCycles,
@@ -70,6 +74,14 @@ export function listSourceFiles(): string[] {
 
 function readSources(files: readonly string[]): Map<string, string> {
   return new Map(files.map((file) => [file, fs.readFileSync(path.join(repoRoot, file), 'utf8')]));
+}
+
+function fileExists(file: string): boolean {
+  return fs.existsSync(path.join(repoRoot, file)) && fs.statSync(path.join(repoRoot, file)).isFile();
+}
+
+function readSourceOrNull(file: string): string | null {
+  return fileExists(file) ? fs.readFileSync(path.join(repoRoot, file), 'utf8') : null;
 }
 
 function isProductionSourceFile(file: string): boolean {
@@ -339,6 +351,47 @@ function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Viola
   return violations;
 }
 
+// R8: a CI job that runs with `install-deps: false` has no `node_modules`, so every script it
+// reaches must import only Node builtins and other repo files. Locally the opposite is true —
+// `node_modules` is always present — which is why this needs a gate rather than a convention.
+function checkZeroDepJobs(): Violation[] {
+  const workflows = readSources(
+    execFileSync('git', ['ls-files', '.github/workflows/*.yml'], { cwd: repoRoot, encoding: 'utf8' })
+      .split('\n')
+      .filter(Boolean),
+  );
+
+  const violations: Violation[] = [];
+  for (const job of zeroDepJobs(workflows, fileExists)) {
+    // Fail closed: a zero-dep job whose commands the entry scan cannot recognize would
+    // otherwise be silently exempt from the rule it is the whole reason for.
+    if (job.entries.length === 0) {
+      violations.push({
+        rule: 'R8 zero-dep-job-closure',
+        file: job.workflow,
+        line: 1,
+        message:
+          `job '${job.job}' runs with install-deps: false but no entry script was found in its ` +
+          `run steps, so its import closure cannot be checked. Invoke the script by path, or ` +
+          `let the job install dependencies.`,
+      });
+      continue;
+    }
+    for (const bare of uninstallableImports(job, readSourceOrNull, fileExists)) {
+      violations.push({
+        rule: 'R8 zero-dep-job-closure',
+        file: bare.file,
+        line: bare.line,
+        message:
+          `'${bare.spec}' is a package, and job '${bare.job}' (${bare.workflow}) runs with ` +
+          `install-deps: false — nothing installs it, so this resolves locally and fails in CI. ` +
+          `Use a Node builtin, inline what you need, or drop install-deps: false from the job.`,
+      });
+    }
+  }
+  return violations;
+}
+
 function report(files: readonly string[], violations: readonly Violation[]): number {
   if (violations.length === 0) {
     process.stdout.write(
@@ -346,7 +399,8 @@ function report(files: readonly string[], violations: readonly Violation[]): num
         `value-import cycles (both checked globally); the ranked target spine contains no ` +
         `back-edges (only the composition root is unranked), and its type-only ` +
         `inversions match the R6 ratchet (${Object.values(TYPE_INVERSION_BASELINE).reduce((sum, count) => sum + count, 0)} remaining); ` +
-        `every SessionState write is inside its declared owner (R7).\n`,
+        `every SessionState write is inside its declared owner (R7); and every zero-dep CI ` +
+        `job resolves without node_modules (R8).\n`,
     );
     return 0;
   }
@@ -382,6 +436,7 @@ export function main(): number {
     ...checkBackEdges(edges),
     ...checkTypeInversions(edges),
     ...checkSessionStateOwnership(sources),
+    ...checkZeroDepJobs(),
   ];
   return report(sourceFiles, violations);
 }
