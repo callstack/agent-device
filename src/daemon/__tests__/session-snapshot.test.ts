@@ -5,8 +5,10 @@ import {
   markSessionPartialRefsIssued,
   resolveRefStalenessWarning,
   setSessionSnapshot,
+  setSnapshotLineage,
   STALE_SNAPSHOT_REFS_WARNING,
 } from '../session-snapshot.ts';
+import { activateCompleteRefFrame, refFrameEpoch } from '../ref-frame.ts';
 
 function makeSession(): SessionState {
   return {
@@ -147,4 +149,62 @@ test('markSessionPartialRefsIssued: an empty result leaves all frame state untou
   markSessionPartialRefsIssued(session, ['@e5~s7', 'e6']);
   expect(session.refFrameScope).toEqual(new Set(['e5', 'e6']));
   expect(session.refFrameGeneration).toBe(9);
+});
+
+// The observation counter and the authorization epoch are different clocks, and conflating them
+// is a documented mistake in this file's history: a comment in snapshot-runtime.ts asserted that
+// a diff leaves refs pinned to the previous generation "which is exactly what the pinned warning
+// diagnoses". Hardware verification against that claim found the opposite, because it IS the
+// opposite — `resolveRefStalenessWarning` compares the pin to the frame epoch on purpose. This
+// test states the real contract so the claim cannot drift back into a comment.
+test('a ref pinned before a diff keeps resolving: the diff advances the counter, not the epoch', () => {
+  const session = makeSession();
+
+  // `snapshot` stores a tree and issues a complete frame, so the epoch is the counter.
+  setSessionSnapshot(session, makeSnapshot());
+  activateCompleteRefFrame(session);
+  const issuedAt = refFrameEpoch(session);
+  expect(issuedAt).toBe(session.snapshotGeneration);
+
+  // `diff` replaces the stored tree, so lineage advances the counter — but it passes
+  // `issuesRefsToClient: false`, so it never reactivates the frame.
+  const afterDiff: SessionState = { ...session };
+  setSnapshotLineage(afterDiff, {
+    scopeSource: undefined,
+    keptCurrentSnapshot: false,
+    previousGeneration: session.snapshotGeneration,
+  });
+  expect(afterDiff.snapshotGeneration).not.toBe(session.snapshotGeneration);
+  expect(refFrameEpoch(afterDiff)).toBe(issuedAt);
+
+  // So the pin minted by the snapshot is still authorized: no warning.
+  expect(
+    resolveRefStalenessWarning({
+      session: afterDiff,
+      ref: `@e1~s${issuedAt}`,
+      mintedGeneration: issuedAt,
+    }),
+  ).toBeUndefined();
+
+  // A pin from a DIFFERENT frame is what the warning is for.
+  expect(
+    resolveRefStalenessWarning({
+      session: afterDiff,
+      ref: '@e1~s1',
+      mintedGeneration: 1,
+    }),
+  ).toBeDefined();
+});
+
+test('keeping the current snapshot leaves the counter alone', () => {
+  const session = makeSession();
+  setSessionSnapshot(session, makeSnapshot());
+  const before = session.snapshotGeneration;
+
+  setSnapshotLineage(session, {
+    scopeSource: undefined,
+    keptCurrentSnapshot: true,
+    previousGeneration: before,
+  });
+  expect(session.snapshotGeneration).toBe(before);
 });

@@ -41,14 +41,22 @@ export function setSessionSnapshot(session: SessionState, snapshot: SnapshotStat
  * The same lineage rule, applied to a freshly BUILT record instead of the stored one.
  * `snapshot-runtime.ts` constructs a new `SessionState` rather than mutating the one in the
  * store, so it cannot go through `setSessionSnapshot` — but the invariant it has to honour is
- * identical, and it is the invariant that matters: #1076 versioned refs require the generation
- * to advance exactly when the stored tree is replaced (snapshot AND diff — diff's summary
- * response leaves client refs pinned to the previous generation, which is what the pinned
- * warning diagnoses), and the scope source must describe the tree that actually ended up there.
+ * identical, and it is the invariant that matters: #1076 versioned refs require the observation
+ * counter to advance exactly when the stored tree is replaced, for `snapshot` and `diff` alike,
+ * and the scope source must describe the tree that actually ended up there.
  *
- * Both fields therefore move together, here, next to the writer they have to agree with. They
- * used to be assigned at the call site, which is how the rule came to have two statements of
- * itself in two modules.
+ * Advancing the counter is NOT the same as invalidating client refs, and the comment this
+ * replaced said otherwise — it claimed a diff leaves refs pinned to the previous generation
+ * "which is exactly what the pinned warning diagnoses". It does not: `diff` passes
+ * `issuesRefsToClient: false`, so it never reactivates the frame, and
+ * `resolveRefStalenessWarning` compares a pin against the frame EPOCH rather than this counter,
+ * precisely so a capture that bumped the counter cannot make a valid pin look stale. A ref
+ * pinned before a diff therefore keeps resolving, with no warning, by design (ADR 0014).
+ * `session-snapshot.test.ts` pins that outcome so the claim cannot drift back.
+ *
+ * Both fields move together, here, next to the writer they have to agree with. They used to be
+ * assigned at the call site, which is how the rule came to have two statements of itself in two
+ * modules.
  */
 export function setSnapshotLineage(
   session: SessionState,
