@@ -339,16 +339,20 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
 ): Promise<IsCommandResult> => {
   const admitted = checkIsPredicate(options.predicate);
   if (!admitted.ok) throw new AppError(admitted.code, admitted.message, { hint: admitted.hint });
-  if (admitted.predicate === 'text' && !options.expectedText) {
+  // Admission normalizes case, so every decision below reads the ADMITTED value: the raw
+  // option would send an uppercase predicate past the gate and then evaluate it against
+  // lower-case branches, admitting `EXISTS`/`TEXT` and returning the wrong answer.
+  const predicate = admitted.predicate;
+  if (predicate === 'text' && !options.expectedText) {
     throw new AppError('INVALID_ARGS', IS_TEXT_VALUE_REQUIRED_MESSAGE);
   }
   const chain = parseSelectorChain(options.selector);
   const capture = await captureSelectorSnapshot(runtime, options, {
     updateSession: true,
-    ...deriveSelectorCapturePolicy({ predicate: options.predicate, selectorChain: chain }),
+    ...deriveSelectorCapturePolicy({ predicate: predicate, selectorChain: chain }),
   });
 
-  if (options.predicate === 'exists') {
+  if (predicate === 'exists') {
     const matched = findSelectorChainMatch(capture.snapshot.nodes, chain, {
       platform: runtime.backend.platform,
     });
@@ -358,7 +362,7 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
       });
     }
     return {
-      predicate: options.predicate,
+      predicate: predicate,
       pass: true,
       selector: matched.selector.raw,
       matches: matched.matches,
@@ -376,7 +380,7 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
     throw new AppError('COMMAND_FAILED', formatSelectorFailure(chain, [], { unique: true }), {
       command: 'is',
       reason: 'selector_not_found',
-      predicate: options.predicate,
+      predicate: predicate,
       selector: chain.raw,
       hint: selectorFailureHint([]),
     });
@@ -388,7 +392,7 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
     'is',
   );
   const result = evaluateIsPredicate({
-    predicate: options.predicate,
+    predicate: predicate,
     node: resolved.node,
     nodes: capture.snapshot.nodes,
     expectedText: options.expectedText,
@@ -397,21 +401,21 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
   if (!result.pass) {
     throw new AppError(
       'COMMAND_FAILED',
-      `is ${options.predicate} failed for selector ${resolved.selector.raw}: ${result.details}`,
+      `is ${predicate} failed for selector ${resolved.selector.raw}: ${result.details}`,
       {
         command: 'is',
         reason: 'predicate_failed',
-        predicate: options.predicate,
+        predicate: predicate,
         selector: resolved.selector.raw,
         predicateDetails: result.details,
       },
     );
   }
   return {
-    predicate: options.predicate,
+    predicate: predicate,
     pass: true,
     selector: resolved.selector.raw,
-    ...(options.predicate === 'text' ? { text: result.actualText } : {}),
+    ...(predicate === 'text' ? { text: result.actualText } : {}),
     selectorChain: chain.selectors.map((entry) => entry.raw),
     node: resolved.node,
     preActionNodes: capture.snapshot.nodes,

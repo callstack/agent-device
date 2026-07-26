@@ -788,3 +788,54 @@ test('runtime wait fails immediately on a helper MECHANISM failure even though i
   );
   assert.equal(attempts(), 1);
 });
+
+// Regression: admission normalizes a predicate's case, and every branch below it has to read
+// the ADMITTED value. Reading `options.predicate` instead let an uppercase predicate past the
+// gate and then evaluated it against lower-case branches — `EXISTS` skipped its own branch and
+// `TEXT` compared nothing — so the command answered wrongly instead of refusing or working.
+test('runtime is admits an upper-case predicate and evaluates it as the normalized one', async () => {
+  const snapshot = makeSnapshotState([
+    { index: 0, depth: 0, type: 'StaticText', label: 'Greeting' },
+  ]);
+  const device = createSelectorDevice(snapshot);
+
+  const exists = await device.selectors.is({
+    session: 'default',
+    predicate: 'EXISTS' as 'exists',
+    selector: 'label=Greeting',
+  });
+  assert.equal(exists.predicate, 'exists');
+  assert.equal(exists.pass, true);
+
+  const text = await device.selectors.is({
+    session: 'default',
+    predicate: 'TEXT' as 'text',
+    selector: 'label=Greeting',
+    expectedText: 'Greeting',
+  });
+  assert.equal(text.predicate, 'text');
+  assert.equal(text.pass, true);
+  assert.equal(text.text, 'Greeting');
+});
+
+test('runtime is still refuses a predicate that is not in the vocabulary', async () => {
+  const device = createSelectorDevice(
+    makeSnapshotState([{ index: 0, depth: 0, type: 'StaticText', label: 'Greeting' }]),
+  );
+
+  await assert.rejects(
+    async () =>
+      await device.selectors.is({
+        session: 'default',
+        predicate: 'shiny' as 'exists',
+        selector: 'label=Greeting',
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'INVALID_ARGS');
+      // ADR 0010: the refusal carries recovery guidance on every surface, not just the daemon's.
+      assert.match(String(error.details?.hint ?? ''), /is <selector> <predicate>/);
+      return true;
+    },
+  );
+});
