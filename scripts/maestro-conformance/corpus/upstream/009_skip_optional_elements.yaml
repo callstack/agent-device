@@ -1,8 +1,8 @@
 appId: com.example.app
 ---
 - tapOn:
-    text: "Optional Element"
+    text: 'Optional Element'
     optional: true
 - assertVisible:
-    text: "Non Optional"
+    text: 'Non Optional'
     optional: false

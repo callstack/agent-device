@@ -13,6 +13,8 @@
 //   - Over the RANKED SPINE only: rejection of every spine back-edge (R5), i.e.
 //     an import whose source zone outranks its target zone, plus a ratchet on the
 //     same inversion measured over TYPE-ONLY edges (R6).
+//   - Over the DAEMON only: SessionState field ownership (R7), because the session
+//     record is store-owned mutable state that any daemon module can write.
 // Root and peripheral zones (see `UNRANKED_ZONES` in model.ts) are deliberately
 // NOT ranked: they still participate in R1-R4, but the gate makes no back-edge
 // claim about them. It is not a claim that every folder is arranged in one total
@@ -22,6 +24,11 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import {
+  findSessionStateWrites,
+  sessionStateFields,
+  SESSION_STATE_FIELD_OWNERS,
+} from './session-state.ts';
 import {
   backEdgePair,
   findValueImportCycles,
@@ -248,13 +255,80 @@ function checkTypeInversions(edges: readonly ResolvedImportEdge[]): Violation[] 
   return violations;
 }
 
+function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Violation[] {
+  const types = sources.get('src/daemon/types.ts');
+  if (!types) {
+    return [
+      {
+        rule: 'R7 session-state-ownership',
+        file: 'src/daemon/types.ts',
+        line: 1,
+        message: 'daemon/types.ts is missing, so SessionState ownership cannot be checked.',
+      },
+    ];
+  }
+
+  const fields = sessionStateFields(types);
+  const writes = findSessionStateWrites(sources, fields);
+  const violations: Violation[] = [];
+  const seenOwners = new Map<string, Set<string>>();
+
+  for (const write of writes) {
+    const owners = SESSION_STATE_FIELD_OWNERS[write.field];
+    const seen = seenOwners.get(write.field) ?? new Set<string>();
+    seen.add(write.file);
+    seenOwners.set(write.field, seen);
+    if (owners === undefined) {
+      violations.push({
+        rule: 'R7 session-state-ownership',
+        file: write.file,
+        line: write.line,
+        message:
+          `session.${write.field} has no declared owner. SessionStore hands out the live ` +
+          `record, so this write is durable: name the owning module in ` +
+          `SESSION_STATE_FIELD_OWNERS (scripts/layering/session-state.ts).`,
+      });
+      continue;
+    }
+    if (!owners.includes(write.file)) {
+      violations.push({
+        rule: 'R7 session-state-ownership',
+        file: write.file,
+        line: write.line,
+        message:
+          `session.${write.field} is owned by ${owners.join(', ')}. Call the owner instead of ` +
+          `writing the field here, so whatever invariant it carries stays in one place.`,
+      });
+    }
+  }
+
+  // An owner that no longer writes its field is stale documentation; drop it so the table
+  // keeps describing the tree rather than a past version of it.
+  for (const [field, owners] of Object.entries(SESSION_STATE_FIELD_OWNERS)) {
+    const actual = seenOwners.get(field) ?? new Set<string>();
+    const stale = owners.filter((owner) => !actual.has(owner)).sort();
+    if (stale.length === 0) continue;
+    violations.push({
+      rule: 'R7 session-state-ownership',
+      file: 'scripts/layering/session-state.ts',
+      line: 1,
+      message:
+        `session.${field} is no longer written by ${stale.join(', ')} — remove ` +
+        `${stale.length === owners.length ? 'the entry' : 'those owners'} from ` +
+        `SESSION_STATE_FIELD_OWNERS.`,
+    });
+  }
+  return violations;
+}
+
 function report(files: readonly string[], violations: readonly Violation[]): number {
   if (violations.length === 0) {
     process.stdout.write(
       `Layering guard: OK — ${files.length} source files satisfy R1-R3 and contain no ` +
         `value-import cycles (both checked globally); the ranked target spine contains no ` +
         `back-edges (root/peripheral zones are intentionally unranked), and its type-only ` +
-        `inversions match the R6 ratchet (${Object.values(TYPE_INVERSION_BASELINE).reduce((sum, count) => sum + count, 0)} remaining).\n`,
+        `inversions match the R6 ratchet (${Object.values(TYPE_INVERSION_BASELINE).reduce((sum, count) => sum + count, 0)} remaining); ` +
+        `every SessionState write is inside its declared owner (R7).\n`,
     );
     return 0;
   }
@@ -282,12 +356,14 @@ function report(files: readonly string[], violations: readonly Violation[]): num
 
 export function main(): number {
   const sourceFiles = listSourceFiles();
-  const edges = resolveImportEdges(readSources(sourceFiles));
+  const sources = readSources(sourceFiles);
+  const edges = resolveImportEdges(sources);
   const violations = [
     ...checkLayeringRules(edges),
     ...checkCycles(edges),
     ...checkBackEdges(edges),
     ...checkTypeInversions(edges),
+    ...checkSessionStateOwnership(sources),
   ];
   return report(sourceFiles, violations);
 }

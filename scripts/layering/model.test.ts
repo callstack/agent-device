@@ -2,6 +2,11 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { listSourceFiles } from './check.ts';
 import {
+  findSessionStateWrites,
+  sessionStateFields,
+  SESSION_STATE_FIELD_OWNERS,
+} from './session-state.ts';
+import {
   RANKED_ZONES,
   typeInversionPair,
   UNRANKED_ZONES,
@@ -164,4 +169,60 @@ test('listSourceFiles includes root-level src/*.ts production files', () => {
     assert.ok(files.has(rootFile), `expected ${rootFile} in analyzed source files`);
   }
   assert.ok(![...files].some((file) => file.endsWith('.test.ts')));
+});
+
+test('SessionState field names come from the declaration, not a hand-kept list', () => {
+  const fields = sessionStateFields(
+    [
+      'export type SessionState = {',
+      '  name: string;',
+      '  sessionScope?: {',
+      "    kind: 'cwd';",
+      '    id: string;',
+      '  };',
+      '  refFrameState?: RefFrameState;',
+      '};',
+      '',
+      'export type Other = { notAField: string };',
+    ].join('\n'),
+  );
+  // Nested object members are not session fields, and neighbouring types are not scanned.
+  assert.deepEqual(fields, ['name', 'sessionScope', 'refFrameState']);
+});
+
+test('session-state writes are found by field, and non-daemon or undeclared names are not', () => {
+  const writes = findSessionStateWrites(
+    new Map([
+      ['src/daemon/ref-frame.ts', "session.refFrameState = 'active';"],
+      ['src/daemon/session-snapshot.ts', 'session.snapshotGeneration += 1;'],
+      // the store owns the record and may write anything on it
+      ['src/daemon/session-store.ts', "session.refFrameState = 'expired';"],
+      // a runner session outside the daemon is a different type that happens to share a name
+      ['src/platforms/apple/runner-session.ts', 'session.refFrameState = 1;'],
+      // a local that is not a declared SessionState field
+      ['src/daemon/audio-probe.ts', 'session.somethingElse = 1;'],
+      // reads and comparisons are not writes
+      ['src/daemon/handlers/find.ts', "if (session.refFrameState === 'active') return;"],
+    ]),
+    ['refFrameState', 'snapshotGeneration'],
+  );
+
+  assert.deepEqual(
+    writes.map(({ file, field }) => `${file}:${field}`),
+    ['src/daemon/ref-frame.ts:refFrameState', 'src/daemon/session-snapshot.ts:snapshotGeneration'],
+  );
+});
+
+test('every declared session-state owner is a real file path under src/daemon', () => {
+  for (const [field, owners] of Object.entries(SESSION_STATE_FIELD_OWNERS)) {
+    assert.ok(owners.length > 0, `${field} must name at least one owner`);
+    for (const owner of owners) {
+      assert.match(
+        owner,
+        /^src\/daemon\/.+\.ts$/,
+        `${field} owner ${owner} must be a daemon module`,
+      );
+    }
+    assert.deepEqual([...owners], [...owners].sort(), `${field} owners must be sorted`);
+  }
 });

@@ -33,12 +33,16 @@ function toMarkdown(run: RunResult): string {
   lines.push(`- **Finished**: ${run.finishedAt}`);
   lines.push('');
   lines.push('All times in milliseconds. `wall-clock` includes process spawn + socket overhead;');
-  lines.push('`daemon` is the batch step round-trip (spawn overhead ≈ wall-median − daemon-median).');
+  lines.push(
+    '`daemon` is the batch step round-trip (spawn overhead ≈ wall-median − daemon-median).',
+  );
   lines.push('`elements` = node count in the snapshot payload (tree-size proxy).');
   lines.push('An untimed warmup interaction runs after each open/relaunch, so measured commands');
   lines.push('do not pay the one-time iOS-runner startup or post-relaunch first-AX-query cost.');
   lines.push('');
-  lines.push('| command | cli | mode | n | wall min | wall median | wall p95 | wall max | daemon median | elements | notes |');
+  lines.push(
+    '| command | cli | mode | n | wall min | wall median | wall p95 | wall max | daemon median | elements | notes |',
+  );
   lines.push('|---|---|---|---|---|---|---|---|---|---|---|');
   for (const m of run.measurements) lines.push(measurementRow(m));
   lines.push('');
@@ -49,7 +53,9 @@ function toMarkdown(run: RunResult): string {
     lines.push('');
     for (const m of failed) {
       const sample = m.samples.find((s) => !s.ok);
-      lines.push(`- **${m.label}** — ${m.notes.join('; ')}${sample?.errorMessage ? ` — ${sample.errorMessage}` : ''}`);
+      lines.push(
+        `- **${m.label}** — ${m.notes.join('; ')}${sample?.errorMessage ? ` — ${sample.errorMessage}` : ''}`,
+      );
     }
     lines.push('');
   }

@@ -78,14 +78,40 @@ export function expireRefFrame(session: SessionState): void {
  * publications (`find`, settled diffs, replay divergence) and internal read
  * captures never call it, so a partial result cannot restore broad authority.
  *
- * Retains the just-published tree (`session.snapshot`) as the frame's immutable
- * source tree by SHARED reference — no deep copy (ADR 0014 performance). A later
- * read-only capture advances `session.snapshot` without disturbing this tree, so
- * a ref keeps resolving against the namespace that authorized it.
+ * Retention and epoch semantics are shared with partial issuance; see
+ * {@link activateRefFrame}.
  */
 export function activateCompleteRefFrame(session: SessionState): void {
+  activateRefFrame(session, undefined);
+}
+
+/**
+ * ADR 0014 partial issuance: activate a frame that authorizes ONLY `scope`, the set of ref
+ * bodies a `find`, settled diff, or replay divergence screen actually returned. A plain ref
+ * then requires a complete frame, and a pinned ref outside the set is rejected.
+ *
+ * The caller decides whether a partial result should supersede existing authority — an
+ * empty result must not (see `markSessionPartialRefsIssued`) — but the transition itself
+ * belongs here, with the complete form, because the two differ only in scope.
+ */
+export function activatePartialRefFrame(session: SessionState, scope: ReadonlySet<string>): void {
+  activateRefFrame(session, scope);
+}
+
+/**
+ * The frame's four fields move together or the frame is incoherent: an `active` state with a
+ * stale `refFrameTree` resolves refs against a namespace nobody authorized, and a frame
+ * pinned to the wrong `refFrameGeneration` invalidates correct pins. Both issuance forms
+ * therefore land here rather than each writing the four fields itself.
+ *
+ * Retains the just-published tree (`session.snapshot`) as the frame's immutable source by
+ * SHARED reference — no deep copy (ADR 0014 performance). A later read-only capture advances
+ * `session.snapshot` without disturbing this tree, so a ref keeps resolving against the
+ * namespace that authorized it.
+ */
+function activateRefFrame(session: SessionState, scope: ReadonlySet<string> | undefined): void {
   session.refFrameState = 'active';
-  session.refFrameScope = undefined;
+  session.refFrameScope = scope;
   session.refFrameTree = session.snapshot;
   session.refFrameGeneration = session.snapshotGeneration;
 }

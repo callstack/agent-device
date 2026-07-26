@@ -4,4 +4,4 @@ appId: com.example.app
 ---
 - swipe:
     from:
-      id: "row"
+      id: 'row'

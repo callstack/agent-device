@@ -63,11 +63,16 @@ test('the seal rejects an edited capture (proof the check has teeth)', () => {
 
 test('fixtures pin the reviewed upstream Maestro artifacts', () => {
   for (const fixture of [loadLayer1(), loadLayer2()] as Array<{ upstream?: unknown }>) {
-    const upstream = (fixture as { upstream: { version: string; commit: string; artifacts: unknown } })
-      .upstream;
+    const upstream = (
+      fixture as { upstream: { version: string; commit: string; artifacts: unknown } }
+    ).upstream;
     assert.equal(upstream.version, PIN.version, 'fixture must pin the reviewed version');
     assert.equal(upstream.commit, PIN.commit, 'fixture must pin the reviewed commit');
-    assert.deepEqual(upstream.artifacts, PIN.artifacts, 'fixture jar SHAs must match pinned-upstream.json');
+    assert.deepEqual(
+      upstream.artifacts,
+      PIN.artifacts,
+      'fixture jar SHAs must match pinned-upstream.json',
+    );
   }
 });
 
@@ -104,21 +109,33 @@ test('layer 1: every divergence is declared (no silent drift)', () => {
   for (const flow of flows) {
     const declared = FLOW_DIVERGENCES[flow.id];
     if (flow.classification === 'identical' || flow.classification === 'both-reject') {
-      if (declared) problems.push(`${flow.id}: declared divergence but classified ${flow.classification}`);
+      if (declared)
+        problems.push(`${flow.id}: declared divergence but classified ${flow.classification}`);
       continue;
     }
     if (!declared) {
-      problems.push(`${flow.id}: undeclared ${flow.classification}${flow.detail ? `\n    ${flow.detail}` : ''}`);
+      problems.push(
+        `${flow.id}: undeclared ${flow.classification}${flow.detail ? `\n    ${flow.detail}` : ''}`,
+      );
       continue;
     }
     if (declared.classification !== flow.classification) {
-      problems.push(`${flow.id}: declared ${declared.classification} but classified ${flow.classification}`);
+      problems.push(
+        `${flow.id}: declared ${declared.classification} but classified ${flow.classification}`,
+      );
     }
-    if (flow.classification === 'we-reject' && !(declared.unsupported && declared.unsupported.length > 0)) {
+    if (
+      flow.classification === 'we-reject' &&
+      !(declared.unsupported && declared.unsupported.length > 0)
+    ) {
       problems.push(`${flow.id}: we-reject entries must list the unsupported command(s)/option(s)`);
     }
   }
-  assert.deepEqual(problems, [], `Undeclared or mismatched divergences:\n  ${problems.join('\n  ')}`);
+  assert.deepEqual(
+    problems,
+    [],
+    `Undeclared or mismatched divergences:\n  ${problems.join('\n  ')}`,
+  );
 });
 
 test('layer 1: no stale divergence declarations', () => {
@@ -138,7 +155,9 @@ test('layer 2: generated semantic vectors match live engine constants', () => {
   // Every reference-only vector must be an on-the-record deviation.
   for (const result of results) {
     if (result.status === 'reference-only') {
-      const documented = DOCUMENTED_DEVIATIONS.some((d) => d.description.includes(result.id) || LAYER2_REFERENCE_ONLY.has(result.id));
+      const documented = DOCUMENTED_DEVIATIONS.some(
+        (d) => d.description.includes(result.id) || LAYER2_REFERENCE_ONLY.has(result.id),
+      );
       assert.ok(documented, `reference-only vector ${result.id} must be a documented deviation`);
     }
   }
@@ -181,7 +200,9 @@ test('bug class 4: settle default parses identically; ordering is a layer-3 diff
   // sleep-after-capture ordering is verified by the layer-3 differential scenario.
   const layer2 = loadLayer2();
   assert.ok(
-    !layer2.constants.some((constant) => /settle/i.test(constant.id) && constant.id !== 'iosScreenSettleTimeoutMs'),
+    !layer2.constants.some(
+      (constant) => /settle/i.test(constant.id) && constant.id !== 'iosScreenSettleTimeoutMs',
+    ),
     'no upstream settle-loop constant exists to cross-check; keep this as layer 3',
   );
 });

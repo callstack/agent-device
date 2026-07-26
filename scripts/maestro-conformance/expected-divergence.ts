@@ -32,7 +32,8 @@ export const FLOW_DIVERGENCES: Record<string, FlowDivergence> = {
   },
   'upstream/062_copy_paste_text': {
     classification: 'we-reject',
-    reason: 'Clipboard commands are unsupported; pasteText is de-advertised (takes clipboard, not inline text).',
+    reason:
+      'Clipboard commands are unsupported; pasteText is de-advertised (takes clipboard, not inline text).',
     unsupported: ['copyTextFrom', 'pasteText'],
   },
   'upstream/067_assertTrue_pass': {
@@ -58,7 +59,8 @@ export const FLOW_DIVERGENCES: Record<string, FlowDivergence> = {
   },
   'upstream/053_repeat_times': {
     classification: 'we-reject',
-    reason: 'repeat is supported, but the flow also uses evalScript and a ${output.list.length} times expression.',
+    reason:
+      'repeat is supported, but the flow also uses evalScript and a ${output.list.length} times expression.',
     unsupported: ['evalScript'],
   },
   // --- Deliberately stricter than upstream ---
@@ -83,23 +85,27 @@ export const FLOW_DIVERGENCES: Record<string, FlowDivergence> = {
   },
   'upstream/076_optional_assertion': {
     classification: 'we-reject',
-    reason: 'assertTrue is outside the supported subset; optional is now supported on scrollUntilVisible and extendedWaitUntil.',
+    reason:
+      'assertTrue is outside the supported subset; optional is now supported on scrollUntilVisible and extendedWaitUntil.',
     unsupported: ['assertTrue'],
     tracking: 'https://github.com/callstack/agent-device/issues/1295',
   },
   'upstream/079_scroll_until_visible': {
     classification: 'we-reject',
-    reason: 'scrollUntilVisible is supported; the flow sets the unsupported speed and visibilityPercentage options.',
+    reason:
+      'scrollUntilVisible is supported; the flow sets the unsupported speed and visibilityPercentage options.',
     unsupported: ['scrollUntilVisible.speed', 'scrollUntilVisible.visibilityPercentage'],
   },
   'upstream/101_doubleTapOn': {
     classification: 'we-reject',
-    reason: 'doubleTapOn is supported; the flow sets the unsupported retryTapIfNoChange option on it.',
+    reason:
+      'doubleTapOn is supported; the flow sets the unsupported retryTapIfNoChange option on it.',
     unsupported: ['doubleTapOn.retryTapIfNoChange'],
   },
   'upstream/119_retry_commands': {
     classification: 'we-reject',
-    reason: 'retry is supported; the flow uses the unsupported per-command waitToSettleTimeoutMs option on a nested tapOn.',
+    reason:
+      'retry is supported; the flow uses the unsupported per-command waitToSettleTimeoutMs option on a nested tapOn.',
     unsupported: ['tapOn.waitToSettleTimeoutMs'],
   },
   // --- agent-device supports ${VAR} in integer-typed numeric option fields that the pinned upstream parser rejects ---

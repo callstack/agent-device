@@ -41,7 +41,10 @@ test('a tap that burns the full settle budget violates the invariant (bug class 
 });
 
 test('the invariant reports the slowest matching step, not the first', () => {
-  const result = evaluateInvariant([stop('tapOn', 300, 1), stop('tapOn', 2117, 2)], SETTLE_INVARIANT);
+  const result = evaluateInvariant(
+    [stop('tapOn', 300, 1), stop('tapOn', 2117, 2)],
+    SETTLE_INVARIANT,
+  );
   assert.equal(result.status, 'violated');
   assert.match(result.detail, /2117ms/);
 });

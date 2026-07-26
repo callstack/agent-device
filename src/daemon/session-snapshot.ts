@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto';
 import type { SnapshotState } from '../kernel/snapshot.ts';
-import { refFrameEpoch, refFrameState } from './ref-frame.ts';
+import { activatePartialRefFrame, refFrameEpoch, refFrameState } from './ref-frame.ts';
 import type { SessionState } from './types.ts';
 
 /**
@@ -20,7 +20,8 @@ export const STALE_SNAPSHOT_REFS_WARNING =
  * does NOT touch the ref frame: replacing the latest observation is an
  * operational read, so it never expires, reactivates, or reindexes the
  * authorized frame (ADR 0014). Frame lifetime is owned solely by
- * `src/daemon/ref-frame.ts` and the partial-issuance writer below.
+ * `src/daemon/ref-frame.ts`; the partial-issuance writer below decides WHETHER to issue
+ * and hands the transition there.
  */
 export function setSessionSnapshot(session: SessionState, snapshot: SnapshotState): void {
   if (session.snapshot !== snapshot) {
@@ -76,18 +77,12 @@ export function markSessionPartialRefsIssued(session: SessionState, refs: Iterab
   // below. Build the scope before touching anything so a no-ref result is a
   // true no-op.
   if (scope.size === 0) return;
-  session.refFrameState = 'active';
-  session.refFrameScope = scope;
-  // ADR 0014: retain the tree this partial result published from as the frame's
-  // immutable source (shared reference — the caller already stored it via
-  // setSessionSnapshot). Interaction guards and replay identity can depend on
-  // ancestors, siblings, and viewport outside the emitted subset, so the whole
-  // tree is kept while the issuance set bounds authority.
-  session.refFrameTree = session.snapshot;
-  // Freeze the epoch the client is handed (the response-level refsGeneration),
-  // so a later read-only capture that bumps the observation counter cannot
-  // invalidate a correct pin from this frame.
-  session.refFrameGeneration = session.snapshotGeneration;
+  // The frame transition itself belongs to ref-frame.ts, which owns all four fields: the
+  // tree retained as the frame's immutable source (interaction guards and replay identity
+  // depend on ancestors, siblings and viewport outside the emitted subset, so the whole
+  // tree is kept while the issuance set bounds authority) and the frozen epoch that keeps
+  // a later read-only capture from invalidating a correct pin from this frame.
+  activatePartialRefFrame(session, scope);
 }
 
 /**

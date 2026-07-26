@@ -2,7 +2,7 @@ appId: com.example.app
 ---
 - scrollUntilVisible:
     element:
-      text: "Test"
+      text: 'Test'
     speed: 100
     visibilityPercentage: 100
     direction: DOWN

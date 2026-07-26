@@ -249,7 +249,7 @@ The perfect-shape refactor is complete and merged. Its end-state:
   hardware evidence validates discovery, lifecycle, and the complete remote-control contract.
   Vega capture, selector, inventory, install, logging, and performance backends remain separate
   follow-up surfaces.
-- Folder DAG + layering lint. `scripts/layering/check.ts` enforces three different scopes in CI.
+- Folder DAG + layering lint. `scripts/layering/check.ts` enforces four different scopes in CI.
   GLOBALLY, across every production source file, it enforces the R1-R3 move rules (kernel-sink,
   commands-floor, platforms-seam) and rejects all production static value-import cycles. Separately,
   it ranks an explicit target spine — as rank groups, lowest (kernel sink) to highest, where `A ◄ B`
@@ -266,6 +266,16 @@ The perfect-shape refactor is complete and merged. Its end-state:
   still a boundary claim, and ranking type edges surfaced 61 inversions the gate had never seen.
   `TYPE_INVERSION_BASELINE` in `check.ts` holds the remaining pairs with their counts; the numbers
   may only shrink, and a new pair fails outright.
+- SessionState ownership (R7). `SessionStore.get()` returns the live record out of a private Map
+  and `set()` re-puts the same reference, so any `session.<field> = …` in the daemon is a durable
+  write to store-owned state — persistence depends on aliasing, not on an API call. That is
+  workable while each field has an owner that keeps its invariants, so
+  `SESSION_STATE_FIELD_OWNERS` (`scripts/layering/session-state.ts`) records them and the gate
+  stops the set from growing quietly: a new field must declare an owner, a foreign write fails
+  with the owner to call instead, and an owner that stops writing must be removed. Field names are
+  read out of the `SessionState` declaration, so a daemon module with an unrelated local named
+  `session` cannot trip it. ADR 0014's ref frame is the worked example — its four fields moved
+  together across two modules until `activateRefFrame` took the transition.
 - Agent-cost. Responses carry a cost block and MCP `outputSchema`, rendered through a leveled
   `ResponseView`.
 
