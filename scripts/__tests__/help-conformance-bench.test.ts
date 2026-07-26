@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { test } from 'vitest';
+import { scoreExpectations } from '../help-conformance-case-checks.mjs';
 import { validateAgentDeviceCommand } from '../help-conformance-command-validator.ts';
 import { opensAndCloses, usesValidationPrep } from '../help-conformance-expectations.mjs';
 import { validatePlanCommands } from '../help-conformance-plan-validator.mjs';
@@ -330,22 +331,84 @@ test('runner output distinguishes model commands from infrastructure errors', ()
     detectRunnerError(JSON.stringify({ type: 'error', message: 'rate limit exceeded' })),
     'rate limit exceeded',
   );
+  assert.equal(
+    detectRunnerError(
+      JSON.stringify({
+        status: 'failed',
+        commands: ['agent-device snapshot -i'],
+      }),
+    ),
+    undefined,
+  );
   assert.equal(detectRunnerError(''), 'Runner returned empty output.');
 });
 
 test('plan validator rejects shell projection and non-permitted executables', async () => {
-  const [redirected, piped, shellCommand] = await validatePlanCommands([
-    'agent-device snapshot -i > evidence.json',
-    'agent-device snapshot -i | tee evidence.txt',
-    'echo done',
-  ]);
-  assert.equal(redirected.issues[0]?.kind, 'shell-projection');
-  assert.equal(piped.issues[0]?.kind, 'shell-projection');
+  const [redirected, piped, newline, carriageReturn, escapedNewline, shellCommand] =
+    await validatePlanCommands([
+      'agent-device snapshot -i > evidence.json',
+      'agent-device snapshot -i | tee evidence.txt',
+      'agent-device press @e1 --settle\ncat',
+      'agent-device press @e1 --settle\rcat',
+      'agent-device press @e1 --settle\\\ncat',
+      'echo done',
+    ]);
+  for (const result of [redirected, piped, newline, carriageReturn, escapedNewline]) {
+    assert.equal(result.issues[0]?.kind, 'shell-projection');
+  }
   assert.equal(shellCommand.issues[0]?.kind, 'executable-policy');
+
+  const [quotedNewline] = await validatePlanCommands([
+    'agent-device fill label=Biography "line one\nline two" --settle',
+  ]);
+  assert.equal(quotedNewline.issues.length, 0);
+  assert.deepEqual(quotedNewline.tokens, [
+    'agent-device',
+    'fill',
+    'label=Biography',
+    'line one\nline two',
+    '--settle',
+  ]);
 
   const [placeholder] = await validatePlanCommands(['agent-device press @<search-ref> --settle']);
   assert.ok(placeholder.issues.some(({ kind }) => kind === 'pseudo-ref'));
   assert.ok(placeholder.issues.some(({ kind }) => kind === 'shell-projection'));
+});
+
+test('case matchers score parsed tokens so shell quoting does not change results', async () => {
+  const commands = [
+    'agent-device open "com.example.shop"',
+    `agent-device fill 'label=Search' "react native" --settle`,
+    `agent-device open 'settings'`,
+  ];
+  const commandValidation = await validatePlanCommands(commands);
+  const checks = scoreExpectations(
+    {
+      matchers: [
+        {
+          id: 'opensKnownDogfoodApp',
+          pattern: /\bagent-device\s+open\s+com\.example\.shop\b/i,
+        },
+        {
+          id: 'fillsExpectedSearch',
+          pattern:
+            /\bagent-device\s+fill\b[^\n]*(?:"react native"|'react native')[^\n]*--settle\b/i,
+        },
+        {
+          id: 'opensSettings',
+          pattern: /\bagent-device\s+open\s+(?:settings|com\.apple\.Preferences)\b/i,
+        },
+      ],
+    },
+    commands,
+    '',
+    commandValidation,
+  );
+  assert.deepEqual(checks, {
+    opensKnownDogfoodApp: true,
+    fillsExpectedSearch: true,
+    opensSettings: true,
+  });
 });
 
 test('plan validator applies narrow grammar to permitted external commands', async () => {

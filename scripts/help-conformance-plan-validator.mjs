@@ -68,34 +68,56 @@ function consumeCharacter(command, index, state) {
 }
 
 function consumeUnquotedCharacter(command, index, character, state) {
+  const boundary = consumeUnquotedBoundary(character, index, state);
+  if (boundary) return boundary;
+  if (character === '#' && !state.started) return { nextIndex: command.length };
+  const escape = consumeUnquotedEscape(command, index, character, state);
+  if (escape) return escape;
+  const operator = shellOperatorAt(command, index);
+  if (operator) {
+    return shellProjectionIssue(
+      index,
+      `Unquoted shell operator "${operator}" is not allowed in a command plan.`,
+    );
+  }
+  appendCharacter(state, character);
+  return { nextIndex: index };
+}
+
+function consumeUnquotedBoundary(character, index, state) {
   if (character === "'" || character === '"') {
     state.quote = character;
     state.started = true;
     return { nextIndex: index };
   }
+  if (character === '\r' || character === '\n') {
+    return shellProjectionIssue(index, 'Unquoted line breaks are not allowed in a command plan.');
+  }
   if (/\s/.test(character)) {
     flushToken(state);
     return { nextIndex: index };
   }
-  if (character === '#' && !state.started) {
-    return { nextIndex: command.length };
+  return undefined;
+}
+
+function consumeUnquotedEscape(command, index, character, state) {
+  if (character !== '\\' || index + 1 >= command.length) return undefined;
+  const escaped = command[index + 1];
+  if (escaped === '\r' || escaped === '\n') {
+    return shellProjectionIssue(index, 'Unquoted line breaks are not allowed in a command plan.');
   }
-  if (character === '\\' && index + 1 < command.length) {
-    appendCharacter(state, command[index + 1]);
-    return { nextIndex: index + 1 };
-  }
-  const operator = shellOperatorAt(command, index);
-  if (operator) {
-    return {
-      nextIndex: index,
-      issue: {
-        kind: 'shell-projection',
-        error: `Unquoted shell operator "${operator}" is not allowed in a command plan.`,
-      },
-    };
-  }
-  appendCharacter(state, character);
-  return { nextIndex: index };
+  appendCharacter(state, escaped);
+  return { nextIndex: index + 1 };
+}
+
+function shellProjectionIssue(nextIndex, error) {
+  return {
+    nextIndex,
+    issue: {
+      kind: 'shell-projection',
+      error,
+    },
+  };
 }
 
 function consumeQuotedCharacter(command, index, character, state) {

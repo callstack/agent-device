@@ -21,6 +21,7 @@ export function detectRunnerError(raw) {
 
 function isErrorPayload(payload) {
   if (!payload || typeof payload !== 'object') return false;
+  if (Array.isArray(payload.commands)) return false;
   return payload.is_error === true || payload.type === 'error' || payload.status === 'failed';
 }
 

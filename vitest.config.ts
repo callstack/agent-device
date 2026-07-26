@@ -38,6 +38,7 @@ export default defineConfig({
           include: [
             'src/**/*.test.ts',
             'scripts/__tests__/help-conformance-bench.test.ts',
+            'test/skillgym/suites/local-cli-help-policy.test.ts',
             // The Maestro conformance oracle runs via `node --test` in its own CI
             // job (scripts/maestro-conformance), like the layering guard.
           ],

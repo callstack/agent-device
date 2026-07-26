@@ -4,7 +4,11 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { opensAndCloses, usesValidationPrep } from './help-conformance-expectations.mjs';
+import {
+  assertCaseDefinitions,
+  countChecks,
+  scoreExpectations,
+} from './help-conformance-case-checks.mjs';
 import { validatePlanCommands } from './help-conformance-plan-validator.mjs';
 import { detectRunnerError, extractCommands } from './help-conformance-runner-output.mjs';
 import { summarizeResults } from './help-conformance-summary.mjs';
@@ -374,7 +378,7 @@ function withDefault(value, fallback) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   assertRuntimeConfiguration();
-  assertCaseDefinitions();
+  assertCaseDefinitions(CASES);
   const outDir = resolveOutDir(args);
   await mkdir(outDir, { recursive: true });
   const selectedCases = selectCases(args.cases);
@@ -708,116 +712,9 @@ async function runCodex(model, prompt, outDir) {
   return lastMessage.trim().length > 0 ? lastMessage : stdout;
 }
 
-const EXPECTATION_SCORERS = {
-  validPlanCommands: ({ commands, commandValidation }) =>
-    commands.length > 0 && commandValidation.every(({ issues }) => issues.length === 0),
-  fullPrefix: ({ commands }) =>
-    commands.length > 0 &&
-    commands.every(
-      (command) => !/^(open|snapshot|press|fill|click|longpress|wait|close)\b/.test(command),
-    ),
-  usesSnapshotI: ({ commands }) => commands.some((command) => /\bsnapshot\b.*\s-i\b/.test(command)),
-  usesSettleOnMutations: ({ commands }) => allMutationsUseSettle(commands),
-  noWaitStable: ({ joined }) => !joined.includes('wait stable'),
-  verifiesNamedExpectation: ({ joined }) => /\b(wait|is|get|find)\b/.test(joined),
-  usesDogfoodEvidence: ({ joined }) =>
-    /(?:\bscreenshot\b|\brecord\b|\blogs\b|\bnetwork\b|\bperf\b|\btrace\b|dogfood-output)/i.test(
-      joined,
-    ),
-  usesValidationPrep,
-  opensAndCloses,
-};
-
-/**
- * Every check a case declares, normalized to a uniform `{ id, test }` shape:
- * - `expectations`: named lookups into EXPECTATION_SCORERS (the original 4
- *   help-layout cases).
- * - `matchers`: the check passes when the pattern matches the planned
- *   commands (ported skillgym quiz cases' `outputs`).
- * - `forbidden`: the check passes when the pattern does NOT match (ported
- *   skillgym quiz cases' `forbiddenOutputs`).
- */
-function resolveChecks(testCase) {
-  const named = (testCase.expectations ?? []).map((id) => ({
-    id,
-    test: (context) => scoreExpectation(id, context),
-  }));
-  const matched = (testCase.matchers ?? []).map(({ id, pattern }) => ({
-    id,
-    test: (context) => pattern.test(context.joined),
-  }));
-  const forbidden = (testCase.forbidden ?? []).map(({ id, pattern }) => ({
-    id,
-    test: (context) => !pattern.test(context.joined),
-  }));
-  return [...named, ...matched, ...forbidden];
-}
-
 function assertRuntimeConfiguration() {
   parsePositiveInteger(String(CONCURRENCY), 'HELP_BENCH_CONCURRENCY');
   parsePositiveInteger(String(RUN_TIMEOUT_MS), 'HELP_BENCH_TIMEOUT_MS');
-}
-
-function assertCaseDefinitions() {
-  assertUniqueIds(
-    CASES.map(({ id }) => id),
-    'benchmark case',
-  );
-  for (const testCase of CASES) assertCaseDefinition(testCase);
-}
-
-function assertCaseDefinition(testCase) {
-  const unknownExpectation = (testCase.expectations ?? []).find(
-    (expectation) => !(expectation in EXPECTATION_SCORERS),
-  );
-  if (unknownExpectation) {
-    throw new Error(`Unknown expectation "${unknownExpectation}" in case "${testCase.id}".`);
-  }
-  assertUniqueIds(
-    resolveChecks(testCase).map(({ id }) => id),
-    `check in case "${testCase.id}"`,
-  );
-}
-
-function assertUniqueIds(ids, label) {
-  const seen = new Set();
-  const duplicates = new Set();
-  for (const id of ids) {
-    if (seen.has(id)) duplicates.add(id);
-    seen.add(id);
-  }
-  if (duplicates.size > 0) {
-    throw new Error(`Duplicate ${label} id(s): ${[...duplicates].join(', ')}`);
-  }
-}
-
-function countChecks(testCase) {
-  return resolveChecks(testCase).length;
-}
-
-function scoreExpectations(testCase, commands, raw, commandValidation) {
-  const context = {
-    commands,
-    joined: commands.join('\n').toLowerCase(),
-    raw,
-    commandValidation,
-  };
-  return Object.fromEntries(resolveChecks(testCase).map(({ id, test }) => [id, test(context)]));
-}
-
-function scoreExpectation(expectation, context) {
-  const scorer = EXPECTATION_SCORERS[expectation];
-  if (!scorer) throw new Error(`Unknown expectation: ${expectation}`);
-  return scorer(context);
-}
-
-function allMutationsUseSettle(commands) {
-  const mutating = commands.filter(isMutationCommand);
-  return mutating.length > 0 && mutating.every((command) => command.includes('--settle'));
-}
-
-function isMutationCommand(command) {
-  return /^agent-device\s+(?:press|click|fill|longpress)\b/.test(command);
 }
 
 function countPassingChecks(checks) {

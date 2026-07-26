@@ -1,4 +1,9 @@
 import { assert, commandMatcher, type Case, type CommandMatcher } from 'skillgym';
+import {
+  extractCommandEvents,
+  isActualLocalCliHelpProbe,
+  isAllowedLocalCliHelpCommand,
+} from './local-cli-help-policy.ts';
 
 type SessionReport = Parameters<typeof assert.skills.has>[0];
 type AssertionContext = Parameters<Case['assert']>[1];
@@ -18,15 +23,6 @@ interface OutputAbsenceContext {
   output: string;
   finalOutput: string;
   plannedReport: SessionReport;
-}
-
-interface CommandEventRecord {
-  type?: unknown;
-  command?: unknown;
-  args?: {
-    command?: unknown;
-    cmd?: unknown;
-  };
 }
 
 const WORKSPACE_ROOT = process.cwd().replaceAll('\\', '/');
@@ -359,7 +355,9 @@ function assertFinalOutputAgentDeviceCommandsOnly(finalOutput: string) {
 
 function assertOnlyLocalCliHelpCommands(report: SessionReport) {
   const commandEvents = extractCommandEvents(report);
-  const forbiddenCommands = commandEvents.filter((command) => !isLocalCliHelpCommand(command));
+  const forbiddenCommands = commandEvents.filter(
+    (command) => !isAllowedLocalCliHelpCommand(command),
+  );
 
   assert.deepEqual(
     forbiddenCommands,
@@ -373,70 +371,8 @@ function assertOnlyLocalCliHelpCommands(report: SessionReport) {
 function assertLocalCliHelpUsed(report: SessionReport) {
   const commandEvents = extractCommandEvents(report);
   assert.ok(
-    commandEvents.some(isLocalCliHelpCommand),
+    commandEvents.some(isActualLocalCliHelpProbe),
     'Expected the planning run to inspect local CLI help before answering.',
-  );
-}
-
-function extractCommandEvents(report: SessionReport): string[] {
-  const events = (report as { events?: unknown[] }).events ?? [];
-  return events.flatMap(commandFromEvent);
-}
-
-function commandFromEvent(event: unknown): string[] {
-  if (!isCommandEventRecord(event)) {
-    return [];
-  }
-
-  const command = directCommandEvent(event) ?? toolCallCommandEvent(event);
-  return command === undefined ? [] : [command];
-}
-
-function isCommandEventRecord(event: unknown): event is CommandEventRecord {
-  return typeof event === 'object' && event !== null;
-}
-
-function directCommandEvent(record: CommandEventRecord): string | undefined {
-  if (record.type === 'command' && typeof record.command === 'string') {
-    return record.command;
-  }
-
-  return undefined;
-}
-
-function toolCallCommandEvent(record: CommandEventRecord): string | undefined {
-  if (record.type !== 'toolCall') return undefined;
-  return firstString([record.args?.command, record.args?.cmd]);
-}
-
-function firstString(values: unknown[]): string | undefined {
-  return values.find((value): value is string => typeof value === 'string');
-}
-
-function isLocalCliHelpCommand(command: string) {
-  const strippedCommand = command
-    .trim()
-    .replace(/^\/bin\/zsh\s+-lc\s+'(.+)'$/, '$1')
-    .trim();
-
-  return splitShellHelpProbe(strippedCommand).every(isLocalCliHelpSegment);
-}
-
-function splitShellHelpProbe(command: string): string[] {
-  return command
-    .split(/\s*(?:&&|\|\||[;|])\s*/)
-    .map((segment) => segment.trim())
-    .filter(Boolean);
-}
-
-function isLocalCliHelpSegment(command: string) {
-  const helpToken = '[^\\s;&|]+';
-  return (
-    new RegExp(
-      `^(?:node\\s+bin\\/agent-device\\.mjs|agent-device)\\s+(?:(?:help(?:\\s+${helpToken})*)|(?:${helpToken}\\s+)?--help)(?:\\s+2>&1)?$`,
-    ).test(command) ||
-    /^printf\s+["'][^"']*["']$/.test(command) ||
-    command === 'cat'
   );
 }
 
