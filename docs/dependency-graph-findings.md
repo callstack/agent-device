@@ -15,13 +15,16 @@ deliberately kept out of this change so the refactor stands on its own.
 | files in the unranked `(root)` zone                      | 29                     | **13** — entrypoints and composition roots only |
 | files covered by the ranked spine                        | 651 of 892             | **729 of 894**                                  |
 | type imports pointing at a re-export hub in another zone | 89                     | **0**                                           |
+| selector-command rules stated in both zones              | 10 messages, 3 drifts  | **0** — shared in `selectors/`                  |
+| modules writing ADR 0014's four ref-frame fields         | 2                      | **1**, enforced by R7                           |
 | value-import cycles (R4) / spine back-edges (R5)         | 0 / 0                  | 0 / 0                                           |
 
 What moved: the platform-plugin contract and its four facet tags, `NetworkEntry`, the
 click-button / recording-export-quality / interactor-types / runner-lease-context vocabularies,
 and 16 internal modules out of `(root)`; `utils` joined the spine at rank 1 after its two upward
-files moved to the zones they were reaching for. R6 now ranks type-only edges so the remaining 35
-can only shrink.
+files moved to the zones they were reaching for. Three new gate scopes keep it: R6 ratchets
+type-only inversions, R7 pins SessionState field ownership, and the shared selector checks in
+`selectors/` are covered by their own tests.
 
 ## What the gate guarantees, and what it cannot see
 
@@ -135,27 +138,25 @@ Things that are **not** wrong, checked and ruled out:
   descriptors; the "copied VERBATIM from daemon" comment in `core/command-descriptor/registry.ts`
   is a stale migration note, not live duplication.
 
-### 5a. `SessionState` is store-owned mutable state, mutated from 17 files
+### 5a. `SessionState` is store-owned mutable state — now with declared owners
 
 `SessionStore.get()` returns the live object out of a private `Map`; `set()` re-puts the same
-reference. So:
+reference. So the 57 direct `session.<field> = …` writes across 17 files are durable whether or
+not `set()` follows, which makes the 26 `set()` calls ceremonial — they document intent rather
+than committing anything. Both methods now say so in their own doc comments.
 
-- **57 direct `session.<field> = ...` writes across 17 files** outside `session-store.ts` —
-  `session-snapshot.ts` (8), `handlers/session-replay-runtime.ts` (7), `ref-frame.ts` (6),
-  `handlers/session-close.ts` (5), `session-action-recorder.ts` (5), …
-- **77 `sessionStore.get()` calls in 39 files**, but only **26 `set()` calls in 17**. The gap is
-  the tell: mutations persist through aliasing, so the 26 `set()` calls are ceremonial and the
-  read-modify-write pattern is really direct mutation of store-owned state.
+Measuring which module writes which field showed the problem is narrower than the raw count: **16
+of 27 fields already have exactly one writer**. The sharp case was ADR 0014's ref frame —
+`refFrameState`, `refFrameScope`, `refFrameTree`, `refFrameGeneration` must move together or the
+frame is incoherent, yet complete issuance wrote them in `ref-frame.ts` and partial issuance
+wrote the same four in `session-snapshot.ts`, even though `ref-frame.ts` claims in its header to
+be "the single owner of the frame's transitions". Both forms now go through `activateRefFrame`.
 
-This is the largest structural item in the daemon. Invariants that ADR 0014 (ref-frame lifetime)
-and the snapshot generation counter depend on are enforced in whichever of those 17 files
-remembered to; nothing at the store boundary can check them; and any future change to
-`SessionStore` — persistence, cloning, the ADR 0018 journal reading session state — breaks silently
-because whether a write is durable depends on aliasing rather than on the API. The shape of the
-fix is intent-named mutators on `SessionStore` (`markRefsIssued`, `recordSnapshot`,
-`attachPerfRun` — `markSessionPartialRefsIssued` already shows the pattern), `get()` handing back
-a readonly view, and a gate rule in the R1–R6 style forbidding `session.<field> =` outside the
-store. It is measurable end to end: 57 → 0.
+`recordSession` deliberately moves alone in two paths (recording without arming a publication),
+so the save-script cluster got no invented abstraction. It got ownership: **R7** records every
+field's owner in `SESSION_STATE_FIELD_OWNERS` and stops the set growing quietly — a new field
+must declare an owner, a foreign write fails naming the owner to call, and an owner that stops
+writing must be removed so the table cannot drift into fiction.
 
 ### 5b. 88 platform-conditional sites, in the layer ADR 0009 exists to keep neutral
 
@@ -176,34 +177,49 @@ imports from one neighbour, `handlers/session-open.ts` 17 of 30, `handlers/sessi
 `handlers/find.ts` 16 of 20. A file whose neighbour already provides two-thirds of what it imports
 is usually doing its neighbour's job too — the same orchestrator smell as §5, from the other side.
 
-## 6. Duplicated validation, forced by R2
+## 6. R2 is right, and the duplication it forces now has a home
 
-20 distinct error messages are constructed in more than one zone; 10 of those pairs are
-`commands ↔ daemon-server`. That duplication is **structural, not sloppiness**: the daemon must
-validate independently (it accepts requests from any client over HTTP/JSON-RPC), and R2 forbids it
-from importing `commands/`. So the only way to share a rule is to declare it below both.
+R2 (commands-floor) forbids `kernel`/`platforms`/`core`/`daemon` from importing `commands/`.
+Measured, that is not an arbitrary restriction but the shape of the system: `commands/` is
+consumed only by `cli/` (9), `cli-schema/` (9), `mcp/` (16), `client/` (2) and the composition
+roots (7). It is the client-side surface; the daemon is the executor on the other side of the
+wire, and ADR 0008 protects exactly that seam ("the process boundary is never collapsed").
+Relaxing R2 would let the executor depend on a client projection and pull CLI grammar and output
+formatting into the daemon's bundle.
 
-`find` is now the worked example: `checkFindArgs` lives in `selectors/find.ts` beside
-`parseFindArgs` and `isReadOnlyFindAction`, and both daemon entry points call it — the copy in
-`dispatchFindReadOnlyViaRuntime` was also unreachable, since its only caller validates first. The
-remaining pairs, each needing the same treatment:
+The duplication is real, though, because the daemon must validate independently — it accepts
+requests from any client — so the only place a shared rule can live is below both zones.
+`selectors/` already held the parsers (`splitIsSelectorArgs`, `splitSelectorFromArgs`,
+`isSupportedPredicate`) and even the `is` predicate message; it just did not hold the checks that
+use them. It does now: `checkFindArgs`, `checkIsPredicate`, `checkIsArgs`, `checkGetFormat`,
+`checkElementTargetArgs`, `checkWaitText`. Each reports a refusal and leaves the mechanism to the
+caller, because returning and throwing are **not** interchangeable — they write different session
+events.
 
-| message                                                                                                                                                                          | zones                                                                                                            |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `get requires @ref or selector expression`, `get only supports text or attrs`, `is requires a selector expression`, `is text requires expected text value`, `wait requires text` | `commands/cli-grammar/common.ts`, `commands/interaction/runtime/selector-read.ts` ↔ `daemon/selector-runtime.ts` |
-| `find did not match any element`, `find could not read the current accessibility tree`                                                                                           | `commands/interaction/runtime/selector-read.ts` ↔ `daemon/handlers/find.ts`                                      |
-| `fill requires text`, `type requires text`                                                                                                                                       | `commands/interaction/runtime/interactions.ts` ↔ `core/dispatch-interactions.ts`                                 |
-| `open <app> <url> requires a valid URL target`, `settings clear-app-state requires an app id…`                                                                                   | `core/dispatch.ts` ↔ `platforms/android/settings.ts`, `platforms/apple/core/app-settings.ts`                     |
-| `snapshot is not supported by this backend`                                                                                                                                      | three files inside `commands/`                                                                                   |
+Three drifts had already appeared in the `is` predicate rule alone, which is the argument for
+doing this rather than leaving the copies aligned by hand:
+
+- `commands/interaction/selectors.ts` re-implemented the predicate list as an inlined seven-way
+  `!==` chain while importing the message and hint from `selectors/predicates.ts`, so adding a
+  predicate to the shared list would not have reached the CLI grammar.
+- That chain compared the raw token, so the CLI rejected `is TEXT …` while the daemon it hands
+  the command to accepts it.
+- `isCommand` raised the same refusal without `IS_PREDICATE_USAGE_HINT`, so whether an agent got
+  recovery guidance depended on which layer noticed first — the failure mode ADR 0010's audit
+  calls out.
+
+Still duplicated across zones, each needing the same treatment: `fill requires text` /
+`type requires text` (`commands/interaction/runtime/interactions.ts` ↔
+`core/dispatch-interactions.ts`), `open <app> <url> requires a valid URL target` and
+`settings clear-app-state requires an app id…` (`core/dispatch.ts` ↔ two platform modules), and
+`snapshot is not supported by this backend` (three files inside `commands/`).
 
 ## Suggested order from here
 
-1. **`SessionState` mutators + a gate rule** (§5a). Biggest structural item, measurable, and it
-   protects ADR 0014's invariants.
-2. **Move the 10 outward-facing `daemon/types.ts` types into `contracts/`** (§2). Mechanical, and
+1. **Move the 10 outward-facing `daemon/types.ts` types into `contracts/`** (§2). Mechanical, and
    it clears most of §1's second cluster.
-3. **Split `client/client-types.ts`** (§1). Largest single inversion cluster, closes the 5-node
+2. **Split `client/client-types.ts`** (§1). Largest remaining inversion cluster, closes the 5-node
    type cycle, and it is already-tracked deferred work.
-4. **Retire platform branches into plugin facets** (§5b), highest-count files first.
-5. **Share the remaining duplicated validators** (§6), following the `checkFindArgs` shape.
-6. Optional: give `daemon/handlers/` the directory structure its filenames already imply (§5).
+3. **Retire platform branches into plugin facets** (§5b), highest-count files first.
+4. **Share the remaining duplicated validators** (§6), following the `checkIsArgs` shape.
+5. Optional: give `daemon/handlers/` the directory structure its filenames already imply (§5).

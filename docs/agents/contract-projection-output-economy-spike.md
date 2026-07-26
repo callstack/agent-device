@@ -41,12 +41,12 @@ more hand-authored declarations, or a measurable cold-start or bundle regression
 
 Deterministic representative payloads rank the unregistered candidates as follows:
 
-| Family | Default bytes | Conservative digest estimate | Reduction | Selection |
-|---|---:|---:|---:|---|
-| network (`include=all`) | 26,371 | 1,665 | 24,706 (93.7%) | selected |
-| events | 7,686 | 3,375 | 4,311 (56.1%) | rejected |
-| debug symbols | 4,804 | 2,054 | 2,750 (57.2%) | rejected |
-| recording | 3,132 | 2,427 | 705 (22.5%) | rejected |
+| Family                  | Default bytes | Conservative digest estimate |      Reduction | Selection |
+| ----------------------- | ------------: | ---------------------------: | -------------: | --------- |
+| network (`include=all`) |        26,371 |                        1,665 | 24,706 (93.7%) | selected  |
+| events                  |         7,686 |                        3,375 |  4,311 (56.1%) | rejected  |
+| debug symbols           |         4,804 |                        2,054 |  2,750 (57.2%) | rejected  |
+| recording               |         3,132 |                        2,427 |    705 (22.5%) | rejected  |
 
 The network estimate removes only repeated payload material from each entry (`headers`,
 `requestHeaders`, `responseHeaders`, `requestBody`, `responseBody`, and `raw`). It retains every
@@ -168,11 +168,11 @@ evidence.
 The six-month churn × current-size refresh continues to identify bounded candidates rather than a
 split mandate:
 
-| File | Commits | LOC | Churn × LOC |
-|---|---:|---:|---:|
-| `src/cli/parser/cli-help.ts` | 34 | 1,227 | 41,718 |
-| `src/core/dispatch-interactions.ts` | 31 | 1,123 | 34,813 |
-| `src/client/client-types.ts` | 21 | 1,139 | 23,919 |
+| File                                | Commits |   LOC | Churn × LOC |
+| ----------------------------------- | ------: | ----: | ----------: |
+| `src/cli/parser/cli-help.ts`        |      34 | 1,227 |      41,718 |
+| `src/core/dispatch-interactions.ts` |      31 | 1,123 |      34,813 |
+| `src/client/client-types.ts`        |      21 | 1,139 |      23,919 |
 
 Higher-churn files below 1,000 lines include `src/core/dispatch.ts`, `src/cli.ts`, and several
 daemon handlers. These are seam-stability signals, not automatic split targets. A future split must

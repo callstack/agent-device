@@ -36,7 +36,7 @@ steps 1-3, plus step 9.
 
 - Long help prose: `src/cli/parser/cli-help.ts`. Flag definitions: `src/commands/cli-grammar/`.
 - Command-specific usage/flag metadata lives with the command family metadata that owns the command.
-- Parser/help *rendering* stays in `src/cli/parser/`; command schema metadata is derived from command
+- Parser/help _rendering_ stays in `src/cli/parser/`; command schema metadata is derived from command
   metadata, family declarations, and the schema-only merge path in
   `src/cli-schema/command-overrides.ts`. Keep the two separate.
 - Locating an owner: `rg -n "helpDescription|summary|supportedFlags|allowedFlags" src/commands src/cli/parser src/cli-schema`.

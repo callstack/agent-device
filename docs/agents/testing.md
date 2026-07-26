@@ -8,17 +8,17 @@ stays authoritative.
 
 The mapping it encodes, for when you need to run a gate directly or reason about coverage:
 
-| Change | Gate |
-| --- | --- |
-| Any TypeScript | `pnpm typecheck` or `pnpm check:quick` |
-| Daemon handler / shared module | `pnpm check:unit` |
-| Tooling/config (`package.json`, `tsconfig*.json`, `.oxlintrc.json`, `.oxfmtrc.json`) | `pnpm check:tooling` |
-| Platform/device response — anything emitting `platform`/`appleOs` on the wire, or shaping a daemon response | `pnpm test:integration:provider` **and** `pnpm test:coverage` |
-| Cross-platform behavior | `pnpm test:integration` |
-| iOS runner / Swift | `pnpm build:xcuitest` |
-| CLI help/guidance (`src/cli/parser/cli-help.ts`, `src/cli-schema/`) | `pnpm exec vitest run src/cli/parser/__tests__ src/cli-schema/command-schema-guards.test.ts` |
-| SkillGym prompts/assertions | `pnpm test:skillgym:case <case-id>` (broad: `pnpm test:skillgym`, filter with `-- --tag fixture-smoke` or `-- --tag skill-guidance`) |
-| Anything in `src/`, `test/`, `skills/` | `pnpm format` |
+| Change                                                                                                      | Gate                                                                                                                                 |
+| ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Any TypeScript                                                                                              | `pnpm typecheck` or `pnpm check:quick`                                                                                               |
+| Daemon handler / shared module                                                                              | `pnpm check:unit`                                                                                                                    |
+| Tooling/config (`package.json`, `tsconfig*.json`, `.oxlintrc.json`, `.oxfmtrc.json`)                        | `pnpm check:tooling`                                                                                                                 |
+| Platform/device response — anything emitting `platform`/`appleOs` on the wire, or shaping a daemon response | `pnpm test:integration:provider` **and** `pnpm test:coverage`                                                                        |
+| Cross-platform behavior                                                                                     | `pnpm test:integration`                                                                                                              |
+| iOS runner / Swift                                                                                          | `pnpm build:xcuitest`                                                                                                                |
+| CLI help/guidance (`src/cli/parser/cli-help.ts`, `src/cli-schema/`)                                         | `pnpm exec vitest run src/cli/parser/__tests__ src/cli-schema/command-schema-guards.test.ts`                                         |
+| SkillGym prompts/assertions                                                                                 | `pnpm test:skillgym:case <case-id>` (broad: `pnpm test:skillgym`, filter with `-- --tag fixture-smoke` or `-- --tag skill-guidance`) |
+| Anything in `src/`, `test/`, `skills/`                                                                      | `pnpm format`                                                                                                                        |
 
 Two traps worth naming:
 
@@ -52,7 +52,7 @@ than as a test affordance (the workflow separately forbids test-only `typeof` DI
 `pnpm check:affected --base <ref>` derives which local checks a diff needs, so
 agents stop interpreting the testing matrix by hand. It is a **fail-open
 advisory**: existing GitHub CI stays authoritative and required, and this only
-narrows the *local* feedback loop.
+narrows the _local_ feedback loop.
 
 ```sh
 pnpm check:affected --base origin/main --run     # default agent loop: plan + run
@@ -122,15 +122,15 @@ Measured on the full unit suite (340 files, 3,210 tests, 48s wall at ~7x paralle
 - **Unit tests must not wait real time.** The suite's worst tests slept through production budgets:
   10.8s to prove "times out" by waiting out the full constant, 8s emulator-boot polls at 1Hz, real
   retry backoffs. Conversion patterns, in preference order (tracking issue #1098):
-  1. *Budget-derived cadence* (production-legit): poll intervals scale with the caller's timeout —
+  1. _Budget-derived cadence_ (production-legit): poll intervals scale with the caller's timeout —
      this took `devices.test.ts` from 25.6s to 2.8s (9x) while making short-budget production calls
      more responsive.
-  2. *Budget-wiring assertion*: don't re-prove the exec layer's timeout per call site; mock the tool
+  2. _Budget-wiring assertion_: don't re-prove the exec layer's timeout per call site; mock the tool
      layer and assert the right `timeoutMs` constant is passed. Exec-layer timeout semantics are
      proven once, in exec's own tests.
-  3. *Fake clocks* where the code accepts an injected clock.
-  Never add a test-only DI seam for this — the CI gate forbids it; patterns 1–2 are production
-  improvements and test restructurings respectively.
+  3. _Fake clocks_ where the code accepts an injected clock.
+     Never add a test-only DI seam for this — the CI gate forbids it; patterns 1–2 are production
+     improvements and test restructurings respectively.
 - **The slow-test ratchet** (`scripts/vitest-slow-test-reporter.ts`) enforces this: unit budget
   2.5s, integration 15s, failure at 2x budget (the band between reports without failing — host
   load legitimately stretches borderline tests, and a flaky gate trains people to ignore it).

@@ -56,10 +56,22 @@ export class SessionStore {
     this.scriptWriter = new SessionScriptWriter(sessionsDir);
   }
 
+  /**
+   * Returns the LIVE record, not a copy: mutating a field on the result is a durable write
+   * to store state whether or not {@link SessionStore.set} is called afterwards. Which
+   * modules may do that is declared in `SESSION_STATE_FIELD_OWNERS`
+   * (`scripts/layering/session-state.ts`) and enforced by the layering gate's R7, because
+   * nothing here can check the invariant a given field carries.
+   */
   get(name: string): SessionState | undefined {
     return this.sessions.get(name);
   }
 
+  /**
+   * Insert or replace a session. Calling this with a record obtained from
+   * {@link SessionStore.get} is a no-op — the reference is already stored — so the call
+   * documents intent rather than committing anything; a genuinely new record needs it.
+   */
   set(name: string, session: SessionState): void {
     this.sessions.set(name, session);
   }
