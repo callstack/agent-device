@@ -91,7 +91,69 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
   audioProbe: ['src/daemon/audio-probe.ts'],
   pendingInteractionOutcome: ['src/daemon/interaction-outcome-policy.ts'],
   postGestureStabilization: ['src/daemon/post-gesture-stabilization.ts'],
+
+  // Snapshot lineage on a freshly BUILT record. snapshot-runtime.ts constructs a new
+  // SessionState rather than mutating the stored one, so it cannot call setSessionSnapshot —
+  // but the rule is the same, so the two-field transition lives in session-snapshot.ts.
+  appName: ['src/daemon/snapshot-runtime.ts'],
+  lease: ['src/daemon/handlers/session-open.ts'],
+  deviceClaim: ['src/daemon/handlers/session-open.ts'],
+  saveScriptComplete: ['src/daemon/handlers/session-replay-runtime.ts'],
 };
+
+/**
+ * Fields no daemon module writes through a session binding: they are set when the record is
+ * constructed (an object literal, not a field assignment) or inside `session-store.ts`, which
+ * owns the record and is excluded from the scan.
+ *
+ * This list exists so the classification is EXHAUSTIVE. Without it, a new `SessionState` field
+ * that happened to have no direct write would satisfy the gate by being invisible to it, and R7
+ * would silently stop covering part of the type it claims to cover. Being here is a positive
+ * claim — "the store establishes this, nothing mutates it later" — so acquiring a direct write
+ * fails the gate until the field is moved into `SESSION_STATE_FIELD_OWNERS` with a real owner.
+ */
+export const STORE_OWNED_SESSION_STATE_FIELDS: ReadonlySet<string> = new Set([
+  'actions',
+  'appBundleId',
+  'appLog',
+  'appLogFailure',
+  'createdAt',
+  'device',
+  'name',
+  'recordOnlySession',
+  'sessionScope',
+  'snapshotDiagnostics',
+  'surface',
+]);
+
+export type FieldClassificationDrift = {
+  field: string;
+  problem: 'unclassified' | 'both' | 'not-a-field';
+};
+
+/**
+ * Where the two ownership tables disagree with `SessionState` itself. Empty means every declared
+ * field is classified exactly once and neither table names a field that no longer exists.
+ */
+export function fieldClassificationDrift(
+  fields: readonly string[],
+): FieldClassificationDrift[] {
+  const declared = new Set(fields);
+  const owned = new Set(Object.keys(SESSION_STATE_FIELD_OWNERS));
+  const drift: FieldClassificationDrift[] = [];
+
+  for (const field of fields) {
+    const inOwners = owned.has(field);
+    const inStore = STORE_OWNED_SESSION_STATE_FIELDS.has(field);
+    if (inOwners && inStore) drift.push({ field, problem: 'both' });
+    else if (!inOwners && !inStore) drift.push({ field, problem: 'unclassified' });
+  }
+  for (const field of [...owned, ...STORE_OWNED_SESSION_STATE_FIELDS]) {
+    if (!declared.has(field)) drift.push({ field, problem: 'not-a-field' });
+  }
+
+  return drift.sort((left, right) => left.field.localeCompare(right.field));
+}
 
 /**
  * Field names declared by `SessionState` itself, so the scan cannot be fooled by a daemon
@@ -103,6 +165,23 @@ export function sessionStateFields(typesSource: string): string[] {
   return [...declaration[1]!.matchAll(/^ {2}([a-zA-Z][A-Za-z0-9]*)\??:/gm)].map(
     (match) => match[1]!,
   );
+}
+
+/**
+ * Whether a binding holds a `SessionState`. The daemon names these records by role, not always
+ * `session`: `nextSession`, `provisionalSession`, `completedSession`, `preRunSession`,
+ * `preEntrySession`, `activeSession`. Matching only the literal name `session` is what let three
+ * genuine foreign writes sit unreported — `nextSession.snapshotGeneration` in snapshot-runtime.ts
+ * among them — while the gate claimed every write was inside its owner.
+ *
+ * There is no type information here, so this is a name test, and it is deliberately paired with
+ * the declared-field filter in `findSessionStateWrites`: a binding must look like a session AND
+ * the field must be one `SessionState` declares. A provider or runner session that happens to be
+ * named `…Session` only registers if it also writes a field name `SessionState` owns, and the
+ * remedy then is to declare the owner — the same remedy as for a real write.
+ */
+function isSessionBinding(name: string): boolean {
+  return /session/i.test(name);
 }
 
 /** A member expression being assigned to, or updated with `++`/`--`. */
@@ -171,7 +250,7 @@ export function findSessionStateWrites(
       }
       const record = node as Record<string, unknown>;
       const target = writeTarget(record);
-      if (target && target.object === 'session') {
+      if (target && target.object !== undefined && isSessionBinding(target.object)) {
         if (target.computed) {
           writes.push({ file, line: lineOf(source, target.offset), field: '[computed]' });
         } else if (target.field !== undefined && declared.has(target.field)) {

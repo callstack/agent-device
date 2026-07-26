@@ -38,6 +38,33 @@ export function setSessionSnapshot(session: SessionState, snapshot: SnapshotStat
 }
 
 /**
+ * The same lineage rule, applied to a freshly BUILT record instead of the stored one.
+ * `snapshot-runtime.ts` constructs a new `SessionState` rather than mutating the one in the
+ * store, so it cannot go through `setSessionSnapshot` — but the invariant it has to honour is
+ * identical, and it is the invariant that matters: #1076 versioned refs require the generation
+ * to advance exactly when the stored tree is replaced (snapshot AND diff — diff's summary
+ * response leaves client refs pinned to the previous generation, which is what the pinned
+ * warning diagnoses), and the scope source must describe the tree that actually ended up there.
+ *
+ * Both fields therefore move together, here, next to the writer they have to agree with. They
+ * used to be assigned at the call site, which is how the rule came to have two statements of
+ * itself in two modules.
+ */
+export function setSnapshotLineage(
+  session: SessionState,
+  params: {
+    scopeSource: SnapshotState | undefined;
+    keptCurrentSnapshot: boolean;
+    previousGeneration: number | undefined;
+  },
+): void {
+  session.snapshotScopeSource = params.scopeSource;
+  session.snapshotGeneration = params.keptCurrentSnapshot
+    ? params.previousGeneration
+    : nextSnapshotGeneration(params.previousGeneration);
+}
+
+/**
  * Advance `snapshotGeneration` (#1076 versioned refs). The FIRST bump of a
  * session lifetime seeds at a random 6-digit base instead of 1: a reopened
  * session restarts its counter, so a per-lifetime count starting at 1 would
@@ -47,7 +74,7 @@ export function setSessionSnapshot(session: SessionState, snapshot: SnapshotStat
  * Within a lifetime the counter stays strictly monotonic (+1 per replacement),
  * so pinned-vs-current comparisons remain exact.
  */
-export function nextSnapshotGeneration(current: number | undefined): number {
+function nextSnapshotGeneration(current: number | undefined): number {
   return current === undefined ? randomInt(100_000, 1_000_000) : current + 1;
 }
 

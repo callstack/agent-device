@@ -15,6 +15,7 @@ import {
   type ReplayTestProgressEvent,
 } from '../../request/progress.ts';
 import { SessionStore } from '../session-store.ts';
+import { clearPendingRecordAndHealWatermark } from './session-replay-resume.ts';
 import { expandSessionPath } from '../session-paths.ts';
 import { applySaveScriptRetarget } from '../session-action-recorder.ts';
 import { computeReplayPlanDigest } from '../../replay/plan-digest.ts';
@@ -704,7 +705,7 @@ function consumeReplayResumeState(params: {
     preEntrySession &&
     preEntrySession.pendingRecordAndHeal?.expectedFrom === req.flags?.replayFrom
   ) {
-    preEntrySession.pendingRecordAndHeal = undefined;
+    clearPendingRecordAndHealWatermark(preEntrySession);
     sessionStore.set(sessionName, preEntrySession);
   }
   if (req.flags?.saveScript) sessionStore.clearRepairTombstone(sessionName);

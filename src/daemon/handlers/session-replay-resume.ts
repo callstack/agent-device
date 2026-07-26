@@ -175,6 +175,15 @@ export function stampPendingRecordAndHealWatermark(params: {
   });
 }
 
+/**
+ * Retire the watermark once the resume it was stamped for has actually been entered. The clear
+ * belongs beside the stamp: both are statements about when the field is meaningful, and the
+ * caller that enters the resume knows only that it matched, not what the field means.
+ */
+export function clearPendingRecordAndHealWatermark(session: SessionState): void {
+  session.pendingRecordAndHeal = undefined;
+}
+
 function computeRecordAndHealWatermark(params: {
   resume: ReplayDivergenceResume;
   repairHint: ReplayRepairHint;

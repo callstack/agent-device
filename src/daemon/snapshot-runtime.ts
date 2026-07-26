@@ -19,7 +19,7 @@ import { createDaemonRuntimePolicy } from './runtime-policy.ts';
 import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
 import { maybeBuildAndroidSnapshotTimeoutFailure } from './android-snapshot-timeout-evidence.ts';
 import { summarizeSnapshotDiagnostics } from '../contracts/snapshot-diagnostics.ts';
-import { nextSnapshotGeneration } from './session-snapshot.ts';
+import { setSnapshotLineage } from './session-snapshot.ts';
 import { activateCompleteRefFrame } from './ref-frame.ts';
 import { stripAndroidSystemChromeProvenance } from '../contracts/android-system-chrome.ts';
 
@@ -253,18 +253,15 @@ function buildNextSnapshotSession(params: {
     snapshot,
     appBundleId: record.appBundleId,
   });
-  nextSession.snapshotScopeSource = resolveNextSnapshotScopeSource({
-    current,
-    keepCurrentSnapshot,
-    refScopedSnapshot,
+  setSnapshotLineage(nextSession, {
+    scopeSource: resolveNextSnapshotScopeSource({
+      current,
+      keepCurrentSnapshot,
+      refScopedSnapshot,
+    }),
+    keptCurrentSnapshot: keepCurrentSnapshot,
+    previousGeneration: current?.snapshotGeneration,
   });
-  // #1076 versioned refs: this path bypasses setSessionSnapshot, so it advances
-  // the generation itself whenever the stored tree is replaced (snapshot AND
-  // diff — diff's summary response leaves client refs pinned to the previous
-  // generation, which is exactly what the pinned warning diagnoses).
-  nextSession.snapshotGeneration = keepCurrentSnapshot
-    ? current?.snapshotGeneration
-    : nextSnapshotGeneration(current?.snapshotGeneration);
   reactivateCompleteFrameIfIssuing(nextSession, keepCurrentSnapshot, params.issuesRefsToClient);
   if (record.appName) nextSession.appName = record.appName;
   return nextSession;

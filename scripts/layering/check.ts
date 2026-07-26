@@ -28,9 +28,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
+  fieldClassificationDrift,
   findSessionStateWrites,
   sessionStateFields,
   SESSION_STATE_FIELD_OWNERS,
+  STORE_OWNED_SESSION_STATE_FIELDS,
 } from './session-state.ts';
 import { uninstallableImports, zeroDepJobs } from './zero-dep-jobs.ts';
 import {
@@ -291,6 +293,30 @@ function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Viola
   const violations: Violation[] = [];
   const seenOwners = new Map<string, Set<string>>();
 
+  // Parity first: the rule is only exhaustive if every declared field is classified. A field
+  // that is in neither table would otherwise pass by being invisible to the scan, and R7 would
+  // quietly stop covering part of the type it claims to cover.
+  const DRIFT_MESSAGE: Readonly<Record<string, string>> = {
+    unclassified:
+      'is declared by SessionState but classified nowhere. Name its owning module in ' +
+      'SESSION_STATE_FIELD_OWNERS, or — if the store establishes it at construction and nothing ' +
+      'mutates it later — add it to STORE_OWNED_SESSION_STATE_FIELDS.',
+    both:
+      'is in both SESSION_STATE_FIELD_OWNERS and STORE_OWNED_SESSION_STATE_FIELDS. A field is ' +
+      'either store-established or owned by a writer, not both.',
+    'not-a-field':
+      'is classified but is no longer declared by SessionState — remove it from the table it ' +
+      'still appears in.',
+  };
+  for (const { field, problem } of fieldClassificationDrift(fields)) {
+    violations.push({
+      rule: 'R7 session-state-ownership',
+      file: 'scripts/layering/session-state.ts',
+      line: 1,
+      message: `session.${field} ${DRIFT_MESSAGE[problem]}`,
+    });
+  }
+
   for (const write of writes) {
     const owners = SESSION_STATE_FIELD_OWNERS[write.field];
     const seen = seenOwners.get(write.field) ?? new Set<string>();
@@ -309,14 +335,19 @@ function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Viola
       continue;
     }
     if (owners === undefined) {
+      const storeOwned = STORE_OWNED_SESSION_STATE_FIELDS.has(write.field);
       violations.push({
         rule: 'R7 session-state-ownership',
         file: write.file,
         line: write.line,
-        message:
-          `session.${write.field} has no declared owner. SessionStore hands out the live ` +
-          `record, so this write is durable: name the owning module in ` +
-          `SESSION_STATE_FIELD_OWNERS (scripts/layering/session-state.ts).`,
+        message: storeOwned
+          ? `session.${write.field} is classified store-established ` +
+            `(STORE_OWNED_SESSION_STATE_FIELDS), meaning nothing mutates it after construction — ` +
+            `but this is a direct write. Route it through the store, or move the field into ` +
+            `SESSION_STATE_FIELD_OWNERS with this module as its owner.`
+          : `session.${write.field} has no declared owner. SessionStore hands out the live ` +
+            `record, so this write is durable: name the owning module in ` +
+            `SESSION_STATE_FIELD_OWNERS (scripts/layering/session-state.ts).`,
       });
       continue;
     }
@@ -392,6 +423,12 @@ function checkZeroDepJobs(): Violation[] {
   return violations;
 }
 
+function sessionStateFieldCount(): number {
+  return (
+    Object.keys(SESSION_STATE_FIELD_OWNERS).length + STORE_OWNED_SESSION_STATE_FIELDS.size
+  );
+}
+
 function report(files: readonly string[], violations: readonly Violation[]): number {
   if (violations.length === 0) {
     process.stdout.write(
@@ -399,8 +436,9 @@ function report(files: readonly string[], violations: readonly Violation[]): num
         `value-import cycles (both checked globally); the ranked target spine contains no ` +
         `back-edges (only the composition root is unranked), and its type-only ` +
         `inversions match the R6 ratchet (${Object.values(TYPE_INVERSION_BASELINE).reduce((sum, count) => sum + count, 0)} remaining); ` +
-        `every SessionState write is inside its declared owner (R7); and every zero-dep CI ` +
-        `job resolves without node_modules (R8).\n`,
+        `all ${sessionStateFieldCount()} SessionState fields are classified and every write is ` +
+        `inside its declared owner (R7); and every zero-dep CI job resolves without ` +
+        `node_modules (R8).\n`,
     );
     return 0;
   }

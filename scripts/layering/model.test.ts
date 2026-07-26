@@ -4,9 +4,11 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { listSourceFiles } from './check.ts';
 import {
+  fieldClassificationDrift,
   findSessionStateWrites,
   sessionStateFields,
   SESSION_STATE_FIELD_OWNERS,
+  STORE_OWNED_SESSION_STATE_FIELDS,
 } from './session-state.ts';
 import { uninstallableImports, zeroDepJobs } from './zero-dep-jobs.ts';
 import {
@@ -398,4 +400,70 @@ test("the repo's own zero-dep jobs resolve without node_modules", () => {
     assert.ok(job.entries.length > 0, `${job.job} must name an entry script`);
     assert.deepEqual(uninstallableImports(job, read, exists), [], `${job.job} must reach no package`);
   }
+});
+
+test('a session write counts through an aliased binding, not only one named `session`', () => {
+  // The daemon names these records by role: nextSession, provisionalSession, completedSession,
+  // preRunSession, preEntrySession, activeSession. Matching only the literal name `session` hid
+  // three real foreign writes — nextSession.snapshotGeneration in snapshot-runtime.ts among them
+  // — while the gate reported that every write was inside its owner.
+  const writes = findSessionStateWrites(
+    new Map([
+      [
+        'src/daemon/probe.ts',
+        [
+          'nextSession.snapshotGeneration = 3;',
+          'preEntrySession.refFrameState = "active";',
+          'completedSession.saveScriptComplete = true;',
+          // Not a session binding, and not a session write.
+          'result.snapshotGeneration = 9;',
+          'flags.refFrameState = "x";',
+        ].join('\n'),
+      ],
+    ]),
+    ['snapshotGeneration', 'refFrameState', 'saveScriptComplete'],
+  );
+  assert.deepEqual(
+    writes.map(({ field, line }) => `${line}:${field}`),
+    ['1:snapshotGeneration', '2:refFrameState', '3:saveScriptComplete'],
+  );
+});
+
+test('every SessionState field is classified exactly once', () => {
+  // Exhaustiveness is the point: without this, a new field with no direct write would satisfy
+  // R7 by being invisible to the scan, and the rule would silently stop covering part of the
+  // type it claims to cover.
+  const fields = sessionStateFields(
+    readFileSync(path.resolve(import.meta.dirname, '../../src/daemon/types.ts'), 'utf8'),
+  );
+  assert.deepEqual(fieldClassificationDrift(fields), []);
+  assert.equal(
+    Object.keys(SESSION_STATE_FIELD_OWNERS).length + STORE_OWNED_SESSION_STATE_FIELDS.size,
+    fields.length,
+  );
+});
+
+test('classification drift is reported in all three directions', () => {
+  const declared = sessionStateFields(
+    readFileSync(path.resolve(import.meta.dirname, '../../src/daemon/types.ts'), 'utf8'),
+  );
+
+  // Unclassified: a field added to SessionState and to neither table. This is the case the
+  // reviewer's finding was about — before parity, such a field passed the gate unnoticed.
+  assert.deepEqual(fieldClassificationDrift([...declared, 'brandNewField']), [
+    { field: 'brandNewField', problem: 'unclassified' },
+  ]);
+
+  // Stale: a table names a field SessionState no longer declares. Dropping one declared field
+  // makes exactly that name stale.
+  assert.deepEqual(fieldClassificationDrift(declared.filter((field) => field !== 'trace')), [
+    { field: 'trace', problem: 'not-a-field' },
+  ]);
+
+  // Contradictory: a field cannot be both store-established and owned by a writer. The real
+  // tables must never overlap, which is what makes the `both` branch unreachable in practice.
+  const inBoth = [...STORE_OWNED_SESSION_STATE_FIELDS].filter(
+    (field) => field in SESSION_STATE_FIELD_OWNERS,
+  );
+  assert.deepEqual(inBoth, [], 'the real tables must not overlap');
 });

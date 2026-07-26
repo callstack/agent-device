@@ -274,10 +274,21 @@ The perfect-shape refactor is complete and merged. Its end-state:
   workable while each field has an owner that keeps its invariants, so
   `SESSION_STATE_FIELD_OWNERS` (`scripts/layering/session-state.ts`) records them and the gate
   stops the set from growing quietly: a new field must declare an owner, a foreign write fails
-  with the owner to call instead, and an owner that stops writing must be removed. Field names are
-  read out of the `SessionState` declaration, so a daemon module with an unrelated local named
-  `session` cannot trip it. ADR 0014's ref frame is the worked example — its four fields moved
-  together across two modules until `activateRefFrame` took the transition.
+  with the owner to call instead, and an owner that stops writing must be removed. The
+  classification is **exhaustive** — every field is either in that table or in
+  `STORE_OWNED_SESSION_STATE_FIELDS`, the positive claim "the store establishes this and nothing
+  mutates it later". Without that parity a new field with no direct write would satisfy the gate by
+  being invisible to it, and R7 would silently stop covering part of the type it covers. A direct
+  write to a store-established field fails, naming both remedies. Detection follows session
+  records through **aliased bindings** (`nextSession`, `provisionalSession`, `completedSession`),
+  not just a local named `session`: matching the literal name is what let three genuine foreign
+  writes sit unreported. Since there is no type information in the gate, the binding test is a name
+  test paired with the declared-field filter — a provider or runner session only registers if it
+  also writes a field `SessionState` owns, and the remedy is then the same. ADR 0014's ref frame
+  and the snapshot lineage are the worked examples: the frame's four fields moved together across
+  two modules until `activateRefFrame` took the transition, and `snapshotScopeSource` +
+  `snapshotGeneration` were assigned in `snapshot-runtime.ts` until `setSnapshotLineage` took
+  theirs.
 - Zero-dep CI jobs (R8). Some jobs run scripts straight from a checkout with `install-deps: false`,
   so they have no `node_modules`. Nothing local can feel that constraint — every dev machine has
   `node_modules` sitting right there — so a script grows a package import, passes locally, and fails
