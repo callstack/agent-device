@@ -287,12 +287,27 @@ function findCyclePath(
   throw new Error(`Expected a cycle inside strongly connected component: ${component.join(', ')}`);
 }
 
-export function backEdgePair(edge: ResolvedImportEdge): string | null {
-  if (edge.dynamic || edge.typeOnly || edge.fromZone === edge.toZone) return null;
+function spineInversionPair(edge: ResolvedImportEdge): string | null {
+  if (edge.fromZone === edge.toZone) return null;
   const fromRank = TARGET_DAG_RANK.get(edge.fromZone);
   const toRank = TARGET_DAG_RANK.get(edge.toZone);
   if (fromRank === undefined || toRank === undefined || fromRank >= toRank) return null;
   return `${edge.fromZone} -> ${edge.toZone}`;
+}
+
+export function backEdgePair(edge: ResolvedImportEdge): string | null {
+  if (edge.dynamic || edge.typeOnly) return null;
+  return spineInversionPair(edge);
+}
+
+// The same ranking applied to TYPE-ONLY edges (R6). R5 deliberately ignores them —
+// a type-only import costs nothing at runtime and does not affect cold start — but a
+// type-only edge still says "this zone is declared in terms of that one", and that IS a
+// boundary claim. Ranking them found 61 inversions the gate had never seen, which is why
+// they are ratcheted rather than merely reported: see `TYPE_INVERSION_BASELINE`.
+export function typeInversionPair(edge: ResolvedImportEdge): string | null {
+  if (edge.dynamic || !edge.typeOnly) return null;
+  return spineInversionPair(edge);
 }
 
 export function collectBackEdges(edges: readonly ResolvedImportEdge[]): BackEdgeMap {

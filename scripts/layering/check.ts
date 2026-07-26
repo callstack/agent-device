@@ -11,7 +11,8 @@
 //   - GLOBALLY, across every production source file: the R1-R3 move rules and
 //     rejection of all production static value-import cycles (R4).
 //   - Over the RANKED SPINE only: rejection of every spine back-edge (R5), i.e.
-//     an import whose source zone outranks its target zone.
+//     an import whose source zone outranks its target zone, plus a ratchet on the
+//     same inversion measured over TYPE-ONLY edges (R6).
 // Root and peripheral zones (see `UNRANKED_ZONES` in model.ts) are deliberately
 // NOT ranked: they still participate in R1-R4, but the gate makes no back-edge
 // claim about them. It is not a claim that every folder is arranged in one total
@@ -26,6 +27,7 @@ import {
   findValueImportCycles,
   resolveImportEdges,
   topFolder,
+  typeInversionPair,
   type ImportEdge,
   type ResolvedImportEdge,
 } from './model.ts';
@@ -164,12 +166,95 @@ function checkBackEdges(edges: readonly ResolvedImportEdge[]): Violation[] {
   });
 }
 
+// R6 ratchet: type-only spine inversions, per zone pair. R5 cannot see these (a
+// type-only import is free at runtime), but "zone A is declared in terms of zone B"
+// is still a boundary claim, and ranking type edges surfaced 61 of them. Two clusters
+// remain, each needing its own change rather than a file move:
+//
+//   commands/contracts -> client   the per-command Options/Result vocabulary is declared
+//                                  inside the 1.2k-line public Node-client surface
+//                                  (client/client-types.ts) instead of in contracts/,
+//                                  where the 24 types it already re-exports live.
+//   core/commands -> daemon-server the ADR 0003 daemon facet: core's descriptor registry
+//                                  composes a shape the daemon owns. The daemon keeps the
+//                                  VALUES; only the shape needs to move below core.
+//
+// The counts may only go DOWN. Fixing edges without lowering the number fails too, so the
+// baseline cannot quietly stop describing the tree.
+const TYPE_INVERSION_BASELINE: Readonly<Record<string, number>> = {
+  'commands -> client': 28,
+  'commands -> daemon-server': 1,
+  'contracts -> client': 1,
+  'core -> daemon-server': 5,
+};
+
+function checkTypeInversions(edges: readonly ResolvedImportEdge[]): Violation[] {
+  const seen = new Set<string>();
+  const countsByPair = new Map<string, number>();
+  const firstEdgeByPair = new Map<string, ResolvedImportEdge>();
+  for (const edge of edges) {
+    const pair = typeInversionPair(edge);
+    if (!pair) continue;
+    const identity = `${edge.file} -> ${edge.target}`;
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    countsByPair.set(pair, (countsByPair.get(pair) ?? 0) + 1);
+    if (!firstEdgeByPair.has(pair)) firstEdgeByPair.set(pair, edge);
+  }
+
+  const violations: Violation[] = [];
+  for (const [pair, count] of [...countsByPair].sort(([left], [right]) =>
+    left.localeCompare(right),
+  )) {
+    const allowed = TYPE_INVERSION_BASELINE[pair];
+    const edge = firstEdgeByPair.get(pair)!;
+    if (allowed === undefined) {
+      violations.push({
+        rule: 'R6 type-spine-inversion',
+        file: edge.file,
+        line: edge.line,
+        message:
+          `new type-only ${pair} inversion (${count} edge(s), e.g. ${edge.file} -> ${edge.target}). ` +
+          `Declare the shared type below both zones instead of adding it to TYPE_INVERSION_BASELINE.`,
+      });
+      continue;
+    }
+    if (count > allowed) {
+      violations.push({
+        rule: 'R6 type-spine-inversion',
+        file: edge.file,
+        line: edge.line,
+        message:
+          `type-only ${pair} inversions grew to ${count} (baseline ${allowed}). ` +
+          `Move the shared type below both zones; the baseline may only shrink.`,
+      });
+    }
+  }
+
+  for (const [pair, allowed] of Object.entries(TYPE_INVERSION_BASELINE)) {
+    const count = countsByPair.get(pair) ?? 0;
+    if (count >= allowed) continue;
+    const message =
+      count === 0
+        ? `type-only ${pair} inversions are all gone — delete this entry from TYPE_INVERSION_BASELINE.`
+        : `type-only ${pair} inversions dropped to ${count} — lower TYPE_INVERSION_BASELINE to ${count}.`;
+    violations.push({
+      rule: 'R6 type-spine-inversion',
+      file: 'scripts/layering/check.ts',
+      line: 1,
+      message,
+    });
+  }
+  return violations;
+}
+
 function report(files: readonly string[], violations: readonly Violation[]): number {
   if (violations.length === 0) {
     process.stdout.write(
       `Layering guard: OK — ${files.length} source files satisfy R1-R3 and contain no ` +
         `value-import cycles (both checked globally); the ranked target spine contains no ` +
-        `back-edges (root/peripheral zones are intentionally unranked).\n`,
+        `back-edges (root/peripheral zones are intentionally unranked), and its type-only ` +
+        `inversions match the R6 ratchet (${Object.values(TYPE_INVERSION_BASELINE).reduce((sum, count) => sum + count, 0)} remaining).\n`,
     );
     return 0;
   }
@@ -202,6 +287,7 @@ export function main(): number {
     ...checkLayeringRules(edges),
     ...checkCycles(edges),
     ...checkBackEdges(edges),
+    ...checkTypeInversions(edges),
   ];
   return report(sourceFiles, violations);
 }

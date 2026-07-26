@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { listSourceFiles } from './check.ts';
 import {
   RANKED_ZONES,
+  typeInversionPair,
   UNRANKED_ZONES,
   classifyZone,
   collectBackEdges,
@@ -97,6 +98,30 @@ test('neutral ownership zones reject value imports into higher layers', () => {
     'request -> commands': ['src/request/cancel.ts -> src/commands/cancel.ts'],
     'selectors -> client': ['src/selectors/parse.ts -> src/client/client.ts'],
   });
+});
+
+test('type-only edges are ranked by R6 and ignored by R5, and vice versa', () => {
+  const edges = resolveImportEdges(
+    new Map([
+      ['src/commands/surface.ts', "import type { Shape } from '../client/client-types.ts';"],
+      ['src/client/client-types.ts', 'export type Shape = { a: 1 };'],
+      ['src/contracts/value.ts', "import '../core/logic.ts';"],
+      ['src/core/logic.ts', 'export const logic = true;'],
+      ['src/kernel/lazy.ts', "void import('../commands/surface.ts');"],
+    ]),
+  );
+
+  // The type-only inversion is invisible to R5 and caught by R6.
+  assert.deepEqual(collectBackEdges(edges), {
+    'contracts -> core': ['src/contracts/value.ts -> src/core/logic.ts'],
+  });
+  assert.deepEqual(edges.map(typeInversionPair).filter(Boolean), ['commands -> client']);
+
+  // Neither rule ranks a dynamic import: it is a deliberate cold-start seam.
+  assert.equal(
+    edges.filter((edge) => edge.dynamic).every((edge) => typeInversionPair(edge) === null),
+    true,
+  );
 });
 
 test('ranked and unranked zones are disjoint and both non-empty', () => {

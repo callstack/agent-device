@@ -249,19 +249,23 @@ The perfect-shape refactor is complete and merged. Its end-state:
   hardware evidence validates discovery, lifecycle, and the complete remote-control contract.
   Vega capture, selector, inventory, install, logging, and performance backends remain separate
   follow-up surfaces.
-- Folder DAG + layering lint. `scripts/layering/check.ts` enforces two different scopes in CI.
+- Folder DAG + layering lint. `scripts/layering/check.ts` enforces three different scopes in CI.
   GLOBALLY, across every production source file, it enforces the R1-R3 move rules (kernel-sink,
   commands-floor, platforms-seam) and rejects all production static value-import cycles. Separately,
   it ranks an explicit target spine — as rank groups, lowest (kernel sink) to highest, where `A ◄ B`
   means B may not be outranked by A (the back-edge order the gate rejects), NOT that every displayed
   import exists:
-  `kernel ◄ { contracts, request, selectors, platforms } ◄ core ◄ { commands, cli-schema } ◄ { client, daemon-server } ◄ daemon-client ◄ cli` —
+  `kernel ◄ { contracts, request, selectors, platforms, utils } ◄ core ◄ { commands, cli-schema } ◄ { client, daemon-server } ◄ daemon-client ◄ cli` —
   and rejects every back-edge within it. Root entrypoints and peripheral zones (`mcp`, `compat`,
-  `remote`, `metro`, `replay`, `recording`, `snapshot`, `screenshot-diff`, `cloud-webdriver`, `sdk`,
-  `utils`) are deliberately unranked (`UNRANKED_ZONES` in `scripts/layering/model.ts`): they still
+  `remote`, `metro`, `replay`, `recording`, `snapshot`, `screenshot-diff`, `cloud-webdriver`, `sdk`)
+  are deliberately unranked (`UNRANKED_ZONES` in `scripts/layering/model.ts`): they still
   obey R1-R4, but the gate asserts no total back-edge order over them. It is not a claim that every
   folder is arranged in one DAG. `model.test.ts` guards that no new zone escapes this classification
-  silently.
+  silently. Thirdly, R6 ratchets the SAME inversion measured over TYPE-ONLY edges, which R5 ignores
+  by design: a type-only import is free at runtime, but "zone A is declared in terms of zone B" is
+  still a boundary claim, and ranking type edges surfaced 61 inversions the gate had never seen.
+  `TYPE_INVERSION_BASELINE` in `check.ts` holds the remaining pairs with their counts; the numbers
+  may only shrink, and a new pair fails outright.
 - Agent-cost. Responses carry a cost block and MCP `outputSchema`, rendered through a leveled
   `ResponseView`.
 
