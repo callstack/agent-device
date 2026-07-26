@@ -155,7 +155,15 @@ one question so `rg` → read-whole-file stays one cheap bounded read.
   `tsconfig.lib.json` (it needs an explicit `rootDir: "./src"`) and `tsdown.config.ts` first, and run
   `pnpm check:tooling` for any build-tooling edit.
 - Prefer the aggregate `package.json` scripts; they encode the expected validation bundles better
-  than ad hoc command lists.
+  than ad hoc command lists — including which paths get formatted: run `pnpm format`, never
+  `oxfmt <path>`, or you will reformat files the repo deliberately leaves alone (`scripts/`,
+  every `.md`).
+- Before pushing, the aggregate is **`pnpm check`** (`check:tooling && check:fallow &&
+  check:unit`). `pnpm check:tooling` is a *subset*: it stops before the Fallow audit, so dead
+  exports and complexity findings your diff introduces still fail CI after it passes clean.
+  Fallow's baselines are keyed by path, so a change that RENAMES a file must move that file's
+  entry in `fallow-baselines/health.json` — regenerating the baselines would silently accept
+  every other outstanding finding too.
 
 ## Apple runner seams
 

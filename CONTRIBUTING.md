@@ -28,13 +28,25 @@ Apple XCTest builds now share a common helper script. `pnpm build:xcuitest:ios` 
 `pnpm build:xcuitest:macos` reuses the existing DerivedData by default for faster local
 iteration. Set `AGENT_DEVICE_IOS_CLEAN_DERIVED=1` when you need a clean macOS runner rebuild.
 
+Before pushing, run the aggregate gate:
+
+```bash
+pnpm check
+```
+
+That is `check:tooling && check:fallow && check:unit`, and it is the only command that covers
+every non-device CI job. **`pnpm check:tooling` on its own is not the gate** — it stops before
+`check:fallow`, so a dead export or a complexity finding your diff introduces still fails CI
+after a clean `check:tooling` run. `pnpm test` likewise runs the unit projects only. What
+`pnpm check` cannot cover is the device/smoke matrix, which needs real devices.
+
 Run tests:
 
 ```bash
 pnpm test
 ```
 
-Targeted checks:
+Targeted checks, while iterating:
 
 ```bash
 pnpm check:quick
