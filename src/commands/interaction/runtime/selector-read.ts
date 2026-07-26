@@ -1,4 +1,5 @@
 import {
+  FIND_VALUE_REQUIRED_MESSAGE,
   findBestMatchesByLocator,
   parseFindSelectorExpression,
   type FindAction,
@@ -37,11 +38,8 @@ import {
   type TargetAnnotationV1,
 } from '../../../replay/target-identity.ts';
 import { buildSelectorChainForNode } from '../../../selectors/build.ts';
-import {
-  evaluateIsPredicate,
-  isSupportedPredicate,
-  IS_PREDICATE_REQUIRED_MESSAGE,
-} from '../../../selectors/predicates.ts';
+import { checkIsPredicate, evaluateIsPredicate } from '../../../selectors/predicates.ts';
+import { checkWaitText, IS_TEXT_VALUE_REQUIRED_MESSAGE } from '../../../selectors/arguments.ts';
 import type {
   ElementTarget,
   RefTarget,
@@ -220,7 +218,7 @@ export const findCommand: RuntimeCommand<FindReadCommandOptions, FindReadCommand
 ): Promise<FindReadCommandResult> => {
   const locator = options.locator ?? 'any';
   if (!options.query) {
-    throw new AppError('INVALID_ARGS', 'find requires a value');
+    throw new AppError('INVALID_ARGS', FIND_VALUE_REQUIRED_MESSAGE);
   }
   if (options.action === 'wait') {
     return await waitForFindMatch(runtime, options, locator);
@@ -339,11 +337,10 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
   runtime,
   options,
 ): Promise<IsCommandResult> => {
-  if (!isSupportedPredicate(options.predicate)) {
-    throw new AppError('INVALID_ARGS', IS_PREDICATE_REQUIRED_MESSAGE);
-  }
-  if (options.predicate === 'text' && !options.expectedText) {
-    throw new AppError('INVALID_ARGS', 'is text requires expected text value');
+  const admitted = checkIsPredicate(options.predicate);
+  if (!admitted.ok) throw new AppError(admitted.code, admitted.message, { hint: admitted.hint });
+  if (admitted.predicate === 'text' && !options.expectedText) {
+    throw new AppError('INVALID_ARGS', IS_TEXT_VALUE_REQUIRED_MESSAGE);
   }
   const chain = parseSelectorChain(options.selector);
   const capture = await captureSelectorSnapshot(runtime, options, {
@@ -472,7 +469,8 @@ export const waitCommand: RuntimeCommand<WaitCommandOptions, WaitCommandResult> 
   if (options.target.kind === 'stable') {
     return await waitForStable(runtime, options, options.target.quietMs, options.target.timeoutMs);
   }
-  if (!options.target.text) throw new AppError('INVALID_ARGS', 'wait requires text');
+  const waitText = checkWaitText(options.target.text);
+  if (!waitText.ok) throw new AppError(waitText.code, waitText.message);
   return await waitForText(runtime, options, options.target.text, options.target.timeoutMs);
 };
 

@@ -9,16 +9,15 @@ import { errorResponse, requireCommandSupported } from './handlers/response.ts';
 import { markSessionPartialRefsIssued, resolveRefStalenessWarning } from './session-snapshot.ts';
 import { resolveSessionDevice, withSessionlessRunnerCleanup } from './handlers/snapshot-session.ts';
 import { checkFindArgs, isReadOnlyFindAction } from '../selectors/find.ts';
-import { splitIsSelectorArgs } from '../selectors/index.ts';
+import {
+  checkElementTargetArgs,
+  checkGetFormat,
+  checkIsArgs,
+  checkWaitText,
+} from '../selectors/arguments.ts';
 import { refSnapshotFlagGuardResponse } from './handlers/interaction-flags.ts';
 import { parseVersionedRefPositional } from './handlers/interaction-touch-targets.ts';
-import {
-  evaluateIsPredicate,
-  isSupportedPredicate,
-  IS_PREDICATE_REQUIRED_MESSAGE,
-  IS_PREDICATE_USAGE_HINT,
-  type IsPredicate,
-} from '../selectors/predicates.ts';
+import { evaluateIsPredicate, type IsPredicate } from '../selectors/predicates.ts';
 import {
   describeAndroidEscapeSurface,
   detectAndroidEscapeSurface,
@@ -139,10 +138,9 @@ export async function dispatchGetViaRuntime(
 ): Promise<DaemonResponse | null> {
   const { req } = params;
   if (req.command !== 'get') return null;
-  const sub = req.positionals?.[0];
-  if (sub !== 'text' && sub !== 'attrs') {
-    return errorResponse('INVALID_ARGS', 'get only supports text or attrs');
-  }
+  const format = checkGetFormat(req.positionals?.[0]);
+  if (!format.ok) return errorResponse(format.code, format.message);
+  const sub = format.format;
   const target = parseGetTarget(req);
   if (!target.ok) return target.response;
   if (target.target.kind === 'ref') {
@@ -205,21 +203,16 @@ export async function dispatchIsViaRuntime(
 ): Promise<DaemonResponse | null> {
   const { req } = params;
   if (req.command !== 'is') return null;
-  const { predicate: rawPredicate, split } = splitIsSelectorArgs(req.positionals ?? []);
-  const predicate = rawPredicate.toLowerCase();
-  if (!isSupportedPredicate(predicate)) {
-    return errorResponse('INVALID_ARGS', IS_PREDICATE_REQUIRED_MESSAGE, {
-      hint: IS_PREDICATE_USAGE_HINT,
-    });
+  const checked = checkIsArgs(req.positionals ?? []);
+  if (!checked.ok) {
+    return errorResponse(
+      checked.code,
+      checked.message,
+      checked.hint ? { hint: checked.hint } : undefined,
+    );
   }
-  if (!split) return errorResponse('INVALID_ARGS', 'is requires a selector expression');
-  const expectedText = split.rest.join(' ').trim();
-  if (predicate === 'text' && !expectedText) {
-    return errorResponse('INVALID_ARGS', 'is text requires expected text value');
-  }
-  if (predicate !== 'text' && split.rest.length > 0) {
-    return errorResponse('INVALID_ARGS', `is ${predicate} does not accept trailing values`);
-  }
+  const { predicate, expectedText } = checked;
+  const split = { selectorExpression: checked.selectorExpression };
   // ADR 0012 decision 3 / #1349: recording and a guarded replay dispatch both
   // require the snapshot path — evidence and the post-resolution identity
   // guard are computed from the resolution tree.
@@ -591,13 +584,11 @@ function parseGetTarget(req: DaemonRequest):
       refGeneration: versionedRef.generation,
     };
   }
-  const selector = req.positionals?.slice(1).join(' ').trim() ?? '';
-  if (!selector) {
-    return {
-      ok: false,
-      response: errorResponse('INVALID_ARGS', 'get requires @ref or selector expression'),
-    };
+  const target = checkElementTargetArgs(req.positionals?.slice(1) ?? []);
+  if (!target.ok) {
+    return { ok: false, response: errorResponse(target.code, target.message) };
   }
+  const selector = 'selector' in target ? target.selector : '';
   return { ok: true, target: { kind: 'selector', selector } };
 }
 
@@ -628,8 +619,9 @@ function toWaitTarget(
       timeoutMs: parsed.timeoutMs,
     };
   }
-  if (!parsed.text) throw new AppError('INVALID_ARGS', 'wait requires text');
-  return { kind: 'text' as const, text: parsed.text, timeoutMs: parsed.timeoutMs };
+  const waitText = checkWaitText(parsed.text);
+  if (!waitText.ok) throw new AppError(waitText.code, waitText.message);
+  return { kind: 'text' as const, text: waitText.text, timeoutMs: parsed.timeoutMs };
 }
 
 async function toDaemonResponse(

@@ -1,3 +1,5 @@
+import { refuse, type SelectorArgumentRefusal } from './argument-refusal.ts';
+
 import type { Platform, PublicPlatform } from '../kernel/device.ts';
 import type { SnapshotState } from '../kernel/snapshot.ts';
 import { isPositiveFiniteRect } from '../kernel/rect.ts';
@@ -26,6 +28,23 @@ export function isSupportedPredicate(input: string): input is IsPredicate {
 
 export const IS_PREDICATE_REQUIRED_MESSAGE =
   'is requires predicate: visible|hidden|exists|editable|selected|focused|text';
+
+/**
+ * The one `is` predicate admission check. Three call sites used to state this rule
+ * independently — the daemon handler (with the usage hint), `commands/interaction/selectors.ts`
+ * (with its own inlined seven-way predicate list) and `isCommand` (without the hint) — so the
+ * same mistake got recovery guidance or not depending on which layer noticed it first, and the
+ * predicate list existed twice.
+ */
+export function checkIsPredicate(
+  raw: string,
+): { ok: true; predicate: IsPredicate } | SelectorArgumentRefusal {
+  const predicate = raw.toLowerCase();
+  if (!isSupportedPredicate(predicate)) {
+    return refuse(IS_PREDICATE_REQUIRED_MESSAGE, IS_PREDICATE_USAGE_HINT);
+  }
+  return { ok: true, predicate };
+}
 
 export const IS_PREDICATE_USAGE_HINT =
   'Use "is <predicate> <selector>" or "is <selector> <predicate>". visible|hidden|editable|selected|focused double as selector keys: a bare predicate token after the selector is read as the predicate, so write key=true (e.g. visible=true) inside the selector to use it as a filter instead.';

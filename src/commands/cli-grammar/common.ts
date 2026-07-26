@@ -4,6 +4,11 @@ import type {
   InternalRequestOptions,
 } from '../../client/client-types.ts';
 import { splitSelectorFromArgs } from '../../selectors/parse.ts';
+import {
+  checkElementTargetArgs,
+  checkGetFormat,
+  SELECTOR_EXPRESSION_REQUIRED_MESSAGE,
+} from '../../selectors/arguments.ts';
 import type { CliFlags } from '../../contracts/cli-flags.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { compactRecord, type SelectorSnapshotInput } from '../command-input.ts';
@@ -210,17 +215,18 @@ function optionalTargetLabel(value: unknown): string[] {
 }
 
 export function readElementTargetFromPositionals(positionals: string[]): ElementTarget {
-  if (positionals[0]?.startsWith('@')) {
-    return { ref: positionals[0], label: optionalTrimmedText(positionals.slice(1)) };
+  const target = checkElementTargetArgs(positionals);
+  if (!target.ok) throw new AppError(target.code, target.message);
+  if ('ref' in target) {
+    return { ref: target.ref, label: optionalTrimmedText(positionals.slice(1)) };
   }
-  const selector = positionals.join(' ').trim();
-  if (!selector) throw new AppError('INVALID_ARGS', 'get requires @ref or selector expression');
-  return { selector };
+  return { selector: target.selector };
 }
 
 export function readGetFormat(value: string | undefined): 'text' | 'attrs' {
-  if (value === 'text' || value === 'attrs') return value;
-  throw new AppError('INVALID_ARGS', 'get only supports text or attrs');
+  const checked = checkGetFormat(value);
+  if (!checked.ok) throw new AppError(checked.code, checked.message);
+  return checked.format;
 }
 
 export function splitRequiredSelector(
@@ -228,7 +234,8 @@ export function splitRequiredSelector(
   options: { preferTrailingValue?: boolean } = {},
 ) {
   const split = splitSelectorFromArgs(positionals, options);
-  if (!split) throw new AppError('INVALID_ARGS', 'is requires a selector expression');
+  // Shares `is`'s refusal with the daemon, which reaches it through checkIsArgs.
+  if (!split) throw new AppError('INVALID_ARGS', SELECTOR_EXPRESSION_REQUIRED_MESSAGE);
   return split;
 }
 

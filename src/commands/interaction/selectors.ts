@@ -2,11 +2,7 @@ import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { FindOptions, IsOptions } from '../../client/client-types.ts';
 import type { CliFlags } from '../../contracts/cli-flags.ts';
 import { AppError } from '../../kernel/errors.ts';
-import {
-  IS_PREDICATE_REQUIRED_MESSAGE,
-  IS_PREDICATE_USAGE_HINT,
-  normalizeIsPositionals,
-} from '../../selectors/predicates.ts';
+import { checkIsPredicate, normalizeIsPositionals } from '../../selectors/predicates.ts';
 import {
   direct,
   optionalCliNumber,
@@ -116,20 +112,14 @@ function readIsOptionsFromPositionals(positionals: string[], flags: CliFlags): I
     ...observationRecordInputFromFlags(flags),
   };
   const normalized = normalizeIsPositionals(positionals);
-  const predicate = normalized[0];
-  if (
-    predicate !== 'text' &&
-    predicate !== 'visible' &&
-    predicate !== 'hidden' &&
-    predicate !== 'exists' &&
-    predicate !== 'editable' &&
-    predicate !== 'selected' &&
-    predicate !== 'focused'
-  ) {
-    throw new AppError('INVALID_ARGS', IS_PREDICATE_REQUIRED_MESSAGE, {
-      hint: IS_PREDICATE_USAGE_HINT,
-    });
+  const admitted = checkIsPredicate(normalized[0] ?? '');
+  if (!admitted.ok) {
+    throw new AppError(admitted.code, admitted.message, { hint: admitted.hint });
   }
+  // The admitted predicate is lower-cased, matching what the daemon accepts. The inlined
+  // check this replaced compared the raw token, so the CLI used to be stricter than the
+  // executor it hands the command to.
+  const predicate = admitted.predicate;
   const split = splitRequiredSelector(normalized.slice(1), {
     preferTrailingValue: predicate === 'text',
   });

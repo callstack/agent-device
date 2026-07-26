@@ -132,6 +132,9 @@ export type ParsedFindArgs = {
   timeoutMs?: number;
 };
 
+/** Shared by `checkFindArgs` and `findCommand`, which validates already-parsed options. */
+export const FIND_VALUE_REQUIRED_MESSAGE = 'find requires a value';
+
 export type FindArgumentCheck =
   | { ok: true; parsed: ParsedFindArgs }
   | { ok: false; code: 'INVALID_ARGS'; message: string };
@@ -157,7 +160,7 @@ export function checkFindArgs(
   }
   const parsed = parseFindArgs([...args]);
   if (!parsed.query) {
-    return { ok: false, code: 'INVALID_ARGS', message: 'find requires a value' };
+    return { ok: false, code: 'INVALID_ARGS', message: FIND_VALUE_REQUIRED_MESSAGE };
   }
   if (flags?.findFirst && flags?.findLast) {
     return {
