@@ -6,7 +6,9 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { test } from 'vitest';
 import { validateAgentDeviceCommand } from '../help-conformance-command-validator.ts';
+import { opensAndCloses, usesValidationPrep } from '../help-conformance-expectations.mjs';
 import { validatePlanCommands } from '../help-conformance-plan-validator.mjs';
+import { detectRunnerError, extractCommands } from '../help-conformance-runner-output.mjs';
 import { summarizeResults } from '../help-conformance-summary.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -256,7 +258,7 @@ test('command validator rejects unsupported flags and malformed interaction gram
   }
 });
 
-test('command validator rejects pseudo refs and ignored snapshot positionals', () => {
+test('command validator rejects pseudo refs and excess production-schema positionals', () => {
   for (const argv of [
     ['press', '@<search-ref>', '--settle'],
     ['fill', '@search_field', 'callstack', '--settle'],
@@ -264,11 +266,71 @@ test('command validator rejects pseudo refs and ignored snapshot positionals', (
     ['focus', '@search-field', '10'],
     ['scroll', '@down'],
     ['snapshot', '-i', './evidence.json'],
+    ['open', 'com.example.community', 'https://example.com', 'close'],
+    ['close', 'first-app', 'second-app'],
   ]) {
     const result = validateAgentDeviceCommand(argv);
     assert.equal(result.valid, false, `${argv.join(' ')} should fail`);
     assert.ok(result.error);
   }
+});
+
+test('open and close scoring requires separate top-level commands', () => {
+  assert.equal(
+    opensAndCloses({
+      commands: ['agent-device open com.example.community close'],
+    }),
+    false,
+  );
+  assert.equal(
+    opensAndCloses({
+      commands: ['agent-device open com.example.community', 'agent-device close'],
+    }),
+    true,
+  );
+});
+
+test('validation prep accepts intervening checks and the Android build path in order', () => {
+  assert.equal(
+    usesValidationPrep({
+      commands: ['agent-device doctor', 'pnpm build', 'pnpm clean:daemon'],
+    }),
+    true,
+  );
+  assert.equal(
+    usesValidationPrep({
+      commands: ['pnpm run build:android', 'agent-device doctor', 'pnpm clean:daemon'],
+    }),
+    true,
+  );
+  assert.equal(
+    usesValidationPrep({
+      commands: ['pnpm clean:daemon', 'pnpm build'],
+    }),
+    false,
+  );
+});
+
+test('runner output distinguishes model commands from infrastructure errors', () => {
+  const successEnvelope = JSON.stringify({
+    is_error: false,
+    result: JSON.stringify({ commands: ['agent-device snapshot -i'] }),
+  });
+  assert.deepEqual(extractCommands(successEnvelope), ['agent-device snapshot -i']);
+  assert.equal(detectRunnerError(successEnvelope), undefined);
+
+  const claudeError = JSON.stringify({
+    is_error: true,
+    result: 'API Error: Unable to connect to API',
+  });
+  assert.equal(detectRunnerError(claudeError), 'API Error: Unable to connect to API');
+  assert.deepEqual(extractCommands(claudeError), []);
+
+  assert.equal(
+    detectRunnerError(JSON.stringify({ type: 'error', message: 'rate limit exceeded' })),
+    'rate limit exceeded',
+  );
+  assert.equal(detectRunnerError(''), 'Runner returned empty output.');
 });
 
 test('plan validator rejects shell projection and non-permitted executables', async () => {
@@ -359,15 +421,27 @@ test('aggregate summary exposes stability and failure taxonomy per runner x case
       ],
       runnerError: 'failed',
     },
+    {
+      runner: 'claude:haiku',
+      caseId: 'metamorphic',
+      passed: false,
+      checks: { validPlanCommands: false, usesSettle: true },
+      commandValidation: [
+        {
+          issues: [{ kind: 'pseudo-ref', error: 'bad ref' }],
+        },
+      ],
+    },
   ]);
   assert.deepEqual(summary, [
     {
       runner: 'claude:haiku',
       caseId: 'metamorphic',
-      trials: 2,
+      trials: 3,
+      evaluatedTrials: 2,
       passed: 1,
       failedChecks: { validPlanCommands: 1 },
-      validationIssues: { 'pseudo-ref': 1, 'shell-projection': 1 },
+      validationIssues: { 'pseudo-ref': 1 },
       runnerErrors: 1,
       passRate: 0.5,
     },

@@ -1,5 +1,6 @@
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from '../src/cli/parser/args.ts';
+import { getCommandSchema } from '../src/cli-schema/command-schema.ts';
 import { readInputFromCli } from '../src/commands/cli-grammar.ts';
 import { isCommandName } from '../src/commands/command-metadata.ts';
 
@@ -33,12 +34,12 @@ export function validateAgentDeviceCommand(value: unknown): ValidationResult {
 function validateParsedCommand(parsed: ReturnType<typeof parseArgs>): ValidationResult {
   if (!parsed.command) return validateGlobalFlags(parsed.flags);
 
+  const arityError = validatePositionalArity(parsed.command, parsed.positionals);
+  if (arityError) return arityError;
   const pseudoRef = targetRefCandidate(parsed.command, parsed.positionals);
   if (pseudoRef && !CONCRETE_REF.test(pseudoRef)) {
     return invalid('pseudo-ref', `Pseudo ref "${pseudoRef}" is not an observed @eN or @cN ref.`);
   }
-  const snapshotError = validateSnapshotPositionals(parsed.command, parsed.positionals);
-  if (snapshotError) return snapshotError;
 
   if (isCommandName(parsed.command)) {
     readInputFromCli(parsed.command, parsed.positionals, parsed.flags);
@@ -52,17 +53,17 @@ function validateGlobalFlags(flags: ReturnType<typeof parseArgs>['flags']): Vali
     : invalid('agent-device-grammar', 'Missing command.');
 }
 
-function validateSnapshotPositionals(
+function validatePositionalArity(
   command: string,
   positionals: string[],
 ): ValidationResult | undefined {
-  if (command !== 'snapshot' || positionals.length === 0) return undefined;
-  // Snapshot currently ignores unexpected positionals in its CLI reader.
-  // Treat them as invalid here so benchmark plans cannot invent a file
-  // destination that the command silently discards.
+  const schema = getCommandSchema(command);
+  if (!schema || schema.allowsExtraPositionals) return undefined;
+  const maximum = schema.positionalArgs?.length ?? 0;
+  if (positionals.length <= maximum) return undefined;
   return invalid(
     'agent-device-grammar',
-    `snapshot does not accept positionals: ${positionals.join(' ')}`,
+    `${command} accepts at most ${maximum} positional argument(s), received ${positionals.length}: ${positionals.join(' ')}`,
   );
 }
 

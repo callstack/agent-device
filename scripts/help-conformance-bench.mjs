@@ -2,13 +2,16 @@
 import { execFile } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { opensAndCloses, usesValidationPrep } from './help-conformance-expectations.mjs';
 import { validatePlanCommands } from './help-conformance-plan-validator.mjs';
+import { detectRunnerError, extractCommands } from './help-conformance-runner-output.mjs';
 import { summarizeResults } from './help-conformance-summary.mjs';
 
 const execFileAsync = promisify(execFile);
 
-const ROOT = new URL('..', import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const OUT_DIR = process.env.HELP_BENCH_OUT ?? join(ROOT, '.tmp', 'help-conformance-bench');
 const RUN_TIMEOUT_MS = Number(process.env.HELP_BENCH_TIMEOUT_MS ?? 90_000);
 // Runner x case pairs run concurrently, capped low: these are paid LLM calls
@@ -18,7 +21,7 @@ const DEFAULT_RUNNERS = ['codex:gpt-5.4-mini', 'claude:claude-haiku-4-5'];
 const USAGE = `Usage: node scripts/help-conformance-bench.mjs [options]
 
 Feeds a help slice + task into one non-agentic LLM call per runner x case and
-scores the returned command plan, including production CLI grammar validation.
+scores the returned command plan with production parser-backed syntax checks.
 
 Options:
   --runner <kind:model>    Add one runner (repeatable). Default: ${DEFAULT_RUNNERS.join(', ')}
@@ -491,13 +494,26 @@ function printSummary(summary) {
   console.log('Aggregate stability:');
   for (const group of summary) {
     const percent = Math.round(group.passRate * 100);
-    const failures = Object.entries(group.failedChecks)
-      .map(([id, count]) => `${id}=${count}`)
-      .join(', ');
+    const details = summaryDetails(group);
     console.log(
-      `  ${group.runner} ${group.caseId}: ${group.passed}/${group.trials} (${percent}%)${failures ? `; failed ${failures}` : ''}`,
+      `  ${group.runner} ${group.caseId}: ${group.passed}/${group.evaluatedTrials} (${percent}%)${details ? `; ${details}` : ''}`,
     );
   }
+}
+
+function summaryDetails(group) {
+  return [
+    countDetails('failed', group.failedChecks),
+    countDetails('validation', group.validationIssues),
+    group.runnerErrors > 0 ? `runner errors=${group.runnerErrors}` : '',
+  ]
+    .filter(Boolean)
+    .join('; ');
+}
+
+function countDetails(label, counts) {
+  const entries = Object.entries(counts).map(([id, count]) => `${id}=${count}`);
+  return entries.length > 0 ? `${label} ${entries.join(', ')}` : '';
 }
 
 async function loadDocs(docIds, overrideDocs) {
@@ -595,10 +611,7 @@ async function runCaseRawOutput(runner, prompt, outDir) {
   const [kind, model] = runner.split(':');
   try {
     const raw = await runModel(kind, model, prompt, outDir);
-    return {
-      raw,
-      runnerError: raw.trim().length === 0 ? 'Runner returned empty output.' : undefined,
-    };
+    return { raw, runnerError: detectRunnerError(raw) };
   } catch (error) {
     return { raw: errorOutput(error), runnerError: errorMessage(error) };
   }
@@ -695,48 +708,6 @@ async function runCodex(model, prompt, outDir) {
   return lastMessage.trim().length > 0 ? lastMessage : stdout;
 }
 
-function extractCommands(raw) {
-  const json = parseJsonPayload(raw);
-  if (json && Array.isArray(json.commands)) {
-    return json.commands.map((command) => String(command).trim()).filter(Boolean);
-  }
-  return raw
-    .split('\n')
-    .map((line) => line.replace(/^[-*\d.]+\s*/, '').trim())
-    .filter(
-      (line) =>
-        line.startsWith('agent-device ') || line.match(/^(open|snapshot|press|fill|click|close)\b/),
-    );
-}
-
-function parseJsonPayload(raw) {
-  const candidates = jsonPayloadCandidates(raw);
-  for (const candidate of candidates) {
-    const parsed = parseJsonCandidate(candidate);
-    if (parsed !== undefined) return parsed;
-  }
-  return null;
-}
-
-function jsonPayloadCandidates(raw) {
-  return [raw, raw.match(/```json\s*([\s\S]*?)```/)?.[1], raw.match(/\{[\s\S]*\}/)?.[0]].filter(
-    Boolean,
-  );
-}
-
-function parseJsonCandidate(candidate) {
-  try {
-    return normalizeParsedJson(JSON.parse(candidate));
-  } catch {
-    return undefined;
-  }
-}
-
-function normalizeParsedJson(parsed) {
-  if (typeof parsed?.result === 'string') return parseJsonPayload(parsed.result);
-  return parsed;
-}
-
 const EXPECTATION_SCORERS = {
   validPlanCommands: ({ commands, commandValidation }) =>
     commands.length > 0 && commandValidation.every(({ issues }) => issues.length === 0),
@@ -753,9 +724,8 @@ const EXPECTATION_SCORERS = {
     /(?:\bscreenshot\b|\brecord\b|\blogs\b|\bnetwork\b|\bperf\b|\btrace\b|dogfood-output)/i.test(
       joined,
     ),
-  usesValidationPrep: ({ commands }) =>
-    isPnpmScript(commands[0], 'build') && isPnpmScript(commands[1], 'clean:daemon'),
-  opensAndCloses: ({ joined }) => /\bopen\b/.test(joined) && /\bclose\b/.test(joined),
+  usesValidationPrep,
+  opensAndCloses,
 };
 
 /**
@@ -848,10 +818,6 @@ function allMutationsUseSettle(commands) {
 
 function isMutationCommand(command) {
   return /^agent-device\s+(?:press|click|fill|longpress)\b/.test(command);
-}
-
-function isPnpmScript(command, script) {
-  return new RegExp(`^pnpm\\s+(?:run\\s+)?${script}(?:\\s|$)`).test(command ?? '');
 }
 
 function countPassingChecks(checks) {

@@ -6,21 +6,26 @@ export function summarizeResults(results) {
       runner: result.runner,
       caseId: result.caseId,
       trials: 0,
+      evaluatedTrials: 0,
       passed: 0,
       failedChecks: {},
       validationIssues: {},
       runnerErrors: 0,
     };
     group.trials += 1;
-    if (result.passed) group.passed += 1;
-    if (result.runnerError) group.runnerErrors += 1;
-    countFailedChecks(group.failedChecks, result.checks);
-    countValidationIssues(group.validationIssues, result.commandValidation);
+    if (result.runnerError) {
+      group.runnerErrors += 1;
+    } else {
+      group.evaluatedTrials += 1;
+      if (result.passed) group.passed += 1;
+      countFailedChecks(group.failedChecks, result.checks);
+      countValidationIssues(group.validationIssues, result.commandValidation);
+    }
     groups.set(key, group);
   }
   return [...groups.values()].map((group) => ({
     ...group,
-    passRate: group.trials === 0 ? 0 : group.passed / group.trials,
+    passRate: group.evaluatedTrials === 0 ? 0 : group.passed / group.evaluatedTrials,
   }));
 }
 

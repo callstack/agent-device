@@ -1,5 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import { SELECTOR_KEY_NAMES } from '../../../selectors/parse.ts';
 import { usage, usageForCommand } from '../args.ts';
 
 test('usage includes concise top-level commands', async () => {
@@ -94,7 +95,10 @@ test('usage includes agent workflows, config, environment, and examples footers'
   );
   assert.match(usageText, /Follow structured command hints before choosing a recovery action/);
   assert.match(usageText, /Targets are concrete refs or selectors/);
-  assert.match(usageText, /Selector keys are only: id, role, text, label, value/);
+  assert.ok(
+    usageText.includes(`Selector keys are only: ${SELECTOR_KEY_NAMES.join(', ')}.`),
+    'The first-screen selector vocabulary must match the parser source of truth.',
+  );
   assert.match(usageText, /placeholder, index, and key are not selector keys/);
   assert.match(usageText, /A literal @ handle is a label/);
   assert.match(usageText, /agent-device fill 'label="Query"' "text" --settle/);

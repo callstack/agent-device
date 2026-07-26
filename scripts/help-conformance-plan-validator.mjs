@@ -1,9 +1,10 @@
 import { execFile } from 'node:child_process';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
-const ROOT = new URL('..', import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const COMMAND_VALIDATOR = join(ROOT, 'scripts', 'help-conformance-command-validator.ts');
 const ALLOWED_PNPM_SCRIPTS = new Set(['build', 'build:android', 'build:xcuitest', 'clean:daemon']);
 
