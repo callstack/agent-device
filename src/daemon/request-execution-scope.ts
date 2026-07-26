@@ -241,6 +241,7 @@ export function prepareLockedRequestScope(params: {
   });
   const lockedReq = binding.req;
   existingSession = binding.existingSession;
+  updateDiagnosticsScope({ traceLogPath: existingSession?.trace?.outPath });
   const finalize = (response: DaemonResponse): DaemonResponse => {
     const finalized = finalizeDaemonResponse(lockedReq, response, trackDownloadableArtifact);
     if (shouldRecordEventForRequest(lockedReq)) {

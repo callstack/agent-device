@@ -324,6 +324,65 @@ envelope is written once, after **all** lane tests settle, and reports `fail` if
 replay self-check, or forced-contention guardrail) failed — a later-failing guardrail can never be
 published as a passing envelope. Optional knobs: `TORTURE_CLIENTS`, `TORTURE_OPS`.
 
+## Live iOS simulator coverage
+
+The iOS lane combines three evidence layers instead of treating a catalog mention as E2E proof:
+
+- pull requests run a short JSON-asserting fixture smoke against the real built CLI, daemon, XCTest
+  runner, and simulator;
+- the scheduled/manual nightly workflow adds device lifecycle, system UI, recording/trace, and
+  fixture replay scenarios without putting those slower operations on the pull-request merge gate;
+- command-contract, workflow-live, and capability-denial rows explicitly own functionality that
+  requires remote sources, unavailable host permissions, or CI setup outside the app session.
+
+`test/integration/ios-simulator-e2e/coverage-manifest.ts` is the executable ownership source. A new
+public command fails the always-running Node contract until it has one primary owner and an
+observable assertion. Live scenario claims are credited only after the scenario runs every claimed
+command and records command-specific app/device/artifact evidence. Replay and test run inside the
+same full harness, so its coverage report cannot turn green before their semantic fixture canaries
+and JUnit output pass.
+
+Command ownership guarantees at least one semantic path for every public command; it does not imply
+that every optional collector or backend mode runs nightly. The complementary
+`behavior-coverage.ts` matrix guards the cross-command mobile patterns from #320: cold deep-link
+navigation, keyboard lifecycle, background resume, modal presentation, permission denial/reset/
+acceptance, interrupted Home/app-switcher recovery, long-list rediscovery, and host-focus
+preservation. Existing focused command contracts remain the evidence for additional expensive or
+host-permission-dependent modes.
+
+CI retrieves the Release fixture through `.github/actions/setup-fixture-app` with `install: false`;
+the smoke then exercises the public `install` command. The artifact is keyed by the Expo native
+fingerprint and repacked with current JavaScript, so screen and replay changes reuse the native
+binary and do not need Metro. Both iOS workflows need `permissions.actions: read`; without it the
+action deliberately falls back to an expensive inline native build. The pull-request consumer
+polls a cold fingerprint while the producer workflow builds it, preventing two concurrent native
+builds; hits proceed immediately. The pull-request lane also pins Finder as the frontmost host app
+and proves simulator automation does not steal macOS focus.
+
+Run the static contract and documented live skip locally:
+
+```bash
+node --test test/integration/smoke-ios-simulator-coverage.test.ts
+```
+
+Run a live tier after booting a simulator and obtaining a current Release `.app`:
+
+```bash
+pnpm build
+pnpm clean:daemon
+AGENT_DEVICE_IOS_E2E=1 \
+AGENT_DEVICE_IOS_E2E_TIER=smoke \
+AGENT_DEVICE_IOS_UDID=<simulator-udid> \
+AGENT_DEVICE_FIXTURE_APP_PATH=<fixture.app> \
+AGENT_DEVICE_FIXTURE_APP_ID=com.callstack.agentdevicelab \
+AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE='agent-device-test-app:///automation?event={event}&payload={payload}' \
+node --test test/integration/smoke-ios-simulator-coverage.test.ts test/integration/smoke-ios-simulator.test.ts
+```
+
+Use `AGENT_DEVICE_IOS_E2E_TIER=full` for the nightly subset. Step history, coverage reports,
+screenshots, recordings, traces, and failure context are written below
+`test/artifacts/ios-simulator/` and uploaded by the existing shared artifact action. The six
+Settings replays remain additive OS-chrome coverage and are not modified by this suite.
 ## Speed rules (experiment-backed, 2026-07-04)
 
 Measured on the full unit suite (340 files, 3,210 tests, 48s wall at ~7x parallelism):
@@ -341,6 +400,7 @@ Measured on the full unit suite (340 files, 3,210 tests, 48s wall at ~7x paralle
      layer and assert the right `timeoutMs` constant is passed. Exec-layer timeout semantics are
      proven once, in exec's own tests.
   3. *Fake clocks* where the code accepts an injected clock.
+
   Never add a test-only DI seam for this — the CI gate forbids it; patterns 1–2 are production
   improvements and test restructurings respectively.
 - **The slow-test ratchet** (`scripts/vitest-slow-test-reporter.ts`) enforces this: unit budget

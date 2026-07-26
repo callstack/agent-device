@@ -118,7 +118,9 @@ export function FormScreen(props: FormScreenProps) {
           keyboardType="email-address"
           label="Email"
           onChangeText={(value) => props.onChange('email', value)}
+          onSubmitEditing={() => Keyboard.dismiss()}
           placeholder="ada@example.com"
+          returnKeyType="done"
           testID="field-email"
           value={props.form.email}
         />

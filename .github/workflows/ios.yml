@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -32,12 +33,42 @@ jobs:
       AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived
       AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS: '420000'
       AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS: '1'
+      AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE: agent-device-test-app:///automation?event={event}&payload={payload}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Set fixture producer wait policy
+        id: fixture-producer
+        run: |
+          set -euo pipefail
+          WAIT_SECONDS=0
+          if [ "${{ github.event_name }}" = "push" ]; then
+            WAIT_SECONDS=1800
+          elif [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+            echo "Fork pull request cannot publish the shared fixture artifact; a cache miss will build inline."
+          else
+            WAIT_SECONDS=1800
+          fi
+          echo "wait-seconds=$WAIT_SECONDS" >> "$GITHUB_OUTPUT"
+
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
+        with:
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            examples/test-app/pnpm-lock.yaml
+
+      - name: Establish host focus canary
+        id: host-focus-canary
+        run: |
+          set -euo pipefail
+          osascript -e 'tell application "Finder" to activate'
+          sleep 1
+          FRONTMOST="$(osascript -e 'tell application "System Events" to get bundle identifier of first application process whose frontmost is true')"
+          test "$FRONTMOST" = "com.apple.finder"
+          mkdir -p .tmp
+          echo "$FRONTMOST" > .tmp/ios-host-focus-before
 
       - name: Setup Apple replay
         id: apple-replay
@@ -83,6 +114,38 @@ jobs:
       - name: Run iOS simulator smoke replay
         run: |
           node --experimental-strip-types src/bin.ts test test/integration/replays/ios/simulator/01-settings.ad --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --retries 2 --artifacts-dir test/artifacts/replays-ios-simulator-smoke --report-junit test/artifacts/replays-ios-simulator-smoke.junit.xml
+
+      - name: Fetch current fixture app
+        id: fixture-app
+        uses: ./.github/actions/setup-fixture-app
+        with:
+          install: 'false'
+          wait-for-artifact-seconds: ${{ steps.fixture-producer.outputs.wait-seconds }}
+          producer-workflow: test-app-build-cache.yml
+          producer-head-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Report fixture cache source
+        run: |
+          echo "Fixture app source: ${{ steps.fixture-app.outputs.source }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run fixture-backed iOS simulator E2E smoke
+        env:
+          AGENT_DEVICE_FIXTURE_APP_ID: ${{ steps.fixture-app.outputs.app-id }}
+          AGENT_DEVICE_FIXTURE_APP_PATH: ${{ steps.fixture-app.outputs.app-path }}
+          AGENT_DEVICE_IOS_E2E: '1'
+          AGENT_DEVICE_IOS_E2E_TIER: smoke
+          AGENT_DEVICE_IOS_UDID: ${{ steps.ios-simulator.outputs.simulator-udid }}
+        run: |
+          pnpm build
+          node --test test/integration/smoke-ios-simulator-coverage.test.ts test/integration/smoke-ios-simulator.test.ts
+
+      - name: Assert simulator automation preserved host focus
+        if: ${{ always() && steps.host-focus-canary.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          test "$(cat .tmp/ios-host-focus-before)" = "com.apple.finder"
+          FRONTMOST="$(osascript -e 'tell application "System Events" to get bundle identifier of first application process whose frontmost is true')"
+          test "$FRONTMOST" = "com.apple.finder"
 
       - name: Run iOS physical device smoke replay
         if: env.IOS_UDID != ''

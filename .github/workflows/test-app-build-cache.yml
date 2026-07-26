@@ -60,6 +60,10 @@ jobs:
 
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
+        with:
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            examples/test-app/pnpm-lock.yaml
 
       - name: Install test app dependencies
         run: pnpm test-app:install
@@ -88,8 +92,15 @@ jobs:
       # `--device generic` builds for the simulator without booting one or
       # installing. Release embeds the bundle (no Metro) and links a universal
       # x86_64+arm64 slice, so the artifact runs on any developer's simulator.
+      # Fork PRs cannot safely publish this binary; their iOS workflow builds the
+      # same Release app inline on a cache miss, so compiling it here would double
+      # the macOS cost without adding signal.
       - name: Build the iOS Release app
-        if: matrix.platform == 'ios' && steps.fp.outputs.cached == 'false'
+        if: |
+          matrix.platform == 'ios' &&
+          steps.fp.outputs.cached == 'false' &&
+          (github.event_name != 'pull_request' ||
+           github.event.pull_request.head.repo.full_name == github.repository)
         run: |
           set -euo pipefail
           pnpm --dir examples/test-app exec expo run:ios \
@@ -144,7 +155,11 @@ jobs:
 
       - name: Stage the binary for upload
         id: stage
-        if: steps.fp.outputs.cached == 'false'
+        if: |
+          steps.fp.outputs.cached == 'false' &&
+          (matrix.platform == 'android' ||
+           github.event_name != 'pull_request' ||
+           github.event.pull_request.head.repo.full_name == github.repository)
         run: |
           set -euo pipefail
           SRC="${{ github.workspace }}/.tmp/test-app-build"
@@ -167,8 +182,9 @@ jobs:
 
       # Fork PRs run with a read-only token but can still upload artifacts, and a
       # consumer serves whatever it finds by name -- so a fork could publish a
-      # tampered binary that CI then executes. Only branches in this repo publish;
-      # a fork's run still builds, which is all the signal a fork PR needs.
+      # tampered binary that CI then executes. Only branches in this repo publish.
+      # Android still builds on forks; iOS gets equivalent build/install signal
+      # from the smoke workflow's inline cache-miss fallback.
       - name: Publish to the build cache
         if: |
           steps.fp.outputs.cached == 'false' &&

@@ -1,0 +1,128 @@
+import assert from 'node:assert/strict';
+
+import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
+import { assertElementText, assertJsonContains, assertWaitText } from './live-assertions.ts';
+import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';
+
+const C = PUBLIC_COMMANDS;
+
+export async function assertAutomationInput(context: LiveContext): Promise<void> {
+  const opened = await runStep(context, 'cold launch fixture', [
+    'open',
+    context.appId,
+    '--relaunch',
+  ]);
+  assertJsonContains(opened, context.appId, 'open response should retain fixture identity');
+  if (context.tier === 'full') {
+    await runStep(context, 'normalize simulator orientation', ['orientation', 'portrait']);
+    await runStep(context, 'normalize simulator appearance', ['settings', 'appearance', 'light']);
+  }
+
+  const home = await runStep(context, 'capture fixture home', ['snapshot', '-i']);
+  assertJsonContains(home, 'Agent Device Tester', 'home snapshot should expose fixture title');
+  verifyCommand(context, C.snapshot, 'interactive fixture tree exposes its stable title');
+  await assertWaitText(context, 'Agent Device Tester');
+  verifyCommand(context, C.open, 'cold launch exposes the fixture UI through snapshot and wait');
+
+  await runStep(context, 'cold launch fixture through a deep link', [
+    'open',
+    context.appId,
+    '--relaunch',
+    '--launch-url',
+    'agent-device-test-app:///automation?event=cold.start&payload=%7B%22source%22%3A%22deep-link%22%7D',
+  ]);
+  await assertWaitText(context, 'Automation lab');
+  await assertElementText(context, 'id="automation-event-name"', 'cold.start');
+  await assertElementText(context, 'id="automation-event-payload"', '{"source":"deep-link"}');
+  await runStep(context, 'navigate onward from cold deep link', [
+    'click',
+    'id="automation-continue-catalog"',
+  ]);
+  await assertWaitText(context, 'Catalog');
+  verifyBehavior(
+    context,
+    'cold-start-deep-link-navigation',
+    'cold deep route rendered decoded payload and continued into the fixture catalog',
+  );
+
+  await runStep(context, 'open settings tab', ['click', 'label="Settings"']);
+  await assertWaitText(context, 'Settings');
+  await runStep(context, 'open automation route', ['click', 'id="open-automation-lab"']);
+  await assertWaitText(context, 'Automation lab');
+  verifyCommand(context, C.click, 'selector click opens the automation route');
+
+  await runStep(context, 'open fixture sheet', ['click', 'id="automation-open-sheet"']);
+  await assertWaitText(context, 'Automation sheet');
+  await runStep(context, 'close fixture sheet', ['click', 'id="automation-close-sheet"']);
+  await assertWaitText(context, 'Automation lab');
+  await runStep(context, 'restore automation route top after sheet', ['scroll', 'top']);
+  verifyBehavior(
+    context,
+    'modal-open-close',
+    'page-sheet modal exposed structural content and returned to the automation route',
+  );
+
+  const heading = await runStep(context, 'read automation heading', [
+    'get',
+    'text',
+    'text="Automation lab"',
+  ]);
+  assertJsonContains(heading, 'Automation lab', 'get text should return automation heading');
+  verifyCommand(context, C.get, 'get returns exact automation heading text');
+
+  const visible = await runStep(context, 'assert automation heading visible', [
+    'is',
+    'visible',
+    'id="automation-title"',
+  ]);
+  assert.equal(visible.json?.data?.pass, true, JSON.stringify(visible.json));
+  verifyCommand(context, C.is, 'visible predicate passes for the automation heading');
+
+  const found = await runStep(context, 'find automation heading', [
+    'find',
+    'text',
+    'Automation lab',
+    'exists',
+  ]);
+  assert.equal(found.json?.data?.found, true, JSON.stringify(found.json));
+  verifyCommand(context, C.find, 'find reports the automation heading');
+
+  await runStep(context, 'reveal automation input canaries', ['scroll', 'down', '--pixels', '120']);
+  for (const identifier of ['automation-press', 'automation-longpress']) {
+    const inputVisible = await runStep(context, `assert ${identifier} is visible`, [
+      'is',
+      'visible',
+      `id="${identifier}"`,
+    ]);
+    assert.equal(inputVisible.json?.data?.pass, true, JSON.stringify(inputVisible.json));
+  }
+
+  await runStep(context, 'press semantic canary', ['press', 'id="automation-press"']);
+  await assertWaitText(context, 'Last input: press');
+  verifyCommand(context, C.press, 'semantic press changes the durable fixture canary');
+
+  await runStep(context, 'long press semantic canary', [
+    'longpress',
+    'id="automation-longpress"',
+    '800',
+  ]);
+  await assertWaitText(context, 'Long presses: 1');
+  verifyCommand(context, C.longPress, '800ms hold increments the long-press counter');
+
+  await runStep(context, 'scroll native alert canary into view', ['scroll', 'down', '1']);
+  await runStep(context, 'open native alert', ['click', 'id="automation-open-alert"']);
+  const alert = await runStep(context, 'wait for native alert', ['alert', 'wait', '5000']);
+  assertJsonContains(alert, 'Automation confirmation', 'alert wait should return fixture alert');
+  await runStep(context, 'inspect native alert', ['alert', 'get']);
+  await runStep(context, 'dismiss native alert', ['alert', 'dismiss']);
+  await assertWaitText(context, 'Alert result: cancelled');
+
+  await runStep(context, 'reopen native alert', ['click', 'id="automation-open-alert"']);
+  await runStep(context, 'accept native alert', ['alert', 'accept']);
+  await assertWaitText(context, 'Alert result: accepted');
+  verifyCommand(context, C.alert, 'alert wait/get/dismiss/accept produce both fixture outcomes');
+
+  await runStep(context, 'return from automation route', ['back']);
+  await assertWaitText(context, 'Settings');
+  verifyCommand(context, C.back, 'back returns from automation route to Settings');
+}

@@ -10,6 +10,10 @@ inputs:
     description: 'Whether to install dependencies with pnpm install --frozen-lockfile'
     required: false
     default: 'true'
+  cache-dependency-path:
+    description: 'Lockfile path(s) used to key the pnpm store cache'
+    required: false
+    default: 'pnpm-lock.yaml'
 
 runs:
   using: 'composite'
@@ -45,6 +49,7 @@ runs:
         # Jobs with install-deps: false never create the store, and on a cache
         # miss (any lockfile-changing PR) the post-job cache save fails the job.
         cache: ${{ inputs.install-deps == 'true' && 'pnpm' || '' }}
+        cache-dependency-path: ${{ inputs.cache-dependency-path }}
 
     # Corepack resolves the same `packageManager` field locally, so a mismatch
     # here means CI is running a pnpm nobody develops against.
