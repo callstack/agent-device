@@ -58,7 +58,7 @@ export function assertFilesDiffer(first: string, second: string, message: string
   assert.notDeepEqual(fs.readFileSync(first), fs.readFileSync(second), message);
 }
 
-export function requireNode(
+function requireNode(
   result: CliJsonResult,
   identifier: string,
 ): { label?: unknown; rect?: { height: number; width: number; x: number; y: number } } {

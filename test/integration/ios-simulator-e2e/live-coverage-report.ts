@@ -56,7 +56,7 @@ export function writeCoverageReport(context: LiveContext): void {
   );
 }
 
-export function scenariosForTier(tier: Tier): readonly IosSimulatorScenario[] {
+function scenariosForTier(tier: Tier): readonly IosSimulatorScenario[] {
   return IOS_SIMULATOR_LIVE_SCENARIOS.filter(
     (scenario) => scenario.tier === 'smoke' || tier === 'full',
   );

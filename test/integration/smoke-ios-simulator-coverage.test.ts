@@ -106,6 +106,14 @@ test('non-live owners name concrete executable repository evidence', () => {
 test('capability classifications match executable simulator behavior', () => {
   for (const [command, entry] of Object.entries(IOS_SIMULATOR_E2E_COVERAGE)) {
     const supported = isCommandSupportedOnDevice(command, IOS_SIMULATOR);
+    if (command === PUBLIC_COMMANDS.audio) {
+      assert.equal(
+        supported,
+        process.platform === 'darwin',
+        'simulator audio admission follows host ScreenCaptureKit availability',
+      );
+      continue;
+    }
     if (entry.level === 'capability-denial') {
       assert.equal(supported, false, `${command} denial must match capability admission`);
     } else {
@@ -124,6 +132,30 @@ test('capability classifications match executable simulator behavior', () => {
   assert.ok(viewportScenario?.commands.includes(PUBLIC_COMMANDS.viewport));
 });
 
+type ReplayAction = ReturnType<typeof parseReplayScriptDetailed>['actions'][number];
+type Viewport = { height: number; width: number; x: number; y: number };
+
+function assertReplayActionFitsViewport(action: ReplayAction, viewport: Viewport): void {
+  const positionals = action.positionals ?? [];
+  if (action.command === 'swipe') {
+    const payload = swipePayloadFromPositionals(positionals);
+    buildGesturePlan(normalizePublicSwipeMotion(payload).gesture, viewport, 'ios');
+  }
+  if (action.command === 'gesture') {
+    const pointerCount =
+      typeof action.flags.pointerCount === 'number' ? action.flags.pointerCount : undefined;
+    const payload = gesturePayloadFromPositionals(positionals, pointerCount);
+    buildGesturePlan(normalizePublicGesture(payload).gesture, viewport, 'ios');
+  }
+}
+
+function assertReplayFitsViewports(replayPath: string, viewports: readonly Viewport[]): void {
+  const actions = parseReplayScriptDetailed(fs.readFileSync(replayPath, 'utf8')).actions;
+  for (const action of actions) {
+    for (const viewport of viewports) assertReplayActionFitsViewport(action, viewport);
+  }
+}
+
 test('fixture replay gestures fit the smallest supported iPhone viewport', () => {
   const compactViewports = [
     { x: 0, y: 0, width: 320, height: 568 },
@@ -134,23 +166,5 @@ test('fixture replay gestures fit the smallest supported iPhone viewport', () =>
     'test/integration/replays/ios/fixture/02-checkout-release.ad',
     'examples/test-app/replays/gesture-lab.ad',
   ];
-
-  for (const replayPath of replayPaths) {
-    const actions = parseReplayScriptDetailed(fs.readFileSync(replayPath, 'utf8')).actions;
-    for (const action of actions) {
-      const positionals = action.positionals ?? [];
-      for (const viewport of compactViewports) {
-        if (action.command === 'swipe') {
-          const payload = swipePayloadFromPositionals(positionals);
-          buildGesturePlan(normalizePublicSwipeMotion(payload).gesture, viewport, 'ios');
-        }
-        if (action.command === 'gesture') {
-          const pointerCount =
-            typeof action.flags.pointerCount === 'number' ? action.flags.pointerCount : undefined;
-          const payload = gesturePayloadFromPositionals(positionals, pointerCount);
-          buildGesturePlan(normalizePublicGesture(payload).gesture, viewport, 'ios');
-        }
-      }
-    }
-  }
+  for (const replayPath of replayPaths) assertReplayFitsViewports(replayPath, compactViewports);
 });
