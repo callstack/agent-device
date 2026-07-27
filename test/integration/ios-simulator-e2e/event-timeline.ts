@@ -22,40 +22,48 @@ export async function collectPagedEventTimeline(
   let cursor: string | undefined;
   let cursorOffset = 0;
 
-  while (true) {
+  while (pages.length < MAX_EVENT_TIMELINE_PAGES) {
     const page = await readPage(cursor);
-    if (!Array.isArray(page.events)) {
-      throw new Error('events page must contain an events array');
-    }
-    commands.push(...page.events.map((event, index) => readEventCommand(event, index, cursor)));
-
-    const nextCursor = page.nextCursor;
-    if (nextCursor === undefined) {
-      pages.push({ cursor: cursor ?? '0', eventCount: page.events.length });
-      return { commands, pages };
-    }
-    if (typeof nextCursor !== 'string' || !/^(?:0|[1-9]\d*)$/.test(nextCursor)) {
-      throw new Error('events nextCursor must be a canonical non-negative integer string');
-    }
-    const nextOffset = Number(nextCursor);
-    if (!Number.isSafeInteger(nextOffset)) {
-      throw new Error('events nextCursor must be a safe non-negative integer string');
-    }
-    if (nextOffset <= cursorOffset) {
-      throw new Error(`events pagination did not advance beyond cursor ${cursorOffset}`);
-    }
+    const pageCommands = readPageCommands(page.events, cursor);
+    const next = readNextCursor(page.nextCursor, cursorOffset);
+    commands.push(...pageCommands);
     pages.push({
       cursor: cursor ?? '0',
-      eventCount: page.events.length,
-      nextCursor,
+      eventCount: pageCommands.length,
+      ...(next === undefined ? {} : { nextCursor: next.cursor }),
     });
-    if (pages.length >= MAX_EVENT_TIMELINE_PAGES) {
-      throw new Error(`events pagination exceeded ${MAX_EVENT_TIMELINE_PAGES} pages`);
-    }
+    if (next === undefined) return { commands, pages };
 
-    cursorOffset = nextOffset;
-    cursor = nextCursor;
+    cursorOffset = next.offset;
+    cursor = next.cursor;
   }
+
+  throw new Error(`events pagination exceeded ${MAX_EVENT_TIMELINE_PAGES} pages`);
+}
+
+function readPageCommands(events: unknown, cursor: string | undefined): string[] {
+  if (!Array.isArray(events)) {
+    throw new Error('events page must contain an events array');
+  }
+  return events.map((event, index) => readEventCommand(event, index, cursor));
+}
+
+function readNextCursor(
+  value: unknown,
+  currentOffset: number,
+): { cursor: string; offset: number } | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !/^(?:0|[1-9]\d*)$/.test(value)) {
+    throw new Error('events nextCursor must be a canonical non-negative integer string');
+  }
+  const offset = Number(value);
+  if (!Number.isSafeInteger(offset)) {
+    throw new Error('events nextCursor must be a safe non-negative integer string');
+  }
+  if (offset <= currentOffset) {
+    throw new Error(`events pagination did not advance beyond cursor ${currentOffset}`);
+  }
+  return { cursor: value, offset };
 }
 
 function readEventCommand(event: unknown, index: number, cursor: string | undefined): string {
