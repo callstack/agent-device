@@ -5,6 +5,8 @@ import { assertElementText, assertJsonContains, assertWaitText } from './live-as
 import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';
 
 const C = PUBLIC_COMMANDS;
+const AUTOMATION_DEEP_LINK =
+  'agent-device-test-app:///automation?event=cold.start&payload=%7B%22source%22%3A%22deep-link%22%7D';
 
 export async function assertAutomationInput(context: LiveContext): Promise<void> {
   const opened = await runStep(context, 'cold launch fixture', [
@@ -24,13 +26,7 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
   await assertWaitText(context, 'Agent Device Tester');
   verifyCommand(context, C.open, 'cold launch exposes the fixture UI through snapshot and wait');
 
-  await runStep(context, 'cold launch fixture through a deep link', [
-    'open',
-    context.appId,
-    '--relaunch',
-    '--launch-url',
-    'agent-device-test-app:///automation?event=cold.start&payload=%7B%22source%22%3A%22deep-link%22%7D',
-  ]);
+  await openAutomationDeepLink(context, 'cold launch fixture through a deep link');
   await acceptDeepLinkConfirmationIfPresent(context);
   await assertWaitText(context, 'Automation lab');
   await assertElementText(context, 'id="automation-event-name"', 'cold.start');
@@ -145,10 +141,21 @@ async function acceptDeepLinkConfirmationIfPresent(context: LiveContext): Promis
         'click',
         'role="button" label="Open"',
       ]);
+      await openAutomationDeepLink(context, 'redeliver cold deep link after confirmation');
       return;
     }
     if (performance.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
   }
+}
+
+async function openAutomationDeepLink(context: LiveContext, step: string): Promise<void> {
+  await runStep(context, step, [
+    'open',
+    context.appId,
+    '--relaunch',
+    '--launch-url',
+    AUTOMATION_DEEP_LINK,
+  ]);
 }
