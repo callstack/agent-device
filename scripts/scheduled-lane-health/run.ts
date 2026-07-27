@@ -24,7 +24,7 @@ import {
 const SELF_WORKFLOW_FILE = 'scheduled-lane-health.yml';
 const GITHUB_API = 'https://api.github.com';
 
-type GithubContext = {
+export type GithubContext = {
   token: string;
   owner: string;
   repo: string;
@@ -182,7 +182,7 @@ function repoRootDir(): string {
   return path.resolve(here, '../..');
 }
 
-async function findExistingAlertIssue(ctx: GithubContext): Promise<number | undefined> {
+export async function findExistingAlertIssue(ctx: GithubContext): Promise<number | undefined> {
   const data = (await githubRequest(
     ctx,
     'GET',
@@ -191,7 +191,7 @@ async function findExistingAlertIssue(ctx: GithubContext): Promise<number | unde
   return data.find((issue) => !issue.pull_request && issue.title === ALERT_ISSUE_TITLE)?.number;
 }
 
-async function raiseAlert(ctx: GithubContext, body: string): Promise<void> {
+export async function raiseAlert(ctx: GithubContext, body: string): Promise<void> {
   const existing = await findExistingAlertIssue(ctx);
   if (existing !== undefined) {
     await githubRequest(

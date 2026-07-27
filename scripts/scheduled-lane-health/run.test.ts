@@ -11,7 +11,13 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import { runCmdSync } from '../../src/utils/exec.ts';
-import { deriveScheduleActivatedAt } from './run.ts';
+import { ALERT_ISSUE_TITLE } from './model.ts';
+import {
+  deriveScheduleActivatedAt,
+  findExistingAlertIssue,
+  raiseAlert,
+  type GithubContext,
+} from './run.ts';
 
 const WORKFLOW = '.github/workflows/lane.yml';
 
@@ -177,5 +183,110 @@ test('deriveScheduleActivatedAt uses the merge commit committer time, not featur
     );
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// The nightly watcher's GitHub issue-write route (open a fresh alert vs. ping an
+// existing one) only ever runs on the default branch, so it can't be exercised
+// from a PR. These stub `fetch` to pin the transport contract — endpoint, method,
+// auth header, and payload for both branches — without a live run.
+type RecordedRequest = {
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+  body: Record<string, unknown> | undefined;
+};
+
+type StubResponse = { status: number; json?: unknown };
+
+function record(input: RequestInfo | URL, init: RequestInit | undefined): RecordedRequest {
+  const rawBody = init?.body;
+  return {
+    method: init?.method ?? 'GET',
+    url: typeof input === 'string' ? input : input.toString(),
+    headers: (init?.headers ?? {}) as Record<string, string>,
+    body:
+      typeof rawBody === 'string' ? (JSON.parse(rawBody) as Record<string, unknown>) : undefined,
+  };
+}
+
+function reply(next: StubResponse): Response {
+  return new Response(next.json === undefined ? null : JSON.stringify(next.json), {
+    status: next.status,
+  });
+}
+
+function stubFetch(responses: readonly StubResponse[]): {
+  calls: RecordedRequest[];
+  restore: () => void;
+} {
+  const calls: RecordedRequest[] = [];
+  const original = globalThis.fetch;
+  let index = 0;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push(record(input, init));
+    return reply(responses[index++] ?? { status: 200, json: {} });
+  }) as typeof fetch;
+  return { calls, restore: () => void (globalThis.fetch = original) };
+}
+
+const CTX: GithubContext = { token: 'secret-token', owner: 'o', repo: 'r' };
+
+test('raiseAlert opens a new alert issue when none is open', async () => {
+  const stub = stubFetch([
+    { status: 200, json: [] }, // GET open issues → none match
+    { status: 201, json: { number: 42 } }, // POST create issue
+  ]);
+  try {
+    await raiseAlert(CTX, 'lane went dark');
+  } finally {
+    stub.restore();
+  }
+  assert.equal(stub.calls.length, 2);
+  assert.equal(stub.calls[0].method, 'GET');
+  assert.match(stub.calls[0].url, /\/repos\/o\/r\/issues\?state=open/);
+  assert.equal(stub.calls[1].method, 'POST');
+  assert.match(stub.calls[1].url, /\/repos\/o\/r\/issues$/);
+  assert.equal(stub.calls[1].headers.authorization, 'Bearer secret-token');
+  assert.equal(stub.calls[1].body?.title, ALERT_ISSUE_TITLE);
+  assert.equal(stub.calls[1].body?.body, 'lane went dark');
+});
+
+test('raiseAlert pings the existing alert issue instead of opening a duplicate', async () => {
+  const stub = stubFetch([
+    {
+      status: 200,
+      json: [
+        { title: 'unrelated', number: 1 },
+        { title: ALERT_ISSUE_TITLE, number: 7 },
+      ],
+    },
+    { status: 201, json: { id: 1 } }, // POST comment
+  ]);
+  try {
+    await raiseAlert(CTX, 'still dark');
+  } finally {
+    stub.restore();
+  }
+  assert.equal(stub.calls.length, 2);
+  assert.equal(stub.calls[1].method, 'POST');
+  assert.match(stub.calls[1].url, /\/repos\/o\/r\/issues\/7\/comments$/);
+  assert.equal(stub.calls[1].body?.body, 'still dark');
+});
+
+test('findExistingAlertIssue ignores pull requests and non-matching titles', async () => {
+  const stub = stubFetch([
+    {
+      status: 200,
+      json: [
+        { title: ALERT_ISSUE_TITLE, number: 3, pull_request: {} }, // a PR, not an issue
+        { title: 'something else', number: 4 },
+      ],
+    },
+  ]);
+  try {
+    assert.equal(await findExistingAlertIssue(CTX), undefined);
+  } finally {
+    stub.restore();
   }
 });
