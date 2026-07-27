@@ -35,6 +35,7 @@ import { SessionStore } from '../../session-store.ts';
 import { handleCloseCommand } from '../session-close.ts';
 import { handleOpenCommand } from '../session-open.ts';
 import type { DeviceInfo } from '../../../kernel/device.ts';
+import type { SessionState } from '../../types.ts';
 import { AppError } from '../../../kernel/errors.ts';
 
 const mockDispatch = vi.mocked(dispatchCommand);
@@ -258,7 +259,11 @@ test('#1391: a close-time script save failure still clears the advisory claim an
   assert.ok(acquired.ownership);
   const targetPath = path.join(stateDir, 'already-published.ad');
   fs.writeFileSync(targetPath, 'pre-existing\n');
-  store.set('close-save-script-failure', {
+  // Retained directly (not just looked up via `store`) so it stays inspectable
+  // after `handleCloseCommand` deletes it from the store — `store.delete` only
+  // drops the map entry, it doesn't touch the object this variable still
+  // points at.
+  const session: SessionState = {
     name: 'close-save-script-failure',
     device: android,
     deviceClaim: acquired.ownership,
@@ -266,7 +271,8 @@ test('#1391: a close-time script save failure still clears the advisory claim an
     actions: [],
     recordSession: true,
     saveScriptPath: targetPath,
-  });
+  };
+  store.set('close-save-script-failure', session);
   mockDispatch.mockResolvedValue({});
 
   // Like the platform-close-error tests above, a failed close-time save is
@@ -322,5 +328,16 @@ test('#1391: a close-time script save failure still clears the advisory claim an
   assert.ok(
     closeEvent,
     'expected a durable action.recorded:close event to survive the failed save',
+  );
+  // Same assertion, in-memory: reinstating `session.actions.length =
+  // actionsBeforeClose` would still pass the durable-event check above (that
+  // event was already queued before the write failed) while silently
+  // dropping this to zero — assert directly on the retained session object,
+  // not just the store, so that specific regression is caught.
+  const inMemoryCloseActions = session.actions.filter((action) => action.command === 'close');
+  assert.equal(inMemoryCloseActions.length, 1);
+  assert.equal(
+    inMemoryCloseActions.length,
+    events.filter((event) => event.command === 'close').length,
   );
 });
