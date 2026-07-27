@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import type { Point, Rect } from '../../kernel/snapshot.ts';
-import { buildGesturePlan, type MultiTouchGesturePlan } from '../../contracts/gesture-plan.ts';
+import {
+  buildGesturePlan,
+  type GesturePlan,
+  type MultiTouchGesturePlan,
+} from '../../contracts/gesture-plan.ts';
 
 export const PORTRAIT: Rect = { x: 0, y: 0, width: 390, height: 844 };
 export const LANDSCAPE: Rect = { x: 0, y: 0, width: 844, height: 390 };
@@ -48,7 +52,7 @@ export function rotationDelta(plan: MultiTouchGesturePlan): number {
   return normalizeDegrees(end - start);
 }
 
-export function assertAllSamplesInViewport(plan: MultiTouchGesturePlan): void {
+export function assertAllSamplesInViewport(plan: GesturePlan): void {
   for (const pointer of plan.pointers) {
     for (const { point } of pointer.samples) {
       assert.ok(point.x >= plan.viewport.x && point.x <= plan.viewport.x + plan.viewport.width);

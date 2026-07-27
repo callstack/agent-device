@@ -231,6 +231,7 @@
     "@types/node": "^22.19.21",
     "@vitest/coverage-v8": "4.1.8",
     "fallow": "^2.95.0",
+    "fast-check": "^4.9.0",
     "oxc-parser": "^0.138.0",
     "oxfmt": "^0.42.0",
     "oxlint": "^1.69.0",

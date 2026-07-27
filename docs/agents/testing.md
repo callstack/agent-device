@@ -48,6 +48,22 @@ to make a test easier — widening the public surface for a test is a product ch
 outlive the test that motivated them. If a seam is genuinely missing, add it as a real one rather
 than as a test affordance (the workflow separately forbids test-only `typeof` DI params).
 
+## Properties over examples (pure parsers and geometry)
+
+**Pure parser or geometry change → extend a property, not another example.** The parse/print and
+geometry kernels (selectors, `@eN~sM` refs, `.ad` script lines, gesture planning, snapshot diff) are
+covered by fast-check properties living in each owning module's test file. Their generators are
+shared in `src/__tests__/test-utils/property-arbitraries.ts` and exported through the test-utils
+barrel, so a new hazard (another quote shape, a new gesture kind, another `.ad` command) belongs in
+the generator, where every property inherits it — not in a new hand-pinned case.
+
+- Keep examples that document a specific decision or a real past bug; add the general guarantee as a
+  property alongside them.
+- Bound `numRuns` with the shared `PROPERTY_RUNS` / `PROPERTY_RUNS_SMALL` constants: properties run
+  in `unit-core` under the same slow-test budget as everything else.
+- A failing property prints the shrunk counterexample plus the seed and path to replay it; paste
+  that seed into `fc.assert(..., { seed, path })` to re-run exactly that case.
+
 ## Affected-check selector (`pnpm check:affected`)
 
 `pnpm check:affected --base <ref>` derives which local checks a diff needs, so

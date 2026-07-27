@@ -1,4 +1,6 @@
+import fc from 'fast-check';
 import { expect, test } from 'vitest';
+import { formatRef, PROPERTY_RUNS, refArb } from '../../__tests__/test-utils/index.ts';
 import { normalizeRef, splitRefGenerationSuffix } from '../snapshot.ts';
 
 // #1076 versioned refs: `~s<generation>` is accepted INPUT on every ref parse
@@ -27,6 +29,22 @@ test('splitRefGenerationSuffix rejects malformed suffixes', () => {
   expect(splitRefGenerationSuffix('@e12~s3~s4')).toBeNull();
   // A leading tilde has no ref to pin.
   expect(splitRefGenerationSuffix('~s3')).toBeNull();
+});
+
+// Property, not another example: `@eN~sM` is a two-part grammar, so split and
+// join must be inverses for every ref and generation, not just the pinned
+// examples above.
+test('splitting then rejoining any pinned ref returns the same token', () => {
+  fc.assert(
+    fc.property(refArb, (ref) => {
+      const token = formatRef(ref);
+      const split = splitRefGenerationSuffix(token);
+      expect(split).toEqual(ref);
+      expect(split && formatRef(split)).toBe(token);
+      expect(normalizeRef(token)).toBe(ref.base.replace(/^@/, ''));
+    }),
+    { numRuns: PROPERTY_RUNS },
+  );
 });
 
 test('normalizeRef keeps legacy behavior for plain refs', () => {

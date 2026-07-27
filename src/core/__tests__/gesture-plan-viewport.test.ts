@@ -1,6 +1,18 @@
 import assert from 'node:assert/strict';
+import fc from 'fast-check';
 import { describe, test } from 'vitest';
 import { buildGesturePlan, GESTURE_SAMPLE_INTERVAL_MS } from '../../contracts/gesture-plan.ts';
+import {
+  gesturePayloadFromPositionals,
+  normalizePublicGesture,
+} from '../../contracts/gesture-normalization.ts';
+import { PUBLIC_PLATFORMS } from '../../kernel/device.ts';
+import { AppError } from '../../kernel/errors.ts';
+import {
+  COMPACT_VIEWPORTS,
+  gestureInViewportArb,
+  PROPERTY_RUNS_SMALL,
+} from '../../__tests__/test-utils/index.ts';
 import {
   assertAllSamplesInViewport,
   isErrorWithReason,
@@ -139,6 +151,43 @@ describe('viewport-aware multi-touch geometry', () => {
     assert.equal(long.pointers[0].samples.length, 626);
     assert.equal(long.pointers[0].samples.at(-1)?.offsetMs, 10_000);
     assert.equal(long.pointers[0].samples[1]?.offsetMs, GESTURE_SAMPLE_INTERVAL_MS);
+  });
+});
+
+// Property, not another example: the planner's whole job is that a synthesized
+// point never leaves the active viewport. It either plans in bounds or refuses
+// with a structured INVALID_ARGS — never a silently out-of-bounds path. The
+// generator enumerates every gesture kind from GESTURE_KINDS, so a new kind
+// inherits the guarantee instead of needing its own pinned viewport case.
+describe('gesture planning never synthesizes an out-of-bounds point', () => {
+  test('holds for every gesture kind, viewport, and platform', () => {
+    fc.assert(
+      fc.property(
+        gestureInViewportArb,
+        fc.constantFrom(...PUBLIC_PLATFORMS),
+        ({ viewport, gesture }, platform) => {
+          let plan;
+          try {
+            plan = buildGesturePlan(normalizePublicGesture(gesture).gesture, viewport, platform);
+          } catch (error) {
+            assert.ok(error instanceof AppError, `unexpected error type: ${String(error)}`);
+            assert.equal(error.code, 'INVALID_ARGS');
+            return;
+          }
+          assertAllSamplesInViewport(plan);
+        },
+      ),
+      { numRuns: PROPERTY_RUNS_SMALL },
+    );
+  });
+
+  // The smallest supported iPhone viewports, kept as examples of the general
+  // property above: a recorded swipe must still fit a compact screen.
+  test.each(COMPACT_VIEWPORTS)('fits a recorded swipe into %j', (viewport) => {
+    const gesture = normalizePublicGesture(
+      gesturePayloadFromPositionals(['pan', '160', '400', '0', '-120']),
+    ).gesture;
+    assertAllSamplesInViewport(buildGesturePlan(gesture, viewport, 'ios'));
   });
 });
 
