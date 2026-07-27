@@ -11,6 +11,7 @@ import {
   type ReplayCompatCoverage,
   type ReplayCompatEntry,
 } from './manifest.ts';
+import { findProvenanceKindViolations, requiredProvenanceKind } from './provenance-rules.ts';
 
 const CORPUS_DIR = fileURLToPath(new URL('.', import.meta.url));
 
@@ -85,6 +86,33 @@ describe('replay-compat corpus', () => {
       expect(createHash('sha256').update(bytes).digest('hex')).toBe(entry.provenance.sha256);
     },
   );
+
+  // Reclassifying a mined entry as `derived` would let edited bytes be re-pinned
+  // by digest inside this same manifest and skipped by the historical verifier,
+  // so the corpus area — not the manifest line — fixes the kind.
+  test('provenance kind is fixed by corpus area', () => {
+    expect(findProvenanceKindViolations(REPLAY_COMPAT_CORPUS)).toEqual([]);
+    for (const entry of REPLAY_COMPAT_CORPUS) {
+      expect(entry.provenance.kind, entry.id).toBe(requiredProvenanceKind(entry.file));
+    }
+  });
+
+  test('a mined entry relabelled as derived is rejected', () => {
+    const mined = REPLAY_COMPAT_CORPUS.find((entry) => entry.provenance.kind === 'mined');
+    expect(mined).toBeDefined();
+    const reclassified: ReplayCompatEntry = {
+      ...(mined as ReplayCompatEntry),
+      provenance: { kind: 'derived', from: 'hand-written', sha256: 'f'.repeat(64) },
+    };
+    expect(findProvenanceKindViolations([reclassified])).toHaveLength(1);
+    expect(findProvenanceKindViolations([reclassified])[0]).toContain('must stay "mined"');
+  });
+
+  test('a corpus area with no declared provenance kind is rejected', () => {
+    expect(() => requiredProvenanceKind('scripts/handwritten/whatever.v0.20.0.ad')).toThrow(
+      /no declared provenance kind/,
+    );
+  });
 
   test('every corpus script is claimed by exactly one manifest entry', () => {
     const claimed = REPLAY_COMPAT_CORPUS.map((entry) => entry.file);

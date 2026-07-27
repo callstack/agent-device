@@ -11,7 +11,11 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { REPLAY_COMPAT_CORPUS, REPLAY_COMPAT_RELEASED_TAGS } from '../test/replay-compat/manifest.ts';
+import {
+  REPLAY_COMPAT_CORPUS,
+  REPLAY_COMPAT_RELEASED_TAGS,
+} from '../test/replay-compat/manifest.ts';
+import { findProvenanceKindViolations } from '../test/replay-compat/provenance-rules.ts';
 import { runCmdSync } from '../src/utils/exec.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
@@ -27,7 +31,9 @@ if (git(['rev-parse', '--is-shallow-repository']) === 'true') {
   );
 }
 
-const failures: string[] = [];
+// An entry that escaped `mined` would also escape the history check below, so
+// the area rule is enforced here as well as in the unit lane.
+const failures: string[] = [...findProvenanceKindViolations(REPLAY_COMPAT_CORPUS)];
 
 const existingTags = new Set(git(['tag', '--list']).split('\n').filter(Boolean));
 if (existingTags.size === 0) {
