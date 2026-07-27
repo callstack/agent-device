@@ -334,3 +334,67 @@ export function collectBackEdges(edges: readonly ResolvedImportEdge[]): BackEdge
       .map(([pair, identities]) => [pair, [...identities].sort()]),
   );
 }
+
+/**
+ * Size of the largest strongly-connected component over value AND type-only edges.
+ *
+ * R4 keeps the VALUE graph acyclic, so any cycle here is created by type-only imports. That costs
+ * nothing at runtime — types are erased — but it bounds what can be read in isolation: every file
+ * in the component transitively references every other one's declarations, so none of them has a
+ * self-contained slice. Dynamic edges are excluded deliberately: a dynamic import is a lazy seam,
+ * and a loop through one is not a comprehension barrier in the same way.
+ *
+ * Returned as a single number because that is all R9 ratchets. `largestTypeCycleMembers` gives the
+ * files when you need to act on it.
+ */
+export function largestTypeCycleSize(edges: readonly ResolvedImportEdge[]): number {
+  return largestTypeCycleMembers(edges).length;
+}
+
+/** Members of the largest value+type strongly-connected component, sorted. */
+export function largestTypeCycleMembers(edges: readonly ResolvedImportEdge[]): string[] {
+  const successors = new Map<string, string[]>();
+  for (const edge of edges) {
+    if (edge.dynamic) continue;
+    const list = successors.get(edge.file) ?? [];
+    list.push(edge.target);
+    successors.set(edge.file, list);
+  }
+
+  const index = new Map<string, number>();
+  const lowLink = new Map<string, number>();
+  const stack: string[] = [];
+  const onStack = new Set<string>();
+  let next = 0;
+  let biggest: string[] = [];
+
+  function visit(file: string): void {
+    index.set(file, next);
+    lowLink.set(file, next);
+    next++;
+    stack.push(file);
+    onStack.add(file);
+
+    for (const target of successors.get(file) ?? []) {
+      if (!index.has(target)) {
+        visit(target);
+        lowLink.set(file, Math.min(lowLink.get(file)!, lowLink.get(target)!));
+      } else if (onStack.has(target)) {
+        lowLink.set(file, Math.min(lowLink.get(file)!, index.get(target)!));
+      }
+    }
+
+    if (lowLink.get(file) !== index.get(file)) return;
+    const component: string[] = [];
+    let member: string;
+    do {
+      member = stack.pop()!;
+      onStack.delete(member);
+      component.push(member);
+    } while (member !== file);
+    if (component.length > biggest.length) biggest = component;
+  }
+
+  for (const file of successors.keys()) if (!index.has(file)) visit(file);
+  return biggest.sort();
+}

@@ -18,6 +18,9 @@
 //   - Over the ZERO-DEP CI JOBS only: their scripts may import nothing that needs
 //     installing (R8), a constraint no local run can feel because `node_modules` is
 //     always there locally and never there in those jobs.
+//   - Over the TYPE GRAPH: the largest type-level import cycle may not grow (R9). R4
+//     keeps the value graph acyclic, so these cycles are free at runtime but bound
+//     what can be read in isolation. Growth-only, deliberately loose.
 // Only `(root)` is unranked (see `UNRANKED_ZONES` in model.ts): it holds the
 // entrypoints and the composition roots that wire the command surface into the
 // daemon, which R2 forbids the daemon from importing, so they sit outside the
@@ -38,6 +41,7 @@ import { uninstallableImports, zeroDepJobs } from './zero-dep-jobs.ts';
 import {
   backEdgePair,
   findValueImportCycles,
+  largestTypeCycleSize,
   resolveImportEdges,
   topFolder,
   typeInversionPair,
@@ -283,6 +287,45 @@ function checkTypeInversions(edges: readonly ResolvedImportEdge[]): Violation[] 
   return violations;
 }
 
+// R9: the largest type-level import cycle, ratcheted for GROWTH ONLY.
+//
+// R4 keeps the value graph acyclic, so every cycle counted here is created by type-only imports.
+// That is free at runtime and invisible to R5/R6, but it bounds what can be read in isolation:
+// inside a strongly-connected component of 102 files, no file has a self-contained slice — reading
+// any one of them means reaching every other one's declarations. It is the largest single obstacle
+// to understanding a subsystem on its own, and nothing else in this gate measures it.
+//
+// Deliberately loose. Unlike R6 this does NOT fail when the number drops, because the number is
+// large and reducing it is a real refactor rather than a file move — a hard equality would turn
+// every unrelated improvement into a baseline edit. It fails only on growth, and reports the slack
+// when the tree has improved so the baseline can be lowered when someone is in here anyway.
+//
+// Hubs at the time of writing, by in-component dependents: runtime-contract.ts (25),
+// commands/runtime-types.ts (21), backend.ts (15), commands/runtime-common.ts (12). A pass at this
+// starts there. See docs/dependency-graph-findings.md.
+// Set to what THIS branch achieves, not to what main carries: main is at 107, and the boundary
+// moves here bring it to 102. Measured on the rebased tree — an earlier 87 was taken against an
+// older main and was stale rather than violated, which is exactly the kind of drift a ratchet
+// measured at merge time prevents.
+const TYPE_CYCLE_BASELINE = 102;
+
+function checkTypeCycleGrowth(edges: readonly ResolvedImportEdge[]): Violation[] {
+  const actual = largestTypeCycleSize(edges);
+  if (actual <= TYPE_CYCLE_BASELINE) return [];
+  return [
+    {
+      rule: 'R9 type-cycle-growth',
+      file: 'scripts/layering/check.ts',
+      line: 1,
+      message:
+        `the largest type-level import cycle grew to ${actual} files (baseline ` +
+        `${TYPE_CYCLE_BASELINE}). A type-only import that closes a loop makes every file in the ` +
+        `loop unreadable in isolation. Declare the shared type below both modules, or if the growth ` +
+        `is genuinely warranted, raise TYPE_CYCLE_BASELINE in the same commit and say why.`,
+    },
+  ];
+}
+
 function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Violation[] {
   const types = sources.get('src/daemon/types.ts');
   if (!types) {
@@ -437,7 +480,21 @@ function sessionStateFieldCount(): number {
   );
 }
 
-function report(files: readonly string[], violations: readonly Violation[]): number {
+/** R9 is growth-only, so a shrunk tree is reported rather than failed — see checkTypeCycleGrowth. */
+function typeCycleNote(edges: readonly ResolvedImportEdge[]): string {
+  const actual = largestTypeCycleSize(edges);
+  if (actual >= TYPE_CYCLE_BASELINE) return `the largest type-level cycle is ${actual} files (R9)`;
+  return (
+    `the largest type-level cycle is down to ${actual} files, under the R9 baseline of ` +
+    `${TYPE_CYCLE_BASELINE} — lower TYPE_CYCLE_BASELINE when convenient`
+  );
+}
+
+function report(
+  files: readonly string[],
+  violations: readonly Violation[],
+  edges: readonly ResolvedImportEdge[],
+): number {
   if (violations.length === 0) {
     process.stdout.write(
       `Layering guard: OK — ${files.length} source files satisfy R1-R3 and contain no ` +
@@ -445,8 +502,8 @@ function report(files: readonly string[], violations: readonly Violation[]): num
         `back-edges (only the composition root is unranked), and its type-only ` +
         `inversions match the R6 ratchet (${Object.values(TYPE_INVERSION_BASELINE).reduce((sum, count) => sum + count, 0)} remaining); ` +
         `all ${sessionStateFieldCount()} SessionState fields are classified and every write is ` +
-        `inside its declared owner (R7); and every zero-dep CI job resolves without ` +
-        `node_modules (R8).\n`,
+        `inside its declared owner (R7); every zero-dep CI job resolves without ` +
+        `node_modules (R8); and ${typeCycleNote(edges)}.\n`,
     );
     return 0;
   }
@@ -482,9 +539,10 @@ export function main(): number {
     ...checkBackEdges(edges),
     ...checkTypeInversions(edges),
     ...checkSessionStateOwnership(sources),
+    ...checkTypeCycleGrowth(edges),
     ...checkZeroDepJobs(),
   ];
-  return report(sourceFiles, violations);
+  return report(sourceFiles, violations, edges);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

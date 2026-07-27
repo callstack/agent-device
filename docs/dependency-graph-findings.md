@@ -1,13 +1,16 @@
 # Dependency graph findings
 
-Snapshot analysis of the production import graph — 901 files, 4768 edges, 25 zones — taken while
-doing the boundary work across #1405 and its follow-up. It is a dated observation, not a normative
+Snapshot analysis of the production import graph — 918 files, 25 zones — taken while doing the
+boundary work across #1405 and its follow-ups. It is a dated observation, not a normative
 document; when it disagrees with `scripts/layering/`, the gate wins.
 
-There is no graph tool to install. A rendered viewer was built and then dropped: it cost ~2200
-lines and a Fallow exemption, and nobody — human or agent — drew a conclusion from the picture.
-Every finding below came from short queries against the gate's own model, which is the point worth
-keeping. Re-derive any of them like this:
+Two ways to reproduce any number below. `pnpm depgraph` (#1410) emits the whole graph as JSON plus a
+summary, and is the tool to reach for when you want the reachability or cycle analysis it computes. A
+*rendered* viewer was also built and dropped — ~2200 lines and a Fallow exemption for a picture
+neither a human nor an agent drew a conclusion from; the analysis survived, the rendering did not.
+
+For a one-off question, a throwaway probe against the gate's own model is faster and leaves nothing
+to clean up:
 
 ```ts
 // scripts/layering/.probe.ts (throwaway; the gate's model is the only dependency)
@@ -115,19 +118,47 @@ Cycle size by edge kind, measured over the whole production graph:
 | edges considered | largest strongly-connected component |
 |---|---|
 | value only | **1** — no cycles, which is what R4 enforces |
-| value + type-only | **87 files** |
+| value + type-only | **102 files** |
 | value + dynamic | **1** |
 | all kinds | 213 files |
 
-At runtime the module graph is a clean DAG. The 87-file cluster is purely type-level: you cannot read
-the types of any one of those files without transitively reaching all 87. That is not a correctness
+At runtime the module graph is a clean DAG. The 102-file cluster is purely type-level: you cannot
+read the types of any one of those files without transitively reaching all 102. (`main` carries 107;
+the boundary moves in this branch bring it to 102.) That is not a correctness
 problem — types are erased — but it is a comprehension one, and it is the single largest obstacle to
 reading a subsystem in isolation. It spans `commands` (33), `daemon` (21), `platforms` (13), `core`
 (12), hubs at `runtime-contract.ts` (25 in-cluster dependents), `commands/runtime-types.ts` (21),
 `backend.ts` (15), `commands/runtime-common.ts` (12).
 
-Deliberately not attempted yet: it is a different and much larger change than moving declarations
-down, and R6 does not measure it. Worth its own pass, starting at those four hubs.
+Now ratcheted for growth by **R9** (`TYPE_CYCLE_BASELINE` in `check.ts`), so it cannot get worse
+while nobody is looking — a type-only import that closes a new loop fails the gate, verified by
+adding one type-only import that closes a loop and watching the gate reject it. Growth-only on
+purpose: reducing it is a real refactor, so a
+hard equality would turn every unrelated improvement into a baseline edit. The refactor itself is
+still deliberately not attempted; it starts at those four hubs.
+
+### The facade cycle: investigated, no narrower port exists
+
+The 4 remaining `-> client` inversions are `AgentDeviceClient` used as an opaque handle. The obvious
+fix is a narrower port in `contracts/` describing only what `commands/` needs, with `client/`
+satisfying it. Measured before attempting it:
+
+| | count |
+|---|---|
+| Files *naming* `AgentDeviceClient` (i.e. the inversions) | 4 |
+| Files *calling* client methods | 26 |
+| Distinct facade namespaces reached | 13 |
+
+The narrowness is an artifact of where the type is *named*, not of what is *used*. Making the four
+generic over the client type pushes the concrete type down into the 26 implementations, turning 4
+inversions into up to 26. A port covering 13 namespaces is the whole facade, so it would either
+duplicate the public API shape — a second source of truth for it — or derive from the facade and
+carry the same dependency.
+
+Those four files are therefore the minimum number of naming sites, not an accident: they are the
+choke point. Accepted as a position, argued at `TYPE_INVERSION_BASELINE`. The remaining option is
+the one that was always the real question — whether `NAVIGATION_COMMAND_PROJECTIONS` belongs in
+`commands/` — and that is a design decision about the command surface, not a dependency cleanup.
 
 ## 1. The two remaining type-inversion clusters
 
