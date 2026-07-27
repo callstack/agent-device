@@ -138,7 +138,10 @@ export const IOS_SIMULATOR_E2E_COVERAGE = {
   [C.prepare]: {
     assertion: 'cached XCTest runner is prepared once before Settings and fixture suites',
     level: 'workflow-live',
-    owner: { path: '.github/workflows/ios.yml', test: 'Prepare iOS runner' },
+    owner: {
+      path: '.github/workflows/ios.yml',
+      test: 'Preflight iOS runner through public CLI',
+    },
   },
   [C.press]: live('smoke:automation-input', 'semantic press updates a durable input canary'),
   [C.push]: contract(

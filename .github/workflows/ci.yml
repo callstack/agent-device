@@ -48,8 +48,8 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Compile Swift runner unit-test surface
-        uses: ./.github/actions/setup-apple-replay
+      - name: Restore and compile Swift runner unit-test surface
+        uses: ./.github/actions/setup-apple-runner-build
         with:
           derived-path: ${{ github.workspace }}/.tmp/swift-runner-unit-derived
           cache-key-prefix: swift-runner-unit

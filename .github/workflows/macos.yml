@@ -36,9 +36,8 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Setup Apple replay
-        id: apple-replay
-        uses: ./.github/actions/setup-apple-replay
+      - name: Restore and build macOS XCTest runner
+        uses: ./.github/actions/setup-apple-runner-build
         with:
           derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
           cache-key-prefix: macos-runner-prebuilt

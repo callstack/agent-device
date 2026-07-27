@@ -71,9 +71,8 @@ jobs:
           mkdir -p .tmp
           echo "$FRONTMOST" > .tmp/ios-host-focus-before
 
-      - name: Setup Apple replay
-        id: apple-replay
-        uses: ./.github/actions/setup-apple-replay
+      - name: Restore and build iOS XCTest runner
+        uses: ./.github/actions/setup-apple-runner-build
         with:
           derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
           cache-key-prefix: ios-runner-prebuilt
@@ -89,7 +88,7 @@ jobs:
           runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
           preferred-device-name: iPhone 17 Pro
 
-      - name: Run iOS runner gesture and lifecycle regressions
+      - name: Run targeted iOS runner XCTest regressions
         run: |
           XCTESTRUN_PATH="$(find "$AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH/Build/Products" -maxdepth 1 -name '*.xctestrun' -print -quit)"
           test -n "$XCTESTRUN_PATH"
@@ -106,13 +105,13 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrainForSnapshotRaw \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotTraversalIdentityPreservesSameOriginNodesWithDifferentBounds
 
-      - name: Prepare iOS runner
+      - name: Preflight iOS runner through public CLI
         run: |
           pnpm clean:daemon
           node --experimental-strip-types src/bin.ts prepare ios-runner --platform ios --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --timeout "$AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS" --json
           pnpm clean:daemon
 
-      - name: Run iOS simulator smoke replay
+      - name: Run iOS Settings replay smoke test
         run: |
           node --experimental-strip-types src/bin.ts test test/integration/replays/ios/simulator/01-settings.ad --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --retries 2 --artifacts-dir test/artifacts/replays-ios-simulator-smoke --report-junit test/artifacts/replays-ios-simulator-smoke.junit.xml
 
