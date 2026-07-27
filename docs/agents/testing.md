@@ -20,6 +20,7 @@ The mapping it encodes, for when you need to run a gate directly or reason about
 | Help benchmark cases (`scripts/help-conformance-*.mjs`) | `pnpm exec vitest run scripts/__tests__` (deterministic gates); model-backed: `pnpm bench:help-conformance` (paid LLM calls, local only) |
 | SkillGym prompts/assertions | `pnpm test:skillgym:case <case-id>` (broad: `pnpm test:skillgym`, filter with `-- --tag fixture-smoke` or `-- --tag skill-guidance`) — agentic routing + local-help-consumption proof only; command-planning knowledge checks belong in the help bench |
 | Anything in `src/`, `test/`, `skills/` | `pnpm format` |
+| A decision kernel or its tests (`src/kernel/errors.ts`, `src/daemon/ref-frame.ts`, `src/commands/interaction/runtime/settle.ts`, `src/utils/scroll-edge-state.ts`, `src/selectors/`) | `pnpm mutation:affected --base origin/main` (minutes; GitHub runs it per PR — see the mutation ratchet section) |
 
 Two traps worth naming:
 
@@ -118,6 +119,40 @@ The plan documents the rule and changed path behind every selected check.
 
 Model and catalog live under `scripts/check-affected/`; the derivation is guarded
 by `pnpm check:affected:test` (the `Affected-check Selector` CI job).
+
+## Mutation ratchet over decision kernels
+
+Mutation score is the mechanical answer to "is this test load-bearing or decorative". A full-suite
+sweep is unaffordable, so the scope is an enumerated list of pure decision kernels — modules where a
+surviving mutant means a silently wrong agent-facing decision. The registry
+(`scripts/mutation/modules.ts`) is the single source of truth: `stryker.config.json`'s `mutate` globs
+are asserted against it, and PR-affected selection maps changed files through it. Modules that spawn
+subprocesses or wait real time stay out by construction.
+
+```sh
+pnpm mutation:test                      # ratchet self-test (fast, no Stryker)
+pnpm mutation:run --modules selectors   # one module locally (~7 min for selectors)
+pnpm mutation:check                     # ratchet an existing .tmp/mutation/mutation.json
+pnpm mutation:baseline                  # full sweep, then record it (reviewed commit)
+```
+
+- **Weekly full sweep** (`.github/workflows/mutation-weekly.yml`) shards one job per module so no job
+  approaches the 30-minute budget, then merges the shard reports (`--report-dir`) for one verdict,
+  reported as a job summary plus an artifact. It never commits: the proposed baseline rides in the
+  artifact, and applying it is a reviewed `pnpm mutation:baseline` commit, so a score cannot lower
+  itself.
+- **PR lane** (`.github/workflows/mutation-affected.yml`) mutates only the modules the diff touches.
+- **Ratchet**: scores may only rise. `mutation-baselines/decision-kernels.json` records the
+  high-water score per module plus the Stryker version and config content hash that produced it, so a
+  score change caused by a tool/config change is reported as provenance drift, never as a
+  test-strength regression.
+- **Graduation, not a flag day**: gating is off until two consecutive comparable weekly sweeps pass
+  (`stableRuns`/`requiredStableRuns` in the baseline); the PR job runs the whole time and only starts
+  failing once the committed baseline says `gating: true`. A regression or provenance drift resets the
+  counter.
+- **Test scope** is derived from Vitest's module graph (`vitest related` over the mutated files), the
+  same delegation `pnpm check:affected` uses; see `scripts/mutation/test-scope.ts` for the three
+  groups it drops and why dropping them cannot hide a surviving mutant.
 
 ## Live web smoke
 

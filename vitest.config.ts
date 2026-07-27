@@ -10,7 +10,7 @@ import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
 // docs/agents/testing.md "tests must not wait real time"). Serialized below with
 // per-file isolation so only one such file spawns stubs at a time, the same
 // execution contract the pre-split android index.test.ts aggregation provided.
-const SUBPROCESS_STUB_TESTS = [
+export const SUBPROCESS_STUB_TESTS = [
   'src/platforms/android/__tests__/{app-lifecycle-install,app-lifecycle-open,device-input-state,input-actions,notifications,settings}.test.ts',
   'src/daemon/__tests__/runtime-hints.test.ts',
   'src/platforms/apple/core/__tests__/index.test.ts',

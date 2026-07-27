@@ -1,0 +1,62 @@
+name: Mutation Affected
+
+# PR-side half of the decision-kernel mutation lane (issue #1415).
+#
+# Graduation, not a flag day: this job runs on every PR that touches a kernel
+# module, but `scripts/mutation/run.ts` only exits non-zero once the committed
+# baseline reports `gating: true` — earned by two consecutive stable weekly
+# sweeps (mutation-weekly.yml). Until then it is a report with the same numbers,
+# so the gate's first failing day is not also its first running day.
+#
+# Scope is the AFFECTED modules only (changed file in the kernel registry -> its
+# mutants). The weekly run stays the full sweep.
+
+on:
+  pull_request:
+    paths:
+      - "src/kernel/errors.ts"
+      - "src/daemon/ref-frame.ts"
+      - "src/commands/interaction/runtime/settle.ts"
+      - "src/utils/scroll-edge-state.ts"
+      - "src/selectors/**"
+      - "scripts/mutation/**"
+      - "stryker.config.json"
+      - "mutation-baselines/**"
+      - ".github/workflows/mutation-affected.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mutation-affected:
+    name: Affected decision-kernel mutants
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Ratchet self-test
+        run: pnpm mutation:test
+
+      - name: Run affected mutants
+        run: pnpm mutation:affected --base "origin/${{ github.event.pull_request.base.ref }}"
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mutation-affected
+          path: |
+            .tmp/mutation/mutation.json
+            .tmp/mutation/mutation.html
+          if-no-files-found: ignore
