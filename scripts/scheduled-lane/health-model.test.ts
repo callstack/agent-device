@@ -3,6 +3,9 @@
 // Every category comes from recorded run fields, so these cases pin the exact boundaries an alert
 // fires on: a lane that stopped running, one that failed twice, and one that is merely flaky.
 
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -25,8 +28,12 @@ const NIGHTLY: LaneCadence = {
   cadenceHours: 24,
 };
 
-function known(runs: LaneRun[]) {
-  return { known: true, runs };
+function known(runs: LaneRun[], registeredHoursAgo = 1000) {
+  return {
+    known: true,
+    registeredAt: new Date(NOW - registeredHoursAgo * 60 * 60 * 1000).toISOString(),
+    runs,
+  };
 }
 
 function run(hoursAgo: number, conclusion: LaneRun['conclusion']): LaneRun {
@@ -75,11 +82,23 @@ describe('lane health', () => {
     expect(lane.reason).toContain('over 48h of cadence');
   });
 
-  it('is dark when the lane has never run on schedule', () => {
+  it('is dark when a long-registered lane has never run on schedule', () => {
     const lane = laneHealth(NIGHTLY, known([]), NOW);
     expect(lane.state).toBe('dark');
     expect(lane.lastRunAt).toBeNull();
     expect(lane.hoursSinceLastSuccess).toBeNull();
+  });
+
+  it('gives a newborn lane the same two-cadence grace before its first run', () => {
+    const lane = laneHealth(NIGHTLY, known([], 5), NOW);
+    expect(lane.state).toBe('pending');
+    expect(lane.reason).toContain('first run not yet 48h overdue');
+    expect(unhealthyLanes([lane])).toEqual([]);
+  });
+
+  it('stays pending when a run-less lane has no registration date to judge', () => {
+    const lane = laneHealth(NIGHTLY, { known: true, registeredAt: null, runs: [] }, NOW);
+    expect(lane.state).toBe('pending');
   });
 
   it('is pending, not dark, when the run history could not be read', () => {
@@ -91,6 +110,44 @@ describe('lane health', () => {
   it('renders one table row per lane', () => {
     const table = healthTable([laneHealth(NIGHTLY, known([run(2, 'success')]), NOW)]);
     expect(table).toContain('| Replay Nightly | `replays-nightly.yml` | healthy |');
+  });
+});
+
+describe('terminal failures', () => {
+  // A monitor whose API call fails must still leave evidence behind, or the lane it watches goes
+  // dark twice over: once in CI and once in the artifact a human would look for.
+  it('writes an error envelope and snapshot when the Actions API is unreachable', () => {
+    const artifactDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lane-health-'));
+    const result = spawnSync(
+      process.execPath,
+      [
+        '--experimental-strip-types',
+        path.join(REPO_ROOT, 'scripts/scheduled-lane/health.ts'),
+        '--artifact-dir',
+        artifactDir,
+        '--dry-run',
+      ],
+      {
+        cwd: REPO_ROOT,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          GITHUB_TOKEN: 'not-a-real-token',
+          GITHUB_API_URL: 'http://127.0.0.1:1',
+        },
+      },
+    );
+    expect(result.status).toBe(1);
+    const envelope = JSON.parse(
+      fs.readFileSync(path.join(artifactDir, 'run-envelope.json'), 'utf8'),
+    );
+    expect(envelope.result).toBe('error');
+    expect(envelope.lane).toBe('scheduled-lane-health');
+    expect(String(envelope.details.error).length).toBeGreaterThan(0);
+    const snapshot = JSON.parse(
+      fs.readFileSync(path.join(artifactDir, 'lane-health.json'), 'utf8'),
+    );
+    expect(snapshot.error).not.toBeNull();
   });
 });
 

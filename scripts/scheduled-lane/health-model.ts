@@ -26,6 +26,8 @@ export type LaneHistory = {
   /** False when the run history could not be read at all, which is not evidence of a dark lane. */
   known: boolean;
   reason?: string;
+  /** When the lane was registered, so a newborn lane is not judged before its first run is due. */
+  registeredAt?: string | null;
   /** Newest-first, as the GitHub runs API returns them. */
   runs: readonly LaneRun[];
 };
@@ -82,14 +84,38 @@ function countLeadingFailures(runs: readonly LaneRun[]): number {
   return failed === -1 ? runs.length : failed;
 }
 
+/**
+ * A lane with no runs yet is only dark once it has existed long enough to have missed the same
+ * number of cadences as a lane that stopped: born-yesterday lanes get the identical grace.
+ */
+function classifyNeverRan(
+  budget: number,
+  ageHours: number | null,
+): { state: LaneState; reason: string } {
+  if (ageHours === null) {
+    return { state: 'pending', reason: 'no scheduled run yet and registration date unknown' };
+  }
+  if (ageHours <= budget) {
+    return {
+      state: 'pending',
+      reason: `added ${ageHours.toFixed(1)}h ago, first run not yet ${budget}h overdue`,
+    };
+  }
+  return {
+    state: 'dark',
+    reason: `no scheduled run in the ${ageHours.toFixed(1)}h since the lane was added`,
+  };
+}
+
 function classify(input: {
   runs: readonly LaneRun[];
   cadenceHours: number;
   hoursSinceLastRun: number | null;
+  ageHours: number | null;
   consecutiveFailures: number;
 }): { state: LaneState; reason: string } {
   const budget = input.cadenceHours * CADENCES_BEFORE_ALERT;
-  if (input.runs.length === 0) return { state: 'dark', reason: 'no scheduled run recorded yet' };
+  if (input.runs.length === 0) return classifyNeverRan(budget, input.ageHours);
   if (input.hoursSinceLastRun !== null && input.hoursSinceLastRun > budget) {
     return {
       state: 'dark',
@@ -118,6 +144,7 @@ export function laneHealth(cadence: LaneCadence, history: LaneHistory, now: numb
           runs,
           cadenceHours: cadence.cadenceHours,
           hoursSinceLastRun,
+          ageHours: hoursSince(history.registeredAt ?? null, now),
           consecutiveFailures,
         })
       : {

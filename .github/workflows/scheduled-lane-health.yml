@@ -18,6 +18,9 @@ on:
 
 permissions:
   contents: read
+  # Reading workflow run history is what this job is: an explicit map makes every omitted scope
+  # `none`, so leaving `actions` out would 403 the collection step.
+  actions: read
   issues: write
 
 concurrency:

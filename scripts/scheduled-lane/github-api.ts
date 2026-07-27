@@ -11,6 +11,8 @@ type RunsResponse = {
   workflow_runs?: { conclusion: string | null; created_at: string; html_url: string }[];
 };
 
+type WorkflowResponse = { created_at?: string };
+
 type IssuesResponse = { number: number; title: string }[];
 
 function headers(token: string): Record<string, string> {
@@ -58,6 +60,19 @@ function toLaneRun(run: { conclusion: string | null; created_at: string; html_ur
   };
 }
 
+/** When the lane was added: it decides whether an empty history is a newborn lane or a dead one. */
+async function fetchRegisteredAt(
+  token: string,
+  repo: string,
+  workflow: string,
+): Promise<string | null> {
+  const body = await requestOrNullOn404<WorkflowResponse>(
+    token,
+    `${API}/repos/${repo}/actions/workflows/${workflow}`,
+  );
+  return body?.created_at ?? null;
+}
+
 /**
  * Newest-first scheduled runs. A 404 means the workflow is not on the default branch yet (a lane
  * being born, as in this PR), which is unknown history rather than a dark lane.
@@ -73,7 +88,11 @@ export async function fetchScheduledRuns(input: {
   if (body === null) {
     return { known: false, reason: 'workflow not on the default branch yet', runs: [] };
   }
-  return { known: true, runs: (body.workflow_runs ?? []).map(toLaneRun) };
+  return {
+    known: true,
+    registeredAt: await fetchRegisteredAt(input.token, input.repo, input.workflow),
+    runs: (body.workflow_runs ?? []).map(toLaneRun),
+  };
 }
 
 /** Creates the alert issue, or comments on it when it is already open. */

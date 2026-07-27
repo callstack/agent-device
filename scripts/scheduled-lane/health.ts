@@ -83,33 +83,75 @@ async function alert(options: Options, unhealthy: readonly LaneHealth[]): Promis
   process.stdout.write(`Alert issue #${result.number} ${result.action}.\n`);
 }
 
-async function main(): Promise<number> {
-  const startedAt = Date.now();
-  const options = readOptions(process.argv.slice(2));
-  const lanes = await collectHealth(options);
-  const unhealthy = unhealthyLanes(lanes);
+function writeSnapshot(
+  options: Options,
+  startedAt: number,
+  lanes: readonly LaneHealth[],
+  error?: string,
+): void {
   fs.mkdirSync(options.artifactDir, { recursive: true });
+  const snapshot = { generatedAt: new Date(startedAt).toISOString(), lanes, error: error ?? null };
   fs.writeFileSync(
     path.join(options.artifactDir, SNAPSHOT_FILE),
-    `${JSON.stringify({ generatedAt: new Date(startedAt).toISOString(), lanes }, null, 2)}\n`,
+    `${JSON.stringify(snapshot, null, 2)}\n`,
   );
-  writeSummary(lanes, unhealthy);
-  await alert(options, unhealthy);
+}
+
+function writeEnvelope(
+  options: Options,
+  startedAt: number,
+  result: 'pass' | 'fail' | 'error',
+  details: Record<string, unknown>,
+): void {
   writeLaneEnvelope(
     options.artifactDir,
     buildLaneEnvelope({
       lane: 'scheduled-lane-health',
       tool: 'scripts/scheduled-lane/health.ts',
-      result: unhealthy.length === 0 ? 'pass' : 'fail',
+      result,
       startedAt,
       finishedAt: Date.now(),
       config: { repo: options.repo, dryRun: options.dryRun, runsPerLane: RUNS_PER_LANE },
-      details: { lanes, unhealthy: unhealthy.map((lane) => lane.workflow) },
+      details,
     }),
   );
+}
+
+async function run(options: Options, startedAt: number): Promise<number> {
+  const lanes = await collectHealth(options);
+  const unhealthy = unhealthyLanes(lanes);
+  writeSnapshot(options, startedAt, lanes);
+  writeSummary(lanes, unhealthy);
+  await alert(options, unhealthy);
+  writeEnvelope(options, startedAt, unhealthy.length === 0 ? 'pass' : 'fail', {
+    lanes,
+    unhealthy: unhealthy.map((lane) => lane.workflow),
+  });
   // Dark/failing lanes are reported, not enforced by this job's own status: the alert issue is the
   // signal, and a red health job would itself be a lane that needs watching.
   return 0;
+}
+
+/**
+ * A monitor that dies silently is worse than no monitor: an API/permission failure still has to
+ * leave a snapshot and an `error` envelope behind, and fail loudly (unlike an unhealthy lane).
+ */
+function reportTerminalFailure(options: Options, startedAt: number, error: unknown): number {
+  const message = error instanceof Error ? error.message : String(error);
+  writeSnapshot(options, startedAt, [], message);
+  writeEnvelope(options, startedAt, 'error', { lanes: [], unhealthy: [], error: message });
+  process.stderr.write(`Scheduled lane health failed: ${message}\n`);
+  return 1;
+}
+
+async function main(): Promise<number> {
+  const startedAt = Date.now();
+  const options = readOptions(process.argv.slice(2));
+  try {
+    return await run(options, startedAt);
+  } catch (error) {
+    return reportTerminalFailure(options, startedAt, error);
+  }
 }
 
 process.exitCode = await main();
