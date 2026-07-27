@@ -169,13 +169,9 @@ test('BLOCKER 2 (second follow-up): a repair-close platform-close failure surfac
   expect(sessionStore.get('typed-error')).toBeDefined();
 });
 
-// #1391 P2: the handler-level test (`session-device-claims.test.ts`) proves
-// `toOrdinaryCloseSaveScriptFailure` builds the right `AppError`, but calls
-// `handleCloseCommand` directly — it never exercises `normalizeError`/
-// `enrichDaemonError`'s own hoisting of `details.retriable` to the TOP-level
-// wire field, the same layer BLOCKER 2's test above exists to catch a
-// regression in. Exercised through the REAL router boundary so a regression
-// in either layer is caught, unlike the direct-call test.
+// Unlike the handler-level test in session-device-claims.test.ts, this goes
+// through the real router boundary, so it also covers normalizeError's
+// details.retriable hoisting.
 test('#1391: an ordinary close-time script-save failure surfaces details.reason/path and retriable:false through the router, and the session is torn down', async () => {
   const { sessionStore, handler } = makeHandler();
   const session = makeIosSession('typed-error');

@@ -169,15 +169,8 @@ function toRepairPlatformCloseFailure(error: unknown): AppError {
 
 type SessionCloseTeardownResult = {
   platformCloseError: unknown;
-  // #1391: an ordinary (non-repair) session's close-time script write (implicit
-  // from `open --save-script`, or this close's own `--save-script`) can refuse
-  // to publish (no-clobber target-exists, or any other fs AppError). Unlike the
-  // repair-armed commit (which keeps its session alive for a `--force` retry —
-  // ADR 0012 BLOCKER 2b), an ordinary session has no transaction to retry: its
-  // `close` already ran (or was skipped) and its teardown below must still
-  // release the lease/device claim and delete the session, exactly as a
-  // `platformCloseError` does not block them either. Surfaced separately so
-  // `handleCloseCommand` can report it AFTER teardown completes, never before.
+  // #1391: a failed close-time script write (see finalizeOrdinaryCloseScript).
+  // Never blocks teardown — see runCloseTeardownAndRelease's blockingError.
   saveScriptError?: AppError;
 };
 
@@ -214,22 +207,10 @@ async function runSessionCloseTeardown(params: {
   return { platformCloseError, saveScriptError };
 }
 
-/**
- * ADR 0012 decision 6 (BLOCKER 2): only an ordinary (non-repair) session
- * records its finalize `close` and writes its session log here — see the
- * call site's own comment for why a repair-armed session skips this entirely.
- *
- * #1391: the write can refuse to publish (no-clobber target-exists, or any
- * other fs `AppError`). Unlike a repair-armed commit failure — which keeps
- * its session alive so `commitRepairBeforeClose` must roll back its
- * just-recorded `close` action to keep a later retry from duplicating it —
- * this caller (`runSessionCloseTeardown`) always completes teardown and
- * deletes the session regardless of the outcome returned here, so there is
- * no surviving session for a retry to duplicate anything on. No rollback:
- * the recorded `close` action (and its durable `events.ndjson` entry) stay
- * exactly as they are — an accurate record that the close itself happened,
- * independent of whether the script also got saved.
- */
+// #1391: unlike commitRepairBeforeClose, this never rolls back the recorded
+// `close` action on a write failure — the caller always tears the session
+// down regardless, so there's no surviving session for a retry to duplicate
+// it on.
 function finalizeOrdinaryCloseScript(params: {
   req: DaemonRequest;
   session: SessionState;
@@ -254,21 +235,9 @@ function finalizeOrdinaryCloseScript(params: {
   }
 }
 
-/**
- * #1391: normalizes an ordinary (non-repair) session's close-time script-write
- * failure. `SessionScriptWriter.write()` only ever throws a genuine `AppError`
- * here (a non-clobber refusal or another fs AppError — see
- * `handleSessionScriptWriteFailure`'s non-repair, non-active-publication
- * branch); anything else is already swallowed into a silent `{written:false}`
- * there. Only the message/hint/retriable are corrected for THIS call site (the
- * shared `publishHealedScriptAtomically` wording, "retry close --save-script",
- * describes the repair-commit retry contract, which does not apply here — by
- * the time the agent sees this, `close` has already released the device and
- * deleted the session, so there is nothing left to retry in place); the
- * original error's machine-readable `details` (e.g. `reason:
- * "script_target_exists"`, `path`) are preserved so a caller dispatching on
- * them still can.
- */
+// #1391: the shared write error's message/details/reason are preserved
+// as-is; only hint/retriable are overridden, since its default "retry close
+// --save-script" wording no longer applies once the session is gone.
 function toOrdinaryCloseSaveScriptFailure(error: unknown): AppError {
   const overrides = {
     hint: 'Remove the existing target (or pass --force/--overwrite), then re-record with open --save-script.',
@@ -506,21 +475,10 @@ type SessionCloseFinalization =
   | { kind: 'response'; response: DaemonResponse }
   | { kind: 'closed'; providerData?: Record<string, unknown> };
 
-/**
- * Everything between a settled repair decision and a success response: the
- * failure-isolated resource teardown, the provider lease release, and — only
- * once both have run — the device-claim clear and session delete. A rejected
- * cleanup step is collected instead of short-circuiting the rest, so every
- * subsequent resource (and the runner stop) is still attempted; the provider
- * lease is released only after that teardown, and a failed release keeps the
- * session retryable (returned as `{kind:'response'}`, mirroring the
- * repair-commit-failure path above it). The platform-close failure is thrown
- * as the primary error with its original code/details/hint intact; the
- * cleanup aggregate has already been emitted as a diagnostic by this point so
- * per-resource failures stay visible; a failed script save (#1391) is thrown
- * last since — unlike the two above it — the session has already ended and
- * the device is already released by the time it surfaces.
- */
+// Everything between a settled repair decision and a success response:
+// failure-isolated resource teardown, provider lease release, then (only
+// once both are known) the device-claim clear and session delete. A failed
+// lease release keeps the session retryable instead (`{kind:'response'}`).
 async function runCloseTeardownAndRelease(params: {
   req: DaemonRequest;
   session: SessionState;
@@ -561,15 +519,14 @@ async function runCloseTeardownAndRelease(params: {
     phase: 'session_close_cleanup_failed',
     failures: cleanupFailures,
   });
-  // #1391: a failed script save is never a reason to keep the device claimed —
-  // only a genuine platform-close failure (the device may still be busy) or a
-  // resource-cleanup failure withholds it, exactly as before.
-  if (!platformCloseError && !cleanupAggregate) {
+  // Only these two withhold the device claim (the device may still be busy);
+  // a failed script save (#1391) never does — it always releases below.
+  const blockingError = platformCloseError ?? cleanupAggregate;
+  if (!blockingError) {
     await clearAdvisoryDeviceClaim(session.deviceClaim);
   }
   sessionStore.delete(sessionName);
-  if (platformCloseError) throw platformCloseError;
-  if (cleanupAggregate) throw cleanupAggregate;
+  if (blockingError) throw blockingError;
   if (saveScriptError) throw saveScriptError;
   return { kind: 'closed', providerData: leaseRelease.providerData };
 }
