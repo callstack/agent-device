@@ -44,10 +44,17 @@ surface, and `provenance` pins the bytes:
 - `derived` entries (`scripts/docs/`) have no historical blob to point at, so their bytes are pinned
   by SHA-256.
 
+The kind is not a free choice: `provenance-rules.ts` fixes it by corpus area (`scripts/integration/`
+and `scripts/examples/` must stay `mined`, `scripts/docs/` is `derived`), so an edited script cannot
+be relabelled `derived`, re-pinned by digest, and thereby skipped by the history check. Both the unit
+test and the verifier enforce that rule, and a new area must declare its kind before entries can live
+under it.
+
 `pnpm check:replay-compat` closes the other half: it re-derives every mined id from git history
 (`git rev-parse <recordedBy>:<path>`) and checks every cited tag against `git tag --list`, so an
-entry cannot claim a version that was never cut. It needs full history and tags, so it is a
-maintainer/reviewer check rather than part of the shallow-clone-safe unit lane.
+entry cannot claim a version that was never cut. It needs full history and tags, so it runs in its
+own `Replay-Compat Provenance` CI job (`fetch-depth: 0`) rather than inside the shallow-clone-safe
+unit lane, and any change under `test/replay-compat/` selects it in `pnpm check:affected`.
 
 **Released surfaces only.** A grammar state that only ever existed between commits is not compat
 surface — `git tag --contains <commit>` decides, and unreleased shapes stay out (AGENTS.md,
