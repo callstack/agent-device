@@ -251,11 +251,15 @@ async function runSessionCloseTeardown(params: {
  * call site's own comment for why a repair-armed session skips this entirely.
  *
  * #1391: the write can refuse to publish (no-clobber target-exists, or any
- * other fs `AppError`). Roll back the just-recorded `close` action on failure
- * — mirroring `commitRepairBeforeClose`'s own rollback — so neither the
- * session/device claim leaks (item 1) nor an unrecorded `close` survives for a
- * later successful write to duplicate (item 2); the caller still completes
- * teardown regardless of the outcome returned here.
+ * other fs `AppError`). Unlike a repair-armed commit failure — which keeps
+ * its session alive so `commitRepairBeforeClose` must roll back its
+ * just-recorded `close` action to keep a later retry from duplicating it —
+ * this caller (`runSessionCloseTeardown`) always completes teardown and
+ * deletes the session regardless of the outcome returned here, so there is
+ * no surviving session for a retry to duplicate anything on. No rollback:
+ * the recorded `close` action (and its durable `events.ndjson` entry) stay
+ * exactly as they are — an accurate record that the close itself happened,
+ * independent of whether the script also got saved.
  */
 function finalizeOrdinaryCloseScript(params: {
   req: DaemonRequest;
@@ -264,7 +268,6 @@ function finalizeOrdinaryCloseScript(params: {
   platformCloseError: unknown;
 }): AppError | undefined {
   const { req, session, sessionStore, platformCloseError } = params;
-  const actionsBeforeClose = session.actions.length;
   if (!platformCloseError) {
     recordSessionAction(sessionStore, session, req, 'close', {
       session: session.name,
@@ -278,7 +281,6 @@ function finalizeOrdinaryCloseScript(params: {
     sessionStore.writeSessionLog(session, { force: resolveEffectiveSaveScriptForce(req, session) });
     return undefined;
   } catch (error) {
-    session.actions.length = actionsBeforeClose;
     return toOrdinaryCloseSaveScriptFailure(error);
   }
 }

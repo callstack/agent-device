@@ -1,4 +1,5 @@
 import { test, expect, vi, beforeEach } from 'vitest';
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -166,4 +167,45 @@ test('BLOCKER 2 (second follow-up): a repair-close platform-close failure surfac
   expect(response.error.code).toBe('DEVICE_NOT_FOUND');
   // The session is retained (not torn down), addressable for the retry.
   expect(sessionStore.get('typed-error')).toBeDefined();
+});
+
+// #1391 P2: the handler-level test (`session-device-claims.test.ts`) proves
+// `toOrdinaryCloseSaveScriptFailure` builds the right `AppError`, but calls
+// `handleCloseCommand` directly — it never exercises `normalizeError`/
+// `enrichDaemonError`'s own hoisting of `details.retriable` to the TOP-level
+// wire field, the same layer BLOCKER 2's test above exists to catch a
+// regression in. Exercised through the REAL router boundary so a regression
+// in either layer is caught, unlike the direct-call test.
+test('#1391: an ordinary close-time script-save failure surfaces details.reason/path and retriable:false through the router, and the session is torn down', async () => {
+  const { sessionStore, handler } = makeHandler();
+  const session = makeIosSession('typed-error');
+  session.recordSession = true;
+  const targetPath = path.join(
+    os.tmpdir(),
+    `agent-device-router-typed-error-${Date.now()}-${Math.random().toString(36).slice(2)}.ad`,
+  );
+  fs.writeFileSync(targetPath, 'pre-existing\n');
+  session.saveScriptPath = targetPath;
+  sessionStore.set('typed-error', session);
+
+  try {
+    // Untargeted close: no positionals, so no platform close is dispatched
+    // (`shouldDispatchPlatformClose`) — isolates the script-save failure from
+    // any platform-close error, matching BLOCKER 2's own targeted-vs-untargeted
+    // distinction above.
+    const response = await handler(request('close'));
+
+    expect(response.ok).toBe(false);
+    if (response.ok) return;
+    expect(response.error.code).toBe('COMMAND_FAILED');
+    expect(response.error.retriable).toBe(false);
+    expect(response.error.details?.reason).toBe('script_target_exists');
+    expect(response.error.details?.path).toBe(targetPath);
+    // Unlike the repair-armed case above, an ordinary session's teardown
+    // never withholds on a failed script save — it is always torn down.
+    expect(sessionStore.get('typed-error')).toBeUndefined();
+    expect(mockDispatch).not.toHaveBeenCalled();
+  } finally {
+    fs.rmSync(targetPath, { force: true });
+  }
 });
