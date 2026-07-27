@@ -26,8 +26,12 @@ export type LaneHistory = {
   /** False when the run history could not be read at all, which is not evidence of a dark lane. */
   known: boolean;
   reason?: string;
-  /** When the lane was registered, so a newborn lane is not judged before its first run is due. */
-  registeredAt?: string | null;
+  /**
+   * When the `schedule:` trigger was added (not when the workflow file was created — adding a
+   * schedule to an old workflow must not skip the grace period). Null means "cannot tell", which
+   * keeps a run-less lane pending instead of alerting on a guess.
+   */
+  scheduleRegisteredAt?: string | null;
   /** Newest-first, as the GitHub runs API returns them. */
   runs: readonly LaneRun[];
 };
@@ -85,25 +89,26 @@ function countLeadingFailures(runs: readonly LaneRun[]): number {
 }
 
 /**
- * A lane with no runs yet is only dark once it has existed long enough to have missed the same
- * number of cadences as a lane that stopped: born-yesterday lanes get the identical grace.
+ * A lane with no runs yet is only dark once its schedule has been registered long enough to have
+ * missed the same number of cadences as a lane that stopped: a just-scheduled lane gets the
+ * identical grace, and an unknown registration date never alerts.
  */
 function classifyNeverRan(
   budget: number,
-  ageHours: number | null,
+  scheduleAgeHours: number | null,
 ): { state: LaneState; reason: string } {
-  if (ageHours === null) {
-    return { state: 'pending', reason: 'no scheduled run yet and registration date unknown' };
+  if (scheduleAgeHours === null) {
+    return { state: 'pending', reason: 'no scheduled run yet and schedule age unknown' };
   }
-  if (ageHours <= budget) {
+  if (scheduleAgeHours <= budget) {
     return {
       state: 'pending',
-      reason: `added ${ageHours.toFixed(1)}h ago, first run not yet ${budget}h overdue`,
+      reason: `scheduled ${scheduleAgeHours.toFixed(1)}h ago, first run not yet ${budget}h overdue`,
     };
   }
   return {
     state: 'dark',
-    reason: `no scheduled run in the ${ageHours.toFixed(1)}h since the lane was added`,
+    reason: `no scheduled run in the ${scheduleAgeHours.toFixed(1)}h since the lane was scheduled`,
   };
 }
 
@@ -111,11 +116,11 @@ function classify(input: {
   runs: readonly LaneRun[];
   cadenceHours: number;
   hoursSinceLastRun: number | null;
-  ageHours: number | null;
+  scheduleAgeHours: number | null;
   consecutiveFailures: number;
 }): { state: LaneState; reason: string } {
   const budget = input.cadenceHours * CADENCES_BEFORE_ALERT;
-  if (input.runs.length === 0) return classifyNeverRan(budget, input.ageHours);
+  if (input.runs.length === 0) return classifyNeverRan(budget, input.scheduleAgeHours);
   if (input.hoursSinceLastRun !== null && input.hoursSinceLastRun > budget) {
     return {
       state: 'dark',
@@ -144,7 +149,7 @@ export function laneHealth(cadence: LaneCadence, history: LaneHistory, now: numb
           runs,
           cadenceHours: cadence.cadenceHours,
           hoursSinceLastRun,
-          ageHours: hoursSince(history.registeredAt ?? null, now),
+          scheduleAgeHours: hoursSince(history.scheduleRegisteredAt ?? null, now),
           consecutiveFailures,
         })
       : {

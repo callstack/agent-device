@@ -3,12 +3,12 @@
 // Every category comes from recorded run fields, so these cases pin the exact boundaries an alert
 // fires on: a lane that stopped running, one that failed twice, and one that is merely flaky.
 
-import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { runCmdSync } from '../../src/utils/exec.ts';
 import { discoverScheduledLanes } from './discover.ts';
 import {
   cadenceHours,
@@ -18,6 +18,7 @@ import {
   type LaneRun,
   unhealthyLanes,
 } from './health-model.ts';
+import { scheduleRegisteredAt } from './schedule-registration.ts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const NOW = Date.parse('2026-07-27T12:00:00Z');
@@ -28,10 +29,16 @@ const NIGHTLY: LaneCadence = {
   cadenceHours: 24,
 };
 
-function known(runs: LaneRun[], registeredHoursAgo = 1000) {
+const temporaryDirs: string[] = [];
+
+afterEach(() => {
+  for (const dir of temporaryDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+});
+
+function known(runs: LaneRun[], scheduledHoursAgo = 1000) {
   return {
     known: true,
-    registeredAt: new Date(NOW - registeredHoursAgo * 60 * 60 * 1000).toISOString(),
+    scheduleRegisteredAt: new Date(NOW - scheduledHoursAgo * 60 * 60 * 1000).toISOString(),
     runs,
   };
 }
@@ -82,23 +89,26 @@ describe('lane health', () => {
     expect(lane.reason).toContain('over 48h of cadence');
   });
 
-  it('is dark when a long-registered lane has never run on schedule', () => {
+  it('is dark when a long-scheduled lane has never run on schedule', () => {
     const lane = laneHealth(NIGHTLY, known([]), NOW);
     expect(lane.state).toBe('dark');
     expect(lane.lastRunAt).toBeNull();
     expect(lane.hoursSinceLastSuccess).toBeNull();
   });
 
-  it('gives a newborn lane the same two-cadence grace before its first run', () => {
+  // The production transition that matters: `schedule:` added to a workflow that has existed for
+  // months. Anchoring on the workflow's own creation date would alert on its first minute.
+  it('gives a just-scheduled old workflow the same two-cadence grace before its first run', () => {
     const lane = laneHealth(NIGHTLY, known([], 5), NOW);
     expect(lane.state).toBe('pending');
     expect(lane.reason).toContain('first run not yet 48h overdue');
     expect(unhealthyLanes([lane])).toEqual([]);
   });
 
-  it('stays pending when a run-less lane has no registration date to judge', () => {
-    const lane = laneHealth(NIGHTLY, { known: true, registeredAt: null, runs: [] }, NOW);
+  it('stays pending when a run-less lane has no schedule date to judge', () => {
+    const lane = laneHealth(NIGHTLY, { known: true, scheduleRegisteredAt: null, runs: [] }, NOW);
     expect(lane.state).toBe('pending');
+    expect(unhealthyLanes([lane])).toEqual([]);
   });
 
   it('is pending, not dark, when the run history could not be read', () => {
@@ -113,12 +123,26 @@ describe('lane health', () => {
   });
 });
 
+describe('schedule registration', () => {
+  // Anchored on the commit that introduced `schedule:`, not the workflow's creation date.
+  it('reads when a lane was scheduled out of git history', () => {
+    const scheduled = scheduleRegisteredAt('.github/workflows', 'replays-nightly.yml');
+    expect(scheduled).not.toBeNull();
+    expect(Number.isFinite(Date.parse(scheduled ?? ''))).toBe(true);
+  });
+
+  it('returns null — never a guess — for a file git knows nothing about', () => {
+    expect(scheduleRegisteredAt('.github/workflows', 'no-such-workflow.yml')).toBeNull();
+  });
+});
+
 describe('terminal failures', () => {
   // A monitor whose API call fails must still leave evidence behind, or the lane it watches goes
   // dark twice over: once in CI and once in the artifact a human would look for.
   it('writes an error envelope and snapshot when the Actions API is unreachable', () => {
     const artifactDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lane-health-'));
-    const result = spawnSync(
+    temporaryDirs.push(artifactDir);
+    const result = runCmdSync(
       process.execPath,
       [
         '--experimental-strip-types',
@@ -129,15 +153,16 @@ describe('terminal failures', () => {
       ],
       {
         cwd: REPO_ROOT,
-        encoding: 'utf8',
         env: {
           ...process.env,
           GITHUB_TOKEN: 'not-a-real-token',
           GITHUB_API_URL: 'http://127.0.0.1:1',
         },
+        timeoutMs: 60_000,
+        allowFailure: true,
       },
     );
-    expect(result.status).toBe(1);
+    expect(result.exitCode).toBe(1);
     const envelope = JSON.parse(
       fs.readFileSync(path.join(artifactDir, 'run-envelope.json'), 'utf8'),
     );

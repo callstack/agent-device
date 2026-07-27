@@ -150,7 +150,11 @@ missing file. Other scheduled lanes adopt the same writer rather than defining a
 from `schedule:`-triggered workflows in `.github/workflows/` (never a hand-maintained list), reads
 each lane's recent scheduled runs from the GitHub API, and classifies it from recorded run fields —
 `healthy`, `failing` (two consecutive failed cadences), `dark` (no run within two cadences), or
-`pending` (no history to judge, e.g. a lane not on the default branch yet). Freshness fields land in
+`pending` (no history to judge, e.g. a lane not on the default branch yet). A lane with no scheduled
+runs is judged against the commit that added its `schedule:` trigger, not the workflow's creation
+date, so adding a schedule to an old workflow still gets the full two-cadence grace — and an
+unreadable schedule date (shallow clone) stays `pending` rather than alerting. Freshness fields land
+in
 `lane-health.json` for the repo-health snapshot; an unhealthy lane opens or pings one tracking issue.
 It runs as `Scheduled Lane Health` (`.github/workflows/scheduled-lane-health.yml`) and locally with
 `--dry-run`, which never touches issues. Classification lives in

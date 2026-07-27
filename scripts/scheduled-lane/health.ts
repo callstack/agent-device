@@ -12,6 +12,7 @@ import { discoverScheduledLanes } from './discover.ts';
 import { buildLaneEnvelope, writeLaneEnvelope } from './envelope.ts';
 import { fetchScheduledRuns, upsertAlertIssue } from './github-api.ts';
 import { healthTable, laneHealth, type LaneHealth, unhealthyLanes } from './health-model.ts';
+import { scheduleRegisteredAt } from './schedule-registration.ts';
 
 const ALERT_TITLE = 'Scheduled lane alert: a nightly/weekly lane is dark or failing';
 const WORKFLOW_DIR = '.github/workflows';
@@ -47,7 +48,13 @@ async function collectHealth(options: Options): Promise<LaneHealth[]> {
             workflow: cadence.workflow,
             perPage: RUNS_PER_LANE,
           });
-    lanes.push(laneHealth(cadence, history, now));
+    lanes.push(
+      laneHealth(
+        cadence,
+        { ...history, scheduleRegisteredAt: scheduleRegisteredAt(WORKFLOW_DIR, cadence.workflow) },
+        now,
+      ),
+    );
   }
   return lanes;
 }
