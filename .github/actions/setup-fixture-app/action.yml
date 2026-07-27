@@ -127,6 +127,10 @@ runs:
               fi
               MISSING_PRODUCER_POLLS=0
               IFS="$(printf '\t')" read -r RUN_ID RUN_STATUS RUN_CONCLUSION <<< "$RUN_STATE"
+              if [ "$RUN_STATUS" = "queued" ]; then
+                echo "Fixture producer run $RUN_ID is queued; building inline rather than waiting behind its concurrency group."
+                break
+              fi
               if [ "$RUN_STATUS" = "completed" ]; then
                 echo "Fixture producer run $RUN_ID completed with ${RUN_CONCLUSION:-unknown} but published no $NAME; building inline."
                 break

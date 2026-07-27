@@ -40,6 +40,7 @@ export type LiveContext = {
 export function createContext(): LiveContext {
   const tier = requiredEnv('AGENT_DEVICE_IOS_E2E_TIER');
   assert.ok(tier === 'smoke' || tier === 'full', `unsupported iOS E2E tier: ${tier}`);
+  if (tier === 'full') requiredEnv('AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE');
   const runId = `${Date.now()}-${process.pid}`;
   const artifactDir = path.resolve('test/artifacts/ios-simulator', tier, runId);
   fs.mkdirSync(artifactDir, { recursive: true });

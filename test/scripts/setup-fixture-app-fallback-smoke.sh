@@ -128,6 +128,37 @@ else
   echo "PASS: a failed producer stops the artifact wait and builds inline."
 fi
 
+# A producer queued behind a different run cannot publish within a predictable
+# time. The consumer should build now instead of idling until its deadline.
+cat > "$WORK/bin/gh" <<'STUB'
+#!/bin/sh
+case "$*" in
+  *actions/workflows/test-app-build-cache.yml/runs*)
+    printf '456\tqueued\t\n'
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+STUB
+chmod +x "$WORK/bin/gh"
+GITHUB_OUTPUT="$WORK/out-queued-producer"
+: > "$GITHUB_OUTPUT"
+export GITHUB_OUTPUT
+set +e
+PATH="$WORK/bin:$PATH" bash "$WORK/fetch.sh" > "$WORK/log-queued-producer" 2>&1
+QUEUED_PRODUCER_RC=$?
+set -e
+if [ "$QUEUED_PRODUCER_RC" -ne 0 ] ||
+  ! grep -q "Fixture producer run 456 is queued" "$WORK/log-queued-producer" ||
+  ! grep -q '^source=build$' "$GITHUB_OUTPUT"; then
+  echo "FAIL: a queued producer did not stop the configured artifact wait." >&2
+  sed 's/^/  /' "$WORK/log-queued-producer" >&2
+  FAIL=1
+else
+  echo "PASS: a queued producer stops the artifact wait and builds inline."
+fi
+
 # A same-repository PR can miss the producer path filter. Three instant polls
 # prove that case takes the bounded grace path instead of the 30-minute wait.
 cat > "$WORK/bin/gh" <<'STUB'

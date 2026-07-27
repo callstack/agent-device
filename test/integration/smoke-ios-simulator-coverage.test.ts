@@ -170,6 +170,24 @@ test('fixture replay gestures fit the smallest supported iPhone viewport', () =>
   for (const replayPath of replayPaths) assertReplayFitsViewports(replayPath, compactViewports);
 });
 
+test('fixture navigation uses edge-aware traversal without losing direct swipe evidence', () => {
+  const actions = parseReplayScriptDetailed(
+    fs.readFileSync('test/integration/replays/ios/fixture/01-navigation-scroll.ad', 'utf8'),
+  ).actions;
+  assert.equal(
+    actions.filter((action) => action.command === 'swipe').length,
+    2,
+    'one directional swipe per edge proves replay swipe execution',
+  );
+  assert.deepEqual(
+    actions
+      .filter((action) => action.command === 'scroll')
+      .map((action) => action.positionals?.[0]),
+    ['bottom', 'top'],
+    'edge traversal must terminate from observed scroll state rather than viewport-tuned swipes',
+  );
+});
+
 test('event timeline coverage follows cursors beyond the first page', async () => {
   const requestedCursors: Array<string | undefined> = [];
   const timeline = await collectPagedEventTimeline(async (cursor) => {

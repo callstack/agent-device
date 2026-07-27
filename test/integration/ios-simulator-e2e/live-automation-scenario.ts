@@ -127,28 +127,29 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
 }
 
 async function acceptDeepLinkConfirmationIfPresent(context: LiveContext): Promise<void> {
-  const deadline = performance.now() + 2_500;
-  let attempt = 0;
-  while (performance.now() < deadline) {
-    attempt += 1;
-    const surface = await runStep(context, `inspect deep-link destination (${attempt})`, [
-      'snapshot',
-      '-i',
+  const destination = await runStep(
+    context,
+    'wait for deep-link destination before inspecting system UI',
+    ['wait', 'text', 'Automation lab', '2500'],
+    { allowFailure: true },
+  );
+  if (destination.status === 0) return;
+
+  // The normal route uses one daemon-side wait rather than repeatedly spawning
+  // interactive snapshots. Retain a single snapshot only to recognize the
+  // occasional system confirmation and redeliver the original deep link.
+  const surface = await runStep(context, 'inspect delayed deep-link destination', [
+    'snapshot',
+    '-i',
+  ]);
+  const serialized = JSON.stringify(surface.json?.data ?? surface.json);
+  if (serialized.includes('Open in')) {
+    assertJsonContains(surface, 'Open in', 'unexpected system alert after fixture deep link');
+    await runStep(context, 'accept deep-link confirmation', [
+      'click',
+      'role="button" label="Open"',
     ]);
-    const serialized = JSON.stringify(surface.json?.data ?? surface.json);
-    if (serialized.includes('Automation lab')) return;
-    if (serialized.includes('Open in')) {
-      assertJsonContains(surface, 'Open in', 'unexpected system alert after fixture deep link');
-      await runStep(context, 'accept deep-link confirmation', [
-        'click',
-        'role="button" label="Open"',
-      ]);
-      await openAutomationDeepLink(context, 'redeliver cold deep link after confirmation');
-      return;
-    }
-    if (performance.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
+    await openAutomationDeepLink(context, 'redeliver cold deep link after confirmation');
   }
 }
 

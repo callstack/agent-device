@@ -48,7 +48,6 @@ export async function assertElementTextAfterScrolling(
       { allowFailure: attempt < 4 },
     );
     if (visible.status === 0) {
-      await assertWaitText(context, expected);
       await assertElementText(context, selector, expected);
       return;
     }

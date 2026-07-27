@@ -240,11 +240,15 @@ test('startIosSimulatorRecording times out and cleans up a recorder that never b
     resolvedOut: outPath,
   });
 
-  await vi.advanceTimersByTimeAsync(16_000);
+  // Let the readiness loop schedule its first fake-timer poll before advancing
+  // the clock. Unlike the success case above, this test has no independent
+  // timer to yield that initial microtask turn.
+  await Promise.resolve();
+  await vi.runAllTimersAsync();
   const result = await resultPromise;
 
   assert.equal('ok' in result && result.ok, false);
-  assert.match(JSON.stringify(result), /did not create its output within 5000ms/);
+  assert.match(JSON.stringify(result), /did not create its output within 15000ms/);
   assert.deepEqual(
     kill.mock.calls.map(([signal]) => signal),
     ['SIGINT', 'SIGTERM', 'SIGKILL'],

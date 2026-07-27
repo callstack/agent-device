@@ -10,34 +10,12 @@ wait "Search, filter, scroll, favorite, and drill into detail without extra depe
 wait "Catalog scroll: top" 5000
 swipe 160 480 160 200
 wait "Catalog scroll: down" 5000
-swipe 160 480 160 200
-swipe 160 480 160 200
-swipe 160 480 160 200
-swipe 160 480 160 200
-swipe 160 480 160 200
-swipe 160 480 160 200
-swipe 160 480 160 200
-swipe 160 480 160 200
-swipe 160 480 160 200
-swipe 160 480 160 200
-swipe 160 480 160 200
-swipe 160 480 160 200
+scroll bottom
 wait "Catalog scroll: bottom" 5000
 wait "Seasonal footer target" 5000
 swipe 160 200 160 480
 wait "Catalog scroll: up" 5000
-swipe 160 200 160 480
-swipe 160 200 160 480
-swipe 160 200 160 480
-swipe 160 200 160 480
-swipe 160 200 160 480
-swipe 160 200 160 480
-swipe 160 200 160 480
-swipe 160 200 160 480
-swipe 160 200 160 480
-swipe 160 200 160 480
-swipe 160 200 160 480
-swipe 160 200 160 480
+scroll top
 wait "Catalog scroll: top" 5000
 wait "Search, filter, scroll, favorite, and drill into detail without extra dependencies." 5000
 close

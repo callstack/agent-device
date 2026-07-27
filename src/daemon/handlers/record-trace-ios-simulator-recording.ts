@@ -22,7 +22,10 @@ import { errorResponse } from './response.ts';
 
 const LOCAL_RECORDING_READY_POLL_MS = 250;
 const LOCAL_RECORDING_LIVENESS_GRACE_MS = 50;
-const LOCAL_RECORDING_READY_TIMEOUT_MS = 5_000;
+// CoreSimulator may delay creating the zero-byte recordVideo destination while
+// a just-booted simulator finishes service startup. This is still much shorter
+// than recording itself, but avoids reporting a false start under CI load.
+const LOCAL_RECORDING_READY_TIMEOUT_MS = 15_000;
 const IOS_SIMULATOR_VIDEO_READY_POLL_MS = 150;
 const IOS_SIMULATOR_VIDEO_READY_ATTEMPTS = 12;
 
