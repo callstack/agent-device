@@ -104,6 +104,19 @@ function optionalIntFromEnv(name: string): number | undefined {
   return parsed;
 }
 
+// Seeds are non-negative (0 is a real, replayable seed): the sweeps start at
+// seed 0 and print `TORTURE_SEED=0` on failure, so the replay parser MUST accept
+// 0 — unlike client/op COUNTS, which must be strictly positive.
+function optionalNonNegativeIntFromEnv(name: string): number | undefined {
+  const raw = process.env[name]?.trim();
+  if (!raw) return undefined;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`${name} must be a non-negative integer, got ${raw}`);
+  }
+  return parsed;
+}
+
 function replayHint(seed: number): string {
   return `Replay this exact interleaving with: TORTURE_SEED=${seed} pnpm test:concurrency-torture`;
 }
@@ -118,7 +131,7 @@ function assertClean(result: TortureRunResult): void {
   );
 }
 
-const explicitSeed = optionalIntFromEnv('TORTURE_SEED');
+const explicitSeed = optionalNonNegativeIntFromEnv('TORTURE_SEED');
 const clients = optionalIntFromEnv('TORTURE_CLIENTS');
 const opsPerClient = optionalIntFromEnv('TORTURE_OPS');
 
@@ -136,6 +149,28 @@ test('concurrency torture — real-scope same-device serialization', () =>
       `real createRequestExecutionScope().runLocked() let ${maxOverlap} same-device critical ` +
         'sections overlap — production execution locking is not serializing',
     );
+  }));
+
+// Regression: seed 0 is inside the default/forced sweeps and failures print
+// `TORTURE_SEED=0`, so that replay command must be runnable. The seed parser
+// must accept 0 (a positive-only parser silently broke this), and seed 0 must
+// itself replay bit-for-bit.
+test('concurrency torture — seed 0 is a replayable seed', () =>
+  guard(async () => {
+    const probe = '__TORTURE_SEED_ZERO_PROBE__';
+    process.env[probe] = '0';
+    try {
+      assert.equal(
+        optionalNonNegativeIntFromEnv(probe),
+        0,
+        'TORTURE_SEED=0 must parse to seed 0 so the printed replay command works',
+      );
+    } finally {
+      delete process.env[probe];
+    }
+    const result = await runTorture({ seed: 0 });
+    assertDeterministicReplay(result, await runTorture({ seed: 0 }));
+    assertClean(result);
   }));
 
 if (explicitSeed !== undefined) {
