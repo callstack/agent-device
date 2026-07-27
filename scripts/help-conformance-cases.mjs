@@ -156,6 +156,41 @@ export const CASES = [
     ],
   },
   {
+    id: 'ios-system-ui-widget-flow',
+    docs: ['--help:first30', 'ios-system-ui'],
+    task: 'On an iOS simulator, add the Calendar widget from SpringBoard, capture visual evidence of the placed widget, return to the installed app com.example.calendar, and close. Plan commands only.',
+    expectations: ['validPlanCommands', 'fullPrefix', 'usesSnapshotI', 'opensAndCloses'],
+    matchers: [
+      {
+        id: 'bindsSessionToSpringBoard',
+        pattern: /\bagent-device\s+open\s+com\.apple\.springboard\b[^\n]*--platform\s+ios\b/i,
+      },
+      {
+        id: 'entersEditModeWithCoordinateLongpress',
+        pattern: /\bagent-device\s+longpress\s+-?\d+(?:\.\d+)?\s+-?\d+(?:\.\d+)?\b/i,
+      },
+      {
+        id: 'refreshesSnapshotAfterEnteringEditMode',
+        pattern: /\blongpress\b[\s\S]*\n[^\n]*\bsnapshot\s+-i\b/i,
+      },
+      {
+        id: 'usesScreenshotForSparseGalleryResult',
+        pattern:
+          /\bagent-device\s+screenshot\b[\s\S]*\n[^\n]*\bagent-device\s+press\s+-?\d+(?:\.\d+)?\s+-?\d+(?:\.\d+)?\b/i,
+      },
+      {
+        id: 'returnsToAppUnderTest',
+        pattern: /\bagent-device\s+open\s+com\.example\.calendar\b[^\n]*--platform\s+ios\b/i,
+      },
+    ],
+    forbidden: [
+      {
+        id: 'noRawSimulatorControl',
+        pattern: /(?:^|\n)(?:xcrun\s+simctl|idb|maestro)\b/i,
+      },
+    ],
+  },
+  {
     id: 'web-managed-backend-loop',
     docs: ['--help:first30', 'web'],
     task: 'On a fresh machine that has never run web automation, plan commands to set up and verify the managed web backend, open https://shop.example/login, fill the Email field with "qa@example.com", press the "Sign in" button, verify the "Welcome back" text appears, capture a screenshot to ./artifacts/web-login.png, and close. Plan commands only.',

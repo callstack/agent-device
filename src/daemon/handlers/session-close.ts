@@ -23,7 +23,6 @@ import {
 } from './session-device-utils.ts';
 import { errorResponse } from './response.ts';
 import { expireRefFrame } from '../ref-frame.ts';
-import { recordSessionAction } from './handler-utils.ts';
 import { stopSessionRecordingForTeardown } from './record-trace-recording.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 import { releaseSessionLease } from '../lease-lifecycle.ts';
@@ -40,6 +39,11 @@ import {
   type SessionCleanupFailure,
 } from '../session-teardown.ts';
 import { clearAdvisoryDeviceClaim } from '../device-claims.ts';
+import {
+  buildRetriableRepairCloseFailureResponse,
+  commitRepairScriptBeforeClose,
+  finalizeOrdinaryCloseScript,
+} from './session-close-script.ts';
 
 async function maybeShutdownSessionTarget(params: {
   device: DeviceInfo;
@@ -50,17 +54,6 @@ async function maybeShutdownSessionTarget(params: {
   if (isActiveProviderDevice(device)) return undefined;
   if (!canShutdownDeviceTarget(device)) return undefined;
   return await shutdownDeviceTarget(device);
-}
-
-/**
- * #1258: the effective `--force`/`--overwrite` decision for a `close`-time
- * publish — this close request's own flag OR'd with whatever was persisted
- * on the session at an earlier arm (`open --save-script --force`, or a
- * repair's first `replay --save-script --force`). Either source authorizes
- * overwriting; neither being set keeps the default refuse-on-exist.
- */
-function resolveEffectiveSaveScriptForce(req: DaemonRequest, session: SessionState): boolean {
-  return Boolean(req.flags?.force || session.saveScriptForce);
 }
 
 function shouldRetainAppleRunnerAfterClose(req: DaemonRequest, session: SessionState): boolean {
@@ -77,88 +70,6 @@ function shouldStopAppleRunnerBeforeTargetedClose(session: SessionState): boolea
   return isApplePlatform(session.device.platform) && !isIosSimulator(session.device);
 }
 
-/**
- * ADR 0012 decision 6 (BLOCKER 2): outcome of committing a repair transaction
- * at `close` time, BEFORE any destructive teardown. `not-armed` = not a repair
- * session (normal close flow); `committed` = the healed `.ad` was written
- * (`path`) or the transaction was incomplete and intentionally discarded (no
- * `path`) — either way close proceeds and tears the session down; `failed` = a
- * COMPLETE transaction's commit failed (no-clobber / bare-`@ref` / fs error),
- * so the session must be KEPT for retry and the failure surfaced.
- */
-type RepairCloseOutcome =
-  | { kind: 'not-armed' }
-  | { kind: 'committed'; path?: string }
-  | { kind: 'aborted' }
-  | { kind: 'failed'; error: AppError };
-
-function commitRepairBeforeClose(
-  sessionStore: SessionStore,
-  session: SessionState,
-  req: DaemonRequest,
-): RepairCloseOutcome {
-  if (session.saveScriptBoundary === undefined) return { kind: 'not-armed' };
-  // Record the finalize `close` (so the committed healed slice ends with it),
-  // then COMMIT before any destructive teardown. A repair-armed session commits
-  // iff the transaction COMPLETED, regardless of `--save-script` on the close
-  // (C2); `recordSession` is already true from arming.
-  const actionsBeforeClose = session.actions.length;
-  recordSessionAction(sessionStore, session, req, 'close', {
-    session: session.name,
-    ...successText(`Closed: ${session.name}`),
-  });
-  const result = sessionStore.writeSessionLog(session, {
-    force: resolveEffectiveSaveScriptForce(req, session),
-  });
-  if (result.written) return { kind: 'committed', path: result.path };
-  if (result.error) {
-    // The session is kept for retry (BLOCKER 2b): roll back the just-recorded
-    // finalize `close` so a subsequent `close --save-script=<other>` retry does
-    // not accumulate duplicate `close` lines in the healed slice.
-    session.actions.length = actionsBeforeClose;
-    return { kind: 'failed', error: result.error };
-  }
-  if (!session.saveScriptComplete) {
-    return { kind: 'aborted' };
-  }
-  return { kind: 'committed' };
-}
-
-/**
- * ADR 0012 decision 6 (BLOCKER 2b): a commit-failure close response. The session
- * is intentionally NOT torn down (the caller returns before teardown), so the
- * agent can fix the cause and retry `close --save-script`.
- *
- * BLOCKER 2 (second follow-up): routes `error` through the SAME
- * `normalizeError` normalization every other AppError -> DaemonResponse
- * conversion in this codebase uses (see `repairExpiredIfTombstoned` in
- * request-router.ts and the dozens of handler call sites doing
- * `{ ok: false, error: normalizeError(error) }`) — a hand-rolled reshape here
- * previously dropped the underlying platform/commit error's `details`,
- * `diagnosticId`, and `logPath` entirely, and put `retriable` under
- * `error.details.retriable`, a location neither the router's `enrichDaemonError`
- * nor the client reads (both read the TOP-LEVEL `error.retriable` — see
- * `DaemonError` in kernel/contracts.ts). `retriable: true` is still forced
- * unconditionally at the end: the session was preserved specifically so the
- * agent can retry (`close`/`close --save-script=<other>`), which must never
- * be contradicted by the underlying error's own (usually absent) classification.
- */
-function buildRepairCloseFailureResponse(session: SessionState, error: AppError): DaemonResponse {
-  const normalized = normalizeError(error);
-  return {
-    ok: false,
-    error: {
-      ...normalized,
-      details: {
-        ...normalized.details,
-        session: session.name,
-        ...(session.saveScriptPath ? { savedScript: session.saveScriptPath } : {}),
-      },
-      retriable: true,
-    },
-  };
-}
-
 function toRepairPlatformCloseFailure(error: unknown): AppError {
   if (error instanceof AppError) return error;
   const detail = error instanceof Error ? error.message : String(error);
@@ -169,8 +80,6 @@ function toRepairPlatformCloseFailure(error: unknown): AppError {
 
 type SessionCloseTeardownResult = {
   platformCloseError: unknown;
-  // #1391: a failed close-time script write (see finalizeOrdinaryCloseScript).
-  // Never blocks teardown — see runCloseTeardownAndRelease's blockingError.
   saveScriptError?: AppError;
 };
 
@@ -205,58 +114,6 @@ async function runSessionCloseTeardown(params: {
     cleanupRetainedMaterializedPathsForSession(sessionName),
   );
   return { platformCloseError, saveScriptError };
-}
-
-// #1391: unlike commitRepairBeforeClose, this never rolls back the recorded
-// `close` action on a write failure — the caller always tears the session
-// down regardless, so there's no surviving session for a retry to duplicate
-// it on.
-function finalizeOrdinaryCloseScript(params: {
-  req: DaemonRequest;
-  session: SessionState;
-  sessionStore: SessionStore;
-  platformCloseError: unknown;
-}): AppError | undefined {
-  const { req, session, sessionStore, platformCloseError } = params;
-  if (!platformCloseError) {
-    recordSessionAction(sessionStore, session, req, 'close', {
-      session: session.name,
-      ...successText(`Closed: ${session.name}`),
-    });
-  }
-  if (req.flags?.saveScript) {
-    session.recordSession = true;
-  }
-  try {
-    sessionStore.writeSessionLog(session, { force: resolveEffectiveSaveScriptForce(req, session) });
-    return undefined;
-  } catch (error) {
-    return toOrdinaryCloseSaveScriptFailure(error);
-  }
-}
-
-// #1391: the shared write error's message/details/reason are preserved
-// as-is; only hint/retriable are overridden, since its default "retry close
-// --save-script" wording no longer applies once the session is gone.
-function toOrdinaryCloseSaveScriptFailure(error: unknown): AppError {
-  const overrides = {
-    hint: 'Remove the existing target (or pass --force/--overwrite), then re-record with open --save-script.',
-    retriable: false,
-  };
-  if (error instanceof AppError) {
-    return new AppError(
-      'COMMAND_FAILED',
-      `The session was closed, but its script was not saved: ${error.message}`,
-      { ...error.details, ...overrides },
-      error.cause,
-    );
-  }
-  const detail = normalizeError(error).message;
-  return new AppError(
-    'COMMAND_FAILED',
-    `The session was closed, but its script was not saved: ${detail}`,
-    overrides,
-  );
 }
 
 type CleanupRunner = (step: string, run: () => Promise<void>) => Promise<void>;
@@ -301,7 +158,7 @@ async function prepareRepairClose(params: {
     const platformCloseError = await dispatchTargetedPlatformClose({ req, session, logPath });
     if (platformCloseError) {
       return {
-        response: buildRepairCloseFailureResponse(
+        response: buildRetriableRepairCloseFailureResponse(
           session,
           toRepairPlatformCloseFailure(platformCloseError),
         ),
@@ -309,9 +166,11 @@ async function prepareRepairClose(params: {
     }
     session.repairPlatformCloseReceipt = closeReceipt;
   }
-  const repairCommit = commitRepairBeforeClose(sessionStore, session, req);
+  const repairCommit = commitRepairScriptBeforeClose(sessionStore, session, req);
   if (repairCommit.kind === 'failed') {
-    return { response: buildRepairCloseFailureResponse(session, repairCommit.error) };
+    return {
+      response: buildRetriableRepairCloseFailureResponse(session, repairCommit.error),
+    };
   }
   session.repairPlatformCloseReceipt = undefined;
   return {
@@ -519,14 +378,12 @@ async function runCloseTeardownAndRelease(params: {
     phase: 'session_close_cleanup_failed',
     failures: cleanupFailures,
   });
-  // Only these two withhold the device claim (the device may still be busy);
-  // a failed script save (#1391) never does — it always releases below.
-  const blockingError = platformCloseError ?? cleanupAggregate;
-  if (!blockingError) {
+  const deviceClaimBlockingError = platformCloseError ?? cleanupAggregate;
+  if (!deviceClaimBlockingError) {
     await clearAdvisoryDeviceClaim(session.deviceClaim);
   }
   sessionStore.delete(sessionName);
-  if (blockingError) throw blockingError;
+  if (deviceClaimBlockingError) throw deviceClaimBlockingError;
   if (saveScriptError) throw saveScriptError;
   return { kind: 'closed', providerData: leaseRelease.providerData };
 }

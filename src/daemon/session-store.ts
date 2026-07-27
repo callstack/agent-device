@@ -146,7 +146,7 @@ export class SessionStore {
    * teardown finalize step for a session (idle-reap or daemon shutdown).
    *
    * BLOCKER 3: unlike the explicit `close --save-script` path
-   * (`commitRepairBeforeClose`), teardown never runs `close`'s handler — but
+   * (`session-close-script.ts`), teardown never runs `close`'s handler — but
    * the source plan's terminal `close` was already skipped-while-armed (Fix
    * 3), so a COMPLETE transaction's auto-commit here must record the same
    * synthetic finalize `close` first, or the auto-committed healed `.ad`
@@ -187,8 +187,8 @@ export class SessionStore {
   }
 
   /**
-   * BLOCKER 3: mirrors `commitRepairBeforeClose`'s finalize-`close` recording
-   * (session-close.ts) for the auto-commit teardown path, which never routes
+   * BLOCKER 3: mirrors the explicit close script's finalize-`close` recording
+   * (`session-close-script.ts`) for the auto-commit path, which never routes
    * through `close`'s handler. Only recorded when this teardown is actually
    * about to attempt a commit (COMPLETE, not yet COMMITTED) — an aborted
    * (incomplete) transaction's write is a no-op regardless, so there is

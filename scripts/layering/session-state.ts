@@ -57,7 +57,7 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
     'src/daemon/handlers/session-script-publication.ts',
   ],
   recordSession: [
-    'src/daemon/handlers/session-close.ts',
+    'src/daemon/handlers/session-close-script.ts',
     'src/daemon/handlers/session-open.ts',
     'src/daemon/handlers/session-replay-runtime.ts',
     'src/daemon/handlers/session-script-publication.ts',
