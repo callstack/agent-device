@@ -42,6 +42,7 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
     'cold deep route rendered decoded payload and continued into the fixture catalog',
   );
 
+  await runStep(context, 'wait for settings tab target', ['wait', 'label="Settings"', '10000']);
   await runStep(context, 'open settings tab', ['click', 'label="Settings"']);
   await assertWaitText(context, 'Settings');
   await runStep(context, 'open automation route', ['click', 'id="open-automation-lab"']);
