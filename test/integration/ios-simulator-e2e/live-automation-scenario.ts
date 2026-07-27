@@ -31,6 +31,7 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
     '--launch-url',
     'agent-device-test-app:///automation?event=cold.start&payload=%7B%22source%22%3A%22deep-link%22%7D',
   ]);
+  await acceptDeepLinkConfirmationIfPresent(context);
   await assertWaitText(context, 'Automation lab');
   await assertElementText(context, 'id="automation-event-name"', 'cold.start');
   await assertElementText(context, 'id="automation-event-payload"', '{"source":"deep-link"}');
@@ -125,4 +126,29 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
   await runStep(context, 'return from automation route', ['back']);
   await assertWaitText(context, 'Settings');
   verifyCommand(context, C.back, 'back returns from automation route to Settings');
+}
+
+async function acceptDeepLinkConfirmationIfPresent(context: LiveContext): Promise<void> {
+  const deadline = performance.now() + 2_500;
+  let attempt = 0;
+  while (performance.now() < deadline) {
+    attempt += 1;
+    const surface = await runStep(context, `inspect deep-link destination (${attempt})`, [
+      'snapshot',
+      '-i',
+    ]);
+    const serialized = JSON.stringify(surface.json?.data ?? surface.json);
+    if (serialized.includes('Automation lab')) return;
+    if (serialized.includes('Open in')) {
+      assertJsonContains(surface, 'Open in', 'unexpected system alert after fixture deep link');
+      await runStep(context, 'accept deep-link confirmation', [
+        'click',
+        'role="button" && label="Open"',
+      ]);
+      return;
+    }
+    if (performance.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
 }
