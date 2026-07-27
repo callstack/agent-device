@@ -32,8 +32,13 @@ test('every kernel path a PR can touch selects the affected mutation job', () =>
     (match) => match.groups!.glob,
   );
   for (const module of KERNEL_MODULES) {
-    for (const owned of module.owns) {
-      const selected = paths.some((glob) => glob === owned || glob === `${owned}**`);
+    for (const owned of [...module.owns, ...module.tests]) {
+      const selected = paths.some(
+        (glob) =>
+          glob === owned ||
+          glob === `${owned}**` ||
+          (glob.endsWith('/**') && owned.startsWith(glob.slice(0, -2))),
+      );
       assert.ok(selected, `no path filter selects ${owned} (module ${module.id})`);
     }
   }

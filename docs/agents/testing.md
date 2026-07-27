@@ -153,6 +153,15 @@ pnpm mutation:baseline                  # full sweep, then record it (reviewed c
 - **Test scope** is derived from Vitest's module graph (`vitest related` over the mutated files), the
   same delegation `pnpm check:affected` uses; see `scripts/mutation/test-scope.ts` for the three
   groups it drops and why dropping them cannot hide a surviving mutant.
+- **Kernel tests own their module too**: a diff that touches `src/kernel/__tests__/errors.test.ts` or
+  `src/commands/interaction/runtime/settle.test.ts` selects that kernel's mutants, because weakening a
+  test is exactly the change whose score must be re-measured. The registry's `tests` field lists them
+  and `scripts/mutation/modules.test.ts` asserts each listed file actually reaches the kernel through
+  the import graph.
+- **Lane envelope** (`scripts/lib/lane-envelope.ts`, issue #1430): every run writes
+  `.tmp/mutation/lane-envelope.json` — schema version, commit, Stryker version, config hash, seed
+  (`null`; the input is enumerated, not randomized), duration, result, per-module scores — and both
+  workflows upload it, so lane freshness and tool drift are readable without parsing logs.
 
 ## Live web smoke
 

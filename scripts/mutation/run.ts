@@ -17,6 +17,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runCmdStreaming, runCmdSync } from '../../src/utils/exec.ts';
 import { parseScriptArgs } from '../lib/cli-args.ts';
+import { laneEnvelope } from '../lib/lane-envelope.ts';
 import {
   affectedModules,
   ALL_MODULE_IDS,
@@ -31,8 +32,9 @@ import {
   evaluateRatchet,
   type Baseline,
   type Provenance,
+  type RatchetResult,
 } from './ratchet.ts';
-import { mergeReports, summarizeReport, type StrykerReport } from './score.ts';
+import { mergeReports, summarizeReport, type ModuleScore, type StrykerReport } from './score.ts';
 import {
   expandMutateFiles,
   relatedTestFiles,
@@ -46,6 +48,8 @@ const CONFIG_PATH = 'stryker.config.json';
 const BASELINE_PATH = 'mutation-baselines/decision-kernels.json';
 const DEFAULT_REPORT_PATH = '.tmp/mutation/mutation.json';
 const TEST_SCOPE_PATH = '.tmp/mutation/test-scope.json';
+const ENVELOPE_PATH = '.tmp/mutation/lane-envelope.json';
+const LANE_ID = 'mutation-decision-kernels';
 
 const USAGE = `Usage: pnpm mutation:run [options]
 
@@ -187,6 +191,52 @@ function emit(markdown: string, summaryPath: string | undefined): void {
   }
 }
 
+/**
+ * Scheduled-lane artifact envelope (#1430). Without it a downloaded report cannot
+ * say which commit or Stryker/config version produced it, how long the sweep took,
+ * or whether it passed — freshness and tool-drift monitoring would have to parse
+ * logs.
+ */
+function writeEnvelope(
+  provenance: Provenance,
+  scores: readonly ModuleScore[],
+  baseline: Baseline,
+  result: RatchetResult,
+  options: { startedAtMs: number; affected: boolean; modules: readonly ModuleId[] },
+): void {
+  const envelope = laneEnvelope({
+    lane: LANE_ID,
+    commit: runCmdSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot }).stdout.trim(),
+    tool: { stryker: provenance.strykerVersion },
+    configHash: provenance.configHash,
+    startedAtMs: options.startedAtMs,
+    result: result.failed ? 'fail' : 'pass',
+    data: {
+      scope: options.affected ? 'affected' : 'full-sweep',
+      modules: options.modules.map((id) => {
+        const score = scores.find((entry) => entry.module === id);
+        return {
+          id,
+          score: score?.score ?? null,
+          killed: score?.killed ?? null,
+          total: score?.total ?? null,
+          status: result.verdicts.find((verdict) => verdict.module === id)?.status ?? null,
+        };
+      }),
+      gating: baseline.gating,
+      stableRuns: baseline.stableRuns,
+      requiredStableRuns: baseline.requiredStableRuns,
+    },
+  });
+  const file = path.join(repoRoot, ENVELOPE_PATH);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify(envelope, null, 2)}\n`);
+  process.stdout.write(
+    `\nLane envelope (${ENVELOPE_PATH}): ${envelope.result} in ` +
+      `${Math.round(envelope.durationMs / 1000)}s at ${envelope.commit.slice(0, 12)}.\n`,
+  );
+}
+
 function readReport(file: string): StrykerReport {
   const absolute = path.isAbsolute(file) ? file : path.join(repoRoot, file);
   return JSON.parse(fs.readFileSync(absolute, 'utf8')) as StrykerReport;
@@ -213,6 +263,7 @@ async function produceReport(
 }
 
 async function main(argv = process.argv.slice(2)): Promise<number> {
+  const startedAtMs = Date.now();
   const args = parseMutationArgs(argv);
   const modules = args.affected ? affectedModules(changedFiles(args.base)) : args.modules;
   if (modules.length === 0) {
@@ -232,6 +283,11 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
     ? 'Mutation score — affected decision kernels'
     : 'Mutation score — decision kernels';
   emit(renderReport(result, baseline, provenance, { title }), args.summary);
+  writeEnvelope(provenance, scores, baseline, result, {
+    startedAtMs,
+    affected: args.affected,
+    modules,
+  });
 
   if (args.update) {
     const next = applyRun(baseline, scores, result, {

@@ -25,6 +25,13 @@ export type KernelModule = {
   readonly mutate: readonly string[];
   /** Paths this module owns; a trailing `/` marks a directory prefix. */
   readonly owns: readonly string[];
+  /**
+   * Test files whose strength this module's score measures. Editing one of
+   * these is exactly the change the PR lane must re-measure, so they own the
+   * module too. `modules.test.ts` asserts each one exists and actually exercises
+   * the module's sources — no stale or aspirational entries.
+   */
+  readonly tests: readonly string[];
 };
 
 export const KERNEL_MODULES: readonly KernelModule[] = [
@@ -33,30 +40,47 @@ export const KERNEL_MODULES: readonly KernelModule[] = [
     label: 'Error retriability + hints',
     mutate: ['src/kernel/errors.ts'],
     owns: ['src/kernel/errors.ts'],
+    tests: ['src/kernel/__tests__/errors.test.ts'],
   },
   {
     id: 'daemon-ref-frame',
     label: 'Ref-frame admission matrix (ADR 0014)',
     mutate: ['src/daemon/ref-frame.ts'],
     owns: ['src/daemon/ref-frame.ts'],
+    tests: [
+      'src/daemon/__tests__/ref-frame.test.ts',
+      'src/daemon/handlers/__tests__/snapshot-scoped-refs.test.ts',
+    ],
   },
   {
     id: 'interaction-settle',
     label: 'Interaction settle decisions',
     mutate: ['src/commands/interaction/runtime/settle.ts'],
     owns: ['src/commands/interaction/runtime/settle.ts'],
+    tests: [
+      'src/commands/interaction/runtime/settle.test.ts',
+      'src/daemon/handlers/__tests__/interaction-settle.test.ts',
+    ],
   },
   {
     id: 'scroll-edge-state',
     label: 'Scroll edge-state detection',
     mutate: ['src/utils/scroll-edge-state.ts'],
     owns: ['src/utils/scroll-edge-state.ts'],
+    // No mirrored test file: edge-state decisions are only reached through the
+    // gesture/dispatch callers, which is also why this kernel scores lowest.
+    tests: [
+      'src/commands/interaction/runtime/gestures.test.ts',
+      'src/core/__tests__/dispatch-scroll.test.ts',
+    ],
   },
   {
     id: 'selectors',
     label: 'Selector parsing + matching',
     mutate: ['src/selectors/**/*.ts', '!src/selectors/**/*.test.ts', '!src/selectors/__tests__/**'],
+    // Selector tests live under the owned directory, so the prefix covers them.
     owns: ['src/selectors/'],
+    tests: ['src/selectors/__tests__/'],
   },
 ];
 
@@ -92,7 +116,7 @@ export function normalizePath(filePath: string): string {
 export function moduleForFile(filePath: string): ModuleId | undefined {
   const normalized = normalizePath(filePath);
   for (const module of KERNEL_MODULES) {
-    for (const owned of module.owns) {
+    for (const owned of [...module.owns, ...module.tests]) {
       const match = owned.endsWith('/') ? normalized.startsWith(owned) : normalized === owned;
       if (match) return module.id;
     }

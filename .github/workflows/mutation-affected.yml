@@ -14,10 +14,19 @@ name: Mutation Affected
 on:
   pull_request:
     paths:
+      # Kernel sources and the tests whose strength they score, mirroring
+      # `KERNEL_MODULES` (scripts/mutation/workflow.test.ts asserts the parity).
       - "src/kernel/errors.ts"
+      - "src/kernel/__tests__/errors.test.ts"
       - "src/daemon/ref-frame.ts"
+      - "src/daemon/__tests__/ref-frame.test.ts"
+      - "src/daemon/handlers/__tests__/snapshot-scoped-refs.test.ts"
       - "src/commands/interaction/runtime/settle.ts"
+      - "src/commands/interaction/runtime/settle.test.ts"
+      - "src/daemon/handlers/__tests__/interaction-settle.test.ts"
       - "src/utils/scroll-edge-state.ts"
+      - "src/commands/interaction/runtime/gestures.test.ts"
+      - "src/core/__tests__/dispatch-scroll.test.ts"
       - "src/selectors/**"
       - "scripts/mutation/**"
       - "stryker.config.json"
@@ -59,4 +68,5 @@ jobs:
           path: |
             .tmp/mutation/mutation.json
             .tmp/mutation/mutation.html
+            .tmp/mutation/lane-envelope.json
           if-no-files-found: ignore

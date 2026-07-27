@@ -99,7 +99,7 @@
     "build:macos-helper": "swift build -c release --package-path apple/macos-helper",
     "build:all": "pnpm build:node && pnpm build:xcuitest",
     "ad": "node bin/agent-device.mjs",
-    "bench:help-conformance": "node scripts/mutation scripts/help-conformance-bench.mjs",
+    "bench:help-conformance": "node scripts/help-conformance-bench.mjs",
     "maestro:conformance": "node --experimental-strip-types --test scripts/maestro-conformance/verify.test.ts scripts/maestro-conformance/differential/run.test.ts scripts/maestro-conformance/differential/invariants.test.ts",
     "maestro:conformance:regenerate": "node scripts/maestro-conformance/regenerate.mjs",
     "maestro:conformance:differential": "node --experimental-strip-types scripts/maestro-conformance/differential/run.ts",

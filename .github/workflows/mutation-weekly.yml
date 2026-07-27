@@ -62,7 +62,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: mutation-shard-${{ matrix.module }}
-          path: .tmp/mutation/mutation.json
+          path: |
+            .tmp/mutation/mutation.json
+            .tmp/mutation/lane-envelope.json
           if-no-files-found: warn
 
   ratchet:
@@ -95,6 +97,21 @@ jobs:
           cp mutation-baselines/decision-kernels.json .tmp/mutation/proposed-baseline.json
           git checkout -- mutation-baselines/decision-kernels.json
 
+      # Freshness/drift telemetry (#1430): the envelope states commit, Stryker
+      # version, config hash, duration and result, so a lane going dark or a tool
+      # bump is visible without reading these logs.
+      - name: Lane envelope
+        if: always()
+        run: |
+          {
+            echo '<details><summary>Lane envelope (schema #1430)</summary>'
+            echo
+            echo '```json'
+            cat .tmp/mutation/lane-envelope.json
+            echo '```'
+            echo '</details>'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload mutation report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -102,5 +119,6 @@ jobs:
           name: mutation-decision-kernels
           path: |
             .tmp/mutation/shards
+            .tmp/mutation/lane-envelope.json
             .tmp/mutation/proposed-baseline.json
           if-no-files-found: warn
