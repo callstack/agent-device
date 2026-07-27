@@ -67,7 +67,8 @@ test('evaluateLaneHealth: a fresh lane is healthy', () => {
   const now = Date.now();
   const lane = { file: 'nightly.yml', name: 'Nightly', cadenceMs: DAY_MS };
   const runs: LaneRun[] = [{ conclusion: 'success', createdAt: isoAgo(now, 3 * HOUR_MS) }];
-  assert.equal(evaluateLaneHealth({ lane, runs, now }).healthy, true);
+  const registeredAt = isoAgo(now, 30 * DAY_MS);
+  assert.equal(evaluateLaneHealth({ lane, runs, now, registeredAt }).healthy, true);
 });
 
 test('evaluateLaneHealth: a lane gone dark (no runs for two cadences) is unhealthy', () => {
@@ -75,21 +76,45 @@ test('evaluateLaneHealth: a lane gone dark (no runs for two cadences) is unhealt
   const lane = { file: 'nightly.yml', name: 'Nightly', cadenceMs: DAY_MS };
   // Last success was 3 days ago and nothing since — two cadences missed.
   const runs: LaneRun[] = [{ conclusion: 'success', createdAt: isoAgo(now, 3 * DAY_MS) }];
-  const health = evaluateLaneHealth({ lane, runs, now });
+  const registeredAt = isoAgo(now, 30 * DAY_MS);
+  const health = evaluateLaneHealth({ lane, runs, now, registeredAt });
   assert.equal(health.healthy, false);
   assert.match(health.reason, /two/);
 });
 
-test('evaluateLaneHealth: a lane with no successful run ever is unhealthy', () => {
+test('evaluateLaneHealth: an established lane failing every cadence is unhealthy', () => {
   const now = Date.now();
   const lane = { file: 'nightly.yml', name: 'Nightly', cadenceMs: DAY_MS };
   const runs: LaneRun[] = [
     { conclusion: 'failure', createdAt: isoAgo(now, HOUR_MS) },
     { conclusion: 'failure', createdAt: isoAgo(now, DAY_MS) },
   ];
-  const health = evaluateLaneHealth({ lane, runs, now });
+  // Registered well over two cadences ago, so the two-cadence grace is spent.
+  const registeredAt = isoAgo(now, 30 * DAY_MS);
+  const health = evaluateLaneHealth({ lane, runs, now, registeredAt });
   assert.equal(health.healthy, false);
-  assert.match(health.reason, /failing every cadence/);
+  assert.match(health.reason, /failing at least two consecutive cadences/);
+});
+
+test('evaluateLaneHealth: a newborn lane with zero runs is still within grace (healthy)', () => {
+  const now = Date.now();
+  const lane = { file: 'nightly.yml', name: 'Nightly', cadenceMs: DAY_MS };
+  // Registered 12h ago — under two cadences, so no success is expected yet.
+  const registeredAt = isoAgo(now, 12 * HOUR_MS);
+  const health = evaluateLaneHealth({ lane, runs: [], now, registeredAt });
+  assert.equal(health.healthy, true, health.reason);
+  assert.match(health.reason, /grace/);
+});
+
+test('evaluateLaneHealth: a lane after only one failed cadence is still within grace (healthy)', () => {
+  const now = Date.now();
+  const lane = { file: 'nightly.yml', name: 'Nightly', cadenceMs: DAY_MS };
+  // Registered 30h ago (~1.25 cadences); a single failed first cadence must not
+  // alert before two cadences have failed/been missed.
+  const registeredAt = isoAgo(now, 30 * HOUR_MS);
+  const runs: LaneRun[] = [{ conclusion: 'failure', createdAt: isoAgo(now, 6 * HOUR_MS) }];
+  const health = evaluateLaneHealth({ lane, runs, now, registeredAt });
+  assert.equal(health.healthy, true, health.reason);
 });
 
 test('buildAlertBody summarizes only unhealthy lanes, or nothing when all healthy', () => {

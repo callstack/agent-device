@@ -256,8 +256,12 @@ Health` workflow (`.github/workflows/scheduled-lane-health.yml`) watches the wat
 every `schedule:`-triggered workflow from `.github/workflows/` (the list is **derived**, not
 hand-maintained), reads each lane's recent scheduled runs via the GitHub API, and opens/pings a single
 tracking issue when a lane has not **succeeded** within two of its own cadences — which covers both a
-lane gone dark (no runs) and one failing every cadence. The cadence is estimated per workflow from its
-cron expression. All decision logic is pure and unit-tested in `scripts/scheduled-lane-health/model.ts`
+lane gone dark (no runs) and one failing every cadence. Freshness is measured from an anchor: the last
+successful run, or — when a lane has never succeeded — the workflow's registration time (`created_at`).
+Anchoring on registration gives a **newborn lane its grace**: a lane younger than two cadences (zero
+runs yet, or a single failed first cadence) is not alerted, because two cadences cannot have been
+missed/failed yet. The cadence is estimated per workflow from its cron expression. All decision logic
+is pure and unit-tested in `scripts/scheduled-lane-health/model.ts`
 (gated on PRs via `scripts/scheduled-lane-health/model.test.ts`); the GitHub API I/O and issue
 open/ping live in `run.ts` and run nightly. New scheduled lanes need no wiring here — emitting the
 standard envelope and carrying a `schedule:` trigger is enough to be watched.

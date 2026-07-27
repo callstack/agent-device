@@ -114,6 +114,25 @@ async function fetchScheduledRuns(
   }));
 }
 
+/**
+ * Registration time of the lane = the workflow's `created_at`. This is the
+ * "first observed" anchor the model uses to give a newborn lane its two-cadence
+ * grace before alerting. Falls back to the current time (maximally generous —
+ * treats the lane as brand new) if the API omits it.
+ */
+async function fetchLaneRegisteredAt(
+  ctx: GithubContext,
+  workflowFile: string,
+  fallback: number,
+): Promise<string> {
+  const data = (await githubRequest(
+    ctx,
+    'GET',
+    `/repos/${ctx.owner}/${ctx.repo}/actions/workflows/${workflowFile}`,
+  )) as { created_at?: string };
+  return data.created_at ?? new Date(fallback).toISOString();
+}
+
 async function findExistingAlertIssue(ctx: GithubContext): Promise<number | undefined> {
   const data = (await githubRequest(
     ctx,
@@ -151,7 +170,8 @@ async function main(): Promise<void> {
   const healths: LaneHealth[] = [];
   for (const lane of lanes) {
     const runs = await fetchScheduledRuns(ctx, lane.file);
-    const health = evaluateLaneHealth({ lane, runs, now });
+    const registeredAt = await fetchLaneRegisteredAt(ctx, lane.file, now);
+    const health = evaluateLaneHealth({ lane, runs, now, registeredAt });
     healths.push(health);
     console.log(`${health.healthy ? 'OK  ' : 'DARK'} ${lane.file}: ${health.reason}`);
   }

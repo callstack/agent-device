@@ -163,17 +163,22 @@ export function discoverScheduledLanes(
 }
 
 /**
- * A lane is unhealthy when it has not SUCCEEDED within two of its own cadences —
- * which captures both a lane that went dark (no runs at all) and one that has
- * been failing every cadence. `runs` are that lane's scheduled runs, newest
- * first is not required.
+ * A lane is unhealthy only once **two of its own cadences have elapsed without a
+ * success**, measured from an anchor: the last successful run, or — when it has
+ * never succeeded — the lane's registration time (`registeredAt`, the workflow's
+ * `created_at`). Anchoring on registration is what gives newborn lanes their
+ * grace: a lane that has existed for less than two cadences (zero runs, or a
+ * single failed first cadence) is still healthy, because two cadences have not
+ * yet had a chance to pass. Elapsed-since-anchor is the "equivalent elapsed
+ * evidence" for both a dark lane (no runs) and one failing every cadence.
  */
 export function evaluateLaneHealth(params: {
   lane: ScheduledLane;
   runs: readonly LaneRun[];
   now: number;
+  registeredAt: string;
 }): LaneHealth {
-  const { lane, runs, now } = params;
+  const { lane, runs, now, registeredAt } = params;
   const staleAfterMs = 2 * lane.cadenceMs;
   const base = { file: lane.file, name: lane.name };
   const cadences = describeCadence(lane.cadenceMs);
@@ -182,33 +187,43 @@ export function evaluateLaneHealth(params: {
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
   const lastSuccess = sorted.find((run) => run.conclusion === 'success');
+  const anchorMs = lastSuccess
+    ? new Date(lastSuccess.createdAt).getTime()
+    : new Date(registeredAt).getTime();
+  const elapsedMs = now - anchorMs;
 
-  if (!lastSuccess) {
-    const lastConclusion = sorted[0]?.conclusion ?? 'no runs';
-    return {
-      ...base,
-      healthy: false,
-      reason:
-        sorted.length === 0
-          ? `no scheduled runs recorded (expected roughly every ${cadences})`
-          : `no successful scheduled run on record (latest: ${lastConclusion}) — failing every cadence (~${cadences})`,
-    };
+  // Within two cadences of the anchor: either a recent success, or a lane young
+  // enough that two cadences cannot have been missed/failed yet (newborn grace).
+  if (elapsedMs <= staleAfterMs) {
+    return { ...base, healthy: true, reason: healthyReason(lastSuccess, elapsedMs, cadences) };
   }
 
-  const ageMs = now - new Date(lastSuccess.createdAt).getTime();
-  if (ageMs > staleAfterMs) {
-    return {
-      ...base,
-      healthy: false,
-      reason: `last success ${formatAge(ageMs)} ago, older than two cadences (~${cadences} each) — lane has missed or failed two consecutive cadences`,
-    };
-  }
+  return { ...base, healthy: false, reason: unhealthyReason(lastSuccess, sorted, elapsedMs, cadences) };
+}
 
-  return {
-    ...base,
-    healthy: true,
-    reason: `last success ${formatAge(ageMs)} ago (within two cadences of ~${cadences})`,
-  };
+function healthyReason(
+  lastSuccess: LaneRun | undefined,
+  elapsedMs: number,
+  cadences: string,
+): string {
+  return lastSuccess
+    ? `last success ${formatAge(elapsedMs)} ago (within two cadences of ~${cadences})`
+    : `registered ${formatAge(elapsedMs)} ago; still inside the two-cadence (~${cadences}) grace before alerting`;
+}
+
+function unhealthyReason(
+  lastSuccess: LaneRun | undefined,
+  sorted: readonly LaneRun[],
+  elapsedMs: number,
+  cadences: string,
+): string {
+  if (lastSuccess) {
+    return `last success ${formatAge(elapsedMs)} ago, over two cadences (~${cadences} each) — lane has missed or failed two consecutive cadences`;
+  }
+  if (sorted.length === 0) {
+    return `no scheduled runs in the ${formatAge(elapsedMs)} since registration — over two cadences (~${cadences} each); lane appears dark`;
+  }
+  return `no successful scheduled run in the ${formatAge(elapsedMs)} since registration (latest: ${sorted[0]?.conclusion ?? 'unknown'}) — failing at least two consecutive cadences (~${cadences})`;
 }
 
 /** Title of the single tracking issue this watcher opens/pings. */
