@@ -304,39 +304,42 @@ The perfect-shape refactor is complete and merged. Its end-state:
 
 ### Principles and their gates
 
-The architecture rules this repo runs on are Clean-Architecture-shaped, but each one exists here as
-an enforcing gate plus, where the rule is still bent, an open ledger that only shrinks. When judging
-a design change, argue from the rule; when landing it, satisfy the gate. Rule → gate → ledger:
+The architecture rules this repo runs on are Clean-Architecture-shaped. Some are fully
+gate-enforced, some carry an open ledger that only shrinks, and some are norms with local evidence
+but no gate yet — each bullet below says which. When judging a design change, argue from the rule;
+when landing it, satisfy the gate where one exists.
 
 - **Dependency Rule** (source dependencies point toward policy; details depend on abstractions).
   Gate: layering R1–R3 import direction plus the ranked spine's no-back-edges check
   (`scripts/layering/check.ts`). #1405's "shared contracts below their consumers" is dependency
   inversion stated as a merge gate. Ledger: `TYPE_INVERSION_BASELINE` — type-only inversions where
   types still flow the wrong way; the ratchet only tightens, and the long-term target is zero.
-- **Acyclic components.** Gate: R4 bans value-import cycles globally. The depgraph report
-  (`scripts/depgraph/`) surfaces what the gate deliberately tolerates — type-only and dynamic-import
-  cycles — as data, not violations.
-- **Policy × detail boundaries on demonstrated axes of change.** The two registries are the two real
-  axes: `CommandDescriptor` (what the system does) × `PlatformPlugin` (how a device does it), ADR
-  0008/0009. Crossing a boundary uses projected DTOs, never internal representations — the
-  apple-platform leak guard (`publicPlatformString`, provider-integration suite) enforces the wire
-  side; the injectable Apple runner transport (`runnerProvider`, #1389) is the transport side.
+- **Acyclic components.** Gate: R4 bans value-import cycles globally. Type-only and dynamic-import
+  cycles are deliberately tolerated by the gate; a report surfacing them as data is proposed in
+  #1410 (the analysis half of the graph tooling, kept after the #1409 viewer was rejected) and is
+  not landed yet.
+- **Policy × detail boundaries on demonstrated axes of change.** The two registries are the two
+  demonstrated axes: `CommandDescriptor` (what the system does) × `PlatformPlugin` (how a device
+  does it), ADR 0008/0009. Boundary-crossing enforcement is narrower than the principle: the
+  apple-platform leak guard (`publicPlatformString`, provider-integration suite) gates one specific
+  DTO class — internal `apple` never reaching serialized public output — and the injectable Apple
+  runner transport (`runnerProvider`, #1389) is one adopted seam, not a rule covering every
+  boundary. Wider DTO/seam coverage is direction, not current enforcement.
 - **Information hiding.** Gate: R7 — every `SessionState` field is classified and every write must
   occur inside its declared owner. Encapsulation of the one shared mutable object, enforced
-  per-field.
-- **Boundaries are earned, not speculative.** The book's caveat, proven locally: the platform
-  descriptor layer (~600 LOC of boundary nobody needed) and the depgraph viewer (#1409) were both
-  removed/rejected, while the analysis half (#1410) stayed. A new abstraction layer needs a
-  demonstrated second consumer or axis of change. The same norm applied to tests is CI-enforced: no
-  test-only DI seams — a missing seam gets added as a real one or not at all.
-- **Tests couple to stable interfaces.** See [Testing Principles](#testing-principles); the fragile-
-  test problem is handled by testing through public surfaces and the seam rule above, and test
-  strength itself is being hardened under the umbrella tracks in
-  [#1412](https://github.com/callstack/agent-device/issues/1412).
-- **Component metrics are observatory data, never gates.** Instability/abstractness per zone
-  (fan-in/fan-out from the depgraph model) belongs in the repo-health snapshot
-  ([#1423](https://github.com/callstack/agent-device/issues/1423)) to locate concrete,
-  high-fan-in modules worth pinning harder — not in CI as a threshold.
+  per-field. This covers `SessionState`; other shared state has no equivalent gate today.
+- **Boundaries are earned, not speculative.** Norm with local evidence, not a gate: the platform
+  descriptor layer (~600 LOC of boundary nobody needed) was deleted, and the depgraph viewer
+  (#1409) was closed unmerged. A new abstraction layer needs a demonstrated second consumer or
+  axis of change. The one gated slice of this norm is tests: CI forbids test-only DI seams — a
+  missing seam gets added as a real one or not at all.
+- **Tests couple to stable interfaces.** Norm (see [Testing Principles](#testing-principles))
+  backed by the test-only-DI-seam gate above; broader test-strength enforcement is planned, not
+  present — tracked under [#1412](https://github.com/callstack/agent-device/issues/1412).
+- **Component metrics are observatory data, never gates.** Instability/abstractness per zone is a
+  proposal ([#1423](https://github.com/callstack/agent-device/issues/1423), building on #1410's
+  graph model) to locate concrete, high-fan-in modules worth pinning harder — explicitly never a
+  CI threshold.
 
 ### Deferred
 
