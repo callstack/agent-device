@@ -616,6 +616,105 @@ test('a content-quality capture failure that never recovers still fails closed a
   expect(mockDispatchCommand.mock.calls.length).toBeGreaterThan(1);
 });
 
+// #1385: the iOS side of the same launch race — the capture doesn't throw,
+// it returns a structurally-valid tree flagged `sparse` (the private-AX
+// fallback engaging under load). `isSparseSnapshotQualityVerdict` treats this
+// as always-retryable, unlike the Android thrown-error branch, which is
+// gated on the narrower content-quality taxonomy — so this needs its own
+// regression, not just coverage by the Android capture-failed tests above.
+function iosSparseCapture(): {
+  nodes: never[];
+  truncated: false;
+  backend: 'xctest';
+  quality: object;
+} {
+  return {
+    nodes: [],
+    truncated: false,
+    backend: 'xctest',
+    quality: { state: 'sparse', backend: 'private-ax', reason: 'AX query rejected mid-transition' },
+  };
+}
+
+test('an iOS sparse-snapshot verdict right after launch recovers within the bounded retry, and the action still dispatches', async () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'agent-device-replay-target-verify-launch-race-sparse-recover-'),
+  );
+  const { sessionStore, sessionName } = setupSession(root);
+  const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
+
+  // First two captures return a structurally-valid but sparse-flagged tree
+  // (mirrors the private-AX fallback engaging mid-launch); the third lands
+  // after the app settles and finds the recorded target.
+  mockDispatchCommand
+    .mockImplementationOnce(async () => iosSparseCapture())
+    .mockImplementationOnce(async () => iosSparseCapture())
+    .mockResolvedValue({
+      nodes: [
+        {
+          index: 0,
+          depth: 0,
+          type: 'Button',
+          identifier: 'save',
+          label: 'Save',
+          rect: { x: 10, y: 10, width: 40, height: 20 },
+        },
+      ],
+      truncated: false,
+      backend: 'xctest',
+    });
+
+  const invoked: DaemonRequest[] = [];
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      invoked.push(req);
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(response.ok).toBe(true);
+  expect(invoked.map((req) => req.command)).toEqual(['click']);
+  expect(mockDispatchCommand).toHaveBeenCalledTimes(3);
+});
+
+test('an iOS sparse-snapshot verdict that never recovers still fails closed as identity-unverifiable once the bounded retry is exhausted', async () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'agent-device-replay-target-verify-launch-race-sparse-exhausted-'),
+  );
+  const { sessionStore, sessionName } = setupSession(root);
+  const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
+
+  mockDispatchCommand.mockImplementation(async () => iosSparseCapture());
+
+  const invoked: DaemonRequest[] = [];
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      invoked.push(req);
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(invoked.length).toBe(0);
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('REPLAY_DIVERGENCE');
+  const divergence = response.error.details?.divergence as Record<string, unknown>;
+  expect(divergence.kind).toBe('identity-unverifiable');
+  const cause = divergence.cause as { code: string; message: string };
+  expect(cause.code).toBe('IDENTITY_UNVERIFIABLE');
+  expect(cause.message).toContain('sparse-snapshot');
+  // Bounded: the retry gives up after its fixed delay list, not forever.
+  expect(mockDispatchCommand.mock.calls.length).toBeGreaterThan(1);
+});
+
 test('a permanent (non-content-quality) capture failure fails fast without retrying', async () => {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), 'agent-device-replay-target-verify-launch-race-permanent-'),
