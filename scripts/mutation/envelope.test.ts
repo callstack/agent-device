@@ -220,12 +220,42 @@ test('--fail-envelope declares a step that failed before the sweep', () => {
 });
 
 // The workflows run it from `if: failure()`, which also fires when the ratchet
-// itself failed — a generic reason must never overwrite the real verdict.
-test('--fail-envelope leaves an envelope this run already wrote alone', () => {
+// itself failed — a generic reason must never displace the specific one.
+test('--fail-envelope keeps a failure the run already reported', () => {
   fs.rmSync(path.join(repoRoot, '.tmp/mutation/lane-envelope.json'), { force: true });
   runMutation(['--fail-envelope', 'the real failure']);
   runMutation(['--fail-envelope', 'a later generic failure']);
   assert.equal(readEnvelope().data.error, 'the real failure');
+});
+
+// A pass is not a verdict worth preserving: the weekly job copies the proposed
+// baseline and restores the committed one *after* the ratchet passed, so a failure
+// there would otherwise publish the failed scheduled job as a passing lane.
+test('--fail-envelope downgrades a passing envelope when a later step fails', () => {
+  const shards = path.join(repoRoot, '.tmp/mutation/pass-then-fail/shard-kernel-errors');
+  fs.mkdirSync(shards, { recursive: true });
+  // A perfect shard so the ratchet passes: the score can only rise from the
+  // committed kernel-errors baseline.
+  fs.writeFileSync(
+    path.join(shards, 'mutation.json'),
+    JSON.stringify({
+      files: { 'src/kernel/errors.ts': { mutants: [{ status: 'Killed' }, { status: 'Killed' }] } },
+    }),
+  );
+  const passing = runMutation([
+    '--report-dir',
+    '.tmp/mutation/pass-then-fail',
+    '--modules',
+    'kernel-errors',
+  ]);
+  assert.equal(passing.exitCode, 0, passing.stderr);
+  assert.equal(readEnvelope().result, 'pass');
+
+  runMutation(['--fail-envelope', 'the baseline copy step failed']);
+  const envelope = readEnvelope();
+  assert.equal(envelope.result, 'fail', 'a failed job must not publish a passing envelope');
+  assert.equal(envelope.data.error, 'the baseline copy step failed');
+  fs.rmSync(path.join(repoRoot, '.tmp/mutation/pass-then-fail'), { recursive: true, force: true });
 });
 
 test('both mutation lanes record an envelope for failures before the sweep', () => {

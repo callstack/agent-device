@@ -218,9 +218,24 @@ type LaneState = {
   scores: readonly ModuleScore[];
   result: RatchetResult | undefined;
   error: string | undefined;
-  /** `--fail-envelope` never overwrites a real verdict this run already wrote. */
-  onlyIfAbsent: boolean;
+  /**
+   * `--fail-envelope` keeps an existing *failure* (its reason is the specific
+   * one) but replaces an existing pass: a post-verdict step can fail after the
+   * ratchet passed, and publishing that job as passing is the bug the envelope
+   * exists to prevent.
+   */
+  recoveryOnly: boolean;
 };
+
+/** The result of an envelope already on disk, if there is a readable one. */
+function existingResult(file: string): string | undefined {
+  if (!fs.existsSync(file)) return undefined;
+  try {
+    return (JSON.parse(fs.readFileSync(file, 'utf8')) as { result?: string }).result;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Scheduled-lane artifact envelope (#1430). Without it a downloaded report cannot
@@ -235,8 +250,8 @@ type LaneState = {
  */
 function writeEnvelope(state: LaneState, startedAtMs: number): void {
   const target = path.join(repoRoot, ENVELOPE_PATH);
-  if (state.onlyIfAbsent && fs.existsSync(target)) {
-    process.stdout.write(`mutation: ${ENVELOPE_PATH} already describes this run; left as is.\n`);
+  if (state.recoveryOnly && existingResult(target) === 'fail') {
+    process.stdout.write(`mutation: ${ENVELOPE_PATH} already reports a failure; left as is.\n`);
     return;
   }
   const envelope = laneEnvelope({
@@ -384,7 +399,7 @@ async function run(argv: readonly string[], state: LaneState): Promise<number> {
     // A step that ran before the sweep failed (the weekly self-test, setup): the
     // lane produced no measurement, and that is what the envelope must say.
     state.error = args.failEnvelope;
-    state.onlyIfAbsent = true;
+    state.recoveryOnly = true;
     return 1;
   }
   return await sweep(args, state);
@@ -410,7 +425,7 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
     scores: [],
     result: undefined,
     error: undefined,
-    onlyIfAbsent: false,
+    recoveryOnly: false,
   };
   try {
     return await run(argv, state);
