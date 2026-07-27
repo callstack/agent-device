@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { listSourceFiles, TYPE_INVERSION_BASELINE } from '../layering/check.ts';
 import { resolveImportEdges } from '../layering/model.ts';
@@ -7,7 +10,7 @@ import {
   buildGraph,
   collapseEdges,
   collectCycles,
-  markRedundantEdges,
+  markTransitivelyReachableEdges,
   typeInversionsByPair,
 } from './model.ts';
 
@@ -40,11 +43,14 @@ test('collapseEdges keeps one edge per pair at the strongest kind', () => {
   );
 });
 
-test('redundant marks only value edges whose target is already reachable at distance >= 2', () => {
+test('flags only value edges whose target is already reachable at distance >= 2', () => {
   const edges = collapseEdges(
     resolveImportEdges(
       sources({
-        // a -> b -> c makes the direct a -> c edge removable; a -> d is the only route to d.
+        // a -> b -> c means c is reachable from a at distance 2, so the direct a -> c edge is
+        // FLAGGED. Note it is not removable: `b` re-exports c's binding under a different name,
+        // so deleting a -> c would break a's `c` import. That gap is the point of the rename —
+        // this measures module reachability, not safe removal. a -> d is the only route to d.
         'src/core/a.ts': [
           "import { b } from './b.ts';",
           "import { c } from './c.ts';",
@@ -56,15 +62,15 @@ test('redundant marks only value edges whose target is already reachable at dist
       }),
     ),
   );
-  markRedundantEdges(edges);
+  markTransitivelyReachableEdges(edges);
 
   const flagged = edges
-    .filter((edge) => edge.redundant)
+    .filter((edge) => edge.transitivelyReachable)
     .map((edge) => `${edge.from} -> ${edge.to}`);
   assert.deepEqual(flagged, ['src/core/a.ts -> src/core/c.ts']);
 });
 
-test('a type-only shortcut is never treated as redundant against a value path', () => {
+test('a type-only shortcut is never flagged against a value path', () => {
   const edges = collapseEdges(
     resolveImportEdges(
       sources({
@@ -76,10 +82,10 @@ test('a type-only shortcut is never treated as redundant against a value path', 
       }),
     ),
   );
-  markRedundantEdges(edges);
+  markTransitivelyReachableEdges(edges);
 
   assert.deepEqual(
-    edges.filter((edge) => edge.redundant),
+    edges.filter((edge) => edge.transitivelyReachable),
     [],
   );
 });
@@ -180,4 +186,82 @@ test("the report's inversion count reproduces the gate's TYPE_INVERSION_BASELINE
     'depgraph and scripts/layering/check.ts disagree about type-only spine inversions. ' +
       'Regenerate with `pnpm depgraph` and update TYPE_INVERSION_BASELINE, or fix the edge.',
   );
+});
+
+// A raw NUL byte in a source file makes Git classify it as binary, which hides the whole diff
+// behind `- -` and leaves the file unreviewable. This module used a literal NUL as a map-key
+// delimiter and shipped that way through a review; it is now the escape sequence, identical at
+// runtime and textual on disk. Guarded repo-wide rather than for this one file, because nothing
+// else would catch a recurrence and the failure mode is silent: the code works, the review does not.
+test('no tracked TypeScript source contains a raw NUL byte', () => {
+  const tracked = execFileSync('git', ['ls-files', 'src/*.ts', 'src/**/*.ts', 'scripts/**/*.ts'], {
+    encoding: 'utf8',
+  })
+    .split('\n')
+    .filter(Boolean);
+
+  const binary = tracked.filter((file) => readFileSync(file).includes(0));
+  assert.deepEqual(
+    binary,
+    [],
+    'these files contain a raw NUL byte, so Git treats them as binary and hides their diff. ' +
+      'Use a unicode escape instead of a literal control character.',
+  );
+});
+
+// build.ts had no coverage at all: every test above exercises model.ts, so the CLI could break its
+// output path, JSON shape or summary without anything failing. These run it as a subprocess, which
+// is the only way to cover argument handling and the file it actually writes.
+
+function runBuild(args: readonly string[]): { status: number | null; stdout: string; stderr: string } {
+  const result = spawnSync(
+    process.execPath,
+    ['--experimental-strip-types', 'scripts/depgraph/build.ts', ...args],
+    { encoding: 'utf8' },
+  );
+  return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+}
+
+test('build.ts writes the default path and a summary consistent with the JSON', () => {
+  const { status, stdout } = runBuild([]);
+  assert.equal(status, 0, stdout);
+
+  const payload = JSON.parse(readFileSync('.tmp/depgraph/graph.json', 'utf8')) as {
+    generated: { commit: string; files: number; edges: number };
+    zones: { id: string; rank: number | null }[];
+    nodes: unknown[];
+    edges: [number, number, number, number][];
+    typeInversions: Record<string, number>;
+  };
+
+  // Wire shape: the fields a consumer queries. A rename here is a breaking change for any script
+  // following README.md, so it is pinned rather than assumed.
+  assert.equal(payload.nodes.length, payload.generated.files);
+  assert.equal(payload.edges.length, payload.generated.edges);
+  assert.ok(payload.zones.length > 0);
+  assert.ok(Object.keys(payload.typeInversions).length > 0);
+
+  // The printed summary must agree with the payload it was derived from.
+  const inversions = Object.values(payload.typeInversions).reduce((sum, n) => sum + n, 0);
+  assert.match(stdout, new RegExp(`${payload.generated.files} files, ${payload.generated.edges} edges`));
+  assert.match(stdout, new RegExp(`type-only spine inversions \\(R6\\): ${inversions}`));
+  const reachable = payload.edges.filter(([, , , flags]) => (flags & 2) !== 0).length;
+  assert.match(stdout, new RegExp(`reachable at distance >= 2: ${reachable}`));
+});
+
+test('build.ts honours --out and reports the path it wrote', () => {
+  const out = join(mkdtempSync(join(tmpdir(), 'depgraph-')), 'custom.json');
+  const { status, stdout } = runBuild(['--out', out]);
+  assert.equal(status, 0, stdout);
+  assert.ok(existsSync(out), `expected ${out} to exist`);
+  JSON.parse(readFileSync(out, 'utf8'));
+  assert.ok(stdout.includes('custom.json'), stdout);
+});
+
+test('build.ts falls back to the default path when --out has no value', () => {
+  // Not an error path today: a trailing `--out` is ignored rather than rejected. Pinned so the
+  // behaviour is a decision rather than an accident, and so changing it is a visible diff.
+  const { status, stdout } = runBuild(['--out']);
+  assert.equal(status, 0, stdout);
+  assert.ok(stdout.includes('.tmp/depgraph/graph.json'), stdout);
 });

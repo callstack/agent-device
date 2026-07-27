@@ -6,7 +6,8 @@
 // module check.ts uses in CI, so the file set, zone partition, edge kinds and cycle definition
 // are the ones actually enforced — a second extractor would describe a graph nobody gates.
 //
-// What it adds over `pnpm check:layering`: transitively redundant value edges, cycles that are
+// What it adds over `pnpm check:layering`: value edges whose target is also reachable at distance
+// >= 2 (module reachability, NOT a removability claim), cycles that are
 // deliberately outside R4 (type-only and dynamic), per-zone size, and per-file fan-in/fan-out.
 // See README.md for which question each field answers.
 
@@ -38,7 +39,7 @@ type Payload = {
   }[];
 /**
    * `[fromIndex, toIndex, kind, flags]`; kind 0=value 1=type 2=dynamic,
-   * flags bit0=R5 back-edge, bit1=transitively redundant, bit2=R6 type inversion.
+   * flags bit0=R5 back-edge, bit1=target also reachable at distance >= 2, bit2=R6 type inversion.
    */
   edges: [number, number, number, number][];
   cycles: { kind: string; path: number[] }[];
@@ -64,9 +65,16 @@ function edgeKindCode(kind: GraphData['edges'][number]['kind']): number {
   return EDGE_KIND_CODES[kind];
 }
 
-/** Bitfield: 1 = spine back-edge (R5), 2 = transitively redundant, 4 = type-only inversion (R6). */
+/**
+ * Bitfield: 1 = spine back-edge (R5), 2 = target also reachable at distance >= 2, 4 = type-only
+ * inversion (R6). Bit 2 is reachability, NOT removability — see markTransitivelyReachableEdges.
+ */
 function edgeFlags(edge: GraphData['edges'][number]): number {
-  return (edge.backEdge ? 1 : 0) | (edge.redundant ? 2 : 0) | (edge.typeInversion ? 4 : 0);
+  return (
+    (edge.backEdge ? 1 : 0) |
+    (edge.transitivelyReachable ? 2 : 0) |
+    (edge.typeInversion ? 4 : 0)
+  );
 }
 
 function buildPayload(): Payload {
@@ -122,7 +130,7 @@ function main(argv: readonly string[]): number {
   const valueCycles = payload.cycles.filter((cycle) => cycle.kind === 'value').length;
   const otherCycles = payload.cycles.length - valueCycles;
   const backEdges = payload.edges.filter(([, , , flags]) => flags & 1).length;
-  const redundant = payload.edges.filter(([, , , flags]) => flags & 2).length;
+  const transitivelyReachable = payload.edges.filter(([, , , flags]) => flags & 2).length;
   const typeInversions = Object.values(payload.typeInversions).reduce((sum, n) => sum + n, 0);
   process.stdout.write(
     `Dependency graph: ${payload.generated.files} files, ${payload.generated.edges} edges, ` +
@@ -131,7 +139,8 @@ function main(argv: readonly string[]): number {
       `  type-only/dynamic cycles (not gate-rejected): ${otherCycles}\n` +
       `  spine back-edges (R5): ${backEdges}\n` +
       `  type-only spine inversions (R6): ${typeInversions}\n` +
-      `  transitively redundant value edges: ${redundant}\n` +
+      `  value edges whose target is also reachable at distance >= 2: ${transitivelyReachable}\n` +
+      `    (reachability only — not a removability claim, see scripts/depgraph/README.md)\n` +
       `  wrote ${path.relative(repoRoot, jsonPath)}\n`,
   );
   return 0;
