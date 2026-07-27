@@ -125,7 +125,7 @@ const CASES = [
       {
         id: 'usesLiteralHandleSelector',
         pattern:
-          /\bagent-device\s+(?:press|click|tap)\b[^\n]*(?:label|text)=["']@react\.dev["'][^\n]*--settle\b/i,
+          /\bagent-device\s+(?:press|click|tap)\b[^\n]*(?:label|text)=@react\.dev\b[^\n]*--settle\b/i,
       },
     ],
     forbidden: [

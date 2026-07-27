@@ -379,6 +379,7 @@ test('case matchers score parsed tokens so shell quoting does not change results
   const commands = [
     'agent-device open "com.example.shop"',
     `agent-device fill 'label=Search' "react native" --settle`,
+    'agent-device press label="@react.dev" --settle',
     `agent-device open 'settings'`,
   ];
   const commandValidation = await validatePlanCommands(commands);
@@ -395,6 +396,11 @@ test('case matchers score parsed tokens so shell quoting does not change results
             /\bagent-device\s+fill\b[^\n]*(?:"react native"|'react native')[^\n]*--settle\b/i,
         },
         {
+          id: 'usesLiteralHandleSelector',
+          pattern:
+            /\bagent-device\s+(?:press|click|tap)\b[^\n]*(?:label|text)=@react\.dev\b[^\n]*--settle\b/i,
+        },
+        {
           id: 'opensSettings',
           pattern: /\bagent-device\s+open\s+(?:settings|com\.apple\.Preferences)\b/i,
         },
@@ -407,6 +413,7 @@ test('case matchers score parsed tokens so shell quoting does not change results
   assert.deepEqual(checks, {
     opensKnownDogfoodApp: true,
     fillsExpectedSearch: true,
+    usesLiteralHandleSelector: true,
     opensSettings: true,
   });
 });
