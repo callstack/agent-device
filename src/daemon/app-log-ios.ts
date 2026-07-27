@@ -2,8 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { buildSimctlArgs } from '../platforms/apple/core/simctl.ts';
 import { AppError } from '../kernel/errors.ts';
-import { runCmd, runCmdBackground, type ExecResult } from '../utils/exec.ts';
+import { runCmd, runCmdBackground } from '../utils/exec.ts';
 import { runXcrun } from '../platforms/apple/core/tool-provider.ts';
+import {
+  buildCoreDeviceConsoleLaunchArgs,
+  checkCoreDeviceConsoleCaptureSupport,
+  type CoreDeviceConsoleCaptureSupport,
+} from '../platforms/apple/core/physical-device-console.ts';
 import {
   clearPidFile,
   writePidFile,
@@ -27,11 +32,7 @@ export const IOS_DEVICE_CONSOLE_CAPTURE_PROBE_FAILED_NOTE = formatIosDeviceConso
   IOS_DEVICE_CONSOLE_CAPTURE_PROBE_FAILED,
 );
 
-export type IosDeviceConsoleCaptureSupport =
-  | { supported: true; stderr?: string }
-  | { supported: false; reason: 'unsupported' | 'probe-failed'; stderr?: string };
-
-let cachedSupportedIosDeviceConsoleCapture: IosDeviceConsoleCaptureSupport | undefined;
+export type IosDeviceConsoleCaptureSupport = CoreDeviceConsoleCaptureSupport;
 
 export function buildAppleLogPredicate(
   appBundleId: string,
@@ -83,60 +84,15 @@ export function buildIosSimulatorLogStreamArgs(params: {
 }
 
 export function buildIosDeviceConsoleLaunchArgs(deviceId: string, appBundleId: string): string[] {
-  return [
-    'devicectl',
-    'device',
-    'process',
-    'launch',
-    '--device',
-    deviceId,
-    '--console',
-    '--terminate-existing',
-    appBundleId,
-  ];
+  return buildCoreDeviceConsoleLaunchArgs(deviceId, appBundleId);
 }
 
 export async function checkIosDeviceConsoleCaptureSupport(): Promise<IosDeviceConsoleCaptureSupport> {
-  if (cachedSupportedIosDeviceConsoleCapture) return cachedSupportedIosDeviceConsoleCapture;
-  try {
-    const result = await runXcrun(['devicectl', 'device', 'process', 'launch', '--help'], {
-      allowFailure: true,
-      timeoutMs: 5_000,
-    });
-    const support = readIosDeviceConsoleCaptureSupport(result);
-    if (support.supported) cachedSupportedIosDeviceConsoleCapture = support;
-    return support;
-  } catch (error) {
-    return {
-      supported: false,
-      reason: 'probe-failed',
-      stderr: error instanceof Error ? error.message : undefined,
-    };
-  }
-}
-
-function readIosDeviceConsoleCaptureSupport(result: ExecResult): IosDeviceConsoleCaptureSupport {
-  const stderr = result.stderr.trim() || undefined;
-  if (result.exitCode !== 0) {
-    return { supported: false, reason: 'probe-failed', stderr };
-  }
-  if (!isIosDeviceConsoleCaptureHelp(result.stdout, result.stderr)) {
-    return { supported: false, reason: 'unsupported', stderr };
-  }
-  return { supported: true, stderr };
+  return await checkCoreDeviceConsoleCaptureSupport();
 }
 
 function formatIosDeviceConsoleCaptureNote(message: { message: string; hint: string }): string {
   return `${message.message} ${message.hint}`;
-}
-
-function isIosDeviceConsoleCaptureHelp(stdout: string, stderr: string): boolean {
-  const help = `${stdout}\n${stderr}`;
-  return (
-    /\bUSAGE:\s+devicectl device process launch\b/i.test(help) &&
-    /--console\b/.test(help) &&
-    /--terminate-existing\b/.test(help)
-  );
 }
 
 export async function readRecentIosSimulatorLogShowForBundle(params: {

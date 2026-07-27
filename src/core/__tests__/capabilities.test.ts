@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { isCommandSupportedOnDevice } from '../capabilities.ts';
+import { isCommandSupportedOnDevice, unsupportedHintForDevice } from '../capabilities.ts';
 import { matchesPlatformSelector, type DeviceInfo } from '../../kernel/device.ts';
 import { WEB_DESKTOP_DEVICE } from '../../__tests__/test-utils/index.ts';
 
@@ -16,6 +16,12 @@ const iosDevice: DeviceInfo = {
   id: 'dev-1',
   name: 'iPhone',
   kind: 'device',
+};
+
+const xctestIosDevice: DeviceInfo = {
+  ...iosDevice,
+  id: 'xctest-dev-1',
+  iosPhysicalDeviceBackend: 'xctest',
 };
 
 const iPadOsDevice: DeviceInfo = {
@@ -212,6 +218,29 @@ test('core commands support iOS simulator, iOS device, and Android', () => {
       { device: iosDevice, expected: true, label: 'on iOS device' },
       { device: androidDevice, expected: true, label: 'on Android' },
     ],
+  );
+});
+
+test('capabilities reject CoreDevice-only commands for XCTest-backed devices', () => {
+  const coreDeviceOnlyCommands = [
+    'apps',
+    'install',
+    'install-from-source',
+    'logs',
+    'perf',
+    'record',
+    'reinstall',
+  ];
+  assertCommandSupport(coreDeviceOnlyCommands, [
+    { device: iosDevice, expected: true, label: 'on CoreDevice' },
+    { device: xctestIosDevice, expected: false, label: 'on XCTest backend' },
+  ]);
+  for (const command of coreDeviceOnlyCommands) {
+    assert.match(unsupportedHintForDevice(command, xctestIosDevice) ?? '', /CoreDevice-backed/);
+  }
+  assertCommandSupport(
+    ['close', 'open', 'screenshot', 'snapshot'],
+    [{ device: xctestIosDevice, expected: true, label: 'on XCTest backend' }],
   );
 });
 

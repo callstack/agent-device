@@ -66,9 +66,9 @@ import {
   captureSimulatorScreenshotWithRetry,
   captureScreenshotViaRunner,
   resolveSimulatorRunnerScreenshotCandidatePaths,
-  shouldFallbackToRunnerForIosScreenshot,
   shouldRetryIosSimulatorScreenshot,
 } from '../screenshot.ts';
+import { shouldFallbackToRunnerForIosScreenshot } from '../physical-device-screenshot.ts';
 import { ensureBootedSimulator, openIosSimulatorApp } from '../simulator.ts';
 import {
   invalidateSimulatorStatusBarOverrideCache,

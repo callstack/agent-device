@@ -5,12 +5,12 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { IOS_DEVICE as SHARED_IOS_DEVICE } from '../../../../__tests__/test-utils/index.ts';
 import type { DeviceInfo } from '../../../../kernel/device.ts';
+import { createAppleInteractor } from '../../interactor.ts';
 import { installIosApp } from '../app-install.ts';
 import { closeIosApp, openIosApp } from '../app-launch.ts';
 import { listIosApps } from '../app-resolution.ts';
 import { resolveIosPhysicalDeviceControl } from '../physical-device-control.ts';
 import { withAppleRunnerProvider } from '../runner/runner-provider.ts';
-import { captureScreenshotViaRunner } from '../screenshot.ts';
 import { withAppleToolProvider } from '../tool-provider.ts';
 
 const IOS_DEVICE: DeviceInfo = {
@@ -85,23 +85,37 @@ test('app lifecycle uses runner commands for an xctrace-only physical device', a
   );
 });
 
-test('runner screenshots stay in-band when CoreDevice file copy is unavailable', async () => {
+test('default interactor screenshots stay in-band without invoking devicectl', async () => {
   const outPath = path.join(
     await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-xctest-screenshot-')),
     'screen.png',
   );
+  const toolCalls: string[][] = [];
   try {
-    await withAppleRunnerProvider(
-      async (_device, command) => {
-        assert.equal(command.inlineScreenshot, true);
-        return { imageBase64: Buffer.from('png-bytes').toString('base64') };
+    await withAppleToolProvider(
+      async (_cmd, args) => {
+        toolCalls.push(args);
+        return { exitCode: 0, stdout: '', stderr: '' };
       },
-      { deviceId: XCTEST_IOS_DEVICE.id },
       async () =>
-        await captureScreenshotViaRunner(XCTEST_IOS_DEVICE, outPath, 'com.example.app', undefined),
+        await withAppleRunnerProvider(
+          async (_device, command) => {
+            assert.equal(command.inlineScreenshot, true);
+            return { imageBase64: Buffer.from('png-bytes').toString('base64') };
+          },
+          { deviceId: XCTEST_IOS_DEVICE.id },
+          async () =>
+            await createAppleInteractor(XCTEST_IOS_DEVICE, {
+              appBundleId: 'com.example.app',
+            }).screenshot(outPath),
+        ),
     );
 
     assert.equal(await fs.readFile(outPath, 'utf8'), 'png-bytes');
+    assert.equal(
+      toolCalls.some((args) => args[0] === 'devicectl'),
+      false,
+    );
   } finally {
     await fs.rm(path.dirname(outPath), { recursive: true, force: true });
   }

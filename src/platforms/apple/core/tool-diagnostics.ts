@@ -27,3 +27,13 @@ export function extractAppleToolErrorMeta(error: unknown): Record<string, unknow
     commandArgs: args,
   };
 }
+
+export function appleToolFailureText(error: AppError): string {
+  const details = (error.details ?? {}) as { stdout?: unknown; stderr?: unknown; args?: unknown };
+  const stdout = typeof details.stdout === 'string' ? details.stdout : '';
+  const stderr = typeof details.stderr === 'string' ? details.stderr : '';
+  const args = Array.isArray(details.args)
+    ? details.args.filter((value): value is string => typeof value === 'string').join(' ')
+    : '';
+  return `${error.message}\n${stdout}\n${stderr}\n${args}`.toLowerCase();
+}

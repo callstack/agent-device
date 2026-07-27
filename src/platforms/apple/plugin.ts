@@ -37,6 +37,14 @@ const supportsAppAndDeviceLifecycle = (device: DeviceInfo): boolean => {
   return caps ? caps.appAndDeviceLifecycle : true;
 };
 
+const supportsCoreDevicePhysicalOperation = (device: DeviceInfo): boolean =>
+  device.platform !== 'apple' ||
+  device.kind !== 'device' ||
+  device.iosPhysicalDeviceBackend !== 'xctest';
+
+const supportsAppInstallation = (device: DeviceInfo): boolean =>
+  supportsAppAndDeviceLifecycle(device) && supportsCoreDevicePhysicalOperation(device);
+
 // `keyboard` (was `android || (ios && target !== 'tv')`). Off Apple: `android`.
 const supportsKeyboard = (device: DeviceInfo): boolean => {
   const caps = appleOsCapabilities(device);
@@ -78,9 +86,13 @@ const supportsTvRemote = (device: DeviceInfo): boolean => {
 // the command-descriptor registry (a command absent here has no Apple gate).
 const APPLE_SUPPORTS_BY_DEFAULT: Record<string, (device: DeviceInfo) => boolean> = {
   [PUBLIC_COMMANDS.boot]: supportsAppAndDeviceLifecycle,
-  [PUBLIC_COMMANDS.install]: supportsAppAndDeviceLifecycle,
-  [PUBLIC_COMMANDS.reinstall]: supportsAppAndDeviceLifecycle,
-  [PUBLIC_COMMANDS.installFromSource]: supportsAppAndDeviceLifecycle,
+  [PUBLIC_COMMANDS.apps]: supportsCoreDevicePhysicalOperation,
+  [PUBLIC_COMMANDS.install]: supportsAppInstallation,
+  [PUBLIC_COMMANDS.reinstall]: supportsAppInstallation,
+  [PUBLIC_COMMANDS.installFromSource]: supportsAppInstallation,
+  [PUBLIC_COMMANDS.logs]: supportsCoreDevicePhysicalOperation,
+  [PUBLIC_COMMANDS.perf]: supportsCoreDevicePhysicalOperation,
+  [PUBLIC_COMMANDS.record]: supportsCoreDevicePhysicalOperation,
   [PUBLIC_COMMANDS.push]: supportsAppAndDeviceLifecycle,
   [PUBLIC_COMMANDS.home]: supportsAppAndDeviceLifecycle,
   [PUBLIC_COMMANDS.appSwitcher]: supportsAppAndDeviceLifecycle,
@@ -101,6 +113,13 @@ const APPLE_UNSUPPORTED_HINT_BY_DEFAULT: Record<
   string,
   (device: DeviceInfo) => string | undefined
 > = {
+  [PUBLIC_COMMANDS.apps]: coreDeviceOnlyPhysicalOperationHint,
+  [PUBLIC_COMMANDS.install]: coreDeviceOnlyPhysicalOperationHint,
+  [PUBLIC_COMMANDS.reinstall]: coreDeviceOnlyPhysicalOperationHint,
+  [PUBLIC_COMMANDS.installFromSource]: coreDeviceOnlyPhysicalOperationHint,
+  [PUBLIC_COMMANDS.logs]: coreDeviceOnlyPhysicalOperationHint,
+  [PUBLIC_COMMANDS.perf]: coreDeviceOnlyPhysicalOperationHint,
+  [PUBLIC_COMMANDS.record]: coreDeviceOnlyPhysicalOperationHint,
   [PUBLIC_COMMANDS.tvRemote]: (device) =>
     device.platform === 'android'
       ? device.target === 'tv'
@@ -112,6 +131,11 @@ const APPLE_UNSUPPORTED_HINT_BY_DEFAULT: Record<
           ? undefined
           : 'tv-remote is supported only on tvOS devices.',
 };
+
+function coreDeviceOnlyPhysicalOperationHint(device: DeviceInfo): string | undefined {
+  if (supportsCoreDevicePhysicalOperation(device)) return undefined;
+  return 'This command requires a CoreDevice-backed physical iOS device. The selected XCTest backend supports open, close, interactions, snapshots, and screenshots.';
+}
 
 // The Apple plugin WRAPS today's existing factories (its `createInteractor` in
 // `./interactor.ts`) and the inventory if-chain (src/core/platform-inventory.ts) as

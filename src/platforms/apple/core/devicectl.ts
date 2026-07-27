@@ -8,7 +8,7 @@ import { execFailureDetails } from '../../../utils/exec.ts';
 
 import { IOS_DEVICECTL_TIMEOUT_MS } from './config.ts';
 import { runXcrun } from './tool-provider.ts';
-import type { IosAppInfo } from './app-info.ts';
+import type { IosAppInfo, IosDeviceAppProcesses, IosDeviceProcessInfo } from './app-info.ts';
 import { filterAppleAppsByBundlePrefix } from './app-filter.ts';
 
 type IosDeviceAppsPayload = {
@@ -19,16 +19,6 @@ type IosDeviceAppsPayload = {
       url?: unknown;
     }>;
   };
-};
-
-export type IosDeviceProcessInfo = {
-  executable: string;
-  pid: number;
-};
-
-export type IosDeviceAppProcesses = {
-  appBundleUrl: string;
-  processes: IosDeviceProcessInfo[];
 };
 
 type IosDeviceProcessesPayload = {

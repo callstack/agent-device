@@ -1,12 +1,21 @@
 import type { DeviceInfo } from '../../../kernel/device.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { execFailureDetails } from '../../../utils/exec.ts';
-import { terminateIosDeviceApp } from './devicectl.ts';
+import type { AppsFilter } from '../../../contracts/app-inventory.ts';
+import type { IosAppInfo, IosDeviceAppProcesses } from './app-info.ts';
+import {
+  installCoreDeviceApp,
+  listCoreDeviceApps,
+  resolveCoreDeviceAppProcesses,
+  terminateCoreDeviceApp,
+  uninstallCoreDeviceApp,
+} from './physical-device-apps.ts';
 import {
   ensureCoreDeviceReady,
   launchCoreDeviceApp,
   resolveCoreDeviceTunnelIp,
 } from './physical-device-coredevice.ts';
+import { copyCoreDeviceRunnerFile } from './physical-device-files.ts';
 import {
   IOS_DEVICE_READY_COMMAND_TIMEOUT_BUFFER_MS,
   IOS_DEVICE_READY_TIMEOUT_MS,
@@ -15,6 +24,11 @@ import type {
   AppleRunnerCommandExecutor,
   AppleRunnerCommandOptions,
 } from './runner/runner-provider.ts';
+import {
+  captureCoreDeviceScreenshot,
+  captureXctestDeviceScreenshot,
+  type IosPhysicalDeviceScreenshotOptions,
+} from './physical-device-screenshot.ts';
 import { runXcrun } from './tool-provider.ts';
 
 export type IosPhysicalDeviceBackend = 'coredevice' | 'xctest';
@@ -31,7 +45,11 @@ type IosPhysicalDeviceLaunchOptions = {
 
 export type IosPhysicalDeviceControl = {
   readonly backend: IosPhysicalDeviceBackend;
+  assertAppInstallationSupported(device: DeviceInfo): void;
   ensureReady(device: DeviceInfo): Promise<void>;
+  listApps(device: DeviceInfo, filter: AppsFilter): Promise<IosAppInfo[]>;
+  installApp(device: DeviceInfo, installablePath: string): Promise<void>;
+  uninstallApp(device: DeviceInfo, bundleId: string): Promise<void>;
   launchApp(
     device: DeviceInfo,
     bundleId: string,
@@ -45,6 +63,18 @@ export type IosPhysicalDeviceControl = {
       runRunnerCommand: AppleRunnerCommandExecutor;
     },
   ): Promise<void>;
+  resolveAppProcesses(device: DeviceInfo, bundleId: string): Promise<IosDeviceAppProcesses>;
+  captureScreenshot(
+    device: DeviceInfo,
+    outPath: string,
+    options: IosPhysicalDeviceScreenshotOptions,
+  ): Promise<void>;
+  copyRunnerFile(
+    device: DeviceInfo,
+    remotePath: string,
+    outPath: string,
+    timeoutMs?: number,
+  ): Promise<void>;
   resolveRunnerTransport(
     device: DeviceInfo,
     timeoutBudgetMs?: number,
@@ -54,9 +84,16 @@ export type IosPhysicalDeviceControl = {
 const CONTROLS: Record<IosPhysicalDeviceBackend, IosPhysicalDeviceControl> = {
   coredevice: {
     backend: 'coredevice',
+    assertAppInstallationSupported: () => {},
     ensureReady: ensureCoreDeviceReady,
+    listApps: listCoreDeviceApps,
+    installApp: installCoreDeviceApp,
+    uninstallApp: uninstallCoreDeviceApp,
     launchApp: launchCoreDeviceApp,
-    terminateApp: async (device, bundleId) => await terminateIosDeviceApp(device, bundleId),
+    terminateApp: async (device, bundleId) => await terminateCoreDeviceApp(device, bundleId),
+    resolveAppProcesses: resolveCoreDeviceAppProcesses,
+    captureScreenshot: captureCoreDeviceScreenshot,
+    copyRunnerFile: copyCoreDeviceRunnerFile,
     resolveRunnerTransport: async (device, timeoutBudgetMs) => ({
       kind: 'network',
       tunnelIp: await resolveCoreDeviceTunnelIp(device, timeoutBudgetMs),
@@ -64,15 +101,73 @@ const CONTROLS: Record<IosPhysicalDeviceBackend, IosPhysicalDeviceControl> = {
   },
   xctest: {
     backend: 'xctest',
+    assertAppInstallationSupported: assertXctestAppInstallationUnsupported,
     ensureReady: ensureXctestDeviceReady,
+    listApps: rejectXctestAppInventory,
+    installApp: rejectXctestAppInstallation,
+    uninstallApp: rejectXctestAppInstallation,
     launchApp: launchXctestDeviceApp,
     terminateApp: terminateXctestDeviceApp,
+    resolveAppProcesses: rejectXctestProcessLookup,
+    captureScreenshot: captureXctestDeviceScreenshot,
+    copyRunnerFile: rejectXctestRunnerFileCopy,
     resolveRunnerTransport: async () => ({ kind: 'usbmux' }),
   },
 };
 
 export function resolveIosPhysicalDeviceControl(device: DeviceInfo): IosPhysicalDeviceControl {
   return CONTROLS[device.iosPhysicalDeviceBackend === 'xctest' ? 'xctest' : 'coredevice'];
+}
+
+function assertXctestAppInstallationUnsupported(device: DeviceInfo): never {
+  throw new AppError(
+    'UNSUPPORTED_OPERATION',
+    'Installing apps is unavailable on this XCTest-backed physical iOS device.',
+    {
+      deviceId: device.id,
+      backend: 'xctest',
+      hint: 'Install the app with Xcode, then open it in agent-device by bundle ID.',
+    },
+  );
+}
+
+async function rejectXctestAppInstallation(device: DeviceInfo): Promise<never> {
+  return assertXctestAppInstallationUnsupported(device);
+}
+
+async function rejectXctestAppInventory(device: DeviceInfo): Promise<never> {
+  throw new AppError(
+    'UNSUPPORTED_OPERATION',
+    'App inventory is unavailable on this XCTest-backed physical iOS device.',
+    {
+      deviceId: device.id,
+      backend: 'xctest',
+      hint: 'Use an installed app bundle ID when opening the device.',
+    },
+  );
+}
+
+async function rejectXctestProcessLookup(device: DeviceInfo): Promise<never> {
+  throw new AppError(
+    'UNSUPPORTED_OPERATION',
+    'Process lookup is unavailable on this XCTest-backed physical iOS device.',
+    {
+      deviceId: device.id,
+      backend: 'xctest',
+      hint: 'Use a CoreDevice-backed iOS device for performance sampling.',
+    },
+  );
+}
+
+async function rejectXctestRunnerFileCopy(device: DeviceInfo): Promise<never> {
+  throw new AppError(
+    'UNSUPPORTED_OPERATION',
+    'Runner file copy is unavailable on this XCTest-backed physical iOS device.',
+    {
+      deviceId: device.id,
+      backend: 'xctest',
+    },
+  );
 }
 
 async function ensureXctestDeviceReady(device: DeviceInfo): Promise<void> {

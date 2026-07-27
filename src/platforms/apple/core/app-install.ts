@@ -1,8 +1,6 @@
 import type { DeviceInfo } from '../../../kernel/device.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { execFailureDetails } from '../../../utils/exec.ts';
-import { IOS_DEVICE_INSTALL_TIMEOUT_MS } from './config.ts';
-import { runIosDevicectl } from './devicectl.ts';
 import { prepareIosInstallArtifact } from './install-artifact.ts';
 import { ensureBootedSimulator } from './simulator.ts';
 import { invalidateIosAppResolutionCache, resolveIosApp } from './app-resolution.ts';
@@ -17,15 +15,7 @@ async function uninstallIosApp(device: DeviceInfo, app: string): Promise<{ bundl
   return await invalidateIosAppResolutionCache(device, async () => {
     const bundleId = await resolveIosApp(device, app);
     if (device.kind !== 'simulator') {
-      requireCoreDeviceInstallBackend(device);
-      await runIosDevicectl(
-        ['device', 'uninstall', 'app', '--device', device.id, bundleId],
-        { action: `uninstall iOS app ${bundleId}`, deviceId: device.id },
-        {
-          tolerateOutput: (stdout, stderr) =>
-            isMissingAppErrorOutput(`${stdout}\n${stderr}`.toLowerCase()),
-        },
-      );
+      await resolveIosPhysicalDeviceControl(device).uninstallApp(device, bundleId);
       return { bundleId };
     }
 
@@ -61,7 +51,7 @@ export async function installIosApp(
   launchTarget?: string;
 }> {
   if (device.kind !== 'simulator') {
-    requireCoreDeviceInstallBackend(device);
+    resolveIosPhysicalDeviceControl(device).assertAppInstallationSupported(device);
   }
   const prepared = await prepareIosInstallArtifact({ kind: 'path', path: appPath }, options);
   try {
@@ -84,7 +74,7 @@ export async function reinstallIosApp(
   appPath: string,
 ): Promise<{ bundleId: string }> {
   if (device.kind !== 'simulator') {
-    requireCoreDeviceInstallBackend(device);
+    resolveIosPhysicalDeviceControl(device).assertAppInstallationSupported(device);
   }
   return await invalidateIosAppResolutionCache(device, async () => {
     const { bundleId } = await uninstallIosApp(device, app);
@@ -99,34 +89,11 @@ export async function installIosInstallablePath(
 ): Promise<void> {
   await invalidateIosAppResolutionCache(device, async () => {
     if (device.kind !== 'simulator') {
-      requireCoreDeviceInstallBackend(device);
-      await runIosDevicectl(
-        ['device', 'install', 'app', '--device', device.id, installablePath],
-        {
-          action: 'install iOS app',
-          deviceId: device.id,
-        },
-        {
-          timeoutMs: IOS_DEVICE_INSTALL_TIMEOUT_MS,
-        },
-      );
+      await resolveIosPhysicalDeviceControl(device).installApp(device, installablePath);
       return;
     }
 
     await ensureBootedSimulator(device);
     await runSimctl(device, ['install', device.id, installablePath]);
   });
-}
-
-function requireCoreDeviceInstallBackend(device: DeviceInfo): void {
-  if (resolveIosPhysicalDeviceControl(device).backend === 'coredevice') return;
-  throw new AppError(
-    'UNSUPPORTED_OPERATION',
-    'Installing apps is unavailable on this XCTest-backed physical iOS device.',
-    {
-      deviceId: device.id,
-      backend: 'xctest',
-      hint: 'Install the app with Xcode, then open it in agent-device by bundle ID.',
-    },
-  );
 }

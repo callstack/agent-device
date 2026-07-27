@@ -3,3 +3,13 @@ export type IosAppInfo = {
   name: string;
   url?: string;
 };
+
+export type IosDeviceProcessInfo = {
+  executable: string;
+  pid: number;
+};
+
+export type IosDeviceAppProcesses = {
+  appBundleUrl: string;
+  processes: IosDeviceProcessInfo[];
+};

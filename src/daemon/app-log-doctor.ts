@@ -7,6 +7,7 @@ import {
   IOS_DEVICE_CONSOLE_CAPTURE_PROBE_FAILED_NOTE,
   IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_NOTE,
 } from './app-log-ios.ts';
+import { checkCoreDeviceAvailable } from '../platforms/apple/core/physical-device-console.ts';
 
 export type AppLogDoctorResult = {
   checks: Record<string, boolean>;
@@ -77,10 +78,7 @@ async function runIosSimulatorAppLogDoctor(): Promise<Record<string, boolean>> {
 async function runIosDeviceAppLogDoctor(): Promise<AppLogDoctorResult> {
   const checks: Record<string, boolean> = {};
   const notes: string[] = [];
-  checks.devicectlAvailable = await safeCheck(async () => {
-    const devicectl = await runXcrun(['devicectl', '--version'], { allowFailure: true });
-    return devicectl.exitCode === 0;
-  });
+  checks.devicectlAvailable = await safeCheck(checkCoreDeviceAvailable);
   if (!checks.devicectlAvailable) return { checks, notes };
 
   const consoleCapture = await checkIosDeviceConsoleCaptureSupport();

@@ -481,7 +481,7 @@ agent-device install com.example.app ./build/MyApp.app --platform ios
 ```
 
 - `install <app> <path>` installs from binary path without uninstalling first.
-- Supports Android devices/emulators, iOS simulators, and iOS physical devices.
+- Supports Android devices/emulators, iOS simulators, and CoreDevice-backed iOS physical devices. On xctrace-only devices, install the app with Xcode before opening it by bundle ID.
 - Useful for upgrade flows where you want to keep existing app data when supported by the platform.
 - Remote daemons automatically upload local app artifacts for `install`; prefix the path with `remote:` to use a daemon-side path verbatim.
 - Supported binary formats: Android `.apk`/`.aab`, iOS `.app`/`.ipa`.
@@ -497,7 +497,7 @@ agent-device reinstall com.example.app ./build/MyApp.app --platform ios
 ```
 
 - `reinstall <app> <path>` uninstalls and installs in one command.
-- Supports Android devices/emulators, iOS simulators, and iOS physical devices.
+- Supports Android devices/emulators, iOS simulators, and CoreDevice-backed iOS physical devices. XCTest-backed xctrace-only devices do not expose install or app inventory operations.
 - Useful for login/logout reset flows and deterministic test setup.
 - Remote daemons automatically upload local app artifacts for `reinstall`; prefix the path with `remote:` to use a daemon-side path verbatim.
 - Supported binary formats: Android `.apk`/`.aab`, iOS `.app`/`.ipa`.
@@ -515,7 +515,7 @@ agent-device install-from-source --github-actions-artifact thymikee/RNCLI83:6635
 - `install-from-source <url>` installs from a URL source through the normal daemon artifact flow.
 - `install-from-source --github-actions-artifact <owner/repo:artifact>` passes a typed GitHub Actions artifact source through to a compatible remote daemon. Numeric artifacts are sent as `artifactId`; non-numeric artifacts are sent as `artifactName`.
 - Repeat `--header <name:value>` for authenticated or signed artifact requests.
-- Supports the same device coverage as `install`: Android devices/emulators, iOS simulators, and iOS physical devices.
+- Supports the same device coverage as `install`: Android devices/emulators, iOS simulators, and CoreDevice-backed iOS physical devices.
 - Use `install` or `reinstall` for local `.apk`, `.aab`, `.app`, and `.ipa` paths; use `install-from-source` when the artifact already exists at a URL reachable by the daemon.
 - Direct Android URL sources may be `.apk` or `.aab`.
 - Trusted artifact service URLs may resolve to archives containing one installable `.apk`, `.aab`, `.ipa`, or iOS `.app` tar archive. Prefer `--github-actions-artifact` for GitHub Actions artifacts that a compatible remote daemon can resolve with its own credentials.
@@ -719,7 +719,7 @@ agent-device perf trace stop --kind perfetto --out app.perfetto-trace
 - Android URL/deep-link opens infer the foreground package after launch when possible, including Expo Go/dev-client shells. If the session still has no app package/bundle ID, package-bound metrics remain unavailable until you `open <app>`.
 - Android frame health is reset after each successful `perf metrics` or `perf frames` read and after `open <app>`, so run `perf frames`, perform the interaction, then run `perf frames` again for a focused window.
 - Android Simpleperf and Perfetto collectors require an active Android app session with a running package process. They return artifact paths, sizes, and compact state summaries; they do not print profile or trace contents into the agent context. iOS native Simpleperf/Perfetto support is not provided by these commands.
-- On physical iOS devices, `perf metrics` and `perf frames` record short `xcrun xctrace` samples. Keep the device unlocked, connected, and the app active in the foreground while sampling.
+- On CoreDevice-backed physical iOS devices, `perf metrics` and `perf frames` record short `xcrun xctrace` samples. Keep the device unlocked, connected, and the app active in the foreground while sampling.
 - Interpretation note: this startup metric is command round-trip timing and does not represent true first frame / first interactive app instrumentation.
 - CPU data is a lightweight process snapshot, so an idle app may legitimately read as `0`.
 
@@ -904,7 +904,7 @@ tail -50 ~/.agent-device/sessions/default/app.log
 - Prefer targeted patterns (e.g. `Error`, `Exception`, your log tags) over reading the whole file.
 - `logs mark "before submit"` lines are prefixed with `[agent-device][mark][...]`, so grep for `agent-device.*mark` when you need timing markers back quickly.
 
-- iOS `record` works on simulators and physical devices.
+- iOS `record` works on simulators and CoreDevice-backed physical devices.
 - iOS simulator recording uses native `simctl io ... recordVideo`.
 - Physical iOS device capture is runner-based and built from repeated `XCUIScreen.main.screenshot()` frames (no native video stream/audio capture).
 - App-scoped recording requires an active app session context (`open <app>` first). Use `--scope device`/`--scope system` only when whole-screen capture is the intended artifact.
@@ -1024,6 +1024,7 @@ For CLI-discoverable setup guidance, run `agent-device help physical-device`.
 - Xcode with `xcrun devicectl` and `xcrun xctrace` available.
 - Paired/trusted physical device, connected, unlocked when needed, with Developer Mode enabled.
 - Older devices discovered only through `xctrace` use the XCTest backend automatically; its runner commands travel through macOS `usbmuxd`, so keep the device connected by cable.
+- XCTest-backed devices support open/close, interactions, snapshots, and screenshots. App inventory, install/reinstall, logs, performance sampling, recording, deep links, and launch arguments require CoreDevice.
 - The `AgentDeviceRunner` XCTest host must be signed before commands can run on a physical device.
 - Start with Automatic Signing and only these env vars:
   - `AGENT_DEVICE_IOS_TEAM_ID`

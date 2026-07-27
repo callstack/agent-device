@@ -14,12 +14,9 @@ import { execFailureDetails, requireExecSuccess, type ExecResult } from '../../.
 import { splitNonEmptyTrimmedLines } from '../../../utils/parsing.ts';
 import { roundPercent } from '../../perf-utils.ts';
 import { uniqueStrings } from '../../../kernel/collections.ts';
-import {
-  IOS_DEVICECTL_DEFAULT_HINT,
-  resolveIosDeviceAppProcesses,
-  resolveIosDevicectlHint,
-  type IosDeviceProcessInfo,
-} from './devicectl.ts';
+import { IOS_DEVICECTL_DEFAULT_HINT, resolveIosDevicectlHint } from './devicectl.ts';
+import type { IosDeviceProcessInfo } from './app-info.ts';
+import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 import { readInfoPlistString } from './plist.ts';
 import { buildSimctlArgsForDevice } from './simctl.ts';
 import { runAppleToolCommand, runXcrun } from './tool-provider.ts';
@@ -845,7 +842,9 @@ export async function resolveIosDevicePerfTarget(
   device: DeviceInfo,
   appBundleId: string,
 ): Promise<IosDeviceProcessInfo[]> {
-  const { appBundleUrl, processes } = await resolveIosDeviceAppProcesses(device, appBundleId);
+  const { appBundleUrl, processes } = await resolveIosPhysicalDeviceControl(
+    device,
+  ).resolveAppProcesses(device, appBundleId);
   const appBundlePath = fileURLToPath(appBundleUrl);
   if (processes.length === 0) {
     throw new AppError('COMMAND_FAILED', `No running process found for ${appBundleId}`, {
