@@ -57,6 +57,9 @@ const USAGE = `Usage: pnpm mutation:run [options]
   --summary <file>  Also write the markdown report to <file>
   --no-run          Alias for --report with the default report path
   --list-affected   Print the affected module ids as JSON and exit (shard matrix)
+  --fail-envelope <reason>
+                    Write a failed lane envelope for a step that ran before (or
+                    instead of) the sweep, e.g. a self-test failure
 `;
 
 type Args = {
@@ -68,6 +71,7 @@ type Args = {
   update: boolean;
   summary: string | undefined;
   listAffected: boolean;
+  failEnvelope: string | undefined;
 };
 
 function parseModules(value: string | undefined): readonly ModuleId[] {
@@ -96,6 +100,7 @@ function parseMutationArgs(argv: readonly string[]): Args {
     summary: { type: 'string' },
     'no-run': { type: 'boolean', default: false },
     'list-affected': { type: 'boolean', default: false },
+    'fail-envelope': { type: 'string' },
   });
   return {
     modules: parseModules(values.modules),
@@ -106,6 +111,7 @@ function parseMutationArgs(argv: readonly string[]): Args {
     update: Boolean(values.update),
     summary: values.summary,
     listAffected: Boolean(values['list-affected']),
+    failEnvelope: values['fail-envelope'],
   };
 }
 
@@ -195,7 +201,13 @@ function emit(markdown: string, summaryPath: string | undefined): void {
  * failure the freshness monitor must see, so the stage rides in the envelope
  * rather than only in the job log.
  */
-type Stage = 'select' | 'stryker' | 'report' | 'ratchet' | 'complete';
+type Stage = 'setup' | 'select' | 'stryker' | 'report' | 'ratchet' | 'complete';
+
+/**
+ * Provenance for a lane that died before it could read any: `unknown` is a
+ * reported fact, whereas skipping the envelope would be silence.
+ */
+const UNKNOWN_PROVENANCE: Provenance = { strykerVersion: 'unknown', configHash: 'unknown' };
 
 type LaneState = {
   stage: Stage;
@@ -206,6 +218,8 @@ type LaneState = {
   scores: readonly ModuleScore[];
   result: RatchetResult | undefined;
   error: string | undefined;
+  /** `--fail-envelope` never overwrites a real verdict this run already wrote. */
+  onlyIfAbsent: boolean;
 };
 
 /**
@@ -220,9 +234,17 @@ type LaneState = {
  * never ran.
  */
 function writeEnvelope(state: LaneState, startedAtMs: number): void {
+  const target = path.join(repoRoot, ENVELOPE_PATH);
+  if (state.onlyIfAbsent && fs.existsSync(target)) {
+    process.stdout.write(`mutation: ${ENVELOPE_PATH} already describes this run; left as is.\n`);
+    return;
+  }
   const envelope = laneEnvelope({
     lane: LANE_ID,
-    commit: runCmdSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot }).stdout.trim(),
+    commit: runCmdSync('git', ['rev-parse', 'HEAD'], {
+      cwd: repoRoot,
+      allowFailure: true,
+    }).stdout.trim(),
     tool: { stryker: state.provenance.strykerVersion },
     configHash: state.provenance.configHash,
     startedAtMs,
@@ -246,9 +268,8 @@ function writeEnvelope(state: LaneState, startedAtMs: number): void {
       requiredStableRuns: state.baseline.requiredStableRuns,
     },
   });
-  const file = path.join(repoRoot, ENVELOPE_PATH);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(envelope, null, 2)}\n`);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, `${JSON.stringify(envelope, null, 2)}\n`);
   process.stdout.write(
     `\nLane envelope (${ENVELOPE_PATH}): ${envelope.result} at stage ${state.stage} in ` +
       `${Math.round(envelope.durationMs / 1000)}s at ${envelope.commit.slice(0, 12)}.\n`,
@@ -296,18 +317,23 @@ function recordRun(args: Args, state: LaneState, result: RatchetResult): void {
   );
 }
 
-async function sweep(args: Args, state: LaneState): Promise<number> {
-  // Test attribution is derived from the import graph, not a listed set of test
-  // files: see scripts/mutation/ownership.ts.
-  state.modules = args.affected
-    ? derivedAffectedModules(changedFiles(args.base), repoRoot)
-    : args.modules;
-  if (state.modules.length === 0) {
-    process.stdout.write('mutation: no decision-kernel modules affected — nothing to mutate.\n');
-    state.stage = 'complete';
-    return 0;
-  }
+/**
+ * A merged shard set must cover every requested module. `summarizeReport` scores
+ * a module with no mutants as 0, and while the lane is non-gating a 0 is only
+ * *reported* as a regression — so a matrix shard that died would otherwise be
+ * aggregated into a `complete`/`pass` envelope claiming the sweep happened.
+ */
+function assertShardsCoverModules(state: LaneState, dir: string): void {
+  const missing = state.scores.filter((score) => score.total === 0).map((score) => score.module);
+  if (missing.length === 0) return;
+  throw new Error(
+    `Incomplete shard set from ${dir}: no mutants for ${missing.join(', ')}. ` +
+      'A shard job failed or its artifact is absent; the aggregate is not a sweep.',
+  );
+}
 
+/** Reads shard reports, an existing report, or runs Stryker — and scores them. */
+async function scoreModules(args: Args, state: LaneState): Promise<void> {
   state.stage = args.reportDir || args.report ? 'report' : 'stryker';
   const report = args.reportDir
     ? readShardedReports(args.reportDir)
@@ -315,6 +341,21 @@ async function sweep(args: Args, state: LaneState): Promise<number> {
 
   state.stage = 'ratchet';
   state.scores = summarizeReport(report, state.modules);
+  if (args.reportDir) assertShardsCoverModules(state, args.reportDir);
+}
+
+async function sweep(args: Args, state: LaneState): Promise<number> {
+  state.stage = 'select';
+  // Test attribution is derived from the import graph, not a listed set of test
+  // files: see scripts/mutation/ownership.ts.
+  if (args.affected) state.modules = derivedAffectedModules(changedFiles(args.base), repoRoot);
+  if (state.modules.length === 0) {
+    process.stdout.write('mutation: no decision-kernel modules affected — nothing to mutate.\n');
+    state.stage = 'complete';
+    return 0;
+  }
+
+  await scoreModules(args, state);
   const result = evaluateRatchet(state.scores, state.baseline, state.provenance);
   state.result = result;
 
@@ -328,31 +369,51 @@ async function sweep(args: Args, state: LaneState): Promise<number> {
   return result.failed ? 1 : 0;
 }
 
+/**
+ * Everything after `--help` runs inside the envelope boundary, argument parsing
+ * and provenance reads included: a lane that cannot even read its own config is
+ * the failure freshness monitoring most needs to see.
+ */
+async function run(argv: readonly string[], state: LaneState): Promise<number> {
+  const args = parseMutationArgs(argv);
+  state.affected = args.affected;
+  state.provenance = readProvenance();
+  state.baseline = readBaseline();
+  state.modules = args.modules;
+  if (args.failEnvelope) {
+    // A step that ran before the sweep failed (the weekly self-test, setup): the
+    // lane produced no measurement, and that is what the envelope must say.
+    state.error = args.failEnvelope;
+    state.onlyIfAbsent = true;
+    return 1;
+  }
+  return await sweep(args, state);
+}
+
 async function main(argv = process.argv.slice(2)): Promise<number> {
   const startedAtMs = Date.now();
-  const args = parseMutationArgs(argv);
-  if (args.listAffected) {
+  if (argv.includes('--list-affected')) {
     // Selection only — no lane run, so no envelope. The shard jobs that consume
     // this matrix each write their own.
+    const args = parseMutationArgs(argv);
     process.stdout.write(
       `${JSON.stringify(derivedAffectedModules(changedFiles(args.base), repoRoot))}\n`,
     );
     return 0;
   }
-  // Provenance and baseline are read before any work so a crashed sweep still
-  // reports which tool and config it crashed with.
   const state: LaneState = {
-    stage: 'select',
-    provenance: readProvenance(),
-    baseline: readBaseline(),
-    modules: args.modules,
-    affected: args.affected,
+    stage: 'setup',
+    provenance: UNKNOWN_PROVENANCE,
+    baseline: emptyBaseline(),
+    modules: [],
+    affected: false,
     scores: [],
     result: undefined,
     error: undefined,
+    onlyIfAbsent: false,
   };
   try {
-    return await sweep(args, state);
+    return await run(argv, state);
   } catch (error: unknown) {
     state.error = error instanceof Error ? error.message : String(error);
     process.stderr.write(`mutation: ${state.error}\n`);

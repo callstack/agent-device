@@ -140,6 +140,100 @@ test('merging shard reports ignores the envelope sitting beside them', () => {
   });
 });
 
+function runMutation(args: readonly string[]): {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+} {
+  const result = runCmdSync(
+    'node',
+    ['--experimental-strip-types', 'scripts/mutation/run.ts', ...args],
+    {
+      cwd: repoRoot,
+      allowFailure: true,
+    },
+  );
+  return { exitCode: result.exitCode ?? 1, stdout: result.stdout, stderr: result.stderr };
+}
+
+type Envelope = {
+  result: string;
+  data: { stage: string; error: string | null; modules: readonly { id: string }[] };
+};
+
+function readEnvelope(): Envelope {
+  return JSON.parse(
+    fs.readFileSync(path.join(repoRoot, '.tmp/mutation/lane-envelope.json'), 'utf8'),
+  ) as Envelope;
+}
+
+// A merged shard set is only a sweep if every requested module actually reported.
+// summarizeReport scores an absent module as 0, and while the lane is non-gating a
+// 0 only *reports* a regression — so a dead matrix shard would otherwise be
+// aggregated into a passing "complete" envelope claiming the sweep happened.
+test('an incomplete shard set fails instead of scoring the missing module as zero', () => {
+  const shards = path.join(repoRoot, '.tmp/mutation/partial-shards/shard-kernel-errors');
+  fs.mkdirSync(shards, { recursive: true });
+  fs.writeFileSync(
+    path.join(shards, 'mutation.json'),
+    JSON.stringify({
+      files: { 'src/kernel/errors.ts': { mutants: [{ status: 'Killed' }] } },
+    }),
+  );
+  const result = runMutation([
+    '--report-dir',
+    '.tmp/mutation/partial-shards',
+    '--modules',
+    'kernel-errors,daemon-ref-frame',
+  ]);
+  assert.notEqual(result.exitCode, 0, 'a missing shard must fail the aggregate');
+  assert.match(result.stderr, /Incomplete shard set/);
+  assert.match(result.stderr, /daemon-ref-frame/);
+  const envelope = readEnvelope();
+  assert.equal(envelope.result, 'fail');
+  assert.equal(envelope.data.stage, 'ratchet');
+  fs.rmSync(path.join(repoRoot, '.tmp/mutation/partial-shards'), { recursive: true, force: true });
+});
+
+// Argument parsing and the provenance/baseline reads used to sit outside the
+// envelope boundary, so the lane could exit without declaring itself at all.
+test('a malformed invocation still writes an envelope', () => {
+  fs.rmSync(path.join(repoRoot, '.tmp/mutation/lane-envelope.json'), { force: true });
+  const result = runMutation(['--modules', 'not-a-kernel']);
+  assert.notEqual(result.exitCode, 0);
+  const envelope = readEnvelope();
+  assert.equal(envelope.result, 'fail');
+  assert.equal(envelope.data.stage, 'setup');
+  assert.match(envelope.data.error ?? '', /Unknown mutation module/);
+});
+
+// The weekly self-test and the affected-selection job run before any mutant, so
+// their failure has to be declared by the lane rather than only by the job log.
+test('--fail-envelope declares a step that failed before the sweep', () => {
+  fs.rmSync(path.join(repoRoot, '.tmp/mutation/lane-envelope.json'), { force: true });
+  const result = runMutation(['--fail-envelope', 'self-test failed']);
+  assert.notEqual(result.exitCode, 0, 'a pre-run failure must not report success');
+  const envelope = readEnvelope();
+  assert.equal(envelope.result, 'fail');
+  assert.equal(envelope.data.stage, 'setup');
+  assert.equal(envelope.data.error, 'self-test failed');
+});
+
+// The workflows run it from `if: failure()`, which also fires when the ratchet
+// itself failed — a generic reason must never overwrite the real verdict.
+test('--fail-envelope leaves an envelope this run already wrote alone', () => {
+  fs.rmSync(path.join(repoRoot, '.tmp/mutation/lane-envelope.json'), { force: true });
+  runMutation(['--fail-envelope', 'the real failure']);
+  runMutation(['--fail-envelope', 'a later generic failure']);
+  assert.equal(readEnvelope().data.error, 'the real failure');
+});
+
+test('both mutation lanes record an envelope for failures before the sweep', () => {
+  for (const name of ['mutation-weekly.yml', 'mutation-affected.yml']) {
+    assert.match(workflow(name), /--fail-envelope/, `${name} can fail without an envelope`);
+  }
+});
+
 test('both mutation lanes publish the envelope', () => {
   for (const name of ['mutation-weekly.yml', 'mutation-affected.yml']) {
     assert.match(

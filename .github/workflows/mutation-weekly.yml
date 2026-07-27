@@ -57,6 +57,15 @@ jobs:
       - name: Run mutants for ${{ matrix.module }}
         run: pnpm mutation:run --modules ${{ matrix.module }}
 
+      # A shard can die before Stryker writes anything (install, config, crash);
+      # without this the artifact is absent and "shard failed" is indistinguishable
+      # from "lane never ran". --fail-envelope leaves a real verdict untouched.
+      - name: Record a failed shard envelope
+        if: failure()
+        run: |
+          pnpm mutation:run --modules ${{ matrix.module }} --fail-envelope \
+            "shard ${{ matrix.module }} failed before producing a report (run ${{ github.run_id }})" || true
+
       - name: Upload shard report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -97,12 +106,25 @@ jobs:
           cp mutation-baselines/decision-kernels.json .tmp/mutation/proposed-baseline.json
           git checkout -- mutation-baselines/decision-kernels.json
 
+      # The self-test and the artifact download both run before the ratchet, so a
+      # failure there would otherwise leave the aggregate lane with no envelope.
+      - name: Record a failed lane envelope
+        if: failure()
+        run: |
+          pnpm mutation:run --fail-envelope \
+            "weekly ratchet job failed before producing a verdict (run ${{ github.run_id }})" || true
+
       # Freshness/drift telemetry (#1430): the envelope states commit, Stryker
       # version, config hash, duration and result, so a lane going dark or a tool
       # bump is visible without reading these logs.
       - name: Lane envelope
         if: always()
         run: |
+          if [ ! -f .tmp/mutation/lane-envelope.json ]; then
+            echo 'No lane envelope was written — the job died before it could run node.' \
+              >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           {
             echo '<details><summary>Lane envelope (schema #1430)</summary>'
             echo

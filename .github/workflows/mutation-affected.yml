@@ -66,6 +66,22 @@ jobs:
           echo "modules=$modules" >> "$GITHUB_OUTPUT"
           echo "Affected decision kernels: $modules" >> "$GITHUB_STEP_SUMMARY"
 
+      # The self-test and the derivation run before any mutant, so a failure here
+      # would leave the lane with no envelope at all (#1430).
+      - name: Record a failed lane envelope
+        if: failure()
+        run: |
+          pnpm mutation:run --affected --fail-envelope \
+            "affected selection failed before any mutant ran (run ${{ github.run_id }})" || true
+
+      - name: Upload selection envelope
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mutation-affected-select
+          path: .tmp/mutation/lane-envelope.json
+          if-no-files-found: warn
+
   mutants:
     name: Mutants (${{ matrix.module }})
     needs: select
@@ -85,6 +101,12 @@ jobs:
 
       - name: Run mutants for ${{ matrix.module }}
         run: pnpm mutation:run --modules ${{ matrix.module }}
+
+      - name: Record a failed shard envelope
+        if: failure()
+        run: |
+          pnpm mutation:run --affected --modules ${{ matrix.module }} --fail-envelope \
+            "shard ${{ matrix.module }} failed before producing a report (run ${{ github.run_id }})" || true
 
       - name: Upload shard report
         if: always()
@@ -129,6 +151,12 @@ jobs:
           else
             pnpm mutation:affected --base "origin/${{ github.event.pull_request.base.ref }}"
           fi
+
+      - name: Record a failed lane envelope
+        if: failure()
+        run: |
+          pnpm mutation:run --affected --fail-envelope \
+            "affected ratchet failed before producing a verdict (run ${{ github.run_id }})" || true
 
       - name: Upload mutation report
         if: always()
