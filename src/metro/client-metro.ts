@@ -5,6 +5,7 @@ import type {
   MetroPrepareKind,
   PrepareMetroRuntimeResult,
   ReloadMetroResult,
+  ResolvedMetroKind,
 } from '../contracts/metro.ts';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -37,7 +38,6 @@ const DEV_SERVER_STATUS_READY_TEXT = 'packager-status:running';
 const METRO_TERM_TIMEOUT_MS = 1_000;
 const METRO_KILL_TIMEOUT_MS = 1_000;
 
-type ResolvedMetroKind = Exclude<MetroPrepareKind, 'auto'>;
 type EnvSource = NodeJS.ProcessEnv | Record<string, string | undefined>;
 type RepackBundlerKind = 'rspack' | 'webpack';
 

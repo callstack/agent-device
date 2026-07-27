@@ -309,8 +309,7 @@ function checkTypeInversions(edges: readonly ResolvedImportEdge[]): Violation[] 
 // measured at merge time prevents.
 const TYPE_CYCLE_BASELINE = 102;
 
-function checkTypeCycleGrowth(edges: readonly ResolvedImportEdge[]): Violation[] {
-  const actual = largestTypeCycleSize(edges);
+function checkTypeCycleGrowth(actual: number): Violation[] {
   if (actual <= TYPE_CYCLE_BASELINE) return [];
   return [
     {
@@ -481,8 +480,7 @@ function sessionStateFieldCount(): number {
 }
 
 /** R9 is growth-only, so a shrunk tree is reported rather than failed — see checkTypeCycleGrowth. */
-function typeCycleNote(edges: readonly ResolvedImportEdge[]): string {
-  const actual = largestTypeCycleSize(edges);
+function typeCycleNote(actual: number): string {
   if (actual >= TYPE_CYCLE_BASELINE) return `the largest type-level cycle is ${actual} files (R9)`;
   return (
     `the largest type-level cycle is down to ${actual} files, under the R9 baseline of ` +
@@ -493,7 +491,7 @@ function typeCycleNote(edges: readonly ResolvedImportEdge[]): string {
 function report(
   files: readonly string[],
   violations: readonly Violation[],
-  edges: readonly ResolvedImportEdge[],
+  typeCycle: number,
 ): number {
   if (violations.length === 0) {
     process.stdout.write(
@@ -503,7 +501,7 @@ function report(
         `inversions match the R6 ratchet (${Object.values(TYPE_INVERSION_BASELINE).reduce((sum, count) => sum + count, 0)} remaining); ` +
         `all ${sessionStateFieldCount()} SessionState fields are classified and every write is ` +
         `inside its declared owner (R7); every zero-dep CI job resolves without ` +
-        `node_modules (R8); and ${typeCycleNote(edges)}.\n`,
+        `node_modules (R8); and ${typeCycleNote(typeCycle)}.\n`,
     );
     return 0;
   }
@@ -533,16 +531,18 @@ export function main(): number {
   const sourceFiles = listSourceFiles();
   const sources = readSources(sourceFiles);
   const edges = resolveImportEdges(sources);
+  // Computed once and threaded: the rule and the success line must report the same number.
+  const typeCycle = largestTypeCycleSize(edges);
   const violations = [
     ...checkLayeringRules(edges),
     ...checkCycles(edges),
     ...checkBackEdges(edges),
     ...checkTypeInversions(edges),
     ...checkSessionStateOwnership(sources),
-    ...checkTypeCycleGrowth(edges),
+    ...checkTypeCycleGrowth(typeCycle),
     ...checkZeroDepJobs(),
   ];
-  return report(sourceFiles, violations, edges);
+  return report(sourceFiles, violations, typeCycle);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

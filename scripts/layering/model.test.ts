@@ -12,6 +12,7 @@ import {
 } from './session-state.ts';
 import { uninstallableImports, zeroDepJobs } from './zero-dep-jobs.ts';
 import {
+  largestTypeCycleSize,
   RANKED_ZONES,
   typeInversionPair,
   UNRANKED_ZONES,
@@ -466,4 +467,49 @@ test('classification drift is reported in all three directions', () => {
     (field) => field in SESSION_STATE_FIELD_OWNERS,
   );
   assert.deepEqual(inBoth, [], 'the real tables must not overlap');
+});
+
+// R9 shipped its first revision with no test — every other rule here has one, and the only
+// verification was a manual injection CI cannot repeat. These pin the three distinctions the rule
+// depends on: which edge kinds count, and that an acyclic graph reports 1 rather than 0.
+test('largestTypeCycleSize counts type-only cycles and ignores dynamic ones', () => {
+  // Acyclic: every component is a single file, so the largest is 1 (not 0).
+  const acyclic = resolveImportEdges(
+    new Map(Object.entries({
+      'src/core/a.ts': "import type { B } from '../contracts/b.ts';",
+      'src/contracts/b.ts': 'export type B = 1;',
+    })),
+  );
+  assert.equal(largestTypeCycleSize(acyclic), 1);
+
+  // A three-file loop closed by type-only imports is exactly what R4 permits and R9 measures.
+  const typeCycle = resolveImportEdges(
+    new Map(Object.entries({
+      'src/core/a.ts': "import type { B } from './b.ts';",
+      'src/core/b.ts': "import type { C } from './c.ts';\nexport type B = 1;",
+      'src/core/c.ts': "import type { A } from './a.ts';\nexport type C = 1;",
+    })),
+  );
+  assert.equal(largestTypeCycleSize(typeCycle), 3);
+
+  // A loop closed through a DYNAMIC import is excluded on purpose: a lazy seam is not a
+  // comprehension barrier, and R3 relies on dynamic imports existing. With no non-dynamic edge at
+  // all no file enters the walk, so the floor here is 0 rather than 1 — specified, not incidental.
+  const dynamicCycle = resolveImportEdges(
+    new Map(Object.entries({
+      'src/core/a.ts': "void import('./b.ts');",
+      'src/core/b.ts': "void import('./a.ts');",
+    })),
+  );
+  assert.equal(largestTypeCycleSize(dynamicCycle), 0);
+
+  // A value cycle counts too — R4 rejects it separately, so R9 must not be the thing that
+  // notices, but it must not under-report either.
+  const valueCycle = resolveImportEdges(
+    new Map(Object.entries({
+      'src/core/a.ts': "export { b } from './b.ts';",
+      'src/core/b.ts': "export { a } from './a.ts';",
+    })),
+  );
+  assert.equal(largestTypeCycleSize(valueCycle), 2);
 });
