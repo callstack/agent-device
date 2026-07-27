@@ -513,6 +513,10 @@ test('usageForCommand resolves ios-system-ui help topic', async () => {
   assert.match(help, /agent-device open com\.apple\.springboard --platform ios/);
   assert.match(help, /longpress <x> <y> on an empty area of the home screen/);
   assert.match(help, /discover them from the current snapshot/);
+  assert.match(
+    help,
+    /verified on iOS simulator; physical-iPhone SpringBoard support is not yet verified/,
+  );
   assert.match(help, /Do not hard-code Edit\/Done\/Add Widget or other SpringBoard label text/);
   assert.match(help, /Reopen the app bundle under test/);
 });

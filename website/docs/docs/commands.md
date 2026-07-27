@@ -1043,7 +1043,7 @@ For CLI-discoverable setup guidance, run `agent-device help physical-device`.
 
 For CLI-discoverable workflow guidance, run `agent-device help ios-system-ui`.
 
-- `agent-device open com.apple.springboard --platform ios` binds the session to SpringBoard on a simulator or physical device today; there is no separate widget/system command.
+- `agent-device open com.apple.springboard --platform ios` binds the session to SpringBoard today; this is verified on iOS simulator only. Physical-iPhone SpringBoard support is not yet verified — see [#1296](https://github.com/callstack/agent-device/issues/1296).
 - The full widget add/edit/remove flow is selector-driven from a fresh `snapshot -i`, except two coordinate-based steps: the empty-space long-press that enters edit mode, and (until fixed) the widget-gallery search-result rows, which currently return unlabeled accessibility nodes.
 - SpringBoard labels vary by iOS version and locale; discover them from the current snapshot rather than hard-coding strings like `Edit` or `Add Widget`.
 - Reopen the app bundle under test to return to normal app automation after a SpringBoard step.
