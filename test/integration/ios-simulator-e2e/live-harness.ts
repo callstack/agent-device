@@ -157,10 +157,17 @@ export async function cleanupSession(context: LiveContext): Promise<void> {
   }
   cleanupSteps.push(['close fixture session', ['close']]);
   for (const [step, args] of cleanupSteps) {
-    try {
-      await runStep(context, `cleanup: ${step}`, args);
-    } catch (error) {
-      failures.push(error);
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const result = await runStep(context, `cleanup: ${step} (attempt ${attempt})`, args, {
+          allowFailure: attempt < 3,
+        });
+        if (result.status === 0) break;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      } catch (error) {
+        failures.push(error);
+        break;
+      }
     }
   }
   if (failures.length === 0) return;

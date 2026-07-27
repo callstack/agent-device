@@ -43,35 +43,13 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
   );
   verifyCommand(context, C.triggerAppEvent, 'deep event name and JSON payload render exactly');
 
-  await runStep(context, 'reset microphone permission before prompt recovery', [
-    'settings',
-    'permission',
-    'reset',
-    'microphone',
-  ]);
+  await resetMicrophonePermissionAndRestart(context, 'initial');
   await clickMicrophonePermission(context, 'request microphone permission for denial');
   await runStep(context, 'wait for microphone permission prompt', ['alert', 'wait', '5000']);
   await runStep(context, 'deny microphone permission prompt', ['alert', 'dismiss']);
   await assertElementText(context, 'id="automation-microphone-permission"', 'denied');
 
-  await runStep(context, 'reset denied microphone permission', [
-    'settings',
-    'permission',
-    'reset',
-    'microphone',
-  ]);
-  await runStep(context, 'restart fixture after permission reset', [
-    'open',
-    context.appId,
-    '--relaunch',
-  ]);
-  await runStep(context, 'restore automation route after permission reset', [
-    'trigger-app-event',
-    'fixture.permission.recovery',
-    '{"source":"permission-reset"}',
-  ]);
-  await assertWaitText(context, 'Automation lab');
-  await assertElementText(context, 'id="automation-microphone-permission"', 'not-requested');
+  await resetMicrophonePermissionAndRestart(context, 'recovery');
   await clickMicrophonePermission(context, 'request microphone permission after reset');
   await runStep(context, 'wait for recovered microphone permission prompt', [
     'alert',
@@ -166,6 +144,30 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
 
   await runStep(context, 'restore fixture after system UI', ['open', context.appId]);
   await assertWaitText(context, 'Automation lab');
+}
+
+async function resetMicrophonePermissionAndRestart(
+  context: LiveContext,
+  phase: 'initial' | 'recovery',
+): Promise<void> {
+  await runStep(context, `reset microphone permission for ${phase} prompt`, [
+    'settings',
+    'permission',
+    'reset',
+    'microphone',
+  ]);
+  await runStep(context, `restart fixture after ${phase} permission reset`, [
+    'open',
+    context.appId,
+    '--relaunch',
+  ]);
+  await runStep(context, `restore automation route after ${phase} permission reset`, [
+    'trigger-app-event',
+    `fixture.permission.${phase}`,
+    `{"source":"permission-${phase}"}`,
+  ]);
+  await assertWaitText(context, 'Automation lab');
+  await assertElementText(context, 'id="automation-microphone-permission"', 'not-requested');
 }
 
 async function clickMicrophonePermission(context: LiveContext, step: string): Promise<void> {
