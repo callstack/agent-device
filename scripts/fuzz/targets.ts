@@ -12,18 +12,7 @@ import { parseSelectorChain } from '../../src/selectors/parse.ts';
 import { parseReplayScriptDetailed } from '../../src/replay/script.ts';
 import { readCliBatchStepsJson } from '../../src/cli/batch-steps.ts';
 import { parseMaestroProgram } from '../../src/compat/maestro/program-ir-parser.ts';
-
-export type FuzzTargetName = 'cli-args' | 'selector' | 'replay-script' | 'batch-steps' | 'maestro';
-
-export type FuzzTarget = {
-  name: FuzzTargetName;
-  /** Human-readable description used in failure reports. */
-  description: string;
-  /** Runs the parser on one case; may throw. */
-  run: (input: string) => void;
-  /** Valid-ish inputs the mutator derives cases from. */
-  seeds: string[];
-};
+import type { FuzzTarget } from './target-types.ts';
 
 // argv is carried as one string so a case (and its corpus entry, artifact, and repro
 // command) stays a single copy-pasteable value. Splitting on spaces is deliberate: the
@@ -119,12 +108,3 @@ export const FUZZ_TARGETS: readonly FuzzTarget[] = [
     ],
   },
 ];
-
-export function getFuzzTarget(name: string): FuzzTarget {
-  const target = FUZZ_TARGETS.find((candidate) => candidate.name === name);
-  if (!target) {
-    const known = FUZZ_TARGETS.map((candidate) => candidate.name).join(', ');
-    throw new Error(`Unknown fuzz target "${name}". Known targets: ${known}`);
-  }
-  return target;
-}

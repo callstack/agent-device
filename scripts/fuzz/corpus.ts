@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { FuzzTargetName } from './targets.ts';
+import type { FuzzTargetName } from './target-types.ts';
 
 export type CorpusEntry = {
   target: FuzzTargetName;
@@ -18,11 +18,11 @@ export type CorpusEntry = {
   note: string;
 };
 
-const CORPUS_PATH = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  'corpus',
-  'regressions.json',
-);
+// AGENT_DEVICE_FUZZ_CORPUS retargets the corpus file so the harness's own tests can exercise
+// the real promotion path against a scratch file instead of mutating the checked-in one.
+const CORPUS_PATH =
+  process.env.AGENT_DEVICE_FUZZ_CORPUS ??
+  path.join(path.dirname(fileURLToPath(import.meta.url)), 'corpus', 'regressions.json');
 
 export function readCorpus(corpusPath = CORPUS_PATH): CorpusEntry[] {
   const raw = fs.readFileSync(corpusPath, 'utf8');

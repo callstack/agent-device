@@ -38,6 +38,11 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
+      # A lane whose classifier or watchdog regressed would pass forever. This runs the
+      # broken-on-purpose targets first and fails unless each violation is caught.
+      - name: Self-check the harness
+        run: pnpm fuzz:parsers --self-check
+
       - name: Fuzz parsers
         env:
           FUZZ_ITERATIONS: ${{ github.event.inputs.fuzz-iterations || '50000' }}
@@ -48,13 +53,26 @@ jobs:
             --seed "$FUZZ_SEED" \
             --artifact-dir .tmp/fuzz
 
-      - name: Upload failing cases
-        if: failure()
+      # Uploaded on pass as well as failure: .tmp/fuzz always holds run-envelope.json
+      # (schemaVersion, commit/ref/run provenance, seed, config, per-target durations,
+      # result), which is what freshness/health monitoring reads for a green run.
+      - name: Upload run envelope and failing cases
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: parser-fuzz-failing-cases
+          name: parser-fuzz-run-${{ github.run_id }}-${{ github.run_attempt }}
           path: .tmp/fuzz
-          if-no-files-found: ignore
+          if-no-files-found: warn
+
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo '### Parser fuzz lane'
+            echo '```json'
+            cat .tmp/fuzz/run-envelope.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   nightly-android:
     name: Android Replay Suite

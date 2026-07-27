@@ -129,14 +129,25 @@ hangs (a worker-thread watchdog attributes a stall to the exact input).
 ```sh
 pnpm fuzz:parsers                                  # all targets, 2,000 cases each, seed 1
 pnpm fuzz:parsers --target selector --iterations 50000 --seed 7
-pnpm fuzz:parsers --input-file .tmp/fuzz/<case>.json   # repro one saved failing case
+pnpm fuzz:parsers --input-file .tmp/fuzz/<case>.json                  # repro a saved case
+pnpm fuzz:parsers --input-file .tmp/fuzz/<case>.json --append-corpus  # …and pin it
+pnpm fuzz:parsers --self-check                     # require the harness to still fail
 ```
 
 The generating run is nightly (`Parser Fuzz Lane` in `.github/workflows/replays-nightly.yml`, seeded
-by the run number); failing cases upload as artifacts and print that repro command. Every case the
-fuzzer catches is appended to `scripts/fuzz/corpus/regressions.json` (`--append-corpus`) and replayed
-in the unit lane by `scripts/fuzz/corpus-replay.test.ts`, so a fixed parser stays fixed on PRs.
-Adding a parser to the lane means adding a target to `scripts/fuzz/targets.ts` — nothing else.
+by the run number). Every run — green or red — writes `<artifact-dir>/run-envelope.json`
+(`schemaVersion`, commit/ref/run provenance, seed and config, per-target cases/failures/durations,
+result, repro commands) and uploads the artifact directory, so a passing scheduled run is auditable
+and not just silent; failing cases are uploaded alongside it.
+
+A nightly discovery reaches the unit lane by promotion, not hand-editing: the printed
+`promote:` command re-runs the downloaded artifact and appends it to
+`scripts/fuzz/corpus/regressions.json`, which `scripts/fuzz/corpus-replay.test.ts` replays on every
+PR. `scripts/fuzz/harness.test.ts` covers the harness itself — an untyped throw, an empty hint, and a
+wedged worker must each be reported — using the broken-on-purpose targets in
+`scripts/fuzz/self-check-targets.ts` (also what `--self-check` runs in CI), so a regressed classifier
+or watchdog cannot pass silently. Adding a parser to the lane means adding a target to
+`scripts/fuzz/targets.ts` — nothing else.
 
 ## Live web smoke
 

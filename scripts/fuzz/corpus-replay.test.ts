@@ -8,7 +8,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readCorpus } from './corpus.ts';
 import { checkCase } from './invariant.ts';
-import { FUZZ_TARGETS, getFuzzTarget } from './targets.ts';
+import { getFuzzTarget } from './registry.ts';
+import { FUZZ_TARGETS } from './targets.ts';
 import { generateCases } from './mutate.ts';
 
 describe('parser fuzz regression corpus', () => {
@@ -25,9 +26,10 @@ describe('parser fuzz regression corpus', () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  it('names only known targets and explains every entry', () => {
+  it('names only real parser targets and explains every entry', () => {
+    const parserTargets = new Set<string>(FUZZ_TARGETS.map((target) => target.name));
     for (const entry of corpus) {
-      expect(() => getFuzzTarget(entry.target)).not.toThrow();
+      expect(parserTargets).toContain(entry.target);
       expect(entry.note.trim()).not.toBe('');
     }
   });

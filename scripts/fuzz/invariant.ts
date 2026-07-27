@@ -9,7 +9,7 @@
 //      synchronous parsers cannot be interrupted from inside their own tick.
 
 import { AppError, normalizeError } from '../../src/kernel/errors.ts';
-import type { FuzzTarget, FuzzTargetName } from './targets.ts';
+import type { FuzzTarget, FuzzTargetName } from './target-types.ts';
 
 export type FuzzFailureKind = 'untyped-throw' | 'empty-hint' | 'hang';
 

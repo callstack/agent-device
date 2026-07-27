@@ -7,7 +7,7 @@
 
 import { parentPort, workerData } from 'node:worker_threads';
 import { checkCase, type FuzzFailure } from './invariant.ts';
-import { getFuzzTarget } from './targets.ts';
+import { getFuzzTarget } from './registry.ts';
 
 export type FuzzWorkerData = {
   targetName: string;
@@ -15,7 +15,10 @@ export type FuzzWorkerData = {
   progress: SharedArrayBuffer;
 };
 
-export type FuzzWorkerMessage = { kind: 'failure'; failure: FuzzFailure } | { kind: 'done' };
+export type FuzzWorkerMessage =
+  | { kind: 'ready' }
+  | { kind: 'failure'; failure: FuzzFailure }
+  | { kind: 'done' };
 
 const port = parentPort;
 if (!port) throw new Error('scripts/fuzz/worker.ts must be run as a worker thread.');
@@ -23,6 +26,10 @@ if (!port) throw new Error('scripts/fuzz/worker.ts must be run as a worker threa
 const { targetName, cases, progress } = workerData as FuzzWorkerData;
 const target = getFuzzTarget(targetName);
 const cursor = new Int32Array(progress);
+
+// Module loading (type stripping, parser imports) can outlast a per-case budget, so the
+// watchdog only starts counting once the worker is about to run the first case.
+port.postMessage({ kind: 'ready' } satisfies FuzzWorkerMessage);
 
 // The batch-steps parser warns on deprecated step shapes; a fuzz run would emit thousands of
 // those lines and bury the failure report.

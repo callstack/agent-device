@@ -11,6 +11,7 @@ export type FuzzOptions = {
   inputFile?: string;
   appendCorpus: boolean;
   replayCorpus: boolean;
+  selfCheck: boolean;
 };
 
 export const FUZZ_USAGE = `Usage: pnpm fuzz:parsers [options]
@@ -21,8 +22,9 @@ export const FUZZ_USAGE = `Usage: pnpm fuzz:parsers [options]
   --case-timeout-ms <n>  Per-case watchdog budget (default: 2000)
   --artifact-dir <dir>   Where failing cases are written (default: .tmp/fuzz)
   --input-file <file>    Replay a single saved failing case (JSON artifact) and exit
-  --append-corpus        Append new failures to the checked-in regression corpus
+  --append-corpus        Promote failures (incl. an --input-file artifact) into the corpus
   --replay-corpus        Replay the checked-in corpus instead of generating cases
+  --self-check           Run the broken-on-purpose targets and require each to be caught
 `;
 
 const DEFAULTS = {
@@ -58,6 +60,7 @@ export function readFuzzOptions(argv: readonly string[]): FuzzOptions | null {
       'input-file': { type: 'string' },
       'append-corpus': { type: 'boolean', default: false },
       'replay-corpus': { type: 'boolean', default: false },
+      'self-check': { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
     },
     allowPositionals: false,
@@ -72,5 +75,6 @@ export function readFuzzOptions(argv: readonly string[]): FuzzOptions | null {
     artifactDir: String(values['artifact-dir']),
     appendCorpus: values['append-corpus'] === true,
     replayCorpus: values['replay-corpus'] === true,
+    selfCheck: values['self-check'] === true,
   };
 }
