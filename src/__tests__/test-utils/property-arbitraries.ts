@@ -1,8 +1,9 @@
 import fc from 'fast-check';
+import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { GESTURE_KINDS, type GesturePayload } from '../../contracts/gesture-input.ts';
 import { SCROLL_DIRECTIONS, SWIPE_PRESETS } from '../../contracts/scroll-gesture.ts';
 import type { Point, RawSnapshotNode, Rect } from '../../kernel/snapshot.ts';
-import type { SelectorKey, SelectorTerm } from '../../selectors/parse.ts';
+import { SELECTOR_KEY_NAMES, type SelectorKey, type SelectorTerm } from '../../selectors/parse.ts';
 
 /**
  * Shared fast-check generators for the pure parse/print and geometry kernels
@@ -30,25 +31,43 @@ export const PROPERTY_RUNS_SMALL = 40;
 // Selectors
 // ---------------------------------------------------------------------------
 
-const SELECTOR_TEXT_KEYS = [
-  'id',
-  'role',
-  'text',
-  'label',
-  'value',
-  'appname',
-  'windowtitle',
-] as const satisfies readonly SelectorKey[];
+/**
+ * Value shape per selector key. The parser owns the key set; this only says how
+ * each key's right-hand side is spelled, and `Record<SelectorKey, …>` makes a
+ * new key a typecheck failure here instead of a silent hole in the property.
+ */
+const SELECTOR_KEY_VALUE_KINDS = {
+  id: 'text',
+  role: 'text',
+  text: 'text',
+  label: 'text',
+  value: 'text',
+  appname: 'text',
+  windowtitle: 'text',
+  visible: 'boolean',
+  hidden: 'boolean',
+  editable: 'boolean',
+  selected: 'boolean',
+  focused: 'boolean',
+  enabled: 'boolean',
+  hittable: 'boolean',
+} satisfies Record<SelectorKey, 'text' | 'boolean'>;
 
-const SELECTOR_BOOLEAN_KEYS = [
-  'visible',
-  'hidden',
-  'editable',
-  'selected',
-  'focused',
-  'enabled',
-  'hittable',
-] as const satisfies readonly SelectorKey[];
+/** Keys of one value shape, derived from the parser's own `SELECTOR_KEY_NAMES`. */
+function selectorKeysOfKind(kind: 'text' | 'boolean'): SelectorKey[] {
+  const keys = SELECTOR_KEY_NAMES.filter((key) => {
+    const valueKind: string | undefined = SELECTOR_KEY_VALUE_KINDS[key];
+    if (valueKind === undefined) {
+      throw new Error(
+        `selector key "${key}" from SELECTOR_KEY_NAMES (src/selectors/parse.ts) has no value shape: ` +
+          'add it to SELECTOR_KEY_VALUE_KINDS in src/__tests__/test-utils/property-arbitraries.ts',
+      );
+    }
+    return valueKind === kind;
+  });
+  if (keys.length === 0) throw new Error(`no selector keys of value shape "${kind}"`);
+  return keys;
+}
 
 /**
  * The shapes that broke hand-written selector examples: both quote characters,
@@ -84,14 +103,14 @@ const selectorTextValueArb: fc.Arbitrary<string> = fc.oneof(
 const selectorTermArb: fc.Arbitrary<SelectorTerm> = fc.oneof(
   fc
     .record({
-      key: fc.constantFrom(...SELECTOR_TEXT_KEYS),
+      key: fc.constantFrom(...selectorKeysOfKind('text')),
       value: selectorTextValueArb,
     })
     // fast-check records are null-prototype; parsed terms are plain objects.
     .map(({ key, value }) => ({ key, value })),
   fc
     .record({
-      key: fc.constantFrom(...SELECTOR_BOOLEAN_KEYS),
+      key: fc.constantFrom(...selectorKeysOfKind('boolean')),
       value: fc.boolean(),
     })
     .map(({ key, value }) => ({ key, value })),
@@ -307,11 +326,33 @@ const scriptTargetArb: fc.Arbitrary<string> = fc.oneof(
 const coordinateArb = fc.integer({ min: 0, max: 1200 }).map(String);
 
 /**
- * One line arbitrary per replay command this property covers. The record is
- * keyed by literal command names so a renamed command breaks the generator
- * loudly instead of quietly narrowing coverage.
+ * A command is either generated from a line template or explicitly waived with
+ * the reason it needs none. `Record<PublicCommandName, …>` makes the
+ * classification exhaustive: a new public command does not compile until it is
+ * given a template or a waiver.
  */
-const REPLAY_SCRIPT_LINE_ARBS = {
+/**
+ * Every command name a `.ad` line can carry. Internal commands are included
+ * because scripts record them too (`runtime` has its own parse/print branch).
+ */
+type ReplayCommandName =
+  | (typeof PUBLIC_COMMANDS)[keyof typeof PUBLIC_COMMANDS]
+  | (typeof INTERNAL_COMMANDS)[keyof typeof INTERNAL_COMMANDS];
+
+type ReplayLinePlan = fc.Arbitrary<string> | { waived: string };
+
+/**
+ * Commands whose `.ad` line is a bare `<command> <token>…` handled by the
+ * generic parse/print branch (`appendGenericActionScriptArgs`), whose shape the
+ * `wait`/`longpress` templates already exercise. A command that grows its own
+ * branch in src/replay/script.ts or src/replay/script-formatting.ts must move
+ * to a template.
+ */
+const GENERIC_REPLAY_LINE = {
+  waived: 'generic line shape, covered by the wait/longpress templates',
+} as const;
+
+const REPLAY_SCRIPT_LINE_PLANS = {
   click: fc.oneof(
     scriptTargetArb.map((target) => `click ${target}`),
     fc.tuple(coordinateArb, coordinateArb).map(([x, y]) => `click ${x} ${y}`),
@@ -356,11 +397,96 @@ const REPLAY_SCRIPT_LINE_ARBS = {
     scriptTextArb.map((scope) => `snapshot -s ${JSON.stringify(scope)}`),
   ),
   screenshot: fc.constantFrom('screenshot', 'screenshot out.png'),
-} satisfies Record<string, fc.Arbitrary<string>>;
+  open: fc.oneof(
+    fc.constantFrom('open com.example.app', 'open com.example.app --relaunch'),
+    fc
+      .tuple(fc.constantFrom('ios', 'android'), fc.integer({ min: 1, max: 65_535 }))
+      .map(
+        ([platform, port]) => `open com.example.app --platform ${platform} --metro-port ${port}`,
+      ),
+  ),
+  runtime: fc.oneof(
+    fc.constant('runtime metro'),
+    fc.constantFrom('ios', 'android').map((platform) => `runtime metro --platform ${platform}`),
+  ),
+  record: fc.oneof(
+    fc.constantFrom('record start', 'record stop', 'record start --hide-touches'),
+    fc.integer({ min: 1, max: 120 }).map((fps) => `record start --fps ${fps}`),
+  ),
+  alert: GENERIC_REPLAY_LINE,
+  'app-switcher': GENERIC_REPLAY_LINE,
+  apps: GENERIC_REPLAY_LINE,
+  appstate: GENERIC_REPLAY_LINE,
+  artifacts: GENERIC_REPLAY_LINE,
+  audio: GENERIC_REPLAY_LINE,
+  back: GENERIC_REPLAY_LINE,
+  batch: GENERIC_REPLAY_LINE,
+  boot: GENERIC_REPLAY_LINE,
+  capabilities: GENERIC_REPLAY_LINE,
+  clipboard: GENERIC_REPLAY_LINE,
+  close: GENERIC_REPLAY_LINE,
+  devices: GENERIC_REPLAY_LINE,
+  diff: GENERIC_REPLAY_LINE,
+  doctor: GENERIC_REPLAY_LINE,
+  events: GENERIC_REPLAY_LINE,
+  find: GENERIC_REPLAY_LINE,
+  focus: GENERIC_REPLAY_LINE,
+  home: GENERIC_REPLAY_LINE,
+  install: GENERIC_REPLAY_LINE,
+  'install-from-source': GENERIC_REPLAY_LINE,
+  is: GENERIC_REPLAY_LINE,
+  keyboard: GENERIC_REPLAY_LINE,
+  logs: GENERIC_REPLAY_LINE,
+  network: GENERIC_REPLAY_LINE,
+  orientation: GENERIC_REPLAY_LINE,
+  perf: GENERIC_REPLAY_LINE,
+  prepare: GENERIC_REPLAY_LINE,
+  push: GENERIC_REPLAY_LINE,
+  'react-native': GENERIC_REPLAY_LINE,
+  reinstall: GENERIC_REPLAY_LINE,
+  replay: GENERIC_REPLAY_LINE,
+  scroll: GENERIC_REPLAY_LINE,
+  settings: GENERIC_REPLAY_LINE,
+  shutdown: GENERIC_REPLAY_LINE,
+  test: GENERIC_REPLAY_LINE,
+  trace: GENERIC_REPLAY_LINE,
+  'trigger-app-event': GENERIC_REPLAY_LINE,
+  'tv-remote': GENERIC_REPLAY_LINE,
+  viewport: GENERIC_REPLAY_LINE,
+  install_source: GENERIC_REPLAY_LINE,
+  lease_allocate: GENERIC_REPLAY_LINE,
+  lease_heartbeat: GENERIC_REPLAY_LINE,
+  lease_release: GENERIC_REPLAY_LINE,
+  release_materialized_paths: GENERIC_REPLAY_LINE,
+  session_list: GENERIC_REPLAY_LINE,
+  session_save_script: GENERIC_REPLAY_LINE,
+} satisfies Record<ReplayCommandName, ReplayLinePlan>;
 
-const replayScriptLineArb: fc.Arbitrary<string> = fc.oneof(
-  ...Object.values(REPLAY_SCRIPT_LINE_ARBS),
-);
+/**
+ * Line templates for every command, resolved through the runtime command
+ * catalog so a command that exists at runtime but not in the plan fails loudly.
+ */
+function replayScriptLineArbs(): fc.Arbitrary<string>[] {
+  const arbitraries: fc.Arbitrary<string>[] = [];
+  const commands: ReplayCommandName[] = [
+    ...Object.values(PUBLIC_COMMANDS),
+    ...Object.values(INTERNAL_COMMANDS),
+  ];
+  for (const command of commands) {
+    const plan: ReplayLinePlan | undefined = REPLAY_SCRIPT_LINE_PLANS[command];
+    if (plan === undefined) {
+      throw new Error(
+        `replay command "${command}" from src/command-catalog.ts is unclassified: ` +
+          'add a line template or a waiver to REPLAY_SCRIPT_LINE_PLANS in ' +
+          'src/__tests__/test-utils/property-arbitraries.ts',
+      );
+    }
+    if (!('waived' in plan)) arbitraries.push(plan);
+  }
+  return arbitraries;
+}
+
+const replayScriptLineArb: fc.Arbitrary<string> = fc.oneof(...replayScriptLineArbs());
 
 /** A valid `.ad` script: action lines interleaved with comments and blank lines. */
 export const replayScriptArb: fc.Arbitrary<string> = fc
