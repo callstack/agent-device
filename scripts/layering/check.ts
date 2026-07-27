@@ -206,7 +206,9 @@ function checkBackEdges(edges: readonly ResolvedImportEdge[]): Violation[] {
 //
 // The counts may only go DOWN. Fixing edges without lowering the number fails too, so the
 // baseline cannot quietly stop describing the tree.
-const TYPE_INVERSION_BASELINE: Readonly<Record<string, number>> = {
+// Exported so scripts/depgraph can assert its own graph build reproduces it — see the
+// baseline-parity test there. The gate remains the authority; the report follows.
+export const TYPE_INVERSION_BASELINE: Readonly<Record<string, number>> = {
   'commands -> client': 28,
   'commands -> daemon-server': 1,
   'contracts -> client': 1,

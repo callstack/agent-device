@@ -42,6 +42,8 @@ type Payload = {
    */
   edges: [number, number, number, number][];
   cycles: { kind: string; path: number[] }[];
+  /** Type-only spine inversions per zone pair, by the gate's counting rule. */
+  typeInversions: Record<string, number>;
 };
 
 function headCommit(): string {
@@ -102,6 +104,7 @@ function buildPayload(): Payload {
       kind: cycle.kind,
       path: cycle.path.map((file) => nodeIndex.get(file)!),
     })),
+    typeInversions: graph.typeInversions,
   };
 }
 
@@ -120,7 +123,7 @@ function main(argv: readonly string[]): number {
   const otherCycles = payload.cycles.length - valueCycles;
   const backEdges = payload.edges.filter(([, , , flags]) => flags & 1).length;
   const redundant = payload.edges.filter(([, , , flags]) => flags & 2).length;
-  const typeInversions = payload.edges.filter(([, , , flags]) => flags & 4).length;
+  const typeInversions = Object.values(payload.typeInversions).reduce((sum, n) => sum + n, 0);
   process.stdout.write(
     `Dependency graph: ${payload.generated.files} files, ${payload.generated.edges} edges, ` +
       `${payload.zones.length} zones\n` +

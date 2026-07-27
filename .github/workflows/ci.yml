@@ -113,6 +113,13 @@ jobs:
           node --experimental-strip-types --test scripts/layering/model.test.ts
           node --experimental-strip-types scripts/layering/check.ts
 
+      - name: Check the depgraph report agrees with the gate
+        # scripts/depgraph reads the same model as the gate, so its inversion count must
+        # reproduce TYPE_INVERSION_BASELINE. Free two-sources check: if the tree changes
+        # and only one side is updated, this fails and names the difference. Runs here
+        # rather than in its own job so the two can never be green independently.
+        run: node --experimental-strip-types --test scripts/depgraph/model.test.ts
+
   affected-selector:
     name: Affected-check Selector
     runs-on: ubuntu-latest

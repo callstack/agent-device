@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { listSourceFiles, TYPE_INVERSION_BASELINE } from '../layering/check.ts';
 import { resolveImportEdges } from '../layering/model.ts';
-import { buildGraph, collapseEdges, collectCycles, markRedundantEdges } from './model.ts';
+import {
+  buildGraph,
+  collapseEdges,
+  collectCycles,
+  markRedundantEdges,
+  typeInversionsByPair,
+} from './model.ts';
 
 function sources(entries: Record<string, string>): Map<string, string> {
   return new Map(Object.entries(entries));
@@ -144,5 +152,32 @@ test('buildGraph reports zone membership, degrees, and cross-zone edge counts', 
   assert.deepEqual(
     graph.zones.map((zone) => zone.classification),
     ['ranked', 'ranked', 'ranked'],
+  );
+});
+
+// Two-sources-of-truth check, run by the Layering Guard job.
+//
+// The report and the gate read the same model, so their inversion counts must agree. This locks
+// that: if the tree changes and only one side is updated, or if the report's extraction diverges
+// from what the gate sees, this fails and names the difference.
+//
+// What it proves precisely: the report's own graph build, over the real tree, reproduces
+// TYPE_INVERSION_BASELINE. It is a cross-check of the extraction and the baseline against reality,
+// not two independent algorithms — `typeInversionsByPair` deliberately applies the gate's counting
+// rule so the numbers cannot differ for a reason unrelated to layering. The gate stays the
+// authority; if these disagree, the baseline or the tree is wrong, never this test.
+test("the report's inversion count reproduces the gate's TYPE_INVERSION_BASELINE", () => {
+  const files = listSourceFiles();
+  const sources = new Map(files.map((file) => [file, readFileSync(file, 'utf8')]));
+  const actual = typeInversionsByPair(resolveImportEdges(sources));
+
+  assert.deepEqual(
+    actual,
+    // Object key order differs between the two literals; compare as sorted entries.
+    Object.fromEntries(
+      Object.entries(TYPE_INVERSION_BASELINE).sort(([left], [right]) => left.localeCompare(right)),
+    ),
+    'depgraph and scripts/layering/check.ts disagree about type-only spine inversions. ' +
+      'Regenerate with `pnpm depgraph` and update TYPE_INVERSION_BASELINE, or fix the edge.',
   );
 });

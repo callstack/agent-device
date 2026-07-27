@@ -62,6 +62,24 @@ it returns an empty list, which is the gate passing, not a broken query.
 
 ## What is authoritative
 
+`pnpm check:layering` is. The viewer reads the same model, so the numbers should agree — and that
+agreement is now enforced rather than hoped for: the **Layering Guard job runs
+`scripts/depgraph/model.test.ts`**, whose last test asserts this report's inversion count reproduces
+`TYPE_INVERSION_BASELINE`. If the tree changes and only one side is updated, CI fails and names the
+difference. The two cannot be green independently.
+
+What that check proves precisely: the report's graph build, over the real tree, agrees with the
+gate's baseline. It is a cross-check of the extraction and the baseline against reality, not two
+independent algorithms — `typeInversionsByPair` deliberately applies the gate's counting rule (once
+per file pair, over raw edges) so the numbers cannot diverge for a reason unrelated to layering. In
+particular it does NOT count from the collapsed edge list, where `dynamic` outranks `type` and a
+module imported both lazily and for its types would drop out.
+
+If they ever disagree, the gate is right and the baseline or the tree is wrong.
+
+### Notes
+
+
 `pnpm check:layering` is. This reads the same model, so the numbers should agree — its R6
 count matching `TYPE_INVERSION_BASELINE` is a useful self-check — but if they ever diverge, the
 gate is right and the graph is stale. Nothing here runs in CI, and nothing here should gate a
