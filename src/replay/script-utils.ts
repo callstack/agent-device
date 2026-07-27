@@ -1,4 +1,4 @@
-import type { SessionAction } from '../daemon/types.ts';
+import type { SessionAction } from '../contracts/session-action.ts';
 import { appendScreenshotScriptFlags } from '../contracts/screenshot.ts';
 import { splitRefGenerationSuffix } from '../kernel/snapshot.ts';
 

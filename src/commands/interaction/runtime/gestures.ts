@@ -1,6 +1,5 @@
 import { AppError } from '../../../kernel/errors.ts';
 import type { Point } from '../../../kernel/snapshot.ts';
-import type { ScrollDirection } from '../../../contracts/scroll-gesture.ts';
 import {
   assertExclusiveScrollDistanceInputs,
   honoredScrollDurationMs,
@@ -54,8 +53,13 @@ export type LongPressCommandOptions = CommandContext & {
 export type { LongPressCommandResult };
 
 export type GestureDirection = ScrollDirection;
-export const SCROLL_INPUT_DIRECTIONS = ['up', 'down', 'left', 'right', 'top', 'bottom'] as const;
-export type ScrollInputDirection = (typeof SCROLL_INPUT_DIRECTIONS)[number];
+// The input vocabulary lives in contracts/scroll-gesture.ts beside the other scroll vocabularies,
+// so the public API can declare `ScrollOptions` without depending on this command runtime.
+export {
+  SCROLL_INPUT_DIRECTIONS,
+  type ScrollInputDirection,
+} from '../../../contracts/scroll-gesture.ts';
+import type { ScrollDirection, ScrollInputDirection } from '../../../contracts/scroll-gesture.ts';
 
 export type ScrollTarget =
   | InteractionTarget

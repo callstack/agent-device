@@ -1,6 +1,8 @@
 import type { CommandCapability } from '../capabilities.ts';
 import type { DaemonCommandDescriptor } from '../../daemon/daemon-command-registry.ts';
-import type { DaemonRequest } from '../../daemon/types.ts';
+// The typed-flags request from contracts/, not the daemon's server-side refinement: these
+// descriptors read `command`, `positionals` and `flags` and never touch `internal`.
+import type { CommandRequest } from '../../contracts/command-request.ts';
 import type { PostActionObservationSupport } from './post-action-observation.ts';
 
 export type ResponseDataFieldTransform = {
@@ -101,7 +103,7 @@ export type CommandDispatchFacet = {
 export type RecordingEffect = 'mutates-app' | 'observes-app';
 export type CommandRecordingEffect =
   | RecordingEffect
-  | ((req: Pick<DaemonRequest, 'command' | 'positionals' | 'flags'>) => RecordingEffect);
+  | ((req: Pick<CommandRequest, 'command' | 'positionals' | 'flags'>) => RecordingEffect);
 
 /**
  * ADR 0012 / #1349: when replay verifies a recorded `target-v1` annotation.

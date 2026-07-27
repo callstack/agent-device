@@ -88,7 +88,9 @@ import type {
   MaterializationReleaseOptions,
   MaterializationReleaseResult,
   MetroPrepareOptions,
+  MetroPrepareResult,
   MetroReloadOptions,
+  MetroReloadResult,
   NetworkOptions,
   PanOptions,
   PerfOptions,
@@ -100,6 +102,7 @@ import type {
   ReplayRunOptions,
   ReplayTestOptions,
   RotateGestureOptions,
+  ScrollOptions,
   SessionCloseResult,
   SessionSaveScriptOptions,
   SessionSaveScriptResult,
@@ -115,13 +118,10 @@ import type {
 
 import type { RotateCommandResult } from '../contracts/navigation.ts';
 
-import type { ScrollInputDirection } from '../commands/interaction/runtime/gestures.ts';
 import type {
   NavigationCommandOptions,
   ProjectedNavigationCommandClient,
 } from '../commands/system/navigation-projection.ts';
-
-import type { PrepareMetroRuntimeResult, ReloadMetroResult } from '../metro/client-metro.ts';
 
 import type { BatchRunResult } from '../core/batch.ts';
 export type { BatchRunResult } from '../core/batch.ts';
@@ -147,10 +147,6 @@ export type { DoctorCommandResult } from '../contracts/doctor.ts';
 export type { DiffSnapshotCommandResult } from '../contracts/diff.ts';
 export type { RecordingCommandResult, TraceCommandResult } from '../contracts/recording.ts';
 export type { ReplayCommandResult, ReplaySuiteResult } from '../contracts/replay.ts';
-
-export type MetroPrepareResult = PrepareMetroRuntimeResult;
-
-export type MetroReloadResult = ReloadMetroResult;
 
 export type BackCommandOptions = DeviceCommandBaseOptions & NavigationCommandOptions<'back'>;
 
@@ -203,13 +199,6 @@ type DeprecatedCommandClient = {
  * 10s) when `settle` is true. A bare `timeoutMs` without `settle` is ignored
  * for compatibility; `settleQuietMs` still requires `settle`.
  */
-
-export type ScrollOptions = DeviceCommandBaseOptions & {
-  direction: ScrollInputDirection;
-  amount?: number;
-  pixels?: number;
-  durationMs?: number;
-};
 
 /**
  * #1271 stage 2 (ADR 0012 amendment): `get`/`is`/`find` are observation-only

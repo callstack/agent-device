@@ -2,6 +2,13 @@ import { AppError } from '../kernel/errors.ts';
 import { defineStringEnum } from '../utils/string-enum.ts';
 import type { Rect, SnapshotNode } from '../kernel/snapshot.ts';
 
+// What a caller may ASK for, as opposed to `ScrollDirection` (what the gesture resolves to):
+// `top`/`bottom` are scroll-to-extreme requests with no direction of their own. Declared here
+// rather than in the command runtime that resolves them, so the public `ScrollOptions` can be
+// stated without depending on `commands/`.
+export const SCROLL_INPUT_DIRECTIONS = ['up', 'down', 'left', 'right', 'top', 'bottom'] as const;
+export type ScrollInputDirection = (typeof SCROLL_INPUT_DIRECTIONS)[number];
+
 export const SCROLL_DIRECTIONS = ['up', 'down', 'left', 'right'] as const;
 export type ScrollDirection = (typeof SCROLL_DIRECTIONS)[number];
 export const SWIPE_PRESETS = ['left', 'right', 'left-edge', 'right-edge'] as const;

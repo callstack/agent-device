@@ -19,22 +19,21 @@ export const TARGET_ANNOTATION_MAX_FIELD_BYTES = 256;
 export const TARGET_ANNOTATION_MAX_PAYLOAD_BYTES = 4096;
 export const TARGET_ANNOTATION_MAX_ANCESTRY = 8;
 
-export type TargetAncestryEntry = { role: string; label?: string };
-export type TargetScrollRegion = { role: string; id?: string; label?: string };
-export type TargetRect = { x: number; y: number; width: number; height: number };
-export type TargetVerification = 'verified' | 'unverifiable';
-
-export type TargetAnnotationV1 = {
-  id?: string;
-  role: string;
-  label?: string;
-  ancestry: TargetAncestryEntry[];
-  sibling: number;
-  viewportOrder: number;
-  scrollRegion?: TargetScrollRegion;
-  rect?: TargetRect;
-  verification: TargetVerification;
-};
+// The annotation SHAPE lives in contracts/ so the recorded-action type can be stated without
+// depending on this zone; re-exported here for existing consumers.
+export type {
+  TargetAncestryEntry,
+  TargetAnnotationV1,
+  TargetScrollRegion,
+  TargetVerification,
+} from '../contracts/target-annotation.ts';
+import type {
+  TargetAncestryEntry,
+  TargetAnnotationV1,
+  TargetRect,
+  TargetScrollRegion,
+  TargetVerification,
+} from '../contracts/target-annotation.ts';
 
 // ---------------------------------------------------------------------------
 // Normalization (decision 3 "Normalization"): all strings NFC; `label` fields

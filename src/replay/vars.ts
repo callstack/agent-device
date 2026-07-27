@@ -1,5 +1,5 @@
 import { AppError } from '../kernel/errors.ts';
-import type { SessionAction } from '../daemon/types.ts';
+import type { SessionAction } from '../contracts/session-action.ts';
 
 export type ReplayVarScope = {
   values: Readonly<Record<string, string>>;

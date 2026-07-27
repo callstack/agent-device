@@ -5,7 +5,7 @@ import { readScreenshotScriptFlag } from '../contracts/screenshot.ts';
 import type { DeviceTarget, PlatformSelector } from '../kernel/device.ts';
 import { PLATFORM_SELECTORS } from '../kernel/device.ts';
 import { parseReplayOpenFlags } from './open-script.ts';
-import type { SessionAction } from '../daemon/types.ts';
+import type { SessionAction } from '../contracts/session-action.ts';
 import {
   isClickLikeCommand,
   parseReplaySeriesFlags,

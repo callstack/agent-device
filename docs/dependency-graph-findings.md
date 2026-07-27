@@ -43,7 +43,7 @@ raw edge count reads higher.
 
 |                                                          | before                 | after                                           |
 | -------------------------------------------------------- | ---------------------- | ----------------------------------------------- |
-| type-only spine inversions (R6)                          | 61 across 6 zone pairs | **18 across 5**, ratcheted                      |
+| type-only spine inversions (R6)                          | 61 across 6 zone pairs | **7 across 4**, ratcheted                       |
 | files in the unranked `(root)` zone                      | 29                     | **13** — entrypoints and composition roots only |
 | files covered by the ranked spine                        | 713 of 898             | **888 of 901**                                  |
 | type imports pointing at a re-export hub in another zone | 89                     | **0**                                           |
@@ -72,6 +72,62 @@ type-only inversions, R7 pins SessionState field ownership, and the shared selec
   concern.
 - Still outside every rule: **dynamic** import direction (0 inversions today, nothing watching),
   and anything inside a zone.
+
+## 0. Where the inversions ended up (and why 7 is the floor for now)
+
+61 → 7. The last pass moved four keystones, each of which was pinning a much larger set:
+
+| Keystone moved to `contracts/` | Unblocked |
+|---|---|
+| `DaemonBatchStep` (was `core/batch.ts`, typed via `DaemonRequest['runtime']`) | `CommandFlags` |
+| `CommandFlags` (was `core/dispatch-context.ts`) | `SessionAction`, `CommandRequest` |
+| `TargetAnnotationV1` shape (was `replay/target-identity.ts`) | `SessionAction` |
+| `ScrollInputDirection`, Metro result payloads | `ScrollOptions`, `MetroPrepareResult`/`MetroReloadResult` |
+
+Two of those deserve their own note, because the pattern repeats: `DaemonBatchStep`'s `runtime` field
+was written `DaemonRequest['runtime']`, pulling the whole daemon request type in to say
+`SessionRuntimeHints` — the same type three zones lower. And `CommandFlags` was a single rank-2
+declaration pinning ~80 public API shapes above it. Neither looked like a keystone from the graph;
+both were found by asking "what does the target itself import, and what rank is that?"
+
+`DaemonRequest` also split into the three shapes it had been conflating:
+
+- `kernel/contracts.ts` — the **wire** shape, `flags?: Record<string, unknown>`, because a process
+  boundary cannot enforce a flag vocabulary;
+- `contracts/command-request.ts` `CommandRequest` — the wire shape with `flags` typed. What a command
+  surface needs to reason about a request without knowing which server runs it;
+- `daemon/types.ts` `DaemonRequest` — that plus `internal?: DaemonRequestInternal`, carrying
+  `SessionState` callbacks and the admitted lease. Server-private, and why it cannot move down.
+
+`core/command-descriptor/` had been importing the third to read `command`, `positionals` and `flags`.
+
+**The remaining 7 are positions, not debt.** 4 are `AgentDeviceClient` used as an opaque handle;
+the facade is built from `commands/`'s own `NAVIGATION_COMMAND_PROJECTIONS`, so this is a genuine
+zone-level cycle and breaking it means deciding where that registry belongs. 3 are the ADR 0003
+daemon descriptor, whose `DaemonCommandRoute` is `keyof typeof DAEMON_ROUTE_HANDLERS` — derived from
+what the server implements, so moving it down would mean re-declaring route names plus a gate to
+prove the handler map still covers them. Both are argued at `TYPE_INVERSION_BASELINE`.
+
+## 0b. The biggest structural finding is not an inversion
+
+Cycle size by edge kind, measured over the whole production graph:
+
+| edges considered | largest strongly-connected component |
+|---|---|
+| value only | **1** — no cycles, which is what R4 enforces |
+| value + type-only | **87 files** |
+| value + dynamic | **1** |
+| all kinds | 213 files |
+
+At runtime the module graph is a clean DAG. The 87-file cluster is purely type-level: you cannot read
+the types of any one of those files without transitively reaching all 87. That is not a correctness
+problem — types are erased — but it is a comprehension one, and it is the single largest obstacle to
+reading a subsystem in isolation. It spans `commands` (33), `daemon` (21), `platforms` (13), `core`
+(12), hubs at `runtime-contract.ts` (25 in-cluster dependents), `commands/runtime-types.ts` (21),
+`backend.ts` (15), `commands/runtime-common.ts` (12).
+
+Deliberately not attempted yet: it is a different and much larger change than moving declarations
+down, and R6 does not measure it. Worth its own pass, starting at those four hubs.
 
 ## 1. The two remaining type-inversion clusters
 

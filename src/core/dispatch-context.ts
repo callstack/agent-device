@@ -1,6 +1,8 @@
-import type { CliFlags, DaemonExcludedCliFlag } from '../contracts/cli-flags.ts';
+// CommandFlags and MaestroRuntimeFlags are declared in contracts/ so both sides of the process
+// boundary can be stated in terms of them; re-exported here because this is where consumers
+// already import them from.
+export type { CommandFlags } from '../contracts/command-flags.ts';
 import type { ScreenshotDispatchFlags } from '../contracts/screenshot.ts';
-import type { DaemonBatchStep } from './batch.ts';
 import type { BackMode } from '../contracts/back-mode.ts';
 import type { ClickButton } from '../contracts/click-button.ts';
 import type { ElementSelectorKey } from '../contracts/interactor-types.ts';
@@ -8,36 +10,6 @@ import type { SwipePattern } from '../contracts/scroll-gesture.ts';
 import type { SessionSurface } from '../contracts/session-surface.ts';
 import type { RunnerLogicalLeaseContext } from '../contracts/runner-lease-context.ts';
 import type { Point } from '../kernel/snapshot.ts';
-
-export type MaestroRuntimeFlags = {
-  allowNonHittableCoordinateFallback?: boolean;
-  expectedTapPoint?: Point;
-  prewarmRunnerBeforeOpen?: boolean;
-  screenshotCaptureBackend?: 'runner';
-};
-
-export type CommandFlags = Omit<CliFlags, DaemonExcludedCliFlag> & {
-  batchSteps?: DaemonBatchStep[];
-  clearAppState?: boolean;
-  interactionOutcome?: {
-    retryOnNoChange?: boolean;
-  };
-  launchArgs?: string[];
-  kind?: string;
-  maestro?: MaestroRuntimeFlags;
-  postGestureStabilization?: boolean;
-  snapshotIncludeHiddenContentHints?: boolean;
-  leaseProvider?: string;
-  provider?: string;
-  deviceKey?: string;
-  clientId?: string;
-  devicePort?: number;
-  hostPort?: number;
-  portReverseName?: string;
-  replayBackend?: string;
-  shardCount?: number;
-  shardIndex?: number;
-};
 
 export type DispatchContext = ScreenshotDispatchFlags & {
   requestId?: string;

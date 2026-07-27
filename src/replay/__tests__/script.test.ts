@@ -8,7 +8,7 @@ import {
 } from '../script.ts';
 import { formatPortableActionLine, formatTargetAnnotationLines } from '../script-formatting.ts';
 import type { TargetAnnotationV1 } from '../target-identity.ts';
-import type { SessionAction } from '../../daemon/types.ts';
+import type { SessionAction } from '../../contracts/session-action.ts';
 
 // `writeReplayScript` (the `--update` heal-and-rewrite serializer) was
 // deleted in ADR 0012 migration step 6 (`--update` retirement left it with

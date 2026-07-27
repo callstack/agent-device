@@ -1,4 +1,11 @@
-import type { MetroPrepareKind } from '../contracts/metro.ts';
+// The result PAYLOADS are declared in contracts/metro.ts so the public API can name them
+// without depending on this zone; re-exported here for existing consumers.
+export type { PrepareMetroRuntimeResult, ReloadMetroResult } from '../contracts/metro.ts';
+import type {
+  MetroPrepareKind,
+  PrepareMetroRuntimeResult,
+  ReloadMetroResult,
+} from '../contracts/metro.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { sleep } from '../utils/timeouts.ts';
@@ -94,22 +101,6 @@ export type PrepareMetroRuntimeOptions = {
   env?: EnvSource;
 };
 
-export type PrepareMetroRuntimeResult = {
-  projectRoot: string;
-  kind: ResolvedMetroKind;
-  dependenciesInstalled: boolean;
-  packageManager: string | null;
-  started: boolean;
-  reused: boolean;
-  pid: number;
-  logPath: string;
-  statusUrl: string;
-  runtimeFilePath: string | null;
-  iosRuntime: MetroRuntimeHints;
-  androidRuntime: MetroRuntimeHints;
-  bridge: MetroBridgeResult | null;
-};
-
 export type ReloadMetroOptions = {
   metroHost?: string;
   metroPort?: number | string;
@@ -124,13 +115,6 @@ export type ReloadMetroOptions = {
  * route (Expo). `status`/`body` always describe the HTTP probe; on the websocket path `reloadUrl`
  * is the ws(s) message-socket URL.
  */
-export type ReloadMetroResult = {
-  reloaded: true;
-  reloadUrl: string;
-  status: number;
-  body: string;
-  transport: 'http' | 'message-socket';
-};
 
 type ProxyBridgeRequestOptions = {
   baseUrl: string;

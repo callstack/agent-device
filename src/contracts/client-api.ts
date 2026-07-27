@@ -1,3 +1,5 @@
+import type { ScrollInputDirection } from './scroll-gesture.ts';
+import type { PrepareMetroRuntimeResult, ReloadMetroResult } from './metro.ts';
 // The public API vocabulary: connection config, the device/session views, and every per-command
 // Options/Result shape. Declared here rather than inside `client/` because BOTH `client/` (the
 // published Node surface) and `commands/` (the CLI/daemon command surface) are stated in terms of
@@ -1051,3 +1053,12 @@ export type InternalRequestOptions = AgentDeviceClientConfig &
   };
 
 export type CommandRequestResult = DaemonResponseData;
+
+export type ScrollOptions = DeviceCommandBaseOptions & {
+  direction: ScrollInputDirection;
+  amount?: number;
+  pixels?: number;
+  durationMs?: number;
+};
+export type MetroPrepareResult = PrepareMetroRuntimeResult;
+export type MetroReloadResult = ReloadMetroResult;

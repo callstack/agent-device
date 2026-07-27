@@ -1,5 +1,9 @@
-import type { MetroPrepareOptions, MetroReloadOptions } from '../../contracts/client-api.ts';
-import type { MetroPrepareResult, MetroReloadResult } from '../../client/client-types.ts';
+import type {
+  MetroPrepareOptions,
+  MetroPrepareResult,
+  MetroReloadOptions,
+  MetroReloadResult,
+} from '../../contracts/client-api.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import {

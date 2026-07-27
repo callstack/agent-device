@@ -271,7 +271,12 @@ The perfect-shape refactor is complete and merged. Its end-state:
   which R5 ignores by design: a type-only import is free at runtime, but "zone A is declared in
   terms of zone B" is still a boundary claim, and ranking type edges surfaced 61 inversions the gate
   had never seen. `TYPE_INVERSION_BASELINE` in `check.ts` holds the remaining pairs with their
-  counts; the numbers may only shrink, and a new pair fails outright.
+  counts; the numbers may only shrink, and a new pair fails outright. Down to **7**, and each is a
+  deliberate position rather than a misplaced declaration: 4 are `AgentDeviceClient` used as an
+  opaque handle (the facade is built from `commands/`'s own projection registry, so moving it down
+  is a design call about where that registry belongs, not a file move), and 3 are the ADR 0003
+  daemon descriptor, whose route type is `keyof typeof DAEMON_ROUTE_HANDLERS` — derived from what
+  the server actually implements. Both are explained at the baseline.
 - SessionState ownership (R7). `SessionStore.get()` returns the live record out of a private Map
   and `set()` re-puts the same reference, so any `session.<field> = …` in the daemon is a durable
   write to store-owned state — persistence depends on aliasing, not on an API call. That is

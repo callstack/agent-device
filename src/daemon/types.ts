@@ -1,6 +1,5 @@
 import type {
   DaemonArtifact as PublicDaemonArtifact,
-  DaemonRequest as PublicDaemonRequest,
   DaemonRequestMeta as PublicDaemonRequestMeta,
   DaemonResponse as PublicDaemonResponse,
   DaemonResponseData as PublicDaemonResponseData,
@@ -8,7 +7,8 @@ import type {
   LeaseBackend,
   SessionRuntimeHints as PublicSessionRuntimeHints,
 } from '../kernel/contracts.ts';
-import type { CommandFlags } from '../core/dispatch.ts';
+import type { CommandRequest } from '../contracts/command-request.ts';
+import type { CommandFlags } from '../contracts/command-flags.ts';
 import type { GestureReferenceFrame, ScrollDirection } from '../contracts/scroll-gesture.ts';
 import type { LogBackend } from '../contracts/logs.ts';
 import type { SessionSurface } from '../contracts/session-surface.ts';
@@ -116,10 +116,15 @@ type DaemonRequestInternal = {
   replayPlanStep?: boolean;
 };
 
-export type DaemonRequest = Omit<PublicDaemonRequest, 'token' | 'session' | 'flags' | 'meta'> & {
+/**
+ * The server-side request: the shared `CommandRequest` (wire shape with typed flags) plus what
+ * only the daemon may see. `token` and `session` are required by the time a request is dispatched,
+ * and `internal` carries `SessionState` callbacks and the admitted lease — which is why this type
+ * stays in the daemon while `CommandRequest` sits in contracts for everyone else.
+ */
+export type DaemonRequest = Omit<CommandRequest, 'token' | 'session' | 'meta'> & {
   token: string;
   session: string;
-  flags?: CommandFlags;
   meta?: DaemonRequestMeta;
   internal?: DaemonRequestInternal;
 };
@@ -494,25 +499,7 @@ export type SessionState = {
   appLogFailure?: AppLogFailure;
 };
 
-export type SessionAction = {
-  ts: number;
-  command: string;
-  positionals: string[];
-  runtime?: SessionRuntimeHints;
-  flags: Partial<CommandFlags> & {
-    snapshotInteractiveOnly?: boolean;
-    snapshotDepth?: number;
-    snapshotScope?: string;
-    snapshotRaw?: boolean;
-    launchArgs?: string[];
-    saveScript?: boolean | string;
-    noRecord?: boolean;
-  };
-  result?: Record<string, unknown>;
-  /**
-   * ADR 0012 decision 3: parsed or record-time-computed `target-v1`
-   * evidence, written as a comment immediately before this action's line.
-   * Inert until migration step 4 adds enforcement.
-   */
-  targetEvidence?: TargetAnnotationV1;
-};
+// The recorded-action SHAPE lives in contracts/ so replay/ and compat/ can read a script
+// without depending on the server; re-exported here for the daemon's own consumers.
+export type { SessionAction } from '../contracts/session-action.ts';
+import type { SessionAction } from '../contracts/session-action.ts';

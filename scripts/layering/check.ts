@@ -187,36 +187,40 @@ function checkBackEdges(edges: readonly ResolvedImportEdge[]): Violation[] {
   });
 }
 
-// R6 ratchet: type-only spine inversions, per zone pair. R5 cannot see these (a
-// type-only import is free at runtime), but "zone A is declared in terms of zone B"
-// is still a boundary claim, and ranking type edges surfaced 61 of them. Down to 18
-// after the public API vocabulary moved to contracts/client-api.ts. What remains:
+// R6 ratchet: type-only spine inversions, per zone pair. R5 cannot see these (a type-only import
+// is free at runtime), but "zone A is declared in terms of zone B" is still a boundary claim, and
+// ranking type edges surfaced 61 of them. Down to 7, and every one of the 7 is now a deliberate
+// architectural position rather than a misplaced declaration:
 //
-//   commands -> client (5)        the eight vocabulary shapes that could NOT move down,
-//                                 because each is stated in terms of a HIGHER zone:
-//                                 `commands/` (navigation projection, ScrollInputDirection)
-//                                 or `metro/` (prepare/reload results). Moving them needs
-//                                 those upstream declarations to come down first.
-//   mcp -> client (1)             the AgentDeviceClient facade itself — a real design
-//                                 question (should a command surface know the client
-//                                 type?), not a declaration in the wrong place.
-//   core/commands -> daemon-server the ADR 0003 daemon facet: core's descriptor registry
-//     (6)                          composes a shape the daemon owns. The daemon keeps the
-//                                  VALUES; only the shape needs to move below core.
-//   replay -> daemon-server (6)    `SessionAction`, the recorded-action shape replay reads
-//                                  and writes. It belongs in contracts/, but it references
-//                                  `CommandFlags` (core), so it moves as a chain.
+//   commands/mcp -> client (4)   `AgentDeviceClient`, used as an opaque handle ("the client this
+//                                command runs against"). It cannot move below `commands/` because
+//                                the facade is BUILT from the command surface's own projection
+//                                registry: AgentDeviceClient -> AgentDeviceCommandClient ->
+//                                ProjectedNavigationCommandClient -> NAVIGATION_COMMAND_PROJECTIONS
+//                                in commands/system/. That is a genuine zone-level cycle, and
+//                                breaking it means deciding where the projection registry belongs —
+//                                a design call, not a file move. R5 is zero here: nothing imports
+//                                the client at runtime, only its type.
 //
-// The counts may only go DOWN. Fixing edges without lowering the number fails too, so the
-// baseline cannot quietly stop describing the tree.
+//   core/commands -> daemon-server (3)  `DaemonCommandDescriptor` and `DaemonCommandRoute`.
+//                                `DaemonCommandRoute` is `keyof typeof DAEMON_ROUTE_HANDLERS` and
+//                                the descriptor resolves `refFrameEffect` against the daemon's own
+//                                request type, so the shape is derived from what the server
+//                                actually implements. Moving it down would mean re-declaring the
+//                                route names in contracts plus a gate to prove the handler map
+//                                still covers them: more coupling to remove a dependency. ADR
+//                                0003/0008 own this boundary deliberately.
+//
+// The counts may only go DOWN. Fixing edges without lowering the number fails too, so the baseline
+// cannot quietly stop describing the tree.
+//
 // Exported so scripts/depgraph can assert its own graph build reproduces it — see the
 // baseline-parity test there. The gate remains the authority; the report follows.
 export const TYPE_INVERSION_BASELINE: Readonly<Record<string, number>> = {
-  'commands -> client': 5,
+  'commands -> client': 3,
   'commands -> daemon-server': 1,
-  'core -> daemon-server': 5,
+  'core -> daemon-server': 2,
   'mcp -> client': 1,
-  'replay -> daemon-server': 6,
 };
 
 function checkTypeInversions(edges: readonly ResolvedImportEdge[]): Violation[] {
