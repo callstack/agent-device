@@ -194,7 +194,7 @@ export async function captureScreenshotViaRunner(
   fullscreen?: boolean,
   runnerOptions?: AppleRunnerCommandOptions,
 ): Promise<void> {
-  if (device.kind === 'device') {
+  if (device.kind === 'device' && !isMacOs(device)) {
     await resolveIosPhysicalDeviceControl(device).captureScreenshot(device, outPath, {
       appBundleId,
       fullscreen,
