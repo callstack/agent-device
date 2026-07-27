@@ -473,6 +473,23 @@ test('a malformed target-v1 payload is rejected as INVALID_ARGS, not silently dr
   );
 });
 
+// Found by the nightly parser fuzz lane (#1414): the closing-quote scan accepted these
+// literals and the JSON decode behind it leaked a raw SyntaxError.
+test.each([
+  ['invalid escape', 'fill @e1 --text "hello wor\\ld"'],
+  ['raw control character', 'fill @e1 --text "hel\u0000lo"'],
+  ['raw tab', 'fill @e1 --text "hello\tworld"'],
+])('a quoted value with an %s is rejected as INVALID_ARGS with a hint', (_case, script) => {
+  assert.throws(
+    () => parseReplayScriptDetailed(script),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      typeof error.details?.hint === 'string' &&
+      error.details.hint.length > 0,
+  );
+});
+
 test('an unknown future target-vN comment is an ordinary comment: no binding requirement, no evidence attached', () => {
   const script = ['# agent-device:target-v2 {"whatever":true}', '', 'click @e12 "Save"'].join('\n');
   const { actions } = parseReplayScriptDetailed(script);

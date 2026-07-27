@@ -38,6 +38,9 @@ export default defineConfig({
           include: [
             'src/**/*.test.ts',
             'scripts/__tests__/help-conformance-bench.test.ts',
+            // Replays the parser fuzz regression corpus (#1414) in the unit lane; the
+            // generating fuzz run itself is nightly (scripts/fuzz/run.ts).
+            'scripts/fuzz/corpus-replay.test.ts',
             'scripts/__tests__/help-conformance-sample-outputs.test.ts',
             'scripts/__tests__/help-conformance-topic-coverage.test.ts',
             'test/skillgym/suites/local-cli-help-policy.test.ts',

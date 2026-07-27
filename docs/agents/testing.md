@@ -119,6 +119,25 @@ The plan documents the rule and changed path behind every selected check.
 Model and catalog live under `scripts/check-affected/`; the derivation is guarded
 by `pnpm check:affected:test` (the `Affected-check Selector` CI job).
 
+## Parser fuzz lane
+
+`pnpm fuzz:parsers` feeds mutated hostile input to `parseArgs`, selector parsing,
+`parseReplayScriptDetailed`, `batch --steps` JSON, and the Maestro compat parser, and enforces one
+invariant: every rejection is a typed `AppError` whose normalized `hint` is non-empty, and no case
+hangs (a worker-thread watchdog attributes a stall to the exact input).
+
+```sh
+pnpm fuzz:parsers                                  # all targets, 2,000 cases each, seed 1
+pnpm fuzz:parsers --target selector --iterations 50000 --seed 7
+pnpm fuzz:parsers --input-file .tmp/fuzz/<case>.json   # repro one saved failing case
+```
+
+The generating run is nightly (`Parser Fuzz Lane` in `.github/workflows/replays-nightly.yml`, seeded
+by the run number); failing cases upload as artifacts and print that repro command. Every case the
+fuzzer catches is appended to `scripts/fuzz/corpus/regressions.json` (`--append-corpus`) and replayed
+in the unit lane by `scripts/fuzz/corpus-replay.test.ts`, so a fixed parser stays fixed on PRs.
+Adding a parser to the lane means adding a target to `scripts/fuzz/targets.ts` — nothing else.
+
 ## Live web smoke
 
 The live web platform smoke runs the public built CLI against a local fixture page through the managed web backend:

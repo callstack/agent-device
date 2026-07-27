@@ -4,6 +4,14 @@ on:
   schedule:
     - cron: '0 3 * * *'
   workflow_dispatch:
+    inputs:
+      fuzz-iterations:
+        description: 'Parser fuzz cases per target'
+        required: false
+        default: '50000'
+      fuzz-seed:
+        description: 'Parser fuzz PRNG seed (defaults to the run number)'
+        required: false
 
 permissions:
   contents: read
@@ -13,6 +21,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Parser fuzz lane (#1414): hostile input into parseArgs, selector parsing, .ad replay
+  # scripts, batch --steps JSON, and the Maestro compat parser. One invariant — every
+  # rejection is a typed AppError with a non-empty hint, and no case hangs. Device-free, so
+  # it rides this nightly rather than owning a workflow; the seed varies per run so the lane
+  # keeps exploring, and anything it catches is appended to the checked-in corpus that the
+  # unit lane replays (scripts/fuzz/corpus/regressions.json).
+  nightly-parser-fuzz:
+    name: Parser Fuzz Lane
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Fuzz parsers
+        env:
+          FUZZ_ITERATIONS: ${{ github.event.inputs.fuzz-iterations || '50000' }}
+          FUZZ_SEED: ${{ github.event.inputs.fuzz-seed || github.run_number }}
+        run: |
+          pnpm fuzz:parsers \
+            --iterations "$FUZZ_ITERATIONS" \
+            --seed "$FUZZ_SEED" \
+            --artifact-dir .tmp/fuzz
+
+      - name: Upload failing cases
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: parser-fuzz-failing-cases
+          path: .tmp/fuzz
+          if-no-files-found: ignore
+
   nightly-android:
     name: Android Replay Suite
     runs-on: ubuntu-latest

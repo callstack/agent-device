@@ -1,0 +1,42 @@
+[
+  {
+    "target": "batch-steps",
+    "input": "[{\"command\":\"snapshot\",\"input\":{\"__proto__\":{\"polluted\":true}}}]",
+    "note": "seed: prototype-pollution shaped batch step must reject or ignore, never throw untyped"
+  },
+  {
+    "target": "cli-args",
+    "input": "click --selector",
+    "note": "seed: flag with a missing value must reject as INVALID_ARGS with a hint"
+  },
+  {
+    "target": "maestro",
+    "input": "appId: com.example.app\n---\n- tapOn: \"unterminated\n",
+    "note": "seed: unterminated YAML scalar must surface as a typed parse error"
+  },
+  {
+    "target": "replay-script",
+    "input": "# target-v1 role=button\n\nclick @e1\n",
+    "note": "seed: unbound target-v1 annotation must reject with a typed error"
+  },
+  {
+    "target": "replay-script",
+    "input": "fill @e1 --text \"hello\tworld\"\na",
+    "note": "untyped-throw: raw tab inside a quoted value leaked a SyntaxError (fixed in readQuotedReplayToken)"
+  },
+  {
+    "target": "replay-script",
+    "input": "fill @e1 --text \"hello wor\\ld\"\nassert text=Welcome\n",
+    "note": "untyped-throw: quoted value with an invalid JSON escape leaked a SyntaxError (fixed in readQuotedReplayToken)"
+  },
+  {
+    "target": "replay-script",
+    "input": "fill @e1 --text \"hel\u0000lo world\"\n",
+    "note": "untyped-throw: raw control character inside a quoted value leaked a SyntaxError (fixed in readQuotedReplayToken)"
+  },
+  {
+    "target": "selector",
+    "input": "label=\"unterminated",
+    "note": "seed: unterminated quoted selector value must reject with a typed error"
+  }
+]

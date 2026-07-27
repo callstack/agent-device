@@ -503,10 +503,22 @@ function readQuotedReplayToken(
   if (end >= line.length) {
     throw new AppError('INVALID_ARGS', `Invalid replay script line: ${line}`);
   }
-  return {
-    value: JSON.parse(line.slice(cursor, end + 1)) as string,
-    nextCursor: end + 1,
-  };
+  // The scan above only locates the closing quote; the literal between the quotes can still
+  // carry an invalid escape or a raw control character that JSON.parse refuses.
+  const literal = line.slice(cursor, end + 1);
+  let value: unknown;
+  try {
+    value = JSON.parse(literal);
+  } catch {
+    throw new AppError(
+      'INVALID_ARGS',
+      `Invalid quoted value ${literal} in replay script line: ${line}`,
+      {
+        hint: 'Quoted replay values are JSON strings: escape backslashes, quotes, tabs, and newlines (\\\\, \\", \\t, \\n).',
+      },
+    );
+  }
+  return { value: value as string, nextCursor: end + 1 };
 }
 
 function readBareReplayToken(line: string, cursor: number): { value: string; nextCursor: number } {
