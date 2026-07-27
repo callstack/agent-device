@@ -47,6 +47,25 @@ function optional<K extends string>(key: K, value: string | undefined): Record<K
   return value === undefined ? {} : ({ [key]: value } as Record<K, string>);
 }
 
+/**
+ * Options to fall back on when argv itself is unusable, so a malformed dispatch input still
+ * produces an envelope. `--artifact-dir` is recovered positionally: the value that decides *where*
+ * monitoring looks must survive a rejected flag elsewhere in argv.
+ */
+export function fallbackFuzzOptions(argv: readonly string[]): FuzzOptions {
+  const flag = argv.indexOf('--artifact-dir');
+  const dir = flag === -1 ? undefined : argv[flag + 1];
+  return {
+    iterations: Number(DEFAULTS.iterations),
+    seed: Number(DEFAULTS.seed),
+    caseTimeoutMs: Number(DEFAULTS.caseTimeoutMs),
+    artifactDir: dir !== undefined && !dir.startsWith('--') ? dir : DEFAULTS.artifactDir,
+    appendCorpus: false,
+    replayCorpus: false,
+    selfCheck: argv.includes('--self-check'),
+  };
+}
+
 /** Parses argv into options; `null` means usage was requested and nothing should run. */
 export function readFuzzOptions(argv: readonly string[]): FuzzOptions | null {
   const { values } = parseArgs({

@@ -144,6 +144,18 @@ to separate artifact subdirectories and both run unconditionally, so freshness/h
 (#1430) always finds an envelope; the step summary prints each one it finds and never fails on a
 missing file. Other scheduled lanes adopt the same writer rather than defining a second shape.
 
+### Scheduled lane health
+
+`pnpm lanes:health` is the consumer side of the envelope contract (#1430): it derives the lane list
+from `schedule:`-triggered workflows in `.github/workflows/` (never a hand-maintained list), reads
+each lane's recent scheduled runs from the GitHub API, and classifies it from recorded run fields —
+`healthy`, `failing` (two consecutive failed cadences), `dark` (no run within two cadences), or
+`pending` (no history to judge, e.g. a lane not on the default branch yet). Freshness fields land in
+`lane-health.json` for the repo-health snapshot; an unhealthy lane opens or pings one tracking issue.
+It runs as `Scheduled Lane Health` (`.github/workflows/scheduled-lane-health.yml`) and locally with
+`--dry-run`, which never touches issues. Classification lives in
+`scripts/scheduled-lane/health-model.ts` and is unit-tested per category.
+
 A nightly discovery reaches the unit lane by promotion, not hand-editing: the printed
 `promote:` command re-runs the downloaded artifact and appends it to
 `scripts/fuzz/corpus/regressions.json`, which `scripts/fuzz/corpus-replay.test.ts` replays on every

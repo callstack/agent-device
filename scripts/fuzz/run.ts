@@ -16,7 +16,7 @@ import {
 import { runTarget } from './execute.ts';
 import { describeFailure, type FuzzFailure } from './invariant.ts';
 import { generateCases } from './mutate.ts';
-import { FUZZ_USAGE, readFuzzOptions, type FuzzOptions } from './options.ts';
+import { fallbackFuzzOptions, FUZZ_USAGE, readFuzzOptions, type FuzzOptions } from './options.ts';
 import { getFuzzTarget } from './registry.ts';
 import { promoteFailures, reportFailures } from './report.ts';
 import { readSavedCase } from './saved-case.ts';
@@ -172,8 +172,7 @@ function reportCrash(options: FuzzOptions, startedAt: number, error: unknown): n
   return 1;
 }
 
-async function run(options: FuzzOptions): Promise<number> {
-  const startedAt = Date.now();
+async function run(options: FuzzOptions, startedAt: number): Promise<number> {
   try {
     const outcome = await runMode(options);
     const result = outcome.failed ? 'fail' : 'pass';
@@ -187,12 +186,21 @@ async function run(options: FuzzOptions): Promise<number> {
 }
 
 async function main(): Promise<number> {
-  const options = readFuzzOptions(process.argv.slice(2));
+  const startedAt = Date.now();
+  const argv = process.argv.slice(2);
+  // Option parsing is inside the guarded path on purpose: a malformed workflow-dispatch input is
+  // exactly the kind of terminal failure monitoring must still see an envelope for.
+  let options: FuzzOptions | null;
+  try {
+    options = readFuzzOptions(argv);
+  } catch (error) {
+    return reportCrash(fallbackFuzzOptions(argv), startedAt, error);
+  }
   if (!options) {
     process.stdout.write(FUZZ_USAGE);
     return 0;
   }
-  return await run(options);
+  return await run(options, startedAt);
 }
 
 process.exitCode = await main();

@@ -43,6 +43,8 @@ export default defineConfig({
             'scripts/fuzz/corpus-replay.test.ts',
             // Proves the harness still fails: classifier + watchdog + corpus promotion.
             'scripts/fuzz/harness.test.ts',
+            // Scheduled-lane health classification and lane discovery (#1430).
+            'scripts/scheduled-lane/health-model.test.ts',
             'scripts/__tests__/help-conformance-sample-outputs.test.ts',
             'scripts/__tests__/help-conformance-topic-coverage.test.ts',
             'test/skillgym/suites/local-cli-help-policy.test.ts',

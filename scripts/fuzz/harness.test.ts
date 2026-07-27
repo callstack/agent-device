@@ -123,6 +123,21 @@ describe('run envelope', () => {
     expect(envelope.details.reproCommands[0]).toContain('--input-file');
   });
 
+  // A malformed workflow-dispatch input used to throw out of option parsing before anything
+  // could write an envelope, which reads to monitoring exactly like a lane that went dark.
+  it('is written when the options themselves are malformed', () => {
+    const { envelope, status } = envelopeFrom(['--iterations', 'lots']);
+    expect(status).toBe(1);
+    expect(envelope.result).toBe('error');
+    expect(envelope.details.targetRuns).toEqual([]);
+  });
+
+  it('is written for an unknown flag', () => {
+    const { envelope, status } = envelopeFrom(['--not-a-flag']);
+    expect(status).toBe(1);
+    expect(envelope.result).toBe('error');
+  });
+
   it('is written for a self-check run', () => {
     const { envelope, status } = envelopeFrom(['--self-check', '--case-timeout-ms', '750']);
     expect(status).toBe(0);
