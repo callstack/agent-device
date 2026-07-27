@@ -135,16 +135,21 @@ pnpm fuzz:parsers --self-check                     # require the harness to stil
 ```
 
 The generating run is nightly (`Parser Fuzz Lane` in `.github/workflows/replays-nightly.yml`, seeded
-by the run number). Every run — green or red — writes `<artifact-dir>/run-envelope.json`
-(`schemaVersion`, commit/ref/run provenance, seed and config, per-target cases/failures/durations,
-result, repro commands) and uploads the artifact directory, so a passing scheduled run is auditable
-and not just silent; failing cases are uploaded alongside it.
+by the run number). Every terminal path — pass, fail, `--self-check`, or a crash in the harness
+itself — writes `<artifact-dir>/run-envelope.json` in the standard scheduled-lane shape
+(`scripts/scheduled-lane/envelope.ts`: `schemaVersion`, `lane`, `result`, commit/ref/workflow-run
+provenance, seed and config, plus a lane-specific `details` payload — here per-target
+cases/failures/durations, failures, and repro commands). The nightly self-check and fuzz steps write
+to separate artifact subdirectories and both run unconditionally, so freshness/health monitoring
+(#1430) always finds an envelope; the step summary prints each one it finds and never fails on a
+missing file. Other scheduled lanes adopt the same writer rather than defining a second shape.
 
 A nightly discovery reaches the unit lane by promotion, not hand-editing: the printed
 `promote:` command re-runs the downloaded artifact and appends it to
 `scripts/fuzz/corpus/regressions.json`, which `scripts/fuzz/corpus-replay.test.ts` replays on every
 PR. `scripts/fuzz/harness.test.ts` covers the harness itself — an untyped throw, an empty hint, and a
-wedged worker must each be reported — using the broken-on-purpose targets in
+wedged worker must each be reported, startup time is never charged against the per-case budget, and
+every mode writes an envelope — using the broken-on-purpose targets in
 `scripts/fuzz/self-check-targets.ts` (also what `--self-check` runs in CI), so a regressed classifier
 or watchdog cannot pass silently. Adding a parser to the lane means adding a target to
 `scripts/fuzz/targets.ts` — nothing else.

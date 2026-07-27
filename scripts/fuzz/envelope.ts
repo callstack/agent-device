@@ -1,17 +1,18 @@
-// Always-produced run envelope for the parser fuzz lane (#1414, scheduled-lane contract of #1412).
+// Parser fuzz lane's mapping onto the shared scheduled-lane envelope (#1414, #1430).
 //
-// A scheduled lane has to be auditable when it passes, not only when it fails: freshness and
-// health monitoring need a machine-readable record of *which* code, config, and seed produced
-// the verdict. So every run — green or red — writes one JSON envelope next to the artifacts.
-// #1430 is standardizing this shape across lanes; when it lands this module becomes the mapping
-// onto the shared writer rather than a second definition.
+// The shape lives in scripts/scheduled-lane/envelope.ts so freshness/health monitoring reads one
+// envelope contract across lanes; this module only supplies the fuzz-specific `details` payload
+// and guarantees an envelope exists for *every* terminal path — pass, fail, or self-check.
 
-import fs from 'node:fs';
-import path from 'node:path';
+import {
+  buildLaneEnvelope,
+  type LaneEnvelope,
+  writeLaneEnvelope,
+} from '../scheduled-lane/envelope.ts';
 import type { FuzzFailure } from './invariant.ts';
 
-const SCHEMA_VERSION = 1;
-const FILENAME = 'run-envelope.json';
+const LANE = 'parser-fuzz';
+const TOOL = 'scripts/fuzz/run.ts';
 
 export type FuzzTargetRun = {
   target: string;
@@ -20,78 +21,37 @@ export type FuzzTargetRun = {
   durationMs: number;
 };
 
-export type FuzzRunEnvelope = {
-  schemaVersion: number;
-  lane: 'parser-fuzz';
-  result: 'pass' | 'fail';
-  startedAt: string;
-  finishedAt: string;
-  durationMs: number;
-  provenance: {
-    commitSha: string | null;
-    ref: string | null;
-    workflowRunId: string | null;
-    workflowRunAttempt: string | null;
-    nodeVersion: string;
-    tool: string;
-    corpusEntries: number;
-  };
-  config: {
-    mode: 'generate' | 'replay-corpus' | 'self-check';
-    seed: number;
-    iterations: number;
-    caseTimeoutMs: number;
-    targets: string[];
-  };
+export type FuzzRunMode = 'generate' | 'replay-corpus' | 'replay-artifact' | 'self-check';
+
+export type FuzzEnvelopeDetails = {
+  mode: FuzzRunMode;
+  corpusEntries: number;
   targetRuns: FuzzTargetRun[];
   failures: (FuzzFailure & { artifact?: string })[];
   reproCommands: string[];
 };
 
-function envOrNull(name: string): string | null {
-  return process.env[name] ?? null;
-}
+export type FuzzRunEnvelope = LaneEnvelope<FuzzEnvelopeDetails>;
 
-/** GitHub Actions exports these; a local run simply records `null`. */
-function provenanceFromEnv() {
-  return {
-    commitSha: envOrNull('GITHUB_SHA'),
-    ref: envOrNull('GITHUB_REF'),
-    workflowRunId: envOrNull('GITHUB_RUN_ID'),
-    workflowRunAttempt: envOrNull('GITHUB_RUN_ATTEMPT'),
-    nodeVersion: process.version,
-    tool: 'scripts/fuzz/run.ts',
-  };
-}
-
-export function buildEnvelope(input: {
+/** Writes the envelope for one fuzz run into `artifactDir`; returns its path. */
+export function writeFuzzEnvelope(input: {
+  artifactDir: string;
   startedAt: number;
   finishedAt: number;
-  config: FuzzRunEnvelope['config'];
-  corpusEntries: number;
-  targetRuns: FuzzTargetRun[];
-  failures: (FuzzFailure & { artifact?: string })[];
-  reproCommands: string[];
-}): FuzzRunEnvelope {
-  return {
-    schemaVersion: SCHEMA_VERSION,
-    lane: 'parser-fuzz',
-    result: input.failures.length === 0 ? 'pass' : 'fail',
-    startedAt: new Date(input.startedAt).toISOString(),
-    finishedAt: new Date(input.finishedAt).toISOString(),
-    durationMs: input.finishedAt - input.startedAt,
-    provenance: { ...provenanceFromEnv(), corpusEntries: input.corpusEntries },
-    config: input.config,
-    targetRuns: input.targetRuns,
-    failures: input.failures,
-    reproCommands: input.reproCommands,
-  };
-}
-
-/** Writes the envelope into the artifact dir; returns its path. */
-export function writeEnvelope(artifactDir: string, envelope: FuzzRunEnvelope): string {
-  fs.mkdirSync(artifactDir, { recursive: true });
-  const file = path.join(artifactDir, FILENAME);
-  fs.writeFileSync(file, `${JSON.stringify(envelope, null, 2)}\n`);
-  return file;
+  result: FuzzRunEnvelope['result'];
+  config: Record<string, unknown>;
+  details: FuzzEnvelopeDetails;
+}): string {
+  return writeLaneEnvelope(
+    input.artifactDir,
+    buildLaneEnvelope({
+      lane: LANE,
+      tool: TOOL,
+      result: input.result,
+      startedAt: input.startedAt,
+      finishedAt: input.finishedAt,
+      config: { mode: input.details.mode, ...input.config },
+      details: input.details,
+    }),
+  );
 }

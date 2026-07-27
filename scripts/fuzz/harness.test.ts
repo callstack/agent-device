@@ -62,6 +62,76 @@ describe('fuzz harness self-check', () => {
   });
 });
 
+describe('worker startup budget', () => {
+  // The watchdog used to start before the worker reported ready, so a slow thread start was
+  // misreported as a hung parser case. Startup must not be charged against the case budget.
+  it('does not report a hang when worker startup outlasts the case budget', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fuzz-startup-'));
+    const { stdout } = runHarness(
+      [
+        '--target',
+        'self-check-untyped-throw',
+        '--iterations',
+        '1',
+        '--case-timeout-ms',
+        '300',
+        '--artifact-dir',
+        dir,
+      ],
+      { AGENT_DEVICE_FUZZ_STARTUP_DELAY_MS: '1200' },
+    );
+    expect(stdout).toContain('untyped-throw');
+    expect(stdout).not.toContain('hang');
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe('run envelope', () => {
+  function envelopeFrom(args: readonly string[]) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fuzz-envelope-'));
+    const { status } = runHarness([...args, '--artifact-dir', dir]);
+    const file = path.join(dir, 'run-envelope.json');
+    const envelope = JSON.parse(fs.readFileSync(file, 'utf8'));
+    fs.rmSync(dir, { recursive: true, force: true });
+    return { envelope, status };
+  }
+
+  it('is written for a passing generate run', () => {
+    const { envelope, status } = envelopeFrom(['--target', 'selector', '--iterations', '20']);
+    expect(status).toBe(0);
+    expect(envelope.lane).toBe('parser-fuzz');
+    expect(envelope.schemaVersion).toBe(1);
+    expect(envelope.result).toBe('pass');
+    expect(envelope.details.mode).toBe('generate');
+    expect(envelope.details.targetRuns[0].target).toBe('selector');
+  });
+
+  // A self-check failure must not leave the lane without an envelope: monitoring reads it and
+  // the workflow summary prints it on every terminal path.
+  it('is written for a failing run too', () => {
+    const { envelope, status } = envelopeFrom([
+      '--target',
+      'self-check-untyped-throw',
+      '--iterations',
+      '1',
+      '--case-timeout-ms',
+      '2000',
+    ]);
+    expect(status).toBe(1);
+    expect(envelope.result).toBe('fail');
+    expect(envelope.details.failures[0].kind).toBe('untyped-throw');
+    expect(envelope.details.reproCommands[0]).toContain('--input-file');
+  });
+
+  it('is written for a self-check run', () => {
+    const { envelope, status } = envelopeFrom(['--self-check', '--case-timeout-ms', '750']);
+    expect(status).toBe(0);
+    expect(envelope.result).toBe('pass');
+    expect(envelope.details.mode).toBe('self-check');
+    expect(envelope.details.targetRuns).toHaveLength(3);
+  });
+});
+
 describe('artifact promotion', () => {
   it('promotes a saved failing case into the corpus, once', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fuzz-promote-'));

@@ -27,6 +27,13 @@ const { targetName, cases, progress } = workerData as FuzzWorkerData;
 const target = getFuzzTarget(targetName);
 const cursor = new Int32Array(progress);
 
+// Simulates slow module loading so the delayed-startup regression test can prove startup time
+// is never charged against a per-case budget (harness.test.ts).
+const startupDelayMs = Number(process.env.AGENT_DEVICE_FUZZ_STARTUP_DELAY_MS ?? '0');
+if (startupDelayMs > 0) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, startupDelayMs);
+}
+
 // Module loading (type stripping, parser imports) can outlast a per-case budget, so the
 // watchdog only starts counting once the worker is about to run the first case.
 port.postMessage({ kind: 'ready' } satisfies FuzzWorkerMessage);

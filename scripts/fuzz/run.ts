@@ -2,12 +2,17 @@
 //
 // Feeds mutated hostile input to the CLI/selector/replay/batch/Maestro parsers and enforces
 // one invariant: a rejection is a typed AppError with a non-empty hint, and no case hangs.
-// Every run writes a machine-readable envelope; failing cases are written as artifacts and
-// printed with repro and corpus-promotion commands. `--self-check` runs the broken-on-purpose
-// targets instead, so a regressed classifier or watchdog cannot pass silently.
+// Every terminal path — pass, fail, self-check, or a crash in the harness itself — writes one
+// scheduled-lane envelope, so monitoring never reads a missing file. Failing cases are written
+// as artifacts and printed with repro and corpus-promotion commands.
 
 import { readCorpus } from './corpus.ts';
-import { buildEnvelope, writeEnvelope, type FuzzTargetRun } from './envelope.ts';
+import {
+  type FuzzEnvelopeDetails,
+  type FuzzRunMode,
+  type FuzzTargetRun,
+  writeFuzzEnvelope,
+} from './envelope.ts';
 import { runTarget } from './execute.ts';
 import { describeFailure, type FuzzFailure } from './invariant.ts';
 import { generateCases } from './mutate.ts';
@@ -59,49 +64,126 @@ function verdictLine(targetName: string, failed: boolean): string {
     : `Case passes the invariant now (${targetName}).\n`;
 }
 
+type ModeOutcome = {
+  mode: FuzzRunMode;
+  failed: boolean;
+  targetRuns: FuzzTargetRun[];
+  details?: Partial<FuzzEnvelopeDetails>;
+  summary: (envelope: string) => string;
+};
+
 /** Replays a saved artifact, optionally promoting it into the checked-in corpus. */
-async function replaySavedCase(options: FuzzOptions): Promise<number> {
+async function replaySavedCase(options: FuzzOptions): Promise<ModeOutcome> {
+  const started = Date.now();
   const { target, input } = readSavedCase(options.inputFile!);
   const failures = await runTarget(target, [input], options.caseTimeoutMs);
   for (const failure of failures) process.stdout.write(`${describeFailure(failure)}\n`);
   process.stdout.write(verdictLine(target.name, failures.length > 0));
   if (options.appendCorpus) promoteFailures(failures);
-  return failures.length === 0 ? 0 : 1;
+  return {
+    mode: 'replay-artifact',
+    failed: failures.length > 0,
+    targetRuns: [
+      {
+        target: target.name,
+        cases: 1,
+        failures: failures.length,
+        durationMs: Date.now() - started,
+      },
+    ],
+    details: { failures },
+    summary: (envelope) => `Envelope: ${envelope}\n`,
+  };
 }
 
-function summaryLine(targetCount: number, seed: number, failed: boolean, envelope: string): string {
-  return failed
-    ? `\nEnvelope: ${envelope}\n`
-    : `Invariant held across ${targetCount} target(s), seed ${seed}. Envelope: ${envelope}\n`;
+async function selfCheckMode(options: FuzzOptions): Promise<ModeOutcome> {
+  const { ok, targetRuns } = await runSelfCheck(options);
+  return {
+    mode: 'self-check',
+    failed: !ok,
+    targetRuns,
+    summary: (envelope) => `Envelope: ${envelope}\n`,
+  };
 }
 
-async function fuzzRun(options: FuzzOptions): Promise<number> {
-  const startedAt = Date.now();
+async function fuzzMode(options: FuzzOptions): Promise<ModeOutcome> {
   const targets = selectTargets(options.target);
   const { failures, targetRuns } = await fuzzTargets(targets, options);
   const { reported, reproCommands } = reportFailures(failures, options.artifactDir);
   if (options.appendCorpus) promoteFailures(failures);
+  const failed = failures.length > 0;
+  return {
+    mode: options.replayCorpus ? 'replay-corpus' : 'generate',
+    failed,
+    targetRuns,
+    details: { failures: reported, reproCommands },
+    summary: (envelope) =>
+      failed
+        ? `\nEnvelope: ${envelope}\n`
+        : `Invariant held across ${targets.length} target(s), seed ${options.seed}. Envelope: ${envelope}\n`,
+  };
+}
 
-  const envelope = writeEnvelope(
-    options.artifactDir,
-    buildEnvelope({
-      startedAt,
-      finishedAt: Date.now(),
-      config: {
-        mode: options.replayCorpus ? ('replay-corpus' as const) : ('generate' as const),
-        seed: options.seed,
-        iterations: options.iterations,
-        caseTimeoutMs: options.caseTimeoutMs,
-        targets: targets.map((target) => target.name),
-      },
+function runMode(options: FuzzOptions): Promise<ModeOutcome> {
+  if (options.selfCheck) return selfCheckMode(options);
+  if (options.inputFile !== undefined) return replaySavedCase(options);
+  return fuzzMode(options);
+}
+
+function configFor(options: FuzzOptions): Record<string, unknown> {
+  return {
+    seed: options.seed,
+    iterations: options.iterations,
+    caseTimeoutMs: options.caseTimeoutMs,
+    targets: options.target === undefined ? 'all' : [options.target],
+  };
+}
+
+/** Writes the envelope every terminal path owes the scheduled-lane contract. */
+function writeOutcomeEnvelope(
+  options: FuzzOptions,
+  startedAt: number,
+  outcome: ModeOutcome,
+  result: 'pass' | 'fail' | 'error',
+): string {
+  return writeFuzzEnvelope({
+    artifactDir: options.artifactDir,
+    startedAt,
+    finishedAt: Date.now(),
+    result,
+    config: configFor(options),
+    details: {
+      mode: outcome.mode,
       corpusEntries: readCorpus().length,
-      targetRuns,
-      failures: reported,
-      reproCommands,
-    }),
-  );
-  process.stdout.write(summaryLine(targets.length, options.seed, failures.length > 0, envelope));
-  return failures.length === 0 ? 0 : 1;
+      targetRuns: outcome.targetRuns,
+      failures: [],
+      reproCommands: [],
+      ...outcome.details,
+    },
+  });
+}
+
+/** A harness crash still owes an envelope, otherwise monitoring sees nothing at all. */
+function reportCrash(options: FuzzOptions, startedAt: number, error: unknown): number {
+  const mode: FuzzRunMode = options.selfCheck ? 'self-check' : 'generate';
+  const outcome: ModeOutcome = { mode, failed: true, targetRuns: [], summary: () => '' };
+  const envelope = writeOutcomeEnvelope(options, startedAt, outcome, 'error');
+  process.stderr.write(`${String(error)}\nEnvelope: ${envelope}\n`);
+  return 1;
+}
+
+async function run(options: FuzzOptions): Promise<number> {
+  const startedAt = Date.now();
+  try {
+    const outcome = await runMode(options);
+    const result = outcome.failed ? 'fail' : 'pass';
+    process.stdout.write(
+      outcome.summary(writeOutcomeEnvelope(options, startedAt, outcome, result)),
+    );
+    return outcome.failed ? 1 : 0;
+  } catch (error) {
+    return reportCrash(options, startedAt, error);
+  }
 }
 
 async function main(): Promise<number> {
@@ -110,9 +192,7 @@ async function main(): Promise<number> {
     process.stdout.write(FUZZ_USAGE);
     return 0;
   }
-  if (options.selfCheck) return await runSelfCheck(options);
-  if (options.inputFile !== undefined) return await replaySavedCase(options);
-  return await fuzzRun(options);
+  return await run(options);
 }
 
 process.exitCode = await main();

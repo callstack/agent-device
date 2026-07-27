@@ -41,9 +41,13 @@ jobs:
       # A lane whose classifier or watchdog regressed would pass forever. This runs the
       # broken-on-purpose targets first and fails unless each violation is caught.
       - name: Self-check the harness
-        run: pnpm fuzz:parsers --self-check
+        run: pnpm fuzz:parsers --self-check --artifact-dir .tmp/fuzz/self-check
 
+      # Runs even when the self-check fails, so the lane always produces a fuzz envelope too
+      # (a step that never runs writes no envelope, and monitoring cannot tell that apart from
+      # a lane that went dark). The job still fails because both steps report their status.
       - name: Fuzz parsers
+        if: always()
         env:
           FUZZ_ITERATIONS: ${{ github.event.inputs.fuzz-iterations || '50000' }}
           FUZZ_SEED: ${{ github.event.inputs.fuzz-seed || github.run_number }}
@@ -51,12 +55,12 @@ jobs:
           pnpm fuzz:parsers \
             --iterations "$FUZZ_ITERATIONS" \
             --seed "$FUZZ_SEED" \
-            --artifact-dir .tmp/fuzz
+            --artifact-dir .tmp/fuzz/run
 
-      # Uploaded on pass as well as failure: .tmp/fuzz always holds run-envelope.json
-      # (schemaVersion, commit/ref/run provenance, seed, config, per-target durations,
-      # result), which is what freshness/health monitoring reads for a green run.
-      - name: Upload run envelope and failing cases
+      # Uploaded on pass as well as failure: each subdirectory of .tmp/fuzz holds the standard
+      # scheduled-lane run-envelope.json (schemaVersion, commit/ref/run provenance, seed, config,
+      # per-target durations, result), which is what freshness/health monitoring reads.
+      - name: Upload run envelopes and failing cases
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -64,14 +68,23 @@ jobs:
           path: .tmp/fuzz
           if-no-files-found: warn
 
+      # Never fails the job on its own: a missing envelope is reported as such rather than
+      # masking the real failure with a `cat` error.
       - name: Summarize
         if: always()
         run: |
           {
             echo '### Parser fuzz lane'
-            echo '```json'
-            cat .tmp/fuzz/run-envelope.json
-            echo '```'
+            found=0
+            for envelope in .tmp/fuzz/*/run-envelope.json; do
+              [ -f "$envelope" ] || continue
+              found=1
+              echo "#### $envelope"
+              echo '```json'
+              cat "$envelope"
+              echo '```'
+            done
+            [ "$found" = 1 ] || echo 'No run envelope was produced — the lane failed before it could run.'
           } >> "$GITHUB_STEP_SUMMARY"
 
   nightly-android:
