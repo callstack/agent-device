@@ -23,6 +23,7 @@ on:
       - 'examples/test-app/**'
       - '.github/workflows/test-app-build-cache.yml'
       - '.github/actions/setup-fixture-app/**'
+      - '.github/actions/setup-test-app-dependencies/**'
   workflow_dispatch:
 
 permissions:
@@ -65,8 +66,8 @@ jobs:
             pnpm-lock.yaml
             examples/test-app/pnpm-lock.yaml
 
-      - name: Install test app dependencies
-        run: pnpm test-app:install
+      - name: Setup test app dependencies
+        uses: ./.github/actions/setup-test-app-dependencies
 
       - name: Resolve fingerprint and whether it is already cached
         id: fp

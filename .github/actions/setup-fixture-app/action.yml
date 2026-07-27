@@ -54,11 +54,10 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    # Installed even on a hit, because the fingerprint is derived from the
-    # dependency graph and cannot be computed without it.
-    - name: Install test app dependencies
-      shell: bash
-      run: pnpm test-app:install
+    # The fingerprint/repack commands need the dependency graph. This shared
+    # action avoids recreating it on every warm native-artifact consumer.
+    - name: Setup test app dependencies
+      uses: ./.github/actions/setup-test-app-dependencies
 
     - name: Fetch the cached Release binary
       id: fetch
