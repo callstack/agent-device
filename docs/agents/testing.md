@@ -203,13 +203,16 @@ through a deterministic scheduler (`concurrency-torture/deterministic-scheduler.
 instrumented dispatcher that is the sole source of ordering (which fiber steps next, and which waiter
 wins a contended lock). A seed therefore fully determines execution order.
 
-Each operation's lock plan is **not** hand-written: it comes from the production router primitive
-`resolveRequestExecutionLockKeys` (`src/daemon/request-binding.ts`), driven with a fake device
-inventory through the production `withDeviceInventoryProvider` seam
+Each operation's lock plan is **not** hand-written: it is built exactly as the daemon builds it in
+`createRequestExecutionScope` — gate on the production decision `shouldLockSessionExecution(command)`
+(`src/daemon/daemon-command-registry.ts`), and only then resolve keys via the production router
+primitive `resolveRequestExecutionLockKeys` (`src/daemon/request-binding.ts`), driven with a fake
+device inventory through the production `withDeviceInventoryProvider` seam
 (`concurrency-torture/bindings.ts`). Only the mutex *grant* is modeled by the scheduler, because
 `withKeyedLock`'s native microtask hand-off cannot be reproduced from a seed. Consequently reverting
-the router's same-device serialization changes the derived plan and trips the overlap invariant — the
-lane is genuinely coupled to production lock resolution, not a duplicate of it. **Real:**
+*either* production decision — exempting a command from execution locking, or dropping the `device:`
+key — changes the derived plan and trips the overlap invariant, so the lane is genuinely coupled to
+production lock resolution, not a duplicate of it. **Real:**
 `SessionStore` and `LeaseRegistry`. **Modeled:** the advisory device claim (`InMemoryClaimRegistry`)
 and process "kill" — the production claim is a filesystem/OS lock and real process death, both out of
 scope for this scheduling lane and covered by their own unit tests. The full real-vs-modeled boundary
@@ -222,17 +225,24 @@ TORTURE_RUNS=5000 TORTURE_SEED_START=0 pnpm test:concurrency-torture   # widen t
 ```
 
 Replay is exact: a given seed reproduces the whole scheduler trace (`traceSignature`), the terminal
-invariant outcome, and the contention profile — the replay test asserts equality on all three, not
-just schedule length. The sweep also asserts real same-device lock *contention* occurred (two clients
-parked on one `device:` lock), and a dedicated forced two-client same-device test drives that
-contention deterministically.
+invariant outcome, and the contention profile — equality on all three is asserted not just under
+`TORTURE_SEED` but for **every seed in the normal sweep** (each seed is re-run and compared), so
+non-determinism is caught on the ordinary CI/nightly path. The sweep also asserts real same-device
+lock *contention* occurred (two clients parked on one `device:` lock), and a dedicated forced
+two-client same-device test pins both clients to one device via `pinnedDevice` so they cannot land on
+different devices, driving that contention deterministically.
 
 Every failure prints the offending seed and the exact `TORTURE_SEED=<n> pnpm test:concurrency-torture`
 replay command. The PR gate runs the fast default sweep through the Node integration lane
 (`test:integration:node`); the `Concurrency Torture Nightly` workflow sweeps a much larger seed range
 on schedule and, per #1430, emits a machine-readable envelope (schema version, commit SHA, tool/config
 hash, seed range, duration, result) via `TORTURE_ENVELOPE=<path>`, uploaded as the
-`concurrency-torture-envelope` artifact. Optional knobs: `TORTURE_CLIENTS`, `TORTURE_OPS`.
+`concurrency-torture-envelope` artifact. The envelope is written once, after **all** lane tests
+settle, and reports `fail` if any of them (sweep, replay self-check, or forced-contention guardrail)
+failed — a later-failing guardrail can never be published as a passing envelope. The #1430 scheduled
+health job that watches lane freshness/last-success across workflows is that issue's own deliverable;
+this lane is born consumable by it (standard envelope + a `schedule:` trigger the job auto-discovers).
+Optional knobs: `TORTURE_CLIENTS`, `TORTURE_OPS`.
 
 ## Speed rules (experiment-backed, 2026-07-04)
 

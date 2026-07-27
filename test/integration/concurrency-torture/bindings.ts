@@ -7,18 +7,33 @@
 // makes the same-device serialization invariant revert-sensitive: if production
 // stops returning a `device:` key (e.g. the router's same-device open
 // serialization is reverted), the derived plan changes and the lane's overlap
-// invariant fires. Only the mutex GRANT is modeled (by the deterministic
-// scheduler) because `withKeyedLock`'s native microtask hand-off cannot be
-// reproduced from a seed.
+// invariant fires.
+//
+// The plan is built the SAME way the daemon builds it in
+// `createRequestExecutionScope`: gate on the production decision
+// `shouldLockSessionExecution(command)`, and only then resolve keys via
+// `resolveRequestExecutionLockKeys`. So the lane is revert-sensitive to BOTH
+// production decision points — exempting a command from execution locking, or
+// dropping the device key — even though the mutex GRANT itself stays modeled
+// (by the deterministic scheduler) because `withKeyedLock`'s native microtask
+// hand-off cannot be reproduced from a seed.
 
 import type { DeviceInfo } from '../../../src/kernel/device.ts';
 import type { CommandFlags } from '../../../src/core/dispatch-context.ts';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';
 import type { SessionStore } from '../../../src/daemon/session-store.ts';
 import { resolveRequestExecutionLockKeys } from '../../../src/daemon/request-binding.ts';
+import { shouldLockSessionExecution } from '../../../src/daemon/daemon-command-registry.ts';
+import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
 import { withDeviceInventoryProvider } from '../../../src/core/dispatch-resolve.ts';
 
 import type { LockKey } from './deterministic-scheduler.ts';
+
+// Production command each modeled op routes as, so the lane consumes the real
+// `shouldLockSessionExecution` gate rather than assuming every op locks.
+const OPEN_COMMAND = PUBLIC_COMMANDS.open;
+export const MUTATE_COMMAND = PUBLIC_COMMANDS.click;
+export const CLOSE_COMMAND = PUBLIC_COMMANDS.close;
 
 export const DEVICE_POOL: readonly DeviceInfo[] = [
   {
@@ -82,7 +97,7 @@ function selectorFlagsForDevice(device: DeviceInfo): CommandFlags {
 
 function openRequest(device: DeviceInfo, sessionName: string): DaemonRequest {
   return {
-    command: 'open',
+    command: OPEN_COMMAND,
     positionals: [],
     token: 'torture',
     session: sessionName,
@@ -90,9 +105,9 @@ function openRequest(device: DeviceInfo, sessionName: string): DaemonRequest {
   } as DaemonRequest;
 }
 
-function existingSessionRequest(sessionName: string): DaemonRequest {
+function existingSessionRequest(command: string, sessionName: string): DaemonRequest {
   return {
-    command: 'is',
+    command,
     positionals: [],
     token: 'torture',
     session: sessionName,
@@ -105,6 +120,23 @@ async function withPool<T>(task: () => Promise<T>): Promise<T> {
 }
 
 /**
+ * Resolve a request's execution lock plan EXACTLY as `createRequestExecutionScope`
+ * does: skip locking entirely when the command is execution-lock-exempt, else
+ * resolve the keys through the production router. Reverting either production
+ * decision changes what this returns.
+ */
+async function resolveExecutionLockPlan(
+  req: DaemonRequest,
+  sessionName: string,
+  sessionStore: SessionStore,
+): Promise<LockKey[]> {
+  if (!shouldLockSessionExecution(req.command)) return [];
+  return (await withPool(() =>
+    resolveRequestExecutionLockKeys({ req, sessionName, sessionStore }),
+  )) as LockKey[];
+}
+
+/**
  * Lock plan for a fresh open of `device` under `sessionName`, computed by the
  * production router (`[session:<name>, device:<id>]` when the device resolves).
  */
@@ -113,28 +145,25 @@ export async function resolveOpenLockPlan(
   sessionName: string,
   device: DeviceInfo,
 ): Promise<LockKey[]> {
-  return (await withPool(() =>
-    resolveRequestExecutionLockKeys({
-      req: openRequest(device, sessionName),
-      sessionName,
-      sessionStore,
-    }),
-  )) as LockKey[];
+  return await resolveExecutionLockPlan(
+    openRequest(device, sessionName),
+    sessionName,
+    sessionStore,
+  );
 }
 
 /**
- * Lock plan for an operation on an already-open session, computed by the
- * production router (`[device:<id>]`, read from the stored session's device).
+ * Lock plan for `command` on an already-open session, computed by the production
+ * router (`[device:<id>]`, read from the stored session's device).
  */
 export async function resolveExistingLockPlan(
   sessionStore: SessionStore,
   sessionName: string,
+  command: string,
 ): Promise<LockKey[]> {
-  return (await withPool(() =>
-    resolveRequestExecutionLockKeys({
-      req: existingSessionRequest(sessionName),
-      sessionName,
-      sessionStore,
-    }),
-  )) as LockKey[];
+  return await resolveExecutionLockPlan(
+    existingSessionRequest(command, sessionName),
+    sessionName,
+    sessionStore,
+  );
 }

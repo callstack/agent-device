@@ -22,11 +22,59 @@
 // seeds (default 128, ≥100 to satisfy the acceptance bar) starting at
 // TORTURE_SEED_START (default 0). Any failure prints the seed and replay command.
 
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { runTorture, type ClientOp, type TortureRunResult } from './concurrency-torture/harness.ts';
+import { DEVICE_POOL } from './concurrency-torture/bindings.ts';
 import { buildEnvelope, writeEnvelopeIfRequested } from './concurrency-torture/envelope.ts';
+
+// The #1430 envelope must report the outcome of the WHOLE lane, not just the
+// sweep test. Every test records its result here and the envelope is written
+// once, after all tests settle, so a later failing guardrail can never be
+// published as a passing envelope.
+type EnvelopeRun = { seedStart: number; runs: number; durationMs: number };
+let laneFailed = false;
+let sweepRun: EnvelopeRun | undefined;
+
+async function guard(body: () => Promise<void>): Promise<void> {
+  try {
+    await body();
+  } catch (error) {
+    laneFailed = true;
+    throw error;
+  }
+}
+
+after(() => {
+  if (!sweepRun) return; // only the sweep lane (nightly) publishes an envelope
+  const envelope = buildEnvelope({ ...sweepRun, result: laneFailed ? 'fail' : 'pass' });
+  const written = writeEnvelopeIfRequested(envelope);
+  if (written) console.log(`torture envelope → ${written}\n${JSON.stringify(envelope)}`);
+});
+
+/**
+ * Assert a seed replays bit-for-bit: same ordered scheduler trace, same terminal
+ * invariant outcome, same contention profile. Run for EVERY seed in the sweep so
+ * determinism is proven on the normal CI/nightly path, not only under TORTURE_SEED.
+ */
+function assertDeterministicReplay(result: TortureRunResult, replay: TortureRunResult): void {
+  assert.equal(
+    replay.traceSignature,
+    result.traceSignature,
+    `seed ${result.seed} produced a different scheduler trace on replay — non-determinism`,
+  );
+  assert.deepEqual(
+    replay.failures,
+    result.failures,
+    `seed ${result.seed} produced a different invariant outcome on replay — non-determinism`,
+  );
+  assert.equal(
+    replay.deviceContention,
+    result.deviceContention,
+    `seed ${result.seed} produced different device contention on replay — non-determinism`,
+  );
+}
 
 function intFromEnv(name: string, fallback: number): number {
   const raw = process.env[name]?.trim();
@@ -67,93 +115,73 @@ const clients = optionalIntFromEnv('TORTURE_CLIENTS');
 const opsPerClient = optionalIntFromEnv('TORTURE_OPS');
 
 if (explicitSeed !== undefined) {
-  test(`concurrency torture — replay seed ${explicitSeed}`, async () => {
-    const result = await runTorture({ seed: explicitSeed, clients, opsPerClient });
-    // Determinism self-check: the same seed must reproduce the EXACT schedule,
-    // the same terminal invariant outcome, and the same contention profile.
-    const replay = await runTorture({ seed: explicitSeed, clients, opsPerClient });
-    assert.equal(
-      replay.traceSignature,
-      result.traceSignature,
-      `seed ${explicitSeed} produced a different scheduler trace on replay — non-determinism`,
-    );
-    assert.deepEqual(
-      replay.failures,
-      result.failures,
-      `seed ${explicitSeed} produced a different invariant outcome on replay — non-determinism`,
-    );
-    assert.equal(
-      replay.deviceContention,
-      result.deviceContention,
-      `seed ${explicitSeed} produced different device contention on replay — non-determinism`,
-    );
-    assertClean(result);
-  });
+  test(`concurrency torture — replay seed ${explicitSeed}`, () =>
+    guard(async () => {
+      const result = await runTorture({ seed: explicitSeed, clients, opsPerClient });
+      const replay = await runTorture({ seed: explicitSeed, clients, opsPerClient });
+      assertDeterministicReplay(result, replay);
+      assertClean(result);
+    }));
 } else {
   const runs = intFromEnv('TORTURE_RUNS', 128);
   const seedStart = intFromEnv('TORTURE_SEED_START', 0);
 
-  test(`concurrency torture — ${runs} seeded interleavings from ${seedStart}`, async () => {
-    const started = Date.now();
-    let totalContention = 0;
-    let failed = false;
-    try {
-      for (let i = 0; i < runs; i += 1) {
-        const seed = seedStart + i;
-        const result = await runTorture({ seed, clients, opsPerClient });
-        totalContention += result.deviceContention;
-        if (result.failures.length > 0) failed = true;
-        assertClean(result);
+  test(`concurrency torture — ${runs} seeded interleavings from ${seedStart}`, () =>
+    guard(async () => {
+      const started = Date.now();
+      let totalContention = 0;
+      try {
+        for (let i = 0; i < runs; i += 1) {
+          const seed = seedStart + i;
+          const result = await runTorture({ seed, clients, opsPerClient });
+          totalContention += result.deviceContention;
+          // Prove exact replay on the NORMAL sweep path (not just TORTURE_SEED):
+          // re-run the seed and assert the whole trace + outcome + contention match.
+          assertDeterministicReplay(result, await runTorture({ seed, clients, opsPerClient }));
+          assertClean(result);
+        }
+        // The sweep must actually PRODUCE same-device contention — two clients
+        // parked on one device lock — or the lane is not exercising serialization
+        // and a broken lock could pass unnoticed.
+        assert.ok(
+          totalContention > 0,
+          'no same-device lock contention occurred across the sweep — the lane is not testing serialization',
+        );
+      } finally {
+        sweepRun = { seedStart, runs, durationMs: Date.now() - started };
       }
-      // The sweep must actually PRODUCE same-device contention — two clients
-      // parked on one device lock — or the lane is not exercising serialization
-      // and a broken lock could pass unnoticed.
-      assert.ok(
-        totalContention > 0,
-        'no same-device lock contention occurred across the sweep — the lane is not testing serialization',
-      );
-    } catch (error) {
-      failed = true;
-      throw error;
-    } finally {
-      const envelope = buildEnvelope({
-        seedStart,
-        runs,
-        durationMs: Date.now() - started,
-        result: failed ? 'fail' : 'pass',
-      });
-      const written = writeEnvelopeIfRequested(envelope);
-      if (written) console.log(`torture envelope → ${written}\n${JSON.stringify(envelope)}`);
-    }
-  });
+    }));
 
   // Forced same-device contention: two clients repeatedly open THE SAME pinned
-  // device. This deterministically drives both onto one `device:` lock so the
-  // overlap invariant is exercised, not just present. If the router stopped
-  // serializing same-device opens, `deviceContention` here would collapse and
-  // the overlap invariant would fire.
-  test('concurrency torture — forced two-client same-device contention', async () => {
-    const program: ClientOp[][] = [
-      ['open', 'mutate', 'close', 'open', 'mutate'],
-      ['open', 'mutate', 'close', 'open', 'mutate'],
-    ];
-    let contendedSeeds = 0;
-    for (let seed = 0; seed < 40; seed += 1) {
-      const result = await runTorture({ seed, program });
-      assertClean(result);
-      const perDeviceMax = Object.values(result.perDeviceMaxConcurrency);
+  // device (via `pinnedDevice`, so `doOpen` cannot randomly pick a different one).
+  // This deterministically drives both onto one `device:` lock so the overlap
+  // invariant is exercised, not just present. If the router stopped serializing
+  // same-device opens, `deviceContention` here would collapse and the overlap
+  // invariant would fire.
+  test('concurrency torture — forced two-client same-device contention', () =>
+    guard(async () => {
+      const pinnedDevice = DEVICE_POOL[0];
+      const program: ClientOp[][] = [
+        ['open', 'mutate', 'close', 'open', 'mutate'],
+        ['open', 'mutate', 'close', 'open', 'mutate'],
+      ];
+      let contendedSeeds = 0;
+      for (let seed = 0; seed < 40; seed += 1) {
+        const result = await runTorture({ seed, program, pinnedDevice });
+        assertClean(result);
+        const perDeviceMax = Object.values(result.perDeviceMaxConcurrency);
+        assert.ok(
+          perDeviceMax.every((max) => max <= 1),
+          `seed ${seed}: same-device critical sections overlapped — ${JSON.stringify(
+            result.perDeviceMaxConcurrency,
+          )}`,
+        );
+        if (result.deviceContention > 0) contendedSeeds += 1;
+      }
       assert.ok(
-        perDeviceMax.every((max) => max <= 1),
-        `seed ${seed}: same-device critical sections overlapped — ${JSON.stringify(
-          result.perDeviceMaxConcurrency,
-        )}`,
+        contendedSeeds > 0,
+        'two clients never actually contended for the pinned device across 40 seeds — ' +
+          'the forced-contention scenario is not exercising the device lock',
       );
-      if (result.deviceContention > 0) contendedSeeds += 1;
-    }
-    assert.ok(
-      contendedSeeds > 0,
-      'two clients never actually contended for the pinned device across 40 seeds — ' +
-        'the forced-contention scenario is not exercising the device lock',
-    );
-  });
+    }));
 }

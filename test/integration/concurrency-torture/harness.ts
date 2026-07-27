@@ -41,7 +41,9 @@ import {
 } from './deterministic-scheduler.ts';
 import { InMemoryClaimRegistry } from './claim-registry.ts';
 import {
+  CLOSE_COMMAND,
   DEVICE_POOL,
+  MUTATE_COMMAND,
   deviceClaimKey,
   resolveExistingLockPlan,
   resolveOpenLockPlan,
@@ -275,7 +277,7 @@ class TortureWorld {
   private async doMutate(fiber: Fiber, client: number): Promise<void> {
     const instance = this.liveInstanceOf(client);
     if (!instance) return;
-    const plan = await resolveExistingLockPlan(this.sessionStore, instance.name);
+    const plan = await resolveExistingLockPlan(this.sessionStore, instance.name, MUTATE_COMMAND);
     await this.withLockPlan(fiber, plan, `mutate-${client}`, async () => {
       await this.enterDeviceCritical(fiber, instance.deviceId);
       try {
@@ -310,7 +312,7 @@ class TortureWorld {
   private async doClose(fiber: Fiber, client: number): Promise<void> {
     const instance = this.liveInstanceOf(client);
     if (!instance) return;
-    const plan = await resolveExistingLockPlan(this.sessionStore, instance.name);
+    const plan = await resolveExistingLockPlan(this.sessionStore, instance.name, CLOSE_COMMAND);
     await this.withLockPlan(fiber, plan, `close-${client}`, async () => {
       await this.enterDeviceCritical(fiber, instance.deviceId);
       try {
@@ -343,7 +345,7 @@ class TortureWorld {
         if (this.activeClients <= 0 && !this.findOrphan()) return;
         continue;
       }
-      const plan = await resolveExistingLockPlan(this.sessionStore, orphan.name);
+      const plan = await resolveExistingLockPlan(this.sessionStore, orphan.name, CLOSE_COMMAND);
       await this.withLockPlan(fiber, plan, 'reaper', async () => {
         await this.enterDeviceCritical(fiber, orphan.deviceId);
         try {
