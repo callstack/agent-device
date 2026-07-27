@@ -13,3 +13,6 @@ minimumReleaseAgeExclude:
 # elsewhere in the tree is untouched.
 overrides:
   undici@7: '^7.28.0'
+  postcss: 8.5.18
+  react-router: 7.18.1
+  react-router-dom: 7.18.1

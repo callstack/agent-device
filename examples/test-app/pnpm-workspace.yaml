@@ -9,11 +9,11 @@
 # stay untouched.
 overrides:
   '@xmldom/xmldom': 0.8.13
-  postcss: 8.5.12
+  postcss: 8.5.18
   uuid: 14.0.0
   ws@8: ^8.20.1
   ws@7: ^7.5.11
-  brace-expansion@5: ^5.0.7
+  brace-expansion@5: ^5.0.8
   shell-quote: ^1.9.0
   js-yaml@4: ^4.3.0
   '@babel/core@7': ^7.29.6
