@@ -13,6 +13,7 @@ import {
   assertWaitText,
   capturePng,
 } from './live-assertions.ts';
+import { collectPagedEventTimeline, type EventTimelinePage } from './event-timeline.ts';
 import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';
 
 const C = PUBLIC_COMMANDS;
@@ -272,17 +273,32 @@ export async function assertObservabilityAndArtifacts(context: LiveContext): Pro
   assertJsonContains(batch, '"pass":true', 'batch should contain passing nested is result');
   verifyCommand(context, C.batch, 'batch returns semantic nested get and is results');
 
-  const events = await runStep(context, 'read session event timeline', ['events', '100']);
-  const eventCommands = Array.isArray(events.json?.data?.events)
-    ? events.json.data.events.map((event: { command?: unknown }) => event.command)
-    : [];
+  const eventTimeline = await collectPagedEventTimeline(async (cursor) => {
+    const events = await runStep(
+      context,
+      cursor === undefined
+        ? 'read session event timeline'
+        : `read session event timeline from cursor ${cursor}`,
+      cursor === undefined ? ['events', '100'] : ['events', '100', cursor],
+    );
+    return (events.json?.data ?? {}) as EventTimelinePage;
+  });
+  assert.ok(
+    eventTimeline.pages.length > 1,
+    `live events coverage must traverse multiple pages: ${JSON.stringify(eventTimeline.pages)}`,
+  );
+
   for (const command of [C.open, C.press, C.snapshot]) {
     assert.ok(
-      eventCommands.includes(command),
-      `events missing ${command}: ${JSON.stringify(events.json)}`,
+      eventTimeline.commands.includes(command),
+      `events missing ${command}: ${JSON.stringify(eventTimeline)}`,
     );
   }
-  verifyCommand(context, C.events, 'typed event entries name open, press, and snapshot');
+  verifyCommand(
+    context,
+    C.events,
+    'paged typed event entries name open, press, and snapshot across the full timeline',
+  );
 
   const reactNative = await runStep(context, 'inspect Release overlay state', [
     'react-native',

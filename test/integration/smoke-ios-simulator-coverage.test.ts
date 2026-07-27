@@ -15,6 +15,7 @@ import { isCommandSupportedOnDevice } from '../../src/core/capabilities.ts';
 import { parseReplayScriptDetailed } from '../../src/replay/script.ts';
 import { IOS_SIMULATOR_BEHAVIOR_COVERAGE } from './ios-simulator-e2e/behavior-coverage.ts';
 import { IOS_SIMULATOR_E2E_COVERAGE } from './ios-simulator-e2e/coverage-manifest.ts';
+import { collectPagedEventTimeline } from './ios-simulator-e2e/event-timeline.ts';
 import { IOS_SIMULATOR_LIVE_SCENARIOS } from './ios-simulator-e2e/scenarios.ts';
 
 const IOS_SIMULATOR = {
@@ -167,4 +168,71 @@ test('fixture replay gestures fit the smallest supported iPhone viewport', () =>
     'examples/test-app/replays/gesture-lab.ad',
   ];
   for (const replayPath of replayPaths) assertReplayFitsViewports(replayPath, compactViewports);
+});
+
+test('event timeline coverage follows cursors beyond the first page', async () => {
+  const requestedCursors: Array<string | undefined> = [];
+  const timeline = await collectPagedEventTimeline(async (cursor) => {
+    requestedCursors.push(cursor);
+    if (cursor === undefined) {
+      return {
+        events: [{ command: PUBLIC_COMMANDS.open }, { command: PUBLIC_COMMANDS.snapshot }],
+        nextCursor: '100',
+      };
+    }
+    return { events: [{ command: PUBLIC_COMMANDS.press }] };
+  });
+
+  assert.deepEqual(requestedCursors, [undefined, '100']);
+  assert.deepEqual(timeline.commands, [
+    PUBLIC_COMMANDS.open,
+    PUBLIC_COMMANDS.snapshot,
+    PUBLIC_COMMANDS.press,
+  ]);
+  assert.deepEqual(timeline.pages, [
+    { cursor: '0', eventCount: 2, nextCursor: '100' },
+    { cursor: '100', eventCount: 1 },
+  ]);
+});
+
+test('event timeline coverage rejects malformed and non-advancing pages', async () => {
+  await assert.rejects(
+    collectPagedEventTimeline(async () => ({})),
+    /events page must contain an events array/,
+  );
+  await assert.rejects(
+    collectPagedEventTimeline(async () => ({ events: [{ command: 42 }] })),
+    /must name a command/,
+  );
+  await assert.rejects(
+    collectPagedEventTimeline(async () => ({ events: [], nextCursor: { offset: 100 } })),
+    /nextCursor must be a canonical non-negative integer string/,
+  );
+  await assert.rejects(
+    collectPagedEventTimeline(async () => ({ events: [], nextCursor: '1e2' })),
+    /nextCursor must be a canonical non-negative integer string/,
+  );
+  await assert.rejects(
+    collectPagedEventTimeline(async () => ({ events: [], nextCursor: '100' })),
+    /did not advance beyond cursor 100/,
+  );
+  let page = 0;
+  await assert.rejects(
+    collectPagedEventTimeline(async () => ({
+      events: [],
+      nextCursor: page++ === 0 ? '100' : '50',
+    })),
+    /did not advance beyond cursor 100/,
+  );
+});
+
+test('event timeline coverage fails fast on runaway pagination', async () => {
+  let nextCursor = 0;
+  await assert.rejects(
+    collectPagedEventTimeline(async () => ({
+      events: [],
+      nextCursor: String(++nextCursor),
+    })),
+    /events pagination exceeded 100 pages/,
+  );
 });
