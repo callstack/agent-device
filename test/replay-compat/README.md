@@ -27,11 +27,24 @@ enough to put in front of whoever recorded the script.
 ## What is in the corpus
 
 - `scripts/integration/` and `scripts/examples/` — mined from the git history of
-  `test/integration/replays` and `examples/test-app/replays`: one entry per distinct file content at
-  a release tag.
+  `test/integration/replays` and `examples/test-app/replays`.
 - `scripts/docs/` — surfaces the released grammar wrote that those two suites never exercised
   (`${VAR}` parameterization, reserved/ordering `env` refusals, `wait stable` and landmark waits,
   `target-v1` annotations, retired `gesture rotate` velocity and `gesture swipe` durationMs).
+
+## What earns an entry
+
+This is a **parser**-compatibility corpus, not a device matrix. An entry has to be the only witness
+of something:
+
+- a shipped syntactic form no other entry's bytes contain, or
+- a distinct migration refusal (error code + hint) no other entry already provokes.
+
+So the same flow recorded on another platform, or re-recorded at an adjacent release with only
+coordinates and labels changed, does **not** get an entry: it costs maintenance and adds no parser
+leverage. Each entry's `note` says which form or refusal it is the sole witness of; if a new entry
+cannot claim one, it does not belong here. Keep the corpus in the tens of entries, not a mirror of
+the replay-fixture tree.
 
 ## How "frozen" and "released" are enforced, not asserted
 
@@ -64,9 +77,10 @@ surface — `git tag --contains <commit>` decides, and unreleased shapes stay ou
 
 1. Find the surface at a release tag (`git show <tag>:<path>`, or the released grammar/docs that
    emitted it) and copy it verbatim into `scripts/<area>/<name>.<tag>.ad`.
-2. Add a `manifest.ts` entry with `recordedBy`, `provenance`, `covers`, and the observed verdict. For
-   a mined entry the blob id is `git rev-parse <tag>:<path>`; for a derived one it is
-   `shasum -a 256 <file>`. Add the tag to `REPLAY_COMPAT_RELEASED_TAGS` if it is new.
+2. Add a `manifest.ts` entry with `recordedBy`, `provenance`, `covers`, the observed verdict, and a
+   `note` naming the form or refusal it is the sole witness of. For a mined entry the blob id is
+   `git rev-parse <tag>:<path>`; for a derived one it is `shasum -a 256 <file>`. Add the tag to
+   `REPLAY_COMPAT_RELEASED_TAGS` if it is new.
 3. Run `pnpm exec vitest run --project unit-core test/replay-compat` and `pnpm check:replay-compat`.
 
 Add an entry when a change retires, renames, or narrows a `.ad` form — the corpus is the record of

@@ -129,6 +129,17 @@ describe('replay-compat corpus', () => {
     }
   });
 
+  // The corpus is a parser-compat suite, not a device matrix: every entry must
+  // say which form or refusal it is the sole witness of, and the count stays a
+  // reviewable set of deliberate entries rather than a mirror of the replay
+  // fixtures. Raising the ceiling is allowed; doing it silently is not.
+  test('every entry states why it exists, and the corpus stays small', () => {
+    for (const entry of REPLAY_COMPAT_CORPUS) {
+      expect(entry.note.trim(), entry.id).not.toBe('');
+    }
+    expect(REPLAY_COMPAT_CORPUS.length).toBeLessThanOrEqual(30);
+  });
+
   test('the corpus covers every compat surface it is required to freeze', () => {
     const covered = new Set(REPLAY_COMPAT_CORPUS.flatMap((entry) => entry.covers));
     expect([...covered].sort()).toEqual([...REQUIRED_COVERAGE].sort());

@@ -1,7 +1,7 @@
 /**
- * The frozen `.ad` replay-compat corpus (#1417): one entry per historical script
- * surface a RELEASED version wrote, paired with the verdict today's parser must
- * return for it.
+ * The frozen `.ad` replay-compat corpus (#1417): one minimal witness per
+ * materially distinct script surface a RELEASED version wrote, paired with the
+ * verdict today's parser must return for it.
  *
  * The scripts under `scripts/` are FROZEN. A grammar change that flips a verdict
  * edits the verdict here — never the script — and says why in the same PR. See
@@ -18,13 +18,9 @@ import type { AppErrorCode } from '../../src/kernel/errors.ts';
 export const REPLAY_COMPAT_RELEASED_TAGS: readonly string[] = [
   'v0.11.0',
   'v0.11.2',
-  'v0.11.8',
-  'v0.12.5',
-  'v0.15.0',
   'v0.15.1',
   'v0.16.0',
   'v0.16.8',
-  'v0.17.0',
   'v0.20.0',
 ];
 
@@ -66,14 +62,19 @@ export type ReplayCompatEntry = {
   provenance: ReplayCompatProvenance;
   covers: ReplayCompatCoverage[];
   verdict: ReplayCompatVerdict;
-  /** Why this entry exists, when the path and verdict do not say it. */
-  note?: string;
+  /** The shipped form or refusal this entry is the sole witness of. */
+  note: string;
 };
 
 /**
  * Mined from the git history of `test/integration/replays` and
- * `examples/test-app/replays` (one entry per distinct content at a release tag),
- * plus surfaces the released grammar wrote that those suites never exercised.
+ * `examples/test-app/replays`, plus surfaces the released grammar wrote that
+ * those suites never exercised.
+ *
+ * This is a parser-compatibility corpus, not a device matrix: an entry earns its
+ * place by being the only witness of a shipped syntactic form or of a distinct
+ * migration refusal. Repeating a form across platforms or adjacent releases adds
+ * maintenance weight and no parser leverage, so those samples stay out.
  * Git-history-only grammar states that never shipped are deliberately absent.
  */
 export const REPLAY_COMPAT_CORPUS: ReplayCompatEntry[] = [
@@ -88,18 +89,7 @@ export const REPLAY_COMPAT_CORPUS: ReplayCompatEntry[] = [
     },
     covers: ['context-header', 'quoting'],
     verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/android-01-settings@v0.11.2',
-    file: 'scripts/integration/android-01-settings.v0.11.2.ad',
-    recordedBy: 'v0.11.2',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/android/01-settings.ad',
-      blob: '47b9ff049772143e1bd8b0cd2e64cb381a48ae2d',
-    },
-    covers: ['context-header', 'quoting', 'wait-landmark'],
-    verdict: { kind: 'parses' },
+    note: 'Sole shipped witness of `appstate`, `snapshot -i`, `is exists "<selector>"`, and bare `back`.',
   },
   {
     id: 'integration/ios-device-01-physical-lifecycle@v0.11.0',
@@ -112,126 +102,7 @@ export const REPLAY_COMPAT_CORPUS: ReplayCompatEntry[] = [
     },
     covers: ['context-header', 'quoting', 'wait-landmark'],
     verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/ios-device-01-physical-lifecycle@v0.11.2',
-    file: 'scripts/integration/ios-device-01-physical-lifecycle.v0.11.2.ad',
-    recordedBy: 'v0.11.2',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/ios/device/01-physical-lifecycle.ad',
-      blob: '797de36dc0d5c5aa2287176de72e82a3ccb21bff',
-    },
-    covers: ['context-header', 'quoting', 'wait-landmark'],
-    verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/ios-device-01-physical-lifecycle@v0.15.0',
-    file: 'scripts/integration/ios-device-01-physical-lifecycle.v0.15.0.ad',
-    recordedBy: 'v0.15.0',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/ios/device/01-physical-lifecycle.ad',
-      blob: '7a5ea2f64756b5400f1e987a32d78b058734461c',
-    },
-    covers: ['context-header', 'quoting', 'wait-landmark'],
-    verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/ios-device-01-physical-lifecycle@v0.17.0',
-    file: 'scripts/integration/ios-device-01-physical-lifecycle.v0.17.0.ad',
-    recordedBy: 'v0.17.0',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/ios/device/01-physical-lifecycle.ad',
-      blob: 'fb6e1c0b90d331a5c7075f37f6690412d0c926f4',
-    },
-    covers: ['context-header', 'quoting', 'wait-landmark'],
-    verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/ios-simulator-01-settings@v0.11.0',
-    file: 'scripts/integration/ios-simulator-01-settings.v0.11.0.ad',
-    recordedBy: 'v0.11.0',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/ios/simulator/01-settings.ad',
-      blob: '704f28b6d38dadf820a658320dca4c611ea9684d',
-    },
-    covers: ['context-header', 'quoting', 'wait-landmark'],
-    verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/ios-simulator-01-settings@v0.11.2',
-    file: 'scripts/integration/ios-simulator-01-settings.v0.11.2.ad',
-    recordedBy: 'v0.11.2',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/ios/simulator/01-settings.ad',
-      blob: 'b9482558fcde1f424dfba55a5dd4dfaecddb7bb4',
-    },
-    covers: ['context-header', 'quoting', 'wait-landmark'],
-    verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/ios-simulator-01-settings@v0.15.0',
-    file: 'scripts/integration/ios-simulator-01-settings.v0.15.0.ad',
-    recordedBy: 'v0.15.0',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/ios/simulator/01-settings.ad',
-      blob: 'f34cb81707b2a8022d466e0ac2b45fcd43f4dcc7',
-    },
-    covers: ['context-header', 'quoting', 'wait-landmark'],
-    verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/ios-simulator-01-settings@v0.17.0',
-    file: 'scripts/integration/ios-simulator-01-settings.v0.17.0.ad',
-    recordedBy: 'v0.17.0',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/ios/simulator/01-settings.ad',
-      blob: '418401db198bdb8b96ed80a25d1474effa693d35',
-    },
-    covers: ['context-header', 'quoting', 'wait-landmark'],
-    verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/macos-01-system-settings@v0.11.0',
-    file: 'scripts/integration/macos-01-system-settings.v0.11.0.ad',
-    recordedBy: 'v0.11.0',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/macos/01-system-settings.ad',
-      blob: 'e3f7f39b53d9a56a14a233129b54f9f110640836',
-    },
-    covers: ['context-header', 'quoting', 'wait-landmark'],
-    verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/macos-01-system-settings@v0.11.2',
-    file: 'scripts/integration/macos-01-system-settings.v0.11.2.ad',
-    recordedBy: 'v0.11.2',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/macos/01-system-settings.ad',
-      blob: '7df54a82235767e42355b204406421d02bae122b',
-    },
-    covers: ['context-header', 'quoting', 'wait-landmark'],
-    verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/macos-01-system-settings@v0.17.0',
-    file: 'scripts/integration/macos-01-system-settings.v0.17.0.ad',
-    recordedBy: 'v0.17.0',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/macos/01-system-settings.ad',
-      blob: 'd43f790938cbde47f99e135737589002f014193f',
-    },
-    covers: ['context-header', 'quoting', 'wait-landmark'],
-    verdict: { kind: 'parses' },
+    note: 'Sole shipped witness of an unquoted `open <bundle-id>` target and an argument-less `snapshot`.',
   },
   {
     id: 'integration/android-02-deep-navigation@v0.11.2',
@@ -244,30 +115,7 @@ export const REPLAY_COMPAT_CORPUS: ReplayCompatEntry[] = [
     },
     covers: ['context-header', 'quoting', 'wait-landmark'],
     verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/android-02-deep-navigation@v0.12.5',
-    file: 'scripts/integration/android-02-deep-navigation.v0.12.5.ad',
-    recordedBy: 'v0.12.5',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/android/02-deep-navigation.ad',
-      blob: '2072595e8e03f76662af0f7dba34d8d7f6a0333f',
-    },
-    covers: ['context-header', 'quoting', 'wait-landmark'],
-    verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/android-03-scroll-discovery@v0.11.2',
-    file: 'scripts/integration/android-03-scroll-discovery.v0.11.2.ad',
-    recordedBy: 'v0.11.2',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/android/03-scroll-discovery.ad',
-      blob: 'f37427fae15ba0d905bad924585ea898d7ff5985',
-    },
-    covers: ['context-header', 'wait-landmark'],
-    verdict: { kind: 'parses' },
+    note: 'Sole shipped witness of `screenshot <path>`, a bare `click @ref`, and `find text "…" exists`.',
   },
   {
     id: 'integration/android-04-text-input-keyboard@v0.11.2',
@@ -280,6 +128,7 @@ export const REPLAY_COMPAT_CORPUS: ReplayCompatEntry[] = [
     },
     covers: ['context-header', 'wait-landmark'],
     verdict: { kind: 'parses' },
+    note: 'Sole shipped witness of `type "<text>"`.',
   },
   {
     id: 'integration/android-05-app-lifecycle@v0.11.2',
@@ -292,6 +141,7 @@ export const REPLAY_COMPAT_CORPUS: ReplayCompatEntry[] = [
     },
     covers: ['context-header', 'wait-landmark'],
     verdict: { kind: 'parses' },
+    note: 'Sole shipped witness of `home`.',
   },
   {
     id: 'integration/android-06-swipe-gestures@v0.11.2',
@@ -311,170 +161,6 @@ export const REPLAY_COMPAT_CORPUS: ReplayCompatEntry[] = [
     note: '#1393 retired the trailing swipe durationMs; a v0.11.2 Android recording carries it and must get the migration, not a silent default-duration swipe.',
   },
   {
-    id: 'integration/ios-simulator-02-deep-navigation@v0.11.2',
-    file: 'scripts/integration/ios-simulator-02-deep-navigation.v0.11.2.ad',
-    recordedBy: 'v0.11.2',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/ios/simulator/02-deep-navigation.ad',
-      blob: '977f082d918c5ec3999d6e71904331465c1ffa85',
-    },
-    covers: ['context-header', 'quoting', 'wait-landmark'],
-    verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/ios-simulator-02-deep-navigation@v0.15.0',
-    file: 'scripts/integration/ios-simulator-02-deep-navigation.v0.15.0.ad',
-    recordedBy: 'v0.15.0',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/ios/simulator/02-deep-navigation.ad',
-      blob: 'edc97d2854c813ed4230fe40533628d8ead897bc',
-    },
-    covers: ['context-header', 'quoting', 'wait-landmark'],
-    verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/ios-simulator-02-deep-navigation@v0.17.0',
-    file: 'scripts/integration/ios-simulator-02-deep-navigation.v0.17.0.ad',
-    recordedBy: 'v0.17.0',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/ios/simulator/02-deep-navigation.ad',
-      blob: '86c27387f4d91e6bfcc5c2a424de41159da68cf5',
-    },
-    covers: ['context-header', 'quoting', 'wait-landmark'],
-    verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/ios-simulator-03-scroll-discovery@v0.11.2',
-    file: 'scripts/integration/ios-simulator-03-scroll-discovery.v0.11.2.ad',
-    recordedBy: 'v0.11.2',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/ios/simulator/03-scroll-discovery.ad',
-      blob: '898bf8423074fc3e8fb05c1dfef8f1c674eb0529',
-    },
-    covers: ['context-header', 'wait-landmark'],
-    verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/ios-simulator-03-scroll-discovery@v0.15.0',
-    file: 'scripts/integration/ios-simulator-03-scroll-discovery.v0.15.0.ad',
-    recordedBy: 'v0.15.0',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/ios/simulator/03-scroll-discovery.ad',
-      blob: '2646c29e9b2323d4652a72c74ceeb1c88f49ce75',
-    },
-    covers: ['context-header', 'wait-landmark'],
-    verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/ios-simulator-04-text-input-keyboard@v0.11.2',
-    file: 'scripts/integration/ios-simulator-04-text-input-keyboard.v0.11.2.ad',
-    recordedBy: 'v0.11.2',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/ios/simulator/04-text-input-keyboard.ad',
-      blob: '0a8be87e3e2caacdf6b35820bb16cc3d492c8fea',
-    },
-    covers: ['context-header', 'quoting', 'wait-landmark'],
-    verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/ios-simulator-04-text-input-keyboard@v0.15.0',
-    file: 'scripts/integration/ios-simulator-04-text-input-keyboard.v0.15.0.ad',
-    recordedBy: 'v0.15.0',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/ios/simulator/04-text-input-keyboard.ad',
-      blob: 'a9f04c26d8ff91ae705bfa2b4f0c61c0b35b8dd3',
-    },
-    covers: ['context-header', 'quoting', 'wait-landmark'],
-    verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/ios-simulator-05-app-lifecycle@v0.11.2',
-    file: 'scripts/integration/ios-simulator-05-app-lifecycle.v0.11.2.ad',
-    recordedBy: 'v0.11.2',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/ios/simulator/05-app-lifecycle.ad',
-      blob: '75cb3ca578c93146731676fb4d0bbf8d71b4e6a9',
-    },
-    covers: ['context-header', 'wait-landmark'],
-    verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/ios-simulator-05-app-lifecycle@v0.15.0',
-    file: 'scripts/integration/ios-simulator-05-app-lifecycle.v0.15.0.ad',
-    recordedBy: 'v0.15.0',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/ios/simulator/05-app-lifecycle.ad',
-      blob: '32d2a15f5006169e8578cde608703dd5e630f577',
-    },
-    covers: ['context-header', 'wait-landmark'],
-    verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/ios-simulator-06-swipe-gestures@v0.11.2',
-    file: 'scripts/integration/ios-simulator-06-swipe-gestures.v0.11.2.ad',
-    recordedBy: 'v0.11.2',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/ios/simulator/06-swipe-gestures.ad',
-      blob: 'ca067860a93fbd1ca976a02401c3d86993cb2028',
-    },
-    covers: ['context-header', 'retired-gesture', 'wait-landmark'],
-    verdict: {
-      kind: 'fails',
-      code: 'INVALID_ARGS',
-      hint: 'swipe accepts 4 arguments: x1 y1 x2 y2 (line 6). The trailing durationMs positional was removed: use "gesture pan 197 650 0 -350 300" for the same timed drag, or "swipe 197 650 197 300" for a default-duration swipe.',
-    },
-  },
-  {
-    id: 'integration/ios-simulator-06-swipe-gestures@v0.15.0',
-    file: 'scripts/integration/ios-simulator-06-swipe-gestures.v0.15.0.ad',
-    recordedBy: 'v0.15.0',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/ios/simulator/06-swipe-gestures.ad',
-      blob: '8f892f1c7af020680a4f921c60cbc4e30ebb021f',
-    },
-    covers: ['context-header', 'retired-gesture', 'wait-landmark'],
-    verdict: {
-      kind: 'fails',
-      code: 'INVALID_ARGS',
-      hint: 'swipe accepts 4 arguments: x1 y1 x2 y2 (line 6). The trailing durationMs positional was removed: use "gesture pan 197 650 0 -350 300" for the same timed drag, or "swipe 197 650 197 300" for a default-duration swipe.',
-    },
-  },
-  {
-    id: 'integration/linux-01-desktop-smoke@v0.11.8',
-    file: 'scripts/integration/linux-01-desktop-smoke.v0.11.8.ad',
-    recordedBy: 'v0.11.8',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/linux/01-desktop-smoke.ad',
-      blob: 'c707cfdb2f172437cfb094d7e9eb7bb98213b450',
-    },
-    covers: ['context-header', 'quoting', 'wait-landmark'],
-    verdict: { kind: 'parses' },
-  },
-  {
-    id: 'integration/linux-01-desktop-smoke@v0.15.0',
-    file: 'scripts/integration/linux-01-desktop-smoke.v0.15.0.ad',
-    recordedBy: 'v0.15.0',
-    provenance: {
-      kind: 'mined',
-      path: 'test/integration/replays/linux/01-desktop-smoke.ad',
-      blob: '1d88b91a84ff6a59ff84c5a5ab79c3c75620543c',
-    },
-    covers: ['context-header', 'quoting', 'wait-landmark'],
-    verdict: { kind: 'parses' },
-  },
-  {
     id: 'examples/checkout-form-android@v0.15.1',
     file: 'scripts/examples/checkout-form-android.v0.15.1.ad',
     recordedBy: 'v0.15.1',
@@ -485,6 +171,7 @@ export const REPLAY_COMPAT_CORPUS: ReplayCompatEntry[] = [
     },
     covers: ['context-header', 'env-vars', 'quoting', 'wait-landmark'],
     verdict: { kind: 'parses' },
+    note: 'Sole shipped witness of `open … --launch-url`, `keyboard dismiss`, `scroll <dir> <fraction>`, and `fill id=… "…"` with `${VAR}` header values.',
   },
   {
     id: 'examples/checkout-form-android@v0.16.8',
@@ -497,30 +184,7 @@ export const REPLAY_COMPAT_CORPUS: ReplayCompatEntry[] = [
     },
     covers: ['context-header', 'env-vars', 'quoting', 'wait-landmark'],
     verdict: { kind: 'parses' },
-  },
-  {
-    id: 'examples/checkout-form@v0.15.1',
-    file: 'scripts/examples/checkout-form.v0.15.1.ad',
-    recordedBy: 'v0.15.1',
-    provenance: {
-      kind: 'mined',
-      path: 'examples/test-app/replays/checkout-form.ad',
-      blob: '8bd23afbd93fe7ec8845882faf346509e9e00d3f',
-    },
-    covers: ['context-header', 'env-vars', 'quoting', 'wait-landmark'],
-    verdict: { kind: 'parses' },
-  },
-  {
-    id: 'examples/checkout-form@v0.16.8',
-    file: 'scripts/examples/checkout-form.v0.16.8.ad',
-    recordedBy: 'v0.16.8',
-    provenance: {
-      kind: 'mined',
-      path: 'examples/test-app/replays/checkout-form.ad',
-      blob: '4c89212dfa191309377a538a16b95bafa8d3d754',
-    },
-    covers: ['context-header', 'env-vars', 'quoting', 'wait-landmark'],
-    verdict: { kind: 'parses' },
+    note: 'Sole shipped witness of a `react-native <subcommand>` step inside a recording.',
   },
   {
     id: 'examples/gesture-lab@v0.16.0',
@@ -537,35 +201,7 @@ export const REPLAY_COMPAT_CORPUS: ReplayCompatEntry[] = [
       code: 'INVALID_ARGS',
       hint: 'gesture fling accepts at most 4 arguments: direction x y [distance] (line 15). The trailing durationMs positional was removed: use "gesture fling up 195 443 80", or gesture pan for timed movement.',
     },
-    note: '#1393 retired the trailing fling durationMs; the shipped gesture-lab example wrote it until v0.20.0.',
-  },
-  {
-    id: 'examples/gesture-lab@v0.16.8',
-    file: 'scripts/examples/gesture-lab.v0.16.8.ad',
-    recordedBy: 'v0.16.8',
-    provenance: {
-      kind: 'mined',
-      path: 'examples/test-app/replays/gesture-lab.ad',
-      blob: '2d6b3aee582d6a04b02e6d51a9d8e6769ed65816',
-    },
-    covers: ['context-header', 'env-vars', 'quoting', 'retired-gesture', 'wait-landmark'],
-    verdict: {
-      kind: 'fails',
-      code: 'INVALID_ARGS',
-      hint: 'gesture fling accepts at most 4 arguments: direction x y [distance] (line 16). The trailing durationMs positional was removed: use "gesture fling up 195 443 80", or gesture pan for timed movement.',
-    },
-  },
-  {
-    id: 'examples/gesture-lab@v0.20.0',
-    file: 'scripts/examples/gesture-lab.v0.20.0.ad',
-    recordedBy: 'v0.20.0',
-    provenance: {
-      kind: 'mined',
-      path: 'examples/test-app/replays/gesture-lab.ad',
-      blob: 'ac3946e335a97237e5d53fbb3fec8472b955b1f6',
-    },
-    covers: ['context-header', 'env-vars', 'quoting', 'wait-landmark'],
-    verdict: { kind: 'parses' },
+    note: '#1393 retired the trailing fling durationMs; the shipped gesture-lab example wrote it until v0.20.0. This is the only entry for that refusal — the v0.16.8 and iOS copies of the same script repeat it.',
   },
   {
     id: 'examples/gesture-lab-android@v0.20.0',
@@ -578,6 +214,7 @@ export const REPLAY_COMPAT_CORPUS: ReplayCompatEntry[] = [
     },
     covers: ['context-header', 'env-vars', 'quoting', 'wait-landmark'],
     verdict: { kind: 'parses' },
+    note: 'The post-#1393 gesture positionals as they ship today: pan (incl. `--pointer-count`), fling, pinch, rotate, transform.',
   },
   {
     id: 'docs/vars-parameterized@v0.15.1',
