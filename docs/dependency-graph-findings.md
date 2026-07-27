@@ -1,19 +1,51 @@
 # Dependency graph findings
 
-Snapshot analysis of the production import graph — 894 files, 4619 edges, 25 zones — taken while
-doing the boundary work in this branch. It is a dated observation, not a normative document; when
-it disagrees with `scripts/layering/`, the gate wins.
+Snapshot analysis of the production import graph — 901 files, 4768 edges, 25 zones — taken while
+doing the boundary work across #1405 and its follow-up. It is a dated observation, not a normative
+document; when it disagrees with `scripts/layering/`, the gate wins.
 
-The graph tool that produced it lives on the `claude/depgraph-viewer` branch (`pnpm depgraph`),
-deliberately kept out of this change so the refactor stands on its own.
+There is no graph tool to install. A rendered viewer was built and then dropped: it cost ~2200
+lines and a Fallow exemption, and nobody — human or agent — drew a conclusion from the picture.
+Every finding below came from short queries against the gate's own model, which is the point worth
+keeping. Re-derive any of them like this:
+
+```ts
+// scripts/layering/.probe.ts (throwaway; the gate's model is the only dependency)
+import fs from 'node:fs';
+import { listSourceFiles } from './check.ts';
+import { resolveImportEdges, typeInversionPair, backEdgePair } from './model.ts';
+
+const files = listSourceFiles();
+const sources = new Map(files.map((f) => [f, fs.readFileSync(f, 'utf8')]));
+const edges = resolveImportEdges(sources);
+
+// e.g. R6 inversions per zone pair, deduplicated by file pair — reproduces
+// TYPE_INVERSION_BASELINE, so a mismatch means one of the two is stale.
+const seen = new Set<string>();
+const byPair = new Map<string, number>();
+for (const edge of edges) {
+  const pair = typeInversionPair(edge);
+  if (!pair) continue;
+  const id = `${edge.file} -> ${edge.target}`;
+  if (seen.has(id)) continue;
+  seen.add(id);
+  byPair.set(pair, (byPair.get(pair) ?? 0) + 1);
+}
+console.log([...byPair].sort((a, b) => b[1] - a[1]));
+```
+
+Run with `node --experimental-strip-types scripts/layering/.probe.ts` and delete it after. Swap
+`typeInversionPair` for `backEdgePair` for R5, or group `edges` by `fromZone`/`toZone` for
+zone-level traffic. Deduplicating by file pair matters: the gate counts each file pair once, so a
+raw edge count reads higher.
 
 ## Where this round landed
 
 |                                                          | before                 | after                                           |
 | -------------------------------------------------------- | ---------------------- | ----------------------------------------------- |
-| type-only spine inversions (R6)                          | 61 across 6 zone pairs | **35 across 4**, ratcheted                      |
+| type-only spine inversions (R6)                          | 61 across 6 zone pairs | **18 across 5**, ratcheted                      |
 | files in the unranked `(root)` zone                      | 29                     | **13** — entrypoints and composition roots only |
-| files covered by the ranked spine                        | 651 of 892             | **729 of 894**                                  |
+| files covered by the ranked spine                        | 713 of 898             | **888 of 901**                                  |
 | type imports pointing at a re-export hub in another zone | 89                     | **0**                                           |
 | selector-command rules stated in both zones              | 10 messages, 3 drifts  | **0** — shared in `selectors/`                  |
 | modules writing ADR 0014's four ref-frame fields         | 2                      | **1**, enforced by R7                           |
