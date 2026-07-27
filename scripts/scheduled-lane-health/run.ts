@@ -5,16 +5,17 @@
 // two consecutive cadences. All decision logic lives in `model.ts`; this file is
 // only I/O and is meant to run in CI via `node --experimental-strip-types`.
 
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { runCmdSync } from '../../src/utils/exec.ts';
 import {
   ALERT_ISSUE_TITLE,
   buildAlertBody,
   discoverScheduledLanes,
   evaluateLaneHealth,
+  parseScheduledLane,
   resolveScheduleAnchor,
   type LaneHealth,
   type LaneRun,
@@ -116,28 +117,69 @@ async function fetchScheduledRuns(
   }));
 }
 
+function gitLines(repoDir: string, args: readonly string[]): string[] {
+  const result = runCmdSync('git', [...args], { cwd: repoDir, allowFailure: true });
+  if (result.exitCode !== 0) return [];
+  return result.stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+/** File content at a git revision, or undefined if the path did not exist there. */
+function fileAtRev(repoDir: string, rev: string, relPath: string): string | undefined {
+  const result = runCmdSync('git', ['show', `${rev}:${relPath}`], {
+    cwd: repoDir,
+    allowFailure: true,
+  });
+  return result.exitCode === 0 ? result.stdout : undefined;
+}
+
+/** Whether the workflow content at a revision is `schedule:`-triggered (YAML, not a text match). */
+function isScheduledAt(relPath: string, content: string | undefined): boolean {
+  if (content === undefined) return false;
+  return parseScheduledLane(path.basename(relPath), content) !== undefined;
+}
+
 /**
- * Author date of the commit that introduced the `schedule:` trigger to a
- * workflow, derived from git history (pickaxe on the literal `schedule:`). This
- * — not the workflow's `created_at` — is when the lane actually started being
- * scheduled, so it's the correct newborn-grace anchor for a schedule added
- * later to an old workflow. Returns undefined when history is unavailable (e.g.
- * a shallow checkout) or the string isn't found; `resolveScheduleAnchor` then
- * falls back to the earliest run or the current time.
+ * Committer/landing time of the most recent unscheduled→scheduled transition of
+ * a workflow on the default branch's first-parent history — i.e. when the lane's
+ * *current* schedule actually became active. This is the correct newborn-grace
+ * anchor: it's the schedule-introduction, not the (possibly ancient) workflow
+ * file `created_at`; it uses committer time so it reflects when the change
+ * landed rather than when it was authored; it parses YAML so a comment
+ * mentioning `schedule:` can't match; and taking the newest transition survives
+ * a schedule being removed and later re-added. Returns undefined when git
+ * history is unavailable (e.g. a shallow checkout), leaving `resolveScheduleAnchor`
+ * to fall back to the earliest run or the current time.
  */
-function scheduleIntroducedAt(dir: string, workflowFile: string): string | undefined {
-  try {
-    const rel = path.relative(process.cwd(), path.join(dir, workflowFile));
-    const out = execFileSync(
-      'git',
-      ['log', '--reverse', '--format=%aI', '-S', 'schedule:', '--', rel],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
-    );
-    const first = out.split('\n').find((line) => line.trim().length > 0);
-    return first?.trim();
-  } catch {
-    return undefined;
+export function deriveScheduleActivatedAt(params: {
+  repoDir: string;
+  relPath: string;
+}): string | undefined {
+  const { repoDir, relPath } = params;
+  // Commits that changed the file, newest first, along default-branch
+  // first-parent history, tagged with committer (landing) time.
+  const lines = gitLines(repoDir, ['log', '--first-parent', '--format=%H %cI', '--', relPath]);
+  let firstAppearanceAt: string | undefined;
+  for (const line of lines) {
+    const sep = line.indexOf(' ');
+    if (sep === -1) continue;
+    const sha = line.slice(0, sep);
+    const committedAt = line.slice(sep + 1).trim();
+    firstAppearanceAt = committedAt; // oldest commit touching the file wins (last iteration)
+    const scheduledNow = isScheduledAt(relPath, fileAtRev(repoDir, sha, relPath));
+    const scheduledBefore = isScheduledAt(relPath, fileAtRev(repoDir, `${sha}^1`, relPath));
+    if (scheduledNow && !scheduledBefore) return committedAt;
   }
+  // Scheduled since the file first appeared (no unscheduled ancestor): anchor on
+  // that first appearance.
+  return firstAppearanceAt;
+}
+
+function repoRootDir(): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  return path.resolve(here, '../..');
 }
 
 async function findExistingAlertIssue(ctx: GithubContext): Promise<number | undefined> {
@@ -172,15 +214,18 @@ async function main(): Promise<void> {
   const ctx = readContext();
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
-  const dir = workflowsDir();
-  const lanes = discoverScheduledLanes(readWorkflowFiles(dir), SELF_WORKFLOW_FILE);
+  const repoDir = repoRootDir();
+  const lanes = discoverScheduledLanes(readWorkflowFiles(workflowsDir()), SELF_WORKFLOW_FILE);
   console.log(`Discovered ${lanes.length} scheduled lane(s): ${lanes.map((l) => l.file).join(', ')}`);
 
   const healths: LaneHealth[] = [];
   for (const lane of lanes) {
     const runs = await fetchScheduledRuns(ctx, lane.file);
     const registeredAt = resolveScheduleAnchor({
-      scheduleIntroducedAt: scheduleIntroducedAt(dir, lane.file),
+      scheduleActivatedAt: deriveScheduleActivatedAt({
+        repoDir,
+        relPath: path.posix.join('.github/workflows', lane.file),
+      }),
       runs,
       fallback: nowIso,
     });

@@ -257,18 +257,22 @@ every `schedule:`-triggered workflow from `.github/workflows/` (the list is **de
 hand-maintained), reads each lane's recent scheduled runs via the GitHub API, and opens/pings a single
 tracking issue when a lane has not **succeeded** within two of its own cadences — which covers both a
 lane gone dark (no runs) and one failing every cadence. Freshness is measured from an anchor: the last
-successful run, or — when a lane has never succeeded — when its **schedule was introduced** (the commit
-that added the `schedule:` trigger, derived via git pickaxe; the workflow needs full history, so the
-watcher checks out with `fetch-depth: 0`). This is deliberately **not** the workflow's `created_at`,
+successful run, or — when a lane has never succeeded — when its **schedule became active**: the
+committer/landing time of the most recent *unscheduled→scheduled* transition of the workflow on the
+default branch's first-parent history, derived from git (`run.ts` walks the file's history and parses
+each revision's YAML, so it uses landing time not author time, ignores a `schedule:` mentioned only in
+a comment, and survives a schedule removed and later re-added). The workflow needs full history, so the
+watcher checks out with `fetch-depth: 0`. This is deliberately **not** the workflow's `created_at`,
 which predates a schedule added later to an old workflow and would spend the grace before the lane was
-ever scheduled. When git history is unavailable it falls back to the earliest scheduled run, then to
-the current time. Anchoring on schedule-introduction gives a **newborn lane its grace**: a lane whose
-schedule is younger than two cadences (zero runs yet, or a single failed first cadence) is not alerted,
-because two cadences cannot have been missed/failed yet. The cadence is estimated per workflow from its
-cron expression. All decision logic is pure and unit-tested in `scripts/scheduled-lane-health/model.ts`
-(gated on PRs via `scripts/scheduled-lane-health/model.test.ts`); the GitHub API I/O and issue
-open/ping live in `run.ts` and run nightly. New scheduled lanes need no wiring here — emitting the
-standard envelope and carrying a `schedule:` trigger is enough to be watched.
+ever scheduled. When git history is unavailable (e.g. a shallow checkout) it falls back to the earliest
+scheduled run, then to the current time. Anchoring on schedule-activation gives a **newborn lane its
+grace**: a lane whose schedule is younger than two cadences (zero runs yet, or a single failed first
+cadence) is not alerted, because two cadences cannot have been missed/failed yet. The cadence is
+estimated per workflow from its cron expression. The pure verdict is unit-tested in
+`scripts/scheduled-lane-health/model.ts` and the git-history derivation in `run.ts` (both gated on PRs
+via `model.test.ts` + `run.test.ts`); the GitHub API I/O and issue open/ping run nightly. New
+scheduled lanes need no wiring here — emitting the standard envelope and carrying a `schedule:` trigger
+is enough to be watched.
 
 ## Speed rules (experiment-backed, 2026-07-04)
 

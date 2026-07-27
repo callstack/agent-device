@@ -122,9 +122,10 @@ jobs:
 
       - name: Check scheduled-lane health watcher model
         # The nightly Scheduled Lane Health watcher (#1430) decides when a lane
-        # has missed/failed two cadences; gate its pure model on PRs so the
-        # freshness logic can't silently rot (the watcher itself runs nightly).
-        run: node --experimental-strip-types --test scripts/scheduled-lane-health/model.test.ts
+        # has missed/failed two cadences; gate its pure model AND the git seam
+        # that derives when a schedule became active on PRs so the freshness
+        # logic can't silently rot (the watcher itself runs nightly).
+        run: node --experimental-strip-types --test scripts/scheduled-lane-health/model.test.ts scripts/scheduled-lane-health/run.test.ts
 
   affected-selector:
     name: Affected-check Selector

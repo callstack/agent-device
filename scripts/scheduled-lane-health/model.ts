@@ -163,14 +163,16 @@ export function discoverScheduledLanes(
 }
 
 /**
- * Resolve the "schedule was introduced / first observed" anchor for a lane that
- * has never succeeded — the timestamp two cadences are measured from before we
- * alert. Picks the most trustworthy signal available, oldest-wins:
+ * Resolve the "schedule became active" anchor for a lane that has never
+ * succeeded — the timestamp two cadences are measured from before we alert.
+ * Picks the most trustworthy signal available, oldest-wins:
  *
- *  1. `scheduleIntroducedAt` — the commit that added the `schedule:` trigger
- *     (derived from git history in `run.ts`). This is when the lane actually
- *     started being scheduled, which is the correct anchor even when the
- *     workflow *file* is far older (a schedule added later to an old workflow).
+ *  1. `scheduleActivatedAt` — the commit (committer/landing time on the default
+ *     branch's first-parent history) of the most recent unscheduled→scheduled
+ *     transition of the workflow, derived from git in `run.ts`. This is when the
+ *     lane actually started being scheduled, the correct anchor even when the
+ *     workflow *file* is far older (a schedule added later to an old workflow),
+ *     and it survives a remove/re-add because it takes the current transition.
  *  2. the earliest scheduled run on record — a hard lower bound proving the
  *     schedule has been firing since at least then (used when git history is
  *     unavailable, e.g. a shallow checkout).
@@ -182,14 +184,14 @@ export function discoverScheduledLanes(
  * has ever been scheduled.
  */
 export function resolveScheduleAnchor(params: {
-  scheduleIntroducedAt?: string;
+  scheduleActivatedAt?: string;
   runs: readonly LaneRun[];
   fallback: string;
 }): string {
-  const { scheduleIntroducedAt, runs, fallback } = params;
+  const { scheduleActivatedAt, runs, fallback } = params;
   const candidates: number[] = [];
-  if (scheduleIntroducedAt) {
-    const ms = new Date(scheduleIntroducedAt).getTime();
+  if (scheduleActivatedAt) {
+    const ms = new Date(scheduleActivatedAt).getTime();
     if (Number.isFinite(ms)) candidates.push(ms);
   }
   const earliestRun = runs.reduce<number | undefined>((earliest, run) => {

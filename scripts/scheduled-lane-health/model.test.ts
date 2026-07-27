@@ -122,20 +122,20 @@ test('resolveScheduleAnchor prefers schedule-introduction time, not workflow age
   const now = Date.now();
   // An OLD workflow that only recently gained a `schedule:` trigger. Its file
   // `created_at` would be ancient, but the schedule-introduction commit is recent.
-  const scheduleIntroducedAt = isoAgo(now, 6 * HOUR_MS);
+  const scheduleActivatedAt = isoAgo(now, 6 * HOUR_MS);
   const anchor = resolveScheduleAnchor({
-    scheduleIntroducedAt,
+    scheduleActivatedAt,
     runs: [],
     fallback: new Date(now).toISOString(),
   });
-  assert.equal(anchor, scheduleIntroducedAt);
+  assert.equal(anchor, scheduleActivatedAt);
 });
 
 test('resolveScheduleAnchor falls back to the earliest run when git history is unavailable', () => {
   const now = Date.now();
   const earliest = isoAgo(now, 5 * HOUR_MS);
   const anchor = resolveScheduleAnchor({
-    scheduleIntroducedAt: undefined,
+    scheduleActivatedAt: undefined,
     runs: [
       { conclusion: 'failure', createdAt: isoAgo(now, HOUR_MS) },
       { conclusion: 'failure', createdAt: earliest },
@@ -148,7 +148,7 @@ test('resolveScheduleAnchor falls back to the earliest run when git history is u
 test('resolveScheduleAnchor falls back to now when there is no other evidence', () => {
   const nowIso = new Date().toISOString();
   assert.equal(
-    resolveScheduleAnchor({ scheduleIntroducedAt: undefined, runs: [], fallback: nowIso }),
+    resolveScheduleAnchor({ scheduleActivatedAt: undefined, runs: [], fallback: nowIso }),
     nowIso,
   );
 });
@@ -158,7 +158,7 @@ test('production mapping: schedule newly added to an OLD workflow stays in grace
   const lane = { file: 'legacy.yml', name: 'Legacy', cadenceMs: DAY_MS };
   // Schedule added 6h ago to a long-lived workflow; no scheduled runs yet.
   const registeredAt = resolveScheduleAnchor({
-    scheduleIntroducedAt: isoAgo(now, 6 * HOUR_MS),
+    scheduleActivatedAt: isoAgo(now, 6 * HOUR_MS),
     runs: [],
     fallback: new Date(now).toISOString(),
   });
@@ -171,7 +171,7 @@ test('production mapping: schedule added to an OLD workflow long ago and dark is
   const now = Date.now();
   const lane = { file: 'legacy.yml', name: 'Legacy', cadenceMs: DAY_MS };
   const registeredAt = resolveScheduleAnchor({
-    scheduleIntroducedAt: isoAgo(now, 10 * DAY_MS),
+    scheduleActivatedAt: isoAgo(now, 10 * DAY_MS),
     runs: [],
     fallback: new Date(now).toISOString(),
   });
