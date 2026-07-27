@@ -27,15 +27,17 @@ import assert from 'node:assert/strict';
 
 import { runTorture, type ClientOp, type TortureRunResult } from './concurrency-torture/harness.ts';
 import { DEVICE_POOL } from './concurrency-torture/bindings.ts';
+import { measureRealScopeMaxOverlap } from './concurrency-torture/real-scope-serialization.ts';
 import { buildEnvelope, writeEnvelopeIfRequested } from './concurrency-torture/envelope.ts';
 
 // The #1430 envelope must report the outcome of the WHOLE lane, not just the
 // sweep test. Every test records its result here and the envelope is written
 // once, after all tests settle, so a later failing guardrail can never be
 // published as a passing envelope.
-type EnvelopeRun = { seedStart: number; runs: number; durationMs: number };
+type SweepRange = { seedStart: number; runs: number };
+const laneStartedMs = Date.now();
 let laneFailed = false;
-let sweepRun: EnvelopeRun | undefined;
+let sweepRange: SweepRange | undefined;
 
 async function guard(body: () => Promise<void>): Promise<void> {
   try {
@@ -47,8 +49,14 @@ async function guard(body: () => Promise<void>): Promise<void> {
 }
 
 after(() => {
-  if (!sweepRun) return; // only the sweep lane (nightly) publishes an envelope
-  const envelope = buildEnvelope({ ...sweepRun, result: laneFailed ? 'fail' : 'pass' });
+  if (!sweepRange) return; // only the sweep lane (nightly) publishes an envelope
+  // Duration spans the WHOLE lane (sweep + replay + both serialization guards),
+  // measured to this hook, so it can't understate work by excluding later tests.
+  const envelope = buildEnvelope({
+    ...sweepRange,
+    durationMs: Date.now() - laneStartedMs,
+    result: laneFailed ? 'fail' : 'pass',
+  });
   const written = writeEnvelopeIfRequested(envelope);
   if (written) console.log(`torture envelope → ${written}\n${JSON.stringify(envelope)}`);
 });
@@ -114,6 +122,22 @@ const explicitSeed = optionalIntFromEnv('TORTURE_SEED');
 const clients = optionalIntFromEnv('TORTURE_CLIENTS');
 const opsPerClient = optionalIntFromEnv('TORTURE_OPS');
 
+// Guard the PRODUCTION lock APPLICATION path, not just the modeled sweep: drive
+// concurrent same-device opens through the real `createRequestExecutionScope()
+// .runLocked()` (→ `withRequestExecutionLocks` → `withKeyedLock`) and assert
+// they never overlap. Regressing production serialization trips this even
+// though the seeded sweep models the grant. Runs in every mode.
+test('concurrency torture — real-scope same-device serialization', () =>
+  guard(async () => {
+    const maxOverlap = await measureRealScopeMaxOverlap(4);
+    assert.equal(
+      maxOverlap,
+      1,
+      `real createRequestExecutionScope().runLocked() let ${maxOverlap} same-device critical ` +
+        'sections overlap — production execution locking is not serializing',
+    );
+  }));
+
 if (explicitSeed !== undefined) {
   test(`concurrency torture — replay seed ${explicitSeed}`, () =>
     guard(async () => {
@@ -128,28 +152,24 @@ if (explicitSeed !== undefined) {
 
   test(`concurrency torture — ${runs} seeded interleavings from ${seedStart}`, () =>
     guard(async () => {
-      const started = Date.now();
+      sweepRange = { seedStart, runs };
       let totalContention = 0;
-      try {
-        for (let i = 0; i < runs; i += 1) {
-          const seed = seedStart + i;
-          const result = await runTorture({ seed, clients, opsPerClient });
-          totalContention += result.deviceContention;
-          // Prove exact replay on the NORMAL sweep path (not just TORTURE_SEED):
-          // re-run the seed and assert the whole trace + outcome + contention match.
-          assertDeterministicReplay(result, await runTorture({ seed, clients, opsPerClient }));
-          assertClean(result);
-        }
-        // The sweep must actually PRODUCE same-device contention — two clients
-        // parked on one device lock — or the lane is not exercising serialization
-        // and a broken lock could pass unnoticed.
-        assert.ok(
-          totalContention > 0,
-          'no same-device lock contention occurred across the sweep — the lane is not testing serialization',
-        );
-      } finally {
-        sweepRun = { seedStart, runs, durationMs: Date.now() - started };
+      for (let i = 0; i < runs; i += 1) {
+        const seed = seedStart + i;
+        const result = await runTorture({ seed, clients, opsPerClient });
+        totalContention += result.deviceContention;
+        // Prove exact replay on the NORMAL sweep path (not just TORTURE_SEED):
+        // re-run the seed and assert the whole trace + outcome + contention match.
+        assertDeterministicReplay(result, await runTorture({ seed, clients, opsPerClient }));
+        assertClean(result);
       }
+      // The sweep must actually PRODUCE same-device contention — two clients
+      // parked on one device lock — or the lane is not exercising serialization
+      // and a broken lock could pass unnoticed.
+      assert.ok(
+        totalContention > 0,
+        'no same-device lock contention occurred across the sweep — the lane is not testing serialization',
+      );
     }));
 
   // Forced same-device contention: two clients repeatedly open THE SAME pinned

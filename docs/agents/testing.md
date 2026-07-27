@@ -218,6 +218,13 @@ and process "kill" — the production claim is a filesystem/OS lock and real pro
 scope for this scheduling lane and covered by their own unit tests. The full real-vs-modeled boundary
 is documented at the top of `concurrency-torture/harness.ts`.
 
+Because the seeded sweep *models* the mutex grant, a separate **real-scope guard**
+(`concurrency-torture/real-scope-serialization.ts`) drives concurrent same-device opens through the
+actual `createRequestExecutionScope().runLocked()` → `withRequestExecutionLocks` → `withKeyedLock`
+and asserts the critical sections never overlap. This is intentionally not seeded (it exercises real
+event-loop scheduling); its job is to fail if the production lock *application* path regresses, which
+the modeled sweep alone could not catch.
+
 ```bash
 pnpm test:concurrency-torture                    # default sweep (TORTURE_RUNS=128 seeds from 0)
 TORTURE_SEED=1234 pnpm test:concurrency-torture  # replay ONE seed's exact interleaving (seed-replay flag)
