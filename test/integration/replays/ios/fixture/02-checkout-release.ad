@@ -16,7 +16,6 @@ is visible id="shipping-pickup"
 click id="shipping-pickup"
 click id="payment-cash"
 wait "Delivery choices" 5000
-scroll bottom
 is visible id="checkbox-agree"
 click id="checkbox-agree"
 is visible id="submit-order"

@@ -157,7 +157,10 @@ export const IOS_SIMULATOR_E2E_COVERAGE = {
   ),
   [C.replay]: live('full:fixture-replays', 'a fixture .ad flow runs through public replay'),
   [C.screenshot]: live('smoke:capture-close', 'captured file has a valid PNG signature'),
-  [C.scroll]: live('full:fixture-replays', 'long fixture content is rediscovered after scroll'),
+  [C.scroll]: live(
+    'full:lifecycle-system',
+    'manual downward scroll reveals the offscreen microphone permission state',
+  ),
   [C.settings]: live(
     'full:lifecycle-system',
     'appearance changes are visible in useColorScheme and restored',

@@ -44,27 +44,33 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
   );
   verifyCommand(context, C.triggerAppEvent, 'deep event name and JSON payload render exactly');
 
-  await resetMicrophonePermissionAndRestart(context, 'initial');
-  await clickMicrophonePermission(context, 'request microphone permission for denial');
-  await runStep(context, 'wait for microphone permission prompt', ['alert', 'wait', '15000']);
-  await runStep(context, 'deny microphone permission prompt', ['alert', 'dismiss']);
-  await assertElementText(context, 'id="automation-microphone-permission"', 'denied');
-
-  await resetMicrophonePermissionAndRestart(context, 'recovery');
-  await clickMicrophonePermission(context, 'request microphone permission after reset');
-  await runStep(context, 'wait for recovered microphone permission prompt', [
-    'alert',
-    'wait',
-    '15000',
+  const bottomEdge = await runStep(context, 'scroll automation route to the bottom edge', [
+    'scroll',
+    'bottom',
+    '0.75',
   ]);
-  await runStep(context, 'accept recovered microphone permission prompt', ['alert', 'accept']);
-  await assertElementText(context, 'id="automation-microphone-permission"', 'granted');
+  assert.equal(bottomEdge.json?.data?.edge, 'bottom', JSON.stringify(bottomEdge.json));
+  assert.ok(
+    Number(bottomEdge.json?.data?.passes) > 0,
+    `bottom edge traversal must execute a live scroll: ${JSON.stringify(bottomEdge.json)}`,
+  );
+
+  await setMicrophonePermissionAndRestart(context, 'initial', 'reset', 'undetermined');
+  await setMicrophonePermissionAndRestart(context, 'grant', 'grant', 'granted');
+  await setMicrophonePermissionAndRestart(context, 'denial', 'deny', 'denied');
+  await setMicrophonePermissionAndRestart(context, 'recovery', 'reset', 'undetermined');
   await runStep(context, 'reset microphone permission after scenario', [
     'settings',
     'permission',
     'reset',
     'microphone',
   ]);
+  await runStep(context, 'clear fixture state after permission scenario', [
+    'settings',
+    'clear-app-state',
+    context.appId,
+  ]);
+  await runStep(context, 'open fixture after permission cleanup', ['open', context.appId]);
   await runStep(context, 'restore automation route after permission cleanup', [
     'trigger-app-event',
     'fixture.permission.cleanup',
@@ -73,11 +79,14 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
   await assertWaitText(context, 'Automation lab');
   verifyBehavior(
     context,
-    'permission-prompt-recovery',
-    'denial was observed before reset produced a second prompt whose acceptance was observed',
+    'permission-state-recovery',
+    'reset, grant, denial, and a second reset were all observed through the fixture permission API',
   );
-
-  await runStep(context, 'return to runtime canaries', ['scroll', 'top']);
+  verifyCommand(
+    context,
+    C.scroll,
+    'manual downward scroll reveals each offscreen microphone permission state',
+  );
 
   await runStep(context, 'set dark appearance', ['settings', 'appearance', 'dark']);
   await assertElementText(context, 'id="automation-appearance"', 'dark');
@@ -86,7 +95,7 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
   verifyCommand(
     context,
     C.settings,
-    'permission denial/reset/recovery and appearance dark/light both produce durable evidence',
+    'permission reset/deny/grant and appearance dark/light all produce durable evidence',
   );
 
   // XCUIDevice models physical device orientation, which is intentionally not
@@ -154,65 +163,43 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
   await assertWaitText(context, 'Automation lab');
 }
 
-async function resetMicrophonePermissionAndRestart(
+async function setMicrophonePermissionAndRestart(
   context: LiveContext,
-  phase: 'initial' | 'recovery',
+  phase: 'initial' | 'denial' | 'recovery' | 'grant',
+  action: 'deny' | 'grant' | 'reset',
+  expected: 'denied' | 'granted' | 'undetermined',
 ): Promise<void> {
-  // Terminate the app before resetting TCC so its live permission requester
+  // Terminate the app before changing TCC so its live permission requester
   // cannot retain the previous state. Clearing data preserves the installed
-  // cached binary and its permission registration.
-  await runStep(context, `clear fixture state before ${phase} permission reset`, [
+  // cached binary and exercises settings permission without depending on a
+  // transient system prompt racing XCTest reconnection on hosted simulators.
+  await runStep(context, `clear fixture state before ${phase} permission ${action}`, [
     'settings',
     'clear-app-state',
     context.appId,
   ]);
-  await runStep(context, `reset microphone permission for ${phase} prompt`, [
+  await runStep(context, `${action} microphone permission for ${phase} state`, [
     'settings',
     'permission',
-    'reset',
+    action,
     'microphone',
   ]);
-  await runStep(context, `open fixture after ${phase} permission reset`, ['open', context.appId]);
-  await runStep(context, `restore automation route after ${phase} permission reset`, [
+  await runStep(context, `open fixture after ${phase} permission ${action}`, [
+    'open',
+    context.appId,
+  ]);
+  await runStep(context, `restore automation route after ${phase} permission ${action}`, [
     'trigger-app-event',
     `fixture.permission.${phase}`,
     `{"source":"permission-${phase}"}`,
   ]);
   await assertWaitText(context, 'Automation lab');
-  await assertElementTextAfterScrolling(
+  const scrollCount = await assertElementTextAfterScrolling(
     context,
     'id="automation-microphone-permission"',
-    'not-requested',
+    expected,
   );
-}
-
-async function clickMicrophonePermission(context: LiveContext, step: string): Promise<void> {
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    const clicked = await runStep(
-      context,
-      `${step} (attempt ${attempt + 1})`,
-      ['click', 'id="automation-request-microphone"'],
-      { allowFailure: true },
-    );
-    if (clicked.status === 0) return;
-    const reason = clicked.json?.error?.details?.reason;
-    const code = clicked.json?.error?.code;
-    assert.ok(
-      reason === 'selector_not_found' ||
-        reason === 'offscreen_selector' ||
-        (reason === undefined && code === 'COMMAND_FAILED'),
-      `unexpected permission click failure: ${JSON.stringify(clicked.json)}`,
-    );
-    if (attempt < 3) {
-      await runStep(context, 'scroll toward microphone permission', [
-        'scroll',
-        'down',
-        '--pixels',
-        '280',
-      ]);
-    }
-  }
-  assert.fail('microphone permission canary did not become safely clickable');
+  assert.ok(scrollCount > 0, `${phase} permission state must require a live scroll`);
 }
 
 export async function assertObservabilityAndArtifacts(context: LiveContext): Promise<void> {

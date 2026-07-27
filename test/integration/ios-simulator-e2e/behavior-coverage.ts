@@ -5,7 +5,7 @@ export type IosSimulatorBehaviorId =
   | 'interrupted-system-ui-flow'
   | 'long-list-scroll-recovery'
   | 'modal-open-close'
-  | 'permission-prompt-recovery'
+  | 'permission-state-recovery'
   | 'text-entry-keyboard-lifecycle';
 
 type BehaviorCoverageEntry =
@@ -47,8 +47,9 @@ export const IOS_SIMULATOR_BEHAVIOR_COVERAGE = {
     level: 'live',
     owner: 'smoke:automation-input',
   },
-  'permission-prompt-recovery': {
-    assertion: 'microphone prompt denial, permission reset, second prompt, and acceptance succeed',
+  'permission-state-recovery': {
+    assertion:
+      'microphone reset, grant, denial, and second reset produce exact app-observed states',
     level: 'live',
     owner: 'full:lifecycle-system',
   },

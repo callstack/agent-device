@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   AppState,
@@ -11,7 +11,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { requestRecordingPermissionsAsync } from 'expo-audio';
+import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync } from 'expo-audio';
 
 import { ActionButton, ScreenTitle, SectionCard } from '../components';
 import { useAppColors, type AppColors } from '../theme';
@@ -30,16 +30,39 @@ export function AutomationLabScreen(props: {
   const [alertResult, setAlertResult] = useState('none');
   const [lastInput, setLastInput] = useState('none');
   const [longPressCount, setLongPressCount] = useState(0);
-  const [microphonePermission, setMicrophonePermission] = useState('not-requested');
+  const [microphonePermission, setMicrophonePermission] = useState('checking');
   const [sheetVisible, setSheetVisible] = useState(false);
+  const permissionReadGeneration = useRef(0);
   const windowMode = dimensions.width > dimensions.height ? 'landscape' : 'portrait';
 
   useEffect(() => {
+    let mounted = true;
+    const refreshMicrophonePermission = () => {
+      const generation = ++permissionReadGeneration.current;
+      setMicrophonePermission('checking');
+      void getRecordingPermissionsAsync()
+        .then((permission) => {
+          if (mounted && generation === permissionReadGeneration.current) {
+            setMicrophonePermission(permission.status);
+          }
+        })
+        .catch(() => {
+          if (mounted && generation === permissionReadGeneration.current) {
+            setMicrophonePermission('error');
+          }
+        });
+    };
+    refreshMicrophonePermission();
     const subscription = AppState.addEventListener('change', (nextState) => {
       setAppState(nextState);
       if (nextState !== 'active') setLastNonActiveState(nextState);
+      if (nextState === 'active') refreshMicrophonePermission();
     });
-    return () => subscription.remove();
+    return () => {
+      mounted = false;
+      permissionReadGeneration.current += 1;
+      subscription.remove();
+    };
   }, []);
 
   function showAutomationAlert() {
@@ -57,11 +80,17 @@ export function AutomationLabScreen(props: {
   }
 
   async function requestMicrophonePermission() {
+    const generation = ++permissionReadGeneration.current;
+    setMicrophonePermission('checking');
     try {
       const permission = await requestRecordingPermissionsAsync();
-      setMicrophonePermission(permission.status);
+      if (generation === permissionReadGeneration.current) {
+        setMicrophonePermission(permission.status);
+      }
     } catch {
-      setMicrophonePermission('error');
+      if (generation === permissionReadGeneration.current) {
+        setMicrophonePermission('error');
+      }
     }
   }
 

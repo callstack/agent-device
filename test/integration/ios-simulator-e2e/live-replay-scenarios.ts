@@ -82,7 +82,7 @@ export async function assertFixtureReplays(context: LiveContext): Promise<void> 
   assert.equal(suite.json?.data?.passed, 2, JSON.stringify(suite.json));
   const suiteTests = Array.isArray(suite.json?.data?.tests) ? suite.json.data.tests : [];
   for (const [replayPath, expectedCommands] of [
-    [checkoutReplay, [C.swipe, C.scroll]],
+    [checkoutReplay, [C.swipe]],
     [gestureReplay, [C.gesture]],
   ] as const) {
     const commands = readReplayCommands(replayPath);
@@ -94,7 +94,6 @@ export async function assertFixtureReplays(context: LiveContext): Promise<void> 
     assertReplayCommands(replayPath, commands, expectedCommands);
   }
   assertNonEmptyFile(junitPath, 'fixture JUnit');
-  verifyCommand(context, C.scroll, 'checkout scroll reveals controls whose visibility is asserted');
   verifyCommand(
     context,
     C.gesture,

@@ -50,6 +50,7 @@ export const IOS_SIMULATOR_LIVE_SCENARIOS: readonly IosSimulatorScenario[] = [
       C.appSwitcher,
       C.clipboard,
       C.orientation,
+      C.scroll,
       C.settings,
       C.triggerAppEvent,
     ],
@@ -62,7 +63,7 @@ export const IOS_SIMULATOR_LIVE_SCENARIOS: readonly IosSimulatorScenario[] = [
   {
     id: 'full:fixture-replays',
     tier: 'full',
-    commands: [C.gesture, C.scroll, C.swipe, C.replay, C.test],
+    commands: [C.gesture, C.swipe, C.replay, C.test],
   },
   {
     id: 'full:device-lifecycle',
