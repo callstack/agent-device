@@ -43,6 +43,22 @@ function commitWorkflow(dir: string, content: string, message: string, whenIso: 
   git(dir, ['commit', '-q', '-m', message], whenIso);
 }
 
+/** Run git with separately-controlled author and committer dates. */
+function gitDated(dir: string, args: string[], authorIso: string, committerIso: string): void {
+  runCmdSync('git', args, {
+    cwd: dir,
+    env: { ...process.env, GIT_AUTHOR_DATE: authorIso, GIT_COMMITTER_DATE: committerIso },
+  });
+}
+
+function headCommitterIso(dir: string): string {
+  return runCmdSync('git', ['log', '-1', '--format=%cI'], { cwd: dir }).stdout.trim();
+}
+
+function headAuthorIso(dir: string): string {
+  return runCmdSync('git', ['log', '-1', '--format=%aI'], { cwd: dir }).stdout.trim();
+}
+
 test('deriveScheduleActivatedAt anchors on when the schedule was added to an OLD workflow', () => {
   const dir = makeRepo();
   try {
@@ -110,6 +126,54 @@ test('deriveScheduleActivatedAt returns undefined when the path has no history',
     assert.equal(
       deriveScheduleActivatedAt({ repoDir: dir, relPath: '.github/workflows/absent.yml' }),
       undefined,
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// The schedule is added on a feature branch (old author/committer dates), then
+// merged onto main much later. The anchor must be the MERGE commit's committer
+// time — which is only true when we walk `--first-parent` (else we'd descend
+// into the feature commit) with `%cI` (else we'd read the merge's older author
+// date). This fixture deliberately makes all three dates distinct so dropping
+// `--first-parent` or reverting `%cI`→`%aI` flips the asserted value.
+test('deriveScheduleActivatedAt uses the merge commit committer time, not feature/author dates', () => {
+  const dir = makeRepo();
+  try {
+    // main: an old, unscheduled workflow.
+    commitWorkflow(dir, UNSCHEDULED, 'base unscheduled', '2024-01-01T00:00:00Z');
+
+    // feature branch: introduce the schedule, with an OLD author+committer date.
+    git(dir, ['checkout', '-q', '-b', 'feature']);
+    commitWorkflow(dir, SCHEDULED, 'add schedule on feature', '2024-06-01T00:00:00Z');
+    const featureIso = headCommitterIso(dir);
+
+    // main advances independently so the later merge is a real divergent merge.
+    git(dir, ['checkout', '-q', 'main']);
+    fs.writeFileSync(path.join(dir, 'README.md'), '# main advances\n');
+    git(dir, ['add', '-A']);
+    git(dir, ['commit', '-q', '-m', 'main advances'], '2025-06-01T00:00:00Z');
+
+    // Merge feature into main much later, with author date < committer date.
+    gitDated(
+      dir,
+      ['merge', '--no-ff', '--no-edit', '-m', 'merge feature', 'feature'],
+      '2025-01-01T00:00:00Z', // merge AUTHOR date (older)
+      '2026-07-20T00:00:00Z', // merge COMMITTER/landing date
+    );
+    const mergeCommitterIso = headCommitterIso(dir);
+    const mergeAuthorIso = headAuthorIso(dir);
+
+    // Sanity: the fixture actually distinguishes the three dates.
+    assert.notEqual(mergeCommitterIso, mergeAuthorIso, 'merge author != committer date');
+    assert.notEqual(mergeCommitterIso, featureIso, 'merge committer != feature committer date');
+
+    const activated = deriveScheduleActivatedAt({ repoDir: dir, relPath: WORKFLOW });
+    assert.equal(
+      activated,
+      mergeCommitterIso,
+      'anchor must be the merge commit committer time (first-parent + %cI)',
     );
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
