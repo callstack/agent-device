@@ -1282,6 +1282,15 @@ Usage:
 `;
 }
 
+/**
+ * Topic-id registry view for conformance tooling: the help benchmark's topic
+ * coverage gate enumerates this instead of a hand-maintained list, so adding a
+ * topic without benchmark coverage (or an explicit waiver) fails a test.
+ */
+export function helpTopicIds(): string[] {
+  return Object.keys(HELP_TOPICS);
+}
+
 function buildHelpTopicUsageText(topicName: string): string | null {
   const topic = HELP_TOPICS[topicName as keyof typeof HELP_TOPICS];
   if (!topic) return null;

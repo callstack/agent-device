@@ -30,7 +30,8 @@
     "scripts/layering/**",
     "scripts/maestro-conformance/**",
     "apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests.xctestplan",
-    "scripts/write-xcuitest-cache-metadata.mjs"
+    "scripts/write-xcuitest-cache-metadata.mjs",
+    "scripts/help-conformance-sample-outputs.d.mts"
   ],
   "ignoreDependencies": [
     "@theme"
@@ -78,6 +79,14 @@
         "BuiltinPluginsCoverAllPlatforms",
         "PlatformDescriptorsAreTotal",
         "GatedKeysAreResolverKeys"
+      ]
+    },
+    {
+      "comment": "Help-benchmark conformance seams: helpTopicIds feeds the topic-coverage gate and PRIVATE_AX_RECOVERY_SAMPLE feeds the skillgym suite; both consumers are test-tree files outside --production analysis.",
+      "file": "{src/cli/parser/cli-help.ts,scripts/help-conformance-sample-outputs.mjs}",
+      "exports": [
+        "helpTopicIds",
+        "PRIVATE_AX_RECOVERY_SAMPLE"
       ]
     }
   ],

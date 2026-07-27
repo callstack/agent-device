@@ -1,58 +1,29 @@
 # Skillgym For agent-device
 
-This folder is a starter `skillgym` setup for benchmarking the `agent-device` skill with a controlled Expo target app.
+This folder benchmarks the one thing only an agentic runner can prove: given the `agent-device` skill, does a real agent route to it, consult local CLI help before answering, and read captured `agent-device` output correctly in that agentic setting?
 
-## Why `skillgym` fits here
+Everything else this suite used to cover moved to cheaper, stronger owners:
 
-`skillgym` is useful for `agent-device` in three layers:
+- Command-planning knowledge checks (can a model choose the right next command from a help slice, a captured output, or an error?) live in the help conformance bench (`scripts/help-conformance-bench.mjs`). Its plans are validated by the production CLI parser, its case list is enumerated against the help-topic registry (`scripts/__tests__/help-conformance-topic-coverage.test.ts`), and its quoted samples are pinned to the real renderers (`scripts/__tests__/help-conformance-sample-outputs.test.ts`).
+- Live fixture-app behavior is owned by the deterministic iOS simulator e2e suite (`test/integration/ios-simulator-e2e/`) and its coverage manifest.
 
-1. Skill-routing checks: verify that the runner loads `skills/agent-device/SKILL.md` and its required references before it answers.
-2. Workflow-planning checks: verify that the agent describes the right `agent-device` loop for a known fixture app.
-3. Optional live-device smoke runs: locally, you can extend prompts so the agent actually drives `agent-device` against a simulator or device.
+## What stays here
 
-The included suite focuses on the first two layers so it stays stable and CI-safe.
-The suite uses SkillGym v0.8 case tags:
+The suite uses two case tags:
 
-- `fixture-smoke`: fixture-specific app surface coverage
-- `skill-guidance`: command-planning guidance regressions
+- `fixture-smoke`: one routing smoke (`open-and-snapshot`) — a sane fixture-app plan from the skill plus local help, without reading project source.
+- `skill-guidance`: four output-interpretation cases that require a REAL observed local help probe before scoring (`requireLocalCliHelp` + `suites/local-cli-help-policy.ts` over observed command events): `settle-diff-is-observation`, `sample-output-settled-diff-next-target`, `sample-output-not-settled-needs-observe`, `sample-output-private-ax-recovery-continues`. Allowing help without verifying that the runner actually read it can misclassify a model-prior failure as a help-guidance failure.
+
+The captured output quoted in the skill-guidance cases is imported from `scripts/help-conformance-sample-outputs.mjs` — the same constants the bench embeds — so a renderer change fails the pinning test instead of silently grading agents against output the CLI no longer prints.
 
 ## Included files
 
-- `../../examples/test-app/`: minimal Expo SDK 56 development-build fixture app for broad UI coverage
+- `../../examples/test-app/`: minimal Expo SDK 56 development-build fixture app
 - `skillgym.config.ts`: starter config that runs Codex and Claude Haiku against this repo
-- `suites/agent-device-smoke-suite.ts`: planning suite for skill routing, fixture-aware flows, and skill-guidance regressions
+- `suites/agent-device-smoke-suite.ts`: the routing + output-interpretation suite
+- `suites/local-cli-help-policy.ts`: the observed-command policy that proves a real local help command ran
 
-## Current coverage
-
-The suite keeps the app small while separating coverage into two non-overlapping groups.
-
-Fixture smoke cases cover concrete app surfaces:
-
-- open/snapshot/close defaults with the installed Expo development build
-- banners, alerts, toggles, and quick actions on Home
-- search debounce, filters, long-list scroll, favorites, and cart updates in Catalog
-- detail navigation, quantity edits, note append, and save-to-cart on Product
-- form validation, success submit, iOS keyboard-dismiss fallback, and reset on Checkout form
-- diagnostics load/error/retry plus reset alert handling in Settings
-- accessibility audit via screenshot + snapshot
-
-Skill-guidance regression cases cover distinct command-planning habits:
-
-- read-only inspection versus mutation
-- fresh `@ref` targeting, durable selectors, raw-rect fallbacks, and off-screen scroll recovery
-- interpreting representative `agent-device` output, including settled diffs, not-settled hints, and private-AX recovery warnings
-- text replacement, append semantics, supported field clearing, keyboard status, and keyboard fallback
-- install/open setup, Expo Go/dev-client launch paths, app discovery, session scoping, and app-owned navigation fallbacks
-- Metro reload, logs, network dump, alert fallback, and screenshot evidence
-- performance metrics, React DevTools profiling, gestures, settings, and trace capture
-- Android TV and Vega OS remote planning, including focus moves, exact holds, and Vega VVD lifecycle
-- remote config, macOS menu bar surfaces, replay update, same-session mutation ordering, and batch schema/recording
-
-Use SkillGym for stable behavior regressions: can a runner choose the right next command from help, app-contract facts, or representative CLI output? For rapid help-layout A/B testing, prefer the lighter help conformance bench (`scripts/help-conformance-bench.mjs`) because it can feed only the top-level first screen or one help topic without letting the runner read the full help page, it runs runner x case pairs concurrently (`HELP_BENCH_CONCURRENCY`, default 4), and it can grade a draft help rewrite with zero rebuild via `--override-doc <topicId>=<path>` (repeatable; last occurrence per topic wins), which loads that file's contents in place of shelling out to `node bin/agent-device.mjs help <topicId>` for that one topic while still applying the same post-processing as the live source (the `--help:first30` doc id stays capped to its first 30 lines), so the A/B grade compares like with like; a topic id no selected case uses fails fast instead of silently grading the real doc. Returned plans are checked against the production CLI parser and interaction grammar, plus a narrow executable allowlist and shell-projection guard, so invented flags, malformed selectors, placeholder refs, redirection, and unsupported helper commands fail even when keyword checks pass. Use `--repeat <n>` to measure variance: every runner x case pair gets numbered independent trials plus an aggregate pass-rate and failure-taxonomy report. The `metamorphic-community-search` case renames the app, controls, query, and account from the original search flow and explicitly forbids original-answer leakage, providing a cheap generalization check. The bench also includes four deliberately uncoached "next-command quiz" cases (`settle-diff-is-observation`, `sample-output-settled-diff-next-target`, `sample-output-not-settled-needs-observe`, and `sample-output-recoverable-failure-retries-in-session`) ported from this suite's skill-guidance regressions and the routine-workflow oracle (`test/output-economy/routine-workflow.ts`), for scoring whether a runner can infer the next action from representative captured `agent-device` output — including the `--settle` "unchanged interactive (N):" tail and an actionable settle timeout that must be recovered in-session rather than by reopening or re-observing — instead of being told the answer by the task. Filter with `--cases`/`--case` and `--runners`/`--runner` (both repeatable/CSV) the same way as this suite.
-
-Parser-backed validation proves command syntax, positional bounds, and interaction grammar; it does not prove runtime semantics for intentionally free-form values such as `open <appOrUrl>`. A selector-looking app string can therefore be syntactically valid even when it would not resolve to an installed app.
-
-The SkillGym output-interpretation cases require an observed local `--help` lookup before scoring. Allowing help without verifying that the runner actually read it can misclassify a model-prior failure as a help-guidance failure.
+For help-layout A/B testing and command-planning regressions, use the bench instead of adding cases here: it feeds only the top-level first screen or one help topic, runs runner x case pairs concurrently (`HELP_BENCH_CONCURRENCY`, default 4), grades draft help rewrites with zero rebuild via `--override-doc <topicId>=<path>`, measures variance with `--repeat <n>` plus an aggregate pass-rate and failure-taxonomy report, and filters with `--cases`/`--case` and `--runners`/`--runner` (both repeatable/CSV) the same way as this suite.
 
 `assertAgentDeviceEvidence` is intentionally soft when a runner does not expose skill-detection telemetry. When telemetry exists, the suite asserts that `agent-device` was loaded; when it is absent, the cases still judge command-planning output instead of failing on missing runner metadata.
 
@@ -62,15 +33,9 @@ SkillGym v0.8 command assertions are for observed command events. This suite pri
 The source-read guardrails use `assert.soft.*` plus deferred explain questions so one failing run can report multiple routing mistakes and can later be inspected with `skillgym explain`.
 Suite types use the v0.8 root export name `Case`; older `TestCase` imports no longer typecheck.
 
-## Suggested workflow
-
-1. Start with the included smoke suite to benchmark routing and default guidance.
-2. Extend the suite with app-specific prompts that cover a new command-planning category rather than duplicating an existing one.
-3. Add local-only cases that expect real `agent-device` shell commands once you are ready to involve a running simulator.
-
 ## Running the suite
 
-`skillgym` is installed as a repo dev dependency, so run the starter suite from the project root:
+`skillgym` is installed as a repo dev dependency, so run the suite from the project root:
 
 ```bash
 cd /absolute/path/to/agent-device
@@ -89,7 +54,7 @@ pnpm test:skillgym:case open-and-snapshot
 Useful v0.8 filters, reporters, and recovery options:
 
 ```bash
-pnpm test:skillgym -- --tag fixture-smoke
+pnpm test:skillgym -- --tag skill-guidance
 pnpm test:skillgym -- --reporter json
 pnpm test:skillgym -- --repeat 3 --repeat-failure 1
 ```
@@ -133,6 +98,6 @@ The configured runners call external Codex and Claude model backends. In Codex s
 
 ## Where to extend next
 
-- Add suite cases that ask for selector-based plans against `Agent Device Tester`.
-- Add local-only prompts that expect `agent-device open`, `snapshot`, `snapshot -i`, `get`, and `wait`.
-- Add regression snapshots once the prompt set stabilizes.
+- Add a case here ONLY when it measures agentic behavior: skill routing, local-help consultation, or multi-turn discovery a single non-agentic call cannot show.
+- Add command-planning knowledge checks to `scripts/help-conformance-cases.mjs` instead; the topic-coverage gate tells you which help topics are unbenchmarked.
+- Add local-only cases that drive a live simulator only when the deterministic e2e suite cannot own the behavior.

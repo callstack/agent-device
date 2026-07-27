@@ -214,8 +214,12 @@ test('runtime-output cases do not coach the command that their output should imp
     [
       'settle-diff-is-observation',
       'sample-output-settled-diff-next-target',
+      'metamorphic-settled-diff-next-target-notes',
       'sample-output-not-settled-needs-observe',
-      'sample-output-recoverable-failure-retries-in-session',
+      'sample-output-device-in-use-reuses-session',
+      'sample-output-stale-ref-resnapshots',
+      'sample-output-ambiguous-match-reobserves',
+      'sample-output-app-not-installed-discovers-first',
     ].join(','),
     '--runner',
     'claude:test-model',

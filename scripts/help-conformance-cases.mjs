@@ -1,0 +1,426 @@
+import {
+  AMBIGUOUS_MATCH_SAMPLE,
+  APP_NOT_INSTALLED_SAMPLE,
+  DEVICE_IN_USE_SAMPLE,
+  NOT_SETTLED_SAMPLE,
+  SETTLE_DIFF_SAMPLE,
+  SETTLE_DIFF_SAMPLE_NOTES,
+  SETTLE_TAIL_SAMPLE,
+  STALE_REF_SAMPLE,
+  sampleText,
+} from './help-conformance-sample-outputs.mjs';
+
+// Raw-coordinate fallback the quiz cases forbid: a click/fill/press targeting
+// bare numbers instead of a ref or selector.
+const RAW_COORDINATE_TARGET =
+  /(?:^|\n)(?:agent-device\s+)?(?:click|fill|press)\s+-?\d+(?:\.\d+)?\s+-?\d+(?:\.\d+)?/i;
+
+function quiz(sample, question) {
+  return `Read this previous agent-device output, then plan the next command:
+
+${sampleText(sample)}
+
+${question}`;
+}
+
+// Case docs reference help topic ids from src/cli/parser/cli-help.ts plus the
+// synthetic '--help:first30' first-screen slice. Topic coverage is enforced by
+// scripts/__tests__/help-conformance-topic-coverage.test.ts: a new help topic
+// needs a case here or an explicit waiver there.
+export const CASES = [
+  {
+    id: 'raw-first-screen-bluesky',
+    docs: ['--help:first30'],
+    task: 'Plan commands to open an already installed Bluesky app, search "callstack", open the @callstack.com account, press Follow or Following, and close.',
+    expectations: [
+      'validPlanCommands',
+      'fullPrefix',
+      'usesSnapshotI',
+      'usesSettleOnMutations',
+      'noWaitStable',
+    ],
+  },
+  {
+    id: 'metamorphic-community-search',
+    docs: ['--help:first30'],
+    task: 'Plan commands to open the already installed app com.example.community, open the visible Discover destination, fill the People search field with "react native", open the @react.dev account, press Connect or Connected, and close.',
+    expectations: [
+      'validPlanCommands',
+      'fullPrefix',
+      'usesSnapshotI',
+      'usesSettleOnMutations',
+      'noWaitStable',
+      'opensAndCloses',
+    ],
+    matchers: [
+      {
+        id: 'opensKnownCommunityApp',
+        pattern: /\bagent-device\s+open\s+com\.example\.community\b/i,
+      },
+      {
+        id: 'fillsExpectedSearch',
+        pattern: /\bagent-device\s+fill\b[^\n]*(?:"react native"|'react native')[^\n]*--settle\b/i,
+      },
+      {
+        id: 'usesLiteralHandleSelector',
+        pattern:
+          /\bagent-device\s+(?:press|click|tap)\b[^\n]*(?:label|text)=@react\.dev\b[^\n]*--settle\b/i,
+      },
+    ],
+    forbidden: [
+      {
+        id: 'noBlueskyLeakage',
+        pattern: /(?:bluesky|callstack|@e64|@callstack\.com)/i,
+      },
+      { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },
+    ],
+  },
+  {
+    id: 'manual-qa-bluesky-script',
+    docs: ['--help:first30', 'manual-qa'],
+    task: 'You are following a manual QA script: on Bluesky, open Search, search "callstack", open @callstack.com, press Follow or Following, verify the button state changed, then close. Plan commands only.',
+    expectations: [
+      'validPlanCommands',
+      'fullPrefix',
+      'usesSnapshotI',
+      'usesSettleOnMutations',
+      'verifiesNamedExpectation',
+      'noWaitStable',
+    ],
+  },
+  {
+    id: 'dogfood-mode',
+    docs: ['--help:first30', 'dogfood'],
+    task: 'Plan a short dogfood pass for the logged-in iOS shop app com.example.shop. Exercise the visible Home, Search, and Cart destinations and capture reproducible evidence for any issue found.',
+    allowedExternalCommands: ['mkdir'],
+    expectations: [
+      'validPlanCommands',
+      'fullPrefix',
+      'usesSnapshotI',
+      'usesSettleOnMutations',
+      'usesDogfoodEvidence',
+      'opensAndCloses',
+    ],
+    matchers: [
+      { id: 'opensKnownDogfoodApp', pattern: /\bagent-device\s+open\s+com\.example\.shop\b/i },
+      {
+        id: 'capturesStrongIssueEvidence',
+        pattern: /\b(?:screenshot\b[^\n]*--overlay-refs|record\s+start\b|logs\s+mark\b)/i,
+      },
+    ],
+  },
+  {
+    id: 'engineering-validate-mode',
+    docs: ['--help:first30', 'validate'],
+    task: 'Plan commands to validate a TypeScript-only CLI/runtime change to settled press output against the already installed iOS Settings app. Use the known General control, prove current built output is running, and clean up. Swift runner code did not change.',
+    allowedExternalCommands: ['pnpm'],
+    expectations: [
+      'validPlanCommands',
+      'fullPrefix',
+      'usesSnapshotI',
+      'usesSettleOnMutations',
+      'usesValidationPrep',
+      'opensAndCloses',
+    ],
+    matchers: [
+      {
+        id: 'opensSettings',
+        pattern: /\bagent-device\s+open\s+(?:settings|com\.apple\.Preferences)\b/i,
+      },
+    ],
+    forbidden: [
+      {
+        id: 'avoidsUnrelatedPlatformBuild',
+        pattern: /\bpnpm\s+(?:run\s+)?build:(?:android|xcuitest)\b/i,
+      },
+    ],
+  },
+  {
+    id: 'tv-focus-first-remote',
+    docs: ['--help:first30', 'tv'],
+    task: 'On an Android TV emulator, open the installed app com.example.tvhub, move focus to the "Continue watching" tile two positions to the right of the initially focused tile, activate it, verify the player screen appeared, and close. Plan commands only.',
+    expectations: ['validPlanCommands', 'fullPrefix', 'usesSnapshotI', 'opensAndCloses'],
+    matchers: [
+      { id: 'movesFocusWithRemote', pattern: /\btv-remote\s+press\s+right\b/i },
+      { id: 'activatesWithSelect', pattern: /\btv-remote\s+press\s+select\b/i },
+      { id: 'verifiesOutcome', pattern: /\b(?:is\s+focused|wait\b|find\b)/i },
+    ],
+    forbidden: [
+      // Focus-first surface: activation goes through tv-remote select, not a
+      // coordinate/element tap (help tv "Do not assume press/click @ref works").
+      {
+        id: 'noDirectTapActivation',
+        pattern: /(?:^|\n)agent-device\s+(?:press|click|tap)\s/i,
+      },
+      { id: 'noRawAdbKeyevent', pattern: /\badb\s+shell\s+input\b/i },
+    ],
+  },
+  {
+    id: 'web-managed-backend-loop',
+    docs: ['--help:first30', 'web'],
+    task: 'On a fresh machine that has never run web automation, plan commands to set up and verify the managed web backend, open https://shop.example/login, fill the Email field with "qa@example.com", press the "Sign in" button, verify the "Welcome back" text appears, capture a screenshot to ./artifacts/web-login.png, and close. Plan commands only.',
+    expectations: ['validPlanCommands', 'fullPrefix', 'usesSnapshotI', 'opensAndCloses'],
+    matchers: [
+      {
+        id: 'setsUpBackendBeforeOpen',
+        pattern: /\bagent-device\s+web\s+setup\b[\s\S]*\n[^\n]*\bopen\s+https:\/\//i,
+      },
+      { id: 'verifiesBackendWithDoctor', pattern: /\bagent-device\s+web\s+doctor\b/i },
+      { id: 'usesWebPlatform', pattern: /--platform\s+web\b/i },
+      { id: 'verifiesWelcomeText', pattern: /\b(?:wait|is|find)\b[^\n]*welcome/i },
+    ],
+    forbidden: [
+      // help web: native mobile/desktop setup commands are out of scope for
+      // --platform web sessions.
+      {
+        id: 'noNativeSetupCommands',
+        pattern: /(?:^|\n)agent-device\s+(?:boot|apps|install|alert|keyboard|perf|logs)\b/i,
+      },
+      { id: 'noStandaloneAgentBrowser', pattern: /(?:^|\n)agent-browser\b/i },
+    ],
+  },
+  {
+    id: 'react-native-overlay-before-tap',
+    docs: ['--help:first30', 'react-native'],
+    task: 'An Expo dev-client app on the iOS simulator shows a React Native warning overlay in the latest snapshot. Plan the commands that safely get past it and then press the control with id "submit-order". Plan commands only.',
+    expectations: ['validPlanCommands', 'fullPrefix', 'usesSettleOnMutations'],
+    matchers: [
+      {
+        id: 'usesDismissOverlayCommand',
+        pattern: /(?:^|\n)agent-device\s+react-native\s+dismiss-overlay\b/i,
+      },
+      {
+        id: 'refreshesRefsAfterDismiss',
+        pattern: /dismiss-overlay\b[\s\S]*\n[^\n]*\bsnapshot\s+-i\b/i,
+      },
+      { id: 'pressesSubmitTarget', pattern: /(?:^|\n)agent-device\s+press\s+[^\n]*submit-order/i },
+    ],
+    forbidden: [
+      // help react-native: never press warning/error overlay text manually;
+      // the dismiss-overlay command owns LogBox/RedBox targeting.
+      {
+        id: 'noManualOverlayPress',
+        pattern: /(?:^|\n)agent-device\s+(?:press|click)\s+[^\n]*(?:warning|error|logbox|redbox)/i,
+      },
+      { id: 'noPlainReloadCommand', pattern: /(?:^|\n)agent-device\s+reload\b/i },
+    ],
+  },
+  {
+    id: 'debugging-small-log-window',
+    docs: ['--help:first30', 'debugging'],
+    task: 'The "Load diagnostics" control (id "load-diagnostics") in the already-open iOS app intermittently fails. Plan commands to capture a small fresh log window plus request/response metadata around one reproduction. Plan commands only.',
+    expectations: ['validPlanCommands', 'fullPrefix'],
+    matchers: [
+      {
+        id: 'clearsAndRestartsLogs',
+        pattern: /(?:^|\n)agent-device\s+logs\s+clear\s+--restart\b/i,
+      },
+      { id: 'marksBeforeRepro', pattern: /\blogs\s+mark\b/i },
+      {
+        id: 'reproducesTargetPress',
+        pattern: /(?:^|\n)agent-device\s+press\s+[^\n]*load-diagnostics/i,
+      },
+      { id: 'readsLogPath', pattern: /\blogs\s+path\b/i },
+      { id: 'dumpsNetworkMetadata', pattern: /\bnetwork\s+dump\b/i },
+    ],
+    forbidden: [
+      { id: 'noSessionReopen', pattern: /(?:^|\n)agent-device\s+open\b/i },
+      { id: 'noSplitLogRestart', pattern: /\blogs\s+stop\b/i },
+    ],
+  },
+  {
+    id: 'workflow-install-artifact-before-open',
+    docs: ['--help:first30', 'workflow'],
+    task: 'A local Android build artifact ./dist/app-release.apk contains the app com.example.orders, which is not yet on the emulator. Plan commands to get it running with fresh state and confirm its first screen shows "Orders". Plan commands only.',
+    expectations: ['validPlanCommands', 'fullPrefix', 'usesSnapshotI'],
+    matchers: [
+      {
+        id: 'installsIdThenArtifact',
+        pattern: /(?:^|\n)agent-device\s+install\s+com\.example\.orders\s+\S*app-release\.apk/i,
+      },
+      {
+        id: 'opensFreshAfterInstall',
+        pattern: /\binstall\b[\s\S]*\n[^\n]*\bopen\s+com\.example\.orders\b[^\n]*--relaunch\b/i,
+      },
+      { id: 'verifiesFirstScreen', pattern: /\b(?:wait|find|is|get)\b[^\n]*orders/i },
+    ],
+    forbidden: [
+      // help workflow: install for a first install; reinstall only when
+      // explicitly requested; never open an artifact path.
+      { id: 'noReinstall', pattern: /(?:^|\n)agent-device\s+reinstall\b/i },
+      { id: 'noOpenArtifactPath', pattern: /(?:^|\n)agent-device\s+open\s+[^\n]*\.apk\b/i },
+    ],
+  },
+  // Next-command quiz cases: captured output (pinned to the real renderer by
+  // scripts/__tests__/help-conformance-sample-outputs.test.ts) plus a task,
+  // scored by regex instead of the named expectation scorers above.
+  {
+    id: 'settle-diff-is-observation',
+    docs: ['--help:first30'],
+    task: `You already ran this command and observed its settled output:
+
+${sampleText(SETTLE_TAIL_SAMPLE)}
+
+Use the output already shown to determine whether the feed-search UI is present, then close the session. What command should run next?`,
+    expectations: ['validPlanCommands', 'fullPrefix'],
+    matchers: [{ id: 'plansClose', pattern: /(?:^|\n)(?:agent-device\s+)?close\b/i }],
+    forbidden: [
+      { id: 'noSnapshot', pattern: /\bsnapshot\b/i },
+      { id: 'noWait', pattern: /\bwait\b/i },
+      { id: 'noFind', pattern: /\bfind\b/i },
+      { id: 'noGet', pattern: /\bget\b/i },
+      { id: 'noIs', pattern: /\bis\b/i },
+      { id: 'noPressOrClick', pattern: /\b(?:press|click)\b/i },
+    ],
+  },
+  {
+    id: 'sample-output-settled-diff-next-target',
+    docs: ['--help:first30'],
+    task: quiz(
+      SETTLE_DIFF_SAMPLE,
+      'The task is to open the matching account result. What command should run next?',
+    ),
+    expectations: ['validPlanCommands', 'fullPrefix'],
+    matchers: [
+      { id: 'pressOrClickOrTap', pattern: /\b(?:press|click|tap)\b/i },
+      { id: 'usesE64RefOrLabel', pattern: /@e64\b|label=(?:["']?@callstack\.com["']?)/i },
+      { id: 'usesSettleFlag', pattern: /--settle\b/i },
+    ],
+    forbidden: [
+      { id: 'noSnapshot', pattern: /\bsnapshot\b/i },
+      { id: 'noWaitStable', pattern: /wait\s+stable/i },
+      { id: 'noFill', pattern: /\bfill\b/i },
+      { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },
+    ],
+  },
+  {
+    id: 'metamorphic-settled-diff-next-target-notes',
+    docs: ['--help:first30'],
+    task: quiz(
+      SETTLE_DIFF_SAMPLE_NOTES,
+      'The task is to open the matching list result. What command should run next?',
+    ),
+    expectations: ['validPlanCommands', 'fullPrefix'],
+    matchers: [
+      { id: 'pressOrClickOrTap', pattern: /\b(?:press|click|tap)\b/i },
+      { id: 'usesE21RefOrLabel', pattern: /@e21\b|label=(?:["']?groceries list["']?)/i },
+      { id: 'usesSettleFlag', pattern: /--settle\b/i },
+    ],
+    forbidden: [
+      { id: 'noSnapshot', pattern: /\bsnapshot\b/i },
+      { id: 'noWaitStable', pattern: /wait\s+stable/i },
+      { id: 'noFill', pattern: /\bfill\b/i },
+      { id: 'noCallstackLeakage', pattern: /(?:callstack|@e64)/i },
+      { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },
+    ],
+  },
+  {
+    id: 'sample-output-not-settled-needs-observe',
+    docs: ['--help:first30'],
+    task: quiz(
+      NOT_SETTLED_SAMPLE,
+      'The next target is not known yet. What command should run next?',
+    ),
+    expectations: ['validPlanCommands', 'fullPrefix'],
+    matchers: [
+      {
+        id: 'observesBeforeActing',
+        pattern: /(?:^|\n)(?:agent-device\s+)?(?:wait\b|snapshot\b[^\n]*-i\b)/i,
+      },
+    ],
+    forbidden: [
+      {
+        id: 'noBareRefMutation',
+        pattern: /(?:^|\n)(?:agent-device\s+)?(?:press|click|fill|longpress)\s+@e\d+/i,
+      },
+      { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },
+    ],
+  },
+  {
+    id: 'sample-output-device-in-use-reuses-session',
+    docs: ['--help:first30'],
+    task: quiz(
+      DEVICE_IN_USE_SAMPLE,
+      'You are continuing the checkout flow that the "checkout" session was already running on this device. What command should run next?',
+    ),
+    expectations: ['validPlanCommands', 'fullPrefix'],
+    matchers: [
+      {
+        id: 'retriesWithOwningSession',
+        pattern: /(?:^|\n)agent-device\s+press\b[^\n]*--session\s+checkout\b/i,
+      },
+      { id: 'keepsSettle', pattern: /--settle\b/i },
+    ],
+    forbidden: [
+      { id: 'noClose', pattern: /(?:^|\n)agent-device\s+close\b/i },
+      { id: 'noReopen', pattern: /(?:^|\n)agent-device\s+open\b/i },
+      { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },
+    ],
+  },
+  {
+    id: 'sample-output-stale-ref-resnapshots',
+    docs: ['--help:first30'],
+    task: quiz(
+      STALE_REF_SAMPLE,
+      'The Continue control this ref pointed at may have moved. What command should run next?',
+    ),
+    expectations: ['validPlanCommands', 'fullPrefix'],
+    matchers: [
+      { id: 'refreshesInteractiveRefs', pattern: /(?:^|\n)agent-device\s+snapshot\s+-i\b/i },
+    ],
+    forbidden: [
+      {
+        id: 'noBareRefRetry',
+        pattern: /(?:^|\n)agent-device\s+(?:press|click|fill|longpress)\s+@e\d/i,
+      },
+      { id: 'noReopen', pattern: /(?:^|\n)agent-device\s+open\b/i },
+      { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },
+    ],
+  },
+  {
+    id: 'sample-output-ambiguous-match-reobserves',
+    docs: ['--help:first30'],
+    task: quiz(
+      AMBIGUOUS_MATCH_SAMPLE,
+      'The intent is to follow the @callstack.com account row. The candidate refs were not shown. What command should run next?',
+    ),
+    expectations: ['validPlanCommands', 'fullPrefix'],
+    matchers: [
+      {
+        id: 'reobservesOrNarrows',
+        pattern:
+          /(?:^|\n)agent-device\s+(?:snapshot\s+-i\b|(?:find|press|click)\s+[^\n]*(?:role=|id=|label="?@callstack\.com))/i,
+      },
+    ],
+    forbidden: [
+      // The candidates live in error details the human output never printed,
+      // so a ref-targeting command here would be a guess.
+      { id: 'noGuessedRef', pattern: /(?:^|\n)agent-device\s+(?:press|click)\s+@e\d/i },
+      {
+        id: 'noVerbatimRetry',
+        pattern: /(?:^|\n)agent-device\s+find\s+text\s+"?follow"?\s+press\b/i,
+      },
+      { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },
+    ],
+  },
+  {
+    id: 'sample-output-app-not-installed-discovers-first',
+    docs: ['--help:first30'],
+    task: quiz(
+      APP_NOT_INSTALLED_SAMPLE,
+      'The goal is still to open the shop app on this simulator; no build artifact was provided. What command should run next?',
+    ),
+    expectations: ['validPlanCommands', 'fullPrefix'],
+    matchers: [{ id: 'discoversInstalledApps', pattern: /(?:^|\n)agent-device\s+apps\b/i }],
+    forbidden: [
+      { id: 'noBlindReopen', pattern: /(?:^|\n)agent-device\s+open\s+"?shoply\b/i },
+      // No artifact exists to install; inventing one is the failure mode help
+      // workflow forbids ("Do not open artifact paths or invent package ids").
+      {
+        id: 'noInventedInstall',
+        pattern: /(?:^|\n)agent-device\s+(?:install|install-from-source)\b/i,
+      },
+      { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },
+    ],
+  },
+];
