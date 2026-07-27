@@ -9,7 +9,7 @@ import type {
   AppOpenResult,
   CaptureSnapshotResult,
   SessionCloseResult,
-} from '../client/client-types.ts';
+} from './client-api.ts';
 import {
   publicSnapshotCaptureAnnotations,
   type SnapshotCaptureAnnotations,

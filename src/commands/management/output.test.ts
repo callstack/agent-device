@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { doctorCliOutput, managementCliOutputFormatters, openCliOutput } from './output.ts';
 import { markDoctorProgressRendered } from '../../contracts/cli-doctor-output.ts';
 import { withNoColor } from '../../__tests__/test-utils/index.ts';
-import type { AppOpenResult } from '../../client/client-types.ts';
+import type { AppOpenResult } from '../../contracts/client-api.ts';
 
 describe('openCliOutput', () => {
   test('prints session state directory on a second line', () => {

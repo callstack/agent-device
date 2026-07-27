@@ -1,3 +1,10 @@
+import type {
+  DaemonServerMode,
+  DaemonTransportPreference,
+  LeaseBackend,
+  SessionIsolationMode,
+} from '../kernel/contracts.ts';
+
 // The remote-config profile field groups that `CliFlags` is composed from.
 //
 // `remote/` owns reading and validating a profile; the flag vocabulary those fields become
@@ -33,4 +40,29 @@ export type RemoteConfigMetroOptions = {
   metroNoReuseExisting?: boolean;
   metroNoInstallDeps?: boolean;
   launchUrl?: string;
+};
+
+/**
+ * How to reach a daemon and which lease/tenant the request belongs to.
+ *
+ * Sibling of `CloudProviderProfileFields` above, and here for the same reason: `remote/` owns
+ * reading and validating a profile, but the field vocabulary is a contract that zones below
+ * `remote/` are stated in terms of — the public API config is composed from both groups. Leaving
+ * this one in `remote/` made every consumer of that composition declare itself in terms of a
+ * rank-4 zone.
+ */
+export type RemoteConnectionProfileFields = {
+  stateDir?: string;
+  daemonBaseUrl?: string;
+  daemonAuthToken?: string;
+  daemonTransport?: DaemonTransportPreference;
+  daemonServerMode?: DaemonServerMode;
+  tenant?: string;
+  sessionIsolation?: SessionIsolationMode;
+  runId?: string;
+  leaseId?: string;
+  leaseBackend?: LeaseBackend;
+  leaseProvider?: string;
+  deviceKey?: string;
+  clientId?: string;
 };

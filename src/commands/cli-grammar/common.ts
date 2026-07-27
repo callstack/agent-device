@@ -2,7 +2,7 @@ import type {
   ElementTarget,
   InteractionTarget,
   InternalRequestOptions,
-} from '../../client/client-types.ts';
+} from '../../contracts/client-api.ts';
 import { splitSelectorFromArgs } from '../../selectors/parse.ts';
 import {
   checkElementTargetArgs,

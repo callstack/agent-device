@@ -5,7 +5,7 @@ import type {
   InteractionTarget,
   LongPressOptions,
   TypeTextOptions,
-} from '../../client/client-types.ts';
+} from '../../contracts/client-api.ts';
 import {
   readFillTargetFromPositionals,
   readInteractionTargetFromPositionals,

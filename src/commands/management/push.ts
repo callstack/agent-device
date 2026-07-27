@@ -1,5 +1,5 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { AppPushOptions, AppTriggerEventOptions } from '../../client/client-types.ts';
+import type { AppPushOptions, AppTriggerEventOptions } from '../../contracts/client-api.ts';
 import type { JsonObject } from '../../contracts/json.ts';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import {

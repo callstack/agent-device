@@ -189,29 +189,31 @@ function checkBackEdges(edges: readonly ResolvedImportEdge[]): Violation[] {
 
 // R6 ratchet: type-only spine inversions, per zone pair. R5 cannot see these (a
 // type-only import is free at runtime), but "zone A is declared in terms of zone B"
-// is still a boundary claim, and ranking type edges surfaced 61 of them. Two clusters
-// remain, each needing its own change rather than a file move:
+// is still a boundary claim, and ranking type edges surfaced 61 of them. Down to 18
+// after the public API vocabulary moved to contracts/client-api.ts. What remains:
 //
-//   commands/contracts/mcp        the per-command Options/Result vocabulary, plus the client
-//     -> client                   facade itself, are declared inside the 1.2k-line public
-//                                 Node-client surface (client/client-types.ts) instead of in
-//                                 contracts/, where the 24 types it already re-exports live.
+//   commands -> client (5)        the eight vocabulary shapes that could NOT move down,
+//                                 because each is stated in terms of a HIGHER zone:
+//                                 `commands/` (navigation projection, ScrollInputDirection)
+//                                 or `metro/` (prepare/reload results). Moving them needs
+//                                 those upstream declarations to come down first.
+//   mcp -> client (1)             the AgentDeviceClient facade itself — a real design
+//                                 question (should a command surface know the client
+//                                 type?), not a declaration in the wrong place.
 //   core/commands -> daemon-server the ADR 0003 daemon facet: core's descriptor registry
-//                                  composes a shape the daemon owns. The daemon keeps the
+//     (6)                          composes a shape the daemon owns. The daemon keeps the
 //                                  VALUES; only the shape needs to move below core.
-//   replay -> daemon-server        `SessionAction`, the recorded-action shape replay reads and
-//                                  writes. It belongs in contracts/, but it references
-//                                  `CommandFlags` (core) which references `DaemonBatchStep`
-//                                  (core), so it moves as a chain of three, not one file.
+//   replay -> daemon-server (6)    `SessionAction`, the recorded-action shape replay reads
+//                                  and writes. It belongs in contracts/, but it references
+//                                  `CommandFlags` (core), so it moves as a chain.
 //
 // The counts may only go DOWN. Fixing edges without lowering the number fails too, so the
 // baseline cannot quietly stop describing the tree.
 // Exported so scripts/depgraph can assert its own graph build reproduces it — see the
 // baseline-parity test there. The gate remains the authority; the report follows.
 export const TYPE_INVERSION_BASELINE: Readonly<Record<string, number>> = {
-  'commands -> client': 28,
+  'commands -> client': 5,
   'commands -> daemon-server': 1,
-  'contracts -> client': 1,
   'core -> daemon-server': 5,
   'mcp -> client': 1,
   'replay -> daemon-server': 6,

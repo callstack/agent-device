@@ -1,4 +1,4 @@
-import type { RecordOptions } from '../../client/client-types.ts';
+import type { RecordOptions } from '../../contracts/client-api.ts';
 import { RECORDING_EXPORT_QUALITIES } from '../../contracts/recording-export-quality.ts';
 import { RECORDING_SCOPE_VALUES } from '../../contracts/recording-scope.ts';
 import { AppError } from '../../kernel/errors.ts';

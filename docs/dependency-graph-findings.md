@@ -45,15 +45,41 @@ type-only inversions, R7 pins SessionState field ownership, and the shared selec
 
 `TYPE_INVERSION_BASELINE` in `scripts/layering/check.ts` holds both, with the reasoning inline.
 
-**28 + 1 edges → `client/client-types.ts`** (1236 lines). The file does three jobs: the public
-Node-client facade (`AgentDeviceClient`, config, transport), the per-command `*Options`/`*Result`
-vocabulary that `commands/`, `contracts/` and `mcp/` all need, and a re-export hub for 24
-`contracts/` types. Only the first is client-owned. The fix is the pattern the file already uses
-for those 24 re-exports: declare the command I/O vocabulary in `contracts/` and re-export it here,
-so the public surface stays byte-identical. Note the coupling is mutual — client-types imports
-`commands/interaction/runtime/gestures.ts` and `commands/system/navigation-projection.ts` — which
-is what closes the 5-node type cycle in §4. This is also the deferred "Node client result types"
-work `CONTEXT.md` already tracks.
+**28 + 1 edges → `client/client-types.ts`** — *done, mostly.* Now 5 edges. The vocabulary moved to
+`contracts/client-api.ts`, with `client/client-types.ts` keeping the `AgentDeviceClient` facade and
+re-exporting the rest through one wildcard, so the published `.d.ts` surface is byte-identical
+(verified by diffing the built `index.d.ts` name set against `main`: 216 names, no change).
+
+The mutual coupling this section already warned about is what set the floor. Eight shapes could NOT
+move down, because each is stated in terms of a HIGHER-ranked zone:
+
+| Shape(s) | Blocked by |
+|---|---|
+| `ScrollOptions` | `ScrollInputDirection` (`commands/interaction/runtime/gestures.ts`) |
+| `BackCommandOptions`, `OrientationCommandOptions`, `AppSwitcherCommandOptions`, `TvRemoteCommandOptions`, `AgentDeviceCommandClient` | `NavigationCommandOptions` / `ProjectedNavigationCommandClient` (`commands/system/navigation-projection.ts`) |
+| `MetroPrepareResult`, `MetroReloadResult` | `PrepareMetroRuntimeResult` / `ReloadMetroResult` (`metro/client-metro.ts`) |
+
+Declaring those in `contracts/` would have traded 28 `commands -> client` inversions for
+`contracts -> commands` and `contracts -> metro` ones — the foundation depending on the layers above
+it, which is worse in kind even though it is fewer edges. Measured, not assumed: the first attempt
+put the whole file in `contracts/` and the gate went from 42 to **48**.
+
+Two keystone moves made the other 84 shapes movable, and both are worth noting as a pattern:
+
+- `RemoteConnectionProfileFields` joined its sibling `CloudProviderProfileFields` in
+  `contracts/remote-config-fields.ts`. It was the root of the base chain
+  (`AgentDeviceClientConfig` → `AgentDeviceRequestOverrides` → `DeviceCommandBaseOptions` → every
+  per-command `*Options`), so one rank-4 declaration was pinning ~80 shapes up with it.
+- `DaemonBatchStep` moved to `contracts/batch-step.ts`. Its `runtime` field was written as
+  `DaemonRequest['runtime']`, which dragged the whole daemon request type in to say
+  `SessionRuntimeHints` — the same type, three zones lower.
+
+**Remaining `commands -> client` (5) needs the upstream declarations to come down first**: move
+`ScrollInputDirection` and the navigation-projection types out of `commands/`, and the Metro
+prepare/reload result payloads out of `metro/`. Each is small; the sequencing is the point. The
+`mcp -> client` edge is different in kind — it is the `AgentDeviceClient` facade itself, i.e. the
+question of whether a command surface should know the client type. That is a design decision, not a
+misplaced declaration.
 
 **5 + 1 edges → `daemon/daemon-command-registry.ts` and `daemon/types.ts`.** `core`'s descriptor
 registry composes the ADR 0003 daemon facet, whose shape the daemon declares. ADR 0003's
@@ -218,8 +244,9 @@ Still duplicated across zones, each needing the same treatment: `fill requires t
 
 1. **Move the 10 outward-facing `daemon/types.ts` types into `contracts/`** (§2). Mechanical, and
    it clears most of §1's second cluster.
-2. **Split `client/client-types.ts`** (§1). Largest remaining inversion cluster, closes the 5-node
-   type cycle, and it is already-tracked deferred work.
+2. ~~**Split `client/client-types.ts`** (§1).~~ Done — 42 → 18 total inversions. The follow-up is
+   the upstream moves that unblock the last 5 (§1): `ScrollInputDirection` and the
+   navigation-projection types out of `commands/`, Metro result payloads out of `metro/`.
 3. **Retire platform branches into plugin facets** (§5b), highest-count files first.
 4. **Share the remaining duplicated validators** (§6), following the `checkIsArgs` shape.
 5. Optional: give `daemon/handlers/` the directory structure its filenames already imply (§5).

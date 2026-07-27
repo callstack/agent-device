@@ -1,31 +1,13 @@
 import type {
   CloudProviderProfileFields,
   RemoteConfigMetroOptions,
+  RemoteConnectionProfileFields,
 } from '../contracts/remote-config-fields.ts';
+// Declared in contracts/ so zones below remote/ can be stated in terms of the field vocabulary;
+// re-exported here because this module is where consumers already import it from.
+export type { RemoteConnectionProfileFields } from '../contracts/remote-config-fields.ts';
 import { buildPrimaryEnvVarName } from '../utils/source-value.ts';
-import type {
-  DaemonServerMode,
-  DaemonTransportPreference,
-  LeaseBackend,
-  SessionIsolationMode,
-} from '../kernel/contracts.ts';
 import { PLATFORM_SELECTORS, type DeviceTarget, type PlatformSelector } from '../kernel/device.ts';
-
-export type RemoteConnectionProfileFields = {
-  stateDir?: string;
-  daemonBaseUrl?: string;
-  daemonAuthToken?: string;
-  daemonTransport?: DaemonTransportPreference;
-  daemonServerMode?: DaemonServerMode;
-  tenant?: string;
-  sessionIsolation?: SessionIsolationMode;
-  runId?: string;
-  leaseId?: string;
-  leaseBackend?: LeaseBackend;
-  leaseProvider?: string;
-  deviceKey?: string;
-  clientId?: string;
-};
 
 export type RemoteConfigProfile = RemoteConfigMetroOptions &
   CloudProviderProfileFields &

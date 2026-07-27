@@ -1,5 +1,5 @@
 import { serializeSnapshotResult } from '../../contracts/result-serialization.ts';
-import type { CaptureSnapshotResult } from '../../client/client-types.ts';
+import type { CaptureSnapshotResult } from '../../contracts/client-api.ts';
 import { dedupeInheritedSnapshotLabels } from '../../snapshot/snapshot-label-dedup.ts';
 import { formatSnapshotText } from '../../utils/output.ts';
 import type { CliOutput } from '../command-contract.ts';

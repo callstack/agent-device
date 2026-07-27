@@ -7,7 +7,7 @@ import { readVersion } from './utils/version.ts';
 import { pathToFileURL } from 'node:url';
 import { sendToDaemon } from './daemon/client/daemon-client.ts';
 import fs from 'node:fs';
-import type { BatchStep } from './client/client-types.ts';
+import type { BatchStep } from './contracts/client-api.ts';
 import type { ReplayTestReporterRuntime } from './replay/test/reporting.ts';
 import {
   createAgentDeviceClient,

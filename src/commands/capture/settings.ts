@@ -1,5 +1,5 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { SettingsUpdateOptions } from '../../client/client-types.ts';
+import type { SettingsUpdateOptions } from '../../contracts/client-api.ts';
 import { SETTINGS_USAGE_OVERRIDE } from '../../contracts/settings-contract.ts';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import type { CliFlags } from '../../contracts/cli-flags.ts';

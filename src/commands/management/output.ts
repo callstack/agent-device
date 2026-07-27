@@ -17,7 +17,7 @@ import type {
   CommandRequestResult,
   SessionCloseResult,
   SessionSaveScriptResult,
-} from '../../client/client-types.ts';
+} from '../../contracts/client-api.ts';
 import type {
   AgentArtifactsResult,
   CloudArtifactsResult,

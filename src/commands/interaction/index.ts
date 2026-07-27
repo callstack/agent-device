@@ -11,12 +11,12 @@ import type {
   IsOptions,
   LongPressOptions,
   RotateGestureOptions,
-  ScrollOptions,
   SwipeGestureOptions,
   SwipeOptions,
   TransformGestureOptions,
   TypeTextOptions,
-} from '../../client/client-types.ts';
+} from '../../contracts/client-api.ts';
+import type { ScrollOptions } from '../../client/client-types.ts';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import {
   REPEATED_TOUCH_FLAGS,

@@ -1,3 +1,7 @@
+// The step SHAPE lives in contracts/ so the public API vocabulary can be stated in terms of it
+// without depending on core/; re-exported here for this module's existing consumers.
+export type { DaemonBatchStep } from '../contracts/batch-step.ts';
+import type { DaemonBatchStep } from '../contracts/batch-step.ts';
 import {
   type DaemonRequest,
   type DaemonResponse,
@@ -20,14 +24,6 @@ import {
 } from './batch-policy.ts';
 
 const batchAllowedStepKeys = new Set<string>(BATCH_DAEMON_STEP_KEYS);
-
-export type DaemonBatchStep = {
-  command: string;
-  positionals?: string[];
-  input?: Record<string, unknown>;
-  flags?: Record<string, unknown>;
-  runtime?: DaemonRequest['runtime'];
-};
 
 export type BatchFlags = Record<string, unknown> & {
   batchOnError?: 'stop';

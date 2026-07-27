@@ -17,13 +17,13 @@ export const ENV_COMPANION_TUNNEL_UNREGISTER_PATH = 'AGENT_DEVICE_COMPANION_TUNN
 export const ENV_COMPANION_TUNNEL_DEVICE_PORT = 'AGENT_DEVICE_COMPANION_TUNNEL_DEVICE_PORT';
 export const ENV_COMPANION_TUNNEL_SESSION = 'AGENT_DEVICE_COMPANION_TUNNEL_SESSION';
 
-export type CompanionTunnelScope = {
-  tenantId: string;
-  runId: string;
-  leaseId: string;
-};
-
-export type MetroBridgeScope = CompanionTunnelScope;
+// The scope SHAPE is declared in contracts/ so zones that only need the shape do not have to
+// declare themselves in terms of client/. Re-exported here for this module's existing consumers.
+export type {
+  CompanionTunnelScope,
+  MetroBridgeScope,
+} from '../contracts/companion-tunnel-scope.ts';
+import type { CompanionTunnelScope } from '../contracts/companion-tunnel-scope.ts';
 
 export class MissingCompanionEnvError extends Error {
   override name = 'MissingCompanionEnvError';

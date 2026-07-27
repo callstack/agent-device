@@ -34,8 +34,6 @@ import {
 import { readScreenshotResultData } from './utils/screenshot-result.ts';
 import { isRecord } from './utils/parsing.ts';
 import type {
-  AgentDeviceCommandClient,
-  AgentDeviceClient,
   AgentDeviceClientConfig,
   AgentDeviceDaemonTransport,
   AppCloseOptions,
@@ -52,16 +50,20 @@ import type {
   Lease,
   MaterializationReleaseOptions,
   MetroPrepareOptions,
-  MetroPrepareResult,
   PanOptions,
   FlingOptions,
-  RotateCommandResult,
   SwipeGestureOptions,
   PinchOptions,
   RotateGestureOptions,
   SessionSaveScriptOptions,
   SessionSaveScriptResult,
   TransformGestureOptions,
+} from './contracts/client-api.ts';
+import type {
+  AgentDeviceCommandClient,
+  AgentDeviceClient,
+  MetroPrepareResult,
+  RotateCommandResult,
 } from './client/client-types.ts';
 import type { OrientationCommandResult } from './contracts/navigation.ts';
 import type { CommandResult } from './core/command-descriptor/command-result.ts';

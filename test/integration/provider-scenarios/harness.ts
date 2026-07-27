@@ -3,10 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createAgentDeviceClient } from '../../../src/agent-device-client.ts';
-import type {
-  AgentDeviceClient,
-  AgentDeviceDaemonTransport,
-} from '../../../src/client/client-types.ts';
+import type { AgentDeviceDaemonTransport } from '../../../src/contracts/client-api.ts';
+import type { AgentDeviceClient } from '../../../src/client/client-types.ts';
 import {
   createRequestHandler,
   type RequestRouterDeps,
