@@ -38,17 +38,17 @@ import { registerBuiltinPlatformPlugins } from '../interactors/register-builtins
 //         flows through the PlatformPlugin registry. `CAPABILITY_BUCKET_BY_PLATFORM`
 //         is kept here as an independent hardcoded oracle, so a plugin-bucket
 //         regression fails this test.
-//   (b.2) the per-command `supports()` / `unsupportedHint()` device closures were
-//         RELOCATED VERBATIM off the command-descriptor facet onto the owning
+//   (b.2) the per-command `supports()` / `unsupportedHint()` device closures live on
+//         the owning
 //         PlatformPlugin's `capability.supportsByDefault` / `unsupportedHintByDefault`
 //         (ADR-0009: relocate, never flatten). Most such closures are Apple
 //         family gates; audio is also an Android gate because Android emulator capture
-//         depends on the macOS host backend. The independent VERBATIM copies below
+//         depends on the macOS host backend. The independent copies below
 //         are the oracle: they pin (a) that production admission (`isCommand
 //         SupportedOnDevice`) and hint output (`unsupportedHintForDevice`) are unchanged
 //         across the full {platform x command x device-kind x target} matrix, and (b)
 //         that the closures now living on the Apple plugin are byte-for-byte behaviorally
-//         identical to the originals across the sample-device matrix.
+//         identical to the intended command contracts across the sample-device matrix.
 
 registerBuiltinPlatformPlugins();
 
@@ -82,6 +82,7 @@ const SAMPLE_DEVICES: DeviceInfo[] = [
   ANDROID_EMULATOR,
   ANDROID_TV_DEVICE,
   IOS_DEVICE,
+  { ...IOS_DEVICE, id: 'xctest-ios-device', iosPhysicalDeviceBackend: 'xctest' },
   IOS_SIMULATOR,
   // The appleOs-bearing iPadOS/visionOS shapes exercise the per-AppleOS table's
   // stored-`appleOs` read path (step d.5); the target-based oracle below still agrees
@@ -96,9 +97,8 @@ const SAMPLE_DEVICES: DeviceInfo[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// (b.2) Independent VERBATIM copies of the per-command supports()/unsupportedHint()
-// closures (src/core/command-descriptor/registry.ts). Kept BYTE-FOR-BYTE in sync by
-// hand so this oracle stays INDEPENDENT of the descriptor it pins.
+// (b.2) Independent copies of the per-command supports()/unsupportedHint()
+// contracts. Kept in sync by hand so this oracle stays independent of production.
 // ---------------------------------------------------------------------------
 const isNotMacOs = (device: DeviceInfo): boolean => !isMacOs(device);
 const isMacOsOrAppleSimulator = (device: DeviceInfo): boolean =>
@@ -117,14 +117,28 @@ const supportsHostAudioProbe = (device: DeviceInfo): boolean =>
     (isMacOs(device) ||
       (isIosFamily(device) && device.kind === 'simulator') ||
       (device.platform === 'android' && device.kind === 'emulator')));
+const supportsCoreDevicePhysicalOperation = (device: DeviceInfo): boolean =>
+  device.platform !== 'apple' ||
+  device.kind !== 'device' ||
+  device.iosPhysicalDeviceBackend !== 'xctest';
+const supportsAppInstallation = (device: DeviceInfo): boolean =>
+  isNotMacOs(device) && supportsCoreDevicePhysicalOperation(device);
+const coreDeviceOnlyPhysicalOperationHint = (device: DeviceInfo): string | undefined =>
+  supportsCoreDevicePhysicalOperation(device)
+    ? undefined
+    : 'This command requires a CoreDevice-backed physical iOS device. The selected XCTest backend supports open, close, interactions, snapshots, and screenshots.';
 // Which commands carry which supports()/unsupportedHint() closure today. The
 // end-to-end assertions cross-check this map against production: a command that
 // gains/loses a closure (or whose closure body changes) breaks parity.
 const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   boot: isNotMacOs,
-  install: isNotMacOs,
-  reinstall: isNotMacOs,
-  'install-from-source': isNotMacOs,
+  apps: supportsCoreDevicePhysicalOperation,
+  install: supportsAppInstallation,
+  reinstall: supportsAppInstallation,
+  'install-from-source': supportsAppInstallation,
+  logs: supportsCoreDevicePhysicalOperation,
+  perf: supportsCoreDevicePhysicalOperation,
+  record: supportsCoreDevicePhysicalOperation,
   push: isNotMacOs,
   home: isNotMacOs,
   'app-switcher': isNotMacOs,
@@ -143,6 +157,13 @@ const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   audio: supportsHostAudioProbe,
 };
 const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
+  apps: coreDeviceOnlyPhysicalOperationHint,
+  install: coreDeviceOnlyPhysicalOperationHint,
+  reinstall: coreDeviceOnlyPhysicalOperationHint,
+  'install-from-source': coreDeviceOnlyPhysicalOperationHint,
+  logs: coreDeviceOnlyPhysicalOperationHint,
+  perf: coreDeviceOnlyPhysicalOperationHint,
+  record: coreDeviceOnlyPhysicalOperationHint,
   'tv-remote': (device) => {
     if (device.platform === 'android') {
       return device.target === 'tv'
@@ -253,7 +274,7 @@ test('(b.2) the Apple plugin carries exactly the relocated supports/hint closure
   assert.equal(getPlugin('apple').capability, getPlugin('apple').capability);
 });
 
-test('(b.2) the relocated Apple closures are byte-for-byte the verbatim originals', () => {
+test('(b.2) the relocated Apple closures match the independent command contracts', () => {
   // Closure-equivalence: for every command x sample-device, the closure now living on
   // the Apple plugin returns an identical boolean / identical hint STRING to the
   // independent verbatim copy of the original command-facet closure.

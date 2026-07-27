@@ -34,15 +34,16 @@ import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-
 // (`apple-os-capabilities.ts`). This test pins that the swap is byte-for-byte
 // behaviorless: the closures now living on the Apple plugin return an identical
 // boolean / identical hint STRING to an INDEPENDENT verbatim copy of the ORIGINAL
-// predicates, across the full {command x sample-device} matrix — real discovery shapes
+// predicates plus intentional backend-specific gates, across the full
+// {command x sample-device} matrix — real discovery shapes
 // for iOS/iPadOS/tvOS/macOS/visionOS plus the exhaustive synthetic cross-product.
 
 registerBuiltinPlatformPlugins();
 
 // ---------------------------------------------------------------------------
-// Independent VERBATIM copies of the ORIGINAL command-facet predicates (before the
-// table read), kept BYTE-FOR-BYTE by hand so this oracle stays INDEPENDENT of the
-// table it pins (mirrors the copy in capability-plugin-routing-parity.test.ts).
+// Independent copies of the command capability contracts, including the original
+// AppleOS predicates and current backend-specific gates. This oracle stays independent
+// of the table it pins (mirrors capability-plugin-routing-parity.test.ts).
 // ---------------------------------------------------------------------------
 const isNotMacOs = (device: DeviceInfo): boolean => !isMacOs(device);
 const isMacOsOrAppleSimulator = (device: DeviceInfo): boolean =>
@@ -55,11 +56,25 @@ const supportsAndroidOrIosNonTv = (device: DeviceInfo): boolean =>
 const supportsTvRemote = (device: DeviceInfo): boolean =>
   (device.platform === 'android' && device.target === 'tv') ||
   (isIosFamily(device) && device.target === 'tv');
+const supportsCoreDevicePhysicalOperation = (device: DeviceInfo): boolean =>
+  device.platform !== 'apple' ||
+  device.kind !== 'device' ||
+  device.iosPhysicalDeviceBackend !== 'xctest';
+const supportsAppInstallation = (device: DeviceInfo): boolean =>
+  isNotMacOs(device) && supportsCoreDevicePhysicalOperation(device);
+const coreDeviceOnlyPhysicalOperationHint = (device: DeviceInfo): string | undefined =>
+  supportsCoreDevicePhysicalOperation(device)
+    ? undefined
+    : 'This command requires a CoreDevice-backed physical iOS device. The selected XCTest backend supports open, close, interactions, snapshots, and screenshots.';
 const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   boot: isNotMacOs,
-  install: isNotMacOs,
-  reinstall: isNotMacOs,
-  'install-from-source': isNotMacOs,
+  apps: supportsCoreDevicePhysicalOperation,
+  install: supportsAppInstallation,
+  reinstall: supportsAppInstallation,
+  'install-from-source': supportsAppInstallation,
+  logs: supportsCoreDevicePhysicalOperation,
+  perf: supportsCoreDevicePhysicalOperation,
+  record: supportsCoreDevicePhysicalOperation,
   push: isNotMacOs,
   home: isNotMacOs,
   'app-switcher': isNotMacOs,
@@ -82,6 +97,13 @@ const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   audio: isAudioProbeSupportedDevice,
 };
 const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
+  apps: coreDeviceOnlyPhysicalOperationHint,
+  install: coreDeviceOnlyPhysicalOperationHint,
+  reinstall: coreDeviceOnlyPhysicalOperationHint,
+  'install-from-source': coreDeviceOnlyPhysicalOperationHint,
+  logs: coreDeviceOnlyPhysicalOperationHint,
+  perf: coreDeviceOnlyPhysicalOperationHint,
+  record: coreDeviceOnlyPhysicalOperationHint,
   'tv-remote': (device) => {
     if (device.platform === 'android') {
       return device.target === 'tv'
@@ -143,6 +165,7 @@ const SAMPLE_DEVICES: DeviceInfo[] = [
   LINUX_DEVICE,
   WEB_DESKTOP_DEVICE,
   ...APPLE_FIXTURES,
+  { ...IOS_DEVICE, id: 'xctest-ios-device', iosPhysicalDeviceBackend: 'xctest' },
   ...APPLE_FIXTURES.flatMap(withKinds),
   ...buildSyntheticMatrix(),
 ];
@@ -167,7 +190,7 @@ test('resolveDeviceAppleOs prefers the stored discriminant, else infers from tar
   assert.equal(resolveDeviceAppleOs(MACOS_DEVICE), 'macos');
 });
 
-test('table-driven Apple supports() closures are byte-for-byte the verbatim originals', () => {
+test('table-driven Apple supports() closures match the independent command contracts', () => {
   const appleSupports = getPlugin('apple').capability.supportsByDefault;
   assert.ok(appleSupports, 'the Apple plugin carries supportsByDefault');
   // Every command that had an original predicate must still carry one, keyed the same.
@@ -185,7 +208,7 @@ test('table-driven Apple supports() closures are byte-for-byte the verbatim orig
   }
 });
 
-test('table-driven Apple unsupportedHint() closures are byte-for-byte the verbatim originals', () => {
+test('table-driven Apple unsupportedHint() closures match the independent contracts', () => {
   const appleHints = getPlugin('apple').capability.unsupportedHintByDefault;
   assert.ok(appleHints, 'the Apple plugin carries unsupportedHintByDefault');
   assert.deepEqual(Object.keys(appleHints).sort(), Object.keys(HINT_REF).sort());
