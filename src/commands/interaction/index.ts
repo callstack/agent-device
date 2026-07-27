@@ -60,6 +60,7 @@ const interactionCliSchemas = {
   get: {
     usageOverride: 'get text|attrs <@ref|selector>',
     positionalArgs: ['subcommand', 'target'],
+    allowsExtraPositionals: true,
     allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS, 'record'],
   },
   find: {

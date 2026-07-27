@@ -168,6 +168,23 @@ test('batch rejects excess legacy positionals before daemon projection', async (
   );
 });
 
+test('batch accepts a multiword ref label in a legacy get step', async () => {
+  const result = await runCliCapture([
+    'batch',
+    '--steps',
+    '[{"command":"get","positionals":["text","@e5~s3","World","Clock"]}]',
+    '--json',
+  ]);
+
+  assert.equal(result.code, null);
+  assert.equal(result.calls.length, 1);
+  assert.deepEqual((result.calls[0]?.flags?.batchSteps ?? [])[0]?.positionals, [
+    'text',
+    '@e5~s3',
+    'World Clock',
+  ]);
+});
+
 test('batch rejects hybrid structured and legacy step shapes', async () => {
   const result = await runCliCapture([
     'batch',
