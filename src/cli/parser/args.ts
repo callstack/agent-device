@@ -2,6 +2,7 @@ import { AppError } from '../../kernel/errors.ts';
 import { mergeDefinedFlags } from '../../utils/merge-flags.ts';
 import {
   applyCommandDefaults,
+  assertCommandPositionalArity,
   getCommandSchema,
   getFlagDefinition,
   getFlagDefinitions,
@@ -200,7 +201,14 @@ export function finalizeParsedArgs(
   }
   assertNoConflictingBackModeFlags(parsed);
   applyCommandDefaults(parsed.command, flags);
-  if (parsed.command === 'batch') {
+  const normalized = normalizeParsedCommandAliases({
+    command: parsed.command,
+    positionals: parsed.positionals,
+    flags,
+    warnings,
+  });
+  assertCommandPositionalArity(normalized.command, normalized.positionals);
+  if (normalized.command === 'batch') {
     const stepSourceCount = (flags.steps ? 1 : 0) + (flags.stepsFile ? 1 : 0);
     if (stepSourceCount !== 1) {
       throw new AppError(
@@ -209,12 +217,7 @@ export function finalizeParsedArgs(
       );
     }
   }
-  return normalizeParsedCommandAliases({
-    command: parsed.command,
-    positionals: parsed.positionals,
-    flags,
-    warnings,
-  });
+  return normalized;
 }
 
 function assertNoConflictingBackModeFlags(parsed: RawParsedArgs): void {

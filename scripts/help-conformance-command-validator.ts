@@ -1,6 +1,5 @@
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from '../src/cli/parser/args.ts';
-import { getCommandSchema } from '../src/cli-schema/command-schema.ts';
 import { readInputFromCli } from '../src/commands/cli-grammar.ts';
 import { isCommandName } from '../src/commands/command-metadata.ts';
 
@@ -34,8 +33,6 @@ export function validateAgentDeviceCommand(value: unknown): ValidationResult {
 function validateParsedCommand(parsed: ReturnType<typeof parseArgs>): ValidationResult {
   if (!parsed.command) return validateGlobalFlags(parsed.flags);
 
-  const arityError = validatePositionalArity(parsed.command, parsed.positionals);
-  if (arityError) return arityError;
   const pseudoRef = targetRefCandidate(parsed.command, parsed.positionals);
   if (pseudoRef && !CONCRETE_REF.test(pseudoRef)) {
     return invalid('pseudo-ref', `Pseudo ref "${pseudoRef}" is not an observed @eN or @cN ref.`);
@@ -51,20 +48,6 @@ function validateGlobalFlags(flags: ReturnType<typeof parseArgs>['flags']): Vali
   return flags.version || flags.help
     ? { valid: true }
     : invalid('agent-device-grammar', 'Missing command.');
-}
-
-function validatePositionalArity(
-  command: string,
-  positionals: string[],
-): ValidationResult | undefined {
-  const schema = getCommandSchema(command);
-  if (!schema || schema.allowsExtraPositionals) return undefined;
-  const maximum = schema.positionalArgs?.length ?? 0;
-  if (positionals.length <= maximum) return undefined;
-  return invalid(
-    'agent-device-grammar',
-    `${command} accepts at most ${maximum} positional argument(s), received ${positionals.length}: ${positionals.join(' ')}`,
-  );
 }
 
 function targetRefCandidate(command: string, positionals: string[]): string | undefined {

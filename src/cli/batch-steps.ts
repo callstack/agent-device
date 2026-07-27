@@ -6,6 +6,7 @@ import { isCommandName, type CommandName } from '../commands/command-metadata.ts
 import type { CliFlags } from '../contracts/cli-flags.ts';
 import { AppError } from '../kernel/errors.ts';
 import { isRecord } from '../utils/parsing.ts';
+import { assertCommandPositionalArity } from '../cli-schema/command-schema.ts';
 
 type LegacyCliBatchStep = {
   command: CommandName;
@@ -79,6 +80,7 @@ function readLegacyCliBatchStep(step: unknown, stepNumber: number): LegacyCliBat
   assertLegacyBatchStepKeys(step, stepNumber);
   const command = readLegacyCommand(step.command, stepNumber);
   const positionals = readLegacyPositionals(step.positionals, stepNumber);
+  assertCommandPositionalArity(command, positionals ?? [], `Batch step ${stepNumber}`);
   const flags = readLegacyFlags(step.flags, stepNumber);
   const runtime = parseBatchStepRuntime(step.runtime, stepNumber);
   return {

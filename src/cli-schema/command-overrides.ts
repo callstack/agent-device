@@ -58,6 +58,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     listUsageOverride: 'connect',
     summary:
       'Attach CLI commands to a saved remote daemon/cloud lease; inspect for remote runs, tenants, or service-token CI',
+    positionalArgs: ['provider?'],
     allowedFlags: [
       'remoteConfig',
       'daemonBaseUrl',

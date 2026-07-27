@@ -108,7 +108,7 @@ const interactionCliSchemas = {
   },
   swipe: {
     helpDescription: 'Quick coordinate fling with optional repeat pattern.',
-    positionalArgs: ['x1', 'y1', 'x2', 'y2'],
+    positionalArgs: ['x1', 'y1', 'x2', 'y2', 'durationMs?'],
     allowedFlags: ['count', 'pauseMs', 'pattern'],
   },
   gesture: {

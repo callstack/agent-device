@@ -12,6 +12,7 @@ import {
   type FlagDefinition,
   type FlagKey,
 } from '../commands/cli-grammar/flag-types.ts';
+import { AppError } from '../kernel/errors.ts';
 
 export type { CliFlags, FlagDefinition, FlagKey };
 export type { CommandSchema };
@@ -35,6 +36,22 @@ export function getCliCommandSchema(command: CliCommandName): CommandSchema {
     throw new Error(`Missing command schema for ${command}`);
   }
   return schema;
+}
+
+export function assertCommandPositionalArity(
+  command: string | null,
+  positionals: readonly string[],
+  context?: string,
+): void {
+  const schema = getCommandSchema(command);
+  if (!command || !schema || schema.allowsExtraPositionals) return;
+  const maximum = schema.positionalArgs?.length ?? 0;
+  if (positionals.length <= maximum) return;
+  const subject = context ? `${context} ${command}` : command;
+  throw new AppError(
+    'INVALID_ARGS',
+    `${subject} accepts at most ${maximum} positional argument(s), received ${positionals.length}: ${positionals.join(' ')}`,
+  );
 }
 
 function readCommandSchema(command: string): CommandSchema | undefined {

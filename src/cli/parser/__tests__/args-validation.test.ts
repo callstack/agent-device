@@ -2,6 +2,8 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { parseArgs } from '../args.ts';
 import { AppError } from '../../../kernel/errors.ts';
+import { listCliCommandNames } from '../../../command-catalog.ts';
+import { getCliCommandSchema } from '../../../cli-schema/command-schema.ts';
 
 test('parseArgs rejects test retries above the supported ceiling', () => {
   assert.throws(
@@ -128,6 +130,25 @@ test('negative numeric positionals are accepted without -- separator', () => {
   const pressed = parseArgs(['press', '-10', '20'], { strictFlags: true });
   assert.equal(pressed.command, 'press');
   assert.deepEqual(pressed.positionals, ['-10', '20']);
+});
+
+test('bounded commands reject excess positionals from their CLI schema', () => {
+  for (const command of listCliCommandNames()) {
+    const schema = getCliCommandSchema(command);
+    if (schema.allowsExtraPositionals) continue;
+    const maximum = schema.positionalArgs?.length ?? 0;
+    const positionals = Array.from({ length: maximum + 1 }, (_, index) => `arg-${index + 1}`);
+
+    assert.throws(
+      () => parseArgs([command, ...positionals], { strictFlags: true }),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'INVALID_ARGS' &&
+        error.message ===
+          `${command} accepts at most ${maximum} positional argument(s), received ${positionals.length}: ${positionals.join(' ')}`,
+      `Expected ${command} to reject excess positionals`,
+    );
+  }
 });
 
 test('command-specific flags without command fail in strict mode', () => {

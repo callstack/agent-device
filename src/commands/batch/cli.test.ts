@@ -153,6 +153,21 @@ test('batch accepts legacy positionals/flags steps with deprecation warning', as
   });
 });
 
+test('batch rejects excess legacy positionals before daemon projection', async () => {
+  const result = await runCliCapture([
+    'batch',
+    '--steps',
+    '[{"command":"open","positionals":["settings","https://example.com","close"]}]',
+  ]);
+
+  assert.equal(result.code, 1);
+  assert.equal(result.calls.length, 0);
+  assert.match(
+    result.stderr,
+    /Batch step 1 open accepts at most 2 positional argument\(s\), received 3/,
+  );
+});
+
 test('batch rejects hybrid structured and legacy step shapes', async () => {
   const result = await runCliCapture([
     'batch',
