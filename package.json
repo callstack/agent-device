@@ -118,6 +118,8 @@
     "check:affected": "node --experimental-strip-types scripts/check-affected/run.ts",
     "check:affected:test": "node --experimental-strip-types --test scripts/check-affected/model.test.ts scripts/check-affected/run.test.ts",
     "check:layering": "node --experimental-strip-types --test scripts/layering/model.test.ts && node --experimental-strip-types scripts/layering/check.ts",
+    "depgraph": "node --experimental-strip-types scripts/depgraph/build.ts",
+    "depgraph:test": "node --experimental-strip-types --test scripts/depgraph/model.test.ts",
     "check:production-exports": "fallow dead-code --config fallow-production-exports.json --production --unused-exports --fail-on-issues",
     "check:bundle-owner-files": "node --experimental-strip-types scripts/check-bundle-owner-files.ts",
     "check:freerange": "fr",
