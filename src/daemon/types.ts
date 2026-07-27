@@ -406,36 +406,8 @@ export type SessionState = {
    * (nothing to tombstone) from an aborted/reaped one.
    */
   saveScriptCommitted?: boolean;
-  /**
-   * ADR 0012 decision 6 (BLOCKER 3, second follow-up): set the moment a
-   * repair-armed `close`'s targeted platform close returns SUCCESS, cleared
-   * once the transaction commits/tears down (never lingers past a single
-   * close attempt's outcome). If the subsequent commit then FAILS (no-clobber
-   * refusal, a bare-`@ref` failure, or an fs error) the session is retained
-   * for retry — a later `close`/`close --save-script=<other>` on the SAME
-   * session must consume this flag and skip re-dispatching the platform
-   * close rather than invoking a (possibly non-idempotent) backend a second
-   * time against an already-closed target.
-   *
-   * BLOCKER 3 (third follow-up): this flag alone is session-wide, not bound
-   * to WHICH close request succeeded — see `repairPlatformCloseIdentity`,
-   * which must ALSO match the retry's own request identity before a retry is
-   * allowed to skip the platform close.
-   */
-  repairPlatformCloseSucceeded?: boolean;
-  /**
-   * ADR 0012 decision 6 (BLOCKER 3, third follow-up): the identity
-   * (`repairPlatformCloseIdentity` in session-close.ts — currently just the
-   * request's target/positionals, the only thing that changes what the
-   * platform close actually dispatches) of the close request whose platform
-   * close last succeeded. A retry only gets to skip re-dispatching the
-   * platform close when BOTH `repairPlatformCloseSucceeded` is true AND this
-   * matches the retry's own identity — an untargeted close that performed NO
-   * platform operation (so `repairPlatformCloseSucceeded` is trivially true)
-   * must never let a later targeted (or differently-targeted) retry skip the
-   * platform close it never actually ran.
-   */
-  repairPlatformCloseIdentity?: string;
+  /** Target identity of a successful repair close awaiting script commit. */
+  repairPlatformCloseReceipt?: string;
   /**
    * ADR 0012 decision 6, R7 (C5a): the original replay input path of an armed
    * repair, stashed so an idle-reap tombstone can hand the agent an actionable

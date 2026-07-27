@@ -159,14 +159,6 @@ function buildRepairCloseFailureResponse(session: SessionState, error: AppError)
   };
 }
 
-/**
- * ADR 0012 decision 6 (BLOCKER 2, new): normalizes a repair-armed session's
- * FAILED platform close into a distinct, surfaceable AppError, mirroring
- * `toRepairCommitFailure` in `session-script-writer.ts`. An AppError from the
- * platform close (e.g. a device-unavailable failure) already carries its own
- * code/details/hint and passes through unchanged; anything else is wrapped
- * with a clear message so the agent can tell this apart from a write failure.
- */
 function toRepairPlatformCloseFailure(error: unknown): AppError {
   if (error instanceof AppError) return error;
   const detail = error instanceof Error ? error.message : String(error);
@@ -189,10 +181,6 @@ type SessionCloseTeardownResult = {
   saveScriptError?: AppError;
 };
 
-// Runs the failure-isolated resource teardown and the targeted platform close
-// (#1225). Returns the preserved platform-close error (if any); best-effort
-// cleanup failures are pushed into `cleanupFailures`. Never throws for a cleanup
-// step so the caller can make an explicit decision about lease/session commit.
 async function runSessionCloseTeardown(params: {
   req: DaemonRequest;
   session: SessionState;
@@ -201,11 +189,6 @@ async function runSessionCloseTeardown(params: {
   sessionStore: SessionStore;
   cleanupFailures: SessionCleanupFailure[];
   repairArmed: boolean;
-  // ADR 0012 decision 6 (BLOCKER 2): a repair-armed session already dispatched
-  // (and confirmed the success of) its platform close BEFORE this teardown —
-  // see `handleCloseCommand`. Dispatching it again here would be redundant at
-  // best and a double-close at worst, so it is skipped for that case only.
-  skipPlatformClose: boolean;
 }): Promise<SessionCloseTeardownResult> {
   const { req, session, sessionName, logPath, sessionStore, cleanupFailures, repairArmed } = params;
   const attemptCleanup = async (step: string, run: () => Promise<void>): Promise<void> => {
@@ -215,27 +198,13 @@ async function runSessionCloseTeardown(params: {
       cleanupFailures.push({ step, error });
     }
   };
-  // Decide runner retention from the PRE-teardown state: an active recording
-  // defeats retention, and `stopBestEffortSessionResources` below finalizes (and
-  // clears) that recording, so the decision must be captured before it runs.
   const retainAppleRunner = shouldRetainAppleRunnerAfterClose(req, session);
   await stopBestEffortSessionResources(session, sessionStore, attemptCleanup);
-  // The targeted platform close is the primary operation, not best-effort cleanup:
-  // its AppError (code/details/hint) is preserved and returned for the caller to
-  // rethrow, and a failed close must not be recorded as `Closed`. Subsequent
-  // resource cleanup still runs regardless.
-  const platformCloseError = params.skipPlatformClose
+  const platformCloseError = repairArmed
     ? undefined
     : await dispatchTargetedPlatformClose({ req, session, logPath });
   await stopOrRetainAppleRunnerAfterClose(retainAppleRunner, session, attemptCleanup);
   await clearSessionRuntimeHints(session, sessionStore, sessionName);
-  // ADR 0012 decision 6 (BLOCKER 2): a repair-armed session already recorded its
-  // finalize `close` and committed (or aborted) its healed `.ad` BEFORE this
-  // teardown (commit-state machine — the single commit path), and only AFTER
-  // its platform close (dispatched above `handleCloseCommand`) was confirmed to
-  // succeed. Only an ordinary (non-repair) session records `close` + writes its
-  // session log here, and — per #1225 — a failed platform close is not recorded
-  // as `Closed`.
   const saveScriptError = repairArmed
     ? undefined
     : finalizeOrdinaryCloseScript({ req, session, sessionStore, platformCloseError });
@@ -328,11 +297,7 @@ async function stopBestEffortSessionResources(
   sessionStore: SessionStore,
   attemptCleanup: CleanupRunner,
 ): Promise<void> {
-  // Finalize any still-active recording first so closing a session mid-recording
-  // (without an explicit `record stop`) cannot leak the recorder process; must
-  // run before the Apple runner is stopped below since overlay finalization
-  // consults the runner. `shouldRetainAppleRunnerAfterClose` then observes the
-  // now-cleared `session.recording`.
+  // Recording overlay finalization needs the Apple runner.
   await attemptCleanup('recording', () => stopSessionRecordingForTeardown(session));
   await attemptCleanup('app_log', () => stopSessionAppLog(session));
   await attemptCleanup('audio_probe', async () => {
@@ -346,22 +311,7 @@ async function stopBestEffortSessionResources(
   );
 }
 
-/**
- * ADR 0012 decision 6 (BLOCKER 3, third follow-up): identifies WHICH close
- * request's platform close succeeded — not merely THAT one did. Only the
- * request's TARGET (`positionals`) can change what `dispatchTargetedPlatformClose`
- * actually does: `shouldDispatchPlatformClose` decides purely from
- * `hasCloseTarget(req)` (plus the `web` special case, constant for a given
- * session), and the dispatch itself is `dispatchCommand(device, 'close',
- * req.positionals, ...)`. `close`'s only other flags (`shutdown`, `saveScript`
- * — see `closeCliSchema`) feed the post-teardown shutdown and the commit path
- * respectively, never this call, so they carry no identity here. Binding the
- * marker to this identity means an untargeted close's "succeeded" (a no-op,
- * since `shouldDispatchPlatformClose` was false) can never be misread as "the
- * platform close for THIS target already ran" by a later retry that adds or
- * changes the target — that retry's identity differs, so it re-dispatches.
- */
-function repairPlatformCloseIdentity(req: DaemonRequest): string {
+function buildRepairPlatformCloseReceipt(req: DaemonRequest): string {
   return JSON.stringify(req.positionals ?? []);
 }
 
@@ -377,11 +327,8 @@ async function prepareRepairClose(params: {
 }): Promise<RepairClosePreparation> {
   const { req, session, logPath, sessionStore } = params;
   const repairArmed = session.saveScriptBoundary !== undefined;
-  const closeIdentity = repairPlatformCloseIdentity(req);
-  if (
-    repairArmed &&
-    !(session.repairPlatformCloseSucceeded && session.repairPlatformCloseIdentity === closeIdentity)
-  ) {
+  const closeReceipt = buildRepairPlatformCloseReceipt(req);
+  if (repairArmed && session.repairPlatformCloseReceipt !== closeReceipt) {
     const platformCloseError = await dispatchTargetedPlatformClose({ req, session, logPath });
     if (platformCloseError) {
       return {
@@ -391,15 +338,13 @@ async function prepareRepairClose(params: {
         ),
       };
     }
-    session.repairPlatformCloseSucceeded = true;
-    session.repairPlatformCloseIdentity = closeIdentity;
+    session.repairPlatformCloseReceipt = closeReceipt;
   }
   const repairCommit = commitRepairBeforeClose(sessionStore, session, req);
   if (repairCommit.kind === 'failed') {
     return { response: buildRepairCloseFailureResponse(session, repairCommit.error) };
   }
-  session.repairPlatformCloseSucceeded = false;
-  session.repairPlatformCloseIdentity = undefined;
+  session.repairPlatformCloseReceipt = undefined;
   return {
     repairArmed,
     ...(repairCommit.kind === 'committed' && repairCommit.path
@@ -531,24 +476,6 @@ export async function handleCloseCommand(params: {
   if (req.internal?.closeAppOnly === true) {
     return await closeAppWithoutEndingSession({ req, session, logPath });
   }
-  // ADR 0012 decision 6 (BLOCKER 2): for a repair-armed session, the platform
-  // close must run and SUCCEED before anything is committed or torn down —
-  // otherwise a committed healed `.ad` could claim a successful `close` that
-  // never actually happened on the device. On failure, return without
-  // touching the session at all (mirrors the commit-failure path below): it
-  // stays addressable so the agent can fix the cause and retry.
-  //
-  // BLOCKER 3: a PRIOR close attempt on this same session may already have
-  // dispatched the platform close and confirmed its success, then failed to
-  // commit (the session is retained for exactly that retry — see below). A
-  // retry must never re-dispatch a (possibly non-idempotent) platform close
-  // against an already-closed target; `repairPlatformCloseSucceeded` +
-  // `repairPlatformCloseIdentity` together record that the platform-level
-  // close already happened FOR THIS EXACT request identity, so a same-identity
-  // retry consumes it and goes straight to the commit instead. A retry whose
-  // identity DIFFERS (third follow-up: e.g. untargeted -> targeted, or a
-  // changed target) never matches — the marker only ever attests to the
-  // identity it was recorded under, so the platform close runs (again).
   const repair = await prepareRepairClose({ req, session, logPath, sessionStore });
   if ('response' in repair) return repair.response;
   const closed = await runCloseTeardownAndRelease({
@@ -622,9 +549,6 @@ async function runCloseTeardownAndRelease(params: {
     sessionStore,
     cleanupFailures,
     repairArmed: params.repairArmed,
-    // The platform close for a repair-armed session already ran (and was
-    // confirmed to succeed) above, before the commit — never dispatch it twice.
-    skipPlatformClose: params.repairArmed,
   });
   const leaseRelease = await releaseProviderLeaseForClose({
     session,

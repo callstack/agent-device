@@ -314,30 +314,13 @@ test('#1391: a close-time script save failure still clears the advisory claim an
   assert.deepEqual(inspectDeviceClaims({ serial: android.id }), []);
   assert.equal(fs.readFileSync(targetPath, 'utf8'), 'pre-existing\n');
 
-  // No rollback: the durable `action.recorded: close` event this close wrote
-  // to events.ndjson (before the script write failed) survives — teardown
-  // never withholds it, since there is no surviving session for a later
-  // write to duplicate it against. Guards against a future rollback or
-  // event-order change silently recreating the in-memory/durable mismatch
-  // this test's own name warns about.
+  assert.deepEqual(
+    session.actions.map((action) => action.command),
+    ['close'],
+  );
   await store.flushEvents('close-save-script-failure');
-  const events = store.readEvents('close-save-script-failure').events;
-  const closeEvent = events.find(
-    (event) => event.kind === 'action.recorded' && event.command === 'close',
-  );
-  assert.ok(
-    closeEvent,
-    'expected a durable action.recorded:close event to survive the failed save',
-  );
-  // Same assertion, in-memory: reinstating `session.actions.length =
-  // actionsBeforeClose` would still pass the durable-event check above (that
-  // event was already queued before the write failed) while silently
-  // dropping this to zero — assert directly on the retained session object,
-  // not just the store, so that specific regression is caught.
-  const inMemoryCloseActions = session.actions.filter((action) => action.command === 'close');
-  assert.equal(inMemoryCloseActions.length, 1);
-  assert.equal(
-    inMemoryCloseActions.length,
-    events.filter((event) => event.command === 'close').length,
-  );
+  const durableCloseEvents = store
+    .readEvents('close-save-script-failure')
+    .events.filter((event) => event.kind === 'action.recorded' && event.command === 'close');
+  assert.equal(durableCloseEvents.length, session.actions.length);
 });

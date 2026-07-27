@@ -984,7 +984,7 @@ test('BLOCKER 3 (second follow-up): a retry after a SUCCESSFUL platform close bu
   if (!closeResponse.ok) expect(closeResponse.error.message).toMatch(/already exists/);
   expect(sessionStore.get(sessionName)).toBeDefined();
   expect(fs.readFileSync(healedPath, 'utf8')).toBe(before);
-  expect(sessionStore.get(sessionName)!.repairPlatformCloseSucceeded).toBe(true);
+  expect(sessionStore.get(sessionName)!.repairPlatformCloseReceipt).toBeDefined();
 
   // Retry with an explicit path: the ALREADY-SUCCEEDED platform close must
   // NEVER be dispatched again — a non-idempotent backend could fail (or
@@ -1043,14 +1043,6 @@ test('BLOCKER 3: a competing second writer never overwrites a COMPLETE artifact 
   expect(fs.readFileSync(healedPath, 'utf8')).toBe(committed);
 });
 
-// --- ADR 0012 decision 6 (BLOCKER 3, third follow-up): `repairPlatformCloseSucceeded`
-// was session-wide, not bound to WHICH close request actually succeeded. An
-// untargeted close performs NO platform operation (`shouldDispatchPlatformClose`
-// is false with no positional target), yet the prior implementation still set
-// the marker as though a real close succeeded; a retry with a DIFFERENT
-// identity (a target added, or a different target) then wrongly skipped the
-// platform close entirely, committing as though it had run. ---
-
 test('BLOCKER 3 (third follow-up): an untargeted close that performed NO platform operation never lets a targeted retry skip the platform close', async () => {
   const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
     'agent-device-repair-transaction-close-identity-untargeted-',
@@ -1078,9 +1070,6 @@ test('BLOCKER 3 (third follow-up): an untargeted close that performed NO platfor
   expect(mockDispatchCommand).not.toHaveBeenCalled();
   expect(sessionStore.get(sessionName)).toBeDefined();
 
-  // Retry WITH a target: the prior session-wide `repairPlatformCloseSucceeded`
-  // flag (set true even though nothing dispatched for the untargeted attempt)
-  // would wrongly skip the platform close here. It must actually run.
   const retry = await handleCloseCommand({
     req: {
       token: 't',
@@ -1126,7 +1115,7 @@ test('BLOCKER 3 (third follow-up): a retry targeting a DIFFERENT app than the su
   });
   expect(first.ok).toBe(false);
   expect(mockDispatchCommand).toHaveBeenCalledTimes(1);
-  expect(sessionStore.get(sessionName)!.repairPlatformCloseSucceeded).toBe(true);
+  expect(sessionStore.get(sessionName)!.repairPlatformCloseReceipt).toBeDefined();
 
   // Retry targets a DIFFERENT app (app-b) — a genuinely different platform
   // operation. The prior session-wide marker would wrongly treat app-b as

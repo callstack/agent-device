@@ -81,8 +81,7 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
   saveScriptCommitted: ['src/daemon/session-script-writer.ts'],
   repairSourcePath: ['src/daemon/handlers/session-replay-runtime.ts'],
   pendingRecordAndHeal: ['src/daemon/handlers/session-replay-resume.ts'],
-  repairPlatformCloseSucceeded: ['src/daemon/handlers/session-close.ts'],
-  repairPlatformCloseIdentity: ['src/daemon/handlers/session-close.ts'],
+  repairPlatformCloseReceipt: ['src/daemon/handlers/session-close.ts'],
 
   trace: ['src/daemon/handlers/record-trace.ts'],
   recording: ['src/daemon/handlers/record-trace-recording.ts'],
