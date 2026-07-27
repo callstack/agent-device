@@ -144,6 +144,8 @@ function runnerResultFor(command: RunnerCommand): Record<string, unknown> {
       };
     case 'gestureViewport':
       return { x: 0, y: 0, x2: 390, y2: 844 };
+    case 'rotate':
+      return { orientation: command.orientation };
     default:
       return {};
   }

@@ -17,7 +17,6 @@ const mockRunAppleRunnerCommand = vi.mocked(runAppleRunnerCommand);
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mockRunAppleRunnerCommand.mockResolvedValue({ message: 'rotate', orientation: 'landscape-left' });
 });
 
 test('dispatch orientation normalizes value aliases before Android execution', async () => {
@@ -34,6 +33,10 @@ test('dispatch orientation normalizes value aliases before Android execution', a
 });
 
 test('dispatch orientation sends normalized orientation to the iOS runner', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValue({
+    message: 'rotate',
+    orientation: 'landscape-right',
+  });
   const result = await dispatchCommand(IOS_DEVICE, 'orientation', ['right'], undefined, {
     appBundleId: 'com.example.app',
   });
@@ -47,4 +50,16 @@ test('dispatch orientation sends normalized orientation to the iOS runner', asyn
     orientation: 'landscape-right',
     appBundleId: 'com.example.app',
   });
+});
+
+test('dispatch orientation rejects a mismatched iOS runner readback', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValue({
+    message: 'rotate',
+    orientation: 'portrait',
+  });
+
+  await assert.rejects(
+    dispatchCommand(IOS_DEVICE, 'orientation', ['left']),
+    /observed portrait after requesting landscape-left/,
+  );
 });

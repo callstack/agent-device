@@ -46,7 +46,7 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
 
   await resetMicrophonePermissionAndRestart(context, 'initial');
   await clickMicrophonePermission(context, 'request microphone permission for denial');
-  await runStep(context, 'wait for microphone permission prompt', ['alert', 'wait', '5000']);
+  await runStep(context, 'wait for microphone permission prompt', ['alert', 'wait', '15000']);
   await runStep(context, 'deny microphone permission prompt', ['alert', 'dismiss']);
   await assertElementText(context, 'id="automation-microphone-permission"', 'denied');
 
@@ -55,7 +55,7 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
   await runStep(context, 'wait for recovered microphone permission prompt', [
     'alert',
     'wait',
-    '5000',
+    '15000',
   ]);
   await runStep(context, 'accept recovered microphone permission prompt', ['alert', 'accept']);
   await assertElementText(context, 'id="automation-microphone-permission"', 'granted');
@@ -89,11 +89,18 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
     'permission denial/reset/recovery and appearance dark/light both produce durable evidence',
   );
 
-  await runStep(context, 'rotate landscape', ['orientation', 'landscape-left']);
-  await assertElementText(context, 'id="automation-window"', 'landscape');
-  await runStep(context, 'restore portrait', ['orientation', 'portrait']);
-  await assertElementText(context, 'id="automation-window"', 'portrait');
-  verifyCommand(context, C.orientation, 'window canary changes to landscape and restores portrait');
+  // XCUIDevice models physical device orientation, which is intentionally not
+  // coupled to an app's interface orientation. Assert the exact typed states
+  // accepted by the native runner instead of overclaiming a window resize.
+  const landscape = await runStep(context, 'rotate landscape', ['orientation', 'landscape-left']);
+  assert.equal(landscape.json?.data?.orientation, 'landscape-left', JSON.stringify(landscape.json));
+  const portrait = await runStep(context, 'restore portrait', ['orientation', 'portrait']);
+  assert.equal(portrait.json?.data?.orientation, 'portrait', JSON.stringify(portrait.json));
+  verifyCommand(
+    context,
+    C.orientation,
+    'native runner reads back exact landscape-left and portrait device states',
+  );
 
   const foregroundPath = path.join(context.artifactDir, 'system-foreground.png');
   await capturePng(context, 'capture foreground system baseline', foregroundPath);

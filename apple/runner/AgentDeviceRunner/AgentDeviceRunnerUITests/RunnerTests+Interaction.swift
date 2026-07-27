@@ -118,9 +118,9 @@ extension RunnerTests {
 #endif
   }
 
-  func rotateDevice(to orientationName: String) -> Bool {
+  func rotateDevice(to orientationName: String) -> String? {
 #if os(macOS) || os(tvOS) || os(visionOS)
-    return false
+    return nil
 #else
     switch orientationName {
     case "portrait":
@@ -132,10 +132,21 @@ extension RunnerTests {
     case "landscape-right":
       XCUIDevice.shared.orientation = .landscapeRight
     default:
-      return false
+      return nil
     }
     sleepFor(0.2)
-    return true
+    switch XCUIDevice.shared.orientation {
+    case .portrait:
+      return "portrait"
+    case .portraitUpsideDown:
+      return "portrait-upside-down"
+    case .landscapeLeft:
+      return "landscape-left"
+    case .landscapeRight:
+      return "landscape-right"
+    default:
+      return nil
+    }
 #endif
   }
 

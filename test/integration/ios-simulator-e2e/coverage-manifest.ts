@@ -129,7 +129,7 @@ export const IOS_SIMULATOR_E2E_COVERAGE = {
   [C.open]: live('smoke:automation-input', 'fixture cold launch and deep route become visible'),
   [C.orientation]: live(
     'full:lifecycle-system',
-    'fixture window dimensions change to landscape and restore to portrait',
+    'native runner reads back exact landscape-left and portrait device states',
   ),
   [C.perf]: live(
     'full:observability-artifacts',
