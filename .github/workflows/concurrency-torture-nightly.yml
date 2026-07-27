@@ -1,0 +1,52 @@
+name: Concurrency Torture Nightly
+
+# Seeded concurrency torture lane for session/lease/lock invariants (#1416,
+# umbrella #1412 Track A). N concurrent clients drive randomized-but-seeded
+# interleavings of open/mutate/close/takeover/kill against the real SessionStore
+# + LeaseRegistry, with all concurrency routed through a deterministic scheduler
+# so a seed fully determines execution order. Deterministic and offline — no
+# devices, simulators, or wall-clock stress (those are out of scope for #1416).
+#
+# Scheduled + manual only: the PR gate already runs a fast default sweep via the
+# Node integration lane; this nightly sweeps a much larger seed range to keep
+# mining for ordering bugs. A failure prints the seed and the exact
+# `TORTURE_SEED=<n> pnpm test:concurrency-torture` replay command.
+
+on:
+  schedule:
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: 'Number of seeded interleavings to sweep'
+        required: false
+        default: '5000'
+      seed-start:
+        description: 'First seed in the sweep'
+        required: false
+        default: '0'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  torture:
+    name: Session/lease/lock torture sweep
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TORTURE_RUNS: ${{ github.event.inputs.runs || '5000' }}
+      TORTURE_SEED_START: ${{ github.event.inputs.seed-start || '0' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Run concurrency torture sweep
+        run: pnpm test:concurrency-torture

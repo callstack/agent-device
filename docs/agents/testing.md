@@ -189,6 +189,33 @@ AGENT_DEVICE_WEB_E2E=1 pnpm test:smoke:web
 
 The test is skipped unless `AGENT_DEVICE_WEB_E2E=1` is set. The test runs `agent-device web setup` and `agent-device web doctor` with an isolated state directory before opening the fixture URL, so it verifies the public managed-backend setup path instead of relying on a global `agent-browser`. CI runs the lane on Node 24 because the managed backend requires Node >= 24. Failure artifacts, daemon state, and browser config are written under `test/artifacts/web/`.
 
+## Concurrency torture lane
+
+`test/integration/concurrency-torture.test.ts` (#1416, umbrella #1412 Track A) runs N concurrent
+clients through randomized-but-**seeded** interleavings of open/mutate/close/takeover/kill against
+the real `SessionStore` + `LeaseRegistry` (plus an in-memory device-claim model). After every run it
+asserts: no leaked leases or claims, no cross-session state bleed, every lock released after owner
+death, the session store stays consistent, and same-device critical sections never overlap (this
+pins the router's same-device open serialization under 100+ interleavings).
+
+A seed alone cannot reproduce Promise/event-loop interleavings, so **all** concurrency is routed
+through a deterministic scheduler (`concurrency-torture/deterministic-scheduler.ts`) — an
+instrumented dispatcher that is the sole source of ordering (which fiber steps next, and which waiter
+wins a contended lock). A seed therefore fully determines execution order. What is real vs modeled,
+and why the production `withKeyedLock` is not driven directly, is documented at the top of
+`concurrency-torture/harness.ts`.
+
+```bash
+pnpm test:concurrency-torture                    # default sweep (TORTURE_RUNS=128 seeds from 0)
+TORTURE_SEED=1234 pnpm test:concurrency-torture  # replay ONE seed's exact interleaving (seed-replay flag)
+TORTURE_RUNS=5000 TORTURE_SEED_START=0 pnpm test:concurrency-torture   # widen the sweep
+```
+
+Every failure prints the offending seed and the exact `TORTURE_SEED=<n> pnpm test:concurrency-torture`
+replay command. The PR gate runs the fast default sweep through the Node integration lane
+(`test:integration:node`); the `Concurrency Torture Nightly` workflow sweeps a much larger seed range
+on schedule. Optional knobs: `TORTURE_CLIENTS`, `TORTURE_OPS`.
+
 ## Speed rules (experiment-backed, 2026-07-04)
 
 Measured on the full unit suite (340 files, 3,210 tests, 48s wall at ~7x parallelism):
