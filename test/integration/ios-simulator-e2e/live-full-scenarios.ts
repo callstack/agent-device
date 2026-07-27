@@ -5,6 +5,7 @@ import path from 'node:path';
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
 import {
   assertElementText,
+  assertElementTextAfterScrolling,
   assertFilesDiffer,
   assertJsonContains,
   assertMp4File,
@@ -167,7 +168,11 @@ async function resetMicrophonePermissionAndRestart(
     `{"source":"permission-${phase}"}`,
   ]);
   await assertWaitText(context, 'Automation lab');
-  await assertElementText(context, 'id="automation-microphone-permission"', 'not-requested');
+  await assertElementTextAfterScrolling(
+    context,
+    'id="automation-microphone-permission"',
+    'not-requested',
+  );
 }
 
 async function clickMicrophonePermission(context: LiveContext, step: string): Promise<void> {

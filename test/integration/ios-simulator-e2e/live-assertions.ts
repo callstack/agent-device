@@ -35,6 +35,27 @@ export async function assertElementText(
   );
 }
 
+export async function assertElementTextAfterScrolling(
+  context: LiveContext,
+  selector: string,
+  expected: string,
+): Promise<void> {
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    const visible = await runStep(
+      context,
+      `wait for ${selector} after scroll (attempt ${attempt})`,
+      ['wait', selector, '1000'],
+      { allowFailure: attempt < 4 },
+    );
+    if (visible.status === 0) {
+      await assertElementText(context, selector, expected);
+      return;
+    }
+    await runStep(context, `scroll toward ${selector}`, ['scroll', 'down', '0.75']);
+  }
+  assert.fail(`${selector} did not become visible after scrolling`);
+}
+
 export function assertNonEmptyFile(filePath: string, name: string): void {
   assert.ok(fs.statSync(filePath).size > 0, `${name} artifact is empty: ${filePath}`);
 }
