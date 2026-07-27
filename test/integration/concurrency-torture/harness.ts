@@ -152,7 +152,8 @@ class TortureWorld {
       ...checkInvariants({
         sessionStore: this.sessionStore,
         leaseRegistry: this.leaseRegistry,
-        claims: this.claims,
+        claimSnapshot: this.claims.snapshot(),
+        claimOwner: (deviceKey) => this.claims.ownerSession(deviceKey),
         instances: [...this.instances.values()],
         isInstanceLive: (instance) => this.isInstanceLive(instance),
         deviceActive: this.deviceActive,

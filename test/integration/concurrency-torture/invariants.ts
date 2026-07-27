@@ -13,8 +13,9 @@
 import type { LeaseRegistry } from '../../../src/daemon/lease-registry.ts';
 import type { SessionStore } from '../../../src/daemon/session-store.ts';
 
-import type { InMemoryClaimRegistry } from './claim-registry.ts';
 import type { SessionInstance } from './bindings.ts';
+
+export type ClaimSnapshot = { deviceKey: string; session: string };
 
 export type InvariantFailure = {
   invariant: string;
@@ -25,7 +26,8 @@ export type InvariantFailure = {
 export type WorldView = {
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
-  claims: InMemoryClaimRegistry;
+  claimSnapshot: readonly ClaimSnapshot[];
+  claimOwner(deviceKey: string): string | undefined;
   instances: readonly SessionInstance[];
   isInstanceLive(instance: SessionInstance): boolean;
   deviceActive: ReadonlyMap<string, number>;
@@ -169,7 +171,7 @@ class InvariantChecker {
   }
 
   private checkNoLeakedClaims(): void {
-    const claims = this.view.claims.snapshot();
+    const claims = this.view.claimSnapshot;
     for (const claim of claims) {
       if (!this.view.sessionStore.get(claim.session)) {
         this.fail(
@@ -189,7 +191,7 @@ class InvariantChecker {
   private checkLiveClaimsHeld(): void {
     for (const session of this.view.sessionStore.values()) {
       if (!session.deviceClaim) continue;
-      const owner = this.view.claims.ownerSession(session.deviceClaim.deviceKey);
+      const owner = this.view.claimOwner(session.deviceClaim.deviceKey);
       if (owner !== session.name) {
         this.fail(
           'no leaked claims',
