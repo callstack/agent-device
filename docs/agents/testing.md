@@ -246,10 +246,21 @@ on schedule and, per #1430, emits a machine-readable envelope (schema version, c
 hash, seed range, duration, result) via `TORTURE_ENVELOPE=<path>`, uploaded as the
 `concurrency-torture-envelope` artifact. The envelope is written once, after **all** lane tests
 settle, and reports `fail` if any of them (sweep, replay self-check, or forced-contention guardrail)
-failed — a later-failing guardrail can never be published as a passing envelope. The #1430 scheduled
-health job that watches lane freshness/last-success across workflows is that issue's own deliverable;
-this lane is born consumable by it (standard envelope + a `schedule:` trigger the job auto-discovers).
+failed — a later-failing guardrail can never be published as a passing envelope.
 Optional knobs: `TORTURE_CLIENTS`, `TORTURE_OPS`.
+
+### Scheduled-lane health watcher (#1430)
+
+Scheduled lanes can fail or stop running for weeks while PR CI stays green, so the `Scheduled Lane
+Health` workflow (`.github/workflows/scheduled-lane-health.yml`) watches the watchers. It discovers
+every `schedule:`-triggered workflow from `.github/workflows/` (the list is **derived**, not
+hand-maintained), reads each lane's recent scheduled runs via the GitHub API, and opens/pings a single
+tracking issue when a lane has not **succeeded** within two of its own cadences — which covers both a
+lane gone dark (no runs) and one failing every cadence. The cadence is estimated per workflow from its
+cron expression. All decision logic is pure and unit-tested in `scripts/scheduled-lane-health/model.ts`
+(gated on PRs via `scripts/scheduled-lane-health/model.test.ts`); the GitHub API I/O and issue
+open/ping live in `run.ts` and run nightly. New scheduled lanes need no wiring here — emitting the
+standard envelope and carrying a `schedule:` trigger is enough to be watched.
 
 ## Speed rules (experiment-backed, 2026-07-04)
 

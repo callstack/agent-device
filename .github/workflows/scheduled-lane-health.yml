@@ -1,0 +1,42 @@
+name: Scheduled Lane Health
+
+# Freshness/cadence watcher for scheduled lanes (#1430, umbrella #1412 Track E —
+# "the observatory must watch the watchers"). Nightly sweeps (torture, replays,
+# perf, conformance) can fail or stop running for weeks while PR CI stays green.
+# This job discovers every `schedule:`-triggered workflow from .github/workflows/
+# (the list is derived, not hand-maintained), reads each lane's recent scheduled
+# runs via the GitHub API, and opens/pings a single tracking issue when a lane
+# has missed or failed two consecutive cadences.
+
+on:
+  schedule:
+    - cron: '0 8 * * *' # after the nightlies (03:00–06:00 UTC) have run
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+concurrency:
+  group: ci-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  health:
+    name: Scheduled lane freshness watch
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+        with:
+          install-deps: 'true'
+
+      - name: Evaluate scheduled-lane freshness
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node --experimental-strip-types scripts/scheduled-lane-health/run.ts
