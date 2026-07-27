@@ -262,9 +262,10 @@ function readReport(file: string): StrykerReport {
 
 function readShardedReports(dir: string): StrykerReport {
   const root = path.isAbsolute(dir) ? dir : path.join(repoRoot, dir);
+  // Shard artifacts also carry the lane envelope and the derived test scope, so
+  // the report is selected by name rather than by "every .json here".
   const files = fs
-    .globSync('**/*.json', { cwd: root })
-    .filter((file) => !file.endsWith('proposed-baseline.json') && !file.endsWith('test-scope.json'))
+    .globSync(`**/${path.basename(DEFAULT_REPORT_PATH)}`, { cwd: root })
     .map((file) => path.join(root, file))
     .sort();
   if (files.length === 0) throw new Error(`No Stryker JSON reports found under ${dir}`);

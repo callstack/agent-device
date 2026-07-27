@@ -90,6 +90,56 @@ test('a crashed run still writes an envelope naming the stage it died in', () =>
   assert.match(envelope.configHash, /^sha256:/);
 });
 
+// Shard artifacts carry the envelope next to the report, so merging "every JSON
+// under the shard directory" fed the envelope to the report parser and crashed
+// the ratchet job after the mutants had already run.
+test('merging shard reports ignores the envelope sitting beside them', () => {
+  const shards = path.join(repoRoot, '.tmp/mutation/envelope-test-shards/shard-a');
+  fs.mkdirSync(shards, { recursive: true });
+  fs.writeFileSync(
+    path.join(shards, 'mutation.json'),
+    JSON.stringify({
+      files: {
+        'src/kernel/errors.ts': { mutants: [{ status: 'Killed' }, { status: 'Survived' }] },
+      },
+    }),
+  );
+  fs.writeFileSync(
+    path.join(shards, 'lane-envelope.json'),
+    JSON.stringify(
+      laneEnvelope({
+        lane: 'mutation-decision-kernels',
+        commit: 'c'.repeat(40),
+        tool: { stryker: '9.6.1' },
+        configHash: 'sha256:abcdef123456',
+        startedAtMs: 0,
+        now: 0,
+        result: 'pass',
+        data: {},
+      }),
+    ),
+  );
+  const result = runCmdSync(
+    'node',
+    [
+      '--experimental-strip-types',
+      'scripts/mutation/run.ts',
+      '--report-dir',
+      '.tmp/mutation/envelope-test-shards',
+      '--modules',
+      'kernel-errors',
+    ],
+    { cwd: repoRoot, allowFailure: true },
+  );
+  assert.match(result.stdout, /merging 1 shard report\(s\)/);
+  assert.match(result.stdout, /kernel-errors/);
+  assert.doesNotMatch(result.stderr, /Cannot convert undefined or null to object/);
+  fs.rmSync(path.join(repoRoot, '.tmp/mutation/envelope-test-shards'), {
+    recursive: true,
+    force: true,
+  });
+});
+
 test('both mutation lanes publish the envelope', () => {
   for (const name of ['mutation-weekly.yml', 'mutation-affected.yml']) {
     assert.match(
