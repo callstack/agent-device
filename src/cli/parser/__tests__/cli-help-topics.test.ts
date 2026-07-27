@@ -185,10 +185,6 @@ test('usage includes agent workflows, config, environment, and examples footers'
   );
   assert.match(
     usageText,
-    /agent-device help ios-system-ui\s+Use when driving iOS SpringBoard, widgets, or other system-UI surfaces/,
-  );
-  assert.match(
-    usageText,
     /agent-device help react-native\s+Use when the target app is React Native, Expo, or a dev client/,
   );
   assert.match(

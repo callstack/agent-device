@@ -58,10 +58,6 @@ const AGENT_WORKFLOWS = [
     description: 'Use when using a connected phone/tablet or iOS signing setup',
   },
   {
-    label: 'agent-device help ios-system-ui',
-    description: 'Use when driving iOS SpringBoard, widgets, or other system-UI surfaces',
-  },
-  {
     label: 'agent-device help remote',
     description: 'Use when working through cloud config, tenants, leases, or local tunnels',
   },
