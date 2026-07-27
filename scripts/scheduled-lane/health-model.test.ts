@@ -123,12 +123,59 @@ describe('lane health', () => {
   });
 });
 
+function git(cwd: string, args: string[], date?: string): void {
+  const stamp = date === undefined ? {} : { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date };
+  runCmdSync('git', args, { cwd, timeoutMs: 30_000, env: { ...process.env, ...stamp } });
+}
+
+/** A workflow that exists for a year, then gains a `schedule:` trigger — the transition that broke. */
+function repoWithLaterSchedule(): { dir: string; scheduledAt: string } {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lane-git-'));
+  temporaryDirs.push(dir);
+  const workflowDir = path.join(dir, '.github/workflows');
+  const file = path.join(workflowDir, 'old.yml');
+  fs.mkdirSync(workflowDir, { recursive: true });
+  git(dir, ['init', '--quiet', '--initial-branch=main']);
+  git(dir, ['config', 'user.email', 'lane@example.test']);
+  git(dir, ['config', 'user.name', 'Lane Test']);
+  fs.writeFileSync(file, 'name: Old\non:\n  workflow_dispatch:\njobs: {}\n');
+  git(dir, ['add', '.']);
+  git(dir, ['commit', '--quiet', '-m', 'add workflow'], '2025-01-02T03:04:05+00:00');
+  fs.writeFileSync(file, 'name: Old\non:\n  schedule:\n    - cron: "0 3 * * *"\njobs: {}\n');
+  git(dir, ['add', '.']);
+  git(dir, ['commit', '--quiet', '-m', 'schedule it'], '2026-06-07T08:09:10+00:00');
+  return { dir, scheduledAt: '2026-06-07T08:09:10+00:00' };
+}
+
 describe('schedule registration', () => {
   // Anchored on the commit that introduced `schedule:`, not the workflow's creation date.
   it('reads when a lane was scheduled out of git history', () => {
     const scheduled = scheduleRegisteredAt('.github/workflows', 'replays-nightly.yml');
     expect(scheduled).not.toBeNull();
     expect(Number.isFinite(Date.parse(scheduled ?? ''))).toBe(true);
+  });
+
+  // The pattern must be POSIX (`[[:space:]]`, not `\s`): the shorthand matches nothing on macOS,
+  // and a silent no-match is indistinguishable from "cannot tell" — every lane stuck pending.
+  it('finds the schedule commit, not the workflow creation commit', () => {
+    const { dir, scheduledAt } = repoWithLaterSchedule();
+    const scheduled = scheduleRegisteredAt('.github/workflows', 'old.yml', dir);
+    expect(scheduled).not.toBeNull();
+    expect(Date.parse(scheduled ?? '')).toBe(Date.parse(scheduledAt));
+    expect(Date.parse(scheduled ?? '')).toBeGreaterThan(Date.parse('2025-01-02T03:04:05+00:00'));
+  });
+
+  it('keeps that lane pending right after scheduling, and only alerts two cadences later', () => {
+    const { dir, scheduledAt } = repoWithLaterSchedule();
+    const history = {
+      known: true,
+      scheduleRegisteredAt: scheduleRegisteredAt('.github/workflows', 'old.yml', dir),
+      runs: [],
+    };
+    const scheduled = Date.parse(scheduledAt);
+    const hour = 60 * 60 * 1000;
+    expect(laneHealth(NIGHTLY, history, scheduled + hour).state).toBe('pending');
+    expect(laneHealth(NIGHTLY, history, scheduled + 49 * hour).state).toBe('dark');
   });
 
   it('returns null — never a guess — for a file git knows nothing about', () => {

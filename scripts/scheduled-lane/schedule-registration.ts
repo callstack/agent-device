@@ -8,13 +8,24 @@
 
 import { runCmdSync } from '../../src/utils/exec.ts';
 
+/**
+ * POSIX character class, not the `\s` shorthand: git's pickaxe regex goes through the platform's
+ * POSIX engine, where BSD/macOS does not understand `\s` and silently matches nothing — which would
+ * pin every lane to `pending` forever on a macOS checkout.
+ */
+const SCHEDULE_KEY = '^[[:space:]]*schedule:';
+
 /** Commit date of the newest commit that changed the number of `schedule:` occurrences. */
-export function scheduleRegisteredAt(workflowDir: string, workflow: string): string | null {
+export function scheduleRegisteredAt(
+  workflowDir: string,
+  workflow: string,
+  cwd?: string,
+): string | null {
   const file = `${workflowDir}/${workflow}`;
   const result = runCmdSync(
     'git',
-    ['log', '-1', '--format=%cI', '--pickaxe-regex', '-S', '^\\s*schedule:', '--', file],
-    { timeoutMs: 10_000, allowFailure: true },
+    ['log', '-1', '--format=%cI', '--pickaxe-regex', '-S', SCHEDULE_KEY, '--', file],
+    { timeoutMs: 10_000, allowFailure: true, cwd },
   );
   if (result.exitCode !== 0) return null;
   const date = result.stdout.trim();
