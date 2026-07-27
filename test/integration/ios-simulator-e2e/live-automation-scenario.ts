@@ -143,7 +143,7 @@ async function acceptDeepLinkConfirmationIfPresent(context: LiveContext): Promis
       assertJsonContains(surface, 'Open in', 'unexpected system alert after fixture deep link');
       await runStep(context, 'accept deep-link confirmation', [
         'click',
-        'role="button" && label="Open"',
+        'role="button" label="Open"',
       ]);
       return;
     }
