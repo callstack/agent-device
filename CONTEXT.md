@@ -302,6 +302,42 @@ The perfect-shape refactor is complete and merged. Its end-state:
 - Agent-cost. Responses carry a cost block and MCP `outputSchema`, rendered through a leveled
   `ResponseView`.
 
+### Principles and their gates
+
+The architecture rules this repo runs on are Clean-Architecture-shaped, but each one exists here as
+an enforcing gate plus, where the rule is still bent, an open ledger that only shrinks. When judging
+a design change, argue from the rule; when landing it, satisfy the gate. Rule → gate → ledger:
+
+- **Dependency Rule** (source dependencies point toward policy; details depend on abstractions).
+  Gate: layering R1–R3 import direction plus the ranked spine's no-back-edges check
+  (`scripts/layering/check.ts`). #1405's "shared contracts below their consumers" is dependency
+  inversion stated as a merge gate. Ledger: `TYPE_INVERSION_BASELINE` — type-only inversions where
+  types still flow the wrong way; the ratchet only tightens, and the long-term target is zero.
+- **Acyclic components.** Gate: R4 bans value-import cycles globally. The depgraph report
+  (`scripts/depgraph/`) surfaces what the gate deliberately tolerates — type-only and dynamic-import
+  cycles — as data, not violations.
+- **Policy × detail boundaries on demonstrated axes of change.** The two registries are the two real
+  axes: `CommandDescriptor` (what the system does) × `PlatformPlugin` (how a device does it), ADR
+  0008/0009. Crossing a boundary uses projected DTOs, never internal representations — the
+  apple-platform leak guard (`publicPlatformString`, provider-integration suite) enforces the wire
+  side; the injectable Apple runner transport (`runnerProvider`, #1389) is the transport side.
+- **Information hiding.** Gate: R7 — every `SessionState` field is classified and every write must
+  occur inside its declared owner. Encapsulation of the one shared mutable object, enforced
+  per-field.
+- **Boundaries are earned, not speculative.** The book's caveat, proven locally: the platform
+  descriptor layer (~600 LOC of boundary nobody needed) and the depgraph viewer (#1409) were both
+  removed/rejected, while the analysis half (#1410) stayed. A new abstraction layer needs a
+  demonstrated second consumer or axis of change. The same norm applied to tests is CI-enforced: no
+  test-only DI seams — a missing seam gets added as a real one or not at all.
+- **Tests couple to stable interfaces.** See [Testing Principles](#testing-principles); the fragile-
+  test problem is handled by testing through public surfaces and the seam rule above, and test
+  strength itself is being hardened under the umbrella tracks in
+  [#1412](https://github.com/callstack/agent-device/issues/1412).
+- **Component metrics are observatory data, never gates.** Instability/abstractness per zone
+  (fan-in/fan-out from the depgraph model) belongs in the repo-health snapshot
+  ([#1423](https://github.com/callstack/agent-device/issues/1423)) to locate concrete,
+  high-fan-in modules worth pinning harder — not in CI as a threshold.
+
 ### Deferred
 
 The refactor is substantively done; these follow-ups are intentionally deferred, not lost:
