@@ -34,6 +34,7 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
   await runStep(context, 'navigate onward from cold deep link', [
     'click',
     'id="automation-continue-catalog"',
+    '--settle',
   ]);
   await assertWaitText(context, 'Catalog');
   verifyBehavior(

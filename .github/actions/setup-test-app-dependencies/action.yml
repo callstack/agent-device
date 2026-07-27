@@ -16,7 +16,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        echo "node_major=$(node -p 'process.versions.node.split(\".\")[0]')" >> "$GITHUB_OUTPUT"
+        echo "node_major=$(node -p 'process.versions.node.split(".")[0]')" >> "$GITHUB_OUTPUT"
         echo "pnpm_version=$(pnpm --version)" >> "$GITHUB_OUTPUT"
 
     - name: Restore test app dependencies
