@@ -9,6 +9,7 @@ import {
   evaluateLaneHealth,
   expandCronField,
   parseScheduledLane,
+  resolveScheduleAnchor,
   type LaneRun,
 } from './model.ts';
 
@@ -115,6 +116,68 @@ test('evaluateLaneHealth: a lane after only one failed cadence is still within g
   const runs: LaneRun[] = [{ conclusion: 'failure', createdAt: isoAgo(now, 6 * HOUR_MS) }];
   const health = evaluateLaneHealth({ lane, runs, now, registeredAt });
   assert.equal(health.healthy, true, health.reason);
+});
+
+test('resolveScheduleAnchor prefers schedule-introduction time, not workflow age', () => {
+  const now = Date.now();
+  // An OLD workflow that only recently gained a `schedule:` trigger. Its file
+  // `created_at` would be ancient, but the schedule-introduction commit is recent.
+  const scheduleIntroducedAt = isoAgo(now, 6 * HOUR_MS);
+  const anchor = resolveScheduleAnchor({
+    scheduleIntroducedAt,
+    runs: [],
+    fallback: new Date(now).toISOString(),
+  });
+  assert.equal(anchor, scheduleIntroducedAt);
+});
+
+test('resolveScheduleAnchor falls back to the earliest run when git history is unavailable', () => {
+  const now = Date.now();
+  const earliest = isoAgo(now, 5 * HOUR_MS);
+  const anchor = resolveScheduleAnchor({
+    scheduleIntroducedAt: undefined,
+    runs: [
+      { conclusion: 'failure', createdAt: isoAgo(now, HOUR_MS) },
+      { conclusion: 'failure', createdAt: earliest },
+    ],
+    fallback: new Date(now).toISOString(),
+  });
+  assert.equal(anchor, earliest);
+});
+
+test('resolveScheduleAnchor falls back to now when there is no other evidence', () => {
+  const nowIso = new Date().toISOString();
+  assert.equal(
+    resolveScheduleAnchor({ scheduleIntroducedAt: undefined, runs: [], fallback: nowIso }),
+    nowIso,
+  );
+});
+
+test('production mapping: schedule newly added to an OLD workflow stays in grace', () => {
+  const now = Date.now();
+  const lane = { file: 'legacy.yml', name: 'Legacy', cadenceMs: DAY_MS };
+  // Schedule added 6h ago to a long-lived workflow; no scheduled runs yet.
+  const registeredAt = resolveScheduleAnchor({
+    scheduleIntroducedAt: isoAgo(now, 6 * HOUR_MS),
+    runs: [],
+    fallback: new Date(now).toISOString(),
+  });
+  const health = evaluateLaneHealth({ lane, runs: [], now, registeredAt });
+  assert.equal(health.healthy, true, health.reason);
+  assert.match(health.reason, /grace/);
+});
+
+test('production mapping: schedule added to an OLD workflow long ago and dark is unhealthy', () => {
+  const now = Date.now();
+  const lane = { file: 'legacy.yml', name: 'Legacy', cadenceMs: DAY_MS };
+  const registeredAt = resolveScheduleAnchor({
+    scheduleIntroducedAt: isoAgo(now, 10 * DAY_MS),
+    runs: [],
+    fallback: new Date(now).toISOString(),
+  });
+  const health = evaluateLaneHealth({ lane, runs: [], now, registeredAt });
+  assert.equal(health.healthy, false);
+  assert.match(health.reason, /dark/);
 });
 
 test('buildAlertBody summarizes only unhealthy lanes, or nothing when all healthy', () => {

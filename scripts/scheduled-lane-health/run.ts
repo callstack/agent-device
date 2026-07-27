@@ -5,6 +5,7 @@
 // two consecutive cadences. All decision logic lives in `model.ts`; this file is
 // only I/O and is meant to run in CI via `node --experimental-strip-types`.
 
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -14,6 +15,7 @@ import {
   buildAlertBody,
   discoverScheduledLanes,
   evaluateLaneHealth,
+  resolveScheduleAnchor,
   type LaneHealth,
   type LaneRun,
 } from './model.ts';
@@ -115,22 +117,27 @@ async function fetchScheduledRuns(
 }
 
 /**
- * Registration time of the lane = the workflow's `created_at`. This is the
- * "first observed" anchor the model uses to give a newborn lane its two-cadence
- * grace before alerting. Falls back to the current time (maximally generous —
- * treats the lane as brand new) if the API omits it.
+ * Author date of the commit that introduced the `schedule:` trigger to a
+ * workflow, derived from git history (pickaxe on the literal `schedule:`). This
+ * — not the workflow's `created_at` — is when the lane actually started being
+ * scheduled, so it's the correct newborn-grace anchor for a schedule added
+ * later to an old workflow. Returns undefined when history is unavailable (e.g.
+ * a shallow checkout) or the string isn't found; `resolveScheduleAnchor` then
+ * falls back to the earliest run or the current time.
  */
-async function fetchLaneRegisteredAt(
-  ctx: GithubContext,
-  workflowFile: string,
-  fallback: number,
-): Promise<string> {
-  const data = (await githubRequest(
-    ctx,
-    'GET',
-    `/repos/${ctx.owner}/${ctx.repo}/actions/workflows/${workflowFile}`,
-  )) as { created_at?: string };
-  return data.created_at ?? new Date(fallback).toISOString();
+function scheduleIntroducedAt(dir: string, workflowFile: string): string | undefined {
+  try {
+    const rel = path.relative(process.cwd(), path.join(dir, workflowFile));
+    const out = execFileSync(
+      'git',
+      ['log', '--reverse', '--format=%aI', '-S', 'schedule:', '--', rel],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    const first = out.split('\n').find((line) => line.trim().length > 0);
+    return first?.trim();
+  } catch {
+    return undefined;
+  }
 }
 
 async function findExistingAlertIssue(ctx: GithubContext): Promise<number | undefined> {
@@ -164,13 +171,19 @@ async function raiseAlert(ctx: GithubContext, body: string): Promise<void> {
 async function main(): Promise<void> {
   const ctx = readContext();
   const now = Date.now();
-  const lanes = discoverScheduledLanes(readWorkflowFiles(workflowsDir()), SELF_WORKFLOW_FILE);
+  const nowIso = new Date(now).toISOString();
+  const dir = workflowsDir();
+  const lanes = discoverScheduledLanes(readWorkflowFiles(dir), SELF_WORKFLOW_FILE);
   console.log(`Discovered ${lanes.length} scheduled lane(s): ${lanes.map((l) => l.file).join(', ')}`);
 
   const healths: LaneHealth[] = [];
   for (const lane of lanes) {
     const runs = await fetchScheduledRuns(ctx, lane.file);
-    const registeredAt = await fetchLaneRegisteredAt(ctx, lane.file, now);
+    const registeredAt = resolveScheduleAnchor({
+      scheduleIntroducedAt: scheduleIntroducedAt(dir, lane.file),
+      runs,
+      fallback: nowIso,
+    });
     const health = evaluateLaneHealth({ lane, runs, now, registeredAt });
     healths.push(health);
     console.log(`${health.healthy ? 'OK  ' : 'DARK'} ${lane.file}: ${health.reason}`);

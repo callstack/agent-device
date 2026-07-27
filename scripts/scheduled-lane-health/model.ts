@@ -163,14 +163,55 @@ export function discoverScheduledLanes(
 }
 
 /**
+ * Resolve the "schedule was introduced / first observed" anchor for a lane that
+ * has never succeeded — the timestamp two cadences are measured from before we
+ * alert. Picks the most trustworthy signal available, oldest-wins:
+ *
+ *  1. `scheduleIntroducedAt` — the commit that added the `schedule:` trigger
+ *     (derived from git history in `run.ts`). This is when the lane actually
+ *     started being scheduled, which is the correct anchor even when the
+ *     workflow *file* is far older (a schedule added later to an old workflow).
+ *  2. the earliest scheduled run on record — a hard lower bound proving the
+ *     schedule has been firing since at least then (used when git history is
+ *     unavailable, e.g. a shallow checkout).
+ *  3. `fallback` (current time) — treat the lane as brand new so we never
+ *     false-alert without evidence.
+ *
+ * Deliberately NOT the workflow's `created_at`: that predates a schedule added
+ * later to an old workflow and would spend the newborn grace before the lane
+ * has ever been scheduled.
+ */
+export function resolveScheduleAnchor(params: {
+  scheduleIntroducedAt?: string;
+  runs: readonly LaneRun[];
+  fallback: string;
+}): string {
+  const { scheduleIntroducedAt, runs, fallback } = params;
+  const candidates: number[] = [];
+  if (scheduleIntroducedAt) {
+    const ms = new Date(scheduleIntroducedAt).getTime();
+    if (Number.isFinite(ms)) candidates.push(ms);
+  }
+  const earliestRun = runs.reduce<number | undefined>((earliest, run) => {
+    const ms = new Date(run.createdAt).getTime();
+    if (!Number.isFinite(ms)) return earliest;
+    return earliest === undefined || ms < earliest ? ms : earliest;
+  }, undefined);
+  if (earliestRun !== undefined) candidates.push(earliestRun);
+  if (candidates.length === 0) return fallback;
+  return new Date(Math.min(...candidates)).toISOString();
+}
+
+/**
  * A lane is unhealthy only once **two of its own cadences have elapsed without a
  * success**, measured from an anchor: the last successful run, or — when it has
- * never succeeded — the lane's registration time (`registeredAt`, the workflow's
- * `created_at`). Anchoring on registration is what gives newborn lanes their
- * grace: a lane that has existed for less than two cadences (zero runs, or a
- * single failed first cadence) is still healthy, because two cadences have not
- * yet had a chance to pass. Elapsed-since-anchor is the "equivalent elapsed
- * evidence" for both a dark lane (no runs) and one failing every cadence.
+ * never succeeded — `registeredAt` (resolved by {@link resolveScheduleAnchor} to
+ * when the schedule was introduced, not when the workflow file was created).
+ * Anchoring on the schedule introduction is what gives newborn lanes their
+ * grace: a lane whose schedule has existed for less than two cadences (zero
+ * runs, or a single failed first cadence) is still healthy, because two cadences
+ * have not yet had a chance to pass. Elapsed-since-anchor is the "equivalent
+ * elapsed evidence" for both a dark lane (no runs) and one failing every cadence.
  */
 export function evaluateLaneHealth(params: {
   lane: ScheduledLane;
