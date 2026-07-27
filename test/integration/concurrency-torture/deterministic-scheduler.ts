@@ -64,6 +64,17 @@ export type SchedulerChoice =
   | { kind: 'step'; fiber: number; label?: string }
   | { kind: 'grant'; fiber: number; key: LockKey };
 
+/** Serialize a decision trace to a canonical string for exact replay comparison. */
+export function serializeTrace(trace: readonly SchedulerChoice[]): string {
+  return trace
+    .map((choice) =>
+      choice.kind === 'step'
+        ? `s:${choice.fiber}:${choice.label ?? ''}`
+        : `g:${choice.fiber}:${choice.key}`,
+    )
+    .join('|');
+}
+
 export class SchedulerDeadlockError extends Error {
   readonly liveFibers: readonly number[];
   readonly heldLocks: readonly { key: LockKey; holder: number; waiters: number[] }[];
@@ -91,6 +102,9 @@ export class DeterministicScheduler {
   private turn: Deferred<void> | null = null;
   private firstError: unknown;
   private readonly choiceLog: SchedulerChoice[] = [];
+  // How many times acquiring a key had to PARK because it was already held —
+  // i.e. genuine contention actually occurred (not just that a lock was taken).
+  private readonly contention = new Map<LockKey, number>();
 
   constructor(pickIndex: (bound: number) => number) {
     this.pickIndex = pickIndex;
@@ -99,6 +113,11 @@ export class DeterministicScheduler {
   /** The full ordered decision trace — handy in failure output for replay. */
   get trace(): readonly SchedulerChoice[] {
     return this.choiceLog;
+  }
+
+  /** Per-key count of acquisitions that parked on a held lock (observed contention). */
+  get contentionByKey(): ReadonlyMap<LockKey, number> {
+    return this.contention;
   }
 
   /**
@@ -182,6 +201,7 @@ export class DeterministicScheduler {
       const gate = deferred<void>();
       this.wake.set(id, gate.resolve);
       mutex.waiters.add(id);
+      this.contention.set(key, (this.contention.get(key) ?? 0) + 1);
       this.resolveTurn();
       return gate.promise;
     };

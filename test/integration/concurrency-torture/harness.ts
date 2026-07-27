@@ -10,15 +10,13 @@
 // What is real vs modeled (issue review amendment "say which and why"):
 //   - REAL: `SessionStore` (session map/consistency) and `LeaseRegistry` (lease
 //     allocation, per-device exclusivity, release, scope checks).
-//   - REAL rule, modeled mechanism: same-device serialization. The production
-//     router serializes on `RequestExecutionLockKey`s via `withKeyedLock`
-//     (`src/daemon/request-binding.ts` + `request-execution-scope.ts`). We reuse
-//     the exact key shape and lock ORDER (session before device) but grant the
-//     locks through the scheduler mutex, because a seed cannot reproduce Node's
-//     native microtask hand-off inside `withKeyedLock`. The invariant under test
-//     — critical sections for one device never overlap; serialization is total —
-//     is identical, and now seed-deterministic. `withKeyedLock` reentrancy and
-//     cleanup remain covered by their own unit tests.
+//   - REAL lock PLAN: every operation's lock keys come from the production
+//     router primitive `resolveRequestExecutionLockKeys` (see bindings.ts),
+//     driven with a fake device inventory. Only the mutex GRANT is modeled by
+//     the scheduler, because `withKeyedLock`'s native microtask hand-off cannot
+//     be reproduced from a seed. Reverting the router's same-device
+//     serialization therefore changes the derived plan and trips the overlap
+//     invariant. `withKeyedLock` reentrancy/cleanup stay covered by unit tests.
 //   - MODELED: the advisory device claim (`InMemoryClaimRegistry`) and process
 //     "kill"; the production claim is a filesystem/OS lock and real process
 //     death, both out of scope for this scheduling-torture lane.
@@ -37,75 +35,32 @@ import { makePrng, type Prng } from './prng.ts';
 import {
   DeterministicScheduler,
   SchedulerDeadlockError,
+  serializeTrace,
   type Fiber,
   type LockKey,
 } from './deterministic-scheduler.ts';
-import { InMemoryClaimRegistry, type AdvisoryClaimOwnership } from './claim-registry.ts';
+import { InMemoryClaimRegistry } from './claim-registry.ts';
+import {
+  DEVICE_POOL,
+  deviceClaimKey,
+  resolveExistingLockPlan,
+  resolveOpenLockPlan,
+  type LeaseScope,
+  type SessionInstance,
+} from './bindings.ts';
+import { checkInvariants, type InvariantFailure } from './invariants.ts';
 
-const DEVICE_POOL: readonly DeviceInfo[] = [
-  {
-    platform: 'apple',
-    id: 'sim-a',
-    name: 'iPhone A',
-    kind: 'simulator',
-    appleOs: 'ios',
-    booted: true,
-  },
-  {
-    platform: 'apple',
-    id: 'sim-b',
-    name: 'iPhone B',
-    kind: 'simulator',
-    appleOs: 'ios',
-    booted: true,
-  },
-  { platform: 'android', id: 'emu-c', name: 'Pixel C', kind: 'emulator', booted: true },
-];
-
-type ClientOp = 'open' | 'mutate' | 'close' | 'takeover' | 'kill';
+export type ClientOp = 'open' | 'mutate' | 'close' | 'takeover' | 'kill';
 
 const ALL_OPS: readonly ClientOp[] = ['open', 'mutate', 'close', 'takeover', 'kill'];
-
-/**
- * The lease scope for one opened session, kept so the harness can release it
- * through the real `LeaseRegistry` with a matching owner scope.
- */
-type LeaseScope = {
-  leaseId: string;
-  tenantId: string;
-  runId: string;
-  leaseBackend: 'ios-simulator';
-  deviceKey: string;
-  clientId: string;
-};
-
-/**
- * Shadow record of one session instance the harness opened. `instanceId` is
- * unique across the whole run even when a session NAME is reused, so a stale
- * reference can never be mistaken for a live one.
- */
-type SessionInstance = {
-  instanceId: number;
-  name: string;
-  deviceId: string;
-  deviceKey: string;
-  lease: LeaseScope;
-  claim: AdvisoryClaimOwnership;
-  ownerClient: number;
-  dead: boolean;
-  reaped: boolean;
-  mutations: number;
-};
 
 export type TortureConfig = {
   seed: number;
   clients?: number;
   opsPerClient?: number;
-};
-
-export type InvariantFailure = {
-  invariant: string;
-  detail: string;
+  // Deterministic overrides used by the forced same-device contention test.
+  program?: ClientOp[][];
+  pinnedDevice?: DeviceInfo;
 };
 
 export type TortureRunResult = {
@@ -114,6 +69,12 @@ export type TortureRunResult = {
   ops: number;
   scheduleLength: number;
   perDeviceMaxConcurrency: Record<string, number>;
+  // Number of device-lock acquisitions that had to park on a held lock, i.e.
+  // genuine same-device contention that actually occurred this run.
+  deviceContention: number;
+  // Canonical serialization of the full scheduler decision trace, for exact
+  // replay comparison (equal seed ⇒ equal signature).
+  traceSignature: string;
   failures: InvariantFailure[];
 };
 
@@ -135,32 +96,37 @@ class TortureWorld {
 
   // Shadow bookkeeping.
   private readonly instances = new Map<number, SessionInstance>();
-  // Which live instance currently owns a device id (harness's expectation).
   private readonly deviceOwner = new Map<string, number>();
-  // Each client's currently-managed instance id, or undefined when not open.
   private readonly clientInstance = new Map<number, number | undefined>();
   private nextInstanceId = 0;
+  // Every open gets a UNIQUE session name. Production keys a session by name, so
+  // reusing a name across opens (e.g. kill then re-open on another device) would
+  // let the store's device for that name diverge from the shadow instance's,
+  // making the router derive a lock plan for the wrong device. Unique names keep
+  // store and shadow in lockstep — exactly one device per session name.
+  private nextSessionSeq = 0;
   private activeClients: number;
 
   // Serialization instrumentation: concurrent critical sections per device.
   private readonly deviceActive = new Map<string, number>();
   private readonly deviceMaxActive = new Map<string, number>();
 
-  private readonly failures: InvariantFailure[] = [];
+  // Invariant violations detected mid-run (vs. the post-run structural checks).
+  private readonly runtimeFailures: InvariantFailure[] = [];
+
+  private readonly config: TortureConfig;
 
   constructor(config: TortureConfig) {
+    this.config = config;
     this.prng = makePrng(config.seed);
     this.scheduler = new DeterministicScheduler((bound) => this.prng.int(bound));
-    this.clientCount = config.clients ?? 2 + this.prng.int(4); // 2..5
+    this.clientCount = config.program?.length ?? config.clients ?? 2 + this.prng.int(4); // 2..5
     this.opsPerClient = config.opsPerClient ?? 6 + this.prng.int(9); // 6..14
     this.activeClients = this.clientCount;
     this.stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-torture-'));
     this.sessionStore = new SessionStore(path.join(this.stateRoot, 'sessions'));
     this.leaseRegistry = new LeaseRegistry({ maxLeaseTtlMs: 10 * 60_000 });
-    this.config = config;
   }
-
-  private readonly config: TortureConfig;
 
   async run(): Promise<TortureRunResult> {
     const programs = this.buildPrograms();
@@ -170,17 +136,30 @@ class TortureWorld {
     }));
     fibers.push({ name: 'reaper', body: (fiber: Fiber) => this.runReaper(fiber) });
 
+    const failures: InvariantFailure[] = [];
     try {
       await this.scheduler.run(fibers);
     } catch (error) {
       if (error instanceof SchedulerDeadlockError) {
-        this.failures.push({ invariant: 'no deadlock', detail: error.message });
+        failures.push({ invariant: 'no deadlock', detail: error.message });
       } else {
         throw error;
       }
     }
 
-    this.checkInvariants();
+    failures.push(...this.runtimeFailures);
+    failures.push(
+      ...checkInvariants({
+        sessionStore: this.sessionStore,
+        leaseRegistry: this.leaseRegistry,
+        claims: this.claims,
+        instances: [...this.instances.values()],
+        isInstanceLive: (instance) => this.isInstanceLive(instance),
+        deviceActive: this.deviceActive,
+        deviceMaxActive: this.deviceMaxActive,
+        assertQuiescent: () => this.scheduler.assertQuiescent(),
+      }),
+    );
     this.cleanup();
 
     return {
@@ -189,13 +168,24 @@ class TortureWorld {
       ops: this.opsPerClient * this.clientCount,
       scheduleLength: this.scheduler.trace.length,
       perDeviceMaxConcurrency: Object.fromEntries(this.deviceMaxActive),
-      failures: this.failures,
+      deviceContention: this.deviceContentionTotal(),
+      traceSignature: serializeTrace(this.scheduler.trace),
+      failures,
     };
+  }
+
+  private deviceContentionTotal(): number {
+    let total = 0;
+    for (const [key, count] of this.scheduler.contentionByKey) {
+      if (key.startsWith('device:')) total += count;
+    }
+    return total;
   }
 
   // --- program generation -------------------------------------------------
 
   private buildPrograms(): ClientOp[][] {
+    if (this.config.program) return this.config.program.map((ops) => [...ops]);
     return Array.from({ length: this.clientCount }, () => {
       const ops: ClientOp[] = [];
       for (let i = 0; i < this.opsPerClient; i += 1) {
@@ -234,81 +224,100 @@ class TortureWorld {
     }
   }
 
+  /**
+   * Acquire a production-derived lock plan in order, yielding a scheduling point
+   * after each grant, then run `body` inside the innermost critical section.
+   */
+  private async withLockPlan(
+    fiber: Fiber,
+    plan: readonly LockKey[],
+    label: string,
+    body: () => Promise<void>,
+  ): Promise<void> {
+    const acquireFrom = async (index: number): Promise<void> => {
+      if (index >= plan.length) return await body();
+      const key = plan[index] as LockKey;
+      await fiber.withLock(key, async () => {
+        await fiber.step(`${label}-locked:${key}`);
+        await acquireFrom(index + 1);
+      });
+    };
+    await acquireFrom(0);
+  }
+
   private async doOpen(fiber: Fiber, client: number, takeover: boolean): Promise<void> {
     if (this.liveInstanceOf(client)) return; // already managing a session
-    const device = this.prng.pick(DEVICE_POOL);
-    const name = `sess-${client}`;
-    await fiber.withLock(this.sessionKey(name), async () => {
-      await fiber.step(`open-session-locked:${client}`);
-      await fiber.withLock(this.deviceKey(device.id), async () => {
-        await this.enterDeviceCritical(fiber, device.id);
-        try {
-          const current = this.deviceOwner.get(device.id);
-          if (current !== undefined) {
-            const owner = this.instances.get(current);
-            if (owner && !owner.reaped) {
-              if (takeover || owner.dead) {
-                this.reapInstance(owner);
-              } else {
-                return; // device busy with a live owner; open is a no-op
-              }
+    const device = this.config.pinnedDevice ?? this.prng.pick(DEVICE_POOL);
+    const name = `s${client}-${this.nextSessionSeq++}`;
+    const plan = await resolveOpenLockPlan(this.sessionStore, name, device);
+    await this.withLockPlan(fiber, plan, `open-${client}`, async () => {
+      await this.enterDeviceCritical(fiber, device.id);
+      try {
+        const current = this.deviceOwner.get(device.id);
+        if (current !== undefined) {
+          const owner = this.instances.get(current);
+          if (owner && !owner.reaped) {
+            if (takeover || owner.dead) {
+              this.reapInstance(owner);
+            } else {
+              return; // device busy with a live owner; open is a no-op
             }
           }
-          this.openSession(client, name, device);
-        } finally {
-          this.exitDeviceCritical(device.id);
         }
-      });
+        this.openSession(client, name, device);
+      } finally {
+        this.exitDeviceCritical(device.id);
+      }
     });
   }
 
   private async doMutate(fiber: Fiber, client: number): Promise<void> {
     const instance = this.liveInstanceOf(client);
     if (!instance) return;
-    await fiber.withLock(this.sessionKey(instance.name), async () => {
-      await fiber.step(`mutate-session-locked:${client}`);
-      await fiber.withLock(this.deviceKey(instance.deviceId), async () => {
-        await this.enterDeviceCritical(fiber, instance.deviceId);
-        try {
-          if (!this.isInstanceLive(instance)) return; // evicted/reaped meanwhile
-          // Heartbeat through the real registry: identity must be preserved and
-          // must not resolve to a different session's lease (cross-session bleed).
-          const refreshed = this.leaseRegistry.heartbeatLease({
-            leaseId: instance.lease.leaseId,
-            tenantId: instance.lease.tenantId,
-            runId: instance.lease.runId,
-            leaseBackend: instance.lease.leaseBackend,
-            deviceKey: instance.lease.deviceKey,
-            clientId: instance.lease.clientId,
-          });
-          if (refreshed.leaseId !== instance.lease.leaseId) {
-            this.fail(
-              'no cross-session bleed',
-              `heartbeat returned foreign lease ${refreshed.leaseId}`,
-            );
-          }
-          instance.mutations += 1;
-        } finally {
-          this.exitDeviceCritical(instance.deviceId);
+    const plan = await resolveExistingLockPlan(this.sessionStore, instance.name);
+    await this.withLockPlan(fiber, plan, `mutate-${client}`, async () => {
+      await this.enterDeviceCritical(fiber, instance.deviceId);
+      try {
+        if (!this.isInstanceLive(instance)) return; // evicted/reaped meanwhile
+        // Heartbeat through the real registry: identity must be preserved and
+        // must not resolve to a different session's lease (cross-session bleed).
+        const refreshed = this.leaseRegistry.heartbeatLease({
+          leaseId: instance.lease.leaseId,
+          tenantId: instance.lease.tenantId,
+          runId: instance.lease.runId,
+          leaseBackend: instance.lease.leaseBackend,
+          deviceKey: instance.lease.deviceKey,
+          clientId: instance.lease.clientId,
+        });
+        if (refreshed.leaseId !== instance.lease.leaseId) {
+          this.fail(
+            'no cross-session bleed',
+            `heartbeat returned foreign lease ${refreshed.leaseId}`,
+          );
         }
-      });
+        instance.mutations += 1;
+      } finally {
+        this.exitDeviceCritical(instance.deviceId);
+      }
     });
+  }
+
+  private fail(invariant: string, detail: string): void {
+    this.runtimeFailures.push({ invariant, detail });
   }
 
   private async doClose(fiber: Fiber, client: number): Promise<void> {
     const instance = this.liveInstanceOf(client);
     if (!instance) return;
-    await fiber.withLock(this.sessionKey(instance.name), async () => {
-      await fiber.step(`close-session-locked:${client}`);
-      await fiber.withLock(this.deviceKey(instance.deviceId), async () => {
-        await this.enterDeviceCritical(fiber, instance.deviceId);
-        try {
-          if (this.isInstanceLive(instance)) this.reapInstance(instance);
-          this.clientInstance.set(client, undefined);
-        } finally {
-          this.exitDeviceCritical(instance.deviceId);
-        }
-      });
+    const plan = await resolveExistingLockPlan(this.sessionStore, instance.name);
+    await this.withLockPlan(fiber, plan, `close-${client}`, async () => {
+      await this.enterDeviceCritical(fiber, instance.deviceId);
+      try {
+        if (this.isInstanceLive(instance)) this.reapInstance(instance);
+        this.clientInstance.set(client, undefined);
+      } finally {
+        this.exitDeviceCritical(instance.deviceId);
+      }
     });
   }
 
@@ -333,16 +342,14 @@ class TortureWorld {
         if (this.activeClients <= 0 && !this.findOrphan()) return;
         continue;
       }
-      await fiber.withLock(this.sessionKey(orphan.name), async () => {
-        await fiber.step('reaper-session-locked');
-        await fiber.withLock(this.deviceKey(orphan.deviceId), async () => {
-          await this.enterDeviceCritical(fiber, orphan.deviceId);
-          try {
-            if (this.isInstanceLive(orphan) && orphan.dead) this.reapInstance(orphan);
-          } finally {
-            this.exitDeviceCritical(orphan.deviceId);
-          }
-        });
+      const plan = await resolveExistingLockPlan(this.sessionStore, orphan.name);
+      await this.withLockPlan(fiber, plan, 'reaper', async () => {
+        await this.enterDeviceCritical(fiber, orphan.deviceId);
+        try {
+          if (this.isInstanceLive(orphan) && orphan.dead) this.reapInstance(orphan);
+        } finally {
+          this.exitDeviceCritical(orphan.deviceId);
+        }
       });
     }
   }
@@ -357,7 +364,7 @@ class TortureWorld {
   // --- state transitions (all under the appropriate locks) ----------------
 
   private openSession(client: number, name: string, device: DeviceInfo): void {
-    const deviceKey = `local:${device.platform}:${device.appleOs ?? 'none'}:${device.id}`;
+    const deviceKey = deviceClaimKey(device);
     const lease = this.leaseRegistry.allocateLease({
       tenantId: `t${client}`,
       runId: `r${client}`,
@@ -369,17 +376,9 @@ class TortureWorld {
     if (!claimResult.ownership) {
       // A live claim under a held device lock means the store/claim disagreed.
       this.fail('session store consistent', `claim conflict opening ${name} on ${device.id}`);
-      this.leaseRegistry.releaseLease({
-        leaseId: lease.leaseId,
-        tenantId: lease.tenantId,
-        runId: lease.runId,
-        leaseBackend: 'ios-simulator',
-        deviceKey,
-        clientId: `c${client}`,
-      });
+      this.releaseLease(lease.leaseId, client, deviceKey);
       return;
     }
-    const instanceId = this.nextInstanceId++;
     const leaseScope: LeaseScope = {
       leaseId: lease.leaseId,
       tenantId: lease.tenantId,
@@ -393,15 +392,7 @@ class TortureWorld {
       device,
       createdAt: Date.now(),
       actions: [],
-      lease: {
-        leaseId: lease.leaseId,
-        tenantId: lease.tenantId,
-        runId: lease.runId,
-        leaseBackend: 'ios-simulator',
-        deviceKey,
-        clientId: `c${client}`,
-        expiresAt: lease.expiresAt,
-      },
+      lease: { ...leaseScope, expiresAt: lease.expiresAt },
       deviceClaim: {
         deviceKey,
         ownerToken: claimResult.ownership.ownerToken,
@@ -410,6 +401,7 @@ class TortureWorld {
       },
     };
     this.sessionStore.set(name, state);
+    const instanceId = this.nextInstanceId++;
     const instance: SessionInstance = {
       instanceId,
       name,
@@ -425,6 +417,17 @@ class TortureWorld {
     this.instances.set(instanceId, instance);
     this.deviceOwner.set(device.id, instanceId);
     this.clientInstance.set(client, instanceId);
+  }
+
+  private releaseLease(leaseId: string, client: number, deviceKey: string): void {
+    this.leaseRegistry.releaseLease({
+      leaseId,
+      tenantId: `t${client}`,
+      runId: `r${client}`,
+      leaseBackend: 'ios-simulator',
+      deviceKey,
+      clientId: `c${client}`,
+    });
   }
 
   private reapInstance(instance: SessionInstance): void {
@@ -481,197 +484,6 @@ class TortureWorld {
 
   private exitDeviceCritical(deviceId: string): void {
     this.deviceActive.set(deviceId, (this.deviceActive.get(deviceId) ?? 1) - 1);
-  }
-
-  // --- lock keys ----------------------------------------------------------
-
-  private sessionKey(name: string): LockKey {
-    return `session:${name}`;
-  }
-
-  private deviceKey(deviceId: string): LockKey {
-    return `device:${deviceId}`;
-  }
-
-  // --- invariants ---------------------------------------------------------
-
-  private checkInvariants(): void {
-    this.checkSerialization();
-    this.checkLocksReleased();
-    this.checkStoreConsistency();
-    this.checkNoLeakedLeases();
-    this.checkNoLeakedClaims();
-    this.checkNoCrossSessionBleed();
-  }
-
-  private checkSerialization(): void {
-    for (const [deviceId, max] of this.deviceMaxActive) {
-      if (max > 1) {
-        this.fail(
-          'same-device serialization',
-          `device ${deviceId} had ${max} overlapping critical sections`,
-        );
-      }
-    }
-    for (const [deviceId, active] of this.deviceActive) {
-      if (active !== 0) {
-        this.fail(
-          'same-device serialization',
-          `device ${deviceId} left ${active} critical sections open`,
-        );
-      }
-    }
-  }
-
-  private checkLocksReleased(): void {
-    try {
-      this.scheduler.assertQuiescent();
-    } catch (error) {
-      this.fail('every lock released after owner death', (error as Error).message);
-    }
-  }
-
-  private liveInstances(): SessionInstance[] {
-    return [...this.instances.values()].filter((instance) => this.isInstanceLive(instance));
-  }
-
-  /** Flags any device key that appears more than once across `deviceKeys`. */
-  private assertUniquePerDevice(
-    deviceKeys: readonly string[],
-    invariant: string,
-    noun: string,
-  ): void {
-    const byDevice = new Map<string, number>();
-    for (const key of deviceKeys) byDevice.set(key, (byDevice.get(key) ?? 0) + 1);
-    for (const [deviceKey, count] of byDevice) {
-      if (count > 1) this.fail(invariant, `device ${deviceKey} has ${count} ${noun}`);
-    }
-  }
-
-  private checkStoreConsistency(): void {
-    this.checkStoredSessionsUnique();
-    this.checkShadowStoreParity();
-  }
-
-  private checkStoredSessionsUnique(): void {
-    const seenDevices = new Map<string, string>();
-    for (const session of this.sessionStore.values()) {
-      if (session.name !== this.sessionStore.get(session.name)?.name) {
-        this.fail('session store consistent', `session ${session.name} key/name mismatch`);
-      }
-      const priorName = seenDevices.get(session.device.id);
-      if (priorName) {
-        this.fail(
-          'session store consistent',
-          `device ${session.device.id} bound to both ${priorName} and ${session.name}`,
-        );
-      }
-      seenDevices.set(session.device.id, session.name);
-    }
-  }
-
-  private checkShadowStoreParity(): void {
-    // Every live shadow instance must have a matching stored session, and vice versa.
-    const liveInstances = this.liveInstances();
-    for (const instance of liveInstances) {
-      const stored = this.sessionStore.get(instance.name);
-      if (!stored) {
-        this.fail('session store consistent', `live instance ${instance.name} missing from store`);
-      } else if (stored.lease?.leaseId !== instance.lease.leaseId) {
-        this.fail('session store consistent', `stored ${instance.name} lease != shadow lease`);
-      }
-    }
-    const storeCount = this.sessionStore.toArray().length;
-    if (storeCount !== liveInstances.length) {
-      this.fail(
-        'session store consistent',
-        `store has ${storeCount} sessions, shadow expects ${liveInstances.length}`,
-      );
-    }
-  }
-
-  private checkNoLeakedLeases(): void {
-    const active = this.leaseRegistry.listActiveLeases();
-    const liveLeaseIds = new Set(this.liveInstances().map((instance) => instance.lease.leaseId));
-    for (const lease of active) {
-      if (!liveLeaseIds.has(lease.leaseId)) {
-        this.fail(
-          'no leaked leases',
-          `lease ${lease.leaseId} (device ${lease.deviceKey}) has no live session`,
-        );
-      }
-    }
-    for (const leaseId of liveLeaseIds) {
-      if (!active.some((lease) => lease.leaseId === leaseId)) {
-        this.fail('no leaked leases', `live session lease ${leaseId} missing from registry`);
-      }
-    }
-    // Device exclusivity: at most one active lease per device key.
-    const deviceKeys = active
-      .map((lease) => lease.deviceKey)
-      .filter((key): key is string => Boolean(key));
-    this.assertUniquePerDevice(deviceKeys, 'no leaked leases', 'active leases');
-  }
-
-  private checkNoLeakedClaims(): void {
-    const claims = this.claims.snapshot();
-    for (const claim of claims) {
-      if (!this.sessionStore.get(claim.session)) {
-        this.fail(
-          'no leaked claims',
-          `claim on ${claim.deviceKey} owned by dead session ${claim.session}`,
-        );
-      }
-    }
-    this.assertUniquePerDevice(
-      claims.map((claim) => claim.deviceKey),
-      'no leaked claims',
-      'claims',
-    );
-    this.checkLiveClaimsHeld();
-  }
-
-  private checkLiveClaimsHeld(): void {
-    // Every live session must hold exactly its own claim.
-    for (const session of this.sessionStore.values()) {
-      if (!session.deviceClaim) continue;
-      const owner = this.claims.ownerSession(session.deviceClaim.deviceKey);
-      if (owner !== session.name) {
-        this.fail(
-          'no leaked claims',
-          `session ${session.name} claim not held (owner=${String(owner)})`,
-        );
-      }
-    }
-  }
-
-  private checkNoCrossSessionBleed(): void {
-    // Each live session's stored lease/claim/device must be exactly the ones the
-    // harness allocated for THAT instance — never another concurrent session's.
-    for (const instance of this.instances.values()) {
-      if (!this.isInstanceLive(instance)) continue;
-      const stored = this.sessionStore.get(instance.name);
-      if (!stored) continue;
-      if (stored.device.id !== instance.deviceId) {
-        this.fail(
-          'no cross-session bleed',
-          `${instance.name} device ${stored.device.id} != ${instance.deviceId}`,
-        );
-      }
-      if (stored.deviceClaim?.deviceKey !== instance.deviceKey) {
-        this.fail('no cross-session bleed', `${instance.name} claim key mismatch`);
-      }
-      if (stored.lease?.clientId !== `c${instance.ownerClient}`) {
-        this.fail(
-          'no cross-session bleed',
-          `${instance.name} lease clientId != owner c${instance.ownerClient}`,
-        );
-      }
-    }
-  }
-
-  private fail(invariant: string, detail: string): void {
-    this.failures.push({ invariant, detail });
   }
 
   private cleanup(): void {

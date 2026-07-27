@@ -5,25 +5,28 @@
 // open / mutate / close / takeover / kill against fake providers (the real
 // `SessionStore` + `LeaseRegistry`, an in-memory device-claim model), with ALL
 // concurrency routed through a deterministic scheduler so a seed fully
-// determines execution order. After every run the harness asserts:
+// determines execution order. Each operation's lock plan is derived from the
+// production router primitive `resolveRequestExecutionLockKeys`, so reverting
+// the router's same-device serialization trips the overlap invariant. After
+// every run the harness asserts:
 //   - no leaked leases or claims,
 //   - no cross-session state bleed,
 //   - every lock released after owner death,
 //   - the session store stays consistent,
-//   - same-device critical sections never overlap (this pins the router's
-//     same-device open serialization under many interleavings).
+//   - same-device critical sections never overlap.
 //
 // Seed replay (documented in docs/agents/testing.md):
 //   TORTURE_SEED=1234 pnpm test:concurrency-torture
-// replays that exact interleaving deterministically. Otherwise the lane sweeps
-// TORTURE_RUNS seeds (default 128, ≥100 to satisfy the acceptance bar) starting
-// at TORTURE_SEED_START (default 0). Any failure prints the seed and the exact
-// replay command.
+// replays that exact interleaving deterministically — the whole scheduler trace,
+// not just its length, is asserted equal. Otherwise the lane sweeps TORTURE_RUNS
+// seeds (default 128, ≥100 to satisfy the acceptance bar) starting at
+// TORTURE_SEED_START (default 0). Any failure prints the seed and replay command.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { runTorture, type TortureRunResult } from './concurrency-torture/harness.ts';
+import { runTorture, type ClientOp, type TortureRunResult } from './concurrency-torture/harness.ts';
+import { buildEnvelope, writeEnvelopeIfRequested } from './concurrency-torture/envelope.ts';
 
 function intFromEnv(name: string, fallback: number): number {
   const raw = process.env[name]?.trim();
@@ -66,13 +69,23 @@ const opsPerClient = optionalIntFromEnv('TORTURE_OPS');
 if (explicitSeed !== undefined) {
   test(`concurrency torture — replay seed ${explicitSeed}`, async () => {
     const result = await runTorture({ seed: explicitSeed, clients, opsPerClient });
-    // Determinism self-check: the same seed must reproduce the same schedule.
+    // Determinism self-check: the same seed must reproduce the EXACT schedule,
+    // the same terminal invariant outcome, and the same contention profile.
     const replay = await runTorture({ seed: explicitSeed, clients, opsPerClient });
     assert.equal(
-      replay.scheduleLength,
-      result.scheduleLength,
-      `seed ${explicitSeed} produced a different schedule length on replay ` +
-        `(${result.scheduleLength} vs ${replay.scheduleLength}) — non-determinism`,
+      replay.traceSignature,
+      result.traceSignature,
+      `seed ${explicitSeed} produced a different scheduler trace on replay — non-determinism`,
+    );
+    assert.deepEqual(
+      replay.failures,
+      result.failures,
+      `seed ${explicitSeed} produced a different invariant outcome on replay — non-determinism`,
+    );
+    assert.equal(
+      replay.deviceContention,
+      result.deviceContention,
+      `seed ${explicitSeed} produced different device contention on replay — non-determinism`,
     );
     assertClean(result);
   });
@@ -81,20 +94,66 @@ if (explicitSeed !== undefined) {
   const seedStart = intFromEnv('TORTURE_SEED_START', 0);
 
   test(`concurrency torture — ${runs} seeded interleavings from ${seedStart}`, async () => {
-    let exercisedSerialization = false;
-    for (let i = 0; i < runs; i += 1) {
-      const seed = seedStart + i;
-      const result = await runTorture({ seed, clients, opsPerClient });
-      assertClean(result);
-      if (Object.values(result.perDeviceMaxConcurrency).some((max) => max >= 1)) {
-        exercisedSerialization = true;
+    const started = Date.now();
+    let totalContention = 0;
+    let failed = false;
+    try {
+      for (let i = 0; i < runs; i += 1) {
+        const seed = seedStart + i;
+        const result = await runTorture({ seed, clients, opsPerClient });
+        totalContention += result.deviceContention;
+        if (result.failures.length > 0) failed = true;
+        assertClean(result);
       }
+      // The sweep must actually PRODUCE same-device contention — two clients
+      // parked on one device lock — or the lane is not exercising serialization
+      // and a broken lock could pass unnoticed.
+      assert.ok(
+        totalContention > 0,
+        'no same-device lock contention occurred across the sweep — the lane is not testing serialization',
+      );
+    } catch (error) {
+      failed = true;
+      throw error;
+    } finally {
+      const envelope = buildEnvelope({
+        seedStart,
+        runs,
+        durationMs: Date.now() - started,
+        result: failed ? 'fail' : 'pass',
+      });
+      const written = writeEnvelopeIfRequested(envelope);
+      if (written) console.log(`torture envelope → ${written}\n${JSON.stringify(envelope)}`);
     }
-    // Sanity: the lane must actually enter device critical sections, otherwise a
-    // regression could hollow it out into a no-op that always "passes".
+  });
+
+  // Forced same-device contention: two clients repeatedly open THE SAME pinned
+  // device. This deterministically drives both onto one `device:` lock so the
+  // overlap invariant is exercised, not just present. If the router stopped
+  // serializing same-device opens, `deviceContention` here would collapse and
+  // the overlap invariant would fire.
+  test('concurrency torture — forced two-client same-device contention', async () => {
+    const program: ClientOp[][] = [
+      ['open', 'mutate', 'close', 'open', 'mutate'],
+      ['open', 'mutate', 'close', 'open', 'mutate'],
+    ];
+    let contendedSeeds = 0;
+    for (let seed = 0; seed < 40; seed += 1) {
+      const result = await runTorture({ seed, program });
+      assertClean(result);
+      const perDeviceMax = Object.values(result.perDeviceMaxConcurrency);
+      assert.ok(
+        perDeviceMax.every((max) => max <= 1),
+        `seed ${seed}: same-device critical sections overlapped — ${JSON.stringify(
+          result.perDeviceMaxConcurrency,
+        )}`,
+      );
+      if (result.deviceContention > 0) contendedSeeds += 1;
+    }
     assert.ok(
-      exercisedSerialization,
-      'no device critical section was exercised across the sweep — the lane is not testing serialization',
+      contendedSeeds > 0,
+      'two clients never actually contended for the pinned device across 40 seeds — ' +
+        'the forced-contention scenario is not exercising the device lock',
     );
   });
 }

@@ -41,6 +41,10 @@ jobs:
     env:
       TORTURE_RUNS: ${{ github.event.inputs.runs || '5000' }}
       TORTURE_SEED_START: ${{ github.event.inputs.seed-start || '0' }}
+      # Standard scheduled-lane artifact envelope (#1430): schemaVersion, commit
+      # SHA, tool/config hashes, seed range, duration, and result. Emitted by the
+      # test and uploaded below so the observatory can detect a lane going dark.
+      TORTURE_ENVELOPE: ${{ github.workspace }}/torture-results/envelope.json
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -50,3 +54,11 @@ jobs:
 
       - name: Run concurrency torture sweep
         run: pnpm test:concurrency-torture
+
+      - name: Upload torture lane envelope
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: concurrency-torture-envelope
+          path: torture-results/
+          if-no-files-found: warn

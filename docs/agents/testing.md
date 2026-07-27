@@ -201,9 +201,19 @@ pins the router's same-device open serialization under 100+ interleavings).
 A seed alone cannot reproduce Promise/event-loop interleavings, so **all** concurrency is routed
 through a deterministic scheduler (`concurrency-torture/deterministic-scheduler.ts`) — an
 instrumented dispatcher that is the sole source of ordering (which fiber steps next, and which waiter
-wins a contended lock). A seed therefore fully determines execution order. What is real vs modeled,
-and why the production `withKeyedLock` is not driven directly, is documented at the top of
-`concurrency-torture/harness.ts`.
+wins a contended lock). A seed therefore fully determines execution order.
+
+Each operation's lock plan is **not** hand-written: it comes from the production router primitive
+`resolveRequestExecutionLockKeys` (`src/daemon/request-binding.ts`), driven with a fake device
+inventory through the production `withDeviceInventoryProvider` seam
+(`concurrency-torture/bindings.ts`). Only the mutex *grant* is modeled by the scheduler, because
+`withKeyedLock`'s native microtask hand-off cannot be reproduced from a seed. Consequently reverting
+the router's same-device serialization changes the derived plan and trips the overlap invariant — the
+lane is genuinely coupled to production lock resolution, not a duplicate of it. **Real:**
+`SessionStore` and `LeaseRegistry`. **Modeled:** the advisory device claim (`InMemoryClaimRegistry`)
+and process "kill" — the production claim is a filesystem/OS lock and real process death, both out of
+scope for this scheduling lane and covered by their own unit tests. The full real-vs-modeled boundary
+is documented at the top of `concurrency-torture/harness.ts`.
 
 ```bash
 pnpm test:concurrency-torture                    # default sweep (TORTURE_RUNS=128 seeds from 0)
@@ -211,10 +221,18 @@ TORTURE_SEED=1234 pnpm test:concurrency-torture  # replay ONE seed's exact inter
 TORTURE_RUNS=5000 TORTURE_SEED_START=0 pnpm test:concurrency-torture   # widen the sweep
 ```
 
+Replay is exact: a given seed reproduces the whole scheduler trace (`traceSignature`), the terminal
+invariant outcome, and the contention profile — the replay test asserts equality on all three, not
+just schedule length. The sweep also asserts real same-device lock *contention* occurred (two clients
+parked on one `device:` lock), and a dedicated forced two-client same-device test drives that
+contention deterministically.
+
 Every failure prints the offending seed and the exact `TORTURE_SEED=<n> pnpm test:concurrency-torture`
 replay command. The PR gate runs the fast default sweep through the Node integration lane
 (`test:integration:node`); the `Concurrency Torture Nightly` workflow sweeps a much larger seed range
-on schedule. Optional knobs: `TORTURE_CLIENTS`, `TORTURE_OPS`.
+on schedule and, per #1430, emits a machine-readable envelope (schema version, commit SHA, tool/config
+hash, seed range, duration, result) via `TORTURE_ENVELOPE=<path>`, uploaded as the
+`concurrency-torture-envelope` artifact. Optional knobs: `TORTURE_CLIENTS`, `TORTURE_OPS`.
 
 ## Speed rules (experiment-backed, 2026-07-04)
 
