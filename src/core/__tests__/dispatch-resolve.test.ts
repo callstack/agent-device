@@ -185,33 +185,28 @@ test('resolveTargetDevice selects the unique booted simulator with the requested
   );
 });
 
-test('resolveTargetDevice uses app-aware iOS selection when platform is omitted', async () => {
-  mockListAppleDevices.mockResolvedValue([bootedSimulator, secondBootedSimulator]);
-  mockFindIosSimulatorInstalledApp.mockImplementation(async (device) =>
-    device.id === secondBootedSimulator.id ? 'com.example.demo' : undefined,
+test('resolveTargetDevice leaves platform-less static app selection to normal cross-platform resolution', async () => {
+  const result = await withDeviceInventoryProvider(
+    async (request) => {
+      assert.equal(request.platform, undefined);
+      return [androidEmulator, bootedSimulator, secondBootedSimulator];
+    },
+    async () => await resolveTargetDevice({}, { appleSimulatorAppTarget: 'com.example.demo' }),
   );
 
-  const result = await resolveTargetDevice({}, { appleSimulatorAppTarget: 'com.example.demo' });
-
-  assert.equal(result.id, secondBootedSimulator.id);
-  assert.deepEqual(
-    mockFindIosSimulatorInstalledApp.mock.calls.map(([device, app]) => [device.id, app]),
-    [
-      [bootedSimulator.id, 'com.example.demo'],
-      [secondBootedSimulator.id, 'com.example.demo'],
-    ],
-  );
+  assert.equal(result.id, androidEmulator.id);
+  assert.equal(mockFindIosSimulatorInstalledApp.mock.calls.length, 0);
 });
 
-test('resolveTargetDevice reuses an app-aware selection for later platform-inferred resolution', async () => {
+test('resolveTargetDevice reuses an app-aware iOS selection for later iOS resolution', async () => {
   mockListAppleDevices.mockResolvedValue([bootedSimulator, secondBootedSimulator]);
   mockFindIosSimulatorInstalledApp.mockImplementation(async (device) =>
     device.id === secondBootedSimulator.id ? 'com.example.demo' : undefined,
   );
 
   const [appAware, laterResolution] = await withResolveTargetDeviceCacheScope(async () => [
-    await resolveTargetDevice({}, { appleSimulatorAppTarget: 'com.example.demo' }),
-    await resolveTargetDevice({}),
+    await resolveTargetDevice({ platform: 'ios' }, { appleSimulatorAppTarget: 'com.example.demo' }),
+    await resolveTargetDevice({ platform: 'ios' }),
   ]);
 
   assert.equal(appAware.id, secondBootedSimulator.id);
