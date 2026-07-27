@@ -4,7 +4,7 @@ import type { SessionRuntimeHints } from '../kernel/contracts.ts';
  * One step of a daemon batch, as submitted.
  *
  * Declared here rather than in `core/batch.ts` because the public API vocabulary
- * (`contracts/client-api.ts`) is stated in terms of it, and `core/` sits above contracts. The
+ * (`contracts/client-replay.ts`) is stated in terms of it, and `core/` sits above contracts. The
  * `runtime` field used to be written as `DaemonRequest['runtime']`, which pulled the whole daemon
  * request type in to say `SessionRuntimeHints` — the same type, one zone lower.
  */

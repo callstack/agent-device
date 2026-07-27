@@ -1,4 +1,4 @@
-import type { AgentDeviceClientConfig } from '../contracts/client-api.ts';
+import type { AgentDeviceClientConfig } from '../contracts/client-connection.ts';
 import type { AgentDeviceClient } from '../client/client-types.ts';
 import type { JsonSchema } from '../commands/command-contract.ts';
 import type { CommandExecutionResult } from '../commands/command-surface.ts';

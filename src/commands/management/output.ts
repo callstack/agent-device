@@ -7,17 +7,21 @@ import {
   serializeSessionListEntry,
 } from '../../contracts/result-serialization.ts';
 import type {
-  AgentDeviceCapabilitiesResult,
-  AgentDeviceDevice,
-  AgentDeviceSession,
   AppCloseResult,
   AppDeployResult,
   AppInstallFromSourceResult,
   AppOpenResult,
-  CommandRequestResult,
+} from '../../contracts/client-app.ts';
+import type {
+  AgentDeviceCapabilitiesResult,
+  AgentDeviceDevice,
+  AgentDeviceSession,
+} from '../../contracts/client-device-view.ts';
+import type { CommandRequestResult } from '../../contracts/client-request.ts';
+import type {
   SessionCloseResult,
   SessionSaveScriptResult,
-} from '../../contracts/client-api.ts';
+} from '../../contracts/client-session.ts';
 import type {
   AgentArtifactsResult,
   CloudArtifactsResult,

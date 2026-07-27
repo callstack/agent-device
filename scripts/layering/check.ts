@@ -206,16 +206,22 @@ function checkBackEdges(edges: readonly ResolvedImportEdge[]): Violation[] {
 //                                a design call, not a file move. R5 is zero here: nothing imports
 //                                the client at runtime, only its type.
 //
-//   core/commands -> daemon-server (3)  `DaemonCommandDescriptor` and `DaemonCommandRoute`.
-//                                `DaemonCommandRoute` is `keyof typeof DAEMON_ROUTE_HANDLERS` and
-//                                the descriptor resolves `refFrameEffect` against the daemon's own
-//                                request type, so the shape is derived from what the server
-//                                actually implements. Moving it down would mean re-declaring the
-//                                route names in contracts plus a gate to prove the handler map
-//                                still covers them: more coupling to remove a dependency. ADR
-//                                0003/0008 own this boundary deliberately.
+//   core -> daemon-server (2)    `DaemonCommandDescriptor`, which is STATED IN TERMS OF the daemon's
+//                                own server-private `DaemonRequest` (`refFrameEffect`,
+//                                `allowSessionlessDefaultDevice`, `skipSessionlessProviderDevice`
+//                                are all `(req: DaemonRequest) => …`). It therefore cannot be
+//                                declared below the daemon, and having core/ re-declare a parallel
+//                                13-field shape would trade one erased edge for a second source of
+//                                truth. Zones that only need to CLASSIFY a command take
+//                                `contracts/dispatched-command.ts` instead. ADR 0003/0008.
 //
-// The counts may only go DOWN. Fixing edges without lowering the number fails too, so the baseline
+//   commands -> daemon-server (1)  `DaemonCommandRoute` = `keyof typeof DAEMON_ROUTE_HANDLERS`, so
+//                                it is COMPUTED FROM the daemon's handler table and cannot exist
+//                                below it. `commands/command-explain.ts` uses it to key an
+//                                exhaustive `Record<DaemonCommandRoute, string>` of owner files; a
+//                                hand-written union in contracts/ would drop that exhaustiveness.
+//
+// See docs/dependency-graph-findings.md §0 for the long form. The counts may only go DOWN. Fixing edges without lowering the number fails too, so the baseline
 // cannot quietly stop describing the tree.
 //
 // Exported so scripts/depgraph can assert its own graph build reproduces it — see the

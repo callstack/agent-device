@@ -1,7 +1,5 @@
-import type {
-  CaptureSnapshotResult,
-  CommandRequestResult,
-} from '../../src/contracts/client-api.ts';
+import type { CaptureSnapshotResult } from '../../src/contracts/client-capture.ts';
+import type { CommandRequestResult } from '../../src/contracts/client-request.ts';
 import type { DaemonResponseData } from '../../src/daemon/types.ts';
 import { AppError } from '../../src/kernel/errors.ts';
 import { attachRefs, type RawSnapshotNode } from '../../src/kernel/snapshot.ts';

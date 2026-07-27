@@ -83,7 +83,7 @@ type-only inversions, R7 pins SessionState field ownership, and the shared selec
 | Keystone moved to `contracts/` | Unblocked |
 |---|---|
 | `DaemonBatchStep` (was `core/batch.ts`, typed via `DaemonRequest['runtime']`) | `CommandFlags` |
-| `CommandFlags` (was `core/dispatch-context.ts`) | `SessionAction`, `CommandRequest` |
+| `CommandFlags` (was `core/dispatch-context.ts`) | `SessionAction`, `DispatchedCommand` |
 | `TargetAnnotationV1` shape (was `replay/target-identity.ts`) | `SessionAction` |
 | `ScrollInputDirection`, Metro result payloads | `ScrollOptions`, `MetroPrepareResult`/`MetroReloadResult` |
 
@@ -93,23 +93,46 @@ was written `DaemonRequest['runtime']`, pulling the whole daemon request type in
 declaration pinning ~80 public API shapes above it. Neither looked like a keystone from the graph;
 both were found by asking "what does the target itself import, and what rank is that?"
 
-`DaemonRequest` also split into the three shapes it had been conflating:
+`DaemonRequest` had been conflating a request with the command that request dispatches. There are
+still only two request shapes — and that is the point, because a third would be a third name for the
+same thing:
 
-- `kernel/contracts.ts` — the **wire** shape, `flags?: Record<string, unknown>`, because a process
-  boundary cannot enforce a flag vocabulary;
-- `contracts/command-request.ts` `CommandRequest` — the wire shape with `flags` typed. What a command
-  surface needs to reason about a request without knowing which server runs it;
-- `daemon/types.ts` `DaemonRequest` — that plus `internal?: DaemonRequestInternal`, carrying
-  `SessionState` callbacks and the admitted lease. Server-private, and why it cannot move down.
+- `kernel/contracts.ts` `DaemonRequest` — the **wire** shape, `flags?: Record<string, unknown>`,
+  because a process boundary cannot enforce a flag vocabulary;
+- `daemon/types.ts` `DaemonRequest` — the wire shape with `token`/`session` required, `flags`
+  narrowed to `CommandFlags`, and `internal?: DaemonRequestInternal` carrying `SessionState`
+  callbacks and the admitted lease. Server-private, and why it cannot move down.
 
-`core/command-descriptor/` had been importing the third to read `command`, `positionals` and `flags`.
+`core/command-descriptor/` had been importing the second to read `command`, `positionals` and
+`flags` — reaching up two ranks for three fields. It now takes
+`contracts/dispatched-command.ts` `DispatchedCommand`, which is those three fields and nothing else,
+with `command`/`positionals` `Pick`ed from the wire so they cannot drift from it. Every descriptor
+resolver already read only those three, in two spellings (the full type and a `Pick` of it); one
+narrow name replaced both.
 
-**The remaining 7 are positions, not debt.** 4 are `AgentDeviceClient` used as an opaque handle;
-the facade is built from `commands/`'s own `NAVIGATION_COMMAND_PROJECTIONS`, so this is a genuine
-zone-level cycle and breaking it means deciding where that registry belongs. 3 are the ADR 0003
-daemon descriptor, whose `DaemonCommandRoute` is `keyof typeof DAEMON_ROUTE_HANDLERS` — derived from
-what the server implements, so moving it down would mean re-declaring route names plus a gate to
-prove the handler map still covers them. Both are argued at `TYPE_INVERSION_BASELINE`.
+**The remaining 7 are positions, not debt** — each for a mechanical reason, not an appeal to an ADR:
+
+- **4 × `AgentDeviceClient`** (`commands/command-contract.ts`, `commands/command-surface.ts`,
+  `commands/family/types.ts`, `mcp/command-tools.ts`). The facade cannot move below `commands/`
+  because it is *built from* the command surface: `client/client-types.ts` imports
+  `ProjectedNavigationCommandClient` from `commands/system/navigation-projection.ts`. That is a real
+  zone-level type cycle, and breaking it means deciding where the projection registry belongs — a
+  design call, not a file move. A narrower port does not exist either: 4 files *name* the facade,
+  but 26 call sites use methods across 13 of its namespaces, so any port would re-declare it.
+- **2 × `DaemonCommandDescriptor`** (`core/command-descriptor/derive.ts`, `.../types.ts`). It is
+  *stated in terms of* the server-private `daemon/types.ts` `DaemonRequest` —
+  `refFrameEffect?: (req: DaemonRequest) => RefFrameEffect`,
+  `allowSessionlessDefaultDevice?: (req: DaemonRequest) => boolean` — so it cannot be declared below
+  the daemon. Having `core/` re-declare a parallel 13-field shape instead would trade one erased
+  edge for a second source of truth.
+- **1 × `DaemonCommandRoute`** (`commands/command-explain.ts`). It is
+  `keyof typeof DAEMON_ROUTE_HANDLERS` — *computed from* the daemon's handler table, so it cannot
+  exist below that table. `command-explain.ts` uses it to key an exhaustive
+  `Record<DaemonCommandRoute, string>` of owner files; a hand-written union in `contracts/` would
+  drop exactly that exhaustiveness.
+
+All three are argued at `TYPE_INVERSION_BASELINE` in `scripts/layering/check.ts`, next to the
+numbers they explain.
 
 ## 0b. The biggest structural finding is not an inversion
 
@@ -164,10 +187,15 @@ the one that was always the real question — whether `NAVIGATION_COMMAND_PROJEC
 
 `TYPE_INVERSION_BASELINE` in `scripts/layering/check.ts` holds both, with the reasoning inline.
 
-**28 + 1 edges → `client/client-types.ts`** — *done, mostly.* Now 5 edges. The vocabulary moved to
-`contracts/client-api.ts`, with `client/client-types.ts` keeping the `AgentDeviceClient` facade and
-re-exporting the rest through one wildcard, so the published `.d.ts` surface is byte-identical
-(verified by diffing the built `index.d.ts` name set against `main`: 216 names, no change).
+**28 + 1 edges → `client/client-types.ts`** — *done, mostly.* Now 5 edges. The vocabulary moved into
+the `contracts/client-*.ts` family files — one file per command/domain family, largest 137 LOC —
+with `client/client-types.ts` keeping the `AgentDeviceClient` facade and re-exporting the rest
+through one wildcard per family. The published surface is unchanged, verified two ways against
+`main`: the exported-name set of all 11 published entrypoints is identical (70 names), and every
+declaration in the built `index.d.ts` is byte-identical after normalization (0 names added, 0 shapes
+changed). `index.d.ts` in fact got *smaller* — 1,726 → 1,682 lines — because 10 declarations that
+`main` duplicated into it (the Metro option/result shapes, `ScrollInputDirection`) now resolve
+through a shared chunk once the vocabulary sits below both its consumers.
 
 The mutual coupling this section already warned about is what set the floor. Eight shapes could NOT
 move down, because each is stated in terms of a HIGHER-ranked zone:

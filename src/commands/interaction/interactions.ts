@@ -1,11 +1,10 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type {
-  ElementTarget,
   FillOptions,
-  InteractionTarget,
   LongPressOptions,
   TypeTextOptions,
-} from '../../contracts/client-api.ts';
+} from '../../contracts/client-gesture.ts';
+import type { ElementTarget, InteractionTarget } from '../../contracts/client-target.ts';
 import {
   readFillTargetFromPositionals,
   readInteractionTargetFromPositionals,

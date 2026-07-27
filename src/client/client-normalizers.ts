@@ -11,15 +11,17 @@ import {
 } from '../kernel/device.ts';
 import { leaseScopeFromOptions, leaseScopeToRequestMeta } from '../core/lease-scope.ts';
 import type {
+  AppDeployResult,
+  AppInstallFromSourceResult,
+  MaterializationReleaseResult,
+} from '../contracts/client-app.ts';
+import type {
   AgentDeviceDevice,
   AgentDeviceSession,
   AgentDeviceSessionDevice,
-  AppDeployResult,
-  AppInstallFromSourceResult,
-  InternalRequestOptions,
-  MaterializationReleaseResult,
   StartupPerfSample,
-} from '../contracts/client-api.ts';
+} from '../contracts/client-device-view.ts';
+import type { InternalRequestOptions } from '../contracts/client-request.ts';
 import type { TargetShutdownResult } from '../contracts/target-shutdown-contract.ts';
 import {
   asRecord,

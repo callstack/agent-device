@@ -1,15 +1,17 @@
 import type {
-  AgentDeviceDevice,
-  AgentDeviceIdentifiers,
-  AgentDeviceSession,
-  AgentDeviceSessionDevice,
   AppCloseResult,
   AppDeployResult,
   AppInstallFromSourceResult,
   AppOpenResult,
-  CaptureSnapshotResult,
-  SessionCloseResult,
-} from './client-api.ts';
+} from './client-app.ts';
+import type { CaptureSnapshotResult } from './client-capture.ts';
+import type { AgentDeviceIdentifiers } from './client-connection.ts';
+import type {
+  AgentDeviceDevice,
+  AgentDeviceSession,
+  AgentDeviceSessionDevice,
+} from './client-device-view.ts';
+import type { SessionCloseResult } from './client-session.ts';
 import {
   publicSnapshotCaptureAnnotations,
   type SnapshotCaptureAnnotations,

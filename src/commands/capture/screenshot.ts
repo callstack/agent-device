@@ -1,5 +1,5 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { CaptureScreenshotOptions } from '../../contracts/client-api.ts';
+import type { CaptureScreenshotOptions } from '../../contracts/client-capture.ts';
 import { SESSION_SURFACES } from '../../contracts/session-surface.ts';
 import {
   SCREENSHOT_COMMAND_FLAG_KEYS,

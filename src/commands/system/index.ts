@@ -1,4 +1,4 @@
-import type { ClipboardCommandOptions } from '../../contracts/client-api.ts';
+import type { ClipboardCommandOptions } from '../../contracts/client-system.ts';
 import type { BackMode } from '../../contracts/back-mode.ts';
 import { BACK_MODES } from '../../contracts/back-mode.ts';
 import { parseDeviceRotation, DEVICE_ROTATIONS } from '../../contracts/device-rotation.ts';

@@ -3,7 +3,7 @@ import type {
   MetroPrepareResult,
   MetroReloadOptions,
   MetroReloadResult,
-} from '../../contracts/client-api.ts';
+} from '../../contracts/metro.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import {

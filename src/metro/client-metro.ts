@@ -109,13 +109,6 @@ export type ReloadMetroOptions = {
   timeoutMs?: number | string;
 };
 
-/**
- * `transport` says which channel delivered the reload: `http` for the classic GET /reload route,
- * `message-socket` for the /message websocket broadcast used when the server has no HTTP reload
- * route (Expo). `status`/`body` always describe the HTTP probe; on the websocket path `reloadUrl`
- * is the ws(s) message-socket URL.
- */
-
 type ProxyBridgeRequestOptions = {
   baseUrl: string;
   bearerToken: string;

@@ -1,6 +1,6 @@
 import { ALERT_ACTIONS, type AlertAction } from '../../contracts/alert-contract.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { AlertCommandOptions } from '../../contracts/client-api.ts';
+import type { AlertCommandOptions } from '../../contracts/client-system.ts';
 import { compactRecord, enumField, integerField } from '../command-input.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import {

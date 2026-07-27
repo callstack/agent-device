@@ -1,11 +1,8 @@
 import type {
   ClickOptions,
   FillOptions,
-  FindOptions,
   FlingOptions,
   FocusOptions,
-  GetOptions,
-  IsOptions,
   LongPressOptions,
   PanOptions,
   PinchOptions,
@@ -16,7 +13,8 @@ import type {
   SwipeOptions,
   TransformGestureOptions,
   TypeTextOptions,
-} from '../../contracts/client-api.ts';
+} from '../../contracts/client-gesture.ts';
+import type { FindOptions, GetOptions, IsOptions } from '../../contracts/client-selector-read.ts';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import {
   REPEATED_TOUCH_FLAGS,

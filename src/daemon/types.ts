@@ -1,5 +1,6 @@
 import type {
   DaemonArtifact as PublicDaemonArtifact,
+  DaemonRequest as WireRequest,
   DaemonRequestMeta as PublicDaemonRequestMeta,
   DaemonResponse as PublicDaemonResponse,
   DaemonResponseData as PublicDaemonResponseData,
@@ -7,7 +8,6 @@ import type {
   LeaseBackend,
   SessionRuntimeHints as PublicSessionRuntimeHints,
 } from '../kernel/contracts.ts';
-import type { CommandRequest } from '../contracts/command-request.ts';
 import type { CommandFlags } from '../contracts/command-flags.ts';
 import type { GestureReferenceFrame, ScrollDirection } from '../contracts/scroll-gesture.ts';
 import type { LogBackend } from '../contracts/logs.ts';
@@ -117,14 +117,16 @@ type DaemonRequestInternal = {
 };
 
 /**
- * The server-side request: the shared `CommandRequest` (wire shape with typed flags) plus what
- * only the daemon may see. `token` and `session` are required by the time a request is dispatched,
- * and `internal` carries `SessionState` callbacks and the admitted lease — which is why this type
- * stays in the daemon while `CommandRequest` sits in contracts for everyone else.
+ * The server-side request: the wire shape plus what only the daemon may see. `token` and `session`
+ * are required by the time a request is dispatched, `flags` is narrowed to the `CommandFlags`
+ * vocabulary the wire cannot enforce, and `internal` carries `SessionState` callbacks and the
+ * admitted lease — which is why this type stays in the daemon. Zones below it that only need to
+ * classify a command take `contracts/dispatched-command.ts` instead.
  */
-export type DaemonRequest = Omit<CommandRequest, 'token' | 'session' | 'meta'> & {
+export type DaemonRequest = Omit<WireRequest, 'token' | 'session' | 'flags' | 'meta'> & {
   token: string;
   session: string;
+  flags?: CommandFlags;
   meta?: DaemonRequestMeta;
   internal?: DaemonRequestInternal;
 };

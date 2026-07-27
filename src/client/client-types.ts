@@ -1,22 +1,47 @@
 // The published Node client surface.
 //
 // The VOCABULARY it is stated in terms of — connection config, the device/session views, and every
-// per-command Options/Result shape — lives in contracts/client-api.ts, below both this zone and
-// `commands/`. R2 forbids the reverse import, so a shape both surfaces need has to sit below both.
+// per-command Options/Result shape — lives in the contracts/client-*.ts family files, one file per
+// command/domain family. Both this module and `commands/` (the CLI and daemon command surface) are
+// stated in terms of that vocabulary, and R2 forbids `commands/` importing `client/`, so a shape
+// both surfaces need has to sit below both.
 //
 // What is still declared HERE is the `AgentDeviceClient` facade plus the shapes that are themselves
-// stated in terms of a HIGHER-ranked zone — `commands/` (navigation projection, ScrollInputDirection)
-// and `metro/` (prepare/reload results). Declaring those in contracts/ would trade 28
-// commands->client inversions for contracts->commands and contracts->metro ones: the foundation
-// depending on the layers above it, which is worse. They can move once their upstream declarations
-// do — see docs/dependency-graph-findings.md.
+// stated in terms of a HIGHER-ranked zone: `commands/system/navigation-projection.ts` (the projected
+// navigation client) and `core/` (`CommandResult`, `BatchRunResult`). Declaring those in contracts/
+// would trade 28 commands->client inversions for contracts->commands and contracts->core ones — the
+// foundation depending on the layers above it, which is worse. They can move once their upstream
+// declarations do; see docs/dependency-graph-findings.md §0, which also explains why the facade's
+// own 4 remaining inversions are a position rather than debt.
 //
 // The published surface is assembled in agent-device-client.ts, which re-exports BOTH homes, so no
 // name became unreachable from the package entrypoint.
 
-// The relocated vocabulary keeps its published import path through this module: one wildcard
-// rather than 84 named re-exports, so no name is published twice under two spellings.
-export type * from '../contracts/client-api.ts';
+// The relocated vocabulary keeps its published import path through this module — a wildcard per
+// family rather than 84 named re-exports, so no name is published twice under two spellings.
+export type * from '../contracts/client-app.ts';
+export type * from '../contracts/client-capture.ts';
+export type * from '../contracts/client-connection.ts';
+export type * from '../contracts/client-device-view.ts';
+export type * from '../contracts/client-gesture.ts';
+export type * from '../contracts/client-lease.ts';
+export type * from '../contracts/client-observability.ts';
+export type * from '../contracts/client-replay.ts';
+export type * from '../contracts/client-request.ts';
+export type * from '../contracts/client-selector-read.ts';
+export type * from '../contracts/client-session.ts';
+export type * from '../contracts/client-settings.ts';
+export type * from '../contracts/client-system.ts';
+export type * from '../contracts/client-target.ts';
+
+// The Metro command vocabulary answers its question in the contracts/metro.ts domain file; named
+// rather than wildcarded so the daemon-side Metro shapes there stay out of the published surface.
+export type {
+  MetroPrepareOptions,
+  MetroPrepareResult,
+  MetroReloadOptions,
+  MetroReloadResult,
+} from '../contracts/metro.ts';
 
 // Contracts/kernel types re-exported into the PUBLISHED surface: `agent-device-client.ts` picks
 // these up via `export type *`, and that is their only job — every internal consumer imports
@@ -37,13 +62,6 @@ export type { AppleOS } from '../kernel/device.ts';
 export type { JsonObject } from '../contracts/json.ts';
 
 import type {
-  AgentDeviceCapabilitiesResult,
-  AgentDeviceClientConfig,
-  AgentDeviceDevice,
-  AgentDeviceRequestOverrides,
-  AgentDeviceSelectionOptions,
-  AgentDeviceSession,
-  AlertCommandOptions,
   AppCloseOptions,
   AppCloseResult,
   AppDeployOptions,
@@ -55,66 +73,91 @@ import type {
   AppOpenOptions,
   AppOpenResult,
   AppPushOptions,
-  AppStateCommandOptions,
   AppTriggerEventOptions,
-  AudioOptions,
-  BatchRunOptions,
+  MaterializationReleaseOptions,
+  MaterializationReleaseResult,
+} from '../contracts/client-app.ts';
+import type {
   CaptureDiffOptions,
   CaptureScreenshotOptions,
   CaptureScreenshotResult,
   CaptureSnapshotOptions,
   CaptureSnapshotResult,
-  ClickOptions,
-  ClipboardCommandOptions,
-  CloudArtifactsOptions,
-  CommandRequestResult,
-  DeviceBootOptions,
+} from '../contracts/client-capture.ts';
+import type {
+  AgentDeviceClientConfig,
+  AgentDeviceRequestOverrides,
+  AgentDeviceSelectionOptions,
   DeviceCommandBaseOptions,
+} from '../contracts/client-connection.ts';
+import type {
+  AgentDeviceCapabilitiesResult,
+  AgentDeviceDevice,
+  AgentDeviceSession,
+  DeviceBootOptions,
   DeviceShutdownOptions,
-  DoctorCommandOptions,
-  EventsOptions,
+} from '../contracts/client-device-view.ts';
+import type {
+  ClickOptions,
   FillOptions,
-  FindOptions,
   FlingOptions,
   FocusOptions,
-  GetOptions,
-  IsOptions,
-  KeyboardCommandOptions,
+  LongPressOptions,
+  PanOptions,
+  PinchOptions,
+  PressOptions,
+  RotateGestureOptions,
+  ScrollOptions,
+  SwipeGestureOptions,
+  SwipeOptions,
+  TransformGestureOptions,
+  TypeTextOptions,
+} from '../contracts/client-gesture.ts';
+import type {
+  CloudArtifactsOptions,
   Lease,
   LeaseAllocateOptions,
   LeaseScopedOptions,
+} from '../contracts/client-lease.ts';
+import type {
+  AudioOptions,
+  EventsOptions,
   LogsOptions,
-  LongPressOptions,
-  MaterializationReleaseOptions,
-  MaterializationReleaseResult,
+  NetworkOptions,
+  PerfOptions,
+  RecordOptions,
+  TraceOptions,
+} from '../contracts/client-observability.ts';
+import type {
+  BatchRunOptions,
+  ReplayRunOptions,
+  ReplayTestOptions,
+} from '../contracts/client-replay.ts';
+import type { CommandRequestResult } from '../contracts/client-request.ts';
+import type { FindOptions, GetOptions, IsOptions } from '../contracts/client-selector-read.ts';
+import type {
+  SessionCloseResult,
+  SessionSaveScriptOptions,
+  SessionSaveScriptResult,
+} from '../contracts/client-session.ts';
+import type { SettingsUpdateOptions } from '../contracts/client-settings.ts';
+import type {
+  AlertCommandOptions,
+  AppStateCommandOptions,
+  ClipboardCommandOptions,
+  DoctorCommandOptions,
+  KeyboardCommandOptions,
+  PrepareCommandOptions,
+  ReactNativeCommandOptions,
+  ViewportCommandOptions,
+  WaitCommandOptions,
+} from '../contracts/client-system.ts';
+import type {
   MetroPrepareOptions,
   MetroPrepareResult,
   MetroReloadOptions,
   MetroReloadResult,
-  NetworkOptions,
-  PanOptions,
-  PerfOptions,
-  PinchOptions,
-  PrepareCommandOptions,
-  PressOptions,
-  ReactNativeCommandOptions,
-  RecordOptions,
-  ReplayRunOptions,
-  ReplayTestOptions,
-  RotateGestureOptions,
-  ScrollOptions,
-  SessionCloseResult,
-  SessionSaveScriptOptions,
-  SessionSaveScriptResult,
-  SettingsUpdateOptions,
-  SwipeGestureOptions,
-  SwipeOptions,
-  TraceOptions,
-  TransformGestureOptions,
-  TypeTextOptions,
-  ViewportCommandOptions,
-  WaitCommandOptions,
-} from '../contracts/client-api.ts';
+} from '../contracts/metro.ts';
 
 import type { RotateCommandResult } from '../contracts/navigation.ts';
 
@@ -190,22 +233,6 @@ type DeprecatedCommandClient = {
    */
   rotate: (options: RotateCommandOptions) => Promise<RotateCommandResult>;
 };
-
-/**
- * Opt-in (#1101): after the action, wait for the UI to go quiet and return the
- * settled diff vs the pre-action tree (`settle` on the result) in the same
- * response. Best-effort — never fails the action. `settleQuietMs` tunes the
- * quiet window (default 500ms); `timeoutMs` bounds the settle wait (default
- * 10s) when `settle` is true. A bare `timeoutMs` without `settle` is ignored
- * for compatibility; `settleQuietMs` still requires `settle`.
- */
-
-/**
- * #1271 stage 2 (ADR 0012 amendment): `get`/`is`/`find` are observation-only
- * and excluded from a repair-armed heal by default. `record` forces this
- * action through (the corrective-read case); `noRecord` continues to opt the
- * action out entirely. Mutually exclusive.
- */
 
 export type AgentDeviceClient = {
   command: AgentDeviceCommandClient;

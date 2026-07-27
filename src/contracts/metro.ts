@@ -1,3 +1,4 @@
+import type { MetroBridgeScope } from './companion-tunnel-scope.ts';
 import type { SessionRuntimeHints } from '../kernel/contracts.ts';
 
 // Metro vocabulary shared by the command surface (which validates it) and metro/ (which
@@ -45,6 +46,12 @@ export type PrepareMetroRuntimeResult = {
   bridge: MetroBridgeResult | null;
 };
 
+/**
+ * `transport` says which channel delivered the reload: `http` for the classic GET /reload route,
+ * `message-socket` for the /message websocket broadcast used when the server has no HTTP reload
+ * route (Expo). `status`/`body` always describe the HTTP probe; on the websocket path `reloadUrl`
+ * is the ws(s) message-socket URL.
+ */
 export type ReloadMetroResult = {
   reloaded: true;
   reloadUrl: string;
@@ -52,3 +59,37 @@ export type ReloadMetroResult = {
   body: string;
   transport: 'http' | 'message-socket';
 };
+
+// The client-facing Metro command vocabulary lives here rather than in a contracts/client-*.ts
+// family file, so that one file answers the Metro question.
+export type MetroPrepareOptions = {
+  projectRoot?: string;
+  kind?: MetroPrepareKind;
+  publicBaseUrl?: string;
+  proxyBaseUrl?: string;
+  bearerToken?: string;
+  bridgeScope?: MetroBridgeScope;
+  launchUrl?: string;
+  companionProfileKey?: string;
+  companionConsumerKey?: string;
+  port?: number;
+  listenHost?: string;
+  statusHost?: string;
+  startupTimeoutMs?: number;
+  probeTimeoutMs?: number;
+  reuseExisting?: boolean;
+  installDependenciesIfNeeded?: boolean;
+  runtimeFilePath?: string;
+  logPath?: string;
+};
+
+export type MetroReloadOptions = {
+  metroHost?: string;
+  metroPort?: number;
+  bundleUrl?: string;
+  timeoutMs?: number;
+};
+
+export type MetroPrepareResult = PrepareMetroRuntimeResult;
+
+export type MetroReloadResult = ReloadMetroResult;

@@ -1,4 +1,4 @@
-import type { InternalRequestOptions } from '../../contracts/client-api.ts';
+import type { InternalRequestOptions } from '../../contracts/client-request.ts';
 import type { CommandFlags } from '../../core/dispatch-context.ts';
 import type { CliFlags } from '../../contracts/cli-flags.ts';
 import type { ClickButton } from '../../contracts/click-button.ts';

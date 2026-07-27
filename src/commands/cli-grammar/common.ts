@@ -1,8 +1,5 @@
-import type {
-  ElementTarget,
-  InteractionTarget,
-  InternalRequestOptions,
-} from '../../contracts/client-api.ts';
+import type { InternalRequestOptions } from '../../contracts/client-request.ts';
+import type { ElementTarget, InteractionTarget } from '../../contracts/client-target.ts';
 import { splitSelectorFromArgs } from '../../selectors/parse.ts';
 import {
   checkElementTargetArgs,

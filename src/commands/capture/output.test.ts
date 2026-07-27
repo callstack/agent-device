@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { attachRefs, type RawSnapshotNode } from '../../kernel/snapshot.ts';
-import type { CaptureSnapshotResult } from '../../contracts/client-api.ts';
+import type { CaptureSnapshotResult } from '../../contracts/client-capture.ts';
 import { snapshotCliOutput } from './output.ts';
 
 function buildResult(raw: RawSnapshotNode[]): CaptureSnapshotResult {

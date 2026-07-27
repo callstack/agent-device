@@ -1,4 +1,4 @@
-import type { CommandRequestResult } from '../../src/contracts/client-api.ts';
+import type { CommandRequestResult } from '../../src/contracts/client-request.ts';
 import type { AgentDeviceClient } from '../../src/client/client-types.ts';
 import { AppError, normalizeError, type NormalizedError } from '../../src/kernel/errors.ts';
 import { snapshotCliOutput } from '../../src/commands/capture/output.ts';
