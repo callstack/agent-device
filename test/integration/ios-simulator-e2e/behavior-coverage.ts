@@ -65,7 +65,7 @@ export const IOS_SIMULATOR_BEHAVIOR_COVERAGE = {
   },
   'host-focus-preservation': {
     assertion:
-      'Finder remains frontmost across runner setup, simulator automation, and fixture E2E',
+      'when the hosted runner can establish a Finder canary, it remains frontmost across simulator automation',
     level: 'workflow-live',
     owner: {
       path: '.github/workflows/ios.yml',

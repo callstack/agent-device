@@ -132,7 +132,6 @@ export async function runStep(
 export function verifyCommand(context: LiveContext, command: string, evidence: string): void {
   const existing = context.commandEvidence[command] ?? [];
   context.commandEvidence[command] = [...existing, evidence];
-  writeCoverageReport(context);
 }
 
 export function verifyBehavior(
@@ -142,7 +141,6 @@ export function verifyBehavior(
 ): void {
   const existing = context.behaviorEvidence[behavior] ?? [];
   context.behaviorEvidence[behavior] = [...existing, evidence];
-  writeCoverageReport(context);
 }
 
 export async function cleanupSession(context: LiveContext): Promise<void> {

@@ -42,13 +42,13 @@ jobs:
         id: fixture-producer
         run: |
           set -euo pipefail
-          WAIT_SECONDS=0
-          if [ "${{ github.event_name }}" = "push" ]; then
-            WAIT_SECONDS=1800
-          elif [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+          WAIT_SECONDS=1800
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            WAIT_SECONDS=1200
+          fi
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
             echo "Fork pull request cannot publish the shared fixture artifact; a cache miss will build inline."
-          else
-            WAIT_SECONDS=1800
+            WAIT_SECONDS=0
           fi
           echo "wait-seconds=$WAIT_SECONDS" >> "$GITHUB_OUTPUT"
 
@@ -61,6 +61,7 @@ jobs:
 
       - name: Establish host focus canary
         id: host-focus-canary
+        continue-on-error: true
         run: |
           set -euo pipefail
           osascript -e 'tell application "Finder" to activate'

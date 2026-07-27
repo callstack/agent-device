@@ -159,7 +159,7 @@ export const IOS_SIMULATOR_E2E_COVERAGE = {
   [C.screenshot]: live('smoke:capture-close', 'captured file has a valid PNG signature'),
   [C.scroll]: live(
     'full:lifecycle-system',
-    'manual downward scroll reveals the offscreen microphone permission state',
+    'bottom-edge traversal executes a live scroll pass and reports the reached edge',
   ),
   [C.settings]: live(
     'full:lifecycle-system',

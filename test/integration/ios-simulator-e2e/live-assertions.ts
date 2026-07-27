@@ -39,8 +39,7 @@ export async function assertElementTextAfterScrolling(
   context: LiveContext,
   selector: string,
   expected: string,
-): Promise<number> {
-  let scrollCount = 0;
+): Promise<void> {
   for (let attempt = 1; attempt <= 4; attempt += 1) {
     const visible = await runStep(
       context,
@@ -51,10 +50,9 @@ export async function assertElementTextAfterScrolling(
     if (visible.status === 0) {
       await assertWaitText(context, expected);
       await assertElementText(context, selector, expected);
-      return scrollCount;
+      return;
     }
     await runStep(context, `scroll toward ${selector}`, ['scroll', 'down', '0.75']);
-    scrollCount += 1;
   }
   assert.fail(`${selector} did not become visible after scrolling`);
 }

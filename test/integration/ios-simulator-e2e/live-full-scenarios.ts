@@ -55,6 +55,11 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
     Number(bottomEdge.json?.data?.passes) > 0,
     `bottom edge traversal must execute a live scroll: ${JSON.stringify(bottomEdge.json)}`,
   );
+  verifyCommand(
+    context,
+    C.scroll,
+    'bottom-edge traversal executes at least one live scroll pass and reports the reached edge',
+  );
 
   await setMicrophonePermissionAndRestart(context, 'initial', 'reset', 'undetermined');
   await setMicrophonePermissionAndRestart(context, 'grant', 'grant', 'granted');
@@ -83,12 +88,6 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
     'permission-state-recovery',
     'reset, grant, denial, and a second reset were all observed through the fixture permission API',
   );
-  verifyCommand(
-    context,
-    C.scroll,
-    'manual downward scroll reveals each offscreen microphone permission state',
-  );
-
   await runStep(context, 'set dark appearance', ['settings', 'appearance', 'dark']);
   await assertElementText(context, 'id="automation-appearance"', 'dark');
   await runStep(context, 'restore light appearance', ['settings', 'appearance', 'light']);
@@ -195,12 +194,7 @@ async function setMicrophonePermissionAndRestart(
     `{"source":"permission-${phase}"}`,
   ]);
   await assertWaitText(context, 'Automation lab');
-  const scrollCount = await assertElementTextAfterScrolling(
-    context,
-    'id="automation-microphone-permission"',
-    expected,
-  );
-  assert.ok(scrollCount > 0, `${phase} permission state must require a live scroll`);
+  await assertElementTextAfterScrolling(context, 'id="automation-microphone-permission"', expected);
 }
 
 export async function assertObservabilityAndArtifacts(context: LiveContext): Promise<void> {

@@ -357,7 +357,8 @@ binary and do not need Metro. Both iOS workflows need `permissions.actions: read
 action deliberately falls back to an expensive inline native build. The pull-request consumer
 polls a cold fingerprint while the producer workflow builds it, preventing two concurrent native
 builds; hits proceed immediately. The pull-request lane also pins Finder as the frontmost host app
-and proves simulator automation does not steal macOS focus.
+and, when the hosted runner can establish that canary, proves simulator automation does not steal
+macOS focus.
 
 Run the static contract and documented live skip locally:
 

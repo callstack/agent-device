@@ -10,34 +10,16 @@ import type { LiveContext, Tier } from './live-harness.ts';
 import { IOS_SIMULATOR_LIVE_SCENARIOS, type IosSimulatorScenario } from './scenarios.ts';
 
 export function assertCoverageComplete(context: LiveContext): void {
-  const requiredScenarios = scenariosForTier(context.tier);
-  const missingScenarios = requiredScenarios
-    .map((scenario) => scenario.id)
-    .filter((id) => !context.completedScenarios.includes(id));
-  const missingCommands = requiredScenarios
-    .flatMap((scenario) => scenario.commands)
-    .filter((command) => (context.commandEvidence[command]?.length ?? 0) === 0);
-  const missingBehaviors = requiredScenarios
-    .flatMap((scenario) => liveBehaviorsForScenario(scenario.id))
-    .filter((behavior) => (context.behaviorEvidence[behavior]?.length ?? 0) === 0);
+  const missing = computeMissing(context);
   assert.deepEqual(
-    { missingBehaviors, missingCommands, missingScenarios },
+    missing,
     { missingBehaviors: [], missingCommands: [], missingScenarios: [] },
     'iOS simulator E2E coverage is incomplete',
   );
 }
 
 export function writeCoverageReport(context: LiveContext): void {
-  const requiredScenarios = scenariosForTier(context.tier);
-  const missingScenarios = requiredScenarios
-    .map((scenario) => scenario.id)
-    .filter((id) => !context.completedScenarios.includes(id));
-  const missingCommands = requiredScenarios
-    .flatMap((scenario) => scenario.commands)
-    .filter((command) => (context.commandEvidence[command]?.length ?? 0) === 0);
-  const missingBehaviors = requiredScenarios
-    .flatMap((scenario) => liveBehaviorsForScenario(scenario.id))
-    .filter((behavior) => (context.behaviorEvidence[behavior]?.length ?? 0) === 0);
+  const missing = computeMissing(context);
   fs.writeFileSync(
     path.join(context.artifactDir, 'coverage-report.json'),
     JSON.stringify(
@@ -45,15 +27,28 @@ export function writeCoverageReport(context: LiveContext): void {
         behaviorEvidence: context.behaviorEvidence,
         commandEvidence: context.commandEvidence,
         completedScenarios: context.completedScenarios,
-        missingBehaviors,
-        missingCommands,
-        missingScenarios,
+        ...missing,
         tier: context.tier,
       },
       null,
       2,
     ),
   );
+}
+
+function computeMissing(context: LiveContext) {
+  const requiredScenarios = scenariosForTier(context.tier);
+  return {
+    missingBehaviors: requiredScenarios
+      .flatMap((scenario) => liveBehaviorsForScenario(scenario.id))
+      .filter((behavior) => (context.behaviorEvidence[behavior]?.length ?? 0) === 0),
+    missingCommands: requiredScenarios
+      .flatMap((scenario) => scenario.commands)
+      .filter((command) => (context.commandEvidence[command]?.length ?? 0) === 0),
+    missingScenarios: requiredScenarios
+      .map((scenario) => scenario.id)
+      .filter((id) => !context.completedScenarios.includes(id)),
+  };
 }
 
 function scenariosForTier(tier: Tier): readonly IosSimulatorScenario[] {
