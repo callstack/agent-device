@@ -23,15 +23,12 @@ export type KernelModule = {
   readonly label: string;
   /** Globs handed to Stryker's `mutate`. */
   readonly mutate: readonly string[];
-  /** Paths this module owns; a trailing `/` marks a directory prefix. */
-  readonly owns: readonly string[];
   /**
-   * Test files whose strength this module's score measures. Editing one of
-   * these is exactly the change the PR lane must re-measure, so they own the
-   * module too. `modules.test.ts` asserts each one exists and actually exercises
-   * the module's sources — no stale or aspirational entries.
+   * Paths this module owns; a trailing `/` marks a directory prefix. Sources
+   * only — the tests whose strength the score measures are derived from the
+   * import graph in `ownership.ts`, never listed here.
    */
-  readonly tests: readonly string[];
+  readonly owns: readonly string[];
 };
 
 export const KERNEL_MODULES: readonly KernelModule[] = [
@@ -40,39 +37,24 @@ export const KERNEL_MODULES: readonly KernelModule[] = [
     label: 'Error retriability + hints',
     mutate: ['src/kernel/errors.ts'],
     owns: ['src/kernel/errors.ts'],
-    tests: ['src/kernel/__tests__/errors.test.ts'],
   },
   {
     id: 'daemon-ref-frame',
     label: 'Ref-frame admission matrix (ADR 0014)',
     mutate: ['src/daemon/ref-frame.ts'],
     owns: ['src/daemon/ref-frame.ts'],
-    tests: [
-      'src/daemon/__tests__/ref-frame.test.ts',
-      'src/daemon/handlers/__tests__/snapshot-scoped-refs.test.ts',
-    ],
   },
   {
     id: 'interaction-settle',
     label: 'Interaction settle decisions',
     mutate: ['src/commands/interaction/runtime/settle.ts'],
     owns: ['src/commands/interaction/runtime/settle.ts'],
-    tests: [
-      'src/commands/interaction/runtime/settle.test.ts',
-      'src/daemon/handlers/__tests__/interaction-settle.test.ts',
-    ],
   },
   {
     id: 'scroll-edge-state',
     label: 'Scroll edge-state detection',
     mutate: ['src/utils/scroll-edge-state.ts'],
     owns: ['src/utils/scroll-edge-state.ts'],
-    // No mirrored test file: edge-state decisions are only reached through the
-    // gesture/dispatch callers, which is also why this kernel scores lowest.
-    tests: [
-      'src/commands/interaction/runtime/gestures.test.ts',
-      'src/core/__tests__/dispatch-scroll.test.ts',
-    ],
   },
   {
     id: 'selectors',
@@ -80,7 +62,6 @@ export const KERNEL_MODULES: readonly KernelModule[] = [
     mutate: ['src/selectors/**/*.ts', '!src/selectors/**/*.test.ts', '!src/selectors/__tests__/**'],
     // Selector tests live under the owned directory, so the prefix covers them.
     owns: ['src/selectors/'],
-    tests: ['src/selectors/__tests__/'],
   },
 ];
 
@@ -108,15 +89,15 @@ export function normalizePath(filePath: string): string {
 }
 
 /**
- * Which kernel module owns a repository-relative path, if any.
+ * Which kernel module owns a repository-relative *source* path, if any.
  *
- * Test files under an owned root count as owned: strengthening (or weakening) a
- * kernel's tests is exactly the change whose mutation score must be re-measured.
+ * Test-file attribution is derived from the import graph — see
+ * `derivedAffectedModules` in `ownership.ts`, which is what the PR lane calls.
  */
 export function moduleForFile(filePath: string): ModuleId | undefined {
   const normalized = normalizePath(filePath);
   for (const module of KERNEL_MODULES) {
-    for (const owned of [...module.owns, ...module.tests]) {
+    for (const owned of module.owns) {
       const match = owned.endsWith('/') ? normalized.startsWith(owned) : normalized === owned;
       if (match) return module.id;
     }
@@ -124,7 +105,7 @@ export function moduleForFile(filePath: string): ModuleId | undefined {
   return undefined;
 }
 
-/** Kernel modules affected by a diff, for PR-scoped runs. */
+/** Kernel modules whose registry-owned paths a diff touches. */
 export function affectedModules(changedFiles: readonly string[]): ModuleId[] {
   const ids = new Set<ModuleId>();
   for (const file of changedFiles) {

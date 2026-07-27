@@ -32,7 +32,7 @@ test('every kernel path a PR can touch selects the affected mutation job', () =>
     (match) => match.groups!.glob,
   );
   for (const module of KERNEL_MODULES) {
-    for (const owned of [...module.owns, ...module.tests]) {
+    for (const owned of module.owns) {
       const selected = paths.some(
         (glob) =>
           glob === owned ||
@@ -42,6 +42,14 @@ test('every kernel path a PR can touch selects the affected mutation job', () =>
       assert.ok(selected, `no path filter selects ${owned} (module ${module.id})`);
     }
   }
+  // Ownership is derived, so any test in src/ can own a kernel; the filter must
+  // let all of them through and leave the decision to the `select` job. A
+  // narrower filter is exactly the omission the derivation exists to prevent.
+  assert.ok(
+    paths.includes('src/**/*.test.ts'),
+    'the PR lane must trigger on every src test, since test ownership is derived',
+  );
+  assert.match(workflow('mutation-affected.yml'), /mutation:affected --list-affected/);
   // The lane's own sources fail open into it too: a ratchet or baseline edit must
   // prove itself against real mutants, not against a stale report.
   for (const own of ['scripts/mutation/**', 'stryker.config.json', 'mutation-baselines/**']) {

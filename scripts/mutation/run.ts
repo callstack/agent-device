@@ -18,13 +18,8 @@ import { pathToFileURL } from 'node:url';
 import { runCmdStreaming, runCmdSync } from '../../src/utils/exec.ts';
 import { parseScriptArgs } from '../lib/cli-args.ts';
 import { laneEnvelope } from '../lib/lane-envelope.ts';
-import {
-  affectedModules,
-  ALL_MODULE_IDS,
-  isModuleId,
-  mutateGlobs,
-  type ModuleId,
-} from './modules.ts';
+import { ALL_MODULE_IDS, isModuleId, mutateGlobs, type ModuleId } from './modules.ts';
+import { derivedAffectedModules } from './ownership.ts';
 import { renderReport } from './report.ts';
 import {
   applyRun,
@@ -61,6 +56,7 @@ const USAGE = `Usage: pnpm mutation:run [options]
   --update          Record the run into the baseline (ratchet + graduation)
   --summary <file>  Also write the markdown report to <file>
   --no-run          Alias for --report with the default report path
+  --list-affected   Print the affected module ids as JSON and exit (shard matrix)
 `;
 
 type Args = {
@@ -71,6 +67,7 @@ type Args = {
   reportDir: string | undefined;
   update: boolean;
   summary: string | undefined;
+  listAffected: boolean;
 };
 
 function parseModules(value: string | undefined): readonly ModuleId[] {
@@ -98,6 +95,7 @@ function parseMutationArgs(argv: readonly string[]): Args {
     update: { type: 'boolean', default: false },
     summary: { type: 'string' },
     'no-run': { type: 'boolean', default: false },
+    'list-affected': { type: 'boolean', default: false },
   });
   return {
     modules: parseModules(values.modules),
@@ -107,6 +105,7 @@ function parseMutationArgs(argv: readonly string[]): Args {
     reportDir: values['report-dir'],
     update: Boolean(values.update),
     summary: values.summary,
+    listAffected: Boolean(values['list-affected']),
   };
 }
 
@@ -192,47 +191,66 @@ function emit(markdown: string, summaryPath: string | undefined): void {
 }
 
 /**
+ * How far the lane got. A run that dies in `stryker` or `report` is exactly the
+ * failure the freshness monitor must see, so the stage rides in the envelope
+ * rather than only in the job log.
+ */
+type Stage = 'select' | 'stryker' | 'report' | 'ratchet' | 'complete';
+
+type LaneState = {
+  stage: Stage;
+  provenance: Provenance;
+  baseline: Baseline;
+  modules: readonly ModuleId[];
+  affected: boolean;
+  scores: readonly ModuleScore[];
+  result: RatchetResult | undefined;
+  error: string | undefined;
+};
+
+/**
  * Scheduled-lane artifact envelope (#1430). Without it a downloaded report cannot
  * say which commit or Stryker/config version produced it, how long the sweep took,
  * or whether it passed — freshness and tool-drift monitoring would have to parse
  * logs.
+ *
+ * Written on every exit path, including a crashed setup or a Stryker run that
+ * produced no report: a lane that fails before it can measure anything is the
+ * dark-lane case, and an absent envelope is indistinguishable from a lane that
+ * never ran.
  */
-function writeEnvelope(
-  provenance: Provenance,
-  scores: readonly ModuleScore[],
-  baseline: Baseline,
-  result: RatchetResult,
-  options: { startedAtMs: number; affected: boolean; modules: readonly ModuleId[] },
-): void {
+function writeEnvelope(state: LaneState, startedAtMs: number): void {
   const envelope = laneEnvelope({
     lane: LANE_ID,
     commit: runCmdSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot }).stdout.trim(),
-    tool: { stryker: provenance.strykerVersion },
-    configHash: provenance.configHash,
-    startedAtMs: options.startedAtMs,
-    result: result.failed ? 'fail' : 'pass',
+    tool: { stryker: state.provenance.strykerVersion },
+    configHash: state.provenance.configHash,
+    startedAtMs,
+    result: state.stage === 'complete' && !state.result?.failed ? 'pass' : 'fail',
     data: {
-      scope: options.affected ? 'affected' : 'full-sweep',
-      modules: options.modules.map((id) => {
-        const score = scores.find((entry) => entry.module === id);
+      scope: state.affected ? 'affected' : 'full-sweep',
+      stage: state.stage,
+      error: state.error ?? null,
+      modules: state.modules.map((id) => {
+        const score = state.scores.find((entry) => entry.module === id);
         return {
           id,
           score: score?.score ?? null,
           killed: score?.killed ?? null,
           total: score?.total ?? null,
-          status: result.verdicts.find((verdict) => verdict.module === id)?.status ?? null,
+          status: state.result?.verdicts.find((verdict) => verdict.module === id)?.status ?? null,
         };
       }),
-      gating: baseline.gating,
-      stableRuns: baseline.stableRuns,
-      requiredStableRuns: baseline.requiredStableRuns,
+      gating: state.baseline.gating,
+      stableRuns: state.baseline.stableRuns,
+      requiredStableRuns: state.baseline.requiredStableRuns,
     },
   });
   const file = path.join(repoRoot, ENVELOPE_PATH);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `${JSON.stringify(envelope, null, 2)}\n`);
   process.stdout.write(
-    `\nLane envelope (${ENVELOPE_PATH}): ${envelope.result} in ` +
+    `\nLane envelope (${ENVELOPE_PATH}): ${envelope.result} at stage ${state.stage} in ` +
       `${Math.round(envelope.durationMs / 1000)}s at ${envelope.commit.slice(0, 12)}.\n`,
   );
 }
@@ -262,48 +280,85 @@ async function produceReport(
   return readReport(reportPath ?? DEFAULT_REPORT_PATH);
 }
 
-async function main(argv = process.argv.slice(2)): Promise<number> {
-  const startedAtMs = Date.now();
-  const args = parseMutationArgs(argv);
-  const modules = args.affected ? affectedModules(changedFiles(args.base)) : args.modules;
-  if (modules.length === 0) {
+function recordRun(args: Args, state: LaneState, result: RatchetResult): void {
+  const next = applyRun(state.baseline, state.scores, result, {
+    provenance: state.provenance,
+    now: new Date().toISOString(),
+    // Only the full sweep proves stability; an affected subset says nothing
+    // about the modules it skipped.
+    countsTowardGraduation: !args.affected && state.modules.length === ALL_MODULE_IDS.length,
+  });
+  writeBaseline(next);
+  process.stdout.write(
+    `\nBaseline updated (${BASELINE_PATH}): ${next.stableRuns}/${next.requiredStableRuns} ` +
+      `stable runs, gating ${next.gating ? 'on' : 'off'}.\n`,
+  );
+}
+
+async function sweep(args: Args, state: LaneState): Promise<number> {
+  // Test attribution is derived from the import graph, not a listed set of test
+  // files: see scripts/mutation/ownership.ts.
+  state.modules = args.affected
+    ? derivedAffectedModules(changedFiles(args.base), repoRoot)
+    : args.modules;
+  if (state.modules.length === 0) {
     process.stdout.write('mutation: no decision-kernel modules affected — nothing to mutate.\n');
+    state.stage = 'complete';
     return 0;
   }
 
+  state.stage = args.reportDir || args.report ? 'report' : 'stryker';
   const report = args.reportDir
     ? readShardedReports(args.reportDir)
-    : await produceReport(modules, args.report);
-  const provenance = readProvenance();
-  const baseline = readBaseline();
-  const scores = summarizeReport(report, modules);
-  const result = evaluateRatchet(scores, baseline, provenance);
+    : await produceReport(state.modules, args.report);
+
+  state.stage = 'ratchet';
+  state.scores = summarizeReport(report, state.modules);
+  const result = evaluateRatchet(state.scores, state.baseline, state.provenance);
+  state.result = result;
 
   const title = args.affected
     ? 'Mutation score — affected decision kernels'
     : 'Mutation score — decision kernels';
-  emit(renderReport(result, baseline, provenance, { title }), args.summary);
-  writeEnvelope(provenance, scores, baseline, result, {
-    startedAtMs,
-    affected: args.affected,
-    modules,
-  });
+  emit(renderReport(result, state.baseline, state.provenance, { title }), args.summary);
 
-  if (args.update) {
-    const next = applyRun(baseline, scores, result, {
-      provenance,
-      now: new Date().toISOString(),
-      // Only the full sweep proves stability; an affected subset says nothing
-      // about the modules it skipped.
-      countsTowardGraduation: !args.affected && modules.length === ALL_MODULE_IDS.length,
-    });
-    writeBaseline(next);
-    process.stdout.write(
-      `\nBaseline updated (${BASELINE_PATH}): ${next.stableRuns}/${next.requiredStableRuns} ` +
-        `stable runs, gating ${next.gating ? 'on' : 'off'}.\n`,
-    );
-  }
+  if (args.update) recordRun(args, state, result);
+  state.stage = 'complete';
   return result.failed ? 1 : 0;
+}
+
+async function main(argv = process.argv.slice(2)): Promise<number> {
+  const startedAtMs = Date.now();
+  const args = parseMutationArgs(argv);
+  if (args.listAffected) {
+    // Selection only — no lane run, so no envelope. The shard jobs that consume
+    // this matrix each write their own.
+    process.stdout.write(
+      `${JSON.stringify(derivedAffectedModules(changedFiles(args.base), repoRoot))}\n`,
+    );
+    return 0;
+  }
+  // Provenance and baseline are read before any work so a crashed sweep still
+  // reports which tool and config it crashed with.
+  const state: LaneState = {
+    stage: 'select',
+    provenance: readProvenance(),
+    baseline: readBaseline(),
+    modules: args.modules,
+    affected: args.affected,
+    scores: [],
+    result: undefined,
+    error: undefined,
+  };
+  try {
+    return await sweep(args, state);
+  } catch (error: unknown) {
+    state.error = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`mutation: ${state.error}\n`);
+    return 1;
+  } finally {
+    writeEnvelope(state, startedAtMs);
+  }
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

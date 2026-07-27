@@ -8,27 +8,26 @@ name: Mutation Affected
 # sweeps (mutation-weekly.yml). Until then it is a report with the same numbers,
 # so the gate's first failing day is not also its first running day.
 #
-# Scope is the AFFECTED modules only (changed file in the kernel registry -> its
-# mutants). The weekly run stays the full sweep.
+# Scope is the AFFECTED modules only, and affectedness is DERIVED from the import
+# graph (scripts/mutation/ownership.ts): a kernel source, or any test that reaches
+# one. Reaching a kernel is a superset of killing its mutants, so the `select` job
+# frequently returns several modules — sharded like the weekly sweep so the PR's
+# wall clock is one module, not their sum. The weekly run stays the full sweep.
 
 on:
   pull_request:
     paths:
-      # Kernel sources and the tests whose strength they score, mirroring
-      # `KERNEL_MODULES` (scripts/mutation/workflow.test.ts asserts the parity).
+      # Kernel sources, every src test (ownership is derived, so any test may own
+      # a kernel — `select` decides, not this filter), and the lane's own tooling.
+      # scripts/mutation/workflow.test.ts asserts this covers the registry.
       - "src/kernel/errors.ts"
-      - "src/kernel/__tests__/errors.test.ts"
       - "src/daemon/ref-frame.ts"
-      - "src/daemon/__tests__/ref-frame.test.ts"
-      - "src/daemon/handlers/__tests__/snapshot-scoped-refs.test.ts"
       - "src/commands/interaction/runtime/settle.ts"
-      - "src/commands/interaction/runtime/settle.test.ts"
-      - "src/daemon/handlers/__tests__/interaction-settle.test.ts"
       - "src/utils/scroll-edge-state.ts"
-      - "src/commands/interaction/runtime/gestures.test.ts"
-      - "src/core/__tests__/dispatch-scroll.test.ts"
       - "src/selectors/**"
+      - "src/**/*.test.ts"
       - "scripts/mutation/**"
+      - "scripts/lib/**"
       - "stryker.config.json"
       - "mutation-baselines/**"
       - ".github/workflows/mutation-affected.yml"
@@ -41,10 +40,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  mutation-affected:
-    name: Affected decision-kernel mutants
+  select:
+    name: Select affected kernels
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 10
+    outputs:
+      modules: ${{ steps.select.outputs.modules }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -57,8 +58,77 @@ jobs:
       - name: Ratchet self-test
         run: pnpm mutation:test
 
-      - name: Run affected mutants
-        run: pnpm mutation:affected --base "origin/${{ github.event.pull_request.base.ref }}"
+      - id: select
+        name: Derive affected modules
+        run: |
+          modules=$(pnpm --silent mutation:affected --list-affected \
+            --base "origin/${{ github.event.pull_request.base.ref }}" | tail -n1)
+          echo "modules=$modules" >> "$GITHUB_OUTPUT"
+          echo "Affected decision kernels: $modules" >> "$GITHUB_STEP_SUMMARY"
+
+  mutants:
+    name: Mutants (${{ matrix.module }})
+    needs: select
+    if: needs.select.outputs.modules != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        module: ${{ fromJSON(needs.select.outputs.modules) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Run mutants for ${{ matrix.module }}
+        run: pnpm mutation:run --modules ${{ matrix.module }}
+
+      - name: Upload shard report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mutation-affected-shard-${{ matrix.module }}
+          path: |
+            .tmp/mutation/mutation.json
+            .tmp/mutation/mutation.html
+            .tmp/mutation/lane-envelope.json
+          if-no-files-found: warn
+
+  ratchet:
+    name: Affected decision-kernel mutants
+    needs: [select, mutants]
+    if: always() && needs.select.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Download shard reports
+        if: needs.select.outputs.modules != '[]'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: mutation-affected-shard-*
+          path: .tmp/mutation/shards
+
+      # No shards means no affected kernel: run.ts reports "nothing to mutate"
+      # and still writes the envelope, so the lane is never silently absent.
+      - name: Ratchet the affected modules
+        run: |
+          if [ -d .tmp/mutation/shards ]; then
+            pnpm mutation:check --report-dir .tmp/mutation/shards --affected \
+              --base "origin/${{ github.event.pull_request.base.ref }}"
+          else
+            pnpm mutation:affected --base "origin/${{ github.event.pull_request.base.ref }}"
+          fi
 
       - name: Upload mutation report
         if: always()
@@ -66,7 +136,6 @@ jobs:
         with:
           name: mutation-affected
           path: |
-            .tmp/mutation/mutation.json
-            .tmp/mutation/mutation.html
+            .tmp/mutation/shards
             .tmp/mutation/lane-envelope.json
           if-no-files-found: ignore

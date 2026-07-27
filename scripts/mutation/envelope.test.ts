@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
+import { runCmdSync } from '../../src/utils/exec.ts';
 import { laneEnvelope, LANE_ENVELOPE_SCHEMA_VERSION } from '../lib/lane-envelope.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
@@ -53,6 +54,40 @@ test('a failed ratchet is recorded as a failed lane run', () => {
   });
   assert.equal(envelope.result, 'fail');
   assert.equal(envelope.durationMs, 0);
+});
+
+// A lane that crashes before it can measure anything is the dark-lane case: an
+// absent envelope is indistinguishable from a lane that never ran, so the run
+// script must emit one from its failure path too.
+test('a crashed run still writes an envelope naming the stage it died in', () => {
+  const envelopePath = path.join(repoRoot, '.tmp/mutation/lane-envelope.json');
+  fs.rmSync(envelopePath, { force: true });
+  const result = runCmdSync(
+    'node',
+    [
+      '--experimental-strip-types',
+      'scripts/mutation/run.ts',
+      '--report',
+      '.tmp/mutation/absent-report.json',
+      '--modules',
+      'kernel-errors',
+    ],
+    { cwd: repoRoot, allowFailure: true },
+  );
+  assert.notEqual(result.exitCode, 0, 'a missing report must fail the run');
+  assert.ok(fs.existsSync(envelopePath), 'no envelope written for a crashed run');
+  const envelope = JSON.parse(fs.readFileSync(envelopePath, 'utf8')) as {
+    result: string;
+    tool: Record<string, string>;
+    configHash: string;
+    data: { stage: string; error: string | null };
+  };
+  assert.equal(envelope.result, 'fail');
+  assert.equal(envelope.data.stage, 'report');
+  assert.match(envelope.data.error ?? '', /absent-report\.json/);
+  // Provenance is read before the work, so a crash still reports its tool/config.
+  assert.ok(envelope.tool.stryker);
+  assert.match(envelope.configHash, /^sha256:/);
 });
 
 test('both mutation lanes publish the envelope', () => {

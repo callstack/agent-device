@@ -89,6 +89,13 @@
       ]
     },
     {
+      "comment": "Mutation-lane completeness gate: ownedTestFiles enumerates the whole derived ownership map, which only the assertion in ownership.test.ts consumes — a production consumer would defeat the point.",
+      "file": "scripts/mutation/ownership.ts",
+      "exports": [
+        "ownedTestFiles"
+      ]
+    },
+    {
       "comment": "Help-benchmark conformance seams: helpTopicIds feeds the topic-coverage gate and PRIVATE_AX_RECOVERY_SAMPLE feeds the skillgym suite; both consumers are test-tree files outside --production analysis.",
       "file": "{src/cli/parser/cli-help.ts,scripts/help-conformance-sample-outputs.mjs}",
       "exports": [

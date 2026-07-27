@@ -141,7 +141,8 @@ pnpm mutation:baseline                  # full sweep, then record it (reviewed c
   reported as a job summary plus an artifact. It never commits: the proposed baseline rides in the
   artifact, and applying it is a reviewed `pnpm mutation:baseline` commit, so a score cannot lower
   itself.
-- **PR lane** (`.github/workflows/mutation-affected.yml`) mutates only the modules the diff touches.
+- **PR lane** (`.github/workflows/mutation-affected.yml`) derives the affected modules
+  (`--list-affected`), shards one job per module, and merges them into one verdict.
 - **Ratchet**: scores may only rise. `mutation-baselines/decision-kernels.json` records the
   high-water score per module plus the Stryker version and config content hash that produced it, so a
   score change caused by a tool/config change is reported as provenance drift, never as a
@@ -153,15 +154,35 @@ pnpm mutation:baseline                  # full sweep, then record it (reviewed c
 - **Test scope** is derived from Vitest's module graph (`vitest related` over the mutated files), the
   same delegation `pnpm check:affected` uses; see `scripts/mutation/test-scope.ts` for the three
   groups it drops and why dropping them cannot hide a surviving mutant.
-- **Kernel tests own their module too**: a diff that touches `src/kernel/__tests__/errors.test.ts` or
-  `src/commands/interaction/runtime/settle.test.ts` selects that kernel's mutants, because weakening a
-  test is exactly the change whose score must be re-measured. The registry's `tests` field lists them
-  and `scripts/mutation/modules.test.ts` asserts each listed file actually reaches the kernel through
-  the import graph.
+- **Test ownership is derived, never listed** (`scripts/mutation/ownership.ts`): a test owns every
+  kernel its imports reach, so `src/__tests__/daemon-error.test.ts` selects `kernel-errors` through
+  `src/daemon.ts` without naming it. A listed set of test files would silently omit exactly those
+  indirect tests and rot as tests are added — weakening one would skip the ratchet. Reaching a kernel
+  is a superset of killing its mutants, so the PR lane over-selects on purpose and shards the
+  selected modules; a false positive costs runner minutes, a false negative costs the gate. Non-kernel
+  *sources* are not owned: they can only move a score through those tests, and the weekly sweep
+  re-measures the whole surface.
 - **Lane envelope** (`scripts/lib/lane-envelope.ts`, issue #1430): every run writes
   `.tmp/mutation/lane-envelope.json` — schema version, commit, Stryker version, config hash, seed
-  (`null`; the input is enumerated, not randomized), duration, result, per-module scores — and both
-  workflows upload it, so lane freshness and tool drift are readable without parsing logs.
+  (`null`; the input is enumerated, not randomized), duration, result, stage, per-module scores — and
+  both workflows upload it, so lane freshness and tool drift are readable without parsing logs. It is
+  written on every exit path, including a crash before any mutant runs: an absent envelope would be
+  indistinguishable from a lane that never ran.
+
+## Scheduled lane health (#1430)
+
+Nightly and weekly lanes can stop running — a disabled schedule, a rename, GitHub's 60-day inactivity
+suspension — while PR CI stays green, so nothing fails and nobody notices. `pnpm lane-health`
+(`.github/workflows/lane-health.yml`, daily) derives the lane list from `.github/workflows/` rather
+than a hand-maintained list, reads each lane's scheduled runs through `gh`, and reports:
+
+- `dark` — two consecutive cadences missed (the cadence comes from the lane's own `cron`);
+- `failing` — two consecutive scheduled runs concluded non-success (cancellations excluded);
+- `never-run` — declared longer than two cadences ago and still never fired.
+
+One miss is a runner hiccup; two is the lane not doing its job. Unhealthy lanes ping a single tracking
+issue (`--alert`) instead of opening one per run, and the job never fails — a second red lane nobody
+watches is not an alert. `pnpm lane-health:test` covers the model.
 
 ## Live web smoke
 
