@@ -151,17 +151,21 @@ async function resetMicrophonePermissionAndRestart(
   context: LiveContext,
   phase: 'initial' | 'recovery',
 ): Promise<void> {
+  // Terminate the app before resetting TCC so its live permission requester
+  // cannot retain the previous state. Clearing data preserves the installed
+  // cached binary and its permission registration.
+  await runStep(context, `clear fixture state before ${phase} permission reset`, [
+    'settings',
+    'clear-app-state',
+    context.appId,
+  ]);
   await runStep(context, `reset microphone permission for ${phase} prompt`, [
     'settings',
     'permission',
     'reset',
     'microphone',
   ]);
-  await runStep(context, `restart fixture after ${phase} permission reset`, [
-    'open',
-    context.appId,
-    '--relaunch',
-  ]);
+  await runStep(context, `open fixture after ${phase} permission reset`, ['open', context.appId]);
   await runStep(context, `restore automation route after ${phase} permission reset`, [
     'trigger-app-event',
     `fixture.permission.${phase}`,
