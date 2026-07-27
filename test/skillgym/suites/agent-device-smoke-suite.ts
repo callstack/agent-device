@@ -345,6 +345,12 @@ const FIXTURE_SMOKE_CASES: Case[] = [
       /host\.exp\.Exponent/i,
       /exp:\/\/127\.0\.0\.1:8081/i,
     ],
+    // The suite's claim is "a sane plan from the skill plus local help" — so
+    // the run must actually consult local help, and must not execute anything
+    // else while planning. Without these, the case can pass on model prior
+    // alone and the claim is unproven.
+    allowOnlyLocalCliHelpCommands: true,
+    requireLocalCliHelp: true,
   }),
 ];
 

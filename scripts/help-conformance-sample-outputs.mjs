@@ -64,8 +64,9 @@ Detected an overly complex or slow accessibility tree. Fell back to the private-
 @e8 [tab] "Home" [selected]`,
 };
 
-// DEVICE_IN_USE from src/daemon/handlers/session-open.ts: another session owns
-// the device; the hint is buildSessionRecoveryHint(session, 'device-in-use').
+// DEVICE_IN_USE from buildDeviceInUseBySessionError
+// (src/daemon/handlers/session-open.ts) — the parity test drives that exact
+// producer.
 export const DEVICE_IN_USE_SAMPLE = {
   command: `agent-device press 'label="Place order"' --settle`,
   output: `Error (DEVICE_IN_USE): Device is already in use by session "checkout".
@@ -83,18 +84,20 @@ export const STALE_REF_SAMPLE = {
 Hint: Ref @e12 was minted from snapshot s5 but the session's ref frame is now s7 — re-run snapshot -i.`,
 };
 
-// AMBIGUOUS_MATCH from src/daemon/handlers/find.ts buildAmbiguousMatchError;
-// the by-design rejection instead of silent disambiguation. Candidate refs
-// live in details, which the human rendering does not print — the agent must
-// re-observe or narrow, not guess a ref it never saw.
+// AMBIGUOUS_MATCH from buildAmbiguousMatchError (src/daemon/handlers/find.ts)
+// — the parity test drives that exact producer. The by-design rejection
+// instead of silent disambiguation: candidate refs live in details, which the
+// human rendering does not print, so the agent must re-observe or narrow, not
+// guess a ref it never saw.
 export const AMBIGUOUS_MATCH_SAMPLE = {
   command: 'agent-device find text "Follow" press',
   output: `Error (AMBIGUOUS_MATCH): find matched 3 elements for text "Follow". Use a more specific locator or selector.
 Hint: Multiple candidates matched. Narrow the query or pass an exact identifier.`,
 };
 
-// APP_NOT_INSTALLED from src/platforms/apple/core/app-resolution.ts; the hint
-// is defaultHintForCode('APP_NOT_INSTALLED').
+// APP_NOT_INSTALLED from buildAppNotInstalledError
+// (src/platforms/apple/core/app-resolution.ts) — the parity test drives that
+// exact producer; the hint is defaultHintForCode('APP_NOT_INSTALLED').
 export const APP_NOT_INSTALLED_SAMPLE = {
   command: 'agent-device open Shoply --platform ios',
   output: `Error (APP_NOT_INSTALLED): No app found matching "Shoply"

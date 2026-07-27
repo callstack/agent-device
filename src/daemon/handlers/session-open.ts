@@ -559,6 +559,17 @@ function findNewSessionDeviceConflict(params: {
       },
     );
   }
+  return buildDeviceInUseBySessionError(inUse, device);
+}
+
+// Exported as the single by-session DEVICE_IN_USE producer so the
+// help-benchmark sample parity test renders the exact error this handler
+// returns; a message or hint change here fails that gate instead of drifting
+// past it.
+export function buildDeviceInUseBySessionError(
+  inUse: SessionState,
+  device: DeviceInfo,
+): DaemonResponse {
   return errorResponse('DEVICE_IN_USE', `Device is already in use by session "${inUse.name}".`, {
     session: inUse.name,
     deviceId: device.id,

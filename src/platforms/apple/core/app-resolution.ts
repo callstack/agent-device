@@ -59,7 +59,14 @@ export async function resolveIosApp(device: DeviceInfo, app: string): Promise<st
     throw new AppError('INVALID_ARGS', `Multiple apps matched "${app}"`, { matches });
   }
 
-  throw new AppError('APP_NOT_INSTALLED', `No app found matching "${app}"`);
+  throw buildAppNotInstalledError(app);
+}
+
+// Exported as the single name-lookup APP_NOT_INSTALLED producer so the
+// help-benchmark sample parity test renders the exact error this resolver
+// throws; a message change here fails that gate instead of drifting past it.
+export function buildAppNotInstalledError(app: string): AppError {
+  return new AppError('APP_NOT_INSTALLED', `No app found matching "${app}"`);
 }
 
 /**

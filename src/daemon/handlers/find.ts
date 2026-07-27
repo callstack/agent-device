@@ -542,7 +542,10 @@ function publicFindFlags(flags: DaemonRequest['flags']): Record<string, unknown>
   return { ...(stripInternalInteractionFlags(flags) ?? {}) };
 }
 
-function buildAmbiguousMatchError(
+// Exported as the single AMBIGUOUS_MATCH producer so the help-benchmark
+// sample parity test renders the exact error this handler returns; a message
+// change here fails that gate instead of drifting past it.
+export function buildAmbiguousMatchError(
   matches: SnapshotState['nodes'],
   locator: FindLocator,
   query: string,

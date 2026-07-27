@@ -13,10 +13,12 @@ import {
 } from '../help-conformance-sample-outputs.mjs';
 import { interactionCliOutputFormatters } from '../../src/commands/interaction/output.ts';
 import { NEVER_SETTLED_HINT } from '../../src/commands/interaction/runtime/settle.ts';
+import { buildAmbiguousMatchError } from '../../src/daemon/handlers/find.ts';
 import { refMutationAdmissionResponse } from '../../src/daemon/handlers/interaction-ref-policy.ts';
-import { buildSessionRecoveryHint } from '../../src/daemon/session-recovery-hints.ts';
+import { buildDeviceInUseBySessionError } from '../../src/daemon/handlers/session-open.ts';
 import { resolveRefStalenessWarning } from '../../src/daemon/session-snapshot.ts';
 import type { SessionState } from '../../src/daemon/types.ts';
+import { buildAppNotInstalledError } from '../../src/platforms/apple/core/app-resolution.ts';
 import { AppError, normalizeError } from '../../src/kernel/errors.ts';
 import type { SnapshotQualityVerdict } from '../../src/snapshot/snapshot-quality.ts';
 import { renderSnapshotQualityWarnings } from '../../src/snapshot/snapshot-quality.ts';
@@ -154,13 +156,19 @@ test('private-ax recovery sample matches the snapshot renderer and quality warni
   assert.equal(text.trimEnd(), PRIVATE_AX_RECOVERY_SAMPLE.output);
 });
 
-test('device-in-use sample matches the human error rendering and recovery hint', () => {
+test('device-in-use sample matches the real session-open producer', () => {
   const owningSession = { name: 'checkout' } as SessionState;
+  const device = { id: 'SIM-001', name: 'iPhone 17 Pro' } as Parameters<
+    typeof buildDeviceInUseBySessionError
+  >[1];
+  const response = buildDeviceInUseBySessionError(owningSession, device);
+  assert.ok(!response.ok, 'the by-session conflict must be an error response');
   const rendered = renderHumanError(
-    new AppError('DEVICE_IN_USE', 'Device is already in use by session "checkout".', {
-      session: 'checkout',
-      hint: buildSessionRecoveryHint(owningSession, 'device-in-use'),
-    }),
+    new AppError(
+      response.error.code as ConstructorParameters<typeof AppError>[0],
+      response.error.message,
+      response.error.details,
+    ),
   );
   assert.equal(rendered, DEVICE_IN_USE_SAMPLE.output);
 });
@@ -184,19 +192,25 @@ test('stale-ref sample matches the real admission rejection and staleness hint',
   assert.equal(rendered, STALE_REF_SAMPLE.output);
 });
 
-test('ambiguous-match sample matches the human error rendering and default hint', () => {
+test('ambiguous-match sample matches the real find producer and default hint', () => {
+  const matches = [
+    { ref: 'e2', label: 'Follow' },
+    { ref: 'e5', label: 'Follow' },
+    { ref: 'e9', label: 'Follow' },
+  ] as Parameters<typeof buildAmbiguousMatchError>[0];
+  const response = buildAmbiguousMatchError(matches, 'text', 'Follow');
+  assert.ok(!response.ok, 'an ambiguous find must be an error response');
   const rendered = renderHumanError(
     new AppError(
-      'AMBIGUOUS_MATCH',
-      'find matched 3 elements for text "Follow". Use a more specific locator or selector.',
+      response.error.code as ConstructorParameters<typeof AppError>[0],
+      response.error.message,
+      response.error.details,
     ),
   );
   assert.equal(rendered, AMBIGUOUS_MATCH_SAMPLE.output);
 });
 
-test('app-not-installed sample matches the human error rendering and default hint', () => {
-  const rendered = renderHumanError(
-    new AppError('APP_NOT_INSTALLED', 'No app found matching "Shoply"'),
-  );
+test('app-not-installed sample matches the real app-resolution producer and default hint', () => {
+  const rendered = renderHumanError(buildAppNotInstalledError('Shoply'));
   assert.equal(rendered, APP_NOT_INSTALLED_SAMPLE.output);
 });
