@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'vitest';
+import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseReplayInput } from '../../src/compat/replay-input.ts';
 import { AppError } from '../../src/kernel/errors.ts';
-import { parseReplayScriptDetailed, readReplayScriptMetadata } from '../../src/replay/script.ts';
 import {
   REPLAY_COMPAT_CORPUS,
+  REPLAY_COMPAT_RELEASED_TAGS,
   type ReplayCompatCoverage,
   type ReplayCompatEntry,
 } from './manifest.ts';
@@ -25,14 +27,13 @@ const REQUIRED_COVERAGE: ReplayCompatCoverage[] = [
   'wait-landmark',
 ];
 
-function readCorpusScript(entry: ReplayCompatEntry): string {
-  return readFileSync(join(CORPUS_DIR, entry.file), 'utf8');
+function readCorpusScript(entry: ReplayCompatEntry): Buffer {
+  return readFileSync(join(CORPUS_DIR, entry.file));
 }
 
-/** The whole parse surface a `.ad` file meets before replay executes anything. */
-function parseCorpusScript(script: string): void {
-  readReplayScriptMetadata(script);
-  parseReplayScriptDetailed(script);
+/** Git's own object id for a blob, so a mined entry's bytes carry their history. */
+function gitBlobId(bytes: Buffer): string {
+  return createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
 }
 
 function listCorpusScriptFiles(): string[] {
@@ -45,17 +46,21 @@ function listCorpusScriptFiles(): string[] {
 }
 
 describe('replay-compat corpus', () => {
+  // The verdict is asserted through `parseReplayInput` — the same composition
+  // (and the same ordering of the action parse and the metadata read) that
+  // `replay`/`test` hit — so a multi-fault script reports the code and hint
+  // production really surfaces, and moving the boundary breaks this gate.
   test.each(REPLAY_COMPAT_CORPUS.map((entry) => [entry.id, entry] as const))('%s', (_id, entry) => {
-    const script = readCorpusScript(entry);
+    const script = readCorpusScript(entry).toString('utf8');
     if (entry.verdict.kind === 'parses') {
       expect(() => {
-        parseCorpusScript(script);
+        parseReplayInput(script, undefined);
       }).not.toThrow();
       return;
     }
     let thrown: unknown;
     try {
-      parseCorpusScript(script);
+      parseReplayInput(script, undefined);
     } catch (error) {
       thrown = error;
     }
@@ -65,18 +70,33 @@ describe('replay-compat corpus', () => {
     expect(error.message).toContain(entry.verdict.hint);
   });
 
+  // The freeze rule needs teeth: a mined entry's bytes must still hash to the
+  // git object id of the blob it was mined from, so "update the script until the
+  // parser agrees" cannot pass as a corpus update. `pnpm check:replay-compat`
+  // re-derives the same ids from history, which this hash alone cannot do.
+  test.each(REPLAY_COMPAT_CORPUS.map((entry) => [entry.id, entry] as const))(
+    '%s is byte-identical to its pinned source',
+    (_id, entry) => {
+      const bytes = readCorpusScript(entry);
+      if (entry.provenance.kind === 'mined') {
+        expect(gitBlobId(bytes)).toBe(entry.provenance.blob);
+        return;
+      }
+      expect(createHash('sha256').update(bytes).digest('hex')).toBe(entry.provenance.sha256);
+    },
+  );
+
   test('every corpus script is claimed by exactly one manifest entry', () => {
     const claimed = REPLAY_COMPAT_CORPUS.map((entry) => entry.file);
     expect([...claimed].sort()).toEqual(listCorpusScriptFiles().sort());
     expect(new Set(claimed).size).toBe(claimed.length);
   });
 
-  test('entry ids are unique and name the producing released version', () => {
+  test('entry ids are unique and name a released producing version', () => {
     const ids = REPLAY_COMPAT_CORPUS.map((entry) => entry.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const entry of REPLAY_COMPAT_CORPUS) {
-      expect(entry.recordedBy, entry.id).toMatch(/^v\d+\.\d+\.\d+$/);
-      expect(entry.source, entry.id).toContain(entry.recordedBy);
+      expect(REPLAY_COMPAT_RELEASED_TAGS, entry.id).toContain(entry.recordedBy);
       expect(entry.file, entry.id).toContain(`.${entry.recordedBy}.ad`);
     }
   });

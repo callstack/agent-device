@@ -19,7 +19,7 @@ The mapping it encodes, for when you need to run a gate directly or reason about
 | CLI help/guidance (`src/cli/parser/cli-help.ts`, `src/cli-schema/`) | `pnpm exec vitest run src/cli/parser/__tests__ src/cli-schema/command-schema-guards.test.ts scripts/__tests__` — the `scripts/__tests__` gates enforce help-topic benchmark coverage and pin the bench's quoted CLI samples to the real renderers |
 | Help benchmark cases (`scripts/help-conformance-*.mjs`) | `pnpm exec vitest run scripts/__tests__` (deterministic gates); model-backed: `pnpm bench:help-conformance` (paid LLM calls, local only) |
 | SkillGym prompts/assertions | `pnpm test:skillgym:case <case-id>` (broad: `pnpm test:skillgym`, filter with `-- --tag fixture-smoke` or `-- --tag skill-guidance`) — agentic routing + local-help-consumption proof only; command-planning knowledge checks belong in the help bench |
-| `.ad` grammar (`src/replay/script.ts`, gesture arity, replay vars) | `pnpm exec vitest run --project unit-core test/replay-compat` — the frozen replay-compat corpus asserts which released script surfaces still parse; a flipped verdict is edited in `test/replay-compat/manifest.ts`, never in the script |
+| `.ad` grammar (`src/replay/script.ts`, gesture arity, replay vars) | `pnpm exec vitest run --project unit-core test/replay-compat` — the frozen replay-compat corpus asserts which released script surfaces still parse; a flipped verdict is edited in `test/replay-compat/manifest.ts`, never in the script. Adding or re-pinning a corpus entry also runs `pnpm check:replay-compat`, which re-derives each entry from its release tag in git history |
 | Anything in `src/`, `test/`, `skills/` | `pnpm format` |
 
 Two traps worth naming:
