@@ -113,9 +113,9 @@ jobs:
         if: matrix.platform == 'android' && steps.fp.outputs.cached == 'false'
         uses: ./.github/actions/setup-android-replay-host
 
-      # Deliberately no `set -o pipefail`, matching android.yml: `yes` is killed
-      # by SIGPIPE once sdkmanager stops reading, and pipefail would report that
-      # 141 as the step's own failure.
+      # Deliberately no `set -o pipefail`: `yes` is killed by SIGPIPE once
+      # sdkmanager stops reading, and pipefail would report that 141 as the
+      # step's own failure.
       - name: Install Android SDK packages
         if: matrix.platform == 'android' && steps.fp.outputs.cached == 'false'
         run: |

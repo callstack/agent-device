@@ -97,11 +97,8 @@ jobs:
       - name: Setup Android replay host
         id: android-replay-host
         uses: ./.github/actions/setup-android-replay-host
-
-      - name: Package npm-bundled Android helpers
-        run: |
-          pnpm package:android-snapshot-helper:npm
-          pnpm package:android-ime-helper:npm
+        with:
+          package-helpers: "true"
 
       - name: Run Android command perf benchmark
         uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0

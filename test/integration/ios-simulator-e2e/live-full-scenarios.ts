@@ -60,12 +60,18 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
     'reset',
     'microphone',
   ]);
+  await runStep(context, 'restart fixture after permission reset', [
+    'open',
+    context.appId,
+    '--relaunch',
+  ]);
   await runStep(context, 'restore automation route after permission reset', [
     'trigger-app-event',
     'fixture.permission.recovery',
     '{"source":"permission-reset"}',
   ]);
   await assertWaitText(context, 'Automation lab');
+  await assertElementText(context, 'id="automation-microphone-permission"', 'not-requested');
   await clickMicrophonePermission(context, 'request microphone permission after reset');
   await runStep(context, 'wait for recovered microphone permission prompt', [
     'alert',

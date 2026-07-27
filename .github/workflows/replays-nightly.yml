@@ -103,6 +103,8 @@ jobs:
       - name: Setup Android replay host
         id: android-replay-host
         uses: ./.github/actions/setup-android-replay-host
+        with:
+          package-helpers: "true"
 
       - name: Run Android replay suite
         uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
