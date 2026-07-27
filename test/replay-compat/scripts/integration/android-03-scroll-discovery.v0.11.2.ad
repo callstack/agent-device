@@ -1,0 +1,15 @@
+# Scroll discovery.
+context platform=android
+
+open settings --relaunch
+snapshot -i
+screenshot "./test/screenshots/replays/android-scroll-top.png"
+
+scroll down 3
+wait 500
+snapshot -i
+screenshot "./test/screenshots/replays/android-scroll-found.png"
+
+scroll up 3
+wait 500
+snapshot -i

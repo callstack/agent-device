@@ -1,0 +1,25 @@
+# Text input.
+context platform=android
+
+open settings --relaunch
+snapshot -i
+
+click @e2
+wait 1000
+snapshot -i
+
+keyboard status
+
+type "Display"
+wait 1000
+snapshot -i
+
+screenshot "./test/screenshots/replays/android-search-results.png"
+
+keyboard status
+
+back
+wait 1000
+keyboard status
+snapshot -i
+find text "Search" exists

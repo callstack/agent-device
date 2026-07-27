@@ -1,0 +1,16 @@
+# Swipe gestures.
+context platform=ios
+
+open com.apple.Preferences --relaunch
+
+swipe 197 650 197 300 300
+wait 500
+
+swipe 197 600 197 350 300
+wait 500
+
+snapshot -i
+
+swipe 197 300 197 650 300
+wait 500
+find text "General" exists

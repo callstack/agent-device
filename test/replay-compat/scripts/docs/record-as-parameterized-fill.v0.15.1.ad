@@ -1,0 +1,7 @@
+context platform=ios
+env PASSWORD=""
+
+open "Agent Device Tester" --relaunch
+fill id="field-email" "ada@example.com"
+fill id="password" "${PASSWORD}"
+click id="submit-order"

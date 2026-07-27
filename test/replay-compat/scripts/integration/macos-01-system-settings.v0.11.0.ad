@@ -1,0 +1,16 @@
+# Dogfood macOS System Settings flow through the replay suite runner.
+context platform=macos
+open "System Settings"
+screenshot "./test/screenshots/replays/macos-system-settings.png"
+appstate
+snapshot -i
+click "role=cell label=General"
+wait "role=button label=About" 5000
+snapshot -i
+is exists "role=button label=About"
+click "role=button label=About"
+wait "label=\"System Report...\" || label=\"Serial number\" || label=Chip || label=Processor || label=macOS" 5000
+snapshot -i
+back
+wait "role=button label=About" 5000
+is exists "role=button label=About"

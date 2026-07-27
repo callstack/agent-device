@@ -228,6 +228,21 @@ const nodeIntegrationOwnership: OwnershipRule = ({ file }) =>
     ? [reason('integration-node', file, 'node-integration', 'node --test integration smoke')]
     : [];
 
+// The frozen replay-compat corpus (#1417) is `.ad` fixture data whose only
+// consumer is `test/replay-compat/corpus.test.ts` in the unit lane, so a corpus
+// addition has a derivable owner instead of failing open on its extension.
+const replayCompatOwnership: OwnershipRule = ({ file }) =>
+  file.startsWith('test/replay-compat/') && file.endsWith('.ad')
+    ? [
+        reason(
+          'unit',
+          file,
+          'own:replay-compat',
+          'frozen replay-compat corpus is asserted by the unit-lane corpus test',
+        ),
+      ]
+    : [];
+
 // SkillGym validates skill guidance (`skills/`) and owns its harness
 // (`test/skillgym/`); the Testing Matrix in docs/agents/testing.md routes
 // skill-prompt/assertion changes here.
@@ -294,6 +309,7 @@ const OWNERSHIP_RULES: readonly OwnershipRule[] = [
   srcProdGate,
   vitestRelatedOwnership,
   nodeIntegrationOwnership,
+  replayCompatOwnership,
   skillgymOwnership,
   buildOwnership,
 ];

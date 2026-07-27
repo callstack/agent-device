@@ -1,0 +1,25 @@
+# Swipe gestures.
+context platform=android
+
+open settings --relaunch
+snapshot -i
+find text "Search" exists
+
+swipe 206 700 206 250 300
+wait 500
+snapshot -i
+
+swipe 206 650 206 300 300 --count 2 --pause-ms 200 --pattern one-way
+wait 500
+snapshot -i
+
+scroll up 0.6
+wait 500
+snapshot -i
+find text "Search" exists
+screenshot "./test/screenshots/replays/android-swipe-before-back.png"
+
+scroll down 2
+wait 500
+snapshot -i
+screenshot "./test/screenshots/replays/android-swipe-scroll.png"

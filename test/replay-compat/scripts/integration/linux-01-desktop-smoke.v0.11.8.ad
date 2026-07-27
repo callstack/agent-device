@@ -1,0 +1,12 @@
+# Smoke test for Linux desktop automation on CI.
+# Opens gnome-calculator, takes a snapshot, and validates the
+# accessibility tree contains expected calculator UI elements.
+context platform=linux
+open gnome-calculator
+wait 3000
+screenshot "./test/screenshots/replays/linux-calculator.png"
+snapshot
+# Verify calculator-specific elements: a window titled Calculator,
+# or digit buttons that only a calculator app would expose.
+is exists "label=Calculator || label=0 || label=1 || label=5"
+snapshot -i

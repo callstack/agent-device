@@ -1,0 +1,18 @@
+# Deep navigation.
+context platform=android
+
+open settings --relaunch
+appstate
+snapshot -i
+screenshot "./test/screenshots/replays/android-deep-nav-root.png"
+
+click @e16
+wait 1000
+snapshot -i
+find text "Notification history" exists
+screenshot "./test/screenshots/replays/android-deep-nav-detail.png"
+
+back
+wait 1000
+snapshot -i
+find text "Search" exists

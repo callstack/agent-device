@@ -41,6 +41,10 @@ export default defineConfig({
             'scripts/__tests__/help-conformance-sample-outputs.test.ts',
             'scripts/__tests__/help-conformance-topic-coverage.test.ts',
             'test/skillgym/suites/local-cli-help-policy.test.ts',
+            // The frozen replay-compat corpus (#1417): parse-only, no device or
+            // subprocess work, so it belongs in the fast lane next to the
+            // grammar it guards.
+            'test/replay-compat/corpus.test.ts',
             // The Maestro conformance oracle runs via `node --test` in its own CI
             // job (scripts/maestro-conformance), like the layering guard.
           ],

@@ -1,0 +1,39 @@
+context platform=ios timeout=60000
+
+env APP_TARGET="Agent Device Tester"
+env APP_URL=""
+
+open "${APP_TARGET}" --relaunch --launch-url "${APP_URL}"
+wait "Gesture lab" 30000
+
+gesture fling left 195 443 180
+wait "fling 1" 5000
+
+gesture fling right 195 443 180
+wait "fling 2" 5000
+
+gesture fling up 195 443 80 80
+wait "fling 3" 5000
+
+gesture fling down 195 443 80 80
+wait "fling 4" 5000
+
+gesture pan 195 443 -80 0
+wait "x -" 5000
+
+gesture pan 195 443 160 0
+wait "x 72" 5000
+
+gesture pan 195 443 0 -80
+wait "y -" 5000
+
+gesture pan 195 443 0 160
+wait "y 56" 5000
+
+gesture pinch 1.25 195 443
+wait "pinch changed yes" 5000
+
+gesture rotate 35 195 443
+wait "rotate changed yes" 5000
+
+close

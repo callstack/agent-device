@@ -1,0 +1,7 @@
+context platform=macos target=desktop
+
+open "System Settings"
+# agent-device:target-v1 {"role":"button","label":"Save","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"verified"}
+
+click @e12 "Save"
+close

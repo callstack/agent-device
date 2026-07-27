@@ -1,0 +1,21 @@
+context platform=ios timeout=60000
+env APP_TARGET="Agent Device Tester"
+env APP_URL=""
+open "${APP_TARGET}" --relaunch --launch-url "${APP_URL}"
+wait "label=\"Form\"" 30000
+click "label=\"Form\""
+wait "Checkout form" 5000
+fill id="field-name" "Ada Lovelace"
+fill id="field-email" "ada@example.com"
+keyboard dismiss
+wait "Checkout form" 5000
+scroll down 0.6
+click id="shipping-pickup"
+click id="payment-cash"
+wait "Delivery choices" 5000
+scroll down 0.7
+click id="checkbox-agree"
+click id="submit-order"
+wait "Order summary" 5000
+wait "Ada Lovelace chose pickup with cash payment." 5000
+close

@@ -1,0 +1,4 @@
+context platform=android
+env AD_FOO=1
+
+open settings --relaunch

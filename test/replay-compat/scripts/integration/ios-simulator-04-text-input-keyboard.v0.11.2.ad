@@ -1,0 +1,11 @@
+# Text input.
+context platform=ios
+
+open com.apple.Preferences --relaunch
+click "role=searchField || label=Search || label=\"Search\""
+wait 1000
+
+type "General"
+wait 1000
+
+find text "General" exists

@@ -1,0 +1,13 @@
+# App lifecycle.
+context platform=ios
+
+open com.apple.Preferences --relaunch
+appstate
+
+home
+wait 2000
+
+open com.apple.Preferences --relaunch
+wait 1000
+appstate
+find text "General" exists

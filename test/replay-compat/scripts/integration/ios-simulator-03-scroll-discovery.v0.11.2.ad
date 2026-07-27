@@ -1,0 +1,11 @@
+# Scroll discovery.
+context platform=ios
+
+open com.apple.Preferences --relaunch
+scroll down 3
+wait 500
+find text "Accessibility" exists
+
+scroll up 3
+wait 500
+find text "General" exists

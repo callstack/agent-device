@@ -1,0 +1,11 @@
+# Deep navigation.
+context platform=ios
+
+open com.apple.Preferences --relaunch
+click "role=cell label=General"
+wait 1000
+find text "About" exists
+
+back
+wait 1000
+find text "General" exists

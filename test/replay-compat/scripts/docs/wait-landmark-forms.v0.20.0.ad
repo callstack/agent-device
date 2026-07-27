@@ -1,0 +1,8 @@
+context platform=ios kind=simulator timeout=180000
+
+open "Agent Device Tester" --relaunch
+wait 500
+wait stable 500 10000
+wait "role=button label=About || label=\"Software Update\"" 30000
+wait @e7~s5 5000
+close

@@ -1,0 +1,6 @@
+context platform=ios
+
+open "Agent Device Tester" --relaunch
+wait "Gesture lab" 30000
+gesture rotate 35 195 443 800
+close

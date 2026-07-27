@@ -1,0 +1,6 @@
+context platform=android
+env SETTINGS="label=Account || label=Profile || label=User"
+
+click "${SETTINGS}"
+wait "label=\"Software Update\" || label=About" 5000
+wait ${WAIT_MS:-500}

@@ -1,0 +1,5 @@
+context platform=android
+context platform=ios
+
+open settings --relaunch
+close

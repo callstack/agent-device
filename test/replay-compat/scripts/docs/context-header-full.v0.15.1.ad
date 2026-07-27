@@ -1,0 +1,5 @@
+context platform=android target=tv timeout=60000 retries=2
+
+open settings --relaunch
+wait "label=Apps" 5000
+close

@@ -1,0 +1,6 @@
+context platform=macos target=desktop
+
+open "System Settings"
+# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[{"role":"toolbar","label":"Editor"},{"role":"window"}],"sibling":0,"viewportOrder":0,"scrollRegion":{"role":"scrollview","id":"editor-scroll"},"verification":"verified"}
+click @e12 "Save"
+close

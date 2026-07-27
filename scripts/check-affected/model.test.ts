@@ -114,6 +114,12 @@ test('a non-.ts fixture under an owned root fails open (format alone is not owne
   assert.equal(result.failOpenReasons[0]?.rule, 'ambiguous-path');
 });
 
+test('a frozen replay-compat corpus script selects the unit lane that asserts it', () => {
+  const result = plan(['test/replay-compat/scripts/examples/gesture-lab.v0.16.8.ad']);
+  assert.equal(result.failOpen, false);
+  assert.ok(result.checks.includes('unit'));
+});
+
 test('skills guidance change selects format + skillgym, not docs-only', () => {
   const result = plan(['skills/agent-device/SKILL.md']);
   assert.equal(result.failOpen, false);
