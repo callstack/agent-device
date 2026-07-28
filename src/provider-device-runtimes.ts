@@ -16,9 +16,15 @@ export async function createDefaultProviderDeviceRuntimes(
   env: DefaultProviderDeviceRuntimeEnv = process.env,
 ): Promise<ProviderDeviceRuntime[]> {
   const runtimes = createDefaultCloudWebDriverProviderRuntimes(env);
-  if (!env.LIMRUN_API_KEY?.trim()) return runtimes;
+  const apiKey = env.LIMRUN_API_KEY?.trim();
+  if (!apiKey) return runtimes;
 
-  const { createLimrunRuntimeFromEnv } = await import('./providers/limrun/runtime.ts');
-  const limrunRuntime = createLimrunRuntimeFromEnv(env);
-  return limrunRuntime ? [...runtimes, limrunRuntime] : runtimes;
+  const { LimrunRuntime } = await import('./providers/limrun/runtime.ts');
+  return [
+    ...runtimes,
+    new LimrunRuntime({
+      apiKey,
+      region: env.LIMRUN_REGION?.trim() || undefined,
+    }),
+  ];
 }

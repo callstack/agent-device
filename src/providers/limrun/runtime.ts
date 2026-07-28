@@ -47,23 +47,12 @@ type LimrunInstance = {
 
 type LimrunRuntimeSession = LimrunIosSession | LimrunAndroidSession;
 
-type LimrunRuntimeOptions = {
+export type LimrunRuntimeOptions = {
   apiKey: string;
   region?: string;
-  version?: string;
 };
 
 const LIMRUN_CLIENT_HEADER = 'agent-device-cli';
-
-export function createLimrunRuntimeFromEnv(env: NodeJS.ProcessEnv): LimrunRuntime | undefined {
-  const apiKey = env.LIMRUN_API_KEY?.trim();
-  if (!apiKey) return undefined;
-  return new LimrunRuntime({
-    apiKey,
-    region: env.LIMRUN_REGION?.trim() || undefined,
-    version: readVersion(),
-  });
-}
 
 export class LimrunRuntime implements ProviderDeviceRuntime {
   private readonly limrun: Limrun;
@@ -101,7 +90,7 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
       apiKey: options.apiKey,
       defaultHeaders: {
         'x-agent-device-client': LIMRUN_CLIENT_HEADER,
-        'x-agent-device-version': options.version ?? readVersion(),
+        'x-agent-device-version': readVersion(),
       },
     });
   }

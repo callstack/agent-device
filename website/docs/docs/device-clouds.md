@@ -255,12 +255,19 @@ Use the normal typed client methods when agent-device owns the daemon. Limrun us
 shape with `leaseProvider: 'limrun'`, `platform: 'android'` or `platform: 'ios'`, and
 `LIMRUN_API_KEY` in the daemon environment.
 
-Bridges that host the provider runtime themselves can reuse agent-device's Limrun implementation:
+The first-party agent-device-cloud bridge hosts the provider runtime itself and can reuse
+agent-device's Limrun implementation:
 
 ```ts
-import { createLimrunRuntimeFromEnv } from 'agent-device/limrun';
+import { LimrunRuntime } from 'agent-device/limrun';
 
-const runtime = createLimrunRuntimeFromEnv(process.env);
+const apiKey = process.env.LIMRUN_API_KEY;
+if (!apiKey) throw new Error('LIMRUN_API_KEY is required');
+
+const runtime = new LimrunRuntime({
+  apiKey,
+  region: process.env.LIMRUN_REGION,
+});
 ```
 
 ## MCP Experience
