@@ -191,7 +191,7 @@ The test is skipped unless `AGENT_DEVICE_WEB_E2E=1` is set. The test runs `agent
 
 ## Concurrency torture lane
 
-`test/integration/concurrency-torture.test.ts` (#1416, umbrella #1412 Track A) runs N concurrent
+`test/integration/nightly/concurrency-torture.test.ts` (#1416, umbrella #1412 Track A) runs N concurrent
 clients through randomized-but-**seeded** interleavings of open/mutate/close/takeover/kill against
 the real `SessionStore` + `LeaseRegistry` (plus an in-memory device-claim model). After every run it
 asserts: no leaked leases or claims, no cross-session state bleed, every lock released after owner
@@ -199,7 +199,7 @@ death, the session store stays consistent, and same-device critical sections nev
 pins the router's same-device open serialization under 100+ interleavings).
 
 A seed alone cannot reproduce Promise/event-loop interleavings, so **all** concurrency is routed
-through a deterministic scheduler (`concurrency-torture/deterministic-scheduler.ts`) — an
+through a deterministic scheduler (`nightly/concurrency-torture/deterministic-scheduler.ts`) — an
 instrumented dispatcher that is the sole source of ordering (which fiber steps next, and which waiter
 wins a contended lock). A seed therefore fully determines execution order.
 
@@ -208,7 +208,7 @@ Each operation's lock plan is **not** hand-written: it is built exactly as the d
 (`src/daemon/daemon-command-registry.ts`), and only then resolve keys via the production router
 primitive `resolveRequestExecutionLockKeys` (`src/daemon/request-binding.ts`), driven with a fake
 device inventory through the production `withDeviceInventoryProvider` seam
-(`concurrency-torture/bindings.ts`). Only the mutex *grant* is modeled by the scheduler, because
+(`nightly/concurrency-torture/bindings.ts`). Only the mutex *grant* is modeled by the scheduler, because
 `withKeyedLock`'s native microtask hand-off cannot be reproduced from a seed. Consequently reverting
 *either* production decision — exempting a command from execution locking, or dropping the `device:`
 key — changes the derived plan and trips the overlap invariant, so the lane is genuinely coupled to
@@ -216,10 +216,10 @@ production lock resolution, not a duplicate of it. **Real:**
 `SessionStore` and `LeaseRegistry`. **Modeled:** the advisory device claim (`InMemoryClaimRegistry`)
 and process "kill" — the production claim is a filesystem/OS lock and real process death, both out of
 scope for this scheduling lane and covered by their own unit tests. The full real-vs-modeled boundary
-is documented at the top of `concurrency-torture/harness.ts`.
+is documented at the top of `nightly/concurrency-torture/harness.ts`.
 
 Because the seeded sweep *models* the mutex grant, a separate **real-scope guard**
-(`concurrency-torture/real-scope-serialization.ts`) drives concurrent same-device opens through the
+(`nightly/concurrency-torture/real-scope-serialization.ts`) drives concurrent same-device opens through the
 actual `createRequestExecutionScope().runLocked()` → `withRequestExecutionLocks` → `withKeyedLock`
 and asserts the critical sections never overlap. This is intentionally not seeded (it exercises real
 event-loop scheduling); its job is to fail if the production lock *application* path regresses, which
