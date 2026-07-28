@@ -1,7 +1,12 @@
 #!/bin/sh
 set -eu
 
-PLATFORM="${1:-}"
+if [ "$#" -ne 1 ]; then
+  echo "usage: resolve-artifact-name.sh <ios|android>" >&2
+  exit 2
+fi
+
+PLATFORM="$1"
 case "$PLATFORM" in
   ios|android) ;;
   *)

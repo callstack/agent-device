@@ -55,7 +55,10 @@ test('producer, consumer, upload, and concurrency use the canonical artifact nam
     /ANDROID_NAME="\$\(sh "\$ARTIFACT_NAME_RESOLVER" android\)"/,
   );
   assert.equal(uploadStep.with.name, '${{ matrix.artifactName }}');
-  assert.equal(workflow.jobs.release.concurrency.group, 'test-app-${{ matrix.artifactName }}');
+  assert.equal(
+    workflow.jobs.release.concurrency.group,
+    'test-app-${{ matrix.artifactName }}-${{ github.event.pull_request.number || github.ref_name }}',
+  );
 });
 
 test('producer maps each platform to its resolved lookup and matrix artifact name', (t) => {
@@ -173,6 +176,14 @@ test('artifact name resolver scopes both platforms and rejects invalid output', 
     '--dir examples/test-app exec fingerprint fingerprint:generate --platform android',
   ]);
   assert.equal(runResolver(undefined, 'unused').status, 2);
+  assert.equal(
+    spawnSync('sh', [resolver, 'ios', 'extra'], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      env: process.env,
+    }).status,
+    2,
+  );
   assert.equal(runResolver('windows', 'unused').status, 2);
   assert.equal(runResolver('ios', 'null').status, 1);
   assert.equal(runResolver('ios', 'bad/hash').status, 1);

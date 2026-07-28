@@ -99,7 +99,7 @@ jobs:
     runs-on: ${{ matrix.runsOn }}
     timeout-minutes: 60
     concurrency:
-      group: test-app-${{ matrix.artifactName }}
+      group: test-app-${{ matrix.artifactName }}-${{ github.event.pull_request.number || github.ref_name }}
       cancel-in-progress: false
     strategy:
       # Independent caches; one platform failing must not withhold the other's.
