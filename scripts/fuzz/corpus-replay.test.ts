@@ -20,6 +20,12 @@ import { FUZZ_TARGETS } from './targets.ts';
  */
 const CASE_TIMEOUT_MS = 5_000;
 
+/**
+ * Vitest must outlast the watchdog for every case a test replays, or a wedged parser is reported as
+ * a bare `Test timed out` instead of the named `hang:` failure that says which input wedged.
+ */
+const timeoutFor = (cases: number) => cases * CASE_TIMEOUT_MS + 10_000;
+
 describe('parser fuzz regression corpus', () => {
   const corpus = readCorpus();
 
@@ -49,6 +55,7 @@ describe('parser fuzz regression corpus', () => {
       const failures = await runCases(target, cases, CASE_TIMEOUT_MS);
       expect(failures.map(describeFailure)).toEqual([]);
     },
+    timeoutFor(corpus.length + Math.max(...FUZZ_TARGETS.map((t) => t.seeds.length))),
   );
 });
 
@@ -61,10 +68,16 @@ describe('fuzz case generation', () => {
     expect(sample(7)).not.toEqual(sample(8));
   });
 
-  it('generates strings the target can be fed directly', async () => {
-    const inputs = fc.sample(arbitraryForTarget(target), { numRuns: 64, seed: 1 });
-    expect(inputs.every((input) => typeof input === 'string')).toBe(true);
-    const failures = await runCases(target, inputs, CASE_TIMEOUT_MS);
-    expect(failures.map(describeFailure)).toEqual([]);
-  });
+  const GENERATED_CASES = 64;
+
+  it(
+    'generates strings the target can be fed directly',
+    async () => {
+      const inputs = fc.sample(arbitraryForTarget(target), { numRuns: GENERATED_CASES, seed: 1 });
+      expect(inputs.every((input) => typeof input === 'string')).toBe(true);
+      const failures = await runCases(target, inputs, CASE_TIMEOUT_MS);
+      expect(failures.map(describeFailure)).toEqual([]);
+    },
+    timeoutFor(GENERATED_CASES),
+  );
 });
