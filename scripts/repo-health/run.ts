@@ -13,7 +13,10 @@
 // from the working tree, git, and the artifacts other gates already write. Coverage and package
 // size are read from coverage/coverage-summary.json and .tmp/size-report.json when present and
 // degrade to `available: false` (with the producing command) when they are not, so a fresh
-// checkout still produces a complete, honest snapshot.
+// checkout still produces a complete, honest snapshot. Those two artifacts carry no producing-commit
+// stamp, so provenance hashes them and flags `stale` when a source file is newer (see
+// artifactProvenance in model.ts) — a consumer like #1424 must never pair stale metrics with the
+// current commit.
 //
 // The one thing that can FAIL the command is the depgraph-vs-layering R6 consistency assertion:
 // the graph built here must reproduce scripts/layering/check.ts's TYPE_INVERSION_BASELINE. The
@@ -32,8 +35,10 @@ import { runAsMain } from '../lib/run-as-main.ts';
 import { CASES } from '../help-conformance-cases.mjs';
 import skillgymSuite from '../../test/skillgym/suites/agent-device-smoke-suite.ts';
 import {
+  artifactProvenance,
   buildSnapshot,
   SNAPSHOT_SCHEMA_VERSION,
+  type ArtifactProvenance,
   type FallowConfig,
   type FallowDeadCodeBaseline,
   type FallowHealthBaseline,
@@ -65,19 +70,44 @@ function readJsonIfExists<T>(relativePath: string): T | null {
   return raw === null ? null : (JSON.parse(raw) as T);
 }
 
+function shortSha(raw: string): string {
+  return createHash('sha256').update(raw).digest('hex').slice(0, 12);
+}
+
 /** Short content hash standing in for an analyzer's version — a source change is a version bump. */
 function contentHash(relativePath: string): string {
   const raw = readIfExists(relativePath);
-  return raw === null ? 'absent' : createHash('sha256').update(raw).digest('hex').slice(0, 12);
+  return raw === null ? 'absent' : shortSha(raw);
 }
 
 function lockfileProvenance(): { path: string; sha256: string } | null {
   const raw = readIfExists(LOCKFILE_PATH);
-  if (raw === null) return null;
-  return {
-    path: LOCKFILE_PATH,
-    sha256: createHash('sha256').update(raw).digest('hex').slice(0, 12),
-  };
+  return raw === null ? null : { path: LOCKFILE_PATH, sha256: shortSha(raw) };
+}
+
+/** The newest mtime across the production source tree, the freshness bar for read artifacts. */
+function newestSourceMtimeMs(files: readonly string[]): number {
+  let newest = 0;
+  for (const file of files) {
+    const mtimeMs = fs.statSync(absolute(file)).mtimeMs;
+    if (mtimeMs > newest) newest = mtimeMs;
+  }
+  return newest;
+}
+
+/** Hash a read artifact and flag it stale when a source file is newer; null when absent. */
+function artifactInput(
+  relativePath: string,
+  newestSourceMtimeMs: number,
+): ArtifactProvenance | null {
+  const abs = absolute(relativePath);
+  if (!fs.existsSync(abs)) return null;
+  return artifactProvenance({
+    path: relativePath,
+    sha256: shortSha(fs.readFileSync(abs, 'utf8')),
+    artifactMtimeMs: fs.statSync(abs).mtimeMs,
+    newestSourceMtimeMs,
+  });
 }
 
 function gitOutput(args: string[]): string | null {
@@ -88,8 +118,7 @@ function gitOutput(args: string[]): string | null {
   }
 }
 
-function buildGraphFromTree(): GraphData {
-  const files = listSourceFiles();
+function buildGraphFromTree(files: readonly string[]): GraphData {
   const sources = new Map(files.map((file) => [file, fs.readFileSync(absolute(file), 'utf8')]));
   return buildGraph(sources, resolveImportEdges(sources));
 }
@@ -109,13 +138,19 @@ function toolHashes(): Record<string, string> {
     depgraph: contentHash('scripts/depgraph/model.ts'),
     layering: contentHash('scripts/layering/check.ts'),
     fallow: contentHash('.fallowrc.json'),
+    coverage: contentHash('vitest.config.ts'),
+    size: contentHash('scripts/size-report.mjs'),
     slowTest: contentHash('scripts/vitest-slow-test-budgets.ts'),
     bench: contentHash('scripts/help-conformance-cases.mjs'),
     skillgym: contentHash('test/skillgym/suites/agent-device-smoke-suite.ts'),
   };
 }
 
-function collectProvenance(graph: GraphData, hasCoverage: boolean, hasSize: boolean): Provenance {
+function collectProvenance(
+  graph: GraphData,
+  coverage: ArtifactProvenance | null,
+  size: ArtifactProvenance | null,
+): Provenance {
   return {
     schemaVersion: SNAPSHOT_SCHEMA_VERSION,
     commit: currentCommit(),
@@ -126,18 +161,24 @@ function collectProvenance(graph: GraphData, hasCoverage: boolean, hasSize: bool
     inputs: {
       sourceFiles: graph.nodes.length,
       lockfile: lockfileProvenance(),
-      coverageSummary: hasCoverage ? COVERAGE_SUMMARY_PATH : null,
-      sizeReport: hasSize ? SIZE_REPORT_PATH : null,
+      coverageSummary: coverage,
+      sizeReport: size,
     },
   };
 }
 
 function collectSnapshot(): RepoHealthSnapshot {
-  const graph = buildGraphFromTree();
+  const files = listSourceFiles();
+  const graph = buildGraphFromTree(files);
+  const newestSource = newestSourceMtimeMs(files);
   const coverage = readJsonIfExists<import('./model.ts').CoverageSummary>(COVERAGE_SUMMARY_PATH);
   const size = readJsonIfExists<import('./model.ts').SizeReport>(SIZE_REPORT_PATH);
   return buildSnapshot({
-    provenance: collectProvenance(graph, coverage !== null, size !== null),
+    provenance: collectProvenance(
+      graph,
+      artifactInput(COVERAGE_SUMMARY_PATH, newestSource),
+      artifactInput(SIZE_REPORT_PATH, newestSource),
+    ),
     graph,
     fallow: {
       deadCode: readJsonIfExists<FallowDeadCodeBaseline>('fallow-baselines/dead-code.json') ?? {},
@@ -165,6 +206,10 @@ function bytes(value: number | undefined): string {
   return `${(value / 1_000_000).toFixed(2)} MB`;
 }
 
+function staleMark(artifact: ArtifactProvenance | null): string {
+  return artifact?.stale ? ' [STALE — source newer than artifact; rerun the producer]' : '';
+}
+
 function renderSummary(snapshot: RepoHealthSnapshot): string {
   const { metrics, provenance, consistency } = snapshot;
   const lines: string[] = [
@@ -174,9 +219,11 @@ function renderSummary(snapshot: RepoHealthSnapshot): string {
       `type=${metrics.depgraph.typeCycles} dynamic=${metrics.depgraph.dynamicCycles}`,
     `  layering:  R6 type-inversions=${metrics.layering.typeInversionTotal} ` +
       `(graph reproduces baseline: ${consistency.r6.ok ? 'yes' : 'NO'}); R9 type-cycle baseline=${metrics.layering.typeCycleBaseline}`,
-    `  coverage:  lines ${pct(metrics.coverage.lines)}; statements ${pct(metrics.coverage.statements)}`,
+    `  coverage:  lines ${pct(metrics.coverage.lines)}; statements ${pct(metrics.coverage.statements)}` +
+      staleMark(provenance.inputs.coverageSummary),
     `  size:      js raw ${bytes(metrics.size.jsRawBytes)}, gzip ${bytes(metrics.size.jsGzipBytes)}; ` +
-      `npm tarball ${bytes(metrics.size.npmTarballBytes)}`,
+      `npm tarball ${bytes(metrics.size.npmTarballBytes)}` +
+      staleMark(provenance.inputs.sizeReport),
     `  fallow:    dead-code findings=${metrics.fallow.deadCodeFindings}, health findings=${metrics.fallow.healthFindings}, ` +
       `suppressions=${metrics.fallow.suppressions.total}`,
     `  slow-test: unit ${metrics.slowTest.unitBudgetMs}ms / integration ${metrics.slowTest.integrationBudgetMs}ms (enforce ${metrics.slowTest.enforceFactor}x)`,

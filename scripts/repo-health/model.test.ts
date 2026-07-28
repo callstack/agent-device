@@ -5,6 +5,7 @@ import { resolveImportEdges } from '../layering/model.ts';
 import { buildGraph, type GraphData } from '../depgraph/model.ts';
 import { mainSequenceModules, zoneComponents } from './components.ts';
 import {
+  artifactProvenance,
   benchMetrics,
   buildSnapshot,
   coverageMetrics,
@@ -121,6 +122,19 @@ test('coverage and size degrade to unavailable when the artifact is absent', () 
   expect(
     coverageMetrics({ total: { lines: { total: 10, covered: 8, pct: 80 } } as never }).available,
   ).toBe(true);
+});
+
+test('artifactProvenance binds bytes and flags an artifact older than the tree as stale', () => {
+  const args = { path: 'coverage/coverage-summary.json', sha256: 'deadbeef' };
+  // Artifact newer than every source file: the metrics match the current tree.
+  expect(artifactProvenance({ ...args, artifactMtimeMs: 2000, newestSourceMtimeMs: 1000 })).toEqual(
+    { path: args.path, sha256: 'deadbeef', stale: false },
+  );
+  // Source edited after the artifact was produced: the metrics predate the tree and must be flagged
+  // so #1424 cannot persist them against the current commit as if they were fresh.
+  expect(artifactProvenance({ ...args, artifactMtimeMs: 1000, newestSourceMtimeMs: 2000 })).toEqual(
+    { path: args.path, sha256: 'deadbeef', stale: true },
+  );
 });
 
 test('benchMetrics counts cases and distinct topics from the case registry', () => {

@@ -47,14 +47,18 @@ Field names are the stable **trend/delta contract** consumed by #1424. Any chang
     "ref": "<branch or GITHUB_REF_NAME>",
     "node": "v22.x",
     "generatedAt": "<ISO 8601>",
-    // Content hash per analyzer, standing in for a version: a source change is a version bump.
-    "tool": { "depgraph": "…", "layering": "…", "fallow": "…", "slowTest": "…",
-              "bench": "…", "skillgym": "…" },
+    // Content hash per analyzer/config, standing in for a version: a source change is a version bump.
+    "tool": { "depgraph": "…", "layering": "…", "fallow": "…", "coverage": "…", "size": "…",
+              "slowTest": "…", "bench": "…", "skillgym": "…" },
     "inputs": {
       "sourceFiles": 932,                              // production files fed to the graph build
       "lockfile": { "path": "pnpm-lock.yaml", "sha256": "…" },
-      "coverageSummary": "coverage/coverage-summary.json" | null,  // null when the gate hasn't run
-      "sizeReport": ".tmp/size-report.json" | null
+      // coverage and size are read artifacts this command does NOT produce, so they carry no
+      // producing-commit stamp. They are hashed (so history keys on the bytes, not the commit) and
+      // flagged `stale` when a source file is newer than the artifact — the tree moved on without
+      // the producer being rerun. A consumer (#1424) must treat stale metrics as lagging `commit`.
+      "coverageSummary": { "path": "coverage/coverage-summary.json", "sha256": "…", "stale": false } | null,
+      "sizeReport": { "path": ".tmp/size-report.json", "sha256": "…", "stale": false } | null
     }
   },
   "metrics": {

@@ -230,10 +230,45 @@ export function benchMetrics(cases: readonly { docs: readonly string[] }[]): Ben
 // ---- Provenance -------------------------------------------------------------------------------
 
 /**
+ * Provenance for an analyzer artifact this snapshot READ but did not itself produce (coverage,
+ * size). These artifacts carry no producing-commit stamp, so the snapshot cannot claim they match
+ * `commit`. We instead record their content hash — so #1424 keys history on the bytes the metrics
+ * came from, not on a commit they may predate — and an explicit `stale` flag: true when a
+ * production source file is newer than the artifact, i.e. the tree moved on without the producer
+ * being rerun. A consumer must treat stale metrics as lagging `commit`, never as current.
+ */
+export type ArtifactProvenance = {
+  path: string;
+  sha256: string;
+  stale: boolean;
+};
+
+/**
+ * Bind an artifact to the bytes and freshness it was read with. `stale` compares mtimes: an
+ * artifact older than the newest production source predates the current working tree. mtime is a
+ * local, offline signal (these artifacts are git-ignored, so there is no blob to diff), evaluated
+ * against a single tree in one run, which is exactly the "edited code but did not rerun the
+ * producer" case this guards against.
+ */
+export function artifactProvenance(params: {
+  path: string;
+  sha256: string;
+  artifactMtimeMs: number;
+  newestSourceMtimeMs: number;
+}): ArtifactProvenance {
+  return {
+    path: params.path,
+    sha256: params.sha256,
+    stale: params.newestSourceMtimeMs > params.artifactMtimeMs,
+  };
+}
+
+/**
  * What produced the snapshot and from which inputs. Mandatory in v1 (issue #1423 amendment) so
  * #1424 can persist history and refuse to diff across schema versions. `tool` holds a content
- * hash per analyzer (its own source, standing in for a version); `inputs` records which
- * lockfile/config each family of metrics was computed from.
+ * hash per analyzer (its own source/config, standing in for a version); `inputs` records the
+ * lockfile and the read-only artifacts each family of metrics was computed from, each hashed and
+ * flagged for staleness so a false commit-indexed history entry cannot slip through.
  */
 export type Provenance = {
   schemaVersion: number;
@@ -246,9 +281,9 @@ export type Provenance = {
     /** Production source files fed to the graph build. */
     sourceFiles: number;
     lockfile: { path: string; sha256: string } | null;
-    /** Analyzer artifacts that were present and read (coverage/size degrade to null when absent). */
-    coverageSummary: string | null;
-    sizeReport: string | null;
+    /** Read artifacts, hashed and stale-flagged; null when absent (coverage/size degrade cleanly). */
+    coverageSummary: ArtifactProvenance | null;
+    sizeReport: ArtifactProvenance | null;
   };
 };
 
