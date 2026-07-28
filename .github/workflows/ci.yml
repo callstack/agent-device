@@ -22,8 +22,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ios-runner-swift-compat:
-    name: iOS Runner Swift Compatibility
+  # Two single-`rg`-assertion jobs (formerly `ios-runner-swift-compat`,
+  # `no-test-di-seams`, added independently in b79bd8601 / 9eb060406) folded
+  # into steps here: each was checkout + one grep, paying full job
+  # scheduling/checkout overhead and its own PR status-check line for what is
+  # a single assertion. Each step keeps its own failure message. See #1462.
+  static-checks:
+    name: Static Checks
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -34,6 +39,13 @@ jobs:
         run: |
           if rg -nU --glob '*.swift' ',\s*\n\s*\)' apple/runner; then
             echo "Found trailing commas before ')' in Swift files. This syntax requires Swift 6.1+ and breaks older Xcode toolchains."
+            exit 1
+          fi
+
+      - name: Fail if test-only DI seams reappear in production code
+        run: |
+          if rg '\?\s*:\s*typeof\s+' src/ --glob '!**/__tests__/**' --glob '!*.test.ts'; then
+            echo "Found test-only DI seams (optional typeof params) in production code."
             exit 1
           fi
 
@@ -55,21 +67,6 @@ jobs:
           cache-key-prefix: swift-runner-unit
           build-command: AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS=1 pnpm build:xcuitest:macos
           xcuitest-platform: macos
-
-  no-test-di-seams:
-    name: No test-only DI seams
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Fail if test-only DI seams reappear in production code
-        run: |
-          if rg '\?\s*:\s*typeof\s+' src/ --glob '!**/__tests__/**' --glob '!*.test.ts'; then
-            echo "Found test-only DI seams (optional typeof params) in production code."
-            exit 1
-          fi
 
   lint:
     name: Lint & Format
@@ -109,16 +106,14 @@ jobs:
         # Generalizes the former inline commands/-import grep into a structured
         # import-direction lint over the resolved graph. See scripts/layering/check.ts
         # and CONTEXT.md (Architecture: folder DAG + layering lint).
-        run: |
-          node --experimental-strip-types --test scripts/layering/model.test.ts
-          node --experimental-strip-types scripts/layering/check.ts
+        run: pnpm check:layering
 
       - name: Check the depgraph report agrees with the gate
         # scripts/depgraph reads the same model as the gate, so its inversion count must
         # reproduce TYPE_INVERSION_BASELINE. Free two-sources check: if the tree changes
         # and only one side is updated, this fails and names the difference. Runs here
         # rather than in its own job so the two can never be green independently.
-        run: node --experimental-strip-types --test scripts/depgraph/model.test.ts
+        run: pnpm depgraph:test
 
   affected-selector:
     name: Affected-check Selector
@@ -136,6 +131,19 @@ jobs:
       # The selector is fail-open and advisory (GitHub CI stays authoritative),
       # so the gate only guards the derivation model. Invoked directly with no
       # deps, mirroring the layering guard.
+      #
+      # Kept as an inline `node` invocation rather than `pnpm check:affected:test`
+      # deliberately (#1462): R8's zero-dep-job closure check (scripts/layering/
+      # zero-dep-jobs.ts) discovers each zero-dep job's entry scripts by matching
+      # literal `scripts/**/*.test.ts` paths inside the `run:` block. A bare pnpm
+      # script name has no such path, so the scan would find zero entries and
+      # check.ts fails closed on that (`no entry script was found in its run
+      # steps`) rather than silently exempting the job — see the model.test.ts
+      # case "a job with no recognizable entry script is reported rather than
+      # exempted". pnpm itself is provisioned regardless of this choice; R8
+      # polices `pnpm install`, not the invocation style, so this is not a
+      # `pnpm install` for the job — the entry-detection regex is the actual
+      # constraint here.
       - name: Check affected-selector model
         run: node --experimental-strip-types --test scripts/check-affected/model.test.ts scripts/check-affected/run.test.ts
 
