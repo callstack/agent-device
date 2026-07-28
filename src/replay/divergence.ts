@@ -276,22 +276,6 @@ export function scrubReplayVarValues(
   return output;
 }
 
-/** Scrubs runtime values from arbitrary normalized error detail payloads, including object keys. */
-export function scrubReplayVarData(
-  value: unknown,
-  entries: readonly ReplayVarScrubEntry[],
-): unknown {
-  if (typeof value === 'string') return scrubReplayVarValues(value, entries);
-  if (Array.isArray(value)) return value.map((entry) => scrubReplayVarData(entry, entries));
-  if (!value || typeof value !== 'object') return value;
-  return Object.fromEntries(
-    Object.entries(value).map(([key, entry]) => [
-      scrubReplayVarValues(key, entries),
-      scrubReplayVarData(entry, entries),
-    ]),
-  );
-}
-
 /** Per-report field sanitizer: variable scrub, then redact, then truncate. */
 export function createReplayDivergenceSanitizer(
   scrubVars: readonly ReplayVarScrubEntry[],

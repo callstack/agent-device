@@ -486,10 +486,17 @@ serialized. Maestro failure provenance renders resolved diagnostic identifiers, 
 `runFlow` paths, so the report names what the runtime actually attempted instead of emitting an unresolved
 `${VAR}` or synthetic `<var:VAR>` token. Text-entry payloads remain semantic secrets: `inputText` progress,
 failure messages, suggestions, and overflow artifacts never serialize the entered text. Injected replay
-values are registered with the request diagnostics redactor before platform work, independently of this
-user-facing failure projection. Users must not place secrets in selectors, links, filenames, or other
-diagnostic identifiers that are expected to appear in failure output. The report sets
-truncation/redaction markers for every omission.
+values are not registered as global sensitive literals: a short ordinary value such as `2` or `on` would
+otherwise corrupt unrelated timestamps, paths, and typed error fields throughout the request log.
+Text-entry values are registered at the actual dispatch boundary before platform work, independently of
+the user-facing failure projection. Users must not place secrets in selectors, links, filenames, or other
+diagnostic identifiers that are expected to appear in failure output.
+
+Native `.ad` replay retains its categorical `<var:NAME>` replacement in human-readable divergence
+messages, hints, and bounded diagnostic fields. That existing fail-closed policy is intentionally
+separate from Maestro compatibility output; semantically masked positionals and daemon-owned
+machine-readable fields and paths are never substring-rewritten. The report sets truncation/redaction
+markers for every omission.
 
 When the bounded form would omit material, the daemon writes the same redacted, bounded-per-field detail
 to a session-scoped divergence artifact and returns its path plus `overflow: { omittedBytes, artifactPath

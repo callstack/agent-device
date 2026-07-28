@@ -9,7 +9,6 @@ import {
   REPLAY_DIVERGENCE_DIGEST_REF_LIMIT,
   REPLAY_DIVERGENCE_LEVEL_BYTE_LIMITS,
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
-  scrubReplayVarData,
   truncateUtf8Field,
   type ReplayDivergence,
 } from '../divergence.ts';
@@ -235,15 +234,6 @@ test('sanitizeReplayDivergenceField redacts sensitive content even when no trunc
   const sanitized = sanitizeReplayDivergenceField('open failed: bearer abc123def token leaked');
   assert.ok(!sanitized.includes('abc123def'));
   assert.ok(sanitized.includes('[REDACTED]'));
-});
-
-test('scrubReplayVarData scrubs variable values from normalized detail values and keys', () => {
-  assert.deepEqual(
-    scrubReplayVarData({ 'secret-value': ['prefix secret-value', { nested: 'secret-value' }] }, [
-      { name: 'TOKEN', value: 'secret-value' },
-    ]),
-    { '<var:TOKEN>': ['prefix <var:TOKEN>', { nested: '<var:TOKEN>' }] },
-  );
 });
 
 // --- Text report carries the repair data (bounded refs + unavailable hint) ---

@@ -11,7 +11,6 @@ export function createMaestroExecutionContext(
   // Flow config and runFlow env values are stack-scoped; script output variables persist.
   let persistentValues = stringifyValues(defaults);
   const scopes: Record<string, string>[] = [];
-  const expandedValues = new Map<string, string>();
   let cachedValues: Readonly<Record<string, string>> | undefined;
   let generation = 0;
   let observation: MaestroObservation | undefined;
@@ -25,9 +24,6 @@ export function createMaestroExecutionContext(
     },
     get observation(): MaestroObservation | undefined {
       return observation?.generation === generation ? observation : undefined;
-    },
-    get expandedVariables(): Readonly<Record<string, string>> {
-      return Object.fromEntries(expandedValues);
     },
     enter(scopedValues: Record<string, string | number | boolean> = {}): () => void {
       const resolved = resolveScopedValues(scopedValues);
@@ -62,10 +58,10 @@ export function createMaestroExecutionContext(
       observation = undefined;
     },
     resolve(value: string): string {
-      return resolveValue(value, currentValues(), recordExpandedValue);
+      return resolveValue(value, currentValues());
     },
     resolveDeferred(value: string): string {
-      return resolveValue(value, currentValues(), undefined, new Set(), false);
+      return resolveValue(value, currentValues(), new Set(), false);
     },
   };
 
@@ -92,16 +88,11 @@ export function createMaestroExecutionContext(
           ...resolved,
           ...overrides,
         },
-        undefined,
         new Set(),
         false,
       );
     }
     return resolved;
-  }
-
-  function recordExpandedValue(name: string, value: string): void {
-    expandedValues.set(name, value);
   }
 }
 
@@ -114,7 +105,6 @@ function stringifyValues(
 function resolveValue(
   value: string,
   values: Readonly<Record<string, string>>,
-  onExpanded?: (name: string, value: string) => void,
   resolving = new Set<string>(),
   failOnUnresolved = true,
 ): string {
@@ -130,11 +120,9 @@ function resolveValue(
     const resolved = resolveValue(
       values[key]!,
       values,
-      onExpanded,
       new Set([...resolving, key]),
       failOnUnresolved,
     );
-    onExpanded?.(key, resolved);
     return resolved;
   });
   if (failOnUnresolved) assertNoUnsupportedInterpolation(resolved);

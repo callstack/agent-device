@@ -62,7 +62,6 @@ async function buildFailureResponse(
       durationMs: 12,
       error: new Error('typed Maestro action failed'),
       artifactPaths: [],
-      expandedVariables: {},
     },
     plan: makeMaestroPlan(),
     replayPath: path.join(root, 'flow.yaml'),
@@ -92,7 +91,6 @@ test('typed Maestro failure projection keeps the event command and source proven
       durationMs: 12,
       error: new Error('tap failed'),
       artifactPaths: [],
-      expandedVariables: {},
     },
     request,
   );

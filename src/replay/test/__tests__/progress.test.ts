@@ -252,6 +252,44 @@ test('createReplayTestProgressRenderer clears every reflowed row after a termina
   assert.ok(rendered?.text.endsWith('...'));
 });
 
+test('createReplayTestProgressRenderer bounds resize cleanup in non-reflowing terminals', () => {
+  let columns = 200;
+  const renderer = createReplayTestProgressRenderer({
+    liveProgress: true,
+    columns: () => columns,
+  });
+  renderer.render({
+    type: 'test-step',
+    test: {
+      file: '/tmp/checkout.yaml',
+      title: 'x'.repeat(180),
+      index: 1,
+      total: 1,
+      stepIndex: 8,
+      stepTotal: 12,
+      stepCommand: 'assertVisible',
+      stepValue: 'Confirmation',
+    },
+  });
+
+  columns = 20;
+  const rendered = renderer.render({
+    type: 'test-step',
+    test: {
+      file: '/tmp/checkout.yaml',
+      title: 'Checkout',
+      index: 1,
+      total: 1,
+      stepIndex: 9,
+      stepTotal: 12,
+      stepCommand: 'tapOn',
+      stepValue: 'Continue',
+    },
+  });
+
+  assert.equal((rendered?.text.split('\u001B[1A').length ?? 1) - 1, 3);
+});
+
 test('createReplayTestProgressRenderer colors completed result markers when color is enabled', () => {
   withForcedColor(() => {
     assert.equal(

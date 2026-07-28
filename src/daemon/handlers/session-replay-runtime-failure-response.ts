@@ -1,8 +1,4 @@
-import {
-  scrubReplayVarData,
-  scrubReplayVarValues,
-  type ReplayVarScrubEntry,
-} from '../../replay/divergence.ts';
+import { scrubReplayVarValues, type ReplayVarScrubEntry } from '../../replay/divergence.ts';
 import { formatDivergenceActionLabel } from '../../replay/script-utils.ts';
 import type { SnapshotDiagnosticsSummary } from '../../contracts/snapshot-diagnostics.ts';
 import { buildDisplayPositionals } from '../session-event-action.ts';
@@ -93,15 +89,12 @@ export function buildReplayDivergenceFailureResponseFromDescriptor(params: {
       ...(error.retriable !== undefined ? { retriable: error.retriable } : {}),
       ...(error.supportedOn !== undefined ? { supportedOn: error.supportedOn } : {}),
       details: {
-        ...(scrubReplayVarData(pickSafeCauseDetails(error.details), scrubVars) as Record<
-          string,
-          unknown
-        >),
-        replayPath: scrubReplayVarValues(replayPath, scrubVars),
+        ...pickSafeCauseDetails(error.details),
+        replayPath,
         step,
         action,
-        positionals: positionals.map((value) => scrubReplayVarValues(value, scrubVars)),
-        artifactPaths: artifactPaths.map((value) => scrubReplayVarValues(value, scrubVars)),
+        positionals,
+        artifactPaths,
         ...(snapshotDiagnostics ? { snapshotDiagnostics } : {}),
         divergence,
       },

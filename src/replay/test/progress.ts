@@ -32,6 +32,7 @@ const REPLAY_TEST_PROGRESS_SPINNER = {
 };
 const ANSI_ESCAPE_PREFIX = `${String.fromCharCode(27)}[`;
 const ANSI_RESET = `${ANSI_ESCAPE_PREFIX}0m`;
+const MAX_LIVE_PROGRESS_CLEAR_ROWS = 4;
 
 export const REPLAY_TEST_PROGRESS_SPINNER_INTERVAL_MS = REPLAY_TEST_PROGRESS_SPINNER.interval;
 
@@ -286,7 +287,13 @@ function clearLiveProgressPrefix(
   previousWidth: number,
   columns: ReplayTestProgressFormatOptions['columns'],
 ): string {
-  const rows = Math.max(1, Math.ceil(previousWidth / resolveColumns(columns)));
+  // Reflowing terminals move the cursor to the final wrapped row after a shrink,
+  // while some multiplexers leave it on the original row. Bound the cursor-up
+  // cleanup so the latter cannot erase an arbitrary number of completed tests.
+  const rows = Math.min(
+    MAX_LIVE_PROGRESS_CLEAR_ROWS,
+    Math.max(1, Math.ceil(previousWidth / resolveColumns(columns))),
+  );
   let output = '\r\x1B[2K';
   for (let row = 1; row < rows; row += 1) {
     output += '\x1B[1A\r\x1B[2K';

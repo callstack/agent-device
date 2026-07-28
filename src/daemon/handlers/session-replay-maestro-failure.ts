@@ -41,7 +41,6 @@ export type MaestroFailedEngineEvent = MaestroEngineEvent & {
   readonly durationMs: number;
   readonly error: unknown;
   readonly artifactPaths: readonly string[];
-  readonly expandedVariables: Readonly<Record<string, string>>;
 };
 
 export type MaestroFailureReportAction = Pick<
@@ -50,7 +49,7 @@ export type MaestroFailureReportAction = Pick<
 >;
 
 export type MaestroFailureReportProjection = {
-  /** Resolved command at the failing runtime boundary; source remains authored provenance. */
+  /** Failure command; runtime-command failures are resolved, while earlier failures stay authored. */
   readonly command: MaestroEngineEvent['command'];
   readonly source: MaestroEngineEvent['source'];
   readonly progress: ReturnType<typeof formatMaestroCommandProgress>;
