@@ -527,7 +527,8 @@ const EXPECTED_HINT_BY_CODE: Record<KnownAppErrorCode, string> = {
     'The --save-script repair session was reaped before it was finalized; re-run replay <script> --save-script from the start.',
   REPAIR_COMMIT_FAILED:
     'The repair transaction completed, but committing its healed script failed at teardown (no-clobber refusal or a filesystem error); inspect the target path/permissions, then re-run replay <script> --save-script to retry.',
-  UNKNOWN: 'Unexpected internal error. Retry with --debug and report the diagnostics log if it persists.',
+  UNKNOWN:
+    'Unexpected internal error. Retry with --debug and report the diagnostics log if it persists.',
 };
 
 for (const code of KNOWN_APP_ERROR_CODES) {
@@ -537,10 +538,7 @@ for (const code of KNOWN_APP_ERROR_CODES) {
 }
 
 test('EXPECTED_HINT_BY_CODE covers every known code — a registry addition without a hint decision fails loudly', () => {
-  assert.deepEqual(
-    Object.keys(EXPECTED_HINT_BY_CODE).sort(),
-    [...KNOWN_APP_ERROR_CODES].sort(),
-  );
+  assert.deepEqual(Object.keys(EXPECTED_HINT_BY_CODE).sort(), [...KNOWN_APP_ERROR_CODES].sort());
 });
 
 test('defaultHintForCode falls back to the generic retry hint for a daemon/runner-originated code outside the registry', () => {
@@ -594,7 +592,10 @@ test('normalizeAgentDeviceError delegates to normalizeError, including the conte
     diagnosticId: 'diag-9',
     logPath: '/tmp/9.log',
   });
-  assert.deepEqual(normalized, normalizeError(err, { diagnosticId: 'diag-9', logPath: '/tmp/9.log' }));
+  assert.deepEqual(
+    normalized,
+    normalizeError(err, { diagnosticId: 'diag-9', logPath: '/tmp/9.log' }),
+  );
   assert.equal(normalized.diagnosticId, 'diag-9');
   assert.equal(normalized.logPath, '/tmp/9.log');
 });
