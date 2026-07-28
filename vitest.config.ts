@@ -40,7 +40,8 @@ export default defineConfig({
             'scripts/__tests__/help-conformance-bench.test.ts',
             'scripts/__tests__/help-conformance-sample-outputs.test.ts',
             'scripts/__tests__/help-conformance-topic-coverage.test.ts',
-            'test/ci/**/*.test.ts',
+            // Parses CI configuration only, so this action guard needs no device or subprocess lane.
+            'test/ci/upload-agent-device-artifacts.test.ts',
             'test/skillgym/suites/local-cli-help-policy.test.ts',
             // The frozen replay-compat corpus (#1417): parse-only, no device or
             // subprocess work, so it belongs in the fast lane next to the

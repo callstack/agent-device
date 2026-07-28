@@ -5,32 +5,71 @@ import { parse } from 'yaml';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 const actionPath = path.join(repoRoot, '.github/actions/upload-agent-device-artifacts/action.yml');
+const conformanceWorkflowPath = path.join(
+  repoRoot,
+  '.github/workflows/conformance-differential.yml',
+);
 
-test('the diagnostics artifact includes hidden files only from its declared inputs', () => {
-  const action = parse(fs.readFileSync(actionPath, 'utf8')) as {
-    runs: { steps: Array<{ uses?: string; with?: Record<string, unknown> }> };
-  };
-  const upload = action.runs.steps.find((step) =>
-    step.uses?.startsWith('actions/upload-artifact@'),
-  );
+type UploadStep = { uses?: unknown; with?: Record<string, unknown> };
 
-  expect(upload, 'the artifact action must include an upload-artifact step').toBeDefined();
+function uploadArtifactSteps(source: unknown): UploadStep[] {
+  if (Array.isArray(source)) return source.flatMap(uploadArtifactSteps);
+  if (source === null || typeof source !== 'object') return [];
+  const record = source as Record<string, unknown>;
+  const matches =
+    typeof record.uses === 'string' && record.uses.startsWith('actions/upload-artifact@')
+      ? [record as UploadStep]
+      : [];
+  return [...matches, ...Object.values(record).flatMap(uploadArtifactSteps)];
+}
+
+function paths(step: UploadStep): string[] {
+  return String(step.with?.path)
+    .trim()
+    .split('\n')
+    .map((entry) => entry.trim());
+}
+
+test('the shared diagnostics artifact includes hidden files only from its declared paths', () => {
+  const action = parse(fs.readFileSync(actionPath, 'utf8'));
+  const uploads = uploadArtifactSteps(action);
+
+  expect(uploads, 'the action must have exactly one artifact upload step').toHaveLength(1);
+  const [upload] = uploads;
   expect(
     upload?.with?.['include-hidden-files'],
     'hidden daemon, session, and runner diagnostics must be included',
   ).toBe(true);
-  expect(
-    String(upload?.with?.path)
-      .trim()
-      .split('\n')
-      .map((entry) => entry.trim()),
-  ).toEqual([
+  expect(paths(upload!)).toEqual([
     '${{ inputs.agent-home-dir }}/daemon.log',
-    '${{ inputs.agent-home-dir }}/logs/**',
+    '~/.agent-device/logs/**',
     '${{ inputs.agent-home-dir }}/sessions/**',
     '${{ inputs.runner-derived-path }}/.agent-device-runner-cache.json',
     '${{ inputs.runner-derived-path }}/Logs/**',
     'test/artifacts/**',
     'test/screenshots/**',
+  ]);
+  expect(
+    paths(upload!).every((entry) =>
+      [
+        '${{ inputs.agent-home-dir }}/',
+        '${{ inputs.runner-derived-path }}/',
+        '~/.agent-device/logs/',
+        'test/',
+      ].some((prefix) => entry.startsWith(prefix)),
+    ),
+  ).toBe(true);
+});
+
+test('the conformance trace artifact includes the hidden replay root', () => {
+  const workflow = parse(fs.readFileSync(conformanceWorkflowPath, 'utf8'));
+  const uploads = uploadArtifactSteps(workflow);
+
+  expect(uploads, 'the workflow must have exactly one artifact upload step').toHaveLength(1);
+  const [upload] = uploads;
+  expect(upload?.with?.['include-hidden-files']).toBe(true);
+  expect(paths(upload!)).toEqual([
+    '.tmp/conformance-differential/differential-report.json',
+    '.agent-device/**/replay-timing.ndjson',
   ]);
 });

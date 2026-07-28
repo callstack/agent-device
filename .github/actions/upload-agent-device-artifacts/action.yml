@@ -6,7 +6,7 @@ inputs:
     description: "Artifact name"
     required: true
   agent-home-dir:
-    description: "Resolved agent-device home directory"
+    description: "Resolved agent-device daemon state directory"
     required: true
   runner-derived-path:
     description: "Optional Apple runner derived data path to upload cache metadata and Xcode logs"
@@ -24,7 +24,7 @@ runs:
         include-hidden-files: true
         path: |
           ${{ inputs.agent-home-dir }}/daemon.log
-          ${{ inputs.agent-home-dir }}/logs/**
+          ~/.agent-device/logs/**
           ${{ inputs.agent-home-dir }}/sessions/**
           ${{ inputs.runner-derived-path }}/.agent-device-runner-cache.json
           ${{ inputs.runner-derived-path }}/Logs/**
