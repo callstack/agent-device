@@ -4,7 +4,7 @@ This folder benchmarks the one thing only an agentic runner can prove: given the
 
 Everything else this suite used to cover moved to cheaper, stronger owners:
 
-- Command-planning knowledge checks (can a model choose the right next command from a help slice, a captured output, or an error?) live in the help conformance bench (`scripts/help-conformance-bench.mjs`). Its plans are validated by the production CLI parser, its case list is enumerated against the help-topic registry (`scripts/__tests__/help-conformance-topic-coverage.test.ts`), and its quoted samples are pinned to the real renderers (`scripts/__tests__/help-conformance-sample-outputs.test.ts`).
+- Command-planning knowledge checks (can a model choose the right next command from a help slice, a captured output, or an error?) live in the help conformance bench (`scripts/help-conformance-bench.mjs`). Its plans are validated by the production CLI parser, its case list is enumerated against the help-topic registry (`scripts/__tests__/help-conformance-topic-coverage.test.ts`), its recovery quizzes are enumerated against the error registry (`scripts/__tests__/help-conformance-error-recovery-coverage.test.ts`), and its quoted samples are pinned to the real renderers (`scripts/__tests__/help-conformance-sample-outputs.test.ts`).
 - Live fixture-app behavior is owned by the deterministic iOS simulator e2e suite (`test/integration/ios-simulator-e2e/`) and its coverage manifest.
 
 ## What stays here

@@ -44,6 +44,7 @@ export default defineConfig({
           include: [
             'src/**/*.test.ts',
             'scripts/__tests__/help-conformance-bench.test.ts',
+            'scripts/__tests__/help-conformance-error-recovery-coverage.test.ts',
             'scripts/__tests__/help-conformance-sample-outputs.test.ts',
             'scripts/__tests__/help-conformance-topic-coverage.test.ts',
             // Parses CI configuration only, so this action guard needs no device or subprocess lane.

@@ -1,22 +1,33 @@
 import { redactDiagnosticData } from './redaction.ts';
 
-export type KnownAppErrorCode =
-  | 'INVALID_ARGS'
-  | 'DEVICE_NOT_FOUND'
-  | 'DEVICE_IN_USE'
-  | 'TOOL_MISSING'
-  | 'APP_NOT_INSTALLED'
-  | 'UNSUPPORTED_PLATFORM'
-  | 'UNSUPPORTED_OPERATION'
-  | 'NOT_IMPLEMENTED'
-  | 'COMMAND_FAILED'
-  | 'SESSION_NOT_FOUND'
-  | 'UNAUTHORIZED'
-  | 'AMBIGUOUS_MATCH'
-  | 'REPLAY_DIVERGENCE'
-  | 'REPAIR_SESSION_EXPIRED'
-  | 'REPAIR_COMMIT_FAILED'
-  | 'UNKNOWN';
+/**
+ * The known error codes as a value, so gates can enumerate them: every code
+ * here must resolve a hint through `defaultHintForCode`, and every code
+ * `retriableForErrorCode` classifies must have a recovery quiz in the help
+ * benchmark (scripts/__tests__/help-conformance-error-recovery-coverage.test.ts).
+ * `KnownAppErrorCode` is derived from this array, so a new code cannot be added
+ * to the type without entering the enumeration.
+ */
+export const KNOWN_APP_ERROR_CODES = [
+  'INVALID_ARGS',
+  'DEVICE_NOT_FOUND',
+  'DEVICE_IN_USE',
+  'TOOL_MISSING',
+  'APP_NOT_INSTALLED',
+  'UNSUPPORTED_PLATFORM',
+  'UNSUPPORTED_OPERATION',
+  'NOT_IMPLEMENTED',
+  'COMMAND_FAILED',
+  'SESSION_NOT_FOUND',
+  'UNAUTHORIZED',
+  'AMBIGUOUS_MATCH',
+  'REPLAY_DIVERGENCE',
+  'REPAIR_SESSION_EXPIRED',
+  'REPAIR_COMMIT_FAILED',
+  'UNKNOWN',
+] as const;
+
+export type KnownAppErrorCode = (typeof KNOWN_APP_ERROR_CODES)[number];
 
 // Intentionally widened with `(string & {})` so daemon-originated codes pass
 // through verbatim without requiring the SDK union to be updated first. Known
