@@ -121,6 +121,36 @@ The plan documents the rule and changed path behind every selected check.
 Model and catalog live under `scripts/check-affected/`; the derivation is guarded
 by `pnpm check:affected:test` (the `Affected-check Selector` CI job).
 
+## Before editing a shared module (`pnpm depgraph affected`)
+
+Before you touch a module other code depends on, run:
+
+```sh
+pnpm depgraph affected src/utils/exec.ts          # bounded text, for an agent's context budget
+pnpm depgraph affected src/daemon/ref-frame.ts --json --limit 25
+```
+
+The output tells you which gates to run and which live scenarios claim the behavior:
+
+- **dependents** — reverse reachability over the layering gate's value-edge graph
+  (`scripts/depgraph/model.ts`), split into direct and transitive, with a zone breakdown and the
+  widest dependents by their own fan-in. Type-only and dynamic dependents are excluded: a
+  type-only edge is free at runtime, and mixing them makes the count unactionable.
+- **gates** — the check plan `scripts/check-affected/model.ts` selects for that dependent set. It
+  is the same selector `pnpm check:affected` runs, so the two cannot disagree; run them with
+  `pnpm check:affected --run`.
+- **public commands whose handler chain reaches it** — the daemon route table
+  (`src/daemon/request-handler-chain.ts`) closed over value *and* dynamic edges, because handlers
+  are loaded through `import()`.
+- **live scenario owners** — the iOS simulator coverage manifest's owning scenario for each of
+  those commands, when that manifest is in the tree.
+- **guarantee-matrix rows** — the ADR 0011 cells (`src/contracts/interaction-guarantees.ts`) whose
+  `via` names the file, i.e. the guarantees your edit is the implementation of.
+
+Lists are bounded (`--limit`, default 10) and always disclose what they hid; `--json` is
+unbounded. The query is read-only, runs in well under a second, and adds no CI work — its model is
+covered by `pnpm depgraph:test` (the existing `Layering Guard` job).
+
 ## Mutation ratchet over decision kernels
 
 Mutation score is the mechanical answer to "is this test load-bearing or decorative". A full-suite

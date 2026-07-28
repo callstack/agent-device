@@ -15,9 +15,10 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { listSourceFiles } from '../layering/check.ts';
-import { resolveImportEdges, zoneRank } from '../layering/model.ts';
-import { buildGraph, computeLevels, type GraphData } from './model.ts';
+import { zoneRank } from '../layering/model.ts';
+import { runAffected } from './affected-run.ts';
+import { loadGraph } from './load.ts';
+import { computeLevels, type GraphData } from './model.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
@@ -76,12 +77,7 @@ function edgeFlags(edge: GraphData['edges'][number]): number {
 }
 
 function buildPayload(): Payload {
-  const files = listSourceFiles();
-  const sources = new Map(
-    files.map((file) => [file, fs.readFileSync(path.join(repoRoot, file), 'utf8')]),
-  );
-  const resolved = resolveImportEdges(sources);
-  const graph = buildGraph(sources, resolved);
+  const graph = loadGraph(repoRoot);
   const levels = computeLevels(graph.nodes, graph.edges);
 
   const zoneIndex = new Map(graph.zones.map((zone, index) => [zone.id, index]));
@@ -114,7 +110,11 @@ function buildPayload(): Payload {
   };
 }
 
-function main(argv: readonly string[]): number {
+async function main(argv: readonly string[]): Promise<number> {
+  // `affected` is the query subcommand (scripts/depgraph/affected-run.ts); with no subcommand
+  // this stays the whole-graph report.
+  if (argv[0] === 'affected') return await runAffected(argv.slice(1), repoRoot);
+
   const outFlag = argv.indexOf('--out');
   const jsonPath =
     outFlag >= 0 && argv[outFlag + 1]
@@ -145,5 +145,8 @@ function main(argv: readonly string[]): number {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  process.exit(main(process.argv.slice(2)));
+  process.exitCode = await main(process.argv.slice(2)).catch((error: unknown) => {
+    process.stderr.write(`depgraph: ${error instanceof Error ? error.message : error}\n`);
+    return 1;
+  });
 }
