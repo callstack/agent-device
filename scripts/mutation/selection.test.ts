@@ -34,7 +34,23 @@ function worktreeWithCommit(name: string, files: readonly string[]): string {
     fs.appendFileSync(path.join(dir, file), '\n');
   }
   runCmdSync('git', ['add', ...files], { cwd: dir });
-  runCmdSync('git', ['commit', '--quiet', '--no-verify', '-m', `touch ${name}`], { cwd: dir });
+  // CI runners have no committer identity configured, and this commit is a
+  // fixture, so it carries its own rather than depending on the environment.
+  runCmdSync(
+    'git',
+    [
+      '-c',
+      'user.name=mutation-selection-test',
+      '-c',
+      'user.email=mutation-selection-test@invalid',
+      'commit',
+      '--quiet',
+      '--no-verify',
+      '-m',
+      `touch ${name}`,
+    ],
+    { cwd: dir },
+  );
   return dir;
 }
 
