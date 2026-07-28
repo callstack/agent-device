@@ -93,7 +93,7 @@ test('Android smoke keeps its install/open/snapshot evidence in a checked-in scr
   assert.throws(
     () =>
       assertAndroidFixtureSnapshot(
-        { data: { androidSnapshot: { backend: 'uiautomator' }, nodes: [] } },
+        { androidSnapshot: { backend: 'uiautomator' }, nodes: [] },
         'com.callstack.agentdevicelab',
         packageVersion,
       ),
@@ -106,10 +106,9 @@ test('Android smoke keeps its install/open/snapshot evidence in a checked-in scr
   fs.writeFileSync(
     snapshotPath,
     JSON.stringify({
-      data: {
-        androidSnapshot: { backend: 'android-helper', helperVersion: packageVersion },
-        nodes: [{ label: 'Agent Device Tester' }],
-      },
+      appBundleId: 'com.callstack.agentdevicelab',
+      androidSnapshot: { backend: 'android-helper', helperVersion: packageVersion },
+      nodes: [{ label: 'Agent Device Tester' }],
     }),
   );
   const result = spawnSync(
@@ -126,10 +125,9 @@ test('Android smoke keeps its install/open/snapshot evidence in a checked-in scr
   fs.writeFileSync(
     snapshotPath,
     JSON.stringify({
-      data: {
-        androidSnapshot: { backend: 'android-helper', helperVersion: 'stale-helper' },
-        nodes: [{ label: 'Agent Device Tester' }],
-      },
+      appBundleId: 'com.callstack.agentdevicelab',
+      androidSnapshot: { backend: 'android-helper', helperVersion: 'stale-helper' },
+      nodes: [{ label: 'Agent Device Tester' }],
     }),
   );
   const staleHelper = spawnSync(

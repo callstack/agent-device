@@ -2,12 +2,14 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 function readSnapshotData(snapshot) {
-  return snapshot.data ?? snapshot;
+  if (!snapshot || typeof snapshot !== 'object' || !Array.isArray(snapshot.nodes)) {
+    throw new Error('Expected the public snapshot JSON shape with a nodes array');
+  }
+  return snapshot;
 }
 
 function readSnapshotLabels(data) {
-  if (!Array.isArray(data.nodes)) return [];
-  return data.nodes.map((node) => String(node.label ?? node.text ?? ''));
+  return data.nodes.map((node) => String(node.label ?? ''));
 }
 
 function assertHelperBackend(metadata) {
@@ -30,11 +32,20 @@ function assertFixtureHomeScreen(labels, expectedAppId) {
   }
 }
 
+function assertForegroundApp(data, expectedAppId) {
+  if (data.appBundleId !== expectedAppId) {
+    throw new Error(
+      `Expected foreground app ${expectedAppId}, received ${String(data.appBundleId)}`,
+    );
+  }
+}
+
 export function assertAndroidFixtureSnapshot(snapshot, expectedAppId, packageVersion) {
   const data = readSnapshotData(snapshot);
-  const metadata = data.androidSnapshot ?? {};
+  const metadata = data.androidSnapshot;
   assertHelperBackend(metadata);
   assertHelperVersion(metadata, packageVersion);
+  assertForegroundApp(data, expectedAppId);
   assertFixtureHomeScreen(readSnapshotLabels(data), expectedAppId);
 }
 

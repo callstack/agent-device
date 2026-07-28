@@ -226,6 +226,8 @@ test('Android denies Apple runner preparation and viewport mutation until durabl
     ['prepare', 'viewport'],
     [
       { device: iosSimulator, expected: true, label: 'on iOS simulator' },
+      { device: macOsDevice, expected: true, label: 'on macOS' },
+      { device: tvOsSimulator, expected: true, label: 'on tvOS simulator' },
       { device: androidDevice, expected: false, label: 'on Android device' },
       { device: androidEmulator, expected: false, label: 'on Android emulator' },
     ],
