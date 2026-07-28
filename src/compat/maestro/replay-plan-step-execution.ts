@@ -75,18 +75,21 @@ async function executeStep(
 }
 
 async function executeOptionalCommand(
-  command: MaestroRuntimeCommand,
+  rawCommand: MaestroRuntimeCommand,
   appId: string | undefined,
   state: MaestroReplayPlanExecutionState,
 ): Promise<MaestroRuntimeResult | undefined> {
+  const command = resolveCommand(rawCommand, state.context);
   try {
-    return await executeCommand(command, appId, state);
+    return await executeResolvedCommand(command, appId, state);
   } catch (error) {
     checkpointMaestroCancellation(state.options.signal);
-    if (!isOptionalCommand(command) || !isMaestroTestFailure(error)) throw error;
-    state.warnings.push(formatOptionalWarning(command, error));
-    state.skipped += 1;
-    return undefined;
+    if (isOptionalCommand(command) && isMaestroTestFailure(error)) {
+      state.warnings.push(formatOptionalWarning(command, error));
+      state.skipped += 1;
+      return undefined;
+    }
+    throw commandFailure(error, command);
   }
 }
 
@@ -100,12 +103,11 @@ function isOptionalCommand(command: MaestroRuntimeCommand): boolean {
   return 'optional' in command && command.optional === true;
 }
 
-async function executeCommand(
-  rawCommand: MaestroRuntimeCommand,
+async function executeResolvedCommand(
+  command: MaestroRuntimeCommand,
   appId: string | undefined,
   state: MaestroReplayPlanExecutionState,
 ): Promise<MaestroRuntimeResult | undefined> {
-  const command = resolveCommand(rawCommand, state.context);
   switch (command.kind) {
     case 'assertVisible':
       await requireObservation(
@@ -300,6 +302,15 @@ export function asMaestroReplayPlanStepFailure(
     error: withSource(error, step?.command),
     source,
     ...(step ? { command: step.command } : {}),
+  };
+}
+
+function commandFailure(error: unknown, command: MaestroRuntimeCommand): PlanStepFailure {
+  return {
+    kind: 'maestroPlanStepFailure',
+    error: withSource(error, command),
+    source: command.source,
+    command,
   };
 }
 

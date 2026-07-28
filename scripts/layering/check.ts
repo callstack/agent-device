@@ -45,16 +45,9 @@ import {
   resolveImportEdges,
   topFolder,
   typeInversionPair,
-  type ImportEdge,
   type ResolvedImportEdge,
 } from './model.ts';
-
-type EdgeContext = {
-  file: string;
-  fromTop: string;
-  toTop: string;
-  imp: ImportEdge;
-};
+import { policyLead, policyViolation, ZONE_POLICIES } from './zone-policy.ts';
 
 type Violation = {
   rule: string;
@@ -96,71 +89,24 @@ function isProductionSourceFile(file: string): boolean {
   return file.endsWith('.ts') && !/(?:^|\/)__tests__\//.test(file) && !/\.test\.ts$/.test(file);
 }
 
-function isCoreInteractor(file: string): boolean {
-  return file.startsWith('src/core/interactors/');
-}
-
-function isDaemonServer(file: string): boolean {
-  return file.startsWith('src/daemon/') && !file.startsWith('src/daemon/client/');
-}
-
-function isSdkBarrel(file: string): boolean {
-  return file.startsWith('src/sdk/');
-}
-
-function ruleKernelSink(ctx: EdgeContext): Violation | null {
-  if (ctx.fromTop !== 'kernel') return null;
-  if (ctx.toTop === 'contracts' && ctx.imp.typeOnly) return null;
-  return {
-    rule: 'R1 kernel-sink',
-    file: ctx.file,
-    line: ctx.imp.line,
-    message:
-      `kernel must not import ${ctx.toTop}/ (imports '${ctx.imp.spec}'). ` +
-      `The only allowed kernel out-edge is a type-only re-export from contracts/.`,
-  };
-}
-
-const BELOW_COMMANDS = new Set(['kernel', 'platforms', 'core', 'daemon']);
-
-function ruleCommandsFloor(ctx: EdgeContext): Violation | null {
-  if (ctx.toTop !== 'commands' || !BELOW_COMMANDS.has(ctx.fromTop)) return null;
-  return {
-    rule: 'R2 commands-floor',
-    file: ctx.file,
-    line: ctx.imp.line,
-    message:
-      `${ctx.fromTop}/ must not import the command surface commands/ ` +
-      `(imports '${ctx.imp.spec}'). Depend on shared kernel/contracts instead.`,
-  };
-}
-
-function rulePlatformsSeam(ctx: EdgeContext): Violation | null {
-  if (ctx.toTop !== 'platforms' || ctx.imp.dynamic || ctx.imp.typeOnly) return null;
-  if (isCoreInteractor(ctx.file) || isDaemonServer(ctx.file) || isSdkBarrel(ctx.file)) return null;
-  return {
-    rule: 'R3 platforms-seam',
-    file: ctx.file,
-    line: ctx.imp.line,
-    message:
-      `static value import of platforms/ from ${ctx.fromTop}/ (imports '${ctx.imp.spec}'). ` +
-      `Only src/core/interactors/ and the daemon server may statically import platforms/; ` +
-      `elsewhere use a dynamic import() or a type-only import to preserve CLI cold-start.`,
-  };
-}
-
-const RULES = [ruleKernelSink, ruleCommandsFloor, rulePlatformsSeam];
-
+// R1-R3 are declared as a policy table in zone-policy.ts. This walks it; the boundaries
+// themselves are data, so adding one is a table entry rather than a fourth predicate.
 function checkLayeringRules(edges: readonly ResolvedImportEdge[]): Violation[] {
   const violations: Violation[] = [];
   for (const edge of edges) {
-    const fromTop = topFolder(edge.file);
-    const toTop = topFolder(edge.target);
-    if (fromTop === toTop) continue;
-    const ctx: EdgeContext = { file: edge.file, fromTop, toTop, imp: edge };
-    for (const rule of RULES) {
-      const violation = rule(ctx);
-      if (violation) violations.push(violation);
+    const fromZone = topFolder(edge.file);
+    const toZone = topFolder(edge.target);
+    if (fromZone === toZone) continue;
+    const ctx = { file: edge.file, fromZone, toZone, imp: edge };
+    for (const policy of ZONE_POLICIES) {
+      const hint = policyViolation(policy, ctx);
+      if (hint === null) continue;
+      violations.push({
+        rule: policy.rule,
+        file: edge.file,
+        line: edge.line,
+        message: `${policyLead(ctx)} ${hint}`,
+      });
     }
   }
   return violations;

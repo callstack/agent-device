@@ -87,6 +87,11 @@
       "comment": "Help-benchmark conformance seams: helpTopicIds feeds the topic-coverage gate and PRIVATE_AX_RECOVERY_SAMPLE feeds the skillgym suite; both consumers are test-tree files outside --production analysis.",
       "file": "{src/cli/parser/cli-help.ts,scripts/help-conformance-sample-outputs.mjs}",
       "exports": ["helpTopicIds", "PRIVATE_AX_RECOVERY_SAMPLE"]
+    },
+    {
+      "comment": "#1458: getSessionCommandKind's former production consumer (the session.ts if-chain) was replaced by SESSION_COMMAND_HANDLER_IMPLS, which encodes command-kind groupings directly via shared handler references instead of a kind lookup. The accessor and its SessionCommandKind classification remain covered by daemon-command-registry.test.ts, a test-tree file outside --production analysis.",
+      "file": "src/daemon/daemon-command-registry.ts",
+      "exports": ["getSessionCommandKind"]
     }
   ],
   "usedClassMembers": ["name", "listActiveLeases", "delete", "values", "elapsedMs", "isExpired"],

@@ -387,6 +387,64 @@ test('readReplayScriptMetadata rejects conflicting metadata keys in context head
   );
 });
 
+test('parseReplayScriptDetailed tracks line numbers', () => {
+  const script = [
+    '# comment',
+    'context platform=android',
+    'env APP=settings',
+    '',
+    'open ${APP}',
+    'wait 500',
+  ].join('\n');
+  const parsed = parseReplayScriptDetailed(script);
+  assert.equal(parsed.actions.length, 2);
+  assert.deepEqual(parsed.actionLines, [5, 6]);
+});
+
+test('readReplayScriptMetadata parses env KEY=VALUE directives', () => {
+  const metadata = readReplayScriptMetadata(
+    'context platform=android\nenv APP=settings\nenv WAIT=500\nopen ${APP}\n',
+  );
+  assert.equal(metadata.env?.APP, 'settings');
+  assert.equal(metadata.env?.WAIT, '500');
+});
+
+test('readReplayScriptMetadata accepts env before context', () => {
+  const metadata = readReplayScriptMetadata(
+    'env APP=settings\ncontext platform=ios target=mobile\n',
+  );
+  assert.equal(metadata.platform, 'ios');
+  assert.equal(metadata.target, 'mobile');
+  assert.equal(metadata.env?.APP, 'settings');
+});
+
+test('readReplayScriptMetadata parses quoted env values with spaces', () => {
+  const metadata = readReplayScriptMetadata(
+    'context platform=android\nenv SEL="label=Wait || label=Apps"\n',
+  );
+  assert.equal(metadata.env?.SEL, 'label=Wait || label=Apps');
+});
+
+test('readReplayScriptMetadata rejects invalid env key', () => {
+  assert.throws(
+    () => readReplayScriptMetadata('context platform=android\nenv lower=settings\n'),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      /Invalid env key "lower"/.test(error.message),
+  );
+});
+
+test('readReplayScriptMetadata rejects duplicate env key', () => {
+  assert.throws(
+    () => readReplayScriptMetadata('context platform=android\nenv APP=a\nenv APP=b\n'),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      /Duplicate env directive "APP"/.test(error.message),
+  );
+});
+
 test('replay parsing strips versioned-ref pins from recorded refs (#1076)', () => {
   // Generations are session-scoped; a replayed script runs against a NEW
   // session, so pins are stripped and IGNORED rather than re-validated.

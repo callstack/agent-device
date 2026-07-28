@@ -4,11 +4,52 @@ import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon/types.ts';
 import { PNG } from '../../../utils/png.ts';
+import {
+  emitDiagnostic,
+  flushDiagnosticsToSessionFile,
+  withDiagnosticsScope,
+} from '../../../utils/diagnostics.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
 import { MAESTRO_OBSERVATION_POLL_MS } from '../daemon-runtime-port-observation.ts';
 import { parseMaestroProgram } from '../program-ir-parser.ts';
 import { executeMaestroProgram } from './runtime-port-fixtures.ts';
 import { makeBaseRequest, makeDependencies, makeSnapshot } from './daemon-runtime-port-fixtures.ts';
+
+test('registers Maestro inputText as sensitive before nested platform work', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-input-diagnostics-'));
+  const logPath = path.join(root, 'request.ndjson');
+  const text = 'opaque-maestro-input';
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      if (request.command === 'type') {
+        emitDiagnostic({
+          phase: 'platform_echo',
+          data: { message: `Backend echoed ${request.positionals?.[0]}` },
+        });
+      }
+      return request.command === 'snapshot'
+        ? { ok: true, data: { nodes: [], createdAt: 0 } }
+        : { ok: true, data: {} };
+    },
+    dependencies: makeDependencies(),
+    platform: 'android',
+  });
+
+  await withDiagnosticsScope({ command: 'replay', logPath }, async () => {
+    await port.execute({
+      command: { kind: 'inputText', source: { line: 2 }, text },
+      generation: 0,
+      env: {},
+      invalidateObservation() {},
+    });
+    flushDiagnosticsToSessionFile({ force: true });
+  });
+
+  const diagnostics = fs.readFileSync(logPath, 'utf8');
+  expect(diagnostics).not.toContain(text);
+  expect(diagnostics).toContain('Backend echoed [REDACTED]');
+});
 
 test('delegates lifecycle and coordinate gestures through public daemon commands', async () => {
   const requests: DaemonRequest[] = [];

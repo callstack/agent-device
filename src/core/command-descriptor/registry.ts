@@ -66,6 +66,23 @@ export type DescriptorDispatchCommandName =
       : never
     : never;
 
+/**
+ * The literal union of every command whose `daemon.route` is `'session'`.
+ * Drives `SESSION_COMMAND_HANDLER_IMPLS` in `src/daemon/handlers/session.ts`
+ * (mirrors `DescriptorDispatchCommandName` above): adding a session-routed
+ * descriptor without a matching handler table entry is a compile error rather
+ * than a runtime routing gap caught only by `expectHandlerResponse`.
+ */
+export type DescriptorSessionRouteCommandName =
+  Extract<
+    (typeof commandDescriptors)[number],
+    { daemon: { route: 'session' } }
+  > extends infer Descriptor
+    ? Descriptor extends { name: infer Name extends string }
+      ? Name
+      : never
+    : never;
+
 // ---------------------------------------------------------------------------
 // Daemon request-policy trait bundles — copied VERBATIM from
 // src/daemon/daemon-command-registry.ts (DAEMON_COMMAND_DESCRIPTORS).

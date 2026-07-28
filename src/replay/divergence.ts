@@ -264,7 +264,10 @@ export type ReplayVarScrubEntry = { name: string; value: string };
  * replay-scope value is replaced with a `<var:NAME>` marker, whatever the
  * value looks like — this is not shape-based secret redaction.
  */
-export function scrubReplayVarValues(value: string, entries: ReplayVarScrubEntry[]): string {
+export function scrubReplayVarValues(
+  value: string,
+  entries: readonly ReplayVarScrubEntry[],
+): string {
   let output = value;
   for (const entry of entries) {
     if (!entry.value) continue;
@@ -275,7 +278,7 @@ export function scrubReplayVarValues(value: string, entries: ReplayVarScrubEntry
 
 /** Per-report field sanitizer: variable scrub, then redact, then truncate. */
 export function createReplayDivergenceSanitizer(
-  scrubVars: ReplayVarScrubEntry[],
+  scrubVars: readonly ReplayVarScrubEntry[],
 ): (value: string, limit?: number) => string {
   return (value, limit) =>
     sanitizeReplayDivergenceField(scrubReplayVarValues(value, scrubVars), limit);

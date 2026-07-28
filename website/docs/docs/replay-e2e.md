@@ -69,6 +69,7 @@ Boundaries:
 - Runtime: iOS and Android only; `launchApp.clearState` supports Android and iOS simulators, launch arguments are Apple-only, and standalone device utility/state commands are unsupported.
 - Expressions: `when.true` supports boolean literals and `maestro.platform` comparisons; `repeat.while`, `evalScript`, and broader JavaScript expressions are unsupported.
 - Environment: flow `env` is the default, `AD_VAR_*` overrides it, and CLI `-e KEY=VALUE` wins over both.
+- Failure diagnostics: resolved targets and `runFlow` paths are rendered, while `inputText` payloads remain hidden; do not place secrets in diagnostic identifiers.
 - Trust: `runScript` executes trusted scripts, may make `http.post` network requests, and is not a security sandbox; output keys cannot contain a dot.
 - Errors and tracking: unsupported commands and fields fail with source context when available; open a focused issue only when implementation work is planned.
 

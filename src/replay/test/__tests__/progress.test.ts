@@ -213,6 +213,147 @@ test('createReplayTestProgressRenderer trims live step progress by visible colum
   });
 });
 
+test('createReplayTestProgressRenderer clears every reflowed row after a terminal resize', () => {
+  const initialColumns = 80;
+  const resizedColumns = 20;
+  const clearRow = '\r\u001B[2K';
+  const moveUpAndClearRow = '\u001B[1A\r\u001B[2K';
+  let columns = initialColumns;
+  const renderer = createReplayTestProgressRenderer({
+    liveProgress: true,
+    columns: () => columns,
+  });
+  const initial = renderer.render({
+    type: 'test-step',
+    test: {
+      file: '/tmp/checkout.yaml',
+      title: 'A long Maestro test title that is one row before terminal reflow',
+      index: 1,
+      total: 1,
+      stepIndex: 8,
+      stepTotal: 12,
+      stepCommand: 'assertVisible',
+      stepValue: 'Confirmation',
+    },
+  });
+  assert.ok(initial?.text.startsWith(clearRow));
+  const initialVisibleWidth = (initial?.text.length ?? clearRow.length) - clearRow.length;
+  assert.equal(initialVisibleWidth, initialColumns);
+
+  columns = resizedColumns;
+  const rendered = renderer.render({
+    type: 'test-step',
+    test: {
+      file: '/tmp/checkout.yaml',
+      title: 'A long Maestro test title that is one row before terminal reflow',
+      index: 1,
+      total: 1,
+      stepIndex: 9,
+      stepTotal: 12,
+      stepCommand: 'tapOn',
+      stepValue: 'Continue',
+    },
+  });
+
+  const reflowedRows = Math.ceil(initialVisibleWidth / resizedColumns);
+  const expectedClearPrefix = clearRow + moveUpAndClearRow.repeat(Math.max(0, reflowedRows - 1));
+  assert.equal(reflowedRows, 4);
+  assert.equal(rendered?.text.slice(0, expectedClearPrefix.length), expectedClearPrefix);
+  assert.equal((rendered?.text.split('\u001B[2K').length ?? 1) - 1, reflowedRows);
+  assert.ok(rendered?.text.endsWith('...'));
+});
+
+test('createReplayTestProgressRenderer clears every row after a large terminal reflow', () => {
+  const initialColumns = 200;
+  const resizedColumns = 20;
+  const clearRow = '\r\u001B[2K';
+  const moveUpAndClearRow = '\u001B[1A\r\u001B[2K';
+  let columns = initialColumns;
+  const renderer = createReplayTestProgressRenderer({
+    liveProgress: true,
+    columns: () => columns,
+    terminalReflowsOnResize: true,
+  });
+  const initial = renderer.render({
+    type: 'test-step',
+    test: {
+      file: '/tmp/checkout.yaml',
+      title: 'x'.repeat(180),
+      index: 1,
+      total: 1,
+      stepIndex: 8,
+      stepTotal: 12,
+      stepCommand: 'assertVisible',
+      stepValue: 'Confirmation',
+    },
+  });
+  assert.ok(initial?.text.startsWith(clearRow));
+  const initialVisibleWidth = (initial?.text.length ?? clearRow.length) - clearRow.length;
+  assert.equal(initialVisibleWidth, initialColumns);
+
+  columns = resizedColumns;
+  const rendered = renderer.render({
+    type: 'test-step',
+    test: {
+      file: '/tmp/checkout.yaml',
+      title: 'Checkout',
+      index: 1,
+      total: 1,
+      stepIndex: 9,
+      stepTotal: 12,
+      stepCommand: 'tapOn',
+      stepValue: 'Continue',
+    },
+  });
+
+  const reflowedRows = Math.ceil(initialVisibleWidth / resizedColumns);
+  const expectedClearPrefix = clearRow + moveUpAndClearRow.repeat(reflowedRows - 1);
+  assert.equal(reflowedRows, 10);
+  assert.equal(rendered?.text.slice(0, expectedClearPrefix.length), expectedClearPrefix);
+  assert.equal((rendered?.text.split('\u001B[1A').length ?? 1) - 1, 9);
+  assert.equal((rendered?.text.split('\u001B[2K').length ?? 1) - 1, 10);
+});
+
+test('createReplayTestProgressRenderer stays on one row in non-reflowing terminals', () => {
+  let columns = 200;
+  const renderer = createReplayTestProgressRenderer({
+    liveProgress: true,
+    columns: () => columns,
+    terminalReflowsOnResize: false,
+  });
+  renderer.render({
+    type: 'test-step',
+    test: {
+      file: '/tmp/checkout.yaml',
+      title: 'x'.repeat(180),
+      index: 1,
+      total: 1,
+      stepIndex: 8,
+      stepTotal: 12,
+      stepCommand: 'assertVisible',
+      stepValue: 'Confirmation',
+    },
+  });
+
+  columns = 20;
+  const rendered = renderer.render({
+    type: 'test-step',
+    test: {
+      file: '/tmp/checkout.yaml',
+      title: 'Checkout',
+      index: 1,
+      total: 1,
+      stepIndex: 9,
+      stepTotal: 12,
+      stepCommand: 'tapOn',
+      stepValue: 'Continue',
+    },
+  });
+
+  assert.equal((rendered?.text.split('\u001B[1A').length ?? 1) - 1, 0);
+  assert.equal((rendered?.text.split('\u001B[2K').length ?? 1) - 1, 1);
+});
+
 test('createReplayTestProgressRenderer colors completed result markers when color is enabled', () => {
   withForcedColor(() => {
     assert.equal(

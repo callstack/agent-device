@@ -481,10 +481,22 @@ number of suggestions available at default/full) so a caller knows whether a re-
 has material; default and full carry at most **20** screen refs and **5** suggestions ranked per
 decision 1's total order. These counts are absolute, including error payloads. Individual
 labels, ids, selectors, source paths, mismatch values, cause messages, and hints are UTF-8 truncated to
-**256 bytes**; an action summary has no positional array, and fill text, expanded variables, and arbitrary
-nested cause details are never serialized. All rendered strings and any overflow artifact pass through the
-central diagnostics redactor before truncation. The report sets truncation/redaction markers for every
-omission.
+**256 bytes**; an action summary has no positional array, and arbitrary nested cause details are never
+serialized. Maestro failure provenance renders resolved diagnostic identifiers, including targets and
+`runFlow` paths, so the report names what the runtime actually attempted instead of emitting an unresolved
+`${VAR}` or synthetic `<var:VAR>` token. Text-entry payloads remain semantic secrets: `inputText` progress,
+failure messages, suggestions, and overflow artifacts never serialize the entered text. Injected replay
+values are not registered as global sensitive literals: a short ordinary value such as `2` or `on` would
+otherwise corrupt unrelated timestamps, paths, and typed error fields throughout the request log.
+Text-entry values are registered at the actual dispatch boundary before platform work, independently of
+the user-facing failure projection. Users must not place secrets in selectors, links, filenames, or other
+diagnostic identifiers that are expected to appear in failure output.
+
+Native `.ad` replay retains its categorical `<var:NAME>` replacement in human-readable divergence
+messages, hints, and bounded diagnostic fields. That existing fail-closed policy is intentionally
+separate from Maestro compatibility output; semantically masked positionals and daemon-owned
+machine-readable fields and paths are never substring-rewritten. The report sets truncation/redaction
+markers for every omission.
 
 When the bounded form would omit material, the daemon writes the same redacted, bounded-per-field detail
 to a session-scoped divergence artifact and returns its path plus `overflow: { omittedBytes, artifactPath

@@ -13,7 +13,10 @@ import { colorize, supportsColor } from '../../utils/output.ts';
 export type ReplayTestProgressFormatOptions = {
   verbose?: boolean;
   liveProgress?: boolean;
-  columns?: number;
+  /** A live reader lets TTY progress adapt to terminal resize events. */
+  columns?: number | (() => number | undefined);
+  /** Whether the terminal reflows existing rows when its width changes. */
+  terminalReflowsOnResize?: boolean;
 };
 
 export type ReplayTestProgressRender = {
@@ -39,37 +42,60 @@ export function createReplayTestProgressRenderer(
 ): ReplayTestProgressRenderer {
   const completedKeys = new Set<string>();
   let hasLiveProgressLine = false;
+  let liveProgressWidth = 0;
   let spinnerFrameIndex = 0;
+
+  const resetLiveProgress = () => {
+    completedKeys.clear();
+    hasLiveProgressLine = false;
+    liveProgressWidth = 0;
+  };
+  const renderLiveStep = (
+    event: Extract<ReplayTestReporterProgressEvent, { type: 'test-step' }>,
+  ) => {
+    if (!options.liveProgress) return undefined;
+    const spinnerFrame = nextReplayTestProgressSpinnerFrame(spinnerFrameIndex);
+    spinnerFrameIndex += 1;
+    const line = formatReplayTestLiveProgressLine(event.test, options, spinnerFrame);
+    const clearPrefix = clearLiveProgressPrefix(
+      hasLiveProgressLine ? liveProgressWidth : 0,
+      options.columns,
+      options.terminalReflowsOnResize !== false,
+    );
+    hasLiveProgressLine = true;
+    liveProgressWidth = visibleLength(line);
+    return { text: `${clearPrefix}${line}`, newline: false };
+  };
+  const renderTestResult = (
+    event: Extract<ReplayTestReporterProgressEvent, { type: 'test-result' }>,
+  ) => {
+    if (isReplayTestCompletionProgressEvent(event.test)) {
+      const key = replayTestCompletionProgressKey(event.test);
+      if (completedKeys.has(key)) return undefined;
+      completedKeys.add(key);
+    }
+    const line = formatReplayTestProgressEvent(event.test, options);
+    if (!line) return undefined;
+    const text = hasLiveProgressLine
+      ? `${clearLiveProgressPrefix(
+          liveProgressWidth,
+          options.columns,
+          options.terminalReflowsOnResize !== false,
+        )}${line}`
+      : line;
+    hasLiveProgressLine = false;
+    liveProgressWidth = 0;
+    return { text, newline: true };
+  };
+
   return {
     render(event) {
       if (event.type === 'suite-start') {
-        completedKeys.clear();
-        hasLiveProgressLine = false;
+        resetLiveProgress();
         return undefined;
       }
-      if (event.type === 'test-step') {
-        if (!options.liveProgress) return undefined;
-        hasLiveProgressLine = true;
-        const spinnerFrame = nextReplayTestProgressSpinnerFrame(spinnerFrameIndex);
-        spinnerFrameIndex += 1;
-        return {
-          text: clearLinePrefix(
-            formatReplayTestLiveProgressLine(event.test, options, spinnerFrame),
-          ),
-          newline: false,
-        };
-      }
-      if (event.type !== 'test-result') return undefined;
-      if (isReplayTestCompletionProgressEvent(event.test)) {
-        const key = replayTestCompletionProgressKey(event.test);
-        if (completedKeys.has(key)) return undefined;
-        completedKeys.add(key);
-      }
-      const line = formatReplayTestProgressEvent(event.test, options);
-      if (!line) return undefined;
-      const text = hasLiveProgressLine ? clearLinePrefix(line) : line;
-      hasLiveProgressLine = false;
-      return { text, newline: true };
+      if (event.type === 'test-step') return renderLiveStep(event);
+      return event.type === 'test-result' ? renderTestResult(event) : undefined;
     },
   };
 }
@@ -263,17 +289,30 @@ function replayTestCompletionProgressKey(event: ReplayTestResult): string {
   return [event.status, event.index, event.total, event.file, event.title ?? '', shard].join('\0');
 }
 
-function clearLinePrefix(text: string): string {
-  return `\r\x1B[2K${text}`;
+function clearLiveProgressPrefix(
+  previousWidth: number,
+  columns: ReplayTestProgressFormatOptions['columns'],
+  terminalReflowsOnResize: boolean,
+): string {
+  // Reflowing terminals move the cursor to the final wrapped row after a shrink.
+  // Non-reflowing multiplexers keep it on the original row, where cursor-up
+  // cleanup would erase completed test output.
+  const rows = terminalReflowsOnResize
+    ? Math.max(1, Math.ceil(previousWidth / resolveColumns(columns)))
+    : 1;
+  let output = '\r\x1B[2K';
+  for (let row = 1; row < rows; row += 1) {
+    output += '\x1B[1A\r\x1B[2K';
+  }
+  return output;
 }
 
-function resolveColumns(columns: number | undefined): number {
-  return typeof columns === 'number' && Number.isFinite(columns) && columns > 0
-    ? Math.floor(columns)
-    : 80;
+function resolveColumns(columns: ReplayTestProgressFormatOptions['columns']): number {
+  const value = typeof columns === 'function' ? columns() : columns;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 80;
 }
 
-function trimToColumns(value: string, columns: number | undefined): string {
+function trimToColumns(value: string, columns: ReplayTestProgressFormatOptions['columns']): string {
   const limit = resolveColumns(columns);
   if (visibleLength(value) <= limit) return value;
   if (limit <= 0) return '';

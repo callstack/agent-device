@@ -41,7 +41,6 @@ export type MaestroFailedEngineEvent = MaestroEngineEvent & {
   readonly durationMs: number;
   readonly error: unknown;
   readonly artifactPaths: readonly string[];
-  readonly expandedVariables: Readonly<Record<string, string>>;
 };
 
 export type MaestroFailureReportAction = Pick<
@@ -50,7 +49,8 @@ export type MaestroFailureReportAction = Pick<
 >;
 
 export type MaestroFailureReportProjection = {
-  readonly authoredCommand: MaestroEngineEvent['command'];
+  /** Failure command; runtime-command failures are resolved, while earlier failures stay authored. */
+  readonly command: MaestroEngineEvent['command'];
   readonly source: MaestroEngineEvent['source'];
   readonly progress: ReturnType<typeof formatMaestroCommandProgress>;
   readonly action: MaestroFailureReportAction;
@@ -62,7 +62,7 @@ export function buildTypedMaestroFailureReportProjection(
 ): MaestroFailureReportProjection {
   const progress = formatMaestroCommandProgress(event.command);
   return {
-    authoredCommand: event.command,
+    command: event.command,
     source: event.source,
     progress,
     action: {
@@ -87,10 +87,7 @@ export async function buildTypedMaestroFailureResponse(params: {
   const { event, plan, replayPath, req, sessionName, sessionStore, logPath } = params;
   const report = buildTypedMaestroFailureReportProjection(event, req);
   const cause = hoistReplayFailureCauseDiagnosticMeta(params.error);
-  const scrubVars = [
-    ...collectExpandedScrubVars(event.expandedVariables),
-    ...collectMaestroTextScrubVars(report.authoredCommand),
-  ].sort((left, right) => right.value.length - left.value.length);
+  const scrubVars = collectMaestroTextScrubVars(report.command);
   const sanitize = createReplayDivergenceSanitizer(scrubVars);
   const safeCause = {
     ...cause,
@@ -114,9 +111,9 @@ export async function buildTypedMaestroFailureResponse(params: {
   const suggestions =
     session &&
     observation.state === 'available' &&
-    !isMaestroControlCommandDescriptor(report.authoredCommand)
+    !isMaestroControlCommandDescriptor(report.command)
       ? collectTypedMaestroSuggestions({
-          command: report.authoredCommand,
+          command: report.command,
           platform: plan.platform,
           action: report.action,
           session,
@@ -128,7 +125,7 @@ export async function buildTypedMaestroFailureResponse(params: {
     from: event.stepIndex,
     planDigest: plan.digest,
   });
-  const actionLabel = [report.authoredCommand.kind, formatMaestroActionValue(report.progress.value)]
+  const actionLabel = [report.command.kind, formatMaestroActionValue(report.progress.value)]
     .filter(Boolean)
     .join(' ');
   const divergence: ReplayDivergence = {
@@ -173,7 +170,7 @@ export async function buildTypedMaestroFailureResponse(params: {
   return buildReplayDivergenceFailureResponseFromDescriptor({
     error: safeCause,
     actionLabel,
-    action: report.authoredCommand.kind,
+    action: report.command.kind,
     positionals: [...report.action.positionals],
     step: event.stepIndex,
     replayPath,
@@ -331,13 +328,6 @@ function reportCommandForCapture(command: string): string {
 function safeProgressPositionals(command: string, value: string | undefined): string[] {
   if (!value || command === 'inputText') return [];
   return [value];
-}
-
-function collectExpandedScrubVars(values: Readonly<Record<string, string>>): ReplayVarScrubEntry[] {
-  return Object.entries(values)
-    .filter(([, value]) => value.length > 0)
-    .map(([name, value]) => ({ name, value }))
-    .sort((left, right) => right.value.length - left.value.length);
 }
 
 function collectMaestroTextScrubVars(

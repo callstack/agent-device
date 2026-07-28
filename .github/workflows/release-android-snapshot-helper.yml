@@ -72,10 +72,11 @@ jobs:
         id: package
         env:
           RELEASE_ASSET_DIR: ${{ github.workspace }}/.tmp/release-assets
+          AGENT_DEVICE_ANDROID_HELPER: snapshot
         run: |
           set -euo pipefail
           mkdir -p "${RELEASE_ASSET_DIR}"
-          sh ./scripts/package-android-snapshot-helper.sh \
+          sh ./scripts/package-android-helper.sh \
             "${{ steps.meta.outputs.version }}" \
             "${{ steps.meta.outputs.tag }}" \
             "${RELEASE_ASSET_DIR}"

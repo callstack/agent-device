@@ -137,7 +137,6 @@ export type MaestroEngineObserver = {
       runtimeMetrics?: MaestroRuntimeMetrics;
       error: unknown;
       artifactPaths: readonly string[];
-      expandedVariables: Readonly<Record<string, string>>;
     },
   ): void;
 };

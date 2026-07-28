@@ -1,6 +1,6 @@
 import { AppError, asAppError } from '../../kernel/errors.ts';
 import type { Rect } from '../../kernel/snapshot.ts';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { emitDiagnostic, registerDiagnosticSensitiveValue } from '../../utils/diagnostics.ts';
 import { stripUndefined } from '../../utils/parsing.ts';
 import { executeRunScriptFile } from './run-script-execution.ts';
 import {
@@ -96,6 +96,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     text: string,
     context: MaestroRuntimeOperationContext,
   ): Promise<void> => {
+    registerDiagnosticSensitiveValue(text);
     await invokeMutation({ kind: 'typeText', text }, context);
     const stable = await waitForTypedSnapshotStability({
       timeoutMs: MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,

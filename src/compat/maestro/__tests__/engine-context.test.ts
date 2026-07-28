@@ -1,10 +1,11 @@
 import { expect, test, vi } from 'vitest';
+import { maestroTestFailure } from '../compatibility-errors.ts';
 import { createMaestroExecutionContext } from '../engine-context.ts';
 import type { MaestroRuntimePort } from '../engine-types.ts';
 import { parseMaestroProgram } from '../program-ir-parser.ts';
 import { executeMaestroProgram } from './runtime-port-fixtures.ts';
 
-test('resolves transitive scoped variables to their final value', () => {
+test('resolves transitive scoped variables', () => {
   const context = createMaestroExecutionContext();
   const leave = context.enter({
     TARGET: '${NEXT}',
@@ -13,11 +14,10 @@ test('resolves transitive scoped variables to their final value', () => {
   });
 
   expect(context.resolve('${TARGET}')).toBe('Done');
-  expect(context.expandedVariables).toEqual({ TARGET: 'Done' });
   leave();
 });
 
-test('retains expanded values after nested scopes unwind', () => {
+test('keeps nested scopes valid until they unwind', () => {
   const context = createMaestroExecutionContext();
   const rootLeave = context.enter({ SECRET: 'nested-scope-secret' });
   const nestedLeave = context.enter({ TARGET: '${SECRET}' });
@@ -25,10 +25,24 @@ test('retains expanded values after nested scopes unwind', () => {
   expect(context.resolve('${TARGET}')).toBe('nested-scope-secret');
   nestedLeave();
   rootLeave();
+});
 
-  expect(context.expandedVariables).toEqual({
-    TARGET: 'nested-scope-secret',
-  });
+test('renders resolved target variables in optional-step warnings', async () => {
+  const target = 'Missing checkout button';
+  const program = parseMaestroProgram(
+    ['---', '- tapOn:', '    text: ${TARGET}', '    optional: true'].join('\n'),
+    { sourcePath: '/flows/optional.yaml' },
+  );
+  const port: MaestroRuntimePort = {
+    execute: vi.fn(async () => {
+      throw maestroTestFailure(`Missing ${target}`);
+    }),
+    observe: vi.fn(async ({ generation }) => ({ generation, matched: true })),
+  };
+
+  const result = await executeMaestroProgram(program, port, { env: { TARGET: target } });
+
+  expect(result.warnings).toEqual([expect.stringContaining(target)]);
 });
 
 test('rejects cyclic references instead of recursing indefinitely', () => {

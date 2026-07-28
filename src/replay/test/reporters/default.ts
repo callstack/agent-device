@@ -45,7 +45,8 @@ export function createDefaultReplayTestReporter(): ReplayTestReporter {
     progressRenderer ??= createReplayTestProgressRenderer({
       verbose: context.verbose,
       liveProgress: shouldUseLiveProgress(context),
-      columns: context.stderr.columns,
+      columns: () => context.stderr.columns,
+      terminalReflowsOnResize: terminalReflowsOnResize(),
     });
     const output = progressRenderer.render(event);
     if (!output) return;
@@ -102,6 +103,10 @@ export function createDefaultReplayTestReporter(): ReplayTestReporter {
 
 function shouldUseLiveProgress(context: ReplayTestReporterContext): boolean {
   return context.stderr.isTTY && !process.env.CI;
+}
+
+function terminalReflowsOnResize(): boolean {
+  return !process.env.TMUX && !process.env.STY;
 }
 
 function renderReplayTestSummary(
