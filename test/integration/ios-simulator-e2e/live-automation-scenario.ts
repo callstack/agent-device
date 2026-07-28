@@ -14,6 +14,19 @@ type FixtureHomeObservationOperations = {
   waitText: typeof assertWaitText;
 };
 
+export function catalogNavigationSteps(): Array<{ args: string[]; step: string }> {
+  return [
+    {
+      args: ['click', 'id="automation-continue-catalog"'],
+      step: 'navigate onward from cold deep link',
+    },
+    {
+      args: ['wait', 'id="catalog-title"', '10000'],
+      step: 'wait for exact catalog destination',
+    },
+  ];
+}
+
 export async function observeFixtureHome(
   context: LiveContext,
   operations: FixtureHomeObservationOperations = {
@@ -57,12 +70,9 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
   await assertWaitText(context, 'Automation lab');
   await assertElementText(context, 'id="automation-event-name"', 'cold.start');
   await assertElementText(context, 'id="automation-event-payload"', '{"source":"deep-link"}');
-  await runStep(context, 'navigate onward from cold deep link', [
-    'click',
-    'id="automation-continue-catalog"',
-    '--settle',
-  ]);
-  await assertWaitText(context, 'Catalog');
+  for (const navigationStep of catalogNavigationSteps()) {
+    await runStep(context, navigationStep.step, navigationStep.args);
+  }
   verifyBehavior(
     context,
     'cold-start-deep-link-navigation',

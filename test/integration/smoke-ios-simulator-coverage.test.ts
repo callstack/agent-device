@@ -16,7 +16,10 @@ import { parseReplayScriptDetailed } from '../../src/replay/script.ts';
 import { IOS_SIMULATOR_BEHAVIOR_COVERAGE } from './ios-simulator-e2e/behavior-coverage.ts';
 import { IOS_SIMULATOR_E2E_COVERAGE } from './ios-simulator-e2e/coverage-manifest.ts';
 import { collectPagedEventTimeline } from './ios-simulator-e2e/event-timeline.ts';
-import { observeFixtureHome } from './ios-simulator-e2e/live-automation-scenario.ts';
+import {
+  catalogNavigationSteps,
+  observeFixtureHome,
+} from './ios-simulator-e2e/live-automation-scenario.ts';
 import { type LiveContext } from './ios-simulator-e2e/live-harness.ts';
 import { IOS_SIMULATOR_LIVE_SCENARIOS } from './ios-simulator-e2e/scenarios.ts';
 
@@ -75,6 +78,19 @@ test('fixture home observation rejects app metadata without a matching snapshot 
     }),
     /home snapshot nodes should expose Agent Device Tester/,
   );
+});
+
+test('deep-link continuation uses a direct selector tap and exact destination landmark', () => {
+  assert.deepEqual(catalogNavigationSteps(), [
+    {
+      args: ['click', 'id="automation-continue-catalog"'],
+      step: 'navigate onward from cold deep link',
+    },
+    {
+      args: ['wait', 'id="catalog-title"', '10000'],
+      step: 'wait for exact catalog destination',
+    },
+  ]);
 });
 
 test('iOS simulator coverage exhaustively classifies the public catalog', () => {
