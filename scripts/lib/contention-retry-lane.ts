@@ -13,18 +13,21 @@ import {
   planContentionRetry,
   type RetryOutcome,
   type RetryPlan,
+  type RunBlocker,
   type TestFailure,
 } from './contention-retry.ts';
 
 export type TestRun = {
   ok: boolean;
   failures: readonly TestFailure[];
+  /** Non-test failures; any of them forbids a retry. */
+  blockers?: readonly RunBlocker[];
 };
 
 /** Telemetry payload for scheduled-lane health (#1430). */
 export type ContentionRetryTelemetry = {
-  /** Files rerun in this job, with the test that timed out. */
-  retried: ReadonlyArray<{ file: string; testName: string; trackingIssue: string }>;
+  /** Files rerun in this job (one entry per file, not per failed test). */
+  retried: ReadonlyArray<{ file: string; testNames: readonly string[]; trackingIssue: string }>;
   retryCount: number;
   retryOutcome: RetryOutcome | null;
   listSize: number;
@@ -81,7 +84,7 @@ export async function runWithContentionRetry(
     return finish(options, { ok: true, summary: '', plan: undefined, outcome: null });
   }
 
-  const plan = planContentionRetry(first.failures);
+  const plan = planContentionRetry(first.failures, first.blockers ?? []);
   if (!plan.retry) {
     return finish(options, {
       ok: false,
@@ -111,16 +114,17 @@ function finish(
   },
 ): ContentionRetryResult {
   const plan = state.plan;
+  // Keyed by file, matching what actually reran: two timed-out tests in one file
+  // are one retry, not two.
   const retried = plan?.retry
-    ? plan.failures.map((failure) => {
-        const file = normalizeTestFile(failure.file);
-        return {
-          file,
-          testName: failure.testName,
-          trackingIssue:
-            CONTENTION_RETRY_FILES.find((entry) => entry.file === file)?.trackingIssue ?? '',
-        };
-      })
+    ? plan.files.map((file) => ({
+        file,
+        testNames: plan.failures
+          .filter((failure) => normalizeTestFile(failure.file) === file)
+          .map((failure) => failure.testName),
+        trackingIssue:
+          CONTENTION_RETRY_FILES.find((entry) => entry.file === file)?.trackingIssue ?? '',
+      }))
     : [];
   return {
     ok: state.ok,

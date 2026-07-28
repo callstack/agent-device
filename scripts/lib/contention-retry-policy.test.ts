@@ -8,15 +8,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { runWithContentionRetry, type TestRun } from './contention-retry-lane.ts';
+import { processBlockers } from './contention-retry-blockers.ts';
 import contentionRetryReporter, {
   failedTestCase,
+  runBlockers,
   writeFailureReport,
 } from './contention-retry-reporter.ts';
 import {
   CONTENTION_RETRY_FILES,
   expiredRetryEntries,
   formatRetrySummary,
-  isTimeoutShapedFailure,
+  isVitestTimeoutError,
   parseFailureReport,
   planContentionRetry,
   SUBPROCESS_STUB_TESTS,
@@ -26,11 +28,35 @@ import {
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 
 const LISTED = 'src/daemon/__tests__/request-router-open.test.ts';
-const TIMEOUT_MESSAGE = 'Error: Test timed out in 5000ms.\n at open()';
+// Vitest's own timeout error, verbatim (@vitest/runner `makeTimeoutError`).
+const VITEST_TIMEOUT = {
+  name: 'Error',
+  message:
+    'Test timed out in 5000ms.\nIf this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".',
+};
+const TIMEOUT_MESSAGE = `Error: ${VITEST_TIMEOUT.message}`;
 const ASSERTION_MESSAGE = 'AssertionError: expected "DEVICE_IN_USE" to be "OK"';
 
 function failure(overrides: Partial<TestFailure> = {}): TestFailure {
-  return { file: LISTED, testName: 'opens a session', message: TIMEOUT_MESSAGE, ...overrides };
+  return {
+    file: LISTED,
+    testName: 'opens a session',
+    message: TIMEOUT_MESSAGE,
+    timeout: true,
+    ...overrides,
+  };
+}
+
+function assertionFailure(overrides: Partial<TestFailure> = {}): TestFailure {
+  return failure({ message: ASSERTION_MESSAGE, timeout: false, ...overrides });
+}
+
+function testCaseStub(errors: ReadonlyArray<Record<string, unknown>>, state = 'failed'): unknown {
+  return {
+    fullName: 'opens a session',
+    module: { moduleId: `${repoRoot}/${LISTED}` },
+    result: () => ({ state, errors }),
+  };
 }
 
 function lane(runs: { first: TestRun; retry?: TestRun; today?: Date }): {
@@ -115,56 +141,179 @@ test('the expiry gate fails the run before any test executes', async () => {
   assert.deepEqual(rerun, []);
 });
 
-test('timeout shapes are recognized and assertion failures are not', () => {
-  assert.ok(isTimeoutShapedFailure(TIMEOUT_MESSAGE));
-  assert.ok(isTimeoutShapedFailure('Error: Hook timed out in 10000 ms.'));
-  assert.ok(!isTimeoutShapedFailure(ASSERTION_MESSAGE));
-  assert.ok(!isTimeoutShapedFailure('Error: expected timeout hint to be set'));
+test("only the runner's own timeout error classifies as a timeout", () => {
+  assert.ok(isVitestTimeoutError(VITEST_TIMEOUT));
+  assert.ok(
+    isVitestTimeoutError({
+      name: 'Error',
+      message:
+        'Hook timed out in 10000ms.\nIf this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".',
+    }),
+  );
+  // An assertion must not be able to talk its way into a retry, whatever it says.
+  for (const impostor of [
+    { name: 'AssertionError', message: VITEST_TIMEOUT.message },
+    { name: 'AssertionError', message: 'expected ETIMEDOUT, got ECONNRESET' },
+    { name: 'Error', message: `saw: ${VITEST_TIMEOUT.message}` },
+    { name: 'Error', message: 'connect ETIMEDOUT 127.0.0.1:8080' },
+    { name: 'Error', message: 'Closing timeout while tearing down the daemon' },
+    { name: 'Error', message: VITEST_TIMEOUT.message, expected: 'OK', actual: 'DEVICE_IN_USE' },
+  ]) {
+    assert.ok(!isVitestTimeoutError(impostor), `${impostor.name}: ${impostor.message}`);
+  }
+});
+
+test('an assertion message quoting a timeout still fails on the first run', async () => {
+  const impostor = failedTestCase(
+    testCaseStub([{ name: 'AssertionError', message: VITEST_TIMEOUT.message }]) as never,
+  );
+  assert.ok(impostor);
+  assert.equal(impostor.timeout, false);
+  const { result, rerun } = lane({
+    first: { ok: false, failures: [{ ...impostor, file: LISTED }] },
+  });
+  assert.equal((await result).ok, false);
+  assert.deepEqual(rerun, []);
+});
+
+test('a test that timed out AND failed an assertion is not retry-eligible', () => {
+  const mixed = failedTestCase(
+    testCaseStub([
+      VITEST_TIMEOUT,
+      { name: 'AssertionError', message: 'expected 1 to be 2', expected: 2, actual: 1 },
+    ]) as never,
+  );
+  assert.equal(mixed?.timeout, false);
 });
 
 test('the lane reporter keeps the real error message a timeout is classified by', () => {
-  const testCase = {
-    fullName: 'opens a session',
-    module: { moduleId: `${repoRoot}/${LISTED}` },
-    result: () => ({
-      state: 'failed',
-      errors: [{ name: 'Error', message: 'Test timed out in 5000ms.' }],
-    }),
-  };
-  const failed = failedTestCase(testCase as unknown as Parameters<typeof failedTestCase>[0]);
+  const failed = failedTestCase(testCaseStub([VITEST_TIMEOUT]) as never);
   assert.deepEqual(failed, {
     file: `${repoRoot}/${LISTED}`,
     testName: 'opens a session',
-    message: 'Error: Test timed out in 5000ms.',
+    message: TIMEOUT_MESSAGE,
+    timeout: true,
   });
-
-  const passing = { ...testCase, result: () => ({ state: 'passed', errors: [] }) };
-  assert.equal(failedTestCase(passing as unknown as Parameters<typeof failedTestCase>[0]), null);
+  assert.equal(failedTestCase(testCaseStub([], 'passed') as never), null);
 
   const target = path.join(repoRoot, '.tmp/contention-retry/reporter-gate.json');
-  writeFailureReport([failure()], target);
-  assert.deepEqual(parseFailureReport(JSON.parse(fs.readFileSync(target, 'utf8')), repoRoot), [
-    failure(),
-  ]);
+  writeFailureReport({ failures: [failure()], blockers: [] }, target);
+  assert.deepEqual(parseFailureReport(JSON.parse(fs.readFileSync(target, 'utf8')), repoRoot), {
+    failures: [failure()],
+    blockers: [],
+  });
   assert.ok(contentionRetryReporter().onTestCaseResult);
+});
+
+test('the Coverage lane keeps the configured reporters, failure sink included', async () => {
+  const { reporters } = await import('../../vitest.config.ts');
+  const plain = reporters({});
+  const laneReporters = reporters({ CONTENTION_RETRY_FAILURES: '/tmp/failures.json' });
+  assert.equal(plain.length, 2, 'default + slow-test gate');
+  assert.equal(
+    laneReporters.length,
+    plain.length + 1,
+    'the failure sink is added, never substituted',
+  );
+  // The slow-test gate must survive into the retry lane.
+  assert.ok(laneReporters.every((reporter) => Boolean(reporter)));
+  assert.ok(typeof laneReporters.at(-1) === 'object');
+  const runner = fs.readFileSync(
+    path.join(repoRoot, 'scripts/lib/contention-retry-run.ts'),
+    'utf8',
+  );
+  assert.ok(
+    !/['"]--reporter/.test(runner),
+    'a --reporter flag replaces the configured reporters and would drop the slow-test gate',
+  );
+});
+
+test('non-test failures block the retry instead of being rerun away', async () => {
+  const covered = processBlockers({
+    ok: false,
+    failureCount: 1,
+    output: [
+      ' Test Files  1 failed (11)',
+      'ERROR: Coverage for lines (79.5%) does not meet global threshold (80%)',
+    ].join('\n'),
+  });
+  assert.deepEqual(
+    covered.map((blocker) => blocker.kind),
+    ['coverage threshold'],
+  );
+  assert.deepEqual(
+    processBlockers({ ok: false, failureCount: 0, output: 'Error: worker exited' }).map(
+      (blocker) => blocker.kind,
+    ),
+    ['unexplained failure'],
+  );
+  assert.deepEqual(processBlockers({ ok: true, failureCount: 0, output: '' }), []);
+
+  const moduleErrors = runBlockers(
+    [
+      { moduleId: `${repoRoot}/${LISTED}`, errors: () => [{ message: 'Cannot find module x' }] },
+    ] as never,
+    [{ name: 'Error', message: 'Unhandled rejection\n at foo' }],
+  );
+  assert.deepEqual(
+    moduleErrors.map((blocker) => blocker.kind),
+    ['unhandled error', 'module error'],
+  );
+
+  // A retry-eligible timeout alongside any of them still fails the job.
+  for (const blockers of [covered, moduleErrors]) {
+    const { result, rerun } = lane({ first: { ok: false, failures: [failure()], blockers } });
+    const resolved = await result;
+    assert.equal(resolved.ok, false);
+    assert.deepEqual(rerun, [], 'a blocked run must never be rerun');
+    assert.equal(resolved.envelope.data.retryCount, 0);
+    assert.match(resolved.summary, /No retry: the run failed for a reason a rerun cannot re-check/);
+  }
+});
+
+test('two timed-out tests in one file are one retry, counted once', async () => {
+  const failures = [failure(), failure({ testName: 'closes a session' })];
+  const plan = planContentionRetry(failures);
+  assert.deepEqual(plan.retry && plan.files, [LISTED]);
+  const { result, rerun } = lane({ first: { ok: false, failures } });
+  const resolved = await result;
+  assert.deepEqual(rerun, [[LISTED]]);
+  assert.equal(resolved.envelope.data.retryCount, 1);
+  assert.deepEqual(resolved.envelope.data.retried, [
+    {
+      file: LISTED,
+      testNames: ['opens a session', 'closes a session'],
+      trackingIssue: CONTENTION_RETRY_FILES.find((entry) => entry.file === LISTED)?.trackingIssue,
+    },
+  ]);
+  assert.match(resolved.summary, /Retried 1 timeout-shaped file\(s\)/);
+  assert.equal(resolved.summary.split('\n').filter((line) => line.includes(LISTED)).length, 1);
 });
 
 test('reporter failures are read as repo-relative paths, names, and messages', () => {
   const failures = parseFailureReport(
     {
       failures: [
-        { file: `${repoRoot}/${LISTED}`, testName: 'opens a session', message: TIMEOUT_MESSAGE },
+        {
+          file: `${repoRoot}/${LISTED}`,
+          testName: 'opens a session',
+          message: TIMEOUT_MESSAGE,
+          timeout: true,
+        },
         { testName: 'no file' },
       ],
     },
     repoRoot,
   );
-  assert.deepEqual(failures, [failure()]);
+  assert.deepEqual(failures.failures, [failure()]);
 });
 
 test('an unreadable report yields no retry-eligible failures', () => {
-  assert.deepEqual(parseFailureReport({}, repoRoot), []);
-  assert.deepEqual(parseFailureReport({ failures: 'nope' }, repoRoot), []);
+  assert.deepEqual(parseFailureReport({}, repoRoot), { failures: [], blockers: [] });
+  assert.deepEqual(parseFailureReport({ failures: 'nope' }, repoRoot), {
+    failures: [],
+    blockers: [],
+  });
   assert.equal(planContentionRetry([]).retry, false);
 });
 
@@ -174,7 +323,7 @@ test('a timeout in a listed file retries exactly that file, once', () => {
 });
 
 test('an assertion failure in a listed file never retries', () => {
-  const plan = planContentionRetry([failure({ message: ASSERTION_MESSAGE })]);
+  const plan = planContentionRetry([assertionFailure()]);
   assert.equal(plan.retry, false);
   assert.match(plan.reason, /assertion failures never retry/);
 });
@@ -190,7 +339,7 @@ test('a timeout outside the list never retries, even alongside eligible ones', (
 
 test('an injected assertion failure in a listed file fails the job on the first run', async () => {
   const { result, rerun } = lane({
-    first: { ok: false, failures: [failure({ message: ASSERTION_MESSAGE })] },
+    first: { ok: false, failures: [assertionFailure()] },
   });
   const resolved = await result;
   assert.equal(resolved.ok, false);

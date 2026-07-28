@@ -233,20 +233,37 @@ export function expiredRetryEntries(now: Date): readonly ContentionRetryEntry[] 
   return CONTENTION_RETRY_FILES.filter((entry) => entry.reviewBy < today);
 }
 
-// Vitest reports a timeout as a plain Error with a fixed message shape; there is
-// no structured signal on the JSON reporter's `failureMessages`, so this is an
-// owned exception to the repo's "typed signals over message sniffing" rule and
-// stays confined to this classifier. Erring towards "not a timeout" is the safe
-// direction: it fails the job on the first run.
-const TIMEOUT_SHAPED = [
-  /\btest timed out in \d+\s*ms\b/i,
-  /\bhook timed out in \d+\s*ms\b/i,
-  /\bclosing timeout\b/i,
-  /\bETIMEDOUT\b/,
-];
+/**
+ * Vitest's own timeout error, verbatim (`makeTimeoutError`, @vitest/runner
+ * 4.1.8): a plain `Error` whose whole message is the runner's template.
+ */
+const VITEST_TIMEOUT_MESSAGE =
+  /^(Test|Hook) timed out in \d+ms\.\nIf this is a long-running (test|hook), pass a timeout value as the last argument/;
 
-export function isTimeoutShapedFailure(message: string): boolean {
-  return TIMEOUT_SHAPED.some((pattern) => pattern.test(message));
+/** The error shape the lane reporter classifies, as Vitest hands it over. */
+export type ReportedError = {
+  name?: unknown;
+  message?: unknown;
+  expected?: unknown;
+  actual?: unknown;
+};
+
+/**
+ * Whether an error is a timeout *raised by the runner itself*, the only failure
+ * this lane may retry.
+ *
+ * Vitest exposes no reason code for a timeout, so the classifier runs against
+ * the live error object inside the reporter rather than against rendered text,
+ * and requires all three of: the runner's exact message template, a plain
+ * `Error` (assertion libraries set `name` to `AssertionError`), and no
+ * `expected`/`actual` diff fields. A test whose *assertion message* merely
+ * mentions a timeout therefore cannot opt itself into a retry — see the gate
+ * test. Erring towards "not a timeout" fails the job on the first run.
+ */
+export function isVitestTimeoutError(error: ReportedError): boolean {
+  if (error.name !== 'Error') return false;
+  if (error.expected !== undefined || error.actual !== undefined) return false;
+  return typeof error.message === 'string' && VITEST_TIMEOUT_MESSAGE.test(error.message);
 }
 
 /** One failed test case as read from a runner report. */
@@ -254,7 +271,17 @@ export type TestFailure = {
   file: string;
   testName: string;
   message: string;
+  /** Classified by the reporter from the live error object, never from text. */
+  timeout: boolean;
 };
+
+/**
+ * A failure that is not a failed test case — an unhandled error, a module that
+ * failed to load, a coverage-threshold miss, a nonzero exit nothing else
+ * explains. These can never be retried away: they block the plan outright, so a
+ * timeout retry can never erase a second, unrelated failure from the same run.
+ */
+export type RunBlocker = { kind: string; detail: string };
 
 /**
  * Failures as written by the lane's reporter (`contention-retry-reporter.ts`),
@@ -262,26 +289,45 @@ export type TestFailure = {
  * to zero failures, which the policy reads as "nothing retry-eligible": the job
  * fails, the safe direction.
  */
-export function parseFailureReport(report: unknown, repoRoot?: string): readonly TestFailure[] {
-  const failures = (report as { failures?: unknown }).failures;
-  if (!Array.isArray(failures)) return [];
-  return failures
-    .map((entry) => readFailure(entry, repoRoot))
-    .filter((entry) => entry !== undefined);
+export function parseFailureReport(
+  report: unknown,
+  repoRoot?: string,
+): { failures: readonly TestFailure[]; blockers: readonly RunBlocker[] } {
+  const { failures, blockers } = report as { failures?: unknown; blockers?: unknown };
+  return {
+    failures: Array.isArray(failures)
+      ? failures.map((entry) => readFailure(entry, repoRoot)).filter((entry) => entry !== undefined)
+      : [],
+    blockers: Array.isArray(blockers)
+      ? blockers.map((entry) => readBlocker(entry)).filter((entry) => entry !== undefined)
+      : [],
+  };
+}
+
+function readBlocker(entry: unknown): RunBlocker | undefined {
+  const { kind, detail } = entry as { kind?: unknown; detail?: unknown };
+  if (typeof kind !== 'string') return undefined;
+  return { kind, detail: typeof detail === 'string' ? detail : '' };
 }
 
 function readFailure(entry: unknown, repoRoot: string | undefined): TestFailure | undefined {
-  const { file, testName, message } = entry as Partial<Record<keyof TestFailure, unknown>>;
+  const { file, testName, message, timeout } = entry as Partial<Record<keyof TestFailure, unknown>>;
   if (typeof file !== 'string') return undefined;
   return {
     file: normalizeTestFile(file, repoRoot),
     testName: typeof testName === 'string' ? testName : 'unknown test',
     message: typeof message === 'string' ? message : '',
+    timeout: timeout === true,
   };
 }
 
 export type RetryPlan =
-  | { retry: false; reason: string; blocked: readonly TestFailure[] }
+  | {
+      retry: false;
+      reason: string;
+      blocked: readonly TestFailure[];
+      blockers: readonly RunBlocker[];
+    }
   | { retry: true; files: readonly string[]; failures: readonly TestFailure[] };
 
 /**
@@ -289,12 +335,25 @@ export type RetryPlan =
  * timeout in a listed file: one assertion failure anywhere fails the job, so a
  * real regression can never be papered over by a rerun.
  */
-export function planContentionRetry(failures: readonly TestFailure[]): RetryPlan {
+export function planContentionRetry(
+  failures: readonly TestFailure[],
+  blockers: readonly RunBlocker[] = [],
+): RetryPlan {
+  if (blockers.length > 0) {
+    return {
+      retry: false,
+      reason: `the run failed for a reason a rerun cannot re-check (${blockers
+        .map((blocker) => blocker.kind)
+        .join(', ')})`,
+      blocked: failures,
+      blockers,
+    };
+  }
   if (failures.length === 0) {
-    return { retry: false, reason: 'no test failures to retry', blocked: [] };
+    return { retry: false, reason: 'no test failures to retry', blocked: [], blockers };
   }
   const blocked = failures.filter(
-    (failure) => !isRetryEligibleFile(failure.file) || !isTimeoutShapedFailure(failure.message),
+    (failure) => !isRetryEligibleFile(failure.file) || !failure.timeout,
   );
   if (blocked.length > 0) {
     const assertionShaped = blocked.filter((failure) => isRetryEligibleFile(failure.file));
@@ -305,6 +364,7 @@ export function planContentionRetry(failures: readonly TestFailure[]): RetryPlan
           ? 'a listed file failed for a non-timeout reason (assertion failures never retry)'
           : 'a failure landed outside the enumerated retry list',
       blocked,
+      blockers,
     };
   }
   const files = [...new Set(failures.map((failure) => normalizeTestFile(failure.file)))].sort();
@@ -323,6 +383,9 @@ export function formatRetrySummary({ plan, outcome }: RetrySummaryInput): string
   const lines = ['## Contention retry (#1419)', ''];
   if (!plan.retry) {
     lines.push(`No retry: ${plan.reason}.`, '');
+    for (const blocker of plan.blockers) {
+      lines.push(`- **${blocker.kind}** — ${blocker.detail}`);
+    }
     for (const failure of plan.blocked) {
       lines.push(`- \`${normalizeTestFile(failure.file)}\` — ${failure.testName}`);
     }
@@ -331,14 +394,17 @@ export function formatRetrySummary({ plan, outcome }: RetrySummaryInput): string
   lines.push(
     `Retried ${plan.files.length} timeout-shaped file(s) once — outcome: **${outcome ?? 'pending'}**.`,
     '',
-    '| File | Failing test | Tracking issue | Review by |',
+    '| File | Failing test(s) | Tracking issue | Review by |',
     '| --- | --- | --- | --- |',
   );
-  for (const failure of plan.failures) {
-    const file = normalizeTestFile(failure.file);
+  for (const file of plan.files) {
     const entry = CONTENTION_RETRY_FILES.find((candidate) => candidate.file === file);
+    const tests = plan.failures
+      .filter((failure) => normalizeTestFile(failure.file) === file)
+      .map((failure) => failure.testName)
+      .join(', ');
     lines.push(
-      `| \`${file}\` | ${failure.testName} | ${entry?.trackingIssue ?? '—'} | ${entry?.reviewBy ?? '—'} |`,
+      `| \`${file}\` | ${tests} | ${entry?.trackingIssue ?? '—'} | ${entry?.reviewBy ?? '—'} |`,
     );
   }
   return `${lines.join('\n')}\n`;

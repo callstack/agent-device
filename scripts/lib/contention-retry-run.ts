@@ -14,7 +14,8 @@ import { runCmdStreaming, runCmdSync } from '../../src/utils/exec.ts';
 import { parseScriptArgs } from './cli-args.ts';
 import { runWithContentionRetry, type TestRun } from './contention-retry-lane.ts';
 import { FAILURE_FILE_ENV } from './contention-retry-reporter.ts';
-import { parseFailureReport, type TestFailure } from './contention-retry.ts';
+import { processBlockers } from './contention-retry-blockers.ts';
+import { parseFailureReport, type RunBlocker, type TestFailure } from './contention-retry.ts';
 
 const USAGE = `Usage: node --experimental-strip-types scripts/lib/contention-retry-run.ts [options]
 
@@ -44,29 +45,38 @@ const summaryPath = args.summary ?? process.env.GITHUB_STEP_SUMMARY;
 async function runVitest(extra: string[], report: string): Promise<TestRun> {
   fs.mkdirSync(path.dirname(report), { recursive: true });
   fs.rmSync(report, { force: true });
-  const result = await runCmdStreaming(
-    'pnpm',
-    [
-      'exec',
-      'vitest',
-      'run',
-      ...extra,
-      '--reporter=default',
-      '--reporter=./scripts/lib/contention-retry-reporter.ts',
+  // No `--reporter` flag: that would replace the reporters configured in
+  // vitest.config.ts and drop the slow-test gate from this lane. The env var
+  // composes the failure sink in alongside them.
+  let output = '';
+  const capture = (chunk: string, write: (text: string) => void): void => {
+    output += chunk;
+    write(chunk);
+  };
+  const result = await runCmdStreaming('pnpm', ['exec', 'vitest', 'run', ...extra], {
+    cwd: repoRoot,
+    env: { ...process.env, [FAILURE_FILE_ENV]: report },
+    allowFailure: true,
+    onStdoutChunk: (chunk) => capture(chunk, (text) => process.stdout.write(text)),
+    onStderrChunk: (chunk) => capture(chunk, (text) => process.stderr.write(text)),
+  });
+  const reported = readReport(report);
+  const ok = result.exitCode === 0;
+  return {
+    ok,
+    failures: reported.failures,
+    blockers: [
+      ...reported.blockers,
+      ...processBlockers({ ok, output, failureCount: reported.failures.length }),
     ],
-    {
-      cwd: repoRoot,
-      env: { ...process.env, [FAILURE_FILE_ENV]: report },
-      allowFailure: true,
-      onStdoutChunk: (chunk) => process.stdout.write(chunk),
-      onStderrChunk: (chunk) => process.stderr.write(chunk),
-    },
-  );
-  return { ok: result.exitCode === 0, failures: readFailures(report) };
+  };
 }
 
-function readFailures(report: string): readonly TestFailure[] {
-  if (!fs.existsSync(report)) return [];
+function readReport(report: string): {
+  failures: readonly TestFailure[];
+  blockers: readonly RunBlocker[];
+} {
+  if (!fs.existsSync(report)) return { failures: [], blockers: [] };
   return parseFailureReport(JSON.parse(fs.readFileSync(report, 'utf8')), repoRoot);
 }
 
@@ -85,6 +95,7 @@ function configHash(): string {
     'vitest.config.ts',
     'scripts/lib/contention-retry.ts',
     'scripts/lib/contention-retry-reporter.ts',
+    'scripts/lib/contention-retry-blockers.ts',
   ]) {
     hash.update(fs.readFileSync(path.join(repoRoot, file)));
   }
@@ -100,9 +111,10 @@ const projects = (args.project ?? '')
 const startedAtMs = Date.now();
 const result = await runWithContentionRetry({
   runAll: () => runVitest([...projects, ...(args.coverage ? ['--coverage'] : [])], reportPath),
-  // The rerun is file-scoped and coverage-free on purpose: coverage thresholds
-  // are a whole-suite verdict, and a threshold miss is not timeout-shaped, so it
-  // never reaches this branch.
+  // The rerun is file-scoped and coverage-free on purpose: a coverage verdict is
+  // a whole-suite property that a file-scoped rerun cannot re-establish, so a
+  // coverage failure in the first run is a blocker (`processBlockers`) and never
+  // reaches this branch.
   runFiles: (files) => runVitest([...files], reportPath.replace(/\.json$/, '.retry.json')),
   commit: runCmdSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot }).stdout.trim(),
   configHash: configHash(),

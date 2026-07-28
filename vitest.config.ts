@@ -1,4 +1,8 @@
+import type { Reporter } from 'vitest/node';
 import { defineConfig } from 'vitest/config';
+import contentionRetryReporter, {
+  FAILURE_FILE_ENV,
+} from './scripts/lib/contention-retry-reporter.ts';
 import { SUBPROCESS_STUB_TESTS } from './scripts/lib/contention-retry.ts';
 import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
 
@@ -16,6 +20,20 @@ import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
 // single-retry policy (#1419) reads, so the two cannot drift.
 export { SUBPROCESS_STUB_TESTS };
 
+/**
+ * Reporters, composed here rather than on the retry lane's command line: a
+ * `--reporter` flag *replaces* this list, which would silently drop the
+ * slow-test gate from the Coverage job. The retry lane opts its failure sink in
+ * through the environment instead.
+ */
+export function reporters(env: NodeJS.ProcessEnv = process.env): Array<string | Reporter> {
+  return [
+    'default',
+    slowTestGateReporter(),
+    ...(env[FAILURE_FILE_ENV] ? [contentionRetryReporter()] : []),
+  ];
+}
+
 export default defineConfig({
   test: {
     // Wall-clock discipline: unit tests must not wait real time. Measured
@@ -26,7 +44,7 @@ export default defineConfig({
     // --no-isolate = 205s wall vs 48s (module state thrashes across files),
     // threads = no change.
     slowTestThreshold: 500,
-    reporters: ['default', slowTestGateReporter()],
+    reporters: reporters(),
     projects: [
       {
         test: {

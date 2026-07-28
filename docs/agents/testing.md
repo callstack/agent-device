@@ -392,10 +392,18 @@ the retry policy cannot drift apart.
 The CI Coverage job runs the suite through `pnpm test:coverage:ci`
 (`scripts/lib/contention-retry-run.ts`), which applies one rule:
 
-- **Timeouts only.** A rerun happens only when *every* failure in the run is timeout-shaped **and**
-  lands in a listed file. One assertion failure — in a listed file or not — fails the job on the
-  first run, so a real regression can never be papered over by a retry.
-- **One retry, of the failed files only.** Not the suite, and never twice.
+- **Timeouts only, classified structurally.** A rerun happens only when *every* failure in the run is
+  a timeout raised by the runner itself **and** lands in a listed file. The lane's own reporter
+  (`scripts/lib/contention-retry-reporter.ts`) classifies the live error object — Vitest's exact
+  timeout template, a plain `Error`, no `expected`/`actual` — so an assertion whose *message*
+  mentions a timeout cannot opt itself into a retry. One assertion failure — in a listed file or not
+  — fails the job on the first run, so a real regression can never be papered over by a retry.
+- **Anything a rerun cannot re-check blocks the retry.** Unhandled errors, module load/setup errors,
+  a coverage-threshold miss, or a nonzero exit no failed test explains are recorded as blockers
+  (`scripts/lib/contention-retry-blockers.ts`) and fail the job, so a green retry can never erase a
+  second, unrelated failure from the same run.
+- **One retry, of the failed files only.** Not the suite, and never twice. Two timed-out tests in one
+  file are one retry, and count as one.
 - **Retries stay visible.** Every retried file is named in the job summary with its tracking issue
   and review date, and the run writes the shared scheduled-lane envelope
   (`scripts/lib/lane-envelope.ts`, #1430) with the retry count, so a permanently flaky file shows up
