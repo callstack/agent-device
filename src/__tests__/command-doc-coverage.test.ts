@@ -41,7 +41,7 @@ function extractDocumentedCommandTokens(markdown: string): Map<string, number> {
   const lines = markdown.split('\n');
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index] ?? '';
-    if (/^\s*```/.test(line)) {
+    if (/^\s*(?:```|~~~)/.test(line)) {
       insideFence = !insideFence;
       continue;
     }
@@ -181,6 +181,12 @@ describe('command reference doc coverage gate behavior', () => {
     const tokens = extractDocumentedCommandTokens(sample);
     assert.deepEqual([...tokens.keys()].sort(), ['boot', 'web']);
     assert.equal(tokens.get('boot'), 7);
+  });
+
+  test('extraction also recognizes tilde-fenced code blocks', () => {
+    const sample = ['~~~bash', 'agent-device snapshot -i', '~~~'].join('\n');
+    const tokens = extractDocumentedCommandTokens(sample);
+    assert.deepEqual([...tokens.keys()], ['snapshot']);
   });
 
   test('adding a public command without touching commands.md fails, naming file and command', () => {
