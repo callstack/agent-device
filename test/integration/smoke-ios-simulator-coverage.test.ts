@@ -16,6 +16,8 @@ import { parseReplayScriptDetailed } from '../../src/replay/script.ts';
 import { IOS_SIMULATOR_BEHAVIOR_COVERAGE } from './ios-simulator-e2e/behavior-coverage.ts';
 import { IOS_SIMULATOR_E2E_COVERAGE } from './ios-simulator-e2e/coverage-manifest.ts';
 import { collectPagedEventTimeline } from './ios-simulator-e2e/event-timeline.ts';
+import { observeFixtureHome } from './ios-simulator-e2e/live-automation-scenario.ts';
+import { type LiveContext } from './ios-simulator-e2e/live-harness.ts';
 import { IOS_SIMULATOR_LIVE_SCENARIOS } from './ios-simulator-e2e/scenarios.ts';
 
 const IOS_SIMULATOR = {
@@ -26,6 +28,54 @@ const IOS_SIMULATOR = {
   platform: 'apple' as const,
   target: 'mobile' as const,
 };
+
+test('fixture home readiness waits before taking a scoped interactive snapshot', async () => {
+  const calls: Array<{ args?: string[]; kind: 'snapshot' | 'wait'; value: string }> = [];
+  await observeFixtureHome({} as LiveContext, {
+    waitText: async (_context, expected) => {
+      calls.push({ kind: 'wait', value: expected });
+    },
+    runStep: async (_context, step, args) => {
+      calls.push({ args, kind: 'snapshot', value: step });
+      return {
+        json: { data: { nodes: [{ label: 'Agent Device Tester' }] } },
+        status: 0,
+        stderr: '',
+        stdout: '',
+      };
+    },
+  });
+
+  assert.deepEqual(calls, [
+    { kind: 'wait', value: 'Agent Device Tester' },
+    {
+      args: ['snapshot', '-i', '-s', 'Agent Device Tester'],
+      kind: 'snapshot',
+      value: 'capture fixture home',
+    },
+  ]);
+});
+
+test('fixture home observation rejects app metadata without a matching snapshot node', async () => {
+  await assert.rejects(
+    observeFixtureHome({} as LiveContext, {
+      waitText: async () => {},
+      runStep: async () => ({
+        json: {
+          data: {
+            appName: 'Agent Device Tester',
+            nodes: [],
+            snapshotQuality: { reasonCode: 'budget', state: 'sparse' },
+          },
+        },
+        status: 0,
+        stderr: '',
+        stdout: '',
+      }),
+    }),
+    /home snapshot nodes should expose Agent Device Tester/,
+  );
+});
 
 test('iOS simulator coverage exhaustively classifies the public catalog', () => {
   const publicCommands = Object.values(PUBLIC_COMMANDS).sort();

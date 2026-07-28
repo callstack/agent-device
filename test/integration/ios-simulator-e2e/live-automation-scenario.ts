@@ -5,8 +5,36 @@ import { assertElementText, assertJsonContains, assertWaitText } from './live-as
 import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';
 
 const C = PUBLIC_COMMANDS;
+const FIXTURE_HOME_TITLE = 'Agent Device Tester';
 const AUTOMATION_DEEP_LINK =
   'agent-device-test-app:///automation?event=cold.start&payload=%7B%22source%22%3A%22deep-link%22%7D';
+
+type FixtureHomeObservationOperations = {
+  runStep: typeof runStep;
+  waitText: typeof assertWaitText;
+};
+
+export async function observeFixtureHome(
+  context: LiveContext,
+  operations: FixtureHomeObservationOperations = {
+    runStep,
+    waitText: assertWaitText,
+  },
+) {
+  await operations.waitText(context, FIXTURE_HOME_TITLE);
+  const snapshot = await operations.runStep(context, 'capture fixture home', [
+    'snapshot',
+    '-i',
+    '-s',
+    FIXTURE_HOME_TITLE,
+  ]);
+  const nodes = Array.isArray(snapshot.json?.data?.nodes) ? snapshot.json.data.nodes : [];
+  assert.ok(
+    nodes.some((node: { label?: unknown }) => node.label === FIXTURE_HOME_TITLE),
+    `home snapshot nodes should expose ${FIXTURE_HOME_TITLE}: ${JSON.stringify(snapshot.json)}`,
+  );
+  return snapshot;
+}
 
 export async function assertAutomationInput(context: LiveContext): Promise<void> {
   const opened = await runStep(context, 'cold launch fixture', [
@@ -20,10 +48,8 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
     await runStep(context, 'normalize simulator appearance', ['settings', 'appearance', 'light']);
   }
 
-  const home = await runStep(context, 'capture fixture home', ['snapshot', '-i']);
-  assertJsonContains(home, 'Agent Device Tester', 'home snapshot should expose fixture title');
+  await observeFixtureHome(context);
   verifyCommand(context, C.snapshot, 'interactive fixture tree exposes its stable title');
-  await assertWaitText(context, 'Agent Device Tester');
   verifyCommand(context, C.open, 'cold launch exposes the fixture UI through snapshot and wait');
 
   await openAutomationDeepLink(context, 'cold launch fixture through a deep link');

@@ -172,7 +172,10 @@ export const IOS_SIMULATOR_E2E_COVERAGE = {
     'full:device-lifecycle',
     'shutdown succeeds and inventory reports the selected simulator stopped',
   ),
-  [C.snapshot]: live('smoke:automation-input', 'interactive tree includes stable fixture ids'),
+  [C.snapshot]: live(
+    'smoke:automation-input',
+    'scoped interactive tree includes the stable fixture title',
+  ),
   [C.swipe]: live(
     'full:fixture-replays',
     'fixture direction canary proves both compact-safe directional swipes move content',
