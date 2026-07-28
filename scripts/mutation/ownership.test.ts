@@ -16,7 +16,9 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../
 
 test('a kernel is owned by the mirrored test that imports it directly', () => {
   const deriver = ownershipDeriver(repoRoot);
-  assert.deepEqual(deriver.ownersOf('src/kernel/__tests__/errors.test.ts'), ['kernel-errors']);
+  assert.deepEqual(deriver.ownersOf('src/kernel/__tests__/errors-code-policy.test.ts'), [
+    'kernel-errors',
+  ]);
   assert.ok(
     deriver.ownersOf('src/daemon/__tests__/ref-frame.test.ts').includes('daemon-ref-frame'),
   );
@@ -72,7 +74,7 @@ test('non-kernel sources and non-tests are not owned', () => {
   assert.deepEqual(derivedAffectedModules(['README.md', 'src/kernel/rect.ts'], repoRoot), []);
   assert.ok(!isTestFile('src/kernel/errors.ts'));
   assert.ok(!isTestFile('scripts/mutation/ownership.test.ts'));
-  assert.ok(isTestFile('src/kernel/__tests__/errors.test.ts'));
+  assert.ok(isTestFile('src/kernel/__tests__/errors-code-policy.test.ts'));
 });
 
 test('derived selection unions source ownership with test reachability', () => {
