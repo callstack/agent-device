@@ -36,7 +36,7 @@ runs:
       run: |
         VERSION="$(node -p 'require("./package.json").version')"
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-        echo "value=${{ hashFiles('android/snapshot-helper/AndroidManifest.xml', 'android/snapshot-helper/debug.keystore', 'android/snapshot-helper/src/**', 'android/ime-helper/AndroidManifest.xml', 'android/ime-helper/res/**', 'android/ime-helper/src/**', 'scripts/build-android-snapshot-helper.sh', 'scripts/package-android-snapshot-helper.sh', 'scripts/build-android-ime-helper.sh', 'scripts/package-android-ime-helper.sh', '.github/actions/setup-android-replay-host/action.yml') }}" >> "$GITHUB_OUTPUT"
+        echo "value=${{ hashFiles('android/snapshot-helper/AndroidManifest.xml', 'android/snapshot-helper/debug.keystore', 'android/snapshot-helper/src/**', 'android/ime-helper/AndroidManifest.xml', 'android/ime-helper/res/**', 'android/ime-helper/src/**', 'scripts/build-android-helper.sh', 'scripts/package-android-helper.sh', '.github/actions/setup-android-replay-host/action.yml') }}" >> "$GITHUB_OUTPUT"
       shell: bash
 
     - name: Restore packaged Android helpers
@@ -70,8 +70,8 @@ runs:
       run: |
         VERSION="${{ steps.android-helper-source.outputs.version }}"
         rm -rf android/snapshot-helper/dist android/ime-helper/dist
-        sh ./scripts/package-android-snapshot-helper.sh "$VERSION" "v$VERSION" android/snapshot-helper/dist
-        sh ./scripts/package-android-ime-helper.sh "$VERSION" android/ime-helper/dist
+        sh ./scripts/package-android-helper.sh snapshot "$VERSION" "v$VERSION" android/snapshot-helper/dist
+        sh ./scripts/package-android-helper.sh ime "$VERSION" android/ime-helper/dist
       shell: bash
 
     - name: Verify packaged Android helpers
