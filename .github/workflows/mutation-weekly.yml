@@ -31,22 +31,27 @@ concurrency:
 
 jobs:
   shard:
-    name: Mutants (${{ matrix.module }})
+    name: Mutants (${{ matrix.name }})
     runs-on: ubuntu-latest
-    # Budget is 30 minutes per shard; the headroom covers checkout/install so a
-    # slow runner still reports instead of being killed mid-sweep.
-    timeout-minutes: 45
+    # The acceptance budget is 30 minutes of wall clock for the lane, and shards
+    # run in parallel, so the budget is per shard. The observed rate on a 2-core
+    # runner is ~3s/mutant, which is why selectors (~1,280 mutants) is sliced.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         # Kept in step with KERNEL_MODULES by the shard-coverage assertion in
-        # scripts/mutation/workflow.test.ts.
-        module:
-          - kernel-errors
-          - daemon-ref-frame
-          - interaction-settle
-          - scroll-edge-state
-          - selectors
+        # scripts/mutation/workflow.test.ts, which also pins --expect-shards to
+        # the number of entries here.
+        include:
+          - { name: kernel-errors, module: kernel-errors }
+          - { name: daemon-ref-frame, module: daemon-ref-frame }
+          - { name: interaction-settle, module: interaction-settle }
+          - { name: scroll-edge-state, module: scroll-edge-state }
+          - { name: selectors-1, module: selectors, shard: 1/4 }
+          - { name: selectors-2, module: selectors, shard: 2/4 }
+          - { name: selectors-3, module: selectors, shard: 3/4 }
+          - { name: selectors-4, module: selectors, shard: 4/4 }
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -54,8 +59,10 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Run mutants for ${{ matrix.module }}
-        run: pnpm mutation:run --modules ${{ matrix.module }}
+      - name: Run mutants for ${{ matrix.name }}
+        run: |
+          pnpm mutation:run --modules ${{ matrix.module }} \
+            ${{ matrix.shard && format('--shard {0}', matrix.shard) || '' }}
 
       # A shard can die before Stryker writes anything (install, config, crash);
       # without this the artifact is absent and "shard failed" is indistinguishable
@@ -64,13 +71,13 @@ jobs:
         if: failure()
         run: |
           pnpm mutation:run --modules ${{ matrix.module }} --fail-envelope \
-            "shard ${{ matrix.module }} failed before producing a report (run ${{ github.run_id }})" || true
+            "shard ${{ matrix.name }} failed before producing a report (run ${{ github.run_id }})" || true
 
       - name: Upload shard report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: mutation-shard-${{ matrix.module }}
+          name: mutation-shard-${{ matrix.name }}
           path: |
             .tmp/mutation/mutation.json
             .tmp/mutation/lane-envelope.json
@@ -102,7 +109,7 @@ jobs:
       # runner exports it, so the summary and the artifact carry the same numbers.
       - name: Ratchet the merged sweep and propose the next baseline
         run: |
-          pnpm mutation:check --report-dir .tmp/mutation/shards --update
+          pnpm mutation:check --report-dir .tmp/mutation/shards --expect-shards 8 --update
           cp mutation-baselines/decision-kernels.json .tmp/mutation/proposed-baseline.json
           git checkout -- mutation-baselines/decision-kernels.json
 

@@ -169,21 +169,6 @@ pnpm mutation:baseline                  # full sweep, then record it (reviewed c
   written on every exit path, including a crash before any mutant runs: an absent envelope would be
   indistinguishable from a lane that never ran.
 
-## Scheduled lane health (#1430)
-
-Nightly and weekly lanes can stop running — a disabled schedule, a rename, GitHub's 60-day inactivity
-suspension — while PR CI stays green, so nothing fails and nobody notices. `pnpm lane-health`
-(`.github/workflows/lane-health.yml`, daily) derives the lane list from `.github/workflows/` rather
-than a hand-maintained list, reads each lane's scheduled runs through `gh`, and reports:
-
-- `dark` — two consecutive cadences missed (the cadence comes from the lane's own `cron`);
-- `failing` — two consecutive scheduled runs concluded non-success (cancellations excluded);
-- `never-run` — declared longer than two cadences ago and still never fired.
-
-One miss is a runner hiccup; two is the lane not doing its job. Unhealthy lanes ping a single tracking
-issue (`--alert`) instead of opening one per run, and the job never fails — a second red lane nobody
-watches is not an alert. `pnpm lane-health:test` covers the model.
-
 ## Live web smoke
 
 The live web platform smoke runs the public built CLI against a local fixture page through the managed web backend:

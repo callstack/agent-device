@@ -29,6 +29,12 @@ export type KernelModule = {
    * import graph in `ownership.ts`, never listed here.
    */
   readonly owns: readonly string[];
+  /**
+   * How many parallel jobs the module's mutants are sliced across. One job per
+   * module is the default; a module big enough to outrun the lane's 30-minute
+   * budget declares more (`--shard i/n` picks the slice).
+   */
+  readonly shards?: number;
 };
 
 export const KERNEL_MODULES: readonly KernelModule[] = [
@@ -62,6 +68,9 @@ export const KERNEL_MODULES: readonly KernelModule[] = [
     mutate: ['src/selectors/**/*.ts', '!src/selectors/**/*.test.ts', '!src/selectors/__tests__/**'],
     // Selector tests live under the owned directory, so the prefix covers them.
     owns: ['src/selectors/'],
+    // ~1,280 mutants at the observed ~3s/mutant on a 2-core runner is ~64
+    // minutes in one job — past the acceptance budget and its own timeout.
+    shards: 4,
   },
 ];
 
@@ -82,6 +91,26 @@ export function mutateGlobs(ids: readonly ModuleId[] = ALL_MODULE_IDS): string[]
   return KERNEL_MODULES.filter((module) => ids.includes(module.id)).flatMap((module) => [
     ...module.mutate,
   ]);
+}
+
+/** One mutation job: a module, optionally one slice of it. */
+export type ShardSpec = { name: string; module: ModuleId; shard?: string };
+
+/**
+ * The jobs a module set expands into. Both workflows' matrices are this list, so
+ * a registry module (or a change to its shard count) can never leave the sweep
+ * without the workflow assertions noticing.
+ */
+export function shardMatrix(ids: readonly ModuleId[] = ALL_MODULE_IDS): ShardSpec[] {
+  return KERNEL_MODULES.filter((module) => ids.includes(module.id)).flatMap((module) => {
+    const count = module.shards ?? 1;
+    if (count === 1) return [{ name: module.id, module: module.id }];
+    return Array.from({ length: count }, (_unused, index) => ({
+      name: `${module.id}-${index + 1}`,
+      module: module.id,
+      shard: `${index + 1}/${count}`,
+    }));
+  });
 }
 
 export function normalizePath(filePath: string): string {

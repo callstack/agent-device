@@ -18,7 +18,15 @@ import { pathToFileURL } from 'node:url';
 import { runCmdStreaming, runCmdSync } from '../../src/utils/exec.ts';
 import { parseScriptArgs } from '../lib/cli-args.ts';
 import { laneEnvelope } from '../lib/lane-envelope.ts';
-import { ALL_MODULE_IDS, isModuleId, mutateGlobs, type ModuleId } from './modules.ts';
+import {
+  ALL_MODULE_IDS,
+  isModuleId,
+  mutateGlobs,
+  normalizePath,
+  shardMatrix,
+  type ModuleId,
+  type ShardSpec,
+} from './modules.ts';
 import { derivedAffectedModules } from './ownership.ts';
 import { renderReport } from './report.ts';
 import {
@@ -53,10 +61,16 @@ const USAGE = `Usage: pnpm mutation:run [options]
   --base <ref>      Base ref for --affected (default: origin/main)
   --report <file>   Read an existing Stryker JSON report instead of running Stryker
   --report-dir <d>  Merge every *.json Stryker report under <d> (weekly shards)
+  --expect-shards <n>
+                    Fail unless --report-dir holds exactly n shard reports
+  --shard <i/n>     Mutate only the i-th of n balanced slices of the module's
+                    sources (the big modules exceed one job's budget)
   --update          Record the run into the baseline (ratchet + graduation)
   --summary <file>  Also write the markdown report to <file>
   --no-run          Alias for --report with the default report path
-  --list-affected   Print the affected module ids as JSON and exit (shard matrix)
+  --list-affected   Print the PR lane's shard matrix as JSON and exit (empty
+                    until the baseline graduates, unless the diff touches the
+                    lane's own tooling)
   --fail-envelope <reason>
                     Write a failed lane envelope for a step that ran before (or
                     instead of) the sweep, e.g. a self-test failure
@@ -72,7 +86,23 @@ type Args = {
   summary: string | undefined;
   listAffected: boolean;
   failEnvelope: string | undefined;
+  shard: Shard | undefined;
+  expectShards: number | undefined;
 };
+
+/** One-based slice of a module's mutated sources: `--shard 2/4`. */
+type Shard = { index: number; count: number };
+
+function parseShard(value: string | undefined): Shard | undefined {
+  if (!value) return undefined;
+  const match = /^(\d+)\/(\d+)$/.exec(value.trim());
+  const index = Number(match?.[1]);
+  const count = Number(match?.[2]);
+  if (!match || index < 1 || index > count) {
+    throw new Error(`--shard expects i/n with 1 <= i <= n, got "${value}"`);
+  }
+  return { index, count };
+}
 
 function parseModules(value: string | undefined): readonly ModuleId[] {
   if (!value) return ALL_MODULE_IDS;
@@ -101,6 +131,8 @@ function parseMutationArgs(argv: readonly string[]): Args {
     'no-run': { type: 'boolean', default: false },
     'list-affected': { type: 'boolean', default: false },
     'fail-envelope': { type: 'string' },
+    shard: { type: 'string' },
+    'expect-shards': { type: 'string' },
   });
   return {
     modules: parseModules(values.modules),
@@ -112,6 +144,8 @@ function parseMutationArgs(argv: readonly string[]): Args {
     summary: values.summary,
     listAffected: Boolean(values['list-affected']),
     failEnvelope: values['fail-envelope'],
+    shard: parseShard(values.shard),
+    expectShards: values['expect-shards'] ? Number(values['expect-shards']) : undefined,
   };
 }
 
@@ -153,22 +187,53 @@ function changedFiles(base: string): string[] {
 
 // The JSON report path comes from the config (Stryker's CLI takes no nested
 // reporter options), so a run always writes DEFAULT_REPORT_PATH.
-async function runStryker(modules: readonly ModuleId[], reportPath: string): Promise<void> {
+/**
+ * Balances a module's sources across `count` jobs. Mutant count tracks file size
+ * closely enough that greedy longest-first packing keeps the slowest slice near
+ * the mean — the alternative is one 1,277-mutant selectors job that outruns both
+ * the 30-minute acceptance budget and its own timeout.
+ */
+function shardFiles(files: readonly string[], shard: Shard, root: string): string[] {
+  const bins: { size: number; files: string[] }[] = Array.from({ length: shard.count }, () => ({
+    size: 0,
+    files: [],
+  }));
+  const weighed = files
+    .map((file) => ({ file, size: fs.statSync(path.join(root, file)).size }))
+    .sort((a, b) => b.size - a.size || a.file.localeCompare(b.file));
+  for (const { file, size } of weighed) {
+    const bin = bins.reduce((smallest, next) => (next.size < smallest.size ? next : smallest));
+    bin.files.push(file);
+    bin.size += size;
+  }
+  return bins[shard.index - 1]!.files.sort();
+}
+
+async function runStryker(
+  modules: readonly ModuleId[],
+  reportPath: string,
+  shard: Shard | undefined,
+): Promise<void> {
   const absolute = path.isAbsolute(reportPath) ? reportPath : path.join(repoRoot, reportPath);
   fs.mkdirSync(path.dirname(absolute), { recursive: true });
   fs.rmSync(absolute, { force: true });
   // The suite Stryker replays per mutant is derived from Vitest's module graph
   // over the mutated files, not hand-listed; see scripts/mutation/test-scope.ts.
   const globs = mutateGlobs(modules);
+  const all = expandMutateFiles(globs, repoRoot);
+  // A sharded job mutates concrete files, so the slice is exact rather than a
+  // glob the next contributor has to keep in step with the registry.
+  const mutate = shard ? shardFiles(all, shard, repoRoot) : globs;
   const scopePath = path.join(repoRoot, TEST_SCOPE_PATH);
-  const testFiles = relatedTestFiles(expandMutateFiles(globs, repoRoot), repoRoot);
+  const testFiles = relatedTestFiles(shard ? mutate : all, repoRoot);
   writeTestScope(testFiles, scopePath);
   process.stdout.write(
-    `mutation: ${modules.join(', ')} -> ${testFiles.length} related test file(s)\n`,
+    `mutation: ${modules.join(', ')}${shard ? ` shard ${shard.index}/${shard.count}` : ''} -> ` +
+      `${shard ? mutate.length : all.length} source(s), ${testFiles.length} related test file(s)\n`,
   );
 
   // Stryker's `--mutate` takes one comma-separated value, not repeated args.
-  const args = ['exec', 'stryker', 'run', CONFIG_PATH, '--mutate', globs.join(',')];
+  const args = ['exec', 'stryker', 'run', CONFIG_PATH, '--mutate', mutate.join(',')];
   const result = await runCmdStreaming('pnpm', args, {
     cwd: repoRoot,
     allowFailure: true,
@@ -296,7 +361,7 @@ function readReport(file: string): StrykerReport {
   return JSON.parse(fs.readFileSync(absolute, 'utf8')) as StrykerReport;
 }
 
-function readShardedReports(dir: string): StrykerReport {
+function readShardedReports(dir: string, expected: number | undefined): StrykerReport {
   const root = path.isAbsolute(dir) ? dir : path.join(repoRoot, dir);
   // Shard artifacts also carry the lane envelope and the derived test scope, so
   // the report is selected by name rather than by "every .json here".
@@ -305,6 +370,15 @@ function readShardedReports(dir: string): StrykerReport {
     .map((file) => path.join(root, file))
     .sort();
   if (files.length === 0) throw new Error(`No Stryker JSON reports found under ${dir}`);
+  // Sub-sharded modules make "every module has mutants" too weak on its own: the
+  // surviving slices would still cover the module, so the expected shard count is
+  // asserted as well.
+  if (expected !== undefined && files.length !== expected) {
+    throw new Error(
+      `Incomplete shard set from ${dir}: ${files.length} report(s), expected ${expected}. ` +
+        'A shard job failed or its artifact is absent; the aggregate is not a sweep.',
+    );
+  }
   process.stdout.write(`mutation: merging ${files.length} shard report(s) from ${dir}\n`);
   return mergeReports(files.map(readReport));
 }
@@ -312,8 +386,9 @@ function readShardedReports(dir: string): StrykerReport {
 async function produceReport(
   modules: readonly ModuleId[],
   reportPath: string | undefined,
+  shard: Shard | undefined,
 ): Promise<StrykerReport> {
-  if (!reportPath) await runStryker(modules, DEFAULT_REPORT_PATH);
+  if (!reportPath) await runStryker(modules, DEFAULT_REPORT_PATH, shard);
   return readReport(reportPath ?? DEFAULT_REPORT_PATH);
 }
 
@@ -351,8 +426,8 @@ function assertShardsCoverModules(state: LaneState, dir: string): void {
 async function scoreModules(args: Args, state: LaneState): Promise<void> {
   state.stage = args.reportDir || args.report ? 'report' : 'stryker';
   const report = args.reportDir
-    ? readShardedReports(args.reportDir)
-    : await produceReport(state.modules, args.report);
+    ? readShardedReports(args.reportDir, args.expectShards)
+    : await produceReport(state.modules, args.report, args.shard);
 
   state.stage = 'ratchet';
   state.scores = summarizeReport(report, state.modules);
@@ -363,7 +438,11 @@ async function sweep(args: Args, state: LaneState): Promise<number> {
   state.stage = 'select';
   // Test attribution is derived from the import graph, not a listed set of test
   // files: see scripts/mutation/ownership.ts.
-  if (args.affected) state.modules = derivedAffectedModules(changedFiles(args.base), repoRoot);
+  // Same selection the PR matrix uses, graduation rule included, so the ratchet
+  // job can never run mutants the `select` job decided not to spend.
+  if (args.affected) {
+    state.modules = [...new Set(affectedMatrix(args.base).map((entry) => entry.module))];
+  }
   if (state.modules.length === 0) {
     process.stdout.write('mutation: no decision-kernel modules affected — nothing to mutate.\n');
     state.stage = 'complete';
@@ -382,6 +461,25 @@ async function sweep(args: Args, state: LaneState): Promise<number> {
   if (args.update) recordRun(args, state, result);
   state.stage = 'complete';
   return result.failed ? 1 : 0;
+}
+
+/** Sources of the lane itself: a change here must prove itself on real mutants. */
+const LANE_TOOLING = ['scripts/mutation/', 'scripts/lib/', 'stryker.config.json', 'mutation-'];
+
+/**
+ * The PR lane's matrix. Before graduation the affected run is a report nobody
+ * acts on, so it costs runner minutes for no verdict: it stays empty until the
+ * baseline reaches `gating: true`. The exception is a diff that changes the lane
+ * itself — that is the one case where the pre-graduation run buys something,
+ * because the gate has to be proven before it can bite.
+ */
+function affectedMatrix(base: string): ShardSpec[] {
+  const changed = changedFiles(base);
+  const touchesLane = changed.some((file) =>
+    LANE_TOOLING.some((prefix) => normalizePath(file).startsWith(prefix)),
+  );
+  if (!readBaseline().gating && !touchesLane) return [];
+  return shardMatrix(derivedAffectedModules(changed, repoRoot));
 }
 
 /**
@@ -411,9 +509,7 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
     // Selection only — no lane run, so no envelope. The shard jobs that consume
     // this matrix each write their own.
     const args = parseMutationArgs(argv);
-    process.stdout.write(
-      `${JSON.stringify(derivedAffectedModules(changedFiles(args.base), repoRoot))}\n`,
-    );
+    process.stdout.write(`${JSON.stringify(affectedMatrix(args.base))}\n`);
     return 0;
   }
   const state: LaneState = {

@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { ALL_MODULE_IDS, KERNEL_MODULES } from './modules.ts';
+import { KERNEL_MODULES, shardMatrix } from './modules.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 
@@ -15,16 +15,44 @@ function workflow(name: string): string {
   return fs.readFileSync(path.join(repoRoot, '.github/workflows', name), 'utf8');
 }
 
-test('the weekly sweep shards exactly the registry modules', () => {
+test('the weekly sweep shards exactly the registry matrix', () => {
   const yaml = workflow('mutation-weekly.yml');
-  const shards = [...yaml.matchAll(/^ {10}- (?<id>[a-z-]+)$/gm)].map((match) => match.groups!.id);
-  assert.deepEqual(shards, [...ALL_MODULE_IDS]);
+  const jobs = [...yaml.matchAll(/^ {10}- \{ (?<entry>[^}]+) \}$/gm)].map((match) =>
+    Object.fromEntries(
+      match
+        .groups!.entry.split(', ')
+        .map((pair) => pair.split(': ') as [string, string])
+        .map(([key, value]) => [key, value]),
+    ),
+  );
+  assert.deepEqual(
+    jobs,
+    shardMatrix().map((spec) =>
+      spec.shard ? { ...spec } : { name: spec.name, module: spec.module },
+    ),
+  );
 });
 
 test('the weekly sweep merges the shards into one ratcheted verdict', () => {
   const yaml = workflow('mutation-weekly.yml');
   assert.match(yaml, /pnpm mutation:check --report-dir/);
   assert.match(yaml, /GITHUB_STEP_SUMMARY|\$GITHUB_STEP_SUMMARY/);
+  // A dead shard must not be merged into a verdict that looks like a sweep.
+  assert.match(
+    yaml,
+    new RegExp(`--expect-shards ${shardMatrix().length}\\b`),
+    'the weekly ratchet does not require the full shard set',
+  );
+});
+
+// A shard that outruns the job timeout reports nothing, so the per-shard budget
+// is the acceptance criterion made mechanical.
+test('no mutation shard is allowed to exceed the 30-minute budget', () => {
+  for (const name of ['mutation-weekly.yml', 'mutation-affected.yml']) {
+    for (const [, minutes] of workflow(name).matchAll(/timeout-minutes: (\d+)/g)) {
+      assert.ok(Number(minutes) <= 30, `${name} declares a ${minutes}-minute job`);
+    }
+  }
 });
 
 test('every kernel path a PR can touch selects the affected mutation job', () => {

@@ -8,6 +8,11 @@ name: Mutation Affected
 # sweeps (mutation-weekly.yml). Until then it is a report with the same numbers,
 # so the gate's first failing day is not also its first running day.
 #
+# Cost control: before graduation an affected run is a report nobody acts on, so
+# `select` returns an empty matrix and no mutants run — except when the diff
+# touches the lane's own tooling, the one case where a pre-graduation run buys
+# something (the gate has to be proven before it can bite).
+#
 # Scope is the AFFECTED modules only, and affectedness is DERIVED from the import
 # graph (scripts/mutation/ownership.ts): a kernel source, or any test that reaches
 # one. Reaching a kernel is a superset of killing its mutants, so the `select` job
@@ -59,12 +64,12 @@ jobs:
         run: pnpm mutation:test
 
       - id: select
-        name: Derive affected modules
+        name: Derive the affected shard matrix
         run: |
           modules=$(pnpm --silent mutation:affected --list-affected \
             --base "origin/${{ github.event.pull_request.base.ref }}" | tail -n1)
           echo "modules=$modules" >> "$GITHUB_OUTPUT"
-          echo "Affected decision kernels: $modules" >> "$GITHUB_STEP_SUMMARY"
+          echo "Affected mutation shards: $modules" >> "$GITHUB_STEP_SUMMARY"
 
       # The self-test and the derivation run before any mutant, so a failure here
       # would leave the lane with no envelope at all (#1430).
@@ -83,15 +88,15 @@ jobs:
           if-no-files-found: warn
 
   mutants:
-    name: Mutants (${{ matrix.module }})
+    name: Mutants (${{ matrix.name }})
     needs: select
     if: needs.select.outputs.modules != '[]'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        module: ${{ fromJSON(needs.select.outputs.modules) }}
+        include: ${{ fromJSON(needs.select.outputs.modules) }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -99,20 +104,22 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Run mutants for ${{ matrix.module }}
-        run: pnpm mutation:run --modules ${{ matrix.module }}
+      - name: Run mutants for ${{ matrix.name }}
+        run: |
+          pnpm mutation:run --modules ${{ matrix.module }} \
+            ${{ matrix.shard && format('--shard {0}', matrix.shard) || '' }}
 
       - name: Record a failed shard envelope
         if: failure()
         run: |
           pnpm mutation:run --affected --modules ${{ matrix.module }} --fail-envelope \
-            "shard ${{ matrix.module }} failed before producing a report (run ${{ github.run_id }})" || true
+            "shard ${{ matrix.name }} failed before producing a report (run ${{ github.run_id }})" || true
 
       - name: Upload shard report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: mutation-affected-shard-${{ matrix.module }}
+          name: mutation-affected-shard-${{ matrix.name }}
           path: |
             .tmp/mutation/mutation.json
             .tmp/mutation/mutation.html
@@ -146,7 +153,9 @@ jobs:
       - name: Ratchet the affected modules
         run: |
           if [ -d .tmp/mutation/shards ]; then
+            expected=$(echo '${{ needs.select.outputs.modules }}' | jq length)
             pnpm mutation:check --report-dir .tmp/mutation/shards --affected \
+              --expect-shards "$expected" \
               --base "origin/${{ github.event.pull_request.base.ref }}"
           else
             pnpm mutation:affected --base "origin/${{ github.event.pull_request.base.ref }}"

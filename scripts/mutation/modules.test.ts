@@ -9,6 +9,7 @@ import {
   KERNEL_MODULES,
   moduleForFile,
   mutateGlobs,
+  shardMatrix,
 } from './modules.ts';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -51,4 +52,26 @@ test('affected selection is deduplicated and registry-ordered', () => {
 test('mutate globs default to every module and narrow on request', () => {
   assert.deepEqual(mutateGlobs(), mutateGlobs(ALL_MODULE_IDS));
   assert.deepEqual(mutateGlobs(['kernel-errors']), ['src/kernel/errors.ts']);
+});
+
+// One job per module is only affordable while a module fits the lane's budget;
+// the shard count is registry data so the workflows and the runner agree on it.
+test('the shard matrix slices only the modules that declare shards', () => {
+  assert.deepEqual(shardMatrix(['kernel-errors']), [
+    { name: 'kernel-errors', module: 'kernel-errors' },
+  ]);
+  assert.deepEqual(shardMatrix(['selectors']), [
+    { name: 'selectors-1', module: 'selectors', shard: '1/4' },
+    { name: 'selectors-2', module: 'selectors', shard: '2/4' },
+    { name: 'selectors-3', module: 'selectors', shard: '3/4' },
+    { name: 'selectors-4', module: 'selectors', shard: '4/4' },
+  ]);
+  assert.equal(shardMatrix().length, ALL_MODULE_IDS.length + 3);
+  // Every registry module reaches the matrix: an unsharded sweep is not a sweep.
+  for (const id of ALL_MODULE_IDS) {
+    assert.ok(
+      shardMatrix().some((spec) => spec.module === id),
+      `${id} has no shard`,
+    );
+  }
 });
