@@ -10,9 +10,9 @@ name: Test App Build Cache
 # binary. Local development does not use this; it caches on disk via the
 # expo-build-disk-cache provider in app.config.js.
 #
-# Only builds when the fingerprint has no artifact yet. Runs on every push to
-# main, and on PRs that touch the cache so a change here is exercised before it
-# merges (workflow_dispatch cannot reach a workflow that is not yet on main).
+# Only builds when the fingerprint has no trusted artifact yet. Runs on every
+# push to main and every PR so a same-head consumer can wait for a scheduled
+# producer (workflow_dispatch cannot reach a workflow that is not yet on main).
 
 on:
   push:
@@ -57,18 +57,18 @@ jobs:
           test -n "$ANDROID_HASH"
           IOS_NAME="fingerprint.${IOS_HASH}.ios"
           ANDROID_NAME="fingerprint.${ANDROID_HASH}.android"
-          IOS_COUNT="$(gh api "repos/${{ github.repository }}/actions/artifacts?name=${IOS_NAME}&per_page=1" \
-            --jq '[.artifacts[] | select(.expired == false)] | length')"
-          ANDROID_COUNT="$(gh api "repos/${{ github.repository }}/actions/artifacts?name=${ANDROID_NAME}&per_page=1" \
-            --jq '[.artifacts[] | select(.expired == false)] | length')"
+          EXPECTED_HEAD_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          TRUSTED_ARTIFACT=".github/actions/setup-fixture-app/trusted-artifact.mjs"
+          IOS_ARTIFACT="$(node "$TRUSTED_ARTIFACT" find "${{ github.repository }}" "$IOS_NAME" "$EXPECTED_HEAD_SHA")"
+          ANDROID_ARTIFACT="$(node "$TRUSTED_ARTIFACT" find "${{ github.repository }}" "$ANDROID_NAME" "$EXPECTED_HEAD_SHA")"
           IOS_BUILD=true
-          if [ "$IOS_COUNT" -gt 0 ] ||
+          if [ -n "$IOS_ARTIFACT" ] ||
              { [ "${{ github.event_name }}" = "pull_request" ] &&
                [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; }; then
             IOS_BUILD=false
           fi
           ANDROID_BUILD=true
-          if [ "$ANDROID_COUNT" -gt 0 ]; then
+          if [ -n "$ANDROID_ARTIFACT" ]; then
             ANDROID_BUILD=false
           fi
           MATRIX="$(jq -cn \
