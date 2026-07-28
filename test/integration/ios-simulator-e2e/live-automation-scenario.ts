@@ -14,17 +14,43 @@ type FixtureHomeObservationOperations = {
   waitText: typeof assertWaitText;
 };
 
-export function catalogNavigationSteps(): Array<{ args: string[]; step: string }> {
-  return [
-    {
-      args: ['click', 'id="automation-continue-catalog"'],
-      step: 'navigate onward from cold deep link',
-    },
-    {
-      args: ['wait', 'id="catalog-title"', '10000'],
-      step: 'wait for exact catalog destination',
-    },
-  ];
+type CatalogNavigationOperations = {
+  runStep: typeof runStep;
+};
+
+const CATALOG_BUTTON_SELECTOR = 'id="automation-continue-catalog"';
+const CATALOG_TITLE_SELECTOR = 'id="catalog-title"';
+
+export async function navigateFromAutomationToCatalog(
+  context: LiveContext,
+  operations: CatalogNavigationOperations = { runStep },
+): Promise<void> {
+  await operations.runStep(context, 'navigate onward from cold deep link', [
+    'click',
+    CATALOG_BUTTON_SELECTOR,
+  ]);
+  const destination = await operations.runStep(
+    context,
+    'verify exact catalog destination',
+    ['wait', CATALOG_TITLE_SELECTOR, '3000'],
+    { allowFailure: true },
+  );
+  if (destination.status === 0) return;
+
+  // Direct iOS selector taps explicitly do not observe an app-visible outcome.
+  // Retry this idempotent navigation once, but tolerate the source disappearing
+  // during a slow transition and keep the exact destination as the condition.
+  await operations.runStep(
+    context,
+    'retry catalog navigation after unobserved tap',
+    ['click', CATALOG_BUTTON_SELECTOR],
+    { allowFailure: true },
+  );
+  await operations.runStep(context, 'wait for exact catalog destination after retry', [
+    'wait',
+    CATALOG_TITLE_SELECTOR,
+    '10000',
+  ]);
 }
 
 export async function observeFixtureHome(
@@ -70,9 +96,7 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
   await assertWaitText(context, 'Automation lab');
   await assertElementText(context, 'id="automation-event-name"', 'cold.start');
   await assertElementText(context, 'id="automation-event-payload"', '{"source":"deep-link"}');
-  for (const navigationStep of catalogNavigationSteps()) {
-    await runStep(context, navigationStep.step, navigationStep.args);
-  }
+  await navigateFromAutomationToCatalog(context);
   verifyBehavior(
     context,
     'cold-start-deep-link-navigation',

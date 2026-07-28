@@ -17,7 +17,7 @@ import { IOS_SIMULATOR_BEHAVIOR_COVERAGE } from './ios-simulator-e2e/behavior-co
 import { IOS_SIMULATOR_E2E_COVERAGE } from './ios-simulator-e2e/coverage-manifest.ts';
 import { collectPagedEventTimeline } from './ios-simulator-e2e/event-timeline.ts';
 import {
-  catalogNavigationSteps,
+  navigateFromAutomationToCatalog,
   observeFixtureHome,
 } from './ios-simulator-e2e/live-automation-scenario.ts';
 import { type LiveContext } from './ios-simulator-e2e/live-harness.ts';
@@ -80,15 +80,63 @@ test('fixture home observation rejects app metadata without a matching snapshot 
   );
 });
 
-test('deep-link continuation uses a direct selector tap and exact destination landmark', () => {
-  assert.deepEqual(catalogNavigationSteps(), [
+test('deep-link continuation stops after the exact destination landmark appears', async () => {
+  const calls: Array<{ args: string[]; options?: { allowFailure?: boolean }; step: string }> = [];
+  await navigateFromAutomationToCatalog({} as LiveContext, {
+    runStep: async (_context, step, args, options) => {
+      calls.push({ args, options, step });
+      return { json: {}, status: 0, stderr: '', stdout: '' };
+    },
+  });
+
+  assert.deepEqual(calls, [
     {
       args: ['click', 'id="automation-continue-catalog"'],
+      options: undefined,
       step: 'navigate onward from cold deep link',
     },
     {
+      args: ['wait', 'id="catalog-title"', '3000'],
+      options: { allowFailure: true },
+      step: 'verify exact catalog destination',
+    },
+  ]);
+});
+
+test('deep-link continuation retries one unobserved tap before the full exact wait', async () => {
+  const calls: Array<{ args: string[]; options?: { allowFailure?: boolean }; step: string }> = [];
+  await navigateFromAutomationToCatalog({} as LiveContext, {
+    runStep: async (_context, step, args, options) => {
+      calls.push({ args, options, step });
+      return {
+        json: {},
+        status: calls.length === 2 ? 1 : 0,
+        stderr: '',
+        stdout: '',
+      };
+    },
+  });
+
+  assert.deepEqual(calls, [
+    {
+      args: ['click', 'id="automation-continue-catalog"'],
+      options: undefined,
+      step: 'navigate onward from cold deep link',
+    },
+    {
+      args: ['wait', 'id="catalog-title"', '3000'],
+      options: { allowFailure: true },
+      step: 'verify exact catalog destination',
+    },
+    {
+      args: ['click', 'id="automation-continue-catalog"'],
+      options: { allowFailure: true },
+      step: 'retry catalog navigation after unobserved tap',
+    },
+    {
       args: ['wait', 'id="catalog-title"', '10000'],
-      step: 'wait for exact catalog destination',
+      options: undefined,
+      step: 'wait for exact catalog destination after retry',
     },
   ]);
 });
