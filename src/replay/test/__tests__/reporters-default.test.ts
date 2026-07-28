@@ -41,20 +41,20 @@ function emptySuite(): ReplaySuiteResult {
   };
 }
 
-function withCiEnv<T>(value: string | undefined, run: () => T): T {
-  const original = process.env.CI;
-  if (value === undefined) delete process.env.CI;
-  else process.env.CI = value;
+function withEnv<T>(name: 'CI' | 'TMUX', value: string | undefined, run: () => T): T {
+  const original = process.env[name];
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
   try {
     return run();
   } finally {
-    if (original === undefined) delete process.env.CI;
-    else process.env.CI = original;
+    if (original === undefined) delete process.env[name];
+    else process.env[name] = original;
   }
 }
 
 test('default replay test reporter hides and restores cursor for tty progress', () => {
-  withCiEnv(undefined, () => {
+  withEnv('CI', undefined, () => {
     const reporter = createDefaultReplayTestReporter();
     const { context, stderr, stdout } = createReporterContext({ stderrIsTty: true });
 
@@ -68,6 +68,53 @@ test('default replay test reporter hides and restores cursor for tty progress', 
     assert.equal(stderr.at(-1), '\u001B[?25h');
     assert.deepEqual(stdout, ['Test summary: 0 passed (0) in 0s\n']);
   });
+});
+
+test('default replay test reporter avoids cursor-up cleanup inside tmux', () => {
+  withEnv('CI', undefined, () =>
+    withEnv('TMUX', '/tmp/tmux-1000/default,1,0', () => {
+      const reporter = createDefaultReplayTestReporter();
+      const { context, stderr } = createReporterContext({ stderrIsTty: true });
+      context.stderr.columns = 200;
+      reporter.onSuiteStart?.(
+        { total: 1, runnable: 1, skipped: 0, artifactsDir: '/tmp/replay' },
+        context,
+      );
+      reporter.onTestStep?.(
+        {
+          file: '/tmp/checkout.yaml',
+          title: 'x'.repeat(180),
+          index: 1,
+          total: 1,
+          stepIndex: 1,
+          stepTotal: 2,
+          stepCommand: 'assertVisible',
+          stepValue: 'Confirmation',
+        },
+        context,
+      );
+
+      context.stderr.columns = 20;
+      reporter.onTestStep?.(
+        {
+          file: '/tmp/checkout.yaml',
+          title: 'Checkout',
+          index: 1,
+          total: 1,
+          stepIndex: 2,
+          stepTotal: 2,
+          stepCommand: 'tapOn',
+          stepValue: 'Continue',
+        },
+        context,
+      );
+      reporter.onSuiteEnd?.(emptySuite(), context);
+
+      const resizedProgress = stderr[2];
+      assert.equal((resizedProgress?.split('\u001B[1A').length ?? 1) - 1, 0);
+      assert.equal((resizedProgress?.split('\u001B[2K').length ?? 1) - 1, 1);
+    }),
+  );
 });
 
 test('default replay test reporter leaves cursor alone for non-tty streams', () => {
