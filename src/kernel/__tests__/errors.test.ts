@@ -181,6 +181,115 @@ test('daemon-originated REPLAY_DIVERGENCE gets a default hint pointing at the re
   assert.match(normalized.hint ?? '', /details\.divergence/);
 });
 
+// --- maybeEnrichCommandFailedMessage: gating conditions, isolated from the
+// stderr-parsing cases above ---
+
+test('normalizeError does not enrich the message for a non-COMMAND_FAILED code, even with processExitError/stderr present', () => {
+  const err = new AppError('DEVICE_NOT_FOUND', 'device vanished', {
+    processExitError: true,
+    stderr: 'some completely different stderr text',
+  });
+  const normalized = normalizeError(err);
+  assert.equal(normalized.message, 'device vanished');
+});
+
+test('normalizeError does not enrich a COMMAND_FAILED message when processExitError is absent', () => {
+  const err = new AppError('COMMAND_FAILED', 'xcrun exited with code 1', {
+    stderr: 'Operation not permitted',
+  });
+  const normalized = normalizeError(err);
+  assert.equal(normalized.message, 'xcrun exited with code 1');
+});
+
+test('normalizeError does not enrich a COMMAND_FAILED message when processExitError is exactly false', () => {
+  const err = new AppError('COMMAND_FAILED', 'xcrun exited with code 1', {
+    processExitError: false,
+    stderr: 'Operation not permitted',
+  });
+  const normalized = normalizeError(err);
+  assert.equal(normalized.message, 'xcrun exited with code 1');
+});
+
+test('normalizeError ignores a non-string details.stderr value rather than enriching the message with it', () => {
+  const err = new AppError('COMMAND_FAILED', 'xcrun exited with code 1', {
+    processExitError: true,
+    stderr: 12345 as unknown as string,
+  });
+  const normalized = normalizeError(err);
+  assert.equal(normalized.message, 'xcrun exited with code 1');
+});
+
+test('normalizeError leaves the message unchanged when stderr yields no usable excerpt', () => {
+  const err = new AppError('COMMAND_FAILED', 'simctl boot failed', {
+    processExitError: true,
+    // Every line is blank or matches a skip pattern, so firstStderrLine finds nothing.
+    stderr: '\n  \nAn error was encountered processing the command (domain=X, code=1):\n',
+  });
+  const normalized = normalizeError(err);
+  assert.equal(normalized.message, 'simctl boot failed');
+});
+
+// GENERIC_EXIT_MESSAGE boundary: pins `^\S+ exited with code -?\d+$` exactly —
+// a single tool token, an optional leading minus, and nothing after the digits.
+
+test('normalizeError replaces (rather than appends) for a generic exit message with a negative exit code', () => {
+  const err = new AppError('COMMAND_FAILED', 'xcrun exited with code -1', {
+    processExitError: true,
+    stderr: 'Operation not permitted',
+  });
+  const normalized = normalizeError(err);
+  assert.equal(normalized.message, 'Operation not permitted');
+});
+
+test('normalizeError appends (rather than replaces) when trailing text follows the exit code', () => {
+  const err = new AppError('COMMAND_FAILED', 'xcrun exited with code 1 (signal 0)', {
+    processExitError: true,
+    stderr: 'Operation not permitted',
+  });
+  const normalized = normalizeError(err);
+  assert.equal(normalized.message, 'xcrun exited with code 1 (signal 0): Operation not permitted');
+});
+
+test('normalizeError appends (rather than replaces) when the exit code is non-numeric', () => {
+  const err = new AppError('COMMAND_FAILED', 'xcrun exited with code abc', {
+    processExitError: true,
+    stderr: 'Operation not permitted',
+  });
+  const normalized = normalizeError(err);
+  assert.equal(normalized.message, 'xcrun exited with code abc: Operation not permitted');
+});
+
+test('normalizeError appends (rather than replaces) when the tool token itself contains whitespace', () => {
+  const err = new AppError('COMMAND_FAILED', 'my tool exited with code 1', {
+    processExitError: true,
+    stderr: 'Operation not permitted',
+  });
+  const normalized = normalizeError(err);
+  assert.equal(normalized.message, 'my tool exited with code 1: Operation not permitted');
+});
+
+// STDERR_NOISE_PREFIX boundary: the adb/xcrun/simctl and "error:" groups each
+// consume only whitespace (`\s*`), never greedily eating adjacent non-whitespace
+// content, and each group is independently optional.
+
+test('normalizeError strips only the adb/xcrun/simctl token, not adjacent non-whitespace content that follows it directly', () => {
+  const err = new AppError('COMMAND_FAILED', 'adb exited with code 1', {
+    processExitError: true,
+    stderr: 'adb:deviceOffline still not ready\n',
+  });
+  const normalized = normalizeError(err);
+  assert.equal(normalized.message, 'deviceOffline still not ready');
+});
+
+test('normalizeError strips a zero-space "error:" prefix without requiring or over-consuming whitespace', () => {
+  const err = new AppError('COMMAND_FAILED', 'simctl boot failed', {
+    processExitError: true,
+    stderr: 'error:immediate text\n',
+  });
+  const normalized = normalizeError(err);
+  assert.equal(normalized.message, 'simctl boot failed: immediate text');
+});
+
 // --- AppError: construction contract ---
 
 test('AppError is a real Error carrying code/message/details/cause', () => {
