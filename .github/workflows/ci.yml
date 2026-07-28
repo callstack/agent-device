@@ -251,10 +251,23 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
+      - name: Test changed-line coverage gate
+        run: pnpm check:coverage-changed:test
+
       - name: Run coverage
         env:
           OUTPUT_ECONOMY_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: pnpm test:coverage
+
+      # Reuses the lcov the coverage step just wrote (never runs coverage twice)
+      # and fails when changed-line coverage < the threshold in
+      # scripts/coverage-changed/model.ts. The `coverage-waiver` PR label maps to
+      # the waiver env, which skips the failure but still prints the numbers.
+      - name: Enforce changed-line coverage gate
+        if: always() && github.event_name == 'pull_request'
+        env:
+          AGENT_DEVICE_COVERAGE_WAIVER: ${{ contains(github.event.pull_request.labels.*.name, 'coverage-waiver') }}
+        run: pnpm check:coverage-changed --base "${{ github.event.pull_request.base.sha }}"
 
   typecheck:
     name: Typecheck

@@ -123,6 +123,8 @@
     "check:fallow": "fallow audit",
     "check:affected": "node --experimental-strip-types scripts/check-affected/run.ts",
     "check:affected:test": "node --experimental-strip-types --test scripts/check-affected/model.test.ts scripts/check-affected/run.test.ts",
+    "check:coverage-changed": "node --experimental-strip-types scripts/coverage-changed/run.ts",
+    "check:coverage-changed:test": "node --experimental-strip-types --test scripts/coverage-changed/model.test.ts scripts/coverage-changed/run.test.ts",
     "check:layering": "node --experimental-strip-types --test scripts/layering/model.test.ts && node --experimental-strip-types scripts/layering/check.ts",
     "depgraph": "node --experimental-strip-types scripts/depgraph/build.ts",
     "depgraph:test": "node --experimental-strip-types --test scripts/depgraph/model.test.ts",
