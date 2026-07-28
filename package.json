@@ -103,6 +103,8 @@
     "maestro:conformance": "node --experimental-strip-types --test scripts/maestro-conformance/verify.test.ts scripts/maestro-conformance/differential/run.test.ts scripts/maestro-conformance/differential/invariants.test.ts",
     "maestro:conformance:regenerate": "node scripts/maestro-conformance/regenerate.mjs",
     "maestro:conformance:differential": "node --experimental-strip-types scripts/maestro-conformance/differential/run.ts",
+    "prototype:program-boundary": "node --experimental-strip-types scripts/prototypes/daemon-boundaries/program-boundary.ts",
+    "prototype:session-boundary": "node --experimental-strip-types scripts/prototypes/daemon-boundaries/session-boundary.ts",
     "size": "node scripts/size-report.mjs",
     "size:markdown": "node scripts/size-report.mjs --json .tmp/size-report.json --markdown .tmp/size-report.md",
     "perf": "node --experimental-strip-types scripts/perf/run.ts",
