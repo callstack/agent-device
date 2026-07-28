@@ -145,7 +145,7 @@ export const IOS_SIMULATOR_E2E_COVERAGE = {
   },
   [C.press]: live('smoke:automation-input', 'semantic press updates a durable input canary'),
   [C.push]: contract(
-    'src/platforms/apple/core/__tests__/index.test.ts',
+    'src/platforms/apple/core/__tests__/apps.test.ts',
     'pushIosNotification uses simctl push with temporary payload file',
     'simctl push dispatch; fixture has no notification entitlement or UI oracle',
   ),
