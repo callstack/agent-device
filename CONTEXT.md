@@ -255,7 +255,12 @@ The perfect-shape refactor is complete and merged. Its end-state:
   follow-up surfaces.
 - Folder DAG + layering lint. `scripts/layering/check.ts` enforces five rules across four scopes in CI.
   GLOBALLY, across every production source file, it enforces the R1-R3 move rules (kernel-sink,
-  commands-floor, platforms-seam) and rejects all production static value-import cycles. Separately,
+  commands-floor, platforms-seam) and rejects all production static value-import cycles. R1-R3 are
+  declared as data in `scripts/layering/zone-policy.ts` (`ZONE_POLICIES`): which zones a boundary
+  governs, which import kinds it tolerates, and which path prefixes are its declared seam. A fourth
+  zone boundary is a table entry, not a fourth predicate. `zone-policy.test.ts` asserts each
+  boundary fires and each exemption holds — necessary because the tree is clean, so a rule that
+  stopped matching would look exactly like a rule being obeyed. Separately,
   it ranks an explicit target spine — as rank groups, lowest (kernel sink) to highest, where `A ◄ B`
   means B may not be outranked by A (the back-edge order the gate rejects), NOT that every displayed
   import exists:

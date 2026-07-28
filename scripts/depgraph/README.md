@@ -10,6 +10,20 @@ Emits the dependency graph of every production file under `src/` (tests excluded
 plus a short summary of what the layering gate does not enforce. There is no renderer: the
 productive artifact is the JSON, queried directly.
 
+## Blast radius of one file
+
+```sh
+pnpm depgraph affected src/utils/exec.ts        # bounded text
+pnpm depgraph affected src/daemon/ref-frame.ts --json --limit 25
+```
+
+Reverse reachability over the value-edge graph, plus the three lookups that used to follow it:
+the `scripts/check-affected/` gate plan for the dependent set, the public commands whose handler
+chain reaches the file (value + dynamic edges, because handlers load through `import()`) with
+their owning live iOS scenarios when that manifest is in the tree, and the ADR 0011
+guarantee-matrix cells the file implements. See docs/agents/testing.md § "Before editing a shared
+module".
+
 ## When to reach for this
 
 It pays for itself on three questions, and misleads on a fourth.

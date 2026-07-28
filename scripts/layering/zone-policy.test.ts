@@ -1,0 +1,135 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { policyLead, policyViolation, ZONE_POLICIES, type ZonePolicy } from './zone-policy.ts';
+
+// R1-R3 were three predicate functions with no unit test for eight months: the only thing
+// exercising them was the real tree, which is clean, so a rule that had silently stopped matching
+// would have looked exactly like a rule that was being obeyed. These tests assert each boundary
+// fires AND each documented exemption holds, so the table cannot quietly become decoration.
+
+type Kind = { typeOnly?: boolean; dynamic?: boolean };
+
+function edge(file: string, fromZone: string, toZone: string, kind: Kind = {}) {
+  return {
+    file,
+    fromZone,
+    toZone,
+    imp: {
+      spec: `../${toZone}/thing.ts`,
+      line: 1,
+      dynamic: kind.dynamic ?? false,
+      typeOnly: kind.typeOnly ?? false,
+    },
+  };
+}
+
+/** Every policy that fires for an edge, by rule id. */
+function firing(e: ReturnType<typeof edge>): string[] {
+  return ZONE_POLICIES.filter((policy) => policyViolation(policy, e) !== null).map((p) => p.rule);
+}
+
+function policiesFor(rule: string): ZonePolicy[] {
+  return ZONE_POLICIES.filter((policy) => policy.rule === rule);
+}
+
+test('R1 kernel-sink closes every kernel out-edge except a type-only contracts re-export', () => {
+  // The one open door.
+  assert.deepEqual(
+    firing(edge('src/kernel/errors.ts', 'kernel', 'contracts', { typeOnly: true })),
+    [],
+  );
+
+  // Same target, value import: closed. A runtime edge out of the sink is the thing R1 exists for.
+  assert.deepEqual(firing(edge('src/kernel/errors.ts', 'kernel', 'contracts')), ['R1 kernel-sink']);
+
+  // Any other target is closed to BOTH kinds — unlike R3, R1 does not tolerate type-only, because
+  // "kernel is declared in terms of utils" is still a claim that kernel is not the sink.
+  for (const kind of [{}, { typeOnly: true }, { dynamic: true }]) {
+    assert.deepEqual(
+      firing(edge('src/kernel/errors.ts', 'kernel', 'utils', kind)),
+      ['R1 kernel-sink'],
+      `kernel -> utils ${JSON.stringify(kind)} must violate R1`,
+    );
+  }
+});
+
+test('R2 commands-floor closes the four zones below the command surface, whatever the kind', () => {
+  for (const zone of ['kernel', 'platforms', 'core', 'daemon']) {
+    for (const kind of [{}, { typeOnly: true }, { dynamic: true }]) {
+      assert.ok(
+        firing(edge(`src/${zone}/thing.ts`, zone, 'commands', kind)).includes('R2 commands-floor'),
+        `${zone} -> commands ${JSON.stringify(kind)} must violate R2`,
+      );
+    }
+  }
+
+  // Zones at or above the command surface are not governed by R2.
+  assert.deepEqual(firing(edge('src/cli/run.ts', 'cli', 'commands')), []);
+  assert.deepEqual(firing(edge('src/mcp/tools.ts', 'mcp', 'commands')), []);
+});
+
+test('R3 platforms-seam closes static value imports and opens the three declared seam owners', () => {
+  // Closed from an ordinary zone.
+  assert.deepEqual(firing(edge('src/cli/run.ts', 'cli', 'platforms')), ['R3 platforms-seam']);
+
+  // Open to the seam owners.
+  for (const file of [
+    'src/core/interactors/android.ts',
+    'src/daemon/handlers/perf.ts',
+    'src/sdk/android-adb.ts',
+  ]) {
+    assert.deepEqual(firing(edge(file, 'core', 'platforms')), [], `${file} is a seam owner`);
+  }
+
+  // daemon/client/ is inside the daemon prefix but is NOT part of the seam: it is the client half
+  // of the process boundary (ADR 0008), so it must not reach platform code at all.
+  assert.deepEqual(firing(edge('src/daemon/client/daemon-client.ts', 'daemon', 'platforms')), [
+    'R3 platforms-seam',
+  ]);
+
+  // Both tolerated kinds are the documented escape hatch that preserves CLI cold-start.
+  assert.deepEqual(firing(edge('src/cli/run.ts', 'cli', 'platforms', { dynamic: true })), []);
+  assert.deepEqual(firing(edge('src/cli/run.ts', 'cli', 'platforms', { typeOnly: true })), []);
+});
+
+test('every policy carries a hint, and the lead names the kind it rejected', () => {
+  // ADR 0010: an error that does not say what to do instead is a rule nobody can act on.
+  for (const policy of ZONE_POLICIES) {
+    assert.ok(policy.hint.length > 20, `${policy.rule} needs an actionable hint`);
+  }
+
+  assert.match(policyLead(edge('a', 'kernel', 'utils')), /kernel\/ must not import utils\//);
+  assert.match(
+    policyLead(edge('a', 'kernel', 'commands', { typeOnly: true })),
+    /must not type-only import commands\//,
+  );
+  assert.match(
+    policyLead(edge('a', 'cli', 'platforms', { dynamic: true })),
+    /must not dynamic import platforms\//,
+  );
+});
+
+test('a policy states its scope with exactly one of `to` or `exceptTo`', () => {
+  // Both would make the target set ambiguous; neither would silently govern every target, which is
+  // never what a boundary means.
+  for (const policy of ZONE_POLICIES) {
+    assert.notEqual(
+      Boolean(policy.to) === Boolean(policy.exceptTo),
+      true,
+      `${policy.rule} must set exactly one of to/exceptTo`,
+    );
+  }
+});
+
+test('R1 is two policies, so the single open door stays visible', () => {
+  // Collapsing these into one entry with a special case is what made the original predicate hard
+  // to read. If someone merges them, this fails and says why.
+  const r1 = policiesFor('R1 kernel-sink');
+  assert.equal(r1.length, 2);
+  assert.deepEqual(
+    r1.find((p) => p.to)?.tolerates,
+    ['type-only'],
+    'the contracts door is type-only',
+  );
+  assert.equal(r1.find((p) => p.exceptTo)?.tolerates, undefined, 'every other target is closed');
+});

@@ -387,6 +387,51 @@ Still duplicated across zones, each needing the same treatment: `fill requires t
 `settings clear-app-state requires an app id…` (`core/dispatch.ts` ↔ two platform modules), and
 `snapshot is not supported by this backend` (three files inside `commands/`).
 
+## 7. `eslint-plugin-boundaries` under oxlint: evaluated, works, not adopted
+
+Spiked properly (installed, configured against the real tree, verified by injection) so nobody has
+to repeat it. **It runs** — oxlint's `jsPlugins` loads npm ESLint plugins directly, so this needs no
+ESLint install, no second config and no extra CI step:
+
+```json
+{ "jsPlugins": [{ "name": "boundaries", "specifier": "eslint-plugin-boundaries" }] }
+```
+
+R1, R2 and R3 are all expressible, and all three were confirmed to fire on injected violations while
+every documented exemption held. The two non-obvious settings that make R3 work:
+
+| need | mechanism |
+|---|---|
+| ignore type-only edges | `importKind: "value"` on the policy |
+| ignore dynamic `import()` | `settings["boundaries/dependency-nodes"] = ["import", "export"]` |
+
+**Why we did not adopt it.** None of these is fatal alone; together they lose more than the
+declarative syntax gains, and `ZONE_POLICIES` gets that syntax anyway:
+
+- **No ratchet.** The mechanism that took R6 from 61 → 7 across three PRs is a baseline that
+  tolerates N and fails on N+1. A per-file lint rule has no cross-run aggregate, so it cannot do
+  this. Any new boundary with existing violations — the platforms facade has ~89 — would need one
+  disable comment per site.
+- **It cannot replace the gate.** R4 (cycles), R5/R6 (spine ranking + ratchet), R7 (field
+  ownership — not an import rule at all), R8 (CI job closure) and R9 (cycle size) are whole-graph or
+  non-import properties. Adopting it means R1-R3 live in one system and R4-R9 in another, so
+  "where is our architecture defined" gets two answers.
+- **Inline type specifiers are misread.** `import { type A, type B } from '…'` is fully erased at
+  runtime, but the plugin classifies it as a value import (its `importKind` is statement-level).
+  That produced one real false positive here — `providers/limrun/android.ts` — flagged as an R3
+  violation the gate correctly ignores. Only 10 of 1,481 type-only edges use this form, so the blast
+  radius is small, but `statementIsTypeOnly` in `model.ts` handles both spellings and the plugin
+  does not.
+- **Message specificity regressed.** With the current non-deprecated selector syntax,
+  `{{dependency.type}}` and `{{file.type}}` interpolated to empty strings, so violations read
+  `must not import commands/` with no zone named. ADR 0010 wants every error actionable.
+- **Cost.** 230 transitive packages, and `jsPlugins` is documented as "in alpha and not subject to
+  semver." A single config attempt produced five deprecation warnings (`mode`, `rules`, legacy
+  selectors, legacy templates, rule-level `importKind`) spanning two major migrations.
+
+Worth re-evaluating if the monorepo migration happens — per-package ESLint configs change the
+calculus — or once `jsPlugins` is stable and the ratchet gap is addressable.
+
 ## Suggested order from here
 
 1. **Move the 10 outward-facing `daemon/types.ts` types into `contracts/`** (§2). Mechanical, and
