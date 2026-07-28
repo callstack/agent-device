@@ -24,8 +24,8 @@ import {
   type InteractionPathId,
 } from '../../src/contracts/interaction-guarantees.ts';
 import { DAEMON_COMMAND_DESCRIPTORS } from '../../src/daemon/daemon-command-registry.ts';
+import { parseArgs } from 'node:util';
 import { selectChecks, type CheckPlan } from '../check-affected/model.ts';
-import { parseScriptArgs } from '../lib/cli-args.ts';
 import {
   bound,
   collectDependents,
@@ -80,18 +80,33 @@ export type BlastRadius = {
   guaranteeRows: GuaranteeRow[];
 };
 
-function parseInvocation(argv: readonly string[]): { file: string; json: boolean; limit: number } {
-  const positionals = argv.filter((arg) => !arg.startsWith('-'));
-  const flags = argv.filter((arg) => arg.startsWith('-'));
-  const values = parseScriptArgs(flags, USAGE, {
-    json: { type: 'boolean', default: false },
-    limit: { type: 'string', default: '10' },
+export type Invocation = { file: string; json: boolean; limit: number } | { help: true };
+
+/**
+ * `parseArgs` with positionals enabled rather than the shared `parseScriptArgs` helper, which
+ * rejects them: partitioning argv by a leading dash would detach `--limit` from its value.
+ */
+export function parseInvocation(argv: readonly string[]): Invocation {
+  const { values, positionals } = parseArgs({
+    args: [...argv],
+    options: {
+      json: { type: 'boolean', default: false },
+      limit: { type: 'string', default: '10' },
+      help: { type: 'boolean', short: 'h', default: false },
+    },
+    allowPositionals: true,
   });
+  if (values.help) return { help: true };
+
   const target = positionals[0];
   if (target === undefined) throw new Error(`missing <path>.\n${USAGE}`);
-  if (positionals.length > 1) throw new Error(`expected one <path>, got ${positionals.length}.`);
+  if (positionals.length > 1) {
+    throw new Error(`expected one <path>, got ${positionals.length}: ${positionals.join(' ')}`);
+  }
   const limit = Number(values.limit);
-  if (!Number.isInteger(limit) || limit < 1) throw new Error(`--limit must be a positive integer`);
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new Error(`--limit must be a positive integer, got "${values.limit}"`);
+  }
   return { file: target, json: Boolean(values.json), limit };
 }
 
@@ -266,7 +281,12 @@ export function formatBlastRadius(radius: BlastRadius, limit: number): string {
 }
 
 export async function runAffected(argv: readonly string[], repoRoot: string): Promise<number> {
-  const { file, json, limit } = parseInvocation(argv);
+  const invocation = parseInvocation(argv);
+  if ('help' in invocation) {
+    process.stdout.write(USAGE);
+    return 0;
+  }
+  const { file, json, limit } = invocation;
   const radius = await computeBlastRadius(repoRoot, normalizeTarget(file, repoRoot));
   process.stdout.write(
     json ? `${JSON.stringify(radius, null, 2)}\n` : formatBlastRadius(radius, limit),

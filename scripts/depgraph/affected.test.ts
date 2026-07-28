@@ -19,6 +19,7 @@ import {
   computeBlastRadius,
   formatBlastRadius,
   guaranteeRows,
+  parseInvocation,
   parseRouteEntries,
 } from './affected-run.ts';
 import { collapseEdges, type GraphNode } from './model.ts';
@@ -164,6 +165,26 @@ test('the real guarantee matrix contributes module-qualified rows', () => {
     rows.some((row) => row.via.startsWith('src/') && row.via.includes('#')),
     'expected at least one runtime cell naming a module',
   );
+});
+
+test('a flag keeps its value whichever side of the path it is on', () => {
+  const expected = { file: 'src/utils/exec.ts', json: true, limit: 25 };
+  assert.deepEqual(parseInvocation(['src/utils/exec.ts', '--json', '--limit', '25']), expected);
+  assert.deepEqual(parseInvocation(['--json', '--limit', '25', 'src/utils/exec.ts']), expected);
+  assert.deepEqual(parseInvocation(['src/utils/exec.ts', '--json', '--limit=25']), expected);
+  assert.deepEqual(parseInvocation(['src/utils/exec.ts']), {
+    file: 'src/utils/exec.ts',
+    json: false,
+    limit: 10,
+  });
+  assert.deepEqual(parseInvocation(['--help']), { help: true });
+});
+
+test('parseInvocation rejects a missing path, a second path, and a non-positive limit', () => {
+  assert.throws(() => parseInvocation(['--json']), /missing <path>/);
+  assert.throws(() => parseInvocation(['a.ts', 'b.ts']), /expected one <path>, got 2: a\.ts b\.ts/);
+  assert.throws(() => parseInvocation(['a.ts', '--limit', '0']), /positive integer/);
+  assert.throws(() => parseInvocation(['a.ts', '--limit', 'lots']), /positive integer/);
 });
 
 test('text output bounds every list and says what it hid', () => {
