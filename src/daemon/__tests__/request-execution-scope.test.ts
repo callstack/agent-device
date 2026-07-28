@@ -2,7 +2,11 @@ import { afterAll, test, expect } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../utils/diagnostics.ts';
+import {
+  emitDiagnostic,
+  flushDiagnosticsToSessionFile,
+  withDiagnosticsScope,
+} from '../../utils/diagnostics.ts';
 import {
   makeAndroidSession,
   makeIosSession,
@@ -568,6 +572,34 @@ test('prepareLockedRequestScope passes the session runner log path into handler 
     expect(result.scope.logPath).toBe(scope.runnerLogPath);
     expect(result.scope.contextFromFlags(undefined).logPath).toBe(scope.runnerLogPath);
   }
+});
+
+test('prepareLockedRequestScope streams ordinary diagnostics into the active trace', async () => {
+  const sessionStore = makeSessionStore('agent-device-request-scope-');
+  const tracePath = path.join(TEST_ROOT, 'active-session.trace');
+  sessionStore.set(
+    'default',
+    makeIosSession('default', {
+      trace: { outPath: tracePath, startedAt: Date.now() },
+    }),
+  );
+  const scope = await createRequestExecutionScope({
+    req: makeRequest({ command: 'snapshot' }),
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+  });
+
+  await withDiagnosticsScope({ command: 'snapshot', logPath: LOG_PATH }, async () => {
+    const result = prepareLockedRequestScope({
+      scope,
+      sessionStore,
+      trackDownloadableArtifact: () => 'artifact-id',
+    });
+    expect(result.type).toBe('scope');
+    emitDiagnostic({ phase: 'trace_regression_canary' });
+  });
+
+  expect(fs.readFileSync(tracePath, 'utf8')).toContain('"phase":"trace_regression_canary"');
 });
 
 test('runLocked rejects a canceled request before executing work', async () => {

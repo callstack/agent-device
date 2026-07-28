@@ -11,7 +11,10 @@ description: 'Install a ready Release build of examples/test-app on the booted i
 # Release build embedded may be stale — @expo/repack-app swaps in a bundle built
 # from the current source. If no artifact exists yet (the producer has not run
 # for this fingerprint), it falls back to building inline, so a caller is never
-# left without an app.
+# left without an app. Callers that run alongside the producer can opt into a
+# bounded wait first, avoiding two simultaneous native builds on a cold key.
+# Artifact hits are accepted only from this repository's designated producer
+# workflow at the current head or from a default-branch push.
 #
 # The caller's job needs `permissions: actions: read` for the artifact lookup.
 # Relevant to #320 (move replay coverage off system apps onto a stable fixture).
@@ -25,7 +28,10 @@ inputs:
     description: 'Install the app onto the booted simulator'
     required: false
     default: 'true'
-
+  wait-for-artifact-seconds:
+    description: 'How long to poll for a concurrently produced artifact before building inline'
+    required: false
+    default: '0'
 outputs:
   app-path:
     description: 'Path to the ready .app bundle'
@@ -40,11 +46,10 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    # Installed even on a hit, because the fingerprint is derived from the
-    # dependency graph and cannot be computed without it.
-    - name: Install test app dependencies
-      shell: bash
-      run: pnpm test-app:install
+    # The fingerprint/repack commands need the dependency graph. This shared
+    # action avoids recreating it on every warm native-artifact consumer.
+    - name: Setup test app dependencies
+      uses: ./.github/actions/setup-test-app-dependencies
 
     - name: Fetch the cached Release binary
       id: fetch
@@ -53,19 +58,80 @@ runs:
         GH_TOKEN: ${{ github.token }}
       run: |
         set -euo pipefail
-        HASH="$(pnpm --dir examples/test-app exec fingerprint fingerprint:generate | jq -r .hash)"
-        NAME="fingerprint.${HASH}.ios"
+        NAME="$(sh "$GITHUB_ACTION_PATH/resolve-artifact-name.sh" ios)"
         DEST="${{ github.workspace }}/.tmp/fixture-app"
+        REPOSITORY="${{ github.repository }}"
+        EXPECTED_HEAD_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+        TRUSTED_ARTIFACT="$GITHUB_ACTION_PATH/trusted-artifact.mjs"
         rm -rf "$DEST"; mkdir -p "$DEST"
+        WAIT_SECONDS="${{ inputs.wait-for-artifact-seconds }}"
+        case "$WAIT_SECONDS" in
+          ''|*[!0-9]*)
+            echo "::error::wait-for-artifact-seconds must be a non-negative integer."
+            exit 1
+            ;;
+        esac
 
         # A lookup failure (API outage, auth, transient 5xx) must not fail the
-        # caller: it degrades to an inline build exactly as a cache miss does. The
-        # assignment sits in an `if` so `set -e` cannot exit on it, and an empty
-        # ART_ID then takes the same path as "no artifact found".
-        if ! ART_ID="$(gh api "repos/${{ github.repository }}/actions/artifacts?name=${NAME}&per_page=1" \
-          --jq '[.artifacts[] | select(.expired == false)][0].id // empty' 2>/dev/null)"; then
+        # caller or trigger a pointless wait: it takes the inline-build path.
+        query_artifact() {
+          node "$TRUSTED_ARTIFACT" find "$REPOSITORY" "$NAME" "$EXPECTED_HEAD_SHA" 2>/dev/null
+        }
+        query_producer_state() {
+          node "$TRUSTED_ARTIFACT" producer-state "$REPOSITORY" "$EXPECTED_HEAD_SHA" 2>/dev/null
+        }
+        if ! ART_ID="$(query_artifact)"; then
           echo "::warning::Could not query the build cache for $NAME; building inline."
           ART_ID=""
+          WAIT_SECONDS=0
+        fi
+        if [ -z "$ART_ID" ] && [ "$WAIT_SECONDS" -gt 0 ]; then
+          DEADLINE=$((SECONDS + WAIT_SECONDS))
+          MISSING_PRODUCER_POLLS=0
+          echo "$NAME is not available; waiting up to ${WAIT_SECONDS}s for its producer."
+          while [ -z "$ART_ID" ] && [ "$SECONDS" -lt "$DEADLINE" ]; do
+            if ! PRODUCER_STATE="$(query_producer_state)"; then
+              echo "::warning::Could not inspect the fixture producer; building inline."
+              break
+            fi
+            case "$PRODUCER_STATE" in
+              queued)
+                echo "Fixture producer is queued; building inline instead of waiting for a macOS runner."
+                break
+                ;;
+              failed)
+                echo "Fixture producer failed; building inline."
+                break
+                ;;
+              success)
+                echo "Fixture producer completed without $NAME; building inline."
+                break
+                ;;
+              absent)
+                MISSING_PRODUCER_POLLS=$((MISSING_PRODUCER_POLLS + 1))
+                if [ "$MISSING_PRODUCER_POLLS" -ge 3 ]; then
+                  echo "No fixture producer appeared for $EXPECTED_HEAD_SHA; building inline."
+                  break
+                fi
+                ;;
+              in_progress)
+                MISSING_PRODUCER_POLLS=0
+                ;;
+              *)
+                echo "::warning::Fixture producer returned unknown state '$PRODUCER_STATE'; building inline."
+                break
+                ;;
+            esac
+            sleep 30
+            if ! ART_ID="$(query_artifact)"; then
+              echo "::warning::Build cache polling failed for $NAME; building inline."
+              ART_ID=""
+              break
+            fi
+            if [ -n "$ART_ID" ]; then
+              break
+            fi
+          done
         fi
 
         SOURCE=build
@@ -84,7 +150,7 @@ runs:
           fi
           rm -rf "$STAGE"
         else
-          echo "$NAME not in the cache yet; building inline."
+          echo "$NAME not in the cache after the configured wait; building inline."
         fi
         echo "source=$SOURCE" >> "$GITHUB_OUTPUT"
 

@@ -1,10 +1,19 @@
 name: 'Setup Android Replay Host'
 description: 'Prepare the Android CI host for replay tests and expose the agent-device home path'
 
+inputs:
+  package-helpers:
+    description: 'Restore or package the npm-bundled Android snapshot and IME helpers'
+    required: false
+    default: 'false'
+
 outputs:
   agent-home-dir:
     description: 'Resolved agent-device home directory'
     value: ${{ steps.agent-home.outputs.dir }}
+  helpers-cache-hit:
+    description: 'Whether packaged Android helpers were restored from cache'
+    value: ${{ steps.android-helpers-cache.outputs.cache-hit }}
 
 runs:
   using: 'composite'
@@ -20,3 +29,64 @@ runs:
         sudo udevadm control --reload-rules
         sudo udevadm trigger --name-match=kvm
       shell: bash
+
+    - name: Resolve Android helper source hash
+      if: inputs.package-helpers == 'true'
+      id: android-helper-source
+      run: |
+        VERSION="$(node -p 'require("./package.json").version')"
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "value=${{ hashFiles('android/snapshot-helper/AndroidManifest.xml', 'android/snapshot-helper/debug.keystore', 'android/snapshot-helper/src/**', 'android/ime-helper/AndroidManifest.xml', 'android/ime-helper/res/**', 'android/ime-helper/src/**', 'scripts/build-android-helper.sh', 'scripts/package-android-helper.sh', '.github/actions/setup-android-replay-host/action.yml') }}" >> "$GITHUB_OUTPUT"
+      shell: bash
+
+    - name: Restore packaged Android helpers
+      if: inputs.package-helpers == 'true'
+      id: android-helpers-cache
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.3
+      with:
+        path: |
+          android/snapshot-helper/dist
+          android/ime-helper/dist
+        key: android-helpers-${{ runner.os }}-${{ runner.arch }}-api36-v${{ steps.android-helper-source.outputs.version }}-${{ steps.android-helper-source.outputs.value }}
+
+    - name: Install Android helper SDK packages
+      if: inputs.package-helpers == 'true' && steps.android-helpers-cache.outputs.cache-hit != 'true'
+      run: |
+        SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+        SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+        if [ ! -x "$SDKMANAGER" ]; then
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/bin/sdkmanager"
+        fi
+        if [ ! -x "$SDKMANAGER" ]; then
+          echo "sdkmanager not found under $SDK_ROOT" >&2
+          exit 1
+        fi
+        yes | "$SDKMANAGER" --licenses >/dev/null || true
+        "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+      shell: bash
+
+    - name: Package npm-bundled Android helpers
+      if: inputs.package-helpers == 'true' && steps.android-helpers-cache.outputs.cache-hit != 'true'
+      run: |
+        VERSION="${{ steps.android-helper-source.outputs.version }}"
+        rm -rf android/snapshot-helper/dist android/ime-helper/dist
+        sh ./scripts/package-android-helper.sh snapshot "$VERSION" "v$VERSION" android/snapshot-helper/dist
+        sh ./scripts/package-android-helper.sh ime "$VERSION" android/ime-helper/dist
+      shell: bash
+
+    - name: Verify packaged Android helpers
+      if: inputs.package-helpers == 'true'
+      run: |
+        VERSION="$(node -p 'require("./package.json").version')"
+        test -f "android/snapshot-helper/dist/agent-device-android-snapshot-helper-$VERSION.manifest.json"
+        test -f "android/ime-helper/dist/agent-device-android-ime-helper-$VERSION.manifest.json"
+      shell: bash
+
+    - name: Save packaged Android helpers
+      if: inputs.package-helpers == 'true' && steps.android-helpers-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.3
+      with:
+        path: |
+          android/snapshot-helper/dist
+          android/ime-helper/dist
+        key: android-helpers-${{ runner.os }}-${{ runner.arch }}-api36-v${{ steps.android-helper-source.outputs.version }}-${{ steps.android-helper-source.outputs.value }}

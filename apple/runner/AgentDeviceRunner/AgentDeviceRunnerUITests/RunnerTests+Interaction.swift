@@ -118,27 +118,6 @@ extension RunnerTests {
 #endif
   }
 
-  func rotateDevice(to orientationName: String) -> Bool {
-#if os(macOS) || os(tvOS) || os(visionOS)
-    return false
-#else
-    switch orientationName {
-    case "portrait":
-      XCUIDevice.shared.orientation = .portrait
-    case "portrait-upside-down":
-      XCUIDevice.shared.orientation = .portraitUpsideDown
-    case "landscape-left":
-      XCUIDevice.shared.orientation = .landscapeLeft
-    case "landscape-right":
-      XCUIDevice.shared.orientation = .landscapeRight
-    default:
-      return false
-    }
-    sleepFor(0.2)
-    return true
-#endif
-  }
-
   func findElement(app: XCUIApplication, text: String) -> XCUIElement? {
     let predicate = NSPredicate(format: "label CONTAINS[c] %@ OR identifier CONTAINS[c] %@ OR value CONTAINS[c] %@", text, text, text)
     let element = app.descendants(matching: .any).matching(predicate).firstMatch

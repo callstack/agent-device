@@ -50,6 +50,10 @@
       "import": "./dist/src/android-adb.js",
       "types": "./dist/src/android-adb.d.ts"
     },
+    "./limrun": {
+      "import": "./dist/src/limrun.js",
+      "types": "./dist/src/limrun.d.ts"
+    },
     "./contracts": {
       "import": "./dist/src/contracts.js",
       "types": "./dist/src/contracts.d.ts"
@@ -127,7 +131,8 @@
     "check:coverage-changed:test": "node --experimental-strip-types --test scripts/coverage-changed/model.test.ts scripts/coverage-changed/run.test.ts",
     "check:layering": "node --experimental-strip-types --test scripts/layering/model.test.ts scripts/layering/zone-policy.test.ts && node --experimental-strip-types scripts/layering/check.ts",
     "depgraph": "node --experimental-strip-types scripts/depgraph/build.ts",
-    "depgraph:test": "node --experimental-strip-types --test scripts/depgraph/model.test.ts",
+    "depgraph:test": "node --experimental-strip-types --test scripts/depgraph/model.test.ts scripts/depgraph/affected.test.ts",
+    "repo-health": "node --experimental-strip-types scripts/repo-health/run.ts",
     "check:production-exports": "fallow dead-code --config fallow-production-exports.json --production --unused-exports --fail-on-issues",
     "check:bundle-owner-files": "node --experimental-strip-types scripts/check-bundle-owner-files.ts",
     "check:command-docs": "vitest run --project unit-core src/__tests__/command-doc-coverage.test.ts",
@@ -158,6 +163,7 @@
     "test:integration:provider": "vitest run --project provider-integration",
     "test:integration:progress": "node --experimental-strip-types scripts/integration-progress.ts",
     "test:integration:progress:check": "node --experimental-strip-types scripts/integration-progress.ts --check",
+    "test:fixture-cache": "node --test test/ci/trusted-fixture-artifact.test.mjs",
     "test:output-economy": "vitest run --project output-economy",
     "test:smoke:web": "pnpm build && node --test test/integration/smoke-web-platform.test.ts",
     "test:skillgym": "node test/skillgym/runner-environment.ts && pnpm build && skillgym run ./test/skillgym/suites/agent-device-smoke-suite.ts --config ./test/skillgym/skillgym.config.ts",

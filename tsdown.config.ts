@@ -51,6 +51,7 @@ export default defineConfig({
     'remote-config': 'src/sdk/remote-config.ts',
     'install-source': 'src/sdk/install-source.ts',
     'android-adb': 'src/sdk/android-adb.ts',
+    limrun: 'src/sdk/limrun.ts',
     contracts: 'src/sdk/contracts.ts',
     selectors: 'src/sdk/selectors.ts',
     finders: 'src/sdk/finders.ts',

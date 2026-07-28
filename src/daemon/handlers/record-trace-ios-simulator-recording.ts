@@ -21,12 +21,21 @@ import type { RecordTraceDeps, RecordingBase } from './record-trace-types.ts';
 import { errorResponse } from './response.ts';
 
 const LOCAL_RECORDING_READY_POLL_MS = 250;
-const LOCAL_RECORDING_READY_SETTLE_POLLS = 2;
+const LOCAL_RECORDING_LIVENESS_GRACE_MS = 50;
+// CoreSimulator may delay creating the zero-byte recordVideo destination while
+// a just-booted simulator finishes service startup. This is still much shorter
+// than recording itself, but avoids reporting a false start under CI load.
+const LOCAL_RECORDING_READY_TIMEOUT_MS = 15_000;
 const IOS_SIMULATOR_VIDEO_READY_POLL_MS = 150;
 const IOS_SIMULATOR_VIDEO_READY_ATTEMPTS = 12;
 
 type ActiveRecording = NonNullable<SessionState['recording']>;
 type IosSimulatorRecording = Extract<ActiveRecording, { platform: 'ios' }>;
+type LocalRecordingReadiness =
+  | { kind: 'ready'; readyAt: number }
+  | { kind: 'exited'; result: Awaited<IosSimulatorRecording['wait']> }
+  | { kind: 'failed'; error: unknown }
+  | { kind: 'timeout' };
 
 export async function startIosSimulatorRecording(params: {
   req: DaemonRequest;
@@ -47,7 +56,26 @@ export async function startIosSimulatorRecording(params: {
     ? await warmIosSimulatorRunner({ req, activeSession, device, logPath, deps })
     : undefined;
   const { child, wait } = deps.startIosSimulatorRecording({ device, outPath: resolvedOut });
-  const readyAt = await waitForLocalRecordingSettleWindow(resolvedOut);
+  const readiness = await waitForLocalRecordingReadiness(resolvedOut, wait);
+  if (readiness.kind !== 'ready') {
+    if (readiness.kind === 'timeout' || readiness.kind === 'failed') {
+      await stopIosSimulatorRecordingProcess({
+        deps,
+        recording: {
+          platform: 'ios',
+          child,
+          wait,
+          ...recordingBase,
+          outPath: resolvedOut,
+          recorderPid: child.pid,
+          startedAt: Date.now(),
+        },
+      });
+    }
+    removeInvalidRecordingOutput(resolvedOut);
+    return errorResponse('COMMAND_FAILED', formatRecordingStartFailure(readiness));
+  }
+  const readyAt = readiness.readyAt;
   let gestureClockOriginAtMs: number | undefined;
   let gestureClockOriginUptimeMs: number | undefined;
   if (warmAnchor) {
@@ -187,28 +215,61 @@ export async function stopIosSimulatorRecording(params: {
   return null;
 }
 
-async function waitForLocalRecordingSettleWindow(outPath: string): Promise<number> {
-  // simctl recordVideo can take a beat to open its output even though recording has already
-  // started. This is a short settle window, not a strict readiness guarantee. We prefer a
-  // close recorder anchor over blocking start indefinitely waiting for non-zero bytes.
-  for (let attempt = 0; attempt < LOCAL_RECORDING_READY_SETTLE_POLLS; attempt += 1) {
+async function waitForLocalRecordingReadiness(
+  outPath: string,
+  wait: IosSimulatorRecording['wait'],
+): Promise<LocalRecordingReadiness> {
+  let settledProcessExit: LocalRecordingReadiness | undefined;
+  const processExit: Promise<LocalRecordingReadiness> = wait.then(
+    (result) => (settledProcessExit = { kind: 'exited', result }),
+    (error: unknown) => (settledProcessExit = { kind: 'failed', error }),
+  );
+  // Give an already-settled recorder wait precedence over a destination the process touched
+  // immediately before exiting.
+  await Promise.resolve();
+  const attempts = Math.ceil(LOCAL_RECORDING_READY_TIMEOUT_MS / LOCAL_RECORDING_READY_POLL_MS);
+  for (let attempt = 0; attempt <= attempts; attempt += 1) {
+    if (settledProcessExit) return settledProcessExit;
     try {
-      const stat = fs.statSync(outPath);
-      if (stat.size > 0) {
-        return Date.now();
-      }
+      fs.statSync(outPath);
+      const readyAt = Date.now();
+      // `simctl recordVideo` creates a zero-byte destination when capture is ready and writes
+      // the finalized MP4 only after SIGINT. Existence, not size, is the readiness signal, but
+      // keep a short liveness window for an immediate post-create process exit to win.
+      const exit = await Promise.race([
+        processExit,
+        sleep(LOCAL_RECORDING_LIVENESS_GRACE_MS).then(() => undefined),
+      ]);
+      if (exit) return exit;
+      return { kind: 'ready', readyAt };
     } catch {
       // Wait for the recorder to create the output file.
     }
 
-    if (attempt + 1 >= LOCAL_RECORDING_READY_SETTLE_POLLS) {
-      return Date.now();
-    }
-
-    await sleep(LOCAL_RECORDING_READY_POLL_MS);
+    if (attempt === attempts) return { kind: 'timeout' };
+    const exit = await Promise.race([
+      processExit,
+      sleep(LOCAL_RECORDING_READY_POLL_MS).then(() => undefined),
+    ]);
+    if (exit) return exit;
   }
 
-  return Date.now();
+  return { kind: 'timeout' };
+}
+
+function formatRecordingStartFailure(
+  readiness: Exclude<LocalRecordingReadiness, { kind: 'ready' }>,
+): string {
+  if (readiness.kind === 'timeout') {
+    return `failed to start recording: simctl recordVideo did not create its output within ${LOCAL_RECORDING_READY_TIMEOUT_MS}ms`;
+  }
+  if (readiness.kind === 'failed') {
+    return `failed to start recording: ${formatRecordTraceError(readiness.error)}`;
+  }
+  return `failed to start recording: ${formatRecordTraceExecFailure(
+    readiness.result,
+    'simctl recordVideo',
+  )}`;
 }
 
 function buildIosSimulatorRecordingStopFailure(

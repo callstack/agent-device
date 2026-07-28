@@ -18,7 +18,17 @@ module.exports = {
     // rebuilding. CI does not rely on this — it builds Release and shares the
     // result through GitHub artifacts (see .github/workflows/test-app-build-cache.yml).
     buildCacheProvider: { plugin: 'expo-build-disk-cache' },
-    plugins: ['expo-router'],
+    plugins: [
+      'expo-router',
+      [
+        'expo-audio',
+        {
+          microphonePermission:
+            'Allow Agent Device Tester to exercise microphone permission recovery.',
+          recordAudioAndroid: false,
+        },
+      ],
+    ],
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.callstack.agentdevicelab',

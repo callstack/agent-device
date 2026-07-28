@@ -18,6 +18,7 @@ import {
   type AppleRunnerProvider,
 } from './core/runner/runner-provider.ts';
 import { toAppleTvRemoteButton } from '../../contracts/tv-remote.ts';
+import { DEVICE_ROTATIONS, type DeviceRotation } from '../../contracts/device-rotation.ts';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { isMacOs, isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
@@ -132,13 +133,22 @@ export function createAppleInteractor(
       );
     },
     setOrientation: async (orientation) => {
-      await runAppleRunnerCommand(
+      const result = await runAppleRunnerCommand(
         device,
         // `rotate` is the runner-protocol command name (its own namespace); the
         // CLI-facing command/method is `orientation`.
         { command: 'rotate', orientation, appBundleId: runnerContext.appBundleId },
         runnerOpts,
       );
+      const observed = readRunnerOrientation(result);
+      if (observed !== orientation) {
+        throw new AppError(
+          'COMMAND_FAILED',
+          `iOS runner observed ${observed} after requesting ${orientation}`,
+          { requestedOrientation: orientation, observedOrientation: observed },
+        );
+      }
+      return { orientation: observed };
     },
     appSwitcher: async () => {
       await runAppleRunnerCommand(
@@ -166,6 +176,16 @@ export function createAppleInteractor(
   };
   if (!runnerProvider) return interactor;
   return withInjectedAppleRunnerTransport(device, runnerContext, interactor, runnerProvider);
+}
+
+function readRunnerOrientation(result: Record<string, unknown>): DeviceRotation {
+  const orientation = result.orientation;
+  if (typeof orientation === 'string' && DEVICE_ROTATIONS.includes(orientation as DeviceRotation)) {
+    return orientation as DeviceRotation;
+  }
+  throw new AppError('COMMAND_FAILED', 'iOS runner returned an invalid orientation result', {
+    orientation,
+  });
 }
 
 /**

@@ -14,6 +14,7 @@ import {
   IOS_SIMULATOR_SCREENSHOT_RETRY_BASE_DELAY_MS,
   IOS_SIMULATOR_SCREENSHOT_RETRY_MAX_ATTEMPTS,
   IOS_SIMULATOR_SCREENSHOT_RETRY_MAX_DELAY_MS,
+  IOS_SIMULATOR_SCREENSHOT_SCALE_TIMEOUT_MS,
   IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS,
 } from './config.ts';
 import { runAppleRunnerCommand, IOS_RUNNER_CONTAINER_BUNDLE_IDS } from './runner/runner-client.ts';
@@ -446,7 +447,7 @@ async function readIosSimulatorMainScreenScale(device: DeviceInfo): Promise<numb
     return cachedScale;
   }
   const scaleResult = await runSimctl(device, ['getenv', device.id, 'SIMULATOR_MAINSCREEN_SCALE'], {
-    timeoutMs: 5_000,
+    timeoutMs: IOS_SIMULATOR_SCREENSHOT_SCALE_TIMEOUT_MS,
   });
   const scale = Number(scaleResult.stdout.trim());
   if (!Number.isFinite(scale) || scale <= 0) {

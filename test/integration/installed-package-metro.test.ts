@@ -316,6 +316,11 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
           './finders': (mod) => mod.findBestMatchesByLocator([], 'text', 'anything').matches.length,
           './install-source': (mod) => typeof mod.isTrustedInstallSourceUrl('https://example.test/app.apk'),
           './io': (mod) => typeof mod.createLocalArtifactAdapter({ cwd: process.cwd() }).reserveOutput,
+          './limrun': async (mod) => {
+            const runtime = new mod.LimrunRuntime({ apiKey: 'lim_test_key' });
+            await runtime.shutdown();
+            return runtime.provider;
+          },
           './metro': (mod) => mod.buildBundleUrl('https://public.example.test', 'ios'),
           './remote-config': (mod) => typeof mod,
           './selectors': (mod) => mod.isSelectorToken('||') && typeof mod.parseSelectorChain === 'function',
@@ -388,6 +393,7 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       './finders': 0,
       './install-source': 'boolean',
       './io': 'function',
+      './limrun': 'limrun',
       // Type-only subpath: resolving the module from the packed exports map is
       // the entire runtime check.
       './remote-config': 'object',

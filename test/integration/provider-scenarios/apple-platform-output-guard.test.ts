@@ -8,8 +8,8 @@ import type { RecordingProvider } from '../../../src/daemon/recording-provider.t
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR, PROVIDER_SCENARIO_MACOS } from './fixtures.ts';
 import {
+  createProviderIosSimulatorRecordingProcess,
   createProviderScenarioHarness,
-  likelyPlayableMp4Container,
   type ProviderScenarioHarness,
   type ProviderScenarioRpcResult,
 } from './harness.ts';
@@ -333,13 +333,8 @@ function permissiveTool(world: World) {
 
 function permissiveRecording(): RecordingProvider {
   return {
-    startIosSimulatorRecording: ({ outPath }) => {
-      fs.writeFileSync(outPath, likelyPlayableMp4Container());
-      return {
-        child: { kill: () => true },
-        wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-      };
-    },
+    startIosSimulatorRecording: ({ outPath }) =>
+      createProviderIosSimulatorRecordingProcess(outPath),
   };
 }
 

@@ -3,7 +3,7 @@ name: Perf Nightly
 # End-to-end command perf benchmark (scripts/perf). Scheduled + manual only — perf timing on
 # shared CI runners is noisy, so treat this as a trend/regression signal, not absolute numbers.
 # Reuses the same build artifacts as the device suites: the cached iOS XCUITest runner
-# (setup-apple-replay, ios-runner-prebuilt cache) and the Android replay host, and runs the CLI
+# (setup-apple-runner-build, ios-runner-prebuilt cache) and the Android replay host, and runs the CLI
 # from source via --experimental-strip-types (no dist build), matching the replay workflows.
 
 on:
@@ -44,9 +44,8 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Setup Apple replay
-        id: apple-replay
-        uses: ./.github/actions/setup-apple-replay
+      - name: Restore and build iOS XCTest runner
+        uses: ./.github/actions/setup-apple-runner-build
         with:
           derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
           cache-key-prefix: ios-runner-prebuilt
@@ -61,7 +60,7 @@ jobs:
           runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
           preferred-device-name: iPhone 17 Pro
 
-      - name: Prepare iOS runner
+      - name: Preflight iOS runner through public CLI
         run: |
           pnpm clean:daemon
           node --experimental-strip-types src/bin.ts prepare ios-runner --platform ios --timeout "$AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS"
@@ -97,11 +96,8 @@ jobs:
       - name: Setup Android replay host
         id: android-replay-host
         uses: ./.github/actions/setup-android-replay-host
-
-      - name: Package npm-bundled Android helpers
-        run: |
-          pnpm package:android-snapshot-helper:npm
-          pnpm package:android-ime-helper:npm
+        with:
+          package-helpers: 'true'
 
       - name: Run Android command perf benchmark
         uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0

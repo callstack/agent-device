@@ -55,17 +55,40 @@ export async function stopIosSimulatorRecordingProcess(params: {
 
   recording.child.kill('SIGKILL');
   await signalIosSimulatorRecorderCleanup(deps, recording, 'SIGKILL');
-  return await waitForRecordingProcessExit(
+  result = await waitForRecordingProcessExit(
     recording.wait,
     IOS_SIMULATOR_RECORDING_FORCE_STOP_TIMEOUT_MS,
   );
+  if (result) return result;
+  if (recording.recorderPid !== undefined && !isProcessAlive(recording.recorderPid)) {
+    return { exitCode: 0, stderr: '', stdout: '' };
+  }
+  return null;
 }
 
 async function waitForRecordingProcessExit(
   wait: Promise<ExecResult>,
   timeoutMs: number,
 ): Promise<ExecResult | null> {
-  return await Promise.race([wait, sleep(timeoutMs).then(() => null)]);
+  // A rejected monitor means we lost the ability to confirm process exit; it does not mean the
+  // recorder exited. Treat it like an unconfirmed timeout so the caller continues through the
+  // PID-backed SIGINT/SIGTERM/SIGKILL cleanup sequence.
+  return await Promise.race([
+    wait.then(
+      (result) => result,
+      () => null,
+    ),
+    sleep(timeoutMs).then(() => null),
+  ]);
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function signalIosSimulatorRecorderCleanup(

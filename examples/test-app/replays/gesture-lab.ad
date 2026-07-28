@@ -14,10 +14,10 @@ wait "two-pointer pan activations 0" 5000
 gesture pan 110 443 48 0 500 --pointer-count 2
 wait "two-pointer pan activations 1" 5000
 
-gesture fling left 280 443 120
+gesture fling left 210 443 90
 wait "fling 1" 5000
 
-gesture fling right 280 443 120
+gesture fling right 210 443 90
 wait "fling 2" 5000
 
 open "${APP_TARGET}" --relaunch --launch-url "${APP_URL}"
@@ -25,7 +25,7 @@ wait "Gesture lab" 30000
 wait "gesture canary ready" 5000
 wait "pan changed no, pinch changed no, rotate changed no" 30000
 
-gesture pinch 1.5 280 443
+gesture pinch 1.5 210 443
 wait "pan changed no, pinch changed yes, rotate changed no" 5000
 
 open "${APP_TARGET}" --relaunch --launch-url "${APP_URL}"
@@ -33,7 +33,7 @@ wait "Gesture lab" 30000
 wait "gesture canary ready" 5000
 wait "pan changed no, pinch changed no, rotate changed no" 30000
 
-gesture rotate 35 280 443
+gesture rotate 35 210 443
 wait "pan changed no, pinch changed no, rotate changed yes" 5000
 
 open "${APP_TARGET}" --relaunch --launch-url "${APP_URL}"
@@ -41,7 +41,7 @@ wait "Gesture lab" 30000
 wait "gesture canary ready" 5000
 wait "pan changed no, pinch changed no, rotate changed no" 30000
 
-gesture transform 280 443 24 -24 1.35 30 300
+gesture transform 210 443 24 -24 1.35 30 300
 wait "pan changed yes, pinch changed yes, rotate changed yes" 5000
 
 close

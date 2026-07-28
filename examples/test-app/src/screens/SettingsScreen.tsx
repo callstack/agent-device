@@ -18,6 +18,7 @@ export interface SettingsScreenProps {
   notificationsEnabled: boolean;
   reducedMotionEnabled: boolean;
   onOpenAccessorySetup: () => void;
+  onOpenAutomationLab: () => void;
   onOpenInertSurface: () => void;
   onOpenWebViewLab: () => void;
   onLoadDiagnostics: () => void;
@@ -61,6 +62,17 @@ export function SettingsScreen(props: SettingsScreenProps) {
         title="Settings"
         testID="settings-title"
       />
+
+      <SectionCard
+        subtitle="Open deterministic app-visible canaries for simulator E2E commands."
+        title="Automation"
+      >
+        <ActionButton
+          label="Open automation lab"
+          onPress={props.onOpenAutomationLab}
+          testID="open-automation-lab"
+        />
+      </SectionCard>
 
       <SectionCard
         subtitle="Open the physical iOS AccessorySetupUI verification fixture."

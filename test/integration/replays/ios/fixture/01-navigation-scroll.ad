@@ -1,0 +1,21 @@
+# Stable fixture navigation and long-list recovery.
+context platform=ios kind=simulator timeout=120000
+
+env APP_TARGET="Agent Device Tester"
+
+open "${APP_TARGET}" --relaunch
+wait "Agent Device Tester" 30000
+click "label=\"Catalog\""
+wait "Search, filter, scroll, favorite, and drill into detail without extra dependencies." 5000
+wait "Catalog scroll: top" 5000
+swipe 160 480 160 200
+wait "Catalog scroll: down" 5000
+scroll bottom
+wait "Catalog scroll: bottom" 5000
+wait "Seasonal footer target" 5000
+swipe 160 200 160 480
+wait "Catalog scroll: up" 5000
+scroll top
+wait "Catalog scroll: top" 5000
+wait "Search, filter, scroll, favorite, and drill into detail without extra dependencies." 5000
+close

@@ -61,7 +61,7 @@ function analyzeScrollEdgeState(
     canScroll,
     emptySnapshot: false,
     signature,
-    scope: buildScrollContainerScope(container),
+    scope: buildScrollContainerScope(container, nodes),
   };
 }
 
@@ -256,10 +256,28 @@ function hasHiddenContentAtEdge(
   return node.hiddenContentAbove === true || hint?.hiddenContentAbove === true;
 }
 
-function buildScrollContainerScope(node: SnapshotNode): string | undefined {
-  return [node.identifier, node.label, node.value]
+function buildScrollContainerScope(
+  node: SnapshotNode,
+  nodes: readonly SnapshotNode[],
+): string | undefined {
+  return [node.identifier, node.label]
     .map((value) => (typeof value === 'string' ? value.trim() : ''))
-    .find(isUsefulScope);
+    .find((value) => isUsefulScope(value) && isUniqueScopeValue(value, node, nodes));
+}
+
+function isUniqueScopeValue(
+  value: string,
+  target: SnapshotNode,
+  nodes: readonly SnapshotNode[],
+): boolean {
+  const normalized = value.toLowerCase();
+  const matches = nodes.filter((node) =>
+    [node.identifier, node.label, node.value].some(
+      (candidate) =>
+        typeof candidate === 'string' && candidate.trim().toLowerCase().includes(normalized),
+    ),
+  );
+  return matches.length === 1 && matches[0]?.index === target.index;
 }
 
 function isUsefulScope(value: string): boolean {

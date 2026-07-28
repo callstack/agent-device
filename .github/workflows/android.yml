@@ -36,25 +36,8 @@ jobs:
       - name: Setup Android replay host
         id: android-replay-host
         uses: ./.github/actions/setup-android-replay-host
-
-      - name: Install Android SDK packages
-        run: |
-          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          if [ ! -x "$SDKMANAGER" ]; then
-            SDKMANAGER="$SDK_ROOT/cmdline-tools/bin/sdkmanager"
-          fi
-          if [ ! -x "$SDKMANAGER" ]; then
-            echo "sdkmanager not found under $SDK_ROOT" >&2
-            exit 1
-          fi
-          yes | "$SDKMANAGER" --licenses >/dev/null
-          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
-
-      - name: Package npm-bundled Android helpers
-        run: |
-          pnpm package:android-snapshot-helper:npm
-          pnpm package:android-ime-helper:npm
+        with:
+          package-helpers: 'true'
 
       - name: Run Android smoke checks
         uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0

@@ -54,14 +54,15 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Setup Apple replay
-        uses: ./.github/actions/setup-apple-replay
+      - name: Restore and build iOS XCTest runner
+        uses: ./.github/actions/setup-apple-runner-build
         with:
           derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
           cache-key-prefix: ios-runner-prebuilt
           cache-key-suffix: -ios-${{ env.IOS_RUNTIME_VERSION }}
           build-command: sh ./scripts/build-xcuitest-apple.sh
           xcuitest-platform: ios
+          xcuitest-destination: generic/platform=iOS Simulator
 
       - name: Boot simulator
         uses: ./.github/actions/boot-ios-test-simulator

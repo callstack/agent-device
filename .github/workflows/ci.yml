@@ -60,13 +60,14 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Compile Swift runner unit-test surface
-        uses: ./.github/actions/setup-apple-replay
+      - name: Restore and compile Swift runner unit-test surface
+        uses: ./.github/actions/setup-apple-runner-build
         with:
           derived-path: ${{ github.workspace }}/.tmp/swift-runner-unit-derived
           cache-key-prefix: swift-runner-unit
           build-command: AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS=1 pnpm build:xcuitest:macos
           xcuitest-platform: macos
+          xcuitest-destination: platform=macOS,arch=arm64
 
   lint:
     name: Lint & Format
