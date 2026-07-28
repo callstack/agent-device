@@ -154,11 +154,10 @@ async function acceptDeepLinkConfirmationIfPresent(context: LiveContext): Promis
   if (destination.status === 0) return;
 
   const alert = await runStep(context, 'inspect delayed deep-link system alert', ['alert', 'get']);
-  const alertInfo = alert.json?.data?.alert;
-  assert.equal(alertInfo?.source, 'system-dialog', JSON.stringify(alert.json));
-  assert.match(String(alertInfo?.title), /^Open in\b/, JSON.stringify(alert.json));
+  const alertInfo = alert.json?.data;
+  assert.match(String(alertInfo?.message), /^Open in\b/, JSON.stringify(alert.json));
   assert.ok(
-    Array.isArray(alertInfo?.buttons) && alertInfo.buttons.includes('Open'),
+    Array.isArray(alertInfo?.items) && alertInfo.items.includes('Open'),
     JSON.stringify(alert.json),
   );
   await runStep(context, 'accept deep-link confirmation', ['alert', 'accept']);
