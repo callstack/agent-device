@@ -59,8 +59,8 @@ surface, and `provenance` pins the bytes:
   doc that emitted the surface is **reviewer-verified**, so a derived entry has to be reviewed against
   its cited source at that tag (`git show <tag>:<path>`) before it lands.
 
-**Two sources, never invention.** The *form* comes from the cited release — the script bytes are what
-that tag's grammar or docs emitted. The *verdict* comes from today's parser, because a migration
+**Two sources, never invention.** The _form_ comes from the cited release — the script bytes are what
+that tag's grammar or docs emitted. The _verdict_ comes from today's parser, because a migration
 refusal for a retired form did not exist at the tag that emitted it (v0.16.8 wrote
 `gesture rotate <deg> <x> <y> <velocity>`; the hint telling you to drop the velocity is current
 output). So copy the form from the release and paste the code/hint from an observed run — never
