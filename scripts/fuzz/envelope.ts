@@ -1,16 +1,21 @@
-// Run envelope for the parser fuzz lane (#1414).
+// Run envelope for the parser fuzz lane (#1414), on #1430's shared contract.
 //
 // A scheduled lane goes dark quietly: it can stop running, or fail for weeks, while PR CI stays
 // green. Freshness monitoring therefore needs one machine-readable record per run — green runs
-// included — describing which commit, tool, config, and seed produced the verdict. This lane
-// writes that record on *every* terminal path: pass, fail, self-check, or a crash in the harness.
-// The cross-lane version of this contract is #1430's deliverable; this is only what this lane owes.
+// included. This module only maps the lane's own facts onto `scripts/lib/lane-envelope.ts`; the
+// envelope shape itself is cross-lane and lives there.
+//
+// `error` (a crash, or config the harness could not parse) is reported as `result: 'fail'` with
+// `data.stage: 'error'`: the shared contract deliberately has two results, and a lane that could
+// not complete itself is not a passing lane.
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { laneEnvelope } from '../lib/lane-envelope.ts';
+import { runCmdSync } from '../../src/utils/exec.ts';
 import type { FuzzFailure } from './invariant.ts';
 
-const SCHEMA_VERSION = 1;
 const FILENAME = 'run-envelope.json';
 const LANE = 'parser-fuzz';
 const TOOL = 'scripts/fuzz/run.ts';
@@ -32,69 +37,54 @@ export type FuzzEnvelopeDetails = {
   reproCommands: string[];
 };
 
-export type FuzzRunEnvelope = {
-  schemaVersion: number;
-  lane: string;
-  /** `error` is for a run that could not complete itself (crash, bad config). */
-  result: 'pass' | 'fail' | 'error';
-  startedAt: string;
-  finishedAt: string;
-  durationMs: number;
-  provenance: {
-    commitSha: string | null;
-    ref: string | null;
-    workflow: string | null;
-    workflowRunId: string | null;
-    workflowRunNumber: string | null;
-    workflowRunAttempt: string | null;
-    nodeVersion: string;
-    tool: string;
-  };
-  /** Everything that decides what the run did: seed, sizes, budgets, selected work. */
+/** `stage` separates "the lane ran and found violations" from "the lane could not run". */
+export type FuzzEnvelopeData = FuzzEnvelopeDetails & {
+  stage: 'complete' | 'error';
   config: Record<string, unknown>;
-  details: FuzzEnvelopeDetails;
 };
-
-function envOrNull(name: string): string | null {
-  return process.env[name] ?? null;
-}
-
-/** GitHub Actions exports these; a local run simply records `null`. */
-function provenanceFromEnv(): FuzzRunEnvelope['provenance'] {
-  return {
-    commitSha: envOrNull('GITHUB_SHA'),
-    ref: envOrNull('GITHUB_REF'),
-    workflow: envOrNull('GITHUB_WORKFLOW'),
-    workflowRunId: envOrNull('GITHUB_RUN_ID'),
-    workflowRunNumber: envOrNull('GITHUB_RUN_NUMBER'),
-    workflowRunAttempt: envOrNull('GITHUB_RUN_ATTEMPT'),
-    nodeVersion: process.version,
-    tool: TOOL,
-  };
-}
 
 /** Writes the envelope for one fuzz run into `artifactDir`; returns its path. */
 export function writeFuzzEnvelope(input: {
   artifactDir: string;
   startedAt: number;
   finishedAt: number;
-  result: FuzzRunEnvelope['result'];
+  result: 'pass' | 'fail' | 'error';
   config: Record<string, unknown>;
   details: FuzzEnvelopeDetails;
 }): string {
-  const envelope: FuzzRunEnvelope = {
-    schemaVersion: SCHEMA_VERSION,
+  const seed = input.config.seed;
+  const envelope = laneEnvelope<FuzzEnvelopeData>({
     lane: LANE,
-    result: input.result,
-    startedAt: new Date(input.startedAt).toISOString(),
-    finishedAt: new Date(input.finishedAt).toISOString(),
-    durationMs: input.finishedAt - input.startedAt,
-    provenance: provenanceFromEnv(),
-    config: { mode: input.details.mode, ...input.config },
-    details: input.details,
-  };
+    commit: runCmdSync('git', ['rev-parse', 'HEAD'], { allowFailure: true }).stdout.trim(),
+    tool: { node: process.version, harness: TOOL },
+    // The generators are the lane's configuration: a case set is decided by the seed plus the
+    // arbitraries, so the harness source is what a drift check has to compare.
+    configHash: harnessHash(),
+    seed: typeof seed === 'number' ? String(seed) : null,
+    startedAtMs: input.startedAt,
+    now: input.finishedAt,
+    result: input.result === 'pass' ? 'pass' : 'fail',
+    data: {
+      stage: input.result === 'error' ? 'error' : 'complete',
+      config: { mode: input.details.mode, ...input.config },
+      ...input.details,
+    },
+  });
   fs.mkdirSync(input.artifactDir, { recursive: true });
   const file = path.join(input.artifactDir, FILENAME);
   fs.writeFileSync(file, `${JSON.stringify(envelope, null, 2)}\n`);
   return file;
+}
+
+/**
+ * Content hash of the modules that decide a case set, so drift analysis can tell "the same seed
+ * means different inputs now" from "the parsers changed".
+ */
+function harnessHash(): string {
+  const here = path.dirname(new URL(import.meta.url).pathname);
+  const digest = crypto.createHash('sha256');
+  for (const name of ['arbitraries.ts', 'targets.ts', 'invariant.ts']) {
+    digest.update(fs.readFileSync(path.join(here, name)));
+  }
+  return `sha256:${digest.digest('hex').slice(0, 16)}`;
 }

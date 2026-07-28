@@ -114,6 +114,19 @@ test('a non-.ts fixture under an owned root fails open (format alone is not owne
   assert.equal(result.failOpenReasons[0]?.rule, 'ambiguous-path');
 });
 
+test('a frozen replay-compat corpus script selects the unit lane and the provenance verifier', () => {
+  const result = plan(['test/replay-compat/scripts/examples/gesture-lab.v0.16.8.ad']);
+  assert.equal(result.failOpen, false);
+  assert.ok(result.checks.includes('unit'));
+  assert.ok(result.checks.includes('replay-compat'));
+});
+
+test('a replay-compat manifest edit selects the provenance verifier', () => {
+  const result = plan(['test/replay-compat/manifest.ts']);
+  assert.equal(result.failOpen, false);
+  assert.ok(result.checks.includes('replay-compat'));
+});
+
 test('skills guidance change selects format + skillgym, not docs-only', () => {
   const result = plan(['skills/agent-device/SKILL.md']);
   assert.equal(result.failOpen, false);
@@ -175,6 +188,7 @@ test('every catalog command resolves against package scripts', () => {
     'build:macos-helper': 'x',
     'test:smoke:web': 'x',
     'test:skillgym': 'x',
+    'check:replay-compat': 'x',
   };
   for (const spec of CHECK_CATALOG) {
     const command = resolveCommand(spec, scripts, 'origin/main');

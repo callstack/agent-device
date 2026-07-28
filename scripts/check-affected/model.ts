@@ -40,7 +40,8 @@ export type CheckId =
   | 'android-helpers'
   | 'macos-helper'
   | 'web-smoke'
-  | 'skillgym';
+  | 'skillgym'
+  | 'replay-compat';
 
 // The complete local check universe. A fail-open plan selects all of these;
 // keep it in sync with the catalog in checks.ts (asserted by the self-test).
@@ -63,6 +64,7 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'macos-helper',
   'web-smoke',
   'skillgym',
+  'replay-compat',
 ];
 
 export type SelectionReason = {
@@ -228,6 +230,34 @@ const nodeIntegrationOwnership: OwnershipRule = ({ file }) =>
     ? [reason('integration-node', file, 'node-integration', 'node --test integration smoke')]
     : [];
 
+// The frozen replay-compat corpus (#1417). `.ad` fixture data would otherwise
+// fail open on its extension: its only consumer is the unit-lane corpus test.
+// Any corpus change — script or manifest — also runs the history-backed
+// provenance verifier, which is the only gate that can prove an entry's blob
+// really came from the release tag it names.
+const replayCompatOwnership: OwnershipRule = ({ file }) => {
+  if (!file.startsWith('test/replay-compat/')) return [];
+  const selections = [
+    reason(
+      'replay-compat',
+      file,
+      'own:replay-compat-provenance',
+      'corpus provenance is re-derived from released git blobs',
+    ),
+  ];
+  if (file.endsWith('.ad')) {
+    selections.push(
+      reason(
+        'unit',
+        file,
+        'own:replay-compat',
+        'frozen replay-compat corpus is asserted by the unit-lane corpus test',
+      ),
+    );
+  }
+  return selections;
+};
+
 // SkillGym validates skill guidance (`skills/`) and owns its harness
 // (`test/skillgym/`); the Testing Matrix in docs/agents/testing.md routes
 // skill-prompt/assertion changes here.
@@ -294,6 +324,7 @@ const OWNERSHIP_RULES: readonly OwnershipRule[] = [
   srcProdGate,
   vitestRelatedOwnership,
   nodeIntegrationOwnership,
+  replayCompatOwnership,
   skillgymOwnership,
   buildOwnership,
 ];

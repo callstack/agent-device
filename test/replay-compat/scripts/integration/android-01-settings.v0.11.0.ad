@@ -1,0 +1,14 @@
+# Dogfood Android Settings flow through the replay suite runner.
+context platform=android
+open settings --relaunch
+appstate
+snapshot -i
+is exists "label=Wait || label=\"Close app\" || label=Apps || label=\"Apps & notifications\" || label=\"Network & internet\" || label=\"Network and internet\" || label=\"Connected devices\" || label=Display || label=Battery || label=Notifications || label=Security || label=Privacy"
+click "label=Wait || label=\"Close app\" || label=Apps || label=\"Apps & notifications\" || label=\"Network & internet\" || label=\"Network and internet\" || label=\"Connected devices\" || label=Display || label=Battery || label=Notifications || label=Security || label=Privacy"
+open settings --relaunch
+snapshot -i
+is exists "label=Apps || label=\"Apps & notifications\" || label=\"Network & internet\" || label=\"Network and internet\" || label=\"Connected devices\" || label=Display || label=Battery || label=Notifications || label=Security || label=Privacy"
+click "label=Apps || label=\"Apps & notifications\" || label=\"Network & internet\" || label=\"Network and internet\" || label=\"Connected devices\" || label=Display || label=Battery || label=Notifications || label=Security || label=Privacy"
+snapshot -i
+appstate
+back

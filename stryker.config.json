@@ -1,0 +1,41 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "_comment": "Decision-kernel mutation lane (issue #1415). The mutate list below MUST mirror KERNEL_MODULES in scripts/mutation/modules.ts — scripts/mutation/config.test.ts asserts it. Ratchet verdicts come from scripts/mutation/run.ts, never from Stryker's own thresholds. Any edit here changes the config content hash, which invalidates every recorded baseline as non-comparable until re-recorded with `pnpm mutation:baseline`.",
+  "packageManager": "pnpm",
+  "tsconfigFile_comment": "Points at a path that does not exist on purpose. Stryker's sandbox rewrites tsconfig `extends`/`references` through the classic TypeScript API, which the repo's TypeScript 7 native package no longer exposes (`ts.parseConfigFileTextToJson is not a function`). Our tsconfig has neither extends nor references, so there is nothing to rewrite — skipping the preprocessor is exact, not a workaround for a real dependency. The behaviour relied on is that the preprocessor no-ops when the file is absent: see packages/core/src/sandbox/ts-config-preprocessor.ts (https://github.com/stryker-mutator/stryker-js/blob/master/packages/core/src/sandbox/ts-config-preprocessor.ts) and https://stryker-mutator.io/docs/stryker-js/configuration/#tsconfigfile-string. Re-check it on every Stryker upgrade: if a future version errors on a missing tsconfig instead, point this at a real, extends-free tsconfig.",
+  "tsconfigFile": "tsconfig.stryker-absent.json",
+  "plugins_comment": "Named explicitly: the default `@stryker-mutator/*` glob does not resolve under pnpm's non-flat node_modules, so plugin discovery finds no test runner.",
+  "plugins": ["@stryker-mutator/vitest-runner"],
+  "testRunner": "vitest",
+  "vitest": {
+    "configFile": "vitest.mutation.config.ts",
+    "related": true
+  },
+  "reporters": ["progress", "clear-text", "json"],
+  "jsonReporter": {
+    "fileName": ".tmp/mutation/mutation.json"
+  },
+  "htmlReporter": {
+    "fileName": ".tmp/mutation/mutation.html"
+  },
+  "coverageAnalysis": "perTest",
+  "ignoreStatic": true,
+  "tempDirName": ".tmp/stryker",
+  "cleanTempDir": true,
+  "timeoutMS": 20000,
+  "timeoutFactor": 2,
+  "thresholds": {
+    "high": 90,
+    "low": 70,
+    "break": null
+  },
+  "mutate": [
+    "src/kernel/errors.ts",
+    "src/daemon/ref-frame.ts",
+    "src/commands/interaction/runtime/settle.ts",
+    "src/utils/scroll-edge-state.ts",
+    "src/selectors/**/*.ts",
+    "!src/selectors/**/*.test.ts",
+    "!src/selectors/__tests__/**"
+  ]
+}

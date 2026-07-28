@@ -1,0 +1,8 @@
+# Dogfood iOS physical device lifecycle through the replay suite runner.
+context platform=ios
+open com.apple.Preferences
+snapshot
+click "role=cell label=General"
+wait "label=About || label=\"Software Update\"" 5000
+back
+is exists "role=cell label=General"

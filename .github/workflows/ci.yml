@@ -216,6 +216,26 @@ jobs:
       - name: Check for production-unused exports
         run: pnpm check:production-exports
 
+  replay-compat-provenance:
+    # The frozen replay-compat corpus (#1417) claims each entry was published by
+    # a released tag. Only a full-history checkout can re-derive that claim, so
+    # this job exists separately from the shallow-clone-safe unit lane.
+    name: Replay-Compat Provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Verify corpus entries against their released blobs
+        run: pnpm check:replay-compat
+
   coverage:
     # Runs the full unit + provider-integration suites under coverage with
     # thresholds, so a separate unit-tests job would rerun the same tests.

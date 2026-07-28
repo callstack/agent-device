@@ -1,0 +1,18 @@
+# App lifecycle.
+context platform=android
+
+open settings --relaunch
+appstate
+snapshot -i
+find text "Search" exists
+
+home
+wait 2000
+
+open settings --relaunch
+wait 1000
+appstate
+snapshot -i
+screenshot "./test/screenshots/replays/android-lifecycle-reopen.png"
+
+find text "Search" exists

@@ -152,6 +152,15 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
     ciJobs: [],
     localRunnable: true,
   },
+  {
+    id: 'replay-compat',
+    label: 'Replay-compat corpus provenance (released blobs)',
+    kind: { type: 'script', script: 'check:replay-compat' },
+    // Needs full history and tags, so it runs in its own fetch-depth: 0 job
+    // rather than inside the shallow-clone-safe unit lane.
+    ciJobs: ['Replay-Compat Provenance'],
+    localRunnable: true,
+  },
 ];
 
 export function getCheckSpec(id: CheckId): CheckSpec {

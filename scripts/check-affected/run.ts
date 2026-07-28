@@ -8,8 +8,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { parseArgs as parseNodeArgs } from 'node:util';
 import { runCmdStreaming, runCmdSync } from '../../src/utils/exec.ts';
+import { parseScriptArgs } from '../lib/cli-args.ts';
 import {
   assertCatalogComplete,
   CHECK_CATALOG,
@@ -26,21 +26,12 @@ const repoRoot = runCmdSync('git', ['rev-parse', '--show-toplevel']).stdout.trim
 const USAGE = 'Usage: pnpm check:affected [--base <ref>] [--head <ref>] [--json] [--run]\n';
 
 function parseArgs(argv: readonly string[]): Args {
-  const { values } = parseNodeArgs({
-    args: [...argv],
-    options: {
-      base: { type: 'string', default: 'origin/main' },
-      head: { type: 'string', default: 'HEAD' },
-      json: { type: 'boolean', default: false },
-      run: { type: 'boolean', default: false },
-      help: { type: 'boolean', short: 'h', default: false },
-    },
-    allowPositionals: false,
+  const values = parseScriptArgs(argv, USAGE, {
+    base: { type: 'string', default: 'origin/main' },
+    head: { type: 'string', default: 'HEAD' },
+    json: { type: 'boolean', default: false },
+    run: { type: 'boolean', default: false },
   });
-  if (values.help) {
-    process.stdout.write(USAGE);
-    process.exit(0);
-  }
   return {
     base: values.base ?? 'origin/main',
     head: values.head ?? 'HEAD',

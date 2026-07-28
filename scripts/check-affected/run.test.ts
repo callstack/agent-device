@@ -101,6 +101,7 @@ const ALL_SCRIPTS: Record<string, string> = {
   'test:integration:node': 'x',
   'test:integration:progress:check': 'x',
   'test:skillgym': 'x',
+  'check:replay-compat': 'x',
 };
 
 const ARGS = { base: 'origin/main', head: 'HEAD', json: false, run: true };

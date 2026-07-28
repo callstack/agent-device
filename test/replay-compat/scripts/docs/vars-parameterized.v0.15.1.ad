@@ -1,0 +1,7 @@
+context platform=android
+env APP_ID=settings
+env WAIT_SHORT=500
+
+open ${APP_ID} --relaunch
+wait ${WAIT_SHORT}
+click "label=${APP_ID}"

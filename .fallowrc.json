@@ -66,7 +66,7 @@
     },
     {
       "comment": "Tool config default exports, loaded by the tool rather than imported.",
-      "file": "{tsdown.config.ts,website/rspress.config.ts,test/skillgym/skillgym.config.ts,test/skillgym/suites/*.ts}",
+      "file": "{tsdown.config.ts,vitest.mutation.config.ts,website/rspress.config.ts,test/skillgym/skillgym.config.ts,test/skillgym/suites/*.ts}",
       "exports": [
         "default"
       ]
@@ -79,6 +79,20 @@
         "BuiltinPluginsCoverAllPlatforms",
         "PlatformDescriptorsAreTotal",
         "GatedKeysAreResolverKeys"
+      ]
+    },
+    {
+      "comment": "Mutation-lane seam: readTestScope is consumed by vitest.mutation.config.ts, a tool config outside --production analysis.",
+      "file": "scripts/mutation/test-scope.ts",
+      "exports": [
+        "readTestScope"
+      ]
+    },
+    {
+      "comment": "Mutation-lane completeness gate: ownedTestFiles enumerates the whole derived ownership map, which only the assertion in ownership.test.ts consumes — a production consumer would defeat the point.",
+      "file": "scripts/mutation/ownership.ts",
+      "exports": [
+        "ownedTestFiles"
       ]
     },
     {

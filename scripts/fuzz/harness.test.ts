@@ -11,6 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { LANE_ENVELOPE_SCHEMA_VERSION } from '../lib/lane-envelope.ts';
 import { checkCase } from './invariant.ts';
 import { SELF_CHECK_TARGETS } from './self-check-targets.ts';
 
@@ -99,10 +100,12 @@ describe('run envelope', () => {
     const { envelope, status } = envelopeFrom(['--target', 'selector', '--iterations', '20']);
     expect(status).toBe(0);
     expect(envelope.lane).toBe('parser-fuzz');
-    expect(envelope.schemaVersion).toBe(1);
+    // The shape is #1430's shared contract, not this lane's invention.
+    expect(envelope.schemaVersion).toBe(LANE_ENVELOPE_SCHEMA_VERSION);
+    expect(envelope.configHash).toMatch(/^sha256:/);
     expect(envelope.result).toBe('pass');
-    expect(envelope.details.mode).toBe('generate');
-    expect(envelope.details.targetRuns[0].target).toBe('selector');
+    expect(envelope.data.mode).toBe('generate');
+    expect(envelope.data.targetRuns[0].target).toBe('selector');
   });
 
   // A self-check failure must not leave the lane without an envelope: monitoring reads it and
@@ -118,8 +121,8 @@ describe('run envelope', () => {
     ]);
     expect(status).toBe(1);
     expect(envelope.result).toBe('fail');
-    expect(envelope.details.failures[0].kind).toBe('untyped-throw');
-    expect(envelope.details.reproCommands[0]).toContain('--input-file');
+    expect(envelope.data.failures[0].kind).toBe('untyped-throw');
+    expect(envelope.data.reproCommands[0]).toContain('--input-file');
   });
 
   // A malformed workflow-dispatch input used to throw out of option parsing before anything
@@ -127,22 +130,24 @@ describe('run envelope', () => {
   it('is written when the options themselves are malformed', () => {
     const { envelope, status } = envelopeFrom(['--iterations', 'lots']);
     expect(status).toBe(1);
-    expect(envelope.result).toBe('error');
-    expect(envelope.details.targetRuns).toEqual([]);
+    expect(envelope.result).toBe('fail');
+    expect(envelope.data.stage).toBe('error');
+    expect(envelope.data.targetRuns).toEqual([]);
   });
 
   it('is written for an unknown flag', () => {
     const { envelope, status } = envelopeFrom(['--not-a-flag']);
     expect(status).toBe(1);
-    expect(envelope.result).toBe('error');
+    expect(envelope.result).toBe('fail');
+    expect(envelope.data.stage).toBe('error');
   });
 
   it('is written for a self-check run', () => {
     const { envelope, status } = envelopeFrom(['--self-check', '--case-timeout-ms', '750']);
     expect(status).toBe(0);
     expect(envelope.result).toBe('pass');
-    expect(envelope.details.mode).toBe('self-check');
-    expect(envelope.details.targetRuns).toHaveLength(3);
+    expect(envelope.data.mode).toBe('self-check');
+    expect(envelope.data.targetRuns).toHaveLength(3);
   });
 });
 

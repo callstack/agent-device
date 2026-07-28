@@ -1,0 +1,5 @@
+context platform=android
+
+open settings --relaunch
+gesture swipe up 400
+close

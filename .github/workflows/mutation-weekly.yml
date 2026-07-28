@@ -1,0 +1,153 @@
+name: Mutation Weekly
+
+# Weekly mutation sweep over the enumerated decision kernels (issue #1415).
+# Mutation score is the mechanical answer to "is this test load-bearing or
+# decorative"; a full-suite sweep is unaffordable, so the scope is the kernel
+# registry in scripts/mutation/modules.ts and nothing else.
+#
+# Sharded one job per module: the whole sweep is ~2,150 mutants, and the selector
+# module alone is ~1,280 of them, so a single job would sit near the 30-minute
+# acceptance budget on an ubuntu runner. The shards' JSON reports are merged into
+# one verdict by the ratchet job (`--report-dir`), so the ratchet still sees a
+# full sweep.
+#
+# The lane reports; it does not commit. The proposed baseline rides in the
+# artifact and applying it is a reviewed `pnpm mutation:baseline` commit — a score
+# can never lower itself. Gating (after two consecutive stable weekly runs) is
+# enforced on PRs by mutation-affected.yml.
+
+on:
+  schedule:
+    # Sundays 05:00 UTC — after the nightly lanes, before the working week.
+    - cron: "0 5 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shard:
+    name: Mutants (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    # The acceptance budget is 30 minutes of wall clock for the lane, and shards
+    # run in parallel, so the budget is per shard. The observed rate on a 2-core
+    # runner is ~3s/mutant, which is why selectors (~1,280 mutants) is sliced.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # Kept in step with KERNEL_MODULES by the shard-coverage assertion in
+        # scripts/mutation/workflow.test.ts, which also pins --expect-shards to
+        # the number of entries here.
+        include:
+          - { name: kernel-errors, module: kernel-errors }
+          - { name: daemon-ref-frame, module: daemon-ref-frame }
+          - { name: interaction-settle, module: interaction-settle }
+          - { name: scroll-edge-state, module: scroll-edge-state }
+          - { name: selectors-1, module: selectors, shard: 1/4 }
+          - { name: selectors-2, module: selectors, shard: 2/4 }
+          - { name: selectors-3, module: selectors, shard: 3/4 }
+          - { name: selectors-4, module: selectors, shard: 4/4 }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Run mutants for ${{ matrix.name }}
+        run: |
+          pnpm mutation:run --modules ${{ matrix.module }} \
+            ${{ matrix.shard && format('--shard {0}', matrix.shard) || '' }}
+
+      # A shard can die before Stryker writes anything (install, config, crash);
+      # without this the artifact is absent and "shard failed" is indistinguishable
+      # from "lane never ran". --fail-envelope leaves a real verdict untouched.
+      - name: Record a failed shard envelope
+        if: failure()
+        run: |
+          pnpm mutation:run --modules ${{ matrix.module }} --fail-envelope \
+            "shard ${{ matrix.name }} failed before producing a report (run ${{ github.run_id }})" || true
+
+      - name: Upload shard report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mutation-shard-${{ matrix.name }}
+          path: |
+            .tmp/mutation/mutation.json
+            .tmp/mutation/lane-envelope.json
+          if-no-files-found: warn
+
+  ratchet:
+    name: Mutation ratchet
+    runs-on: ubuntu-latest
+    needs: shard
+    if: always()
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Ratchet self-test
+        run: pnpm mutation:test
+
+      - name: Download shard reports
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: mutation-shard-*
+          path: .tmp/mutation/shards
+
+      # run.ts writes the markdown verdict to $GITHUB_STEP_SUMMARY when the
+      # runner exports it, so the summary and the artifact carry the same numbers.
+      - name: Ratchet the merged sweep and propose the next baseline
+        run: |
+          pnpm mutation:check --report-dir .tmp/mutation/shards --expect-shards 8 --update
+          cp mutation-baselines/decision-kernels.json .tmp/mutation/proposed-baseline.json
+          git checkout -- mutation-baselines/decision-kernels.json
+
+      # The self-test and the artifact download both run before the ratchet, so a
+      # failure there would otherwise leave the aggregate lane with no envelope.
+      - name: Record a failed lane envelope
+        if: failure()
+        run: |
+          pnpm mutation:run --fail-envelope \
+            "weekly ratchet job failed before producing a verdict (run ${{ github.run_id }})" || true
+
+      # Freshness/drift telemetry (#1430): the envelope states commit, Stryker
+      # version, config hash, duration and result, so a lane going dark or a tool
+      # bump is visible without reading these logs.
+      - name: Lane envelope
+        if: always()
+        run: |
+          if [ ! -f .tmp/mutation/lane-envelope.json ]; then
+            echo 'No lane envelope was written — the job died before it could run node.' \
+              >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo '<details><summary>Lane envelope (schema #1430)</summary>'
+            echo
+            echo '```json'
+            cat .tmp/mutation/lane-envelope.json
+            echo '```'
+            echo '</details>'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mutation-decision-kernels
+          path: |
+            .tmp/mutation/shards
+            .tmp/mutation/lane-envelope.json
+            .tmp/mutation/proposed-baseline.json
+          if-no-files-found: warn
