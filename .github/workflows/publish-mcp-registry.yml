@@ -55,7 +55,7 @@ jobs:
         shell: bash
 
       - name: Check MCP metadata sync
-        run: node scripts/sync-mcp-metadata.mjs --check
+        run: pnpm check:mcp-metadata
 
       - name: Install mcp-publisher
         run: |

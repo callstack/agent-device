@@ -452,9 +452,13 @@ function checkZeroDepJobs(): Violation[] {
       .split('\n')
       .filter(Boolean),
   );
+  const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as {
+    scripts?: Record<string, string>;
+  };
+  const packageScripts = new Map(Object.entries(packageJson.scripts ?? {}));
 
   const violations: Violation[] = [];
-  for (const job of zeroDepJobs(workflows, fileExists)) {
+  for (const job of zeroDepJobs(workflows, fileExists, packageScripts)) {
     // Fail closed: a zero-dep job whose commands the entry scan cannot recognize would
     // otherwise be silently exempt from the rule it is the whole reason for.
     if (job.entries.length === 0) {

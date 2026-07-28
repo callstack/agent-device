@@ -69,7 +69,7 @@ jobs:
 
       - name: Run iOS command perf benchmark
         run: |
-          node --experimental-strip-types scripts/perf/run.ts \
+          pnpm perf \
             --platform ios \
             --device "iPhone 17 Pro" \
             --n "$PERF_ROUNDS" --warmup 1 \
@@ -116,7 +116,7 @@ jobs:
             adb -s emulator-5554 shell settings put global window_animation_scale 0 || true;
             adb -s emulator-5554 shell settings put global transition_animation_scale 0 || true;
             adb -s emulator-5554 shell settings put global animator_duration_scale 0 || true;
-            node --experimental-strip-types scripts/perf/run.ts --platform android --serial emulator-5554 --n "$PERF_ROUNDS" --warmup 1 --out-dir "$GITHUB_WORKSPACE/perf-results"
+            pnpm perf:android --serial emulator-5554 --n "$PERF_ROUNDS" --warmup 1 --out-dir "$GITHUB_WORKSPACE/perf-results"
 
       - name: Upload Android perf report
         if: always()

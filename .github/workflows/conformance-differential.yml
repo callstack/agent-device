@@ -125,7 +125,7 @@ jobs:
       # burning its budget) — outcome parity alone cannot see that.
       - name: Run differential
         run: |
-          node --experimental-strip-types scripts/maestro-conformance/differential/run.ts \
+          pnpm maestro:conformance:differential \
             --platform ios \
             --out-dir "${{ github.workspace }}/.tmp/conformance-differential" \
             --trace-root "${{ github.workspace }}/.agent-device" \

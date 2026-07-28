@@ -129,23 +129,12 @@ jobs:
           install-deps: false
 
       # The selector is fail-open and advisory (GitHub CI stays authoritative),
-      # so the gate only guards the derivation model. Invoked directly with no
-      # deps, mirroring the layering guard.
-      #
-      # Kept as an inline `node` invocation rather than `pnpm check:affected:test`
-      # deliberately (#1462): R8's zero-dep-job closure check (scripts/layering/
-      # zero-dep-jobs.ts) discovers each zero-dep job's entry scripts by matching
-      # literal `scripts/**/*.test.ts` paths inside the `run:` block. A bare pnpm
-      # script name has no such path, so the scan would find zero entries and
-      # check.ts fails closed on that (`no entry script was found in its run
-      # steps`) rather than silently exempting the job — see the model.test.ts
-      # case "a job with no recognizable entry script is reported rather than
-      # exempted". pnpm itself is provisioned regardless of this choice; R8
-      # polices `pnpm install`, not the invocation style, so this is not a
-      # `pnpm install` for the job — the entry-detection regex is the actual
-      # constraint here.
+      # so the gate only guards the derivation model. Invoked with no deps,
+      # mirroring the layering guard. R8 (scripts/layering/zero-dep-jobs.ts)
+      # resolves this bare pnpm script name back to package.json's own command
+      # to find its entry scripts, so this is not a `pnpm install` for the job.
       - name: Check affected-selector model
-        run: node --experimental-strip-types --test scripts/check-affected/model.test.ts scripts/check-affected/run.test.ts
+        run: pnpm check:affected:test
 
   maestro-conformance:
     name: Maestro Conformance Oracle

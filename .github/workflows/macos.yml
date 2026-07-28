@@ -50,7 +50,7 @@ jobs:
         run: pnpm build:macos-helper
 
       - name: Run macOS integration test
-        run: node --experimental-strip-types src/bin.ts test test/integration/replays/macos --retries 2 --report-junit test/artifacts/replays-macos.junit.xml
+        run: pnpm test:replay:macos --retries 2 --report-junit test/artifacts/replays-macos.junit.xml
 
       - name: Upload macOS artifacts
         if: always()

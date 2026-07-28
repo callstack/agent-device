@@ -332,6 +332,66 @@ test('a job with no recognizable entry script is reported rather than exempted',
   assert.deepEqual(jobs, [{ workflow: 'w.yml', job: 'zero-dep', entries: [] }]);
 });
 
+test('a bare pnpm script name resolves through package.json to its entry scripts', () => {
+  // The workflow names no path at all — only the pnpm script name package.json maps to the
+  // real command. A zero-dep job may call its script this way (#1462) without R8 losing the
+  // entries it needs to check: the resolution reads the same paths out of the mapped command.
+  const workflow = `
+name: CI
+jobs:
+  zero-dep:
+    steps:
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          install-deps: false
+      - run: pnpm check:affected:test
+`;
+  const present = new Set([
+    'scripts/check-affected/model.test.ts',
+    'scripts/check-affected/run.test.ts',
+  ]);
+  const packageScripts = new Map([
+    [
+      'check:affected:test',
+      'node --experimental-strip-types --test scripts/check-affected/model.test.ts scripts/check-affected/run.test.ts',
+    ],
+  ]);
+  const jobs = zeroDepJobs(
+    new Map([['w.yml', workflow]]),
+    (file) => present.has(file),
+    packageScripts,
+  );
+  assert.deepEqual(jobs, [
+    {
+      workflow: 'w.yml',
+      job: 'zero-dep',
+      entries: ['scripts/check-affected/model.test.ts', 'scripts/check-affected/run.test.ts'],
+    },
+  ]);
+});
+
+test('a pnpm word that names no real package.json script resolves to nothing', () => {
+  // `pnpm install` (or any other non-script pnpm subcommand) must not be treated as a script
+  // name just because it follows `pnpm` — it is absent from packageScripts, same as a shell
+  // word that merely looks like a path is absent from the tree.
+  const workflow = `
+name: CI
+jobs:
+  zero-dep:
+    steps:
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          install-deps: false
+      - run: pnpm install --frozen-lockfile
+`;
+  const jobs = zeroDepJobs(
+    new Map([['w.yml', workflow]]),
+    () => true,
+    new Map([['check:affected:test', 'node scripts/check-affected/run.test.ts']]),
+  );
+  assert.deepEqual(jobs, [{ workflow: 'w.yml', job: 'zero-dep', entries: [] }]);
+});
+
 test('a package import anywhere in a zero-dep closure is rejected, builtins are not', () => {
   const tree = new Map([
     [
@@ -394,10 +454,13 @@ test("the repo's own zero-dep jobs resolve without node_modules", () => {
       : null;
   };
   const exists = (file: string): boolean => read(file) !== null;
+  const packageJson = JSON.parse(read('package.json')!) as { scripts?: Record<string, string> };
+  const packageScripts = new Map(Object.entries(packageJson.scripts ?? {}));
 
   const jobs = zeroDepJobs(
     new Map([['.github/workflows/ci.yml', read('.github/workflows/ci.yml')!]]),
     exists,
+    packageScripts,
   );
   assert.ok(jobs.length > 0, 'expected ci.yml to still declare at least one zero-dep job');
   for (const job of jobs) {
