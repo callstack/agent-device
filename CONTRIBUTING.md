@@ -7,15 +7,21 @@ Thanks for your interest in contributing to agent-device.
 Requirements:
 
 - Node.js 22+
-- pnpm
+- pnpm, activated from `package.json` `packageManager` (`corepack enable pnpm`)
 - Android SDK tools (`adb`) for Android support
 - Xcode (`simctl`/`devicectl`) for iOS support
 
 Setup:
 
 ```bash
+corepack enable pnpm
 pnpm install
 ```
+
+`package.json` `packageManager` is the single source of truth for the pnpm version. Corepack
+activates that exact version locally, and `.github/actions/setup-node-pnpm` reads the same field
+and fails the job when the installed `pnpm --version` disagrees — so the CI and local package
+managers cannot drift apart silently, and the "Ignoring...pnpm" drift warning stays quiet locally.
 
 Build all CLIs and Xcode projects:
 
@@ -161,6 +167,21 @@ Examples:
 // CONSERVATIVE: Preserve external runner artifacts because the checkout does not own their cache
 // root. Revisit only if external artifacts get an ownership marker that makes cleanup safe.
 ```
+
+## Dependency Updates
+
+Renovate (`.github/renovate.json`) proposes dependency updates: weekly lockfile maintenance, one
+grouped PR for devDependencies, one PR per runtime dependency, and digest bumps for GitHub Actions.
+Security updates are enabled explicitly (`vulnerabilityAlerts` plus `osvVulnerabilityAlerts`) and
+are the only updates exempt from the 7-day minimum release age.
+
+Renovate PRs are gated exactly like human PRs: `automerge` is off everywhere, so every branch needs
+a green CI run and a human review before merge. Review one the way you would review any dependency
+change — read the release notes in the PR body, and check that the affected-check plan for the diff
+(`pnpm check:affected --base origin/main --run`, which fails open to the full set for lockfile and
+workflow changes) is green. A green Renovate PR is a merge candidate, not a merge: no rubber-stamp
+automerge path exists, and none should be added without also deciding which gate is trusted to
+replace the reviewer.
 
 ## Issue Labels
 

@@ -181,6 +181,21 @@ agent-device capabilities --session checkout --json
 - `capabilities` reports the command names supported by the selected session device or an explicit `--platform`/`--device`/`--udid`/`--serial` target.
 - In JSON output, `capabilities` returns `{ device, availableCommands }`. Use `availableCommands` for dynamic integrations instead of maintaining a separate platform support table.
 
+## Diagnostics
+
+```bash
+agent-device doctor
+agent-device doctor --platform ios
+agent-device doctor --platform android --app com.example.myapp
+agent-device doctor --remote --json
+```
+
+- `doctor` diagnoses device, app, Metro, and React Native setup/readiness issues for the selected target.
+- Use `--platform ios|android|vega|macos|linux|web|apple` to scope the checks to one backend; without it, `doctor` reports across the discoverable targets.
+- `--app <id-or-name>` focuses app-specific checks (install state, Metro/React Native wiring) on a single bundle id or app name.
+- `--remote` runs the environment-only checks that do not require a booted device, which is what CI bootstrap and the packaged-CLI smoke use.
+- `doctor` is read-only: it never boots, installs, or mutates the session device.
+
 ## Prepare Apple runner
 
 ```bash
@@ -755,6 +770,15 @@ agent-device react-devtools profile report @c5
 - For remote iOS bridge sessions, open the app once to create the bridge session, run `agent-device react-devtools start`, then relaunch the same bundle id with `agent-device open <bundle-id> --platform ios --relaunch` before `wait --connected`. React Native attempts the legacy DevTools websocket during JavaScript startup, so starting DevTools after the first launch can miss that connection attempt.
 - Remote bridge React DevTools assumes the React Native-bundled DevTools behavior in React Native 0.83+. Older browser/Chromium DevTools workflows are not assumed to exist inside remote sandboxes. Expo projects should be verified against the SDK's bundled React Native version before relying on this path; this release does not claim a separately verified Expo SDK version.
 - For cross-platform validation with explicit target selectors, use separate sessions/devices and restart `react-devtools` between iOS and Android runs.
+
+```bash
+agent-device react-native dismiss-overlay
+agent-device react-native dismiss-overlay --platform android
+```
+
+- `react-native dismiss-overlay` clears a React Native development overlay (a redbox/LogBox error or a collapsed warning banner) that is blocking interaction, then returns without changing app state otherwise.
+- Use it when a snapshot or interaction is blocked by a dev-only overlay; it is a no-op when no overlay is present.
+- It is supported on iOS simulators/devices and Android emulators/devices; `react-native` currently exposes only the `dismiss-overlay` helper.
 
 ## Multiple React Native worktrees
 

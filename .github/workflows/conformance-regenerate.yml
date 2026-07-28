@@ -15,7 +15,7 @@ name: Conformance Regenerate Verify
 
 on:
   schedule:
-    - cron: "0 6 * * *"
+    - cron: '0 6 * * *'
   workflow_dispatch:
 
 permissions:
@@ -44,7 +44,7 @@ jobs:
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: '17'
 
       # Verifies the pinned jar SHA-256s against pinned-upstream.json, runs the
       # harness over the corpus, and rewrites fixtures/ + corpus/manifest.json.

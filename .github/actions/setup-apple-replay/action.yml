@@ -1,43 +1,43 @@
-name: "Setup Apple Replay"
-description: "Resolve shared Apple replay cache/build state and expose the agent-device home path"
+name: 'Setup Apple Replay'
+description: 'Resolve shared Apple replay cache/build state and expose the agent-device home path'
 
 inputs:
   derived-path:
-    description: "Derived data path used by the replay runner"
+    description: 'Derived data path used by the replay runner'
     required: true
   cache-key-prefix:
-    description: "Prefix for the cache key"
+    description: 'Prefix for the cache key'
     required: true
   cache-key-suffix:
-    description: "Optional suffix for the cache key"
+    description: 'Optional suffix for the cache key'
     required: false
-    default: ""
+    default: ''
   build-command:
-    description: "Command used to refresh replay artifacts before use"
+    description: 'Command used to refresh replay artifacts before use'
     required: true
   xcuitest-platform:
-    description: "Optional AGENT_DEVICE_XCUITEST_PLATFORM value"
+    description: 'Optional AGENT_DEVICE_XCUITEST_PLATFORM value'
     required: false
-    default: ""
+    default: ''
   xcuitest-destination:
-    description: "Optional AGENT_DEVICE_XCUITEST_DESTINATION value"
+    description: 'Optional AGENT_DEVICE_XCUITEST_DESTINATION value'
     required: false
-    default: ""
+    default: ''
   build-before-use:
-    description: "Whether this setup action should refresh replay artifacts after restoring the cache"
+    description: 'Whether this setup action should refresh replay artifacts after restoring the cache'
     required: false
-    default: "true"
+    default: 'true'
 
 outputs:
   agent-home-dir:
-    description: "Resolved agent-device home directory"
+    description: 'Resolved agent-device home directory'
     value: ${{ steps.agent-home.outputs.dir }}
   cache-hit:
-    description: "Whether a replay cache was restored before any build refresh"
+    description: 'Whether a replay cache was restored before any build refresh'
     value: ${{ steps.restore-prebuilt.outputs.cache-hit }}
 
 runs:
-  using: "composite"
+  using: 'composite'
   steps:
     - name: Resolve Xcode cache key
       id: xcode

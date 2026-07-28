@@ -19,7 +19,10 @@ if (typeof expectedName !== 'string' || expectedName.length === 0) {
 if (typeof expectedVersion !== 'string' || expectedVersion.length === 0) {
   fail('package.json must define version.');
 }
-if (typeof server.description === 'string' && server.description.length > registryDescriptionMaxLength) {
+if (
+  typeof server.description === 'string' &&
+  server.description.length > registryDescriptionMaxLength
+) {
   fail(`server.json description must be ${registryDescriptionMaxLength} characters or fewer.`);
 }
 

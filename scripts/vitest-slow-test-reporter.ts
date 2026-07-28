@@ -53,10 +53,7 @@ export function classifySlowTest(params: {
 }
 
 /** Render the gate outcome; returns true when the run must fail. */
-export function reportSlowTests(
-  offenders: Offender[],
-  write: (message: string) => void,
-): boolean {
+export function reportSlowTests(offenders: Offender[], write: (message: string) => void): boolean {
   if (offenders.length === 0) return false;
   const sorted = [...offenders].sort((a, b) => b.durationMs - a.durationMs);
   const line = (o: Offender): string =>
@@ -71,7 +68,7 @@ export function reportSlowTests(
   }
   if (failing.length === 0) return false;
   write(
-      `\nSlow-test gate: ${failing.length} test(s) exceeded ${ENFORCE_FACTOR}x the wall-clock budget.\n` +
+    `\nSlow-test gate: ${failing.length} test(s) exceeded ${ENFORCE_FACTOR}x the wall-clock budget.\n` +
       `Tests must not wait real time — inject the timeout/poll budget or assert the budget is\n` +
       `wired instead of waiting it out (docs/agents/testing.md). If the runtime cost is genuinely\n` +
       `irreducible, document the reason in the owning test or move it out of the unit lane.\n` +

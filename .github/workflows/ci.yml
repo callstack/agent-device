@@ -3,13 +3,13 @@ name: CI
 on:
   pull_request:
     paths-ignore:
-      - "docs/**"
-      - "website/**"
-      - "README.md"
-      - ".github/actions/build-docs/action.yml"
-      - ".github/workflows/deploy.yml"
-      - ".github/workflows/pr-preview.yml"
-      - ".github/workflows/pr-preview-cleanup.yml"
+      - 'docs/**'
+      - 'website/**'
+      - 'README.md'
+      - '.github/actions/build-docs/action.yml'
+      - '.github/workflows/deploy.yml'
+      - '.github/workflows/pr-preview.yml'
+      - '.github/workflows/pr-preview-cleanup.yml'
   push:
     branches:
       - main
@@ -182,7 +182,7 @@ jobs:
       - name: Setup Node.js 22.12
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
         with:
-          node-version: "22.12"
+          node-version: '22.12'
 
       - name: Install and run global CLI on Node.js 22.12
         run: |
@@ -251,10 +251,23 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
+      - name: Test changed-line coverage gate
+        run: pnpm check:coverage-changed:test
+
       - name: Run coverage
         env:
           OUTPUT_ECONOMY_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: pnpm test:coverage
+
+      # Reuses the lcov the coverage step just wrote (never runs coverage twice)
+      # and fails when changed-line coverage < the threshold in
+      # scripts/coverage-changed/model.ts. The `coverage-waiver` PR label maps to
+      # the waiver env, which skips the failure but still prints the numbers.
+      - name: Enforce changed-line coverage gate
+        if: always() && github.event_name == 'pull_request'
+        env:
+          AGENT_DEVICE_COVERAGE_WAIVER: ${{ contains(github.event.pull_request.labels.*.name, 'coverage-waiver') }}
+        run: pnpm check:coverage-changed --base "${{ github.event.pull_request.base.sha }}"
 
   typecheck:
     name: Typecheck
@@ -328,7 +341,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      AGENT_DEVICE_WEB_E2E: "1"
+      AGENT_DEVICE_WEB_E2E: '1'
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -336,7 +349,7 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
         with:
-          node-version: "24.13"
+          node-version: '24.13'
 
       - name: Run live web smoke
         run: |

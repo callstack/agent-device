@@ -37,7 +37,7 @@ type Payload = {
     lvl: number;
     cyc: number;
   }[];
-/**
+  /**
    * `[fromIndex, toIndex, kind, flags]`; kind 0=value 1=type 2=dynamic,
    * flags bit0=R5 back-edge, bit1=target also reachable at distance >= 2, bit2=R6 type inversion.
    */
@@ -71,9 +71,7 @@ function edgeKindCode(kind: GraphData['edges'][number]['kind']): number {
  */
 function edgeFlags(edge: GraphData['edges'][number]): number {
   return (
-    (edge.backEdge ? 1 : 0) |
-    (edge.transitivelyReachable ? 2 : 0) |
-    (edge.typeInversion ? 4 : 0)
+    (edge.backEdge ? 1 : 0) | (edge.transitivelyReachable ? 2 : 0) | (edge.typeInversion ? 4 : 0)
   );
 }
 

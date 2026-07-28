@@ -36,8 +36,8 @@ export function InertScreen() {
         Tapping this text changes nothing on screen.
       </Text>
       <Text style={styles.footnote}>
-        Nothing here reacts to touch, loads, or animates, so a tap leaves the
-        hierarchy byte-identical and retryTapIfNoChange must re-tap.
+        Nothing here reacts to touch, loads, or animates, so a tap leaves the hierarchy
+        byte-identical and retryTapIfNoChange must re-tap.
       </Text>
     </View>
   );

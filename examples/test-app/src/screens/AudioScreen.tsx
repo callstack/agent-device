@@ -86,7 +86,10 @@ export function AudioScreen() {
   function playNativeSample() {
     stopNativeSample();
     try {
-      const player = createAudioPlayer({ uri: createNativeBeepDataUri(), name: 'Agent Device beep' });
+      const player = createAudioPlayer({
+        uri: createNativeBeepDataUri(),
+        name: 'Agent Device beep',
+      });
       nativePlayerRef.current = player;
       player.play();
       setPlaybackState('playing');
@@ -304,7 +307,8 @@ function base64Encode(bytes: Uint8Array): string {
     const third = bytes[index + 2];
     output += alphabet[first >> 2];
     output += alphabet[((first & 0x03) << 4) | ((second ?? 0) >> 4)];
-    output += index + 1 < bytes.length ? alphabet[((second & 0x0f) << 2) | ((third ?? 0) >> 6)] : '=';
+    output +=
+      index + 1 < bytes.length ? alphabet[((second & 0x0f) << 2) | ((third ?? 0) >> 6)] : '=';
     output += index + 2 < bytes.length ? alphabet[(third ?? 0) & 0x3f] : '=';
   }
   return output;

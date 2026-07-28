@@ -1,5 +1,5 @@
-name: "Setup Fixture App"
-description: "Install a ready Release build of examples/test-app on the booted iOS simulator, from the shared build cache"
+name: 'Setup Fixture App'
+description: 'Install a ready Release build of examples/test-app on the booted iOS simulator, from the shared build cache'
 
 # Any job that needs a controlled app to drive can use this instead of an Apple
 # system app. It fetches the Release binary that test-app-build-cache.yml
@@ -18,17 +18,17 @@ description: "Install a ready Release build of examples/test-app on the booted i
 
 inputs:
   device-name:
-    description: "Simulator device name used for the inline-build fallback"
+    description: 'Simulator device name used for the inline-build fallback'
     required: false
-    default: "iPhone 17 Pro"
+    default: 'iPhone 17 Pro'
   install:
-    description: "Install the app onto the booted simulator"
+    description: 'Install the app onto the booted simulator'
     required: false
-    default: "true"
+    default: 'true'
 
 outputs:
   app-path:
-    description: "Path to the ready .app bundle"
+    description: 'Path to the ready .app bundle'
     value: ${{ steps.locate.outputs.app-path }}
   app-id:
     description: "Bundle identifier read from the app's Info.plist"
@@ -38,7 +38,7 @@ outputs:
     value: ${{ steps.fetch.outputs.source }}
 
 runs:
-  using: "composite"
+  using: 'composite'
   steps:
     # Installed even on a hit, because the fingerprint is derived from the
     # dependency graph and cannot be computed without it.

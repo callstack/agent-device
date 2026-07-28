@@ -47,7 +47,9 @@ for (const tag of REPLAY_COMPAT_RELEASED_TAGS) {
 
 for (const entry of REPLAY_COMPAT_CORPUS) {
   if (!REPLAY_COMPAT_RELEASED_TAGS.includes(entry.recordedBy)) {
-    failures.push(`${entry.id}: recordedBy ${entry.recordedBy} is not in REPLAY_COMPAT_RELEASED_TAGS`);
+    failures.push(
+      `${entry.id}: recordedBy ${entry.recordedBy} is not in REPLAY_COMPAT_RELEASED_TAGS`,
+    );
     continue;
   }
   if (entry.provenance.kind !== 'mined') continue;

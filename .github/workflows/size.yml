@@ -3,13 +3,13 @@ name: Size
 on:
   pull_request:
     paths-ignore:
-      - "docs/**"
-      - "website/**"
-      - "README.md"
-      - ".github/actions/build-docs/action.yml"
-      - ".github/workflows/deploy.yml"
-      - ".github/workflows/pr-preview.yml"
-      - ".github/workflows/pr-preview-cleanup.yml"
+      - 'docs/**'
+      - 'website/**'
+      - 'README.md'
+      - '.github/actions/build-docs/action.yml'
+      - '.github/workflows/deploy.yml'
+      - '.github/workflows/pr-preview.yml'
+      - '.github/workflows/pr-preview-cleanup.yml'
 
 permissions:
   contents: read

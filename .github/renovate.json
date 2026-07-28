@@ -1,0 +1,64 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommitTypeAll(chore)",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "timezone": "Etc/UTC",
+  "schedule": ["before 6am on monday"],
+  "labels": ["dependencies"],
+  "dependencyDashboard": true,
+  "automerge": false,
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+  "rebaseWhen": "conflicted",
+  "minimumReleaseAge": "7 days",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 6am on monday"],
+    "automerge": false,
+    "commitMessageAction": "refresh"
+  },
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["dependencies", "security"],
+    "schedule": ["at any time"],
+    "minimumReleaseAge": null,
+    "automerge": false
+  },
+  "osvVulnerabilityAlerts": true,
+  "packageRules": [
+    {
+      "matchDepTypes": ["devDependencies"],
+      "groupName": "devDependencies",
+      "groupSlug": "dev-dependencies",
+      "automerge": false
+    },
+    {
+      "matchDepTypes": ["dependencies", "optionalDependencies", "peerDependencies"],
+      "groupName": null,
+      "automerge": false
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions",
+      "groupSlug": "github-actions",
+      "pinDigests": true,
+      "automerge": false
+    },
+    {
+      "matchFileNames": ["examples/test-app/package.json"],
+      "matchDepTypes": ["devDependencies"],
+      "groupName": "test-app fixture devDependencies",
+      "groupSlug": "test-app-dev",
+      "automerge": false
+    },
+    {
+      "matchDepTypes": ["packageManager"],
+      "groupName": "pnpm (packageManager)",
+      "groupSlug": "package-manager",
+      "automerge": false
+    }
+  ]
+}

@@ -8,13 +8,13 @@ name: Perf Nightly
 
 on:
   schedule:
-    - cron: "0 4 * * *"
+    - cron: '0 4 * * *'
   workflow_dispatch:
     inputs:
       rounds:
-        description: "Measured rounds per command (samples)"
+        description: 'Measured rounds per command (samples)'
         required: false
-        default: "5"
+        default: '5'
 
 permissions:
   contents: read
@@ -24,7 +24,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  AGENT_DEVICE_PERF_CLI: "--experimental-strip-types src/bin.ts"
+  AGENT_DEVICE_PERF_CLI: '--experimental-strip-types src/bin.ts'
   PERF_ROUNDS: ${{ github.event.inputs.rounds || '5' }}
 
 jobs:
@@ -33,10 +33,10 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 80
     env:
-      IOS_RUNTIME_VERSION: "26.2"
+      IOS_RUNTIME_VERSION: '26.2'
       AGENT_DEVICE_STATE_DIR: ${{ github.workspace }}/.tmp/agent-device-state
       AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived
-      AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS: "420000"
+      AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS: '420000'
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

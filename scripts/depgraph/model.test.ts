@@ -213,7 +213,11 @@ test('no tracked TypeScript source contains a raw NUL byte', () => {
 // output path, JSON shape or summary without anything failing. These run it as a subprocess, which
 // is the only way to cover argument handling and the file it actually writes.
 
-function runBuild(args: readonly string[]): { status: number | null; stdout: string; stderr: string } {
+function runBuild(args: readonly string[]): {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+} {
   const result = spawnSync(
     process.execPath,
     ['--experimental-strip-types', 'scripts/depgraph/build.ts', ...args],
@@ -243,7 +247,10 @@ test('build.ts writes the default path and a summary consistent with the JSON', 
 
   // The printed summary must agree with the payload it was derived from.
   const inversions = Object.values(payload.typeInversions).reduce((sum, n) => sum + n, 0);
-  assert.match(stdout, new RegExp(`${payload.generated.files} files, ${payload.generated.edges} edges`));
+  assert.match(
+    stdout,
+    new RegExp(`${payload.generated.files} files, ${payload.generated.edges} edges`),
+  );
   assert.match(stdout, new RegExp(`type-only spine inversions \\(R6\\): ${inversions}`));
   const reachable = payload.edges.filter(([, , , flags]) => (flags & 2) !== 0).length;
   assert.match(stdout, new RegExp(`reachable at distance >= 2: ${reachable}`));
