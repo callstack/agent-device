@@ -41,10 +41,7 @@ import {
 import { withMockedMacOsHelper } from './macos-helper-test-utils.ts';
 import { quitMacOsApp, resolveMacOsHelperPackageRootFrom } from '../../os/macos/helper.ts';
 import { ensureBootedSimulator } from '../simulator.ts';
-import {
-  IOS_DEVICE_INSTALL_TIMEOUT_MS,
-  IOS_SIMULATOR_TERMINATE_TIMEOUT_MS,
-} from '../config.ts';
+import { IOS_DEVICE_INSTALL_TIMEOUT_MS, IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from '../config.ts';
 import type { DeviceInfo } from '../../../../kernel/device.ts';
 import { AppError } from '../../../../kernel/errors.ts';
 import { runCmd } from '../../../../utils/exec.ts';
