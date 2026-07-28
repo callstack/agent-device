@@ -3,16 +3,16 @@ description: 'Prepare the Android CI host for replay tests and expose the agent-
 
 inputs:
   package-helpers:
-    description: "Restore or package the npm-bundled Android snapshot and IME helpers"
+    description: 'Restore or package the npm-bundled Android snapshot and IME helpers'
     required: false
-    default: "false"
+    default: 'false'
 
 outputs:
   agent-home-dir:
     description: 'Resolved agent-device home directory'
     value: ${{ steps.agent-home.outputs.dir }}
   helpers-cache-hit:
-    description: "Whether packaged Android helpers were restored from cache"
+    description: 'Whether packaged Android helpers were restored from cache'
     value: ${{ steps.android-helpers-cache.outputs.cache-hit }}
 
 runs:
