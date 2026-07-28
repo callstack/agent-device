@@ -481,10 +481,13 @@ number of suggestions available at default/full) so a caller knows whether a re-
 has material; default and full carry at most **20** screen refs and **5** suggestions ranked per
 decision 1's total order. These counts are absolute, including error payloads. Individual
 labels, ids, selectors, source paths, mismatch values, cause messages, and hints are UTF-8 truncated to
-**256 bytes**; an action summary has no positional array, and fill text, expanded variables, and arbitrary
-nested cause details are never serialized. All rendered strings and any overflow artifact pass through the
-central diagnostics redactor before truncation. The report sets truncation/redaction markers for every
-omission.
+**256 bytes**; an action summary has no positional array, and fill text and arbitrary nested cause details
+are never serialized. Maestro keeps expanded variables redacted in typed action/source provenance by default,
+so a failure never serializes an injected or flow-local value. A caller may explicitly disclose a
+non-sensitive runtime value with `--public-env KEY`; names and value shapes never imply sensitivity. Every
+other resolved value is removed from rendered strings, optional-step warnings, diagnostics, and overflow
+artifacts, including aliases and nested `runFlow` scopes, before the central diagnostics redactor and
+truncation. The report sets truncation/redaction markers for every omission.
 
 When the bounded form would omit material, the daemon writes the same redacted, bounded-per-field detail
 to a session-scoped divergence artifact and returns its path plus `overflow: { omittedBytes, artifactPath

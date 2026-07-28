@@ -8,7 +8,7 @@ export const MAESTRO_COMPAT_SUPPORTED_CAPABILITIES = [
 export const MAESTRO_COMPAT_LIMITATIONS = [
   'Runtime: iOS and Android only; launchApp.clearState supports Android and iOS simulators, launch arguments are Apple-only, and standalone device utility/state commands are unsupported.',
   'Expressions: when.true supports boolean literals and maestro.platform comparisons; repeat.while, evalScript, and broader JavaScript expressions are unsupported.',
-  'Environment: flow env is the default, AD_VAR_* overrides it, and CLI -e KEY=VALUE wins over both.',
+  'Environment: flow env is the default, AD_VAR_* overrides it, and CLI -e KEY=VALUE wins over both. Expanded values are redacted from Maestro failure diagnostics by default; use --public-env KEY only when a value is safe to disclose.',
   'Trust: runScript executes trusted scripts, may make http.post network requests, and is not a security sandbox; output keys cannot contain a dot.',
   'Errors and tracking: unsupported commands and fields fail with source context when available; open a focused issue only when implementation work is planned.',
 ] as const;

@@ -51,6 +51,7 @@ import {
   buildReplayVarScope,
   collectReplayShellEnv,
   parseReplayCliEnvEntries,
+  parseReplayPublicEnvNames,
   resolveReplayAction,
   resolveReplayString,
 } from '../../../replay/vars.ts';
@@ -271,6 +272,15 @@ test('parseReplayCliEnvEntries splits KEY=VALUE and rejects invalid keys', () =>
   assert.throws(() => parseReplayCliEnvEntries(['=value']), AppError);
 });
 
+test('parseReplayPublicEnvNames accepts replay variable names without inferring sensitivity', () => {
+  assert.deepEqual(parseReplayPublicEnvNames(['TARGET', 'API_TOKEN', 'TARGET']), [
+    'TARGET',
+    'API_TOKEN',
+  ]);
+  assert.throws(() => parseReplayPublicEnvNames(['target']), AppError);
+  assert.throws(() => parseReplayPublicEnvNames(['AD_TOKEN']), AppError);
+});
+
 test('resolveReplayAction walks positionals and string flags', () => {
   const action: SessionAction = {
     ts: 0,
@@ -471,6 +481,20 @@ test('parseReplayCliEnvEntries error wording is user-friendly for invalid keys',
       error.code === 'INVALID_ARGS' &&
       /uppercase letters, digits, and underscores/.test(error.message),
   );
+});
+
+test('rejects --public-env outside Maestro YAML replay', async () => {
+  const { response } = await runReplayFixture({
+    label: 'public-env-native-replay',
+    script: 'snapshot\n',
+    flags: { replayPublicEnv: ['TARGET'] },
+  });
+
+  assert.equal(response.ok, false);
+  if (!response.ok) {
+    assert.equal(response.error.code, 'INVALID_ARGS');
+    assert.match(response.error.message, /--public-env.*Maestro YAML/);
+  }
 });
 
 // fallow-ignore-next-line complexity

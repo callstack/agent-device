@@ -62,7 +62,7 @@ async function buildFailureResponse(
       durationMs: 12,
       error: new Error('typed Maestro action failed'),
       artifactPaths: [],
-      expandedVariables: {},
+      redactionVariables: [],
     },
     plan: makeMaestroPlan(),
     replayPath: path.join(root, 'flow.yaml'),
@@ -75,7 +75,7 @@ async function buildFailureResponse(
   return response;
 }
 
-test('typed Maestro failure projection is report-only and preserves authored provenance', () => {
+test('typed Maestro failure projection keeps the event command and source provenance', () => {
   const command = {
     kind: 'tapOn' as const,
     source: { path: '/flows/login.yaml', line: 4 },
@@ -92,12 +92,12 @@ test('typed Maestro failure projection is report-only and preserves authored pro
       durationMs: 12,
       error: new Error('tap failed'),
       artifactPaths: [],
-      expandedVariables: {},
+      redactionVariables: [],
     },
     request,
   );
 
-  expect(projection.authoredCommand).toBe(command);
+  expect(projection.command).toBe(command);
   expect(projection.source).toBe(command.source);
   expect(projection.progress).toEqual({ command: 'tapOn', value: 'save' });
   expect(projection.action).toEqual({
@@ -145,7 +145,10 @@ test('typed Maestro failure diagnostics scrub expanded selector values', async (
   const response = await runReplayScriptFile({
     req: baseReq({
       positionals: [flowPath],
-      flags: { replayBackend: 'maestro', replayEnv: [`TARGET=${sentinel}`] },
+      flags: {
+        replayBackend: 'maestro',
+        replayEnv: [`TARGET=${sentinel}`],
+      },
     }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
@@ -174,10 +177,79 @@ test('typed Maestro failure diagnostics scrub expanded selector values', async (
     cause: { message: string; hint?: string };
     suggestions: unknown[];
   };
-  expect(divergence.action).toBe('tapOn "${TARGET}"');
+  expect(divergence.action).toBe('tapOn "<var:TARGET>"');
   expect(divergence.cause.message).toContain('<var:TARGET>');
   expect(divergence.cause.hint).toContain('<var:TARGET>');
-  expect(divergence.suggestions).toEqual([]);
+  expect(divergence.suggestions).toEqual([
+    expect.objectContaining({
+      label: '<var:TARGET>',
+      selector: expect.stringContaining('<var:TARGET>'),
+    }),
+  ]);
+});
+
+test('typed Maestro failure diagnostics retain non-sensitive expanded selector values', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-expanded-selector-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const flowPath = path.join(root, 'flow.yaml');
+  const label = 'Continue checkout';
+  fs.writeFileSync(
+    flowPath,
+    ['appId: com.example.app', '---', '- tapOn: ${TARGET}', ''].join('\n'),
+  );
+
+  const response = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [flowPath],
+      flags: {
+        replayBackend: 'maestro',
+        replayEnv: [`TARGET=${label}`],
+        replayPublicEnv: ['TARGET'],
+      },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      if (req.command === 'snapshot') {
+        return {
+          ok: true,
+          data: {
+            nodes: [
+              {
+                index: 0,
+                depth: 0,
+                type: 'Button',
+                label,
+                rect: { x: 20, y: 40, width: 120, height: 44 },
+                hittable: true,
+              },
+            ],
+          },
+        };
+      }
+      if (req.command === 'click') {
+        return {
+          ok: false,
+          error: {
+            code: 'COMMAND_FAILED',
+            message: `tap failed for ${label}`,
+            hint: `Find ${label}`,
+          },
+        };
+      }
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.message).toContain(`tapOn "${label}"`);
+  expect(response.error.message).toContain(label);
+  expect(response.error.message).not.toContain('<var:TARGET>');
+  expect(response.error.hint).toContain(label);
 });
 
 test('typed Maestro nested scopes scrub failure values after unwind and keep retry trace identity', async () => {
@@ -274,6 +346,35 @@ test('typed Maestro nested scopes scrub failure values after unwind and keep ret
       ok: false,
     }),
   ]);
+});
+
+test('typed Maestro scrubs flow-local values when static include resolution fails', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-include-redaction-'));
+  const sessionName = 'default';
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const flowPath = path.join(root, 'flow.yaml');
+  const sentinel = 'flow-local-maestro-secret';
+  fs.writeFileSync(
+    flowPath,
+    ['env:', `  SECRET: ${sentinel}`, '---', '- runFlow: ${SECRET}.yaml', ''].join('\n'),
+  );
+
+  const response = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [flowPath],
+      flags: { replayBackend: 'maestro', platform: 'ios' },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => ({ ok: true, data: {} }),
+  });
+
+  expect(response.ok).toBe(false);
+  expect(JSON.stringify(response)).not.toContain(sentinel);
+  if (response.ok) return;
+  expect(response.error.message).toContain('<var:SECRET>');
 });
 
 test('typed Maestro suggestions rank visible childOf candidates and exclude out-of-scope nodes', async () => {

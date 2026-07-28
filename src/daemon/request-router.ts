@@ -48,6 +48,12 @@ import { canRunReplayScopedAction } from './daemon-command-registry.ts';
 import { createAgentBrowserWebProvider } from '../platforms/web/agent-browser-provider.ts';
 import { openWebSessionNames } from './web-session-names.ts';
 import { inferFillText } from './action-utils.ts';
+import {
+  collectReplayShellEnv,
+  parseReplayCliEnvEntries,
+  readReplayCliEnvEntries,
+  readReplayShellEnvSource,
+} from '../replay/vars.ts';
 
 // ---------------------------------------------------------------------------
 // Request handler API
@@ -141,6 +147,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       return unauthorizedResponse();
     }
     registerParameterizedFillDiagnosticValue(req);
+    registerReplayVariableDiagnosticValues(req);
     const invalidRecordingFlags = recordingFlagsResponse(req);
     if (invalidRecordingFlags) return invalidRecordingFlags;
 
@@ -255,6 +262,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         return unauthorizedResponse();
       }
       registerParameterizedFillDiagnosticValue(req);
+      registerReplayVariableDiagnosticValues(req);
 
       let childScope: RequestExecutionScope | undefined;
       try {
@@ -326,6 +334,19 @@ function registerParameterizedFillDiagnosticValue(req: DaemonRequest): void {
       flags: req.flags,
     }),
   );
+}
+
+/**
+ * Replay variables are fail-closed diagnostic values. Register them before
+ * request/session binding so nested dispatch and backend work inherit the
+ * redaction boundary even when no Maestro failure report is produced.
+ */
+function registerReplayVariableDiagnosticValues(req: DaemonRequest): void {
+  const values = {
+    ...collectReplayShellEnv(readReplayShellEnvSource(req.flags?.replayShellEnv)),
+    ...parseReplayCliEnvEntries(readReplayCliEnvEntries(req.flags?.replayEnv)),
+  };
+  for (const value of Object.values(values)) registerDiagnosticSensitiveValue(value);
 }
 
 async function dispatchGenericForLockedScope(params: {

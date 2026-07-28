@@ -514,7 +514,15 @@ async function runTypedReplayIfNeeded(params: {
   invoke: DaemonInvokeFn;
   resolved: string;
 }): Promise<DaemonResponse | undefined> {
-  if (!isTypedMaestroReplay(params.req, params.resolved)) return undefined;
+  if (!isTypedMaestroReplay(params.req, params.resolved)) {
+    if ((params.req.flags?.replayPublicEnv?.length ?? 0) > 0) {
+      return errorResponse(
+        'INVALID_ARGS',
+        '--public-env is supported only with Maestro YAML replay (--maestro).',
+      );
+    }
+    return undefined;
+  }
   if (params.sessionStore.get(params.sessionName)?.saveScriptBoundary !== undefined) {
     return errorResponse(
       'INVALID_ARGS',

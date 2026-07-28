@@ -45,7 +45,7 @@ export function createDefaultReplayTestReporter(): ReplayTestReporter {
     progressRenderer ??= createReplayTestProgressRenderer({
       verbose: context.verbose,
       liveProgress: shouldUseLiveProgress(context),
-      columns: context.stderr.columns,
+      columns: () => context.stderr.columns,
     });
     const output = progressRenderer.render(event);
     if (!output) return;

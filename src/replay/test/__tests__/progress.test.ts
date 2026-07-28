@@ -213,6 +213,45 @@ test('createReplayTestProgressRenderer trims live step progress by visible colum
   });
 });
 
+test('createReplayTestProgressRenderer clears every reflowed row after a terminal resize', () => {
+  let columns = 80;
+  const renderer = createReplayTestProgressRenderer({
+    liveProgress: true,
+    columns: () => columns,
+  });
+  renderer.render({
+    type: 'test-step',
+    test: {
+      file: '/tmp/checkout.yaml',
+      title: 'A long Maestro test title that is one row before terminal reflow',
+      index: 1,
+      total: 1,
+      stepIndex: 8,
+      stepTotal: 12,
+      stepCommand: 'assertVisible',
+      stepValue: 'Confirmation',
+    },
+  });
+
+  columns = 20;
+  const rendered = renderer.render({
+    type: 'test-step',
+    test: {
+      file: '/tmp/checkout.yaml',
+      title: 'A long Maestro test title that is one row before terminal reflow',
+      index: 1,
+      total: 1,
+      stepIndex: 9,
+      stepTotal: 12,
+      stepCommand: 'tapOn',
+      stepValue: 'Continue',
+    },
+  });
+
+  assert.ok(rendered?.text.includes('\u001B[1A'));
+  assert.ok(rendered?.text.endsWith('...'));
+});
+
 test('createReplayTestProgressRenderer colors completed result markers when color is enabled', () => {
   withForcedColor(() => {
     assert.equal(

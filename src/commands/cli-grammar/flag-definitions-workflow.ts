@@ -49,6 +49,15 @@ export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
       'Replay/Test: inject or override a ${KEY} variable for the script (repeatable)',
   },
   {
+    key: 'replayPublicEnv',
+    names: ['--public-env'],
+    type: 'string',
+    multiple: true,
+    usageLabel: '--public-env KEY',
+    usageDescription:
+      "Replay/Test: allow this Maestro variable's resolved value in failures (repeatable); all expanded values stay redacted unless explicitly public",
+  },
+  {
     key: 'failFast',
     names: ['--fail-fast'],
     type: 'boolean',

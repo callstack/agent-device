@@ -43,7 +43,7 @@ export const REPEATED_TOUCH_FLAGS = flagKeys(
 // (flag-sourced budget on the interaction descriptors, mirroring wait's
 // positional budget).
 export const SETTLE_FLAGS = flagKeys('settle', 'settleQuietMs', 'timeoutMs');
-export const REPLAY_FLAGS = flagKeys('replayUpdate', 'replayEnv');
+export const REPLAY_FLAGS = flagKeys('replayUpdate', 'replayEnv', 'replayPublicEnv');
 
 export const COMMON_COMMAND_SUPPORTED_FLAG_KEYS = flagKeys(
   'remoteConfig',

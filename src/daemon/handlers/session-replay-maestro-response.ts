@@ -9,9 +9,18 @@ import {
   type MaestroFailedEngineEvent,
 } from './session-replay-maestro-failure.ts';
 import { errorResponse } from './response.ts';
+import {
+  scrubReplayVarData,
+  scrubReplayVarValues,
+  type ReplayVarScrubEntry,
+} from '../../replay/divergence.ts';
 
 export function buildTypedMaestroSuccessResponse(params: {
-  result: { artifactPaths: string[]; warnings?: string[] };
+  result: {
+    artifactPaths: string[];
+    warnings?: string[];
+    redactionVariables: readonly ReplayVarScrubEntry[];
+  };
   plan: MaestroReplayPlan;
   startIndex: number;
   startedAt: number;
@@ -29,8 +38,16 @@ export function buildTypedMaestroSuccessResponse(params: {
       healed: 0,
       session: sessionName,
       sessionActive: sessionStore.get(sessionName) !== undefined,
-      artifactPaths: result.artifactPaths,
-      ...(result.warnings ? { warnings: result.warnings } : {}),
+      artifactPaths: result.artifactPaths.map((entry) =>
+        scrubReplayVarValues(entry, result.redactionVariables),
+      ),
+      ...(result.warnings
+        ? {
+            warnings: result.warnings.map((entry) =>
+              scrubReplayVarValues(entry, result.redactionVariables),
+            ),
+          }
+        : {}),
       ...(snapshotDiagnostics ? { snapshotDiagnostics } : {}),
       message: replaySuccessMessage(replayed, Date.now() - startedAt),
     } satisfies ReplayCommandResult,
@@ -43,6 +60,7 @@ export async function buildTypedMaestroReplayErrorResponse(params: {
   state: {
     failedEvent?: MaestroFailedEngineEvent;
     plan?: MaestroReplayPlan;
+    redactionVariables: ReplayVarScrubEntry[];
     snapshotStart: number;
   };
   error: unknown;
@@ -69,10 +87,17 @@ export async function buildTypedMaestroReplayErrorResponse(params: {
       ),
     });
   }
-  return errorResponse(normalizedError.code, normalizedError.message, {
-    ...(normalizedError.details ?? {}),
-    ...buildErrorDetails(failedEvent),
-  });
+  return errorResponse(
+    normalizedError.code,
+    scrubReplayVarValues(normalizedError.message, params.state.redactionVariables),
+    {
+      ...(scrubReplayVarData(
+        normalizedError.details ?? {},
+        params.state.redactionVariables,
+      ) as Record<string, unknown>),
+      ...buildErrorDetails(failedEvent),
+    },
+  );
 }
 
 function readSnapshotDiagnostics(

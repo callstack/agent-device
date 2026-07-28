@@ -93,7 +93,35 @@ export function parseReplayCliEnvEntries(entries: readonly string[]): Record<str
   return result;
 }
 
+/**
+ * Explicit diagnostic-disclosure declarations for replay variables. Expanded
+ * variables are redacted by default; callers may opt individual names into
+ * failure-report rendering. Values are never classified from names or shapes.
+ */
+export function parseReplayPublicEnvNames(entries: readonly string[]): string[] {
+  const names = new Set<string>();
+  for (const entry of entries) {
+    if (!REPLAY_VAR_KEY_RE.test(entry)) {
+      throw new AppError(
+        'INVALID_ARGS',
+        `Invalid --public-env name "${entry}": names must use uppercase letters, digits, and underscores (e.g. TARGET).`,
+      );
+    }
+    if (isReservedNamespaceKey(entry)) {
+      throw reservedNamespaceError(entry);
+    }
+    names.add(entry);
+  }
+  return [...names];
+}
+
 export function readReplayCliEnvEntries(raw: unknown): string[] {
+  return Array.isArray(raw)
+    ? raw.filter((value): value is string => typeof value === 'string')
+    : [];
+}
+
+export function readReplayPublicEnvNames(raw: unknown): string[] {
   return Array.isArray(raw)
     ? raw.filter((value): value is string => typeof value === 'string')
     : [];

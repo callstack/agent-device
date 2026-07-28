@@ -205,13 +205,24 @@ test('parseArgs recognizes command-specific flag combinations', async () => {
     },
     {
       label: 'replay maestro flow',
-      argv: ['replay', './flow.yaml', '--maestro', '--env', 'USER=Ada', '--timeout', '240000'],
+      argv: [
+        'replay',
+        './flow.yaml',
+        '--maestro',
+        '--env',
+        'USER=Ada',
+        '--public-env',
+        'PASSWORD',
+        '--timeout',
+        '240000',
+      ],
       strictFlags: true,
       assertParsed: (parsed) => {
         assert.equal(parsed.command, 'replay');
         assert.deepEqual(parsed.positionals, ['./flow.yaml']);
         assert.equal(parsed.flags.replayMaestro, true);
         assert.deepEqual(parsed.flags.replayEnv, ['USER=Ada']);
+        assert.deepEqual(parsed.flags.replayPublicEnv, ['PASSWORD']);
         assert.equal(parsed.flags.timeoutMs, 240000);
       },
     },

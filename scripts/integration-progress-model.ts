@@ -298,7 +298,7 @@ function summarizeProviderScenarioFlagExclusions() {
       ],
     },
     {
-      name: 'parser/client-only command flags',
+      name: 'parser, client, and diagnostic-only command flags',
       owner: 'args, CLI, debug-symbols, screenshot-diff, and batch tests',
       keys: [
         'artifact',
@@ -311,6 +311,7 @@ function summarizeProviderScenarioFlagExclusions() {
         'reporter',
         'reportJunit',
         'replayMaestro',
+        'replayPublicEnv',
         'recordVideo',
         'shardAll',
         'shardSplit',

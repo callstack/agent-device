@@ -33,7 +33,11 @@ export async function executeMaestroReplayPlan(
     plan,
     port,
     options,
-    context: createMaestroExecutionContext(options.defaults, options.env ? { ...options.env } : {}),
+    context: createMaestroExecutionContext(
+      options.defaults,
+      options.env ? { ...options.env } : {},
+      options.publicVariableNames,
+    ),
     timing: DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY,
     artifacts: new Set(),
     warnings: [],
@@ -52,6 +56,7 @@ export async function executeMaestroReplayPlan(
     skipped: state.skipped,
     generation: state.context.generation,
     artifactPaths: [...state.artifacts],
+    redactionVariables: state.context.redactionVariables,
     ...(state.warnings.length > 0 ? { warnings: state.warnings } : {}),
   };
 }
@@ -96,7 +101,7 @@ async function executeObservedStep(
         ...runtimeMetricsDelta(metricsBefore, state.port.readMetrics?.()),
         error: failure.error,
         artifactPaths: [...state.artifacts],
-        expandedVariables: state.context.expandedVariables,
+        redactionVariables: state.context.redactionVariables,
       }),
     );
     throw failure;
