@@ -49,8 +49,9 @@
     },
     {
       "matchFileNames": ["examples/test-app/package.json"],
-      "groupName": "test-app fixture dependencies",
-      "groupSlug": "test-app",
+      "matchDepTypes": ["devDependencies"],
+      "groupName": "test-app fixture devDependencies",
+      "groupSlug": "test-app-dev",
       "automerge": false
     },
     {
