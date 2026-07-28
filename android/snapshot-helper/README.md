@@ -15,7 +15,7 @@ requires a stable signing certificate for `adb install -r` upgrades.
 
 ```sh
 VERSION="$(node -p 'require("./package.json").version')"
-sh ./scripts/build-android-snapshot-helper.sh "$VERSION" .tmp/android-snapshot-helper
+AGENT_DEVICE_ANDROID_HELPER=snapshot sh ./scripts/build-android-helper.sh "$VERSION" .tmp/android-snapshot-helper
 ```
 
 The build uses Android SDK command-line tools directly. It expects `ANDROID_HOME` or

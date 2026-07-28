@@ -21,7 +21,7 @@ verified the same way (bundled npm-packaged dist + version-keyed manifest.json),
 
 ```sh
 VERSION="$(node -p 'require("./package.json").version')"
-sh ./scripts/build-android-ime-helper.sh "$VERSION" .tmp/android-ime-helper
+AGENT_DEVICE_ANDROID_HELPER=ime sh ./scripts/build-android-helper.sh "$VERSION" .tmp/android-ime-helper
 ```
 
 ## Run
