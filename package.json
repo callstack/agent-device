@@ -128,6 +128,7 @@
     "depgraph:test": "node --experimental-strip-types --test scripts/depgraph/model.test.ts",
     "check:production-exports": "fallow dead-code --config fallow-production-exports.json --production --unused-exports --fail-on-issues",
     "check:bundle-owner-files": "node --experimental-strip-types scripts/check-bundle-owner-files.ts",
+    "check:command-docs": "vitest run --project unit-core src/__tests__/command-doc-coverage.test.ts",
     "check:replay-compat": "node --experimental-strip-types scripts/check-replay-compat-provenance.ts",
     "check:freerange": "fr",
     "check:quick": "pnpm lint && pnpm typecheck",

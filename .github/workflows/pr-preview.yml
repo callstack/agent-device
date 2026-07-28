@@ -18,6 +18,27 @@ on:
 concurrency: preview-${{ github.ref }}
 
 jobs:
+  command-docs-gate:
+    # ci.yml ignores website/**, so a docs-only PR never triggers the unit lane
+    # that carries the command-reference coverage gate
+    # (src/__tests__/command-doc-coverage.test.ts). Run it here — where
+    # commands.md changes DO trigger a workflow — so documenting a retired
+    # command (or dropping a public command's docs) fails on docs-only PRs too.
+    # Unlike deploy-preview this has no fork guard: the gate is read-only and
+    # must run on fork docs PRs as well. Coordinates with the #1429 gate manifest.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Check command reference doc coverage
+        run: pnpm check:command-docs
+
   deploy-preview:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
