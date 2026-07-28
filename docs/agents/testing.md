@@ -148,6 +148,10 @@ pnpm mutation:baseline                  # full sweep, then record it (reviewed c
   (`--list-affected`) and merges the shards into one verdict. Before graduation the matrix is empty —
   a report nobody acts on is not worth the runner minutes — unless the diff touches the lane's own
   tooling, the one pre-graduation run that buys something: the gate has to be proven before it bites.
+  Lane sources own no kernel, so that exception adds `LANE_CANARY` (`kernel-errors`, the registry's
+  cheapest real sweep) to whatever the diff derives; otherwise it would select zero mutants and prove
+  nothing. `scripts/mutation/selection.test.ts` drives both halves of the rule through the real CLI
+  against a throwaway worktree commit.
 - **Ratchet**: scores may only rise. `mutation-baselines/decision-kernels.json` records the
   high-water score per module plus the Stryker version and config content hash that produced it, so a
   score change caused by a tool/config change is reported as provenance drift, never as a

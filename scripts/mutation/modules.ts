@@ -93,6 +93,14 @@ export function mutateGlobs(ids: readonly ModuleId[] = ALL_MODULE_IDS): string[]
   ]);
 }
 
+/**
+ * The module a lane-tooling change proves itself against before graduation.
+ * `kernel-errors` is the cheapest real sweep in the registry (one file, ~183
+ * mutants), so a change to the ratchet, the config, or the baseline runs actual
+ * mutants end to end without paying for the full sweep.
+ */
+export const LANE_CANARY: ModuleId = 'kernel-errors';
+
 /** One mutation job: a module, optionally one slice of it. */
 export type ShardSpec = { name: string; module: ModuleId; shard?: string };
 

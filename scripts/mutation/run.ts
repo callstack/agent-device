@@ -21,6 +21,7 @@ import { laneEnvelope } from '../lib/lane-envelope.ts';
 import {
   ALL_MODULE_IDS,
   isModuleId,
+  LANE_CANARY,
   mutateGlobs,
   normalizePath,
   shardMatrix,
@@ -473,13 +474,25 @@ const LANE_TOOLING = ['scripts/mutation/', 'scripts/lib/', 'stryker.config.json'
  * itself — that is the one case where the pre-graduation run buys something,
  * because the gate has to be proven before it can bite.
  */
-function affectedMatrix(base: string): ShardSpec[] {
-  const changed = changedFiles(base);
+export function affectedMatrixFor(
+  changed: readonly string[],
+  gating: boolean,
+  root: string = repoRoot,
+): ShardSpec[] {
   const touchesLane = changed.some((file) =>
     LANE_TOOLING.some((prefix) => normalizePath(file).startsWith(prefix)),
   );
-  if (!readBaseline().gating && !touchesLane) return [];
-  return shardMatrix(derivedAffectedModules(changed, repoRoot));
+  if (!gating && !touchesLane) return [];
+  const modules = new Set(derivedAffectedModules(changed, root));
+  // Lane sources own no kernel, so a tooling-only diff derives nothing: without
+  // the canary the "prove the gate" exception would select zero mutants and
+  // prove nothing.
+  if (touchesLane) modules.add(LANE_CANARY);
+  return shardMatrix(ALL_MODULE_IDS.filter((id) => modules.has(id)));
+}
+
+function affectedMatrix(base: string): ShardSpec[] {
+  return affectedMatrixFor(changedFiles(base), readBaseline().gating);
 }
 
 /**
