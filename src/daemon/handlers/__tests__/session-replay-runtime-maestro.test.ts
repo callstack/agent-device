@@ -195,6 +195,14 @@ test('--update no longer rejects Maestro compat flow controls (the guard existed
   assert.equal(response.ok, true);
 });
 
+function assertNoUnresolvedInterpolation(calls: CapturedInvocation[]): void {
+  for (const call of calls) {
+    for (const pos of call.positionals ?? []) {
+      assert.equal(pos.includes('${'), false, `unresolved interpolation leaked: ${pos}`);
+    }
+  }
+}
+
 test('runReplayScriptFile dispatches resolved literals with file env overridden by CLI', async () => {
   const { response, calls } = await runReplayFixture({
     label: 'green',
@@ -211,21 +219,19 @@ test('runReplayScriptFile dispatches resolved literals with file env overridden 
     flags: { replayEnv: ['APP=cli-app'] },
   });
   assert.equal(response.ok, true);
+  const [open, snapshot, click] = calls;
+  assert.ok(open && snapshot && click);
   // open ${APP} -> CLI override wins.
-  assert.equal(calls[0]?.command, 'open');
-  assert.deepEqual(calls[0]?.positionals, ['cli-app']);
+  assert.equal(open.command, 'open');
+  assert.deepEqual(open.positionals, ['cli-app']);
   // snapshot -s ${SCOPE} -> file env fills in.
-  assert.equal(calls[1]?.command, 'snapshot');
-  assert.equal(calls[1]?.flags?.snapshotScope, 'file-scope');
+  assert.equal(snapshot.command, 'snapshot');
+  assert.equal(snapshot.flags?.snapshotScope, 'file-scope');
   // click with ${AD_FILENAME} resolves to the relative script path.
-  assert.equal(calls[2]?.command, 'click');
-  assert.deepEqual(calls[2]?.positionals, ['at flow.ad']);
+  assert.equal(click.command, 'click');
+  assert.deepEqual(click.positionals, ['at flow.ad']);
   // And nothing dispatched still contains a literal ${...} token.
-  for (const call of calls) {
-    for (const pos of call.positionals ?? []) {
-      assert.equal(pos.includes('${'), false, `unresolved interpolation leaked: ${pos}`);
-    }
-  }
+  assertNoUnresolvedInterpolation(calls);
 });
 
 test('.ad replay normalizes resolved gesture and swipe syntax into structured daemon input', async () => {
