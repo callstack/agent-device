@@ -2,10 +2,25 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 function readSnapshotData(snapshot) {
-  if (!snapshot || typeof snapshot !== 'object' || !Array.isArray(snapshot.nodes)) {
-    throw new Error('Expected the public snapshot JSON shape with a nodes array');
-  }
-  return snapshot;
+  if (!isSuccessfulSnapshotEnvelope(snapshot)) throw invalidSnapshotEnvelope();
+  if (!hasSnapshotNodes(snapshot.data)) throw invalidSnapshotEnvelope();
+  return snapshot.data;
+}
+
+function isSuccessfulSnapshotEnvelope(value) {
+  return isRecord(value) && value.success === true;
+}
+
+function hasSnapshotNodes(value) {
+  return isRecord(value) && Array.isArray(value.nodes);
+}
+
+function isRecord(value) {
+  return Boolean(value) && typeof value === 'object';
+}
+
+function invalidSnapshotEnvelope() {
+  return new Error('Expected the public successful snapshot JSON envelope with a nodes array');
 }
 
 function readSnapshotLabels(data) {
