@@ -60,6 +60,38 @@ function pnpmScriptNames(run: string): string[] {
   return [...run.matchAll(/(?:^|\s)pnpm\s+(?:run\s+)?([\w:.-]+)/g)].map((match) => match[1]!);
 }
 
+/**
+ * Entry paths reachable from a `run:` block, following `pnpm <name>` aliases into
+ * package.json and back into `runBlockEntries` however deep the chain goes — a script
+ * that itself runs another named script must not hide that script's entries from R8.
+ * `chain` is the set of script names already expanded on this path: an alias that names
+ * one of them is a cycle, and is dropped rather than walked again, so a cycle contributes
+ * whatever entries its non-cyclic edges found instead of recursing forever.
+ */
+function resolveRunEntries(
+  run: string,
+  packageScripts: ReadonlyMap<string, string>,
+  fileExists: (file: string) => boolean,
+  entries: Set<string>,
+  chain: ReadonlySet<string> = new Set(),
+): void {
+  for (const entry of runBlockEntries(run)) {
+    if (fileExists(entry)) entries.add(entry);
+  }
+  for (const scriptName of pnpmScriptNames(run)) {
+    if (chain.has(scriptName)) continue;
+    const resolved = packageScripts.get(scriptName);
+    if (resolved === undefined) continue;
+    resolveRunEntries(
+      resolved,
+      packageScripts,
+      fileExists,
+      entries,
+      new Set([...chain, scriptName]),
+    );
+  }
+}
+
 function stepsOf(job: unknown): Record<string, unknown>[] {
   if (job === null || typeof job !== 'object') return [];
   const steps = (job as Record<string, unknown>)['steps'];
@@ -87,6 +119,10 @@ function skipsInstall(step: Record<string, unknown>): boolean {
  * the same entry paths out of the resolved command rather than requiring the literal path
  * inline in the workflow. A `pnpm` word that names no real script (`pnpm install`) resolves
  * to nothing and is silently ignored, same as a shell word that merely looks like a path.
+ * Resolution recurses through chained aliases (a script that itself runs another named
+ * script), so a nested entry is never invisible to the closure just because it is one hop
+ * further away; a cycle in that chain stops re-expanding the repeated name rather than
+ * recursing forever.
  */
 export function zeroDepJobs(
   workflows: ReadonlyMap<string, string>,
@@ -106,16 +142,7 @@ export function zeroDepJobs(
       for (const step of steps) {
         const run = step['run'];
         if (typeof run !== 'string') continue;
-        for (const entry of runBlockEntries(run)) {
-          if (fileExists(entry)) entries.add(entry);
-        }
-        for (const scriptName of pnpmScriptNames(run)) {
-          const resolved = packageScripts.get(scriptName);
-          if (resolved === undefined) continue;
-          for (const entry of runBlockEntries(resolved)) {
-            if (fileExists(entry)) entries.add(entry);
-          }
-        }
+        resolveRunEntries(run, packageScripts, fileExists, entries);
       }
       jobs.push({ workflow, job, entries: [...entries].sort() });
     }
