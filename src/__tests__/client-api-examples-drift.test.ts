@@ -17,7 +17,10 @@ import { describe, test } from 'vitest';
 //             demonstrate.
 // This mirrors command-doc-coverage.test.ts's markdown-scanning approach
 // rather than compiling snippets, since the manifest list is already a
-// structured, parseable statement of the subpath surface.
+// structured, parseable statement of the subpath surface. The doc's own
+// fenced ```ts snippets are compiled separately, in the Node integration lane
+// (test/integration/client-api-doc-snippets.test.ts) — that check spawns a
+// real tsc Program and doesn't fit the unit suite's wall-clock budget.
 
 const CLIENT_API_DOC_PATH = 'website/docs/docs/client-api.md';
 const EXAMPLES_SDK_DIR = 'examples/sdk';

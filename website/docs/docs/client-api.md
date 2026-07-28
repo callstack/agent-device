@@ -124,8 +124,10 @@ const result = await client.sessions.artifacts({
   providerSessionId: 'arn:aws:devicefarm:us-west-2:123:session/project/session/00000',
 });
 
-for (const artifact of result.cloudArtifacts) {
-  console.log(artifact.kind, artifact.name, artifact.url);
+if ('cloudArtifacts' in result) {
+  for (const artifact of result.cloudArtifacts) {
+    console.log(artifact.kind, artifact.name, artifact.url);
+  }
 }
 ```
 
@@ -138,13 +140,11 @@ import { createAgentDeviceClient } from 'agent-device';
 
 const client = createAgentDeviceClient({
   leaseProvider: 'browserstack',
-  platform: 'android',
-  device: 'Google Pixel 8',
   providerOsVersion: '14.0',
   providerApp: 'bs://app-id',
 });
 
-await client.apps.open({ app: 'com.example.app' });
+await client.apps.open({ app: 'com.example.app', platform: 'android', device: 'Google Pixel 8' });
 await client.capture.snapshot({ interactiveOnly: true });
 const closed = await client.sessions.close();
 ```
@@ -197,9 +197,11 @@ idempotent for the same owner and rejects conflicting owners for the same local 
 
 ```ts
 import { getAndroidAppStateWithAdb, listAndroidAppsWithAdb } from 'agent-device/android-adb';
+import type { AndroidAdbExecutorOptions } from 'agent-device/android-adb';
 
 const provider = {
-  exec: async (args, options) => await runAdbThroughRemoteTunnel(args, options),
+  exec: async (args: string[], options?: AndroidAdbExecutorOptions) =>
+    await runAdbThroughRemoteTunnel(args, options),
 };
 
 const apps = await listAndroidAppsWithAdb(provider.exec); // user-installed apps by default
