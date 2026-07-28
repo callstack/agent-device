@@ -14,9 +14,10 @@
 // size are read from coverage/coverage-summary.json and .tmp/size-report.json when present and
 // degrade to `available: false` (with the producing command) when they are not, so a fresh
 // checkout still produces a complete, honest snapshot. Those two artifacts carry no producing-commit
-// stamp, so provenance hashes them and flags `stale` when a source file is newer (see
-// artifactProvenance in model.ts) — a consumer like #1424 must never pair stale metrics with the
-// current commit.
+// stamp, so provenance hashes them and flags `stale` when any of their producer inputs is newer
+// (PRODUCER_INPUTS below; see artifactProvenance in model.ts) — coverage tracks tests + config, size
+// tracks package.json + packaging config, not just `src`. A consumer like #1424 must never pair
+// stale metrics with the current commit.
 //
 // The one thing that can FAIL the command is the depgraph-vs-layering R6 consistency assertion:
 // the graph built here must reproduce scripts/layering/check.ts's TYPE_INVERSION_BASELINE. The
@@ -85,28 +86,66 @@ function lockfileProvenance(): { path: string; sha256: string } | null {
   return raw === null ? null : { path: LOCKFILE_PATH, sha256: shortSha(raw) };
 }
 
-/** The newest mtime across the production source tree, the freshness bar for read artifacts. */
-function newestSourceMtimeMs(files: readonly string[]): number {
-  let newest = 0;
-  for (const file of files) {
-    const mtimeMs = fs.statSync(absolute(file)).mtimeMs;
-    if (mtimeMs > newest) newest = mtimeMs;
+// The tracked inputs whose change can invalidate each READ artifact — NOT just `src`. Coverage is
+// the whole test run (sources + tests + vitest config + the scripts package.json wires); size runs
+// tsdown + `npm pack`, so packaging metadata and bundler/ts config are inputs. An old artifact is
+// flagged stale when ANY of these is newer than it, closing the src-only false-negative.
+const PRODUCER_INPUTS = {
+  coverage: [
+    'src/*.ts',
+    'src/**/*.ts',
+    'test',
+    'vitest.config.ts',
+    'vitest.*.config.ts',
+    'package.json',
+  ],
+  size: [
+    'src/*.ts',
+    'src/**/*.ts',
+    'package.json',
+    'pnpm-lock.yaml',
+    'tsdown.config.ts',
+    'tsconfig.json',
+    'tsconfig.lib.json',
+    'scripts/size-report.mjs',
+  ],
+} as const;
+
+/** Tracked files matching the pathspecs (offline, ignores untracked/generated); [] on failure. */
+function trackedFiles(pathspecs: readonly string[]): string[] {
+  try {
+    const out = execFileSync('git', ['ls-files', '-z', '--', ...pathspecs], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    });
+    return out.split('\0').filter(Boolean);
+  } catch {
+    return [];
   }
-  return newest;
 }
 
-/** Hash a read artifact and flag it stale when a source file is newer; null when absent. */
+function mtimesMs(files: readonly string[]): number[] {
+  const out: number[] = [];
+  for (const file of files) {
+    const abs = absolute(file);
+    if (fs.existsSync(abs)) out.push(fs.statSync(abs).mtimeMs);
+  }
+  return out;
+}
+
+/** Hash a read artifact and judge freshness against its whole producer input set; null when absent. */
 function artifactInput(
   relativePath: string,
-  newestSourceMtimeMs: number,
+  producerInputs: readonly string[],
 ): ArtifactProvenance | null {
   const abs = absolute(relativePath);
   if (!fs.existsSync(abs)) return null;
   return artifactProvenance({
     path: relativePath,
     sha256: shortSha(fs.readFileSync(abs, 'utf8')),
+    producerInputs: [...producerInputs],
     artifactMtimeMs: fs.statSync(abs).mtimeMs,
-    newestSourceMtimeMs,
+    producerInputMtimesMs: mtimesMs(trackedFiles(producerInputs)),
   });
 }
 
@@ -168,16 +207,14 @@ function collectProvenance(
 }
 
 function collectSnapshot(): RepoHealthSnapshot {
-  const files = listSourceFiles();
-  const graph = buildGraphFromTree(files);
-  const newestSource = newestSourceMtimeMs(files);
+  const graph = buildGraphFromTree(listSourceFiles());
   const coverage = readJsonIfExists<import('./model.ts').CoverageSummary>(COVERAGE_SUMMARY_PATH);
   const size = readJsonIfExists<import('./model.ts').SizeReport>(SIZE_REPORT_PATH);
   return buildSnapshot({
     provenance: collectProvenance(
       graph,
-      artifactInput(COVERAGE_SUMMARY_PATH, newestSource),
-      artifactInput(SIZE_REPORT_PATH, newestSource),
+      artifactInput(COVERAGE_SUMMARY_PATH, PRODUCER_INPUTS.coverage),
+      artifactInput(SIZE_REPORT_PATH, PRODUCER_INPUTS.size),
     ),
     graph,
     fallow: {

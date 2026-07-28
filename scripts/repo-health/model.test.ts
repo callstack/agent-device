@@ -6,6 +6,7 @@ import { buildGraph, type GraphData } from '../depgraph/model.ts';
 import { mainSequenceModules, zoneComponents } from './components.ts';
 import {
   artifactProvenance,
+  isArtifactStale,
   benchMetrics,
   buildSnapshot,
   coverageMetrics,
@@ -124,17 +125,32 @@ test('coverage and size degrade to unavailable when the artifact is absent', () 
   ).toBe(true);
 });
 
-test('artifactProvenance binds bytes and flags an artifact older than the tree as stale', () => {
-  const args = { path: 'coverage/coverage-summary.json', sha256: 'deadbeef' };
-  // Artifact newer than every source file: the metrics match the current tree.
-  expect(artifactProvenance({ ...args, artifactMtimeMs: 2000, newestSourceMtimeMs: 1000 })).toEqual(
-    { path: args.path, sha256: 'deadbeef', stale: false },
-  );
-  // Source edited after the artifact was produced: the metrics predate the tree and must be flagged
-  // so #1424 cannot persist them against the current commit as if they were fresh.
-  expect(artifactProvenance({ ...args, artifactMtimeMs: 1000, newestSourceMtimeMs: 2000 })).toEqual(
-    { path: args.path, sha256: 'deadbeef', stale: true },
-  );
+test('isArtifactStale flags an artifact predating ANY producer input, incl. non-src ones', () => {
+  const artifact = 1500;
+  const srcMtimes = [1000, 1200]; // all older than the artifact
+  // Freshness judged on src alone would (wrongly) call this fresh — the earlier false-negative.
+  expect(isArtifactStale(artifact, srcMtimes)).toBe(false);
+  // A non-src producer input (e.g. package.json / vitest config / tsdown config) edited after the
+  // artifact was produced must flip the verdict, so a coverage/size number is not paired with a
+  // commit it predates.
+  const packageJsonMtime = 1800;
+  expect(isArtifactStale(artifact, [...srcMtimes, packageJsonMtime])).toBe(true);
+  // No observable producer input => freshness cannot be proven => stale, never a false "fresh".
+  expect(isArtifactStale(artifact, [])).toBe(true);
+});
+
+test('artifactProvenance binds bytes, the producer input set, and the staleness verdict', () => {
+  const args = {
+    path: 'coverage/coverage-summary.json',
+    sha256: 'deadbeef',
+    producerInputs: ['src/**/*.ts', 'package.json'],
+  };
+  expect(
+    artifactProvenance({ ...args, artifactMtimeMs: 2000, producerInputMtimesMs: [1000, 1500] }),
+  ).toEqual({ ...args, stale: false });
+  expect(
+    artifactProvenance({ ...args, artifactMtimeMs: 1000, producerInputMtimesMs: [1500] }),
+  ).toEqual({ ...args, stale: true });
 });
 
 test('benchMetrics counts cases and distinct topics from the case registry', () => {

@@ -55,10 +55,14 @@ Field names are the stable **trend/delta contract** consumed by #1424. Any chang
       "lockfile": { "path": "pnpm-lock.yaml", "sha256": "…" },
       // coverage and size are read artifacts this command does NOT produce, so they carry no
       // producing-commit stamp. They are hashed (so history keys on the bytes, not the commit) and
-      // flagged `stale` when a source file is newer than the artifact — the tree moved on without
-      // the producer being rerun. A consumer (#1424) must treat stale metrics as lagging `commit`.
-      "coverageSummary": { "path": "coverage/coverage-summary.json", "sha256": "…", "stale": false } | null,
-      "sizeReport": { "path": ".tmp/size-report.json", "sha256": "…", "stale": false } | null
+      // flagged `stale` when ANY of their `producerInputs` is newer than the artifact — coverage
+      // tracks sources + tests + vitest config + package.json; size tracks package.json + lockfile +
+      // tsdown/tsconfig + size-report.mjs, not just `src`. Unprovable freshness (no observable input)
+      // is reported stale. A consumer (#1424) must treat stale metrics as lagging `commit`.
+      "coverageSummary": { "path": "coverage/coverage-summary.json", "sha256": "…",
+                           "producerInputs": ["src/**/*.ts", "test", "…"], "stale": false } | null,
+      "sizeReport": { "path": ".tmp/size-report.json", "sha256": "…",
+                      "producerInputs": ["src/**/*.ts", "package.json", "…"], "stale": false } | null
     }
   },
   "metrics": {

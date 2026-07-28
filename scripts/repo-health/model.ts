@@ -233,33 +233,47 @@ export function benchMetrics(cases: readonly { docs: readonly string[] }[]): Ben
  * Provenance for an analyzer artifact this snapshot READ but did not itself produce (coverage,
  * size). These artifacts carry no producing-commit stamp, so the snapshot cannot claim they match
  * `commit`. We instead record their content hash — so #1424 keys history on the bytes the metrics
- * came from, not on a commit they may predate — and an explicit `stale` flag: true when a
- * production source file is newer than the artifact, i.e. the tree moved on without the producer
- * being rerun. A consumer must treat stale metrics as lagging `commit`, never as current.
+ * came from, not on a commit they may predate — the `producerInputs` freshness was judged against,
+ * and an explicit `stale` flag. Freshness is bound to the artifact's WHOLE producer input set, not
+ * just `src` (coverage also depends on tests/config; size on package.json and packaging config), so
+ * a change to any of them re-flags the artifact. A consumer must treat stale metrics as lagging
+ * `commit`, never as current.
  */
 export type ArtifactProvenance = {
   path: string;
   sha256: string;
+  /** The producer input pathspecs whose freshness this verdict was computed against. */
+  producerInputs: string[];
   stale: boolean;
 };
 
 /**
- * Bind an artifact to the bytes and freshness it was read with. `stale` compares mtimes: an
- * artifact older than the newest production source predates the current working tree. mtime is a
- * local, offline signal (these artifacts are git-ignored, so there is no blob to diff), evaluated
- * against a single tree in one run, which is exactly the "edited code but did not rerun the
- * producer" case this guards against.
+ * Whether an artifact predates any of its producer inputs. mtime is a local, offline signal (these
+ * artifacts are git-ignored, so there is no blob to diff), evaluated against a single tree in one
+ * run. Freshness we cannot prove is reported as stale: an EMPTY input set (nothing observable) and
+ * any input newer than the artifact both mean the metrics may lag the tree — we never claim fresh
+ * on the strength of `src` alone, which was the earlier false-negative.
  */
+export function isArtifactStale(
+  artifactMtimeMs: number,
+  producerInputMtimesMs: readonly number[],
+): boolean {
+  return producerInputMtimesMs.length === 0 || Math.max(...producerInputMtimesMs) > artifactMtimeMs;
+}
+
+/** Bind an artifact to the bytes and the full producer input set its freshness was judged against. */
 export function artifactProvenance(params: {
   path: string;
   sha256: string;
+  producerInputs: string[];
   artifactMtimeMs: number;
-  newestSourceMtimeMs: number;
+  producerInputMtimesMs: readonly number[];
 }): ArtifactProvenance {
   return {
     path: params.path,
     sha256: params.sha256,
-    stale: params.newestSourceMtimeMs > params.artifactMtimeMs,
+    producerInputs: params.producerInputs,
+    stale: isArtifactStale(params.artifactMtimeMs, params.producerInputMtimesMs),
   };
 }
 
