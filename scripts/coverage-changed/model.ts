@@ -18,13 +18,15 @@
 // percentage fails the Coverage CI job (unless waived).
 export const CHANGED_LINE_COVERAGE_THRESHOLD = 70;
 
+export type LcovBranch = { readonly line: number; readonly taken: number };
+
 export type LcovFile = {
   readonly path: string;
   // new-side line number -> hit count (v8 only emits DA for executable lines,
   // so a line absent here is non-executable or ignored).
   readonly lineHits: ReadonlyMap<number, number>;
   // One entry per BRDA record: the line it sits on and whether it was taken.
-  readonly branches: readonly { readonly line: number; readonly taken: number }[];
+  readonly branches: readonly LcovBranch[];
 };
 
 export type CoverageIndex = ReadonlyMap<string, LcovFile>;
@@ -52,87 +54,105 @@ export function normalizePath(raw: string, rootDir?: string): string {
   return p;
 }
 
-export function parseLcov(text: string, rootDir?: string): CoverageIndex {
-  const index = new Map<string, LcovFile>();
+function parseDaRecord(body: string): readonly [number, number] | null {
+  const [lineNo, hits] = body.split(',');
+  const n = Number(lineNo);
+  const h = Number(hits);
+  return Number.isFinite(n) && Number.isFinite(h) ? [n, h] : null;
+}
+
+function parseBrdaRecord(body: string): LcovBranch | null {
+  // BRDA:<line>,<block>,<branch>,<taken>; taken is '-' when never reached.
+  const parts = body.split(',');
+  const line = Number(parts[0]);
+  if (!Number.isFinite(line)) return null;
+  const takenRaw = parts[3];
+  const taken = takenRaw === '-' || takenRaw === undefined ? 0 : Number(takenRaw);
+  return { line, taken: Number.isFinite(taken) ? taken : 0 };
+}
+
+function parseLcovRecord(block: string, rootDir?: string): LcovFile | null {
   let path: string | null = null;
-  let lineHits = new Map<number, number>();
-  let branches: { line: number; taken: number }[] = [];
-  const flush = (): void => {
-    if (path !== null) index.set(path, { path, lineHits, branches });
-    path = null;
-    lineHits = new Map();
-    branches = [];
-  };
-  for (const rawLine of text.split('\n')) {
-    const line = rawLine.trim();
+  const lineHits = new Map<number, number>();
+  const branches: LcovBranch[] = [];
+  for (const raw of block.split('\n')) {
+    const line = raw.trim();
     if (line.startsWith('SF:')) {
-      flush();
       path = normalizePath(line.slice(3), rootDir);
     } else if (line.startsWith('DA:')) {
-      const [lineNo, hits] = line.slice(3).split(',');
-      const n = Number(lineNo);
-      const h = Number(hits);
-      if (Number.isFinite(n) && Number.isFinite(h)) lineHits.set(n, h);
+      const da = parseDaRecord(line.slice(3));
+      if (da) lineHits.set(da[0], da[1]);
     } else if (line.startsWith('BRDA:')) {
-      // BRDA:<line>,<block>,<branch>,<taken>; taken is '-' when never reached.
-      const parts = line.slice(5).split(',');
-      const lineNo = Number(parts[0]);
-      const takenRaw = parts[3];
-      const taken = takenRaw === '-' || takenRaw === undefined ? 0 : Number(takenRaw);
-      if (Number.isFinite(lineNo))
-        branches.push({ line: lineNo, taken: Number.isFinite(taken) ? taken : 0 });
-    } else if (line === 'end_of_record') {
-      flush();
+      const branch = parseBrdaRecord(line.slice(5));
+      if (branch) branches.push(branch);
     }
   }
-  flush();
+  return path === null ? null : { path, lineHits, branches };
+}
+
+export function parseLcov(text: string, rootDir?: string): CoverageIndex {
+  const index = new Map<string, LcovFile>();
+  for (const block of text.split('end_of_record')) {
+    const file = parseLcovRecord(block, rootDir);
+    if (file) index.set(file.path, file);
+  }
   return index;
 }
 
-// Parse `git diff --unified=0` output into the added (new-side) line numbers per
-// file. Renames with edits report their added lines under the destination path;
-// pure renames and deletions contribute nothing.
+type DiffSection = { path: string; added: Set<number>; deleted: boolean; cursor: number };
+
+function newStartOfHunk(line: string): number | null {
+  const match = /@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
+  return match ? Number(match[1]) : null;
+}
+
+function pathFromDiffHeader(line: string): string {
+  const header = /^diff --git a\/.+ b\/(.+)$/.exec(line);
+  return header ? normalizePath(header[1]!) : '';
+}
+
+// Fold one line of a file's diff body into its section. Renames+edits report
+// their added lines under the destination (`+++ b/...`); pure renames and
+// deletions add nothing. `--unified=0` means no context lines in practice.
+function foldDiffBodyLine(section: DiffSection, line: string): void {
+  if (line.startsWith('+++ ')) {
+    const target = line.slice(4).trim();
+    if (target === '/dev/null') section.deleted = true;
+    else section.path = normalizePath(target);
+  } else if (line.startsWith('@@')) {
+    const start = newStartOfHunk(line);
+    if (start !== null) section.cursor = start;
+  } else if (line.startsWith('+') && !line.startsWith('+++')) {
+    section.added.add(section.cursor);
+    section.cursor += 1;
+  } else if (line.startsWith('-') || line.startsWith('\\')) {
+    // Removed line or "\ No newline": occupies no new-side number.
+  } else {
+    section.cursor += 1;
+  }
+}
+
 export function parseUnifiedDiff(diff: string): ChangedFileDiff[] {
   const files: ChangedFileDiff[] = [];
-  let current: { path: string; added: Set<number>; deleted: boolean } | null = null;
-  let newLineCursor = 0;
-  const push = (): void => {
-    if (current && current.path) {
+  let section: DiffSection | null = null;
+  const flush = (): void => {
+    if (section && section.path) {
       files.push({
-        path: current.path,
-        added: [...current.added].sort((a, b) => a - b),
-        deleted: current.deleted,
+        path: section.path,
+        added: [...section.added].sort((a, b) => a - b),
+        deleted: section.deleted,
       });
     }
   };
   for (const line of diff.split('\n')) {
     if (line.startsWith('diff --git ')) {
-      push();
-      // Seed the path from the header's b/ side so deleted files (whose `+++` is
-      // /dev/null) still carry a path; a real `+++ b/<path>` refines it below.
-      const header = /^diff --git a\/.+ b\/(.+)$/.exec(line);
-      current = { path: header ? normalizePath(header[1]!) : '', added: new Set(), deleted: false };
-      newLineCursor = 0;
-    } else if (line.startsWith('+++ ')) {
-      const target = line.slice(4).trim();
-      if (current) {
-        if (target === '/dev/null') current.deleted = true;
-        else current.path = normalizePath(target);
-      }
-    } else if (line.startsWith('@@')) {
-      const match = /@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
-      if (match) newLineCursor = Number(match[1]);
-    } else if (current && line.startsWith('+') && !line.startsWith('+++')) {
-      current.added.add(newLineCursor);
-      newLineCursor += 1;
-    } else if (current && line.startsWith('-') && !line.startsWith('---')) {
-      // Removed lines occupy no new-side number; do not advance the cursor.
-    } else if (current && !line.startsWith('\\')) {
-      // Context lines (rare with --unified=0) advance the new-side cursor.
-      newLineCursor += 1;
+      flush();
+      section = { path: pathFromDiffHeader(line), added: new Set(), deleted: false, cursor: 0 };
+    } else if (section) {
+      foldDiffBodyLine(section, line);
     }
   }
-  push();
+  flush();
   return files;
 }
 
@@ -153,9 +173,15 @@ function isCodeLike(text: string | undefined): boolean {
   if (text === undefined) return false;
   const trimmed = text.trim();
   if (trimmed === '') return false;
-  if (trimmed.startsWith('//')) return false;
-  if (trimmed.startsWith('/*') || trimmed.startsWith('*/') || trimmed.startsWith('*')) return false;
-  return true;
+  return !/^(\/\/|\/\*|\*)/.test(trimmed);
+}
+
+type IgnoreDirective = { readonly kind: 'next' | 'start' | 'stop'; readonly count: number };
+
+function parseIgnoreDirective(line: string): IgnoreDirective | null {
+  const match = /(?:v8|c8|istanbul)\s+ignore\s+(next|start|stop)(?:\s+(\d+))?/.exec(line);
+  if (!match) return null;
+  return { kind: match[1] as IgnoreDirective['kind'], count: match[2] ? Number(match[2]) : 1 };
 }
 
 // Lines suppressed by an explicit coverage-ignore directive (v8 / c8 / istanbul).
@@ -164,24 +190,18 @@ function isCodeLike(text: string | undefined): boolean {
 export function ignoredLineSet(lines: readonly string[]): Set<number> {
   const ignored = new Set<number>();
   let rangeActive = false;
-  const directive = /(?:v8|c8|istanbul)\s+ignore\s+(next|start|stop)(?:\s+(\d+))?/;
   for (let i = 0; i < lines.length; i += 1) {
-    const lineNo = i + 1;
-    const match = directive.exec(lines[i] ?? '');
-    if (match) {
-      const kind = match[1];
-      if (kind === 'start') {
-        rangeActive = true;
-        ignored.add(lineNo);
-      } else if (kind === 'stop') {
-        rangeActive = false;
-      } else if (kind === 'next') {
-        const count = match[2] ? Number(match[2]) : 1;
-        for (let k = 1; k <= count; k += 1) ignored.add(lineNo + k);
-      }
-      continue;
+    const directive = parseIgnoreDirective(lines[i] ?? '');
+    if (directive === null) {
+      if (rangeActive) ignored.add(i + 1);
+    } else if (directive.kind === 'stop') {
+      rangeActive = false;
+    } else if (directive.kind === 'start') {
+      rangeActive = true;
+      ignored.add(i + 1);
+    } else {
+      for (let k = 1; k <= directive.count; k += 1) ignored.add(i + 1 + k);
     }
-    if (rangeActive) ignored.add(lineNo);
   }
   return ignored;
 }
@@ -225,6 +245,42 @@ function ratioPct(covered: number, total: number): number | null {
   return Math.round((covered / total) * 10000) / 100;
 }
 
+function scoreGateFile(path: string, added: readonly number[], cov: LcovFile): FileCoverageReport {
+  let coveredLines = 0;
+  let totalLines = 0;
+  const uncoveredLines: number[] = [];
+  for (const n of added) {
+    const hits = cov.lineHits.get(n);
+    if (hits === undefined) continue;
+    totalLines += 1;
+    if (hits > 0) coveredLines += 1;
+    else uncoveredLines.push(n);
+  }
+  const addedSet = new Set(added);
+  const changedBranches = cov.branches.filter((b) => addedSet.has(b.line));
+  return {
+    path,
+    coveredLines,
+    totalLines,
+    uncoveredLines,
+    coveredBranches: changedBranches.filter((b) => b.taken > 0).length,
+    totalBranches: changedBranches.length,
+  };
+}
+
+// Changed lines suppressed by an ignore directive: executable-looking, absent
+// from the DA records, inside an ignore range. Reported, never gated.
+function ignoredChangedLines(
+  added: readonly number[],
+  cov: LcovFile,
+  contentLines: readonly string[],
+): number[] {
+  const ignored = ignoredLineSet(contentLines);
+  return added.filter(
+    (n) => ignored.has(n) && !cov.lineHits.has(n) && isCodeLike(contentLines[n - 1]),
+  );
+}
+
 export type ComputeInput = {
   readonly diffs: readonly ChangedFileDiff[];
   readonly coverage: CoverageIndex;
@@ -234,100 +290,62 @@ export type ComputeInput = {
   readonly waived?: boolean;
 };
 
+function sum<T>(items: readonly T[], pick: (item: T) => number): number {
+  return items.reduce((acc, item) => acc + pick(item), 0);
+}
+
 export function computeChangedCoverage(input: ComputeInput): ChangedCoverageResult {
   const files: FileCoverageReport[] = [];
   const excludedFiles: ExcludedFileReport[] = [];
-  let coveredLines = 0;
-  let totalLines = 0;
-  let coveredBranches = 0;
-  let totalBranches = 0;
-  let excludedLineTotal = 0;
 
   for (const diff of input.diffs) {
-    if (diff.deleted || diff.added.length === 0) continue;
-    if (!isIncludableSource(diff.path)) continue;
+    if (diff.deleted || diff.added.length === 0 || !isIncludableSource(diff.path)) continue;
 
     const cov = input.coverage.get(diff.path);
-    const addedSet = new Set(diff.added);
-
     if (!cov) {
       // Includable source absent from the all-files lcov report: an exclude glob
       // dropped it. Count its code-like added lines so the exclusion is visible.
       const lines = input.fileLines(diff.path);
-      const excludedLines = diff.added.filter((n) => isCodeLike(lines?.[n - 1]));
-      if (excludedLines.length > 0) {
-        excludedFiles.push({ path: diff.path, reason: 'excluded-path', lines: excludedLines });
-        excludedLineTotal += excludedLines.length;
+      const excluded = diff.added.filter((n) => isCodeLike(lines?.[n - 1]));
+      if (excluded.length > 0) {
+        excludedFiles.push({ path: diff.path, reason: 'excluded-path', lines: excluded });
       }
       continue;
     }
 
-    let covered = 0;
-    let total = 0;
-    const uncovered: number[] = [];
-    for (const n of diff.added) {
-      const hits = cov.lineHits.get(n);
-      if (hits === undefined) continue;
-      total += 1;
-      if (hits > 0) covered += 1;
-      else uncovered.push(n);
-    }
-    for (const branch of cov.branches) {
-      if (!addedSet.has(branch.line)) continue;
-      totalBranches += 1;
-      if (branch.taken > 0) coveredBranches += 1;
-    }
-
-    // Changed lines suppressed by an ignore directive: executable-looking, not
-    // in the DA records, inside an ignore range. Reported, never gated.
+    files.push(scoreGateFile(diff.path, diff.added, cov));
     const contentLines = input.fileLines(diff.path);
-    if (contentLines) {
-      const ignored = ignoredLineSet(contentLines);
-      const ignoredChanged = diff.added.filter(
-        (n) => ignored.has(n) && !cov.lineHits.has(n) && isCodeLike(contentLines[n - 1]),
-      );
-      if (ignoredChanged.length > 0) {
-        excludedFiles.push({ path: diff.path, reason: 'ignored-lines', lines: ignoredChanged });
-        excludedLineTotal += ignoredChanged.length;
-      }
+    const ignored = contentLines ? ignoredChangedLines(diff.added, cov, contentLines) : [];
+    if (ignored.length > 0) {
+      excludedFiles.push({ path: diff.path, reason: 'ignored-lines', lines: ignored });
     }
-
-    coveredLines += covered;
-    totalLines += total;
-    files.push({
-      path: diff.path,
-      coveredLines: covered,
-      totalLines: total,
-      uncoveredLines: uncovered,
-      coveredBranches: cov.branches.filter((b) => addedSet.has(b.line) && b.taken > 0).length,
-      totalBranches: cov.branches.filter((b) => addedSet.has(b.line)).length,
-    });
   }
 
+  const coveredLines = sum(files, (f) => f.coveredLines);
+  const totalLines = sum(files, (f) => f.totalLines);
+  const coveredBranches = sum(files, (f) => f.coveredBranches);
+  const totalBranches = sum(files, (f) => f.totalBranches);
   const pct = ratioPct(coveredLines, totalLines);
   const waived = Boolean(input.waived);
-  const meetsThreshold = pct === null || pct >= CHANGED_LINE_COVERAGE_THRESHOLD;
-  const offenders = files
-    .filter((file) => file.uncoveredLines.length > 0)
-    .sort((a, b) => a.path.localeCompare(b.path));
 
+  const byPath = (a: { path: string }, b: { path: string }): number => a.path.localeCompare(b.path);
   return {
     threshold: CHANGED_LINE_COVERAGE_THRESHOLD,
     coveredLines,
     totalLines,
     pct,
     waived,
-    passed: waived || meetsThreshold,
-    files: files.sort((a, b) => a.path.localeCompare(b.path)),
-    offenders,
+    passed: waived || pct === null || pct >= CHANGED_LINE_COVERAGE_THRESHOLD,
+    files: [...files].sort(byPath),
+    offenders: files.filter((f) => f.uncoveredLines.length > 0).sort(byPath),
     branch: {
       covered: coveredBranches,
       total: totalBranches,
       pct: ratioPct(coveredBranches, totalBranches),
     },
     excluded: {
-      files: excludedFiles.sort((a, b) => a.path.localeCompare(b.path)),
-      totalLines: excludedLineTotal,
+      files: [...excludedFiles].sort(byPath),
+      totalLines: sum(excludedFiles, (f) => f.lines.length),
     },
   };
 }
