@@ -21,6 +21,7 @@ runs:
       with:
         name: ${{ inputs.artifact-name }}
         if-no-files-found: ignore
+        include-hidden-files: true
         path: |
           ${{ inputs.agent-home-dir }}/daemon.log
           ${{ inputs.agent-home-dir }}/logs/**
