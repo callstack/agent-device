@@ -290,6 +290,83 @@ test('normalizeError strips a zero-space "error:" prefix without requiring or ov
   assert.equal(normalized.message, 'simctl boot failed: immediate text');
 });
 
+test('normalizeError trims each stderr line before prefix-matching, so leading whitespace cannot defeat the anchored noise-prefix regex', () => {
+  // The leading-whitespace line must NOT be the string's first/last line: the
+  // whole `details.stderr` value is `.trim()`-ed once by redaction before
+  // firstStderrLine ever sees it, which would otherwise erase exactly the
+  // whitespace this test needs to keep. A real skip-pattern line ahead of it
+  // keeps that whitespace internal to the string.
+  const err = new AppError('COMMAND_FAILED', 'simctl boot failed', {
+    processExitError: true,
+    stderr:
+      'An error was encountered processing the command (domain=X):\n' +
+      '  error: leading whitespace line\n',
+  });
+  const normalized = normalizeError(err);
+  assert.equal(normalized.message, 'simctl boot failed: leading whitespace line');
+});
+
+// firstStderrLine truncates an excerpt over 200 characters; pin both sides of
+// that boundary explicitly since a passing-but-short-excerpt test can never
+// exercise it.
+
+test('normalizeError truncates a stderr excerpt over 200 characters and appends an ellipsis', () => {
+  const longLine = 'x'.repeat(250);
+  const err = new AppError('COMMAND_FAILED', 'simctl boot failed', {
+    processExitError: true,
+    stderr: `${longLine}\n`,
+  });
+  const normalized = normalizeError(err);
+  assert.equal(normalized.message, `simctl boot failed: ${'x'.repeat(200)}...`);
+});
+
+test('normalizeError leaves a stderr excerpt of exactly 200 characters untruncated', () => {
+  const exactLine = 'y'.repeat(200);
+  const err = new AppError('COMMAND_FAILED', 'simctl boot failed', {
+    processExitError: true,
+    stderr: `${exactLine}\n`,
+  });
+  const normalized = normalizeError(err);
+  assert.equal(normalized.message, `simctl boot failed: ${exactLine}`);
+});
+
+// --- stringDetail/booleanDetail/stripDiagnosticMeta: type-guard and
+// empty-after-stripping contracts normalizeError relies on ---
+
+test('normalizeError ignores a non-string details.diagnosticId/logPath/hint rather than surfacing the wrong-typed value', () => {
+  const normalized = normalizeError(
+    new AppError('COMMAND_FAILED', 'runner failed', {
+      diagnosticId: 12345 as unknown as string,
+      logPath: true as unknown as string,
+      hint: [] as unknown as string,
+    }),
+  );
+  assert.equal(normalized.diagnosticId, undefined);
+  assert.equal(normalized.logPath, undefined);
+  // hint falls back to the code's default once the non-string value is rejected.
+  assert.equal(normalized.hint, defaultHintForCode('COMMAND_FAILED'));
+});
+
+test('normalizeError ignores a non-boolean details.retriable and falls back to the code-level default', () => {
+  const normalized = normalizeError(
+    new AppError('DEVICE_IN_USE', 'device busy', { retriable: 'yes' as unknown as boolean }),
+  );
+  assert.equal(normalized.retriable, true); // retriableForErrorCode('DEVICE_IN_USE') default, not the string.
+});
+
+test('normalizeError omits details entirely once stripping diagnostic-meta keys leaves nothing behind', () => {
+  const normalized = normalizeError(
+    new AppError('COMMAND_FAILED', 'runner failed', {
+      hint: 'custom hint',
+      diagnosticId: 'diag-1',
+      logPath: '/tmp/diag.log',
+      retriable: true,
+      supportedOn: 'ios',
+    }),
+  );
+  assert.equal(normalized.details, undefined);
+});
+
 // --- AppError: construction contract ---
 
 test('AppError is a real Error carrying code/message/details/cause', () => {
