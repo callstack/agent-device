@@ -251,7 +251,17 @@ const client = createAgentDeviceClient({
 });
 ```
 
-The JavaScript client does not publish provider SDK subpaths. Use the normal typed client methods; provider implementation details stay internal. Limrun uses the same client shape with `leaseProvider: 'limrun'`, `platform: 'android'` or `platform: 'ios'`, and `LIMRUN_API_KEY` in the daemon environment.
+Use the normal typed client methods when agent-device owns the daemon. Limrun uses the same client
+shape with `leaseProvider: 'limrun'`, `platform: 'android'` or `platform: 'ios'`, and
+`LIMRUN_API_KEY` in the daemon environment.
+
+Bridges that host the provider runtime themselves can reuse agent-device's Limrun implementation:
+
+```ts
+import { createLimrunRuntimeFromEnv } from 'agent-device/limrun';
+
+const runtime = createLimrunRuntimeFromEnv(process.env);
+```
 
 ## MCP Experience
 

@@ -50,6 +50,10 @@
       "import": "./dist/src/android-adb.js",
       "types": "./dist/src/android-adb.d.ts"
     },
+    "./limrun": {
+      "import": "./dist/src/limrun.js",
+      "types": "./dist/src/limrun.d.ts"
+    },
     "./contracts": {
       "import": "./dist/src/contracts.js",
       "types": "./dist/src/contracts.d.ts"
