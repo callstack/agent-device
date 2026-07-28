@@ -38,25 +38,30 @@ const REQUIRED_EXAMPLE_SYMBOLS: readonly { subpath: string; symbol: string }[] =
 // bullet starts a subpath section; backtick-quoted identifiers on its nested
 // bullet lines (stripping a trailing `(...)` call signature) are that
 // subpath's documented symbols, until the next top-level bullet.
+function matchTopLevelSubpathBullet(line: string): string | null {
+  return /^- `(agent-device[a-z0-9/-]*)`$/.exec(line)?.[1] ?? null;
+}
+
+function extractBacktickedNames(line: string): string[] {
+  return [...line.matchAll(/`([A-Za-z0-9_]+)(?:\([^)]*\))?`/g)]
+    .map((match) => match[1])
+    .filter((name): name is string => name !== undefined);
+}
+
 function parseSubpathManifest(markdown: string): SubpathManifest {
   const manifest = new Map<string, Set<string>>();
   let currentSubpath: string | null = null;
   for (const line of markdown.split('\n')) {
-    const topLevelMatch = /^- `(agent-device[a-z0-9/-]*)`$/.exec(line);
-    if (topLevelMatch) {
-      currentSubpath = topLevelMatch[1] ?? null;
-      if (currentSubpath && !manifest.has(currentSubpath)) {
-        manifest.set(currentSubpath, new Set());
-      }
+    const subpath = matchTopLevelSubpathBullet(line);
+    if (subpath) {
+      currentSubpath = subpath;
+      if (!manifest.has(subpath)) manifest.set(subpath, new Set());
       continue;
     }
-    if (currentSubpath === null || !/^\s+- /.test(line)) continue;
+    if (!currentSubpath || !/^\s+- /.test(line)) continue;
     const symbols = manifest.get(currentSubpath);
     if (!symbols) continue;
-    for (const match of line.matchAll(/`([A-Za-z0-9_]+)(?:\([^)]*\))?`/g)) {
-      const name = match[1];
-      if (name) symbols.add(name);
-    }
+    for (const name of extractBacktickedNames(line)) symbols.add(name);
   }
   return manifest;
 }

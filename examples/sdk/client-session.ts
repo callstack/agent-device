@@ -19,6 +19,30 @@ import {
   normalizeAgentDeviceError,
 } from 'agent-device';
 
+async function resolveSnapshotCapableIosDevice(client: ReturnType<typeof createAgentDeviceClient>) {
+  const devices = await client.devices.list({ platform: 'ios' });
+  const device = devices[0];
+  if (!device) {
+    throw new AppError('DEVICE_NOT_FOUND', 'No iOS device available');
+  }
+
+  const capabilities = await client.devices.capabilities({ platform: 'ios' });
+  if (!capabilities.availableCommands.includes('snapshot')) {
+    throw new AppError('UNSUPPORTED_OPERATION', 'Selected target does not support snapshots');
+  }
+
+  return device;
+}
+
+function reportAgentDeviceError(error: unknown): void {
+  const normalized = normalizeAgentDeviceError(error);
+  console.error(`agent-device error [${normalized.code}]: ${normalized.message}`);
+  if (normalized.hint) {
+    console.error(`hint: ${normalized.hint}`);
+  }
+  process.exitCode = 1;
+}
+
 async function main(): Promise<void> {
   const client = createAgentDeviceClient({
     session: 'sdk-example',
@@ -27,16 +51,7 @@ async function main(): Promise<void> {
   });
 
   try {
-    const devices = await client.devices.list({ platform: 'ios' });
-    const device = devices[0];
-    if (!device) {
-      throw new AppError('DEVICE_NOT_FOUND', 'No iOS device available');
-    }
-
-    const capabilities = await client.devices.capabilities({ platform: 'ios' });
-    if (!capabilities.availableCommands.includes('snapshot')) {
-      throw new AppError('UNSUPPORTED_OPERATION', 'Selected target does not support snapshots');
-    }
+    const device = await resolveSnapshotCapableIosDevice(client);
 
     await client.apps.open({
       app: 'com.apple.Preferences',
@@ -50,16 +65,8 @@ async function main(): Promise<void> {
       await client.interactions.press({ ref: target.ref });
     }
   } catch (error) {
-    if (isAgentDeviceError(error)) {
-      const normalized = normalizeAgentDeviceError(error);
-      console.error(`agent-device error [${normalized.code}]: ${normalized.message}`);
-      if (normalized.hint) {
-        console.error(`hint: ${normalized.hint}`);
-      }
-      process.exitCode = 1;
-      return;
-    }
-    throw error;
+    if (!isAgentDeviceError(error)) throw error;
+    reportAgentDeviceError(error);
   } finally {
     await client.sessions.close();
   }

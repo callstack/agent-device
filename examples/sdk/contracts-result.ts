@@ -14,15 +14,21 @@
 import { createAgentDeviceClient } from 'agent-device';
 import { centerOfRect } from 'agent-device/contracts';
 
+function assertHasRect<T extends { rect?: unknown }>(
+  node: T | undefined,
+): asserts node is T & { rect: NonNullable<T['rect']> } {
+  if (!node?.rect) {
+    throw new Error('No visible node with a rect in the snapshot');
+  }
+}
+
 async function main(): Promise<void> {
   const client = createAgentDeviceClient({ session: 'sdk-example' });
 
   try {
     const snapshot = await client.capture.snapshot({ interactiveOnly: true });
     const node = snapshot.nodes.find((candidate) => candidate.rect !== undefined);
-    if (!node?.rect) {
-      throw new Error('No visible node with a rect in the snapshot');
-    }
+    assertHasRect(node);
 
     const center = centerOfRect(node.rect);
     console.log(
