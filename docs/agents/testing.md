@@ -136,21 +136,26 @@ pnpm mutation:check                     # ratchet an existing .tmp/mutation/muta
 pnpm mutation:baseline                  # full sweep, then record it (reviewed commit)
 ```
 
-- **Weekly full sweep** (`.github/workflows/mutation-weekly.yml`) shards one job per module so no job
-  approaches the 30-minute budget, then merges the shard reports (`--report-dir`) for one verdict,
+- **Weekly full sweep** (`.github/workflows/mutation-weekly.yml`) runs `shardMatrix()` from the
+  registry: one job per module, except modules that declare a `shards` count and are sliced with
+  `--shard i/n` (selectors is ~1,280 mutants, well past the 30-minute budget in one job). The ratchet
+  merges the shard reports (`--report-dir`) for one verdict and requires the full set
+  (`--expect-shards`), so a dead shard fails the lane instead of scoring its module as 0. Results are
   reported as a job summary plus an artifact. It never commits: the proposed baseline rides in the
   artifact, and applying it is a reviewed `pnpm mutation:baseline` commit, so a score cannot lower
   itself.
-- **PR lane** (`.github/workflows/mutation-affected.yml`) derives the affected modules
-  (`--list-affected`), shards one job per module, and merges them into one verdict.
+- **PR lane** (`.github/workflows/mutation-affected.yml`) derives the affected shard matrix
+  (`--list-affected`) and merges the shards into one verdict. Before graduation the matrix is empty —
+  a report nobody acts on is not worth the runner minutes — unless the diff touches the lane's own
+  tooling, the one pre-graduation run that buys something: the gate has to be proven before it bites.
 - **Ratchet**: scores may only rise. `mutation-baselines/decision-kernels.json` records the
   high-water score per module plus the Stryker version and config content hash that produced it, so a
   score change caused by a tool/config change is reported as provenance drift, never as a
   test-strength regression.
 - **Graduation, not a flag day**: gating is off until two consecutive comparable weekly sweeps pass
-  (`stableRuns`/`requiredStableRuns` in the baseline); the PR job runs the whole time and only starts
-  failing once the committed baseline says `gating: true`. A regression or provenance drift resets the
-  counter.
+  (`stableRuns`/`requiredStableRuns` in the baseline); the PR job starts selecting modules — and
+  failing on them — once the committed baseline says `gating: true`. A regression or provenance drift
+  resets the counter.
 - **Test scope** is derived from Vitest's module graph (`vitest related` over the mutated files), the
   same delegation `pnpm check:affected` uses; see `scripts/mutation/test-scope.ts` for the three
   groups it drops and why dropping them cannot hide a surviving mutant.
