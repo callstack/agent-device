@@ -13,19 +13,20 @@ import path from 'node:path';
 import { runCmdStreaming, runCmdSync } from '../../src/utils/exec.ts';
 import { parseScriptArgs } from './cli-args.ts';
 import { runWithContentionRetry, type TestRun } from './contention-retry-lane.ts';
-import { parseVitestFailures, type TestFailure } from './contention-retry.ts';
+import { FAILURE_FILE_ENV } from './contention-retry-reporter.ts';
+import { parseFailureReport, type TestFailure } from './contention-retry.ts';
 
 const USAGE = `Usage: node --experimental-strip-types scripts/lib/contention-retry-run.ts [options]
 
   --coverage         Run the full suite under coverage (the CI Coverage job)
   --project <a,b>    Vitest projects for the first run (default: all)
-  --report <file>    Vitest JSON report path (default: .tmp/contention-retry/report.json)
+  --report <file>    Failure report path (default: .tmp/contention-retry/failures.json)
   --envelope <file>  Lane envelope path (default: .tmp/contention-retry/lane-envelope.json)
   --summary <file>   Markdown summary sink (default: $GITHUB_STEP_SUMMARY)
 `;
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
-const DEFAULT_REPORT = '.tmp/contention-retry/report.json';
+const DEFAULT_REPORT = '.tmp/contention-retry/failures.json';
 const DEFAULT_ENVELOPE = '.tmp/contention-retry/lane-envelope.json';
 
 const args = parseScriptArgs(process.argv.slice(2), USAGE, {
@@ -40,18 +41,22 @@ const reportPath = path.resolve(repoRoot, args.report);
 const envelopePath = path.resolve(repoRoot, args.envelope);
 const summaryPath = args.summary ?? process.env.GITHUB_STEP_SUMMARY;
 
-function reporterArgs(report: string): string[] {
-  return ['--reporter=default', '--reporter=json', `--outputFile.json=${report}`];
-}
-
 async function runVitest(extra: string[], report: string): Promise<TestRun> {
   fs.mkdirSync(path.dirname(report), { recursive: true });
   fs.rmSync(report, { force: true });
   const result = await runCmdStreaming(
     'pnpm',
-    ['exec', 'vitest', 'run', ...extra, ...reporterArgs(report)],
+    [
+      'exec',
+      'vitest',
+      'run',
+      ...extra,
+      '--reporter=default',
+      '--reporter=./scripts/lib/contention-retry-reporter.ts',
+    ],
     {
       cwd: repoRoot,
+      env: { ...process.env, [FAILURE_FILE_ENV]: report },
       allowFailure: true,
       onStdoutChunk: (chunk) => process.stdout.write(chunk),
       onStderrChunk: (chunk) => process.stderr.write(chunk),
@@ -62,7 +67,7 @@ async function runVitest(extra: string[], report: string): Promise<TestRun> {
 
 function readFailures(report: string): readonly TestFailure[] {
   if (!fs.existsSync(report)) return [];
-  return parseVitestFailures(JSON.parse(fs.readFileSync(report, 'utf8')), repoRoot);
+  return parseFailureReport(JSON.parse(fs.readFileSync(report, 'utf8')), repoRoot);
 }
 
 function vitestVersion(): string {
@@ -76,7 +81,11 @@ function vitestVersion(): string {
 
 function configHash(): string {
   const hash = crypto.createHash('sha256');
-  for (const file of ['vitest.config.ts', 'scripts/lib/contention-retry.ts']) {
+  for (const file of [
+    'vitest.config.ts',
+    'scripts/lib/contention-retry.ts',
+    'scripts/lib/contention-retry-reporter.ts',
+  ]) {
     hash.update(fs.readFileSync(path.join(repoRoot, file)));
   }
   return `sha256:${hash.digest('hex').slice(0, 16)}`;
@@ -94,7 +103,7 @@ const result = await runWithContentionRetry({
   // The rerun is file-scoped and coverage-free on purpose: coverage thresholds
   // are a whole-suite verdict, and a threshold miss is not timeout-shaped, so it
   // never reaches this branch.
-  runFiles: (files) => runVitest([...files], `${reportPath}.retry.json`),
+  runFiles: (files) => runVitest([...files], reportPath.replace(/\.json$/, '.retry.json')),
   commit: runCmdSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot }).stdout.trim(),
   configHash: configHash(),
   vitestVersion: vitestVersion(),

@@ -13,7 +13,7 @@ import {
   expiredRetryEntries,
   formatRetrySummary,
   isTimeoutShapedFailure,
-  parseVitestFailures,
+  parseFailureReport,
   planContentionRetry,
   SUBPROCESS_STUB_TESTS,
   type TestFailure,
@@ -118,18 +118,12 @@ test('timeout shapes are recognized and assertion failures are not', () => {
   assert.ok(!isTimeoutShapedFailure('Error: expected timeout hint to be set'));
 });
 
-test('vitest JSON failures are read as absolute paths, names, and messages', () => {
-  const failures = parseVitestFailures(
+test('reporter failures are read as repo-relative paths, names, and messages', () => {
+  const failures = parseFailureReport(
     {
-      testResults: [
-        {
-          name: `${repoRoot}/${LISTED}`,
-          assertionResults: [
-            { status: 'passed', fullName: 'closes a session', failureMessages: [] },
-            { status: 'failed', fullName: 'opens a session', failureMessages: [TIMEOUT_MESSAGE] },
-          ],
-        },
-        { name: 'broken-suite' },
+      failures: [
+        { file: `${repoRoot}/${LISTED}`, testName: 'opens a session', message: TIMEOUT_MESSAGE },
+        { testName: 'no file' },
       ],
     },
     repoRoot,
@@ -138,8 +132,8 @@ test('vitest JSON failures are read as absolute paths, names, and messages', () 
 });
 
 test('an unreadable report yields no retry-eligible failures', () => {
-  assert.deepEqual(parseVitestFailures({}, repoRoot), []);
-  assert.deepEqual(parseVitestFailures({ testResults: 'nope' }, repoRoot), []);
+  assert.deepEqual(parseFailureReport({}, repoRoot), []);
+  assert.deepEqual(parseFailureReport({ failures: 'nope' }, repoRoot), []);
   assert.equal(planContentionRetry([]).retry, false);
 });
 

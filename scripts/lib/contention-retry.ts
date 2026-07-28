@@ -257,37 +257,26 @@ export type TestFailure = {
 };
 
 /**
- * Failures from Vitest's JSON reporter, narrowed at the trust boundary. A run
- * that dies before writing a report parses to zero failures, which the policy
- * reads as "nothing retry-eligible": the job fails, the safe direction.
+ * Failures as written by the lane's reporter (`contention-retry-reporter.ts`),
+ * narrowed at the trust boundary. A run that dies before writing the file parses
+ * to zero failures, which the policy reads as "nothing retry-eligible": the job
+ * fails, the safe direction.
  */
-export function parseVitestFailures(report: unknown, repoRoot?: string): readonly TestFailure[] {
-  const suites = (report as { testResults?: unknown }).testResults;
-  if (!Array.isArray(suites)) return [];
-  return suites.flatMap((suite) => suiteFailures(suite, repoRoot));
+export function parseFailureReport(report: unknown, repoRoot?: string): readonly TestFailure[] {
+  const failures = (report as { failures?: unknown }).failures;
+  if (!Array.isArray(failures)) return [];
+  return failures
+    .map((entry) => readFailure(entry, repoRoot))
+    .filter((entry) => entry !== undefined);
 }
 
-function suiteFailures(suite: unknown, repoRoot: string | undefined): TestFailure[] {
-  const { name, assertionResults } = suite as { name?: unknown; assertionResults?: unknown };
-  if (typeof name !== 'string' || !Array.isArray(assertionResults)) return [];
-  const file = normalizeTestFile(name, repoRoot);
-  return assertionResults
-    .map((assertion) => assertionFailure(file, assertion))
-    .filter((failure) => failure !== undefined);
-}
-
-function assertionFailure(file: string, assertion: unknown): TestFailure | undefined {
-  const { status, fullName, failureMessages } = assertion as {
-    status?: unknown;
-    fullName?: unknown;
-    failureMessages?: unknown;
-  };
-  if (status !== 'failed') return undefined;
-  const messages = Array.isArray(failureMessages) ? failureMessages : [];
+function readFailure(entry: unknown, repoRoot: string | undefined): TestFailure | undefined {
+  const { file, testName, message } = entry as Partial<Record<keyof TestFailure, unknown>>;
+  if (typeof file !== 'string') return undefined;
   return {
-    file,
-    testName: typeof fullName === 'string' ? fullName : 'unknown test',
-    message: messages.filter((message) => typeof message === 'string').join('\n'),
+    file: normalizeTestFile(file, repoRoot),
+    testName: typeof testName === 'string' ? testName : 'unknown test',
+    message: typeof message === 'string' ? message : '',
   };
 }
 
