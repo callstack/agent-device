@@ -344,23 +344,42 @@ adapters make `AdReplayRuntime` an earned seam rather than speculative indirecti
 Publication is a session capability, not a native replay runtime entry point:
 
 ```ts
-export interface SessionScriptPublication {
-  handle(event: ScriptPublicationEvent): Promise<ScriptPublicationOutcome>;
-}
+type ScriptPublicationTarget = Readonly<{
+  path: string;
+  source: 'generated' | 'explicit' | 'healed-sibling';
+  force: boolean;
+}>;
 
-export type ScriptPublicationEvent =
-  | { kind: 'publish-active'; path?: string; force?: boolean }
-  | { kind: 'explicit-close'; platformCloseSucceeded: boolean; force?: boolean }
-  | { kind: 'lifecycle-teardown' };
+type RepairPlatformCloseReceipt = Readonly<{
+  operationKey: string;
+}>;
+
+interface SessionScriptPublication {
+  publishActive(input: ActivePublicationRequest): Promise<ScriptPublicationOutcome>;
+  finalizeExplicitClose(input: {
+    retarget?: { path: string; force?: true };
+    platformClose: {
+      operationKey: string;
+      perform(): Promise<void>;
+    };
+  }): Promise<ScriptPublicationOutcome>;
+  finalizeLifecycleTeardown(
+    reason: 'idle-reap' | 'daemon-shutdown',
+  ): Promise<ScriptPublicationOutcome>;
+}
 ```
 
-The capability is bound to one locked session. It owns:
+This is a daemon-private, request-bound capability. Passing `platformCloseSucceeded: boolean` would
+lose the operation identity and make sequencing the caller's responsibility. Instead, the
+capability receives one narrow close operation and controls when it runs and when its success
+receipt commits. It owns:
 
 - ADR 0016 eligibility, ARMED/ABORTED/PUBLISHED transitions, and repair-state disjointness;
 - mutually exclusive tagged ordinary-recording and repair states rather than co-resident mutable
   flags that callers must interpret;
 - publication-side repair commit/tombstone transitions from ADR 0012;
-- action-slice selection, target/force authorization, and retry semantics;
+- action-slice selection, durable target/per-target force authorization, close receipts, and retry
+  semantics;
 - portability, unresolved-ref, target-evidence, and destination-guard validation;
 - atomic create-exclusive or explicitly forced replacement;
 - the store-derived active-session view used by response projection; and
@@ -377,22 +396,64 @@ to an engine.
 The current cluster of co-resident flags collapses into one state:
 
 ```ts
+type OrdinaryPublicationStatus =
+  | { kind: 'armed' }
+  | { kind: 'published'; path: string }
+  | { kind: 'aborted'; reason: 'second-open' };
+
+type RepairPublicationStatus =
+  | { kind: 'armed' }
+  | { kind: 'complete' }
+  | {
+      kind: 'close-succeeded';
+      completion: 'armed' | 'complete';
+      receipt: RepairPlatformCloseReceipt;
+    }
+  | { kind: 'committed'; path: string; receipt?: RepairPlatformCloseReceipt }
+  | {
+      kind: 'aborted';
+      reason: 'explicit-close-incomplete' | 'lifecycle-incomplete' | 'teardown-commit-failed';
+      receipt?: RepairPlatformCloseReceipt;
+    };
+
 type ScriptPublicationState =
   | { kind: 'inactive' }
-  | { kind: 'recording'; path?: string; force?: boolean }
+  | {
+      kind: 'ordinary';
+      target: ScriptPublicationTarget;
+      status: OrdinaryPublicationStatus;
+    }
   | {
       kind: 'repair';
       boundary: number;
       sourcePath: string;
-      phase: 'armed' | 'complete';
+      target: ScriptPublicationTarget;
       watermark?: ResumeWatermark;
-    }
-  | { kind: 'published'; path: string }
-  | { kind: 'aborted' };
+      status: RepairPublicationStatus;
+    };
 ```
 
 ADR 0016 ordinary publication and ADR 0012 repair ownership are then type-level alternatives,
-rather than nullable fields whose legal combinations every caller must remember.
+rather than nullable fields whose legal combinations every caller must remember. The repair close
+transaction has one required ordering:
+
+1. Derive a candidate target from the request without mutating state. Force remains authorization
+   for one target: changing the path without a live `force` clears the old authorization.
+2. If no receipt matches the effective platform-close operation key, perform that close. A failure
+   leaves the aggregate byte-for-byte unchanged.
+3. After close succeeds, persist the target and `close-succeeded` receipt before attempting atomic
+   publication.
+4. If publication fails, retain that state. A retry with the same close operation skips platform
+   dispatch and can safely retarget publication; a different operation key dispatches again.
+5. Publication transitions to `committed`, retaining its receipt until the lifecycle coordinator
+   deletes the session. An incomplete repair transitions to explicit `aborted` state and never
+   publishes. Teardown persists the existing bounded tombstone before deleting failed or incomplete
+   repair state.
+
+The tagged aggregate and both capability projections must land together; do not temporarily keep a
+second repair/publication state beside it. Centralizing the callers behind the locked replay
+coordinator can follow as a separate migration step because it changes orchestration, not state
+ownership.
 
 It uses an internal pure `.ad` codec for canonical serialization. The codec is shared syntax, not
 the replay engine and not an injected port; the local filesystem remains directly testable through
@@ -532,7 +593,8 @@ disciplines:
 1. **Immediate pessimistic transitions** for ref frames and observation lineage: commit
    synchronously before an asynchronous side effect and never roll back on its failure.
 2. **Staged protocols** for repair and publication: arm, establish a watermark, complete, then
-   commit or abort with failure-preserving tombstones.
+   settle any platform close, commit or abort, and preserve close receipts or failure tombstones
+   across retries.
 3. **Append-only streams** for recorded actions and journal events: append facts without using
    them to coordinate mutable state.
 
@@ -760,6 +822,10 @@ This is mostly ownership correction around an already-proven port.
   expose those transitions to the engine.
 - Put active, ordinary-close, repair-close, and lifecycle-teardown publication behind
   `SessionScriptPublication`, preserving ADR 0016 disjointness and store-derived session activity.
+  Collapse output target, per-target force authorization, repair completion, committed/aborted
+  status, and the operation-keyed platform-close receipt into the tagged aggregate. Pin that a
+  failed platform close leaves state unchanged; a failed publication retains the receipt; the same
+  close retry skips dispatch; and a different close identity dispatches again.
 - At the daemon request seam, pin that every `record` action rejects or ignores unsupported
   `saveScript` without arming publication. Only then delete the surface-dormant but raw-wire
   reachable `record stop` writer invocation.
@@ -873,6 +939,10 @@ The session-boundary prototype exercises:
 - ref activation and expiry before both successful and failed mutations;
 - parameterized recording;
 - repair arm/corrective-resume/commit;
+- platform-close failure without state mutation;
+- durable target/force and close-receipt state across a failed publication;
+- same-close retry without redispatch, changed-close redispatch, and explicit committed/aborted
+  terminal states;
 - client resume-digest validation outside session state;
 - no-clobber active publication and repair/publication disjointness.
 

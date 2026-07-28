@@ -35,7 +35,14 @@ interface, while plan-digest validation remains engine-owned and publication rem
 The prototype uses an internal state capsule, not an engine port. It puts ref-frame, recording,
 corrective-resume, and repair transitions behind daemon-owned authority, keeps a client-supplied
 plan-digest check outside session state, rejects active publication while a repair owns the session,
-and calls a pure `.ad` serializer from session-owned publication. Its assertions cover invalid
-transitions, ref expiry before successful and failed mutations, repair/recording disjointness,
-digest validation without session mutation, and single publication; it then prints compact JSON
-evidence.
+and calls a pure `.ad` serializer from session-owned publication.
+
+The focused repair-publication sub-probe models target and per-target force authorization together
+with explicit armed, complete, close-succeeded, committed, and aborted states. Its assertions pin
+the transaction edges called out by the production close path: platform-close failure leaves state
+unchanged; publication failure retains an operation-keyed close receipt; retrying the same close
+does not dispatch it twice; changing the close identity does; retargeting without live force drops
+the old target's authorization; and terminal committed or aborted state is explicit. The aggregate
+probe also covers invalid transitions, ref expiry before successful and failed mutations,
+repair/recording disjointness, digest validation without session mutation, and single publication,
+then prints compact JSON evidence.

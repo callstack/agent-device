@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { runRepairPublicationTransactionProbe } from './session-publication-transaction.ts';
 
 type RefFrame = { generation: number; status: 'active' | 'expired' };
 type RepairTransaction = {
   sourcePath: string;
+  phase: 'armed' | 'complete';
   acceptedSteps: number[];
   pendingResume?: {
     expectedFrom: number;
@@ -81,7 +83,11 @@ class LockedSessionState {
     this.assert(this.script.kind === 'idle', 'repair is disjoint from ordinary recording');
     this.script = {
       kind: 'repair',
-      transaction: { sourcePath, acceptedSteps: [] },
+      transaction: {
+        sourcePath,
+        phase: 'armed',
+        acceptedSteps: [],
+      },
       actions: [],
     };
     this.commit('repair:armed');
@@ -112,7 +118,8 @@ class LockedSessionState {
   completeRepair(): void {
     const repair = this.requireRepair();
     this.assert(!repair.transaction.pendingResume, 'corrective resume has not been admitted');
-    this.script = { kind: 'idle' };
+    this.assert(repair.transaction.phase === 'armed', 'repair cannot complete from this phase');
+    repair.transaction.phase = 'complete';
     this.commit('repair:complete');
   }
 
@@ -184,7 +191,14 @@ assert.throws(() => repairSession.admitCorrectiveResume(3), /no corrective actio
 repairSession.recordAction('click text="Continue anyway"');
 repairSession.admitCorrectiveResume(3);
 repairSession.completeRepair();
-assert.equal(repairSession.snapshot().script.kind, 'idle');
+assert.equal(
+  repairSession.snapshot().script.kind === 'repair'
+    ? repairSession.snapshot().script.transaction.phase
+    : undefined,
+  'complete',
+);
+
+const repairPublicationEvidence = await runRepairPublicationTransactionProbe();
 
 const publicationSession = new LockedSessionState();
 publicationSession.armOrdinaryRecording();
@@ -221,6 +235,7 @@ process.stdout.write(
         successfulMutationExpiredRefs:
           successfulMutationSession.snapshot().refFrame?.status === 'expired',
         correctiveResumeRequiresRecordedAction: true,
+        ...repairPublicationEvidence,
         clientDigestValidationLeftSessionUntouched: true,
         activePublicationIsRepairDisjoint: true,
         parameterizedArtifactPublished:

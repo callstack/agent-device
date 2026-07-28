@@ -57,8 +57,10 @@ effect, and retain that expiry even when dispatch times out or fails.
 ### Staged protocols
 
 Repair and publication are saga-shaped protocols: arm, establish a watermark, complete, then commit
-or abort while preserving failure tombstones. Their failure handling is domain behavior owned by
-the capability, not generic store rollback.
+or abort while preserving operation receipts and failure tombstones. A successful non-idempotent
+step commits its operation-keyed receipt before the next fallible step. Retry reuses a matching
+receipt; a different operation identity executes again. Their failure handling is domain behavior
+owned by the capability, not generic store rollback.
 
 ### Append-only streams
 
@@ -69,21 +71,51 @@ Collapse each mutable field cluster into one discriminated union so invalid comb
 unrepresentable. For the script cluster:
 
 ```ts
+type ScriptPublicationTarget = Readonly<{
+  path: string;
+  source: 'generated' | 'explicit' | 'healed-sibling';
+  force: boolean;
+}>;
+
+type RepairPublicationStatus =
+  | { kind: 'armed' }
+  | { kind: 'complete' }
+  | {
+      kind: 'close-succeeded';
+      completion: 'armed' | 'complete';
+      receipt: { operationKey: string };
+    }
+  | { kind: 'committed'; path: string; receipt?: { operationKey: string } }
+  | {
+      kind: 'aborted';
+      reason: 'explicit-close-incomplete' | 'lifecycle-incomplete' | 'teardown-commit-failed';
+      receipt?: { operationKey: string };
+    };
+
 type ScriptPublicationState =
   | { kind: 'inactive' }
-  | { kind: 'recording'; path?: string; force?: boolean }
+  | {
+      kind: 'ordinary';
+      target: ScriptPublicationTarget;
+      status:
+        | { kind: 'armed' }
+        | { kind: 'published'; path: string }
+        | { kind: 'aborted'; reason: 'second-open' };
+    }
   | {
       kind: 'repair';
       boundary: number;
       sourcePath: string;
-      phase: 'armed' | 'complete';
+      target: ScriptPublicationTarget;
       watermark?: ResumeWatermark;
-    }
-  | { kind: 'published'; path: string }
-  | { kind: 'aborted' };
+      status: RepairPublicationStatus;
+    };
 ```
 
-This makes ordinary publication and repair ownership mutually exclusive by construction.
+This makes ordinary publication and repair ownership mutually exclusive by construction. It also
+keeps the publication target and its force authorization together, and makes a successful platform
+close durable before atomic publication. A publication failure remains `close-succeeded`; retrying
+the same operation does not repeat the close.
 
 A Redux-like or request-transactional session store is deliberately rejected. ADR 0014 requires
 ref-frame expiry to commit in the middle of a request, before awaiting the device operation, and to
