@@ -13,7 +13,7 @@ import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
 export const SUBPROCESS_STUB_TESTS = [
   'src/platforms/android/__tests__/{app-lifecycle-install,app-lifecycle-open,device-input-state,input-actions,notifications,settings}.test.ts',
   'src/daemon/__tests__/runtime-hints.test.ts',
-  'src/platforms/apple/core/__tests__/index.test.ts',
+  'src/platforms/apple/core/__tests__/{apps,interactions,simulator,physical-device-screenshot,screenshot,screenshot-status-bar,devicectl}.test.ts',
   // Stubs npx + the package managers on PATH and spawns a real Metro dev server per case.
   'src/__tests__/client-metro.test.ts',
   // Proves the parser fuzz harness still fails (#1414): every case spawns a node subprocess or a
