@@ -64,8 +64,8 @@ runs:
       if: inputs.platform == 'android'
       shell: bash
       run: |
-        # sdkmanager intentionally closes stdin after accepting licenses; with
-        # pipefail that benign SIGPIPE from `yes` would look like a failure.
+        # sdkmanager intentionally closes stdin after accepting licenses; disable
+        # the runner's inherited pipefail only around that benign SIGPIPE.
         set -eu
         SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
         BUILD_TOOLS="$SDK_ROOT/build-tools/36.0.0"
@@ -80,7 +80,9 @@ runs:
           echo "::error::sdkmanager not found under $SDK_ROOT." >&2
           exit 1
         fi
+        set +o pipefail
         yes | "$SDKMANAGER" --licenses >/dev/null
+        set -o pipefail
         "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
 
     - name: Fetch the cached Release binary

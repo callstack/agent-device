@@ -44,6 +44,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     throw new Error('Usage: assert-android-fixture-snapshot.mjs <snapshot-path> <app-id>');
   }
   const snapshot = JSON.parse(fs.readFileSync(snapshotPath, 'utf8'));
-  const packageVersion = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
+  const packageJsonPath = fileURLToPath(new URL('../../package.json', import.meta.url));
+  const packageVersion = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')).version;
   assertAndroidFixtureSnapshot(snapshot, expectedAppId, packageVersion);
 }

@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-if [ "$#" -ne 2 ]; then
+if [ "$#" -ne 2 ] || [ -z "$1" ] || [ -z "$2" ]; then
   echo "Usage: android-fixture-cache-smoke.sh <apk-path> <app-id>" >&2
   exit 2
 fi

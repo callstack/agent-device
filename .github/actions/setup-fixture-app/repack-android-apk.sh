@@ -5,7 +5,7 @@ APK="${1:?source APK is required}"
 OUT="${2:?output APK is required}"
 SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
 BUILD_TOOLS="$SDK_ROOT/build-tools/36.0.0"
-if [ ! -x "$BUILD_TOOLS/apksigner" ]; then
+if [ ! -x "$BUILD_TOOLS/aapt" ] || [ ! -x "$BUILD_TOOLS/apksigner" ]; then
   echo "::error::Android build tools were not found at $BUILD_TOOLS." >&2
   exit 1
 fi

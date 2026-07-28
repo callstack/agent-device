@@ -46,7 +46,10 @@ jobs:
         with:
           platform: android
           install: 'false'
-          wait-for-artifact-seconds: '120'
+          wait-for-artifact-seconds: '600'
+
+      - name: Report fixture cache source
+        run: echo "Android fixture APK source=${{ steps.fixture-app.outputs.source }}"
 
       - name: Run Android smoke checks
         uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0

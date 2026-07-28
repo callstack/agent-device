@@ -47,6 +47,7 @@ test('producer, consumers, upload, and concurrency use the canonical platform-sc
   assert.match(fetchArtifact, /find "\$REPOSITORY" "\$NAME" "\$EXPECTED_HEAD_SHA"/);
   assert.match(androidBuildToolsStep.run, /build-tools;36\.0\.0/);
   assert.match(androidBuildToolsStep.run, /apksigner/);
+  assert.match(androidBuildToolsStep.run, /set \+o pipefail/);
   assert.match(androidFallbackStep.if, /inputs\.platform == 'android'/);
   assert.match(androidFallbackStep.run, /expo prebuild --platform android --no-install/);
   assert.match(androidFallbackStep.run, /:app:assembleRelease/);
@@ -68,12 +69,23 @@ test('Android smoke keeps its install/open/snapshot evidence in a checked-in scr
   const smokeStep = workflow.jobs['smoke-android'].steps.find(
     (step) => step.name === 'Run Android smoke checks',
   );
+  const restoreStep = workflow.jobs['smoke-android'].steps.find(
+    (step) => step.name === 'Restore fixture APK',
+  );
+  const sourceStep = workflow.jobs['smoke-android'].steps.find(
+    (step) => step.name === 'Report fixture cache source',
+  );
   const assertion = fs.readFileSync('test/scripts/assert-android-fixture-snapshot.mjs', 'utf8');
   const smokeScript = fs.readFileSync('test/scripts/android-fixture-cache-smoke.sh', 'utf8');
   const packageVersion = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
 
   assert.match(smokeStep.with.script, /android-fixture-cache-smoke\.sh/);
+  assert.match(smokeStep.with.script, /steps\.fixture-app\.outputs\.apk-path/);
+  assert.match(smokeStep.with.script, /steps\.fixture-app\.outputs\.app-id/);
+  assert.equal(restoreStep.with['wait-for-artifact-seconds'], '600');
+  assert.match(sourceStep.run, /steps\.fixture-app\.outputs\.source/);
   assert.match(smokeScript, /snapshot -i .*--json > "\$SNAPSHOT_PATH"/);
+  assert.match(smokeScript, /\[ -z "\$1" \] \|\| \[ -z "\$2" \]/);
   assert.match(smokeScript, /assert-android-fixture-snapshot\.mjs/);
   assert.match(assertion, /metadata\.backend !== 'android-helper'/);
   assert.match(assertion, /metadata\.helperVersion !== packageVersion/);
