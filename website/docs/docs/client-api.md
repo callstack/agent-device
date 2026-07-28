@@ -22,10 +22,12 @@ Public subpath API exposed for Node consumers:
   - `buildBundleUrl(baseUrl, platform)`
   - `normalizeBaseUrl(baseUrl)`
   - `resolveRuntimeTransport(runtime)`
+  - `prepareMetroRuntime(options?)`, `reloadMetro(options?)`, `stopMetroTunnel(options)`
   - types: `MetroBridgeDescriptor`, `MetroTunnelRequestMessage`, `MetroTunnelResponseMessage`
 - `agent-device/batch`
   - `runBatch(req, sessionName, invoke)`
 - `agent-device/remote-config`
+  - `resolveRemoteConfigProfile(options)`
   - types: `RemoteConfigProfile`
 - `agent-device/contracts`
   - `centerOfRect(rect)`
@@ -345,6 +347,8 @@ async function handleBatch(req: BatchRequest): Promise<DaemonResponse> {
 ## Android `installFromSource()`
 
 ```ts
+import { createAgentDeviceClient } from 'agent-device';
+
 const androidClient = createAgentDeviceClient({ session: 'qa-android' });
 
 const installed = await androidClient.apps.installFromSource({
@@ -406,7 +410,7 @@ Direct Android `.apk` and `.aab` URL sources can still resolve package identity 
 ## Remote Metro helpers
 
 ```ts
-import { prepareRemoteMetro, reloadRemoteMetro, stopMetroTunnel } from 'agent-device/metro';
+import { prepareMetroRuntime, reloadMetro, stopMetroTunnel } from 'agent-device/metro';
 import { resolveRemoteConfigProfile } from 'agent-device/remote-config';
 
 const remoteConfig = resolveRemoteConfigProfile({
@@ -414,7 +418,7 @@ const remoteConfig = resolveRemoteConfigProfile({
   cwd: process.cwd(),
 });
 
-const prepared = await prepareRemoteMetro({
+const prepared = await prepareMetroRuntime({
   projectRoot: remoteConfig.profile.metroProjectRoot!,
   kind: remoteConfig.profile.metroKind ?? 'auto',
   proxyBaseUrl: remoteConfig.profile.metroProxyBaseUrl,
@@ -424,12 +428,12 @@ const prepared = await prepareRemoteMetro({
     runId: remoteConfig.profile.runId!,
     leaseId: remoteConfig.profile.leaseId!,
   },
-  profileKey: remoteConfig.resolvedPath,
+  companionProfileKey: remoteConfig.resolvedPath,
 });
 
 console.log(prepared.iosRuntime, prepared.androidRuntime);
 
-await reloadRemoteMetro({
+await reloadMetro({
   runtime: prepared.iosRuntime,
 });
 

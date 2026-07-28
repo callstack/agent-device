@@ -3,8 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { runCmdSync } from '../../src/utils/exec.ts';
 
 // Compiles every fenced ```ts snippet in website/docs/docs/client-api.md against
 // agent-device's real `agent-device/*` subpath sources, so a doc snippet that no
@@ -36,9 +36,7 @@ function extractTsSnippets(markdown: string): string[] {
 // returns it fully resolved and comment-free, so this reads the one true copy of
 // the subpath map instead of keeping a second, driftable one here.
 function resolveExamplesSdkPaths(): Record<string, string[]> {
-  const raw = execFileSync(TSC_BIN, ['-p', EXAMPLES_SDK_TSCONFIG, '--showConfig'], {
-    encoding: 'utf8',
-  });
+  const raw = runCmdSync(TSC_BIN, ['-p', EXAMPLES_SDK_TSCONFIG, '--showConfig']).stdout;
   const configDir = path.dirname(EXAMPLES_SDK_TSCONFIG);
   const paths: Record<string, string[]> = {};
   for (const [specifier, targets] of Object.entries(
@@ -49,38 +47,30 @@ function resolveExamplesSdkPaths(): Record<string, string[]> {
   return paths;
 }
 
-// Free identifiers a snippet references without declaring — continuing a
-// `client`/`snapshot` from an earlier snippet in the doc's prose. Typed against
-// the real SDK return types (not `any`) so continuation snippets still get
-// meaningful checking; anything else (illustrative host-glue names the doc
-// invents, like a bridge's own transport function) falls back to `any`, which
-// only weakens the check for that invented name, not for the real SDK calls
-// around it.
-const KNOWN_CONTINUATION_STUB_TYPES: Record<string, string> = {
+// Free identifiers a snippet references without declaring, because the doc's
+// prose treats them as continuing from an earlier snippet (`client`,
+// `androidClient`, `snapshot` — typed against the real SDK return type, not
+// `any`, so continuation snippets still get meaningful checking) or as
+// illustrative host-glue the doc invents on purpose (a bridge's own transport
+// function, never part of the SDK). This is a closed, explicit allowlist, not
+// a catch-all: any free identifier NOT listed here — including a typo of one
+// that IS, like `cliet` for `client` — is left as a real "Cannot find name"
+// failure. See the "rejects an unrecognized free identifier" test below for
+// the regression this guards against.
+const KNOWN_FREE_NAME_STUB_TYPES: Record<string, string> = {
   client: `ReturnType<typeof import('agent-device').createAgentDeviceClient>`,
   androidClient: `ReturnType<typeof import('agent-device').createAgentDeviceClient>`,
   snapshot: `Awaited<ReturnType<ReturnType<typeof import('agent-device').createAgentDeviceClient>['capture']['snapshot']>>`,
+  // "Android ADB providers": the doc's own invented remote-transport glue, not
+  // part of agent-device — typed as the real `AndroidAdbExecutor` function
+  // shape so the snippet's `exec: async (args, options) => ...` still has to
+  // return something assignable to it.
+  runAdbThroughRemoteTunnel: `import('agent-device/android-adb').AndroidAdbExecutor`,
+  // "Batch orchestration for custom transports": the doc's own invented
+  // command dispatcher and error mapper.
+  dispatch: `(stepReq: unknown) => Promise<import('agent-device/contracts').DaemonResponseData>`,
+  bridgeErrorToDaemonResponse: `(error: unknown) => import('agent-device/contracts').DaemonResponse`,
 };
-
-// Pre-existing gaps this check surfaced that are out of scope for #1463 to fix
-// (they predate this PR and touch unrelated public API surface, not the new
-// examples): flagged for the maintainer rather than silently patched. Remove
-// an entry once the underlying gap is closed.
-const KNOWN_DOC_GAPS = [
-  // "Remote Metro helpers": prepareRemoteMetro/reloadRemoteMetro/stopMetroTunnel
-  // aren't exported from `agent-device/metro`, and resolveRemoteConfigProfile
-  // isn't exported from `agent-device/remote-config` — the doc documents a
-  // public surface neither subpath's src/sdk/*.ts re-exports today.
-  `Module '"agent-device/metro"' has no exported member 'prepareRemoteMetro'`,
-  `Module '"agent-device/metro"' has no exported member 'reloadRemoteMetro'`,
-  `Module '"agent-device/metro"' has no exported member 'stopMetroTunnel'`,
-  `'"agent-device/remote-config"' has no exported member named 'resolveRemoteConfigProfile'`,
-  // "Web sessions" / audio probe: NetworkOptions/AudioOptions have no `platform`
-  // field, even though the CLI's `network`/`audio` commands accept `--platform`
-  // — the typed client's contracts are narrower than the CLI surface here.
-  `'platform' does not exist in type 'NetworkOptions'`,
-  `'platform' does not exist in type 'AudioOptions'`,
-];
 
 function writeSnippetProgram(snippets: string[]): string {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'client-api-doc-snippets-'));
@@ -112,44 +102,46 @@ function writeSnippetProgram(snippets: string[]): string {
 }
 
 function runTsc(tmpDir: string): string {
-  try {
-    execFileSync(
-      TSC_BIN,
-      ['--noEmit', '-p', path.join(tmpDir, 'tsconfig.json'), '--pretty', 'false'],
-      {
-        encoding: 'utf8',
-        cwd: tmpDir,
-      },
-    );
-    return '';
-  } catch (error) {
-    const { stdout, stderr } = error as { stdout?: string; stderr?: string };
-    return `${stdout ?? ''}${stderr ?? ''}`;
-  }
+  const result = runCmdSync(
+    TSC_BIN,
+    ['--noEmit', '-p', path.join(tmpDir, 'tsconfig.json'), '--pretty', 'false'],
+    { cwd: tmpDir, allowFailure: true },
+  );
+  return `${result.stdout}${result.stderr}`;
 }
 
-// One auto-stub pass: for every "Cannot find name 'X'" diagnostic, declare `X`
-// (typed precisely if it's a known SDK-derived continuation, `any` otherwise)
-// at the top of that snippet file and recompile. A missing/renamed *import*
-// binding is a different diagnostic code and is never suppressed this way.
-function stubFreeNamesAndRecompile(tmpDir: string, firstPassOutput: string): string {
+// Finds every "Cannot find name 'X'" diagnostic where `X` is in
+// KNOWN_FREE_NAME_STUB_TYPES, grouped by snippet file. Any other free name —
+// anything not in that explicit allowlist — is deliberately left out here, so
+// its diagnostic survives untouched into the final output and fails the
+// check. A missing/renamed *import* binding is a different diagnostic code
+// and is never matched by this regex either way.
+function findKnownFreeNamesByFile(tscOutput: string): Map<string, Set<string>> {
   const freeNamesByFile = new Map<string, Set<string>>();
-  for (const line of firstPassOutput.split('\n')) {
+  for (const line of tscOutput.split('\n')) {
     const match = /^(snippet-\d+\.ts)\(\d+,\d+\): error TS2304: Cannot find name '([^']+)'/.exec(
       line,
     );
-    if (match?.[1] && match[2]) {
+    const name = match?.[2];
+    if (match?.[1] && name && name in KNOWN_FREE_NAME_STUB_TYPES) {
       const names = freeNamesByFile.get(match[1]) ?? new Set<string>();
-      names.add(match[2]);
+      names.add(name);
       freeNamesByFile.set(match[1], names);
     }
   }
+  return freeNamesByFile;
+}
+
+// One auto-stub pass: declare each known free name at the top of its snippet
+// file (typed per KNOWN_FREE_NAME_STUB_TYPES) and recompile.
+function stubFreeNamesAndRecompile(tmpDir: string, firstPassOutput: string): string {
+  const freeNamesByFile = findKnownFreeNamesByFile(firstPassOutput);
   if (freeNamesByFile.size === 0) return firstPassOutput;
 
   for (const [fileName, names] of freeNamesByFile) {
     const filePath = path.join(tmpDir, fileName);
     const stubs = [...names]
-      .map((name) => `declare const ${name}: ${KNOWN_CONTINUATION_STUB_TYPES[name] ?? 'any'};`)
+      .map((name) => `declare const ${name}: ${KNOWN_FREE_NAME_STUB_TYPES[name]};`)
       .join('\n');
     fs.writeFileSync(
       filePath,
@@ -163,8 +155,7 @@ function compileDocSnippets(snippets: string[]): string[] {
   const tmpDir = writeSnippetProgram(snippets);
   try {
     const output = stubFreeNamesAndRecompile(tmpDir, runTsc(tmpDir));
-    const diagnosticLines = output.split('\n').filter((line) => /error TS\d+:/.test(line));
-    return diagnosticLines.filter((line) => !KNOWN_DOC_GAPS.some((gap) => line.includes(gap)));
+    return output.split('\n').filter((line) => /error TS\d+:/.test(line));
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -183,8 +174,21 @@ test("every fenced ```ts snippet in client-api.md compiles against agent-device'
     [],
     `A \`\`\`ts snippet in ${CLIENT_API_DOC_PATH} no longer compiles against agent-device's real ` +
       `exports:\n${failures.join('\n')}\n` +
-      'Fix the snippet to match the current API, or update the SDK if the doc was right and the ' +
-      'API regressed. If this is a new, deliberately out-of-scope gap, add it to KNOWN_DOC_GAPS ' +
-      'with a comment explaining why.',
+      'Fix the snippet to match the current API, or fix the actual exported contract if the doc ' +
+      'was right and the API regressed.',
+  );
+});
+
+test('rejects an unrecognized free identifier instead of silently stubbing it (e.g. a typo of `client`)', () => {
+  const failures = compileDocSnippets([
+    "import { createAgentDeviceClient } from 'agent-device';\n\n" +
+      "const client = createAgentDeviceClient({ session: 'qa-ios' });\n" +
+      "await cliet.apps.open({ app: 'com.example.app', platform: 'ios' });\n",
+  ]);
+  assert.ok(
+    failures.some((line) => line.includes("Cannot find name 'cliet'")),
+    `Expected a "Cannot find name 'cliet'" failure for an unrecognized free identifier, got: ` +
+      `${JSON.stringify(failures)}. If this fails, stubFreeNamesAndRecompile is stubbing names ` +
+      'outside its explicit allowlist again.',
   );
 });
