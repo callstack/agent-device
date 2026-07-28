@@ -27,6 +27,13 @@ ${question}`;
 // synthetic '--help:first30' first-screen slice. Topic coverage is enforced by
 // scripts/__tests__/help-conformance-topic-coverage.test.ts: a new help topic
 // needs a case here or an explicit waiver there.
+//
+// A case whose quoted output is a rendered error declares
+// `recovery: { code, sample }` — the error code the case teaches recovery from
+// and the pinned sample it quotes. That marking is what
+// scripts/__tests__/help-conformance-error-recovery-coverage.test.ts counts as
+// coverage (a bare mention of an error code in prose is not a quiz), and it is
+// how the gate proves the quoted text is verbatim sample output.
 export const CASES = [
   {
     id: 'raw-first-screen-bluesky',
@@ -374,6 +381,7 @@ Use the output already shown to determine whether the feed-search UI is present,
   {
     id: 'sample-output-device-in-use-reuses-session',
     docs: ['--help:first30'],
+    recovery: { code: 'DEVICE_IN_USE', sample: DEVICE_IN_USE_SAMPLE },
     task: quiz(
       DEVICE_IN_USE_SAMPLE,
       'You are continuing the checkout flow that the "checkout" session was already running on this device. What command should run next?',
@@ -395,6 +403,7 @@ Use the output already shown to determine whether the feed-search UI is present,
   {
     id: 'sample-output-stale-ref-resnapshots',
     docs: ['--help:first30'],
+    recovery: { code: 'COMMAND_FAILED', sample: STALE_REF_SAMPLE },
     task: quiz(
       STALE_REF_SAMPLE,
       'The Continue control this ref pointed at may have moved. What command should run next?',
@@ -415,6 +424,7 @@ Use the output already shown to determine whether the feed-search UI is present,
   {
     id: 'sample-output-ambiguous-match-reobserves',
     docs: ['--help:first30'],
+    recovery: { code: 'AMBIGUOUS_MATCH', sample: AMBIGUOUS_MATCH_SAMPLE },
     task: quiz(
       AMBIGUOUS_MATCH_SAMPLE,
       'The intent is to follow the @callstack.com account row. The candidate refs were not shown. What command should run next?',
@@ -441,6 +451,7 @@ Use the output already shown to determine whether the feed-search UI is present,
   {
     id: 'sample-output-app-not-installed-discovers-first',
     docs: ['--help:first30'],
+    recovery: { code: 'APP_NOT_INSTALLED', sample: APP_NOT_INSTALLED_SAMPLE },
     task: quiz(
       APP_NOT_INSTALLED_SAMPLE,
       'The goal is still to open the shop app on this simulator; no build artifact was provided. What command should run next?',

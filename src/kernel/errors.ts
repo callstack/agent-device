@@ -219,21 +219,32 @@ function stripDiagnosticMeta(
 }
 
 /**
- * Conservative retriability policy for the Phase 2 typed-error graft. Returns
- * `true` only for codes that are clearly transient (a retry can succeed without
- * the caller changing anything) and `undefined` for ambiguous/deterministic
- * codes — so the error wire shape is unchanged unless we have a confident answer.
- * Intentionally small; extend as codes gain a clear retriability verdict.
+ * Conservative retriability policy for the Phase 2 typed-error graft. A code is
+ * listed only when the verdict is clear (a retry can succeed without the caller
+ * changing anything, or it definitely cannot); unlisted codes stay `undefined`
+ * so the error wire shape is unchanged unless we have a confident answer.
+ *
+ * Keyed by `KnownAppErrorCode`, so a verdict cannot be given to a code the
+ * registry does not enumerate — that would classify a code as retriable while
+ * escaping the gate that requires a recovery quiz for it.
+ */
+const RETRIABILITY_BY_CODE: Partial<Record<KnownAppErrorCode, boolean>> = {
+  // The device is healthy but currently leased/busy — the same request can
+  // succeed once it frees up.
+  DEVICE_IN_USE: true,
+};
+
+function isKnownAppErrorCode(code: string): code is KnownAppErrorCode {
+  return (KNOWN_APP_ERROR_CODES as readonly string[]).includes(code);
+}
+
+/**
+ * The retriability verdict for a code, or `undefined` when there is none —
+ * including for every daemon/runner-originated code outside
+ * `KNOWN_APP_ERROR_CODES`, which cannot carry a verdict at all.
  */
 export function retriableForErrorCode(code: string): boolean | undefined {
-  switch (code) {
-    // The device is healthy but currently leased/busy — the same request can
-    // succeed once it frees up.
-    case 'DEVICE_IN_USE':
-      return true;
-    default:
-      return undefined;
-  }
+  return isKnownAppErrorCode(code) ? RETRIABILITY_BY_CODE[code] : undefined;
 }
 
 export function defaultHintForCode(code: string): string | undefined {

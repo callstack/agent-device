@@ -1,10 +1,9 @@
-import fs from 'node:fs';
 import assert from 'node:assert/strict';
-import { join } from 'node:path';
 import { test } from 'vitest';
 import { CASES } from '../help-conformance-cases.mjs';
 import type { CapturedSample } from '../help-conformance-sample-outputs.mjs';
 import * as samples from '../help-conformance-sample-outputs.mjs';
+import { SAMPLE_PRODUCERS } from './help-conformance-sample-producers.ts';
 import {
   defaultHintForCode,
   KNOWN_APP_ERROR_CODES,
@@ -12,17 +11,15 @@ import {
 } from '../../src/kernel/errors.ts';
 
 // "What enumerates N" for the error surface. The benchmark's recovery quizzes
-// (a captured `Error (CODE)` output plus "what runs next?") are keyed to the
+// (a pinned rendered error plus "what command runs next?") are keyed to the
 // error registry itself, so the two error-side policies cannot drift from the
 // cases silently:
-//   - a code `retriableForErrorCode` classifies is one an agent is told to
-//     retry, so the bench must show whether a model actually recovers from it;
-//   - a code with no specific `defaultHintForCode` entry falls back to generic
+//   - a code retriableForErrorCode classifies is one an agent is told to retry,
+//     so the bench must show whether a model actually recovers from it;
+//   - a code with no specific defaultHintForCode entry falls back to generic
 //     "retry with --debug" guidance, which is a decision, not a default.
 // Uncovered codes need a named waiver below, and a waiver fails once it goes
 // stale — the same shape as the help-topic gate.
-
-const PINNING_TEST_FILE = 'help-conformance-sample-outputs.test.ts';
 
 /** Recovery-quiz waivers, keyed by error code: why the code is unbenchmarked. */
 const WAIVED_RECOVERY_QUIZ_CODES: Record<string, string> = {};
@@ -37,41 +34,58 @@ const WAIVED_GENERIC_HINT_CODES: Record<string, string> = {
 };
 
 // Human error rendering (src/utils/output.ts printHumanError) opens with
-// `Error (CODE): message`, so a quoted error sample names its own code.
-const QUOTED_ERROR_CODE = /(?:^|\n)Error \(([A-Z_]+)\):/g;
+// `Error (CODE): message`, so any rendered error text names its own code.
+const RENDERED_ERROR_CODE = /(?:^|\n)Error \(([A-Z_]+)\):/g;
 
-const CAPTURED_SAMPLES: [string, CapturedSample][] = Object.entries(samples).filter(
-  (entry): entry is [string, CapturedSample] => typeof entry[1] === 'object' && entry[1] !== null,
+type RecoveryCase = {
+  id: string;
+  task: string;
+  expectations?: string[];
+  matchers?: { id: string; pattern: RegExp }[];
+  forbidden?: { id: string; pattern: RegExp }[];
+  recovery: { code: string; sample: CapturedSample };
+};
+
+function renderedErrorCodes(text: string): string[] {
+  return [...`\n${text}`.matchAll(RENDERED_ERROR_CODE)].map((match) => match[1]!);
+}
+
+/** The cases that declare themselves recovery quizzes (see the cases module). */
+const RECOVERY_CASES: RecoveryCase[] = CASES.filter(
+  (testCase: { recovery?: unknown }): testCase is RecoveryCase => testCase.recovery !== undefined,
 );
 
-function quotedErrorCodes(text: string): string[] {
-  return [...text.matchAll(QUOTED_ERROR_CODE)].map((match) => match[1]!);
-}
-
-/** Error codes an agent is quizzed on recovering from, derived from the cases. */
-function quizzedErrorCodes(): Set<string> {
-  return new Set(CASES.flatMap((testCase) => quotedErrorCodes(testCase.task)));
-}
+const QUIZZED_CODES = new Set(RECOVERY_CASES.map((testCase) => testCase.recovery.code));
 
 test('every code with a retriability verdict has a recovery quiz or an explicit waiver', () => {
-  const quizzed = quizzedErrorCodes();
   const classified = KNOWN_APP_ERROR_CODES.filter(
     (code) => retriableForErrorCode(code) !== undefined,
   );
   assert.ok(classified.length > 0, 'retriableForErrorCode classifies at least one code');
   const uncovered = classified.filter(
-    (code) => !quizzed.has(code) && !(code in WAIVED_RECOVERY_QUIZ_CODES),
+    (code) => !QUIZZED_CODES.has(code) && !(code in WAIVED_RECOVERY_QUIZ_CODES),
   );
   assert.deepEqual(
     uncovered,
     [],
-    'a code retriableForErrorCode classifies needs a recovery-quiz case in scripts/help-conformance-cases.mjs (quoting a pinned sample) or a waiver above',
+    'a code retriableForErrorCode classifies needs a recovery-quiz case in scripts/help-conformance-cases.mjs (declaring recovery: { code, sample }) or a waiver above',
   );
+});
+
+test('retriability cannot be claimed for a code outside the enumeration', () => {
+  // Otherwise a new retriable code could be classified in production and still
+  // escape the coverage gate above by never entering KNOWN_APP_ERROR_CODES.
+  for (const unenumerated of ['RUNNER_BUSY', 'DEVICE_IN_USE_SOON', 'device_in_use', '']) {
+    assert.equal(
+      retriableForErrorCode(unenumerated),
+      undefined,
+      `"${unenumerated}" is not in KNOWN_APP_ERROR_CODES, so it must not carry a retriability verdict — add it to the enumeration (and quiz it) instead`,
+    );
+  }
 });
 
 test('recovery-quiz waivers only name real, classified, unquizzed codes', () => {
   const known = new Set<string>(KNOWN_APP_ERROR_CODES);
-  const quizzed = quizzedErrorCodes();
   for (const [code, reason] of Object.entries(WAIVED_RECOVERY_QUIZ_CODES)) {
     assert.ok(known.has(code), `waived code "${code}" no longer exists — remove the waiver`);
     assert.ok(
@@ -79,48 +93,91 @@ test('recovery-quiz waivers only name real, classified, unquizzed codes', () => 
       `waived code "${code}" is no longer classified by retriableForErrorCode — remove the waiver`,
     );
     assert.ok(
-      !quizzed.has(code),
+      !QUIZZED_CODES.has(code),
       `waived code "${code}" now has a recovery quiz — remove the waiver`,
     );
     assert.ok(reason.trim().length > 0, `waiver for "${code}" needs a reason`);
   }
 });
 
-test('every quiz-quoted error code is a real error code', () => {
+test('every recovery case quizzes a real code through the pinned sample that renders it', () => {
   const known = new Set<string>(KNOWN_APP_ERROR_CODES);
-  for (const testCase of CASES) {
-    for (const code of quotedErrorCodes(testCase.task)) {
-      assert.ok(
-        known.has(code),
-        `case "${testCase.id}" quotes error code "${code}", which is not in KNOWN_APP_ERROR_CODES — a renamed or invented code`,
-      );
-    }
+  const exported = new Map<CapturedSample, string>(
+    Object.entries(samples)
+      .filter((entry): entry is [string, CapturedSample] => typeof entry[1] === 'object')
+      .map(([name, sample]) => [sample, name]),
+  );
+  for (const testCase of RECOVERY_CASES) {
+    const { code, sample } = testCase.recovery;
+    assert.ok(
+      known.has(code),
+      `case "${testCase.id}" claims recovery from "${code}", which is not in KNOWN_APP_ERROR_CODES — a renamed or invented code`,
+    );
+    assert.ok(
+      exported.has(sample),
+      `case "${testCase.id}" must quote a sample exported from scripts/help-conformance-sample-outputs.mjs, never an inline literal`,
+    );
+    assert.deepEqual(
+      renderedErrorCodes(sample.output),
+      [code],
+      `case "${testCase.id}" declares recovery from "${code}" but its sample renders a different error`,
+    );
+    assert.equal(
+      testCase.task.split(samples.sampleText(sample)).length,
+      2,
+      `case "${testCase.id}" must quote ${exported.get(sample)} verbatim, exactly once`,
+    );
   }
 });
 
-test('every quiz-quoted error output comes from a pinned sample, never hand-transcribed', () => {
-  for (const testCase of CASES) {
-    for (const code of quotedErrorCodes(testCase.task)) {
-      const source = CAPTURED_SAMPLES.find(
-        ([, sample]) =>
-          quotedErrorCodes(`\n${sample.output}`).includes(code) &&
-          testCase.task.includes(samples.sampleText(sample)),
-      );
-      assert.ok(
-        source,
-        `case "${testCase.id}" quotes ${code} output that is not a verbatim sample from scripts/help-conformance-sample-outputs.mjs — quoted output must be pinned to its real producer, never hand-transcribed`,
-      );
-    }
+test('a recovery case scores the recovery command, not just plan validity', () => {
+  for (const testCase of RECOVERY_CASES) {
+    assert.ok(
+      testCase.expectations?.includes('validPlanCommands'),
+      `case "${testCase.id}" must expect validPlanCommands`,
+    );
+    // Without these, "recovery" would be satisfied by any parseable plan — the
+    // point of an error quiz is which next command the error's hint implies,
+    // and which retry the error rules out.
+    assert.ok(
+      (testCase.matchers ?? []).length > 0,
+      `recovery case "${testCase.id}" needs at least one matcher asserting the recovery command`,
+    );
+    assert.ok(
+      (testCase.forbidden ?? []).length > 0,
+      `recovery case "${testCase.id}" needs at least one forbidden pattern for the failure mode this error rules out`,
+    );
   }
 });
 
-test('every captured sample is exercised by the sample-outputs pinning test', () => {
-  const pinningTest = fs.readFileSync(join(import.meta.dirname, PINNING_TEST_FILE), 'utf8');
-  for (const [name] of CAPTURED_SAMPLES) {
-    assert.match(
-      pinningTest,
-      new RegExp(`\\b${name}\\b`),
-      `sample ${name} is not referenced by ${PINNING_TEST_FILE} — rebuild it through the real producer instead of trusting the transcription`,
+test('no case quotes rendered error text outside a declared pinned sample', () => {
+  for (const testCase of CASES as {
+    id: string;
+    task: string;
+    recovery?: RecoveryCase['recovery'];
+  }[]) {
+    const pinned = testCase.recovery ? samples.sampleText(testCase.recovery.sample) : undefined;
+    const outsidePinned = pinned ? testCase.task.split(pinned).join('\n') : testCase.task;
+    assert.deepEqual(
+      renderedErrorCodes(outsidePinned),
+      [],
+      `case "${testCase.id}" quotes rendered error text that is not part of its declared pinned sample — quoted output must come from scripts/help-conformance-sample-outputs.mjs, never hand-transcribed`,
+    );
+    assert.doesNotMatch(
+      outsidePinned,
+      /(?:^|\n)Hint: /,
+      `case "${testCase.id}" quotes a rendered error hint outside its declared pinned sample`,
+    );
+  }
+});
+
+test('every captured sample is rebuilt through a real producer', () => {
+  const pinned = new Set(SAMPLE_PRODUCERS.map((producer) => producer.sample));
+  for (const [name, sample] of Object.entries(samples)) {
+    if (typeof sample !== 'object') continue;
+    assert.ok(
+      pinned.has(sample),
+      `sample ${name} has no entry in help-conformance-sample-producers.ts — captured output must be rebuilt through the real producer, never trusted as a transcription`,
     );
   }
 });
