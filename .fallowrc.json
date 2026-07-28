@@ -18,6 +18,7 @@
     "src/utils/png-worker.ts",
     "scripts/patch-xcuitest-runner-icon.ts",
     "scripts/runner-request-count/run.ts",
+    "scripts/lib/contention-retry-run.ts",
     "src/utils/update-check-entry.ts",
     "examples/sdk/client-session.ts",
     "examples/sdk/metro-runtime.ts",
@@ -75,6 +76,14 @@
         "BuiltinPluginsCoverAllPlatforms",
         "PlatformDescriptorsAreTotal",
         "GatedKeysAreResolverKeys"
+      ]
+    },
+    {
+      "comment": "Contention retry lane (#1419): the reporter default is loaded by Vitest from a `--reporter=<path>` string, and SUBPROCESS_STUB_TESTS is consumed by vitest.config.ts \u2014 a tool config outside --production analysis.",
+      "file": "scripts/lib/{contention-retry.ts,contention-retry-reporter.ts}",
+      "exports": [
+        "default",
+        "SUBPROCESS_STUB_TESTS"
       ]
     },
     {
