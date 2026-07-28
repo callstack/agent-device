@@ -16,17 +16,21 @@ import { findProvenanceKindViolations, requiredProvenanceKind } from './provenan
 const CORPUS_DIR = fileURLToPath(new URL('.', import.meta.url));
 
 /**
- * Every historical surface the corpus exists to hold still. A coverage tag with
- * no entry means the corpus stopped covering a compat surface #1417 named.
+ * Every historical surface the corpus exists to hold still. Keyed by the coverage
+ * union so the typechecker — not a hand-kept list — forces a new surface to be
+ * required here; a tag with no entry means the corpus stopped covering a compat
+ * surface #1417 named.
  */
-const REQUIRED_COVERAGE: ReplayCompatCoverage[] = [
-  'context-header',
-  'env-vars',
-  'quoting',
-  'retired-gesture',
-  'target-annotation',
-  'wait-landmark',
-];
+const REQUIRED_COVERAGE_KEYS: Record<ReplayCompatCoverage, true> = {
+  'context-header': true,
+  'env-vars': true,
+  quoting: true,
+  'retired-gesture': true,
+  'target-annotation': true,
+  'wait-landmark': true,
+};
+
+const REQUIRED_COVERAGE = Object.keys(REQUIRED_COVERAGE_KEYS) as ReplayCompatCoverage[];
 
 function readCorpusScript(entry: ReplayCompatEntry): Buffer {
   return readFileSync(join(CORPUS_DIR, entry.file));
@@ -133,6 +137,10 @@ describe('replay-compat corpus', () => {
   // say which form or refusal it is the sole witness of, and the count stays a
   // reviewable set of deliberate entries rather than a mirror of the replay
   // fixtures. Raising the ceiling is allowed; doing it silently is not.
+  //
+  // 30 is headroom over the 22 witnesses the shipped grammar needs today: enough
+  // for the next few retirements without another pruning pass, small enough that
+  // a re-mirrored fixture tree (52 entries at first cut) cannot land quietly.
   test('every entry states why it exists, and the corpus stays small', () => {
     for (const entry of REPLAY_COMPAT_CORPUS) {
       expect(entry.note.trim(), entry.id).not.toBe('');

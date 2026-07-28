@@ -55,7 +55,10 @@ surface, and `provenance` pins the bytes:
   checked-in bytes and must reproduce that id, so a rewritten script cannot be made green by editing
   the manifest to match — the id is only obtainable from the released content.
 - `derived` entries (`scripts/docs/`) have no historical blob to point at, so their bytes are pinned
-  by SHA-256.
+  by SHA-256. Only the bytes are machine-checked: the `from` citation naming the released grammar or
+  doc that emitted the surface is **reviewer-verified**, so a derived entry has to be reviewed against
+  its cited source at that tag (`git show <tag>:<path>`) before it lands. Never hand-transcribe a
+  hint or a form — copy it from the release.
 
 The kind is not a free choice: `provenance-rules.ts` fixes it by corpus area (`scripts/integration/`
 and `scripts/examples/` must stay `mined`, `scripts/docs/` is `derived`), so an edited script cannot
