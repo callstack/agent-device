@@ -213,7 +213,7 @@ export const SUBPROCESS_STUB_TESTS: readonly string[] = CONTENTION_RETRY_FILES.f
   (entry) => entry.serializedStub,
 ).map((entry) => entry.file);
 
-export function isRetryEligibleFile(file: string): boolean {
+function isRetryEligibleFile(file: string): boolean {
   return CONTENTION_RETRY_FILES.some((entry) => entry.file === normalizeTestFile(file));
 }
 
@@ -255,6 +255,41 @@ export type TestFailure = {
   testName: string;
   message: string;
 };
+
+/**
+ * Failures from Vitest's JSON reporter, narrowed at the trust boundary. A run
+ * that dies before writing a report parses to zero failures, which the policy
+ * reads as "nothing retry-eligible": the job fails, the safe direction.
+ */
+export function parseVitestFailures(report: unknown, repoRoot?: string): readonly TestFailure[] {
+  const suites = (report as { testResults?: unknown }).testResults;
+  if (!Array.isArray(suites)) return [];
+  return suites.flatMap((suite) => suiteFailures(suite, repoRoot));
+}
+
+function suiteFailures(suite: unknown, repoRoot: string | undefined): TestFailure[] {
+  const { name, assertionResults } = suite as { name?: unknown; assertionResults?: unknown };
+  if (typeof name !== 'string' || !Array.isArray(assertionResults)) return [];
+  const file = normalizeTestFile(name, repoRoot);
+  return assertionResults
+    .map((assertion) => assertionFailure(file, assertion))
+    .filter((failure) => failure !== undefined);
+}
+
+function assertionFailure(file: string, assertion: unknown): TestFailure | undefined {
+  const { status, fullName, failureMessages } = assertion as {
+    status?: unknown;
+    fullName?: unknown;
+    failureMessages?: unknown;
+  };
+  if (status !== 'failed') return undefined;
+  const messages = Array.isArray(failureMessages) ? failureMessages : [];
+  return {
+    file,
+    testName: typeof fullName === 'string' ? fullName : 'unknown test',
+    message: messages.filter((message) => typeof message === 'string').join('\n'),
+  };
+}
 
 export type RetryPlan =
   | { retry: false; reason: string; blocked: readonly TestFailure[] }

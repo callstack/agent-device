@@ -13,7 +13,7 @@ import path from 'node:path';
 import { runCmdStreaming, runCmdSync } from '../../src/utils/exec.ts';
 import { parseScriptArgs } from './cli-args.ts';
 import { runWithContentionRetry, type TestRun } from './contention-retry-lane.ts';
-import { normalizeTestFile, type TestFailure } from './contention-retry.ts';
+import { parseVitestFailures, type TestFailure } from './contention-retry.ts';
 
 const USAGE = `Usage: node --experimental-strip-types scripts/lib/contention-retry-run.ts [options]
 
@@ -60,40 +60,9 @@ async function runVitest(extra: string[], report: string): Promise<TestRun> {
   return { ok: result.exitCode === 0, failures: readFailures(report) };
 }
 
-/**
- * Vitest's JSON reporter, narrowed at the trust boundary. A run that dies before
- * writing a report yields no failures, which the policy reads as "nothing
- * retry-eligible" — the job fails, which is the safe direction.
- */
 function readFailures(report: string): readonly TestFailure[] {
   if (!fs.existsSync(report)) return [];
-  const parsed: unknown = JSON.parse(fs.readFileSync(report, 'utf8'));
-  const suites = (parsed as { testResults?: unknown }).testResults;
-  if (!Array.isArray(suites)) return [];
-  const failures: TestFailure[] = [];
-  for (const suite of suites) {
-    const { name, assertionResults } = suite as {
-      name?: unknown;
-      assertionResults?: unknown;
-    };
-    if (typeof name !== 'string' || !Array.isArray(assertionResults)) continue;
-    for (const assertion of assertionResults) {
-      const { status, fullName, title, failureMessages } = assertion as {
-        status?: unknown;
-        fullName?: unknown;
-        title?: unknown;
-        failureMessages?: unknown;
-      };
-      if (status !== 'failed') continue;
-      const messages = Array.isArray(failureMessages) ? failureMessages : [];
-      failures.push({
-        file: normalizeTestFile(name, repoRoot),
-        testName: typeof fullName === 'string' ? fullName : String(title ?? 'unknown test'),
-        message: messages.filter((message) => typeof message === 'string').join('\n'),
-      });
-    }
-  }
-  return failures;
+  return parseVitestFailures(JSON.parse(fs.readFileSync(report, 'utf8')), repoRoot);
 }
 
 function vitestVersion(): string {

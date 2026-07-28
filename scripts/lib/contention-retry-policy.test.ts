@@ -13,6 +13,7 @@ import {
   expiredRetryEntries,
   formatRetrySummary,
   isTimeoutShapedFailure,
+  parseVitestFailures,
   planContentionRetry,
   SUBPROCESS_STUB_TESTS,
   type TestFailure,
@@ -115,6 +116,31 @@ test('timeout shapes are recognized and assertion failures are not', () => {
   assert.ok(isTimeoutShapedFailure('Error: Hook timed out in 10000 ms.'));
   assert.ok(!isTimeoutShapedFailure(ASSERTION_MESSAGE));
   assert.ok(!isTimeoutShapedFailure('Error: expected timeout hint to be set'));
+});
+
+test('vitest JSON failures are read as absolute paths, names, and messages', () => {
+  const failures = parseVitestFailures(
+    {
+      testResults: [
+        {
+          name: `${repoRoot}/${LISTED}`,
+          assertionResults: [
+            { status: 'passed', fullName: 'closes a session', failureMessages: [] },
+            { status: 'failed', fullName: 'opens a session', failureMessages: [TIMEOUT_MESSAGE] },
+          ],
+        },
+        { name: 'broken-suite' },
+      ],
+    },
+    repoRoot,
+  );
+  assert.deepEqual(failures, [failure()]);
+});
+
+test('an unreadable report yields no retry-eligible failures', () => {
+  assert.deepEqual(parseVitestFailures({}, repoRoot), []);
+  assert.deepEqual(parseVitestFailures({ testResults: 'nope' }, repoRoot), []);
+  assert.equal(planContentionRetry([]).retry, false);
 });
 
 test('a timeout in a listed file retries exactly that file, once', () => {
