@@ -96,6 +96,7 @@ function configHash(): string {
     'scripts/lib/contention-retry.ts',
     'scripts/lib/contention-retry-reporter.ts',
     'scripts/lib/contention-retry-blockers.ts',
+    'scripts/lib/run-blocker-bus.ts',
   ]) {
     hash.update(fs.readFileSync(path.join(repoRoot, file)));
   }

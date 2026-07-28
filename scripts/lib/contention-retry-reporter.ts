@@ -15,7 +15,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Reporter, TestCase, TestModule } from 'vitest/node';
-import { isVitestTimeoutError, type RunBlocker, type TestFailure } from './contention-retry.ts';
+import { isRunnerTimeout, type RunBlocker, type TestFailure } from './contention-retry.ts';
+import { drainRunBlockers } from './run-blocker-bus.ts';
 
 export const FAILURE_FILE_ENV = 'CONTENTION_RETRY_FAILURES';
 
@@ -30,25 +31,34 @@ export function failedTestCase(testCase: TestCase): TestFailure | null {
     file: (testCase.module as TestModule).moduleId,
     testName: testCase.fullName,
     message: errors.map((error) => `${error.name}: ${error.message}`).join('\n'),
-    // Every error must be a runner timeout: a test that timed out *and* failed
-    // an assertion is not retry-eligible.
-    timeout: errors.length > 0 && errors.every((error) => isVitestTimeoutError(error)),
+    // Decided from runner metadata (budget consumed) plus the error shape, so
+    // test code cannot forge it; a test that timed out *and* failed an assertion
+    // is not retry-eligible either.
+    timeout: isRunnerTimeout(errors, {
+      timeoutMs: testCase.options.timeout,
+      durationMs: testCase.diagnostic()?.duration,
+    }),
   };
 }
 
 /**
- * Failures that no rerun of the failed files can re-check: unhandled errors, and
- * modules that failed outside a test case (import/setup/teardown errors, which
- * report no failed test at all).
+ * Failures that no rerun of the failed files can re-check: verdicts published by
+ * other gate reporters, unhandled errors, and modules that failed outside a test
+ * case (import/setup/teardown errors, which report no failed test at all).
  */
 export function runBlockers(
   testModules: readonly TestModule[],
   unhandledErrors: readonly { name?: unknown; message?: unknown }[],
 ): RunBlocker[] {
-  const blockers: RunBlocker[] = unhandledErrors.map((error) => ({
-    kind: 'unhandled error',
-    detail: `${String(error.name ?? 'Error')}: ${String(error.message ?? '')}`.split('\n')[0] ?? '',
-  }));
+  // Gate reporters that fail the run without failing a test publish here.
+  const blockers: RunBlocker[] = drainRunBlockers();
+  for (const error of unhandledErrors) {
+    blockers.push({
+      kind: 'unhandled error',
+      detail:
+        `${String(error.name ?? 'Error')}: ${String(error.message ?? '')}`.split('\n')[0] ?? '',
+    });
+  }
   for (const testModule of testModules) {
     for (const error of testModule.errors()) {
       blockers.push({

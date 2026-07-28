@@ -392,16 +392,23 @@ the retry policy cannot drift apart.
 The CI Coverage job runs the suite through `pnpm test:coverage:ci`
 (`scripts/lib/contention-retry-run.ts`), which applies one rule:
 
-- **Timeouts only, classified structurally.** A rerun happens only when *every* failure in the run is
-  a timeout raised by the runner itself **and** lands in a listed file. The lane's own reporter
-  (`scripts/lib/contention-retry-reporter.ts`) classifies the live error object — Vitest's exact
-  timeout template, a plain `Error`, no `expected`/`actual` — so an assertion whose *message*
-  mentions a timeout cannot opt itself into a retry. One assertion failure — in a listed file or not
-  — fails the job on the first run, so a real regression can never be papered over by a retry.
+- **Timeouts only, decided from runner metadata.** A rerun happens only when *every* failure in the
+  run is a test the runner itself aborted, in a listed file. Eligibility keys on structured runner
+  facts test code cannot author (`isRunnerTimeout`): the test must have consumed its whole configured
+  budget — `TestCase.options.timeout` versus `diagnostic().duration` — with Vitest's timeout template
+  and a diff-free plain `Error` required as corroboration. A hand-thrown `Error` carrying the exact
+  timeout message returns long before the budget and is refused; a test that really does run to its
+  budget is aborted by the runner, so the error is the runner's. One assertion failure — in a listed
+  file or not — fails the job on the first run, so a real regression can never be papered over.
 - **Anything a rerun cannot re-check blocks the retry.** Unhandled errors, module load/setup errors,
   a coverage-threshold miss, or a nonzero exit no failed test explains are recorded as blockers
   (`scripts/lib/contention-retry-blockers.ts`) and fail the job, so a green retry can never erase a
   second, unrelated failure from the same run.
+- **Gates that fail a run without failing a test publish structurally.** A reporter-level verdict
+  (the slow-test ratchet setting `process.exitCode = 1`) is invisible in test results, so it is
+  recorded on the shared blocker channel `scripts/lib/run-blocker-bus.ts`; the retry lane's failure
+  sink drains it and refuses the rerun. **Any new gate reporter must call `recordRunBlocker`**, and
+  must be ordered before the sink in `reporters()`.
 - **One retry, of the failed files only.** Not the suite, and never twice. Two timed-out tests in one
   file are one retry, and count as one.
 - **Retries stay visible.** Every retried file is named in the job summary with its tracking issue

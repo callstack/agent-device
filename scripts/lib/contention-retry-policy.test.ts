@@ -18,7 +18,7 @@ import {
   CONTENTION_RETRY_FILES,
   expiredRetryEntries,
   formatRetrySummary,
-  isVitestTimeoutError,
+  isRunnerTimeout,
   parseFailureReport,
   planContentionRetry,
   SUBPROCESS_STUB_TESTS,
@@ -51,13 +51,22 @@ function assertionFailure(overrides: Partial<TestFailure> = {}): TestFailure {
   return failure({ message: ASSERTION_MESSAGE, timeout: false, ...overrides });
 }
 
-function testCaseStub(errors: ReadonlyArray<Record<string, unknown>>, state = 'failed'): unknown {
+const TIMEOUT_MS = 5000;
+
+function testCaseStub(
+  errors: ReadonlyArray<Record<string, unknown>>,
+  overrides: { state?: string; timeoutMs?: number; durationMs?: number } = {},
+): unknown {
   return {
     fullName: 'opens a session',
     module: { moduleId: `${repoRoot}/${LISTED}` },
-    result: () => ({ state, errors }),
+    options: { timeout: overrides.timeoutMs ?? TIMEOUT_MS },
+    diagnostic: () => ({ duration: overrides.durationMs ?? TIMEOUT_MS + 4 }),
+    result: () => ({ state: overrides.state ?? 'failed', errors }),
   };
 }
+
+const RAN_TO_BUDGET = { timeoutMs: TIMEOUT_MS, durationMs: TIMEOUT_MS + 4 };
 
 function lane(runs: { first: TestRun; retry?: TestRun; today?: Date }): {
   result: ReturnType<typeof runWithContentionRetry>;
@@ -141,15 +150,26 @@ test('the expiry gate fails the run before any test executes', async () => {
   assert.deepEqual(rerun, []);
 });
 
-test("only the runner's own timeout error classifies as a timeout", () => {
-  assert.ok(isVitestTimeoutError(VITEST_TIMEOUT));
+test('only a test the runner aborted at its own budget classifies as a timeout', () => {
+  assert.ok(isRunnerTimeout([VITEST_TIMEOUT], RAN_TO_BUDGET));
   assert.ok(
-    isVitestTimeoutError({
-      name: 'Error',
-      message:
-        'Hook timed out in 10000ms.\nIf this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".',
-    }),
+    isRunnerTimeout(
+      [
+        {
+          name: 'Error',
+          message:
+            'Hook timed out in 10000ms.\nIf this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".',
+        },
+      ],
+      RAN_TO_BUDGET,
+    ),
   );
+  // Runner metadata is the primary evidence: test code cannot make its own
+  // failure consume the whole configured budget and still choose the error.
+  assert.ok(!isRunnerTimeout([VITEST_TIMEOUT], { timeoutMs: TIMEOUT_MS, durationMs: 12 }));
+  assert.ok(!isRunnerTimeout([VITEST_TIMEOUT], { timeoutMs: undefined, durationMs: 99_999 }));
+  assert.ok(!isRunnerTimeout([VITEST_TIMEOUT], { timeoutMs: 0, durationMs: 0 }));
+  assert.ok(!isRunnerTimeout([], RAN_TO_BUDGET));
   // An assertion must not be able to talk its way into a retry, whatever it says.
   for (const impostor of [
     { name: 'AssertionError', message: VITEST_TIMEOUT.message },
@@ -159,8 +179,23 @@ test("only the runner's own timeout error classifies as a timeout", () => {
     { name: 'Error', message: 'Closing timeout while tearing down the daemon' },
     { name: 'Error', message: VITEST_TIMEOUT.message, expected: 'OK', actual: 'DEVICE_IN_USE' },
   ]) {
-    assert.ok(!isVitestTimeoutError(impostor), `${impostor.name}: ${impostor.message}`);
+    assert.ok(!isRunnerTimeout([impostor], RAN_TO_BUDGET), `${impostor.name}: ${impostor.message}`);
   }
+});
+
+test('an exact-template Error thrown by the test itself never retries', async () => {
+  // The forgery the classifier must refuse: right name, right message, right
+  // shape — but the test returned long before its budget was up.
+  const forged = failedTestCase(
+    testCaseStub([{ name: 'Error', message: VITEST_TIMEOUT.message }], { durationMs: 7 }) as never,
+  );
+  assert.ok(forged);
+  assert.equal(forged.timeout, false, 'a hand-thrown timeout message is not a runner timeout');
+  const { result, rerun } = lane({ first: { ok: false, failures: [{ ...forged, file: LISTED }] } });
+  const resolved = await result;
+  assert.equal(resolved.ok, false);
+  assert.deepEqual(rerun, []);
+  assert.equal(resolved.envelope.data.retryCount, 0);
 });
 
 test('an assertion message quoting a timeout still fails on the first run', async () => {
@@ -194,7 +229,7 @@ test('the lane reporter keeps the real error message a timeout is classified by'
     message: TIMEOUT_MESSAGE,
     timeout: true,
   });
-  assert.equal(failedTestCase(testCaseStub([], 'passed') as never), null);
+  assert.equal(failedTestCase(testCaseStub([], { state: 'passed' }) as never), null);
 
   const target = path.join(repoRoot, '.tmp/contention-retry/reporter-gate.json');
   writeFailureReport({ failures: [failure()], blockers: [] }, target);
@@ -269,6 +304,43 @@ test('non-test failures block the retry instead of being rerun away', async () =
     assert.equal(resolved.envelope.data.retryCount, 0);
     assert.match(resolved.summary, /No retry: the run failed for a reason a rerun cannot re-check/);
   }
+});
+
+test('a gate that fails the run without failing a test blocks the retry', async () => {
+  const { default: slowTestGateReporter } = await import('../vitest-slow-test-reporter.ts');
+  const gate = slowTestGateReporter();
+  const exitCode = process.exitCode;
+  const stderr = console.error;
+  console.error = () => {};
+  try {
+    gate.onInit?.({ config: { root: repoRoot } } as never);
+    // Passing, but far past the unit budget: no failed test, run must still fail.
+    gate.onTestCaseResult?.({
+      name: 'INJECTED slow test',
+      fullName: 'INJECTED slow test',
+      module: { moduleId: `${repoRoot}/${LISTED}` },
+      diagnostic: () => ({ duration: 30_000 }),
+      result: () => ({ state: 'passed', errors: [] }),
+    } as never);
+    gate.onTestRunEnd?.([] as never, [] as never, 'failed' as never);
+  } finally {
+    console.error = stderr;
+    process.exitCode = exitCode;
+  }
+  // The gate published its verdict on the shared channel; the sink drains it.
+  const blockers = runBlockers([], []);
+  assert.deepEqual(
+    blockers.map((blocker) => blocker.kind),
+    ['slow-test gate'],
+  );
+  assert.deepEqual(runBlockers([], []), [], 'draining is one-shot');
+
+  // A retry-eligible timeout in the same run must not rerun the gate away.
+  const { result, rerun } = lane({ first: { ok: false, failures: [failure()], blockers } });
+  const resolved = await result;
+  assert.equal(resolved.ok, false);
+  assert.deepEqual(rerun, []);
+  assert.match(resolved.summary, /slow-test gate/);
 });
 
 test('two timed-out tests in one file are one retry, counted once', async () => {
