@@ -17,23 +17,37 @@ const UPSTREAM_REPO_DIR = 'maestro-test/src/test/resources';
 
 const NOTES = {
   'bug-classes/percent-decimal-swipe': 'Bug class 1: decimal percentage rejection at parse.',
-  'bug-classes/target-swipe-missing-direction': 'Bug class 2: target swipe requires an explicit direction.',
-  'bug-classes/retry-over-cap': 'Bug class 3: retry maxRetries parses verbatim; the clamp is a layer-2 vector.',
-  'bug-classes/settle-after-tap': 'Bug class 4: plain tap; settle ordering is a layer-3 differential.',
+  'bug-classes/target-swipe-missing-direction':
+    'Bug class 2: target swipe requires an explicit direction.',
+  'bug-classes/retry-over-cap':
+    'Bug class 3: retry maxRetries parses verbatim; the clamp is a layer-2 vector.',
+  'bug-classes/settle-after-tap':
+    'Bug class 4: plain tap; settle ordering is a layer-3 differential.',
   'authored/runscript': 'Coverage: runScript file command (no self-contained upstream flow).',
   'authored/runflow-main': 'Coverage: runFlow file include + provenance.',
   'authored/runflow-child': 'Include target for runflow-main (not parsed as a top-level flow).',
-  'authored/doubletap': 'Coverage: doubleTapOn (upstream 101 uses the unsupported retryTapIfNoChange option).',
-  'authored/scroll-until-visible': 'Coverage: scrollUntilVisible (upstream 079 uses unsupported speed/visibilityPercentage).',
-  'authored/extended-wait': 'Coverage: extendedWaitUntil (upstream 042 interpolates ${TIMEOUT} from a flow env block).',
-  'authored/repeat': 'Coverage: repeat.times (upstream 053 also uses the unsupported evalScript command).',
-  'authored/presskey': 'Coverage: pressKey supported keys (upstream 034 exercises many unsupported keycodes).',
-  'authored/numeric-variable-tap': 'Coverage: tapOn repeat/delay/index numeric option fields accept ${VAR} tokens (upstream rejects repeat/delay as integer-typed; agent-device is lenient).',
-  'authored/numeric-variable-doubletap': 'Coverage: doubleTapOn delay accepts a ${VAR} token (upstream rejects as integer-typed; agent-device is lenient).',
-  'authored/numeric-variable-swipe': 'Coverage: swipe duration accepts a ${VAR} token (upstream rejects as integer-typed; agent-device is lenient).',
-  'authored/numeric-variable-erase': 'Coverage: eraseText charactersToErase accepts a ${VAR} token (upstream rejects as integer-typed; agent-device is lenient).',
-  'authored/numeric-variable-tap-index': 'Coverage: tapOn index accepts a ${VAR} token and projects identically through the canonical model.',
-  'authored/numeric-variable-wait': 'Coverage: waitForAnimationToEnd timeout accepts a ${VAR} token and projects identically through the canonical model.',
+  'authored/doubletap':
+    'Coverage: doubleTapOn (upstream 101 uses the unsupported retryTapIfNoChange option).',
+  'authored/scroll-until-visible':
+    'Coverage: scrollUntilVisible (upstream 079 uses unsupported speed/visibilityPercentage).',
+  'authored/extended-wait':
+    'Coverage: extendedWaitUntil (upstream 042 interpolates ${TIMEOUT} from a flow env block).',
+  'authored/repeat':
+    'Coverage: repeat.times (upstream 053 also uses the unsupported evalScript command).',
+  'authored/presskey':
+    'Coverage: pressKey supported keys (upstream 034 exercises many unsupported keycodes).',
+  'authored/numeric-variable-tap':
+    'Coverage: tapOn repeat/delay/index numeric option fields accept ${VAR} tokens (upstream rejects repeat/delay as integer-typed; agent-device is lenient).',
+  'authored/numeric-variable-doubletap':
+    'Coverage: doubleTapOn delay accepts a ${VAR} token (upstream rejects as integer-typed; agent-device is lenient).',
+  'authored/numeric-variable-swipe':
+    'Coverage: swipe duration accepts a ${VAR} token (upstream rejects as integer-typed; agent-device is lenient).',
+  'authored/numeric-variable-erase':
+    'Coverage: eraseText charactersToErase accepts a ${VAR} token (upstream rejects as integer-typed; agent-device is lenient).',
+  'authored/numeric-variable-tap-index':
+    'Coverage: tapOn index accepts a ${VAR} token and projects identically through the canonical model.',
+  'authored/numeric-variable-wait':
+    'Coverage: waitForAnimationToEnd timeout accepts a ${VAR} token and projects identically through the canonical model.',
   'invalid/bad-swipe-direction': 'Lenient-guard: unknown SwipeDirection enum value.',
   'invalid/unknown-command': 'Lenient-guard: unknown command name (tapOn typo).',
   'invalid/malformed-selector': 'Lenient-guard: selector given as a sequence.',
@@ -46,7 +60,10 @@ const sha256 = (file) => createHash('sha256').update(fs.readFileSync(file)).dige
 
 const yamlIn = (dir) =>
   fs.existsSync(path.join(CORPUS_DIR, dir))
-    ? fs.readdirSync(path.join(CORPUS_DIR, dir)).filter((n) => n.endsWith('.yaml')).sort()
+    ? fs
+        .readdirSync(path.join(CORPUS_DIR, dir))
+        .filter((n) => n.endsWith('.yaml'))
+        .sort()
     : [];
 
 function entriesFor(dir, kind) {

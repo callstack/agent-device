@@ -1,13 +1,13 @@
-name: "Setup Android Replay Host"
-description: "Prepare the Android CI host for replay tests and expose the agent-device home path"
+name: 'Setup Android Replay Host'
+description: 'Prepare the Android CI host for replay tests and expose the agent-device home path'
 
 outputs:
   agent-home-dir:
-    description: "Resolved agent-device home directory"
+    description: 'Resolved agent-device home directory'
     value: ${{ steps.agent-home.outputs.dir }}
 
 runs:
-  using: "composite"
+  using: 'composite'
   steps:
     - name: Resolve agent-device home
       id: agent-home

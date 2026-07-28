@@ -112,7 +112,10 @@ function agentParseProgram(file: string): MaestroProgram | null {
   }
 }
 
-function agentParse(file: string): { status: 'parsed' | 'rejected'; commands?: CanonicalCommand[] } {
+function agentParse(file: string): {
+  status: 'parsed' | 'rejected';
+  commands?: CanonicalCommand[];
+} {
   const program = agentParseProgram(file);
   if (!program) return { status: 'rejected' };
   return { status: 'parsed', commands: canonicalizeAgentCommands(program) };
@@ -121,7 +124,12 @@ function agentParse(file: string): { status: 'parsed' | 'rejected'; commands?: C
 function classifyFlow(fixtureFlow: Layer1Fixture['flows'][number]): FlowResult {
   const agent = agentParse(fixtureFlow.file);
   const upstreamStatus = fixtureFlow.status;
-  const base = { id: fixtureFlow.id, file: fixtureFlow.file, upstreamStatus, agentStatus: agent.status };
+  const base = {
+    id: fixtureFlow.id,
+    file: fixtureFlow.file,
+    upstreamStatus,
+    agentStatus: agent.status,
+  };
 
   if (upstreamStatus === 'rejected') {
     return {
@@ -208,7 +216,10 @@ export function agentKindsByCorpus(): Set<string> {
   return kinds;
 }
 
-function collectKinds(commands: Array<{ kind: string; commands?: unknown }>, into: Set<string>): void {
+function collectKinds(
+  commands: Array<{ kind: string; commands?: unknown }>,
+  into: Set<string>,
+): void {
   for (const command of commands) {
     into.add(command.kind);
     const nested = (command as { commands?: Array<{ kind: string }> }).commands;
@@ -246,7 +257,9 @@ function report(): void {
   }
   console.log('\n### layer 2');
   for (const result of checkLayer2()) {
-    console.log(`  ${result.status.padEnd(14)} ${result.id} upstream=${result.upstream} agent=${result.agent ?? '-'}`);
+    console.log(
+      `  ${result.status.padEnd(14)} ${result.id} upstream=${result.upstream} agent=${result.agent ?? '-'}`,
+    );
   }
   console.log('\n### coverage gaps');
   for (const result of checkCoverage()) {

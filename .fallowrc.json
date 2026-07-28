@@ -33,16 +33,12 @@
     "scripts/write-xcuitest-cache-metadata.mjs",
     "scripts/help-conformance-sample-outputs.d.mts"
   ],
-  "ignoreDependencies": [
-    "@theme"
-  ],
+  "ignoreDependencies": ["@theme"],
   "ignoreExports": [
     {
       "comment": "Authoritative supported-command list; sole consumer is the conformance oracle (scripts/maestro-conformance, an ignored tooling tree).",
       "file": "src/compat/maestro/program-ir-command-parser.ts",
-      "exports": [
-        "SUPPORTED_MAESTRO_COMMAND_NAMES"
-      ]
+      "exports": ["SUPPORTED_MAESTRO_COMMAND_NAMES"]
     },
     {
       "comment": "Daemon route handlers are reached only through the dynamic `import()` table in request-handler-chain.ts, which --production analysis cannot follow to a consumer.",
@@ -60,16 +56,12 @@
     {
       "comment": "Published package surface (see package.json#exports); consumed by SDK users, not internally.",
       "file": "src/sdk/*.ts",
-      "exports": [
-        "*"
-      ]
+      "exports": ["*"]
     },
     {
       "comment": "Tool config default exports, loaded by the tool rather than imported.",
       "file": "{tsdown.config.ts,vitest.mutation.config.ts,website/rspress.config.ts,test/skillgym/skillgym.config.ts,test/skillgym/suites/*.ts}",
-      "exports": [
-        "default"
-      ]
+      "exports": ["default"]
     },
     {
       "comment": "Type-level `AssertTrue<...>` registry-totality guards. Exported only so `noUnusedLocals` keeps them alive; a consumer would defeat the point.",
@@ -84,34 +76,20 @@
     {
       "comment": "Mutation-lane seam: readTestScope is consumed by vitest.mutation.config.ts, a tool config outside --production analysis.",
       "file": "scripts/mutation/test-scope.ts",
-      "exports": [
-        "readTestScope"
-      ]
+      "exports": ["readTestScope"]
     },
     {
       "comment": "Mutation-lane completeness gate: ownedTestFiles enumerates the whole derived ownership map, which only the assertion in ownership.test.ts consumes — a production consumer would defeat the point.",
       "file": "scripts/mutation/ownership.ts",
-      "exports": [
-        "ownedTestFiles"
-      ]
+      "exports": ["ownedTestFiles"]
     },
     {
       "comment": "Help-benchmark conformance seams: helpTopicIds feeds the topic-coverage gate and PRIVATE_AX_RECOVERY_SAMPLE feeds the skillgym suite; both consumers are test-tree files outside --production analysis.",
       "file": "{src/cli/parser/cli-help.ts,scripts/help-conformance-sample-outputs.mjs}",
-      "exports": [
-        "helpTopicIds",
-        "PRIVATE_AX_RECOVERY_SAMPLE"
-      ]
+      "exports": ["helpTopicIds", "PRIVATE_AX_RECOVERY_SAMPLE"]
     }
   ],
-  "usedClassMembers": [
-    "name",
-    "listActiveLeases",
-    "delete",
-    "values",
-    "elapsedMs",
-    "isExpired"
-  ],
+  "usedClassMembers": ["name", "listActiveLeases", "delete", "values", "elapsedMs", "isExpired"],
   "rules": {
     "unused-types": "error",
     "duplicate-exports": "off"
@@ -119,9 +97,7 @@
   "production": {
     "dupes": true
   },
-  "publicPackages": [
-    "agent-device"
-  ],
+  "publicPackages": ["agent-device"],
   "audit": {
     "deadCodeBaseline": "fallow-baselines/dead-code.json",
     "healthBaseline": "fallow-baselines/health.json"

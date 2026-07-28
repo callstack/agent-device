@@ -20,9 +20,9 @@ on:
       - main
   pull_request:
     paths:
-      - "examples/test-app/**"
-      - ".github/workflows/test-app-build-cache.yml"
-      - ".github/actions/setup-fixture-app/**"
+      - 'examples/test-app/**'
+      - '.github/workflows/test-app-build-cache.yml'
+      - '.github/actions/setup-fixture-app/**'
   workflow_dispatch:
 
 permissions:

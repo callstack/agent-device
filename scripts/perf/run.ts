@@ -1,7 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseConfig, REPO_ROOT, usesSourceCli } from './config.ts';
-import { runScenario, setupIsolation, teardownIsolation, type IsolationContext } from './harness.ts';
+import {
+  runScenario,
+  setupIsolation,
+  teardownIsolation,
+  type IsolationContext,
+} from './harness.ts';
 import { writeReports } from './report.ts';
 import type { RunResult } from './types.ts';
 

@@ -4,5 +4,13 @@
   "trailingComma": "all",
   "printWidth": 100,
   "sortPackageJson": false,
-  "ignorePatterns": ["dist/**", "node_modules/**", "**/.skillgym-results/**"]
+  "ignorePatterns": [
+    "dist/**",
+    "node_modules/**",
+    "**/.skillgym-results/**",
+    "**/*.md",
+    "scripts/maestro-conformance/corpus/**",
+    "fallow-baselines/**",
+    "mutation-baselines/**"
+  ]
 }

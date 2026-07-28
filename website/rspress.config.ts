@@ -23,8 +23,9 @@ export default withCallstackPreset(
     theme: {
       content: {
         outlineCTAHeadline: 'Curious about developing mobile apps with AI agents?',
-        outlineCTADescription: 'We can help you take your agentic workflows to the next level and ship faster.',
-        outlineCTAButtonText: "Book a call",
+        outlineCTADescription:
+          'We can help you take your agentic workflows to the next level and ship faster.',
+        outlineCTAButtonText: 'Book a call',
       },
     },
   },

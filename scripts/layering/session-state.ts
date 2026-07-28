@@ -134,9 +134,7 @@ export type FieldClassificationDrift = {
  * Where the two ownership tables disagree with `SessionState` itself. Empty means every declared
  * field is classified exactly once and neither table names a field that no longer exists.
  */
-export function fieldClassificationDrift(
-  fields: readonly string[],
-): FieldClassificationDrift[] {
+export function fieldClassificationDrift(fields: readonly string[]): FieldClassificationDrift[] {
   const declared = new Set(fields);
   const owned = new Set(Object.keys(SESSION_STATE_FIELD_OWNERS));
   const drift: FieldClassificationDrift[] = [];

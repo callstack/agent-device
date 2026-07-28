@@ -395,11 +395,18 @@ test("the repo's own zero-dep jobs resolve without node_modules", () => {
   };
   const exists = (file: string): boolean => read(file) !== null;
 
-  const jobs = zeroDepJobs(new Map([['.github/workflows/ci.yml', read('.github/workflows/ci.yml')!]]), exists);
+  const jobs = zeroDepJobs(
+    new Map([['.github/workflows/ci.yml', read('.github/workflows/ci.yml')!]]),
+    exists,
+  );
   assert.ok(jobs.length > 0, 'expected ci.yml to still declare at least one zero-dep job');
   for (const job of jobs) {
     assert.ok(job.entries.length > 0, `${job.job} must name an entry script`);
-    assert.deepEqual(uninstallableImports(job, read, exists), [], `${job.job} must reach no package`);
+    assert.deepEqual(
+      uninstallableImports(job, read, exists),
+      [],
+      `${job.job} must reach no package`,
+    );
   }
 });
 
@@ -475,20 +482,24 @@ test('classification drift is reported in all three directions', () => {
 test('largestTypeCycleSize counts type-only cycles and ignores dynamic ones', () => {
   // Acyclic: every component is a single file, so the largest is 1 (not 0).
   const acyclic = resolveImportEdges(
-    new Map(Object.entries({
-      'src/core/a.ts': "import type { B } from '../contracts/b.ts';",
-      'src/contracts/b.ts': 'export type B = 1;',
-    })),
+    new Map(
+      Object.entries({
+        'src/core/a.ts': "import type { B } from '../contracts/b.ts';",
+        'src/contracts/b.ts': 'export type B = 1;',
+      }),
+    ),
   );
   assert.equal(largestTypeCycleSize(acyclic), 1);
 
   // A three-file loop closed by type-only imports is exactly what R4 permits and R9 measures.
   const typeCycle = resolveImportEdges(
-    new Map(Object.entries({
-      'src/core/a.ts': "import type { B } from './b.ts';",
-      'src/core/b.ts': "import type { C } from './c.ts';\nexport type B = 1;",
-      'src/core/c.ts': "import type { A } from './a.ts';\nexport type C = 1;",
-    })),
+    new Map(
+      Object.entries({
+        'src/core/a.ts': "import type { B } from './b.ts';",
+        'src/core/b.ts': "import type { C } from './c.ts';\nexport type B = 1;",
+        'src/core/c.ts': "import type { A } from './a.ts';\nexport type C = 1;",
+      }),
+    ),
   );
   assert.equal(largestTypeCycleSize(typeCycle), 3);
 
@@ -496,20 +507,24 @@ test('largestTypeCycleSize counts type-only cycles and ignores dynamic ones', ()
   // comprehension barrier, and R3 relies on dynamic imports existing. With no non-dynamic edge at
   // all no file enters the walk, so the floor here is 0 rather than 1 — specified, not incidental.
   const dynamicCycle = resolveImportEdges(
-    new Map(Object.entries({
-      'src/core/a.ts': "void import('./b.ts');",
-      'src/core/b.ts': "void import('./a.ts');",
-    })),
+    new Map(
+      Object.entries({
+        'src/core/a.ts': "void import('./b.ts');",
+        'src/core/b.ts': "void import('./a.ts');",
+      }),
+    ),
   );
   assert.equal(largestTypeCycleSize(dynamicCycle), 0);
 
   // A value cycle counts too — R4 rejects it separately, so R9 must not be the thing that
   // notices, but it must not under-report either.
   const valueCycle = resolveImportEdges(
-    new Map(Object.entries({
-      'src/core/a.ts': "export { b } from './b.ts';",
-      'src/core/b.ts': "export { a } from './a.ts';",
-    })),
+    new Map(
+      Object.entries({
+        'src/core/a.ts': "export { b } from './b.ts';",
+        'src/core/b.ts': "export { a } from './a.ts';",
+      }),
+    ),
   );
   assert.equal(largestTypeCycleSize(valueCycle), 2);
 });

@@ -33,7 +33,12 @@ export type CanonicalTarget = {
 
 export type CanonicalGesture =
   | { mode: 'direction'; direction: string; duration?: number | string }
-  | { mode: 'coordinates'; start?: CanonicalPoint; end?: CanonicalPoint; duration?: number | string }
+  | {
+      mode: 'coordinates';
+      start?: CanonicalPoint;
+      end?: CanonicalPoint;
+      duration?: number | string;
+    }
   | { mode: 'element'; from: CanonicalSelector; direction?: string; duration?: number | string };
 
 export type CanonicalCommand =
@@ -42,14 +47,31 @@ export type CanonicalCommand =
   // COUNT is the canonical field on both sides rather than a `double` variant on
   // one — that keeps our distinct tapOn/doubleTapOn kinds comparable to upstream
   // and preserves conformance signal for tapOn.repeat/delay.
-  | { kind: 'tap'; longPress: boolean; repeat: number | string; delay?: number | string; target: CanonicalTarget }
-  | { kind: 'assert'; mode: 'visible' | 'notVisible'; timed: boolean; timeout?: number | string; selector?: CanonicalSelector }
+  | {
+      kind: 'tap';
+      longPress: boolean;
+      repeat: number | string;
+      delay?: number | string;
+      target: CanonicalTarget;
+    }
+  | {
+      kind: 'assert';
+      mode: 'visible' | 'notVisible';
+      timed: boolean;
+      timeout?: number | string;
+      selector?: CanonicalSelector;
+    }
   | { kind: 'swipe'; gesture: CanonicalGesture }
   | { kind: 'inputText'; text?: string }
   | { kind: 'eraseText'; count?: number | string }
   | { kind: 'openLink'; link?: string }
   | { kind: 'scroll' }
-  | { kind: 'scrollUntilVisible'; direction?: string; selector?: CanonicalSelector; timeout?: number | string }
+  | {
+      kind: 'scrollUntilVisible';
+      direction?: string;
+      selector?: CanonicalSelector;
+      timeout?: number | string;
+    }
   | { kind: 'pressKey'; key: string }
   | { kind: 'back' }
   | { kind: 'hideKeyboard' }
@@ -141,7 +163,10 @@ function canonicalizeUpstreamCommand(command: UpstreamCommand): CanonicalCommand
     case 'InputTextCommand':
       return dropUndefined({ kind: 'inputText', text: str(f.text) });
     case 'EraseTextCommand':
-      return dropUndefined({ kind: 'eraseText', count: numLike(f.charactersToErase) ?? str(f.charactersToErase) });
+      return dropUndefined({
+        kind: 'eraseText',
+        count: numLike(f.charactersToErase) ?? str(f.charactersToErase),
+      });
     case 'OpenLinkCommand':
       return dropUndefined({ kind: 'openLink', link: str(f.link) });
     case 'PressKeyCommand':
@@ -153,13 +178,19 @@ function canonicalizeUpstreamCommand(command: UpstreamCommand): CanonicalCommand
     case 'TakeScreenshotCommand':
       return { kind: 'takeScreenshot' };
     case 'WaitForAnimationToEndCommand':
-      return dropUndefined({ kind: 'waitForAnimationToEnd', timeout: numLike(f.timeout) ?? str(f.timeout) });
+      return dropUndefined({
+        kind: 'waitForAnimationToEnd',
+        timeout: numLike(f.timeout) ?? str(f.timeout),
+      });
     case 'StopAppCommand':
       return { kind: 'stopApp' };
     case 'RepeatCommand':
       return { kind: 'repeat', times: numLike(f.times) ?? str(f.times) ?? '' };
     case 'RetryCommand':
-      return dropUndefined({ kind: 'retry', maxRetries: numLike(f.maxRetries) ?? str(f.maxRetries) });
+      return dropUndefined({
+        kind: 'retry',
+        maxRetries: numLike(f.maxRetries) ?? str(f.maxRetries),
+      });
     case 'RunFlowCommand':
       return { kind: 'runFlow', source: f.sourceDescription != null ? 'file' : 'commands' };
     case 'RunScriptCommand':
@@ -335,7 +366,9 @@ function canonicalizeAgentCommand(
       return canonicalTap({
         longPress: false,
         repeat,
-        delay: repeatIsNumber ? (numLike(command.delay) ?? AGENT_REPEAT_DELAY_MS) : numLike(command.delay),
+        delay: repeatIsNumber
+          ? (numLike(command.delay) ?? AGENT_REPEAT_DELAY_MS)
+          : numLike(command.delay),
         target: agentTarget(command.target, numLike(command.index), command.childOf),
       });
     }
@@ -403,7 +436,10 @@ function canonicalizeAgentCommand(
     case 'repeat':
       return { kind: 'repeat', times: numLike(command.times) ?? str(command.times) };
     case 'retry':
-      return dropUndefined({ kind: 'retry', maxRetries: numLike(command.maxRetries) ?? str(command.maxRetries) });
+      return dropUndefined({
+        kind: 'retry',
+        maxRetries: numLike(command.maxRetries) ?? str(command.maxRetries),
+      });
     case 'runFlow':
       return { kind: 'runFlow', source: command.include.kind === 'file' ? 'file' : 'commands' };
     case 'runScript':
@@ -429,7 +465,9 @@ function agentTarget(
       }),
     };
   }
-  return { point: { x: target.x, y: target.y, unit: target.space === 'percent' ? 'percent' : 'px' } };
+  return {
+    point: { x: target.x, y: target.y, unit: target.space === 'percent' ? 'percent' : 'px' },
+  };
 }
 
 function agentSelector(
@@ -468,6 +506,14 @@ function agentGesture(gesture: MaestroSwipeGesture): CanonicalGesture {
   }
 }
 
-function agentPoint(coordinate: { space: 'absolute' | 'percent'; x: number; y: number }): CanonicalPoint {
-  return { x: coordinate.x, y: coordinate.y, unit: coordinate.space === 'percent' ? 'percent' : 'px' };
+function agentPoint(coordinate: {
+  space: 'absolute' | 'percent';
+  x: number;
+  y: number;
+}): CanonicalPoint {
+  return {
+    x: coordinate.x,
+    y: coordinate.y,
+    unit: coordinate.space === 'percent' ? 'percent' : 'px',
+  };
 }

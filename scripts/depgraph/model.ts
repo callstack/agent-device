@@ -66,7 +66,6 @@ export type GraphData = {
   typeInversions: Record<string, number>;
 };
 
-
 function countLines(source: string): number {
   let lines = 1;
   for (let index = 0; index < source.length; index++) {
@@ -317,9 +316,7 @@ function aggregateZones(nodes: ReadonlyMap<string, GraphNode>): GraphData['zones
  * but the count feeding a CI equality check must not be able to drift for a reason unrelated to
  * layering.
  */
-export function typeInversionsByPair(
-  edges: readonly ResolvedImportEdge[],
-): Record<string, number> {
+export function typeInversionsByPair(edges: readonly ResolvedImportEdge[]): Record<string, number> {
   const seen = new Set<string>();
   const byPair = new Map<string, number>();
   for (const edge of edges) {

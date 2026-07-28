@@ -25,17 +25,17 @@ on:
       # Kernel sources, every src test (ownership is derived, so any test may own
       # a kernel — `select` decides, not this filter), and the lane's own tooling.
       # scripts/mutation/workflow.test.ts asserts this covers the registry.
-      - "src/kernel/errors.ts"
-      - "src/daemon/ref-frame.ts"
-      - "src/commands/interaction/runtime/settle.ts"
-      - "src/utils/scroll-edge-state.ts"
-      - "src/selectors/**"
-      - "src/**/*.test.ts"
-      - "scripts/mutation/**"
-      - "scripts/lib/**"
-      - "stryker.config.json"
-      - "mutation-baselines/**"
-      - ".github/workflows/mutation-affected.yml"
+      - 'src/kernel/errors.ts'
+      - 'src/daemon/ref-frame.ts'
+      - 'src/commands/interaction/runtime/settle.ts'
+      - 'src/utils/scroll-edge-state.ts'
+      - 'src/selectors/**'
+      - 'src/**/*.test.ts'
+      - 'scripts/mutation/**'
+      - 'scripts/lib/**'
+      - 'stryker.config.json'
+      - 'mutation-baselines/**'
+      - '.github/workflows/mutation-affected.yml'
 
 permissions:
   contents: read

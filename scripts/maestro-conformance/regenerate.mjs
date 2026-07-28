@@ -37,12 +37,16 @@ function gradle(args, options = {}) {
   const [cmd, baseArgs] = override
     ? [override, []]
     : [process.platform === 'win32' ? 'gradlew.bat' : './gradlew', []];
-  return execFileSync(cmd, [...baseArgs, '-p', HARNESS_DIR, '--no-daemon', '--console=plain', '-q', ...args], {
-    cwd: HARNESS_DIR,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'inherit'],
-    ...options,
-  });
+  return execFileSync(
+    cmd,
+    [...baseArgs, '-p', HARNESS_DIR, '--no-daemon', '--console=plain', '-q', ...args],
+    {
+      cwd: HARNESS_DIR,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'inherit'],
+      ...options,
+    },
+  );
 }
 
 function sha256(filePath) {
@@ -58,7 +62,8 @@ function verifyArtifacts(pin) {
   }
   for (const artifact of pin.artifacts) {
     const jarPath = resolved.get(artifact.coordinate);
-    if (!jarPath) throw new Error(`Pinned artifact ${artifact.coordinate} was not resolved by Gradle.`);
+    if (!jarPath)
+      throw new Error(`Pinned artifact ${artifact.coordinate} was not resolved by Gradle.`);
     const actual = sha256(jarPath);
     if (actual !== artifact.sha256) {
       throw new Error(
@@ -92,7 +97,9 @@ function writeFixture(name, pin, content) {
 
 function main() {
   const pin = readPin();
-  console.log(`Regenerating Maestro ${pin.version} conformance fixtures (${pin.commit.slice(0, 12)}).`);
+  console.log(
+    `Regenerating Maestro ${pin.version} conformance fixtures (${pin.commit.slice(0, 12)}).`,
+  );
 
   // Refresh corpus provenance first so a newly added flow is picked up.
   const manifest = writeManifest(pin);
@@ -110,7 +117,9 @@ function main() {
   } finally {
     fs.rmSync(outDir, { recursive: true, force: true });
   }
-  console.log('Done. Review the diff, then run `node --experimental-strip-types scripts/maestro-conformance/verify.test.ts`.');
+  console.log(
+    'Done. Review the diff, then run `node --experimental-strip-types scripts/maestro-conformance/verify.test.ts`.',
+  );
 }
 
 main();

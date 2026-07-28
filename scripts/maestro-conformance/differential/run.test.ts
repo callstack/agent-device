@@ -22,7 +22,10 @@ test('every differential scenario references an existing corpus flow with a uniq
 
 test('the settle-loop bug class (4) is covered by a differential scenario', () => {
   const settle = DIFFERENTIAL_SCENARIOS.find((scenario) => scenario.bugClass === 4);
-  assert.ok(settle, 'bug class 4 (settle ordering) has no reflectable constant; it must be a differential scenario');
+  assert.ok(
+    settle,
+    'bug class 4 (settle ordering) has no reflectable constant; it must be a differential scenario',
+  );
   assert.equal(settle?.id, 'settle-after-tap');
 });
 
@@ -75,14 +78,22 @@ test('every knownDivergence carries a tracking issue', () => {
 // swallow upstream regressing or a different invariant breaking — hiding the
 // next bug behind the last one.
 describe('knownDivergence signature matching', () => {
-  const sig: DivergenceSignature = { maestro: 'pass', agentDevice: 'fail', invariants: ['no-data'] };
+  const sig: DivergenceSignature = {
+    maestro: 'pass',
+    agentDevice: 'fail',
+    invariants: ['no-data'],
+  };
   const engine = (outcome: 'pass' | 'fail') => ({
     engine: 'maestro' as const,
     outcome,
     exitCode: outcome === 'pass' ? 0 : 1,
   });
   const inv = (status: 'held' | 'violated' | 'no-data') =>
-    ({ invariant: { kind: 'stepDurationBelow', command: 'tapOn', maxMs: 1, because: 'x' }, status, detail: '' }) as never;
+    ({
+      invariant: { kind: 'stepDurationBelow', command: 'tapOn', maxMs: 1, because: 'x' },
+      status,
+      detail: '',
+    }) as never;
 
   test('matches the declared failure exactly', () => {
     assert.equal(matchesSignature(sig, engine('pass'), engine('fail'), [inv('no-data')]), true);
@@ -113,7 +124,10 @@ describe('knownDivergence signature matching', () => {
     for (const scenario of DIFFERENTIAL_SCENARIOS) {
       const declared = scenario.knownDivergence;
       if (!declared) continue;
-      assert.ok(declared.expected, `${scenario.id}: knownDivergence must declare an expected signature`);
+      assert.ok(
+        declared.expected,
+        `${scenario.id}: knownDivergence must declare an expected signature`,
+      );
       assert.ok(
         ['pass', 'fail'].includes(declared.expected.maestro) &&
           ['pass', 'fail'].includes(declared.expected.agentDevice),

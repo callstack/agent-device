@@ -1,26 +1,26 @@
-name: "Boot iOS Test Simulator"
-description: "Resolve and boot the preferred iOS simulator for replay tests"
+name: 'Boot iOS Test Simulator'
+description: 'Resolve and boot the preferred iOS simulator for replay tests'
 
 inputs:
   runtime-version:
-    description: "Preferred iOS runtime version"
+    description: 'Preferred iOS runtime version'
     required: true
   preferred-device-name:
-    description: "Preferred simulator device name"
+    description: 'Preferred simulator device name'
     required: false
-    default: "iPhone 17 Pro"
+    default: 'iPhone 17 Pro'
   boot-timeout-seconds:
-    description: "Maximum time to wait for simulator bootstatus"
+    description: 'Maximum time to wait for simulator bootstatus'
     required: false
-    default: "300"
+    default: '300'
 
 outputs:
   simulator-udid:
-    description: "UDID of the booted iOS simulator"
+    description: 'UDID of the booted iOS simulator'
     value: ${{ steps.boot.outputs.simulator-udid }}
 
 runs:
-  using: "composite"
+  using: 'composite'
   steps:
     - name: Resolve and boot iOS test simulator
       id: boot

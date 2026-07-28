@@ -1,20 +1,20 @@
-name: "Upload Agent Device Artifacts"
-description: "Upload shared agent-device diagnostics, session logs, and replay artifacts"
+name: 'Upload Agent Device Artifacts'
+description: 'Upload shared agent-device diagnostics, session logs, and replay artifacts'
 
 inputs:
   artifact-name:
-    description: "Artifact name"
+    description: 'Artifact name'
     required: true
   agent-home-dir:
-    description: "Resolved agent-device daemon state directory"
+    description: 'Resolved agent-device daemon state directory'
     required: true
   runner-derived-path:
-    description: "Optional Apple runner derived data path to upload cache metadata and Xcode logs"
+    description: 'Optional Apple runner derived data path to upload cache metadata and Xcode logs'
     required: false
-    default: ".agent-device-no-runner-derived"
+    default: '.agent-device-no-runner-derived'
 
 runs:
-  using: "composite"
+  using: 'composite'
   steps:
     - name: Upload artifacts
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

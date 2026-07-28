@@ -68,17 +68,18 @@ export function validateScenarios(): void {
     if (ids.has(scenario.id)) throw new Error(`Duplicate scenario id: ${scenario.id}`);
     ids.add(scenario.id);
     const flowPath = path.join(CONFORMANCE_DIR, scenario.flow);
-    if (!fs.existsSync(flowPath)) throw new Error(`Scenario ${scenario.id} flow not found: ${scenario.flow}`);
+    if (!fs.existsSync(flowPath))
+      throw new Error(`Scenario ${scenario.id} flow not found: ${scenario.flow}`);
   }
 }
 
-type EngineResult = { engine: 'maestro' | 'agent-device'; outcome: 'pass' | 'fail'; exitCode: number };
+type EngineResult = {
+  engine: 'maestro' | 'agent-device';
+  outcome: 'pass' | 'fail';
+  exitCode: number;
+};
 
-function runEngine(
-  engine: EngineResult['engine'],
-  command: string,
-  args: string[],
-): EngineResult {
+function runEngine(engine: EngineResult['engine'], command: string, args: string[]): EngineResult {
   const [bin = '', ...rest] = command.split(' ').filter(Boolean);
   const result = spawnSync(bin, [...rest, ...args], { stdio: 'inherit', cwd: process.cwd() });
   const exitCode = result.status ?? 1;
@@ -255,7 +256,9 @@ function main(argv: readonly string[]): void {
   // Keep declared gaps visible: a green run must still say what it is not proving.
   const known = reports.filter((report) => report.status === 'known-divergence');
   if (known.length > 0) {
-    console.log(`\n${known.length} declared divergence(s), not enforced: ${known.map((r) => r.id).join(', ')}`);
+    console.log(
+      `\n${known.length} declared divergence(s), not enforced: ${known.map((r) => r.id).join(', ')}`,
+    );
   }
 
   const failed = reports.filter((report) => report.failed);

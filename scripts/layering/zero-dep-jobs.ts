@@ -54,7 +54,9 @@ function runBlockEntries(run: string): string[] {
 function stepsOf(job: unknown): Record<string, unknown>[] {
   if (job === null || typeof job !== 'object') return [];
   const steps = (job as Record<string, unknown>)['steps'];
-  return Array.isArray(steps) ? steps.filter((step) => step !== null && typeof step === 'object') : [];
+  return Array.isArray(steps)
+    ? steps.filter((step) => step !== null && typeof step === 'object')
+    : [];
 }
 
 function skipsInstall(step: Record<string, unknown>): boolean {
@@ -96,7 +98,8 @@ export function zeroDepJobs(
     }
   }
   return jobs.sort(
-    (left, right) => left.workflow.localeCompare(right.workflow) || left.job.localeCompare(right.job),
+    (left, right) =>
+      left.workflow.localeCompare(right.workflow) || left.job.localeCompare(right.job),
   );
 }
 

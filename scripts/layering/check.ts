@@ -83,7 +83,9 @@ function readSources(files: readonly string[]): Map<string, string> {
 }
 
 function fileExists(file: string): boolean {
-  return fs.existsSync(path.join(repoRoot, file)) && fs.statSync(path.join(repoRoot, file)).isFile();
+  return (
+    fs.existsSync(path.join(repoRoot, file)) && fs.statSync(path.join(repoRoot, file)).isFile()
+  );
 }
 
 function readSourceOrNull(file: string): string | null {
@@ -443,7 +445,10 @@ function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Viola
 // `node_modules` is always present — which is why this needs a gate rather than a convention.
 function checkZeroDepJobs(): Violation[] {
   const workflows = readSources(
-    execFileSync('git', ['ls-files', '.github/workflows/*.yml'], { cwd: repoRoot, encoding: 'utf8' })
+    execFileSync('git', ['ls-files', '.github/workflows/*.yml'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    })
       .split('\n')
       .filter(Boolean),
   );
@@ -480,9 +485,7 @@ function checkZeroDepJobs(): Violation[] {
 }
 
 function sessionStateFieldCount(): number {
-  return (
-    Object.keys(SESSION_STATE_FIELD_OWNERS).length + STORE_OWNED_SESSION_STATE_FIELDS.size
-  );
+  return Object.keys(SESSION_STATE_FIELD_OWNERS).length + STORE_OWNED_SESSION_STATE_FIELDS.size;
 }
 
 /** R9 is growth-only, so a shrunk tree is reported rather than failed — see checkTypeCycleGrowth. */

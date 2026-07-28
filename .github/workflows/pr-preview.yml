@@ -7,13 +7,13 @@ on:
       - reopened
       - synchronize
     paths:
-      - "website/**"
-      - ".github/actions/build-docs/action.yml"
-      - ".github/actions/setup-node-pnpm/action.yml"
-      - ".github/workflows/pr-preview.yml"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
+      - 'website/**'
+      - '.github/actions/build-docs/action.yml'
+      - '.github/actions/setup-node-pnpm/action.yml'
+      - '.github/workflows/pr-preview.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
 
 concurrency: preview-${{ github.ref }}
 
