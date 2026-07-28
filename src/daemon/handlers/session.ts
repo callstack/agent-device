@@ -1,5 +1,5 @@
 import { dispatchCommand } from '../../core/dispatch.ts';
-import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { resolvePayloadInput } from '../../utils/payload-input.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import {
@@ -38,7 +38,8 @@ import { handleSessionObservabilityCommands } from './session-observability.ts';
 import { handleSessionReplayCommands } from './session-replay.ts';
 import { handleSessionScriptPublication } from './session-script-publication.ts';
 import { handleDoctorCommand } from './session-doctor.ts';
-import { getSessionCommandKind, resolveRefFrameEffect } from '../daemon-command-registry.ts';
+import { resolveRefFrameEffect } from '../daemon-command-registry.ts';
+import type { DescriptorSessionRouteCommandName } from '../../core/command-descriptor/registry.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { PREPARE_REQUEST_TIMEOUT_MS } from '../../core/command-descriptor/timeout-policy.ts';
@@ -268,7 +269,213 @@ async function handleClipboardCommand(params: {
   return { ok: true, data: { platform: publicPlatformString(device), ...(result ?? {}) } };
 }
 
-// fallow-ignore-next-line complexity
+type SessionCommandParams = {
+  req: DaemonRequest;
+  sessionName: string;
+  logPath: string;
+  sessionStore: SessionStore;
+  leaseRegistry: LeaseRegistry;
+  leaseLifecycleProvider?: LeaseLifecycleProvider;
+  invoke: DaemonInvokeFn;
+  invokeReplayAction?: DaemonInvokeFn;
+  androidAdbExecutor?: AndroidAdbExecutor;
+};
+
+type SessionCommandHandler = (params: SessionCommandParams) => Promise<DaemonResponse | null>;
+
+const handleSessionInventoryCommandGroup: SessionCommandHandler = async ({
+  req,
+  sessionName,
+  sessionStore,
+}) => await handleSessionInventoryCommands({ req, sessionName, sessionStore });
+
+const handleSessionStateCommandGroup: SessionCommandHandler = async ({
+  req,
+  sessionName,
+  logPath,
+  sessionStore,
+}) => await handleSessionStateCommands({ req, sessionName, logPath, sessionStore });
+
+const handleSessionObservabilityCommandGroup: SessionCommandHandler = async ({
+  req,
+  sessionName,
+  sessionStore,
+  androidAdbExecutor,
+}) =>
+  await handleSessionObservabilityCommands({ req, sessionName, sessionStore, androidAdbExecutor });
+
+const handleSessionReplayCommandGroup: SessionCommandHandler = async ({
+  req,
+  sessionName,
+  logPath,
+  sessionStore,
+  leaseRegistry,
+  invoke,
+  invokeReplayAction,
+}) =>
+  await handleSessionReplayCommands({
+    req,
+    sessionName,
+    logPath,
+    sessionStore,
+    leaseRegistry,
+    invoke: invokeReplayAction ?? invoke,
+  });
+
+async function handleKeyboardCommand(params: SessionCommandParams): Promise<DaemonResponse> {
+  const { req, sessionName, logPath, sessionStore } = params;
+  const session = sessionStore.get(sessionName);
+  const keyboardAction = req.positionals?.[0]?.trim().toLowerCase();
+  const needsForegroundIosApp =
+    keyboardAction === 'dismiss' || keyboardAction === 'enter' || keyboardAction === 'return';
+  if (!session && needsForegroundIosApp) {
+    const flags = req.flags ?? {};
+    const normalizedPlatform = flags.platform;
+    if (normalizedPlatform === 'ios') {
+      return errorResponse(
+        'SESSION_NOT_FOUND',
+        'iOS keyboard action requires an active session so the target app stays foregrounded. Run open first.',
+      );
+    }
+  }
+  return await runSessionOrSelectorDispatch({
+    req,
+    sessionName,
+    logPath,
+    sessionStore,
+    command: PUBLIC_COMMANDS.keyboard,
+    positionals: req.positionals ?? [],
+  });
+}
+
+async function handlePushCommand(params: SessionCommandParams): Promise<DaemonResponse> {
+  const { req, sessionName, logPath, sessionStore } = params;
+  const appId = req.positionals?.[0]?.trim();
+  const payloadArg = req.positionals?.[1]?.trim();
+  if (!appId || !payloadArg) {
+    return errorResponse(
+      'INVALID_ARGS',
+      'push requires <bundle|package> <payload.json|inline-json>',
+    );
+  }
+
+  return await runSessionOrSelectorDispatch({
+    req,
+    sessionName,
+    logPath,
+    sessionStore,
+    command: PUBLIC_COMMANDS.push,
+    positionals: [appId, maybeResolvePushPayloadPath(payloadArg, req.meta?.cwd)],
+    recordPositionals: [appId, payloadArg],
+  });
+}
+
+async function handleTriggerAppEventCommand(params: SessionCommandParams): Promise<DaemonResponse> {
+  const { req, sessionName, logPath, sessionStore } = params;
+  return await runSessionOrSelectorDispatch({
+    req,
+    sessionName,
+    logPath,
+    sessionStore,
+    command: PUBLIC_COMMANDS.triggerAppEvent,
+    positionals: req.positionals ?? [],
+    deriveNextSession: async (session, result) => {
+      const eventUrl = typeof result?.eventUrl === 'string' ? result.eventUrl : undefined;
+      const nextAppBundleId = eventUrl
+        ? ((await resolveSessionAppBundleIdForTarget(
+            session.device,
+            eventUrl,
+            session.appBundleId,
+            resolveAndroidPackageForOpen,
+          )) ?? session.appBundleId)
+        : session.appBundleId;
+      return {
+        ...session,
+        appBundleId: nextAppBundleId,
+      };
+    },
+  });
+}
+
+/**
+ * Descriptor-driven exhaustive dispatch table for the daemon's `session`
+ * route (mirrors `DISPATCH_HANDLERS` in src/core/dispatch.ts and
+ * `SNAPSHOT_COMMAND_HANDLER_IMPLS` in src/daemon/handlers/snapshot.ts). The
+ * `satisfies Record<DescriptorSessionRouteCommandName, …>` check means a
+ * session-routed descriptor added to the registry without a matching entry
+ * here is a COMPILE error, not a runtime routing gap. Command-kind groupings
+ * (`getSessionCommandKind`'s former inventory/state/observability/replay
+ * clusters) map several keys to the SAME handler reference below.
+ */
+const SESSION_COMMAND_HANDLER_IMPLS = {
+  session_list: handleSessionInventoryCommandGroup,
+  devices: handleSessionInventoryCommandGroup,
+  capabilities: handleSessionInventoryCommandGroup,
+  apps: handleSessionInventoryCommandGroup,
+  doctor: async ({ req, sessionName, sessionStore, androidAdbExecutor }) =>
+    await handleDoctorCommand({ req, sessionName, sessionStore, androidAdbExecutor }),
+  boot: handleSessionStateCommandGroup,
+  shutdown: handleSessionStateCommandGroup,
+  appstate: handleSessionStateCommandGroup,
+  session_save_script: async ({ req, sessionName, sessionStore }) =>
+    handleSessionScriptPublication({ req, sessionName, sessionStore }),
+  runtime: async ({ req, sessionName, sessionStore }) =>
+    await handleRuntimeCommand({ req, sessionName, sessionStore }),
+  clipboard: async ({ req, sessionName, logPath, sessionStore }) =>
+    await handleClipboardCommand({ req, sessionName, logPath, sessionStore }),
+  keyboard: handleKeyboardCommand,
+  perf: handleSessionObservabilityCommandGroup,
+  logs: handleSessionObservabilityCommandGroup,
+  events: handleSessionObservabilityCommandGroup,
+  network: handleSessionObservabilityCommandGroup,
+  audio: handleSessionObservabilityCommandGroup,
+  prepare: async ({ req, sessionName, logPath, sessionStore }) =>
+    await handlePrepareCommand({ req, sessionName, logPath, sessionStore }),
+  install: async ({ req, sessionName, sessionStore }) =>
+    await handleAppDeployCommand({
+      req,
+      command: 'install',
+      sessionName,
+      sessionStore,
+      deployOps: defaultInstallOps,
+    }),
+  reinstall: async ({ req, sessionName, sessionStore }) =>
+    await handleAppDeployCommand({
+      req,
+      command: 'reinstall',
+      sessionName,
+      sessionStore,
+      deployOps: defaultReinstallOps,
+    }),
+  install_source: async ({ req, sessionName, sessionStore }) =>
+    await handleInstallFromSourceCommand({ req, sessionName, sessionStore }),
+  release_materialized_paths: async ({ req }) =>
+    await handleReleaseMaterializedPathsCommand({ req }),
+  push: handlePushCommand,
+  'trigger-app-event': handleTriggerAppEventCommand,
+  open: async ({ req, sessionName, logPath, sessionStore }) =>
+    await handleOpenCommand({ req, sessionName, logPath, sessionStore }),
+  replay: handleSessionReplayCommandGroup,
+  test: handleSessionReplayCommandGroup,
+  batch: async ({ req, sessionName, invoke }) => await runBatchCommands(req, sessionName, invoke),
+  close: async ({
+    req,
+    sessionName,
+    logPath,
+    sessionStore,
+    leaseRegistry,
+    leaseLifecycleProvider,
+  }) =>
+    await handleCloseCommand({
+      req,
+      sessionName,
+      logPath,
+      sessionStore,
+      leaseRegistry,
+      leaseLifecycleProvider,
+    }),
+} satisfies Record<DescriptorSessionRouteCommandName, SessionCommandHandler>;
+
 export async function handleSessionCommands(params: {
   req: DaemonRequest;
   sessionName: string;
@@ -292,201 +499,21 @@ export async function handleSessionCommands(params: {
     androidAdbExecutor,
   } = params;
 
-  if (req.command === PUBLIC_COMMANDS.doctor) {
-    return await handleDoctorCommand({
-      req,
-      sessionName,
-      sessionStore,
-      androidAdbExecutor,
-    });
-  }
+  const handler =
+    SESSION_COMMAND_HANDLER_IMPLS[req.command as keyof typeof SESSION_COMMAND_HANDLER_IMPLS];
+  if (!handler) return null;
 
-  if (getSessionCommandKind(req.command) === 'inventory') {
-    return await handleSessionInventoryCommands({
-      req,
-      sessionName,
-      sessionStore,
-    });
-  }
-
-  if (req.command === 'runtime') {
-    return await handleRuntimeCommand({
-      req,
-      sessionName,
-      sessionStore,
-    });
-  }
-
-  if (getSessionCommandKind(req.command) === 'state') {
-    return await handleSessionStateCommands({
-      req,
-      sessionName,
-      logPath,
-      sessionStore,
-    });
-  }
-
-  if (getSessionCommandKind(req.command) === 'publication') {
-    return handleSessionScriptPublication({ req, sessionName, sessionStore });
-  }
-
-  if (req.command === PUBLIC_COMMANDS.clipboard) {
-    return await handleClipboardCommand({
-      req,
-      sessionName,
-      logPath,
-      sessionStore,
-    });
-  }
-
-  if (req.command === PUBLIC_COMMANDS.keyboard) {
-    const session = sessionStore.get(sessionName);
-    const keyboardAction = req.positionals?.[0]?.trim().toLowerCase();
-    const needsForegroundIosApp =
-      keyboardAction === 'dismiss' || keyboardAction === 'enter' || keyboardAction === 'return';
-    if (!session && needsForegroundIosApp) {
-      const flags = req.flags ?? {};
-      const normalizedPlatform = flags.platform;
-      if (normalizedPlatform === 'ios') {
-        return errorResponse(
-          'SESSION_NOT_FOUND',
-          'iOS keyboard action requires an active session so the target app stays foregrounded. Run open first.',
-        );
-      }
-    }
-    return await runSessionOrSelectorDispatch({
-      req,
-      sessionName,
-      logPath,
-      sessionStore,
-      command: PUBLIC_COMMANDS.keyboard,
-      positionals: req.positionals ?? [],
-    });
-  }
-
-  if (getSessionCommandKind(req.command) === 'observability') {
-    return await handleSessionObservabilityCommands({
-      req,
-      sessionName,
-      sessionStore,
-      androidAdbExecutor,
-    });
-  }
-
-  if (req.command === PUBLIC_COMMANDS.prepare) {
-    return await handlePrepareCommand({
-      req,
-      sessionName,
-      logPath,
-      sessionStore,
-    });
-  }
-
-  if (req.command === PUBLIC_COMMANDS.install || req.command === PUBLIC_COMMANDS.reinstall) {
-    return await handleAppDeployCommand({
-      req,
-      command: req.command,
-      sessionName,
-      sessionStore,
-      deployOps: req.command === PUBLIC_COMMANDS.install ? defaultInstallOps : defaultReinstallOps,
-    });
-  }
-
-  if (req.command === INTERNAL_COMMANDS.installSource) {
-    return await handleInstallFromSourceCommand({
-      req,
-      sessionName,
-      sessionStore,
-    });
-  }
-
-  if (req.command === INTERNAL_COMMANDS.releaseMaterializedPaths) {
-    return await handleReleaseMaterializedPathsCommand({ req });
-  }
-
-  if (req.command === PUBLIC_COMMANDS.push) {
-    const appId = req.positionals?.[0]?.trim();
-    const payloadArg = req.positionals?.[1]?.trim();
-    if (!appId || !payloadArg) {
-      return errorResponse(
-        'INVALID_ARGS',
-        'push requires <bundle|package> <payload.json|inline-json>',
-      );
-    }
-
-    return await runSessionOrSelectorDispatch({
-      req,
-      sessionName,
-      logPath,
-      sessionStore,
-      command: PUBLIC_COMMANDS.push,
-      positionals: [appId, maybeResolvePushPayloadPath(payloadArg, req.meta?.cwd)],
-      recordPositionals: [appId, payloadArg],
-    });
-  }
-
-  if (req.command === PUBLIC_COMMANDS.triggerAppEvent) {
-    return await runSessionOrSelectorDispatch({
-      req,
-      sessionName,
-      logPath,
-      sessionStore,
-      command: PUBLIC_COMMANDS.triggerAppEvent,
-      positionals: req.positionals ?? [],
-      deriveNextSession: async (session, result) => {
-        const eventUrl = typeof result?.eventUrl === 'string' ? result.eventUrl : undefined;
-        const nextAppBundleId = eventUrl
-          ? ((await resolveSessionAppBundleIdForTarget(
-              session.device,
-              eventUrl,
-              session.appBundleId,
-              resolveAndroidPackageForOpen,
-            )) ?? session.appBundleId)
-          : session.appBundleId;
-        return {
-          ...session,
-          appBundleId: nextAppBundleId,
-        };
-      },
-    });
-  }
-
-  if (req.command === PUBLIC_COMMANDS.open) {
-    return await handleOpenCommand({
-      req,
-      sessionName,
-      logPath,
-      sessionStore,
-    });
-  }
-
-  if (getSessionCommandKind(req.command) === 'replay') {
-    return await handleSessionReplayCommands({
-      req,
-      sessionName,
-      logPath,
-      sessionStore,
-      leaseRegistry,
-      invoke: invokeReplayAction ?? invoke,
-    });
-  }
-
-  if (req.command === PUBLIC_COMMANDS.batch) {
-    return await runBatchCommands(req, sessionName, invoke);
-  }
-
-  if (req.command === PUBLIC_COMMANDS.close) {
-    return await handleCloseCommand({
-      req,
-      sessionName,
-      logPath,
-      sessionStore,
-      leaseRegistry,
-      leaseLifecycleProvider,
-    });
-  }
-
-  return null;
+  return await handler({
+    req,
+    sessionName,
+    logPath,
+    sessionStore,
+    leaseRegistry,
+    leaseLifecycleProvider,
+    invoke,
+    invokeReplayAction,
+    androidAdbExecutor,
+  });
 }
 
 function maybeResolvePushPayloadPath(payloadArg: string, cwd?: string): string {
