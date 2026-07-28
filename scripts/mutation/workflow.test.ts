@@ -56,9 +56,11 @@ test('no mutation shard is allowed to exceed the 30-minute budget', () => {
 });
 
 test('every kernel path a PR can touch selects the affected mutation job', () => {
-  const paths = [...workflow('mutation-affected.yml').matchAll(/^ {6}- "(?<glob>[^"]+)"$/gm)].map(
-    (match) => match.groups!.glob,
-  );
+  // Quote style is the formatter's business (oxfmt formats the workflow tree), so
+  // accept either spelling of the same scalar rather than pinning this gate to it.
+  const paths = [
+    ...workflow('mutation-affected.yml').matchAll(/^ {6}- (?<q>['"])(?<glob>[^'"]+)\k<q>$/gm),
+  ].map((match) => match.groups!.glob);
   for (const module of KERNEL_MODULES) {
     for (const owned of module.owns) {
       const selected = paths.some(
