@@ -16,6 +16,9 @@ const SUBPROCESS_STUB_TESTS = [
   'src/platforms/apple/core/__tests__/index.test.ts',
   // Stubs npx + the package managers on PATH and spawns a real Metro dev server per case.
   'src/__tests__/client-metro.test.ts',
+  // Proves the parser fuzz harness still fails (#1414): every case spawns a node subprocess or a
+  // worker thread and one target is a deliberate hang, so it waits real watchdog time.
+  'scripts/fuzz/harness.test.ts',
 ];
 
 export default defineConfig({
@@ -41,10 +44,6 @@ export default defineConfig({
             // Replays the parser fuzz regression corpus (#1414) in the unit lane; the
             // generating fuzz run itself is nightly (scripts/fuzz/run.ts).
             'scripts/fuzz/corpus-replay.test.ts',
-            // Proves the harness still fails: classifier + watchdog + corpus promotion.
-            'scripts/fuzz/harness.test.ts',
-            // Scheduled-lane health classification and lane discovery (#1430).
-            'scripts/scheduled-lane/health-model.test.ts',
             'scripts/__tests__/help-conformance-sample-outputs.test.ts',
             'scripts/__tests__/help-conformance-topic-coverage.test.ts',
             'test/skillgym/suites/local-cli-help-policy.test.ts',

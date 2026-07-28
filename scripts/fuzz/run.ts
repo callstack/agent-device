@@ -13,9 +13,9 @@ import {
   type FuzzTargetRun,
   writeFuzzEnvelope,
 } from './envelope.ts';
-import { runTarget } from './execute.ts';
+import { runCases } from './execute.ts';
+import { generateAndCheck } from './generate.ts';
 import { describeFailure, type FuzzFailure } from './invariant.ts';
-import { generateCases } from './mutate.ts';
 import { fallbackFuzzOptions, FUZZ_USAGE, readFuzzOptions, type FuzzOptions } from './options.ts';
 import { getFuzzTarget } from './registry.ts';
 import { promoteFailures, reportFailures } from './report.ts';
@@ -28,11 +28,29 @@ function selectTargets(name: string | undefined): FuzzTarget[] {
   return name === undefined ? [...FUZZ_TARGETS] : [getFuzzTarget(name)];
 }
 
-function casesFor(target: FuzzTarget, options: FuzzOptions): string[] {
-  if (!options.replayCorpus) return generateCases(target.seeds, options.iterations, options.seed);
+function corpusCasesFor(target: FuzzTarget): string[] {
   return readCorpus()
     .filter((entry) => entry.target === target.name)
     .map((entry) => entry.input);
+}
+
+/** One target's run: generated (fast-check, shrinking) or a replay of the checked-in corpus. */
+async function runOneTarget(
+  target: FuzzTarget,
+  options: FuzzOptions,
+): Promise<{ cases: number; failures: FuzzFailure[]; replayHint?: string }> {
+  if (options.replayCorpus) {
+    const cases = corpusCasesFor(target);
+    return { cases: cases.length, failures: await runCases(target, cases, options.caseTimeoutMs) };
+  }
+  const run = await generateAndCheck(target, options);
+  return {
+    cases: run.cases,
+    failures: run.failure ? [run.failure] : [],
+    ...(run.replay
+      ? { replayHint: `fast-check replay: --seed ${run.replay.seed} (path ${run.replay.path})` }
+      : {}),
+  };
 }
 
 /** Fuzzes every selected target, printing a per-target line as each finishes. */
@@ -40,19 +58,14 @@ async function fuzzTargets(targets: readonly FuzzTarget[], options: FuzzOptions)
   const failures: FuzzFailure[] = [];
   const targetRuns: FuzzTargetRun[] = [];
   for (const target of targets) {
-    const cases = casesFor(target, options);
     const started = Date.now();
-    const found = await runTarget(target, cases, options.caseTimeoutMs);
+    const { cases, failures: found, replayHint } = await runOneTarget(target, options);
     const durationMs = Date.now() - started;
-    targetRuns.push({
-      target: target.name,
-      cases: cases.length,
-      failures: found.length,
-      durationMs,
-    });
+    targetRuns.push({ target: target.name, cases, failures: found.length, durationMs });
     process.stdout.write(
-      `${target.name}: ${cases.length} cases, ${found.length} failures (${durationMs}ms)\n`,
+      `${target.name}: ${cases} cases, ${found.length} failures (${durationMs}ms)\n`,
     );
+    if (replayHint !== undefined) process.stdout.write(`  ${replayHint}\n`);
     failures.push(...found);
   }
   return { failures, targetRuns };
@@ -76,7 +89,7 @@ type ModeOutcome = {
 async function replaySavedCase(options: FuzzOptions): Promise<ModeOutcome> {
   const started = Date.now();
   const { target, input } = readSavedCase(options.inputFile!);
-  const failures = await runTarget(target, [input], options.caseTimeoutMs);
+  const failures = await runCases(target, [input], options.caseTimeoutMs);
   for (const failure of failures) process.stdout.write(`${describeFailure(failure)}\n`);
   process.stdout.write(verdictLine(target.name, failures.length > 0));
   if (options.appendCorpus) promoteFailures(failures);

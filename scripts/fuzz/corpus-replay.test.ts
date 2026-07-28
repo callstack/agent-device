@@ -5,12 +5,13 @@
 // Cases run synchronously here on purpose: a corpus case that hangs would hang the unit
 // suite, which is exactly the signal (the nightly lane is where hangs are diagnosed).
 
+import fc from 'fast-check';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { arbitraryForTarget } from './arbitraries.ts';
 import { readCorpus } from './corpus.ts';
 import { checkCase } from './invariant.ts';
 import { getFuzzTarget } from './registry.ts';
 import { FUZZ_TARGETS } from './targets.ts';
-import { generateCases } from './mutate.ts';
 
 describe('parser fuzz regression corpus', () => {
   const corpus = readCorpus();
@@ -50,15 +51,18 @@ describe('parser fuzz regression corpus', () => {
 });
 
 describe('fuzz case generation', () => {
-  it('is deterministic for a seed, so a repro command reproduces', () => {
-    const seeds = ['text=Login', 'label="Sign in" && role=button'];
-    expect(generateCases(seeds, 32, 7)).toEqual(generateCases(seeds, 32, 7));
-    expect(generateCases(seeds, 32, 7)).not.toEqual(generateCases(seeds, 32, 8));
+  const target = getFuzzTarget('selector');
+
+  it('is deterministic for a seed, so a reported counterexample replays', () => {
+    const sample = (seed: number) => fc.sample(arbitraryForTarget(target), { numRuns: 32, seed });
+    expect(sample(7)).toEqual(sample(7));
+    expect(sample(7)).not.toEqual(sample(8));
   });
 
-  it('always covers the verbatim seeds before mutating', () => {
-    const seeds = ['a', 'b', 'c'];
-    expect(generateCases(seeds, 1, 1)).toEqual(seeds);
-    expect(generateCases(seeds, 10, 1).slice(0, 3)).toEqual(seeds);
+  it('generates strings the target can be fed directly', () => {
+    for (const input of fc.sample(arbitraryForTarget(target), { numRuns: 64, seed: 1 })) {
+      expect(typeof input).toBe('string');
+      expect(checkCase(target, input)).toBeNull();
+    }
   });
 });

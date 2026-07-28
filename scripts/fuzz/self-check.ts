@@ -5,7 +5,7 @@
 // mode fails when the harness reports nothing.
 
 import type { FuzzTargetRun } from './envelope.ts';
-import { runTarget } from './execute.ts';
+import { runCases } from './execute.ts';
 import { describeFailure } from './invariant.ts';
 import type { FuzzOptions } from './options.ts';
 import { SELF_CHECK_EXPECTATIONS, SELF_CHECK_TARGETS } from './self-check-targets.ts';
@@ -25,7 +25,7 @@ async function selfCheckResults(caseTimeoutMs: number): Promise<SelfCheckResult[
   for (const target of SELF_CHECK_TARGETS) {
     const expected = SELF_CHECK_EXPECTATIONS[target.name as SelfCheckTargetName];
     const started = Date.now();
-    const failures = await runTarget(target, [...target.seeds], caseTimeoutMs);
+    const failures = await runCases(target, [...target.seeds], caseTimeoutMs);
     const actual = failures[0] ? failures[0].kind : 'none';
     results.push({
       target: target.name,

@@ -57,9 +57,9 @@ jobs:
             --seed "$FUZZ_SEED" \
             --artifact-dir .tmp/fuzz/run
 
-      # Uploaded on pass as well as failure: each subdirectory of .tmp/fuzz holds the standard
-      # scheduled-lane run-envelope.json (schemaVersion, commit/ref/run provenance, seed, config,
-      # per-target durations, result), which is what freshness/health monitoring reads.
+      # Uploaded on pass as well as failure: each subdirectory of .tmp/fuzz holds a
+      # run-envelope.json (schemaVersion, commit/ref/run provenance, seed, config, per-target
+      # durations, result), which is what freshness monitoring reads.
       - name: Upload run envelopes and failing cases
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

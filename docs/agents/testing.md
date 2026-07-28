@@ -136,29 +136,17 @@ pnpm fuzz:parsers --self-check                     # require the harness to stil
 
 The generating run is nightly (`Parser Fuzz Lane` in `.github/workflows/replays-nightly.yml`, seeded
 by the run number). Every terminal path — pass, fail, `--self-check`, or a crash in the harness
-itself — writes `<artifact-dir>/run-envelope.json` in the standard scheduled-lane shape
-(`scripts/scheduled-lane/envelope.ts`: `schemaVersion`, `lane`, `result`, commit/ref/workflow-run
-provenance, seed and config, plus a lane-specific `details` payload — here per-target
-cases/failures/durations, failures, and repro commands). The nightly self-check and fuzz steps write
-to separate artifact subdirectories and both run unconditionally, so freshness/health monitoring
-(#1430) always finds an envelope; the step summary prints each one it finds and never fails on a
-missing file. Other scheduled lanes adopt the same writer rather than defining a second shape.
+itself — writes `<artifact-dir>/run-envelope.json` (`scripts/fuzz/envelope.ts`: `schemaVersion`,
+`lane`, `result`, commit/ref/workflow-run provenance, seed and config, plus per-target
+cases/failures/durations, failures, and repro commands), so a lane that goes dark or fails for weeks
+leaves a machine-readable trail. The self-check and fuzz steps write to separate artifact
+subdirectories and both run unconditionally; the step summary prints each envelope it finds and never
+fails on a missing file. The cross-lane version of this contract is #1430's own deliverable.
 
-### Scheduled lane health
-
-`pnpm lanes:health` is the consumer side of the envelope contract (#1430): it derives the lane list
-from `schedule:`-triggered workflows in `.github/workflows/` (never a hand-maintained list), reads
-each lane's recent scheduled runs from the GitHub API, and classifies it from recorded run fields —
-`healthy`, `failing` (two consecutive failed cadences), `dark` (no run within two cadences), or
-`pending` (no history to judge, e.g. a lane not on the default branch yet). A lane with no scheduled
-runs is judged against the commit that added its `schedule:` trigger, not the workflow's creation
-date, so adding a schedule to an old workflow still gets the full two-cadence grace — and an
-unreadable schedule date (shallow clone) stays `pending` rather than alerting. Freshness fields land
-in
-`lane-health.json` for the repo-health snapshot; an unhealthy lane opens or pings one tracking issue.
-It runs as `Scheduled Lane Health` (`.github/workflows/scheduled-lane-health.yml`) and locally with
-`--dry-run`, which never touches issues. Classification lives in
-`scripts/scheduled-lane/health-model.ts` and is unit-tested per category.
+Cases come from fast-check arbitraries (`scripts/fuzz/arbitraries.ts`) built on the hazard vocabulary
+shared with `src/__tests__/test-utils/property-arbitraries.ts`, so a hazard added for the property
+suite reaches the fuzz lane too — and a counterexample is reported **shrunk**, with fast-check's seed
+and replay path printed alongside the saved artifact.
 
 A nightly discovery reaches the unit lane by promotion, not hand-editing: the printed
 `promote:` command re-runs the downloaded artifact and appends it to

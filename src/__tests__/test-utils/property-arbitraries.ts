@@ -73,8 +73,12 @@ function selectorKeysOfKind(kind: 'text' | 'boolean'): SelectorKey[] {
  * The shapes that broke hand-written selector examples: both quote characters,
  * backslash runs before a quote, the `||` fallback separator and `=` inside a
  * value, whitespace-only values, and non-BMP text.
+ *
+ * Exported because the nightly parser fuzz lane (#1414) generates from this same
+ * list: a hazard added here for a round-trip property reaches the fuzzer too,
+ * instead of the two suites drifting into two vocabularies.
  */
-const SELECTOR_VALUE_HAZARDS = [
+export const SELECTOR_VALUE_HAZARDS = [
   '',
   ' ',
   '"',

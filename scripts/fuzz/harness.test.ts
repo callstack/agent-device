@@ -63,23 +63,22 @@ describe('fuzz harness self-check', () => {
 });
 
 describe('worker startup budget', () => {
-  // The watchdog used to start before the worker reported ready, so a slow thread start was
-  // misreported as a hung parser case. Startup must not be charged against the case budget.
-  it('does not report a hang when worker startup outlasts the case budget', () => {
+  // The watchdog used to start before the worker reported ready, so thread spawn plus type
+  // stripping plus parser imports — hundreds of milliseconds — was charged to the first case and
+  // reported as a hung parser. A budget far below real startup time is the regression: this only
+  // passes because the budget starts at the worker's `ready` handshake.
+  it('does not report a hang when startup outlasts the per-case budget', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fuzz-startup-'));
-    const { stdout } = runHarness(
-      [
-        '--target',
-        'self-check-untyped-throw',
-        '--iterations',
-        '1',
-        '--case-timeout-ms',
-        '300',
-        '--artifact-dir',
-        dir,
-      ],
-      { AGENT_DEVICE_FUZZ_STARTUP_DELAY_MS: '1200' },
-    );
+    const { stdout } = runHarness([
+      '--target',
+      'self-check-untyped-throw',
+      '--iterations',
+      '1',
+      '--case-timeout-ms',
+      '50',
+      '--artifact-dir',
+      dir,
+    ]);
     expect(stdout).toContain('untyped-throw');
     expect(stdout).not.toContain('hang');
     fs.rmSync(dir, { recursive: true, force: true });

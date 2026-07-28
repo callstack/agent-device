@@ -18,7 +18,7 @@ export const FUZZ_USAGE = `Usage: pnpm fuzz:parsers [options]
 
   --target <name>        Fuzz one target only (default: all)
   --iterations <n>       Cases per target (default: 2000)
-  --seed <n>             PRNG seed (default: 1). Same seed = same cases.
+  --seed <n>             fast-check seed (default: 1). Same seed = same cases.
   --case-timeout-ms <n>  Per-case watchdog budget (default: 2000)
   --artifact-dir <dir>   Where failing cases are written (default: .tmp/fuzz)
   --input-file <file>    Replay a single saved failing case (JSON artifact) and exit
