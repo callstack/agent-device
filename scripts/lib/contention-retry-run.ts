@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { runCmdStreaming, runCmdSync } from '../../src/utils/exec.ts';
 import { parseScriptArgs } from './cli-args.ts';
+import { firstRunArgs, retryRunArgs, type RunModes } from './contention-retry-args.ts';
 import { runWithContentionRetry, type TestRun } from './contention-retry-lane.ts';
 import { FAILURE_FILE_ENV } from './contention-retry-reporter.ts';
 import { RUNNER_TIMEOUT_TOKEN_ENV } from './runner-timeout-meta.ts';
@@ -95,6 +96,7 @@ function configHash(): string {
   for (const file of [
     'vitest.config.ts',
     'scripts/lib/contention-retry.ts',
+    'scripts/lib/contention-retry-args.ts',
     'scripts/lib/contention-retry-reporter.ts',
     'scripts/lib/contention-retry-blockers.ts',
     'scripts/lib/run-blocker-bus.ts',
@@ -105,16 +107,19 @@ function configHash(): string {
   return `sha256:${hash.digest('hex').slice(0, 16)}`;
 }
 
-const projects = (args.project ?? '')
-  .split(',')
-  .map((entry) => entry.trim())
-  .filter(Boolean)
-  .flatMap((name) => ['--project', name]);
+const modes: RunModes = {
+  projects: (args.project ?? '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean),
+  coverage: args.coverage,
+};
 
 const startedAtMs = Date.now();
 const result = await runWithContentionRetry({
-  runAll: () => runVitest([...projects, ...(args.coverage ? ['--coverage'] : [])], reportPath),
-  runFiles: (files) => runVitest([...files], reportPath.replace(/\.json$/, '.retry.json')),
+  runAll: () => runVitest(firstRunArgs(modes), reportPath),
+  runFiles: (files) =>
+    runVitest(retryRunArgs(modes, files), reportPath.replace(/\.json$/, '.retry.json')),
   commit: runCmdSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot }).stdout.trim(),
   configHash: configHash(),
   vitestVersion: vitestVersion(),

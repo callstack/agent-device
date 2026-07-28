@@ -414,7 +414,10 @@ The CI Coverage job runs the suite through `pnpm test:coverage:ci`
   sink drains it and refuses the rerun. **Any new gate reporter must call `recordRunBlocker`**, and
   must be ordered before the sink in `reporters()`.
 - **One retry, of the failed files only.** Not the suite, and never twice. Two timed-out tests in one
-  file are one retry, and count as one.
+  file are one retry, and count as one. The rerun keeps the first run's execution modes — the same
+  `--project` selection and the same V8 instrumentation (`scripts/lib/contention-retry-args.ts`), so
+  a coverage-job failure is never accepted by a run that could not reproduce it. Its coverage lands
+  in `coverage/contention-retry/`, leaving the first run's report as the changed-line gate's evidence.
 - **Retries stay visible.** Every retried file is named in the job summary with its tracking issue
   and review date, and the run writes the shared scheduled-lane envelope
   (`scripts/lib/lane-envelope.ts`, #1430) with the retry count, so a permanently flaky file shows up

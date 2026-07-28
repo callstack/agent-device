@@ -16,6 +16,7 @@ import contentionRetryReporter, {
   writeFailureReport,
 } from './contention-retry-reporter.ts';
 import { RUNNER_TIMEOUT_META, RUNNER_TIMEOUT_TOKEN_ENV } from './runner-timeout-meta.ts';
+import { firstRunArgs, RETRY_COVERAGE_DIR, retryRunArgs } from './contention-retry-args.ts';
 import {
   CONTENTION_RETRY_FILES,
   expiredRetryEntries,
@@ -288,6 +289,41 @@ test('the Coverage lane keeps the configured reporters, failure sink included', 
     !/['"]--reporter/.test(runner),
     'a --reporter flag replaces the configured reporters and would drop the slow-test gate',
   );
+});
+
+test('the retry reruns the failed files in the first run modes', () => {
+  const modes = { projects: ['unit-core', 'subprocess-stub'], coverage: true };
+  assert.deepEqual(firstRunArgs(modes), [
+    '--project',
+    'unit-core',
+    '--project',
+    'subprocess-stub',
+    '--coverage',
+  ]);
+  const retry = retryRunArgs(modes, [LISTED]);
+  assert.deepEqual(retry, [
+    '--project',
+    'unit-core',
+    '--project',
+    'subprocess-stub',
+    '--coverage',
+    `--coverage.reportsDirectory=${RETRY_COVERAGE_DIR}`,
+    // A subset of files can never meet whole-suite thresholds, and a first-run
+    // threshold failure is a blocker, so the retry never runs after one.
+    '--coverage.thresholds.statements=0',
+    '--coverage.thresholds.lines=0',
+    LISTED,
+  ]);
+  // The gate reads the first run's report; the retry must not overwrite it.
+  assert.notEqual(RETRY_COVERAGE_DIR, 'coverage');
+  assert.deepEqual(retryRunArgs({ projects: [], coverage: false }, [LISTED]), [LISTED]);
+
+  const runner = fs.readFileSync(
+    path.join(repoRoot, 'scripts/lib/contention-retry-run.ts'),
+    'utf8',
+  );
+  assert.match(runner, /runAll: \(\) => runVitest\(firstRunArgs\(modes\)/);
+  assert.match(runner, /runFiles: \(files\) =>\s*runVitest\(retryRunArgs\(modes, files\)/);
 });
 
 test('non-test failures block the retry instead of being rerun away', async () => {
