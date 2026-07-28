@@ -127,17 +127,11 @@ test('a replay-compat manifest edit selects the provenance verifier', () => {
   assert.ok(result.checks.includes('replay-compat'));
 });
 
-test('skills guidance change selects format + skillgym, not docs-only', () => {
+test('skills guidance change is docs-only', () => {
   const result = plan(['skills/agent-device/SKILL.md']);
   assert.equal(result.failOpen, false);
-  assert.equal(result.docsOnlyPaths.length, 0);
-  assert.ok(result.checks.includes('skillgym'), 'skills change must select the SkillGym suite');
-  assert.ok(result.checks.includes('format'), 'skills change must still run format');
-});
-
-test('SkillGym harness change selects the skillgym suite', () => {
-  const result = ids(['test/skillgym/suites/agent-device-smoke-suite.ts']);
-  assert.ok(result.includes('skillgym'));
+  assert.deepEqual(result.docsOnlyPaths, ['skills/agent-device/SKILL.md']);
+  assert.deepEqual(result.checks, []);
 });
 
 test('workflow/tooling and selector-owning changes fail open', () => {
@@ -187,7 +181,6 @@ test('every catalog command resolves against package scripts', () => {
     'build:android-snapshot-helper': 'x',
     'build:macos-helper': 'x',
     'test:smoke:web': 'x',
-    'test:skillgym': 'x',
     'check:replay-compat': 'x',
   };
   for (const spec of CHECK_CATALOG) {
@@ -271,10 +264,4 @@ test('every catalog CI job maps to a real workflow job (no fabricated checks)', 
       );
     }
   }
-});
-
-test('skillgym is a local-only gate (locally runnable, claims no CI job)', () => {
-  const skillgym = CHECK_CATALOG.find((spec) => spec.id === 'skillgym')!;
-  assert.equal(skillgym.localRunnable, true);
-  assert.deepEqual([...skillgym.ciJobs], []);
 });

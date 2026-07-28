@@ -570,11 +570,6 @@
       "crap_moderate": {
         "count": 1
       }
-    },
-    "test/skillgym/suites/agent-device-smoke-suite.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
     }
   },
   "runtime_coverage_findings": [],

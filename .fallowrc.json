@@ -60,7 +60,7 @@
     },
     {
       "comment": "Tool config default exports, loaded by the tool rather than imported.",
-      "file": "{tsdown.config.ts,vitest.mutation.config.ts,website/rspress.config.ts,test/skillgym/skillgym.config.ts,test/skillgym/suites/*.ts}",
+      "file": "{tsdown.config.ts,vitest.mutation.config.ts,website/rspress.config.ts}",
       "exports": ["default"]
     },
     {
@@ -84,7 +84,7 @@
       "exports": ["ownedTestFiles"]
     },
     {
-      "comment": "Help-benchmark conformance seams: helpTopicIds feeds the topic-coverage gate and PRIVATE_AX_RECOVERY_SAMPLE feeds the skillgym suite; both consumers are test-tree files outside --production analysis.",
+      "comment": "Help-benchmark conformance seams: helpTopicIds feeds the topic-coverage gate and PRIVATE_AX_RECOVERY_SAMPLE feeds the bench sample producers; both consumers are test-tree files outside --production analysis.",
       "file": "{src/cli/parser/cli-help.ts,scripts/help-conformance-sample-outputs.mjs}",
       "exports": ["helpTopicIds", "PRIVATE_AX_RECOVERY_SAMPLE"]
     },

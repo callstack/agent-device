@@ -261,8 +261,6 @@ function checkTypeInversions(edges: readonly ResolvedImportEdge[]): Violation[] 
 // moves here bring it to 102. Measured on the rebased tree — an earlier 87 was taken against an
 // older main and was stale rather than violated, which is exactly the kind of drift a ratchet
 // measured at merge time prevents.
-// Exported so the repo-health snapshot (scripts/repo-health) can record the R9 ratchet value as
-// observatory data without re-deriving it. The gate remains the authority; the snapshot follows.
 export const TYPE_CYCLE_BASELINE = 102;
 
 function checkTypeCycleGrowth(actual: number): Violation[] {

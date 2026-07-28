@@ -100,7 +100,6 @@ const ALL_SCRIPTS: Record<string, string> = {
   'test:integration:provider': 'x',
   'test:integration:node': 'x',
   'test:integration:progress:check': 'x',
-  'test:skillgym': 'x',
   'check:replay-compat': 'x',
 };
 

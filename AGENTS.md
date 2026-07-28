@@ -233,10 +233,8 @@ connect errors, retry policy, or command typing, start in
   layer after writing is how the same contract ends up duplicated across two of them.
   `docs/agents/cli-flags.md` walks the layers for the flag case.
 - Decide docs impact with the change, not after. For behavior/CLI-surface changes: update
-  help/metadata, README or `website/docs/**` when user-facing, and a SkillGym case in
-  `test/skillgym/suites/agent-device-smoke-suite.ts` when command-planning guidance changes.
-- Keep SkillGym cases behavioral and command-planning oriented: assert the user-visible contract and
-  expected command family, forbid known bad patterns, avoid brittle exact output.
+  help/metadata, README or `website/docs/**` when user-facing, and a help-conformance bench case
+  (`scripts/help-conformance-*.mjs`) when command-planning guidance changes.
 - State in the final summary whether docs/skills were updated, and why not if they weren't.
 
 When guidance conflicts, Hard Rules win, then scope, then testing, then style.

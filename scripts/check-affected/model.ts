@@ -11,10 +11,7 @@
 //     categories, so they are never silently skipped (issue constraint);
 //   - a small explicit build-ownership layer covers Swift, Android helpers,
 //     the macOS helper, MCP metadata, and the public package surface — the
-//     only paths whose owning build the sources of truth cannot derive;
-//   - SkillGym owns skill guidance (`skills/`) and its harness
-//     (`test/skillgym/`): those changes select the SkillGym suite, and their
-//     Markdown is skill/harness input, not inert docs.
+//     only paths whose owning build the sources of truth cannot derive.
 //
 // Anything the model cannot confidently classify fails open to the full check
 // set: unknown paths, workflow/tooling, the selector's own sources, and
@@ -40,7 +37,6 @@ export type CheckId =
   | 'android-helpers'
   | 'macos-helper'
   | 'web-smoke'
-  | 'skillgym'
   | 'replay-compat';
 
 // The complete local check universe. A fail-open plan selects all of these;
@@ -63,7 +59,6 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'android-helpers',
   'macos-helper',
   'web-smoke',
-  'skillgym',
   'replay-compat',
 ];
 
@@ -127,10 +122,8 @@ function isWorkflowTooling(file: string): boolean {
 }
 
 function isDocs(file: string): boolean {
-  // skills/ and the SkillGym harness are validated by the SkillGym suite (and
-  // formatting), not treated as inert docs — even their Markdown is skill
-  // guidance or harness input, so let them flow to ownership rules instead.
-  if (file.startsWith('skills/') || file.startsWith('test/skillgym/')) return false;
+  // skills/ Markdown is agent guidance prose with no owning suite (the
+  // SkillGym harness was removed), so it classifies as docs like the rest.
   return (
     file.startsWith('docs/') ||
     file.startsWith('website/') ||
@@ -211,10 +204,7 @@ function isNodeIntegrationPath(file: string): boolean {
 }
 
 const vitestRelatedOwnership: OwnershipRule = ({ file, isTs, underSrc, underTest }) =>
-  isTs &&
-  (underSrc || underTest) &&
-  !isNodeIntegrationPath(file) &&
-  !file.startsWith('test/skillgym/')
+  isTs && (underSrc || underTest) && !isNodeIntegrationPath(file)
     ? [
         reason(
           'vitest-related',
@@ -257,21 +247,6 @@ const replayCompatOwnership: OwnershipRule = ({ file }) => {
   }
   return selections;
 };
-
-// SkillGym validates skill guidance (`skills/`) and owns its harness
-// (`test/skillgym/`); the Testing Matrix in docs/agents/testing.md routes
-// skill-prompt/assertion changes here.
-const skillgymOwnership: OwnershipRule = ({ file, underSkills }) =>
-  underSkills || file.startsWith('test/skillgym/')
-    ? [
-        reason(
-          'skillgym',
-          file,
-          'own:skillgym',
-          'SkillGym suite validates skill guidance and its harness',
-        ),
-      ]
-    : [];
 
 const BUILD_OWNERSHIP: ReadonlyArray<{
   check: CheckId;
@@ -325,7 +300,6 @@ const OWNERSHIP_RULES: readonly OwnershipRule[] = [
   vitestRelatedOwnership,
   nodeIntegrationOwnership,
   replayCompatOwnership,
-  skillgymOwnership,
   buildOwnership,
 ];
 

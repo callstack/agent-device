@@ -1,13 +1,12 @@
 # Agent Device Tester
 
-`Agent Device Tester` is a minimal Expo Router fixture app for `agent-device` and `skillgym` experiments.
+`Agent Device Tester` is a minimal Expo Router fixture app for `agent-device` experiments.
 
 It is intentionally small, but each surface is dense with durable accessibility targets so a few screens cover a large share of the workflows we care about.
 
 ## Why this app exists
 
 - It gives `agent-device` a stable React Native target that we control.
-- It makes `skillgym` prompts concrete: the agent can inspect real app files instead of answering against an imagined UI.
 - It keeps the number of screens low while still covering roughly 50 practical interaction and verification cases.
 
 ## Screens

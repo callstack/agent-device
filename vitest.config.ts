@@ -22,9 +22,6 @@ export const SUBPROCESS_STUB_TESTS = [
   // Replays the fuzz regression corpus (#1414) through that same worker watchdog, so a promoted
   // hang case fails against its per-case budget instead of wedging the unit job.
   'scripts/fuzz/corpus-replay.test.ts',
-  // Spawns the `pnpm repo-health` CLI as a subprocess to exercise its arg handling and the JSON
-  // it writes over the real tree (#1423).
-  'scripts/repo-health/run.test.ts',
 ];
 
 export default defineConfig({
@@ -50,13 +47,8 @@ export default defineConfig({
             'scripts/__tests__/help-conformance-error-recovery-coverage.test.ts',
             'scripts/__tests__/help-conformance-sample-outputs.test.ts',
             'scripts/__tests__/help-conformance-topic-coverage.test.ts',
-            // Repo-health snapshot model (#1423): pure aggregation over the analyzers, no
-            // subprocess or device work, so it runs in the fast lane. The CLI's subprocess test
-            // lives in the subprocess-stub project.
-            'scripts/repo-health/model.test.ts',
             // Parses CI configuration only, so this action guard needs no device or subprocess lane.
             'test/ci/upload-agent-device-artifacts.test.ts',
-            'test/skillgym/suites/local-cli-help-policy.test.ts',
             // The frozen replay-compat corpus (#1417): parse-only, no device or
             // subprocess work, so it belongs in the fast lane next to the
             // grammar it guards.

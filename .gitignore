@@ -35,7 +35,6 @@ xcuserdata/
 *.app
 *.xctestrun
 *.xcarchive
-.skillgym-results/
 android/snapshot-helper/build/
 android/snapshot-helper/dist/
 android/ime-helper/build/

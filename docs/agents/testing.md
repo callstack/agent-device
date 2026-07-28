@@ -18,7 +18,6 @@ The mapping it encodes, for when you need to run a gate directly or reason about
 | iOS runner / Swift | `pnpm build:xcuitest` |
 | CLI help/guidance (`src/cli/parser/cli-help.ts`, `src/cli-schema/`) | `pnpm exec vitest run src/cli/parser/__tests__ src/cli-schema/command-schema-guards.test.ts scripts/__tests__` — the `scripts/__tests__` gates enforce help-topic benchmark coverage and pin the bench's quoted CLI samples to the real renderers |
 | Help benchmark cases (`scripts/help-conformance-*.mjs`) | `pnpm exec vitest run scripts/__tests__` (deterministic gates); model-backed: `pnpm bench:help-conformance` (paid LLM calls, local only) |
-| SkillGym prompts/assertions | `pnpm test:skillgym:case <case-id>` (broad: `pnpm test:skillgym`, filter with `-- --tag fixture-smoke` or `-- --tag skill-guidance`) — agentic routing + local-help-consumption proof only; command-planning knowledge checks belong in the help bench |
 | `.ad` grammar (`src/replay/script.ts`, gesture arity, replay vars) | `pnpm exec vitest run --project unit-core test/replay-compat` — the frozen replay-compat corpus asserts which released script surfaces still parse; a flipped verdict is edited in `test/replay-compat/manifest.ts`, never in the script. Adding or re-pinning a corpus entry also runs `pnpm check:replay-compat`, which re-derives each entry from its release tag in git history |
 | Anything in `src/`, `test/`, `skills/` | `pnpm format` |
 | A decision kernel or its tests (`src/kernel/errors.ts`, `src/daemon/ref-frame.ts`, `src/commands/interaction/runtime/settle.ts`, `src/utils/scroll-edge-state.ts`, `src/selectors/`) | `pnpm mutation:affected --base origin/main` (minutes; GitHub runs it per PR — see the mutation ratchet section) |
@@ -88,8 +87,8 @@ hand-maintained path map:
   import ownership. Dynamic-import relationships remain outside Vitest's
   analysis; GitHub's authoritative full suites still cover that boundary.
 - **Non-Vitest suites** retain explicit ownership. Root
-  `test/integration/*.ts` files use the Node integration lane, SkillGym owns its
-  harness and skill guidance, and platform/build tools keep their native gates.
+  `test/integration/*.ts` files use the Node integration lane, and
+  platform/build tools keep their native gates.
 - **Always-on gates** (`lint`, `typecheck`, `layering`, `fallow`, `format`) fire
   for their input categories and are never silently skipped. Platform source
   also selects the provider-integration and coverage gates required by the
@@ -99,9 +98,6 @@ hand-maintained path map:
 - A **small explicit build-ownership layer** covers the paths whose owning build
   cannot be derived: Swift runner, Android helpers, macOS helper, MCP metadata,
   and the public package surface (itself derived from `package.json` `exports`).
-- **SkillGym ownership** covers skill guidance (`skills/`) and the SkillGym
-  harness (`test/skillgym/`) — those changes select the (local-only) SkillGym
-  suite, and their Markdown is treated as skill/harness input, not inert docs.
 
 Changed-file discovery folds working-tree state into the local plan: in the
 default local mode (`--head HEAD`) it unions the committed `base..HEAD` diff with

@@ -140,7 +140,7 @@ export function FormScreen(props: FormScreenProps) {
         title="Android IME capture"
         testID="android-ime-capture-fixture"
       >
-        {/* SkillGym fixture: static diagnostic copy, not live state. */}
+        {/* Fixture: static diagnostic copy, not live state. */}
         <TextField
           accessibilityLabel="Android IME target field"
           autoCapitalize="none"
