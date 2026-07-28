@@ -15,7 +15,7 @@ import contentionRetryReporter, {
   runBlockers,
   writeFailureReport,
 } from './contention-retry-reporter.ts';
-import { RUNNER_TIMEOUT_META } from './runner-timeout-meta.ts';
+import { RUNNER_TIMEOUT_META, RUNNER_TIMEOUT_TOKEN_ENV } from './runner-timeout-meta.ts';
 import {
   CONTENTION_RETRY_FILES,
   expiredRetryEntries,
@@ -54,8 +54,11 @@ function assertionFailure(overrides: Partial<TestFailure> = {}): TestFailure {
   return failure({ message: ASSERTION_MESSAGE, timeout: false, ...overrides });
 }
 
+/** The run's secret, minted by the lane and never visible to a test module. */
+const TOKEN = 'a4ec0a4a-0f77-4f2e-9d4a-6d7f1d3f0d21';
+
 /** What the runner-timeout setup file writes on a test the runner aborted. */
-const RUNNER_ABORTED = { [RUNNER_TIMEOUT_META]: true };
+const RUNNER_ABORTED = { [RUNNER_TIMEOUT_META]: TOKEN };
 
 function testCaseStub(
   errors: ReadonlyArray<Record<string, unknown>>,
@@ -152,7 +155,14 @@ test('the expiry gate fails the run before any test executes', async () => {
 });
 
 test('only the runner-owned abort mark classifies a failure as a timeout', () => {
-  assert.ok(isRunnerTimeout([VITEST_TIMEOUT], RUNNER_ABORTED));
+  assert.ok(isRunnerTimeout([VITEST_TIMEOUT], RUNNER_ABORTED, TOKEN));
+  // `task.meta` is test-writable, so a mark that is not the run's secret is worthless.
+  for (const forged of [true, 'true', 'agentDeviceRunnerTimeout', '', undefined]) {
+    assert.ok(!isRunnerTimeout([VITEST_TIMEOUT], { [RUNNER_TIMEOUT_META]: forged }, TOKEN));
+  }
+  // No secret configured means nothing is eligible.
+  assert.ok(!isRunnerTimeout([VITEST_TIMEOUT], RUNNER_ABORTED, undefined));
+  assert.ok(!isRunnerTimeout([VITEST_TIMEOUT], RUNNER_ABORTED, ''));
   // Without the runner's mark, no message and no error shape can earn a retry.
   for (const impostor of [
     { name: 'Error', message: VITEST_TIMEOUT.message },
@@ -160,18 +170,19 @@ test('only the runner-owned abort mark classifies a failure as a timeout', () =>
     { name: 'Error', message: 'connect ETIMEDOUT 127.0.0.1:8080' },
     { name: 'Error', message: 'Closing timeout while tearing down the daemon' },
   ]) {
-    assert.ok(!isRunnerTimeout([impostor], {}), `${impostor.name}: ${impostor.message}`);
-    assert.ok(!isRunnerTimeout([impostor], undefined));
-    assert.ok(!isRunnerTimeout([impostor], { [RUNNER_TIMEOUT_META]: 'yes' }));
+    assert.ok(!isRunnerTimeout([impostor], {}, TOKEN), `${impostor.name}: ${impostor.message}`);
+    assert.ok(!isRunnerTimeout([impostor], undefined, TOKEN));
+    assert.ok(!isRunnerTimeout([impostor], { [RUNNER_TIMEOUT_META]: 'yes' }, TOKEN));
   }
   // An aborted test that also produced an assertion diff is a regression.
   assert.ok(
     !isRunnerTimeout(
       [VITEST_TIMEOUT, { name: 'AssertionError', message: 'x', expected: 1, actual: 2 }],
       RUNNER_ABORTED,
+      TOKEN,
     ),
   );
-  assert.ok(!isRunnerTimeout([], RUNNER_ABORTED));
+  assert.ok(!isRunnerTimeout([], RUNNER_ABORTED, TOKEN));
 });
 
 test('a real Vitest run marks only runner-aborted tests as retry-eligible', () => {
@@ -181,7 +192,11 @@ test('a real Vitest run marks only runner-aborted tests as retry-eligible', () =
   fs.rmSync(report, { force: true });
   runCmdSync('pnpm', ['exec', 'vitest', 'run', '--config', FIXTURE_CONFIG], {
     cwd: repoRoot,
-    env: { ...process.env, CONTENTION_RETRY_FAILURES: report },
+    env: {
+      ...process.env,
+      CONTENTION_RETRY_FAILURES: report,
+      [RUNNER_TIMEOUT_TOKEN_ENV]: TOKEN,
+    },
     allowFailure: true,
   });
   const { failures } = parseFailureReport(JSON.parse(fs.readFileSync(report, 'utf8')), repoRoot);
@@ -193,6 +208,11 @@ test('a real Vitest run marks only runner-aborted tests as retry-eligible', () =
     'timeout message thrown after blocking the event loop past the budget': false,
     'assertion failure after blocking the event loop past the budget': false,
     'plain assertion failure': false,
+    // `task.meta` is test-writable, but the mark is the run's secret and the
+    // setup file takes it out of the environment before any test module loads.
+    'test writes the provenance marker itself': false,
+    'test writes the marker after blocking the event loop past the budget': false,
+    'test writes the marker from the environment it can still read': false,
   });
   // Only the genuine timeout may reach a rerun.
   const listed = failures.map((entry) => ({ ...entry, file: LISTED }));
@@ -206,6 +226,7 @@ test('an assertion message quoting a timeout still fails on the first run', asyn
     testCaseStub([{ name: 'AssertionError', message: VITEST_TIMEOUT.message }], {
       meta: {},
     }) as never,
+    TOKEN,
   );
   assert.ok(impostor);
   assert.equal(impostor.timeout, false);
@@ -222,19 +243,20 @@ test('a test that timed out AND failed an assertion is not retry-eligible', () =
       VITEST_TIMEOUT,
       { name: 'AssertionError', message: 'expected 1 to be 2', expected: 2, actual: 1 },
     ]) as never,
+    TOKEN,
   );
   assert.equal(mixed?.timeout, false);
 });
 
 test('the lane reporter keeps the real error message a timeout is classified by', () => {
-  const failed = failedTestCase(testCaseStub([VITEST_TIMEOUT]) as never);
+  const failed = failedTestCase(testCaseStub([VITEST_TIMEOUT]) as never, TOKEN);
   assert.deepEqual(failed, {
     file: `${repoRoot}/${LISTED}`,
     testName: 'opens a session',
     message: TIMEOUT_MESSAGE,
     timeout: true,
   });
-  assert.equal(failedTestCase(testCaseStub([], { state: 'passed' }) as never), null);
+  assert.equal(failedTestCase(testCaseStub([], { state: 'passed' }) as never, TOKEN), null);
 
   const target = path.join(repoRoot, '.tmp/contention-retry/reporter-gate.json');
   writeFailureReport({ failures: [failure()], blockers: [] }, target);

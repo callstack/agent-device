@@ -8,13 +8,14 @@ import path from 'node:path';
 import type { Reporter, TestCase, TestModule } from 'vitest/node';
 import { isRunnerTimeout, type RunBlocker, type TestFailure } from './contention-retry.ts';
 import { drainRunBlockers } from './run-blocker-bus.ts';
+import { RUNNER_TIMEOUT_TOKEN_ENV } from './runner-timeout-meta.ts';
 
 export const FAILURE_FILE_ENV = 'CONTENTION_RETRY_FAILURES';
 
 export type FailureReport = { failures: TestFailure[]; blockers: RunBlocker[] };
 
 /** The failed-test view of a Vitest test case, or null when it did not fail. */
-export function failedTestCase(testCase: TestCase): TestFailure | null {
+export function failedTestCase(testCase: TestCase, token: string | undefined): TestFailure | null {
   const result = testCase.result();
   if (result.state !== 'failed') return null;
   const errors = result.errors ?? [];
@@ -22,7 +23,7 @@ export function failedTestCase(testCase: TestCase): TestFailure | null {
     file: (testCase.module as TestModule).moduleId,
     testName: testCase.fullName,
     message: errors.map((error) => `${error.name}: ${error.message}`).join('\n'),
-    timeout: isRunnerTimeout(errors, testCase.meta()),
+    timeout: isRunnerTimeout(errors, testCase.meta(), token),
   };
 }
 
@@ -59,7 +60,7 @@ export default function contentionRetryReporter(): Reporter {
   const failures: TestFailure[] = [];
   return {
     onTestCaseResult(testCase: TestCase): void {
-      const failed = failedTestCase(testCase);
+      const failed = failedTestCase(testCase, process.env[RUNNER_TIMEOUT_TOKEN_ENV]);
       if (failed) failures.push(failed);
     },
     onTestRunEnd(

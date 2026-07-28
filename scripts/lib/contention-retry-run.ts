@@ -14,6 +14,7 @@ import { runCmdStreaming, runCmdSync } from '../../src/utils/exec.ts';
 import { parseScriptArgs } from './cli-args.ts';
 import { runWithContentionRetry, type TestRun } from './contention-retry-lane.ts';
 import { FAILURE_FILE_ENV } from './contention-retry-reporter.ts';
+import { RUNNER_TIMEOUT_TOKEN_ENV } from './runner-timeout-meta.ts';
 import { processBlockers } from './contention-retry-blockers.ts';
 import { parseFailureReport, type RunBlocker, type TestFailure } from './contention-retry.ts';
 
@@ -42,6 +43,9 @@ const reportPath = path.resolve(repoRoot, args.report);
 const envelopePath = path.resolve(repoRoot, args.envelope);
 const summaryPath = args.summary ?? process.env.GITHUB_STEP_SUMMARY;
 
+/** The capability the runner needs to mark a timeout; test modules never see it. */
+const TIMEOUT_TOKEN = crypto.randomUUID();
+
 async function runVitest(extra: string[], report: string): Promise<TestRun> {
   fs.mkdirSync(path.dirname(report), { recursive: true });
   fs.rmSync(report, { force: true });
@@ -52,7 +56,7 @@ async function runVitest(extra: string[], report: string): Promise<TestRun> {
   };
   const result = await runCmdStreaming('pnpm', ['exec', 'vitest', 'run', ...extra], {
     cwd: repoRoot,
-    env: { ...process.env, [FAILURE_FILE_ENV]: report },
+    env: { ...process.env, [FAILURE_FILE_ENV]: report, [RUNNER_TIMEOUT_TOKEN_ENV]: TIMEOUT_TOKEN },
     allowFailure: true,
     onStdoutChunk: (chunk) => capture(chunk, (text) => process.stdout.write(text)),
     onStderrChunk: (chunk) => capture(chunk, (text) => process.stderr.write(text)),

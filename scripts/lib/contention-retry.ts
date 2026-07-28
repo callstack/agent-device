@@ -244,8 +244,12 @@ export type ReportedError = {
 };
 
 /** A test the runner aborted at its timeout — the only failure this lane retries. */
-export function isRunnerTimeout(errors: readonly ReportedError[], meta: unknown): boolean {
-  return runnerTimedOut(meta) && errors.length > 0 && errors.every(hasNoAssertionDiff);
+export function isRunnerTimeout(
+  errors: readonly ReportedError[],
+  meta: unknown,
+  token: string | undefined,
+): boolean {
+  return runnerTimedOut(meta, token) && errors.length > 0 && errors.every(hasNoAssertionDiff);
 }
 
 /** A timeout that also failed an assertion is a regression, not contention. */

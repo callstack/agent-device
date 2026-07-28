@@ -397,7 +397,10 @@ The CI Coverage job runs the suite through `pnpm test:coverage:ci`
   runner (`scripts/vitest-runner-timeout-setup.ts`, a setup file on every project): the runner owns
   the controller behind `context.signal` and aborts it with the timeout error it raises, so a test
   that merely *throws* the exact timeout message — immediately, or after blocking the event loop past
-  its budget — never carries the mark. Error text is never consulted for eligibility;
+  its budget — never carries the mark. `task.meta` is writable by test code, so the mark is not a
+  flag but the run's secret: the lane mints it per run, and the setup file takes it out of the
+  environment as it loads — before any test module is imported — so a test writing the marker itself
+  has no value to write. Error text is never consulted for eligibility;
   `test/contention-retry-fixtures/` drives those forgeries through a real Vitest run in the gate. One
   assertion failure — in a listed file or not — fails the job on the first run, so a real regression
   can never be papered over.
