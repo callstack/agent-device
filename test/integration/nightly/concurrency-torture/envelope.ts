@@ -1,29 +1,30 @@
 // Standard scheduled-lane artifact envelope (#1430) for the concurrency torture
-// lane (#1416). #1430 requires every scheduled lane to emit a machine-readable
-// envelope — schema version, commit SHA, tool/config hashes, seed range,
-// duration, and result — so the observatory can detect a lane going dark or
-// stale. Written when TORTURE_ENVELOPE names an output path (set by the nightly
-// workflow, which uploads it as an artifact); a no-op otherwise.
+// lane (#1416). Builds the shared `LaneEnvelope` from scripts/lib/lane-envelope.ts
+// so the #1430 health watcher parses one dialect, not a lane-local one; the
+// lane's seed range / run count ride in the typed `data` payload, and the lane
+// source hash maps onto the generic `configHash`. Written when TORTURE_ENVELOPE
+// names an output path (set by the nightly workflow, which uploads it as an
+// artifact); a no-op otherwise.
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  laneEnvelope,
+  type LaneEnvelope,
+  type LaneResult,
+} from '../../../../scripts/lib/lane-envelope.ts';
 
-const ENVELOPE_SCHEMA_VERSION = 1;
+const LANE_ID = 'concurrency-torture';
 
-export type LaneEnvelope = {
-  schemaVersion: number;
-  lane: string;
+export type TortureEnvelopeData = {
   issue: number;
-  commitSha: string | null;
-  tool: { node: string };
-  sourceHash: string;
   seedRange: { start: number; end: number };
   runs: number;
-  durationMs: number;
-  result: 'pass' | 'fail';
 };
+
+export type TortureEnvelope = LaneEnvelope<TortureEnvelopeData>;
 
 /** Content hash of the lane's own source, so config/tool drift is visible. */
 function laneSourceHash(): string {
@@ -46,25 +47,28 @@ function laneSourceHash(): string {
 export function buildEnvelope(params: {
   seedStart: number;
   runs: number;
-  durationMs: number;
-  result: 'pass' | 'fail';
-}): LaneEnvelope {
-  return {
-    schemaVersion: ENVELOPE_SCHEMA_VERSION,
-    lane: 'concurrency-torture',
-    issue: 1416,
-    commitSha: process.env.GITHUB_SHA?.trim() || null,
+  startedAtMs: number;
+  result: LaneResult;
+}): TortureEnvelope {
+  const end = params.seedStart + params.runs;
+  return laneEnvelope<TortureEnvelopeData>({
+    lane: LANE_ID,
+    commit: process.env.GITHUB_SHA?.trim() || '',
     tool: { node: process.version },
-    sourceHash: laneSourceHash(),
-    seedRange: { start: params.seedStart, end: params.seedStart + params.runs },
-    runs: params.runs,
-    durationMs: params.durationMs,
+    configHash: laneSourceHash(),
+    seed: `${params.seedStart}-${end - 1}`,
+    startedAtMs: params.startedAtMs,
     result: params.result,
-  };
+    data: {
+      issue: 1416,
+      seedRange: { start: params.seedStart, end },
+      runs: params.runs,
+    },
+  });
 }
 
 /** Write the envelope to TORTURE_ENVELOPE when set; returns the path or null. */
-export function writeEnvelopeIfRequested(envelope: LaneEnvelope): string | null {
+export function writeEnvelopeIfRequested(envelope: TortureEnvelope): string | null {
   const target = process.env.TORTURE_ENVELOPE?.trim();
   if (!target) return null;
   fs.mkdirSync(path.dirname(target), { recursive: true });

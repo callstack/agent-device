@@ -41,9 +41,10 @@ jobs:
     env:
       TORTURE_RUNS: ${{ github.event.inputs.runs || '5000' }}
       TORTURE_SEED_START: ${{ github.event.inputs.seed-start || '0' }}
-      # Standard scheduled-lane artifact envelope (#1430): schemaVersion, commit
-      # SHA, tool/config hashes, seed range, duration, and result. Emitted by the
-      # test and uploaded below so the observatory can detect a lane going dark.
+      # Standard scheduled-lane artifact envelope (#1430) built via the shared
+      # scripts/lib/lane-envelope.ts (commit, tool/configHash, seed range, result);
+      # the seed sweep rides in the typed data payload. Emitted by the test and
+      # uploaded below so the freshness watcher can detect a lane going dark.
       TORTURE_ENVELOPE: ${{ github.workspace }}/torture-results/envelope.json
     steps:
       - name: Checkout

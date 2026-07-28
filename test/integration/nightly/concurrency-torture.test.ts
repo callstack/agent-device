@@ -54,7 +54,7 @@ after(() => {
   // measured to this hook, so it can't understate work by excluding later tests.
   const envelope = buildEnvelope({
     ...sweepRange,
-    durationMs: Date.now() - laneStartedMs,
+    startedAtMs: laneStartedMs,
     result: laneFailed ? 'fail' : 'pass',
   });
   const written = writeEnvelopeIfRequested(envelope);

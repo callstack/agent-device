@@ -244,8 +244,10 @@ replay command. The lane lives under `test/integration/nightly/`, deliberately *
 `test:integration:node` glob so it is not an accidental PR-time run: the PR gate runs a fast default
 sweep via an explicit `Run seeded concurrency torture lane` step in the Integration job, and the
 `Concurrency Torture Nightly` workflow sweeps a much larger seed range on schedule. The nightly run
-emits a machine-readable envelope (schema version, commit SHA, tool/config hash, seed range, duration,
-result) via `TORTURE_ENVELOPE=<path>`, uploaded as the `concurrency-torture-envelope` artifact. The
+emits the shared scheduled-lane envelope (`scripts/lib/lane-envelope.ts`, #1430 — commit,
+tool/`configHash` from the lane source hash, `seed` range, duration, result, with the seed sweep in
+the typed `data` payload) via `TORTURE_ENVELOPE=<path>`, uploaded as the `concurrency-torture-envelope`
+artifact. The
 envelope is written once, after **all** lane tests settle, and reports `fail` if any of them (sweep,
 replay self-check, or forced-contention guardrail) failed — a later-failing guardrail can never be
 published as a passing envelope. Optional knobs: `TORTURE_CLIENTS`, `TORTURE_OPS`.
