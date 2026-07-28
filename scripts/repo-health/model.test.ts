@@ -5,8 +5,7 @@ import { resolveImportEdges } from '../layering/model.ts';
 import { buildGraph, type GraphData } from '../depgraph/model.ts';
 import { mainSequenceModules, zoneComponents } from './components.ts';
 import {
-  artifactProvenance,
-  isArtifactStale,
+  collectArtifactProvenance,
   benchMetrics,
   buildSnapshot,
   coverageMetrics,
@@ -125,32 +124,32 @@ test('coverage and size degrade to unavailable when the artifact is absent', () 
   ).toBe(true);
 });
 
-test('isArtifactStale flags an artifact predating ANY producer input, incl. non-src ones', () => {
-  const artifact = 1500;
-  const srcMtimes = [1000, 1200]; // all older than the artifact
-  // Freshness judged on src alone would (wrongly) call this fresh — the earlier false-negative.
-  expect(isArtifactStale(artifact, srcMtimes)).toBe(false);
-  // A non-src producer input (e.g. package.json / vitest config / tsdown config) edited after the
-  // artifact was produced must flip the verdict, so a coverage/size number is not paired with a
-  // commit it predates.
-  const packageJsonMtime = 1800;
-  expect(isArtifactStale(artifact, [...srcMtimes, packageJsonMtime])).toBe(true);
-  // No observable producer input => freshness cannot be proven => stale, never a false "fresh".
-  expect(isArtifactStale(artifact, [])).toBe(true);
-});
+// Drives the real collector (parse → read stamped commit → hash → status), so removing the
+// commit-verification breaks these — unlike a fabricated status. Freshness is proven ONLY from a
+// commit the artifact stamps, never mtime or a producer-input list.
+test('collectArtifactProvenance proves freshness only from a commit the artifact stamps', () => {
+  const path = 'coverage/coverage-summary.json';
 
-test('artifactProvenance binds bytes, the producer input set, and the staleness verdict', () => {
-  const args = {
-    path: 'coverage/coverage-summary.json',
-    sha256: 'deadbeef',
-    producerInputs: ['src/**/*.ts', 'package.json'],
-  };
+  // A real coverage-summary shape stamps no commit — we cannot prove it matches HEAD, so `unknown`.
+  const coverageShaped = JSON.stringify({ total: { lines: { total: 10, covered: 8, pct: 80 } } });
+  const unknown = collectArtifactProvenance(path, coverageShaped, 'abc123');
+  expect(unknown?.status).toBe('unknown');
+  expect(unknown?.producerCommit).toBeNull();
+  expect(unknown?.sha256).toMatch(/^[0-9a-f]{12}$/); // bytes still hashed for #1424
+
+  // An artifact that stamps the current commit is proven current.
   expect(
-    artifactProvenance({ ...args, artifactMtimeMs: 2000, producerInputMtimesMs: [1000, 1500] }),
-  ).toEqual({ ...args, stale: false });
-  expect(
-    artifactProvenance({ ...args, artifactMtimeMs: 1000, producerInputMtimesMs: [1500] }),
-  ).toEqual({ ...args, stale: true });
+    collectArtifactProvenance(path, JSON.stringify({ commit: 'abc123', total: {} }), 'abc123')
+      ?.status,
+  ).toBe('fresh');
+
+  // A stamped commit that differs is stale — metrics predate HEAD.
+  const stale = collectArtifactProvenance(path, JSON.stringify({ commit: 'old999' }), 'abc123');
+  expect(stale?.status).toBe('stale');
+  expect(stale?.producerCommit).toBe('old999');
+
+  // Absent artifact degrades cleanly to null (coverage/size become { available: false }).
+  expect(collectArtifactProvenance(path, null, 'abc123')).toBeNull();
 });
 
 test('benchMetrics counts cases and distinct topics from the case registry', () => {

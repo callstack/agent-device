@@ -53,16 +53,18 @@ Field names are the stable **trend/delta contract** consumed by #1424. Any chang
     "inputs": {
       "sourceFiles": 932,                              // production files fed to the graph build
       "lockfile": { "path": "pnpm-lock.yaml", "sha256": "…" },
-      // coverage and size are read artifacts this command does NOT produce, so they carry no
-      // producing-commit stamp. They are hashed (so history keys on the bytes, not the commit) and
-      // flagged `stale` when ANY of their `producerInputs` is newer than the artifact — coverage
-      // tracks sources + tests + vitest config + package.json; size tracks package.json + lockfile +
-      // tsdown/tsconfig + size-report.mjs, not just `src`. Unprovable freshness (no observable input)
-      // is reported stale. A consumer (#1424) must treat stale metrics as lagging `commit`.
+      // coverage and size are read artifacts this command does NOT produce. Their freshness relative
+      // to `commit` is proven ONLY from a producing commit the artifact stamps in its own bytes —
+      // never mtime (a copy/restore/CI-cache download resets it) nor an enumerated input list (never
+      // provably complete). status: "fresh" = stamped commit == HEAD; "stale" = stamped commit !=
+      // HEAD; "unknown" = no stamp. Today neither producer stamps a commit, so both report "unknown"
+      // (honest — cannot be proven current); if one starts emitting `commit`, it is verified. The
+      // bytes are still hashed so #1424 keys history on the exact metrics. A consumer must treat
+      // "unknown"/"stale" alike as not-current, never as `commit`.
       "coverageSummary": { "path": "coverage/coverage-summary.json", "sha256": "…",
-                           "producerInputs": ["src/**/*.ts", "test", "…"], "stale": false } | null,
+                           "producerCommit": null, "status": "unknown" } | null,
       "sizeReport": { "path": ".tmp/size-report.json", "sha256": "…",
-                      "producerInputs": ["src/**/*.ts", "package.json", "…"], "stale": false } | null
+                      "producerCommit": null, "status": "unknown" } | null
     }
   },
   "metrics": {

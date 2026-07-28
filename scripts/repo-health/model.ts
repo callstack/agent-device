@@ -17,6 +17,7 @@
 // become CI thresholds (CONTEXT.md "Principles and their gates"). The single thing wired into CI
 // is the depgraph-vs-layering R6 consistency assertion, which lives in the Layering Guard job.
 
+import { createHash } from 'node:crypto';
 import { TYPE_CYCLE_BASELINE, TYPE_INVERSION_BASELINE } from '../layering/check.ts';
 import type { EdgeKind, GraphData } from '../depgraph/model.ts';
 import {
@@ -230,50 +231,68 @@ export function benchMetrics(cases: readonly { docs: readonly string[] }[]): Ben
 // ---- Provenance -------------------------------------------------------------------------------
 
 /**
+ * Freshness of a READ artifact relative to the snapshot's `commit`. `fresh` requires proof; anything
+ * unproven is `unknown`, never silently trusted.
+ */
+export type ArtifactStatus = 'fresh' | 'stale' | 'unknown';
+
+/**
  * Provenance for an analyzer artifact this snapshot READ but did not itself produce (coverage,
- * size). These artifacts carry no producing-commit stamp, so the snapshot cannot claim they match
- * `commit`. We instead record their content hash — so #1424 keys history on the bytes the metrics
- * came from, not on a commit they may predate — the `producerInputs` freshness was judged against,
- * and an explicit `stale` flag. Freshness is bound to the artifact's WHOLE producer input set, not
- * just `src` (coverage also depends on tests/config; size on package.json and packaging config), so
- * a change to any of them re-flags the artifact. A consumer must treat stale metrics as lagging
- * `commit`, never as current.
+ * size). Its freshness relative to `commit` is proven ONLY from a producing commit the artifact
+ * stamps in its own bytes. We deliberately reject the two signals that cannot prove it: mtime (a
+ * copy, restore, or CI cache download resets it) and an enumerated producer-input list (never
+ * provably complete — the last review showed it silently omitted inputs). So a stamped commit equal
+ * to `commit` is `fresh`; a different stamped commit is `stale`; NO stamp is `unknown`. Today
+ * neither producer stamps a commit, so both report `unknown` — honest, since we cannot prove they
+ * match; if a producer starts emitting one, it is verified automatically. `sha256` still records the
+ * bytes so #1424 keys history on the exact metrics read. A consumer must treat `stale` and `unknown`
+ * alike as not-current, never as `commit`.
  */
 export type ArtifactProvenance = {
   path: string;
   sha256: string;
-  /** The producer input pathspecs whose freshness this verdict was computed against. */
-  producerInputs: string[];
-  stale: boolean;
+  /** The producing commit read from the artifact's own bytes, or null when it stamps none. */
+  producerCommit: string | null;
+  status: ArtifactStatus;
 };
 
-/**
- * Whether an artifact predates any of its producer inputs. mtime is a local, offline signal (these
- * artifacts are git-ignored, so there is no blob to diff), evaluated against a single tree in one
- * run. Freshness we cannot prove is reported as stale: an EMPTY input set (nothing observable) and
- * any input newer than the artifact both mean the metrics may lag the tree — we never claim fresh
- * on the strength of `src` alone, which was the earlier false-negative.
- */
-export function isArtifactStale(
-  artifactMtimeMs: number,
-  producerInputMtimesMs: readonly number[],
-): boolean {
-  return producerInputMtimesMs.length === 0 || Math.max(...producerInputMtimesMs) > artifactMtimeMs;
+/** The producing commit an artifact stamps in its own JSON, if any (`producerCommit` or `commit`). */
+function readStampedCommit(raw: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== 'object') return null;
+  const record = parsed as Record<string, unknown>;
+  for (const key of ['producerCommit', 'commit']) {
+    const value = record[key];
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  return null;
 }
 
-/** Bind an artifact to the bytes and the full producer input set its freshness was judged against. */
-export function artifactProvenance(params: {
-  path: string;
-  sha256: string;
-  producerInputs: string[];
-  artifactMtimeMs: number;
-  producerInputMtimesMs: readonly number[];
-}): ArtifactProvenance {
+/**
+ * The whole read-artifact collector: hash the bytes, read any producing commit the artifact stamps,
+ * and derive freshness against `currentCommit`. Returns null when the artifact is absent. This is
+ * the function the runner wires to disk, so a test that drives it with real artifact bytes exercises
+ * the actual freshness path end-to-end (not a fabricated status).
+ */
+export function collectArtifactProvenance(
+  path: string,
+  raw: string | null,
+  currentCommit: string,
+): ArtifactProvenance | null {
+  if (raw === null) return null;
+  const producerCommit = readStampedCommit(raw);
+  const status: ArtifactStatus =
+    producerCommit === null ? 'unknown' : producerCommit === currentCommit ? 'fresh' : 'stale';
   return {
-    path: params.path,
-    sha256: params.sha256,
-    producerInputs: params.producerInputs,
-    stale: isArtifactStale(params.artifactMtimeMs, params.producerInputMtimesMs),
+    path,
+    sha256: createHash('sha256').update(raw).digest('hex').slice(0, 12),
+    producerCommit,
+    status,
   };
 }
 
@@ -282,7 +301,7 @@ export function artifactProvenance(params: {
  * #1424 can persist history and refuse to diff across schema versions. `tool` holds a content
  * hash per analyzer (its own source/config, standing in for a version); `inputs` records the
  * lockfile and the read-only artifacts each family of metrics was computed from, each hashed and
- * flagged for staleness so a false commit-indexed history entry cannot slip through.
+ * given a proven freshness `status` so a false commit-indexed history entry cannot slip through.
  */
 export type Provenance = {
   schemaVersion: number;
@@ -295,7 +314,7 @@ export type Provenance = {
     /** Production source files fed to the graph build. */
     sourceFiles: number;
     lockfile: { path: string; sha256: string } | null;
-    /** Read artifacts, hashed and stale-flagged; null when absent (coverage/size degrade cleanly). */
+    /** Read artifacts, hashed with a proven freshness status; null when absent (degrade cleanly). */
     coverageSummary: ArtifactProvenance | null;
     sizeReport: ArtifactProvenance | null;
   };

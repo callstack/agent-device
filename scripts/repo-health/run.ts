@@ -14,19 +14,19 @@
 // size are read from coverage/coverage-summary.json and .tmp/size-report.json when present and
 // degrade to `available: false` (with the producing command) when they are not, so a fresh
 // checkout still produces a complete, honest snapshot. Those two artifacts carry no producing-commit
-// stamp, so provenance hashes them and flags `stale` when any of their producer inputs is newer
-// (PRODUCER_INPUTS below; see artifactProvenance in model.ts) — coverage tracks tests + config, size
-// tracks package.json + packaging config, not just `src`. A consumer like #1424 must never pair
-// stale metrics with the current commit.
+// stamp today, so provenance hashes them and reports freshness as `unknown` unless the artifact
+// itself stamps a commit equal to HEAD (see collectArtifactProvenance in model.ts) — we never infer
+// freshness from mtime or a producer-input list, neither of which can prove it. A consumer like
+// #1424 must treat `unknown`/`stale` as not-current, never as HEAD.
 //
 // The one thing that can FAIL the command is the depgraph-vs-layering R6 consistency assertion:
 // the graph built here must reproduce scripts/layering/check.ts's TYPE_INVERSION_BASELINE. The
 // identical assertion is wired into CI by the Layering Guard job (scripts/depgraph/model.test.ts).
 
-import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { runCmdSync } from '../../src/utils/exec.ts';
 import { listSourceFiles } from '../layering/check.ts';
 import { resolveImportEdges } from '../layering/model.ts';
 import { buildGraph, type GraphData } from '../depgraph/model.ts';
@@ -36,8 +36,8 @@ import { runAsMain } from '../lib/run-as-main.ts';
 import { CASES } from '../help-conformance-cases.mjs';
 import skillgymSuite from '../../test/skillgym/suites/agent-device-smoke-suite.ts';
 import {
-  artifactProvenance,
   buildSnapshot,
+  collectArtifactProvenance,
   SNAPSHOT_SCHEMA_VERSION,
   type ArtifactProvenance,
   type FallowConfig,
@@ -53,9 +53,7 @@ const COVERAGE_SUMMARY_PATH = 'coverage/coverage-summary.json';
 const SIZE_REPORT_PATH = '.tmp/size-report.json';
 const LOCKFILE_PATH = 'pnpm-lock.yaml';
 
-const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
-  encoding: 'utf8',
-}).trim();
+const repoRoot = runCmdSync('git', ['rev-parse', '--show-toplevel']).stdout.trim();
 
 function absolute(relativePath: string): string {
   return path.join(repoRoot, relativePath);
@@ -69,6 +67,12 @@ function readIfExists(relativePath: string): string | null {
 function readJsonIfExists<T>(relativePath: string): T | null {
   const raw = readIfExists(relativePath);
   return raw === null ? null : (JSON.parse(raw) as T);
+}
+
+/** A read artifact's raw bytes (for content-hash provenance) and its parsed form (for metrics). */
+function readArtifact<T>(relativePath: string): { raw: string | null; parsed: T | null } {
+  const raw = readIfExists(relativePath);
+  return { raw, parsed: raw === null ? null : (JSON.parse(raw) as T) };
 }
 
 function shortSha(raw: string): string {
@@ -86,75 +90,9 @@ function lockfileProvenance(): { path: string; sha256: string } | null {
   return raw === null ? null : { path: LOCKFILE_PATH, sha256: shortSha(raw) };
 }
 
-// The tracked inputs whose change can invalidate each READ artifact — NOT just `src`. Coverage is
-// the whole test run (sources + tests + vitest config + the scripts package.json wires); size runs
-// tsdown + `npm pack`, so packaging metadata and bundler/ts config are inputs. An old artifact is
-// flagged stale when ANY of these is newer than it, closing the src-only false-negative.
-const PRODUCER_INPUTS = {
-  coverage: [
-    'src/*.ts',
-    'src/**/*.ts',
-    'test',
-    'vitest.config.ts',
-    'vitest.*.config.ts',
-    'package.json',
-  ],
-  size: [
-    'src/*.ts',
-    'src/**/*.ts',
-    'package.json',
-    'pnpm-lock.yaml',
-    'tsdown.config.ts',
-    'tsconfig.json',
-    'tsconfig.lib.json',
-    'scripts/size-report.mjs',
-  ],
-} as const;
-
-/** Tracked files matching the pathspecs (offline, ignores untracked/generated); [] on failure. */
-function trackedFiles(pathspecs: readonly string[]): string[] {
-  try {
-    const out = execFileSync('git', ['ls-files', '-z', '--', ...pathspecs], {
-      cwd: repoRoot,
-      encoding: 'utf8',
-    });
-    return out.split('\0').filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
-function mtimesMs(files: readonly string[]): number[] {
-  const out: number[] = [];
-  for (const file of files) {
-    const abs = absolute(file);
-    if (fs.existsSync(abs)) out.push(fs.statSync(abs).mtimeMs);
-  }
-  return out;
-}
-
-/** Hash a read artifact and judge freshness against its whole producer input set; null when absent. */
-function artifactInput(
-  relativePath: string,
-  producerInputs: readonly string[],
-): ArtifactProvenance | null {
-  const abs = absolute(relativePath);
-  if (!fs.existsSync(abs)) return null;
-  return artifactProvenance({
-    path: relativePath,
-    sha256: shortSha(fs.readFileSync(abs, 'utf8')),
-    producerInputs: [...producerInputs],
-    artifactMtimeMs: fs.statSync(abs).mtimeMs,
-    producerInputMtimesMs: mtimesMs(trackedFiles(producerInputs)),
-  });
-}
-
 function gitOutput(args: string[]): string | null {
-  try {
-    return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' }).trim();
-  } catch {
-    return null;
-  }
+  const result = runCmdSync('git', args, { cwd: repoRoot, allowFailure: true });
+  return result.exitCode === 0 ? result.stdout.trim() : null;
 }
 
 function buildGraphFromTree(files: readonly string[]): GraphData {
@@ -187,12 +125,13 @@ function toolHashes(): Record<string, string> {
 
 function collectProvenance(
   graph: GraphData,
+  commit: string,
   coverage: ArtifactProvenance | null,
   size: ArtifactProvenance | null,
 ): Provenance {
   return {
     schemaVersion: SNAPSHOT_SCHEMA_VERSION,
-    commit: currentCommit(),
+    commit,
     ref: currentRef(),
     node: process.version,
     generatedAt: new Date().toISOString(),
@@ -208,13 +147,15 @@ function collectProvenance(
 
 function collectSnapshot(): RepoHealthSnapshot {
   const graph = buildGraphFromTree(listSourceFiles());
-  const coverage = readJsonIfExists<import('./model.ts').CoverageSummary>(COVERAGE_SUMMARY_PATH);
-  const size = readJsonIfExists<import('./model.ts').SizeReport>(SIZE_REPORT_PATH);
+  const commit = currentCommit();
+  const coverage = readArtifact<import('./model.ts').CoverageSummary>(COVERAGE_SUMMARY_PATH);
+  const size = readArtifact<import('./model.ts').SizeReport>(SIZE_REPORT_PATH);
   return buildSnapshot({
     provenance: collectProvenance(
       graph,
-      artifactInput(COVERAGE_SUMMARY_PATH, PRODUCER_INPUTS.coverage),
-      artifactInput(SIZE_REPORT_PATH, PRODUCER_INPUTS.size),
+      commit,
+      collectArtifactProvenance(COVERAGE_SUMMARY_PATH, coverage.raw, commit),
+      collectArtifactProvenance(SIZE_REPORT_PATH, size.raw, commit),
     ),
     graph,
     fallow: {
@@ -222,8 +163,8 @@ function collectSnapshot(): RepoHealthSnapshot {
       health: readJsonIfExists<FallowHealthBaseline>('fallow-baselines/health.json') ?? {},
       config: readJsonIfExists<FallowConfig>('.fallowrc.json') ?? {},
     },
-    coverage,
-    size,
+    coverage: coverage.parsed,
+    size: size.parsed,
     slowTest: SLOW_TEST_RATCHET,
     benchCases: CASES,
     skillgymCaseCount: skillgymSuite.length,
@@ -244,7 +185,10 @@ function bytes(value: number | undefined): string {
 }
 
 function staleMark(artifact: ArtifactProvenance | null): string {
-  return artifact?.stale ? ' [STALE — source newer than artifact; rerun the producer]' : '';
+  if (artifact === null || artifact.status === 'fresh') return '';
+  return artifact.status === 'stale'
+    ? ' [STALE — artifact stamps a different commit]'
+    : ' [UNKNOWN — artifact stamps no commit; may not reflect HEAD]';
 }
 
 function renderSummary(snapshot: RepoHealthSnapshot): string {
