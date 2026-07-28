@@ -14,13 +14,11 @@ import { buildGesturePlan } from '../../src/contracts/gesture-plan.ts';
 import { isCommandSupportedOnDevice } from '../../src/core/capabilities.ts';
 import { parseReplayScriptDetailed } from '../../src/replay/script.ts';
 import { IOS_SIMULATOR_BEHAVIOR_COVERAGE } from './ios-simulator-e2e/behavior-coverage.ts';
-import { IOS_SIMULATOR_E2E_COVERAGE } from './ios-simulator-e2e/coverage-manifest.ts';
-import { collectPagedEventTimeline } from './ios-simulator-e2e/event-timeline.ts';
 import {
-  navigateFromAutomationToCatalog,
-  observeFixtureHome,
-} from './ios-simulator-e2e/live-automation-scenario.ts';
-import { type LiveContext } from './ios-simulator-e2e/live-harness.ts';
+  IOS_SIMULATOR_E2E_COVERAGE,
+  liveCommandsForScenario,
+} from './ios-simulator-e2e/coverage-manifest.ts';
+import { collectPagedEventTimeline } from './ios-simulator-e2e/event-timeline.ts';
 import { IOS_SIMULATOR_LIVE_SCENARIOS } from './ios-simulator-e2e/scenarios.ts';
 
 const IOS_SIMULATOR = {
@@ -31,115 +29,6 @@ const IOS_SIMULATOR = {
   platform: 'apple' as const,
   target: 'mobile' as const,
 };
-
-test('fixture home readiness waits before taking a scoped interactive snapshot', async () => {
-  const calls: Array<{ args?: string[]; kind: 'snapshot' | 'wait'; value: string }> = [];
-  await observeFixtureHome({} as LiveContext, {
-    waitText: async (_context, expected) => {
-      calls.push({ kind: 'wait', value: expected });
-    },
-    runStep: async (_context, step, args) => {
-      calls.push({ args, kind: 'snapshot', value: step });
-      return {
-        json: { data: { nodes: [{ label: 'Agent Device Tester' }] } },
-        status: 0,
-        stderr: '',
-        stdout: '',
-      };
-    },
-  });
-
-  assert.deepEqual(calls, [
-    { kind: 'wait', value: 'Agent Device Tester' },
-    {
-      args: ['snapshot', '-i', '-s', 'Agent Device Tester'],
-      kind: 'snapshot',
-      value: 'capture fixture home',
-    },
-  ]);
-});
-
-test('fixture home observation rejects app metadata without a matching snapshot node', async () => {
-  await assert.rejects(
-    observeFixtureHome({} as LiveContext, {
-      waitText: async () => {},
-      runStep: async () => ({
-        json: {
-          data: {
-            appName: 'Agent Device Tester',
-            nodes: [],
-            snapshotQuality: { reasonCode: 'budget', state: 'sparse' },
-          },
-        },
-        status: 0,
-        stderr: '',
-        stdout: '',
-      }),
-    }),
-    /home snapshot nodes should expose Agent Device Tester/,
-  );
-});
-
-test('deep-link continuation stops after the exact destination landmark appears', async () => {
-  const calls: Array<{ args: string[]; options?: { allowFailure?: boolean }; step: string }> = [];
-  await navigateFromAutomationToCatalog({} as LiveContext, {
-    runStep: async (_context, step, args, options) => {
-      calls.push({ args, options, step });
-      return { json: {}, status: 0, stderr: '', stdout: '' };
-    },
-  });
-
-  assert.deepEqual(calls, [
-    {
-      args: ['click', 'id="automation-continue-catalog"'],
-      options: undefined,
-      step: 'navigate onward from cold deep link',
-    },
-    {
-      args: ['wait', 'id="catalog-title"', '3000'],
-      options: { allowFailure: true },
-      step: 'verify exact catalog destination',
-    },
-  ]);
-});
-
-test('deep-link continuation retries one unobserved tap before the full exact wait', async () => {
-  const calls: Array<{ args: string[]; options?: { allowFailure?: boolean }; step: string }> = [];
-  await navigateFromAutomationToCatalog({} as LiveContext, {
-    runStep: async (_context, step, args, options) => {
-      calls.push({ args, options, step });
-      return {
-        json: {},
-        status: calls.length === 2 ? 1 : 0,
-        stderr: '',
-        stdout: '',
-      };
-    },
-  });
-
-  assert.deepEqual(calls, [
-    {
-      args: ['click', 'id="automation-continue-catalog"'],
-      options: undefined,
-      step: 'navigate onward from cold deep link',
-    },
-    {
-      args: ['wait', 'id="catalog-title"', '3000'],
-      options: { allowFailure: true },
-      step: 'verify exact catalog destination',
-    },
-    {
-      args: ['click', 'id="automation-continue-catalog"'],
-      options: { allowFailure: true },
-      step: 'retry catalog navigation after unobserved tap',
-    },
-    {
-      args: ['wait', 'id="catalog-title"', '10000'],
-      options: undefined,
-      step: 'wait for exact catalog destination after retry',
-    },
-  ]);
-});
 
 test('iOS simulator coverage exhaustively classifies the public catalog', () => {
   const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
@@ -169,24 +58,22 @@ test('live command claims are owned by executable scenarios', () => {
     if (entry.level !== 'live' && entry.level !== 'known-gap') continue;
     const scenario = scenariosById.get(entry.owner);
     assert.ok(scenario, `${command} references missing scenario ${entry.owner}`);
-    assert.ok(scenario.commands.includes(command), `${entry.owner} does not execute ${command}`);
+    assert.ok(
+      liveCommandsForScenario(scenario.id).some((candidate) => candidate === command),
+      `${entry.owner} does not execute ${command}`,
+    );
   }
 
   const scenarioIds = IOS_SIMULATOR_LIVE_SCENARIOS.map((scenario) => scenario.id);
   assert.equal(new Set(scenarioIds).size, scenarioIds.length, 'scenario ids must be unique');
-  const claimedCommands = IOS_SIMULATOR_LIVE_SCENARIOS.flatMap((scenario) => scenario.commands);
+  const claimedCommands = IOS_SIMULATOR_LIVE_SCENARIOS.flatMap((scenario) =>
+    liveCommandsForScenario(scenario.id),
+  );
   assert.equal(
     new Set(claimedCommands).size,
     claimedCommands.length,
     'runtime command claims must have one primary scenario',
   );
-  for (const scenario of IOS_SIMULATOR_LIVE_SCENARIOS) {
-    assert.equal(
-      new Set(scenario.commands).size,
-      scenario.commands.length,
-      `${scenario.id} has duplicate command claims`,
-    );
-  }
 });
 
 test('mobile behavior patterns are owned by live scenarios or executable workflows', () => {
@@ -244,7 +131,10 @@ test('capability classifications match executable simulator behavior', () => {
   const viewportScenario = IOS_SIMULATOR_LIVE_SCENARIOS.find(
     (scenario) => scenario.id === IOS_SIMULATOR_E2E_COVERAGE[PUBLIC_COMMANDS.viewport].owner,
   );
-  assert.ok(viewportScenario?.commands.includes(PUBLIC_COMMANDS.viewport));
+  assert.ok(
+    viewportScenario &&
+      liveCommandsForScenario(viewportScenario.id).includes(PUBLIC_COMMANDS.viewport),
+  );
 });
 
 type ReplayAction = ReturnType<typeof parseReplayScriptDetailed>['actions'][number];

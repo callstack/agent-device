@@ -58,7 +58,7 @@ export async function startIosSimulatorRecording(params: {
   const { child, wait } = deps.startIosSimulatorRecording({ device, outPath: resolvedOut });
   const readiness = await waitForLocalRecordingReadiness(resolvedOut, wait);
   if (readiness.kind !== 'ready') {
-    if (readiness.kind === 'timeout') {
+    if (readiness.kind === 'timeout' || readiness.kind === 'failed') {
       await stopIosSimulatorRecordingProcess({
         deps,
         recording: {
@@ -71,14 +71,6 @@ export async function startIosSimulatorRecording(params: {
           startedAt: Date.now(),
         },
       });
-    } else if (readiness.kind === 'failed') {
-      // A rejected wait monitor does not prove the child exited. Signal the direct handle so a
-      // live recorder cannot retain the host capture resource after startup reports failure.
-      try {
-        child.kill('SIGINT');
-      } catch {
-        // Best effort; the original monitor failure remains the actionable error.
-      }
     }
     removeInvalidRecordingOutput(resolvedOut);
     return errorResponse('COMMAND_FAILED', formatRecordingStartFailure(readiness));

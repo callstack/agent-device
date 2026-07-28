@@ -8,7 +8,7 @@ import {
   runStep,
   verifyBehavior,
   verifyCommand,
-  withSessionCleanup,
+  verifyNestedReplayCommand,
 } from './live-harness.ts';
 import {
   assertReplayCommands,
@@ -25,15 +25,11 @@ export async function assertFixtureReplays(context: LiveContext): Promise<void> 
   );
   const navigationActions = readReplayCommands(navigationReplay);
   const navigationDaemonTimeoutMs = replayAttemptTimeoutMs(navigationReplay) + 30_000;
-  const navigation = await withSessionCleanup(
+  const navigation = await runStep(
     context,
-    async () =>
-      await runStep(
-        context,
-        'run navigation replay through public command',
-        ['replay', navigationReplay, '--timeout', String(navigationDaemonTimeoutMs)],
-        { timeoutMs: navigationDaemonTimeoutMs + 30_000 },
-      ),
+    'run navigation replay through public command',
+    ['replay', navigationReplay, '--timeout', String(navigationDaemonTimeoutMs)],
+    { timeoutMs: navigationDaemonTimeoutMs + 30_000 },
   );
   assert.equal(
     navigation.json?.data?.replayed,
@@ -42,7 +38,12 @@ export async function assertFixtureReplays(context: LiveContext): Promise<void> 
   );
   assertReplayCommands(navigationReplay, navigationActions, [C.swipe]);
   verifyCommand(context, C.replay, 'public replay completes the navigation fixture');
-  verifyCommand(context, C.swipe, 'direction canary proves both compact-safe swipes moved content');
+  verifyNestedReplayCommand(
+    context,
+    C.swipe,
+    C.replay,
+    'direction canary proves both compact-safe swipes moved content',
+  );
   verifyBehavior(
     context,
     'long-list-scroll-recovery',
@@ -56,27 +57,23 @@ export async function assertFixtureReplays(context: LiveContext): Promise<void> 
   );
   const gestureReplay = path.resolve('examples/test-app/replays/gesture-lab.ad');
   const suiteRetries = 2;
-  const suite = await withSessionCleanup(
+  const suite = await runStep(
     context,
-    async () =>
-      await runStep(
-        context,
-        'run fixture suite through public test command',
-        [
-          'test',
-          checkoutReplay,
-          gestureReplay,
-          '--retries',
-          String(suiteRetries),
-          '--artifacts-dir',
-          suiteArtifacts,
-          '--report-junit',
-          junitPath,
-        ],
-        {
-          timeoutMs: replaySuiteHostTimeoutMs([checkoutReplay, gestureReplay], suiteRetries),
-        },
-      ),
+    'run fixture suite through public test command',
+    [
+      'test',
+      checkoutReplay,
+      gestureReplay,
+      '--retries',
+      String(suiteRetries),
+      '--artifacts-dir',
+      suiteArtifacts,
+      '--report-junit',
+      junitPath,
+    ],
+    {
+      timeoutMs: replaySuiteHostTimeoutMs([checkoutReplay, gestureReplay], suiteRetries),
+    },
   );
   assert.equal(suite.json?.data?.failed, 0, JSON.stringify(suite.json));
   assert.equal(suite.json?.data?.passed, 2, JSON.stringify(suite.json));
@@ -94,9 +91,10 @@ export async function assertFixtureReplays(context: LiveContext): Promise<void> 
     assertReplayCommands(replayPath, commands, expectedCommands);
   }
   assertNonEmptyFile(junitPath, 'fixture JUnit');
-  verifyCommand(
+  verifyNestedReplayCommand(
     context,
     C.gesture,
+    C.test,
     'gesture fixture counters prove pan/fling/pinch/rotate/transform',
   );
   verifyCommand(context, C.test, 'two fixture scripts pass as a suite and emit non-empty JUnit');

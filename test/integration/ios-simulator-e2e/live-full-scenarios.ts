@@ -140,6 +140,26 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
   );
 
   await runStep(context, 'open app switcher', ['app-switcher']);
+  const switcherSurface = await runStep(context, 'inspect covered fixture in app switcher', [
+    'snapshot',
+    '-i',
+  ]);
+  const switcherNodes = Array.isArray(switcherSurface.json?.data?.nodes)
+    ? switcherSurface.json.data.nodes
+    : [];
+  const coveredFixtureControl = switcherNodes.find(
+    (node: { identifier?: unknown }) => node.identifier === 'automation-press-canary',
+  );
+  assert.ok(coveredFixtureControl, JSON.stringify(switcherSurface.json));
+  assert.equal(coveredFixtureControl.hittable, false, JSON.stringify(coveredFixtureControl));
+  assert.equal(
+    switcherNodes.some(
+      (node: { hittable?: unknown; type?: unknown }) =>
+        node.type === 'Button' && node.hittable === true,
+    ),
+    false,
+    'app switcher should cover every fixture button',
+  );
   const switcherPath = path.join(context.artifactDir, 'system-app-switcher.png');
   await capturePng(context, 'capture app switcher', switcherPath);
   assertFilesDiffer(homePath, switcherPath, 'app switcher should differ from Home');
@@ -151,7 +171,7 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
   verifyCommand(
     context,
     C.appSwitcher,
-    'app switcher pixels differ from both Home and the foreground fixture',
+    'app switcher covers fixture controls and differs from Home and foreground pixels',
   );
   verifyBehavior(
     context,
@@ -243,7 +263,7 @@ export async function assertObservabilityAndArtifacts(context: LiveContext): Pro
   ]);
   await runStep(context, 'record a visible mutation', ['press', 'id="automation-press"']);
   await runStep(context, 'stop screen recording', ['record', 'stop']);
-  assertMp4File(recordingPath);
+  await assertMp4File(recordingPath);
   verifyCommand(context, C.record, 'visible mutation produces a non-empty playable MP4');
 
   const batch = await runStep(context, 'run semantic read batch', [

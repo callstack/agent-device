@@ -6,6 +6,7 @@ import {
   IOS_SIMULATOR_BEHAVIOR_COVERAGE,
   type IosSimulatorBehaviorId,
 } from './behavior-coverage.ts';
+import { liveCommandsForScenario } from './coverage-manifest.ts';
 import type { LiveContext, Tier } from './live-harness.ts';
 import { IOS_SIMULATOR_LIVE_SCENARIOS, type IosSimulatorScenario } from './scenarios.ts';
 
@@ -43,7 +44,7 @@ function computeMissing(context: LiveContext) {
       .flatMap((scenario) => liveBehaviorsForScenario(scenario.id))
       .filter((behavior) => (context.behaviorEvidence[behavior]?.length ?? 0) === 0),
     missingCommands: requiredScenarios
-      .flatMap((scenario) => scenario.commands)
+      .flatMap((scenario) => liveCommandsForScenario(scenario.id))
       .filter((command) => (context.commandEvidence[command]?.length ?? 0) === 0),
     missingScenarios: requiredScenarios
       .map((scenario) => scenario.id)

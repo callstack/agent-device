@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
+import { isPlayableVideo } from '../../../src/utils/video.ts';
 import { assertPngFile } from '../provider-scenarios/assertions.ts';
 import type { CliJsonResult } from '../cli-json.ts';
 import { type LiveContext, runStep, verifyCommand } from './live-harness.ts';
@@ -60,10 +61,13 @@ export function assertNonEmptyFile(filePath: string, name: string): void {
   assert.ok(fs.statSync(filePath).size > 0, `${name} artifact is empty: ${filePath}`);
 }
 
-export function assertMp4File(filePath: string): void {
+export async function assertMp4File(filePath: string): Promise<void> {
   assertNonEmptyFile(filePath, 'recording');
-  const header = fs.readFileSync(filePath).subarray(0, 32).toString('latin1');
-  assert.ok(header.includes('ftyp'), `recording has no MP4 ftyp atom: ${filePath}`);
+  assert.equal(
+    await isPlayableVideo(filePath),
+    true,
+    `recording is not a finalized playable video: ${filePath}`,
+  );
 }
 
 export async function capturePng(

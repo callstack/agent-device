@@ -55,6 +55,7 @@ jobs:
           cache-key-prefix: swift-runner-unit
           build-command: AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS=1 pnpm build:xcuitest:macos
           xcuitest-platform: macos
+          xcuitest-destination: platform=macOS,arch=arm64
 
   no-test-di-seams:
     name: No test-only DI seams

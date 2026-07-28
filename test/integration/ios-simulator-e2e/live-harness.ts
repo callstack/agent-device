@@ -4,15 +4,17 @@ import path from 'node:path';
 
 import { type CliJsonResult, formatResultDebug, runBuiltCliJson } from '../cli-json.ts';
 import { type IosSimulatorBehaviorId } from './behavior-coverage.ts';
+import { liveCommandsForScenario } from './coverage-manifest.ts';
 import { liveBehaviorsForScenario, writeCoverageReport } from './live-coverage-report.ts';
-import { IOS_SIMULATOR_LIVE_SCENARIOS, type IosSimulatorScenario } from './scenarios.ts';
 
 export { assertCoverageComplete, writeCoverageReport } from './live-coverage-report.ts';
 
 export type Tier = 'smoke' | 'full';
 
 type StepRecord = {
+  accepted: boolean;
   command: string;
+  commandName?: string;
   durationMs: number;
   errorCode?: string;
   errorMessage?: string;
@@ -64,25 +66,26 @@ export function createContext(): LiveContext {
 
 export async function runScenario(
   context: LiveContext,
-  id: string,
-  run: () => Promise<void>,
+  scenario: {
+    id: string;
+    run: (context: LiveContext) => Promise<void>;
+  },
 ): Promise<void> {
-  const scenario = IOS_SIMULATOR_LIVE_SCENARIOS.find((candidate) => candidate.id === id);
-  assert.ok(scenario, `missing live scenario metadata: ${id}`);
-  context.currentScenario = id;
+  context.currentScenario = scenario.id;
+  const commands = liveCommandsForScenario(scenario.id);
   const evidenceCounts = new Map(
-    scenario.commands.map((command) => [command, context.commandEvidence[command]?.length ?? 0]),
+    commands.map((command) => [command, context.commandEvidence[command]?.length ?? 0]),
   );
   const behaviorCounts = new Map(
-    liveBehaviorsForScenario(id).map((behavior) => [
+    liveBehaviorsForScenario(scenario.id).map((behavior) => [
       behavior,
       context.behaviorEvidence[behavior]?.length ?? 0,
     ]),
   );
-  await run();
-  assertScenarioCommandsVerified(scenario, context, evidenceCounts);
-  assertScenarioBehaviorsVerified(id, context, behaviorCounts);
-  context.completedScenarios.push(id);
+  await scenario.run(context);
+  assertScenarioCommandsVerified(scenario.id, commands, context, evidenceCounts);
+  assertScenarioBehaviorsVerified(scenario.id, context, behaviorCounts);
+  context.completedScenarios.push(scenario.id);
   writeCoverageReport(context);
 }
 
@@ -103,7 +106,9 @@ export async function runStep(
     timeoutMs: options.timeoutMs,
   });
   context.stepHistory.push({
+    accepted: result.status === 0 || (options.expectFailure === true && result.status !== 0),
     command: `agent-device ${fullArgs.join(' ')}`,
+    commandName: args[0],
     durationMs: Date.now() - startedAt,
     errorCode: stringValue(result.json?.error?.code),
     errorMessage: stringValue(result.json?.error?.message),
@@ -131,6 +136,33 @@ export async function runStep(
 }
 
 export function verifyCommand(context: LiveContext, command: string, evidence: string): void {
+  recordCommandEvidence(context, command, command, evidence);
+}
+
+export function verifyNestedReplayCommand(
+  context: LiveContext,
+  command: 'gesture' | 'swipe',
+  executedVia: 'replay' | 'test',
+  evidence: string,
+): void {
+  recordCommandEvidence(context, command, executedVia, evidence);
+}
+
+function recordCommandEvidence(
+  context: LiveContext,
+  command: string,
+  executedCommand: string,
+  evidence: string,
+): void {
+  assert.ok(
+    context.stepHistory.some(
+      (step) =>
+        step.scenario === context.currentScenario &&
+        step.commandName === executedCommand &&
+        step.accepted,
+    ),
+    `${context.currentScenario} credited ${command} without a successful ${executedCommand} execution`,
+  );
   const existing = context.commandEvidence[command] ?? [];
   context.commandEvidence[command] = [...existing, evidence];
 }
@@ -175,68 +207,26 @@ export async function cleanupSession(context: LiveContext): Promise<void> {
   throw new AggregateError(failures, `iOS E2E cleanup failed; details: ${errorPath}`);
 }
 
-export async function withSessionCleanup<T>(
-  context: LiveContext,
-  run: () => Promise<T>,
-): Promise<T> {
-  let result!: T;
-  let primaryError: unknown;
-  try {
-    result = await run();
-  } catch (error) {
-    primaryError = error;
-  }
-
-  let cleanupError: unknown;
-  try {
-    const attempts = primaryError === undefined ? 1 : 15;
-    for (let attempt = 0; attempt < attempts; attempt += 1) {
-      const inventory = await runStep(
-        context,
-        'inspect replay session cleanup',
-        ['session', 'list'],
-        {
-          commonFlags: false,
-        },
-      );
-      const sessions = Array.isArray(inventory.json?.data?.sessions)
-        ? inventory.json.data.sessions
-        : [];
-      if (sessions.some((session: { name?: unknown }) => session.name === context.session)) {
-        await runStep(context, 'close replay session after command', ['close']);
-        break;
-      }
-      if (attempt + 1 < attempts) {
-        await new Promise((resolve) => setTimeout(resolve, 300));
-      }
-    }
-  } catch (error) {
-    cleanupError = error;
-  }
-
-  if (primaryError !== undefined && cleanupError !== undefined) {
-    throw new AggregateError(
-      [primaryError, cleanupError],
-      'replay and session cleanup both failed',
-    );
-  }
-  if (primaryError !== undefined) throw primaryError;
-  if (cleanupError !== undefined) throw cleanupError;
-  return result;
+export async function sessionExists(context: LiveContext): Promise<boolean> {
+  const inventory = await runStep(context, 'inspect final session ownership', ['session', 'list'], {
+    commonFlags: false,
+  });
+  const sessions = Array.isArray(inventory.json?.data?.sessions)
+    ? inventory.json.data.sessions
+    : [];
+  return sessions.some((session: { name?: unknown }) => session.name === context.session);
 }
 
 function assertScenarioCommandsVerified(
-  scenario: IosSimulatorScenario,
+  scenarioId: string,
+  commands: readonly string[],
   context: LiveContext,
   evidenceCounts: ReadonlyMap<string, number>,
 ): void {
-  for (const command of scenario.commands) {
+  for (const command of commands) {
     const before = evidenceCounts.get(command) ?? 0;
     const after = context.commandEvidence[command]?.length ?? 0;
-    assert.ok(
-      after > before,
-      `${scenario.id} produced no command-specific evidence for ${command}`,
-    );
+    assert.ok(after > before, `${scenarioId} produced no command-specific evidence for ${command}`);
   }
 }
 

@@ -104,7 +104,7 @@ test('startIosSimulatorRecording reports an early recorder exit instead of a fal
   assert.match(JSON.stringify(result), /failed to start recording: capture unavailable/);
 });
 
-test('startIosSimulatorRecording signals the child when its wait monitor rejects', async () => {
+test('startIosSimulatorRecording escalates cleanup when its wait monitor rejects', async () => {
   const root = makeTemporaryRoot('agent-device-record-wait-failed-');
   const outPath = path.join(root, 'recording.mp4');
   const kill = vi.fn((_signal?: NodeJS.Signals) => true);
@@ -141,7 +141,7 @@ test('startIosSimulatorRecording signals the child when its wait monitor rejects
 
   assert.equal('ok' in result && result.ok, false);
   assert.match(JSON.stringify(result), /recorder wait monitor failed/);
-  assert.deepEqual(kill.mock.calls, [['SIGINT']]);
+  assert.deepEqual(kill.mock.calls, [['SIGINT'], ['SIGTERM'], ['SIGKILL']]);
 });
 
 test.each([

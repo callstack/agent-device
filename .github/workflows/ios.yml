@@ -43,9 +43,6 @@ jobs:
         run: |
           set -euo pipefail
           WAIT_SECONDS=1800
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            WAIT_SECONDS=1200
-          fi
           if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
             echo "Fork pull request cannot publish the shared fixture artifact; a cache miss will build inline."
             WAIT_SECONDS=0
@@ -61,7 +58,6 @@ jobs:
 
       - name: Establish host focus canary
         id: host-focus-canary
-        continue-on-error: true
         run: |
           set -euo pipefail
           osascript -e 'tell application "Finder" to activate'
@@ -121,8 +117,6 @@ jobs:
         with:
           install: 'false'
           wait-for-artifact-seconds: ${{ steps.fixture-producer.outputs.wait-seconds }}
-          producer-workflow: test-app-build-cache.yml
-          producer-head-sha: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Report fixture cache source
         run: |
@@ -140,7 +134,7 @@ jobs:
           node --test test/integration/smoke-ios-simulator-coverage.test.ts test/integration/smoke-ios-simulator.test.ts
 
       - name: Assert simulator automation preserved host focus
-        if: ${{ always() && steps.host-focus-canary.outcome == 'success' }}
+        if: ${{ always() }}
         run: |
           set -euo pipefail
           test "$(cat .tmp/ios-host-focus-before)" = "com.apple.finder"

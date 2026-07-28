@@ -1894,41 +1894,7 @@ extension RunnerTests {
       pressHomeButton()
       return Response(ok: true, data: DataPayload(message: "home"))
     case .rotate:
-      guard let orientation = command.orientation?.trimmingCharacters(in: .whitespacesAndNewlines),
-        !orientation.isEmpty
-      else {
-        return Response(ok: false, error: ErrorPayload(message: "rotate requires orientation"))
-      }
-      let supportedOrientations = [
-        "portrait",
-        "portrait-upside-down",
-        "landscape-left",
-        "landscape-right",
-      ]
-      guard supportedOrientations.contains(orientation) else {
-        return Response(
-          ok: false,
-          error: ErrorPayload(message: "unsupported rotate orientation: \(orientation)")
-        )
-      }
-      guard let observedOrientation = rotateDevice(to: orientation) else {
-        return Response(
-          ok: false,
-          error: ErrorPayload(message: "unable to observe device orientation after rotate")
-        )
-      }
-      guard observedOrientation == orientation else {
-        return Response(
-          ok: false,
-          error: ErrorPayload(
-            message: "device orientation is \(observedOrientation), expected \(orientation)"
-          )
-        )
-      }
-      return Response(
-        ok: true,
-        data: DataPayload(message: "rotate", orientation: observedOrientation)
-      )
+      return executeRotateCommand(command)
     case .appSwitcher:
       performAppSwitcherGesture(app: activeApp)
       return Response(ok: true, data: DataPayload(message: "appSwitcher"))

@@ -9,59 +9,9 @@ const FIXTURE_HOME_TITLE = 'Agent Device Tester';
 const AUTOMATION_DEEP_LINK =
   'agent-device-test-app:///automation?event=cold.start&payload=%7B%22source%22%3A%22deep-link%22%7D';
 
-type FixtureHomeObservationOperations = {
-  runStep: typeof runStep;
-  waitText: typeof assertWaitText;
-};
-
-type CatalogNavigationOperations = {
-  runStep: typeof runStep;
-};
-
-const CATALOG_BUTTON_SELECTOR = 'id="automation-continue-catalog"';
-const CATALOG_TITLE_SELECTOR = 'id="catalog-title"';
-
-export async function navigateFromAutomationToCatalog(
-  context: LiveContext,
-  operations: CatalogNavigationOperations = { runStep },
-): Promise<void> {
-  await operations.runStep(context, 'navigate onward from cold deep link', [
-    'click',
-    CATALOG_BUTTON_SELECTOR,
-  ]);
-  const destination = await operations.runStep(
-    context,
-    'verify exact catalog destination',
-    ['wait', CATALOG_TITLE_SELECTOR, '3000'],
-    { allowFailure: true },
-  );
-  if (destination.status === 0) return;
-
-  // Direct iOS selector taps explicitly do not observe an app-visible outcome.
-  // Retry this idempotent navigation once, but tolerate the source disappearing
-  // during a slow transition and keep the exact destination as the condition.
-  await operations.runStep(
-    context,
-    'retry catalog navigation after unobserved tap',
-    ['click', CATALOG_BUTTON_SELECTOR],
-    { allowFailure: true },
-  );
-  await operations.runStep(context, 'wait for exact catalog destination after retry', [
-    'wait',
-    CATALOG_TITLE_SELECTOR,
-    '10000',
-  ]);
-}
-
-export async function observeFixtureHome(
-  context: LiveContext,
-  operations: FixtureHomeObservationOperations = {
-    runStep,
-    waitText: assertWaitText,
-  },
-) {
-  await operations.waitText(context, FIXTURE_HOME_TITLE);
-  const snapshot = await operations.runStep(context, 'capture fixture home', [
+async function observeFixtureHome(context: LiveContext) {
+  await assertWaitText(context, FIXTURE_HOME_TITLE);
+  const snapshot = await runStep(context, 'capture fixture home', [
     'snapshot',
     '-i',
     '-s',
@@ -96,7 +46,15 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
   await assertWaitText(context, 'Automation lab');
   await assertElementText(context, 'id="automation-event-name"', 'cold.start');
   await assertElementText(context, 'id="automation-event-payload"', '{"source":"deep-link"}');
-  await navigateFromAutomationToCatalog(context);
+  await runStep(context, 'navigate onward from cold deep link', [
+    'click',
+    'id="automation-continue-catalog"',
+  ]);
+  await runStep(context, 'wait for exact catalog destination', [
+    'wait',
+    'id="catalog-title"',
+    '10000',
+  ]);
   verifyBehavior(
     context,
     'cold-start-deep-link-navigation',
@@ -195,22 +153,15 @@ async function acceptDeepLinkConfirmationIfPresent(context: LiveContext): Promis
   );
   if (destination.status === 0) return;
 
-  // The normal route uses one daemon-side wait rather than repeatedly spawning
-  // interactive snapshots. Retain a single snapshot only to recognize the
-  // occasional system confirmation and redeliver the original deep link.
-  const surface = await runStep(context, 'inspect delayed deep-link destination', [
-    'snapshot',
-    '-i',
-  ]);
-  const serialized = JSON.stringify(surface.json?.data ?? surface.json);
-  if (serialized.includes('Open in')) {
-    assertJsonContains(surface, 'Open in', 'unexpected system alert after fixture deep link');
-    await runStep(context, 'accept deep-link confirmation', [
-      'click',
-      'role="button" label="Open"',
-    ]);
-    await openAutomationDeepLink(context, 'redeliver cold deep link after confirmation');
-  }
+  const alert = await runStep(context, 'inspect delayed deep-link system alert', ['alert', 'get']);
+  const alertInfo = alert.json?.data?.alert;
+  assert.equal(alertInfo?.source, 'system-dialog', JSON.stringify(alert.json));
+  assert.match(String(alertInfo?.title), /^Open in\b/, JSON.stringify(alert.json));
+  assert.ok(
+    Array.isArray(alertInfo?.buttons) && alertInfo.buttons.includes('Open'),
+    JSON.stringify(alert.json),
+  );
+  await runStep(context, 'accept deep-link confirmation', ['alert', 'accept']);
 }
 
 async function openAutomationDeepLink(context: LiveContext, step: string): Promise<void> {

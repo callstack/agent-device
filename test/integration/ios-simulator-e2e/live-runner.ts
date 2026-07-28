@@ -11,12 +11,12 @@ import {
   requireNodeRect,
 } from './live-assertions.ts';
 import { assertAutomationInput } from './live-automation-scenario.ts';
+import { assertDeviceLifecycle, assertKnownGaps } from './live-device-lifecycle.ts';
 import {
   assertLifecycleAndSystem,
   assertObservabilityAndArtifacts,
 } from './live-full-scenarios.ts';
 import { assertFixtureReplays } from './live-replay-scenarios.ts';
-import { assertDeviceLifecycle, assertKnownGaps } from './live-device-lifecycle.ts';
 import {
   assertCoverageComplete,
   cleanupSession,
@@ -24,72 +24,80 @@ import {
   type LiveContext,
   runScenario,
   runStep,
+  sessionExists,
   verifyBehavior,
   verifyCommand,
   writeCoverageReport,
 } from './live-harness.ts';
+import { bindIosSimulatorScenarios } from './scenarios.ts';
 
 const C = PUBLIC_COMMANDS;
+const LIVE_SCENARIOS = bindIosSimulatorScenarios<LiveContext>({
+  automationInput: assertAutomationInput,
+  captureClose: async (context) => {
+    await assertCapture(context);
+    await assertClose(context);
+  },
+  deviceLifecycle: assertDeviceLifecycle,
+  fixtureReplays: assertFixtureReplays,
+  formInput: assertFormInput,
+  inventoryInstall: assertInventoryAndInstall,
+  knownGaps: async (context) => {
+    await assertKnownGaps(context);
+    await assertClose(context);
+  },
+  lifecycleSystem: assertLifecycleAndSystem,
+  observabilityArtifacts: assertObservabilityAndArtifacts,
+});
 
 export async function runIosSimulatorE2E(): Promise<void> {
   const context = createContext();
   let primaryError: unknown;
-
   try {
-    await runScenario(context, 'smoke:inventory-install', async () => {
-      await assertInventoryAndInstall(context);
-    });
-    await runScenario(context, 'smoke:automation-input', async () => {
-      await assertAutomationInput(context);
-    });
-    await runScenario(context, 'smoke:form-input', async () => {
-      await assertFormInput(context);
-    });
-    await runScenario(context, 'smoke:capture-close', async () => {
-      await assertCapture(context);
-      await assertClose(context);
-    });
-
-    if (context.tier === 'full') {
-      await runStep(context, 'reopen fixture for full tier', ['open', context.appId, '--relaunch']);
-      await runScenario(context, 'full:lifecycle-system', async () => {
-        await assertLifecycleAndSystem(context);
-      });
-      await runScenario(context, 'full:observability-artifacts', async () => {
-        await assertObservabilityAndArtifacts(context);
-      });
-      await runScenario(context, 'full:known-gaps', async () => {
-        await assertKnownGaps(context);
-      });
-      await assertClose(context);
-      await runScenario(context, 'full:fixture-replays', async () => {
-        await assertFixtureReplays(context);
-      });
-      await runScenario(context, 'full:device-lifecycle', async () => {
-        await assertDeviceLifecycle(context);
-      });
-    }
-    assertCoverageComplete(context);
+    await executeLiveScenarios(context);
   } catch (error) {
     primaryError = error;
   }
+  const cleanupError = await finalizeLiveRun(context);
+  throwLiveRunErrors(primaryError, cleanupError);
+}
 
+async function executeLiveScenarios(context: LiveContext): Promise<void> {
+  for (const scenario of LIVE_SCENARIOS.filter((candidate) => candidate.tier === 'smoke')) {
+    await runScenario(context, scenario);
+  }
+  if (context.tier === 'full') {
+    await runStep(context, 'reopen fixture for full tier', ['open', context.appId, '--relaunch']);
+    for (const scenario of LIVE_SCENARIOS.filter((candidate) => candidate.tier === 'full')) {
+      await runScenario(context, scenario);
+    }
+  }
+  assertCoverageComplete(context);
+}
+
+async function finalizeLiveRun(context: LiveContext): Promise<unknown> {
   let cleanupError: unknown;
+  try {
+    context.sessionOpen = context.sessionOpen || (await sessionExists(context));
+  } catch (error) {
+    cleanupError = error;
+  }
   if (context.sessionOpen) {
     try {
       await cleanupSession(context);
     } catch (error) {
-      cleanupError = error;
+      cleanupError = combineErrors(cleanupError, error, 'session inspection and cleanup failed');
     }
   }
   try {
     writeCoverageReport(context);
   } catch (error) {
-    cleanupError =
-      cleanupError === undefined
-        ? error
-        : new AggregateError([cleanupError, error], 'cleanup and coverage reporting failed');
+    cleanupError = combineErrors(cleanupError, error, 'cleanup and coverage reporting failed');
   }
+  return cleanupError;
+}
+
+function throwLiveRunErrors(primaryError: unknown, cleanupError: unknown): void {
   if (primaryError !== undefined && cleanupError !== undefined) {
     throw new AggregateError(
       [primaryError, cleanupError],
@@ -98,6 +106,10 @@ export async function runIosSimulatorE2E(): Promise<void> {
   }
   if (primaryError !== undefined) throw primaryError;
   if (cleanupError !== undefined) throw cleanupError;
+}
+
+function combineErrors(existing: unknown, next: unknown, message: string): unknown {
+  return existing === undefined ? next : new AggregateError([existing, next], message);
 }
 
 async function assertInventoryAndInstall(context: LiveContext): Promise<void> {

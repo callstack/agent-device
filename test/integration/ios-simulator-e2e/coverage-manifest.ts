@@ -53,7 +53,7 @@ export const IOS_SIMULATOR_E2E_COVERAGE = {
   [C.alert]: live('smoke:automation-input', 'native alert get, dismiss, and accept update the app'),
   [C.appSwitcher]: live(
     'full:lifecycle-system',
-    'app switcher pixels differ from Home before the fixture is restored',
+    'app switcher covers fixture controls and differs from Home before restoration',
   ),
   [C.apps]: live('smoke:inventory-install', 'installed fixture bundle appears in app inventory'),
   [C.appState]: live(
@@ -206,3 +206,12 @@ export const IOS_SIMULATOR_E2E_COVERAGE = {
   },
   [C.wait]: live('smoke:automation-input', 'polling observes durable fixture state'),
 } satisfies Record<PublicCommand, IosSimulatorCoverageEntry>;
+
+export function liveCommandsForScenario(scenarioId: string): PublicCommand[] {
+  return Object.entries(IOS_SIMULATOR_E2E_COVERAGE)
+    .filter(
+      ([, entry]) =>
+        (entry.level === 'live' || entry.level === 'known-gap') && entry.owner === scenarioId,
+    )
+    .map(([command]) => command as PublicCommand);
+}

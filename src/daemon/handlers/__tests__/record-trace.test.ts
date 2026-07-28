@@ -1423,7 +1423,7 @@ test('record stop prefers session-owned iOS recorder processes before path fallb
       ['-P', '1111'],
     ]);
     expect(processKill.mock.calls.map((call) => call[0])).toEqual([
-      1111, 2222, 1111, 2222, 1111, 2222,
+      1111, 2222, 1111, 2222, 1111, 2222, 1111,
     ]);
     expect(processKill.mock.calls.map((call) => call[1])).toEqual([
       'SIGINT',
@@ -1432,6 +1432,7 @@ test('record stop prefers session-owned iOS recorder processes before path fallb
       'SIGTERM',
       'SIGKILL',
       'SIGKILL',
+      0,
     ]);
   } finally {
     processKill.mockRestore();

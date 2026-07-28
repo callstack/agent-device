@@ -12,11 +12,6 @@ private enum RunnerInterfaceOrientation {
   static let landscapeLeft = 4
 }
 
-private enum OrientationObservationTiming {
-  static let pollInterval: TimeInterval = 0.05
-  static let timeout: TimeInterval = 2
-}
-
 extension RunnerTests {
   enum PlannedGestureExecution: Equatable {
     case fastSwipe
@@ -120,55 +115,6 @@ extension RunnerTests {
       return
     }
     XCUIDevice.shared.press(.home)
-#endif
-  }
-
-  func rotateDevice(to orientationName: String) -> String? {
-#if os(macOS) || os(tvOS) || os(visionOS)
-    return nil
-#else
-    switch orientationName {
-    case "portrait":
-      XCUIDevice.shared.orientation = .portrait
-    case "portrait-upside-down":
-      XCUIDevice.shared.orientation = .portraitUpsideDown
-    case "landscape-left":
-      XCUIDevice.shared.orientation = .landscapeLeft
-    case "landscape-right":
-      XCUIDevice.shared.orientation = .landscapeRight
-    default:
-      return nil
-    }
-    let deadline = Date().addingTimeInterval(OrientationObservationTiming.timeout)
-    repeat {
-      if observedDeviceOrientation() == orientationName {
-        return orientationName
-      }
-      sleepFor(OrientationObservationTiming.pollInterval)
-    } while Date() < deadline
-
-    // Keep the last observed value so the protocol can distinguish a settled
-    // but wrong orientation from one XCTest could not observe at all.
-    return observedDeviceOrientation()
-#endif
-  }
-
-  private func observedDeviceOrientation() -> String? {
-#if os(macOS) || os(tvOS) || os(visionOS)
-    return nil
-#else
-    switch XCUIDevice.shared.orientation {
-    case .portrait:
-      return "portrait"
-    case .portraitUpsideDown:
-      return "portrait-upside-down"
-    case .landscapeLeft:
-      return "landscape-left"
-    case .landscapeRight:
-      return "landscape-right"
-    default:
-      return nil
-    }
 #endif
   }
 

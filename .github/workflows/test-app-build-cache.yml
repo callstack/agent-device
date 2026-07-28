@@ -19,11 +19,6 @@ on:
     branches:
       - main
   pull_request:
-    paths:
-      - 'examples/test-app/**'
-      - '.github/workflows/test-app-build-cache.yml'
-      - '.github/actions/setup-fixture-app/**'
-      - '.github/actions/setup-test-app-dependencies/**'
   workflow_dispatch:
 
 permissions:
@@ -31,30 +26,13 @@ permissions:
   # Look up whether this fingerprint's artifact already exists across runs.
   actions: read
 
-concurrency:
-  # One producer at a time so a fingerprint is never built twice over; queue
-  # rather than cancel, or a long build could be killed by the next merge and the
-  # cache would never populate. Queued runs are cheap: they find the artifact and
-  # skip the build.
-  group: ci-${{ github.workflow }}
-  cancel-in-progress: false
-
 jobs:
-  release:
-    name: ${{ matrix.name }}
-    runs-on: ${{ matrix.runs-on }}
-    timeout-minutes: 60
-    strategy:
-      # Independent caches; one platform failing must not withhold the other's.
-      fail-fast: false
-      matrix:
-        include:
-          - name: iOS Release
-            platform: ios
-            runs-on: macos-26
-          - name: Android Release
-            platform: android
-            runs-on: ubuntu-latest
+  fingerprint:
+    name: Resolve native fingerprint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.fingerprint.outputs.matrix }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -62,33 +40,94 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
         with:
+          cache-dependency-path: examples/test-app/pnpm-lock.yaml
+
+      - name: Setup test app dependencies
+        uses: ./.github/actions/setup-test-app-dependencies
+
+      - name: Resolve native fingerprint
+        id: fingerprint
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          IOS_HASH="$(pnpm --dir examples/test-app exec fingerprint fingerprint:generate --platform ios | jq -r .hash)"
+          ANDROID_HASH="$(pnpm --dir examples/test-app exec fingerprint fingerprint:generate --platform android | jq -r .hash)"
+          test -n "$IOS_HASH"
+          test -n "$ANDROID_HASH"
+          IOS_NAME="fingerprint.${IOS_HASH}.ios"
+          ANDROID_NAME="fingerprint.${ANDROID_HASH}.android"
+          IOS_COUNT="$(gh api "repos/${{ github.repository }}/actions/artifacts?name=${IOS_NAME}&per_page=1" \
+            --jq '[.artifacts[] | select(.expired == false)] | length')"
+          ANDROID_COUNT="$(gh api "repos/${{ github.repository }}/actions/artifacts?name=${ANDROID_NAME}&per_page=1" \
+            --jq '[.artifacts[] | select(.expired == false)] | length')"
+          IOS_BUILD=true
+          if [ "$IOS_COUNT" -gt 0 ] ||
+             { [ "${{ github.event_name }}" = "pull_request" ] &&
+               [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; }; then
+            IOS_BUILD=false
+          fi
+          ANDROID_BUILD=true
+          if [ "$ANDROID_COUNT" -gt 0 ]; then
+            ANDROID_BUILD=false
+          fi
+          MATRIX="$(jq -cn \
+            --arg iosHash "$IOS_HASH" \
+            --arg iosName "$IOS_NAME" \
+            --argjson iosBuild "$IOS_BUILD" \
+            --arg androidHash "$ANDROID_HASH" \
+            --arg androidName "$ANDROID_NAME" \
+            --argjson androidBuild "$ANDROID_BUILD" \
+            '{
+              include: [
+                {
+                  name: "iOS Release",
+                  platform: "ios",
+                  runsOn: (if $iosBuild then "macos-26" else "ubuntu-latest" end),
+                  hash: $iosHash,
+                  artifactName: $iosName,
+                  build: $iosBuild
+                },
+                {
+                  name: "Android Release",
+                  platform: "android",
+                  runsOn: "ubuntu-latest",
+                  hash: $androidHash,
+                  artifactName: $androidName,
+                  build: $androidBuild
+                }
+              ]
+            }')"
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: ${{ matrix.name }}
+    needs: fingerprint
+    runs-on: ${{ matrix.runsOn }}
+    timeout-minutes: 60
+    concurrency:
+      group: test-app-${{ matrix.platform }}-${{ matrix.hash }}
+      cancel-in-progress: false
+    strategy:
+      # Independent caches; one platform failing must not withhold the other's.
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.fingerprint.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        if: matrix.build
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup toolchain
+        if: matrix.build
+        uses: ./.github/actions/setup-node-pnpm
+        with:
           cache-dependency-path: |
             pnpm-lock.yaml
             examples/test-app/pnpm-lock.yaml
 
       - name: Setup test app dependencies
+        if: matrix.build
         uses: ./.github/actions/setup-test-app-dependencies
-
-      - name: Resolve fingerprint and whether it is already cached
-        id: fp
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          HASH="$(pnpm --dir examples/test-app exec fingerprint fingerprint:generate | jq -r .hash)"
-          NAME="fingerprint.${HASH}.${{ matrix.platform }}"
-          # A non-expired artifact under this name means the native inputs are
-          # unchanged; there is nothing to rebuild.
-          COUNT="$(gh api "repos/${{ github.repository }}/actions/artifacts?name=${NAME}&per_page=1" \
-            --jq '[.artifacts[] | select(.expired == false)] | length')"
-          echo "name=$NAME" >> "$GITHUB_OUTPUT"
-          if [ "$COUNT" -gt 0 ]; then
-            echo "cached=true" >> "$GITHUB_OUTPUT"
-            echo "$NAME already cached; nothing to build."
-          else
-            echo "cached=false" >> "$GITHUB_OUTPUT"
-            echo "$NAME not cached; building."
-          fi
 
       # `--device generic` builds for the simulator without booting one or
       # installing. Release embeds the bundle (no Metro) and links a universal
@@ -99,7 +138,7 @@ jobs:
       - name: Build the iOS Release app
         if: |
           matrix.platform == 'ios' &&
-          steps.fp.outputs.cached == 'false' &&
+          matrix.build &&
           (github.event_name != 'pull_request' ||
            github.event.pull_request.head.repo.full_name == github.repository)
         run: |
@@ -111,14 +150,14 @@ jobs:
             --output "${{ github.workspace }}/.tmp/test-app-build"
 
       - name: Setup Android host
-        if: matrix.platform == 'android' && steps.fp.outputs.cached == 'false'
+        if: matrix.platform == 'android' && matrix.build
         uses: ./.github/actions/setup-android-replay-host
 
       # Deliberately no `set -o pipefail`: `yes` is killed by SIGPIPE once
       # sdkmanager stops reading, and pipefail would report that 141 as the
       # step's own failure.
       - name: Install Android SDK packages
-        if: matrix.platform == 'android' && steps.fp.outputs.cached == 'false'
+        if: matrix.platform == 'android' && matrix.build
         run: |
           SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
           SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
@@ -137,7 +176,7 @@ jobs:
       # build already spans every ABI (the CLI only narrows debug builds to the
       # device ABI), so no --all-arch and no emulator-architecture coupling.
       - name: Build the Android Release apk
-        if: matrix.platform == 'android' && steps.fp.outputs.cached == 'false'
+        if: matrix.platform == 'android' && matrix.build
         uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
         with:
           api-level: 36
@@ -157,7 +196,7 @@ jobs:
       - name: Stage the binary for upload
         id: stage
         if: |
-          steps.fp.outputs.cached == 'false' &&
+          matrix.build &&
           (matrix.platform == 'android' ||
            github.event_name != 'pull_request' ||
            github.event.pull_request.head.repo.full_name == github.repository)
@@ -179,7 +218,7 @@ jobs:
           # leave an installed .app unable to launch.
           mkdir -p .tmp/test-app-artifact
           tar -czf .tmp/test-app-artifact/binary.tar.gz -C "$SRC" "$(basename "$BINARY")"
-          echo "publishing ${{ steps.fp.outputs.name }} ($(du -h .tmp/test-app-artifact/binary.tar.gz | cut -f1))"
+          echo "publishing ${{ matrix.artifactName }} ($(du -h .tmp/test-app-artifact/binary.tar.gz | cut -f1))"
 
       # Fork PRs run with a read-only token but can still upload artifacts, and a
       # consumer serves whatever it finds by name -- so a fork could publish a
@@ -188,12 +227,12 @@ jobs:
       # from the smoke workflow's inline cache-miss fallback.
       - name: Publish to the build cache
         if: |
-          steps.fp.outputs.cached == 'false' &&
+          matrix.build &&
           (github.event_name != 'pull_request' ||
            github.event.pull_request.head.repo.full_name == github.repository)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: ${{ steps.fp.outputs.name }}
+          name: ${{ matrix.artifactName }}
           path: .tmp/test-app-artifact/binary.tar.gz
           if-no-files-found: error
           compression-level: 0 # already gzipped
