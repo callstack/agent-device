@@ -233,14 +233,11 @@ export function expiredRetryEntries(now: Date): readonly ContentionRetryEntry[] 
   return CONTENTION_RETRY_FILES.filter((entry) => entry.reviewBy < today);
 }
 
-/**
- * Vitest's own timeout error, verbatim (`makeTimeoutError`, @vitest/runner
- * 4.1.8): a plain `Error` whose whole message is the runner's template.
- */
-const VITEST_TIMEOUT_MESSAGE =
+/** Vitest's runner timeout error, verbatim (`makeTimeoutError`, @vitest/runner 4.1.8). */
+const RUNNER_TIMEOUT_MESSAGE =
   /^(Test|Hook) timed out in \d+ms\.\nIf this is a long-running (test|hook), pass a timeout value as the last argument/;
 
-/** The error shape the lane reporter classifies, as Vitest hands it over. */
+/** An error as the lane reporter receives it from Vitest. */
 export type ReportedError = {
   name?: unknown;
   message?: unknown;
@@ -248,43 +245,28 @@ export type ReportedError = {
   actual?: unknown;
 };
 
-/** The runner-owned facts a timeout claim is checked against. */
-export type TimeoutEvidence = {
-  /** `TestCase.options.timeout` — the runner's configured budget for this test. */
+/** `TestCase.options.timeout` and `TestCase.diagnostic().duration`. */
+export type TestBudget = {
   timeoutMs: number | undefined;
-  /** `TestCase.diagnostic().duration` — how long the runner let it run. */
   durationMs: number | undefined;
 };
 
-/**
- * Whether a failed test was aborted by the runner's own timeout, the only
- * failure this lane may retry.
- *
- * Vitest 4 ships no reason code on the timeout error, so eligibility is decided
- * primarily by structured runner metadata that test code cannot author: the test
- * must have consumed its entire configured budget (`options.timeout`, measured
- * by `diagnostic().duration`). A forged `throw new Error(<the exact template>)`
- * fails here — it returns long before the budget — and a test that *does* run to
- * its budget is aborted by the runner, so the error the runner reports is its
- * own. The message template and error shape are then required as corroboration:
- * a plain `Error` (assertion libraries set `name`) with no `expected`/`actual`
- * diff fields. All of it must hold, and every error on the test must qualify;
- * anything unclassifiable fails the job on the first run.
- */
-export function isRunnerTimeout(
-  errors: readonly ReportedError[],
-  evidence: TimeoutEvidence,
-): boolean {
-  const { timeoutMs, durationMs } = evidence;
-  if (typeof timeoutMs !== 'number' || timeoutMs <= 0) return false;
-  if (typeof durationMs !== 'number' || durationMs < timeoutMs) return false;
-  return errors.length > 0 && errors.every((error) => isTimeoutErrorShape(error));
+/** A test the runner aborted at its timeout — the only failure this lane retries. */
+export function isRunnerTimeout(errors: readonly ReportedError[], budget: TestBudget): boolean {
+  return consumedWholeBudget(budget) && errors.length > 0 && errors.every(raisedByRunnerTimeout);
 }
 
-function isTimeoutErrorShape(error: ReportedError): boolean {
+/** The runner aborts a test only once it has run for its whole configured budget. */
+function consumedWholeBudget({ timeoutMs, durationMs }: TestBudget): boolean {
+  if (typeof timeoutMs !== 'number' || timeoutMs <= 0) return false;
+  return typeof durationMs === 'number' && durationMs >= timeoutMs;
+}
+
+/** The runner raises a plain `Error` holding its template, never an assertion diff. */
+function raisedByRunnerTimeout(error: ReportedError): boolean {
   if (error.name !== 'Error') return false;
   if (error.expected !== undefined || error.actual !== undefined) return false;
-  return typeof error.message === 'string' && VITEST_TIMEOUT_MESSAGE.test(error.message);
+  return typeof error.message === 'string' && RUNNER_TIMEOUT_MESSAGE.test(error.message);
 }
 
 /** One failed test case as read from a runner report. */

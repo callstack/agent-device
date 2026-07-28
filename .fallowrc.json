@@ -81,10 +81,7 @@
     {
       "comment": "Contention retry lane (#1419): the reporter default is loaded by Vitest from a `--reporter=<path>` string, and SUBPROCESS_STUB_TESTS is consumed by vitest.config.ts \u2014 a tool config outside --production analysis.",
       "file": "scripts/lib/{contention-retry.ts,contention-retry-reporter.ts}",
-      "exports": [
-        "default",
-        "SUBPROCESS_STUB_TESTS"
-      ]
+      "exports": ["default", "SUBPROCESS_STUB_TESTS"]
     },
     {
       "comment": "Mutation-lane seam: readTestScope is consumed by vitest.mutation.config.ts, a tool config outside --production analysis.",

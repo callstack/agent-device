@@ -100,9 +100,6 @@ export default function slowTestGateReporter(): Reporter {
       // eslint-disable-next-line no-console
       if (reportSlowTests(offenders, (message) => console.error(message))) {
         process.exitCode = 1;
-        // This gate fails the run without failing a test, so it must be
-        // published structurally: otherwise a retry lane sees only the
-        // retry-eligible failures and a green rerun erases this verdict.
         recordRunBlocker({
           kind: 'slow-test gate',
           detail: `${offenders.filter((offender) => offender.enforce).length} test(s) exceeded the wall-clock budget`,

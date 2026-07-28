@@ -45,9 +45,6 @@ const summaryPath = args.summary ?? process.env.GITHUB_STEP_SUMMARY;
 async function runVitest(extra: string[], report: string): Promise<TestRun> {
   fs.mkdirSync(path.dirname(report), { recursive: true });
   fs.rmSync(report, { force: true });
-  // No `--reporter` flag: that would replace the reporters configured in
-  // vitest.config.ts and drop the slow-test gate from this lane. The env var
-  // composes the failure sink in alongside them.
   let output = '';
   const capture = (chunk: string, write: (text: string) => void): void => {
     output += chunk;
@@ -112,10 +109,6 @@ const projects = (args.project ?? '')
 const startedAtMs = Date.now();
 const result = await runWithContentionRetry({
   runAll: () => runVitest([...projects, ...(args.coverage ? ['--coverage'] : [])], reportPath),
-  // The rerun is file-scoped and coverage-free on purpose: a coverage verdict is
-  // a whole-suite property that a file-scoped rerun cannot re-establish, so a
-  // coverage failure in the first run is a blocker (`processBlockers`) and never
-  // reaches this branch.
   runFiles: (files) => runVitest([...files], reportPath.replace(/\.json$/, '.retry.json')),
   commit: runCmdSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot }).stdout.trim(),
   configHash: configHash(),

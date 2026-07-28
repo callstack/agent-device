@@ -1,11 +1,5 @@
-// Process-level blockers for the contention single-retry policy (#1419).
-//
-// The reporter can only see what happened inside the run. Two failure classes
-// live outside it and would otherwise be erased by a green retry: a coverage
-// verdict (computed after the tests, and a whole-suite property a file-scoped
-// rerun cannot re-establish), and any nonzero exit no failed test explains
-// (worker crash, config error, report never written). Both are recorded as
-// blockers, which forbid the retry outright.
+// Blockers a reporter cannot see, read from the run's process outcome (#1419):
+// the coverage verdict, and any nonzero exit no failed test explains.
 
 import type { RunBlocker } from './contention-retry.ts';
 

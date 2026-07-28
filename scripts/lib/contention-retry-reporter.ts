@@ -1,16 +1,7 @@
-// Failure sink for the contention single-retry policy (#1419).
-//
-// The lane needs two things no built-in reporter gives it together: each failed
-// test's *live* error object (so a timeout is classified structurally rather
-// than from rendered text — Vitest's `json` reporter serializes a timeout as a
-// bare `STACK_TRACE_ERROR`), and every failure that is not a failed test case.
-// The latter are recorded as blockers, which forbid a retry outright: without
-// them a timeout retry could turn a run green that also failed for an unrelated
-// reason.
-//
-// Composed into the configured reporters by vitest.config.ts whenever
-// `CONTENTION_RETRY_FAILURES` is set, so the slow-test gate stays in the lane.
-// Module ids are written as-is; `parseFailureReport` makes them repo-relative.
+// Failure sink for the contention single-retry policy (#1419): writes each
+// failed test with its retry eligibility, plus every failure that is not a
+// failed test case. Enabled by `CONTENTION_RETRY_FAILURES`; module ids are
+// written as-is and `parseFailureReport` makes them repo-relative.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -31,9 +22,6 @@ export function failedTestCase(testCase: TestCase): TestFailure | null {
     file: (testCase.module as TestModule).moduleId,
     testName: testCase.fullName,
     message: errors.map((error) => `${error.name}: ${error.message}`).join('\n'),
-    // Decided from runner metadata (budget consumed) plus the error shape, so
-    // test code cannot forge it; a test that timed out *and* failed an assertion
-    // is not retry-eligible either.
     timeout: isRunnerTimeout(errors, {
       timeoutMs: testCase.options.timeout,
       durationMs: testCase.diagnostic()?.duration,
@@ -41,16 +29,11 @@ export function failedTestCase(testCase: TestCase): TestFailure | null {
   };
 }
 
-/**
- * Failures that no rerun of the failed files can re-check: verdicts published by
- * other gate reporters, unhandled errors, and modules that failed outside a test
- * case (import/setup/teardown errors, which report no failed test at all).
- */
+/** Failures that rerunning the failed files cannot re-check. */
 export function runBlockers(
   testModules: readonly TestModule[],
   unhandledErrors: readonly { name?: unknown; message?: unknown }[],
 ): RunBlocker[] {
-  // Gate reporters that fail the run without failing a test publish here.
   const blockers: RunBlocker[] = drainRunBlockers();
   for (const error of unhandledErrors) {
     blockers.push({

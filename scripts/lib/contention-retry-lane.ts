@@ -114,8 +114,7 @@ function finish(
   },
 ): ContentionRetryResult {
   const plan = state.plan;
-  // Keyed by file, matching what actually reran: two timed-out tests in one file
-  // are one retry, not two.
+  // Keyed by file, matching what actually reran.
   const retried = plan?.retry
     ? plan.files.map((file) => ({
         file,

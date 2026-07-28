@@ -20,18 +20,11 @@ import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
 // single-retry policy (#1419) reads, so the two cannot drift.
 export { SUBPROCESS_STUB_TESTS };
 
-/**
- * Reporters, composed here rather than on the retry lane's command line: a
- * `--reporter` flag *replaces* this list, which would silently drop the
- * slow-test gate from the Coverage job. The retry lane opts its failure sink in
- * through the environment instead.
- */
+/** Reporters for every lane; a `--reporter` flag would replace them, so no lane passes one. */
 export function reporters(env: NodeJS.ProcessEnv = process.env): Array<string | Reporter> {
-  return [
-    'default',
-    slowTestGateReporter(),
-    ...(env[FAILURE_FILE_ENV] ? [contentionRetryReporter()] : []),
-  ];
+  const gates: Array<string | Reporter> = ['default', slowTestGateReporter()];
+  // The failure sink drains the gates' verdicts, so it reports after them.
+  return env[FAILURE_FILE_ENV] ? [...gates, contentionRetryReporter()] : gates;
 }
 
 export default defineConfig({
