@@ -8,6 +8,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { runWithContentionRetry, type TestRun } from './contention-retry-lane.ts';
+import contentionRetryReporter, {
+  failedTestCase,
+  writeFailureReport,
+} from './contention-retry-reporter.ts';
 import {
   CONTENTION_RETRY_FILES,
   expiredRetryEntries,
@@ -116,6 +120,33 @@ test('timeout shapes are recognized and assertion failures are not', () => {
   assert.ok(isTimeoutShapedFailure('Error: Hook timed out in 10000 ms.'));
   assert.ok(!isTimeoutShapedFailure(ASSERTION_MESSAGE));
   assert.ok(!isTimeoutShapedFailure('Error: expected timeout hint to be set'));
+});
+
+test('the lane reporter keeps the real error message a timeout is classified by', () => {
+  const testCase = {
+    fullName: 'opens a session',
+    module: { moduleId: `${repoRoot}/${LISTED}` },
+    result: () => ({
+      state: 'failed',
+      errors: [{ name: 'Error', message: 'Test timed out in 5000ms.' }],
+    }),
+  };
+  const failed = failedTestCase(testCase as unknown as Parameters<typeof failedTestCase>[0]);
+  assert.deepEqual(failed, {
+    file: `${repoRoot}/${LISTED}`,
+    testName: 'opens a session',
+    message: 'Error: Test timed out in 5000ms.',
+  });
+
+  const passing = { ...testCase, result: () => ({ state: 'passed', errors: [] }) };
+  assert.equal(failedTestCase(passing as unknown as Parameters<typeof failedTestCase>[0]), null);
+
+  const target = path.join(repoRoot, '.tmp/contention-retry/reporter-gate.json');
+  writeFailureReport([failure()], target);
+  assert.deepEqual(parseFailureReport(JSON.parse(fs.readFileSync(target, 'utf8')), repoRoot), [
+    failure(),
+  ]);
+  assert.ok(contentionRetryReporter().onTestCaseResult);
 });
 
 test('reporter failures are read as repo-relative paths, names, and messages', () => {
