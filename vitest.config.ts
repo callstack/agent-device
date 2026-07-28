@@ -19,6 +19,9 @@ const SUBPROCESS_STUB_TESTS = [
   // Proves the parser fuzz harness still fails (#1414): every case spawns a node subprocess or a
   // worker thread and one target is a deliberate hang, so it waits real watchdog time.
   'scripts/fuzz/harness.test.ts',
+  // Replays the fuzz regression corpus (#1414) through that same worker watchdog, so a promoted
+  // hang case fails against its per-case budget instead of wedging the unit job.
+  'scripts/fuzz/corpus-replay.test.ts',
 ];
 
 export default defineConfig({
@@ -41,9 +44,6 @@ export default defineConfig({
           include: [
             'src/**/*.test.ts',
             'scripts/__tests__/help-conformance-bench.test.ts',
-            // Replays the parser fuzz regression corpus (#1414) in the unit lane; the
-            // generating fuzz run itself is nightly (scripts/fuzz/run.ts).
-            'scripts/fuzz/corpus-replay.test.ts',
             'scripts/__tests__/help-conformance-sample-outputs.test.ts',
             'scripts/__tests__/help-conformance-topic-coverage.test.ts',
             'test/skillgym/suites/local-cli-help-policy.test.ts',

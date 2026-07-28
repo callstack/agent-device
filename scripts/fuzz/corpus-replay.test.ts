@@ -1,25 +1,27 @@
 // Unit-lane replay of the parser fuzz regression corpus (#1414).
 //
-// The nightly lane finds cases; this replays every case it ever found, in-process and
-// without a watchdog, so a regression fails in seconds on a PR instead of a night later.
-// Cases run synchronously here on purpose: a corpus case that hangs would hang the unit
-// suite, which is exactly the signal (the nightly lane is where hangs are diagnosed).
+// The nightly lane finds cases; this replays every case it ever found so a regression fails in
+// seconds on a PR instead of a night later. Cases go through the same worker-backed watchdog the
+// nightly lane uses: a promoted hang case must fail this test against its per-case budget, not
+// wedge the unit job until the CI timeout.
 
 import fc from 'fast-check';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { arbitraryForTarget } from './arbitraries.ts';
 import { readCorpus } from './corpus.ts';
-import { checkCase } from './invariant.ts';
+import { runCases } from './execute.ts';
+import { describeFailure } from './invariant.ts';
 import { getFuzzTarget } from './registry.ts';
 import { FUZZ_TARGETS } from './targets.ts';
 
+/**
+ * Generous enough that a loaded CI runner never reports a healthy parser as hung, small enough
+ * that a genuinely wedged case fails the file in seconds.
+ */
+const CASE_TIMEOUT_MS = 5_000;
+
 describe('parser fuzz regression corpus', () => {
   const corpus = readCorpus();
-
-  // The batch-steps parser warns on deprecated step shapes; replaying those cases would
-  // print one warning line per case into the unit-suite output.
-  beforeEach(() => void vi.spyOn(process.stderr, 'write').mockReturnValue(true));
-  afterEach(() => void vi.restoreAllMocks());
 
   it('is non-empty and free of duplicates', () => {
     expect(corpus.length).toBeGreaterThan(0);
@@ -35,17 +37,17 @@ describe('parser fuzz regression corpus', () => {
     }
   });
 
-  it.each(corpus.map((entry, index) => [index, entry] as const))(
-    'case %i holds the typed-AppError invariant',
-    (_index, entry) => {
-      expect(checkCase(getFuzzTarget(entry.target), entry.input)).toBeNull();
-    },
-  );
-
+  // One worker per target rather than per case: startup is the only real cost here, and the
+  // watchdog budget is per case either way.
   it.each(FUZZ_TARGETS.map((target) => [target.name, target] as const))(
-    '%s seeds hold the invariant',
-    (_name, target) => {
-      for (const seed of target.seeds) expect(checkCase(target, seed)).toBeNull();
+    '%s corpus cases and seeds hold the invariant, under the watchdog',
+    async (name, target) => {
+      const cases = [
+        ...target.seeds,
+        ...corpus.filter((entry) => entry.target === name).map((entry) => entry.input),
+      ];
+      const failures = await runCases(target, cases, CASE_TIMEOUT_MS);
+      expect(failures.map(describeFailure)).toEqual([]);
     },
   );
 });
@@ -59,10 +61,10 @@ describe('fuzz case generation', () => {
     expect(sample(7)).not.toEqual(sample(8));
   });
 
-  it('generates strings the target can be fed directly', () => {
-    for (const input of fc.sample(arbitraryForTarget(target), { numRuns: 64, seed: 1 })) {
-      expect(typeof input).toBe('string');
-      expect(checkCase(target, input)).toBeNull();
-    }
+  it('generates strings the target can be fed directly', async () => {
+    const inputs = fc.sample(arbitraryForTarget(target), { numRuns: 64, seed: 1 });
+    expect(inputs.every((input) => typeof input === 'string')).toBe(true);
+    const failures = await runCases(target, inputs, CASE_TIMEOUT_MS);
+    expect(failures.map(describeFailure)).toEqual([]);
   });
 });

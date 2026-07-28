@@ -29,10 +29,12 @@ type Session = { worker: Worker; ready: Promise<void> };
 /** A worker plus the promise that settles when it has finished importing the parsers. */
 function startSession(targetName: string): Session {
   const workerData: FuzzWorkerData = { targetName };
-  // A restarted worker re-emits Node's type-stripping warning; one per hang would bury the report.
+  // Type stripping is requested explicitly rather than inherited: under Vitest the parent's
+  // execArgv carries no such flag, and the worker is a plain `.ts` file Node must strip itself.
+  // The warning is silenced because a restarted worker re-emits it — one per hang buries the report.
   const worker = new Worker(WORKER_PATH, {
     workerData,
-    execArgv: [...process.execArgv, '--disable-warning=ExperimentalWarning'],
+    execArgv: ['--experimental-strip-types', '--disable-warning=ExperimentalWarning'],
   });
   const ready = new Promise<void>((resolve, reject) => {
     const timer = setTimeout(

@@ -151,8 +151,9 @@ and replay path printed alongside the saved artifact.
 A nightly discovery reaches the unit lane by promotion, not hand-editing: the printed
 `promote:` command re-runs the downloaded artifact and appends it to
 `scripts/fuzz/corpus/regressions.json`, which `scripts/fuzz/corpus-replay.test.ts` replays on every
-PR. `scripts/fuzz/harness.test.ts` covers the harness itself — an untyped throw, an empty hint, and a
-wedged worker must each be reported, startup time is never charged against the per-case budget, and
+PR — through the same worker watchdog, so a promoted hang case fails against its per-case budget
+instead of wedging the unit job. `scripts/fuzz/harness.test.ts` covers the harness itself — an
+untyped throw, an empty hint, and a wedged worker must each be reported, startup time is never charged against the per-case budget, and
 every mode writes an envelope — using the broken-on-purpose targets in
 `scripts/fuzz/self-check-targets.ts` (also what `--self-check` runs in CI), so a regressed classifier
 or watchdog cannot pass silently. Adding a parser to the lane means adding a target to
