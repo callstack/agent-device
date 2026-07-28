@@ -12,11 +12,14 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { laneEnvelope } from '../lib/lane-envelope.ts';
 import { runCmdSync } from '../../src/utils/exec.ts';
 import type { FuzzFailure } from './invariant.ts';
 
 const FILENAME = 'run-envelope.json';
+/** Shared with the property suite (#1437): its hazard list feeds the fuzz arbitraries. */
+const PROPERTY_ARBITRARIES = '../../src/__tests__/test-utils/property-arbitraries.ts';
 const LANE = 'parser-fuzz';
 const TOOL = 'scripts/fuzz/run.ts';
 
@@ -56,9 +59,9 @@ export function writeFuzzEnvelope(input: {
   const envelope = laneEnvelope<FuzzEnvelopeData>({
     lane: LANE,
     commit: runCmdSync('git', ['rev-parse', 'HEAD'], { allowFailure: true }).stdout.trim(),
-    tool: { node: process.version, harness: TOOL },
-    // The generators are the lane's configuration: a case set is decided by the seed plus the
-    // arbitraries, so the harness source is what a drift check has to compare.
+    // fast-check is a case-generation input, not just a dependency: an upgrade can change what a
+    // seed produces, so its version belongs in provenance next to Node's.
+    tool: { node: process.version, 'fast-check': fastCheckVersion(), harness: TOOL },
     configHash: harnessHash(),
     seed: typeof seed === 'number' ? String(seed) : null,
     startedAtMs: input.startedAt,
@@ -77,14 +80,33 @@ export function writeFuzzEnvelope(input: {
 }
 
 /**
- * Content hash of the modules that decide a case set, so drift analysis can tell "the same seed
- * means different inputs now" from "the parsers changed".
+ * Every module that decides which inputs a seed produces, or what counts as a violation: the
+ * arbitraries, the targets they are built for, the generation loop (numRuns, property, shrinking),
+ * and the invariant itself. Hashing a subset would let a changed case set look like an unchanged
+ * lane, which is exactly the drift this field exists to catch.
  */
+const CASE_GENERATION_INPUTS = [
+  'arbitraries.ts',
+  'generate.ts',
+  'targets.ts',
+  'invariant.ts',
+] as const;
+
+/** Content hash of `CASE_GENERATION_INPUTS`, alongside their shared source of hazards. */
 function harnessHash(): string {
   const here = path.dirname(new URL(import.meta.url).pathname);
   const digest = crypto.createHash('sha256');
-  for (const name of ['arbitraries.ts', 'targets.ts', 'invariant.ts']) {
+  for (const name of CASE_GENERATION_INPUTS) {
     digest.update(fs.readFileSync(path.join(here, name)));
   }
+  digest.update(fs.readFileSync(path.join(here, PROPERTY_ARBITRARIES)));
   return `sha256:${digest.digest('hex').slice(0, 16)}`;
+}
+
+/** The generators read from the installed package, so its version is read from there too. */
+function fastCheckVersion(): string {
+  const manifest = fileURLToPath(import.meta.resolve('fast-check/package.json'));
+  const parsed: unknown = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+  const version = (parsed as { version?: unknown }).version;
+  return typeof version === 'string' ? version : 'unknown';
 }

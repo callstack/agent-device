@@ -6,6 +6,7 @@
 // and require each failure kind to be reported.
 
 import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -86,6 +87,21 @@ describe('worker startup budget', () => {
   });
 });
 
+/**
+ * Recomputes `configHash` over every case-generation input except `skip`. If the real hash equals
+ * one of these, that file is not covered and a change to it would look like an unchanged lane.
+ */
+function hashWithout(skip: string): string {
+  const digest = crypto.createHash('sha256');
+  for (const name of ['arbitraries.ts', 'generate.ts', 'targets.ts', 'invariant.ts']) {
+    if (name !== skip) digest.update(fs.readFileSync(path.join(FUZZ_DIR, name)));
+  }
+  digest.update(
+    fs.readFileSync(path.join(FUZZ_DIR, '../../src/__tests__/test-utils/property-arbitraries.ts')),
+  );
+  return `sha256:${digest.digest('hex').slice(0, 16)}`;
+}
+
 describe('run envelope', () => {
   function envelopeFrom(args: readonly string[]) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fuzz-envelope-'));
@@ -102,7 +118,11 @@ describe('run envelope', () => {
     expect(envelope.lane).toBe('parser-fuzz');
     // The shape is #1430's shared contract, not this lane's invention.
     expect(envelope.schemaVersion).toBe(LANE_ENVELOPE_SCHEMA_VERSION);
+    // Drift provenance: fast-check's version and the case-generation sources both decide what a
+    // seed produces, so an upgrade or a generator edit must be visible without reading logs.
+    expect(envelope.tool['fast-check']).toMatch(/^\d+\.\d+\.\d+/);
     expect(envelope.configHash).toMatch(/^sha256:/);
+    expect(envelope.configHash).not.toBe(hashWithout('generate.ts'));
     expect(envelope.result).toBe('pass');
     expect(envelope.data.mode).toBe('generate');
     expect(envelope.data.targetRuns[0].target).toBe('selector');
