@@ -1,0 +1,25 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "agent-device": ["../../src/sdk/index.ts"],
+      "agent-device/io": ["../../src/sdk/io.ts"],
+      "agent-device/artifacts": ["../../src/sdk/artifacts.ts"],
+      "agent-device/metro": ["../../src/sdk/metro.ts"],
+      "agent-device/batch": ["../../src/sdk/batch.ts"],
+      "agent-device/remote-config": ["../../src/sdk/remote-config.ts"],
+      "agent-device/install-source": ["../../src/sdk/install-source.ts"],
+      "agent-device/android-adb": ["../../src/sdk/android-adb.ts"],
+      "agent-device/contracts": ["../../src/sdk/contracts.ts"],
+      "agent-device/selectors": ["../../src/sdk/selectors.ts"],
+      "agent-device/finders": ["../../src/sdk/finders.ts"]
+    }
+  },
+  // Scoped to this directory only: these examples import `agent-device/...`
+  // by package name (the published export map), and `paths` above resolves
+  // those specifiers straight to `src/sdk/` so CI typechecks them without a
+  // prior build, workspace link, or publish step. Running an example for real
+  // still resolves `agent-device` as a self-referencing package (needs
+  // `pnpm build`), matching how a real consumer would import it.
+  "include": [".", "../../src/global.d.ts"]
+}
