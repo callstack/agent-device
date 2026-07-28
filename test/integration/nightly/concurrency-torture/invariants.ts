@@ -10,8 +10,8 @@
 //   - no cross-session bleed: each stored session carries exactly its own
 //     lease/claim/device, never a concurrent session's
 
-import type { LeaseRegistry } from '../../../src/daemon/lease-registry.ts';
-import type { SessionStore } from '../../../src/daemon/session-store.ts';
+import type { LeaseRegistry } from '../../../../src/daemon/lease-registry.ts';
+import type { SessionStore } from '../../../../src/daemon/session-store.ts';
 
 import type { SessionInstance } from './bindings.ts';
 

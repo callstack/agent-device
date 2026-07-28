@@ -18,14 +18,14 @@
 // (by the deterministic scheduler) because `withKeyedLock`'s native microtask
 // hand-off cannot be reproduced from a seed.
 
-import type { DeviceInfo } from '../../../src/kernel/device.ts';
-import type { CommandFlags } from '../../../src/core/dispatch-context.ts';
-import type { DaemonRequest } from '../../../src/daemon/types.ts';
-import type { SessionStore } from '../../../src/daemon/session-store.ts';
-import { resolveRequestExecutionLockKeys } from '../../../src/daemon/request-binding.ts';
-import { shouldLockSessionExecution } from '../../../src/daemon/daemon-command-registry.ts';
-import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
-import { withDeviceInventoryProvider } from '../../../src/core/dispatch-resolve.ts';
+import type { DeviceInfo } from '../../../../src/kernel/device.ts';
+import type { CommandFlags } from '../../../../src/core/dispatch-context.ts';
+import type { DaemonRequest } from '../../../../src/daemon/types.ts';
+import type { SessionStore } from '../../../../src/daemon/session-store.ts';
+import { resolveRequestExecutionLockKeys } from '../../../../src/daemon/request-binding.ts';
+import { shouldLockSessionExecution } from '../../../../src/daemon/daemon-command-registry.ts';
+import { PUBLIC_COMMANDS } from '../../../../src/command-catalog.ts';
+import { withDeviceInventoryProvider } from '../../../../src/core/dispatch-resolve.ts';
 
 import type { LockKey } from './deterministic-scheduler.ts';
 

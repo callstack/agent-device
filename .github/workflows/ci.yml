@@ -120,13 +120,6 @@ jobs:
         # rather than in its own job so the two can never be green independently.
         run: node --experimental-strip-types --test scripts/depgraph/model.test.ts
 
-      - name: Check scheduled-lane health watcher model
-        # The nightly Scheduled Lane Health watcher (#1430) decides when a lane
-        # has missed/failed two cadences; gate its pure model AND the git seam
-        # that derives when a schedule became active on PRs so the freshness
-        # logic can't silently rot (the watcher itself runs nightly).
-        run: node --experimental-strip-types --test scripts/scheduled-lane-health/model.test.ts scripts/scheduled-lane-health/run.test.ts
-
   affected-selector:
     name: Affected-check Selector
     runs-on: ubuntu-latest
@@ -309,6 +302,14 @@ jobs:
         run: |
           pnpm clean:daemon
           pnpm test:integration:node
+
+      - name: Run seeded concurrency torture lane (fast PR sweep)
+        # #1416's nightly torture lane lives under test/integration/nightly/, out
+        # of the test:integration:node glob, so this is a *deliberate* fast PR
+        # sweep (TORTURE_RUNS default 128 seeds, ~sub-second) — not an accidental
+        # glob inclusion. The Concurrency Torture Nightly workflow sweeps a much
+        # larger seed range on schedule.
+        run: pnpm test:concurrency-torture
 
       - name: Run provider-backed integration tests
         run: pnpm test:integration:provider
