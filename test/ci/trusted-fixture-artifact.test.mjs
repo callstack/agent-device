@@ -23,37 +23,24 @@ const trustedRun = {
 
 test('producer, consumer, upload, and concurrency use the canonical artifact name', () => {
   const action = parse(fs.readFileSync('.github/actions/setup-fixture-app/action.yml', 'utf8'));
-  const workflow = parse(
-    fs.readFileSync('.github/workflows/test-app-build-cache.yml', 'utf8'),
-  );
+  const workflow = parse(fs.readFileSync('.github/workflows/test-app-build-cache.yml', 'utf8'));
   const fetchStep = action.runs.steps.find((step) => step.id === 'fetch');
-  const fingerprintStep = workflow.jobs.fingerprint.steps.find(
-    (step) => step.id === 'fingerprint',
-  );
-  const uploadStep = workflow.jobs.release.steps.find(
-    (step) => step.uses?.startsWith('actions/upload-artifact@'),
+  const fingerprintStep = workflow.jobs.fingerprint.steps.find((step) => step.id === 'fingerprint');
+  const uploadStep = workflow.jobs.release.steps.find((step) =>
+    step.uses?.startsWith('actions/upload-artifact@'),
   );
 
   assert.match(
     fetchStep.run,
     /NAME="\$\(sh "\$GITHUB_ACTION_PATH\/resolve-artifact-name\.sh" ios\)"/,
   );
-  assert.match(
-    fetchStep.run,
-    /find "\$REPOSITORY" "\$NAME" "\$EXPECTED_HEAD_SHA"/,
-  );
+  assert.match(fetchStep.run, /find "\$REPOSITORY" "\$NAME" "\$EXPECTED_HEAD_SHA"/);
   assert.match(
     fingerprintStep.run,
     /ARTIFACT_NAME_RESOLVER="\.github\/actions\/setup-fixture-app\/resolve-artifact-name\.sh"/,
   );
-  assert.match(
-    fingerprintStep.run,
-    /IOS_NAME="\$\(sh "\$ARTIFACT_NAME_RESOLVER" ios\)"/,
-  );
-  assert.match(
-    fingerprintStep.run,
-    /ANDROID_NAME="\$\(sh "\$ARTIFACT_NAME_RESOLVER" android\)"/,
-  );
+  assert.match(fingerprintStep.run, /IOS_NAME="\$\(sh "\$ARTIFACT_NAME_RESOLVER" ios\)"/);
+  assert.match(fingerprintStep.run, /ANDROID_NAME="\$\(sh "\$ARTIFACT_NAME_RESOLVER" android\)"/);
   assert.equal(uploadStep.with.name, '${{ matrix.artifactName }}');
   assert.equal(
     workflow.jobs.release.concurrency.group,
@@ -62,12 +49,8 @@ test('producer, consumer, upload, and concurrency use the canonical artifact nam
 });
 
 test('producer maps each platform to its resolved lookup and matrix artifact name', (t) => {
-  const workflow = parse(
-    fs.readFileSync('.github/workflows/test-app-build-cache.yml', 'utf8'),
-  );
-  const fingerprintStep = workflow.jobs.fingerprint.steps.find(
-    (step) => step.id === 'fingerprint',
-  );
+  const workflow = parse(fs.readFileSync('.github/workflows/test-app-build-cache.yml', 'utf8'));
+  const fingerprintStep = workflow.jobs.fingerprint.steps.find((step) => step.id === 'fingerprint');
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-producer-name-'));
   t.after(() => fs.rmSync(tempRoot, { force: true, recursive: true }));
   const actionDir = path.join(tempRoot, '.github/actions/setup-fixture-app');
@@ -118,10 +101,7 @@ test('producer maps each platform to its resolved lookup and matrix artifact nam
       { platform: 'android', artifactName: 'fingerprint.android-hash.android' },
     ],
   );
-  assert.deepEqual(fs.readFileSync(resolverLog, 'utf8').trim().split('\n'), [
-    'ios',
-    'android',
-  ]);
+  assert.deepEqual(fs.readFileSync(resolverLog, 'utf8').trim().split('\n'), ['ios', 'android']);
   assert.deepEqual(fs.readFileSync(nodeLog, 'utf8').trim().split('\n'), [
     '.github/actions/setup-fixture-app/trusted-artifact.mjs find octo/repo fingerprint.ios-hash.ios current-head',
     '.github/actions/setup-fixture-app/trusted-artifact.mjs find octo/repo fingerprint.android-hash.android current-head',
@@ -188,10 +168,7 @@ test('artifact name resolver scopes both platforms and rejects invalid output', 
   assert.equal(runResolver('ios', 'null').status, 1);
   assert.equal(runResolver('ios', 'bad/hash').status, 1);
   assert.equal(runResolver('ios', 'unused', 0, '{"hash":"bad\\nhash"}').status, 1);
-  assert.equal(
-    runResolver('ios', 'unused', 0, '{"hash":"first"}\n{"hash":"second"}').status,
-    1,
-  );
+  assert.equal(runResolver('ios', 'unused', 0, '{"hash":"first"}\n{"hash":"second"}').status, 1);
   assert.equal(runResolver('ios', 'unused', 17).status, 17);
 });
 
