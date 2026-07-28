@@ -214,12 +214,16 @@ test('createReplayTestProgressRenderer trims live step progress by visible colum
 });
 
 test('createReplayTestProgressRenderer clears every reflowed row after a terminal resize', () => {
-  let columns = 80;
+  const initialColumns = 80;
+  const resizedColumns = 20;
+  const clearRow = '\r\u001B[2K';
+  const moveUpAndClearRow = '\u001B[1A\r\u001B[2K';
+  let columns = initialColumns;
   const renderer = createReplayTestProgressRenderer({
     liveProgress: true,
     columns: () => columns,
   });
-  renderer.render({
+  const initial = renderer.render({
     type: 'test-step',
     test: {
       file: '/tmp/checkout.yaml',
@@ -232,8 +236,11 @@ test('createReplayTestProgressRenderer clears every reflowed row after a termina
       stepValue: 'Confirmation',
     },
   });
+  assert.ok(initial?.text.startsWith(clearRow));
+  const initialVisibleWidth = (initial?.text.length ?? clearRow.length) - clearRow.length;
+  assert.equal(initialVisibleWidth, initialColumns);
 
-  columns = 20;
+  columns = resizedColumns;
   const rendered = renderer.render({
     type: 'test-step',
     test: {
@@ -248,7 +255,11 @@ test('createReplayTestProgressRenderer clears every reflowed row after a termina
     },
   });
 
-  assert.ok(rendered?.text.includes('\u001B[1A'));
+  const reflowedRows = Math.ceil(initialVisibleWidth / resizedColumns);
+  const expectedClearPrefix = clearRow + moveUpAndClearRow.repeat(Math.max(0, reflowedRows - 1));
+  assert.equal(reflowedRows, 4);
+  assert.equal(rendered?.text.slice(0, expectedClearPrefix.length), expectedClearPrefix);
+  assert.equal((rendered?.text.split('\u001B[2K').length ?? 1) - 1, reflowedRows);
   assert.ok(rendered?.text.endsWith('...'));
 });
 
