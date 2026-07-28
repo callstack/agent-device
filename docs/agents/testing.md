@@ -380,6 +380,32 @@ Use `AGENT_DEVICE_IOS_E2E_TIER=full` for the nightly subset. Step history, cover
 screenshots, recordings, traces, and failure context are written below
 `test/artifacts/ios-simulator/` and uploaded by the existing shared artifact action. The six
 Settings replays remain additive OS-chrome coverage and are not modified by this suite.
+## Contention retry policy (enumerated, timeouts only)
+
+Some test files stub a real binary and then spawn or wait on it, so under host load they fail for a
+reason that has nothing to do with the diff. The set of such files is **enumerated** in
+`scripts/lib/contention-retry.ts` (`CONTENTION_RETRY_FILES`) — never a glob, which would silently
+enroll every future file under a directory. That one constant also derives `SUBPROCESS_STUB_TESTS`,
+the serialized `subprocess-stub` Vitest project in `vitest.config.ts`, so the execution contract and
+the retry policy cannot drift apart.
+
+The CI Coverage job runs the suite through `pnpm test:coverage:ci`
+(`scripts/lib/contention-retry-run.ts`), which applies one rule:
+
+- **Timeouts only.** A rerun happens only when *every* failure in the run is timeout-shaped **and**
+  lands in a listed file. One assertion failure — in a listed file or not — fails the job on the
+  first run, so a real regression can never be papered over by a retry.
+- **One retry, of the failed files only.** Not the suite, and never twice.
+- **Retries stay visible.** Every retried file is named in the job summary with its tracking issue
+  and review date, and the run writes the shared scheduled-lane envelope
+  (`scripts/lib/lane-envelope.ts`, #1430) with the retry count, so a permanently flaky file shows up
+  as lane health rather than as a green check.
+
+Adding a file to the list is a reviewed waiver in the ADR 0011 sense: a `reason` naming the concrete
+spawn/wait that makes it contention-flaky, a `trackingIssue` for removing that wait, and a `reviewBy`
+date. `pnpm check:contention-retry` (its own CI step, and part of `pnpm check:unit`) fails on an
+expired entry, a missing file, or a glob, so an entry is renewed or removed rather than inherited.
+
 ## Speed rules (experiment-backed, 2026-07-04)
 
 Measured on the full unit suite (340 files, 3,210 tests, 48s wall at ~7x parallelism):

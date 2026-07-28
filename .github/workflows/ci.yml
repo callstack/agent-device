@@ -252,10 +252,26 @@ jobs:
       - name: Test changed-line coverage gate
         run: pnpm check:coverage-changed:test
 
+      # The retry list is an enumerated set of owned waivers, so an expired entry
+      # must fail before the suite runs rather than quietly keeping its retry.
+      - name: Check contention retry policy
+        run: pnpm check:contention-retry
+
+      # Wrapped in the single-retry policy (#1419): a timeout-shaped failure in
+      # an enumerated contention-flaky file reruns that file once and reports it
+      # in the job summary. Assertion failures fail here on the first run.
       - name: Run coverage
         env:
           OUTPUT_ECONOMY_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-        run: pnpm test:coverage
+        run: pnpm test:coverage:ci
+
+      - name: Upload contention-retry envelope
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: contention-retry-envelope
+          if-no-files-found: ignore
+          path: .tmp/contention-retry/lane-envelope.json
 
       # Reuses the lcov the coverage step just wrote (never runs coverage twice)
       # and fails when changed-line coverage < the threshold in

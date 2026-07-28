@@ -224,7 +224,9 @@ connect errors, retry policy, or command typing, start in
 - Contention flakes: `request-handler-catalog` ("specialized daemon routes...") and the doctor
   provider scenario time out under host load. Before believing a regression, rerun in isolation AND
   reproduce on plain `origin/main` under the same load. A changing failure set that passes in
-  isolation is contention, not your change.
+  isolation is contention, not your change. The files CI may rerun once for a timeout-shaped failure
+  are enumerated in `scripts/lib/contention-retry.ts` (docs/agents/testing.md, "Contention retry
+  policy").
 
 ## Docs & skills
 
