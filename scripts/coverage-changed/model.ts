@@ -1,18 +1,13 @@
-// Pure model for the changed-line coverage gate (#1418).
+// Pure model for the changed-line coverage gate (#1418): joins a unified=0
+// diff (base...HEAD) with vitest's lcov report to score coverage of CHANGED
+// LINES ONLY. Only added (new-side) lines count — deleted lines never do — so
+// the gate is deterministic against renames and deletes. run.ts owns all I/O.
 //
-// Joins a unified=0 diff (base...HEAD) with vitest's lcov coverage report to
-// score coverage of the CHANGED LINES ONLY, per file. Only added (new-side)
-// lines count; deleted lines never do, so the gate is deterministic against
-// renames and deletes. The gate fails when changed-line coverage drops below
-// CHANGED_LINE_COVERAGE_THRESHOLD; run.ts owns all I/O so this stays testable
-// with fixture strings.
-//
-// The coverable universe is sourced from the lcov report itself, not a second
-// copy of vitest's exclude globs: vitest runs coverage with `all` on, so every
-// includable `src/**/*.ts` file appears in lcov even when untested. A changed
-// includable source file that is ABSENT from lcov was therefore dropped by an
-// exclude glob — which is exactly the "excluded path" we report (non-gating) so
-// exclusions cannot silently absorb new logic.
+// The coverable universe is the lcov report itself, not a second copy of
+// vitest's exclude globs: coverage runs with `all` on, so every includable
+// `src/**/*.ts` file appears in lcov even when untested. A changed includable
+// file ABSENT from lcov was dropped by an exclude glob — reported (non-gating)
+// so exclusions cannot silently absorb new logic.
 
 // Single source of truth for the gate. Changed-line coverage below this
 // percentage fails the Coverage CI job (unless waived).
@@ -22,10 +17,8 @@ export type LcovBranch = { readonly line: number; readonly taken: number };
 
 export type LcovFile = {
   readonly path: string;
-  // new-side line number -> hit count (v8 only emits DA for executable lines,
-  // so a line absent here is non-executable or ignored).
+  // line -> DA hit count; lines absent here are non-executable or ignored.
   readonly lineHits: ReadonlyMap<number, number>;
-  // One entry per BRDA record: the line it sits on and whether it was taken.
   readonly branches: readonly LcovBranch[];
 };
 
@@ -230,7 +223,6 @@ export type ChangedCoverageResult = {
   readonly pct: number | null;
   readonly waived: boolean;
   readonly passed: boolean;
-  readonly files: readonly FileCoverageReport[];
   readonly offenders: readonly FileCoverageReport[];
   readonly branch: {
     readonly covered: number;
@@ -336,7 +328,6 @@ export function computeChangedCoverage(input: ComputeInput): ChangedCoverageResu
     pct,
     waived,
     passed: waived || pct === null || pct >= CHANGED_LINE_COVERAGE_THRESHOLD,
-    files: [...files].sort(byPath),
     offenders: files.filter((f) => f.uncoveredLines.length > 0).sort(byPath),
     branch: {
       covered: coveredBranches,

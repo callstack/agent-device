@@ -69,7 +69,7 @@ test('passes and prints n/a for a docs-only change without touching coverage', (
   const { code, out } = capture(() => run(['--base', 'main'], repo));
   assert.equal(code, 0);
   assert.match(out, /Changed-line coverage gate: PASS/);
-  assert.match(out, /changed lines covered: 0\/0 \(n\/a\)/);
+  assert.match(out, /0\/0 \(n\/a\)/);
 });
 
 test('fails when a changed source line is uncovered and names that line', () => {
@@ -80,44 +80,35 @@ test('fails when a changed source line is uncovered and names that line', () => 
   const { code, out } = capture(() => run(['--base', 'main'], repo));
   assert.equal(code, 1);
   assert.match(out, /Changed-line coverage gate: FAIL/);
-  assert.match(out, /src\/feature\.ts: 2/);
+  assert.match(out, /`src\/feature\.ts`: 2/);
 });
 
-test('waiver env keeps the job green while still printing the numbers', () => {
+test('waiver env keeps the job green, still reporting numbers to the job summary', () => {
   write('src/feature.ts', 'export const covered = 1;\nexport const uncovered = 2;\n');
   git('add', '-A');
   git('commit', '-q', '-m', 'feature');
   writeLcov('SF:src/feature.ts\nDA:1,3\nDA:2,0\nend_of_record\n');
-  const previous = process.env.AGENT_DEVICE_COVERAGE_WAIVER;
+  const summaryPath = path.join(repo, 'summary.md');
+  const previous = {
+    waiver: process.env.AGENT_DEVICE_COVERAGE_WAIVER,
+    summary: process.env.GITHUB_STEP_SUMMARY,
+  };
   process.env.AGENT_DEVICE_COVERAGE_WAIVER = 'true';
+  process.env.GITHUB_STEP_SUMMARY = summaryPath;
   try {
     const { code, out } = capture(() => run(['--base', 'main'], repo));
     assert.equal(code, 0);
     assert.match(out, /WAIVED/);
     assert.match(out, /1\/2/);
-  } finally {
-    if (previous === undefined) delete process.env.AGENT_DEVICE_COVERAGE_WAIVER;
-    else process.env.AGENT_DEVICE_COVERAGE_WAIVER = previous;
-  }
-});
-
-test('writes the GitHub job summary when GITHUB_STEP_SUMMARY is set', () => {
-  write('src/feature.ts', 'export const covered = 1;\n');
-  git('add', '-A');
-  git('commit', '-q', '-m', 'feature');
-  writeLcov('SF:src/feature.ts\nDA:1,3\nend_of_record\n');
-  const summaryPath = path.join(repo, 'summary.md');
-  const previous = process.env.GITHUB_STEP_SUMMARY;
-  process.env.GITHUB_STEP_SUMMARY = summaryPath;
-  try {
-    capture(() => run(['--base', 'main'], repo));
     const summary = fs.readFileSync(summaryPath, 'utf8');
     assert.match(summary, /## Changed-line coverage gate/);
     assert.match(summary, /Changed-branch coverage \(non-gating\)/);
     assert.match(summary, /Changed executable lines excluded/);
   } finally {
-    if (previous === undefined) delete process.env.GITHUB_STEP_SUMMARY;
-    else process.env.GITHUB_STEP_SUMMARY = previous;
+    if (previous.waiver === undefined) delete process.env.AGENT_DEVICE_COVERAGE_WAIVER;
+    else process.env.AGENT_DEVICE_COVERAGE_WAIVER = previous.waiver;
+    if (previous.summary === undefined) delete process.env.GITHUB_STEP_SUMMARY;
+    else process.env.GITHUB_STEP_SUMMARY = previous.summary;
   }
 });
 
