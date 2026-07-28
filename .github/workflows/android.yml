@@ -57,10 +57,7 @@ jobs:
           target: google_apis_playstore
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
           script: |
-            node --experimental-strip-types src/bin.ts install "${{ steps.fixture-app.outputs.apk-path }}" --platform android
-            node --experimental-strip-types src/bin.ts open "${{ steps.fixture-app.outputs.app-id }}" --platform android --session fixture-cache --relaunch
-            node --experimental-strip-types src/bin.ts snapshot -i --platform android --session fixture-cache
-            node --experimental-strip-types src/bin.ts close --platform android --session fixture-cache
+            sh ./test/scripts/android-fixture-cache-smoke.sh "${{ steps.fixture-app.outputs.apk-path }}" "${{ steps.fixture-app.outputs.app-id }}"
             node --experimental-strip-types src/bin.ts test test/integration/replays/android/01-settings.ad --retries 2 --report-junit test/artifacts/replays-android-smoke.junit.xml
             sh ./test/scripts/android-snapshot-helper-release-smoke.sh
 

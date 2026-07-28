@@ -9,6 +9,7 @@ import {
   classifyProducerState,
   findTrustedArtifact,
 } from '../../.github/actions/setup-fixture-app/trusted-artifact.mjs';
+import { assertAndroidFixtureSnapshot } from '../scripts/assert-android-fixture-snapshot.mjs';
 
 const repository = { default_branch: 'main', id: 42 };
 const trustedRun = {
@@ -60,6 +61,76 @@ test('producer, consumers, upload, and concurrency use the canonical platform-sc
     workflow.jobs.release.concurrency.group,
     'test-app-${{ matrix.artifactName }}-${{ github.event.pull_request.number || github.ref_name }}',
   );
+});
+
+test('Android smoke keeps its install/open/snapshot evidence in a checked-in script', (t) => {
+  const workflow = parse(fs.readFileSync('.github/workflows/android.yml', 'utf8'));
+  const smokeStep = workflow.jobs['smoke-android'].steps.find(
+    (step) => step.name === 'Run Android smoke checks',
+  );
+  const assertion = fs.readFileSync('test/scripts/assert-android-fixture-snapshot.mjs', 'utf8');
+  const smokeScript = fs.readFileSync('test/scripts/android-fixture-cache-smoke.sh', 'utf8');
+  const packageVersion = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
+
+  assert.match(smokeStep.with.script, /android-fixture-cache-smoke\.sh/);
+  assert.match(smokeScript, /snapshot -i .*--json > "\$SNAPSHOT_PATH"/);
+  assert.match(smokeScript, /assert-android-fixture-snapshot\.mjs/);
+  assert.match(assertion, /metadata\.backend !== 'android-helper'/);
+  assert.match(assertion, /metadata\.helperVersion !== packageVersion/);
+  assert.match(assertion, /Agent Device Tester/);
+  assert.throws(
+    () =>
+      assertAndroidFixtureSnapshot(
+        { data: { androidSnapshot: { backend: 'uiautomator' }, nodes: [] } },
+        'com.callstack.agentdevicelab',
+        packageVersion,
+      ),
+    /Expected android-helper backend/,
+  );
+
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-android-snapshot-'));
+  t.after(() => fs.rmSync(tempRoot, { force: true, recursive: true }));
+  const snapshotPath = path.join(tempRoot, 'snapshot.json');
+  fs.writeFileSync(
+    snapshotPath,
+    JSON.stringify({
+      data: {
+        androidSnapshot: { backend: 'android-helper', helperVersion: packageVersion },
+        nodes: [{ label: 'Agent Device Tester' }],
+      },
+    }),
+  );
+  const result = spawnSync(
+    process.execPath,
+    [
+      'test/scripts/assert-android-fixture-snapshot.mjs',
+      snapshotPath,
+      'com.callstack.agentdevicelab',
+    ],
+    { cwd: process.cwd(), encoding: 'utf8' },
+  );
+  assert.equal(result.status, 0, result.stderr);
+
+  fs.writeFileSync(
+    snapshotPath,
+    JSON.stringify({
+      data: {
+        androidSnapshot: { backend: 'android-helper', helperVersion: 'stale-helper' },
+        nodes: [{ label: 'Agent Device Tester' }],
+      },
+    }),
+  );
+  const staleHelper = spawnSync(
+    process.execPath,
+    [
+      'test/scripts/assert-android-fixture-snapshot.mjs',
+      snapshotPath,
+      'com.callstack.agentdevicelab',
+    ],
+    { cwd: process.cwd(), encoding: 'utf8' },
+  );
+  assert.notEqual(staleHelper.status, 0);
+  assert.match(staleHelper.stderr, /Expected helper version/);
 });
 
 test('Android APK locator emits an exact APK path and package id, and rejects collisions or malformed artifacts', (t) => {
