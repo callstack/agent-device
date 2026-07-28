@@ -57,8 +57,14 @@ surface, and `provenance` pins the bytes:
 - `derived` entries (`scripts/docs/`) have no historical blob to point at, so their bytes are pinned
   by SHA-256. Only the bytes are machine-checked: the `from` citation naming the released grammar or
   doc that emitted the surface is **reviewer-verified**, so a derived entry has to be reviewed against
-  its cited source at that tag (`git show <tag>:<path>`) before it lands. Never hand-transcribe a
-  hint or a form — copy it from the release.
+  its cited source at that tag (`git show <tag>:<path>`) before it lands.
+
+**Two sources, never invention.** The *form* comes from the cited release — the script bytes are what
+that tag's grammar or docs emitted. The *verdict* comes from today's parser, because a migration
+refusal for a retired form did not exist at the tag that emitted it (v0.16.8 wrote
+`gesture rotate <deg> <x> <y> <velocity>`; the hint telling you to drop the velocity is current
+output). So copy the form from the release and paste the code/hint from an observed run — never
+paraphrase either.
 
 The kind is not a free choice: `provenance-rules.ts` fixes it by corpus area (`scripts/integration/`
 and `scripts/examples/` must stay `mined`, `scripts/docs/` is `derived`), so an edited script cannot
@@ -80,11 +86,15 @@ surface — `git tag --contains <commit>` decides, and unreleased shapes stay ou
 
 1. Find the surface at a release tag (`git show <tag>:<path>`, or the released grammar/docs that
    emitted it) and copy it verbatim into `scripts/<area>/<name>.<tag>.ad`.
-2. Add a `manifest.ts` entry with `recordedBy`, `provenance`, `covers`, the observed verdict, and a
-   `note` naming the form or refusal it is the sole witness of. For a mined entry the blob id is
-   `git rev-parse <tag>:<path>`; for a derived one it is `shasum -a 256 <file>`. Add the tag to
-   `REPLAY_COMPAT_RELEASED_TAGS` if it is new.
-3. Run `pnpm exec vitest run --project unit-core test/replay-compat` and `pnpm check:replay-compat`.
+2. Add a `manifest.ts` entry with `recordedBy`, `provenance`, `covers`, and a `note` naming the form
+   or refusal it is the sole witness of. For a mined entry the blob id is `git rev-parse <tag>:<path>`;
+   for a derived one it is `shasum -a 256 <file>`. Add the tag to `REPLAY_COMPAT_RELEASED_TAGS` if it
+   is new.
+3. Take the `verdict` from what the current parser does with those bytes: start from
+   `verdict: { kind: 'parses' }`, run the suite, and if it refuses, paste the reported code and hint
+   substring verbatim. Do not transcribe a hint from a release, an issue, or memory — the refusal is
+   produced by today's parser, not by the tag that emitted the form.
+4. Run `pnpm exec vitest run --project unit-core test/replay-compat` and `pnpm check:replay-compat`.
 
 Add an entry when a change retires, renames, or narrows a `.ad` form — the corpus is the record of
 what that costs someone with a saved recording.
