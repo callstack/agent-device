@@ -7,7 +7,7 @@ import {
   type PrepareIosRunnerResult,
 } from '../../platforms/apple/core/runner/runner-client.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
-import { isApplePlatform, publicPlatformString } from '../../kernel/device.ts';
+import { publicPlatformString } from '../../kernel/device.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { contextFromFlags } from '../context.ts';
@@ -71,12 +71,8 @@ async function handlePrepareCommand(params: {
     flags,
     ensureReady: true,
   });
-  if (!isApplePlatform(device.platform)) {
-    return errorResponse(
-      'UNSUPPORTED_OPERATION',
-      'prepare ios-runner is only supported on Apple runner platforms',
-    );
-  }
+  const unsupported = requireCommandSupported(PUBLIC_COMMANDS.prepare, device);
+  if (unsupported) return unsupported;
 
   const startedAtMs = Date.now();
   const result = await prepareIosRunner(

@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -39,6 +40,14 @@ jobs:
         with:
           package-helpers: 'true'
 
+      - name: Restore fixture APK
+        id: fixture-app
+        uses: ./.github/actions/setup-fixture-app
+        with:
+          platform: android
+          install: 'false'
+          wait-for-artifact-seconds: '120'
+
       - name: Run Android smoke checks
         uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
         with:
@@ -48,7 +57,17 @@ jobs:
           target: google_apis_playstore
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
           script: |
-            set -e
+            set -eu
+            fixture_session=fixture-cache
+            cleanup_fixture_session() {
+              node --experimental-strip-types src/bin.ts close --platform android --session "$fixture_session" || true
+            }
+            trap cleanup_fixture_session EXIT
+            node --experimental-strip-types src/bin.ts install "${{ steps.fixture-app.outputs.apk-path }}" --platform android
+            node --experimental-strip-types src/bin.ts open "${{ steps.fixture-app.outputs.app-id }}" --platform android --session "$fixture_session" --relaunch
+            node --experimental-strip-types src/bin.ts snapshot -i --platform android --session "$fixture_session"
+            node --experimental-strip-types src/bin.ts close --platform android --session "$fixture_session"
+            trap - EXIT
             node --experimental-strip-types src/bin.ts test test/integration/replays/android/01-settings.ad --retries 2 --report-junit test/artifacts/replays-android-smoke.junit.xml
             sh ./test/scripts/android-snapshot-helper-release-smoke.sh
 
