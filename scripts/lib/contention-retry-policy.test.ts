@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
+import { runCmdSync } from '../../src/utils/exec.ts';
 import { runWithContentionRetry, type TestRun } from './contention-retry-lane.ts';
 import { processBlockers } from './contention-retry-blockers.ts';
 import contentionRetryReporter, {
@@ -14,6 +15,7 @@ import contentionRetryReporter, {
   runBlockers,
   writeFailureReport,
 } from './contention-retry-reporter.ts';
+import { RUNNER_TIMEOUT_META } from './runner-timeout-meta.ts';
 import {
   CONTENTION_RETRY_FILES,
   expiredRetryEntries,
@@ -26,6 +28,7 @@ import {
 } from './contention-retry.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
+const FIXTURE_CONFIG = 'test/contention-retry-fixtures/vitest.fixture.config.ts';
 
 const LISTED = 'src/daemon/__tests__/request-router-open.test.ts';
 // Vitest's own timeout error, verbatim (@vitest/runner `makeTimeoutError`).
@@ -51,22 +54,20 @@ function assertionFailure(overrides: Partial<TestFailure> = {}): TestFailure {
   return failure({ message: ASSERTION_MESSAGE, timeout: false, ...overrides });
 }
 
-const TIMEOUT_MS = 5000;
+/** What the runner-timeout setup file writes on a test the runner aborted. */
+const RUNNER_ABORTED = { [RUNNER_TIMEOUT_META]: true };
 
 function testCaseStub(
   errors: ReadonlyArray<Record<string, unknown>>,
-  overrides: { state?: string; timeoutMs?: number; durationMs?: number } = {},
+  overrides: { state?: string; meta?: Record<string, unknown> } = {},
 ): unknown {
   return {
     fullName: 'opens a session',
     module: { moduleId: `${repoRoot}/${LISTED}` },
-    options: { timeout: overrides.timeoutMs ?? TIMEOUT_MS },
-    diagnostic: () => ({ duration: overrides.durationMs ?? TIMEOUT_MS + 4 }),
+    meta: () => overrides.meta ?? RUNNER_ABORTED,
     result: () => ({ state: overrides.state ?? 'failed', errors }),
   };
 }
-
-const RAN_TO_BUDGET = { timeoutMs: TIMEOUT_MS, durationMs: TIMEOUT_MS + 4 };
 
 function lane(runs: { first: TestRun; retry?: TestRun; today?: Date }): {
   result: ReturnType<typeof runWithContentionRetry>;
@@ -150,57 +151,61 @@ test('the expiry gate fails the run before any test executes', async () => {
   assert.deepEqual(rerun, []);
 });
 
-test('only a test the runner aborted at its own budget classifies as a timeout', () => {
-  assert.ok(isRunnerTimeout([VITEST_TIMEOUT], RAN_TO_BUDGET));
-  assert.ok(
-    isRunnerTimeout(
-      [
-        {
-          name: 'Error',
-          message:
-            'Hook timed out in 10000ms.\nIf this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".',
-        },
-      ],
-      RAN_TO_BUDGET,
-    ),
-  );
-  // Runner metadata is the primary evidence: test code cannot make its own
-  // failure consume the whole configured budget and still choose the error.
-  assert.ok(!isRunnerTimeout([VITEST_TIMEOUT], { timeoutMs: TIMEOUT_MS, durationMs: 12 }));
-  assert.ok(!isRunnerTimeout([VITEST_TIMEOUT], { timeoutMs: undefined, durationMs: 99_999 }));
-  assert.ok(!isRunnerTimeout([VITEST_TIMEOUT], { timeoutMs: 0, durationMs: 0 }));
-  assert.ok(!isRunnerTimeout([], RAN_TO_BUDGET));
-  // An assertion must not be able to talk its way into a retry, whatever it says.
+test('only the runner-owned abort mark classifies a failure as a timeout', () => {
+  assert.ok(isRunnerTimeout([VITEST_TIMEOUT], RUNNER_ABORTED));
+  // Without the runner's mark, no message and no error shape can earn a retry.
   for (const impostor of [
+    { name: 'Error', message: VITEST_TIMEOUT.message },
     { name: 'AssertionError', message: VITEST_TIMEOUT.message },
-    { name: 'AssertionError', message: 'expected ETIMEDOUT, got ECONNRESET' },
-    { name: 'Error', message: `saw: ${VITEST_TIMEOUT.message}` },
     { name: 'Error', message: 'connect ETIMEDOUT 127.0.0.1:8080' },
     { name: 'Error', message: 'Closing timeout while tearing down the daemon' },
-    { name: 'Error', message: VITEST_TIMEOUT.message, expected: 'OK', actual: 'DEVICE_IN_USE' },
   ]) {
-    assert.ok(!isRunnerTimeout([impostor], RAN_TO_BUDGET), `${impostor.name}: ${impostor.message}`);
+    assert.ok(!isRunnerTimeout([impostor], {}), `${impostor.name}: ${impostor.message}`);
+    assert.ok(!isRunnerTimeout([impostor], undefined));
+    assert.ok(!isRunnerTimeout([impostor], { [RUNNER_TIMEOUT_META]: 'yes' }));
   }
+  // An aborted test that also produced an assertion diff is a regression.
+  assert.ok(
+    !isRunnerTimeout(
+      [VITEST_TIMEOUT, { name: 'AssertionError', message: 'x', expected: 1, actual: 2 }],
+      RUNNER_ABORTED,
+    ),
+  );
+  assert.ok(!isRunnerTimeout([], RUNNER_ABORTED));
 });
 
-test('an exact-template Error thrown by the test itself never retries', async () => {
-  // The forgery the classifier must refuse: right name, right message, right
-  // shape — but the test returned long before its budget was up.
-  const forged = failedTestCase(
-    testCaseStub([{ name: 'Error', message: VITEST_TIMEOUT.message }], { durationMs: 7 }) as never,
-  );
-  assert.ok(forged);
-  assert.equal(forged.timeout, false, 'a hand-thrown timeout message is not a runner timeout');
-  const { result, rerun } = lane({ first: { ok: false, failures: [{ ...forged, file: LISTED }] } });
-  const resolved = await result;
-  assert.equal(resolved.ok, false);
-  assert.deepEqual(rerun, []);
-  assert.equal(resolved.envelope.data.retryCount, 0);
+test('a real Vitest run marks only runner-aborted tests as retry-eligible', () => {
+  // The classifier's inputs come from the runner, so this case drives a real
+  // child Vitest run over test/contention-retry-fixtures/ rather than stubs.
+  const report = path.join(repoRoot, '.tmp/contention-retry/fixture-gate.json');
+  fs.rmSync(report, { force: true });
+  runCmdSync('pnpm', ['exec', 'vitest', 'run', '--config', FIXTURE_CONFIG], {
+    cwd: repoRoot,
+    env: { ...process.env, CONTENTION_RETRY_FAILURES: report },
+    allowFailure: true,
+  });
+  const { failures } = parseFailureReport(JSON.parse(fs.readFileSync(report, 'utf8')), repoRoot);
+  assert.deepEqual(Object.fromEntries(failures.map((entry) => [entry.testName, entry.timeout])), {
+    'genuine runner timeout': true,
+    'timeout message thrown immediately': false,
+    // The forgery this gate exists for: blocking the event loop past the
+    // budget does not abort the signal, so the throw stays a plain failure.
+    'timeout message thrown after blocking the event loop past the budget': false,
+    'assertion failure after blocking the event loop past the budget': false,
+    'plain assertion failure': false,
+  });
+  // Only the genuine timeout may reach a rerun.
+  const listed = failures.map((entry) => ({ ...entry, file: LISTED }));
+  const plan = planContentionRetry(listed);
+  assert.equal(plan.retry, false);
+  assert.equal(planContentionRetry(listed.filter((entry) => entry.timeout)).retry, true);
 });
 
 test('an assertion message quoting a timeout still fails on the first run', async () => {
   const impostor = failedTestCase(
-    testCaseStub([{ name: 'AssertionError', message: VITEST_TIMEOUT.message }]) as never,
+    testCaseStub([{ name: 'AssertionError', message: VITEST_TIMEOUT.message }], {
+      meta: {},
+    }) as never,
   );
   assert.ok(impostor);
   assert.equal(impostor.timeout, false);

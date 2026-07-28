@@ -94,6 +94,7 @@ function configHash(): string {
     'scripts/lib/contention-retry-reporter.ts',
     'scripts/lib/contention-retry-blockers.ts',
     'scripts/lib/run-blocker-bus.ts',
+    'scripts/vitest-runner-timeout-setup.ts',
   ]) {
     hash.update(fs.readFileSync(path.join(repoRoot, file)));
   }

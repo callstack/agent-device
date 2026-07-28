@@ -392,14 +392,15 @@ the retry policy cannot drift apart.
 The CI Coverage job runs the suite through `pnpm test:coverage:ci`
 (`scripts/lib/contention-retry-run.ts`), which applies one rule:
 
-- **Timeouts only, decided from runner metadata.** A rerun happens only when *every* failure in the
-  run is a test the runner itself aborted, in a listed file. Eligibility keys on structured runner
-  facts test code cannot author (`isRunnerTimeout`): the test must have consumed its whole configured
-  budget — `TestCase.options.timeout` versus `diagnostic().duration` — with Vitest's timeout template
-  and a diff-free plain `Error` required as corroboration. A hand-thrown `Error` carrying the exact
-  timeout message returns long before the budget and is refused; a test that really does run to its
-  budget is aborted by the runner, so the error is the runner's. One assertion failure — in a listed
-  file or not — fails the job on the first run, so a real regression can never be papered over.
+- **Timeouts only, proven by the runner.** A rerun happens only when *every* failure in the run is a
+  test the runner itself aborted, in a listed file. Eligibility comes from a mark written inside the
+  runner (`scripts/vitest-runner-timeout-setup.ts`, a setup file on every project): the runner owns
+  the controller behind `context.signal` and aborts it with the timeout error it raises, so a test
+  that merely *throws* the exact timeout message — immediately, or after blocking the event loop past
+  its budget — never carries the mark. Error text is never consulted for eligibility;
+  `test/contention-retry-fixtures/` drives those forgeries through a real Vitest run in the gate. One
+  assertion failure — in a listed file or not — fails the job on the first run, so a real regression
+  can never be papered over.
 - **Anything a rerun cannot re-check blocks the retry.** Unhandled errors, module load/setup errors,
   a coverage-threshold miss, or a nonzero exit no failed test explains are recorded as blockers
   (`scripts/lib/contention-retry-blockers.ts`) and fail the job, so a green retry can never erase a

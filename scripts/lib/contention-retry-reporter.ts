@@ -22,10 +22,7 @@ export function failedTestCase(testCase: TestCase): TestFailure | null {
     file: (testCase.module as TestModule).moduleId,
     testName: testCase.fullName,
     message: errors.map((error) => `${error.name}: ${error.message}`).join('\n'),
-    timeout: isRunnerTimeout(errors, {
-      timeoutMs: testCase.options.timeout,
-      durationMs: testCase.diagnostic()?.duration,
-    }),
+    timeout: isRunnerTimeout(errors, testCase.meta()),
   };
 }
 

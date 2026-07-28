@@ -8,13 +8,15 @@
 //
 //   - the retry set is ENUMERATED here, never a glob: a glob would silently
 //     enroll every future file under a directory,
-//   - only timeout-shaped failures retry; an assertion failure in a listed file
-//     fails the job on the first run,
+//   - only tests the runner itself aborted at their timeout retry; an assertion
+//     failure in a listed file fails the job on the first run,
 //   - one retry, of the failed files only, and every retry is reported in the
 //     job summary so a permanently flaky file cannot hide behind a green check,
 //   - each entry is an owned waiver in the ADR 0011 sense: a tracking issue plus
 //     a review date, and an expired entry fails the gate until it is renewed or
 //     removed.
+
+import { runnerTimedOut } from './runner-timeout-meta.ts';
 
 /** One enumerated retry-eligible file, owned like an ADR 0011 waiver. */
 export type ContentionRetryEntry = {
@@ -233,10 +235,6 @@ export function expiredRetryEntries(now: Date): readonly ContentionRetryEntry[] 
   return CONTENTION_RETRY_FILES.filter((entry) => entry.reviewBy < today);
 }
 
-/** Vitest's runner timeout error, verbatim (`makeTimeoutError`, @vitest/runner 4.1.8). */
-const RUNNER_TIMEOUT_MESSAGE =
-  /^(Test|Hook) timed out in \d+ms\.\nIf this is a long-running (test|hook), pass a timeout value as the last argument/;
-
 /** An error as the lane reporter receives it from Vitest. */
 export type ReportedError = {
   name?: unknown;
@@ -245,28 +243,14 @@ export type ReportedError = {
   actual?: unknown;
 };
 
-/** `TestCase.options.timeout` and `TestCase.diagnostic().duration`. */
-export type TestBudget = {
-  timeoutMs: number | undefined;
-  durationMs: number | undefined;
-};
-
 /** A test the runner aborted at its timeout — the only failure this lane retries. */
-export function isRunnerTimeout(errors: readonly ReportedError[], budget: TestBudget): boolean {
-  return consumedWholeBudget(budget) && errors.length > 0 && errors.every(raisedByRunnerTimeout);
+export function isRunnerTimeout(errors: readonly ReportedError[], meta: unknown): boolean {
+  return runnerTimedOut(meta) && errors.length > 0 && errors.every(hasNoAssertionDiff);
 }
 
-/** The runner aborts a test only once it has run for its whole configured budget. */
-function consumedWholeBudget({ timeoutMs, durationMs }: TestBudget): boolean {
-  if (typeof timeoutMs !== 'number' || timeoutMs <= 0) return false;
-  return typeof durationMs === 'number' && durationMs >= timeoutMs;
-}
-
-/** The runner raises a plain `Error` holding its template, never an assertion diff. */
-function raisedByRunnerTimeout(error: ReportedError): boolean {
-  if (error.name !== 'Error') return false;
-  if (error.expected !== undefined || error.actual !== undefined) return false;
-  return typeof error.message === 'string' && RUNNER_TIMEOUT_MESSAGE.test(error.message);
+/** A timeout that also failed an assertion is a regression, not contention. */
+function hasNoAssertionDiff(error: ReportedError): boolean {
+  return error.expected === undefined && error.actual === undefined;
 }
 
 /** One failed test case as read from a runner report. */

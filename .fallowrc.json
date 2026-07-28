@@ -19,6 +19,9 @@
     "scripts/patch-xcuitest-runner-icon.ts",
     "scripts/runner-request-count/run.ts",
     "scripts/lib/contention-retry-run.ts",
+    "scripts/vitest-runner-timeout-setup.ts",
+    "test/contention-retry-fixtures/vitest.fixture.config.ts",
+    "test/contention-retry-fixtures/timeout-provenance.fixture.ts",
     "src/utils/update-check-entry.ts",
     "examples/sdk/client-session.ts",
     "examples/sdk/metro-runtime.ts",
@@ -82,6 +85,11 @@
       "comment": "Contention retry lane (#1419): the reporter default is loaded by Vitest from a `--reporter=<path>` string, and SUBPROCESS_STUB_TESTS is consumed by vitest.config.ts \u2014 a tool config outside --production analysis.",
       "file": "scripts/lib/{contention-retry.ts,contention-retry-reporter.ts}",
       "exports": ["default", "SUBPROCESS_STUB_TESTS"]
+    },
+    {
+      "comment": "Contention retry gate fixtures (#1419): the config default is loaded by the child `vitest run --config` the gate test spawns.",
+      "file": "test/contention-retry-fixtures/vitest.fixture.config.ts",
+      "exports": ["default"]
     },
     {
       "comment": "Mutation-lane seam: readTestScope is consumed by vitest.mutation.config.ts, a tool config outside --production analysis.",

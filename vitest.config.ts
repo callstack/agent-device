@@ -20,6 +20,13 @@ import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
 // single-retry policy (#1419) reads, so the two cannot drift.
 export { SUBPROCESS_STUB_TESTS };
 
+/** Every project loads the same setup, including the runner-timeout provenance hook. */
+const SETUP_FILES = [
+  'scripts/vitest-runner-timeout-setup.ts',
+  'src/__tests__/hermetic-env-setup.ts',
+  'src/__tests__/process-memo-setup.ts',
+];
+
 /** Reporters for every lane; a `--reporter` flag would replace them, so no lane passes one. */
 export function reporters(env: NodeJS.ProcessEnv = process.env): Array<string | Reporter> {
   const gates: Array<string | Reporter> = ['default', slowTestGateReporter()];
@@ -60,10 +67,7 @@ export default defineConfig({
             // job (scripts/maestro-conformance), like the layering guard.
           ],
           exclude: [...SUBPROCESS_STUB_TESTS],
-          setupFiles: [
-            'src/__tests__/hermetic-env-setup.ts',
-            'src/__tests__/process-memo-setup.ts',
-          ],
+          setupFiles: SETUP_FILES,
         },
       },
       {
@@ -75,10 +79,7 @@ export default defineConfig({
         test: {
           name: 'subprocess-stub',
           include: [...SUBPROCESS_STUB_TESTS],
-          setupFiles: [
-            'src/__tests__/hermetic-env-setup.ts',
-            'src/__tests__/process-memo-setup.ts',
-          ],
+          setupFiles: SETUP_FILES,
           fileParallelism: false,
           isolate: true,
           maxWorkers: 1,
@@ -88,30 +89,21 @@ export default defineConfig({
         test: {
           name: 'provider-integration',
           include: ['test/integration/provider-scenarios/**/*.test.ts'],
-          setupFiles: [
-            'src/__tests__/hermetic-env-setup.ts',
-            'src/__tests__/process-memo-setup.ts',
-          ],
+          setupFiles: SETUP_FILES,
         },
       },
       {
         test: {
           name: 'interaction-contract',
           include: ['test/integration/interaction-contract/**/*.test.ts'],
-          setupFiles: [
-            'src/__tests__/hermetic-env-setup.ts',
-            'src/__tests__/process-memo-setup.ts',
-          ],
+          setupFiles: SETUP_FILES,
         },
       },
       {
         test: {
           name: 'output-economy',
           include: ['test/output-economy/**/*.test.ts'],
-          setupFiles: [
-            'src/__tests__/hermetic-env-setup.ts',
-            'src/__tests__/process-memo-setup.ts',
-          ],
+          setupFiles: SETUP_FILES,
         },
       },
     ],
