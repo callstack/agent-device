@@ -5,7 +5,7 @@ import type { MaestroRuntimePort } from '../engine-types.ts';
 import { parseMaestroProgram } from '../program-ir-parser.ts';
 import { executeMaestroProgram } from './runtime-port-fixtures.ts';
 
-test('redacts transitive scoped variables unless explicitly public', () => {
+test('tracks expanded transitive scoped variables', () => {
   const context = createMaestroExecutionContext();
   const leave = context.enter({
     TARGET: '${NEXT}',
@@ -14,15 +14,13 @@ test('redacts transitive scoped variables unless explicitly public', () => {
   });
 
   expect(context.resolve('${TARGET}')).toBe('Done');
-  expect(context.redactionVariables).toEqual([
-    { name: 'FINAL', value: 'Done' },
-    { name: 'NEXT', value: 'Done' },
-    { name: 'TARGET', value: 'Done' },
-  ]);
+  expect(context.expandedVariables).toEqual({
+    TARGET: 'Done',
+  });
   leave();
 });
 
-test('retains shadowed non-public values after nested scopes unwind', () => {
+test('retains expanded values after nested scopes unwind', () => {
   const context = createMaestroExecutionContext();
   const rootLeave = context.enter({ SECRET: 'nested-scope-secret' });
   const nestedLeave = context.enter({ TARGET: '${SECRET}' });
@@ -31,36 +29,27 @@ test('retains shadowed non-public values after nested scopes unwind', () => {
   nestedLeave();
   rootLeave();
 
-  expect(context.redactionVariables).toEqual([
-    { name: 'SECRET', value: 'nested-scope-secret' },
-    { name: 'TARGET', value: 'nested-scope-secret' },
-  ]);
+  expect(context.expandedVariables).toEqual({
+    TARGET: 'nested-scope-secret',
+  });
 });
 
-test('omits explicitly public variable values from the redaction set', () => {
-  const context = createMaestroExecutionContext({}, { TARGET: 'Continue checkout' }, ['TARGET']);
-
-  expect(context.resolve('${TARGET}')).toBe('Continue checkout');
-  expect(context.redactionVariables).toEqual([]);
-});
-
-test('scrubs optional-step warnings before they enter a successful result', async () => {
-  const sentinel = 'optional-maestro-secret';
+test('renders resolved target variables in optional-step warnings', async () => {
+  const target = 'Missing checkout button';
   const program = parseMaestroProgram(
-    ['---', '- tapOn:', '    text: ${SECRET}', '    optional: true'].join('\n'),
+    ['---', '- tapOn:', '    text: ${TARGET}', '    optional: true'].join('\n'),
     { sourcePath: '/flows/optional.yaml' },
   );
   const port: MaestroRuntimePort = {
     execute: vi.fn(async () => {
-      throw maestroTestFailure(`Missing ${sentinel}`);
+      throw maestroTestFailure(`Missing ${target}`);
     }),
     observe: vi.fn(async ({ generation }) => ({ generation, matched: true })),
   };
 
-  const result = await executeMaestroProgram(program, port, { env: { SECRET: sentinel } });
+  const result = await executeMaestroProgram(program, port, { env: { TARGET: target } });
 
-  expect(result.warnings).toEqual([expect.stringContaining('<var:SECRET>')]);
-  expect(JSON.stringify(result.warnings)).not.toContain(sentinel);
+  expect(result.warnings).toEqual([expect.stringContaining(target)]);
 });
 
 test('rejects cyclic references instead of recursing indefinitely', () => {

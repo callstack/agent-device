@@ -5,11 +5,6 @@ import type {
   MaestroSelector,
   MaestroSourceLocation,
 } from './program-ir.ts';
-
-export type MaestroRedactionVariable = {
-  readonly name: string;
-  readonly value: string;
-};
 export type MaestroControlCommand = Extract<
   MaestroCommand,
   { kind: 'runFlow' | 'repeat' | 'retry' }
@@ -142,8 +137,7 @@ export type MaestroEngineObserver = {
       runtimeMetrics?: MaestroRuntimeMetrics;
       error: unknown;
       artifactPaths: readonly string[];
-      /** Expanded non-public values that must be scrubbed from diagnostics. */
-      redactionVariables: readonly MaestroRedactionVariable[];
+      expandedVariables: Readonly<Record<string, string>>;
     },
   ): void;
 };
@@ -151,8 +145,6 @@ export type MaestroEngineObserver = {
 export type MaestroEngineOptions = {
   /** Highest-precedence invocation values, normally CLI over shell. */
   env?: Readonly<Record<string, string>>;
-  /** Names whose resolved values may be rendered in failure diagnostics. */
-  publicVariableNames?: Iterable<string>;
   /** Lowest-precedence defaults, normally replay built-ins. */
   defaults?: Readonly<Record<string, string | number | boolean>>;
   platform?: MaestroPlatform;
@@ -178,6 +170,4 @@ export type MaestroEngineResult = {
   generation: number;
   artifactPaths: string[];
   warnings?: string[];
-  /** Non-public values observed during execution, retained only for response scrubbing. */
-  redactionVariables: readonly MaestroRedactionVariable[];
 };

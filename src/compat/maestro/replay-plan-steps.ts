@@ -42,12 +42,7 @@ export async function compileMaestroReplayPlanSteps(
   const rootPath = sourcePathKey(program.source.path);
   const state: BuildState = {
     options,
-    context: createMaestroExecutionContext(
-      options.defaults,
-      options.env,
-      options.publicVariableNames,
-      options.onRedactionVariable,
-    ),
+    context: createMaestroExecutionContext(options.defaults, options.env),
     activeIncludePaths: new Set(rootPath === undefined ? [] : [rootPath]),
     staticallyExecutedControls: 0,
     staticallySkippedControls: 0,

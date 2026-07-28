@@ -85,7 +85,7 @@ async function executeOptionalCommand(
   } catch (error) {
     checkpointMaestroCancellation(state.options.signal);
     if (isOptionalCommand(command) && isMaestroTestFailure(error)) {
-      state.warnings.push(state.context.redact(formatOptionalWarning(command, error)));
+      state.warnings.push(formatOptionalWarning(command, error));
       state.skipped += 1;
       return undefined;
     }

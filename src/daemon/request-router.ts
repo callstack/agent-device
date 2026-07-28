@@ -342,6 +342,7 @@ function registerParameterizedFillDiagnosticValue(req: DaemonRequest): void {
  * redaction boundary even when no Maestro failure report is produced.
  */
 function registerReplayVariableDiagnosticValues(req: DaemonRequest): void {
+  if (req.command !== 'replay' && req.command !== 'test') return;
   const values = {
     ...collectReplayShellEnv(readReplayShellEnvSource(req.flags?.replayShellEnv)),
     ...parseReplayCliEnvEntries(readReplayCliEnvEntries(req.flags?.replayEnv)),

@@ -133,8 +133,6 @@ export type CliFlags = CloudProviderProfileFields &
     replayUpdate?: boolean;
     replayMaestro?: boolean;
     replayEnv?: string[];
-    /** Replay/Test: names whose resolved values may appear in Maestro failure diagnostics. */
-    replayPublicEnv?: string[];
     replayShellEnv?: Record<string, string>;
     replayFrom?: number;
     replayPlanDigest?: string;

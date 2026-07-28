@@ -92,7 +92,6 @@ function buildFlags(options: InternalRequestOptions): CommandFlags {
     replayUpdate: options.replayUpdate,
     replayBackend: options.replayBackend,
     replayEnv: options.replayEnv,
-    replayPublicEnv: options.publicEnv,
     replayShellEnv: options.replayShellEnv,
     replayFrom: options.replayFrom,
     replayPlanDigest: options.replayPlanDigest,

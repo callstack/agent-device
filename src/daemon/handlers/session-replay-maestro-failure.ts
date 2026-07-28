@@ -1,6 +1,5 @@
 import {
   isMaestroControlCommandDescriptor,
-  type MaestroRedactionVariable,
   type MaestroEngineEvent,
 } from '../../compat/maestro/engine-types.ts';
 import { formatMaestroCommandProgress } from '../../compat/maestro/progress.ts';
@@ -42,7 +41,7 @@ export type MaestroFailedEngineEvent = MaestroEngineEvent & {
   readonly durationMs: number;
   readonly error: unknown;
   readonly artifactPaths: readonly string[];
-  readonly redactionVariables: readonly MaestroRedactionVariable[];
+  readonly expandedVariables: Readonly<Record<string, string>>;
 };
 
 export type MaestroFailureReportAction = Pick<
@@ -89,10 +88,7 @@ export async function buildTypedMaestroFailureResponse(params: {
   const { event, plan, replayPath, req, sessionName, sessionStore, logPath } = params;
   const report = buildTypedMaestroFailureReportProjection(event, req);
   const cause = hoistReplayFailureCauseDiagnosticMeta(params.error);
-  const scrubVars = [
-    ...collectExpandedScrubVars(event.redactionVariables),
-    ...collectMaestroTextScrubVars(report.command),
-  ].sort((left, right) => right.value.length - left.value.length);
+  const scrubVars = collectMaestroTextScrubVars(report.command);
   const sanitize = createReplayDivergenceSanitizer(scrubVars);
   const safeCause = {
     ...cause,
@@ -333,15 +329,6 @@ function reportCommandForCapture(command: string): string {
 function safeProgressPositionals(command: string, value: string | undefined): string[] {
   if (!value || command === 'inputText') return [];
   return [value];
-}
-
-function collectExpandedScrubVars(
-  values: readonly MaestroRedactionVariable[],
-): ReplayVarScrubEntry[] {
-  return values
-    .filter(({ value }) => value.length > 0)
-    .map(({ name, value }) => ({ name, value }))
-    .sort((left, right) => right.value.length - left.value.length);
 }
 
 function collectMaestroTextScrubVars(

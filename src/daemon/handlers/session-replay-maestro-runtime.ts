@@ -12,9 +12,7 @@ import { stripUndefined } from '../../utils/parsing.ts';
 import {
   collectReplayShellEnv,
   parseReplayCliEnvEntries,
-  parseReplayPublicEnvNames,
   readReplayCliEnvEntries,
-  readReplayPublicEnvNames,
   readReplayShellEnvSource,
 } from '../../replay/vars.ts';
 import { createDaemonMaestroRuntimePort } from '../../compat/maestro/daemon-runtime-port.ts';
@@ -34,7 +32,6 @@ import { SessionStore } from '../session-store.ts';
 import { errorResponse } from './response.ts';
 import { buildReplayBuiltinVars } from './session-replay-vars.ts';
 import type { MaestroFailedEngineEvent } from './session-replay-maestro-failure.ts';
-import type { ReplayVarScrubEntry } from '../../replay/divergence.ts';
 import { createMaestroReplayObserver } from './session-replay-maestro-observer.ts';
 import {
   buildTypedMaestroReplayErrorResponse,
@@ -56,7 +53,6 @@ type TypedMaestroReplayParams = {
 type TypedMaestroReplayState = {
   failedEvent?: MaestroFailedEngineEvent;
   plan?: MaestroReplayPlan;
-  redactionVariables: ReplayVarScrubEntry[];
   snapshotStart: number;
 };
 
@@ -69,8 +65,6 @@ type TypedMaestroReplayContext = {
   runtimeHints: ReturnType<typeof resolveEffectiveOpenRuntimeHints>;
   defaults: Record<string, string>;
   env: Record<string, string>;
-  publicVariableNames: string[];
-  redactionVariables: ReplayVarScrubEntry[];
   signal: AbortSignal | undefined;
   loadProgram: ReturnType<typeof createMaestroProgramLoader>;
 };
@@ -93,7 +87,7 @@ export async function runTypedMaestroReplayFile(
     );
   }
   const startedAt = Date.now();
-  const state: TypedMaestroReplayState = { snapshotStart: 0, redactionVariables: [] };
+  const state: TypedMaestroReplayState = { snapshotStart: 0 };
   try {
     return await executeTypedMaestroReplay({
       ...params,
@@ -120,7 +114,6 @@ async function executeTypedMaestroReplay(
 ): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore, tracePath, invoke, state } = params;
   const context = await prepareTypedMaestroReplay(params);
-  state.redactionVariables = context.redactionVariables;
   const plan = await compileMaestroReplayPlan(context.program, {
     defaults: context.defaults,
     env: context.env,
@@ -129,8 +122,6 @@ async function executeTypedMaestroReplay(
     runtimeHints: context.runtimeHints,
     loadProgram: context.loadProgram,
     signal: context.signal,
-    publicVariableNames: context.publicVariableNames,
-    onRedactionVariable: (entry) => addRedactionVariable(state.redactionVariables, entry),
   });
   state.plan = plan;
   const startIndex = resolveMaestroReplayStartIndex(plan, {
@@ -152,7 +143,6 @@ async function executeTypedMaestroReplay(
   const result = await executeMaestroPlan(plan, port, {
     defaults: context.defaults,
     env: context.env,
-    publicVariableNames: context.publicVariableNames,
     platform: context.platform,
     target: context.target,
     loadProgram: context.loadProgram,
@@ -194,7 +184,6 @@ async function prepareTypedMaestroReplay(
     session,
     program,
   });
-  const runtimeEnv = buildTypedMaestroEnv(req);
   return {
     filePath,
     program,
@@ -206,9 +195,7 @@ async function prepareTypedMaestroReplay(
       platform: binding.platform,
       target: binding.target,
     }),
-    env: runtimeEnv.values,
-    publicVariableNames: runtimeEnv.publicVariableNames,
-    redactionVariables: runtimeEnv.redactionVariables,
+    env: buildTypedMaestroEnv(req),
     signal: getRequestSignal(req.meta?.requestId),
     loadProgram: createMaestroProgramLoader(path.dirname(filePath)),
   };
@@ -307,30 +294,10 @@ function buildTypedMaestroDefaults(params: {
   };
 }
 
-function addRedactionVariable(entries: ReplayVarScrubEntry[], entry: ReplayVarScrubEntry): void {
-  if (entries.some((current) => current.name === entry.name && current.value === entry.value))
-    return;
-  entries.push(entry);
-}
-
-function buildTypedMaestroEnv(req: DaemonRequest): {
-  values: Record<string, string>;
-  publicVariableNames: string[];
-  redactionVariables: ReplayVarScrubEntry[];
-} {
-  const values = {
+function buildTypedMaestroEnv(req: DaemonRequest): Record<string, string> {
+  return {
     ...collectReplayShellEnv(readReplayShellEnvSource(req.flags?.replayShellEnv)),
     ...parseReplayCliEnvEntries(readReplayCliEnvEntries(req.flags?.replayEnv)),
-  };
-  const publicVariableNames = parseReplayPublicEnvNames(
-    readReplayPublicEnvNames(req.flags?.replayPublicEnv),
-  );
-  return {
-    values,
-    publicVariableNames,
-    redactionVariables: Object.entries(values)
-      .filter(([name, value]) => value.length > 0 && !publicVariableNames.includes(name))
-      .map(([name, value]) => ({ name, value })),
   };
 }
 

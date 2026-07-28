@@ -1,10 +1,6 @@
 import type { MaestroProgramLoader } from './program-loader.ts';
 import type { MaestroPlatform, MaestroSourceLocation } from './program-ir.ts';
-import type {
-  MaestroControlCommandDescriptor,
-  MaestroRedactionVariable,
-  MaestroRuntimeCommand,
-} from './engine-types.ts';
+import type { MaestroControlCommandDescriptor, MaestroRuntimeCommand } from './engine-types.ts';
 import type { SessionRuntimeHints } from '../../kernel/contracts.ts';
 
 export type MaestroReplayPlanScope = Readonly<Record<string, string | number | boolean>>;
@@ -53,10 +49,6 @@ export type MaestroReplayPlanOptions = {
   readonly platform?: MaestroPlatform;
   readonly target?: string;
   readonly runtimeHints?: Readonly<SessionRuntimeHints>;
-  /** Explicit names whose resolved values may appear in diagnostics. */
-  readonly publicVariableNames?: Iterable<string>;
-  /** Receives non-public values observed while resolving the static plan. */
-  readonly onRedactionVariable?: (entry: MaestroRedactionVariable) => void;
   readonly loadProgram?: MaestroProgramLoader;
   readonly signal?: AbortSignal;
 };

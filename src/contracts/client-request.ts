@@ -53,7 +53,6 @@ export type CommandExecutionOptions = Partial<ScreenshotRequestFlags> & {
   replayUpdate?: boolean;
   replayBackend?: string;
   replayEnv?: string[];
-  publicEnv?: string[];
   replayShellEnv?: Record<string, string>;
   replayFrom?: number;
   replayPlanDigest?: string;

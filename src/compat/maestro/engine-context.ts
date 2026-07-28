@@ -1,27 +1,20 @@
 import { AppError } from '../../kernel/errors.ts';
-import type { MaestroObservation, MaestroRedactionVariable } from './engine-types.ts';
+import type { MaestroObservation } from './engine-types.ts';
 
 export type MaestroExecutionContext = ReturnType<typeof createMaestroExecutionContext>;
 
 export function createMaestroExecutionContext(
   defaults: Record<string, string | number | boolean> = {},
   runtimeOverrides: Record<string, string> = {},
-  publicVariableNames: Iterable<string> = [],
-  onRedactionVariable?: (entry: MaestroRedactionVariable) => void,
 ) {
   const overrides = { ...runtimeOverrides };
-  const publicNames = new Set(publicVariableNames);
   // Flow config and runFlow env values are stack-scoped; script output variables persist.
   let persistentValues = stringifyValues(defaults);
   const scopes: Record<string, string>[] = [];
-  const redactionValues = new Map<string, Set<string>>();
+  const expandedValues = new Map<string, string>();
   let cachedValues: Readonly<Record<string, string>> | undefined;
   let generation = 0;
   let observation: MaestroObservation | undefined;
-
-  for (const [name, value] of Object.entries(overrides)) {
-    recordSensitiveValue(name, value);
-  }
 
   return {
     get values(): Readonly<Record<string, string>> {
@@ -33,10 +26,8 @@ export function createMaestroExecutionContext(
     get observation(): MaestroObservation | undefined {
       return observation?.generation === generation ? observation : undefined;
     },
-    get redactionVariables(): readonly MaestroRedactionVariable[] {
-      return [...redactionValues].flatMap(([name, values]) =>
-        [...values].map((value) => ({ name, value })),
-      );
+    get expandedVariables(): Readonly<Record<string, string>> {
+      return Object.fromEntries(expandedValues);
     },
     enter(scopedValues: Record<string, string | number | boolean> = {}): () => void {
       const resolved = resolveScopedValues(scopedValues);
@@ -71,16 +62,10 @@ export function createMaestroExecutionContext(
       observation = undefined;
     },
     resolve(value: string): string {
-      return resolveValue(value, currentValues(), recordSensitiveValue);
+      return resolveValue(value, currentValues(), recordExpandedValue);
     },
     resolveDeferred(value: string): string {
       return resolveValue(value, currentValues(), undefined, new Set(), false);
-    },
-    redact(value: string): string {
-      return [...redactionValues]
-        .flatMap(([name, values]) => [...values].map((entry) => ({ name, value: entry })))
-        .sort((left, right) => right.value.length - left.value.length)
-        .reduce((result, entry) => result.replaceAll(entry.value, `<var:${entry.name}>`), value);
     },
   };
 
@@ -107,25 +92,16 @@ export function createMaestroExecutionContext(
           ...resolved,
           ...overrides,
         },
-        recordSensitiveValue,
+        undefined,
         new Set(),
         false,
       );
-      recordSensitiveValue(key, resolved[key]);
     }
     return resolved;
   }
 
-  function recordSensitiveValue(name: string, value: string): void {
-    if (publicNames.has(name) || value.length === 0) return;
-    let values = redactionValues.get(name);
-    if (!values) {
-      values = new Set();
-      redactionValues.set(name, values);
-    }
-    if (values.has(value)) return;
-    values.add(value);
-    onRedactionVariable?.({ name, value });
+  function recordExpandedValue(name: string, value: string): void {
+    expandedValues.set(name, value);
   }
 }
 
