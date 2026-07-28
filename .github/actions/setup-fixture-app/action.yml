@@ -58,8 +58,7 @@ runs:
         GH_TOKEN: ${{ github.token }}
       run: |
         set -euo pipefail
-        HASH="$(pnpm --dir examples/test-app exec fingerprint fingerprint:generate | jq -r .hash)"
-        NAME="fingerprint.${HASH}.ios"
+        NAME="$(sh "$GITHUB_ACTION_PATH/resolve-artifact-name.sh" ios)"
         DEST="${{ github.workspace }}/.tmp/fixture-app"
         REPOSITORY="${{ github.repository }}"
         EXPECTED_HEAD_SHA="${{ github.event.pull_request.head.sha || github.sha }}"

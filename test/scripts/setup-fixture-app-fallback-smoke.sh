@@ -42,11 +42,19 @@ extract_fetch
 # pnpm yields a fixed fingerprint so the step has a name to look up without
 # installing the app. The real selector uses the deliberately unavailable API.
 mkdir -p "$WORK/bin"
+REAL_NODE="$(command -v node)"
+export REAL_NODE
 cat > "$WORK/bin/pnpm" <<'STUB'
 #!/bin/sh
+printf '%s\n' "$*" >> "$WORK/fingerprint-calls"
 echo '{"hash":"deadbeefcafe"}'
 STUB
-chmod +x "$WORK/bin/pnpm"
+cat > "$WORK/bin/node" <<'STUB'
+#!/bin/sh
+printf '%s\n' "$*" >> "$WORK/node-calls"
+exec "$REAL_NODE" "$@"
+STUB
+chmod +x "$WORK/bin/pnpm" "$WORK/bin/node"
 
 GITHUB_OUTPUT="$WORK/out"
 : > "$GITHUB_OUTPUT"
@@ -76,6 +84,14 @@ if ! grep -q '^source=build$' "$GITHUB_OUTPUT"; then
 fi
 if ! grep -q "building inline" "$WORK/log"; then
   echo "FAIL: expected a warning that it is building inline." >&2
+  FAIL=1
+fi
+if ! grep -qx -- '--dir examples/test-app exec fingerprint fingerprint:generate --platform ios' "$WORK/fingerprint-calls"; then
+  echo "FAIL: fixture consumer did not request the iOS-scoped fingerprint." >&2
+  FAIL=1
+fi
+if ! grep -q -- ' find octo/repo fingerprint.deadbeefcafe.ios current-head$' "$WORK/node-calls"; then
+  echo "FAIL: fixture consumer did not query the exact platform-scoped artifact name." >&2
   FAIL=1
 fi
 

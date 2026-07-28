@@ -51,12 +51,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          IOS_HASH="$(pnpm --dir examples/test-app exec fingerprint fingerprint:generate --platform ios | jq -r .hash)"
-          ANDROID_HASH="$(pnpm --dir examples/test-app exec fingerprint fingerprint:generate --platform android | jq -r .hash)"
-          test -n "$IOS_HASH"
-          test -n "$ANDROID_HASH"
-          IOS_NAME="fingerprint.${IOS_HASH}.ios"
-          ANDROID_NAME="fingerprint.${ANDROID_HASH}.android"
+          ARTIFACT_NAME_RESOLVER=".github/actions/setup-fixture-app/resolve-artifact-name.sh"
+          IOS_NAME="$(sh "$ARTIFACT_NAME_RESOLVER" ios)"
+          ANDROID_NAME="$(sh "$ARTIFACT_NAME_RESOLVER" android)"
           EXPECTED_HEAD_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
           TRUSTED_ARTIFACT=".github/actions/setup-fixture-app/trusted-artifact.mjs"
           IOS_ARTIFACT="$(node "$TRUSTED_ARTIFACT" find "${{ github.repository }}" "$IOS_NAME" "$EXPECTED_HEAD_SHA")"
@@ -72,10 +69,8 @@ jobs:
             ANDROID_BUILD=false
           fi
           MATRIX="$(jq -cn \
-            --arg iosHash "$IOS_HASH" \
             --arg iosName "$IOS_NAME" \
             --argjson iosBuild "$IOS_BUILD" \
-            --arg androidHash "$ANDROID_HASH" \
             --arg androidName "$ANDROID_NAME" \
             --argjson androidBuild "$ANDROID_BUILD" \
             '{
@@ -84,7 +79,6 @@ jobs:
                   name: "iOS Release",
                   platform: "ios",
                   runsOn: (if $iosBuild then "macos-26" else "ubuntu-latest" end),
-                  hash: $iosHash,
                   artifactName: $iosName,
                   build: $iosBuild
                 },
@@ -92,7 +86,6 @@ jobs:
                   name: "Android Release",
                   platform: "android",
                   runsOn: "ubuntu-latest",
-                  hash: $androidHash,
                   artifactName: $androidName,
                   build: $androidBuild
                 }
@@ -106,7 +99,7 @@ jobs:
     runs-on: ${{ matrix.runsOn }}
     timeout-minutes: 60
     concurrency:
-      group: test-app-${{ matrix.platform }}-${{ matrix.hash }}
+      group: test-app-${{ matrix.artifactName }}
       cancel-in-progress: false
     strategy:
       # Independent caches; one platform failing must not withhold the other's.
