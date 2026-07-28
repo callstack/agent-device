@@ -271,11 +271,60 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       consumerRoot,
       ['--input-type=module', '-e'],
       `
+        import { readFileSync } from 'node:fs';
+        import nodePath from 'node:path';
         import * as agentDeviceRoot from 'agent-device';
         import 'agent-device/contracts';
         import { createLocalArtifactAdapter as createIoArtifactAdapter } from 'agent-device/io';
         import { buildBundleUrl, normalizeBaseUrl } from 'agent-device/metro';
         const client = agentDeviceRoot.createAgentDeviceClient();
+        const exportSubpaths = Object.keys(
+          JSON.parse(
+            readFileSync(
+              nodePath.join(process.cwd(), 'node_modules', 'agent-device', 'package.json'),
+              'utf8',
+            ),
+          ).exports,
+        ).sort();
+        const subpathSmoke = {
+          '.': (mod) => mod.centerOfRect({ x: 0, y: 0, width: 10, height: 4 }),
+          './android-adb': (mod) => {
+            const manager = mod.createAndroidPortReverseManager(async () => ({
+              stdout: '',
+              stderr: '',
+              exitCode: 0,
+            }));
+            return typeof manager.ensure;
+          },
+          './artifacts': async (mod) => {
+            const name = await mod.resolveAndroidArchivePackageName(
+              nodePath.join(process.cwd(), 'package.json'),
+            );
+            return String(name);
+          },
+          './batch': async (mod) => {
+            const response = await mod.runBatch(
+              { command: 'batch', positionals: [], flags: { batchOnError: 'continue' } },
+              'smoke-session',
+              async () => {
+                throw new Error('batch invoke should not run');
+              },
+            );
+            return response.ok === false ? response.error.code : 'unexpected-success';
+          },
+          './contracts': (mod) => mod.centerOfRect({ x: 2, y: 2, width: 6, height: 6 }),
+          './finders': (mod) => mod.findBestMatchesByLocator([], 'text', 'anything').matches.length,
+          './install-source': (mod) => typeof mod.isTrustedInstallSourceUrl('https://example.test/app.apk'),
+          './io': (mod) => typeof mod.createLocalArtifactAdapter({ cwd: process.cwd() }).reserveOutput,
+          './metro': (mod) => mod.buildBundleUrl('https://public.example.test', 'ios'),
+          './remote-config': (mod) => typeof mod,
+          './selectors': (mod) => mod.isSelectorToken('||') && typeof mod.parseSelectorChain === 'function',
+        };
+        const subpathSmokeResults = {};
+        for (const subpath of Object.keys(subpathSmoke).sort()) {
+          const mod = await import('agent-device' + subpath.slice(1));
+          subpathSmokeResults[subpath] = await subpathSmoke[subpath](mod);
+        }
         const removedSubpaths = await Promise.all([
           'agent-device/backend',
           'agent-device/commands',
@@ -300,6 +349,9 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
           removedSubpathsBlocked: removedSubpaths.every(Boolean),
           normalizedBaseUrl: normalizeBaseUrl('https://public.example.test///'),
           protocolBundleUrl: buildBundleUrl('https://public.example.test', 'android'),
+          exportSubpaths,
+          smokedSubpaths: Object.keys(subpathSmoke).sort(),
+          subpathSmokeResults,
         }));
       `,
     );
@@ -324,6 +376,24 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       imports.protocolBundleUrl,
       'https://public.example.test/index.bundle?platform=android&dev=true&minify=false',
     );
+    // Every subpath in the packed package's exports map must have a smoke check
+    // above; adding a subpath without one fails here.
+    assert.deepEqual(imports.smokedSubpaths, imports.exportSubpaths);
+    assert.deepEqual(imports.subpathSmokeResults, {
+      '.': { x: 5, y: 2 },
+      './android-adb': 'function',
+      './artifacts': 'undefined',
+      './batch': 'INVALID_ARGS',
+      './contracts': { x: 5, y: 5 },
+      './finders': 0,
+      './install-source': 'boolean',
+      './io': 'function',
+      // Type-only subpath: resolving the module from the packed exports map is
+      // the entire runtime check.
+      './remote-config': 'object',
+      './metro': 'https://public.example.test/index.bundle?platform=ios&dev=true&minify=false',
+      './selectors': true,
+    });
     const cliStdout = await execFileText(
       process.execPath,
       [
