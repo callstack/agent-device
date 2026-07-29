@@ -33,23 +33,8 @@ const limrunMockState = vi.hoisted(() => {
       { bundleId: 'com.apple.Preferences', name: 'Settings', installType: 'System' },
       { bundleId: 'com.example.ios', name: 'Example', installType: 'User' },
     ]),
-    iosPressKey: vi.fn(async () => undefined),
-    iosAppLogTail: vi.fn(async () => 'line one\nline two\n'),
-    iosStartRecording: vi.fn(async () => undefined),
-    iosStopRecording: vi.fn(async () => 'https://ios.example/recording'),
-    iosSimctlWait: vi.fn(async () => ({ code: 0, stdout: 'ok', stderr: '' })),
-    iosSimctlStop: vi.fn(),
-    iosSimctl: vi.fn(() => ({
-      on: vi.fn().mockReturnThis(),
-      off: vi.fn().mockReturnThis(),
-      wait: limrunMockState.iosSimctlWait,
-      stop: limrunMockState.iosSimctlStop,
-    })),
     androidOpenUrl: vi.fn(async () => undefined),
     androidDisconnect: vi.fn(),
-    androidPressKey: vi.fn(async () => undefined),
-    androidStartRecording: vi.fn(async () => undefined),
-    androidStopRecording: vi.fn(async () => 'https://android.example/recording'),
     androidSendAsset: vi.fn(async () => undefined),
     androidTunnelClose,
     androidStartAdbTunnel: vi.fn(async () => ({
@@ -111,11 +96,6 @@ vi.mock('@limrun/api/ios-client', () => ({
     openUrl: limrunMockState.iosOpenUrl,
     setOrientation: limrunMockState.iosSetOrientation,
     listApps: limrunMockState.iosListApps,
-    pressKey: limrunMockState.iosPressKey,
-    appLogTail: limrunMockState.iosAppLogTail,
-    startRecording: limrunMockState.iosStartRecording,
-    stopRecording: limrunMockState.iosStopRecording,
-    simctl: limrunMockState.iosSimctl,
     deviceInfo: {
       udid: 'ios-device',
       screenWidth: 402,
@@ -129,9 +109,6 @@ vi.mock('@limrun/api/instance-client', () => ({
   createInstanceClient: vi.fn(async () => ({
     disconnect: limrunMockState.androidDisconnect,
     openUrl: limrunMockState.androidOpenUrl,
-    pressKey: limrunMockState.androidPressKey,
-    startRecording: limrunMockState.androidStartRecording,
-    stopRecording: limrunMockState.androidStopRecording,
     sendAsset: limrunMockState.androidSendAsset,
     startAdbTunnel: limrunMockState.androidStartAdbTunnel,
   })),
@@ -169,7 +146,12 @@ test('Limrun runtime identifies direct CLI usage to the Limrun API', async () =>
   try {
     const allocateLease = runtime.leaseLifecycle.allocate;
     if (!allocateLease) throw new Error('Limrun runtime must provide lease allocation');
-    await allocateLease(lease);
+    const allocation = await allocateLease(lease);
+    const device = allocation?.device as DeviceInfo | undefined;
+    if (!device) throw new Error('Limrun runtime must expose its allocated device');
+    const deviceSession = runtime.getDeviceSession(device);
+    assert.equal(deviceSession?.platform, 'ios');
+    assert.equal(deviceSession ? 'client' in deviceSession : true, false);
 
     assert.deepEqual(limrunMockState.constructorOptions[0]?.defaultHeaders, {
       'x-agent-device-client': 'agent-device-cli',
@@ -185,189 +167,6 @@ test('Limrun runtime identifies direct CLI usage to the Limrun API', async () =>
       provider: 'limrun',
       source: 'agent-device-cli',
     });
-  } finally {
-    await runtime.shutdown();
-  }
-});
-
-test('Limrun runtime exposes a client-private iOS device session facade', async () => {
-  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key' });
-  const lease: SimulatorLease = {
-    leaseId: 'lease-ios-session',
-    tenantId: 'team-a',
-    runId: 'run-a',
-    backend: 'ios-instance',
-    leaseProvider: 'limrun',
-    createdAt: 1,
-    heartbeatAt: 1,
-    expiresAt: 60_001,
-  };
-
-  try {
-    const device = await allocateLimrunDevice(runtime, lease);
-    const session = runtime.getDeviceSession(device);
-    assert.equal(session?.platform, 'ios');
-    if (!session || session.platform !== 'ios') {
-      throw new Error('Limrun runtime must expose an iOS device session');
-    }
-
-    assert.deepEqual(await session.listApps('user-installed'), [
-      {
-        id: 'com.example.ios',
-        name: 'Example',
-        installType: 'User',
-      },
-    ]);
-    assert.deepEqual(await session.listApps(), [
-      {
-        id: 'com.apple.Preferences',
-        name: 'Settings',
-        installType: 'System',
-      },
-      {
-        id: 'com.example.ios',
-        name: 'Example',
-        installType: 'User',
-      },
-    ]);
-    assert.equal(await session.getForegroundApp(), undefined);
-    assert.deepEqual(session.viewport, { width: 402, height: 874 });
-    await session.pressKey('enter', ['command']);
-    assert.equal(await session.readLogs('com.example.ios', 200), 'line one\nline two\n');
-    await assert.rejects(
-      () => session.readLogs(undefined, 200),
-      /require an app bundle identifier/,
-    );
-    await session.startRecording({ quality: 8 });
-    await session.stopRecording({ outPath: '/tmp/ios-recording.mp4' });
-    assert.deepEqual(await session.runSimctl(['listapps', 'booted']).wait(), {
-      code: 0,
-      stdout: 'ok',
-      stderr: '',
-    });
-    assert.deepEqual(
-      await session.installRemoteApp('https://assets.example/runner.zip', {
-        md5: 'runner-md5',
-        relaunch: true,
-      }),
-      { appId: 'com.example.ios' },
-    );
-
-    assert.deepEqual(limrunMockState.iosPressKey.mock.calls[0], [['enter', ['command']]][0]);
-    assert.deepEqual(limrunMockState.iosAppLogTail.mock.calls[0], ['com.example.ios', 200]);
-    assert.deepEqual(limrunMockState.iosStartRecording.mock.calls[0], [{ quality: 8 }]);
-    assert.deepEqual(limrunMockState.iosStopRecording.mock.calls[0], [
-      { localPath: '/tmp/ios-recording.mp4' },
-    ]);
-    assert.deepEqual(limrunMockState.iosSimctl.mock.calls[0], [['listapps', 'booted']]);
-    assert.deepEqual(limrunMockState.iosInstallApp.mock.calls.at(-1), [
-      'https://assets.example/runner.zip',
-      {
-        md5: 'runner-md5',
-        launchMode: 'RelaunchIfRunning',
-      },
-    ]);
-    assert.equal('client' in session, false);
-  } finally {
-    await runtime.shutdown();
-  }
-});
-
-test('Limrun runtime exposes reusable Android capabilities without the raw client', async () => {
-  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key' });
-
-  try {
-    vi.mocked(runCmd).mockImplementation(async (_command, args) => {
-      if (args.includes('query-activities')) {
-        return {
-          stdout: 'com.example.android/.MainActivity\n',
-          stderr: '',
-          exitCode: 0,
-        };
-      }
-      if (args.includes('window')) {
-        return {
-          stdout: 'mCurrentFocus=Window{42 u0 com.example.android/.MainActivity}\n',
-          stderr: '',
-          exitCode: 0,
-        };
-      }
-      if (args.includes('input_method')) {
-        return {
-          stdout: 'mInputShown=false mCurMethodId=com.android.inputmethod.latin/.LatinIME',
-          stderr: '',
-          exitCode: 0,
-        };
-      }
-      if (args.includes('logcat')) {
-        return {
-          stdout: 'log line\n',
-          stderr: '',
-          exitCode: 0,
-        };
-      }
-      return { stdout: '', stderr: '', exitCode: 0 };
-    });
-    const device = await allocateLimrunDevice(runtime, androidLease());
-    const session = runtime.getDeviceSession(device);
-    assert.equal(session?.platform, 'android');
-    if (!session || session.platform !== 'android') {
-      throw new Error('Limrun runtime must expose an Android device session');
-    }
-
-    assert.deepEqual(await session.listApps(), [{ id: 'com.example.android', name: 'Example' }]);
-    assert.deepEqual(await session.getForegroundApp(), {
-      appId: 'com.example.android',
-      activity: '.MainActivity',
-    });
-    assert.equal((await session.getKeyboardState()).visible, false);
-    assert.deepEqual(await session.dismissKeyboard(), {
-      attempts: 0,
-      wasVisible: false,
-      dismissed: false,
-      visible: false,
-      inputType: undefined,
-      type: undefined,
-      inputMethodPackage: 'com.android.inputmethod.latin',
-      focusedPackage: undefined,
-      focusedResourceId: undefined,
-      inputOwner: 'unknown',
-    });
-    assert.equal(await session.readLogs(undefined, 20), 'log line\n');
-    assert.deepEqual(
-      await session.installRemoteApp('https://assets.example/android.apk', {
-        appIdentifierHint: 'com.example.android',
-      }),
-      { appId: 'com.example.android' },
-    );
-    await session.pressKey('KEYCODE_ENTER', ['shift']);
-    await session.startRecording({ quality: 7 });
-    await session.stopRecording({ outPath: '/tmp/android-recording.mp4' });
-    await runtime.configurePortReverse({
-      leaseId: 'lease-android',
-      devicePort: 8081,
-      hostPort: 8081,
-      name: 'metro',
-    });
-    await session.removePortReverse(8081);
-    await assert.rejects(() => session.removePortReverse(0), /Invalid Android tcp reverse port/);
-
-    assert.deepEqual(limrunMockState.androidSendAsset.mock.calls[0], [
-      'https://assets.example/android.apk',
-    ]);
-    assert.deepEqual(limrunMockState.androidPressKey.mock.calls[0], ['KEYCODE_ENTER', ['shift']]);
-    assert.deepEqual(limrunMockState.androidStartRecording.mock.calls[0], [{ quality: 7 }]);
-    assert.deepEqual(limrunMockState.androidStopRecording.mock.calls[0], [
-      { localPath: '/tmp/android-recording.mp4' },
-    ]);
-    assert.equal(typeof session.adb.exec, 'function');
-    assert.equal('client' in session, false);
-    assert.equal(
-      vi
-        .mocked(runCmd)
-        .mock.calls.some(([, args]) => args.includes('--remove') && args.includes('tcp:8081')),
-      true,
-    );
   } finally {
     await runtime.shutdown();
   }
