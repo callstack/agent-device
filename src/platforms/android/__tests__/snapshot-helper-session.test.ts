@@ -203,6 +203,12 @@ test('allows an acknowledged helper quit to release UiAutomation before forcing 
 
   assert.equal(processes.length, 1);
   assert.equal(processes[0]?.killed, false);
+  assert.equal(
+    calls.some(
+      (args) => args.join(' ') === 'shell am force-stop com.callstack.agentdevice.snapshothelper',
+    ),
+    true,
+  );
 });
 
 test('force terminates the helper when quit is not acknowledged', async () => {

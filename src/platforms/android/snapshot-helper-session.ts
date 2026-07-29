@@ -231,6 +231,7 @@ export async function stopAndroidSnapshotHelperSession(deviceKey: string): Promi
     }
     await waitForProcessExit(processExit, SESSION_PROCESS_EXIT_TIMEOUT_MS);
   }
+  const runtimeForceStopped = await forceStopSessionHelperRuntime(session);
   try {
     await removeForward(session);
   } catch {
@@ -245,6 +246,7 @@ export async function stopAndroidSnapshotHelperSession(deviceKey: string): Promi
       lifetimeMs: Date.now() - session.startedAtMs,
       quitAcknowledged,
       forceKilled: !exitedGracefully,
+      runtimeForceStopped,
     },
   });
 }
@@ -589,6 +591,20 @@ async function sessionForwardRemove(session: AndroidSnapshotHelperSession): Prom
     allowFailure: true,
     timeoutMs: FORWARD_TIMEOUT_MS,
   });
+}
+
+async function forceStopSessionHelperRuntime(
+  session: AndroidSnapshotHelperSession,
+): Promise<boolean> {
+  try {
+    const result = await session.adb(['shell', 'am', 'force-stop', session.helper.packageName], {
+      allowFailure: true,
+      timeoutMs: FORWARD_TIMEOUT_MS,
+    });
+    return result.exitCode === 0;
+  } catch {
+    return false;
+  }
 }
 
 function createSessionIdentity(
