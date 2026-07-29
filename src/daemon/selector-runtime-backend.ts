@@ -174,7 +174,9 @@ async function findText(params: SelectorRuntimeDeviceParams, text: string): Prom
   const macosSurfaceResult = await findTextInMacosNonAppSurface(params, text);
   if (macosSurfaceResult !== null) return macosSurfaceResult;
   const appleRunnerResult = await findTextWithAppleRunner(params, text);
-  if (appleRunnerResult !== null) return appleRunnerResult;
+  // The runner query is a fast path, not the semantic source of truth. XCTest can report a
+  // transient miss for visible SwiftUI text that the canonical snapshot already contains.
+  if (appleRunnerResult === true) return true;
   return await findTextInWaitSnapshot(params, text);
 }
 

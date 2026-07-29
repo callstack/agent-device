@@ -1986,6 +1986,58 @@ test('wait text on iOS without app bundle id uses snapshot path', async () => {
   );
 });
 
+test('wait text falls back to the canonical snapshot after an Apple runner miss', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-wait-runner-miss';
+  sessionStore.set(sessionName, {
+    ...makeSession(sessionName, iosSimulatorDevice),
+    appBundleId: 'com.example.app',
+  });
+
+  mockRunnerCommand.mockResolvedValue({ found: false });
+  mockDispatch.mockResolvedValue({
+    nodes: [
+      {
+        index: 0,
+        depth: 0,
+        type: 'Window',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+      },
+      {
+        index: 1,
+        depth: 1,
+        parentIndex: 0,
+        type: 'StaticText',
+        label: 'Agent Device Tester',
+        rect: { x: 20, y: 80, width: 240, height: 40 },
+      },
+    ],
+  });
+
+  const response = await handleSnapshotCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'wait',
+      positionals: ['Agent Device Tester', '5000'],
+      flags: {},
+    },
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(mockRunnerCommand).toHaveBeenCalledTimes(1);
+  expect(mockDispatch).toHaveBeenCalledWith(
+    expect.anything(),
+    'snapshot',
+    [],
+    undefined,
+    expect.anything(),
+  );
+});
+
 // fallow-ignore-next-line complexity
 test('wait selector uses direct iOS selector query when possible', async () => {
   const sessionStore = makeSessionStore();
