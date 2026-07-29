@@ -11,7 +11,7 @@ import {
 } from '../kernel/device.ts';
 import type { JsonSchema } from './command-contract.ts';
 import { AppError } from '../kernel/errors.ts';
-import { readOptionalInteger as optionalInteger } from '../kernel/input-validation.ts';
+import { readOptionalInteger as optionalInteger } from '../contracts/input-validation.ts';
 
 const INTERACTION_TARGET_KINDS = ['ref', 'selector', 'point'] as const;
 

@@ -1,6 +1,6 @@
 import { AppError } from '../kernel/errors.ts';
 import type { Point } from '../kernel/snapshot.ts';
-import { readOptionalInteger } from '../kernel/input-validation.ts';
+import { readOptionalInteger } from './input-validation.ts';
 import {
   SCROLL_DIRECTIONS,
   SWIPE_PRESETS,

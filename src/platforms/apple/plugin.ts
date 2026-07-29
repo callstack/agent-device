@@ -1,7 +1,7 @@
 import { appleOsCapabilities } from './capabilities.ts';
 import type { PlatformPlugin } from '../../contracts/platform-plugin.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { isAudioProbeSupportedDevice } from '../../kernel/audio-probe-support.ts';
+import { isAudioProbeSupportedDevice } from '../../contracts/audio-probe-support.ts';
 import {
   shouldUseHostMacFastPath,
   type DeviceInventoryRequest,

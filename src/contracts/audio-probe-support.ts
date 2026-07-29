@@ -1,5 +1,5 @@
-import { isIosFamily, isMacOs } from './device.ts';
-import type { DeviceInfo } from './device.ts';
+import { isIosFamily, isMacOs } from '../kernel/device.ts';
+import type { DeviceInfo } from '../kernel/device.ts';
 
 export function isHostSystemAudioProbeDevice(device: DeviceInfo): boolean {
   return (

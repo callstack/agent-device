@@ -14,7 +14,7 @@ import {
   SWIPE_SERIES_MAX_SCHEDULED_DURATION_MS,
 } from '../../contracts/scroll-gesture.ts';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
-import { readOptionalInteger } from '../../kernel/input-validation.ts';
+import { readOptionalInteger } from '../../contracts/input-validation.ts';
 import type { Point } from '../../kernel/snapshot.ts';
 import type { GestureSemanticInput } from '../../contracts/gesture-plan-types.ts';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';

@@ -1,5 +1,5 @@
 import type { AudioProbeSource } from '../contracts/audio-probe-result.ts';
-import { isHostSystemAudioProbeDevice } from '../kernel/audio-probe-support.ts';
+import { isHostSystemAudioProbeDevice } from '../contracts/audio-probe-support.ts';
 import type { DeviceInfo } from '../kernel/device.ts';
 import type { ExecBackgroundResult } from '../utils/exec.ts';
 

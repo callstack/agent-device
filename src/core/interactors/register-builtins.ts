@@ -2,7 +2,7 @@ import { registerPlatformPlugin, type PlatformPlugin } from '../../contracts/pla
 import { applePlugin } from '../../platforms/apple/plugin.ts';
 import { vegaPlugin } from '../../platforms/vega/plugin.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { isAudioProbeSupportedDevice } from '../../kernel/audio-probe-support.ts';
+import { isAudioProbeSupportedDevice } from '../../contracts/audio-probe-support.ts';
 import {
   WEB_DESKTOP_DEVICE,
   type DeviceInventoryRequest,

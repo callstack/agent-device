@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { isAudioProbeSupportedDevice } from '../../kernel/audio-probe-support.ts';
+import { isAudioProbeSupportedDevice } from '../audio-probe-support.ts';
 import {
   isIosFamily,
   isMacOs,
