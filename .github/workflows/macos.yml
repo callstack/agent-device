@@ -56,5 +56,5 @@ jobs:
         uses: ./.github/actions/upload-agent-device-artifacts
         with:
           artifact-name: macos-artifacts
-          agent-home-dir: ${{ env.AGENT_DEVICE_STATE_DIR }}
+          agent-state-dir: ${{ env.AGENT_DEVICE_STATE_DIR }}
           runner-derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}

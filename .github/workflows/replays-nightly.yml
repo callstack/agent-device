@@ -121,7 +121,7 @@ jobs:
         uses: ./.github/actions/upload-agent-device-artifacts
         with:
           artifact-name: replay-nightly-android-artifacts
-          agent-home-dir: ${{ steps.android-replay-host.outputs.agent-home-dir }}
+          agent-state-dir: ${{ steps.android-replay-host.outputs.agent-state-dir }}
 
   nightly-ios:
     name: iOS Replay Suite
@@ -202,7 +202,7 @@ jobs:
         uses: ./.github/actions/upload-agent-device-artifacts
         with:
           artifact-name: replay-nightly-ios-artifacts
-          agent-home-dir: ${{ env.AGENT_DEVICE_STATE_DIR }}
+          agent-state-dir: ${{ env.AGENT_DEVICE_STATE_DIR }}
           runner-derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
 
   nightly-macos:
@@ -239,5 +239,5 @@ jobs:
         uses: ./.github/actions/upload-agent-device-artifacts
         with:
           artifact-name: replay-nightly-macos-artifacts
-          agent-home-dir: ${{ env.AGENT_DEVICE_STATE_DIR }}
+          agent-state-dir: ${{ env.AGENT_DEVICE_STATE_DIR }}
           runner-derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}

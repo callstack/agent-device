@@ -5,7 +5,7 @@ inputs:
   artifact-name:
     description: 'Artifact name'
     required: true
-  agent-home-dir:
+  agent-state-dir:
     description: 'Resolved agent-device daemon state directory'
     required: true
   runner-derived-path:
@@ -23,9 +23,9 @@ runs:
         if-no-files-found: ignore
         include-hidden-files: true
         path: |
-          ${{ inputs.agent-home-dir }}/daemon.log
+          ${{ inputs.agent-state-dir }}/daemon.log
           ~/.agent-device/logs/**
-          ${{ inputs.agent-home-dir }}/sessions/**
+          ${{ inputs.agent-state-dir }}/sessions/**
           ${{ inputs.runner-derived-path }}/.agent-device-runner-cache.json
           ${{ inputs.runner-derived-path }}/Logs/**
           test/artifacts/**

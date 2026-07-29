@@ -80,4 +80,4 @@ jobs:
         uses: ./.github/actions/upload-agent-device-artifacts
         with:
           artifact-name: android-artifacts
-          agent-home-dir: ${{ steps.android-replay-host.outputs.agent-home-dir }}
+          agent-state-dir: ${{ steps.android-replay-host.outputs.agent-state-dir }}

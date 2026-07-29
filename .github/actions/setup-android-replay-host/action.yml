@@ -1,5 +1,5 @@
 name: 'Setup Android Replay Host'
-description: 'Prepare the Android CI host for replay tests and expose the agent-device home path'
+description: 'Prepare the Android CI host for replay tests and expose the daemon state path'
 
 inputs:
   package-helpers:
@@ -8,9 +8,9 @@ inputs:
     default: 'false'
 
 outputs:
-  agent-home-dir:
-    description: 'Resolved agent-device home directory'
-    value: ${{ steps.agent-home.outputs.dir }}
+  agent-state-dir:
+    description: 'Resolved agent-device daemon state directory'
+    value: ${{ steps.agent-state.outputs.dir }}
   helpers-cache-hit:
     description: 'Whether packaged Android helpers were restored from cache'
     value: ${{ steps.android-helpers-cache.outputs.cache-hit }}
@@ -18,9 +18,9 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    - name: Resolve agent-device home
-      id: agent-home
-      run: echo "dir=$HOME/.agent-device" >> "$GITHUB_OUTPUT"
+    - name: Resolve agent-device daemon state
+      id: agent-state
+      run: echo "dir=$(pnpm --silent daemon:state-dir)" >> "$GITHUB_OUTPUT"
       shell: bash
 
     - name: Enable KVM
