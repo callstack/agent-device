@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
 import { assertElementText, assertJsonContains, assertWaitText } from './live-assertions.ts';
+import { clearStateLaunchUrlMaestroFlow } from './live-fixtures.ts';
 import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';
 
 const C = PUBLIC_COMMANDS;
@@ -46,6 +49,7 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
   await assertWaitText(context, 'Automation lab');
   await assertElementText(context, 'id="automation-event-name"', 'cold.start');
   await assertElementText(context, 'id="automation-event-payload"', '{"source":"deep-link"}');
+  await assertClearStateLaunchUrl(context);
   await runStep(context, 'navigate onward from cold deep link', [
     'click',
     'id="automation-continue-catalog"',
@@ -58,7 +62,7 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
   verifyBehavior(
     context,
     'cold-start-deep-link-navigation',
-    'cold deep route rendered decoded payload and continued into the fixture catalog',
+    'launchApp(clearState) removed a seeded data canary, rendered the stored deep route and payload, and continued into the fixture catalog',
   );
 
   await runStep(context, 'wait for settings tab target', ['wait', 'label="Settings"', '10000']);
@@ -142,6 +146,40 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
   await runStep(context, 'return from automation route', ['back']);
   await assertWaitText(context, 'Settings');
   verifyCommand(context, C.back, 'back returns from automation route to Settings');
+}
+
+async function assertClearStateLaunchUrl(context: LiveContext): Promise<void> {
+  const prepared = await runStep(context, 'prepare fixture data clear canary', [
+    'settings',
+    'clear-app-state',
+    context.appId,
+  ]);
+  const containerPath = prepared.json?.data?.containerPath;
+  assert.ok(
+    typeof containerPath === 'string' && path.isAbsolute(containerPath),
+    `clear-state response should expose an absolute data container: ${JSON.stringify(prepared.json)}`,
+  );
+
+  const canaryPath = path.join(containerPath, 'Documents', 'agent-device-clear-state-canary.txt');
+  fs.mkdirSync(path.dirname(canaryPath), { recursive: true });
+  fs.writeFileSync(canaryPath, 'must be removed by launchApp(clearState: true)\n');
+  assert.equal(fs.existsSync(canaryPath), true, `failed to seed clear-state canary: ${canaryPath}`);
+
+  const flowPath = path.join(context.artifactDir, 'clear-state-launch-url.yaml');
+  fs.writeFileSync(flowPath, clearStateLaunchUrlMaestroFlow(context.appId));
+  const replay = await runStep(context, 'launch clear-state fixture through stored URL', [
+    'replay',
+    flowPath,
+    '--maestro',
+  ]);
+  assert.equal(replay.json?.data?.replayed, 3, JSON.stringify(replay.json));
+  assert.equal(
+    fs.existsSync(canaryPath),
+    false,
+    `launchApp(clearState: true) retained data canary: ${canaryPath}`,
+  );
+  await assertElementText(context, 'id="automation-event-name"', 'cold.start');
+  await assertElementText(context, 'id="automation-event-payload"', '{"source":"deep-link"}');
 }
 
 async function acceptDeepLinkConfirmationIfPresent(context: LiveContext): Promise<void> {

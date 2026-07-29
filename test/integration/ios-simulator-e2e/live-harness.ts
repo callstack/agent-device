@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { resolveDaemonPaths } from '../../../src/daemon/config.ts';
 import { type CliJsonResult, formatResultDebug, runBuiltCliJson } from '../cli-json.ts';
 import { type IosSimulatorBehaviorId } from './behavior-coverage.ts';
 import { liveCommandsForScenario } from './coverage-manifest.ts';
@@ -34,6 +35,7 @@ export type LiveContext = {
   env: NodeJS.ProcessEnv;
   session: string;
   sessionOpen: boolean;
+  stateDir: string;
   stepHistory: StepRecord[];
   tier: Tier;
   udid: string;
@@ -58,6 +60,9 @@ export function createContext(): LiveContext {
     env: process.env,
     session: `ios-e2e-${tier}-${process.pid.toString(36)}`,
     sessionOpen: false,
+    stateDir: resolveDaemonPaths(process.env.AGENT_DEVICE_STATE_DIR, {
+      env: process.env,
+    }).baseDir,
     stepHistory: [],
     tier,
     udid: requiredEnv('AGENT_DEVICE_IOS_UDID'),
@@ -251,6 +256,8 @@ function withCommonFlags(context: LiveContext, args: string[]): string[] {
     context.udid,
     '--session',
     context.session,
+    '--state-dir',
+    context.stateDir,
     ...(args.includes('--json') ? [] : ['--json']),
   ];
 }

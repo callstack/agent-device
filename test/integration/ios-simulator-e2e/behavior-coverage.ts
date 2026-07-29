@@ -27,7 +27,8 @@ type BehaviorCoverageEntry =
  */
 export const IOS_SIMULATOR_BEHAVIOR_COVERAGE = {
   'cold-start-deep-link-navigation': {
-    assertion: 'a terminated fixture opens a deep route, renders payload, and navigates back',
+    assertion:
+      'launchApp(clearState) removes seeded app data, opens the stored deep route, renders its payload, and navigates onward',
     level: 'live',
     owner: 'smoke:automation-input',
   },
