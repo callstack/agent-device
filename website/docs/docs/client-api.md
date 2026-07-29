@@ -62,10 +62,14 @@ Public subpath API exposed for Node consumers:
   - `forceStopAndroidAppWithAdb(executor, packageName)`
   - `listAndroidAppsWithAdb(executor)`
   - `getAndroidAppStateWithAdb(executor)`
-  - types: `AndroidAdbExecutor`, `AndroidAdbExecutorOptions`, `AndroidPortReverseEndpoint`
+  - types: `AndroidAdbExecutor`, `AndroidAdbExecutorOptions`, `AndroidAdbProvider`,
+    `AndroidKeyboardState`, `AndroidKeyboardDismissResult`, `AndroidPortReverseEndpoint`
 - `agent-device/limrun`
   - `new LimrunRuntime(options)`
-  - types: `LimrunRuntimeOptions`
+  - `runtime.getDeviceSession(device)`
+  - types: `LimrunRuntimeOptions`, `LimrunDeviceSession`, `LimrunAndroidDeviceSession`,
+    `LimrunIosDeviceSession`, `AndroidAdbProvider`, `AndroidKeyboardState`,
+    `AndroidKeyboardDismissResult`
 
 The `contracts`, `selectors`, `finders`, `install-source`, `android-adb`, `limrun`, `artifacts`, `batch`, `metro`, `remote-config`, and `io` subpaths are the supported Node entry points. The former compatibility subpaths `agent-device/android-apps` and `agent-device/daemon`, plus hosted-runtime subpaths `agent-device/cloud-webdriver`, `agent-device/commands`, `agent-device/backend`, `agent-device/testing/conformance`, and `agent-device/observability`, are not published.
 

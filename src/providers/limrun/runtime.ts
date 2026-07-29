@@ -35,6 +35,7 @@ import {
   installLimrunIosApp,
   type LimrunIosSession,
 } from './ios.ts';
+import { createLimrunDeviceSession, type LimrunDeviceSession } from './device-session.ts';
 
 type LimrunInstance = {
   metadata: { id: string };
@@ -105,6 +106,11 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
     return session.platform === 'ios'
       ? createLimrunIosInteractor(session)
       : createLimrunAndroidInteractor(session);
+  }
+
+  getDeviceSession(device: DeviceInfo): LimrunDeviceSession | undefined {
+    const session = this.getSessionForDevice(device);
+    return session ? createLimrunDeviceSession(session) : undefined;
   }
 
   async installApp(

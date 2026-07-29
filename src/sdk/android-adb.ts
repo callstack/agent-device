@@ -2,6 +2,7 @@ export {
   createAndroidPortReverseManager,
   type AndroidAdbExecutor,
   type AndroidAdbExecutorOptions,
+  type AndroidAdbProvider,
   type AndroidPortReverseEndpoint,
 } from '../platforms/android/adb-executor.ts';
 export {
@@ -17,5 +18,7 @@ export {
   dismissAndroidKeyboardWithAdb,
   getAndroidKeyboardStatusWithAdb,
   readAndroidClipboardWithAdb,
+  type AndroidKeyboardDismissResult,
+  type AndroidKeyboardState,
   writeAndroidClipboardWithAdb,
 } from '../platforms/android/device-input-state.ts';

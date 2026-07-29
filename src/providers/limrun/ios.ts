@@ -66,11 +66,12 @@ export async function installLimrunIosApp(
       path: prepared.uploadPath,
       name: prepared.assetName,
     });
-    const result = await session.client.installApp(asset.signedDownloadUrl, {
+    const result = await installLimrunIosRemoteApp(session, asset.signedDownloadUrl, {
       md5: asset.md5,
-      launchMode: options?.relaunch ? 'RelaunchIfRunning' : 'ForegroundIfRunning',
+      relaunch: options?.relaunch,
+      appIdentifierHint: options?.appIdentifierHint,
     });
-    const bundleId = normalizeOptionalString(result.bundleId) ?? options?.appIdentifierHint;
+    const bundleId = result.appId;
     return {
       ...(bundleId ? { bundleId, launchTarget: bundleId } : {}),
       ...(prepared.appName ? { appName: prepared.appName } : {}),
@@ -78,6 +79,44 @@ export async function installLimrunIosApp(
   } finally {
     await prepared.cleanup();
   }
+}
+
+export async function installLimrunIosRemoteApp(
+  session: LimrunIosSession,
+  url: string,
+  options?: {
+    md5?: string;
+    relaunch?: boolean;
+    appIdentifierHint?: string;
+  },
+): Promise<{ appId?: string }> {
+  const beforeInstallApps = await session.client.listApps().catch(() => undefined);
+  const result = await session.client.installApp(url, {
+    md5: options?.md5,
+    launchMode: options?.relaunch ? 'RelaunchIfRunning' : 'ForegroundIfRunning',
+  });
+  const resultBundleId = normalizeOptionalString(result.bundleId);
+  const requestedBundleId = normalizeOptionalString(options?.appIdentifierHint);
+  let afterInstallApps: Awaited<ReturnType<LimrunIosSession['client']['listApps']>> = [];
+  for (const delayMs of IOS_APP_INVENTORY_RETRY_DELAYS_MS) {
+    if (delayMs > 0) await sleep(delayMs);
+    afterInstallApps = await session.client.listApps();
+    const verifiedBundleId = resolveInstalledIosAppId({
+      resultBundleId,
+      requestedBundleId,
+      beforeInstallApps,
+      afterInstallApps,
+    });
+    if (verifiedBundleId) return { appId: verifiedBundleId };
+  }
+  throw new AppError('COMMAND_FAILED', 'Limrun iOS app installation could not be verified.', {
+    resultBundleId,
+    requestedBundleId,
+    installedUserApps: afterInstallApps
+      .filter(isUserInstalledIosApp)
+      .map((app) => app.bundleId)
+      .sort(),
+  });
 }
 
 export function createLimrunIosInteractor(session: LimrunIosSession): Interactor {
@@ -265,6 +304,44 @@ async function resolveIosTarget(app: string): Promise<string> {
 function inferAppNameFromPath(appPath: string): string | undefined {
   const base = path.basename(appPath).replace(/\.(?:app|ipa|apk|aab|zip)$/i, '');
   return base || undefined;
+}
+
+const IOS_APP_INVENTORY_RETRY_DELAYS_MS = [0, 250] as const;
+
+function resolveInstalledIosAppId(params: {
+  resultBundleId?: string;
+  requestedBundleId?: string;
+  beforeInstallApps: Awaited<ReturnType<LimrunIosSession['client']['listApps']>> | undefined;
+  afterInstallApps: Awaited<ReturnType<LimrunIosSession['client']['listApps']>>;
+}): string | undefined {
+  const installedBundleIds = new Set(params.afterInstallApps.map((app) => app.bundleId));
+  return (
+    (params.resultBundleId && installedBundleIds.has(params.resultBundleId)
+      ? params.resultBundleId
+      : undefined) ??
+    (params.requestedBundleId && installedBundleIds.has(params.requestedBundleId)
+      ? params.requestedBundleId
+      : undefined) ??
+    inferNewUserInstalledApp(params.beforeInstallApps, params.afterInstallApps)
+  );
+}
+
+function inferNewUserInstalledApp(
+  beforeInstallApps: Awaited<ReturnType<LimrunIosSession['client']['listApps']>> | undefined,
+  afterInstallApps: Awaited<ReturnType<LimrunIosSession['client']['listApps']>>,
+): string | undefined {
+  if (!beforeInstallApps) return undefined;
+  const beforeBundleIds = new Set(beforeInstallApps.map((app) => app.bundleId));
+  const candidates = afterInstallApps.filter(
+    (app) => isUserInstalledIosApp(app) && !beforeBundleIds.has(app.bundleId),
+  );
+  return candidates.length === 1 ? candidates[0]?.bundleId : undefined;
+}
+
+function isUserInstalledIosApp(app: { bundleId: string; installType: string }): boolean {
+  return (
+    !app.bundleId.startsWith('com.apple.') && !app.installType.toLowerCase().includes('system')
+  );
 }
 
 async function readIosBundleAppName(appPath: string): Promise<string | undefined> {

@@ -270,6 +270,14 @@ const runtime = new LimrunRuntime({
 });
 ```
 
+After allocating a lease, embedding bridges can call `runtime.getDeviceSession(device)` to access
+the allocated device's reusable semantic capabilities. The facade includes app inventory,
+foreground state where the provider exposes it, key input, bounded log reads, recording, remote
+asset installation, and the existing interactor. Android additionally exposes agent-device's
+`AndroidAdbProvider` abstraction for helpers and reversible port forwarding. iOS exposes a typed
+`simctl` execution handle for bridge-owned runner lifecycle and launch policy. Raw Limrun clients
+remain private to the provider runtime.
+
 ## MCP Experience
 
 The MCP server exposes operational command tools such as `open`, `snapshot`, `click`, `close`, and `artifacts`. It does not expose provider `connect` commands.
