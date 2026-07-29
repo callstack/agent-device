@@ -3,17 +3,10 @@ import type { AppsFilter } from '../../contracts/app-inventory.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { AndroidAdbProvider } from '../../platforms/android/adb-executor.ts';
-import {
-  getAndroidAppStateWithAdb,
-  listAndroidAppsWithAdb,
-} from '../../platforms/android/app-helpers.ts';
-import {
-  dismissAndroidKeyboardWithAdb,
-  getAndroidKeyboardStatusWithAdb,
-  type AndroidKeyboardDismissResult,
-  type AndroidKeyboardState,
+import type {
+  AndroidKeyboardDismissResult,
+  AndroidKeyboardState,
 } from '../../platforms/android/device-input-state.ts';
-import { captureAndroidLogcatWithAdb } from '../../platforms/android/logcat.ts';
 import { createLimrunAndroidInteractor, type LimrunAndroidSession } from './android.ts';
 import {
   createLimrunIosInteractor,
@@ -119,25 +112,38 @@ function createAndroidDeviceSession(session: LimrunAndroidSession): LimrunAndroi
     device: session.device,
     interactor: createLimrunAndroidInteractor(session),
     adb: session.adbProvider,
-    listApps: async (filter = 'all') =>
-      (await listAndroidAppsWithAdb(adb, { filter, target: 'mobile' })).map((app) => ({
+    listApps: async (filter = 'all') => {
+      const { listAndroidAppsWithAdb } = await import('../../platforms/android/app-helpers.ts');
+      return (await listAndroidAppsWithAdb(adb, { filter, target: 'mobile' })).map((app) => ({
         id: app.package,
         name: app.name,
-      })),
+      }));
+    },
     getForegroundApp: async () => {
+      const { getAndroidAppStateWithAdb } = await import('../../platforms/android/app-helpers.ts');
       const app = await getAndroidAppStateWithAdb(adb);
       return app.package ? { appId: app.package, activity: app.activity } : undefined;
     },
     pressKey: async (key, modifiers) => {
       await session.client.pressKey(key, modifiers);
     },
-    getKeyboardState: async () => await getAndroidKeyboardStatusWithAdb(adb),
-    dismissKeyboard: async () => await dismissAndroidKeyboardWithAdb(adb),
-    readLogs: async (_appId, lineLimit) =>
-      await captureAndroidLogcatWithAdb(adb, {
+    getKeyboardState: async () => {
+      const { getAndroidKeyboardStatusWithAdb } =
+        await import('../../platforms/android/device-input-state.ts');
+      return await getAndroidKeyboardStatusWithAdb(adb);
+    },
+    dismissKeyboard: async () => {
+      const { dismissAndroidKeyboardWithAdb } =
+        await import('../../platforms/android/device-input-state.ts');
+      return await dismissAndroidKeyboardWithAdb(adb);
+    },
+    readLogs: async (_appId, lineLimit) => {
+      const { captureAndroidLogcatWithAdb } = await import('../../platforms/android/logcat.ts');
+      return await captureAndroidLogcatWithAdb(adb, {
         lines: lineLimit,
         timeoutMs: 5_000,
-      }),
+      });
+    },
     ...createRecordingOperations(session.client),
     installRemoteApp: async (url, options) => {
       await session.client.sendAsset(url);
