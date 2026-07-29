@@ -146,7 +146,6 @@ type FileFacts = {
   isTs: boolean;
   underSrc: boolean;
   underTest: boolean;
-  underSkills: boolean;
   isSrcProd: boolean;
 };
 
@@ -156,9 +155,9 @@ function reason(check: CheckId, file: string, rule: string, detail: string): Sel
   return { check, path: file, rule, detail };
 }
 
-const formatGate: OwnershipRule = ({ file, underSrc, underTest, underSkills }) =>
-  underSrc || underTest || underSkills
-    ? [reason('format', file, 'gate:format', 'oxfmt covers src/, test/, and skills/')]
+const formatGate: OwnershipRule = ({ file, underSrc, underTest }) =>
+  underSrc || underTest
+    ? [reason('format', file, 'gate:format', 'oxfmt covers src/ and test/')]
     : [];
 
 const staticTsGates: OwnershipRule = ({ file, isTs, underSrc, underTest }) =>
@@ -311,7 +310,6 @@ function fileFacts(file: string): FileFacts {
     isTs,
     underSrc,
     underTest: file.startsWith('test/'),
-    underSkills: file.startsWith('skills/'),
     isSrcProd: underSrc && isTs && !isTestPath(file),
   };
 }

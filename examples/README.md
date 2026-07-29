@@ -33,6 +33,5 @@ way a Node consumer or the agent-device-cloud bridge would. Each file:
 
 ## test-app/
 
-[`test-app/`](./test-app) is the Expo dogfood fixture used for `agent-device` and `skillgym`
-experiments (see its own [README](./test-app/README.md)) — it is a test fixture, not an SDK usage
-example.
+[`test-app/`](./test-app) is the Expo dogfood fixture used for `agent-device` experiments (see
+its own [README](./test-app/README.md)) — it is a test fixture, not an SDK usage example.
