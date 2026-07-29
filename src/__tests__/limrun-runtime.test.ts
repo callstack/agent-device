@@ -218,9 +218,26 @@ test('Limrun runtime exposes a client-private iOS device session facade', async 
         installType: 'User',
       },
     ]);
+    assert.deepEqual(await session.listApps(), [
+      {
+        id: 'com.apple.Preferences',
+        name: 'Settings',
+        installType: 'System',
+      },
+      {
+        id: 'com.example.ios',
+        name: 'Example',
+        installType: 'User',
+      },
+    ]);
+    assert.equal(await session.getForegroundApp(), undefined);
     assert.deepEqual(session.viewport, { width: 402, height: 874 });
     await session.pressKey('enter', ['command']);
     assert.equal(await session.readLogs('com.example.ios', 200), 'line one\nline two\n');
+    await assert.rejects(
+      () => session.readLogs(undefined, 200),
+      /require an app bundle identifier/,
+    );
     await session.startRecording({ quality: 8 });
     await session.stopRecording({ outPath: '/tmp/ios-recording.mp4' });
     assert.deepEqual(await session.runSimctl(['listapps', 'booted']).wait(), {
@@ -260,6 +277,37 @@ test('Limrun runtime exposes reusable Android capabilities without the raw clien
   const runtime = new LimrunRuntime({ apiKey: 'lim_test_key' });
 
   try {
+    vi.mocked(runCmd).mockImplementation(async (_command, args) => {
+      if (args.includes('query-activities')) {
+        return {
+          stdout: 'com.example.android/.MainActivity\n',
+          stderr: '',
+          exitCode: 0,
+        };
+      }
+      if (args.includes('window')) {
+        return {
+          stdout: 'mCurrentFocus=Window{42 u0 com.example.android/.MainActivity}\n',
+          stderr: '',
+          exitCode: 0,
+        };
+      }
+      if (args.includes('input_method')) {
+        return {
+          stdout: 'mInputShown=false mCurMethodId=com.android.inputmethod.latin/.LatinIME',
+          stderr: '',
+          exitCode: 0,
+        };
+      }
+      if (args.includes('logcat')) {
+        return {
+          stdout: 'log line\n',
+          stderr: '',
+          exitCode: 0,
+        };
+      }
+      return { stdout: '', stderr: '', exitCode: 0 };
+    });
     const device = await allocateLimrunDevice(runtime, androidLease());
     const session = runtime.getDeviceSession(device);
     assert.equal(session?.platform, 'android');
@@ -267,6 +315,31 @@ test('Limrun runtime exposes reusable Android capabilities without the raw clien
       throw new Error('Limrun runtime must expose an Android device session');
     }
 
+    assert.deepEqual(await session.listApps(), [{ id: 'com.example.android', name: 'Example' }]);
+    assert.deepEqual(await session.getForegroundApp(), {
+      appId: 'com.example.android',
+      activity: '.MainActivity',
+    });
+    assert.equal((await session.getKeyboardState()).visible, false);
+    assert.deepEqual(await session.dismissKeyboard(), {
+      attempts: 0,
+      wasVisible: false,
+      dismissed: false,
+      visible: false,
+      inputType: undefined,
+      type: undefined,
+      inputMethodPackage: 'com.android.inputmethod.latin',
+      focusedPackage: undefined,
+      focusedResourceId: undefined,
+      inputOwner: 'unknown',
+    });
+    assert.equal(await session.readLogs(undefined, 20), 'log line\n');
+    assert.deepEqual(
+      await session.installRemoteApp('https://assets.example/android.apk', {
+        appIdentifierHint: 'com.example.android',
+      }),
+      { appId: 'com.example.android' },
+    );
     await session.pressKey('KEYCODE_ENTER', ['shift']);
     await session.startRecording({ quality: 7 });
     await session.stopRecording({ outPath: '/tmp/android-recording.mp4' });
@@ -277,7 +350,11 @@ test('Limrun runtime exposes reusable Android capabilities without the raw clien
       name: 'metro',
     });
     await session.removePortReverse(8081);
+    await assert.rejects(() => session.removePortReverse(0), /Invalid Android tcp reverse port/);
 
+    assert.deepEqual(limrunMockState.androidSendAsset.mock.calls[0], [
+      'https://assets.example/android.apk',
+    ]);
     assert.deepEqual(limrunMockState.androidPressKey.mock.calls[0], ['KEYCODE_ENTER', ['shift']]);
     assert.deepEqual(limrunMockState.androidStartRecording.mock.calls[0], [{ quality: 7 }]);
     assert.deepEqual(limrunMockState.androidStopRecording.mock.calls[0], [
