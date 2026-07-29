@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { checkDaemonModularityRatchets, DAEMON_MODULARITY_BASELINE } from './daemon-modularity.ts';
-import { SESSION_STATE_FIELD_OWNERS, STORE_OWNED_SESSION_STATE_FIELDS } from './session-state.ts';
+import {
+  checkDaemonModularityRatchets,
+  DAEMON_MODULARITY_BASELINE,
+  TYPE_CYCLE_BASELINE,
+} from './daemon-modularity.ts';
+import { sessionStateFieldCount, SESSION_STATE_FIELD_OWNERS } from './session-state.ts';
 import { resolveImportEdges, targetDagZone, type ResolvedImportEdge } from './model.ts';
 
 function importEdge(file: string, target: string): ResolvedImportEdge {
@@ -32,10 +36,8 @@ test('daemon modularity baseline records the measured R7 ownership pressure', ()
     Object.values(SESSION_STATE_FIELD_OWNERS).reduce((sum, owners) => sum + owners.length, 0),
     DAEMON_MODULARITY_BASELINE.sessionState.ownerFileClaims,
   );
-  assert.equal(
-    Object.keys(SESSION_STATE_FIELD_OWNERS).length + STORE_OWNED_SESSION_STATE_FIELDS.size,
-    41,
-  );
+  assert.equal(sessionStateFieldCount(), 41);
+  assert.equal(TYPE_CYCLE_BASELINE, 102);
   assert.equal(DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers['daemon-server'], 30);
   assert.equal('daemon' in DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers, false);
 });
@@ -50,7 +52,7 @@ test('external daemon/types.ts importer membership changes require the baseline 
 
   const violations = checkDaemonModularityRatchets([...baselineDaemonTypesEdges(), ...edges], []);
   assert.equal(violations.length, 1);
-  assert.match(violations[0]!.message, /may only shrink from the recorded four/);
+  assert.match(violations[0]!.message, /may only shrink from the recorded 4/);
 
   const removed = checkDaemonModularityRatchets(baselineDaemonTypesEdges().slice(1), []);
   assert.equal(removed.length, 1);

@@ -125,6 +125,10 @@ export const STORE_OWNED_SESSION_STATE_FIELDS: ReadonlySet<string> = new Set([
   'surface',
 ]);
 
+export function sessionStateFieldCount(): number {
+  return Object.keys(SESSION_STATE_FIELD_OWNERS).length + STORE_OWNED_SESSION_STATE_FIELDS.size;
+}
+
 export type FieldClassificationDrift = {
   field: string;
   problem: 'unclassified' | 'both' | 'not-a-field';

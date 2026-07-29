@@ -37,6 +37,7 @@ import {
   fieldClassificationDrift,
   findSessionStateWrites,
   sessionStateFields,
+  sessionStateFieldCount,
   SESSION_STATE_FIELD_OWNERS,
   STORE_OWNED_SESSION_STATE_FIELDS,
 } from './session-state.ts';
@@ -48,24 +49,15 @@ import {
   resolveImportEdges,
   topFolder,
   typeInversionPair,
+  type LayeringViolation,
   type ResolvedImportEdge,
 } from './model.ts';
 import {
   checkDaemonModularityRatchets,
   daemonModularitySummary,
-  sessionStateFieldCount,
   TYPE_CYCLE_BASELINE,
 } from './daemon-modularity.ts';
 import { policyLead, policyViolation, ZONE_POLICIES } from './zone-policy.ts';
-
-export { TYPE_CYCLE_BASELINE } from './daemon-modularity.ts';
-
-type Violation = {
-  rule: string;
-  file: string;
-  line: number;
-  message: string;
-};
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
@@ -102,8 +94,8 @@ function isProductionSourceFile(file: string): boolean {
 
 // R1-R3 are declared as a policy table in zone-policy.ts. This walks it; the boundaries
 // themselves are data, so adding one is a table entry rather than a fourth predicate.
-function checkLayeringRules(edges: readonly ResolvedImportEdge[]): Violation[] {
-  const violations: Violation[] = [];
+function checkLayeringRules(edges: readonly ResolvedImportEdge[]): LayeringViolation[] {
+  const violations: LayeringViolation[] = [];
   for (const edge of edges) {
     const fromZone = topFolder(edge.file);
     const toZone = topFolder(edge.target);
@@ -123,7 +115,7 @@ function checkLayeringRules(edges: readonly ResolvedImportEdge[]): Violation[] {
   return violations;
 }
 
-function checkCycles(edges: readonly ResolvedImportEdge[]): Violation[] {
+function checkCycles(edges: readonly ResolvedImportEdge[]): LayeringViolation[] {
   return findValueImportCycles(edges).map((cycle) => ({
     rule: 'R4 value-import-cycle',
     file: cycle[0]!,
@@ -132,7 +124,7 @@ function checkCycles(edges: readonly ResolvedImportEdge[]): Violation[] {
   }));
 }
 
-function checkBackEdges(edges: readonly ResolvedImportEdge[]): Violation[] {
+function checkBackEdges(edges: readonly ResolvedImportEdge[]): LayeringViolation[] {
   const seen = new Set<string>();
   return edges.flatMap((edge) => {
     const pair = backEdgePair(edge);
@@ -192,7 +184,7 @@ export const TYPE_INVERSION_BASELINE: Readonly<Record<string, number>> = {
   'mcp -> client': 1,
 };
 
-function checkTypeInversions(edges: readonly ResolvedImportEdge[]): Violation[] {
+function checkTypeInversions(edges: readonly ResolvedImportEdge[]): LayeringViolation[] {
   const seen = new Set<string>();
   const countsByPair = new Map<string, number>();
   const firstEdgeByPair = new Map<string, ResolvedImportEdge>();
@@ -206,7 +198,7 @@ function checkTypeInversions(edges: readonly ResolvedImportEdge[]): Violation[] 
     if (!firstEdgeByPair.has(pair)) firstEdgeByPair.set(pair, edge);
   }
 
-  const violations: Violation[] = [];
+  const violations: LayeringViolation[] = [];
   for (const [pair, count] of [...countsByPair].sort(([left], [right]) =>
     left.localeCompare(right),
   )) {
@@ -252,7 +244,7 @@ function checkTypeInversions(edges: readonly ResolvedImportEdge[]): Violation[] 
   return violations;
 }
 
-function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Violation[] {
+function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): LayeringViolation[] {
   const types = sources.get('src/daemon/types.ts');
   if (!types) {
     return [
@@ -267,7 +259,7 @@ function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Viola
 
   const fields = sessionStateFields(types);
   const writes = findSessionStateWrites(sources, fields);
-  const violations: Violation[] = [];
+  const violations: LayeringViolation[] = [];
   const seenOwners = new Map<string, Set<string>>();
 
   // Parity first: the rule is only exhaustive if every declared field is classified. A field
@@ -362,7 +354,7 @@ function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Viola
 // R8: a CI job that runs with `install-deps: false` has no `node_modules`, so every script it
 // reaches must import only Node builtins and other repo files. Locally the opposite is true —
 // `node_modules` is always present — which is why this needs a gate rather than a convention.
-function checkZeroDepJobs(): Violation[] {
+function checkZeroDepJobs(): LayeringViolation[] {
   const workflows = readSources(
     execFileSync('git', ['ls-files', '.github/workflows/*.yml'], {
       cwd: repoRoot,
@@ -376,7 +368,7 @@ function checkZeroDepJobs(): Violation[] {
   };
   const packageScripts = new Map(Object.entries(packageJson.scripts ?? {}));
 
-  const violations: Violation[] = [];
+  const violations: LayeringViolation[] = [];
   for (const job of zeroDepJobs(workflows, fileExists, packageScripts)) {
     // Fail closed: a zero-dep job whose commands the entry scan cannot recognize would
     // otherwise be silently exempt from the rule it is the whole reason for.
@@ -407,19 +399,20 @@ function checkZeroDepJobs(): Violation[] {
   return violations;
 }
 
-/** R9 is growth-only, so a shrunk tree is reported rather than failed — see checkTypeCycleGrowth. */
+/** R9 is growth-only, so a shrunk tree is reported rather than failed by the ratchet. */
 function typeCycleNote(actual: number): string {
-  const baseline = TYPE_CYCLE_BASELINE;
-  if (actual >= baseline) return `the largest type-level cycle is ${actual} files (R9)`;
+  if (actual >= TYPE_CYCLE_BASELINE) {
+    return `the largest type-level cycle is ${actual} files (R9)`;
+  }
   return (
     `the largest type-level cycle is down to ${actual} files, under the R9 baseline of ` +
-    `${baseline} — lower the daemon modularity baseline when convenient`
+    `${TYPE_CYCLE_BASELINE} — lower the daemon modularity zone ceilings when convenient`
   );
 }
 
 function report(
   files: readonly string[],
-  violations: readonly Violation[],
+  violations: readonly LayeringViolation[],
   typeCycle: number,
 ): number {
   if (violations.length === 0) {
@@ -435,7 +428,7 @@ function report(
     return 0;
   }
 
-  const byRule = new Map<string, Violation[]>();
+  const byRule = new Map<string, LayeringViolation[]>();
   for (const violation of violations) {
     const group = byRule.get(violation.rule) ?? [];
     group.push(violation);

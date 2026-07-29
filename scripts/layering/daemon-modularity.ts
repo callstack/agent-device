@@ -1,12 +1,15 @@
 import path from 'node:path';
-import { SESSION_STATE_FIELD_OWNERS, STORE_OWNED_SESSION_STATE_FIELDS } from './session-state.ts';
-import { targetDagZone, type ResolvedImportEdge } from './model.ts';
+import { targetDagZone, type LayeringViolation, type ResolvedImportEdge } from './model.ts';
+import { SESSION_STATE_FIELD_OWNERS } from './session-state.ts';
 
-export type LayeringViolation = {
-  rule: string;
-  file: string;
-  line: number;
-  message: string;
+const LARGEST_TYPE_CYCLE_ZONE_CEILINGS: Readonly<Record<string, number>> = {
+  '(root)': 5,
+  client: 1,
+  commands: 33,
+  contracts: 2,
+  core: 12,
+  'daemon-server': 30,
+  platforms: 19,
 };
 
 export const DAEMON_MODULARITY_BASELINE = {
@@ -15,16 +18,7 @@ export const DAEMON_MODULARITY_BASELINE = {
     ownerFileClaims: 42,
   },
   largestTypeCycle: {
-    size: 102,
-    zoneMembers: {
-      '(root)': 5,
-      client: 1,
-      commands: 33,
-      contracts: 2,
-      core: 12,
-      'daemon-server': 30,
-      platforms: 19,
-    },
+    zoneMembers: LARGEST_TYPE_CYCLE_ZONE_CEILINGS,
   },
   externalDaemonTypesImporters: [
     'src/client/client-normalizers.ts',
@@ -34,7 +28,10 @@ export const DAEMON_MODULARITY_BASELINE = {
   ],
 } as const;
 
-export const TYPE_CYCLE_BASELINE = DAEMON_MODULARITY_BASELINE.largestTypeCycle.size;
+export const TYPE_CYCLE_BASELINE = Object.values(LARGEST_TYPE_CYCLE_ZONE_CEILINGS).reduce(
+  (sum, count) => sum + count,
+  0,
+);
 
 type LogicalModulePolicy = {
   name: string;
@@ -67,13 +64,7 @@ export const LOGICAL_MODULE_POLICIES: readonly LogicalModulePolicy[] = [
   {
     name: 'replay-test',
     roots: ['src/replay/test/'],
-    forbiddenTargetRoots: [
-      'src/daemon/',
-      'src/platforms/',
-      'src/providers/',
-      'src/ad-replay/internal/',
-      'src/maestro/internal/',
-    ],
+    forbiddenTargetRoots: ['src/daemon/', 'src/platforms/', 'src/providers/'],
   },
 ];
 
@@ -126,18 +117,22 @@ function checkSessionStateBaseline(): LayeringViolation[] {
 function checkTypeCycleBaseline(members: readonly string[]): LayeringViolation[] {
   const violations: LayeringViolation[] = [];
   const baseline = DAEMON_MODULARITY_BASELINE.largestTypeCycle;
-  if (members.length > baseline.size) {
+  if (members.length > TYPE_CYCLE_BASELINE) {
     violations.push({
       rule: 'R9 type-cycle-growth',
       file: 'scripts/layering/daemon-modularity.ts',
       line: 1,
-      message: `the largest type-level import cycle grew to ${members.length} files (baseline ${baseline.size}). Declare the shared type below both modules.`,
+      message:
+        `the largest type-level import cycle grew to ${members.length} files (baseline ` +
+        `${TYPE_CYCLE_BASELINE}). A type-only import that closes a loop makes every file in the ` +
+        `loop unreadable in isolation. Declare the shared type below both modules, or if the growth ` +
+        `is genuinely warranted, raise the zone ceilings in the same commit and say why.`,
     });
   }
 
   const zoneCounts = countBy(members, targetDagZone);
   for (const [zone, count] of zoneCounts) {
-    const allowed = baseline.zoneMembers[zone as keyof typeof baseline.zoneMembers] ?? 0;
+    const allowed = baseline.zoneMembers[zone] ?? 0;
     if (count <= allowed) continue;
     violations.push({
       rule: 'R10 daemon-modularity',
@@ -174,7 +169,8 @@ function checkDaemonTypesImporters(edges: readonly ResolvedImportEdge[]): Layeri
       file,
       line: edge.line,
       message:
-        'external production imports of daemon/types.ts may only shrink from the recorded four. Use an existing neutral contract; do not move DaemonRequest into contracts to satisfy this gate.',
+        `external production imports of daemon/types.ts may only shrink from the recorded ${allowed.size}. ` +
+        'Use an existing neutral contract; do not move DaemonRequest into contracts to satisfy this gate.',
     }));
   for (const file of allowed) {
     if (importers.has(file)) continue;
@@ -242,15 +238,10 @@ function countBy(values: readonly string[], keyOf: (value: string) => string): M
 
 export function daemonModularitySummary(): string {
   const session = DAEMON_MODULARITY_BASELINE.sessionState;
-  const cycle = DAEMON_MODULARITY_BASELINE.largestTypeCycle;
   return (
     `R10 pins R7 at ${session.writerOwnedFields} writer-owned fields / ` +
-    `${session.ownerFileClaims} owner claims, R9 at ${cycle.size} files with zone ceilings, ` +
+    `${session.ownerFileClaims} owner claims, R9 at ${TYPE_CYCLE_BASELINE} files with zone ceilings, ` +
     `${DAEMON_MODULARITY_BASELINE.externalDaemonTypesImporters.length} external daemon/types.ts importers, ` +
     'and zero forbidden logical-module imports'
   );
-}
-
-export function sessionStateFieldCount(): number {
-  return Object.keys(SESSION_STATE_FIELD_OWNERS).length + STORE_OWNED_SESSION_STATE_FIELDS.size;
 }

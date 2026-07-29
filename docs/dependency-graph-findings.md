@@ -161,7 +161,8 @@ but it is a comprehension one, and it is the single largest obstacle to reading 
 isolation. At the current measured commit it spans `commands` (33), `daemon-server` (30),
 `platforms` (19), `core` (12), root composition (5), `contracts` (2), and `client` (1).
 
-Now ratcheted for growth by **R9** (`TYPE_CYCLE_BASELINE` in `check.ts`), so it cannot get worse
+Now ratcheted for growth by **R9** (`TYPE_CYCLE_BASELINE`, derived from the zone ceilings in
+`scripts/layering/daemon-modularity.ts`), so it cannot get worse
 while nobody is looking — a type-only import that closes a new loop fails the gate, verified by
 adding one type-only import that closes a loop and watching the gate reject it. Growth-only on
 purpose: reducing it is a real refactor, so a

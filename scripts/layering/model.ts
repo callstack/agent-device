@@ -14,6 +14,13 @@ export type ResolvedImportEdge = ImportEdge & {
   toZone: string;
 };
 
+export type LayeringViolation = {
+  rule: string;
+  file: string;
+  line: number;
+  message: string;
+};
+
 export type BackEdgeMap = Record<string, string[]>;
 
 // The ranked target spine. Back-edge detection is defined ONLY between two ranked

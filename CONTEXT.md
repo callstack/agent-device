@@ -306,8 +306,8 @@ The perfect-shape refactor is complete and merged. Its end-state:
 - Type-cycle growth (R9). R4 keeps the VALUE import graph acyclic, so every remaining cycle is
   created by type-only imports — free at runtime, invisible to R5/R6, and the largest single
   obstacle to reading a subsystem in isolation: inside a strongly-connected component of 102 files,
-  no file has a self-contained slice. `TYPE_CYCLE_BASELINE`, exported from
-  `scripts/layering/check.ts`, ratchets it for **growth only**, deliberately unlike R6: reducing it
+  no file has a self-contained slice. `TYPE_CYCLE_BASELINE`, derived from the zone ceilings in
+  `scripts/layering/daemon-modularity.ts`, ratchets it for **growth only**, deliberately unlike R6: reducing it
   is a real refactor rather than a file move, so a hard equality would turn every unrelated
   improvement into a baseline edit. A shrunk tree is reported in the success line instead of
   failing. Hubs by in-component dependents: `runtime-contract.ts` (25),
@@ -317,7 +317,10 @@ The perfect-shape refactor is complete and merged. Its end-state:
   `daemon-server` 30, `platforms` 19, `core` 12, root 5, `contracts` 2, `client` 1), and the four
   production importers of `daemon/types.ts` from outside daemon. R7 counts and external importers may
   only shrink; no zone may grow inside R9, and replay/Maestro/replay-test engine files remain outside
-  it. Zero-count policies begin enforcing when `src/ad-replay/` or `src/maestro/` first exists and
+  it. This per-zone migration ratchet is intentionally stricter than R9's ordinary total-growth
+  rule: during the extraction, even moving cycle membership into a zone at its ceiling must be
+  justified by lowering another ceiling or changing the migration baseline explicitly. Zero-count
+  policies begin enforcing when `src/ad-replay/` or `src/maestro/` first exists and
   already protect `src/replay/test/`: engines cannot import daemon/platform/provider implementations,
   and no logical module may deep-import another module's `internal/` tree. These are migration
   ratchets, not permission to scaffold façades before a real seam has two adapters.
