@@ -222,6 +222,7 @@ async function completeOpenCommand(params: {
     existingSession,
     deviceClaim,
   } = params;
+  await req.internal?.retainDeviceExecutionLock?.(device.id);
   const shouldRelaunch = req.flags?.relaunch === true;
   const traceLogPath = existingSession?.trace?.outPath;
   let sessionAppBundleId = appBundleId;
@@ -327,7 +328,6 @@ async function completeOpenCommand(params: {
   }
   const runnerTargetPredatesOpen = runnerPrewarmAwaited;
   const openStartedAtMs = Date.now();
-  await req.internal?.retainDeviceExecutionLock?.(device.id);
   const provisionalSession = await prepareOpenDispatchSession({
     req,
     sessionName,

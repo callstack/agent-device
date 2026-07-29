@@ -33,15 +33,19 @@ import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts'
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createRequestHandler } from '../request-router.ts';
+import { applyRuntimeHintsToApp } from '../runtime-hints.ts';
 
 const mockDispatch = vi.mocked(dispatchCommand);
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
+const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintsToApp);
 
 beforeEach(() => {
   mockDispatch.mockReset();
   mockDispatch.mockResolvedValue({});
   mockResolveTargetDevice.mockReset();
   mockResolveTargetDevice.mockResolvedValue(IOS_SIMULATOR);
+  mockApplyRuntimeHints.mockReset();
+  mockApplyRuntimeHints.mockResolvedValue();
 });
 
 test('replay runs active-session actions inside the parent request provider scope', async () => {
@@ -154,24 +158,21 @@ test('fresh replay retains a dynamically selected device through finalization', 
   const replayPath = path.join(root, 'flow.ad');
   fs.writeFileSync(
     replayPath,
-    'runtime set --platform ios --metro-host localhost\nopen "demo://checkout"\nhome\n',
+    'runtime set --platform ios --metro-host localhost\nopen "demo://checkout"\n',
   );
   const sessionStore = makeSessionStore('agent-device-replay-device-lock-');
   const leaseRegistry = new LeaseRegistry();
-  let releaseReplayAction: () => void = () => {};
-  const replayActionReleased = new Promise<void>((resolve) => {
-    releaseReplayAction = resolve;
+  let releasePreDispatchEffect: () => void = () => {};
+  const preDispatchEffectReleased = new Promise<void>((resolve) => {
+    releasePreDispatchEffect = resolve;
   });
-  let markReplayActionEntered: () => void = () => {};
-  const replayActionEntered = new Promise<void>((resolve) => {
-    markReplayActionEntered = resolve;
+  let markPreDispatchEffectEntered: () => void = () => {};
+  const preDispatchEffectEntered = new Promise<void>((resolve) => {
+    markPreDispatchEffectEntered = resolve;
   });
-  mockDispatch.mockImplementation(async (_device, command) => {
-    if (command === 'home') {
-      markReplayActionEntered();
-      await replayActionReleased;
-    }
-    return {};
+  mockApplyRuntimeHints.mockImplementation(async () => {
+    markPreDispatchEffectEntered();
+    await preDispatchEffectReleased;
   });
 
   const handler = createRequestHandler({
@@ -190,7 +191,7 @@ test('fresh replay retains a dynamically selected device through finalization', 
     flags: { platform: 'ios' },
     meta: { cwd: root, requestId: 'replay-device-lock', deviceKey: 'test:sim-1' },
   });
-  await replayActionEntered;
+  await preDispatchEffectEntered;
 
   sessionStore.set('external', makeIosSession('external'));
   let externalRequestSettled = false;
@@ -210,7 +211,7 @@ test('fresh replay retains a dynamically selected device through finalization', 
   await new Promise<void>((resolve) => setImmediate(resolve));
   expect(externalRequestSettled).toBe(false);
 
-  releaseReplayAction();
+  releasePreDispatchEffect();
   await expect(replayResponse).resolves.toMatchObject({ ok: true });
   await externalResponse;
   expect(externalRequestSettled).toBe(true);
