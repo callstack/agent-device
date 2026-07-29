@@ -131,6 +131,7 @@ jobs:
             test -n "$ANDROID_SERIAL"
             BOOT_FINISHED_AT="$(date +%s)"
             pnpm build
+            pnpm build:android
             pnpm clean:daemon
             FULL_STARTED_AT="$(date +%s)"
             AGENT_DEVICE_ANDROID_E2E=1 AGENT_DEVICE_ANDROID_E2E_TIER=full AGENT_DEVICE_ANDROID_SERIAL="$ANDROID_SERIAL" AGENT_DEVICE_FIXTURE_APP_PATH="${{ steps.fixture-app.outputs.apk-path }}" AGENT_DEVICE_FIXTURE_APP_ID="${{ steps.fixture-app.outputs.app-id }}" node --test test/integration/smoke-android-emulator.test.ts
