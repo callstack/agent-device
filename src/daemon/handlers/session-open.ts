@@ -227,6 +227,7 @@ async function completeOpenCommand(params: {
   let sessionAppBundleId = appBundleId;
   const openCommandStartedAtMs = Date.now();
   const timing: OpenTiming = {};
+  const usesLocalIosSimulatorLifecycle = isIosSimulator(device) && !isActiveProviderDevice(device);
 
   const shouldPrewarmIosRunner =
     isIosFamily(device) &&
@@ -266,11 +267,10 @@ async function completeOpenCommand(params: {
   // touches the runner there (both ride simctl), so the xcodebuild ramp
   // overlaps the app relaunch instead of following it. Real devices tear the
   // runner down in relaunchCloseApp, so their prewarm stays post-open.
-  if (shouldPrewarmIosRunner && isIosSimulator(device) && !shouldPrewarmRunnerBeforeOpen) {
+  if (shouldPrewarmIosRunner && usesLocalIosSimulatorLifecycle && !shouldPrewarmRunnerBeforeOpen) {
     schedulePrewarm();
   }
 
-  const usesLocalIosSimulatorLifecycle = isIosSimulator(device) && !isActiveProviderDevice(device);
   const launchPlan = buildSessionOpenLaunchPlan({
     openPositionals,
     runtime,
@@ -371,11 +371,7 @@ async function completeOpenCommand(params: {
   } else if (runnerPrewarm && !runnerPrewarmAwaited) {
     timing.runnerPrewarmWaited = false;
   }
-  if (
-    !isActiveProviderDevice(device) &&
-    isIosSimulator(device) &&
-    (shouldRelaunch || runnerTargetPredatesOpen)
-  ) {
+  if (usesLocalIosSimulatorLifecycle && (shouldRelaunch || runnerTargetPredatesOpen)) {
     await notifyIosRunnerAppRelaunched(device, runnerPrewarmOptions);
   }
   sessionAppBundleId = await inferAndroidPackageAfterOpen(device, openTarget, sessionAppBundleId);

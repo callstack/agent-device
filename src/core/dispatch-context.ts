@@ -17,8 +17,8 @@ export type DispatchContext = ScreenshotDispatchFlags & {
   activity?: string;
   launchConsole?: string;
   launchArgs?: string[];
-  // iOS simulator only: relaunch via a single `simctl launch
-  // --terminate-running-process` instead of a separate terminate + launch.
+  // iOS simulator only: terminate the current app inside the platform open,
+  // either during `simctl launch` or immediately before `simctl openurl`.
   terminateRunningApp?: boolean;
   clearAppState?: boolean;
   verbose?: boolean;

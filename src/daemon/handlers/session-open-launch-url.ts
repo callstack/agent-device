@@ -25,9 +25,11 @@ export function buildSessionOpenLaunchPlan(params: {
     return { openPositionals };
   }
 
-  const hasDirectLaunchOptions =
-    Boolean(flags?.launchConsole?.trim()) || Boolean(flags?.launchArgs?.length);
-  if (foldRuntimeLaunchUrl && !hasDirectLaunchOptions) {
+  const requiresDirectAppLaunch =
+    flags?.clearAppState === true ||
+    Boolean(flags?.launchConsole?.trim()) ||
+    Boolean(flags?.launchArgs?.length);
+  if (foldRuntimeLaunchUrl && !requiresDirectAppLaunch) {
     return { openPositionals: [openTarget, launchUrl] };
   }
   return {
@@ -46,11 +48,12 @@ export async function dispatchSessionOpenFollowUpLaunchUrl(params: {
 }): Promise<void> {
   const { launchUrl, device, req, logPath, appBundleId, traceLogPath } = params;
   const followUpFlags = req.flags
-    ? (Object.fromEntries(
-        Object.entries(req.flags).filter(
-          ([name]) => name !== 'launchConsole' && name !== 'launchArgs',
-        ),
-      ) as NonNullable<DaemonRequest['flags']>)
+    ? {
+        ...req.flags,
+        clearAppState: undefined,
+        launchConsole: undefined,
+        launchArgs: undefined,
+      }
     : undefined;
   const context = contextFromFlags(logPath, followUpFlags, appBundleId, traceLogPath);
   await dispatchCommand(device, 'open', [launchUrl], req.flags?.out, context);

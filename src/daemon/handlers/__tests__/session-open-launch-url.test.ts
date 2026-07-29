@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { IOS_DEVICE, IOS_SIMULATOR } from '../../../__tests__/test-utils/index.ts';
 import { setActiveProviderDeviceRuntimes } from '../../../provider-device-runtime.ts';
 import {
   makeSession,
@@ -11,15 +12,6 @@ import {
 } from './session-test-harness.ts';
 import { buildSessionOpenLaunchPlan } from '../session-open-launch-url.ts';
 import { handleSessionCommands } from '../session.ts';
-
-const iosSimulator = {
-  platform: 'apple' as const,
-  appleOs: 'ios' as const,
-  id: 'sim-1',
-  name: 'iPhone 17 Pro',
-  kind: 'simulator' as const,
-  booted: true,
-};
 
 describe('buildSessionOpenLaunchPlan', () => {
   test('folds an iOS launch URL into the app open', () => {
@@ -49,6 +41,20 @@ describe('buildSessionOpenLaunchPlan', () => {
     });
   });
 
+  test('keeps clear-state on the direct app launch before the URL open', () => {
+    expect(
+      buildSessionOpenLaunchPlan({
+        openPositionals: ['com.example.app'],
+        runtime: { platform: 'ios', launchUrl: 'myapp://automation' },
+        flags: { clearAppState: true },
+        foldRuntimeLaunchUrl: true,
+      }),
+    ).toEqual({
+      openPositionals: ['com.example.app'],
+      followUpLaunchUrl: 'myapp://automation',
+    });
+  });
+
   test('keeps the existing two-dispatch contract when URL folding is unavailable', () => {
     expect(
       buildSessionOpenLaunchPlan({
@@ -67,7 +73,7 @@ describe('buildSessionOpenLaunchPlan', () => {
     const sessionStore = makeSessionStore();
     const sessionName = 'ios-simulator-runtime-url-relaunch-session';
     sessionStore.set(sessionName, {
-      ...makeSession(sessionName, iosSimulator),
+      ...makeSession(sessionName, IOS_SIMULATOR),
       appName: 'com.example.app',
     });
     sessionStore.setRuntimeHints(sessionName, {
@@ -76,7 +82,7 @@ describe('buildSessionOpenLaunchPlan', () => {
     });
 
     const calls: Array<{ command: string; terminateRunningApp?: boolean }> = [];
-    mockResolveTargetDevice.mockResolvedValue(iosSimulator);
+    mockResolveTargetDevice.mockResolvedValue(IOS_SIMULATOR);
     mockDispatch.mockImplementation(async (_device, command, positionals, _out, context) => {
       calls.push({
         command: `${command}:${positionals.join(' ')}`,
@@ -108,22 +114,69 @@ describe('buildSessionOpenLaunchPlan', () => {
     ]);
   });
 
+  test('clears state on the app launch before opening the runtime URL', async () => {
+    const sessionStore = makeSessionStore();
+    const sessionName = 'ios-simulator-runtime-url-clear-state-session';
+    sessionStore.set(sessionName, {
+      ...makeSession(sessionName, IOS_SIMULATOR),
+      appName: 'com.example.app',
+    });
+    sessionStore.setRuntimeHints(sessionName, {
+      platform: 'ios',
+      launchUrl: 'myapp://automation',
+    });
+
+    const calls: Array<{ command: string; clearAppState?: boolean }> = [];
+    mockResolveTargetDevice.mockResolvedValue(IOS_SIMULATOR);
+    mockDispatch.mockImplementation(async (_device, command, positionals, _out, context) => {
+      calls.push({
+        command: `${command}:${positionals.join(' ')}`,
+        clearAppState: context?.clearAppState,
+      });
+      return {};
+    });
+
+    const response = await handleSessionCommands({
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'open',
+        positionals: [],
+        flags: { relaunch: true, clearAppState: true },
+      },
+      sessionName,
+      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      sessionStore,
+      invoke: noopInvoke,
+    });
+
+    expect(response?.ok).toBe(true);
+    expect(calls).toEqual([
+      {
+        command: 'close:com.example.app',
+        clearAppState: true,
+      },
+      {
+        command: 'open:com.example.app',
+        clearAppState: true,
+      },
+      {
+        command: 'open:myapp://automation',
+        clearAppState: undefined,
+      },
+    ]);
+  });
+
   test('keeps a physical iOS runtime URL as a follow-up open', async () => {
     const sessionStore = makeSessionStore();
     const sessionName = 'ios-device-runtime-url-session';
-    const iosDevice = {
-      ...iosSimulator,
-      id: 'device-1',
-      name: 'My iPhone',
-      kind: 'device' as const,
-    };
     sessionStore.setRuntimeHints(sessionName, {
       platform: 'ios',
       launchUrl: 'https://example.com/automation',
     });
 
     const calls: string[] = [];
-    mockResolveTargetDevice.mockResolvedValue(iosDevice);
+    mockResolveTargetDevice.mockResolvedValue(IOS_DEVICE);
     mockDispatch.mockImplementation(async (_device, command, positionals) => {
       calls.push(`${command}:${positionals.join(' ')}`);
       return {};
@@ -151,7 +204,7 @@ describe('buildSessionOpenLaunchPlan', () => {
     const sessionStore = makeSessionStore();
     const sessionName = 'provider-ios-runtime-url-session';
     const providerSimulator = {
-      ...iosSimulator,
+      ...IOS_SIMULATOR,
       id: 'provider:ios:lease-a',
       name: 'Provider iPhone',
     };

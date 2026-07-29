@@ -108,9 +108,6 @@ export async function openIosApp(
       throw new AppError('INVALID_ARGS', LAUNCH_CONSOLE_DIRECT_APP_ONLY_MESSAGE);
     }
     if (device.kind === 'simulator') {
-      if (options?.terminateRunningApp && options.appBundleId) {
-        await terminateIosSimulatorApp(device, options.appBundleId);
-      }
       await openIosSimulatorUrl(device, deepLinkTarget, launchArgs);
       return;
     }

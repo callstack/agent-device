@@ -44,22 +44,3 @@ test('iOS simulator URL relaunch terminates the app before opening the URL', asy
     ['xcrun', ['simctl', 'openurl', 'sim-1', 'myapp://automation'], undefined],
   ]);
 });
-
-test('iOS simulator deep-link relaunch terminates the active app before opening the URL', async () => {
-  await openIosApp(IOS_TEST_SIMULATOR, 'myapp://automation', {
-    appBundleId: 'com.example.app',
-    terminateRunningApp: true,
-  });
-
-  assert.deepEqual(mockRunCmd.mock.calls, [
-    [
-      'xcrun',
-      ['simctl', 'terminate', 'sim-1', 'com.example.app'],
-      {
-        allowFailure: true,
-        timeoutMs: IOS_SIMULATOR_TERMINATE_TIMEOUT_MS,
-      },
-    ],
-    ['xcrun', ['simctl', 'openurl', 'sim-1', 'myapp://automation'], undefined],
-  ]);
-});
