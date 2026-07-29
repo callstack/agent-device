@@ -166,8 +166,8 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
     'snapshot',
     '-i',
   ]);
-  assertDiffLine(diff, 'removed', 'Automation lab');
-  assertDiffLine(diff, 'added', 'Settings');
+  assertDiffLine(diff, 'removed', 'Open automation alert');
+  assertDiffLine(diff, 'added', 'Open automation lab');
   await assertWaitText(context, 'Settings');
   verifyCommand(context, C.diff, 'snapshot diff reports the Automation-to-Settings transition');
   verifyCommand(context, C.back, 'Android Back returns from automation route to Settings');
