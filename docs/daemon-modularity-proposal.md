@@ -1,6 +1,7 @@
 # Proposal: make daemon a serialized host, not the home of every runtime
 
-Status: design proposal, revised after consolidated review
+Status: revised design context; implementation handoff:
+[`#1478`](https://github.com/callstack/agent-device/issues/1478)
 
 Measured at: `e545544dfa85`
 
@@ -393,6 +394,11 @@ the publication projection owns all artifact eligibility and commit transitions.
 daemon-owned locked replay coordinator sees the replay projection, and neither projection is passed
 to an engine.
 
+> **Do not implement the following sketch verbatim.** It illustrates the one-aggregate/two-projection
+> invariant and the minimum retry state. Issue
+> [`#1478`](https://github.com/callstack/agent-device/issues/1478) owns the exact worker contract and
+> supersedes this TypeScript wherever it is more specific.
+
 The current cluster of co-resident flags collapses into one state:
 
 ```ts
@@ -416,7 +422,7 @@ type RepairPublicationStatus =
       receipt?: RepairPlatformCloseReceipt;
     };
 
-type ScriptPublicationState =
+type SessionScriptState =
   | { kind: 'inactive' }
   | {
       kind: 'ordinary';
@@ -938,7 +944,10 @@ The session-boundary prototype exercises:
 
 - ref activation and expiry before both successful and failed mutations;
 - parameterized recording;
-- repair arm/corrective-resume/commit;
+- one private tagged aggregate exposed through separate replay and publication capability
+  projections;
+- repair arm, corrective-resume watermark, completion, close receipt, retry, and commit on the same
+  aggregate instance;
 - platform-close failure without state mutation;
 - durable target/force and close-receipt state across a failed publication;
 - same-close retry without redispatch, changed-close redispatch, and explicit committed/aborted
@@ -946,8 +955,9 @@ The session-boundary prototype exercises:
 - client resume-digest validation outside session state;
 - no-clobber active publication and repair/publication disjointness.
 
-It demonstrates that these invariants can be expressed through aggregate methods without exposing a
-mutable session record.
+It demonstrates that these invariants can be expressed through two narrow capability projections
+over one aggregate without exposing a mutable session record or maintaining parallel repair and
+publication state.
 
 These are interface-thinking aids, not feasibility evidence. The stronger production evidence is
 the existing replay-test seam: `session-test-types.ts` already describes `runReplay`,
@@ -966,20 +976,14 @@ probes in one change. The root scripts make these deliberate executable entry po
 Fallow; they remain throwaway logic models, not production scaffolding or regression suites, and
 should be removed with the probes after the migration questions are settled.
 
-## Decisions to grill before implementation
+## Implementation handoff
 
-1. What is the smallest failure type that preserves `code`, `hint`, `diagnosticId`, `logPath`,
-   retriable/support details, and structured divergence without importing `DaemonError`?
-2. Should replay-test inspect through its host, or should engines expose stable manifests directly?
-3. Which neutral snapshot/selector types are truly shared enough to become a leaf contract if a
-   workspace trigger is eventually earned?
-4. Can a request-bound device binding replace all eight resolver dependencies without hiding
-   guarantee-path evidence or weakening provider-first tests?
-5. Which session resources require ordered cleanup, and which can use independent best-effort
-   finalizers?
-6. What daemon-to-platform import count is unavoidable at the composition root after all adapters
-   are private?
+Issue [`#1478`](https://github.com/callstack/agent-device/issues/1478) is the versioned execution
+plan. It records the post-review interface decisions, compatibility constraints, dependency-ordered
+worker briefs, STOP conditions, success metrics, and final documentation cleanup. The sketches in
+this proposal illustrate those constraints; they are not a standalone worker specification. Where
+the issue is more specific, implement the issue rather than extrapolating from a sketch here.
 
-These questions are narrow enough to grill against actual call sites before stabilizing package
-exports. The optimization target is the minimum context and authority required for a safe
+This proposal remains the source for rationale, ADR constraints, measurements, tradeoffs, and probe
+evidence. The optimization target is the minimum context and authority required for a safe
 contribution, not minimum LOC or the maximum number of packages.

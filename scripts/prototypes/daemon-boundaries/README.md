@@ -32,17 +32,16 @@ pnpm prototype:session-boundary
 Question: can a daemon-owned coordinator keep replay from receiving any mutable `SessionState`
 interface, while plan-digest validation remains engine-owned and publication remains session-owned?
 
-The prototype uses an internal state capsule, not an engine port. It puts ref-frame, recording,
-corrective-resume, and repair transitions behind daemon-owned authority, keeps a client-supplied
-plan-digest check outside session state, rejects active publication while a repair owns the session,
-and calls a pure `.ad` serializer from session-owned publication.
+The prototype uses one internal tagged script aggregate, not an engine port or parallel replay and
+publication state. Separate `ReplaySessionTransaction` and `SessionScriptPublication` capability
+projections mutate that same aggregate. The repair scenario carries one instance through arm,
+corrective-resume watermark, recorded correction, completion, successful platform-close receipt,
+failed publication, retry, and commit.
 
-The focused repair-publication sub-probe models target and per-target force authorization together
-with explicit armed, complete, close-succeeded, committed, and aborted states. Its assertions pin
-the transaction edges called out by the production close path: platform-close failure leaves state
-unchanged; publication failure retains an operation-keyed close receipt; retrying the same close
-does not dispatch it twice; changing the close identity does; retargeting without live force drops
-the old target's authorization; and terminal committed or aborted state is explicit. The aggregate
-probe also covers invalid transitions, ref expiry before successful and failed mutations,
-repair/recording disjointness, digest validation without session mutation, and single publication,
-then prints compact JSON evidence.
+Its assertions pin the transaction edges called out by the production close path: platform-close
+failure leaves the whole aggregate unchanged; publication failure retains target/force and an
+operation-keyed close receipt; retrying the same close does not dispatch it twice; changing the
+close identity does; retargeting without live force drops the old target's authorization; and
+terminal committed or aborted state is explicit. The aggregate probe also covers ref expiry before
+successful and failed mutations, repair/recording disjointness, digest validation without session
+mutation, and single active publication, then prints compact JSON evidence.
