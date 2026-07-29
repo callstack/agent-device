@@ -11,6 +11,7 @@ import {
   buildReplayDivergenceFailureResponse,
   hoistReplayFailureCauseDiagnosticMeta,
 } from './session-replay-runtime-failure-response.ts';
+import { getRequestSignal } from '../../request/cancel.ts';
 
 export async function withReplayFailureDiagnostics(params: {
   response: DaemonResponse;
@@ -87,6 +88,7 @@ async function withReplayFailureContext(params: {
     scrubVars,
     planActions,
     planDigest,
+    signal: getRequestSignal(req.meta?.requestId),
   });
   return buildReplayDivergenceFailureResponse({
     error: cause,

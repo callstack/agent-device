@@ -42,10 +42,14 @@ function makeMaestroPlan(): MaestroReplayPlan {
   };
 }
 
-async function buildFailureResponse(
+async function buildFailureScenario(
   command: MaestroCommand,
   nodes: SnapshotNode[],
-): Promise<Extract<Awaited<ReturnType<typeof buildTypedMaestroFailureResponse>>, { ok: false }>> {
+): Promise<{
+  response: Extract<Awaited<ReturnType<typeof buildTypedMaestroFailureResponse>>, { ok: false }>;
+  sessionStore: SessionStore;
+  sessionName: string;
+}> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-suggestions-'));
   const sessionName = 'default';
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
@@ -71,7 +75,14 @@ async function buildFailureResponse(
     logPath: path.join(root, 'daemon.log'),
   });
   if (response.ok) throw new Error('expected typed Maestro failure response');
-  return response;
+  return { response, sessionStore, sessionName };
+}
+
+async function buildFailureResponse(
+  command: MaestroCommand,
+  nodes: SnapshotNode[],
+): Promise<Extract<Awaited<ReturnType<typeof buildTypedMaestroFailureResponse>>, { ok: false }>> {
+  return (await buildFailureScenario(command, nodes)).response;
 }
 
 test('typed Maestro failure projection keeps the event command and source provenance', () => {
@@ -303,6 +314,41 @@ test('typed Maestro failure diagnostics never render inputText payloads', async 
 
   expect(JSON.stringify(response.error)).not.toContain(text);
   expect(response.error.message).toContain('inputText');
+});
+
+test('typed Maestro failure publishes exactly the refs exposed by its divergence', async () => {
+  const command = {
+    kind: 'tapOn' as const,
+    source: { path: '/flows/actions.yaml', line: 4 },
+    target: { space: 'target' as const, selector: { label: 'Missing' } },
+  } satisfies Extract<MaestroCommand, { kind: 'tapOn' }>;
+  const scenario = await buildFailureScenario(command, [
+    {
+      ref: 'e1',
+      index: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 402, height: 874 },
+    },
+    {
+      ref: 'e2',
+      index: 1,
+      parentIndex: 0,
+      label: 'Available action',
+      type: 'Button',
+      rect: { x: 16, y: 40, width: 140, height: 44 },
+      hittable: true,
+    },
+  ]);
+  const divergence = scenario.response.error.details?.divergence as {
+    screen: { state: string; refs: Array<{ ref: string }> };
+  };
+  const exposedRefs = divergence.screen.refs.map(({ ref }) => ref);
+
+  expect(divergence.screen.state).toBe('available');
+  expect(exposedRefs).toEqual(['e2']);
+  expect(scenario.sessionStore.get(scenario.sessionName)?.refFrameScope).toEqual(
+    new Set(exposedRefs),
+  );
 });
 
 test('typed Maestro suggestions rank visible childOf candidates and exclude out-of-scope nodes', async () => {

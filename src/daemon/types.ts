@@ -52,6 +52,11 @@ type DaemonRequestInternal = {
   openLifecycle?: DaemonOpenLifecycle;
   admittedLease?: DeviceLease;
   /**
+   * Daemon-composed hierarchy capture used as operational evidence only.
+   * It must not issue or replace client ref authority.
+   */
+  observationOnly?: true;
+  /**
    * Implicit caller scope resolved before a nested dispatch replaces the
    * public session name with its effective scoped key.
    */

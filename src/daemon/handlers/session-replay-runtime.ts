@@ -60,6 +60,7 @@ import {
   isTypedMaestroReplay,
   runTypedMaestroReplayFile,
 } from './session-replay-maestro-runtime.ts';
+import { getRequestSignal } from '../../request/cancel.ts';
 
 /** Per-run invariants for a single replay step (ADR 0012 step 4 verify + dispatch + guard). */
 type ReplayStepContext = {
@@ -76,6 +77,7 @@ type ReplayStepContext = {
   actionTracePath: string | undefined;
   responseLevel: ResponseLevel | undefined;
   invoke: DaemonInvokeFn;
+  signal: AbortSignal | undefined;
 };
 
 /**
@@ -109,6 +111,7 @@ async function resolveReplayStepResponse(
     responseLevel: ctx.responseLevel,
     planActions: ctx.actions,
     planDigest: ctx.planDigest,
+    signal: ctx.signal,
   });
   if (!verification.verified) return verification.response;
   const guard = verification.guard;
@@ -178,6 +181,7 @@ async function convertIdentityRefusalResponse(params: {
     responseLevel: ctx.responseLevel,
     planActions: ctx.actions,
     planDigest: ctx.planDigest,
+    signal: ctx.signal,
   };
   if (params.guard && isReplayTargetGuardMismatchResponse(response)) {
     return await buildReplayTargetGuardMismatchResponse({ ...mismatchParams, guard: params.guard });
@@ -252,6 +256,7 @@ export async function runReplayScriptFile(params: {
       actionTracePath,
       responseLevel: req.meta?.responseLevel,
       invoke,
+      signal: getRequestSignal(req.meta?.requestId),
     };
     const failure = await executeReplayActions({
       req,

@@ -241,6 +241,90 @@ test('leased session heartbeat is serialized with the request execution lock', a
   expect(leaseRegistry.listActiveLeases()[0]?.heartbeatAt).toBe(3_000);
 });
 
+test('a later external command cannot interleave with replay observation finalization', async () => {
+  const sessionStore = makeSessionStore('agent-device-request-scope-');
+  sessionStore.set('default', makeIosSession('default'));
+  const leaseRegistry = new LeaseRegistry();
+  const replay = await createRequestExecutionScope({
+    req: makeRequest({ command: 'replay' }),
+    sessionStore,
+    leaseRegistry,
+  });
+  const laterSnapshot = await createRequestExecutionScope({
+    req: makeRequest({ command: 'snapshot' }),
+    sessionStore,
+    leaseRegistry,
+  });
+
+  let finishReplay: () => void = () => {};
+  let replayEntered: () => void = () => {};
+  const replayEnteredPromise = new Promise<void>((resolve) => {
+    replayEntered = resolve;
+  });
+  const replayRun = replay.runLocked(
+    async () =>
+      await new Promise<void>((resolve) => {
+        finishReplay = resolve;
+        replayEntered();
+      }),
+  );
+  await replayEnteredPromise;
+
+  let laterCommandEntered = false;
+  const laterRun = laterSnapshot.runLocked(async () => {
+    laterCommandEntered = true;
+  });
+  await Promise.resolve();
+  expect(laterCommandEntered).toBe(false);
+
+  finishReplay();
+  await replayRun;
+  await laterRun;
+  expect(laterCommandEntered).toBe(true);
+});
+
+test('a fresh replay keeps its session lock after a nested open binds the device', async () => {
+  const sessionStore = makeSessionStore('agent-device-request-scope-');
+  const leaseRegistry = new LeaseRegistry();
+  const replay = await createRequestExecutionScope({
+    req: makeRequest({ command: 'replay' }),
+    sessionStore,
+    leaseRegistry,
+  });
+
+  let finishReplay: () => void = () => {};
+  let sessionOpened: () => void = () => {};
+  const sessionOpenedPromise = new Promise<void>((resolve) => {
+    sessionOpened = resolve;
+  });
+  const replayRun = replay.runLocked(
+    async () =>
+      await new Promise<void>((resolve) => {
+        sessionStore.set('default', makeIosSession('default'));
+        finishReplay = resolve;
+        sessionOpened();
+      }),
+  );
+  await sessionOpenedPromise;
+
+  const laterSnapshot = await createRequestExecutionScope({
+    req: makeRequest({ command: 'snapshot' }),
+    sessionStore,
+    leaseRegistry,
+  });
+  let laterCommandEntered = false;
+  const laterRun = laterSnapshot.runLocked(async () => {
+    laterCommandEntered = true;
+  });
+  await Promise.resolve();
+  expect(laterCommandEntered).toBe(false);
+
+  finishReplay();
+  await replayRun;
+  await laterRun;
+  expect(laterCommandEntered).toBe(true);
+});
+
 test('leased session rejects mismatched lease id before dispatch', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   const leaseRegistry = new LeaseRegistry();

@@ -51,8 +51,11 @@ export async function invokeMaestroPublicOperation(
     ...baseReq
   } = options.baseReq;
   const effectiveFlags = flagsWith(baseFlags, projected.flags ?? {});
-  const effectiveInternal =
-    projected.internal === undefined ? baseInternal : { ...baseInternal, ...projected.internal };
+  const effectiveInternal = stripUndefined({
+    ...baseInternal,
+    ...projected.internal,
+    ...(operation.kind === 'snapshot' ? { observationOnly: true as const } : {}),
+  });
   const response = await options.invoke(
     stripUndefined({
       ...baseReq,
@@ -60,7 +63,7 @@ export async function invokeMaestroPublicOperation(
       positionals: projected.positionals,
       input: projected.input,
       flags: effectiveFlags,
-      internal: effectiveInternal,
+      internal: Object.keys(effectiveInternal).length > 0 ? effectiveInternal : undefined,
     }),
   );
   if (!response.ok) throw daemonResponseError(response);

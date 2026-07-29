@@ -1,13 +1,9 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { sleep } from '../../utils/timeouts.ts';
-import { markSessionPartialRefsIssued, setSessionSnapshot } from '../session-snapshot.ts';
 import {
   isSparseSnapshotQualityVerdict,
   isUnreadableCaptureContentError,
 } from '../../snapshot/snapshot-quality.ts';
 import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
-import { redactDiagnosticData } from '../../kernel/redaction.ts';
 import type { CommandFlags } from '../../core/dispatch.ts';
 import type { DaemonError, ResponseLevel } from '../../kernel/contracts.ts';
 import type { SnapshotNode } from '../../kernel/snapshot.ts';
@@ -28,11 +24,15 @@ import {
   type ReplayRepairHintCapture,
 } from './session-replay-repair-hint.ts';
 import { SessionStore } from '../session-store.ts';
+import {
+  bindInternalObservationAuthority,
+  type InternalObservationEvidence,
+} from '../internal-observation.ts';
+import { boundReplayDivergenceForSession } from './session-replay-divergence-publication.ts';
 import type { ReplayReportAction } from './session-replay-report-action.ts';
 import type { SessionAction, SessionState } from '../types.ts';
 import {
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
-  boundReplayDivergence,
   createReplayDivergenceSanitizer,
   type ReplayDivergence,
   type ReplayDivergenceScreen,
@@ -68,6 +68,7 @@ export async function buildReplayFailureDivergence(params: {
   planActions: SessionAction[];
   /** SHA-256 digest of the canonical plan `planActions` came from (`computeReplayPlanDigest`). */
   planDigest: string;
+  signal?: AbortSignal;
 }): Promise<ReplayDivergence> {
   const {
     error,
@@ -83,6 +84,7 @@ export async function buildReplayFailureDivergence(params: {
     scrubVars = [],
     planActions,
     planDigest,
+    signal,
   } = params;
   const sanitize = createReplayDivergenceSanitizer(scrubVars);
 
@@ -146,27 +148,13 @@ export async function buildReplayFailureDivergence(params: {
     repairHint,
   };
 
-  return boundReplayDivergenceForSession({ sessionStore, sessionName, divergence, responseLevel });
-}
-
-/**
- * Shared response-level bounding + overflow-artifact wiring (`boundReplayDivergence`
- * bound to this session's artifact directory). Exported so step 4's
- * target-binding divergence goes through the exact same bounding/overflow
- * behavior as an action-failure divergence.
- */
-export function boundReplayDivergenceForSession(params: {
-  sessionStore: SessionStore;
-  sessionName: string;
-  divergence: ReplayDivergence;
-  responseLevel: ResponseLevel | undefined;
-}): ReplayDivergence {
-  const { sessionStore, sessionName, divergence, responseLevel } = params;
-  return boundReplayDivergence({
+  return boundReplayDivergenceForSession({
+    sessionStore,
+    sessionName,
     divergence,
-    level: responseLevel,
-    writeOverflowArtifact: (payload) =>
-      writeReplayDivergenceArtifact(sessionStore, sessionName, payload),
+    responseLevel,
+    evidence: observation.state === 'available' ? observation.evidence : undefined,
+    ...(signal ? { signal } : {}),
   });
 }
 
@@ -175,6 +163,7 @@ export type DivergenceObservation =
       state: 'available';
       nodes: SnapshotNode[];
       refsGeneration: number;
+      evidence: InternalObservationEvidence;
       /** Session's app bundle id at capture time; threaded to `buildDivergenceScreen`'s chrome filter (Android IME-scope guard — inert on iOS). */
       appBundleId: string | undefined;
     }
@@ -190,10 +179,10 @@ export function toReplayRepairHintCapture(
 }
 
 /**
- * The single post-failure capture, blessed via the ADR-0014 partial ref-issuing
- * sequence (setSessionSnapshot -> markSessionPartialRefsIssued -> store): a
- * divergence screen publishes only its bounded ref set, so it activates a
- * PARTIAL frame authorizing exactly those bodies, not a complete namespace.
+ * The single post-failure internal capture. It updates operational observation
+ * state and returns opaque lineage evidence without touching client ref
+ * authority. The daemon-owned response finalizer above activates a PARTIAL
+ * frame only after response-level bounding and overflow projection are exact.
  * Sparse captures do not write back (selector-capture reliability contract),
  * so a sparse verdict degrades the whole observation.
  *
@@ -330,25 +319,17 @@ async function captureDivergenceObservationAttempt(params: {
         retryable: true,
       };
     }
-    setSessionSnapshot(session, snapshot);
-    // ADR 0014 (#1257) + #1264: the divergence screen publishes exactly the
-    // ranked, occlusion-resolved, capped ref set `screen.refs` renders. Activate
-    // a PARTIAL frame authorizing precisely THOSE bodies — derived from the same
-    // `selectDivergenceScreenRefNodes` the digest uses, so the frame never
-    // authorizes a ref the screen hides (over-pin risk) nor rejects one the
-    // screen advertised (e.g. the mass-covered fallback surfaces covered refs
-    // that the old non-covered-only filter would have excluded here).
-    const digestBodies = selectDivergenceScreenRefNodes(
-      snapshot.nodes,
-      session.appBundleId,
-    ).nodes.map((node) => node.ref as string);
-    markSessionPartialRefsIssued(session, digestBodies);
-    sessionStore.set(sessionName, session);
+    const observationAuthority = bindInternalObservationAuthority({
+      sessionStore,
+      sessionName,
+    });
+    const stored = observationAuthority.store(snapshot);
     return {
       observation: {
         state: 'available',
         nodes: snapshot.nodes,
-        refsGeneration: session.snapshotGeneration ?? 0,
+        refsGeneration: stored.refsGeneration,
+        evidence: stored.evidence,
         appBundleId: session.appBundleId,
       },
       retryable: false,
@@ -460,8 +441,7 @@ function isForeignOverlayDismissTarget(
  * The single source of truth for which nodes a divergence `screen.refs`
  * publishes, and in what order. Both the rendered `screen.refs` digest
  * (`buildReplayDivergenceScreenRefs`) AND the ADR-0014 partial ref frame the
- * capture authorizes (`captureDivergenceObservation` →
- * `markSessionPartialRefsIssued`) derive from THIS function, so the authorized
+ * finalizer may authorize derive from THIS function, so the authorized
  * ref set is exactly the set the agent is shown — never a superset it can pin
  * refs outside of, nor a subset that rejects a ref the screen advertised.
  * Returns the capped node list plus whether ranking overflowed the cap.
@@ -672,21 +652,4 @@ export function buildReplayDivergenceSuggestionForNode(params: {
     role: sanitize(role),
     ...(label ? { label: sanitize(label) } : {}),
   };
-}
-
-function writeReplayDivergenceArtifact(
-  sessionStore: SessionStore,
-  sessionName: string,
-  payload: ReplayDivergence,
-): { artifactPath: string } | { artifactUnavailable: true } {
-  try {
-    const dir = path.join(sessionStore.ensureSessionDir(sessionName), 'replay-divergence');
-    fs.mkdirSync(dir, { recursive: true });
-    const fileName = `${Date.now()}-step${payload.step.index}.json`;
-    const artifactPath = path.join(dir, fileName);
-    fs.writeFileSync(artifactPath, `${JSON.stringify(redactDiagnosticData(payload), null, 2)}\n`);
-    return { artifactPath };
-  } catch {
-    return { artifactUnavailable: true };
-  }
 }

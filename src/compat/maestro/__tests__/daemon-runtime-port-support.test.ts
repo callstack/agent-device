@@ -38,6 +38,27 @@ test('composes operation-specific Maestro flags with the runtime envelope', asyn
   );
 });
 
+test('marks Maestro hierarchy captures as daemon-private observations', async () => {
+  const invoke = vi.fn(async () => ({ ok: true as const, data: { nodes: [] } }));
+
+  await invokeMaestroPublicOperation(
+    {
+      baseReq: makeBaseRequest(),
+      invoke,
+      dependencies: makeDependencies(),
+      platform: 'ios',
+    },
+    { kind: 'snapshot' },
+  );
+
+  expect(invoke).toHaveBeenCalledWith(
+    expect.objectContaining({
+      command: 'snapshot',
+      internal: expect.objectContaining({ observationOnly: true }),
+    }),
+  );
+});
+
 test('preserves diagnostic metadata carried inside daemon error details', async () => {
   const invoke = vi.fn(async () => ({
     ok: false as const,

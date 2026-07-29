@@ -63,7 +63,7 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
         let requestAbortRegistration: ReturnType<typeof registerRequestAbort>;
         let streamProgress = false;
         try {
-          const req = JSON.parse(line) as DaemonRequest;
+          const req = parseSocketDaemonRequest(line);
           streamProgress = shouldStreamRequestProgress(req);
           requestIdForCleanup = resolveRequestTrackingId(req.meta?.requestId, 'socket');
           req.meta = {
@@ -111,6 +111,19 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
     sockets.clear();
   };
   return server;
+}
+
+function parseSocketDaemonRequest(line: string): DaemonRequest {
+  const parsed = JSON.parse(line) as unknown;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return parsed as DaemonRequest;
+  }
+  // `internal` carries daemon-issued capabilities and provenance. The socket is
+  // a public transport like HTTP, so a token-bearing client must not be able to
+  // forge those semantics even though the legacy socket request otherwise
+  // preserves its existing raw wire shape.
+  const { internal: _internal, ...request } = parsed as Record<string, unknown>;
+  return request as DaemonRequest;
 }
 
 export function listenNetServer(server: net.Server): Promise<number> {

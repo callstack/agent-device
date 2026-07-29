@@ -7,7 +7,7 @@ import { handleSnapshotCommands } from '../snapshot.ts';
 import { withSessionlessRunnerCleanup } from '../snapshot-session.ts';
 import { captureSnapshot } from '../snapshot-capture.ts';
 import { SessionStore } from '../../session-store.ts';
-import type { SessionState } from '../../types.ts';
+import type { DaemonResponse, SessionState } from '../../types.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { buildSnapshotSignatures } from '../../android-snapshot-freshness.ts';
 import { buildInteractionSurfaceSignature } from '../../interaction-outcome-policy.ts';
@@ -484,6 +484,20 @@ function makeVersionedRefsScenario(sessionName: string) {
   return sessionStore;
 }
 
+function expectInternalObservationResult(params: {
+  response: DaemonResponse | null | undefined;
+  session: SessionState | undefined;
+  publishedGeneration: number | undefined;
+  publishedTree: SessionState['snapshot'];
+}): void {
+  expect(params.response?.ok).toBe(true);
+  expect(params.response?.ok ? params.response.data?.refsGeneration : undefined).toBeUndefined();
+  expect(params.session?.snapshotGeneration).toBe((params.publishedGeneration as number) + 1);
+  expect(params.session?.snapshot).not.toBe(params.publishedTree);
+  expect(params.session?.refFrameGeneration).toBe(params.publishedGeneration);
+  expect(params.session?.refFrameTree).toBe(params.publishedTree);
+}
+
 test('snapshot responses carry refsGeneration and advance it per capture (#1076 versioned refs)', async () => {
   const sessionName = 'android-refs-generation';
   const sessionStore = makeVersionedRefsScenario(sessionName);
@@ -515,6 +529,43 @@ test('diff advances the generation without issuing refsGeneration (#1076 version
   const diffData = await runVersionedRefsCommand({ sessionStore, sessionName, command: 'diff' });
   expect(diffData?.refsGeneration).toBeUndefined();
   expect(sessionStore.get(sessionName)?.snapshotGeneration).toBe(seed + 1);
+});
+
+test('daemon-private snapshot observation advances capture state without publishing ref authority', async () => {
+  const sessionName = 'android-internal-observation';
+  const sessionStore = makeVersionedRefsScenario(sessionName);
+
+  await runVersionedRefsCommand({ sessionStore, sessionName, command: 'snapshot' });
+  const published = sessionStore.get(sessionName);
+  const publishedGeneration = published?.refFrameGeneration;
+  const publishedTree = published?.refFrameTree;
+
+  mockDispatch.mockResolvedValue({
+    nodes: [{ index: 0, depth: 0, type: 'android.widget.Button', label: 'Internal' }],
+    truncated: false,
+    backend: 'android',
+  });
+
+  const response = await handleSnapshotCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'snapshot',
+      positionals: [],
+      flags: {},
+      internal: { observationOnly: true },
+    },
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expectInternalObservationResult({
+    response,
+    session: sessionStore.get(sessionName),
+    publishedGeneration,
+    publishedTree,
+  });
 });
 
 test('snapshot surfaces filtered-to-zero Android guidance for interactive snapshots', async () => {

@@ -1,5 +1,7 @@
 import type { SessionState } from './types.ts';
 
+const runtimeRevisions = new WeakMap<SessionState, number>();
+
 /**
  * ADR 0014 session ref-frame lifetime — the authorization model for mutation
  * refs, kept distinct from the latest operational observation (`session.snapshot`).
@@ -67,8 +69,26 @@ export function refFrameEpoch(session: SessionState): number | undefined {
  * side effect.
  */
 export function expireRefFrame(session: SessionState): void {
+  advanceSessionRuntimeRevision(session);
   session.refFrameState = 'expired';
   session.snapshotScopeSource = undefined;
+}
+
+/**
+ * Monotonic, daemon-private revision for side-effect lineage. Unlike the
+ * client-visible snapshot/ref generations, this advances for every possible
+ * device mutation, including another mutation while the ref frame is already
+ * expired. Internal observation evidence uses it to refuse publication after
+ * any intervening side-effect seam.
+ */
+function advanceSessionRuntimeRevision(session: SessionState): number {
+  const next = readSessionRuntimeRevision(session) + 1;
+  runtimeRevisions.set(session, next);
+  return next;
+}
+
+export function readSessionRuntimeRevision(session: SessionState): number {
+  return runtimeRevisions.get(session) ?? 0;
 }
 
 /**

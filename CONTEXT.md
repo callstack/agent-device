@@ -91,7 +91,13 @@ task touches:
   (`active`/`expired`), and an issuance scope (`all` for a complete snapshot, or the bounded set of
   ref bodies a partial publication emitted). Owned solely by `src/daemon/ref-frame.ts`. A complete
   snapshot activates an `all` frame; `find`/settled diff/replay divergence activate a bounded partial
-  frame that supersedes the prior one; internal read captures never activate or reindex it.
+  frame that supersedes the prior one; internal read captures never activate or reindex it. Replay
+  captures return opaque, one-shot lineage evidence, and daemon response composition activates refs
+  synchronously only after the exact inline or successfully written overflow projection is known.
+  Every finalization attempt consumes its evidence. The outer replay retains its stable session lock
+  plus the device lock when known through finalization, so external commands cannot interleave;
+  nested replay actions reuse that scope and invalidate lineage through capture, ref-frame,
+  side-effect, or session-lifetime changes.
 - Frame expiry seam (ADR 0014): every mutating leaf calls `expireRefFrame` synchronously, immediately
   before the device op that may change element identity (after all pre-action guards), so a
   post-dispatch failure still leaves the frame expired — there is no success-only rollback. Ref

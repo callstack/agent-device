@@ -21,7 +21,10 @@ export async function resolveRequestExecutionLockKeys(params: {
   const { req, sessionName, sessionStore } = params;
   const existingSession = sessionStore.get(sessionName);
   if (existingSession) {
-    return [deviceExecutionLockKey(existingSession.device.id)];
+    return orderRequestExecutionLockKeys([
+      sessionExecutionLockKey(sessionName),
+      deviceExecutionLockKey(existingSession.device.id),
+    ]);
   }
 
   const keys = new Set<RequestExecutionLockKey>([sessionExecutionLockKey(sessionName)]);

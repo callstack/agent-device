@@ -78,12 +78,12 @@ test('malformed command params (command as number) yield 400 / -32602', async (t
 });
 
 // `DaemonRequest.internal` carries semantics-affecting bits stamped inside the
-// daemon — `replayPlanStep` (#1271 stage 2) decides whether a read is an
-// authored plan step or an out-of-band diagnostic, and so whether it lands in a
-// repair heal. Two independent allowlists keep it unreachable from the wire:
-// `commandRpcParamsSchema` projects only its eight named fields, and
+// daemon — `replayPlanStep` controls recording provenance and
+// `observationOnly` suppresses snapshot ref issuance for daemon-composed
+// Maestro reads. Two independent allowlists keep both unreachable from the
+// HTTP wire: `commandRpcParamsSchema` projects only its eight named fields, and
 // `toDaemonRequest` then builds the request field by field. Both would have to
-// regress for a caller to stamp its own provenance; this pins the resulting
+// regress for a caller to stamp these semantics; this pins the resulting
 // boundary contract so neither drifts silently.
 test('the rpc boundary never accepts internal request fields from the wire', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
@@ -105,9 +105,13 @@ test('the rpc boundary never accepts internal request fields from the wire', asy
         id: 'req-1',
         method: 'agent_device.command',
         params: {
-          command: 'get',
-          positionals: ['text', 'id=whatever'],
-          internal: { replayPlanStep: true, replayTargetGuard: { ref: '@e1' } },
+          command: 'snapshot',
+          positionals: [],
+          internal: {
+            observationOnly: true,
+            replayPlanStep: true,
+            replayTargetGuard: { ref: '@e1' },
+          },
         },
       }),
     });

@@ -23,19 +23,20 @@ import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import type { ReplayReportAction } from './session-replay-report-action.ts';
 import {
-  boundReplayDivergenceForSession,
   buildReplayDivergenceSuggestionForNode,
   buildDivergenceScreen,
   captureDivergenceObservation,
   toReplayRepairHintCapture,
   type DivergenceFieldSanitizer,
 } from './session-replay-divergence.ts';
+import { boundReplayDivergenceForSession } from './session-replay-divergence-publication.ts';
 import { computeReplayRepairHint } from './session-replay-repair-hint.ts';
 import { rankAndDedupeReplaySuggestions } from './session-replay-suggestion-ranking.ts';
 import {
   buildReplayDivergenceFailureResponseFromDescriptor,
   hoistReplayFailureCauseDiagnosticMeta,
 } from './session-replay-runtime-failure-response.ts';
+import { getRequestSignal } from '../../request/cancel.ts';
 
 export type MaestroFailedEngineEvent = MaestroEngineEvent & {
   readonly durationMs: number;
@@ -85,6 +86,7 @@ export async function buildTypedMaestroFailureResponse(params: {
   readonly snapshotDiagnostics?: SnapshotDiagnosticsSummary;
 }): Promise<DaemonResponse> {
   const { event, plan, replayPath, req, sessionName, sessionStore, logPath } = params;
+  const requestSignal = getRequestSignal(req.meta?.requestId);
   const report = buildTypedMaestroFailureReportProjection(event, req);
   const cause = hoistReplayFailureCauseDiagnosticMeta(params.error);
   const scrubVars = collectMaestroTextScrubVars(report.command);
@@ -166,6 +168,8 @@ export async function buildTypedMaestroFailureResponse(params: {
     sessionName,
     divergence,
     responseLevel: req.meta?.responseLevel,
+    evidence: observation.state === 'available' ? observation.evidence : undefined,
+    ...(requestSignal ? { signal: requestSignal } : {}),
   });
   return buildReplayDivergenceFailureResponseFromDescriptor({
     error: safeCause,

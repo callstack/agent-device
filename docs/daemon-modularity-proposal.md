@@ -297,8 +297,9 @@ export interface AdReplayRuntime {
   executeStep(input: AdStepExecution): Promise<AdStepOutcome>;
 
   /**
-   * Capture a replay observation and atomically update the session observation plus
-   * the exact partial ref frame exposed by the outcome.
+   * Capture replay evidence and update operational observation state only.
+   * The returned value may carry opaque, one-shot lineage evidence; it cannot
+   * publish or replace client ref authority.
    */
   observeReplay(input: AdObservationRequest): Promise<AdObservation>;
 
@@ -323,8 +324,15 @@ export type AdStepExecution = {
 The daemon runtime adapter owns translation to `DaemonRequest`, parent flag merging,
 `internal.replayPlanStep`, target/landmark guards, session-scope inheritance through
 `internal.resolvedSessionScope`, request-level provider-scope reuse, and response/error projection.
-`observeReplay` deliberately combines capture, stored observation update, and exact partial-frame
-activation. Splitting those operations would expose an illegal intermediate state under ADR 0014.
+`observeReplay` updates the stored operational observation and returns opaque, one-shot
+capture-lineage evidence. Daemon response composition projects the exact inline response or
+successfully written overflow artifact, consumes and validates that evidence synchronously, and only
+then activates the matching partial frame. Every finalization attempt consumes the token, including
+empty, cancelled, invalid, and stale outcomes. The engine cannot publish refs or access session/store
+authority; no asynchronous work may occur between activation and returning the projected response.
+The outer replay keeps its stable session lock plus the device lock when known through this
+finalization. Same-session nested actions reuse the admitted scope; their meaningful changes
+invalidate lineage through observation, ref-frame, runtime-revision, or session-lifetime checks.
 
 The engine receives no session interface. A daemon-owned coordinator wraps `execute` inside the
 already locked scope:
@@ -854,8 +862,8 @@ This is mostly ownership correction around an already-proven port.
 - Keep canonical `.ad` syntax in a pure internal codec shared with session publication. Publication
   keeps portability/destination validation, atomic commit, and lifecycle authority.
 - Preserve inherited session scope, request-level provider scope, the existing lock, and the
-  side-effect/ref-frame seam. `observeReplay` atomically couples capture and partial-frame
-  activation.
+  side-effect/ref-frame seam. `observeReplay` updates operational observation and returns opaque
+  lineage evidence; daemon response composition alone activates the exact projected partial frame.
 - Delete superseded helpers and handler-mock tests as their interface replacements land.
 
 ### Phase 5: narrow platform binding

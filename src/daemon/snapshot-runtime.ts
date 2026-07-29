@@ -47,7 +47,7 @@ export async function dispatchSnapshotViaRuntime(params: {
       // the node tree itself stays plain `e12` refs (token economy). The
       // capture above already stored the next session via setRecord, so the
       // store holds the generation these refs were minted from.
-      const refsGeneration = params.sessionStore.get(sessionName)?.snapshotGeneration;
+      const refsGeneration = publishedSnapshotGeneration(req, params.sessionStore.get(sessionName));
       // ADR 0014: retain provenance in the immutable operational/ref-frame tree;
       // project only the published copy so settle and replay keep the full evidence.
       const publicNodes = stripAndroidSystemChromeProvenance(result.nodes);
@@ -63,6 +63,13 @@ export async function dispatchSnapshotViaRuntime(params: {
       };
     },
   });
+}
+
+function publishedSnapshotGeneration(
+  req: DaemonRequest,
+  session: SessionState | undefined,
+): number | undefined {
+  return req.internal?.observationOnly === true ? undefined : session?.snapshotGeneration;
 }
 
 export async function dispatchSnapshotDiffViaRuntime(params: {
@@ -227,7 +234,8 @@ function createSnapshotRuntime(params: {
             // Only the snapshot command's response carries every stored node's
             // ref back to the client; diff returns a summary, so its refreshed
             // tree leaves client refs stale (#1076).
-            issuesRefsToClient: req.command === 'snapshot',
+            issuesRefsToClient:
+              req.command === 'snapshot' && req.internal?.observationOnly !== true,
           }),
         );
       },
