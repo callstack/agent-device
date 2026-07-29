@@ -33,6 +33,18 @@ export type LimrunIosSession = {
   client: LimrunIosClient;
 };
 
+export type LimrunIosRemoteInstallOptions = {
+  md5?: string;
+  relaunch?: boolean;
+  appIdentifierHint?: string;
+};
+
+export type LimrunIosRemoteInstallResult = {
+  appId?: string;
+};
+
+type LimrunIosApp = Awaited<ReturnType<LimrunIosClient['listApps']>>[number];
+
 export async function createLimrunIosSession(options: {
   lease: DeviceLease;
   instanceId: string;
@@ -84,12 +96,8 @@ export async function installLimrunIosApp(
 export async function installLimrunIosRemoteApp(
   session: LimrunIosSession,
   url: string,
-  options?: {
-    md5?: string;
-    relaunch?: boolean;
-    appIdentifierHint?: string;
-  },
-): Promise<{ appId?: string }> {
+  options?: LimrunIosRemoteInstallOptions,
+): Promise<LimrunIosRemoteInstallResult> {
   const beforeInstallApps = await session.client.listApps().catch(() => undefined);
   const result = await session.client.installApp(url, {
     md5: options?.md5,
@@ -97,7 +105,7 @@ export async function installLimrunIosRemoteApp(
   });
   const resultBundleId = normalizeOptionalString(result.bundleId);
   const requestedBundleId = normalizeOptionalString(options?.appIdentifierHint);
-  let afterInstallApps: Awaited<ReturnType<LimrunIosSession['client']['listApps']>> = [];
+  let afterInstallApps: LimrunIosApp[] = [];
   for (const delayMs of IOS_APP_INVENTORY_RETRY_DELAYS_MS) {
     if (delayMs > 0) await sleep(delayMs);
     afterInstallApps = await session.client.listApps();
@@ -311,8 +319,8 @@ const IOS_APP_INVENTORY_RETRY_DELAYS_MS = [0, 250] as const;
 function resolveInstalledIosAppId(params: {
   resultBundleId?: string;
   requestedBundleId?: string;
-  beforeInstallApps: Awaited<ReturnType<LimrunIosSession['client']['listApps']>> | undefined;
-  afterInstallApps: Awaited<ReturnType<LimrunIosSession['client']['listApps']>>;
+  beforeInstallApps: LimrunIosApp[] | undefined;
+  afterInstallApps: LimrunIosApp[];
 }): string | undefined {
   const installedBundleIds = new Set(params.afterInstallApps.map((app) => app.bundleId));
   return (
@@ -327,8 +335,8 @@ function resolveInstalledIosAppId(params: {
 }
 
 function inferNewUserInstalledApp(
-  beforeInstallApps: Awaited<ReturnType<LimrunIosSession['client']['listApps']>> | undefined,
-  afterInstallApps: Awaited<ReturnType<LimrunIosSession['client']['listApps']>>,
+  beforeInstallApps: LimrunIosApp[] | undefined,
+  afterInstallApps: LimrunIosApp[],
 ): string | undefined {
   if (!beforeInstallApps) return undefined;
   const beforeBundleIds = new Set(beforeInstallApps.map((app) => app.bundleId));
@@ -338,7 +346,7 @@ function inferNewUserInstalledApp(
   return candidates.length === 1 ? candidates[0]?.bundleId : undefined;
 }
 
-function isUserInstalledIosApp(app: { bundleId: string; installType: string }): boolean {
+export function isUserInstalledIosApp(app: LimrunIosApp): boolean {
   return (
     !app.bundleId.startsWith('com.apple.') && !app.installType.toLowerCase().includes('system')
   );

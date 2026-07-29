@@ -37,20 +37,22 @@ test('iOS device session exposes reusable capabilities without its raw client', 
   assert.equal(session.platform, 'ios');
   if (session.platform !== 'ios') throw new Error('Expected an iOS device session');
 
-  assert.deepEqual(await session.listApps('user-installed'), [
+  assert.deepEqual(await session.listApps(), [
     { id: 'com.example.ios', name: 'Example', installType: 'User' },
   ]);
-  assert.deepEqual(await session.listApps(), [
+  assert.deepEqual(await session.listApps('all'), [
     { id: 'com.apple.Preferences', name: 'Settings', installType: 'System' },
     { id: 'com.example.ios', name: 'Example', installType: 'User' },
   ]);
-  assert.equal(await session.getForegroundApp(), undefined);
+  assert.equal('getForegroundApp' in session, false);
   assert.deepEqual(session.viewport, { width: 402, height: 874 });
   await session.pressKey('enter', ['command']);
   assert.equal(await session.readLogs('com.example.ios', 200), 'line one\nline two\n');
-  await assert.rejects(() => session.readLogs(undefined, 200), /bundle identifier/);
   await session.startRecording({ quality: 8 });
-  await session.stopRecording({ outPath: '/tmp/ios-recording.mp4' });
+  assert.equal(
+    await session.stopRecording({ outPath: '/tmp/ios-recording.mp4' }),
+    'https://ios.example/recording',
+  );
   assert.deepEqual(await session.runSimctl(['listapps', 'booted']).wait(), {
     code: 0,
     stdout: 'ok',
@@ -100,6 +102,7 @@ test('iOS remote install waits for eventually consistent app inventory', async (
 test('Android device session exposes semantic ADB capabilities without its raw client', async () => {
   const adb = vi.fn(async (args: string[]) => {
     if (args.includes('query-activities')) return adbResult('com.example.android/.MainActivity\n');
+    if (args.includes('packages')) return adbResult('package:com.example.android\n');
     if (args.includes('window')) {
       return adbResult('mCurrentFocus=Window{42 u0 com.example.android/.MainActivity}\n');
     }
@@ -136,18 +139,15 @@ test('Android device session exposes semantic ADB capabilities without its raw c
   });
   assert.equal((await session.getKeyboardState()).visible, false);
   assert.equal((await session.dismissKeyboard()).dismissed, false);
-  assert.equal(await session.readLogs(undefined, 20), 'log line\n');
-  assert.deepEqual(
-    await session.installRemoteApp('https://assets.example/android.apk', {
-      appIdentifierHint: 'com.example.android',
-    }),
-    { appId: 'com.example.android' },
-  );
+  assert.equal(await session.readLogs(20), 'log line\n');
+  assert.equal(await session.installRemoteApp('https://assets.example/android.apk'), undefined);
   await session.pressKey('KEYCODE_ENTER', ['shift']);
   await session.startRecording({ quality: 7 });
-  await session.stopRecording({ outPath: '/tmp/android-recording.mp4' });
-  await session.removePortReverse(8081);
-  await assert.rejects(() => session.removePortReverse(0), /Invalid Android tcp reverse port/);
+  assert.equal(
+    await session.stopRecording({ outPath: '/tmp/android-recording.mp4' }),
+    'https://android.example/recording',
+  );
+  await session.adb.reverse?.remove('tcp:8081');
 
   assert.deepEqual(sendAsset.mock.calls[0], ['https://assets.example/android.apk']);
   assert.deepEqual(pressKey.mock.calls[0], ['KEYCODE_ENTER', ['shift']]);

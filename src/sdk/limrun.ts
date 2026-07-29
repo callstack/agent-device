@@ -13,6 +13,8 @@ export type {
   LimrunIosCommandResult,
   LimrunIosDeviceSession,
   LimrunRecordingQuality,
-  LimrunRemoteInstallOptions,
-  LimrunRemoteInstallResult,
 } from '../providers/limrun/device-session.ts';
+export type {
+  LimrunIosRemoteInstallOptions,
+  LimrunIosRemoteInstallResult,
+} from '../providers/limrun/ios.ts';
