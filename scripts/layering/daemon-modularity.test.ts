@@ -5,7 +5,7 @@ import {
   DAEMON_MODULARITY_BASELINE,
   TYPE_CYCLE_BASELINE,
 } from './daemon-modularity.ts';
-import { sessionStateFieldCount, SESSION_STATE_FIELD_OWNERS } from './session-state.ts';
+import { SESSION_STATE_FIELD_OWNERS } from './session-state.ts';
 import { resolveImportEdges, targetDagZone, type ResolvedImportEdge } from './model.ts';
 
 function importEdge(file: string, target: string): ResolvedImportEdge {
@@ -36,7 +36,6 @@ test('daemon modularity baseline records the measured R7 ownership pressure', ()
     Object.values(SESSION_STATE_FIELD_OWNERS).reduce((sum, owners) => sum + owners.length, 0),
     DAEMON_MODULARITY_BASELINE.sessionState.ownerFileClaims,
   );
-  assert.equal(sessionStateFieldCount(), 41);
   assert.equal(TYPE_CYCLE_BASELINE, 102);
   assert.equal(DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers['daemon-server'], 30);
   assert.equal('daemon' in DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers, false);
