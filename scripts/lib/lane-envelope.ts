@@ -1,4 +1,4 @@
-// Standard artifact envelope for scheduled lanes (issue #1430).
+// Standard artifact envelope for scheduled lanes.
 //
 // A scheduled lane can go dark or drift for weeks while PR CI stays green, so
 // every artifact it uploads must say — without a human reading logs — which

@@ -5,7 +5,7 @@
 // Runs Vitest once; if the only failures are timeout-shaped and live in the
 // enumerated retry list (scripts/lib/contention-retry.ts), reruns exactly those
 // files once. Every retried file is named in the job summary, and the run writes
-// the shared scheduled-lane envelope so retry counts feed lane health (#1430).
+// the shared lane envelope (scripts/lib/lane-envelope.ts) so retry counts stay observable.
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';

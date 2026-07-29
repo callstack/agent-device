@@ -173,13 +173,6 @@ export const CONTENTION_RETRY_FILES: readonly ContentionRetryEntry[] = [
     serializedStub: true,
   },
   {
-    file: 'scripts/repo-health/run.test.ts',
-    reason: 'Spawns the repo-health CLI over the real tree and waits for it to exit (#1423).',
-    trackingIssue: 'https://github.com/callstack/agent-device/issues/1423',
-    reviewBy: REVIEW_BY,
-    serializedStub: true,
-  },
-  {
     file: 'src/daemon/__tests__/request-router-open.test.ts',
     reason: 'Drives real open routing over keyed locks, waiting on lock/session settle budgets.',
     trackingIssue: CONTENTION_ISSUE,

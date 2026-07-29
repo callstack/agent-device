@@ -24,7 +24,7 @@ export type TestRun = {
   blockers?: readonly RunBlocker[];
 };
 
-/** Telemetry payload for scheduled-lane health (#1430). */
+/** Telemetry payload written to the shared lane envelope (scripts/lib/lane-envelope.ts). */
 export type ContentionRetryTelemetry = {
   /** Files rerun in this job (one entry per file, not per failed test). */
   retried: ReadonlyArray<{ file: string; testNames: readonly string[]; trackingIssue: string }>;
