@@ -19,9 +19,11 @@ export async function runAndroidEmulatorE2E(
   options: AndroidEmulatorE2EOptions = {},
 ): Promise<void> {
   const requestedIds = options.scenarioIds ?? scenarioIdsFromEnv(process.env[SCENARIO_FILTER_ENV]);
-  const selectedScenarios = selectAndroidEmulatorScenarios(requestedIds);
-  const executedScenarios = [ANDROID_EMULATOR_FIXTURE_BOOTSTRAP, ...selectedScenarios];
   const context = createContext();
+  const selectedScenarios = selectAndroidEmulatorScenarios(requestedIds).filter(
+    (scenario) => scenario.tier !== 'full' || context.tier === 'full',
+  );
+  const executedScenarios = [ANDROID_EMULATOR_FIXTURE_BOOTSTRAP, ...selectedScenarios];
   let primaryError: unknown;
   try {
     for (const scenario of executedScenarios) {

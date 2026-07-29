@@ -3,6 +3,7 @@ import {
   Alert,
   AppState,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,9 +13,19 @@ import {
   View,
 } from 'react-native';
 import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync } from 'expo-audio';
+import { requireOptionalNativeModule } from 'expo-modules-core';
 
 import { ActionButton, ScreenTitle, SectionCard } from '../components';
 import { useAppColors, type AppColors } from '../theme';
+
+type PushBroadcastLabModule = {
+  lastPushBroadcast(): string;
+};
+
+const pushBroadcastLab =
+  Platform.OS === 'android'
+    ? requireOptionalNativeModule<PushBroadcastLabModule>('PushBroadcastLab')
+    : null;
 
 export function AutomationLabScreen(props: {
   eventName: string;
@@ -31,6 +42,7 @@ export function AutomationLabScreen(props: {
   const [lastInput, setLastInput] = useState('none');
   const [longPressCount, setLongPressCount] = useState(0);
   const [microphonePermission, setMicrophonePermission] = useState('checking');
+  const [lastPushBroadcast, setLastPushBroadcast] = useState('none');
   const [sheetVisible, setSheetVisible] = useState(false);
   const permissionReadGeneration = useRef(0);
   const windowMode = dimensions.width > dimensions.height ? 'landscape' : 'portrait';
@@ -52,11 +64,18 @@ export function AutomationLabScreen(props: {
           }
         });
     };
+    const refreshPushBroadcast = () => {
+      setLastPushBroadcast(pushBroadcastLab?.lastPushBroadcast() ?? 'unavailable');
+    };
     refreshMicrophonePermission();
+    refreshPushBroadcast();
     const subscription = AppState.addEventListener('change', (nextState) => {
       setAppState(nextState);
       if (nextState !== 'active') setLastNonActiveState(nextState);
-      if (nextState === 'active') refreshMicrophonePermission();
+      if (nextState === 'active') {
+        refreshMicrophonePermission();
+        refreshPushBroadcast();
+      }
     });
     return () => {
       mounted = false;
@@ -92,6 +111,10 @@ export function AutomationLabScreen(props: {
         setMicrophonePermission('error');
       }
     }
+  }
+
+  function refreshPushBroadcast() {
+    setLastPushBroadcast(pushBroadcastLab?.lastPushBroadcast() ?? 'unavailable');
   }
 
   return (
@@ -178,6 +201,20 @@ export function AutomationLabScreen(props: {
           label="Microphone permission"
           testID="automation-microphone-permission"
           value={microphonePermission}
+        />
+      </SectionCard>
+
+      <SectionCard title="Android push broadcast">
+        <ActionButton
+          kind="secondary"
+          label="Refresh push broadcast"
+          onPress={refreshPushBroadcast}
+          testID="automation-refresh-push-broadcast"
+        />
+        <StateRow
+          label="Last push broadcast"
+          testID="automation-last-push-broadcast"
+          value={lastPushBroadcast}
         />
       </SectionCard>
 

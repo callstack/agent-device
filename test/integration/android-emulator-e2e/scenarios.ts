@@ -6,6 +6,9 @@ import { assertCaptureAndClose } from './live-capture-scenario.ts';
 import { assertFormInput, assertKeyboardIme } from './live-form-scenario.ts';
 import type { LiveContext } from './live-harness.ts';
 import { assertInventoryAndInstall } from './live-inventory-scenario.ts';
+import { assertLifecycleAndSystem } from './live-lifecycle-scenario.ts';
+import { assertObservabilityAndArtifacts } from './live-observability-scenario.ts';
+import { assertFixtureReplays } from './live-replay-scenarios.ts';
 import type { AndroidEmulatorScenarioStart } from './scenario-start.ts';
 
 const C = PUBLIC_COMMANDS;
@@ -18,6 +21,7 @@ export type AndroidEmulatorScenario = {
   id: string;
   run: (context: LiveContext) => Promise<void>;
   start?: AndroidEmulatorScenarioStart;
+  tier?: 'smoke' | 'full';
 };
 
 export const ANDROID_EMULATOR_FIXTURE_BOOTSTRAP: AndroidEmulatorScenario = {
@@ -40,6 +44,7 @@ export const ANDROID_EMULATOR_LIVE_SCENARIOS = [
       'cold-start-deep-link-navigation',
       'home-recents-restoration',
       'orientation-fixture-state',
+      'safe-back-navigation',
     ],
     commands: [
       C.alert,
@@ -99,6 +104,31 @@ export const ANDROID_EMULATOR_LIVE_SCENARIOS = [
       landmark: 'Agent Device Tester',
       url: 'agent-device-test-app:///',
     },
+  },
+  {
+    behaviors: [
+      'ime-owned-input-recovery',
+      'push-broadcast-delivery',
+      'runtime-permission-recovery',
+    ],
+    commands: [C.push, C.settings],
+    id: 'full:lifecycle-system',
+    run: assertLifecycleAndSystem,
+    tier: 'full',
+  },
+  {
+    behaviors: [],
+    commands: [C.artifacts, C.batch, C.events, C.logs, C.perf, C.record, C.trace],
+    id: 'full:observability-artifacts',
+    run: assertObservabilityAndArtifacts,
+    tier: 'full',
+  },
+  {
+    behaviors: ['helper-backed-gesture-recovery', 'long-list-scroll-recovery'],
+    commands: [C.gesture, C.replay, C.scroll, C.swipe, C.test],
+    id: 'full:fixture-replays',
+    run: assertFixtureReplays,
+    tier: 'full',
   },
 ] as const satisfies readonly AndroidEmulatorScenario[];
 

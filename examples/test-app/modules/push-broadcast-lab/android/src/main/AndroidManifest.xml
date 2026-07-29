@@ -1,0 +1,11 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <receiver
+      android:name=".PushBroadcastReceiver"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="com.callstack.agentdevicelab.TEST_PUSH" />
+      </intent-filter>
+    </receiver>
+  </application>
+</manifest>

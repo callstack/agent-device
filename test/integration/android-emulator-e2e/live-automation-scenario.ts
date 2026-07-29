@@ -176,6 +176,11 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
   await assertWaitText(context, 'Settings');
   verifyCommand(context, C.diff, 'snapshot diff reports the Automation-to-Settings transition');
   verifyCommand(context, C.back, 'Android Back returns from automation route to Settings');
+  verifyBehavior(
+    context,
+    'safe-back-navigation',
+    'Back returned from the automation route to the fixture Settings tab without opening system navigation',
+  );
 }
 
 async function assertOrientationFixtureState(

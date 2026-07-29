@@ -1,8 +1,14 @@
 export type AndroidEmulatorBehaviorId =
   | 'android-resource-id-selectors'
   | 'cold-start-deep-link-navigation'
+  | 'helper-backed-gesture-recovery'
   | 'home-recents-restoration'
+  | 'ime-owned-input-recovery'
+  | 'long-list-scroll-recovery'
   | 'orientation-fixture-state'
+  | 'push-broadcast-delivery'
+  | 'runtime-permission-recovery'
+  | 'safe-back-navigation'
   | 'safe-keyboard-dismissal'
   | 'system-ime-keyboard'
   | 'test-ime-restoration'
@@ -30,6 +36,35 @@ export const ANDROID_EMULATOR_BEHAVIOR_COVERAGE = {
   'orientation-fixture-state': {
     assertion:
       'fixture window state observes landscape and portrait after Android rotation commands',
+    owner: 'smoke:automation-system',
+  },
+  'runtime-permission-recovery': {
+    assertion:
+      'the fixture observes microphone permission granted by its prompt, then denied after Android revocation',
+    owner: 'full:lifecycle-system',
+  },
+  'ime-owned-input-recovery': {
+    assertion:
+      'the Android IME diagnostic remains reachable after text input and keyboard recovery returns to the app field',
+    owner: 'full:lifecycle-system',
+  },
+  'push-broadcast-delivery': {
+    assertion:
+      'an Android push broadcast with typed extras is rendered by the fixture after its native receiver records it',
+    owner: 'full:lifecycle-system',
+  },
+  'helper-backed-gesture-recovery': {
+    assertion:
+      'the Android helper-backed direct gesture flow observes one- and two-pointer motion plus every transform effect',
+    owner: 'full:fixture-replays',
+  },
+  'long-list-scroll-recovery': {
+    assertion:
+      'fixture traversal reaches the footer, returns to the top, and rediscovers the catalog landmark',
+    owner: 'full:fixture-replays',
+  },
+  'safe-back-navigation': {
+    assertion: 'Back leaves the fixture automation route through normal in-app navigation',
     owner: 'smoke:automation-system',
   },
   'safe-keyboard-dismissal': {

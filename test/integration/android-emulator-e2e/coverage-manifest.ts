@@ -1,15 +1,8 @@
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
-import { ANDROID_ARTIFACTS_CONTRACT_EVIDENCE } from '../../../src/daemon/__tests__/http-server-artifacts.coverage.ts';
 import { ANDROID_AUDIO_CONTRACT_EVIDENCE } from '../../../src/daemon/handlers/__tests__/session-audio.coverage.ts';
 import { ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE } from '../../../src/platforms/__tests__/install-source.coverage.ts';
-import {
-  ANDROID_LIFECYCLE_CONTRACT_EVIDENCE,
-  ANDROID_TOUCH_CONTRACT_EVIDENCE,
-} from '../provider-scenarios/android-lifecycle.coverage.ts';
-import { ANDROID_RECORDING_CONTRACT_EVIDENCE } from '../provider-scenarios/android-recording.coverage.ts';
-import { ANDROID_TEST_SUITE_CONTRACT_EVIDENCE } from '../provider-scenarios/android-test-suite.coverage.ts';
+import { ANDROID_LIFECYCLE_CONTRACT_EVIDENCE } from '../provider-scenarios/android-lifecycle.coverage.ts';
 import type { AndroidContractEvidence } from './contract-evidence.ts';
-import androidReplayWorkflowEvidence from '../../ci/android-workflow-evidence.json' with { type: 'json' };
 
 type PublicCommand = (typeof PUBLIC_COMMANDS)[keyof typeof PUBLIC_COMMANDS];
 
@@ -20,12 +13,7 @@ export type AndroidEmulatorCoverageEntry =
       evidence: AndroidContractEvidence;
       level: 'command-contract';
     }
-  | { assertion: string; level: 'capability-denial' }
-  | {
-      assertion: string;
-      evidence: typeof androidReplayWorkflowEvidence;
-      level: 'workflow-live';
-    };
+  | { assertion: string; level: 'capability-denial' };
 
 export type AndroidEmulatorCoverageClassificationSummary = {
   capabilityDenial: number;
@@ -62,18 +50,18 @@ export const ANDROID_EMULATOR_E2E_COVERAGE = {
     'smoke:automation-system',
     'Android foreground package changes on Home and returns to the fixture after restoration',
   ),
-  [C.artifacts]: contract(
-    ANDROID_ARTIFACTS_CONTRACT_EVIDENCE,
-    'daemon inventory exposes typed downloadable artifact bytes',
+  [C.artifacts]: live(
+    'full:observability-artifacts',
+    'inventory exposes generated recording and trace artifacts and one download consumes its entry',
   ),
   [C.audio]: contract(
     ANDROID_AUDIO_CONTRACT_EVIDENCE,
     'host audio probing has an Android-emulator session contract',
   ),
   [C.back]: live('smoke:automation-system', 'back returns from automation to the Settings tab'),
-  [C.batch]: contract(
-    ANDROID_LIFECYCLE_CONTRACT_EVIDENCE,
-    'provider scenario asserts typed nested Android batch outcomes',
+  [C.batch]: live(
+    'full:observability-artifacts',
+    'nested get and is results retain their Android fixture evidence',
   ),
   [C.boot]: contract(
     ANDROID_LIFECYCLE_CONTRACT_EVIDENCE,
@@ -95,16 +83,16 @@ export const ANDROID_EMULATOR_E2E_COVERAGE = {
     'snapshot diff observes the Automation-to-Settings transition',
   ),
   [C.doctor]: live('smoke:inventory', 'doctor discovers the installed fixture package'),
-  [C.events]: contract(
-    ANDROID_LIFECYCLE_CONTRACT_EVIDENCE,
-    'provider scenario records Android session command events',
+  [C.events]: live(
+    'full:observability-artifacts',
+    'paged timeline includes commands from the active Android fixture session',
   ),
   [C.fill]: live('smoke:form-input', 'replacement form text is read back from Android UI'),
   [C.find]: live('smoke:automation-system', 'find observes the automation landmark'),
   [C.focus]: live('smoke:form-input', 'snapshot-derived Android field point receives typed text'),
-  [C.gesture]: contract(
-    ANDROID_LIFECYCLE_CONTRACT_EVIDENCE,
-    'provider scenario verifies Android single- and multi-touch plans',
+  [C.gesture]: live(
+    'full:fixture-replays',
+    'helper-backed one- and two-pointer gestures produce every fixture transform effect',
   ),
   [C.get]: live('smoke:automation-system', 'get returns fixture automation canary text'),
   [C.home]: live(
@@ -118,9 +106,9 @@ export const ANDROID_EMULATOR_E2E_COVERAGE = {
   ),
   [C.is]: live('smoke:automation-system', 'visible predicate passes for Android fixture node'),
   [C.keyboard]: live('smoke:keyboard-ime', 'safe dismissal hides keyboard without navigating Back'),
-  [C.logs]: contract(
-    ANDROID_LIFECYCLE_CONTRACT_EVIDENCE,
-    'provider scenario starts, inspects, restarts, and stops Android logcat',
+  [C.logs]: live(
+    'full:observability-artifacts',
+    'Android logcat starts, exposes a concrete path, and stops cleanly',
   ),
   [C.longPress]: live('smoke:automation-system', '800ms hold increments durable fixture counter'),
   [C.network]: contract(
@@ -135,44 +123,43 @@ export const ANDROID_EMULATOR_E2E_COVERAGE = {
     'smoke:automation-system',
     'fixture window state observes landscape then portrait Android rotation',
   ),
-  [C.perf]: contract(
-    ANDROID_LIFECYCLE_CONTRACT_EVIDENCE,
-    'provider scenario validates typed Android process metrics',
+  [C.perf]: live(
+    'full:observability-artifacts',
+    'startup, process memory, and CPU metrics are typed and numeric on the emulator',
   ),
   [C.prepare]: {
     assertion: 'Android emulator capability model rejects Apple runner preparation',
     level: 'capability-denial',
   },
   [C.press]: live('smoke:automation-system', 'semantic press updates durable fixture input state'),
-  [C.push]: contract(
-    ANDROID_LIFECYCLE_CONTRACT_EVIDENCE,
-    'provider scenario validates Android intent action and extras delivery',
+  [C.push]: live(
+    'full:lifecycle-system',
+    'typed broadcast extras are persisted by the fixture receiver and rendered after refresh',
   ),
   [C.reactNative]: contract(
     ANDROID_LIFECYCLE_CONTRACT_EVIDENCE,
     'provider scenario returns Android overlay dismissal state',
   ),
-  [C.record]: contract(
-    ANDROID_RECORDING_CONTRACT_EVIDENCE,
-    'Android recording finalizes through its durable manifest and pull contract',
+  [C.record]: live(
+    'full:observability-artifacts',
+    'short visible fixture mutation produces a non-empty playable Android MP4',
   ),
   [C.reinstall]: contract(
     ANDROID_LIFECYCLE_CONTRACT_EVIDENCE,
     'provider scenario validates APK and bundle reinstall identities',
   ),
-  [C.replay]: {
-    assertion: 'narrow Android Settings replay remains an additive live workflow check',
-    evidence: androidReplayWorkflowEvidence,
-    level: 'workflow-live',
-  },
-  [C.screenshot]: live('smoke:capture-close', 'captured fixture file has a valid PNG signature'),
-  [C.scroll]: contract(
-    ANDROID_TOUCH_CONTRACT_EVIDENCE,
-    'provider scenario validates Android scroll plans and resulting actions',
+  [C.replay]: live(
+    'full:fixture-replays',
+    'the catalog traversal fixture runs through replay without retrying its deterministic flow',
   ),
-  [C.settings]: contract(
-    ANDROID_LIFECYCLE_CONTRACT_EVIDENCE,
-    'provider scenario validates Android device setting mutations',
+  [C.screenshot]: live('smoke:capture-close', 'captured fixture file has a valid PNG signature'),
+  [C.scroll]: live(
+    'full:fixture-replays',
+    'edge-aware catalog traversal reaches its footer and safely rediscovers the top',
+  ),
+  [C.settings]: live(
+    'full:lifecycle-system',
+    'Android grant and deny permission transitions are observed by the fixture',
   ),
   [C.shutdown]: contract(
     ANDROID_LIFECYCLE_CONTRACT_EVIDENCE,
@@ -182,17 +169,17 @@ export const ANDROID_EMULATOR_E2E_COVERAGE = {
     'smoke:automation-system',
     'interactive tree exposes Android resource-id fixture nodes',
   ),
-  [C.swipe]: contract(
-    ANDROID_LIFECYCLE_CONTRACT_EVIDENCE,
-    'provider scenario validates Android swipe execution',
+  [C.swipe]: live(
+    'full:fixture-replays',
+    'direct fixture swipe moves the catalog before edge-aware recovery',
   ),
-  [C.test]: contract(
-    ANDROID_TEST_SUITE_CONTRACT_EVIDENCE,
-    'Android replay suite reports attempt outcomes and JUnit evidence',
+  [C.test]: live(
+    'full:fixture-replays',
+    'deterministic fixture suite emits JUnit without retries',
   ),
-  [C.trace]: contract(
-    ANDROID_LIFECYCLE_CONTRACT_EVIDENCE,
-    'provider scenario verifies Android trace lifecycle output',
+  [C.trace]: live(
+    'full:observability-artifacts',
+    'a visible fixture mutation creates non-empty trace diagnostics at the requested path',
   ),
   [C.triggerAppEvent]: contract(
     ANDROID_LIFECYCLE_CONTRACT_EVIDENCE,
@@ -233,7 +220,6 @@ function buildCoverageClassificationSummary(
   for (const entry of entries) {
     switch (entry.level) {
       case 'live':
-      case 'workflow-live':
         summary.live += 1;
         break;
       case 'command-contract':
