@@ -78,7 +78,7 @@ export const ANDROID_EMULATOR_E2E_COVERAGE = {
   ),
   [C.close]: live('smoke:capture-close', 'session inventory proves fixture lease removal'),
   [C.devices]: live('smoke:inventory-install', 'selected emulator serial appears in inventory'),
-  [C.diff]: live('smoke:form-input', 'snapshot diff observes the Form-to-Settings transition'),
+  [C.diff]: live('smoke:form-input', 'snapshot diff observes the Form-to-Home transition'),
   [C.doctor]: live('smoke:inventory-install', 'doctor discovers the installed fixture package'),
   [C.events]: contract(
     ANDROID_LIFECYCLE_CONTRACT.path,

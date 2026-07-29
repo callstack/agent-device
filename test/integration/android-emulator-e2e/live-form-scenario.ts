@@ -43,11 +43,13 @@ export async function assertFormInput(context: LiveContext): Promise<void> {
   assert.ok(
     lines.some(
       (line) =>
-        line.kind === 'added' && typeof line.text === 'string' && line.text.includes('Settings'),
+        line.kind === 'added' &&
+        typeof line.text === 'string' &&
+        line.text.includes('Agent Device Tester'),
     ),
-    `expected added Settings evidence: ${JSON.stringify(diff.json)}`,
+    `expected added Home evidence: ${JSON.stringify(diff.json)}`,
   );
-  verifyCommand(context, C.diff, 'snapshot diff reports the Form-to-Settings transition');
+  verifyCommand(context, C.diff, 'snapshot diff reports the Form-to-Home transition');
 
   await runStep(context, 'reopen form tab after diff', ['click', 'label="Form"']);
   await assertWaitText(context, 'Checkout form');
