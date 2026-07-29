@@ -44,6 +44,15 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
     localRunnable: true,
   },
   {
+    id: 'test-app-typecheck',
+    label: 'Expo test app typecheck',
+    kind: { type: 'script', script: 'test-app:typecheck' },
+    ciJobs: ['Resolve native fingerprint'],
+    // The test app intentionally owns a separate Expo dependency graph. Do
+    // not make every root-checkout validation install it implicitly.
+    localRunnable: false,
+  },
+  {
     id: 'layering',
     label: 'Import-direction layering guard',
     kind: { type: 'script', script: 'check:layering' },

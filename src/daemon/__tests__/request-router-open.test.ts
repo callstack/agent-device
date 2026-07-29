@@ -5,6 +5,10 @@ import path from 'node:path';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
 
 vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../../utils/host-process.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../utils/host-process.ts')>();
+  return { ...actual, readProcessStartTime: vi.fn(() => 'test-process-start') };
+});
 
 import { dispatchCommand } from '../../core/dispatch.ts';
 import { createRequestHandler } from '../request-router.ts';
@@ -401,11 +405,18 @@ test('router serializes same-device open requests before first session creation 
     new AppError('DEVICE_NOT_FOUND', 'device discovery is still warming up'),
     sameDevice,
   ];
+  let resolutionCalls = 0;
+  let markSecondPreflightFinished: (() => void) | undefined;
+  const secondPreflightFinished = new Promise<void>((resolve) => {
+    markSecondPreflightFinished = resolve;
+  });
   mockResolveTargetDevice.mockImplementation(async () => {
+    resolutionCalls += 1;
     const next = resolutionPlan.shift();
     if (!next) {
       throw new Error('Unexpected resolveTargetDevice call');
     }
+    if (resolutionCalls === 3) markSecondPreflightFinished?.();
     if (next instanceof AppError) {
       throw next;
     }
@@ -416,11 +427,16 @@ test('router serializes same-device open requests before first session creation 
   let activeEnsures = 0;
   let maxActiveEnsures = 0;
   let releaseFirstEnsure: (() => void) | undefined;
+  let markFirstEnsureStarted: (() => void) | undefined;
+  const firstEnsureStarted = new Promise<void>((resolve) => {
+    markFirstEnsureStarted = resolve;
+  });
   mockEnsureDeviceReady.mockImplementation(async () => {
     ensureCalls += 1;
     activeEnsures += 1;
     maxActiveEnsures = Math.max(maxActiveEnsures, activeEnsures);
     if (ensureCalls === 1) {
+      markFirstEnsureStarted?.();
       await new Promise<void>((resolve) => {
         releaseFirstEnsure = () => {
           activeEnsures -= 1;
@@ -436,15 +452,13 @@ test('router serializes same-device open requests before first session creation 
 
   const firstOpen = handler(openRequest('session-a', { platform: 'ios' }, 'req-open-1'));
 
-  await vi.waitFor(() => {
-    expect(ensureCalls).toBe(1);
-  });
+  await firstEnsureStarted;
 
   const secondOpen = handler(
     openRequest('session-b', { platform: 'ios', udid: 'SIM-001' }, 'req-open-2'),
   );
 
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  await secondPreflightFinished;
   expect(ensureCalls).toBe(1);
   expect(maxActiveEnsures).toBe(1);
 
@@ -478,10 +492,15 @@ test('router allows pre-open requests for different devices to proceed concurren
   let activeEnsures = 0;
   let maxActiveEnsures = 0;
   const releases: Array<() => void> = [];
+  let markBothEnsuresStarted: (() => void) | undefined;
+  const bothEnsuresStarted = new Promise<void>((resolve) => {
+    markBothEnsuresStarted = resolve;
+  });
   mockEnsureDeviceReady.mockImplementation(async () => {
     ensureCalls += 1;
     activeEnsures += 1;
     maxActiveEnsures = Math.max(maxActiveEnsures, activeEnsures);
+    if (ensureCalls === 2) markBothEnsuresStarted?.();
     await new Promise<void>((resolve) => {
       releases.push(() => {
         activeEnsures -= 1;
@@ -499,10 +518,9 @@ test('router allows pre-open requests for different devices to proceed concurren
     openRequest('session-b', { platform: 'ios', udid: 'SIM-002' }, 'req-open-b'),
   );
 
-  await vi.waitFor(() => {
-    expect(ensureCalls).toBe(2);
-  });
+  await bothEnsuresStarted;
 
+  expect(ensureCalls).toBe(2);
   expect(maxActiveEnsures).toBe(2);
   releases.splice(0).forEach((release) => release());
 

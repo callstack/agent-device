@@ -23,6 +23,7 @@ export type CheckId =
   | 'format'
   | 'lint'
   | 'typecheck'
+  | 'test-app-typecheck'
   | 'layering'
   | 'fallow'
   | 'mcp-metadata'
@@ -45,6 +46,7 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'format',
   'lint',
   'typecheck',
+  'test-app-typecheck',
   'layering',
   'fallow',
   'mcp-metadata',
@@ -219,6 +221,21 @@ const nodeIntegrationOwnership: OwnershipRule = ({ file }) =>
     ? [reason('integration-node', file, 'node-integration', 'node --test integration smoke')]
     : [];
 
+const testAppOwnership: OwnershipRule = ({ file }) => {
+  if (!file.startsWith('examples/test-app/')) return [];
+  if (!/\.(?:[cm]?[jt]sx?|json)$/.test(file)) return [];
+  return [
+    reason('format', file, 'gate:format', 'oxfmt covers the Expo test app'),
+    reason('lint', file, 'gate:lint', 'oxlint covers the Expo test app'),
+    reason(
+      'test-app-typecheck',
+      file,
+      'own:test-app',
+      'the Expo test app has an isolated TypeScript dependency graph',
+    ),
+  ];
+};
+
 // The frozen replay-compat corpus (#1417). `.ad` fixture data would otherwise
 // fail open on its extension: its only consumer is the unit-lane corpus test.
 // Any corpus change — script or manifest — also runs the history-backed
@@ -298,6 +315,7 @@ const OWNERSHIP_RULES: readonly OwnershipRule[] = [
   srcProdGate,
   vitestRelatedOwnership,
   nodeIntegrationOwnership,
+  testAppOwnership,
   replayCompatOwnership,
   buildOwnership,
 ];

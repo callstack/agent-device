@@ -1,8 +1,24 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+vi.mock('../../utils/png-worker-client.ts', async () => {
+  const [{ PNG }, { decodePng }, { computeScreenshotDiffPixels }] = await Promise.all([
+    import('../../utils/png-codec.ts'),
+    import('../../utils/png.ts'),
+    import('../../utils/screenshot-diff-pixels.ts'),
+  ]);
+  return {
+    decodePngAsync: async (buffer: Buffer, label: string) => decodePng(buffer, label),
+    encodePngAsync: async (png: InstanceType<typeof PNG>) => PNG.sync.write(png),
+    computeScreenshotDiffPixelsAsync: async (
+      job: Parameters<typeof computeScreenshotDiffPixels>[0],
+    ) => computeScreenshotDiffPixels(job),
+  };
+});
+
 import { PNG } from '../../utils/png.ts';
 import { compareScreenshots } from '../screenshot-diff.ts';
 

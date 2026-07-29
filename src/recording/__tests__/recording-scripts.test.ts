@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { beforeAll, test } from 'vitest';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,25 +12,29 @@ const recordingScriptsDir = path.resolve(
 );
 const recordingTestSupportDir = path.resolve(__dirname, '../../../test/integration/support');
 const SWIFT_TYPECHECK_TIMEOUT_MS = 60_000;
+let swiftCompilerPath = 'swiftc';
+let swiftSdkPath = '';
 
 async function assertSwiftScriptTypechecks(scriptPath: string): Promise<void> {
-  const result = await runCmd('xcrun', ['swiftc', '-typecheck', scriptPath], {
+  const result = await runCmd(swiftCompilerPath, ['-sdk', swiftSdkPath, '-typecheck', scriptPath], {
     allowFailure: true,
   });
-  assert.equal(result.exitCode, 0, `${path.basename(scriptPath)} should typecheck`);
+  assert.equal(
+    result.exitCode,
+    0,
+    `${path.basename(scriptPath)} should typecheck\n${result.stderr}`,
+  );
 }
 
-test(
-  'recording overlay Swift script typechecks',
-  async (t) => {
-    if (process.platform !== 'darwin') {
-      t.skip('Swift recording scripts are only validated on macOS');
-    }
-
-    await assertSwiftScriptTypechecks(path.join(recordingScriptsDir, 'recording-overlay.swift'));
-  },
-  SWIFT_TYPECHECK_TIMEOUT_MS,
-);
+beforeAll(async () => {
+  if (process.platform !== 'darwin') return;
+  const [compilerResult, sdkResult] = await Promise.all([
+    runCmd('xcrun', ['--find', 'swiftc']),
+    runCmd('xcrun', ['--show-sdk-path', '--sdk', 'macosx']),
+  ]);
+  swiftCompilerPath = compilerResult.stdout.trim();
+  swiftSdkPath = sdkResult.stdout.trim();
+});
 
 test(
   'recording trim Swift script typechecks',
@@ -66,6 +70,18 @@ test(
     await assertSwiftScriptTypechecks(
       path.join(recordingTestSupportDir, 'recording-inspect.swift'),
     );
+  },
+  SWIFT_TYPECHECK_TIMEOUT_MS,
+);
+
+test(
+  'recording overlay Swift script typechecks',
+  async (t) => {
+    if (process.platform !== 'darwin') {
+      t.skip('Swift recording scripts are only validated on macOS');
+    }
+
+    await assertSwiftScriptTypechecks(path.join(recordingScriptsDir, 'recording-overlay.swift'));
   },
   SWIFT_TYPECHECK_TIMEOUT_MS,
 );

@@ -1,8 +1,8 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
+import { sleep } from '../../utils/timeouts.ts';
 import type { AndroidAdbExecutor } from './adb-executor.ts';
 import { resolveAndroidAdbExecutor } from './adb-executor.ts';
 import { annotateAndroidNativePerfError } from './perf-native-errors.ts';
@@ -180,7 +180,7 @@ async function waitForAndroidNativeArtifact(
       return;
     }
     previousSize = size;
-    await delay(ANDROID_NATIVE_ARTIFACT_POLL_INTERVAL_MS);
+    await sleep(ANDROID_NATIVE_ARTIFACT_POLL_INTERVAL_MS);
   }
   throw new AppError('COMMAND_FAILED', `Android ${session.kind} artifact is not ready to pull`, {
     package: session.packageName,

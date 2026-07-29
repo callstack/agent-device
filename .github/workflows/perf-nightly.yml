@@ -68,8 +68,7 @@ jobs:
 
       - name: Run iOS command perf benchmark
         run: |
-          pnpm perf \
-            --platform ios \
+          pnpm perf:ios \
             --device "iPhone 17 Pro" \
             --n "$PERF_ROUNDS" --warmup 1 \
             --out-dir "$GITHUB_WORKSPACE/perf-results"

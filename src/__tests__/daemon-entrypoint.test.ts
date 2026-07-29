@@ -104,7 +104,12 @@ test('daemon runtime starts HTTP transport in-process and shuts down cleanly', a
     await waitForHttpOk(`http://127.0.0.1:${runtime?.httpPort}/health`, 2_000);
     const artifactResponse = await fetch(
       `http://127.0.0.1:${runtime?.httpPort}/artifacts/${encodeURIComponent(artifactId)}`,
-      { headers: { authorization: `Bearer ${runtime?.token}` } },
+      {
+        headers: {
+          authorization: `Bearer ${runtime?.token}`,
+          connection: 'close',
+        },
+      },
     );
     assert.equal(artifactResponse.status, 200);
     assert.equal(await artifactResponse.text(), 'runtime-artifact');

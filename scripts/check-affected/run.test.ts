@@ -91,6 +91,7 @@ const ALL_SCRIPTS: Record<string, string> = {
   'format:check': 'x',
   lint: 'x',
   typecheck: 'x',
+  'test-app:typecheck': 'x',
   'check:layering': 'x',
   'check:fallow': 'x',
   'check:mcp-metadata': 'x',

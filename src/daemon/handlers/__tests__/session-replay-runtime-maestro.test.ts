@@ -50,8 +50,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { Worker } from 'node:worker_threads';
 import { PNG } from '../../../utils/png.ts';
-import { runCmdBackground, type ExecBackgroundResult } from '../../../utils/exec.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../types.ts';
 import type { CommandFlags } from '../../../core/dispatch.ts';
 import { SessionStore } from '../../session-store.ts';
@@ -147,34 +147,6 @@ function fixtureReplayRequest(params: {
     },
     meta: { cwd: params.root },
   };
-}
-
-async function readFirstStdoutLine(process: ExecBackgroundResult): Promise<string> {
-  return await new Promise((resolve, reject) => {
-    let stdout = '';
-    const cleanup = (): void => {
-      clearTimeout(timer);
-      process.child.stdout?.off('data', onData);
-      process.child.off('exit', onExit);
-    };
-    const timer = setTimeout(() => {
-      cleanup();
-      reject(new Error('Timed out waiting for child process stdout.'));
-    }, 5000);
-    const onData = (chunk: Buffer | string): void => {
-      stdout += String(chunk);
-      const lineEnd = stdout.indexOf('\n');
-      if (lineEnd === -1) return;
-      cleanup();
-      resolve(stdout.slice(0, lineEnd));
-    };
-    const onExit = (): void => {
-      cleanup();
-      reject(new Error('Child process exited before writing stdout.'));
-    };
-    process.child.stdout?.on('data', onData);
-    process.child.on('exit', onExit);
-  });
 }
 
 test('--update no longer rejects Maestro compat flow controls (the guard existed only for rewrite safety)', async () => {
@@ -469,30 +441,32 @@ output.result = SERVER_PATH + ':' + json(res.body).appviewDid
 });
 
 test('runReplayScriptFile supports successful Maestro runScript http.post calls', async () => {
-  const serverScript = path.join(
-    fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-runscript-http-')),
-    'server.cjs',
-  );
-  fs.writeFileSync(
-    serverScript,
+  const server = new Worker(
     `
 const http = require('node:http');
+const { parentPort } = require('node:worker_threads');
 const server = http.createServer((req, res) => {
   let body = '';
   req.setEncoding('utf8');
   req.on('data', chunk => { body += chunk; });
   req.on('end', () => {
     res.setHeader('content-type', 'application/json');
-    res.end(JSON.stringify({method: req.method, body}));
+    res.end(JSON.stringify({ method: req.method, body }));
   });
 });
 server.listen(0, '127.0.0.1', () => {
-  process.stdout.write(String(server.address().port) + '\\n');
+  parentPort.postMessage(server.address().port);
 });
 `,
+    { eval: true },
   );
-  const server = runCmdBackground(process.execPath, [serverScript], { allowFailure: true });
-  const port = await readFirstStdoutLine(server);
+  const port = await new Promise<number>((resolve, reject) => {
+    server.once('message', (value) => resolve(Number(value)));
+    server.once('error', reject);
+    server.once('exit', (code) => {
+      if (code !== 0) reject(new Error(`HTTP fixture worker exited with code ${code}`));
+    });
+  });
 
   try {
     const { response, calls } = await runReplayFixture({
@@ -524,8 +498,7 @@ output.result = parsed.method + ':' + json(parsed.body).ok
       ],
     );
   } finally {
-    server.child.kill();
-    await server.wait.catch(() => undefined);
+    await server.terminate();
   }
 });
 

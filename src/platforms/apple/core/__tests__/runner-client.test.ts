@@ -5,10 +5,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const { mockRunCmdStreaming, mockRepairMacOsRunnerProductsIfNeeded } = vi.hoisted(() => ({
-  mockRunCmdStreaming: vi.fn(),
-  mockRepairMacOsRunnerProductsIfNeeded: vi.fn(),
-}));
+const { mockRunCmdStreaming, mockRunCmdSync, mockRepairMacOsRunnerProductsIfNeeded } = vi.hoisted(
+  () => ({
+    mockRunCmdStreaming: vi.fn(),
+    mockRunCmdSync: vi.fn(),
+    mockRepairMacOsRunnerProductsIfNeeded: vi.fn(),
+  }),
+);
 
 vi.mock('../../../../utils/exec.ts', async () => {
   const actual = await vi.importActual<typeof import('../../../../utils/exec.ts')>(
@@ -17,6 +20,7 @@ vi.mock('../../../../utils/exec.ts', async () => {
   return {
     ...actual,
     runCmdStreaming: mockRunCmdStreaming,
+    runCmdSync: mockRunCmdSync,
   };
 });
 
@@ -28,6 +32,11 @@ vi.mock('../runner/runner-macos-products.ts', async () => {
     ...actual,
     repairMacOsRunnerProductsIfNeeded: mockRepairMacOsRunnerProductsIfNeeded,
   };
+});
+
+vi.mock('../../../../utils/host-process.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../utils/host-process.ts')>();
+  return { ...actual, readProcessStartTime: vi.fn(() => 'test-process-start') };
 });
 
 import type { DeviceInfo } from '../../../../kernel/device.ts';
@@ -204,10 +213,6 @@ async function makeProjectTmpDir(): Promise<string> {
   return tmpDir;
 }
 
-async function waitMs(ms: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function writeXctestrunFixture(
   xctestrunPath: string,
   options: { projectRoot: string; productRelativePaths: string[] },
@@ -311,6 +316,18 @@ async function makeCachedRunnerXctestrun(): Promise<{
 beforeEach(() => {
   vi.resetAllMocks();
   mockRunCmdStreaming.mockResolvedValue(undefined);
+  mockRunCmdSync.mockImplementation((command: string, args: string[]) => {
+    if (command === 'xcodebuild' && args[0] === '-version') {
+      return { exitCode: 0, stdout: 'Xcode 26.2\nBuild version 17C52\n', stderr: '' };
+    }
+    if (command === 'xcrun' && args.includes('--show-sdk-version')) {
+      return { exitCode: 0, stdout: '26.2\n', stderr: '' };
+    }
+    if (command === 'xcrun' && args.includes('--show-sdk-build-version')) {
+      return { exitCode: 0, stdout: '23C53\n', stderr: '' };
+    }
+    throw new Error(`Unexpected Apple fingerprint command: ${command} ${args.join(' ')}`);
+  });
   mockRepairMacOsRunnerProductsIfNeeded.mockResolvedValue(undefined);
 });
 
@@ -1073,6 +1090,10 @@ test('resolveRunnerDerivedPath reuses cache path for identical runner source fin
 });
 
 test('acquireRunnerXctestrunCacheLock serializes cache access across acquirers', async () => {
+  vi.useFakeTimers();
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
   const tmpDir = await makeTmpDir();
   const derivedPath = path.join(tmpDir, 'derived');
   const releaseFirst = await acquireRunnerXctestrunCacheLock(derivedPath);
@@ -1082,9 +1103,9 @@ test('acquireRunnerXctestrunCacheLock serializes cache access across acquirers',
     await releaseSecond();
   });
 
-  await waitMs(50);
   assert.equal(secondAcquired, false);
   await releaseFirst();
+  await vi.advanceTimersByTimeAsync(100);
   await second;
   assert.equal(secondAcquired, true);
 });

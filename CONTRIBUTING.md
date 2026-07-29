@@ -1,199 +1,178 @@
 # Contributing
 
-Thanks for your interest in contributing to agent-device.
+Thanks for helping improve agent-device. This guide is the shortest path from a fresh checkout to a
+reviewable change. Detailed testing and device procedures live in the linked focused guides.
 
-## Development
+## Set up the repository
 
 Requirements:
 
-- Node.js 22+
-- pnpm, activated from `package.json` `packageManager` (`corepack enable pnpm`)
-- Android SDK tools (`adb`) for Android support
-- Xcode (`simctl`/`devicectl`) for iOS support
-
-Setup:
+- Node.js 22 or newer
+- pnpm at the version pinned in `package.json`
+- Android SDK tools (`adb`) for Android work
+- Xcode (`simctl`/`devicectl`) for Apple-platform work
 
 ```bash
-corepack enable pnpm
 pnpm install
+pnpm build
 ```
 
-`package.json` `packageManager` is the single source of truth for the pnpm version. Corepack
-activates that exact version locally, and `.github/actions/setup-node-pnpm` reads the same field
-and fails the job when the installed `pnpm --version` disagrees — so the CI and local package
-managers cannot drift apart silently, and the "Ignoring...pnpm" drift warning stays quiet locally.
+`package.json`'s `packageManager` field is the source of truth for pnpm, and CI rejects a different
+version. Node distributions that include Corepack can activate it with `corepack enable pnpm`.
+Newer Node distributions may not bundle Corepack; in that case, install the pinned pnpm version
+using your Node version manager or the [pnpm installation guide](https://pnpm.io/installation), then
+confirm it with `pnpm --version` before installing dependencies.
 
-Build all CLIs and Xcode projects:
+The root install does not install the much larger Expo test-app dependency graph. If your change
+touches `examples/test-app`, install it separately:
 
 ```bash
-pnpm build:all
+pnpm test-app:install
+pnpm test-app:typecheck
 ```
 
-Apple XCTest builds now share a common helper script. `pnpm build:xcuitest:ios` and
-`pnpm build:xcuitest:tvos` keep their existing cleanup behavior, while
-`pnpm build:xcuitest:macos` reuses the existing DerivedData by default for faster local
-iteration. Set `AGENT_DEVICE_IOS_CLEAN_DERIVED=1` when you need a clean macOS runner rebuild.
+## Build the surface you changed
 
-Before pushing, run the aggregate gate:
+`pnpm build` compiles the TypeScript CLI and library. If a running development daemon must pick up
+that build, use `pnpm rebuild:cli`; it builds and then stops the worktree-scoped daemon.
+
+Build only the Apple runner target you changed:
+
+```bash
+pnpm build:xcuitest:ios
+pnpm build:xcuitest:macos
+pnpm build:xcuitest:tvos
+pnpm build:xcuitest:visionos
+```
+
+Append `:clean` to any platform build when DerivedData may be stale, for example
+`pnpm build:xcuitest:macos:clean`. `pnpm build:xcuitest` remains the shared iOS-and-macOS gate for
+changes that affect both runners; it is not an all-platform build.
+
+Android and macOS helper builds remain separate because they require their native toolchains:
+
+```bash
+pnpm build:android
+pnpm build:macos-helper
+```
+
+There is intentionally no catch-all development build. Native toolchains are expensive and
+independent, so agents and contributors should run the command for the surface they changed.
+Use `pnpm build:macos-helper:clean` if a Swift cache was created in another worktree.
+
+## Prepare the npm package
+
+`pnpm publish` and package-manager pack commands run `prepack`, which first checks synchronized MCP
+metadata and then runs `pnpm package:npm`. This is the one completeness-oriented aggregate: it
+builds the TypeScript distribution and all four Apple runner targets, clean-builds the macOS helper,
+packages the Apple runner source, and rebuilds both Android helper APKs. Any failed build stops
+packaging. It deliberately does not stop the worktree's development daemon; use `pnpm rebuild:cli`
+when a running daemon needs to pick up a new TypeScript build.
+
+`pnpm package:npm` is a release guard, not a routine development command. Use the specific commands
+above while iterating.
+
+## Validate a change
+
+Use the smallest trustworthy loop while editing:
+
+```bash
+pnpm check:quick             # lint + TypeScript
+pnpm test:maestro-compat     # example of a focused family suite
+pnpm exec vitest run path/to/file.test.ts
+```
+
+Before pushing a normal code change, let the repository derive the required gates:
+
+```bash
+pnpm check:affected --run
+```
+
+The selector combines the committed diff with staged, unstaged, and untracked files. Unknown,
+workflow, lockfile, and selector-owning changes fail open to the full local set. It reports
+device/toolchain checks that remain GitHub-authoritative instead of trying to run them implicitly.
+
+For broad refactors or when explicitly requested, run the deterministic core aggregate:
 
 ```bash
 pnpm check
 ```
 
-That is `check:tooling && check:fallow && check:unit`, and it is the only command that covers
-every non-device CI job. **`pnpm check:tooling` on its own is not the gate** — it stops before
-`check:fallow`, so a dead export or a complexity finding your diff introduces still fails CI
-after a clean `check:tooling` run. `pnpm test` likewise runs the unit projects only. What
-`pnpm check` cannot cover is the device/smoke matrix, which needs real devices.
+`pnpm check` covers formatting, lint, typechecking, layering, dependency-graph parity, production
+exports, MCP metadata, the distributable build, bundle ownership, Fallow, unit tests, and local smoke
+tests. It is intentionally not a simulation of every CI job: coverage, provider integration,
+history-backed compatibility, specialized toolchains, and live device/browser lanes remain separate.
+GitHub CI is authoritative.
 
-Run tests:
+Useful direct entry points:
 
-```bash
-pnpm test
-```
+- `pnpm test` or `pnpm test:unit` — root unit projects
+- `pnpm test:coverage` — coverage plus coverage-only projects
+- `pnpm test:integration` — Node and provider-backed integration suites
+- `pnpm perf --platform ios` or `pnpm perf --platform android` — device performance harness
+- `pnpm check:fallow --base origin/main` — changed-code quality gate
+- `pnpm fallow:all` — full-tree audit, including grandfathered baseline findings
+- `pnpm fallow:baseline` — intentionally regenerate both reviewed Fallow baselines
 
-Targeted checks, while iterating:
+See [`docs/agents/testing.md`](docs/agents/testing.md) for gate ownership, shared test utilities,
+mutation/fuzz lanes, contention policy, and test-speed rules. For real devices, follow
+[`docs/agents/device-verification.md`](docs/agents/device-verification.md); a fixture-backed test does
+not prove that a native path was active.
 
-```bash
-pnpm check:quick
-pnpm check:unit
-pnpm exec vitest run src/compat/maestro/__tests__/replay-flow.test.ts src/compat/__tests__/replay-input.test.ts
-```
+## Test app and Maestro compatibility
 
-Code quality (fallow): CI runs `pnpm check:fallow --base "$FALLOW_BASE"`, a diff-based
-audit of dead code, duplication, and complexity in the files your PR changes, compared
-against the grandfathered baselines in `fallow-baselines/`. Locally, `pnpm fallow` runs
-the same kind of audit against `origin/main` and is expected to pass on a clean tree;
-`pnpm fallow:all` shows the full-project picture, including known legacy findings that
-the baselines grandfather, so it reporting issues is normal. CRAP scores depend on
-estimated test coverage, so a finding can occasionally be exposed — not introduced — by
-your change. Run `pnpm fallow:baseline` to regenerate the baselines only when you are
-intentionally accepting a finding.
+The Expo fixture app owns its setup, simulator/device, Metro, replay, and Maestro instructions in
+[`examples/test-app/README.md`](examples/test-app/README.md).
 
-- `pnpm fallow` — diff-based audit vs `origin/main` (what CI runs, with CI picking the PR base)
-- `pnpm fallow:all` — full-tree summary, includes grandfathered legacy findings
-- `pnpm fallow:baseline` — regenerate baselines (only to intentionally accept a finding)
-
-Code quality (production exports): `pnpm check:production-exports` runs Fallow's native
-production graph, which excludes test/story/dev files, and fails when a new export has no
-production consumer. This includes the test-only-export bug class that shipped in #1199's first
-revision, while also catching exports that are unreachable from every graph. It is intentionally
-baseline-free: there is no grandfather file, so a new unused production export fails loudly. Fallow's
-`ignoreExportsUsedInFile` option in the gate's inherited config keeps exports with a real
-same-file consumer out of this report without weakening the general Fallow audit.
-
-Fix a finding by wiring the export into production or removing the unnecessary export/code. For
-an intentional test seam or other non-production consumer, add a JSDoc `@internal` tag with a short
-justification beside the declaration. An inline
-`// fallow-ignore-next-line unused-export` is not suitable here: the general test-inclusive graph
-sees the test consumer and correctly reports that suppression as stale. Production usage reached
-only through dynamic property access remains invisible to a static import graph, so register those
-exports in `.fallowrc.json` `ignoreExports` instead (as with the daemon route handlers loaded
-through `typeof import()`).
-
-Optional device selectors for tests:
-
-- `ANDROID_DEVICE=Pixel_9_Pro_XL` or `ANDROID_SERIAL=emulator-5554`
-- `IOS_DEVICE="iPhone 17 Pro"` or `IOS_UDID=<udid>`
-
-## Test App and Maestro Compatibility
-
-The Expo test app lives in `examples/test-app`. Install its dependencies once:
+The stable compatibility entry points are:
 
 ```bash
-pnpm test-app:install
+pnpm test:maestro-compat
+pnpm maestro:conformance
+pnpm test-app:maestro:ios
+pnpm test-app:maestro:android
 ```
 
-For Maestro compatibility, we currently have 15 parser/compat unit tests and one
-top-level test-app Maestro flow, `examples/test-app/maestro/checkout-form.yaml`,
-which includes `examples/test-app/maestro/helpers/open-checkout-form.yaml`.
+The first two are deterministic and device-free. The test-app suites need the app, Metro when
+applicable, and a real simulator or emulator.
 
-Run only the parser/compat tests:
+## Contribution guidelines
 
-```bash
-pnpm exec vitest run src/compat/maestro/__tests__/replay-flow.test.ts src/compat/__tests__/replay-input.test.ts
-```
+- Keep dependencies minimal and prefer built-in Node APIs.
+- Preserve the CLI's compact, agent-friendly JSON output.
+- Open and close sessions explicitly in tests and manual verification.
+- Add or adjust integration coverage when introducing a command or changing a wire response.
+- Run the focused gate that owns the behavior; do not replace missing coverage with a broad,
+  assertion-free test.
 
-Run the Expo test-app flow on iOS:
+### Conservative code comments
 
-```bash
-pnpm test-app:ios -- --device "iPhone 17 Pro"
-pnpm ad --session test-app-maestro open "Agent Device Tester" --platform ios --device "iPhone 17 Pro"
-pnpm ad --session test-app-maestro wait "Agent Device Tester" 30000 --platform ios --device "iPhone 17 Pro"
-pnpm test-app:maestro:ios -- --session test-app-maestro -- --device "iPhone 17 Pro"
-```
-
-`pnpm test-app:ios` keeps Metro in the foreground after launching the app. Leave
-that terminal running and run the `agent-device` and Maestro commands from a
-separate terminal.
-
-When targeting a specific Android emulator or device, build and install the
-development client on that same target before running Maestro:
-
-```bash
-pnpm test-app:android -- --device "$ANDROID_DEVICE"
-pnpm test-app:maestro:android -- --session test-app-maestro -- --device "$ANDROID_DEVICE"
-```
-
-## Guidelines
-
-- Keep dependencies minimal.
-- Preserve the CLI’s agent-friendly JSON output.
-- Ensure tests open and close sessions explicitly.
-- Add/adjust integration tests when introducing new commands.
-- Prefer built-in Node APIs over new packages.
-
-### Conservative Code Comments
-
-When code deliberately chooses a slower or more conservative path, leave a short inline comment at
-the decision site. The comment should name:
-
-1. the failure or regression the conservative path prevents; and
-2. the condition that should trigger a revisit.
-
-Use a grep-able `CONSERVATIVE:` prefix when the choice is expected to outlive the current change.
-This applies to defensive fallbacks, temporary guards, disabled fast paths, serialization, retries,
-over-preservation, and teardown-to-be-safe behavior.
-
-Examples:
-
-```ts
-// CONSERVATIVE: Keep the preflight for non-allowlisted runner commands because only the
-// allowlist has proven healthy-mutation recovery. Revisit when lifecycle status coverage can
-// distinguish every mutating command's terminal state.
-```
+When code deliberately chooses a slower or more conservative path, leave a short comment at the
+decision site naming the prevented failure and the condition for revisiting the choice. Use the
+grep-able `CONSERVATIVE:` prefix when the decision is expected to outlive the current change.
 
 ```ts
 // CONSERVATIVE: Preserve external runner artifacts because the checkout does not own their cache
 // root. Revisit only if external artifacts get an ownership marker that makes cleanup safe.
 ```
 
-## Dependency Updates
+## Dependency updates
 
-Renovate (`.github/renovate.json`) proposes dependency updates: weekly lockfile maintenance, one
-grouped PR for devDependencies, one PR per runtime dependency, and digest bumps for GitHub Actions.
-Security updates are enabled explicitly (`vulnerabilityAlerts` plus `osvVulnerabilityAlerts`) and
-are the only updates exempt from the 7-day minimum release age.
+Renovate proposes weekly lockfile maintenance, grouped development-dependency updates, individual
+runtime-dependency updates, and GitHub Action digest bumps. Automerge is disabled: dependency PRs
+need green CI and human review.
 
-Renovate PRs are gated exactly like human PRs: `automerge` is off everywhere, so every branch needs
-a green CI run and a human review before merge. Review one the way you would review any dependency
-change — read the release notes in the PR body, and check that the affected-check plan for the diff
-(`pnpm check:affected --base origin/main --run`, which fails open to the full set for lockfile and
-workflow changes) is green. A green Renovate PR is a merge candidate, not a merge: no rubber-stamp
-automerge path exists, and none should be added without also deciding which gate is trusted to
-replace the reviewer.
+Read the release notes, inspect the affected-check plan, and treat a green update as a merge
+candidate rather than an automatic merge:
 
-## Issue Labels
+```bash
+pnpm check:affected --run
+```
 
-Issue labels describe workflow state, not who will do the work. See
-`docs/agents/triage-labels.md` for the label meanings and state flow.
+## Issues
 
-## Reporting issues
+Issue labels describe workflow state, not ownership. See
+[`docs/agents/triage-labels.md`](docs/agents/triage-labels.md).
 
-Please include:
-
-- OS and Node version
-- Xcode/Android SDK versions (if relevant)
-- Exact command and output
-
-Thanks for helping improve agent-device.
+When reporting a problem, include the OS and Node version, relevant Xcode or Android SDK versions,
+and the exact command and output.

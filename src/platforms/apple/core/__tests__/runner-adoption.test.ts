@@ -17,10 +17,6 @@ import {
 } from '../runner/runner-adoption.ts';
 import { sendRunnerCommandOnce } from '../runner/runner-transport.ts';
 import { isProcessAlive } from '../../../../utils/host-process.ts';
-import {
-  resolveExpectedRunnerCacheMetadata,
-  resolveRunnerDerivedPath,
-} from '../runner/runner-xctestrun.ts';
 
 vi.mock('../runner/runner-transport.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../runner/runner-transport.ts')>();
@@ -28,7 +24,19 @@ vi.mock('../runner/runner-transport.ts', async (importOriginal) => {
 });
 vi.mock('../../../../utils/host-process.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../../utils/host-process.ts')>();
-  return { ...actual, isProcessAlive: vi.fn(() => false) };
+  return {
+    ...actual,
+    isProcessAlive: vi.fn(() => false),
+    readProcessStartTime: vi.fn(() => 'test-process-start'),
+  };
+});
+vi.mock('../runner/runner-xctestrun.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../runner/runner-xctestrun.ts')>();
+  return {
+    ...actual,
+    resolveExpectedRunnerCacheMetadata: vi.fn(() => ({})),
+    resolveRunnerDerivedPath: vi.fn(() => expectedDerived),
+  };
 });
 
 const mockSendRunnerCommandOnce = vi.mocked(sendRunnerCommandOnce);
@@ -70,10 +78,7 @@ function writeStaleLease(overrides: Partial<RunnerLease> = {}): RunnerLease {
 beforeEach(() => {
   leaseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-lease-test-'));
   process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR = leaseDir;
-  expectedDerived = resolveRunnerDerivedPath(
-    simulator,
-    resolveExpectedRunnerCacheMetadata(simulator),
-  );
+  expectedDerived = path.join(leaseDir, 'derived');
   mockSendRunnerCommandOnce.mockReset();
   mockIsProcessAlive.mockReset();
   mockIsProcessAlive.mockReturnValue(false);

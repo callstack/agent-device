@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
+import { runExplainCommandCli } from '../../../scripts/explain-command.ts';
 import { commandDescriptors } from '../../core/command-descriptor/registry.ts';
 import { ownerFilesForCommand } from '../../core/command-descriptor/owner-files.ts';
 import { getDaemonRouteOwnerFiles } from '../../daemon/route-owner-files.ts';
@@ -23,6 +24,10 @@ const explainCommand = (
   });
 
 function runExplainCli(args: string[]): { status: number; stdout: string; stderr: string } {
+  return runExplainCommandCli(args, repoRoot);
+}
+
+function runExplainCliProcess(args: string[]): { status: number; stdout: string; stderr: string } {
   try {
     const stdout = execFileSync(
       process.execPath,
@@ -207,7 +212,7 @@ describe('explainCommand table-driven coverage', () => {
 
 describe('explain:command CLI', () => {
   test('prints the formatted explanation to stdout and exits 0', () => {
-    const { status, stdout, stderr } = runExplainCli(['open']);
+    const { status, stdout, stderr } = runExplainCliProcess(['open']);
     expect(status).toBe(0);
     expect(stderr).toBe('');
     expect(stdout).toContain('open [public]');

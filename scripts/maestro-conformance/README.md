@@ -111,7 +111,6 @@ failure, not a pass.
 
 ```sh
 pnpm maestro:conformance
-# node --test scripts/maestro-conformance/verify.test.ts differential/run.test.ts
 ```
 
 The verifier fails on any **undeclared** divergence: a flow our engine parses

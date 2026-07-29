@@ -95,18 +95,6 @@ module imported both lazily and for its types would drop out.
 
 If they ever disagree, the gate is right and the baseline or the tree is wrong.
 
-### Notes
-
-
-`pnpm check:layering` is. This reads the same model, so the numbers should agree — its R6
-count matching `TYPE_INVERSION_BASELINE` is a useful self-check — but if they ever diverge, the
-gate is right and the graph is stale.
-
-One thing here DOES run in CI, and only one: the Layering Guard job runs
-`scripts/depgraph/model.test.ts`, whose parity test asserts this report's inversion count equals
-`TYPE_INVERSION_BASELINE`. Nothing else here gates a merge — the report itself is an instrument, not
-a rule, and no finding it produces is enforced.
-
 ## Why it reuses the layering gate
 
 The graph is extracted with `scripts/layering/model.ts`, the same module

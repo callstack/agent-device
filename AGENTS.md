@@ -41,8 +41,9 @@ prose in this repo, including this file.
   shipped before this rule.
 - Unreleased API surface dies free. Before treating a field as wire-compat, check
   `git tag --contains <commit>`; if it never shipped, delete it now.
-- Push only behind `&&`-chained gates: `format:check && typecheck && lint && vitest && git push`. A
-  push that can run after a failed gate eventually will.
+- Push only behind an `&&`-chained affected gate:
+  `pnpm check:affected --run && git push`. A push that can run after a failed gate eventually will;
+  GitHub remains authoritative for reported device/toolchain lanes.
 
 ## Derived registries — read the declaration site, not prose
 
@@ -159,9 +160,10 @@ one question so `rg` → read-whole-file stays one cheap bounded read.
   the only exclusion list is `.oxfmtrc.json` `ignorePatterns` — Markdown, the Maestro conformance
   corpus, and generated baselines. Run `pnpm format`, never `oxfmt <path>`: a path argument
   reformats a subset and hides whatever else drifted.
-- Before pushing, the aggregate is **`pnpm check`** (`check:tooling && check:fallow &&
-  check:unit`). `pnpm check:tooling` is a *subset*: it stops before the Fallow audit, so dead
-  exports and complexity findings your diff introduces still fail CI after it passes clean.
+- Before pushing, default to **`pnpm check:affected --run`**. It selects the relevant local gates and
+  reports native/device checks left to GitHub. Use **`pnpm check`**
+  (`check:tooling && check:fallow && check:unit`) for broad refactors or an explicitly requested full
+  deterministic core gate. Neither command claims to reproduce every GitHub job.
   Fallow's baselines are keyed by path, so a change that RENAMES a file must move that file's
   entry in `fallow-baselines/health.json` — regenerating the baselines would silently accept
   every other outstanding finding too.

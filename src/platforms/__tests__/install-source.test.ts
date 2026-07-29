@@ -6,6 +6,7 @@ import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { withCommandExecutorOverride } from '../../utils/exec.ts';
 import {
   ARCHIVE_EXTENSIONS,
   isBlockedIpAddress,
@@ -17,6 +18,10 @@ import {
 import * as androidManifest from '../android/manifest.ts';
 import { prepareAndroidInstallArtifact } from '../android/install-artifact.ts';
 import { prepareIosInstallArtifact } from '../apple/core/install-artifact.ts';
+import {
+  createLocalAppleToolProvider,
+  withAppleToolProvider,
+} from '../apple/core/tool-provider.ts';
 
 test('validateDownloadSourceUrl rejects localhost and private literal addresses by default', async () => {
   await assert.rejects(
@@ -132,6 +137,35 @@ test.sequential('materializeInstallablePath extracts zip archives without ditto'
     }
   } finally {
     process.env.PATH = previousPath;
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('materializeInstallablePath extracts tar.gz archives', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-install-source-tar-'));
+  const archivePath = path.join(tempRoot, 'bundle.tar.gz');
+  const payloadDir = path.join(tempRoot, 'payload');
+  const apkPath = path.join(payloadDir, 'Sample.apk');
+
+  try {
+    await fs.mkdir(payloadDir);
+    await fs.writeFile(apkPath, 'placeholder apk', 'utf8');
+    execFileSync('tar', ['-czf', archivePath, '-C', payloadDir, 'Sample.apk']);
+
+    const result = await materializeInstallablePath({
+      source: { kind: 'path', path: archivePath },
+      isInstallablePath: (candidatePath, stat) => stat.isFile() && candidatePath.endsWith('.apk'),
+      installableLabel: 'Android installable (.apk or .aab)',
+      allowArchiveExtraction: true,
+    });
+
+    try {
+      assert.equal(path.basename(result.installablePath), 'Sample.apk');
+      assert.equal(await fs.readFile(result.installablePath, 'utf8'), 'placeholder apk');
+    } finally {
+      await result.cleanup();
+    }
+  } finally {
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 });
@@ -256,154 +290,186 @@ test('prepareAndroidInstallArtifact cleans URL materialization when identity ins
 });
 
 test('prepareAndroidInstallArtifact extracts trusted GitHub artifact ZIP containing one APK', async () => {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-github-apk-'));
-  const archivePath = path.join(tempRoot, 'artifact.zip');
-  const apkPath = path.join(tempRoot, 'app.apk');
-  await fs.writeFile(
-    path.join(tempRoot, 'AndroidManifest.xml'),
-    '<manifest package="io.example.githubapk" xmlns:android="http://schemas.android.com/apk/res/android" />',
-    'utf8',
+  await withArchiveFixture(
+    {
+      extractions: [
+        {
+          command: 'unzip',
+          populate: async (outputPath) => {
+            await fs.writeFile(path.join(outputPath, 'app.apk'), 'apk fixture');
+          },
+        },
+      ],
+      zipEntries: {
+        'AndroidManifest.xml':
+          '<manifest package="io.example.githubapk" xmlns:android="http://schemas.android.com/apk/res/android" />',
+      },
+    },
+    async () => {
+      await withMockedInstallSourceFetch(Buffer.from('artifact fixture'), async () => {
+        const result = await prepareAndroidInstallArtifact({
+          kind: 'url',
+          url: 'https://api.github.com/repos/acme/app/actions/artifacts/123/zip',
+        });
+
+        try {
+          assert.equal(path.basename(result.installablePath), 'app.apk');
+          assert.equal(result.packageName, 'io.example.githubapk');
+        } finally {
+          await result.cleanup();
+        }
+      });
+    },
   );
-  execFileSync('zip', ['-q', apkPath, 'AndroidManifest.xml'], { cwd: tempRoot });
-  execFileSync('zip', ['-q', archivePath, 'app.apk'], { cwd: tempRoot });
-
-  await withMockedInstallSourceFetch(await fs.readFile(archivePath), async () => {
-    const result = await prepareAndroidInstallArtifact({
-      kind: 'url',
-      url: 'https://api.github.com/repos/acme/app/actions/artifacts/123/zip',
-    });
-
-    try {
-      assert.equal(path.basename(result.installablePath), 'app.apk');
-      assert.equal(result.packageName, 'io.example.githubapk');
-    } finally {
-      await result.cleanup();
-    }
-  });
-  await fs.rm(tempRoot, { recursive: true, force: true });
 });
 
 test('prepareAndroidInstallArtifact extracts trusted GitHub artifact ZIP containing one AAB', async () => {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-github-aab-'));
-  const archivePath = path.join(tempRoot, 'artifact.zip');
-  const manifestDir = path.join(tempRoot, 'base', 'manifest');
-  const aabPath = path.join(tempRoot, 'app.aab');
-  await fs.mkdir(manifestDir, { recursive: true });
-  await fs.writeFile(
-    path.join(manifestDir, 'AndroidManifest.xml'),
-    '<manifest package="io.example.githubaab" xmlns:android="http://schemas.android.com/apk/res/android" />',
-    'utf8',
+  await withArchiveFixture(
+    {
+      extractions: [
+        {
+          command: 'unzip',
+          populate: async (outputPath) => {
+            await fs.writeFile(path.join(outputPath, 'app.aab'), 'aab fixture');
+          },
+        },
+      ],
+      zipEntries: {
+        'base/manifest/AndroidManifest.xml':
+          '<manifest package="io.example.githubaab" xmlns:android="http://schemas.android.com/apk/res/android" />',
+      },
+    },
+    async () => {
+      await withMockedInstallSourceFetch(Buffer.from('artifact fixture'), async () => {
+        const result = await prepareAndroidInstallArtifact({
+          kind: 'url',
+          url: 'https://api.github.com/repos/acme/app/actions/artifacts/456/zip',
+        });
+
+        try {
+          assert.equal(path.basename(result.installablePath), 'app.aab');
+          assert.equal(result.packageName, 'io.example.githubaab');
+        } finally {
+          await result.cleanup();
+        }
+      });
+    },
   );
-  await fs.writeFile(path.join(tempRoot, 'BundleConfig.pb'), 'bundle-config', 'utf8');
-  execFileSync('zip', ['-qr', aabPath, 'BundleConfig.pb', 'base'], { cwd: tempRoot });
-  execFileSync('zip', ['-q', archivePath, 'app.aab'], { cwd: tempRoot });
-
-  await withMockedInstallSourceFetch(await fs.readFile(archivePath), async () => {
-    const result = await prepareAndroidInstallArtifact({
-      kind: 'url',
-      url: 'https://api.github.com/repos/acme/app/actions/artifacts/456/zip',
-    });
-
-    try {
-      assert.equal(path.basename(result.installablePath), 'app.aab');
-      assert.equal(result.packageName, 'io.example.githubaab');
-    } finally {
-      await result.cleanup();
-    }
-  });
-  await fs.rm(tempRoot, { recursive: true, force: true });
 });
 
 test('prepareIosInstallArtifact extracts trusted GitHub artifact ZIP containing nested app tar', async () => {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-github-app-tar-'));
-  const payloadDir = path.join(tempRoot, 'payload');
-  const appDir = path.join(payloadDir, 'Demo.app');
-  const tarPath = path.join(tempRoot, 'Demo.app.tar.gz');
-  const archivePath = path.join(tempRoot, 'artifact.zip');
-  await fs.mkdir(appDir, { recursive: true });
-  await writeIosInfoPlist(appDir, {
-    bundleId: 'com.example.githubtar',
-    appName: 'GitHub Tar',
-  });
-  execFileSync('tar', ['-czf', tarPath, '-C', payloadDir, 'Demo.app']);
-  execFileSync('zip', ['-q', archivePath, 'Demo.app.tar.gz'], { cwd: tempRoot });
+  await withArchiveFixture(
+    {
+      extractions: [
+        {
+          command: 'unzip',
+          populate: async (outputPath) => {
+            await fs.writeFile(path.join(outputPath, 'Demo.app.tar.gz'), 'tar fixture');
+          },
+        },
+        {
+          command: 'tar',
+          populate: async (outputPath) => {
+            await fs.mkdir(path.join(outputPath, 'Demo.app'));
+          },
+        },
+      ],
+    },
+    async () => {
+      await withIosBundleInfo('com.example.githubtar', 'GitHub Tar', async () => {
+        await withMockedInstallSourceFetch(Buffer.from('artifact fixture'), async () => {
+          const result = await prepareIosInstallArtifact({
+            kind: 'url',
+            url: 'https://api.github.com/repos/acme/app/actions/artifacts/789/zip',
+          });
 
-  await withMockedInstallSourceFetch(await fs.readFile(archivePath), async () => {
-    const result = await prepareIosInstallArtifact({
-      kind: 'url',
-      url: 'https://api.github.com/repos/acme/app/actions/artifacts/789/zip',
-    });
-
-    try {
-      assert.equal(path.basename(result.installablePath), 'Demo.app');
-      assert.equal(result.bundleId, 'com.example.githubtar');
-      assert.equal(result.appName, 'GitHub Tar');
-    } finally {
-      await result.cleanup();
-    }
-  });
-  await fs.rm(tempRoot, { recursive: true, force: true });
+          try {
+            assert.equal(path.basename(result.installablePath), 'Demo.app');
+            assert.equal(result.bundleId, 'com.example.githubtar');
+            assert.equal(result.appName, 'GitHub Tar');
+          } finally {
+            await result.cleanup();
+          }
+        });
+      });
+    },
+  );
 });
 
 test('prepareIosInstallArtifact extracts trusted GitHub artifact ZIP containing one IPA', async () => {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-github-ipa-'));
-  const payloadAppDir = path.join(tempRoot, 'Payload', 'Demo.app');
-  const ipaPath = path.join(tempRoot, 'Demo.ipa');
-  const archivePath = path.join(tempRoot, 'artifact.zip');
-  await fs.mkdir(payloadAppDir, { recursive: true });
-  await writeIosInfoPlist(payloadAppDir, {
-    bundleId: 'com.example.githubipa',
-    appName: 'GitHub IPA',
-  });
-  execFileSync('zip', ['-qr', ipaPath, 'Payload'], { cwd: tempRoot });
-  execFileSync('zip', ['-q', archivePath, 'Demo.ipa'], { cwd: tempRoot });
+  await withArchiveFixture(
+    {
+      extractions: [
+        {
+          command: 'unzip',
+          populate: async (outputPath) => {
+            await fs.writeFile(path.join(outputPath, 'Demo.ipa'), 'ipa fixture');
+          },
+        },
+        {
+          command: 'unzip',
+          populate: async (outputPath) => {
+            await fs.mkdir(path.join(outputPath, 'Payload', 'Demo.app'), { recursive: true });
+          },
+        },
+      ],
+    },
+    async () => {
+      await withIosBundleInfo('com.example.githubipa', 'GitHub IPA', async () => {
+        await withMockedInstallSourceFetch(Buffer.from('artifact fixture'), async () => {
+          const result = await prepareIosInstallArtifact({
+            kind: 'url',
+            url: 'https://api.github.com/repos/acme/app/actions/artifacts/987/zip',
+          });
 
-  await withMockedInstallSourceFetch(await fs.readFile(archivePath), async () => {
-    const result = await prepareIosInstallArtifact({
-      kind: 'url',
-      url: 'https://api.github.com/repos/acme/app/actions/artifacts/987/zip',
-    });
-
-    try {
-      assert.equal(path.basename(result.installablePath), 'Demo.app');
-      assert.equal(result.bundleId, 'com.example.githubipa');
-      assert.equal(result.appName, 'GitHub IPA');
-    } finally {
-      await result.cleanup();
-    }
-  });
-  await fs.rm(tempRoot, { recursive: true, force: true });
+          try {
+            assert.equal(path.basename(result.installablePath), 'Demo.app');
+            assert.equal(result.bundleId, 'com.example.githubipa');
+            assert.equal(result.appName, 'GitHub IPA');
+          } finally {
+            await result.cleanup();
+          }
+        });
+      });
+    },
+  );
 });
 
 test('prepareIosInstallArtifact cleans URL materialization when IPA payload resolution fails', async () => {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-multi-ipa-'));
-  const payloadDir = path.join(tempRoot, 'Payload');
-  const oneAppDir = path.join(payloadDir, 'One.app');
-  const twoAppDir = path.join(payloadDir, 'Two.app');
-  const ipaPath = path.join(tempRoot, 'Multi.ipa');
-  const archivePath = path.join(tempRoot, 'artifact.zip');
-  await fs.mkdir(oneAppDir, { recursive: true });
-  await fs.mkdir(twoAppDir, { recursive: true });
-  execFileSync('zip', ['-qr', ipaPath, 'Payload'], { cwd: tempRoot });
-  execFileSync('zip', ['-q', archivePath, 'Multi.ipa'], { cwd: tempRoot });
-
-  try {
-    await withMockedInstallSourceFetch(await fs.readFile(archivePath), async () => {
-      await withIsolatedInstallTempRoot(async (materializeTempRoot) => {
-        await assert.rejects(
-          async () =>
-            await prepareIosInstallArtifact({
-              kind: 'url',
-              url: 'https://api.github.com/repos/acme/app/actions/artifacts/988/zip',
-            }),
-          /found 2 .app bundles/,
-        );
-        assert.deepEqual(await fs.readdir(materializeTempRoot), []);
+  await withArchiveFixture(
+    {
+      extractions: [
+        {
+          command: 'unzip',
+          populate: async (outputPath) => {
+            await fs.writeFile(path.join(outputPath, 'Multi.ipa'), 'ipa fixture');
+          },
+        },
+        {
+          command: 'unzip',
+          populate: async (outputPath) => {
+            await fs.mkdir(path.join(outputPath, 'Payload', 'One.app'), { recursive: true });
+            await fs.mkdir(path.join(outputPath, 'Payload', 'Two.app'), { recursive: true });
+          },
+        },
+      ],
+    },
+    async () => {
+      await withMockedInstallSourceFetch(Buffer.from('artifact fixture'), async () => {
+        await withIsolatedInstallTempRoot(async (materializeTempRoot) => {
+          await assert.rejects(
+            async () =>
+              await prepareIosInstallArtifact({
+                kind: 'url',
+                url: 'https://api.github.com/repos/acme/app/actions/artifacts/988/zip',
+              }),
+            /found 2 .app bundles/,
+          );
+          assert.deepEqual(await fs.readdir(materializeTempRoot), []);
+        });
       });
-    });
-  } finally {
-    await fs.rm(tempRoot, { recursive: true, force: true });
-  }
+    },
+  );
 });
 
 test('prepareAndroidInstallArtifact rejects trusted artifact archives with multiple installables', async () => {
@@ -470,6 +536,57 @@ function findExecutableInPath(command: string): string | undefined {
   return undefined;
 }
 
+type ArchiveExtractionFixture = {
+  command: 'unzip' | 'tar';
+  populate: (outputPath: string) => Promise<void>;
+};
+
+async function withArchiveFixture(
+  fixture: {
+    extractions: ArchiveExtractionFixture[];
+    zipEntries?: Record<string, string>;
+  },
+  run: () => Promise<void>,
+): Promise<void> {
+  let extractionIndex = 0;
+  await withCommandExecutorOverride((command, args) => {
+    if (command === 'unzip' && args[0] === '-p') {
+      const contents = fixture.zipEntries?.[String(args[2])];
+      return Promise.resolve({
+        exitCode: contents === undefined ? 1 : 0,
+        stdout: '',
+        stderr: '',
+        stdoutBuffer: contents === undefined ? Buffer.alloc(0) : Buffer.from(contents),
+      });
+    }
+    if (command !== 'unzip' && command !== 'tar') return undefined;
+
+    const extraction = fixture.extractions[extractionIndex];
+    assert.ok(extraction, `Unexpected extra ${command} extraction`);
+    assert.equal(command, extraction.command);
+    extractionIndex += 1;
+    const outputPath = String(args[3]);
+    return extraction.populate(outputPath).then(() => ({ exitCode: 0, stdout: '', stderr: '' }));
+  }, run);
+  assert.equal(extractionIndex, fixture.extractions.length);
+}
+
+async function withIosBundleInfo(
+  bundleId: string,
+  appName: string,
+  run: () => Promise<void>,
+): Promise<void> {
+  const provider = createLocalAppleToolProvider({
+    plist: {
+      readJson: async () => ({
+        CFBundleIdentifier: bundleId,
+        CFBundleDisplayName: appName,
+      }),
+    },
+  });
+  await withAppleToolProvider(provider, run);
+}
+
 async function withMockedInstallSourceFetch(
   bytes: Buffer,
   run: () => Promise<void>,
@@ -511,22 +628,4 @@ async function withIsolatedInstallTempRoot(
     tmpdirSpy.mockRestore();
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
-}
-
-async function writeIosInfoPlist(
-  appDir: string,
-  params: { bundleId: string; appName: string },
-): Promise<void> {
-  const plist = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleIdentifier</key>
-  <string>${params.bundleId}</string>
-  <key>CFBundleDisplayName</key>
-  <string>${params.appName}</string>
-</dict>
-</plist>
-`;
-  await fs.writeFile(path.join(appDir, 'Info.plist'), plist, 'utf8');
 }

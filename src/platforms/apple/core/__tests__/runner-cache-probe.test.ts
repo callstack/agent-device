@@ -1,7 +1,17 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+
+const { mockRunCmdSync } = vi.hoisted(() => ({ mockRunCmdSync: vi.fn() }));
+
+vi.mock('../../../../utils/exec.ts', async () => {
+  const actual = await vi.importActual<typeof import('../../../../utils/exec.ts')>(
+    '../../../../utils/exec.ts',
+  );
+  return { ...actual, runCmdSync: mockRunCmdSync };
+});
+
 import type { DeviceInfo } from '../../../../kernel/device.ts';
 import { hasCachedAppleRunnerArtifact } from '../runner/runner-xctestrun.ts';
 
@@ -17,6 +27,16 @@ const simulator: DeviceInfo = {
 let derivedDir: string;
 
 beforeEach(() => {
+  mockRunCmdSync.mockImplementation((command: string, args: string[]) => {
+    if (command === 'xcodebuild') {
+      return { exitCode: 0, stdout: 'Xcode 26.2\nBuild version 17C52\n', stderr: '' };
+    }
+    return {
+      exitCode: 0,
+      stdout: args.includes('--show-sdk-build-version') ? '23C53\n' : '26.2\n',
+      stderr: '',
+    };
+  });
   derivedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-cache-probe-'));
   process.env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH = derivedDir;
 });

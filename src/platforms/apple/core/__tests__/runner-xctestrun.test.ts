@@ -5,6 +5,23 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+const { mockExecFileSync, mockRunCmdSync } = vi.hoisted(() => ({
+  mockExecFileSync: vi.fn(),
+  mockRunCmdSync: vi.fn(),
+}));
+
+vi.mock('node:child_process', async () => {
+  const actual = await vi.importActual<typeof import('node:child_process')>('node:child_process');
+  return { ...actual, execFileSync: mockExecFileSync };
+});
+
+vi.mock('../../../../utils/exec.ts', async () => {
+  const actual = await vi.importActual<typeof import('../../../../utils/exec.ts')>(
+    '../../../../utils/exec.ts',
+  );
+  return { ...actual, runCmdSync: mockRunCmdSync };
+});
+
 import type { DeviceInfo } from '../../../../kernel/device.ts';
 import { withCommandExecutorOverride } from '../../../../utils/exec.ts';
 import { findXctestrun, scoreXctestrunCandidate } from '../runner/runner-artifact.ts';
@@ -44,6 +61,24 @@ type RedirectPaths = {
 
 const runnerPortEnv = { AGENT_DEVICE_RUNNER_PORT: '12345' };
 
+function appleToolFingerprintOutput(command: string, args: readonly string[]): string {
+  if (command === 'xcodebuild' && args[0] === '-version') {
+    return 'Xcode 26.2\nBuild version 17C52\n';
+  }
+  if (command === 'xcrun' && args.includes('--show-sdk-version')) return '26.2\n';
+  if (command === 'xcrun' && args.includes('--show-sdk-build-version')) return '23C53\n';
+  throw new Error(`Unexpected Apple fingerprint command: ${command} ${args.join(' ')}`);
+}
+
+mockExecFileSync.mockImplementation((command: string, args: readonly string[]) =>
+  appleToolFingerprintOutput(command, args),
+);
+mockRunCmdSync.mockImplementation((command: string, args: string[]) => ({
+  exitCode: 0,
+  stdout: appleToolFingerprintOutput(command, args),
+  stderr: '',
+}));
+
 async function withTempDir<T>(prefix: string, fn: (root: string) => Promise<T> | T): Promise<T> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   try {
@@ -65,14 +100,6 @@ function makeRedirectPaths(root: string): RedirectPaths {
 
 function makeScopedSimulator(paths: RedirectPaths): DeviceInfo {
   return { ...iosSimulator, simulatorSetPath: paths.requestedSetPath };
-}
-
-function restoreEnvVar(name: string, value: string | undefined): void {
-  if (value === undefined) {
-    delete process.env[name];
-    return;
-  }
-  process.env[name] = value;
 }
 
 async function acquireRedirect(
@@ -212,8 +239,6 @@ test('setup metadata script matches expected iOS simulator cache metadata', asyn
     const scriptPath = path.join(repoRoot, 'scripts', 'write-xcuitest-cache-metadata.mjs');
     const projectRoot = path.join(root, 'project');
     const derivedRoot = path.join(root, 'derived');
-    const binDir = path.join(root, 'bin');
-    fs.mkdirSync(binDir, { recursive: true });
     fs.mkdirSync(derivedRoot, { recursive: true });
     fs.mkdirSync(path.join(projectRoot, 'apple', 'runner', 'AgentDeviceRunner'), {
       recursive: true,
@@ -223,44 +248,19 @@ test('setup metadata script matches expected iOS simulator cache metadata', asyn
       path.join(projectRoot, 'apple', 'runner', 'AgentDeviceRunner', 'Runner.swift'),
       'final class Runner {}\n',
     );
-    writeExecutable(
-      path.join(binDir, 'xcodebuild'),
-      ['#!/bin/sh', 'printf "Xcode 26.2\\nBuild version 17C52\\n"'].join('\n'),
+    const { writeXcuitestCacheMetadata } = await import(
+      `${pathToFileURL(scriptPath).href}?case=${Date.now()}`
     );
-    writeExecutable(
-      path.join(binDir, 'xcrun'),
-      [
-        '#!/bin/sh',
-        'case "$*" in',
-        '  *"--show-sdk-version"*) printf "26.2\\n" ;;',
-        '  *"--show-sdk-build-version"*) printf "23C53\\n" ;;',
-        '  *) exit 1 ;;',
-        'esac',
-      ].join('\n'),
+    writeXcuitestCacheMetadata(['ios', derivedRoot, 'generic/platform=iOS Simulator'], projectRoot);
+
+    const actual = JSON.parse(
+      fs.readFileSync(path.join(derivedRoot, '.agent-device-runner-cache.json'), 'utf8'),
     );
-    const previousPath = process.env.PATH;
-    process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ''}`;
+    const { artifacts: _actualArtifacts, ...actualComparable } = actual;
+    const { artifacts: _expectedArtifacts, ...expectedComparable } =
+      resolveExpectedRunnerCacheMetadata(iosSimulator, projectRoot);
 
-    try {
-      const { writeXcuitestCacheMetadata } = await import(
-        `${pathToFileURL(scriptPath).href}?case=${Date.now()}`
-      );
-      writeXcuitestCacheMetadata(
-        ['ios', derivedRoot, 'generic/platform=iOS Simulator'],
-        projectRoot,
-      );
-
-      const actual = JSON.parse(
-        fs.readFileSync(path.join(derivedRoot, '.agent-device-runner-cache.json'), 'utf8'),
-      );
-      const { artifacts: _actualArtifacts, ...actualComparable } = actual;
-      const { artifacts: _expectedArtifacts, ...expectedComparable } =
-        resolveExpectedRunnerCacheMetadata(iosSimulator, projectRoot);
-
-      assert.deepEqual(actualComparable, expectedComparable);
-    } finally {
-      restoreEnvVar('PATH', previousPath);
-    }
+    assert.deepEqual(actualComparable, expectedComparable);
   });
 }, 15_000);
 
@@ -290,10 +290,6 @@ test('runner cache key ignores package version but honors toolchain and SDK chan
     basePath,
   );
 });
-
-function writeExecutable(filePath: string, contents: string): void {
-  fs.writeFileSync(filePath, `${contents}\n`, { mode: 0o755 });
-}
 
 test('prepareXctestrunWithEnv avoids XCTest screen recordings for nested and legacy targets', async () => {
   await withTempDir('runner-xctestrun-policy-', async (root) => {

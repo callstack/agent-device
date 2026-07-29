@@ -2,20 +2,28 @@
 
 ## Which gates a change needs
 
-Default for code changes: `pnpm check:affected --base origin/main --run`. It derives the gate set
-from repository sources of truth, so prefer it over interpreting the table below by hand. GitHub CI
-stays authoritative.
+Use three validation tiers:
+
+1. **While editing:** run a focused test or `pnpm check:quick`.
+2. **Before pushing:** run `pnpm check:affected --run`. It derives the relevant local gates from
+   repository sources of truth and reports checks that need CI or a native toolchain.
+3. **For broad refactors or an explicitly requested full local gate:** run `pnpm check`.
+
+`pnpm check` is the deterministic core aggregate, not a local reproduction of every GitHub job.
+Coverage, provider integration, history-backed compatibility, specialized toolchains, and live
+device/browser lanes remain separate. GitHub CI stays authoritative.
 
 The mapping it encodes, for when you need to run a gate directly or reason about coverage:
 
 | Change | Gate |
 | --- | --- |
 | Any TypeScript | `pnpm typecheck` or `pnpm check:quick` |
+| Expo test app (`examples/test-app/**/*.{ts,tsx,js,jsx,json}`) | Root lint and format plus `pnpm test-app:typecheck`; the affected selector runs lint/format locally and reports the CI-owned typecheck without installing the isolated Expo dependency graph |
 | Daemon handler / shared module | `pnpm check:unit` |
 | Tooling/config (`package.json`, `tsconfig*.json`, `.oxlintrc.json`, `.oxfmtrc.json`) | `pnpm check:tooling` |
 | Platform/device response — anything emitting `platform`/`appleOs` on the wire, or shaping a daemon response | `pnpm test:integration:provider` **and** `pnpm test:coverage` |
 | Cross-platform behavior | `pnpm test:integration` |
-| iOS runner / Swift | `pnpm build:xcuitest` |
+| Apple runner / Swift | Build the changed target with `pnpm build:xcuitest:<platform>`; use `pnpm build:xcuitest` only for shared iOS/macOS changes |
 | CLI help/guidance (`src/cli/parser/cli-help.ts`, `src/cli-schema/`) | `pnpm exec vitest run src/cli/parser/__tests__ src/cli-schema/command-schema-guards.test.ts scripts/__tests__` — the `scripts/__tests__` gates enforce help-topic benchmark coverage and pin the bench's quoted CLI samples to the real renderers |
 | Help benchmark cases (`scripts/help-conformance-*.mjs`) | `pnpm exec vitest run scripts/__tests__` (deterministic gates); model-backed: `pnpm bench:help-conformance` (paid LLM calls, local only) |
 | `.ad` grammar (`src/replay/script.ts`, gesture arity, replay vars) | `pnpm exec vitest run --project unit-core test/replay-compat` — the frozen replay-compat corpus asserts which released script surfaces still parse; a flipped verdict is edited in `test/replay-compat/manifest.ts`, never in the script. Adding or re-pinning a corpus entry also runs `pnpm check:replay-compat`, which re-derives each entry from its release tag in git history |
@@ -29,6 +37,8 @@ Two traps worth naming:
   Internal `apple` must never reach a command response — project through `publicPlatformString`.
 - Fallow CI failures reproduce with `pnpm check:fallow --base origin/main`. Do not estimate
   complexity or dead-code impact by hand.
+- `pnpm fallow:all` audits the entire repository and can report grandfathered baseline findings. Use
+  it to inspect repository-wide debt, not as the changed-code gate.
 
 Docs/skills-only and non-TS changes with no behavior impact need no tests. Test-only DI seam CI
 failures are enforced by the workflow — do not add optional `typeof` DI params to production code to
@@ -73,10 +83,12 @@ advisory**: existing GitHub CI stays authoritative and required, and this only
 narrows the *local* feedback loop.
 
 ```sh
-pnpm check:affected --base origin/main --run     # default agent loop: plan + run
-pnpm check:affected --base origin/main           # human-readable plan only
-pnpm check:affected --base origin/main --json    # machine-readable plan only
+pnpm check:affected --run     # default agent loop: plan + run
+pnpm check:affected           # human-readable plan only
+pnpm check:affected --json    # machine-readable plan only
 ```
+
+The default base is `origin/main`; pass `--base <ref>` only when comparing against another ref.
 
 The selection is derived from repository sources of truth rather than a
 hand-maintained path map:
@@ -88,7 +100,10 @@ hand-maintained path map:
   analysis; GitHub's authoritative full suites still cover that boundary.
 - **Non-Vitest suites** retain explicit ownership. Root
   `test/integration/*.ts` files use the Node integration lane, and
-  platform/build tools keep their native gates.
+  platform/build tools keep their native gates. Test-app source selects root
+  lint and format plus its isolated typecheck; the typecheck is reported but
+  left to CI by `--run` so a root checkout never installs Expo dependencies
+  implicitly.
 - **Always-on gates** (`lint`, `typecheck`, `layering`, `fallow`, `format`) fire
   for their input categories and are never silently skipped. Platform source
   also selects the provider-integration and coverage gates required by the

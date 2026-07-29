@@ -100,8 +100,14 @@ test('docs-only change selects no checks and records the docs paths', () => {
   assert.equal(result.docsOnlyPaths.length, 3);
 });
 
+test('test app source selects root lint and format plus its isolated typecheck', () => {
+  const result = plan(['examples/test-app/app/index.tsx']);
+  assert.equal(result.failOpen, false);
+  assert.deepEqual(result.checks, ['format', 'lint', 'test-app-typecheck']);
+});
+
 test('unknown path fails open to the full check set', () => {
-  const result = plan(['examples/test-app/App.tsx']);
+  const result = plan(['fixtures/unknown.data']);
   assert.equal(result.failOpen, true);
   assert.deepEqual(result.checks, [...ALL_CHECKS]);
   assert.equal(result.failOpenReasons[0]?.rule, 'unknown-path');
@@ -168,6 +174,7 @@ test('every catalog command resolves against package scripts', () => {
     'format:check': 'x',
     lint: 'x',
     typecheck: 'x',
+    'test-app:typecheck': 'x',
     'check:layering': 'x',
     'check:fallow': 'x',
     'check:mcp-metadata': 'x',
