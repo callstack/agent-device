@@ -270,28 +270,17 @@ async function completeOpenCommand(params: {
     schedulePrewarm();
   }
 
+  const usesLocalIosSimulatorLifecycle = isIosSimulator(device) && !isActiveProviderDevice(device);
   const launchPlan = buildSessionOpenLaunchPlan({
-    device,
     openPositionals,
     runtime,
     flags: req.flags,
+    foldRuntimeLaunchUrl: usesLocalIosSimulatorLifecycle,
   });
-  // Local iOS simulators relaunch inside the platform open: direct app launches use
-  // `simctl launch --terminate-running-process`, while app+URL launches terminate
-  // and let `simctl openurl` be the sole launch trigger. Provider simulators must
-  // dispatch an explicit close because their interactors own app termination.
-  // Runtime hints written below are user-defaults reads at that launch, so ordering holds.
-  // Collapse when the platform open can implement terminate-before-launch
-  // itself. App+URL is one semantic relaunch: terminate the bundle, then let
-  // the URL be the sole launch trigger. --clear-app-state keeps close-first
-  // ordering because it must never mutate a running app's container.
+  // Local simulators terminate inside the Apple open path. Provider simulators
+  // keep explicit close/open dispatches, and clear-state must mutate a stopped app.
   const collapseSimulatorRelaunch =
-    shouldRelaunch &&
-    Boolean(openTarget) &&
-    launchPlan.supportsTerminateRunningApp &&
-    isIosSimulator(device) &&
-    !isActiveProviderDevice(device) &&
-    req.flags?.clearAppState !== true;
+    shouldRelaunch && usesLocalIosSimulatorLifecycle && req.flags?.clearAppState !== true;
   if (
     shouldRunRelaunchPreClose({
       shouldRelaunch,
@@ -363,14 +352,16 @@ async function completeOpenCommand(params: {
   timing.openDispatchDurationMs = Math.max(0, Date.now() - openStartedAtMs);
   await maybeActivateAndroidTestImeForOpen(device, req, sessionStore.resolveDaemonStateDir());
   const launchUrlStartedAtMs = Date.now();
-  await dispatchSessionOpenFollowUpLaunchUrl({
-    launchUrl: launchPlan.followUpLaunchUrl,
-    device,
-    req,
-    logPath,
-    appBundleId: sessionAppBundleId,
-    traceLogPath,
-  });
+  if (launchPlan.followUpLaunchUrl) {
+    await dispatchSessionOpenFollowUpLaunchUrl({
+      launchUrl: launchPlan.followUpLaunchUrl,
+      device,
+      req,
+      logPath,
+      appBundleId: sessionAppBundleId,
+      traceLogPath,
+    });
+  }
   timing.launchUrlDurationMs = Math.max(0, Date.now() - launchUrlStartedAtMs);
   if (shouldPrewarmIosRunner && !runnerPrewarmScheduled) {
     schedulePrewarm();

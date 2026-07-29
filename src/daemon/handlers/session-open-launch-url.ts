@@ -1,53 +1,43 @@
 import { isDeepLinkTarget } from '../../contracts/open-target.ts';
 import { dispatchCommand } from '../../core/dispatch.ts';
-import { isIosFamily, type DeviceInfo } from '../../kernel/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import type { DaemonRequest, SessionRuntimeHints } from '../types.ts';
 import { contextFromFlags } from '../context.ts';
 
 type SessionOpenLaunchPlan = {
   openPositionals: string[];
   followUpLaunchUrl?: string;
-  supportsTerminateRunningApp: boolean;
 };
 
 export function buildSessionOpenLaunchPlan(params: {
-  device: DeviceInfo;
   openPositionals: string[];
   runtime: SessionRuntimeHints | undefined;
   flags: DaemonRequest['flags'];
+  foldRuntimeLaunchUrl: boolean;
 }): SessionOpenLaunchPlan {
-  const { device, openPositionals, runtime, flags } = params;
+  const { openPositionals, runtime, flags, foldRuntimeLaunchUrl } = params;
   const launchUrl = runtime?.launchUrl;
   if (!launchUrl || openPositionals.length !== 1) {
-    return {
-      openPositionals,
-      supportsTerminateRunningApp:
-        openPositionals.length === 2 ||
-        (openPositionals.length === 1 && !isDeepLinkTarget(openPositionals[0] ?? '')),
-    };
+    return { openPositionals };
   }
   const openTarget = openPositionals[0]?.trim();
   if (!openTarget || isDeepLinkTarget(openTarget)) {
-    return { openPositionals, supportsTerminateRunningApp: false };
+    return { openPositionals };
   }
 
   const hasDirectLaunchOptions =
     Boolean(flags?.launchConsole?.trim()) || Boolean(flags?.launchArgs?.length);
-  if (isIosFamily(device) && !hasDirectLaunchOptions) {
-    return {
-      openPositionals: [openTarget, launchUrl],
-      supportsTerminateRunningApp: true,
-    };
+  if (foldRuntimeLaunchUrl && !hasDirectLaunchOptions) {
+    return { openPositionals: [openTarget, launchUrl] };
   }
   return {
     openPositionals,
     followUpLaunchUrl: launchUrl,
-    supportsTerminateRunningApp: true,
   };
 }
 
 export async function dispatchSessionOpenFollowUpLaunchUrl(params: {
-  launchUrl: string | undefined;
+  launchUrl: string;
   device: DeviceInfo;
   req: DaemonRequest;
   logPath: string;
@@ -55,9 +45,13 @@ export async function dispatchSessionOpenFollowUpLaunchUrl(params: {
   traceLogPath?: string;
 }): Promise<void> {
   const { launchUrl, device, req, logPath, appBundleId, traceLogPath } = params;
-  if (!launchUrl) return;
-  const context = contextFromFlags(logPath, req.flags, appBundleId, traceLogPath);
-  delete context.launchConsole;
-  delete context.launchArgs;
+  const followUpFlags = req.flags
+    ? (Object.fromEntries(
+        Object.entries(req.flags).filter(
+          ([name]) => name !== 'launchConsole' && name !== 'launchArgs',
+        ),
+      ) as NonNullable<DaemonRequest['flags']>)
+    : undefined;
+  const context = contextFromFlags(logPath, followUpFlags, appBundleId, traceLogPath);
   await dispatchCommand(device, 'open', [launchUrl], req.flags?.out, context);
 }

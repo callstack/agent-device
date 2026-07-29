@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { setActiveProviderDeviceRuntimes } from '../../../provider-device-runtime.ts';
 import {
   makeSession,
   makeSessionStore,
@@ -24,50 +25,41 @@ describe('buildSessionOpenLaunchPlan', () => {
   test('folds an iOS launch URL into the app open', () => {
     expect(
       buildSessionOpenLaunchPlan({
-        device: iosSimulator,
         openPositionals: ['com.example.app'],
         runtime: { platform: 'ios', launchUrl: 'myapp://automation' },
         flags: { relaunch: true },
+        foldRuntimeLaunchUrl: true,
       }),
     ).toEqual({
       openPositionals: ['com.example.app', 'myapp://automation'],
-      supportsTerminateRunningApp: true,
     });
   });
 
   test('keeps launch options on the direct app launch before the URL open', () => {
     expect(
       buildSessionOpenLaunchPlan({
-        device: iosSimulator,
         openPositionals: ['com.example.app'],
         runtime: { platform: 'ios', launchUrl: 'myapp://automation' },
         flags: { launchArgs: ['-Flag', 'YES'] },
+        foldRuntimeLaunchUrl: true,
       }),
     ).toEqual({
       openPositionals: ['com.example.app'],
       followUpLaunchUrl: 'myapp://automation',
-      supportsTerminateRunningApp: true,
     });
   });
 
-  test('keeps the existing two-dispatch contract off Apple platforms', () => {
+  test('keeps the existing two-dispatch contract when URL folding is unavailable', () => {
     expect(
       buildSessionOpenLaunchPlan({
-        device: {
-          platform: 'android',
-          id: 'emulator-5554',
-          name: 'Pixel',
-          kind: 'emulator',
-          booted: true,
-        },
         openPositionals: ['com.example.app'],
-        runtime: { platform: 'android', launchUrl: 'myapp://automation' },
+        runtime: { platform: 'ios', launchUrl: 'myapp://automation' },
         flags: {},
+        foldRuntimeLaunchUrl: false,
       }),
     ).toEqual({
       openPositionals: ['com.example.app'],
       followUpLaunchUrl: 'myapp://automation',
-      supportsTerminateRunningApp: true,
     });
   });
 
@@ -114,5 +106,96 @@ describe('buildSessionOpenLaunchPlan', () => {
         terminateRunningApp: true,
       },
     ]);
+  });
+
+  test('keeps a physical iOS runtime URL as a follow-up open', async () => {
+    const sessionStore = makeSessionStore();
+    const sessionName = 'ios-device-runtime-url-session';
+    const iosDevice = {
+      ...iosSimulator,
+      id: 'device-1',
+      name: 'My iPhone',
+      kind: 'device' as const,
+    };
+    sessionStore.setRuntimeHints(sessionName, {
+      platform: 'ios',
+      launchUrl: 'https://example.com/automation',
+    });
+
+    const calls: string[] = [];
+    mockResolveTargetDevice.mockResolvedValue(iosDevice);
+    mockDispatch.mockImplementation(async (_device, command, positionals) => {
+      calls.push(`${command}:${positionals.join(' ')}`);
+      return {};
+    });
+
+    const response = await handleSessionCommands({
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'open',
+        positionals: ['com.example.app'],
+        flags: {},
+      },
+      sessionName,
+      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      sessionStore,
+      invoke: noopInvoke,
+    });
+
+    expect(response).toMatchObject({ ok: true });
+    expect(calls).toEqual(['open:com.example.app', 'open:https://example.com/automation']);
+  });
+
+  test('keeps a provider iOS simulator runtime URL as a follow-up open', async () => {
+    const sessionStore = makeSessionStore();
+    const sessionName = 'provider-ios-runtime-url-session';
+    const providerSimulator = {
+      ...iosSimulator,
+      id: 'provider:ios:lease-a',
+      name: 'Provider iPhone',
+    };
+    sessionStore.setRuntimeHints(sessionName, {
+      platform: 'ios',
+      launchUrl: 'myapp://automation',
+    });
+    setActiveProviderDeviceRuntimes([
+      {
+        provider: 'fake-provider',
+        leaseLifecycle: {},
+        deviceInventoryProvider: async () => [providerSimulator],
+        ownsDevice: (candidate) => candidate.id === providerSimulator.id,
+        getInteractor: () => undefined,
+        shutdown: async () => {},
+      },
+    ]);
+
+    const calls: string[] = [];
+    mockResolveTargetDevice.mockResolvedValue(providerSimulator);
+    mockDispatch.mockImplementation(async (_device, command, positionals) => {
+      calls.push(`${command}:${positionals.join(' ')}`);
+      return {};
+    });
+
+    try {
+      const response = await handleSessionCommands({
+        req: {
+          token: 't',
+          session: sessionName,
+          command: 'open',
+          positionals: ['com.example.app'],
+          flags: {},
+        },
+        sessionName,
+        logPath: path.join(os.tmpdir(), 'daemon.log'),
+        sessionStore,
+        invoke: noopInvoke,
+      });
+
+      expect(response).toMatchObject({ ok: true });
+      expect(calls).toEqual(['open:com.example.app', 'open:myapp://automation']);
+    } finally {
+      setActiveProviderDeviceRuntimes([]);
+    }
   });
 });
