@@ -327,6 +327,7 @@ async function completeOpenCommand(params: {
   }
   const runnerTargetPredatesOpen = runnerPrewarmAwaited;
   const openStartedAtMs = Date.now();
+  await req.internal?.retainDeviceExecutionLock?.(device.id);
   const provisionalSession = await prepareOpenDispatchSession({
     req,
     sessionName,

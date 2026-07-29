@@ -67,9 +67,7 @@ export function boundReplayDivergenceForSession(params: {
     refsGeneration: screen.refsGeneration,
     refs: screen.refs.map((entry) => entry.ref),
   });
-  if (publication.published === true || publication.reason === 'empty') {
-    return bounded;
-  }
+  if (publication.published === true) return bounded;
 
   removeUnpublishedOverflowArtifact(overflowArtifactPath);
   return suppressUnpublishedDivergenceRefs(bounded, publication.reason);
@@ -77,7 +75,7 @@ export function boundReplayDivergenceForSession(params: {
 
 function suppressUnpublishedDivergenceRefs(
   divergence: ReplayDivergence,
-  reason: 'missing-evidence' | 'cancelled' | 'stale-capture' | 'invalid-projection',
+  reason: 'missing-evidence' | 'empty' | 'cancelled' | 'stale-capture' | 'invalid-projection',
 ): ReplayDivergence {
   const { overflow: _overflow, ...withoutOverflow } = divergence;
   return {

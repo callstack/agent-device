@@ -1,6 +1,5 @@
 import type { CommandFlags } from '../core/dispatch.ts';
 import type { DaemonArtifactType } from '../kernel/contracts.ts';
-import { withKeyedLock } from '../utils/keyed-lock.ts';
 import {
   emitDiagnostic,
   getDiagnosticsMeta,
@@ -18,11 +17,8 @@ import {
   assertLockedLeaseAdmissionPreflight,
   cleanupExpiredLeasedSession,
 } from './lease-lifecycle.ts';
-import {
-  prepareLockedRequestBinding,
-  resolveRequestExecutionLockKeys,
-  type RequestExecutionLockKey,
-} from './request-binding.ts';
+import { prepareLockedRequestBinding, resolveRequestExecutionLockKeys } from './request-binding.ts';
+import { createRequestExecutionLocks } from './request-execution-locks.ts';
 import { throwIfRequestCanceled } from '../request/cancel.ts';
 import { finalizeDaemonResponse } from './request-finalization.ts';
 import { refreshRecordingHealth } from './request-recording-health.ts';
@@ -58,6 +54,7 @@ export type RequestExecutionScope = {
   startedAtMs: number;
   runAdmitted<T>(task: () => Promise<T>): Promise<T>;
   runLocked<T>(task: () => Promise<T>): Promise<T>;
+  retainDeviceExecutionLock(deviceId: string): Promise<void>;
   throwIfCanceled(): void;
 };
 
@@ -66,6 +63,7 @@ export type LockedRequestScope = {
   sessionName: string;
   logPath: string;
   existingSession: SessionState | undefined;
+  retainDeviceExecutionLock(deviceId: string): Promise<void>;
   finalize(response: DaemonResponse): DaemonResponse;
   contextFromFlags(
     flags: CommandFlags | undefined,
@@ -133,6 +131,10 @@ export async function createRequestExecutionScope(params: {
       ? await resolveRequestExecutionLockKeys({ req: scopedReq, sessionName, sessionStore })
       : [];
     const executionLocks = getLeaseRegistryExecutionLocks(leaseRegistry);
+    const requestExecutionLocks = createRequestExecutionLocks({
+      locks: executionLocks,
+      initialKeys: executionLockKeys,
+    });
 
     const scope: RequestExecutionScope = {
       req: scopedReq,
@@ -141,6 +143,8 @@ export async function createRequestExecutionScope(params: {
       requestLogPath,
       runnerLogPath,
       startedAtMs,
+      retainDeviceExecutionLock: async (deviceId) =>
+        await requestExecutionLocks.retainDevice(deviceId),
       throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
       runAdmitted: async (task) => {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
@@ -161,12 +165,7 @@ export async function createRequestExecutionScope(params: {
       },
       runLocked: async (task) => {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
-        if (executionLockKeys.length === 0) return await scope.runAdmitted(task);
-        return await withRequestExecutionLocks(
-          executionLocks,
-          executionLockKeys,
-          async () => await scope.runAdmitted(task),
-        );
+        return await requestExecutionLocks.run(async () => await scope.runAdmitted(task));
       },
     };
     return scope;
@@ -189,20 +188,6 @@ export async function createRequestExecutionScope(params: {
     }
     throw error;
   }
-}
-
-async function withRequestExecutionLocks<T>(
-  locks: Map<string, Promise<unknown>>,
-  keys: RequestExecutionLockKey[],
-  task: () => Promise<T>,
-): Promise<T> {
-  const [key, ...remainingKeys] = keys;
-  if (!key) return await task();
-  return await withKeyedLock(
-    locks,
-    key,
-    async () => await withRequestExecutionLocks(locks, remainingKeys, task),
-  );
 }
 
 function applyRequestCommandDefaults(req: DaemonRequest): DaemonRequest {
@@ -295,6 +280,7 @@ export function prepareLockedRequestScope(params: {
       sessionName: scope.sessionName,
       logPath,
       existingSession,
+      retainDeviceExecutionLock: scope.retainDeviceExecutionLock,
       finalize,
       contextFromFlags,
       handlerContextFromFlags: (flags, appBundleId, traceLogPath) =>

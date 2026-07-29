@@ -125,7 +125,7 @@ test('session list includes a cwd-scoped session opened by replay', async () => 
     command: 'replay',
     positionals: [replayPath],
     flags: { platform: 'ios' },
-    meta: { cwd: root, requestId: 'replay-open-scope' },
+    meta: { cwd: root, requestId: 'replay-open-scope', deviceKey: 'test:sim-1' },
   });
   expect(replayResponse).toMatchObject({ ok: true });
 
@@ -147,4 +147,71 @@ test('session list includes a cwd-scoped session opened by replay', async () => 
       ],
     },
   });
+});
+
+test('fresh replay retains a dynamically selected device through finalization', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-device-lock-'));
+  const replayPath = path.join(root, 'flow.ad');
+  fs.writeFileSync(
+    replayPath,
+    'runtime set --platform ios --metro-host localhost\nopen "demo://checkout"\nhome\n',
+  );
+  const sessionStore = makeSessionStore('agent-device-replay-device-lock-');
+  const leaseRegistry = new LeaseRegistry();
+  let releaseReplayAction: () => void = () => {};
+  const replayActionReleased = new Promise<void>((resolve) => {
+    releaseReplayAction = resolve;
+  });
+  let markReplayActionEntered: () => void = () => {};
+  const replayActionEntered = new Promise<void>((resolve) => {
+    markReplayActionEntered = resolve;
+  });
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command === 'home') {
+      markReplayActionEntered();
+      await replayActionReleased;
+    }
+    return {};
+  });
+
+  const handler = createRequestHandler({
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry,
+    appleRunnerProvider: () => undefined,
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+  const replayResponse = handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'replay',
+    positionals: [replayPath],
+    flags: { platform: 'ios' },
+    meta: { cwd: root, requestId: 'replay-device-lock', deviceKey: 'test:sim-1' },
+  });
+  await replayActionEntered;
+
+  sessionStore.set('external', makeIosSession('external'));
+  let externalRequestSettled = false;
+  const externalResponse = handler({
+    token: 'test-token',
+    session: 'external',
+    command: 'snapshot',
+    positionals: [],
+    meta: {
+      cwd: root,
+      requestId: 'external-device-command',
+      sessionExplicit: true,
+    },
+  }).finally(() => {
+    externalRequestSettled = true;
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(externalRequestSettled).toBe(false);
+
+  releaseReplayAction();
+  await expect(replayResponse).resolves.toMatchObject({ ok: true });
+  await externalResponse;
+  expect(externalRequestSettled).toBe(true);
 });

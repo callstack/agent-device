@@ -258,13 +258,17 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
 
       let childScope: RequestExecutionScope | undefined;
       try {
-        childScope = await createRequestExecutionScope({ req, sessionStore, leaseRegistry });
+        const scopedReq = bindReplayDeviceExecutionLock(req, parentScope);
+        childScope = await createRequestExecutionScope({
+          req: scopedReq,
+          sessionStore,
+          leaseRegistry,
+        });
         // The outer replay keeps its stable session lock plus the device lock
-        // when known through response projection and ref finalization. A
-        // same-session replay action reuses that admitted scope instead of
-        // reacquiring the non-reentrant locks, so no external later command can
-        // interleave. Nested changes remain visible to capture lineage through
-        // snapshot/frame/runtime/store state.
+        // from the first device binding through response projection and ref
+        // finalization. A same-session replay action reuses that admitted scope
+        // instead of reacquiring the non-reentrant locks. Nested changes remain
+        // visible to capture lineage through snapshot/frame/runtime/store state.
         return childScope.sessionName === parentScope.sessionName
           ? await executeRequestScope(childScope, providerScope)
           : await executeRequestScope(childScope);
@@ -355,6 +359,24 @@ async function dispatchGenericForLockedScope(params: {
     contextFromFlags: lockedScope.contextFromFlags,
   });
   return lockedScope.finalize(dispatchResponse);
+}
+
+function bindReplayDeviceExecutionLock(
+  req: DaemonRequest,
+  parentScope: LockedRequestScope,
+): DaemonRequest {
+  if (req.command !== 'open') return req;
+  const retainDeviceExecutionLock = req.internal?.retainDeviceExecutionLock;
+  return {
+    ...req,
+    internal: {
+      ...req.internal,
+      retainDeviceExecutionLock: async (deviceId) => {
+        await parentScope.retainDeviceExecutionLock(deviceId);
+        await retainDeviceExecutionLock?.(deviceId);
+      },
+    },
+  };
 }
 
 function canRunReplayActionInCurrentScope(

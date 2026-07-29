@@ -165,6 +165,44 @@ test('missing capture evidence fails closed instead of exposing unauthorized ref
   expect(input.session.refFrameTree).toBe(input.prior);
 });
 
+test('degenerate projected refs fail closed when publication normalizes to empty', () => {
+  const input = scenario();
+  const result = boundReplayDivergenceForSession({
+    sessionStore: input.sessionStore,
+    sessionName: input.sessionName,
+    divergence: divergence(input, {
+      screen: {
+        state: 'available',
+        refsGeneration: input.refsGeneration,
+        refs: [
+          { ref: '@', role: 'button', label: 'Empty ref' },
+          { ref: '@~s3', role: 'button', label: 'Empty scoped ref' },
+        ],
+      },
+      suggestions: [
+        { selector: 'label="Empty ref"', basis: 'label', ref: '@' },
+        { selector: 'label="Empty scoped ref"', basis: 'label', ref: '@~s3' },
+      ],
+      suggestionCount: 2,
+    }),
+    responseLevel: 'default',
+    evidence: input.evidence,
+  });
+
+  expect(result.screen).toEqual(
+    expect.objectContaining({
+      state: 'unavailable',
+      reason: 'ref-publication-empty',
+    }),
+  );
+  expect(result.suggestions).toEqual([
+    { selector: 'label="Empty ref"', basis: 'label' },
+    { selector: 'label="Empty scoped ref"', basis: 'label' },
+  ]);
+  expect(input.session.refFrameScope).toEqual(new Set(['old']));
+  expect(input.session.refFrameTree).toBe(input.prior);
+});
+
 test('an empty outward projection consumes its one-shot capture evidence', () => {
   const input = scenario();
   const empty = divergence(input, {
