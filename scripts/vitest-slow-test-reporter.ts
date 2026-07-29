@@ -1,9 +1,4 @@
 import type { Reporter, TestCase, TestModule } from 'vitest/node';
-import {
-  ENFORCE_FACTOR,
-  INTEGRATION_BUDGET_MS,
-  UNIT_BUDGET_MS,
-} from './vitest-slow-test-budgets.ts';
 
 /**
  * Slow-test ratchet (see docs/agents/testing.md "Speed rules").
@@ -12,8 +7,18 @@ import {
  * wall clock was bounded by files whose tests slept through production
  * timeouts (a 10.8s test proving "times out" by waiting the full 10s budget).
  * This reporter fails the run when a unit test exceeds the enforced budget.
- * The budgets themselves live in ./vitest-slow-test-budgets.ts.
  */
+
+// Unit tests must not wait real time; integration scenarios drive a real
+// daemon request path and get more room.
+const UNIT_BUDGET_MS = 2_500;
+const INTEGRATION_BUDGET_MS = 15_000;
+
+// Enforcement fires at 2x budget: host load legitimately stretches a
+// borderline test by tens of percent, and a wall-clock gate that flakes under
+// contention trains people to ignore it. Between budget and 2x budget the
+// gate reports without failing.
+const ENFORCE_FACTOR = 2;
 type Offender = { key: string; durationMs: number; budgetMs: number; enforce: boolean };
 
 function budgetForPath(relativePath: string): number {
