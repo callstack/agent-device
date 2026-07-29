@@ -412,6 +412,31 @@ test('MCP prepare outputSchema stays complete for the typed non-exposed command'
   assert.ok(prepareSchema.required?.includes('timing'));
 });
 
+test('MCP stopped trace schema advertises its downloadable trace artifact', () => {
+  const stoppedTrace = {
+    trace: 'stopped',
+    outPath: '/daemon/fixture.adtrace',
+    artifacts: [
+      {
+        field: 'outPath',
+        artifactType: 'trace-log',
+        path: '/daemon/fixture.adtrace',
+        localPath: '/client/fixture.adtrace',
+        fileName: 'fixture.adtrace',
+      },
+    ],
+  };
+
+  assert.deepEqual(validateAgainstSchema(stoppedTrace, COMMAND_OUTPUT_SCHEMAS.trace), []);
+  assert.notDeepEqual(
+    validateAgainstSchema(
+      { trace: 'stopped', outPath: stoppedTrace.outPath },
+      COMMAND_OUTPUT_SCHEMAS.trace,
+    ),
+    [],
+  );
+});
+
 test('MCP untyped object tools stay byte-identical: no outputSchema key', () => {
   const tools = listCommandTools();
 

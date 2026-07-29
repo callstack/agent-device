@@ -686,10 +686,14 @@ export const COMMAND_OUTPUT_SCHEMAS = {
         'trace',
         'outPath',
       ]),
-      objectSchema({ trace: constSchema('stopped'), outPath: stringSchema() }, [
-        'trace',
-        'outPath',
-      ]),
+      objectSchema(
+        {
+          trace: constSchema('stopped'),
+          outPath: stringSchema(),
+          artifacts: { type: 'array', items: artifactSchema },
+        },
+        ['trace', 'outPath', 'artifacts'],
+      ),
     ],
   },
 } satisfies Record<keyof CommandResultMap, JsonSchema>;
