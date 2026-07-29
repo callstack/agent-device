@@ -6,5 +6,6 @@ public final class SnapshotHelperTestSuite {
   public static void main(String[] args) throws Exception {
     PointerEventScheduleTest.run();
     AccessibilityCaptureStabilizerTest.run();
+    BoundedUiAutomationConnectionTest.run();
   }
 }

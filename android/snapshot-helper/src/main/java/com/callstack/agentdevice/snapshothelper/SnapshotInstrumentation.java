@@ -141,6 +141,9 @@ public final class SnapshotInstrumentation extends Instrumentation {
   private UiAutomation getConnectedUiAutomationUnchecked() {
     try {
       return getConnectedUiAutomation(GESTURE_UI_AUTOMATION_CONNECT_TIMEOUT_MS);
+    } catch (InterruptedException error) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("Interrupted while connecting Android UiAutomation", error);
     } catch (TimeoutException error) {
       throw new IllegalStateException(error.getMessage(), error);
     }
@@ -428,28 +431,25 @@ public final class SnapshotInstrumentation extends Instrumentation {
     }
   }
 
-  private UiAutomation getConnectedUiAutomation(long timeoutMs) throws TimeoutException {
-    long deadlineMs = System.currentTimeMillis() + Math.max(1, timeoutMs);
+  private UiAutomation getConnectedUiAutomation(long timeoutMs)
+      throws InterruptedException, TimeoutException {
+    return BoundedUiAutomationConnection.await(this::tryGetConnectedUiAutomation, timeoutMs);
+  }
+
+  private UiAutomation tryGetConnectedUiAutomation() {
     UiAutomation automation = getUiAutomation();
-    RuntimeException lastError = null;
-    while (System.currentTimeMillis() <= deadlineMs) {
-      try {
-        automation.getServiceInfo();
-        return automation;
-      } catch (IllegalStateException error) {
-        if (!isUiAutomationConnectingError(error) && !isUiAutomationNotConnectedError(error)) {
-          throw error;
-        }
-        lastError = error;
+    if (automation == null) {
+      return null;
+    }
+    try {
+      automation.getServiceInfo();
+      return automation;
+    } catch (IllegalStateException error) {
+      if (isUiAutomationConnectingError(error) || isUiAutomationNotConnectedError(error)) {
+        return null;
       }
-      sleep(50);
+      throw error;
     }
-    TimeoutException timeout =
-        new TimeoutException("Timed out waiting for Android UiAutomation to connect");
-    if (lastError != null) {
-      timeout.initCause(lastError);
-    }
-    throw timeout;
   }
 
   private static void enableInteractiveWindowRetrieval(UiAutomation automation) {
