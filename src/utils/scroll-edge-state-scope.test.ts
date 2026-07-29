@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { captureScrollEdgeState } from './scroll-edge-state.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
-import { capture, scopeFor, windowRoot } from './scroll-edge-state-fixtures.ts';
+import { capture, scopeFor, scrollNode, windowRoot } from './scroll-edge-state-fixtures.ts';
 
 // ---------------------------------------------------------------------------
 // buildScrollContainerScope / isUsefulScope
@@ -84,15 +84,7 @@ test('isUniqueScopeValue: an unrelated sibling with its own distinct, non-matchi
   // and reject 'Feed list' as ambiguous.
   const nodes: SnapshotNode[] = [
     windowRoot(),
-    {
-      ref: 'e2',
-      index: 1,
-      parentIndex: 0,
-      type: 'ScrollView',
-      label: 'Feed list',
-      hiddenContentBelow: true,
-      rect: { x: 0, y: 100, width: 400, height: 600 },
-    },
+    scrollNode(1, { label: 'Feed list', hiddenContentBelow: true }),
     {
       ref: 'e3',
       index: 2,

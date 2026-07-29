@@ -28,19 +28,20 @@ export async function capture(
   });
 }
 
+/** A `ScrollView` node with the common defaults (top-level, full-width rect) this suite reuses. */
+export function scrollNode(index: number, overrides: Partial<SnapshotNode> = {}): SnapshotNode {
+  return {
+    ref: `e${index + 1}`,
+    index,
+    parentIndex: 0,
+    type: 'ScrollView',
+    rect: { x: 0, y: 100, width: 400, height: 600 },
+    ...overrides,
+  };
+}
+
 export async function scopeFor(node: Partial<SnapshotNode>): Promise<string | undefined> {
-  const nodes = [
-    windowRoot(),
-    {
-      ref: 'e2',
-      index: 1,
-      parentIndex: 0,
-      type: 'ScrollView',
-      hiddenContentBelow: true,
-      rect: { x: 0, y: 100, width: 400, height: 600 },
-      ...node,
-    },
-  ];
+  const nodes = [windowRoot(), scrollNode(1, { hiddenContentBelow: true, ...node })];
   return (await capture(nodes, 'bottom')).scope;
 }
 

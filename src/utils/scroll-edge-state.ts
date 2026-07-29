@@ -28,11 +28,11 @@ export type ScrollEdgeTarget = {
 const SCROLL_EDGE_PASS_LIMIT = 40;
 
 function analyzeScrollEdgeState(
-  inputNodes: readonly (RawSnapshotNode | SnapshotNode)[] | undefined,
+  inputNodes: readonly (RawSnapshotNode | SnapshotNode)[],
   edge: ScrollEdge,
   target: ScrollEdgeTarget = {},
 ): ScrollEdgeState {
-  const nodes = ensureSnapshotNodes(inputNodes ?? []);
+  const nodes = ensureSnapshotNodes(inputNodes);
   if (nodes.length === 0) {
     return {
       canScroll: false,
@@ -233,7 +233,8 @@ function buildScrollContainerScope(
   nodes: readonly SnapshotNode[],
 ): string | undefined {
   return [node.identifier, node.label]
-    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter((value): value is string => typeof value === 'string')
+    .map((value) => value.trim())
     .find((value) => isUsefulScope(value) && isUniqueScopeValue(value, node, nodes));
 }
 
