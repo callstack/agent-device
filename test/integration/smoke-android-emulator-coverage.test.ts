@@ -6,6 +6,7 @@ import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
 import { isCommandSupportedOnDevice } from '../../src/core/capabilities.ts';
 import { ANDROID_EMULATOR_BEHAVIOR_COVERAGE } from './android-emulator-e2e/behavior-coverage.ts';
 import {
+  ANDROID_EMULATOR_COVERAGE_CLASSIFICATION_SUMMARY,
   ANDROID_EMULATOR_E2E_COVERAGE,
   liveCommandsForScenario,
 } from './android-emulator-e2e/coverage-manifest.ts';
@@ -31,6 +32,21 @@ test('Android emulator coverage exhaustively classifies the public catalog', () 
       assert.ok(entry.evidence.path.trim().length > 0, `${command} needs an evidence path`);
     }
   }
+});
+
+test('Android coverage report summary accounts for every manifest classification', () => {
+  const summary = ANDROID_EMULATOR_COVERAGE_CLASSIFICATION_SUMMARY;
+  assert.deepEqual(summary, {
+    capabilityDenial: 3,
+    contract: 22,
+    gap: 0,
+    live: 28,
+    total: 53,
+  });
+  assert.equal(
+    summary.live + summary.contract + summary.gap + summary.capabilityDenial,
+    summary.total,
+  );
 });
 
 test('Android live command ownership is structural and exhaustive', () => {

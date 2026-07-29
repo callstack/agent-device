@@ -6,7 +6,11 @@ import {
   ANDROID_EMULATOR_BEHAVIOR_COVERAGE,
   type AndroidEmulatorBehaviorId,
 } from './behavior-coverage.ts';
-import { ANDROID_EMULATOR_E2E_COVERAGE, liveCommandsForScenario } from './coverage-manifest.ts';
+import {
+  ANDROID_EMULATOR_COVERAGE_CLASSIFICATION_SUMMARY,
+  ANDROID_EMULATOR_E2E_COVERAGE,
+  liveCommandsForScenario,
+} from './coverage-manifest.ts';
 import type { LiveContext } from './live-harness.ts';
 
 const REQUIRED_SCENARIOS = [
@@ -29,7 +33,9 @@ export function assertCoverageComplete(context: LiveContext): void {
 }
 
 export function writeCoverageReport(context: LiveContext): string {
-  return writeLiveCoverageReport(context);
+  return writeLiveCoverageReport(context, {
+    classificationSummary: ANDROID_EMULATOR_COVERAGE_CLASSIFICATION_SUMMARY,
+  });
 }
 
 export function liveBehaviorsForScenario(scenarioId: string): AndroidEmulatorBehaviorId[] {

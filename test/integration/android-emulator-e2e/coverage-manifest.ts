@@ -14,6 +14,14 @@ export type AndroidEmulatorCoverageEntry =
       level: 'command-contract' | 'workflow-live' | 'capability-denial';
     };
 
+export type AndroidEmulatorCoverageClassificationSummary = {
+  capabilityDenial: number;
+  contract: number;
+  gap: number;
+  live: number;
+  total: number;
+};
+
 const C = PUBLIC_COMMANDS;
 const live = (scenario: string, assertion: string): AndroidEmulatorCoverageEntry => ({
   assertion,
@@ -197,8 +205,39 @@ export const ANDROID_EMULATOR_E2E_COVERAGE = {
   [C.wait]: live('smoke:automation-system', 'wait observes durable fixture landmarks'),
 } satisfies Record<PublicCommand, AndroidEmulatorCoverageEntry>;
 
+export const ANDROID_EMULATOR_COVERAGE_CLASSIFICATION_SUMMARY = buildCoverageClassificationSummary(
+  Object.values(ANDROID_EMULATOR_E2E_COVERAGE),
+);
+
 export function liveCommandsForScenario(scenarioId: string): PublicCommand[] {
   return Object.entries(ANDROID_EMULATOR_E2E_COVERAGE)
     .filter(([, entry]) => entry.level === 'live' && entry.scenario === scenarioId)
     .map(([command]) => command as PublicCommand);
+}
+
+function buildCoverageClassificationSummary(
+  entries: readonly AndroidEmulatorCoverageEntry[],
+): AndroidEmulatorCoverageClassificationSummary {
+  const summary: AndroidEmulatorCoverageClassificationSummary = {
+    capabilityDenial: 0,
+    contract: 0,
+    gap: 0,
+    live: 0,
+    total: entries.length,
+  };
+  for (const entry of entries) {
+    switch (entry.level) {
+      case 'live':
+      case 'workflow-live':
+        summary.live += 1;
+        break;
+      case 'command-contract':
+        summary.contract += 1;
+        break;
+      case 'capability-denial':
+        summary.capabilityDenial += 1;
+        break;
+    }
+  }
+  return summary;
 }
