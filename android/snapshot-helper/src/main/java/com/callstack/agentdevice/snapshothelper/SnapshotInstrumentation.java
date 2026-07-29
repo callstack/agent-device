@@ -33,6 +33,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
   private static final long DEFAULT_WAIT_FOR_IDLE_TIMEOUT_MS = 500;
   private static final long DEFAULT_WAIT_FOR_IDLE_QUIET_MS = 100;
   private static final long DEFAULT_TIMEOUT_MS = 8_000;
+  private static final long ROOT_CAPTURE_STABILIZATION_TIMEOUT_MS = 500;
   private static final int DEFAULT_MAX_DEPTH = 128;
   private static final int DEFAULT_MAX_NODES = 5_000;
   private Bundle arguments;
@@ -327,7 +328,9 @@ public final class SnapshotInstrumentation extends Instrumentation {
       long timeoutMs,
       int maxDepth,
       int maxNodes)
-      throws TimeoutException {
+      throws TimeoutException,
+          InterruptedException,
+          AccessibilityCaptureStabilizer.IncompleteCaptureException {
     UiAutomation automation = getConnectedUiAutomation(timeoutMs);
     enableInteractiveWindowRetrieval(automation);
     if (waitForIdleTimeoutMs > 0) {
@@ -343,20 +346,39 @@ public final class SnapshotInstrumentation extends Instrumentation {
     }
     clearAccessibilityCache(automation);
 
+    return AccessibilityCaptureStabilizer.capture(
+        () -> captureXmlOnce(automation, maxDepth, maxNodes),
+        ROOT_CAPTURE_STABILIZATION_TIMEOUT_MS);
+  }
+
+  @SuppressWarnings("deprecation")
+  private CaptureResult captureXmlOnce(
+      UiAutomation automation, int maxDepth, int maxNodes) {
     CaptureStats stats = new CaptureStats();
     StringBuilder xml = new StringBuilder();
     xml.append("<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>");
     xml.append("<hierarchy rotation=\"0\">");
     int windowCount = appendInteractiveWindowRoots(xml, automation, maxDepth, maxNodes, stats);
     String captureMode = "interactive-windows";
-    if (windowCount == 0) {
+    if (AccessibilityCaptureStabilizer.requiresActiveWindowFallback(
+        windowCount, stats.activeWindowRootMissing)) {
+      boolean hasInteractiveWindowRoot = windowCount > 0;
       AccessibilityNodeInfo root = automation.getRootInActiveWindow();
       try {
-        if (root != null) {
-          appendNode(xml, root, 0, 0, maxDepth, maxNodes, stats, null);
-          windowCount = 1;
+        WindowMetadata fallbackMetadata =
+            stats.activeWindowMetadata == null
+                ? null
+                : stats.activeWindowMetadata.withIndex(windowCount);
+        if (root != null
+            && AccessibilityCaptureStabilizer.canAppendActiveWindowFallback(
+                windowCount, fallbackMetadata != null)) {
+          appendNode(xml, root, windowCount, 0, maxDepth, maxNodes, stats, fallbackMetadata);
+          windowCount += 1;
+          stats.activeWindowRootMissing = false;
         }
-        captureMode = "active-window";
+        if (!hasInteractiveWindowRoot) {
+          captureMode = "active-window";
+        }
       } finally {
         if (root != null) {
           root.recycle();
@@ -365,7 +387,13 @@ public final class SnapshotInstrumentation extends Instrumentation {
     }
     xml.append("</hierarchy>");
     return new CaptureResult(
-        xml.toString(), windowCount > 0, captureMode, windowCount, stats.nodeCount, stats.truncated);
+        xml.toString(),
+        windowCount > 0,
+        !stats.activeWindowRootMissing && !stats.focusedNonActiveWindowRootMissing,
+        captureMode,
+        windowCount,
+        stats.nodeCount,
+        stats.truncated);
   }
 
   private static void clearAccessibilityCache(UiAutomation automation) {
@@ -466,9 +494,18 @@ public final class SnapshotInstrumentation extends Instrumentation {
       }
       AccessibilityWindowInfo window = windows.get(index);
       AccessibilityNodeInfo root = null;
+      boolean activeWindow = isActiveWindow(window);
+      boolean focusedNonActiveWindow = !activeWindow && isFocusedWindow(window);
+      WindowMetadata windowMetadata = null;
       try {
+        windowMetadata = readWindowMetadata(window, windowCount);
         root = window.getRoot();
         if (root == null) {
+          stats.activeWindowRootMissing |= activeWindow;
+          stats.focusedNonActiveWindowRootMissing |= focusedNonActiveWindow;
+          if (activeWindow) {
+            stats.activeWindowMetadata = windowMetadata;
+          }
           continue;
         }
         StringBuilder windowXml = new StringBuilder();
@@ -481,12 +518,17 @@ public final class SnapshotInstrumentation extends Instrumentation {
             maxDepth,
             maxNodes,
             windowStats,
-            readWindowMetadata(window, windowCount));
+            windowMetadata);
         xml.append(windowXml);
         stats.copyFrom(windowStats);
         windowCount += 1;
       } catch (RuntimeException ignored) {
         // Accessibility windows can disappear while traversing; keep the rest of the snapshot.
+        stats.activeWindowRootMissing |= activeWindow;
+        stats.focusedNonActiveWindowRootMissing |= focusedNonActiveWindow;
+        if (activeWindow && windowMetadata != null) {
+          stats.activeWindowMetadata = windowMetadata;
+        }
       } finally {
         if (root != null) {
           root.recycle();
@@ -496,6 +538,22 @@ public final class SnapshotInstrumentation extends Instrumentation {
       }
     }
     return windowCount;
+  }
+
+  private static boolean isActiveWindow(AccessibilityWindowInfo window) {
+    try {
+      return window.isActive();
+    } catch (RuntimeException ignored) {
+      return false;
+    }
+  }
+
+  private static boolean isFocusedWindow(AccessibilityWindowInfo window) {
+    try {
+      return window.isFocused();
+    } catch (RuntimeException ignored) {
+      return false;
+    }
   }
 
   private void emitChunks(String payload) {
@@ -745,23 +803,33 @@ public final class SnapshotInstrumentation extends Instrumentation {
   private static final class CaptureStats {
     int nodeCount;
     boolean truncated;
+    boolean activeWindowRootMissing;
+    boolean focusedNonActiveWindowRootMissing;
+    WindowMetadata activeWindowMetadata;
 
     CaptureStats copy() {
       CaptureStats next = new CaptureStats();
       next.nodeCount = nodeCount;
       next.truncated = truncated;
+      next.activeWindowRootMissing = activeWindowRootMissing;
+      next.focusedNonActiveWindowRootMissing = focusedNonActiveWindowRootMissing;
+      next.activeWindowMetadata = activeWindowMetadata;
       return next;
     }
 
     void copyFrom(CaptureStats next) {
       nodeCount = next.nodeCount;
       truncated = next.truncated;
+      activeWindowRootMissing = next.activeWindowRootMissing;
+      focusedNonActiveWindowRootMissing = next.focusedNonActiveWindowRootMissing;
+      activeWindowMetadata = next.activeWindowMetadata;
     }
   }
 
-  private static final class CaptureResult {
+  private static final class CaptureResult implements AccessibilityCaptureStabilizer.Capture {
     final String xml;
     final boolean rootPresent;
+    final boolean foregroundWindowRootsPresent;
     final String captureMode;
     final int windowCount;
     final int nodeCount;
@@ -770,16 +838,23 @@ public final class SnapshotInstrumentation extends Instrumentation {
     CaptureResult(
         String xml,
         boolean rootPresent,
+        boolean foregroundWindowRootsPresent,
         String captureMode,
         int windowCount,
         int nodeCount,
         boolean truncated) {
       this.xml = xml;
       this.rootPresent = rootPresent;
+      this.foregroundWindowRootsPresent = foregroundWindowRootsPresent;
       this.captureMode = captureMode;
       this.windowCount = windowCount;
       this.nodeCount = nodeCount;
       this.truncated = truncated;
+    }
+
+    @Override
+    public boolean isComplete() {
+      return rootPresent && foregroundWindowRootsPresent;
     }
   }
 
@@ -798,6 +873,10 @@ public final class SnapshotInstrumentation extends Instrumentation {
       this.active = active;
       this.focused = focused;
       this.bounds = bounds;
+    }
+
+    WindowMetadata withIndex(int nextIndex) {
+      return new WindowMetadata(nextIndex, type, layer, active, focused, bounds);
     }
   }
 }

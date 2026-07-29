@@ -27,7 +27,7 @@ case "$HELPER" in
   snapshot)
     HELPER_DIR="$PROJECT_DIR/android/snapshot-helper"
     PACKAGE_NAME="com.callstack.agentdevice.snapshothelper"
-    RUN_TEST_CLASS="com.callstack.agentdevice.snapshothelper.PointerEventScheduleTest"
+    RUN_TEST_CLASS="com.callstack.agentdevice.snapshothelper.SnapshotHelperTestSuite"
     RESOURCE_DIR=""
     ;;
   ime)
