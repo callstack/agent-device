@@ -17,7 +17,6 @@ export type ScrollEdge = 'top' | 'bottom';
 export type ScrollEdgeState = {
   canScroll: boolean;
   emptySnapshot: boolean;
-  signature: string;
   scope?: string;
 };
 
@@ -27,8 +26,6 @@ export type ScrollEdgeTarget = {
 };
 
 const SCROLL_EDGE_PASS_LIMIT = 40;
-
-const SCROLL_SIGNATURE_RECT_PRECISION = 1;
 
 function analyzeScrollEdgeState(
   inputNodes: readonly (RawSnapshotNode | SnapshotNode)[] | undefined,
@@ -40,19 +37,15 @@ function analyzeScrollEdgeState(
     return {
       canScroll: false,
       emptySnapshot: true,
-      signature: '',
     };
   }
 
   const hiddenHints = deriveMobileSnapshotHiddenContentHints(nodes);
   const container = selectScrollContainer(nodes, hiddenHints, edge, target);
-  const signatureNodes = container ? collectSubtreeNodes(nodes, container.index) : nodes;
-  const signature = buildScrollStateSignature(signatureNodes);
   if (!container) {
     return {
       canScroll: false,
       emptySnapshot: false,
-      signature,
     };
   }
 
@@ -60,7 +53,6 @@ function analyzeScrollEdgeState(
   return {
     canScroll,
     emptySnapshot: false,
-    signature,
     scope: buildScrollContainerScope(container, nodes),
   };
 }
@@ -225,26 +217,6 @@ function findNearestScrollableAncestor(
   return null;
 }
 
-function collectSubtreeNodes(nodes: SnapshotNode[], rootIndex: number): SnapshotNode[] {
-  const byIndex = new Map(nodes.map((node) => [node.index, node]));
-  return nodes.filter((node) => node.index === rootIndex || hasAncestor(node, rootIndex, byIndex));
-}
-
-function hasAncestor(
-  node: SnapshotNode,
-  ancestorIndex: number,
-  byIndex: Map<number, SnapshotNode>,
-): boolean {
-  let current = node.parentIndex === undefined ? undefined : byIndex.get(node.parentIndex);
-  while (current) {
-    if (current.index === ancestorIndex) {
-      return true;
-    }
-    current = current.parentIndex === undefined ? undefined : byIndex.get(current.parentIndex);
-  }
-  return false;
-}
-
 function hasHiddenContentAtEdge(
   node: SnapshotNode,
   hint: HiddenContentHint | undefined,
@@ -290,28 +262,6 @@ function isUsefulScope(value: string): boolean {
   );
 }
 
-function buildScrollStateSignature(nodes: SnapshotNode[]): string {
-  return nodes
-    .map((node) => {
-      const rectSignature = node.rect
-        ? ['x', 'y', 'width', 'height']
-            .map((key) =>
-              roundSignatureNumber(node.rect?.[key as keyof NonNullable<SnapshotNode['rect']>]),
-            )
-            .join(',')
-        : '';
-      return [
-        String(node.index ?? ''),
-        String(node.parentIndex ?? ''),
-        String(node.type ?? ''),
-        String(node.label ?? ''),
-        String(node.value ?? ''),
-        rectSignature,
-      ].join('|');
-    })
-    .join('\n');
-}
-
 function compareSpecificScrollContainer(a: SnapshotNode, b: SnapshotNode): number {
   return rectArea(a.rect) - rectArea(b.rect);
 }
@@ -335,10 +285,4 @@ function containsPoint(rect: NonNullable<SnapshotNode['rect']>, point: Point): b
 
 function isUsableRect(rect: SnapshotNode['rect']): rect is NonNullable<SnapshotNode['rect']> {
   return Boolean(rect && rect.width > 0 && rect.height > 0);
-}
-
-function roundSignatureNumber(value: unknown): string {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? value.toFixed(SCROLL_SIGNATURE_RECT_PRECISION)
-    : '';
 }
