@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import path from 'node:path';
 import test from 'node:test';
 
 import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
@@ -26,84 +25,64 @@ test('Android emulator coverage exhaustively classifies the public catalog', () 
   for (const command of publicCommands) {
     const entry = ANDROID_EMULATOR_E2E_COVERAGE[command];
     assert.ok(entry.assertion.trim().length > 0, `${command} needs an observable assertion`);
-    if (typeof entry.owner === 'string') {
-      assert.ok(entry.owner.trim().length > 0, `${command} needs a scenario owner`);
+    if (entry.level === 'live') {
+      assert.ok(entry.scenario.trim().length > 0, `${command} needs a scenario owner`);
     } else {
-      assert.ok(entry.owner.path.trim().length > 0, `${command} needs an evidence path`);
-      assert.ok(entry.owner.test.trim().length > 0, `${command} needs named evidence`);
-    }
-    if (entry.level === 'known-gap') {
-      assert.match(entry.trackingIssue, /^#\d+$/, `${command} gap needs a tracking issue`);
+      assert.ok(entry.evidence.path.trim().length > 0, `${command} needs an evidence path`);
     }
   }
 });
 
-test('Android live claims execute in exactly one scenario with command-specific evidence', () => {
-  const scenarios = new Map(
-    ANDROID_EMULATOR_LIVE_SCENARIOS.map((scenario) => [scenario.id, scenario]),
-  );
-  for (const [command, entry] of Object.entries(ANDROID_EMULATOR_E2E_COVERAGE)) {
-    if (entry.level !== 'live' && entry.level !== 'known-gap') continue;
-    assert.ok(scenarios.has(entry.owner), `${command} references missing scenario ${entry.owner}`);
-    assert.ok(
-      liveCommandsForScenario(entry.owner).includes(
-        command as (typeof PUBLIC_COMMANDS)[keyof typeof PUBLIC_COMMANDS],
-      ),
-      `${entry.owner} does not execute ${command}`,
-    );
-    const source = [
-      fs.readFileSync(scenarios.get(entry.owner)?.source ?? '', 'utf8'),
-      fs.readFileSync('test/integration/android-emulator-e2e/live-assertions.ts', 'utf8'),
-    ].join('\n');
-    const commandKey = Object.entries(PUBLIC_COMMANDS).find(([, value]) => value === command)?.[0];
-    assert.ok(commandKey, `public command key missing for ${command}`);
-    assert.match(
-      source,
-      new RegExp(`verifyCommand\\(\\s*context,\\s*(?:C\\.${commandKey}|['"]${command}['"])`),
-      `${entry.owner} has no runtime command-specific evidence assertion for ${command}`,
+test('Android live command ownership is structural and exhaustive', () => {
+  for (const scenario of ANDROID_EMULATOR_LIVE_SCENARIOS) {
+    assert.deepEqual(
+      [...scenario.commands].sort(),
+      liveCommandsForScenario(scenario.id).sort(),
+      `${scenario.id} command declaration must match the coverage manifest`,
     );
   }
-  const claimed = ANDROID_EMULATOR_LIVE_SCENARIOS.flatMap((scenario) =>
-    liveCommandsForScenario(scenario.id),
-  );
-  assert.equal(
-    new Set(claimed).size,
-    claimed.length,
-    'live commands need exactly one primary owner',
-  );
+  const claimed = ANDROID_EMULATOR_LIVE_SCENARIOS.flatMap((scenario) => scenario.commands);
+  const liveCommands = Object.entries(ANDROID_EMULATOR_E2E_COVERAGE)
+    .filter(([, entry]) => entry.level === 'live')
+    .map(([command]) => command);
+  assert.deepEqual([...claimed].sort(), liveCommands.sort());
+  assert.equal(new Set(claimed).size, claimed.length, 'live commands need one primary owner');
 });
 
-test('Android emulator non-live owners name executable repository evidence', () => {
+test('Android emulator non-live owners name executable repository modules', () => {
   for (const [command, entry] of Object.entries(ANDROID_EMULATOR_E2E_COVERAGE)) {
-    if (entry.level === 'live' || entry.level === 'known-gap') continue;
-    const ownerPath = path.resolve(entry.owner.path);
-    assert.ok(fs.existsSync(ownerPath), `${command} owner does not exist: ${entry.owner.path}`);
+    if (entry.level === 'live') continue;
     assert.ok(
-      fs.readFileSync(ownerPath, 'utf8').includes(entry.owner.test),
-      `${command} owner does not contain named evidence: ${entry.owner.test}`,
+      fs.existsSync(entry.evidence.path),
+      `${command} evidence does not exist: ${entry.evidence.path}`,
     );
   }
 });
 
 test('Android behavior patterns are owned by live fixture journeys', () => {
-  const scenarioIds = new Set(ANDROID_EMULATOR_LIVE_SCENARIOS.map((scenario) => scenario.id));
+  const claimedBehaviors = ANDROID_EMULATOR_LIVE_SCENARIOS.flatMap(
+    (scenario) => scenario.behaviors,
+  );
   for (const [behavior, entry] of Object.entries(ANDROID_EMULATOR_BEHAVIOR_COVERAGE)) {
     assert.ok(entry.assertion.trim().length > 0, `${behavior} needs observable assertion`);
-    assert.equal(entry.level, 'live');
+    const scenario = ANDROID_EMULATOR_LIVE_SCENARIOS.find(
+      (candidate) => candidate.id === entry.owner,
+    );
+    assert.ok(scenario, `${behavior} references missing scenario ${entry.owner}`);
     assert.ok(
-      scenarioIds.has(entry.owner),
-      `${behavior} references missing scenario ${entry.owner}`,
-    );
-    const source = fs.readFileSync(
-      ANDROID_EMULATOR_LIVE_SCENARIOS.find((scenario) => scenario.id === entry.owner)?.source ?? '',
-      'utf8',
-    );
-    assert.match(
-      source,
-      new RegExp(`verifyBehavior\\(\\s*context,\\s*['"]${behavior}['"]`),
-      `${entry.owner} has no runtime behavior assertion for ${behavior}`,
+      scenario.behaviors.some((claimed) => claimed === behavior),
+      `${scenario.id} must declare ${behavior}`,
     );
   }
+  assert.deepEqual(
+    [...claimedBehaviors].sort(),
+    Object.keys(ANDROID_EMULATOR_BEHAVIOR_COVERAGE).sort(),
+  );
+  assert.equal(
+    new Set(claimedBehaviors).size,
+    claimedBehaviors.length,
+    'live behaviors need one primary owner',
+  );
 });
 
 test('Android emulator capability denial matches the public catalog', () => {

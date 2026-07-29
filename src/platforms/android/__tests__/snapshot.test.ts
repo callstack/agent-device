@@ -515,35 +515,6 @@ test('snapshotAndroid reports helper-side truncation on the public snapshot resu
   assert.equal(result.androidSnapshot.helperTruncated, true);
 });
 
-test('snapshotAndroid forwards alert-style helper idle timeout override', async () => {
-  let instrumentArgs: string[] | undefined;
-  const helperAdb: AndroidAdbExecutor = async (args) => {
-    if (args.includes('--show-versioncode')) {
-      return installedHelperProbe;
-    }
-    if (args.includes('instrument')) {
-      instrumentArgs = args;
-      return {
-        exitCode: 0,
-        stdout: helperOutput('<hierarchy><node text="helper" bounds="[0,0][10,10]" /></hierarchy>'),
-        stderr: '',
-      };
-    }
-    throw new Error(`unexpected helper adb args: ${args.join(' ')}`);
-  };
-
-  await snapshotAndroid(device, {
-    helperAdb,
-    helperArtifact,
-    helperWaitForIdleTimeoutMs: 0,
-  });
-
-  assert.ok(instrumentArgs);
-  assert.equal(instrumentArgs[instrumentArgs.indexOf('waitForIdleTimeoutMs') + 1], '0');
-  assert.equal(instrumentArgs.includes('outputPath'), false);
-  assert.equal(instrumentArgs.includes('emitChunks'), false);
-});
-
 test('snapshotAndroid emits helper phase diagnostics', async () => {
   const helperAdb: AndroidAdbExecutor = async (args) => {
     if (args.includes('--show-versioncode')) {

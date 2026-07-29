@@ -4,8 +4,10 @@ import path from 'node:path';
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
 import {
   assertElementText,
+  assertDiffLine,
   assertFilesDiffer,
   assertJsonContains,
+  assertWaitSelector,
   assertWaitText,
   capturePng,
   requireAndroidResourceId,
@@ -157,8 +159,17 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
   verifyCommand(context, C.alert, 'alert wait/get/dismiss/accept produce fixture-visible results');
 
   await assertHomeAndRecentsRestoration(context);
+  await runStep(context, 'establish automation diff baseline', ['snapshot', '-i']);
   await runStep(context, 'return from automation route with Back', ['back']);
+  const diff = await runStep(context, 'observe automation-to-settings diff', [
+    'diff',
+    'snapshot',
+    '-i',
+  ]);
+  assertDiffLine(diff, 'removed', 'Automation lab');
+  assertDiffLine(diff, 'added', 'Settings');
   await assertWaitText(context, 'Settings');
+  verifyCommand(context, C.diff, 'snapshot diff reports the Automation-to-Settings transition');
   verifyCommand(context, C.back, 'Android Back returns from automation route to Settings');
 }
 
@@ -190,11 +201,7 @@ async function assertHomeAndRecentsRestoration(context: LiveContext): Promise<vo
   verifyCommand(context, C.appSwitcher, 'Recents pixels differ from Home system surface');
 
   await runStep(context, 'restore fixture after Android system UI', ['open', context.appId]);
-  await runStep(context, 'wait for restored fixture automation control', [
-    'wait',
-    'id="automation-open-sheet"',
-    '10000',
-  ]);
+  await assertWaitSelector(context, 'id="automation-open-sheet"');
   const restored = await runStep(context, 'verify restored Android fixture foreground state', [
     'appstate',
   ]);

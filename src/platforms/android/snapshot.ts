@@ -58,7 +58,6 @@ export type AndroidSnapshotOptions = SnapshotOptions & {
   helperInstallPolicy?: AndroidSnapshotHelperInstallPolicy;
   helperSessionScope?: 'command' | 'daemon-session';
   helperAdb?: AndroidAdbExecutor | AndroidAdbProvider;
-  helperWaitForIdleTimeoutMs?: number;
   includeHiddenContentHints?: boolean;
 };
 
@@ -192,7 +191,6 @@ async function captureAndroidUiHierarchyWithHelper(
         await stopAndroidSnapshotHelperSession(helperDeviceKey);
       }
       const capture = await captureAndroidUiHierarchyFromHelper({
-        options,
         adb,
         adbProvider,
         artifact,
@@ -275,13 +273,12 @@ async function installAndroidSnapshotHelper(
 }
 
 async function captureAndroidUiHierarchyFromHelper(params: {
-  options: AndroidSnapshotOptions;
   adb: AndroidAdbExecutor;
   adbProvider: AndroidAdbProvider;
   artifact: AndroidSnapshotHelperArtifact;
   helperDeviceKey: string;
 }): Promise<AndroidSnapshotHelperOutput> {
-  const { options, adb, adbProvider, artifact, helperDeviceKey } = params;
+  const { adb, adbProvider, artifact, helperDeviceKey } = params;
   const captureOptions = {
     adb,
     adbProvider,
@@ -291,8 +288,7 @@ async function captureAndroidUiHierarchyFromHelper(params: {
     helperSha256: artifact.manifest.sha256,
     packageName: artifact.manifest.packageName,
     instrumentationRunner: artifact.manifest.instrumentationRunner,
-    waitForIdleTimeoutMs:
-      options.helperWaitForIdleTimeoutMs ?? ANDROID_SNAPSHOT_HELPER_WAIT_FOR_IDLE_TIMEOUT_MS,
+    waitForIdleTimeoutMs: ANDROID_SNAPSHOT_HELPER_WAIT_FOR_IDLE_TIMEOUT_MS,
     timeoutMs: HELPER_CAPTURE_TIMEOUT_MS,
     commandTimeoutMs: HELPER_COMMAND_TIMEOUT_MS,
   };

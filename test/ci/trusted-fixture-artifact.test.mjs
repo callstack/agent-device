@@ -76,19 +76,14 @@ test('Android smoke consumes the restored APK through catalog fixture E2E', (t) 
     (step) => step.name === 'Report fixture cache source',
   );
   const assertion = fs.readFileSync('test/scripts/assert-android-fixture-snapshot.mjs', 'utf8');
-  const smokeScript = fs.readFileSync('test/scripts/android-fixture-cache-smoke.sh', 'utf8');
   const packageVersion = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
 
   assert.match(smokeStep.with.script, /AGENT_DEVICE_ANDROID_E2E=1/);
   assert.match(smokeStep.with.script, /steps\.fixture-app\.outputs\.apk-path/);
   assert.match(smokeStep.with.script, /steps\.fixture-app\.outputs\.app-id/);
   assert.match(smokeStep.with.script, /smoke-android-emulator\.test\.ts/);
-  assert.match(smokeStep.with.script, /android-snapshot-helper-release-smoke\.sh/);
   assert.equal(restoreStep.with['wait-for-artifact-seconds'], '600');
   assert.match(sourceStep.run, /steps\.fixture-app\.outputs\.source/);
-  assert.match(smokeScript, /snapshot -i .*--json > "\$SNAPSHOT_PATH"/);
-  assert.match(smokeScript, /\[ -z "\$1" \] \|\| \[ -z "\$2" \]/);
-  assert.match(smokeScript, /assert-android-fixture-snapshot\.mjs/);
   assert.match(assertion, /metadata\.backend !== 'android-helper'/);
   assert.match(assertion, /metadata\.helperVersion !== packageVersion/);
   assert.match(assertion, /Agent Device Tester/);

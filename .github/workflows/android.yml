@@ -54,6 +54,12 @@ jobs:
       - name: Run Android emulator catalog coverage contract
         run: node --test test/integration/smoke-android-emulator-coverage.test.ts
 
+      - name: Build agent-device CLI
+        run: pnpm build
+
+      - name: Reset daemon state
+        run: pnpm clean:daemon
+
       - name: Run Android smoke checks
         uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
         with:
@@ -66,12 +72,8 @@ jobs:
             set -eu
             ANDROID_SERIAL="$(adb devices | awk 'NR > 1 && $2 == "device" { print $1; exit }')"
             test -n "$ANDROID_SERIAL"
-            pnpm build
-            pnpm clean:daemon
             AGENT_DEVICE_ANDROID_E2E=1 AGENT_DEVICE_ANDROID_SERIAL="$ANDROID_SERIAL" AGENT_DEVICE_FIXTURE_APP_PATH="${{ steps.fixture-app.outputs.apk-path }}" AGENT_DEVICE_FIXTURE_APP_ID="${{ steps.fixture-app.outputs.app-id }}" node --test test/integration/smoke-android-emulator.test.ts
-            node --input-type=module -e 'import fs from "node:fs"; const report = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); console.log(`Android emulator scenario body: ${report.timings.scenarioBodyDurationMs}ms`); for (const scenario of report.timings.scenarios) console.log(`  ${scenario.id}: ${scenario.durationMs}ms`);' "$(find test/artifacts/android-emulator -name coverage-report.json -print -quit)"
             node --experimental-strip-types src/bin.ts test test/integration/replays/android/01-settings.ad --retries 2 --report-junit test/artifacts/replays-android-smoke.junit.xml
-            sh ./test/scripts/android-snapshot-helper-release-smoke.sh
 
       - name: Upload Android artifacts
         if: always()

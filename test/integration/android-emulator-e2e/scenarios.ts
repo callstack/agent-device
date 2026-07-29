@@ -1,44 +1,71 @@
+import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
+import type { AndroidEmulatorBehaviorId } from './behavior-coverage.ts';
+import { assertAutomationSystem } from './live-automation-scenario.ts';
+import { assertCaptureAndClose } from './live-capture-scenario.ts';
+import { assertFormInput, assertKeyboardIme } from './live-form-scenario.ts';
+import type { LiveContext } from './live-harness.ts';
+import { assertInventoryAndInstall } from './live-inventory-scenario.ts';
+
+const C = PUBLIC_COMMANDS;
+
 export type AndroidEmulatorScenario = {
+  behaviors: readonly AndroidEmulatorBehaviorId[];
+  commands: readonly string[];
   id: string;
-  source: string;
+  run: (context: LiveContext) => Promise<void>;
 };
 
-type ScenarioRunnerKey = 'automationSystem' | 'captureClose' | 'formInput' | 'inventoryInstall';
-
-type ScenarioDefinition = AndroidEmulatorScenario & { runner: ScenarioRunnerKey };
-
-const SCENARIO_DEFINITIONS: readonly ScenarioDefinition[] = [
+export const ANDROID_EMULATOR_LIVE_SCENARIOS: readonly AndroidEmulatorScenario[] = [
   {
+    behaviors: [],
+    commands: [C.devices, C.capabilities, C.install, C.apps, C.doctor],
     id: 'smoke:inventory-install',
-    runner: 'inventoryInstall',
-    source: 'test/integration/android-emulator-e2e/live-inventory-scenario.ts',
+    run: assertInventoryAndInstall,
   },
   {
+    behaviors: [
+      'android-resource-id-selectors',
+      'cold-start-deep-link-navigation',
+      'home-recents-restoration',
+      'orientation-fixture-state',
+    ],
+    commands: [
+      C.alert,
+      C.appSwitcher,
+      C.appState,
+      C.back,
+      C.click,
+      C.diff,
+      C.find,
+      C.get,
+      C.home,
+      C.is,
+      C.longPress,
+      C.open,
+      C.orientation,
+      C.press,
+      C.snapshot,
+      C.wait,
+    ],
     id: 'smoke:automation-system',
-    runner: 'automationSystem',
-    source: 'test/integration/android-emulator-e2e/live-automation-scenario.ts',
+    run: assertAutomationSystem,
   },
   {
+    behaviors: [],
+    commands: [C.fill, C.focus, C.type],
     id: 'smoke:form-input',
-    runner: 'formInput',
-    source: 'test/integration/android-emulator-e2e/live-form-scenario.ts',
+    run: assertFormInput,
   },
   {
-    id: 'smoke:capture-close',
-    runner: 'captureClose',
-    source: 'test/integration/android-emulator-e2e/live-runner.ts',
+    behaviors: ['safe-keyboard-dismissal'],
+    commands: [C.keyboard],
+    id: 'smoke:keyboard-ime',
+    run: assertKeyboardIme,
   },
-] as const;
-
-export const ANDROID_EMULATOR_LIVE_SCENARIOS: readonly AndroidEmulatorScenario[] =
-  SCENARIO_DEFINITIONS;
-
-export function bindAndroidEmulatorScenarios<Context>(
-  runners: Record<ScenarioRunnerKey, (context: Context) => Promise<void>>,
-): readonly (AndroidEmulatorScenario & { run: (context: Context) => Promise<void> })[] {
-  return SCENARIO_DEFINITIONS.map(({ id, source, runner }) => ({
-    id,
-    run: runners[runner],
-    source,
-  }));
-}
+  {
+    behaviors: [],
+    commands: [C.close, C.screenshot],
+    id: 'smoke:capture-close',
+    run: assertCaptureAndClose,
+  },
+];

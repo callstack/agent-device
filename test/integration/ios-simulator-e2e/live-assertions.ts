@@ -3,38 +3,21 @@ import fs from 'node:fs';
 
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
 import { isPlayableVideo } from '../../../src/utils/video.ts';
-import { assertPngFile } from '../provider-scenarios/assertions.ts';
+import {
+  assertFilesDiffer,
+  assertJsonContains,
+  createLiveDeviceAssertions,
+} from '../live-device-e2e/assertions.ts';
 import type { CliJsonResult } from '../cli-json.ts';
+import type { IosSimulatorBehaviorId } from './behavior-coverage.ts';
 import { type LiveContext, runStep, verifyCommand } from './live-harness.ts';
 
-export function assertJsonContains(result: CliJsonResult, expected: string, message: string): void {
-  const serialized = JSON.stringify(result.json?.data ?? result.json);
-  assert.ok(serialized.includes(expected), `${message}\nreceived: ${serialized}`);
-}
+export { assertFilesDiffer, assertJsonContains };
 
-export async function assertWaitText(context: LiveContext, expected: string): Promise<void> {
-  const result = await runStep(context, `wait for ${expected}`, [
-    'wait',
-    'text',
-    expected,
-    '10000',
-  ]);
-  assertJsonContains(result, expected, `wait should observe ${expected}`);
-  verifyCommand(context, PUBLIC_COMMANDS.wait, `wait observes durable text: ${expected}`);
-}
-
-export async function assertElementText(
-  context: LiveContext,
-  selector: string,
-  expected: string,
-): Promise<void> {
-  const result = await runStep(context, `read ${selector}`, ['get', 'text', selector]);
-  assert.equal(
-    result.json?.data?.text,
-    expected,
-    `${selector} should expose ${expected}: ${JSON.stringify(result.json)}`,
-  );
-}
+export const { assertElementText, assertWaitText, capturePng } = createLiveDeviceAssertions<
+  IosSimulatorBehaviorId,
+  LiveContext
+>(runStep, verifyCommand, PUBLIC_COMMANDS.wait);
 
 export async function assertElementTextAfterScrolling(
   context: LiveContext,
@@ -68,19 +51,6 @@ export async function assertMp4File(filePath: string): Promise<void> {
     true,
     `recording is not a finalized playable video: ${filePath}`,
   );
-}
-
-export async function capturePng(
-  context: LiveContext,
-  step: string,
-  outputPath: string,
-): Promise<void> {
-  await runStep(context, step, ['screenshot', outputPath, '--max-size', '900']);
-  assertPngFile(outputPath);
-}
-
-export function assertFilesDiffer(first: string, second: string, message: string): void {
-  assert.notDeepEqual(fs.readFileSync(first), fs.readFileSync(second), message);
 }
 
 function requireNode(
