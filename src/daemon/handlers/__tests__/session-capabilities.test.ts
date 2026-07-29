@@ -7,6 +7,11 @@ import { withTargetDeviceResolutionScope } from '../../../core/dispatch-resolve.
 import type { DeviceInfo } from '../../../kernel/device.ts';
 import { handleSessionCommands } from '../session.ts';
 
+function assertAndroidCapabilityHonesty(availableCommands: unknown): void {
+  expect(availableCommands).not.toContain(PUBLIC_COMMANDS.prepare);
+  expect(availableCommands).not.toContain(PUBLIC_COMMANDS.viewport);
+}
+
 test('capabilities reports supported commands for the selected session device', async () => {
   const sessionName = 'android-capabilities';
   const sessionStore = makeSessionStore('agent-device-capabilities-');
@@ -47,6 +52,7 @@ test('capabilities reports supported commands for the selected session device', 
   );
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.capabilities);
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.devices);
+  assertAndroidCapabilityHonesty(response.data?.availableCommands);
 });
 
 test('capabilities accepts a stopped Android AVD placeholder for explicit platform discovery', async () => {

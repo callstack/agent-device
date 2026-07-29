@@ -122,6 +122,15 @@ jobs:
         if: matrix.build
         uses: ./.github/actions/setup-test-app-dependencies
 
+      # The generated Android project is safe to assemble without an emulator.
+      # Keep Gradle's heavy dependency/transforms cache, but never let an
+      # untrusted fork PR write it.
+      - name: Setup Gradle cache
+        if: matrix.platform == 'android' && matrix.build
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+
       # `--device generic` builds for the simulator without booting one or
       # installing. Release embeds the bundle (no Metro) and links a universal
       # x86_64+arm64 slice, so the artifact runs on any developer's simulator.
@@ -142,10 +151,6 @@ jobs:
             --no-bundler \
             --output "${{ github.workspace }}/.tmp/test-app-build"
 
-      - name: Setup Android host
-        if: matrix.platform == 'android' && matrix.build
-        uses: ./.github/actions/setup-android-replay-host
-
       # Deliberately no `set -o pipefail`: `yes` is killed by SIGPIPE once
       # sdkmanager stops reading, and pipefail would report that 141 as the
       # step's own failure.
@@ -164,27 +169,21 @@ jobs:
           yes | "$SDKMANAGER" --licenses >/dev/null
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
 
-      # Android has no build-only mode, so an emulator satisfies device
-      # resolution; it installs the APK as a bonus check that it loads. A Release
-      # build already spans every ABI (the CLI only narrows debug builds to the
-      # device ABI), so no --all-arch and no emulator-architecture coupling.
+      # CNG's generated Android project exposes the ordinary Gradle Release task;
+      # it builds and packages every ABI without device resolution. Installation
+      # and launch are deliberately proven by the Android consumer instead.
       - name: Build the Android Release apk
         if: matrix.platform == 'android' && matrix.build
-        uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
-        with:
-          api-level: 36
-          arch: x86_64
-          profile: pixel_7
-          target: google_apis_playstore
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
-          # This action runs each line in its own `sh -c`, so every line must be
-          # self-contained: no line continuations, and no variables shared between
-          # lines. `expo run:android` also installs and launches the APK, proving
-          # the Release build loads before it is published.
-          script: |
-            pnpm --dir examples/test-app exec expo run:android --variant release --no-bundler
-            mkdir -p "${{ github.workspace }}/.tmp/test-app-build"
-            cp "$(find examples/test-app/android/app/build/outputs/apk/release -name '*.apk' | head -1)" "${{ github.workspace }}/.tmp/test-app-build/app-release.apk"
+        run: |
+          set -euo pipefail
+          pnpm --dir examples/test-app exec expo prebuild --platform android --no-install
+          (
+            cd examples/test-app/android
+            ./gradlew :app:assembleRelease
+          )
+          mkdir -p "${{ github.workspace }}/.tmp/test-app-build"
+          cp examples/test-app/android/app/build/outputs/apk/release/app-release.apk \
+            "${{ github.workspace }}/.tmp/test-app-build/app-release.apk"
 
       - name: Stage the binary for upload
         id: stage

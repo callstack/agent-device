@@ -106,6 +106,7 @@ test('serializeSnapshotResult includes Android backend metadata', () => {
   const data = serializeSnapshotResult({
     nodes: [],
     truncated: false,
+    appBundleId: 'com.callstack.agentdevicelab',
     androidSnapshot: {
       backend: 'android-helper',
       helperVersion: '0.13.3',
@@ -121,6 +122,7 @@ test('serializeSnapshotResult includes Android backend metadata', () => {
   assert.deepEqual(data, {
     nodes: [],
     truncated: false,
+    appBundleId: 'com.callstack.agentdevicelab',
     androidSnapshot: {
       backend: 'android-helper',
       helperVersion: '0.13.3',

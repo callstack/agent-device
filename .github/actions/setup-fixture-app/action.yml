@@ -1,5 +1,5 @@
 name: 'Setup Fixture App'
-description: 'Install a ready Release build of examples/test-app on the booted iOS simulator, from the shared build cache'
+description: 'Restore a ready Release build of examples/test-app from the shared build cache'
 
 # Any job that needs a controlled app to drive can use this instead of an Apple
 # system app. It fetches the Release binary that test-app-build-cache.yml
@@ -20,6 +20,10 @@ description: 'Install a ready Release build of examples/test-app on the booted i
 # Relevant to #320 (move replay coverage off system apps onto a stable fixture).
 
 inputs:
+  platform:
+    description: 'Fixture platform to restore: ios or android'
+    required: false
+    default: 'ios'
   device-name:
     description: 'Simulator device name used for the inline-build fallback'
     required: false
@@ -34,11 +38,14 @@ inputs:
     default: '0'
 outputs:
   app-path:
-    description: 'Path to the ready .app bundle'
-    value: ${{ steps.locate.outputs.app-path }}
+    description: 'Path to the ready .app bundle or APK'
+    value: ${{ steps.locate-ios.outputs.app-path || steps.locate-android.outputs.app-path }}
+  apk-path:
+    description: 'Path to the ready APK when platform is android'
+    value: ${{ steps.locate-android.outputs.app-path }}
   app-id:
-    description: "Bundle identifier read from the app's Info.plist"
-    value: ${{ steps.locate.outputs.app-id }}
+    description: 'Bundle/package identifier read from the restored artifact'
+    value: ${{ steps.locate-ios.outputs.app-id || steps.locate-android.outputs.app-id }}
   source:
     description: "Where the binary came from: 'artifact' or 'build'"
     value: ${{ steps.fetch.outputs.source }}
@@ -51,113 +58,49 @@ runs:
     - name: Setup test app dependencies
       uses: ./.github/actions/setup-test-app-dependencies
 
+    # The Android replay host caches its helpers independently, so a cache hit
+    # must not make artifact inspection/repacking depend on the runner image.
+    - name: Ensure Android artifact build tools
+      if: inputs.platform == 'android'
+      shell: bash
+      run: |
+        # sdkmanager intentionally closes stdin after accepting licenses; disable
+        # the runner's inherited pipefail only around that benign SIGPIPE.
+        set -eu
+        SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+        BUILD_TOOLS="$SDK_ROOT/build-tools/36.0.0"
+        if [ -x "$BUILD_TOOLS/aapt" ] && [ -x "$BUILD_TOOLS/apksigner" ]; then
+          exit 0
+        fi
+        SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+        if [ ! -x "$SDKMANAGER" ]; then
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/bin/sdkmanager"
+        fi
+        if [ ! -x "$SDKMANAGER" ]; then
+          echo "::error::sdkmanager not found under $SDK_ROOT." >&2
+          exit 1
+        fi
+        set +o pipefail
+        yes | "$SDKMANAGER" --licenses >/dev/null
+        set -o pipefail
+        "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+
     - name: Fetch the cached Release binary
       id: fetch
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
-        set -euo pipefail
-        NAME="$(sh "$GITHUB_ACTION_PATH/resolve-artifact-name.sh" ios)"
         DEST="${{ github.workspace }}/.tmp/fixture-app"
-        REPOSITORY="${{ github.repository }}"
-        EXPECTED_HEAD_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
-        TRUSTED_ARTIFACT="$GITHUB_ACTION_PATH/trusted-artifact.mjs"
-        rm -rf "$DEST"; mkdir -p "$DEST"
-        WAIT_SECONDS="${{ inputs.wait-for-artifact-seconds }}"
-        case "$WAIT_SECONDS" in
-          ''|*[!0-9]*)
-            echo "::error::wait-for-artifact-seconds must be a non-negative integer."
-            exit 1
-            ;;
-        esac
-
-        # A lookup failure (API outage, auth, transient 5xx) must not fail the
-        # caller or trigger a pointless wait: it takes the inline-build path.
-        query_artifact() {
-          node "$TRUSTED_ARTIFACT" find "$REPOSITORY" "$NAME" "$EXPECTED_HEAD_SHA" 2>/dev/null
-        }
-        query_producer_state() {
-          node "$TRUSTED_ARTIFACT" producer-state "$REPOSITORY" "$EXPECTED_HEAD_SHA" 2>/dev/null
-        }
-        if ! ART_ID="$(query_artifact)"; then
-          echo "::warning::Could not query the build cache for $NAME; building inline."
-          ART_ID=""
-          WAIT_SECONDS=0
-        fi
-        if [ -z "$ART_ID" ] && [ "$WAIT_SECONDS" -gt 0 ]; then
-          DEADLINE=$((SECONDS + WAIT_SECONDS))
-          MISSING_PRODUCER_POLLS=0
-          echo "$NAME is not available; waiting up to ${WAIT_SECONDS}s for its producer."
-          while [ -z "$ART_ID" ] && [ "$SECONDS" -lt "$DEADLINE" ]; do
-            if ! PRODUCER_STATE="$(query_producer_state)"; then
-              echo "::warning::Could not inspect the fixture producer; building inline."
-              break
-            fi
-            case "$PRODUCER_STATE" in
-              queued)
-                echo "Fixture producer is queued; building inline instead of waiting for a macOS runner."
-                break
-                ;;
-              failed)
-                echo "Fixture producer failed; building inline."
-                break
-                ;;
-              success)
-                echo "Fixture producer completed without $NAME; building inline."
-                break
-                ;;
-              absent)
-                MISSING_PRODUCER_POLLS=$((MISSING_PRODUCER_POLLS + 1))
-                if [ "$MISSING_PRODUCER_POLLS" -ge 3 ]; then
-                  echo "No fixture producer appeared for $EXPECTED_HEAD_SHA; building inline."
-                  break
-                fi
-                ;;
-              in_progress)
-                MISSING_PRODUCER_POLLS=0
-                ;;
-              *)
-                echo "::warning::Fixture producer returned unknown state '$PRODUCER_STATE'; building inline."
-                break
-                ;;
-            esac
-            sleep 30
-            if ! ART_ID="$(query_artifact)"; then
-              echo "::warning::Build cache polling failed for $NAME; building inline."
-              ART_ID=""
-              break
-            fi
-            if [ -n "$ART_ID" ]; then
-              break
-            fi
-          done
-        fi
-
-        SOURCE=build
-        if [ -n "$ART_ID" ]; then
-          STAGE="$(mktemp -d)"
-          # Any failure along the download path falls through to an inline build
-          # rather than failing the caller.
-          if gh api "repos/${{ github.repository }}/actions/artifacts/${ART_ID}/zip" > "$STAGE/a.zip" \
-             && unzip -q "$STAGE/a.zip" -d "$STAGE" \
-             && tar -xzf "$STAGE/binary.tar.gz" -C "$DEST"; then
-            SOURCE=artifact
-            echo "restored $NAME from the build cache"
-          else
-            echo "::warning::Could not restore $NAME; building inline."
-            rm -rf "$DEST"/*.app
-          fi
-          rm -rf "$STAGE"
-        else
-          echo "$NAME not in the cache after the configured wait; building inline."
-        fi
-        echo "source=$SOURCE" >> "$GITHUB_OUTPUT"
+        bash "$GITHUB_ACTION_PATH/fetch-artifact.sh" \
+          "${{ inputs.platform }}" "$DEST" "${{ inputs.wait-for-artifact-seconds }}" \
+          "${{ github.repository }}" "${{ github.event.pull_request.head.sha || github.sha }}" \
+          "$GITHUB_ACTION_PATH"
 
     # Fallback only: the producer builds the same way. `--device generic` avoids
     # needing a booted simulator; Release embeds the bundle so no Metro is needed.
     - name: Build the Release app (fallback)
-      if: steps.fetch.outputs.source == 'build'
+      if: inputs.platform == 'ios' && steps.fetch.outputs.source == 'build'
       shell: bash
       run: |
         set -euo pipefail
@@ -168,7 +111,8 @@ runs:
           --output "${{ github.workspace }}/.tmp/fixture-app"
 
     - name: Locate fixture app
-      id: locate
+      id: locate-ios
+      if: inputs.platform == 'ios'
       shell: bash
       run: |
         set -euo pipefail
@@ -188,11 +132,11 @@ runs:
     # --js-bundle-only refreshes exactly the gap the native fingerprint leaves;
     # an inline build already has current JS, so it is skipped there.
     - name: Repack the cached app with the current JS
-      if: steps.fetch.outputs.source == 'artifact'
+      if: inputs.platform == 'ios' && steps.fetch.outputs.source == 'artifact'
       shell: bash
       run: |
         set -euo pipefail
-        APP="${{ steps.locate.outputs.app-path }}"
+        APP="${{ steps.locate-ios.outputs.app-path }}"
         OUT="${{ github.workspace }}/.tmp/fixture-app-repacked/$(basename "$APP")"
         rm -rf "$(dirname "$OUT")"; mkdir -p "$(dirname "$OUT")"
         pnpm --dir examples/test-app exec repack-app \
@@ -204,16 +148,45 @@ runs:
         mv "$OUT" "$APP"
 
     - name: Install fixture app
-      if: inputs.install == 'true'
+      if: inputs.platform == 'ios' && inputs.install == 'true'
       shell: bash
       run: |
         set -euo pipefail
-        xcrun simctl install booted "${{ steps.locate.outputs.app-path }}"
+        xcrun simctl install booted "${{ steps.locate-ios.outputs.app-path }}"
         # Fail loudly rather than let a caller drive a device with no app: a
         # missing app produces scenarios that fail for the wrong reason, or pass
         # while proving nothing.
-        if ! xcrun simctl get_app_container booted "${{ steps.locate.outputs.app-id }}" >/dev/null 2>&1; then
-          echo "::error::Fixture app ${{ steps.locate.outputs.app-id }} is not installed on the booted simulator."
+        if ! xcrun simctl get_app_container booted "${{ steps.locate-ios.outputs.app-id }}" >/dev/null 2>&1; then
+          echo "::error::Fixture app ${{ steps.locate-ios.outputs.app-id }} is not installed on the booted simulator."
           exit 1
         fi
-        echo "installed ${{ steps.locate.outputs.app-id }}"
+        echo "installed ${{ steps.locate-ios.outputs.app-id }}"
+
+    - name: Build the Android Release APK (fallback)
+      if: inputs.platform == 'android' && steps.fetch.outputs.source == 'build'
+      shell: bash
+      run: |
+        set -euo pipefail
+        pnpm --dir examples/test-app exec expo prebuild --platform android --no-install
+        (
+          cd examples/test-app/android
+          ./gradlew :app:assembleRelease
+        )
+        cp examples/test-app/android/app/build/outputs/apk/release/app-release.apk \
+          "${{ github.workspace }}/.tmp/fixture-app/fixture-app.apk"
+
+    - name: Locate fixture APK
+      id: locate-android
+      if: inputs.platform == 'android'
+      shell: bash
+      run: 'bash "$GITHUB_ACTION_PATH/locate-android-apk.sh" "${{ github.workspace }}/.tmp/fixture-app"'
+
+    - name: Repack the cached APK with the current JS
+      if: inputs.platform == 'android' && steps.fetch.outputs.source == 'artifact'
+      shell: bash
+      run: |
+        set -euo pipefail
+        APK="${{ steps.locate-android.outputs.app-path }}"
+        OUT="${{ github.workspace }}/.tmp/fixture-app-repacked/$(basename "$APK")"
+        bash "$GITHUB_ACTION_PATH/repack-android-apk.sh" "$APK" "$OUT"
+        mv "$OUT" "$APK"

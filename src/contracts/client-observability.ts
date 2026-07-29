@@ -28,13 +28,13 @@ export type EventsOptions = AgentDeviceRequestOverrides & {
   limit?: number;
 };
 
-export type NetworkOptions = AgentDeviceRequestOverrides & {
+export type NetworkOptions = DeviceCommandBaseOptions & {
   action?: 'dump' | 'log';
   limit?: number;
   include?: NetworkIncludeMode;
 };
 
-export type AudioOptions = AgentDeviceRequestOverrides & {
+export type AudioOptions = DeviceCommandBaseOptions & {
   action?: 'probe';
   probeAction?: 'start' | 'status' | 'stop';
   durationMs?: number;

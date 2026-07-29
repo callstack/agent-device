@@ -741,9 +741,7 @@ test('prepare ios-runner rejects non-Apple runner devices', async () => {
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
     expect(response.error.code).toBe('UNSUPPORTED_OPERATION');
-    expect(response.error.message).toBe(
-      'prepare ios-runner is only supported on Apple runner platforms',
-    );
+    expect(response.error.message).toBe('prepare is not supported on this device');
   }
   expect(mockPrepareIosRunner).not.toHaveBeenCalled();
 });

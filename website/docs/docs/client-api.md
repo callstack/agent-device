@@ -22,10 +22,12 @@ Public subpath API exposed for Node consumers:
   - `buildBundleUrl(baseUrl, platform)`
   - `normalizeBaseUrl(baseUrl)`
   - `resolveRuntimeTransport(runtime)`
+  - `prepareMetroRuntime(options?)`, `reloadMetro(options?)`, `stopMetroTunnel(options)`
   - types: `MetroBridgeDescriptor`, `MetroTunnelRequestMessage`, `MetroTunnelResponseMessage`
 - `agent-device/batch`
   - `runBatch(req, sessionName, invoke)`
 - `agent-device/remote-config`
+  - `resolveRemoteConfigProfile(options)`
   - types: `RemoteConfigProfile`
 - `agent-device/contracts`
   - `centerOfRect(rect)`
@@ -124,8 +126,10 @@ const result = await client.sessions.artifacts({
   providerSessionId: 'arn:aws:devicefarm:us-west-2:123:session/project/session/00000',
 });
 
-for (const artifact of result.cloudArtifacts) {
-  console.log(artifact.kind, artifact.name, artifact.url);
+if ('cloudArtifacts' in result) {
+  for (const artifact of result.cloudArtifacts) {
+    console.log(artifact.kind, artifact.name, artifact.url);
+  }
 }
 ```
 
@@ -138,13 +142,11 @@ import { createAgentDeviceClient } from 'agent-device';
 
 const client = createAgentDeviceClient({
   leaseProvider: 'browserstack',
-  platform: 'android',
-  device: 'Google Pixel 8',
   providerOsVersion: '14.0',
   providerApp: 'bs://app-id',
 });
 
-await client.apps.open({ app: 'com.example.app' });
+await client.apps.open({ app: 'com.example.app', platform: 'android', device: 'Google Pixel 8' });
 await client.capture.snapshot({ interactiveOnly: true });
 const closed = await client.sessions.close();
 ```
@@ -197,9 +199,11 @@ idempotent for the same owner and rejects conflicting owners for the same local 
 
 ```ts
 import { getAndroidAppStateWithAdb, listAndroidAppsWithAdb } from 'agent-device/android-adb';
+import type { AndroidAdbExecutorOptions } from 'agent-device/android-adb';
 
 const provider = {
-  exec: async (args, options) => await runAdbThroughRemoteTunnel(args, options),
+  exec: async (args: string[], options?: AndroidAdbExecutorOptions) =>
+    await runAdbThroughRemoteTunnel(args, options),
 };
 
 const apps = await listAndroidAppsWithAdb(provider.exec); // user-installed apps by default
@@ -343,6 +347,8 @@ async function handleBatch(req: BatchRequest): Promise<DaemonResponse> {
 ## Android `installFromSource()`
 
 ```ts
+import { createAgentDeviceClient } from 'agent-device';
+
 const androidClient = createAgentDeviceClient({ session: 'qa-android' });
 
 const installed = await androidClient.apps.installFromSource({
@@ -404,7 +410,7 @@ Direct Android `.apk` and `.aab` URL sources can still resolve package identity 
 ## Remote Metro helpers
 
 ```ts
-import { prepareRemoteMetro, reloadRemoteMetro, stopMetroTunnel } from 'agent-device/metro';
+import { prepareMetroRuntime, reloadMetro, stopMetroTunnel } from 'agent-device/metro';
 import { resolveRemoteConfigProfile } from 'agent-device/remote-config';
 
 const remoteConfig = resolveRemoteConfigProfile({
@@ -412,7 +418,7 @@ const remoteConfig = resolveRemoteConfigProfile({
   cwd: process.cwd(),
 });
 
-const prepared = await prepareRemoteMetro({
+const prepared = await prepareMetroRuntime({
   projectRoot: remoteConfig.profile.metroProjectRoot!,
   kind: remoteConfig.profile.metroKind ?? 'auto',
   proxyBaseUrl: remoteConfig.profile.metroProxyBaseUrl,
@@ -422,12 +428,12 @@ const prepared = await prepareRemoteMetro({
     runId: remoteConfig.profile.runId!,
     leaseId: remoteConfig.profile.leaseId!,
   },
-  profileKey: remoteConfig.resolvedPath,
+  companionProfileKey: remoteConfig.resolvedPath,
 });
 
 console.log(prepared.iosRuntime, prepared.androidRuntime);
 
-await reloadRemoteMetro({
+await reloadMetro({
   runtime: prepared.iosRuntime,
 });
 
@@ -437,7 +443,7 @@ await stopMetroTunnel({
 });
 ```
 
-Use `agent-device/remote-config` for profile loading and path resolution, `agent-device/metro` for Metro preparation, reload, and tunnel lifecycle, and `agent-device/contracts` when a server consumer needs daemon request or runtime contract types. For bridged remote Metro, `proxyBaseUrl` is the bridge origin and `publicBaseUrl` is optional; the bridge descriptor supplies cloud iOS wildcard HTTPS hints and Android runtime-route hints. `reloadRemoteMetro()` calls Metro's `/reload` endpoint, matching the terminal `r` reload path for connected React Native apps.
+Use `agent-device/remote-config` for profile loading and path resolution, `agent-device/metro` for Metro preparation, reload, and tunnel lifecycle, and `agent-device/contracts` when a server consumer needs daemon request or runtime contract types. For bridged remote Metro, `proxyBaseUrl` is the bridge origin and `publicBaseUrl` is optional; the bridge descriptor supplies cloud iOS wildcard HTTPS hints and Android runtime-route hints. `reloadMetro()` calls Metro's `/reload` endpoint, matching the terminal `r` reload path for connected React Native apps.
 
 ## Selector helpers
 

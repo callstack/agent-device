@@ -221,6 +221,19 @@ test('core commands support iOS simulator, iOS device, and Android', () => {
   );
 });
 
+test('Android denies Apple runner preparation and viewport mutation until durable backends exist', () => {
+  assertCommandSupport(
+    ['prepare', 'viewport'],
+    [
+      { device: iosSimulator, expected: true, label: 'on iOS simulator' },
+      { device: macOsDevice, expected: true, label: 'on macOS' },
+      { device: tvOsSimulator, expected: true, label: 'on tvOS simulator' },
+      { device: androidDevice, expected: false, label: 'on Android device' },
+      { device: androidEmulator, expected: false, label: 'on Android emulator' },
+    ],
+  );
+});
+
 test('capabilities reject CoreDevice-only commands for XCTest-backed devices', () => {
   const coreDeviceOnlyCommands = [
     'apps',

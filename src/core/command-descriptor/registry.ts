@@ -715,6 +715,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
     catalog: { group: 'public' },
     recordsSessionAction: false,
     daemon: { route: 'session', refFrameEffect: 'preserve' },
+    // `ios-runner` has no Android implementation; admission must agree with
+    // the handler rather than advertising a command that always rejects later.
+    capability: { apple: APPLE_SIM_AND_DEVICE, android: {}, linux: LINUX_NONE },
     // Runner warm-up builds are the longest fixed envelope; --timeout overrides.
     timeoutPolicy: {
       budget: { source: 'flag' },
@@ -1134,7 +1137,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
     recordingEffect: 'mutates-app',
     daemon: { route: 'generic', refFrameEffect: 'may-invalidate' },
     dispatch: {},
-    capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
+    // Android has no durable viewport set/read/reset lifecycle. Deny it until
+    // that contract, including cleanup, exists instead of accepting a no-op.
+    capability: { apple: APPLE_SIM_AND_DEVICE, android: {}, linux: LINUX_NONE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
   },

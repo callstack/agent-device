@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -39,6 +40,17 @@ jobs:
         with:
           package-helpers: 'true'
 
+      - name: Restore fixture APK
+        id: fixture-app
+        uses: ./.github/actions/setup-fixture-app
+        with:
+          platform: android
+          install: 'false'
+          wait-for-artifact-seconds: '600'
+
+      - name: Report fixture cache source
+        run: echo "Android fixture APK source=${{ steps.fixture-app.outputs.source }}"
+
       - name: Run Android smoke checks
         uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
         with:
@@ -48,7 +60,7 @@ jobs:
           target: google_apis_playstore
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
           script: |
-            set -e
+            sh ./test/scripts/android-fixture-cache-smoke.sh "${{ steps.fixture-app.outputs.apk-path }}" "${{ steps.fixture-app.outputs.app-id }}"
             node --experimental-strip-types src/bin.ts test test/integration/replays/android/01-settings.ad --retries 2 --report-junit test/artifacts/replays-android-smoke.junit.xml
             sh ./test/scripts/android-snapshot-helper-release-smoke.sh
 
