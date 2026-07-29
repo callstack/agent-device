@@ -268,6 +268,7 @@ async function handleOpenCommand(
       activity: context?.activity,
       appBundleId: context?.appBundleId,
       launchArgs,
+      terminateRunningApp: context?.terminateRunningApp,
       url,
     });
     return { app, url, ...successText(`Opened: ${app}`) };

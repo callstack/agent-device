@@ -77,6 +77,23 @@ test('dispatch open rejects launch arguments without an app target', async () =>
   );
 });
 
+test('dispatch open forwards terminate-running semantics with an iOS app URL', async () => {
+  await dispatchCommand(
+    IOS_SIMULATOR,
+    'open',
+    ['com.example.app', 'myapp://automation'],
+    undefined,
+    {
+      terminateRunningApp: true,
+    },
+  );
+
+  assert.equal(mockOpenIosApp.mock.calls.length, 1);
+  assert.deepEqual(mockOpenIosApp.mock.calls[0]?.slice(0, 2), [IOS_SIMULATOR, 'com.example.app']);
+  assert.equal(mockOpenIosApp.mock.calls[0]?.[2]?.url, 'myapp://automation');
+  assert.equal(mockOpenIosApp.mock.calls[0]?.[2]?.terminateRunningApp, true);
+});
+
 test('dispatch open forwards Android launch arguments to openAndroidApp', async () => {
   const device: DeviceInfo = {
     platform: 'android',
