@@ -338,12 +338,23 @@ test('runtime wait stable times out with capture stats when never settling', asy
 
 test('runtime wait stable times out when a backend capture stalls past the wait budget', async () => {
   const clock = createFakeClock();
+  let captureAborted = false;
   const device = createAgentDevice({
     backend: {
       platform: 'macos',
-      // Simulates the stalled macOS AX capture: the promise never settles, so
-      // only the real-timer deadline can end the wait.
-      captureSnapshot: () => new Promise<BackendSnapshotResult>(() => {}),
+      // Simulates a stalled macOS AX capture that honors the backend cancellation contract.
+      captureSnapshot: (context) =>
+        new Promise<BackendSnapshotResult>((_resolve, reject) => {
+          assert.ok(context.signal);
+          context.signal.addEventListener(
+            'abort',
+            () => {
+              captureAborted = true;
+              reject(context.signal?.reason);
+            },
+            { once: true },
+          );
+        }),
     } satisfies AgentDeviceBackend,
     artifacts: createLocalArtifactAdapter(),
     sessions: createMemorySessionStore([{ name: 'default' }]),
@@ -367,6 +378,7 @@ test('runtime wait stable times out when a backend capture stalls past the wait 
       return true;
     },
   );
+  assert.equal(captureAborted, true);
 });
 
 test('runtime wait stable uses provided defaults when quietMs/timeoutMs are omitted', async () => {

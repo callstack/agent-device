@@ -77,6 +77,7 @@ test('disables repeated persistent session attempts after startup failure', asyn
   assert.equal(first, undefined);
   assert.equal(second, undefined);
   assert.equal(spawnArgs.length, 1);
+  assert.equal(readSessionArgument(spawnArgs[0]!, 'timeoutMs'), '2000');
   assert.equal(calls.filter((args) => args[0] === 'forward').length, 2);
 });
 
@@ -123,7 +124,7 @@ test('allows a persistent session snapshot to use the helper command budget', as
       timeoutMs: 10,
       commandTimeoutMs: 4_000,
     }),
-    4_000,
+    3_010,
   );
 
   const output = await captureAndroidSnapshotWithHelperSession({
@@ -161,6 +162,36 @@ test('caps a persistent session snapshot at the helper command budget', async ()
       return true;
     },
   );
+});
+
+test('cancels a stalled snapshot, retires its helper, and starts the next capture cleanly', async () => {
+  const calls: string[][] = [];
+  const processes: FakeAndroidProcess[] = [];
+  const provider = createSessionProvider({ calls, processes, stalledSnapshots: 1 });
+  const controller = new AbortController();
+  const capture = captureAndroidSnapshotWithHelperSession({
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey: 'android:emulator-5554',
+    signal: controller.signal,
+  });
+  setTimeout(() => controller.abort(new Error('wait deadline exceeded')), 10);
+
+  await assert.rejects(capture, /wait deadline exceeded/);
+  assert.equal(processes[0]?.killed, true);
+  assert.equal(
+    calls.some((args) => args[0] === 'forward' && args[1] === '--remove'),
+    true,
+  );
+
+  const next = await captureAndroidSnapshotWithHelperSession({
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey: 'android:emulator-5554',
+  });
+  assert.match(next?.xml ?? '', /snapshot 1/);
+  assert.equal(next?.metadata.sessionReused, false);
+  assert.equal(processes.length, 2);
 });
 
 test('restarts the helper session when capture options change', async () => {
@@ -227,6 +258,27 @@ test('force terminates the helper when quit is not acknowledged', async () => {
   assert.equal(processes[0]?.killed, true);
 });
 
+test('force terminates a session whose UiAutomation connection timed out', async () => {
+  const calls: string[][] = [];
+  const processes: FakeAndroidProcess[] = [];
+  const provider = createSessionProvider({
+    calls,
+    processes,
+    responseMode: 'ui-automation-timeout',
+  });
+
+  await assert.rejects(
+    captureAndroidSnapshotWithHelperSession({
+      adb: provider.exec,
+      adbProvider: provider,
+      deviceKey: 'android:emulator-5554',
+    }),
+    /Timed out waiting for Android UiAutomation to connect/,
+  );
+
+  assert.equal(processes[0]?.killed, true);
+});
+
 test('invalidates the helper session after a malformed response', async () => {
   const calls: string[][] = [];
   const provider = createSessionProvider({ calls, responseMode: 'malformed' });
@@ -255,9 +307,11 @@ function createSessionProvider(options: {
   quitExitDelayMs?: number;
   quitResponseMode?: 'ok' | 'malformed';
   spawnArgs?: string[][];
-  responseMode?: 'ok' | 'malformed';
+  responseMode?: 'ok' | 'malformed' | 'ui-automation-timeout';
   responseDelayMs?: number;
+  stalledSnapshots?: number;
 }): AndroidAdbProvider {
+  let stalledSnapshots = options.stalledSnapshots ?? 0;
   return {
     exec: async (args) => {
       options.calls.push(args);
@@ -269,7 +323,10 @@ function createSessionProvider(options: {
       const process = new FakeAndroidProcess();
       options.processes?.push(process);
       let snapshotCount = 0;
+      const sockets = new Set<net.Socket>();
       const server = net.createServer((socket) => {
+        sockets.add(socket);
+        socket.once('close', () => sockets.delete(socket));
         socket.once('data', (chunk) => {
           const command = chunk.toString('utf8').trim();
           const [, requestId = ''] = command.split(/\s+/, 2);
@@ -288,7 +345,25 @@ function createSessionProvider(options: {
             socket.end('not a session response');
             return;
           }
+          if (options.responseMode === 'ui-automation-timeout') {
+            socket.end(
+              sessionResponse({
+                requestId,
+                body: '',
+                metadata: {
+                  ok: 'false',
+                  errorType: 'java.util.concurrent.TimeoutException',
+                  message: 'Timed out waiting for Android UiAutomation to connect',
+                },
+              }),
+            );
+            return;
+          }
           snapshotCount += 1;
+          if (stalledSnapshots > 0) {
+            stalledSnapshots -= 1;
+            return;
+          }
           const body = `<hierarchy><node text="snapshot ${snapshotCount}" /></hierarchy>`;
           setTimeout(() => {
             socket.end(
@@ -324,6 +399,7 @@ function createSessionProvider(options: {
         );
       });
       process.onKill = () => {
+        for (const socket of sockets) socket.destroy();
         if (server.listening) {
           server.close(() => process.emitExit(0, null));
         } else {
@@ -359,6 +435,11 @@ function readSessionPort(args: string[]): number {
   const index = args.indexOf('sessionPort');
   assert.notEqual(index, -1);
   return Number(args[index + 1]);
+}
+
+function readSessionArgument(args: string[], name: string): string | undefined {
+  const index = args.indexOf(name);
+  return index < 0 ? undefined : args[index + 1];
 }
 
 class FakeAndroidProcess extends EventEmitter implements AndroidAdbProcess {

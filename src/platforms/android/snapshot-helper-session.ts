@@ -25,7 +25,10 @@ const SESSION_STOP_TIMEOUT_MS = 1_000;
 // connecting UiAutomation. Let an acknowledged quit complete that release before force-killing adb.
 const SESSION_GRACEFUL_EXIT_TIMEOUT_MS = 11_000;
 const SESSION_PROCESS_EXIT_TIMEOUT_MS = 2_000;
-const SESSION_REQUEST_OVERHEAD_MS = 10_000;
+// Persistent capture is an optimization before the required one-shot path. Keep its native and
+// transport budgets shorter so a wedged UiAutomation connection leaves time for a clean fallback.
+const SESSION_CAPTURE_TIMEOUT_MS = 2_000;
+const SESSION_REQUEST_OVERHEAD_MS = 3_000;
 const FORWARD_TIMEOUT_MS = 5_000;
 
 type AndroidSnapshotHelperSessionHelperIdentity = {
@@ -56,7 +59,9 @@ export async function captureAndroidSnapshotWithHelperSession(
   if (!isAndroidSnapshotHelperSessionEnabled() || !options.adbProvider?.spawn) {
     return undefined;
   }
-  const resolved = resolveAndroidSnapshotHelperCaptureOptions(options);
+  const resolved = resolvePersistentSessionCaptureOptions(
+    resolveAndroidSnapshotHelperCaptureOptions(options),
+  );
   const deviceKey = options.deviceKey ?? 'android:default';
   const identity = createSessionIdentity(deviceKey, resolved, options);
   if (disabledSessionIdentities.get(deviceKey) === identity) {
@@ -76,6 +81,7 @@ export async function captureAndroidSnapshotWithHelperSession(
         resolved,
       });
     } catch (error) {
+      options.signal?.throwIfAborted();
       disabledSessionIdentities.set(deviceKey, identity);
       emitDiagnostic({
         level: 'warn',
@@ -90,7 +96,7 @@ export async function captureAndroidSnapshotWithHelperSession(
   }
   try {
     const reused = session.capturedCount > 0;
-    const output = await requestSessionSnapshot(session, resolved);
+    const output = await requestSessionSnapshot(session, resolved, options.signal);
     session.capturedCount += 1;
     return {
       xml: output.xml,
@@ -101,9 +107,30 @@ export async function captureAndroidSnapshotWithHelperSession(
       },
     };
   } catch (error) {
-    await stopAndroidSnapshotHelperSession(deviceKey);
+    await stopAndroidSnapshotHelperSession(deviceKey, {
+      force: options.signal?.aborted === true || isUiAutomationConnectionTimeoutResponse(error),
+      signal: options.signal,
+    });
     throw error;
   }
+}
+
+function resolvePersistentSessionCaptureOptions(
+  resolved: AndroidSnapshotHelperResolvedCaptureOptions,
+): AndroidSnapshotHelperResolvedCaptureOptions {
+  const timeoutMs = Math.min(resolved.timeoutMs, SESSION_CAPTURE_TIMEOUT_MS);
+  return {
+    ...resolved,
+    timeoutMs,
+    commandTimeoutMs: Math.min(resolved.commandTimeoutMs, timeoutMs + SESSION_REQUEST_OVERHEAD_MS),
+  };
+}
+
+function isUiAutomationConnectionTimeoutResponse(error: unknown): boolean {
+  if (!(error instanceof AppError)) return false;
+  const helper = error.details?.helper;
+  if (!helper || typeof helper !== 'object') return false;
+  return (helper as Record<string, unknown>).errorType === 'java.util.concurrent.TimeoutException';
 }
 
 // Touch commands piggyback on a live snapshot session so gestures do not restart instrumentation
@@ -204,25 +231,34 @@ function assertTouchSessionHeaders(headers: Record<string, string>, requestId: s
   }
 }
 
-export async function stopAndroidSnapshotHelperSession(deviceKey: string): Promise<void> {
+export async function stopAndroidSnapshotHelperSession(
+  deviceKey: string,
+  options: { force?: boolean; signal?: AbortSignal } = {},
+): Promise<void> {
   const session = sessions.get(deviceKey);
   if (!session) return;
   sessions.delete(deviceKey);
   const processExit = observeProcessExit(session.process);
   const quitRequestId = `quit-${Date.now()}`;
   let quitAcknowledged = false;
-  try {
-    const response = await sendSessionCommand(
-      session,
-      `quit ${quitRequestId}`,
-      SESSION_STOP_TIMEOUT_MS,
-    );
-    quitAcknowledged = isSessionCommandAcknowledged(response, quitRequestId);
-  } catch {
-    // The process may already be gone; adb forward cleanup and kill below are still enough.
+  const force = options.force === true || options.signal?.aborted === true;
+  if (!force) {
+    try {
+      const response = await sendSessionCommand(
+        session,
+        `quit ${quitRequestId}`,
+        SESSION_STOP_TIMEOUT_MS,
+        options.signal,
+      );
+      quitAcknowledged = isSessionCommandAcknowledged(response, quitRequestId);
+    } catch {
+      // The process may already be gone; adb forward cleanup and kill below are still enough.
+    }
   }
   const exitedGracefully =
-    quitAcknowledged && (await waitForProcessExit(processExit, SESSION_GRACEFUL_EXIT_TIMEOUT_MS));
+    !force &&
+    quitAcknowledged &&
+    (await waitForProcessExit(processExit, SESSION_GRACEFUL_EXIT_TIMEOUT_MS, options.signal));
   if (!exitedGracefully) {
     try {
       session.process.kill('SIGTERM');
@@ -231,12 +267,12 @@ export async function stopAndroidSnapshotHelperSession(deviceKey: string): Promi
     }
     await waitForProcessExit(processExit, SESSION_PROCESS_EXIT_TIMEOUT_MS);
   }
-  const runtimeForceStopped = await forceStopSessionHelperRuntime(session);
-  try {
-    await removeForward(session);
-  } catch {
-    // Stale forwards are harmless and the next start overwrites its chosen local port.
-  }
+  const [runtimeStopResult] = await Promise.allSettled([
+    forceStopSessionHelperRuntime(session),
+    removeForward(session),
+  ]);
+  const runtimeForceStopped =
+    runtimeStopResult.status === 'fulfilled' ? runtimeStopResult.value : false;
   emitDiagnostic({
     phase: 'android_snapshot_helper_session_stop',
     data: {
@@ -246,6 +282,7 @@ export async function stopAndroidSnapshotHelperSession(deviceKey: string): Promi
       lifetimeMs: Date.now() - session.startedAtMs,
       quitAcknowledged,
       forceKilled: !exitedGracefully,
+      forced: force || options.signal?.aborted === true,
       runtimeForceStopped,
     },
   });
@@ -294,6 +331,7 @@ async function startAndroidSnapshotHelperSession(params: {
   await params.options.adb(['forward', `tcp:${port}`, `tcp:${port}`], {
     allowFailure: false,
     timeoutMs: FORWARD_TIMEOUT_MS,
+    signal: params.options.signal,
   });
   const args = buildAndroidSnapshotHelperArgs({
     ...params.resolved,
@@ -326,7 +364,7 @@ async function startAndroidSnapshotHelperSession(params: {
     capturedCount: 0,
   };
   try {
-    await waitForSessionReady(process, SESSION_READY_TIMEOUT_MS);
+    await waitForSessionReady(process, SESSION_READY_TIMEOUT_MS, params.options.signal);
     sessions.set(params.deviceKey, session);
     emitDiagnostic({
       phase: 'android_snapshot_helper_session_ready',
@@ -365,22 +403,42 @@ function observeProcessExit(process: AndroidAdbProcess): Promise<void> {
   });
 }
 
-async function waitForProcessExit(processExit: Promise<void>, timeoutMs: number): Promise<boolean> {
+async function waitForProcessExit(
+  processExit: Promise<void>,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<boolean> {
   let timer: NodeJS.Timeout | undefined;
+  let onAbort: (() => void) | undefined;
   const exited = await Promise.race([
     processExit.then(() => true),
     new Promise<false>((resolve) => {
       timer = setTimeout(() => resolve(false), timeoutMs);
     }),
+    ...(signal
+      ? [
+          new Promise<false>((resolve) => {
+            onAbort = () => resolve(false);
+            signal.addEventListener('abort', onAbort, { once: true });
+            if (signal.aborted) onAbort();
+          }),
+        ]
+      : []),
   ]);
   if (timer) clearTimeout(timer);
+  if (onAbort) signal?.removeEventListener('abort', onAbort);
   return exited;
 }
 
-function waitForSessionReady(process: AndroidAdbProcess, timeoutMs: number): Promise<void> {
+function waitForSessionReady(
+  process: AndroidAdbProcess,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     let output = '';
     const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
       reject(
         new AppError('COMMAND_FAILED', 'Android snapshot helper session did not become ready', {
           output,
@@ -395,23 +453,35 @@ function waitForSessionReady(process: AndroidAdbProcess, timeoutMs: number): Pro
         output.includes('sessionReady=true')
       ) {
         clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
         resolve();
       }
     };
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason ?? new DOMException('The operation was aborted', 'AbortError'));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
     process.stdout?.on('data', onData);
     process.stderr?.on('data', onData);
-    process.once('exit', (code, signal) => {
+    process.once('exit', (code, exitSignal) => {
       clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
       reject(
         new AppError('COMMAND_FAILED', 'Android snapshot helper session exited before ready', {
           output,
           exitCode: code,
-          signal,
+          signal: exitSignal,
         }),
       );
     });
     process.on('error', (error) => {
       clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
       reject(error);
     });
   });
@@ -420,12 +490,13 @@ function waitForSessionReady(process: AndroidAdbProcess, timeoutMs: number): Pro
 async function requestSessionSnapshot(
   session: AndroidSnapshotHelperSession,
   resolved: AndroidSnapshotHelperResolvedCaptureOptions,
+  signal?: AbortSignal,
 ): Promise<AndroidSnapshotHelperOutput> {
   const requestId = `snapshot-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   // Keep the session request generous enough for slow UIAutomator captures, but never
   // beyond the command budget the caller already assigned to this snapshot.
   const timeoutMs = resolveAndroidSnapshotHelperSessionRequestTimeoutMs(resolved);
-  const response = await sendSessionCommand(session, `snapshot ${requestId}`, timeoutMs);
+  const response = await sendSessionCommand(session, `snapshot ${requestId}`, timeoutMs, signal);
   return parseSessionSnapshotResponse(response, requestId);
 }
 
@@ -433,11 +504,13 @@ function sendSessionCommand(
   session: AndroidSnapshotHelperSession,
   command: string,
   timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const socket = net.connect({ host: '127.0.0.1', port: session.port });
     const chunks: Buffer[] = [];
     const timer = setTimeout(() => {
+      cleanup();
       socket.destroy();
       reject(
         new AppError('COMMAND_FAILED', 'Android snapshot helper session request timed out', {
@@ -447,6 +520,20 @@ function sendSessionCommand(
         }),
       );
     }, timeoutMs);
+    const cleanup = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+    };
+    const onAbort = () => {
+      cleanup();
+      socket.destroy();
+      reject(signal?.reason ?? new DOMException('The operation was aborted', 'AbortError'));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
     socket.on('connect', () => {
       socket.write(`${command}\n`);
     });
@@ -454,11 +541,11 @@ function sendSessionCommand(
       chunks.push(Buffer.from(chunk));
     });
     socket.on('error', (error) => {
-      clearTimeout(timer);
+      cleanup();
       reject(error);
     });
     socket.on('close', () => {
-      clearTimeout(timer);
+      cleanup();
       resolve(Buffer.concat(chunks).toString('utf8'));
     });
   });

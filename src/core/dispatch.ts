@@ -98,6 +98,7 @@ export async function dispatchGestureViewport(
 function runnerContextFromDispatchContext(context?: DispatchContext): RunnerContext {
   return {
     requestId: context?.requestId,
+    signal: context?.signal,
     appBundleId: context?.appBundleId,
     verbose: context?.verbose,
     logPath: context?.logPath,
@@ -631,15 +632,17 @@ async function handleSnapshotCommand(
   interactor: Interactor,
   context: DispatchContext | undefined,
 ): Promise<Record<string, unknown>> {
+  const snapshotContext = context ?? {};
   return await interactor.snapshot({
-    appBundleId: context?.appBundleId,
-    interactiveOnly: context?.snapshotInteractiveOnly,
-    depth: context?.snapshotDepth,
-    scope: context?.snapshotScope,
-    raw: context?.snapshotRaw,
-    includeRects: context?.snapshotIncludeRects,
-    includeHiddenContentHints: context?.snapshotIncludeHiddenContentHints,
-    surface: context?.surface,
+    appBundleId: snapshotContext.appBundleId,
+    signal: snapshotContext.signal,
+    interactiveOnly: snapshotContext.snapshotInteractiveOnly,
+    depth: snapshotContext.snapshotDepth,
+    scope: snapshotContext.snapshotScope,
+    raw: snapshotContext.snapshotRaw,
+    includeRects: snapshotContext.snapshotIncludeRects,
+    includeHiddenContentHints: snapshotContext.snapshotIncludeHiddenContentHints,
+    surface: snapshotContext.surface,
   });
 }
 

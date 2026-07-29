@@ -33,6 +33,7 @@ import {
   buildIndexMap,
   filterIdentitySet,
 } from '../../../replay/target-evidence-tree.ts';
+import { runWithinWaitDeadline } from './wait-deadline.ts';
 import {
   annotationLocalIdentity,
   type TargetAnnotationV1,
@@ -578,15 +579,31 @@ async function waitForSelector(
   // polling; only the deadline turns this into the fail-closed refusal.
   let landmarkMismatch: WaitLandmarkMismatchEvidence | undefined;
   const unreadable = createUnreadablePollTracker();
+  let captureStalled = false;
   while (now(runtime) - start < timeout) {
     // Presence-only poll: skip scroll-hint derivation (#1270), same as waitForFindMatch.
-    const capture = await unreadable.attempt(() =>
-      captureSelectorSnapshot(runtime, options, {
-        updateSession: true,
-        includeHiddenContentHints: false,
-        ...capturePolicy,
-      }),
+    const poll = await runUnreadableWaitPoll(
+      runtime,
+      options,
+      unreadable,
+      start,
+      timeout,
+      async (signal) =>
+        await captureSelectorSnapshot(
+          runtime,
+          { ...options, signal },
+          {
+            updateSession: true,
+            includeHiddenContentHints: false,
+            ...capturePolicy,
+          },
+        ),
     );
+    if (poll.timedOut) {
+      captureStalled = true;
+      break;
+    }
+    const capture = poll.value;
     if (capture) {
       const nodes = capture.snapshot.nodes;
       const matchList = listSelectorChainMatches(nodes, chain, {
@@ -608,6 +625,9 @@ async function waitForSelector(
     }
     await sleep(runtime, POLL_INTERVAL_MS);
   }
+  if (captureStalled) {
+    throw waitCaptureStalledError(`wait timed out for selector: ${selectorExpression}`, timeout);
+  }
   if (landmarkMismatch) {
     throw new AppError(
       'COMMAND_FAILED',
@@ -628,10 +648,12 @@ async function waitForSelector(
  * deadline so persistent breakage keeps its capture diagnosis instead of a
  * generic timeout.
  */
-function createUnreadablePollTracker(): {
+type UnreadablePollTracker = {
   attempt: <T>(capture: () => Promise<T>) => Promise<T | undefined>;
   rethrowIfNeverReadable: () => void;
-} {
+};
+
+function createUnreadablePollTracker(): UnreadablePollTracker {
   let sawReadableCapture = false;
   let lastUnreadableError: unknown;
   return {
@@ -702,17 +724,62 @@ async function waitForText(
   const timeout = timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const start = now(runtime);
   const unreadable = createUnreadablePollTracker();
+  let captureStalled = false;
   while (now(runtime) - start < timeout) {
-    const found = await unreadable.attempt(async () =>
-      runtime.backend.findText
-        ? (await runtime.backend.findText(toBackendContext(runtime, options), text)).found
-        : await snapshotContainsText(runtime, options, text),
+    const poll = await runUnreadableWaitPoll(
+      runtime,
+      options,
+      unreadable,
+      start,
+      timeout,
+      async (signal) =>
+        runtime.backend.findText
+          ? (
+              await runtime.backend.findText(
+                toBackendContext(runtime, { ...options, signal }),
+                text,
+              )
+            ).found
+          : await snapshotContainsText(runtime, { ...options, signal }, text),
     );
+    if (poll.timedOut) {
+      captureStalled = true;
+      break;
+    }
+    const found = poll.value;
     if (found) return { kind: 'text', text, waitedMs: now(runtime) - start };
     await sleep(runtime, POLL_INTERVAL_MS);
   }
+  if (captureStalled) {
+    throw waitCaptureStalledError(`wait timed out for text: ${text}`, timeout);
+  }
   unreadable.rethrowIfNeverReadable();
   throw new AppError('COMMAND_FAILED', `wait timed out for text: ${text}`);
+}
+
+async function runUnreadableWaitPoll<T>(
+  runtime: AgentDeviceRuntime,
+  options: WaitCommandOptions,
+  unreadable: UnreadablePollTracker,
+  start: number,
+  timeoutMs: number,
+  capture: (signal: AbortSignal) => Promise<T>,
+) {
+  return await runWithinWaitDeadline(
+    runtime,
+    options,
+    timeoutMs - (now(runtime) - start),
+    async (signal) => await unreadable.attempt(() => capture(signal)),
+  );
+}
+
+function waitCaptureStalledError(message: string, timeoutMs: number): AppError {
+  return new AppError('COMMAND_FAILED', message, {
+    reason: 'wait_capture_stalled',
+    captureStalled: true,
+    timeoutMs,
+    hint: 'A snapshot capture stalled past the wait timeout. Retry, or use screenshot to inspect the current surface.',
+  });
 }
 
 async function snapshotContainsText(

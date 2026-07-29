@@ -723,6 +723,59 @@ test('runtime wait keeps the plain timeout when readable polls simply never matc
   );
 });
 
+test('runtime wait reports a stalled final capture over an earlier unreadable verdict', async () => {
+  let captureCount = 0;
+  const initial = makeSnapshotState([{ index: 0, depth: 0, type: 'Other', label: 'Initial' }]);
+  const sessions = createMemorySessionStore([{ name: 'default', snapshot: initial }]);
+  const device = createAgentDevice({
+    backend: {
+      platform: 'android',
+      captureSnapshot: (context) => {
+        captureCount += 1;
+        if (captureCount === 1) throw unreadableCaptureError();
+        return new Promise((resolve) => {
+          context.signal?.addEventListener(
+            'abort',
+            () => {
+              setTimeout(
+                () =>
+                  resolve({
+                    snapshot: makeSnapshotState([
+                      { index: 0, depth: 0, type: 'Other', label: 'Late capture' },
+                    ]),
+                  }),
+                5,
+              );
+            },
+            { once: true },
+          );
+        });
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions,
+    policy: localCommandPolicy(),
+    clock: createFakeClock(),
+  });
+
+  await assert.rejects(
+    device.selectors.wait({
+      session: 'default',
+      target: { kind: 'selector', selector: 'label="Screen X"', timeoutMs: 400 },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.message, 'wait timed out for selector: label="Screen X"');
+      assert.equal(
+        (error as { details?: Record<string, unknown> }).details?.reason,
+        'wait_capture_stalled',
+      );
+      return true;
+    },
+  );
+  assert.deepEqual((await sessions.get('default'))?.snapshot, initial);
+});
+
 function failingWaitDevice(produceError: () => Error): {
   device: ReturnType<typeof createAgentDevice>;
   attempts: () => number;

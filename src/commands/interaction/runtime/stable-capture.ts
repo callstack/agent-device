@@ -6,6 +6,7 @@ import {
   type CapturedSnapshot,
   type SelectorSnapshotOptions,
 } from './selector-read-shared.ts';
+import { runWithinWaitDeadline } from './wait-deadline.ts';
 
 /**
  * The quiet-window stable-capture loop shared by `wait stable` and the
@@ -184,35 +185,24 @@ function stableCaptureDelayMs(params: {
 // Resolves undefined when the capture does not return within remainingMs. A
 // stalled backend capture (observed with macOS AX captures) must not push the
 // stable wait past the user-supplied timeout into the daemon request timeout.
-// The deadline uses a real timer even when runtime.clock is injected: test
-// clocks advance synthetic time synchronously and cannot represent a hung
-// backend call.
+// The deadline cancels and joins the capture before returning so no late capture
+// can overwrite session state or retain a platform helper.
 async function captureStableSignalWithinDeadline(
   runtime: AgentDeviceRuntime,
   options: CommandContext & SelectorSnapshotOptions,
   remainingMs: number,
 ): Promise<CapturedSnapshot | undefined> {
-  const capture = captureSelectorSnapshot(runtime, options, {
-    updateSession: false,
-    interactiveOnly: true,
+  const result = await runWithinWaitDeadline(runtime, options, remainingMs, async (signal) => {
+    return await captureSelectorSnapshot(
+      runtime,
+      { ...options, signal },
+      {
+        updateSession: false,
+        interactiveOnly: true,
+      },
+    );
   });
-  let timer: NodeJS.Timeout | undefined;
-  try {
-    const result = await Promise.race([
-      capture,
-      new Promise<undefined>((resolve) => {
-        timer = setTimeout(() => resolve(undefined), remainingMs);
-      }),
-    ]);
-    if (result === undefined) {
-      // The abandoned capture settles (or fails) on its own; swallow it so it
-      // cannot surface as an unhandled rejection after the wait already threw.
-      capture.catch(() => {});
-    }
-    return result;
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-  }
+  return result.timedOut ? undefined : result.value;
 }
 
 function digestSnapshotNodes(nodes: SnapshotNode[]): string {

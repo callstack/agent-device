@@ -1530,7 +1530,8 @@ test('wait text on Android uses freshness-aware capture instead of one-shot snap
       token: 't',
       session: sessionName,
       command: 'wait',
-      positionals: ['Create document', '50'],
+      // The wait budget includes Android's 250 ms freshness retry delay.
+      positionals: ['Create document', '500'],
       flags: {},
     },
     sessionName,

@@ -8,6 +8,7 @@ import {
   type DeviceInventoryRequest,
 } from '../../contracts/device-inventory.ts';
 import type { Platform, DeviceInfo } from '@agent-device/kernel/device';
+import type { RunnerContext } from '../../contracts/interactor-types.ts';
 import { resolveAndroidDiscoverySerialAllowlist } from '../platform-inventory.ts';
 
 // The builtin-plugin wiring lives at the interactor seam (src/core/interactors/) —
@@ -51,9 +52,9 @@ const androidPlugin = {
   // Declares the platform-gated request provider resolver the Android family owns (the
   // adb provider, formerly gated by `device.platform === 'android'`).
   providers: { platformGatedResolvers: ['androidAdbProvider'] },
-  createInteractor: async (device: DeviceInfo) => {
+  createInteractor: async (device: DeviceInfo, runner: RunnerContext) => {
     const { createAndroidInteractor } = await import('./android.ts');
-    return createAndroidInteractor(device);
+    return createAndroidInteractor(device, undefined, runner);
   },
   discoverDevices: async (request: DeviceInventoryRequest) => {
     const { listAndroidDevices } = await import('../../platforms/android/devices.ts');

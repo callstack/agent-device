@@ -75,6 +75,7 @@ export async function ensureAndroidSnapshotHelper(options: {
   deviceKey?: string;
   installPolicy?: AndroidSnapshotHelperInstallPolicy;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }): Promise<AndroidSnapshotHelperInstallResult> {
   const { adb, artifact } = options;
   const installPolicy = options.installPolicy ?? 'missing-or-outdated';
@@ -107,7 +108,12 @@ export async function ensureAndroidSnapshotHelper(options: {
   const installedState =
     installPolicy === 'always'
       ? {
-          installedVersionCode: await readInstalledVersionCode(adb, packageName, options.timeoutMs),
+          installedVersionCode: await readInstalledVersionCode(
+            adb,
+            packageName,
+            options.timeoutMs,
+            options.signal,
+          ),
           reason: 'forced' as const,
         }
       : await inspectInstalledAndroidHelper({
@@ -116,6 +122,7 @@ export async function ensureAndroidSnapshotHelper(options: {
           packageName,
           versionCode,
           sha256,
+          signal: options.signal,
         });
   const { installedVersionCode } = installedState;
   const installedSha256 =
@@ -147,6 +154,7 @@ export async function ensureAndroidSnapshotHelper(options: {
       {
         packageName,
         timeoutMs: options.timeoutMs,
+        signal: options.signal,
       },
     );
   } catch (error) {
@@ -203,12 +211,14 @@ async function readInstalledVersionCode(
   adb: AndroidAdbExecutor,
   packageName: string,
   timeoutMs: number | undefined,
+  signal: AbortSignal | undefined,
 ): Promise<number | undefined> {
   const result = await adb(
     ['shell', 'cmd', 'package', 'list', 'packages', '--show-versioncode', packageName],
     {
       allowFailure: true,
       timeoutMs,
+      signal,
     },
   );
   if (result.exitCode === 0) {
@@ -222,7 +232,7 @@ async function installAndroidSnapshotHelper(
   adbProvider: AndroidAdbProvider | AndroidAdbExecutor,
   apkPath: string,
   installOptions: AndroidSnapshotHelperInstallOptions,
-  options: { packageName: string; timeoutMs?: number },
+  options: { packageName: string; timeoutMs?: number; signal?: AbortSignal },
 ): Promise<Awaited<ReturnType<AndroidAdbExecutor>>> {
   const install = async () =>
     await installAndroidAdbPackage(apkPath, {
@@ -230,6 +240,7 @@ async function installAndroidSnapshotHelper(
       provider: adbProvider,
       ...installOptions,
       timeoutMs: options.timeoutMs,
+      signal: options.signal,
     });
 
   const result = await install();
@@ -240,6 +251,7 @@ async function installAndroidSnapshotHelper(
   const uninstall = await adb(['uninstall', options.packageName], {
     allowFailure: true,
     timeoutMs: options.timeoutMs,
+    signal: options.signal,
   });
   const retry = await install();
   if (retry.exitCode === 0) {

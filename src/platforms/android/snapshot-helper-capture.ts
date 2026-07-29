@@ -50,7 +50,9 @@ export async function captureAndroidSnapshotWithHelper(
   const result = await options.adb(buildAndroidSnapshotHelperArgs(resolved), {
     allowFailure: true,
     timeoutMs: resolved.commandTimeoutMs,
+    signal: options.signal,
   });
+  options.signal?.throwIfAborted();
   const { output, cleanupDone } = await readAndroidSnapshotHelperOutput(options, resolved, result);
   if (resolved.outputPath && !cleanupDone) {
     await removeHelperOutputFile(options.adb, resolved.outputPath);

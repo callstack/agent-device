@@ -13,6 +13,7 @@ import type { Point } from '@agent-device/kernel/snapshot';
 
 export type DispatchContext = ScreenshotDispatchFlags & {
   requestId?: string;
+  signal?: AbortSignal;
   appBundleId?: string;
   activity?: string;
   launchConsole?: string;

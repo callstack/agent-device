@@ -50,6 +50,7 @@ type SelectorCaptureRecoveryPolicy = {
 
 type SelectorCaptureRequest = {
   flags: CommandFlags | undefined;
+  signal?: AbortSignal;
   includeRects?: boolean;
   outPath?: string;
   snapshotScope?: string;
@@ -95,6 +96,7 @@ export function createSelectorCaptureRuntime(params: SelectorCaptureRuntimeParam
     }
 
     const snapshot = await captureSelectorSnapshot({ params, request });
+    request.signal?.throwIfAborted();
     const result = { snapshot };
     updateSessionSnapshot({ session, sessionStore, sessionName, snapshot });
     lastSnapshotAt = timestamp;
@@ -178,6 +180,7 @@ async function runCapture(
     logPath: params.logPath ?? '',
     snapshotScope,
     includeRects: request.includeRects,
+    signal: request.signal,
   });
   return capture.snapshot;
 }

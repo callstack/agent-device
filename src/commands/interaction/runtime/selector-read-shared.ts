@@ -81,6 +81,7 @@ export async function captureSelectorSnapshot(
       ...(result.quality ? { snapshotQuality: result.quality } : {}),
       createdAt: now(runtime),
     } satisfies SnapshotState);
+  (options.signal ?? runtime.signal)?.throwIfAborted();
   if (
     captureOptions.updateSession &&
     session &&

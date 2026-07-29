@@ -34,12 +34,13 @@ import { screenshotAndroid } from '../../platforms/android/screenshot.ts';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { withMethodScope } from '../../utils/method-scope.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { Interactor } from '../../contracts/interactor-types.ts';
+import type { Interactor, RunnerContext } from '../../contracts/interactor-types.ts';
 import { snapshotCaptureAnnotationsFrom } from '../../contracts/snapshot-capture-annotations.ts';
 
 export function createAndroidInteractor(
   device: DeviceInfo,
   provider?: AndroidAdbProvider,
+  runnerContext?: Pick<RunnerContext, 'signal'>,
 ): Interactor {
   const interactor: Interactor = {
     open: (app, options) =>
@@ -65,19 +66,21 @@ export function createAndroidInteractor(
     gestureViewport: () => readAndroidGestureViewport(device),
     screenshot: (outPath, options) => screenshotAndroid(device, outPath, options),
     snapshot: async (options) => {
+      const snapshotOptions = options ?? {};
       const result = await withDiagnosticTimer(
         'snapshot_capture',
         async () =>
           await snapshotAndroid(device, {
-            appBundleId: options?.appBundleId,
-            interactiveOnly: options?.interactiveOnly,
-            depth: options?.depth,
-            scope: options?.scope,
-            raw: options?.raw,
-            includeHiddenContentHints: options?.includeHiddenContentHints,
+            appBundleId: snapshotOptions.appBundleId,
+            signal: snapshotOptions.signal ?? runnerContext?.signal,
+            interactiveOnly: snapshotOptions.interactiveOnly,
+            depth: snapshotOptions.depth,
+            scope: snapshotOptions.scope,
+            raw: snapshotOptions.raw,
+            includeHiddenContentHints: snapshotOptions.includeHiddenContentHints,
             // appBundleId is present for app-backed daemon sessions; keep the helper warm there,
             // but release it after standalone device snapshots so UiAutomation is not squatted.
-            helperSessionScope: options?.appBundleId ? 'daemon-session' : 'command',
+            helperSessionScope: snapshotOptions.appBundleId ? 'daemon-session' : 'command',
           }),
         { backend: 'android' },
       );

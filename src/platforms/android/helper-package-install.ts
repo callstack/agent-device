@@ -112,21 +112,32 @@ export async function inspectInstalledAndroidHelper(options: {
   packageName: string;
   versionCode: number;
   sha256: string;
+  signal?: AbortSignal;
 }): Promise<InstalledAndroidHelperState> {
-  const { adb, adbProvider, packageName, versionCode, sha256 } = options;
-  const installedVersionCode = await readInstalledAndroidPackageVersionCode(adb, packageName);
+  const { adb, adbProvider, packageName, versionCode, sha256, signal } = options;
+  const installedVersionCode = await readInstalledAndroidPackageVersionCode(
+    adb,
+    packageName,
+    signal,
+  );
   if (installedVersionCode === undefined) return { reason: 'missing' };
   if (installedVersionCode < versionCode) return { installedVersionCode, reason: 'outdated' };
   if (installedVersionCode > versionCode) return { installedVersionCode, reason: 'current' };
 
   try {
-    const installedSha256 = await readInstalledAndroidPackageSha256(adb, adbProvider, packageName);
+    const installedSha256 = await readInstalledAndroidPackageSha256(
+      adb,
+      adbProvider,
+      packageName,
+      signal,
+    );
     return {
       installedVersionCode,
       installedSha256,
       reason: installedSha256 === sha256 ? 'current' : 'mismatched',
     };
   } catch {
+    signal?.throwIfAborted();
     return { installedVersionCode, reason: 'unverifiable' };
   }
 }
@@ -193,10 +204,11 @@ export function makeEnsureAndroidHelperInstalled<
 async function readInstalledAndroidPackageVersionCode(
   adb: AndroidAdbExecutor,
   packageName: string,
+  signal?: AbortSignal,
 ): Promise<number | undefined> {
   const result = await adb(
     ['shell', 'cmd', 'package', 'list', 'packages', '--show-versioncode', packageName],
-    { allowFailure: true, timeoutMs: 5_000 },
+    { allowFailure: true, timeoutMs: 5_000, signal },
   );
   if (result.exitCode !== 0) return undefined;
   const match = new RegExp(
@@ -209,10 +221,12 @@ async function readInstalledAndroidPackageSha256(
   adb: AndroidAdbExecutor,
   adbProvider: AndroidAdbProvider,
   packageName: string,
+  signal?: AbortSignal,
 ): Promise<string> {
   const pathResult = await adb(['shell', 'pm', 'path', packageName], {
     allowFailure: true,
     timeoutMs: ANDROID_HELPER_IDENTITY_TIMEOUT_MS,
+    signal,
   });
   const remotePath = readBaseApkPath(`${pathResult.stdout}\n${pathResult.stderr}`);
   if (pathResult.exitCode !== 0 || !remotePath) {
@@ -226,6 +240,7 @@ async function readInstalledAndroidPackageSha256(
       provider: adbProvider,
       allowFailure: true,
       timeoutMs: ANDROID_HELPER_IDENTITY_TIMEOUT_MS,
+      signal,
     });
     if (pull.exitCode !== 0) {
       throw androidAdbResultError('Could not read installed Android helper APK', pull, {

@@ -59,6 +59,7 @@ type CaptureSnapshotParams = {
   logPath: string;
   snapshotScope?: string;
   androidFreshnessMode?: AndroidFreshnessMode;
+  signal?: AbortSignal;
 };
 
 type SnapshotData = {
@@ -227,6 +228,7 @@ export async function captureSnapshotData(params: CaptureSnapshotParams): Promis
       session?.trace?.outPath,
     ),
     snapshotIncludeRects: params.includeRects,
+    signal: params.signal,
   })) as SnapshotData;
 }
 

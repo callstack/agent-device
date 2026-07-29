@@ -59,6 +59,7 @@ export type AndroidSnapshotHelperInstallResult = {
 
 export type AndroidSnapshotHelperCaptureOptions = {
   adb: AndroidAdbExecutor;
+  signal?: AbortSignal;
   adbProvider?: AndroidAdbProvider;
   deviceKey?: string;
   helperVersion?: string;
