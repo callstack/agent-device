@@ -20,12 +20,38 @@ export async function assertFormInput(context: LiveContext): Promise<void> {
 
   const baseline = await runStep(context, 'establish form diff baseline', ['snapshot', '-i']);
   requireAndroidResourceId(baseline, 'field-name');
-  await runStep(context, 'fill full name', ['fill', 'id="field-name"', 'Ada Lovelace']);
-  const diff = await runStep(context, 'observe form diff', ['diff', 'snapshot', '-i']);
+  await runStep(context, 'leave form before snapshot diff', ['back']);
+  const diff = await runStep(context, 'observe form navigation diff', ['diff', 'snapshot', '-i']);
   const additions = Number(diff.json?.data?.summary?.additions ?? 0);
   const removals = Number(diff.json?.data?.summary?.removals ?? 0);
-  assert.ok(additions + removals > 0, `expected non-empty diff: ${JSON.stringify(diff.json)}`);
-  verifyCommand(context, C.diff, 'snapshot diff reports a non-empty form mutation');
+  assert.ok(
+    additions + removals > 0,
+    `expected non-empty form navigation diff: ${JSON.stringify(diff.json)}`,
+  );
+  const lines = Array.isArray(diff.json?.data?.lines)
+    ? (diff.json.data.lines as { kind?: unknown; text?: unknown }[])
+    : [];
+  assert.ok(
+    lines.some(
+      (line) =>
+        line.kind === 'removed' &&
+        typeof line.text === 'string' &&
+        line.text.includes('Checkout form'),
+    ),
+    `expected removed Checkout form evidence: ${JSON.stringify(diff.json)}`,
+  );
+  assert.ok(
+    lines.some(
+      (line) =>
+        line.kind === 'added' && typeof line.text === 'string' && line.text.includes('Settings'),
+    ),
+    `expected added Settings evidence: ${JSON.stringify(diff.json)}`,
+  );
+  verifyCommand(context, C.diff, 'snapshot diff reports the Form-to-Settings transition');
+
+  await runStep(context, 'reopen form tab after diff', ['click', 'label="Form"']);
+  await assertWaitText(context, 'Checkout form');
+  await runStep(context, 'fill full name', ['fill', 'id="field-name"', 'Ada Lovelace']);
 
   const name = await runStep(context, 'read filled full name', ['get', 'text', 'id="field-name"']);
   assertJsonContains(name, 'Ada Lovelace', 'filled name should be observable in Android UI');
