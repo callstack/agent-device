@@ -189,6 +189,38 @@ test('restarts the helper session when capture options change', async () => {
   );
 });
 
+test('allows an acknowledged helper quit to release UiAutomation before forcing termination', async () => {
+  const calls: string[][] = [];
+  const processes: FakeAndroidProcess[] = [];
+  const provider = createSessionProvider({ calls, processes, quitExitDelayMs: 25 });
+
+  await captureAndroidSnapshotWithHelperSession({
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey: 'android:emulator-5554',
+  });
+  await resetAndroidSnapshotHelperSessions();
+
+  assert.equal(processes.length, 1);
+  assert.equal(processes[0]?.killed, false);
+});
+
+test('force terminates the helper when quit is not acknowledged', async () => {
+  const calls: string[][] = [];
+  const processes: FakeAndroidProcess[] = [];
+  const provider = createSessionProvider({ calls, processes, quitResponseMode: 'malformed' });
+
+  await captureAndroidSnapshotWithHelperSession({
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey: 'android:emulator-5554',
+  });
+  await resetAndroidSnapshotHelperSessions();
+
+  assert.equal(processes.length, 1);
+  assert.equal(processes[0]?.killed, true);
+});
+
 test('invalidates the helper session after a malformed response', async () => {
   const calls: string[][] = [];
   const provider = createSessionProvider({ calls, responseMode: 'malformed' });
@@ -213,6 +245,9 @@ test('invalidates the helper session after a malformed response', async () => {
 
 function createSessionProvider(options: {
   calls: string[][];
+  processes?: FakeAndroidProcess[];
+  quitExitDelayMs?: number;
+  quitResponseMode?: 'ok' | 'malformed';
   spawnArgs?: string[][];
   responseMode?: 'ok' | 'malformed';
   responseDelayMs?: number;
@@ -226,14 +261,21 @@ function createSessionProvider(options: {
       options.spawnArgs?.push(args);
       const port = readSessionPort(args);
       const process = new FakeAndroidProcess();
+      options.processes?.push(process);
       let snapshotCount = 0;
       const server = net.createServer((socket) => {
         socket.once('data', (chunk) => {
           const command = chunk.toString('utf8').trim();
           const [, requestId = ''] = command.split(/\s+/, 2);
           if (command.startsWith('quit')) {
+            if (options.quitResponseMode === 'malformed') {
+              socket.end('not a session response');
+              return;
+            }
             socket.end(sessionResponse({ requestId, body: '' }));
-            server.close(() => process.emitExit(0, null));
+            server.close(() => {
+              setTimeout(() => process.emitExit(0, null), options.quitExitDelayMs ?? 0);
+            });
             return;
           }
           if (options.responseMode === 'malformed') {
@@ -276,7 +318,11 @@ function createSessionProvider(options: {
         );
       });
       process.onKill = () => {
-        server.close(() => process.emitExit(0, null));
+        if (server.listening) {
+          server.close(() => process.emitExit(0, null));
+        } else {
+          process.emitExit(0, null);
+        }
       };
       return process;
     },
@@ -313,6 +359,8 @@ class FakeAndroidProcess extends EventEmitter implements AndroidAdbProcess {
   stdin = new PassThrough();
   stdout = new PassThrough();
   stderr = new PassThrough();
+  exitCode: number | null = null;
+  signalCode: NodeJS.Signals | null = null;
   killed = false;
   onKill: (() => void) | undefined;
 
@@ -323,6 +371,8 @@ class FakeAndroidProcess extends EventEmitter implements AndroidAdbProcess {
   }
 
   emitExit(code: number | null, signal: NodeJS.Signals | null): void {
+    this.exitCode = code;
+    this.signalCode = signal;
     this.emit('exit', code, signal);
     this.emit('close', code, signal);
   }

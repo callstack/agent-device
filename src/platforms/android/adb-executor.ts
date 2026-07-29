@@ -30,6 +30,8 @@ export type AndroidAdbExecutorResult = Pick<
 
 export type AndroidAdbProcess = {
   pid?: number;
+  exitCode?: number | null;
+  signalCode?: NodeJS.Signals | null;
   stdin: Writable | null;
   stdout: Readable | null;
   stderr: Readable | null;

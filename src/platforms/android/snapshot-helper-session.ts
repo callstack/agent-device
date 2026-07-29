@@ -21,6 +21,9 @@ import {
 
 const SESSION_READY_TIMEOUT_MS = 10_000;
 const SESSION_STOP_TIMEOUT_MS = 1_000;
+// SnapshotInstrumentation.finishSafely can spend up to 10 seconds waiting for Android to finish
+// connecting UiAutomation. Let an acknowledged quit complete that release before force-killing adb.
+const SESSION_GRACEFUL_EXIT_TIMEOUT_MS = 11_000;
 const SESSION_PROCESS_EXIT_TIMEOUT_MS = 2_000;
 const SESSION_REQUEST_OVERHEAD_MS = 10_000;
 const FORWARD_TIMEOUT_MS = 5_000;
@@ -205,17 +208,29 @@ export async function stopAndroidSnapshotHelperSession(deviceKey: string): Promi
   const session = sessions.get(deviceKey);
   if (!session) return;
   sessions.delete(deviceKey);
+  const processExit = observeProcessExit(session.process);
+  const quitRequestId = `quit-${Date.now()}`;
+  let quitAcknowledged = false;
   try {
-    await sendSessionCommand(session, `quit ${Date.now()}`, SESSION_STOP_TIMEOUT_MS);
+    const response = await sendSessionCommand(
+      session,
+      `quit ${quitRequestId}`,
+      SESSION_STOP_TIMEOUT_MS,
+    );
+    quitAcknowledged = isSessionCommandAcknowledged(response, quitRequestId);
   } catch {
     // The process may already be gone; adb forward cleanup and kill below are still enough.
   }
-  try {
-    await session.process.kill('SIGTERM');
-  } catch {
-    // Best effort. A completed instrumentation process can reject/ignore kill.
+  const exitedGracefully =
+    quitAcknowledged && (await waitForProcessExit(processExit, SESSION_GRACEFUL_EXIT_TIMEOUT_MS));
+  if (!exitedGracefully) {
+    try {
+      session.process.kill('SIGTERM');
+    } catch {
+      // Best effort. A completed instrumentation process can reject/ignore kill.
+    }
+    await waitForProcessExit(processExit, SESSION_PROCESS_EXIT_TIMEOUT_MS);
   }
-  await waitForProcessExit(session.process, SESSION_PROCESS_EXIT_TIMEOUT_MS);
   try {
     await removeForward(session);
   } catch {
@@ -228,6 +243,8 @@ export async function stopAndroidSnapshotHelperSession(deviceKey: string): Promi
       port: session.port,
       capturedCount: session.capturedCount,
       lifetimeMs: Date.now() - session.startedAtMs,
+      quitAcknowledged,
+      forceKilled: !exitedGracefully,
     },
   });
 }
@@ -321,28 +338,41 @@ async function startAndroidSnapshotHelperSession(params: {
     return session;
   } catch (error) {
     await removeForward(session);
+    const processExit = observeProcessExit(process);
     try {
       process.kill('SIGTERM');
     } catch {
       // Best effort after startup failure.
     }
-    await waitForProcessExit(process, SESSION_PROCESS_EXIT_TIMEOUT_MS);
+    await waitForProcessExit(processExit, SESSION_PROCESS_EXIT_TIMEOUT_MS);
     throw error;
   }
 }
 
-function waitForProcessExit(process: AndroidAdbProcess, timeoutMs: number): Promise<void> {
+function observeProcessExit(process: AndroidAdbProcess): Promise<void> {
+  if (process.exitCode != null || process.signalCode != null) {
+    return Promise.resolve();
+  }
   return new Promise((resolve) => {
-    const timer = setTimeout(resolve, timeoutMs);
     process.once('close', () => {
-      clearTimeout(timer);
       resolve();
     });
     process.once('exit', () => {
-      clearTimeout(timer);
       resolve();
     });
   });
+}
+
+async function waitForProcessExit(processExit: Promise<void>, timeoutMs: number): Promise<boolean> {
+  let timer: NodeJS.Timeout | undefined;
+  const exited = await Promise.race([
+    processExit.then(() => true),
+    new Promise<false>((resolve) => {
+      timer = setTimeout(() => resolve(false), timeoutMs);
+    }),
+  ]);
+  if (timer) clearTimeout(timer);
+  return exited;
 }
 
 function waitForSessionReady(process: AndroidAdbProcess, timeoutMs: number): Promise<void> {
@@ -430,6 +460,15 @@ function sendSessionCommand(
       resolve(Buffer.concat(chunks).toString('utf8'));
     });
   });
+}
+
+function isSessionCommandAcknowledged(response: string, requestId: string): boolean {
+  const headers = parseSessionHeaders(response.slice(0, findSessionHeaderEnd(response)));
+  return (
+    headers.agentDeviceProtocol === ANDROID_SNAPSHOT_HELPER_PROTOCOL &&
+    headers.requestId === requestId &&
+    headers.ok === 'true'
+  );
 }
 
 function parseSessionSnapshotResponse(

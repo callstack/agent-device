@@ -101,7 +101,7 @@ function helperAdbOperation(args: string[]): 'instrument' | 'activity' | undefin
 function createPersistentSnapshotHelperProvider(options: {
   calls: string[][];
   spawnArgs: string[][];
-  killedProcesses: FakeAndroidProcess[];
+  processes: FakeAndroidProcess[];
 }): AndroidAdbProvider {
   return {
     exec: async (args) => {
@@ -116,6 +116,7 @@ function createPersistentSnapshotHelperProvider(options: {
     spawn: (args) => {
       options.spawnArgs.push(args);
       const process = new FakeAndroidProcess();
+      options.processes.push(process);
       const port = readSessionPort(args);
       let snapshotCount = 0;
       const server = net.createServer((socket) => {
@@ -124,6 +125,7 @@ function createPersistentSnapshotHelperProvider(options: {
           const [, requestId = ''] = command.split(/\s+/, 2);
           if (command.startsWith('quit')) {
             socket.end(sessionResponse({ requestId, body: '' }));
+            server.close(() => process.emitExit(0, null));
             return;
           }
           snapshotCount += 1;
@@ -160,7 +162,6 @@ function createPersistentSnapshotHelperProvider(options: {
         );
       });
       process.onKill = () => {
-        options.killedProcesses.push(process);
         server.close(() => process.emitExit(0, null));
       };
       return process;
@@ -197,6 +198,8 @@ class FakeAndroidProcess extends EventEmitter implements AndroidAdbProcess {
   stdin = new PassThrough();
   stdout = new PassThrough();
   stderr = new PassThrough();
+  exitCode: number | null = null;
+  signalCode: NodeJS.Signals | null = null;
   killed = false;
   onKill: (() => void) | undefined;
 
@@ -208,6 +211,8 @@ class FakeAndroidProcess extends EventEmitter implements AndroidAdbProcess {
   }
 
   emitExit(code: number | null, signal: NodeJS.Signals | null): void {
+    this.exitCode = code;
+    this.signalCode = signal;
     this.emit('exit', code, signal);
     this.emit('close', code, signal);
   }
@@ -602,11 +607,11 @@ test('snapshotAndroid resolves helper adb through scoped provider', async () => 
 test('snapshotAndroid stops command-scoped persistent helper session after capture', async () => {
   const adbCalls: string[][] = [];
   const spawnArgs: string[][] = [];
-  const killedProcesses: FakeAndroidProcess[] = [];
+  const processes: FakeAndroidProcess[] = [];
   const provider = createPersistentSnapshotHelperProvider({
     calls: adbCalls,
     spawnArgs,
-    killedProcesses,
+    processes,
   });
 
   const result = await snapshotAndroid(device, {
@@ -618,7 +623,8 @@ test('snapshotAndroid stops command-scoped persistent helper session after captu
   assert.equal(result.androidSnapshot.helperTransport, 'persistent-session');
   assert.equal(result.androidSnapshot.helperSessionReused, false);
   assert.equal(spawnArgs.length, 1);
-  assert.equal(killedProcesses.length, 1);
+  assert.equal(processes[0]?.exitCode, 0);
+  assert.equal(processes[0]?.killed, false);
   assert.equal(
     adbCalls.some((args) => args[0] === 'forward' && args[1] === '--remove'),
     true,
@@ -628,11 +634,11 @@ test('snapshotAndroid stops command-scoped persistent helper session after captu
 test('snapshotAndroid keeps daemon-session helper alive for reuse until session cleanup', async () => {
   const adbCalls: string[][] = [];
   const spawnArgs: string[][] = [];
-  const killedProcesses: FakeAndroidProcess[] = [];
+  const processes: FakeAndroidProcess[] = [];
   const provider = createPersistentSnapshotHelperProvider({
     calls: adbCalls,
     spawnArgs,
-    killedProcesses,
+    processes,
   });
 
   const first = await snapshotAndroid(device, {
@@ -650,7 +656,8 @@ test('snapshotAndroid keeps daemon-session helper alive for reuse until session 
   assert.equal(second.androidSnapshot.helperSessionReused, true);
   assert.equal(second.nodes[0]?.label, 'persistent helper snapshot 2');
   assert.equal(spawnArgs.length, 1);
-  assert.equal(killedProcesses.length, 0);
+  assert.equal(processes[0]?.exitCode, null);
+  assert.equal(processes[0]?.killed, false);
   assert.equal(
     adbCalls.some((args) => args[0] === 'forward' && args[1] === '--remove'),
     false,
@@ -658,7 +665,8 @@ test('snapshotAndroid keeps daemon-session helper alive for reuse until session 
 
   await resetAndroidSnapshotHelperSessions();
 
-  assert.equal(killedProcesses.length, 1);
+  assert.equal(processes[0]?.exitCode, 0);
+  assert.equal(processes[0]?.killed, false);
   assert.equal(
     adbCalls.some((args) => args[0] === 'forward' && args[1] === '--remove'),
     true,

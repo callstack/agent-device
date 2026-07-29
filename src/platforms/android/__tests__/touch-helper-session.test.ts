@@ -117,6 +117,17 @@ function createFakeTouchHelperSessionProvider(
         socket.once('data', (chunk) => {
           const command = chunk.toString('utf8').trim();
           const [, requestId = ''] = command.split(/\s+/, 2);
+          if (command.startsWith('quit')) {
+            socket.end(
+              sessionHeaderResponse({
+                agentDeviceProtocol: 'android-snapshot-helper-v1',
+                requestId,
+                ok: 'true',
+              }),
+            );
+            server.close(() => process.emitExit(0, null));
+            return;
+          }
           socket.end(handleCommand(command, requestId));
         });
       });
