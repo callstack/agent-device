@@ -310,7 +310,7 @@ test('openAndroidApp ensures Android reverse before IPv6 localhost deep link lau
         '-a',
         'android.intent.action.VIEW',
         '-d',
-        'http://[::1]:8081/status',
+        "'http://[::1]:8081/status'",
       ],
     },
   ]);
@@ -522,6 +522,18 @@ test('openAndroidApp appends launchArgs to am start for deep link URL opens', as
       });
       const logged = await fs.readFile(argsLogPath, 'utf8');
       assert.match(logged, /-d\nmyapp:\/\/item\/42\n--es\nref\ncampaign/);
+    },
+  );
+});
+
+test('openAndroidApp quotes deep link URL shell characters', async () => {
+  await withScriptedAdb(
+    'agent-device-android-open-deep-link-shell-characters-',
+    androidOpenAdbScript(),
+    async ({ argsLogPath, device }) => {
+      await openAndroidApp(device, 'myapp://item/42?event=cold.start&source=smoke');
+      const logged = await fs.readFile(argsLogPath, 'utf8');
+      assert.match(logged, /-d\n'myapp:\/\/item\/42\?event=cold\.start&source=smoke'/);
     },
   );
 });

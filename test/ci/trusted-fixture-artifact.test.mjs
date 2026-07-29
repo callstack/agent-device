@@ -64,7 +64,7 @@ test('producer, consumers, upload, and concurrency use the canonical platform-sc
   );
 });
 
-test('Android smoke keeps its install/open/snapshot evidence in a checked-in script', (t) => {
+test('Android smoke consumes the restored APK through catalog fixture E2E', (t) => {
   const workflow = parse(fs.readFileSync('.github/workflows/android.yml', 'utf8'));
   const smokeStep = workflow.jobs['smoke-android'].steps.find(
     (step) => step.name === 'Run Android smoke checks',
@@ -79,9 +79,11 @@ test('Android smoke keeps its install/open/snapshot evidence in a checked-in scr
   const smokeScript = fs.readFileSync('test/scripts/android-fixture-cache-smoke.sh', 'utf8');
   const packageVersion = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
 
-  assert.match(smokeStep.with.script, /android-fixture-cache-smoke\.sh/);
+  assert.match(smokeStep.with.script, /AGENT_DEVICE_ANDROID_E2E=1/);
   assert.match(smokeStep.with.script, /steps\.fixture-app\.outputs\.apk-path/);
   assert.match(smokeStep.with.script, /steps\.fixture-app\.outputs\.app-id/);
+  assert.match(smokeStep.with.script, /smoke-android-emulator\.test\.ts/);
+  assert.match(smokeStep.with.script, /android-snapshot-helper-release-smoke\.sh/);
   assert.equal(restoreStep.with['wait-for-artifact-seconds'], '600');
   assert.match(sourceStep.run, /steps\.fixture-app\.outputs\.source/);
   assert.match(smokeScript, /snapshot -i .*--json > "\$SNAPSHOT_PATH"/);

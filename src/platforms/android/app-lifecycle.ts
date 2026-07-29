@@ -303,9 +303,9 @@ export type OpenAndroidAppOptions = {
 // `adb shell` joins its argv with spaces and feeds the result to a device
 // shell, which re-tokenises. The other `am start` arguments (action, category,
 // component, etc.) are well-known and never contain shell-significant
-// characters, so they round-trip untouched. Launch arguments are user-supplied
-// and may contain JSON, spaces, `#`, etc.; each is single-quoted unless it
-// consists entirely of safe shell characters.
+// characters, so they round-trip untouched. URLs and launch arguments are
+// user-supplied and may contain JSON, spaces, `#`, or `&`; each is single-quoted
+// unless it consists entirely of safe shell characters.
 function quoteAndroidShellArg(arg: string): string {
   if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(arg)) return arg;
   return `'${arg.replace(/'/g, `'\\''`)}'`;
@@ -367,7 +367,7 @@ async function openAndroidDeepLink(
     '-a',
     'android.intent.action.VIEW',
     '-d',
-    target,
+    quoteAndroidShellArg(target),
     ...androidDeepLinkPackageArgs(options.appBundleId),
     ...androidLaunchArgs(options),
   ]);
@@ -398,7 +398,7 @@ async function openAndroidAppBoundDeepLink(
     '-a',
     'android.intent.action.VIEW',
     '-d',
-    deepLinkUrl,
+    quoteAndroidShellArg(deepLinkUrl),
     '-p',
     resolved,
     ...androidLaunchArgs(options),

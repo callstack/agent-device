@@ -103,6 +103,7 @@ export function AutomationLabScreen(props: {
         testID="automation-title"
       />
       <SectionCard title="Runtime state">
+        <StateRow label="Window" testID="automation-window" value={windowMode} />
         <StateRow label="App state" testID="automation-appstate" value={appState} />
         <StateRow
           label="Last non-active"
@@ -110,7 +111,6 @@ export function AutomationLabScreen(props: {
           value={lastNonActiveState}
         />
         <StateRow label="Appearance" testID="automation-appearance" value={colorScheme} />
-        <StateRow label="Window" testID="automation-window" value={windowMode} />
       </SectionCard>
 
       <SectionCard title="App event">

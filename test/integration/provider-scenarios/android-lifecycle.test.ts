@@ -1428,7 +1428,7 @@ function assertAndroidPushAndEventContract(world: AndroidSettingsWorld): void {
     '-a',
     'android.intent.action.VIEW',
     '-d',
-    'demo://agent-device/event?name=pre_open_ping&payload=%7B%22stage%22%3A%22explicit-selector%22%7D&platform=android',
+    "'demo://agent-device/event?name=pre_open_ping&payload=%7B%22stage%22%3A%22explicit-selector%22%7D&platform=android'",
   ]);
   assertCommandCall(adbCalls, [
     'shell',
@@ -1438,7 +1438,7 @@ function assertAndroidPushAndEventContract(world: AndroidSettingsWorld): void {
     '-a',
     'android.intent.action.VIEW',
     '-d',
-    'demo://agent-device/event?name=screenshot_taken&payload=%7B%22source%22%3A%22provider-scenario%22%2C%22foreground%22%3Atrue%7D&platform=android',
+    "'demo://agent-device/event?name=screenshot_taken&payload=%7B%22source%22%3A%22provider-scenario%22%2C%22foreground%22%3Atrue%7D&platform=android'",
     '-p',
     'com.example.demo',
   ]);

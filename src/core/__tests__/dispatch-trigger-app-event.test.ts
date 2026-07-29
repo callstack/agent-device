@@ -94,7 +94,7 @@ test('trigger-app-event opens deep link with encoded event payload', async () =>
 
     const args = (await fs.readFile(argsLogPath, 'utf8')).trim().split('\n').filter(Boolean);
     assert.equal(args.includes('-d'), true);
-    assert.equal(args.includes(expectedUrl), true);
+    assert.equal(args.includes(`'${expectedUrl}'`), true);
   } finally {
     process.env.PATH = previousPath;
     if (previousArgsFile === undefined) delete process.env.AGENT_DEVICE_TEST_ARGS_FILE;

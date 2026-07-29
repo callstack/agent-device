@@ -126,7 +126,6 @@ async function readAndroidAlertCandidate(
     'snapshot_capture',
     async () =>
       await snapshotAndroid(device, {
-        helperWaitForIdleTimeoutMs: 0,
         includeHiddenContentHints: false,
       }),
     { backend: 'android', purpose: 'alert' },
