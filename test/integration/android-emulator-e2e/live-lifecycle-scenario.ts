@@ -23,22 +23,13 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
 }
 
 async function assertPermissionRecovery(context: LiveContext): Promise<void> {
-  await runStep(context, 'reset microphone permission before runtime prompt', [
-    'settings',
-    'permission',
-    'reset',
-    'microphone',
-  ]);
-  await runStep(context, 'request Android microphone permission in fixture', [
-    'click',
-    'id="automation-request-microphone"',
-  ]);
-  const prompt = await runStep(context, 'inspect Android microphone permission prompt', [
-    'alert',
-    'get',
-  ]);
-  assert.equal(prompt.json?.data?.alert?.source, 'permission', JSON.stringify(prompt.json));
-  await runStep(context, 'accept Android microphone permission prompt', ['alert', 'accept']);
+  await resetAndRequestMicrophonePermission(context, 'accept');
+  await assertElementText(context, 'id="automation-microphone-permission"', 'granted');
+
+  await resetAndRequestMicrophonePermission(context, 'deny');
+  await assertElementText(context, 'id="automation-microphone-permission"', 'denied');
+
+  await resetAndRequestMicrophonePermission(context, 'accept after denial');
   await assertElementText(context, 'id="automation-microphone-permission"', 'granted');
 
   await runStep(context, 'revoke Android microphone permission', [
@@ -54,13 +45,40 @@ async function assertPermissionRecovery(context: LiveContext): Promise<void> {
   verifyCommand(
     context,
     C.settings,
-    'grant and deny runtime permission transitions are fixture-visible',
+    'prompt accept, prompt deny, and adb revoke transitions are fixture-visible',
   );
   verifyBehavior(
     context,
     'runtime-permission-recovery',
-    'fixture observed prompt acceptance then the app-active readback after pm revoke',
+    'fixture observed native prompt accept and deny, then app-active readback after pm revoke',
   );
+}
+
+async function resetAndRequestMicrophonePermission(
+  context: LiveContext,
+  action: 'accept' | 'deny' | 'accept after denial',
+): Promise<void> {
+  await runStep(context, `reset microphone permission before ${action}`, [
+    'settings',
+    'permission',
+    'reset',
+    'microphone',
+  ]);
+  await runStep(context, `scroll to microphone permission control before ${action}`, [
+    'scroll',
+    'bottom',
+  ]);
+  await runStep(context, `request Android microphone permission for ${action}`, [
+    'click',
+    'id="automation-request-microphone"',
+  ]);
+  const prompt = await runStep(context, `inspect Android microphone prompt for ${action}`, [
+    'alert',
+    'get',
+  ]);
+  assert.equal(prompt.json?.data?.alert?.source, 'permission', JSON.stringify(prompt.json));
+  const alertAction = action === 'deny' ? 'dismiss' : 'accept';
+  await runStep(context, `${action} Android microphone permission prompt`, ['alert', alertAction]);
 }
 
 async function assertPushBroadcast(context: LiveContext): Promise<void> {
@@ -72,6 +90,7 @@ async function assertPushBroadcast(context: LiveContext): Promise<void> {
   ]);
   assert.equal(pushed.json?.data?.package, context.appId, JSON.stringify(pushed.json));
   assert.equal(pushed.json?.data?.extrasCount, 2, JSON.stringify(pushed.json));
+  await runStep(context, 'scroll to Android push receiver state', ['scroll', 'bottom']);
   await runStep(context, 'refresh fixture push receiver state', [
     'click',
     'id="automation-refresh-push-broadcast"',

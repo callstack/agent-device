@@ -93,6 +93,8 @@ jobs:
     name: Android Full Emulator Suite
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      AGENT_DEVICE_STATE_DIR: ${{ github.workspace }}/.tmp/android-e2e-state
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -112,6 +114,7 @@ jobs:
         with:
           platform: android
           install: 'false'
+          require-artifact: 'true'
 
       - name: Mark Android emulator setup complete
         id: android-setup
@@ -137,7 +140,7 @@ jobs:
             AGENT_DEVICE_ANDROID_E2E=1 AGENT_DEVICE_ANDROID_E2E_TIER=full AGENT_DEVICE_ANDROID_SERIAL="$ANDROID_SERIAL" AGENT_DEVICE_FIXTURE_APP_PATH="${{ steps.fixture-app.outputs.apk-path }}" AGENT_DEVICE_FIXTURE_APP_ID="${{ steps.fixture-app.outputs.app-id }}" node --test test/integration/smoke-android-emulator.test.ts
             FULL_FINISHED_AT="$(date +%s)"
             COVERAGE_REPORT="$(find test/artifacts/android-emulator -name coverage-report.json -print | tail -n 1)"
-            node --input-type=module -e 'import fs from "node:fs"; const report = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); console.log(`Android full scenario body: ${report.timings.scenarioBodyDurationMs}ms`); for (const scenario of report.timings.scenarios) console.log(`  ${scenario.id}: ${scenario.durationMs}ms`);' "$COVERAGE_REPORT"
+            node --input-type=module -e 'import fs from "node:fs"; const report = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); console.log(`Android full scenario body: ${report.timings.runDurationMs}ms`); for (const scenario of report.timings.scenarios) console.log(`  ${scenario.id}: ${scenario.durationMs}ms`);' "$COVERAGE_REPORT"
             echo "Android setup before emulator: $((BOOT_FINISHED_AT - ${{ steps.android-setup.outputs.seconds }}))s"
             echo "Android full scenario wall time: $((FULL_FINISHED_AT - FULL_STARTED_AT))s"
             node --experimental-strip-types src/bin.ts test test/integration/replays/android/01-settings.ad --retries 2 --artifacts-dir test/artifacts/replays-android-settings --report-junit test/artifacts/replays-android-settings.junit.xml
@@ -148,7 +151,7 @@ jobs:
         uses: ./.github/actions/upload-agent-device-artifacts
         with:
           artifact-name: replay-nightly-android-artifacts
-          agent-state-dir: ${{ steps.android-replay-host.outputs.agent-state-dir }}
+          agent-state-dir: ${{ env.AGENT_DEVICE_STATE_DIR }}
 
   nightly-ios:
     name: iOS Replay Suite

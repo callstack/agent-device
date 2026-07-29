@@ -46,6 +46,7 @@ export type TraceCommandResult =
   | {
       trace: 'stopped';
       outPath: string;
+      artifacts: DaemonArtifact[];
     };
 
 /**

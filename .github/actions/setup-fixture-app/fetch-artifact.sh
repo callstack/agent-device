@@ -8,6 +8,7 @@ WAIT_SECONDS="${3:?wait duration is required}"
 REPOSITORY="${4:?repository is required}"
 EXPECTED_HEAD_SHA="${5:?expected head SHA is required}"
 ACTION_PATH="${6:?action path is required}"
+REQUIRE_ARTIFACT="${7:-false}"
 
 NAME="$(sh "$ACTION_PATH/resolve-artifact-name.sh" "$PLATFORM")"
 TRUSTED_ARTIFACT="$ACTION_PATH/trusted-artifact.mjs"
@@ -15,6 +16,13 @@ rm -rf "$DEST"; mkdir -p "$DEST"
 case "$WAIT_SECONDS" in
   ''|*[!0-9]*)
     echo "::error::wait-for-artifact-seconds must be a non-negative integer."
+    exit 1
+    ;;
+esac
+case "$REQUIRE_ARTIFACT" in
+  true|false) ;;
+  *)
+    echo "::error::require-artifact must be true or false."
     exit 1
     ;;
 esac
@@ -89,11 +97,19 @@ if [ -n "$ART_ID" ]; then
     SOURCE=artifact
     echo "restored $NAME from the build cache"
   else
+    if [ "$REQUIRE_ARTIFACT" = true ]; then
+      echo "::error::Could not restore required fixture artifact $NAME."
+      exit 1
+    fi
     echo "::warning::Could not restore $NAME; building inline."
     rm -rf "$DEST"/*
   fi
   rm -rf "$STAGE"
 else
+  if [ "$REQUIRE_ARTIFACT" = true ]; then
+    echo "::error::Required fixture artifact $NAME is unavailable for this exact head."
+    exit 1
+  fi
   echo "$NAME not in the cache after the configured wait; building inline."
 fi
 echo "source=$SOURCE" >> "$GITHUB_OUTPUT"

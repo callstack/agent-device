@@ -25,7 +25,7 @@ module.exports = {
         {
           microphonePermission:
             'Allow Agent Device Tester to exercise microphone permission recovery.',
-          recordAudioAndroid: false,
+          recordAudioAndroid: true,
         },
       ],
     ],

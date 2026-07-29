@@ -36,6 +36,10 @@ inputs:
     description: 'How long to poll for a concurrently produced artifact before building inline'
     required: false
     default: '0'
+  require-artifact:
+    description: 'Fail instead of building inline when no trusted same-head artifact is available'
+    required: false
+    default: 'false'
 outputs:
   app-path:
     description: 'Path to the ready .app bundle or APK'
@@ -95,7 +99,7 @@ runs:
         bash "$GITHUB_ACTION_PATH/fetch-artifact.sh" \
           "${{ inputs.platform }}" "$DEST" "${{ inputs.wait-for-artifact-seconds }}" \
           "${{ github.repository }}" "${{ github.event.pull_request.head.sha || github.sha }}" \
-          "$GITHUB_ACTION_PATH"
+          "$GITHUB_ACTION_PATH" "${{ inputs.require-artifact }}"
 
     # Fallback only: the producer builds the same way. `--device generic` avoids
     # needing a booted simulator; Release embeds the bundle so no Metro is needed.

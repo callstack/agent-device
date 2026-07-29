@@ -63,7 +63,23 @@ export async function handleRecordTraceCommands(params: {
     }
     session.trace = undefined;
     recordSessionAction(sessionStore, session, req, command, { action: 'stop', outPath });
-    return { ok: true, data: { trace: 'stopped', outPath } satisfies TraceCommandResult };
+    const clientOutPath = req.meta?.clientArtifactPaths?.outPath ?? outPath;
+    return {
+      ok: true,
+      data: {
+        trace: 'stopped',
+        outPath,
+        artifacts: [
+          {
+            field: 'outPath',
+            artifactType: 'trace-log',
+            path: outPath,
+            localPath: clientOutPath,
+            fileName: path.basename(clientOutPath),
+          },
+        ],
+      } satisfies TraceCommandResult,
+    };
   }
 
   return null;

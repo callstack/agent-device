@@ -6,12 +6,7 @@ import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
 import { readDaemonInfo } from '../../../src/daemon/client/daemon-client-metadata.ts';
 import { resolveDaemonPaths } from '../../../src/daemon/config.ts';
 import { collectPagedEventTimeline, type EventTimelinePage } from './event-timeline.ts';
-import {
-  assertJsonContains,
-  assertMp4File,
-  assertNonEmptyFile,
-  assertWaitText,
-} from './live-assertions.ts';
+import { assertMp4File, assertNonEmptyFile, assertWaitText } from './live-assertions.ts';
 import { type LiveContext, runStep, verifyCommand } from './live-harness.ts';
 
 const C = PUBLIC_COMMANDS;
@@ -114,12 +109,16 @@ async function assertBatchAndEvents(context: LiveContext): Promise<void> {
       },
     ]),
   ]);
-  assertJsonContains(
-    batch,
-    'Agent Device Tester',
-    'batch should contain nested Android get result',
+  const results = batch.json?.data?.results;
+  assert.ok(
+    Array.isArray(results),
+    `batch must retain nested results: ${JSON.stringify(batch.json)}`,
   );
-  assertJsonContains(batch, '"pass":true', 'batch should contain nested Android is result');
+  assert.equal(results.length, 2, JSON.stringify(batch.json));
+  assert.equal(results[0]?.command, 'get', JSON.stringify(batch.json));
+  assert.equal(results[0]?.data?.text, 'Agent Device Tester', JSON.stringify(batch.json));
+  assert.equal(results[1]?.command, 'is', JSON.stringify(batch.json));
+  assert.equal(results[1]?.data?.pass, true, JSON.stringify(batch.json));
   verifyCommand(context, C.batch, 'Android batch retains nested get and is evidence');
 
   const timeline = await collectPagedEventTimeline(async (cursor) => {
@@ -158,13 +157,13 @@ async function assertArtifactInventory(context: LiveContext): Promise<void> {
     );
   }
   const trace = artifacts.find(
-    (artifact: { artifactId?: unknown; artifactType?: unknown; sizeBytes?: unknown }) =>
+    (artifact: { artifactType?: unknown; id?: unknown; sizeBytes?: unknown }) =>
       artifact.artifactType === 'trace-log' &&
-      typeof artifact.artifactId === 'string' &&
+      typeof artifact.id === 'string' &&
       Number(artifact.sizeBytes) > 0,
-  ) as { artifactId: string; sizeBytes: number } | undefined;
+  ) as { id: string; sizeBytes: number } | undefined;
   assert.ok(trace, `trace artifact is not downloadable: ${JSON.stringify(artifacts)}`);
-  const downloaded = await downloadDaemonArtifact(context, trace.artifactId);
+  const downloaded = await downloadDaemonArtifact(context, trace.id);
   assert.equal(
     downloaded.byteLength,
     trace.sizeBytes,
@@ -177,9 +176,7 @@ async function assertArtifactInventory(context: LiveContext): Promise<void> {
   const remaining = afterDownload.json?.data?.artifacts;
   assert.ok(Array.isArray(remaining), JSON.stringify(afterDownload.json));
   assert.equal(
-    remaining.some(
-      (artifact: { artifactId?: unknown }) => artifact.artifactId === trace.artifactId,
-    ),
+    remaining.some((artifact: { id?: unknown }) => artifact.id === trace.id),
     false,
     'artifact download must consume its inventory entry',
   );
