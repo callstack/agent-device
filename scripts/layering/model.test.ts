@@ -12,6 +12,7 @@ import {
 } from './session-state.ts';
 import { uninstallableImports, zeroDepJobs } from './zero-dep-jobs.ts';
 import {
+  largestTypeCycleMembers,
   largestTypeCycleSize,
   RANKED_ZONES,
   typeInversionPair,
@@ -631,6 +632,11 @@ test('largestTypeCycleSize counts type-only cycles and ignores dynamic ones', ()
     ),
   );
   assert.equal(largestTypeCycleSize(typeCycle), 3);
+  assert.deepEqual(largestTypeCycleMembers(typeCycle), [
+    'src/core/a.ts',
+    'src/core/b.ts',
+    'src/core/c.ts',
+  ]);
 
   // A loop closed through a DYNAMIC import is excluded on purpose: a lazy seam is not a
   // comprehension barrier, and R3 relies on dynamic imports existing. With no non-dynamic edge at
@@ -644,6 +650,7 @@ test('largestTypeCycleSize counts type-only cycles and ignores dynamic ones', ()
     ),
   );
   assert.equal(largestTypeCycleSize(dynamicCycle), 0);
+  assert.deepEqual(largestTypeCycleMembers(dynamicCycle), []);
 
   // A value cycle counts too — R4 rejects it separately, so R9 must not be the thing that
   // notices, but it must not under-report either.

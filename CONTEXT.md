@@ -306,11 +306,21 @@ The perfect-shape refactor is complete and merged. Its end-state:
 - Type-cycle growth (R9). R4 keeps the VALUE import graph acyclic, so every remaining cycle is
   created by type-only imports — free at runtime, invisible to R5/R6, and the largest single
   obstacle to reading a subsystem in isolation: inside a strongly-connected component of 102 files,
-  no file has a self-contained slice. `TYPE_CYCLE_BASELINE` in `check.ts` ratchets it for **growth
-  only**, deliberately unlike R6: reducing it is a real refactor rather than a file move, so a hard
-  equality would turn every unrelated improvement into a baseline edit. A shrunk tree is reported in
-  the success line instead of failing. Hubs by in-component dependents: `runtime-contract.ts` (25),
+  no file has a self-contained slice. `TYPE_CYCLE_BASELINE`, exported from
+  `scripts/layering/check.ts`, ratchets it for **growth only**, deliberately unlike R6: reducing it
+  is a real refactor rather than a file move, so a hard equality would turn every unrelated
+  improvement into a baseline edit. A shrunk tree is reported in the success line instead of
+  failing. Hubs by in-component dependents: `runtime-contract.ts` (25),
   `commands/runtime-types.ts` (21), `backend.ts` (15), `commands/runtime-common.ts` (12).
+- Daemon modularity migration (R10). The same tooling-only declaration records R7 at 30
+  writer-owned fields / 42 owner-file claims, R9's 102 members by zone (`commands` 33,
+  `daemon-server` 30, `platforms` 19, `core` 12, root 5, `contracts` 2, `client` 1), and the four
+  production importers of `daemon/types.ts` from outside daemon. R7 counts and external importers may
+  only shrink; no zone may grow inside R9, and replay/Maestro/replay-test engine files remain outside
+  it. Zero-count policies begin enforcing when `src/ad-replay/` or `src/maestro/` first exists and
+  already protect `src/replay/test/`: engines cannot import daemon/platform/provider implementations,
+  and no logical module may deep-import another module's `internal/` tree. These are migration
+  ratchets, not permission to scaffold façades before a real seam has two adapters.
 - Zero-dep CI jobs (R8). Some jobs run scripts straight from a checkout with `install-deps: false`,
   so they have no `node_modules`. Nothing local can feel that constraint — every dev machine has
   `node_modules` sitting right there — so a script grows a package import, passes locally, and fails

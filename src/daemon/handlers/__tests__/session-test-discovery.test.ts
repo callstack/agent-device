@@ -219,3 +219,54 @@ test('discoverReplayTestEntries orders Maestro file inputs before expanded flows
     ['99-explicit.yaml', '01-directory.yaml', '02-glob.yaml'],
   );
 });
+
+test('discoverReplayTestEntries de-duplicates overlapping Maestro file and glob inputs', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-discovery-overlap-'));
+  const explicit = path.join(root, '02-explicit.yaml');
+  fs.writeFileSync(explicit, 'appId: demo\n---\n- launchApp\n');
+  fs.writeFileSync(path.join(root, '01-expanded.yaml'), 'appId: demo\n---\n- launchApp\n');
+
+  const entries = discoverReplayTestEntries({
+    inputs: [explicit, path.join(root, '*.yaml')],
+    cwd: root,
+    replayBackend: 'maestro',
+  });
+
+  assert.deepEqual(
+    entries.map((entry) => path.basename(entry.path)),
+    ['02-explicit.yaml', '01-expanded.yaml'],
+  );
+});
+
+test('discoverReplayTestEntries sorts mixed Maestro glob matches by YAML-first compatibility order', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-discovery-mixed-glob-'));
+  fs.writeFileSync(path.join(root, '20-zeta.yaml'), 'appId: demo\n---\n- launchApp\n');
+  fs.writeFileSync(path.join(root, '10-alpha.yml'), 'appId: demo\n---\n- launchApp\n');
+  fs.writeFileSync(path.join(root, '00-native.ad'), 'open "Demo"\n');
+  fs.writeFileSync(path.join(root, '30-native.ad'), 'open "Demo"\n');
+
+  const entries = discoverReplayTestEntries({
+    inputs: [path.join(root, '*.{yaml,yml,ad}')],
+    cwd: root,
+    replayBackend: 'maestro',
+  });
+
+  assert.deepEqual(
+    entries.map((entry) => path.basename(entry.path)),
+    ['10-alpha.yml', '20-zeta.yaml', '00-native.ad', '30-native.ad'],
+  );
+});
+
+test('discoverReplayTestEntries rejects YAML without explicit Maestro routing', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-discovery-yaml-route-'));
+  const flowPath = path.join(root, 'flow.yaml');
+  fs.writeFileSync(flowPath, 'appId: demo\n---\n- launchApp\n');
+
+  assert.throws(
+    () => discoverReplayTestEntries({ inputs: [flowPath], cwd: root }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.message === `test does not support this file type: ${flowPath}`,
+  );
+});
