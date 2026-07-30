@@ -11,7 +11,7 @@ import { parseArgs } from '../../src/cli/parser/args.ts';
 import { parseSelectorChain } from '../../src/selectors/parse.ts';
 import { parseReplayScriptDetailed } from '../../src/replay/script.ts';
 import { readCliBatchStepsJson } from '../../src/cli/batch-steps.ts';
-import { parseMaestroProgram } from '../../src/compat/maestro/program-ir-parser.ts';
+import { inspectMaestroFlow } from '@agent-device/maestro';
 import type { FuzzTarget } from './target-types.ts';
 
 // argv is carried as one string so a case (and its corpus entry, artifact, and repro
@@ -94,7 +94,7 @@ export const FUZZ_TARGETS: readonly FuzzTarget[] = [
   {
     name: 'maestro',
     description: 'parseMaestroProgram (Maestro compat)',
-    run: (input) => void parseMaestroProgram(input, { sourcePath: 'fuzz.yaml' }),
+    run: (input) => void inspectMaestroFlow(input, 'fuzz.yaml'),
     seeds: [
       'appId: com.example.app\n---\n- launchApp\n- tapOn: "Login"\n',
       'appId: com.example.app\n---\n- tapOn:\n    id: "login"\n',

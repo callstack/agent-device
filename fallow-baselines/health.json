@@ -616,7 +616,7 @@
     "src/platforms/apple/core/debug-symbols/utils.ts:high impact",
     "src/platforms/linux/snapshot.ts:high impact",
     "src/core/interaction-targeting.ts:high impact",
-    "src/compat/maestro/runtime-targets.ts:high impact",
+    "packages/maestro/src/internal/runtime-targets.ts:high impact",
     "src/utils/source-value.ts:high impact",
     "src/request/cancel.ts:high impact",
     "src/commands/interaction/selectors.ts:untested risk",

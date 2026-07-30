@@ -21,8 +21,6 @@ export const DAEMON_MODULARITY_BASELINE = {
   },
   externalDaemonTypesImporters: [
     'src/client/client-normalizers.ts',
-    'src/compat/maestro/daemon-runtime-port-support.ts',
-    'src/compat/maestro/daemon-runtime-public-operation.ts',
     'src/remote/daemon-artifacts.ts',
   ],
 } as const;
@@ -60,12 +58,12 @@ export const LOGICAL_MODULE_POLICIES: readonly LogicalModulePolicy[] = [
       'src/platforms/',
       'src/providers/',
       'src/compat/',
-      'src/maestro/',
+      'packages/maestro/',
     ],
   },
   {
     name: 'maestro',
-    roots: ['src/maestro/'],
+    roots: ['packages/maestro/src/'],
     forbiddenTargetRoots: ['src/daemon/', 'src/platforms/', 'src/providers/', 'src/ad-replay/'],
   },
   {
@@ -96,9 +94,8 @@ export const LOGICAL_MODULE_POLICIES: readonly LogicalModulePolicy[] = [
 
 const ENGINE_FILE_PREFIXES = [
   'src/ad-replay/',
-  'src/maestro/',
+  'packages/maestro/src/',
   'src/replay/',
-  'src/compat/maestro/',
   'src/daemon/handlers/session-replay',
   'src/daemon/handlers/session-test',
 ] as const;

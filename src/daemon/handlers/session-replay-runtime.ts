@@ -39,6 +39,7 @@ import {
 } from '@agent-device/contracts/capture';
 import type { ReplayCommandResult } from '@agent-device/contracts/replay';
 import type { ReplayDivergenceResume } from '../../replay/divergence.ts';
+import { resolveReplayFormat } from '../../replay/format.ts';
 import { isRecord } from '../../utils/parsing.ts';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import { withReplayFailureDiagnostics } from './session-replay-runtime-failure.ts';
@@ -56,10 +57,7 @@ import {
   type ReplayVerifiedTargetGuard,
 } from './session-replay-target-verification.ts';
 import { buildReplayBuiltinVars } from './session-replay-vars.ts';
-import {
-  isTypedMaestroReplay,
-  runTypedMaestroReplayFile,
-} from './session-replay-maestro-runtime.ts';
+import { runTypedMaestroReplayFile } from './session-replay-maestro-runtime.ts';
 import { getRequestSignal } from '../../request/cancel.ts';
 
 /** Per-run invariants for a single replay step (ADR 0012 step 4 verify + dispatch + guard). */
@@ -211,8 +209,15 @@ export async function runReplayScriptFile(params: {
   const artifactPaths = new Set<string>();
   try {
     resolved = SessionStore.expandHome(filePath, req.meta?.cwd);
-    const typedResponse = await runTypedReplayIfNeeded({ ...params, resolved });
-    if (typedResponse) return typedResponse;
+    if (resolveReplayFormat(resolved, req.flags?.replayBackend) === 'maestro') {
+      if (sessionStore.get(sessionName)?.saveScriptBoundary !== undefined) {
+        return errorResponse(
+          'INVALID_ARGS',
+          'This session has an active .ad --save-script repair run; finish it with replay --from or close before running Maestro YAML.',
+        );
+      }
+      return await runTypedMaestroReplayFile(params);
+    }
     const planPreparation = prepareReplayPlan({
       req,
       sessionName,
@@ -509,25 +514,6 @@ type PreparedReplayPlan = {
 };
 
 type ParsedReplayInput = ReturnType<typeof parseReplayInput>;
-
-async function runTypedReplayIfNeeded(params: {
-  req: DaemonRequest;
-  sessionName: string;
-  logPath: string;
-  sessionStore: SessionStore;
-  tracePath?: string;
-  invoke: DaemonInvokeFn;
-  resolved: string;
-}): Promise<DaemonResponse | undefined> {
-  if (!isTypedMaestroReplay(params.req, params.resolved)) return undefined;
-  if (params.sessionStore.get(params.sessionName)?.saveScriptBoundary !== undefined) {
-    return errorResponse(
-      'INVALID_ARGS',
-      'This session has an active .ad --save-script repair run; finish it with replay --from or close before running Maestro YAML.',
-    );
-  }
-  return await runTypedMaestroReplayFile(params);
-}
 
 function prepareReplayPlan(params: {
   req: DaemonRequest;

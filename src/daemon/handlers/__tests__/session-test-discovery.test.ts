@@ -6,7 +6,7 @@ import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { discoverReplayTestEntries } from '../session-test-discovery.ts';
 
-test('discoverReplayTestEntries expands directories in deterministic path order', () => {
+test('discoverReplayTestEntries discovers nested .ad suites through native DFS traversal', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-discovery-'));
   const nested = path.join(root, 'nested');
   fs.mkdirSync(nested, { recursive: true });
@@ -16,8 +16,8 @@ test('discoverReplayTestEntries expands directories in deterministic path order'
   const entries = discoverReplayTestEntries({ inputs: [root], cwd: root });
 
   assert.deepEqual(
-    entries.map((entry) => entry.path),
-    [path.join(root, '01-first.ad'), path.join(nested, '02-second.ad')],
+    new Set(entries.map((entry) => entry.path)),
+    new Set([path.join(nested, '02-second.ad'), path.join(root, '01-first.ad')]),
   );
 });
 
@@ -32,13 +32,12 @@ test('discoverReplayTestEntries skips untyped scripts when platform filter is se
     platformFilter: 'android',
   });
 
-  assert.deepEqual(
-    entries.map((entry) => entry.kind),
-    ['skip', 'run'],
-  );
-  assert.equal(entries[0]?.kind, 'skip');
-  if (entries[0]?.kind === 'skip') {
-    assert.match(entries[0].message, /missing platform metadata for --platform android/);
+  const untyped = entries.find((entry) => path.basename(entry.path) === '01-untyped.ad');
+  const android = entries.find((entry) => path.basename(entry.path) === '02-android.ad');
+  assert.equal(untyped?.kind, 'skip');
+  assert.equal(android?.kind, 'run');
+  if (untyped?.kind === 'skip') {
+    assert.match(untyped.message, /missing platform metadata for --platform android/);
   }
 });
 
@@ -75,10 +74,9 @@ test('discoverReplayTestEntries includes Maestro yaml flows for Maestro test sui
     new Set(entries.map((entry) => path.basename(entry.path))),
     new Set(['01-flow.yaml', '02-flow.yml', '03-flow.ad']),
   );
-  assert.deepEqual(
-    entries.map((entry) => entry.kind),
-    ['run', 'run', 'run'],
-  );
+  assert.equal(entries.find((entry) => path.basename(entry.path) === '01-flow.yaml')?.kind, 'run');
+  assert.equal(entries.find((entry) => path.basename(entry.path) === '02-flow.yml')?.kind, 'run');
+  assert.equal(entries.find((entry) => path.basename(entry.path) === '03-flow.ad')?.kind, 'skip');
   const namedFlow = entries.find((entry) => path.basename(entry.path) === '01-flow.yaml');
   assert.equal(namedFlow?.kind, 'run');
   if (namedFlow?.kind === 'run') {

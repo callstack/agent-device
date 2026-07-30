@@ -1,27 +1,22 @@
 import type { ReplayCommandResult } from '@agent-device/contracts/replay';
-import type { MaestroReplayPlan } from '../../compat/maestro/replay-plan-types.ts';
+import type { MaestroExecutionOutcome } from '@agent-device/maestro';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { summarizeSnapshotTimingSamples } from '@agent-device/contracts/capture';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
-import {
-  buildTypedMaestroFailureResponse,
-  type MaestroFailedEngineEvent,
-} from './session-replay-maestro-failure.ts';
+import { buildTypedMaestroFailureResponse } from './session-replay-maestro-failure.ts';
 import { errorResponse } from './response.ts';
 
 export function buildTypedMaestroSuccessResponse(params: {
-  result: { artifactPaths: string[]; warnings?: string[] };
-  plan: MaestroReplayPlan;
-  startIndex: number;
+  outcome: Extract<MaestroExecutionOutcome, { ok: true }>;
   startedAt: number;
   sessionName: string;
   sessionStore: SessionStore;
   snapshotStart: number;
 }): DaemonResponse {
-  const { result, plan, startIndex, startedAt, sessionName, sessionStore, snapshotStart } = params;
+  const { outcome, startedAt, sessionName, sessionStore, snapshotStart } = params;
   const snapshotDiagnostics = readSnapshotDiagnostics(sessionStore, sessionName, snapshotStart);
-  const replayed = plan.total - startIndex;
+  const replayed = outcome.replayed;
   return {
     ok: true,
     data: {
@@ -29,8 +24,8 @@ export function buildTypedMaestroSuccessResponse(params: {
       healed: 0,
       session: sessionName,
       sessionActive: sessionStore.get(sessionName) !== undefined,
-      artifactPaths: result.artifactPaths,
-      ...(result.warnings ? { warnings: result.warnings } : {}),
+      artifactPaths: outcome.artifactPaths,
+      ...(outcome.warnings ? { warnings: outcome.warnings } : {}),
       ...(snapshotDiagnostics ? { snapshotDiagnostics } : {}),
       message: replaySuccessMessage(replayed, Date.now() - startedAt),
     } satisfies ReplayCommandResult,
@@ -41,22 +36,19 @@ export async function buildTypedMaestroReplayErrorResponse(params: {
   req: DaemonRequest;
   requestedPath: string;
   state: {
-    failedEvent?: MaestroFailedEngineEvent;
-    plan?: MaestroReplayPlan;
     snapshotStart: number;
   };
-  error: unknown;
+  outcome: Extract<MaestroExecutionOutcome, { ok: false }>;
   sessionName: string;
   sessionStore: SessionStore;
   logPath: string;
 }): Promise<DaemonResponse> {
-  const { failedEvent, plan } = params.state;
-  const normalizedError = normalizeError(failedEvent?.error ?? params.error);
-  if (failedEvent && plan) {
+  const { failure } = params.outcome;
+  const normalizedError = normalizeError(params.outcome.error);
+  if (failure) {
     return await buildTypedMaestroFailureResponse({
       error: normalizedError,
-      event: failedEvent,
-      plan,
+      failure,
       replayPath: SessionStore.expandHome(params.requestedPath, params.req.meta?.cwd),
       req: params.req,
       sessionName: params.sessionName,
@@ -71,7 +63,7 @@ export async function buildTypedMaestroReplayErrorResponse(params: {
   }
   return errorResponse(normalizedError.code, normalizedError.message, {
     ...(normalizedError.details ?? {}),
-    ...buildErrorDetails(failedEvent),
+    ...buildErrorDetails(failure),
   });
 }
 
@@ -86,13 +78,13 @@ function readSnapshotDiagnostics(
 }
 
 function buildErrorDetails(
-  failedEvent: MaestroFailedEngineEvent | undefined,
+  failure: Extract<MaestroExecutionOutcome, { ok: false }>['failure'],
 ): Record<string, unknown> {
-  if (!failedEvent) return {};
+  if (!failure) return {};
   return {
-    replaySource: failedEvent.source,
-    replayStep: failedEvent.stepIndex,
-    replayStepTotal: failedEvent.stepTotal,
+    replaySource: failure.source,
+    replayStep: failure.stepIndex,
+    replayStepTotal: failure.stepTotal,
   };
 }
 

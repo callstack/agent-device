@@ -14,15 +14,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AppError } from '@agent-device/kernel/errors';
-import type { MaestroProgram } from '../../src/compat/maestro/program-ir.ts';
-import { parseMaestroProgram } from '../../src/compat/maestro/program-ir-parser.ts';
-import { SUPPORTED_MAESTRO_COMMAND_NAMES } from '../../src/compat/maestro/program-ir-command-parser.ts';
-import { MAESTRO_COMPATIBILITY_PRESETS } from '../../src/compat/maestro/compatibility-policy.ts';
 import {
-  type CanonicalCommand,
-  canonicalizeAgentCommands,
-  canonicalizeUpstreamFlow,
-} from './normalize.ts';
+  canonicalizeUpstreamMaestroFlow,
+  MAESTRO_CONFORMANCE_CONSTANTS,
+  parseMaestroConformanceSource,
+  SUPPORTED_MAESTRO_COMMAND_NAMES,
+  type MaestroCanonicalCommand,
+} from '@agent-device/maestro';
 import { LAYER2_REFERENCE_ONLY, UNVERIFIED_COMMANDS } from './expected-divergence.ts';
 // @ts-expect-error -- .mjs helper shared with regenerate.mjs; no type declarations.
 import { checkFixtureSeal } from './fixture-seal.mjs';
@@ -102,10 +100,10 @@ export function checkFixtureSeals(): SealResult[] {
 const AGENT_REJECTION_CODES = new Set(['INVALID_ARGS']);
 
 /** Parse a corpus flow with the live engine. `null` = a clean rejection. */
-function agentParseProgram(file: string): MaestroProgram | null {
+function agentParseProgram(file: string): ReturnType<typeof parseMaestroConformanceSource> | null {
   const script = fs.readFileSync(path.join(CORPUS_DIR, file), 'utf8');
   try {
-    return parseMaestroProgram(script, { sourcePath: file });
+    return parseMaestroConformanceSource(script, file);
   } catch (error) {
     if (error instanceof AppError && AGENT_REJECTION_CODES.has(error.code)) return null;
     throw new Error(`Parsing ${file} crashed instead of rejecting cleanly`, { cause: error });
@@ -114,11 +112,11 @@ function agentParseProgram(file: string): MaestroProgram | null {
 
 function agentParse(file: string): {
   status: 'parsed' | 'rejected';
-  commands?: CanonicalCommand[];
+  commands?: MaestroCanonicalCommand[];
 } {
   const program = agentParseProgram(file);
   if (!program) return { status: 'rejected' };
-  return { status: 'parsed', commands: canonicalizeAgentCommands(program) };
+  return { status: 'parsed', commands: program.commands };
 }
 
 function classifyFlow(fixtureFlow: Layer1Fixture['flows'][number]): FlowResult {
@@ -141,7 +139,7 @@ function classifyFlow(fixtureFlow: Layer1Fixture['flows'][number]): FlowResult {
   if (agent.status === 'rejected') {
     return { ...base, classification: 'we-reject' };
   }
-  const upstream = canonicalizeUpstreamFlow(fixtureFlow.commands ?? []);
+  const upstream = canonicalizeUpstreamMaestroFlow(fixtureFlow.commands ?? []);
   const agentCommands = agent.commands ?? [];
   const upstreamJson = JSON.stringify(upstream);
   const agentJson = JSON.stringify(agentCommands);
@@ -161,15 +159,9 @@ export function classifyAllFlows(): FlowResult[] {
 // Layer 2 cross-check
 // ---------------------------------------------------------------------------
 
-const P = MAESTRO_COMPATIBILITY_PRESETS;
-
 /** Generated vector id → the live agent-device constant it must equal. */
 const LAYER2_AGENT_CONSTANTS: Record<string, number> = {
-  retryMaxRetries: P.control.retryMaxRetries,
-  animationWaitThreshold: P.command.waitForAnimationToEndDifferencePercent,
-  animationWaitTimeoutMs: P.command.waitForAnimationToEndTimeoutMs,
-  maxEraseCharacters: P.command.eraseTextMaxCharacters,
-  swipeDurationMs: P.command.swipeDurationMs,
+  ...MAESTRO_CONFORMANCE_CONSTANTS,
 };
 
 export type Layer2Result = {
@@ -211,20 +203,11 @@ export function agentKindsByCorpus(): Set<string> {
   for (const flow of loadLayer1().flows) {
     // Rejected flows contribute nothing to coverage; a crash still throws.
     const program = agentParseProgram(flow.file);
-    if (program) collectKinds(program.commands, kinds);
+    if (program) {
+      for (const kind of program.kinds) kinds.add(kind);
+    }
   }
   return kinds;
-}
-
-function collectKinds(
-  commands: Array<{ kind: string; commands?: unknown }>,
-  into: Set<string>,
-): void {
-  for (const command of commands) {
-    into.add(command.kind);
-    const nested = (command as { commands?: Array<{ kind: string }> }).commands;
-    if (Array.isArray(nested)) collectKinds(nested, into);
-  }
 }
 
 export function checkCoverage(): CoverageResult[] {

@@ -112,9 +112,11 @@ test('test filters replay scripts by context platform and skips untyped files', 
     expect(response.data?.skipped).toBe(1);
     const tests = response.data?.tests as Array<Record<string, unknown>> | undefined;
     expect(tests?.length).toBe(2);
-    expect(tests?.[0]?.status).toBe('passed');
-    expect(tests?.[1]?.status).toBe('skipped');
-    expect(tests?.[1]?.reason).toBe('skipped-by-filter');
+    const android = tests?.find((entry) => String(entry.file).endsWith('01-android.ad'));
+    const untyped = tests?.find((entry) => String(entry.file).endsWith('03-untyped.ad'));
+    expect(android?.status).toBe('passed');
+    expect(untyped?.status).toBe('skipped');
+    expect(untyped?.reason).toBe('skipped-by-filter');
   }
 });
 

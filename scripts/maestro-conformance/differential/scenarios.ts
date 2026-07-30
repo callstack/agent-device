@@ -17,7 +17,7 @@
 // we do it engine-side via `engineInvariants` over agent-device's own replay
 // timing trace. Scenarios without invariants prove outcome parity ONLY; do not
 // read more into them than that.
-import { MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS } from '../../../src/compat/maestro/compatibility-policy.ts';
+import { MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS } from '@agent-device/maestro';
 import type { Invariant } from './invariants.ts';
 
 /** Bundle id of the fixture app the workflow installs before running scenarios. */
@@ -115,7 +115,7 @@ export const DIFFERENTIAL_SCENARIOS: DifferentialScenario[] = [
     // distinguish it, so claiming this scenario guards bug class 1 would be a
     // lie the pass/pass result cannot back up. That half is pinned exactly by a
     // pure unit test of the conversion
-    // (src/compat/maestro/__tests__/runtime-port-geometry.test.ts), and the
+    // (packages/maestro/src/internal/__tests__/runtime-port-geometry.test.ts), and the
     // parse-level half by layer 1 (bug-classes/percent-decimal-swipe). What this
     // scenario adds is only that percentage swipes work end-to-end on both.
     flow: 'differential/flows/percent-swipe.yaml',

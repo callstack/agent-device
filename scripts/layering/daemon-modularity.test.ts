@@ -66,7 +66,7 @@ test('external daemon/types.ts importer membership changes require the baseline 
 
   const violations = checkDaemonModularityRatchets([...baselineEdges(), ...edges], []);
   assert.equal(violations.length, 1);
-  assert.match(violations[0]!.message, /may only shrink from the recorded 4/);
+  assert.match(violations[0]!.message, /may only shrink from the recorded 2/);
 
   const removed = checkDaemonModularityRatchets(
     [...baselineDaemonTypesEdges().slice(1), ...recordedMigrationEdges()],
@@ -148,8 +148,8 @@ test('recorded replay-test migration imports are exempt until the import is dele
 test('internal trees reject deep imports globally, including from daemon', () => {
   const edges = resolveImportEdges(
     new Map([
-      ['src/daemon/adapter.ts', "import type { Plan } from '../maestro/internal/plan.ts';"],
-      ['src/maestro/internal/plan.ts', 'export type Plan = { steps: number };'],
+      ['src/daemon/adapter.ts', "import type { Plan } from '@agent-device/maestro/internal/plan';"],
+      ['packages/maestro/src/internal/plan.ts', 'export type Plan = { steps: number };'],
     ]),
   );
 

@@ -3,7 +3,7 @@ import {
   formatMaestroCompatibilityReference,
   MAESTRO_COMPATIBILITY_ADR_URL,
   MAESTRO_COMPATIBILITY_ISSUE_URL,
-} from '../../compat/maestro/support-matrix.ts';
+} from '@agent-device/maestro';
 import {
   getCliCommandSchema,
   getCommandSchema,

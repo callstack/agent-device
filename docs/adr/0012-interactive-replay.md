@@ -1148,7 +1148,7 @@ via `open --save-script` (`src/daemon/session-action-recorder.ts`,
 `||` alternates (`buildSelectorChainForNode(...).join(' || ')`,
 `src/commands/interaction/runtime/resolution.ts:242`, mirrored in
 `src/daemon/handlers/session-replay-heal.ts:131-135`); Maestro YAML flows import through `--maestro`
-(`src/compat/maestro/`); progress is step-indexed (`stepIndex`/`stepTotal` in
+(`packages/maestro/src/internal/`); progress is step-indexed (`stepIndex`/`stepTotal` in
 `emitReplayTestActionProgress`, `session-replay-runtime.ts:243-260`).
 
 Recovery was opt-in `--update`/`-u` healing (`replayUpdate` flag,

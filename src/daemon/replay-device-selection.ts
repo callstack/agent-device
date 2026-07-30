@@ -1,9 +1,9 @@
 import fs from 'node:fs';
+import { inspectMaestroFlow } from '@agent-device/maestro';
 import { parseReplayInput } from '../compat/replay-input.ts';
-import { parseMaestroProgram } from '../compat/maestro/program-ir-parser.ts';
 import type { ResolveTargetDeviceOptions } from '../core/dispatch-resolve.ts';
-import type { MaestroProgram } from '../compat/maestro/program-ir.ts';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
+import { resolveReplayFormat } from '../replay/format.ts';
 import { appleSimulatorAppTargetForOpenTarget } from './open-device-selection.ts';
 import { SessionStore } from './session-store.ts';
 import type { CommandFlags } from '../core/dispatch.ts';
@@ -28,11 +28,12 @@ export function buildReplayTargetDeviceResolution(
   try {
     const resolved = SessionStore.expandHome(filePath, req.meta?.cwd);
     const source = fs.readFileSync(resolved, 'utf8');
-    if (isMaestroReplay(req, resolved)) {
+    if (resolveReplayFormat(resolved, req.flags?.replayBackend) === 'maestro') {
+      const flow = inspectMaestroFlow(source, resolved);
       return {
         flags: req.flags ?? {},
         options: buildMaestroReplayTargetDeviceResolutionOptions(
-          parseMaestroProgram(source, { sourcePath: resolved }),
+          flow.appTarget,
           req.flags?.platform,
         ),
       };
@@ -55,19 +56,11 @@ export function buildReplayTargetDeviceResolution(
 }
 
 export function buildMaestroReplayTargetDeviceResolutionOptions(
-  program: MaestroProgram,
+  appTarget: string | undefined,
   platform: CommandFlags['platform'] | undefined,
 ): ResolveTargetDeviceOptions {
   if (platform !== 'ios') return {};
-  const appTarget = readMaestroReplayAppTarget(program);
   return appTargetResolutionOptions(appTarget) ?? {};
-}
-
-function isMaestroReplay(req: DaemonRequest, filePath: string): boolean {
-  return (
-    req.flags?.replayBackend === 'maestro' &&
-    (filePath.endsWith('.yaml') || filePath.endsWith('.yml'))
-  );
 }
 
 function readScriptReplaySelection(actions: SessionAction[]): {
@@ -99,15 +92,6 @@ export function buildReplayScriptPlatformFlags(
     return flags ?? {};
   }
   return { ...flags, platform: selection.platform };
-}
-
-function readMaestroReplayAppTarget(program: MaestroProgram): string | undefined {
-  const configured = program.config.appId;
-  if (isStaticAppTarget(configured)) return configured;
-  const launch = [...(program.config.onFlowStart ?? []), ...program.commands].find(
-    (command) => command.kind === 'launchApp' && isStaticAppTarget(command.appId),
-  );
-  return launch?.kind === 'launchApp' ? launch.appId : undefined;
 }
 
 function isStaticAppTarget(value: string | undefined): value is string {

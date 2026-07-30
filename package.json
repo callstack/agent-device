@@ -145,7 +145,7 @@
     "check:unit": "pnpm check:contention-retry && pnpm test:unit && pnpm test:smoke",
     "check": "pnpm check:tooling && pnpm check:fallow && pnpm check:unit",
     "prepack": "pnpm check:mcp-metadata && pnpm package:npm",
-    "typecheck": "tsc -b packages/kernel packages/contracts && tsc -p tsconfig.json && tsc -p examples/sdk/tsconfig.json",
+    "typecheck": "tsc -b packages/kernel packages/contracts packages/maestro && tsc -p tsconfig.json && tsc -p examples/sdk/tsconfig.json",
     "test-app:install": "pnpm install --dir examples/test-app",
     "test-app:start": "pnpm --dir examples/test-app start",
     "test-app:ios": "pnpm --dir examples/test-app ios",
@@ -158,7 +158,7 @@
     "test-app:maestro:android": "pnpm test-app:maestro --platform android",
     "test": "pnpm test:unit",
     "test:unit": "vitest run --project unit-core --project subprocess-stub",
-    "test:maestro-compat": "vitest run --project unit-core src/compat/maestro src/compat/__tests__/replay-input.test.ts",
+    "test:maestro-compat": "vitest run --project unit-core packages/maestro src/daemon/adapters/maestro src/compat/__tests__/replay-input.test.ts",
     "test:coverage": "vitest run --coverage",
     "test:coverage:ci": "node --experimental-strip-types scripts/lib/contention-retry-run.ts --coverage",
     "check:contention-retry": "node --experimental-strip-types --test scripts/lib/contention-retry-policy.test.ts",
@@ -241,12 +241,12 @@
   ],
   "dependencies": {
     "@limrun/api": "^0.24.5",
-    "pngjs": "^7.0.0",
-    "yaml": "^2.9.0"
+    "pngjs": "^7.0.0"
   },
   "devDependencies": {
     "@agent-device/contracts": "workspace:*",
     "@agent-device/kernel": "workspace:*",
+    "@agent-device/maestro": "workspace:*",
     "@chenglou/freerange": "^0.0.1",
     "@stryker-mutator/core": "9.6.1",
     "@stryker-mutator/vitest-runner": "9.6.1",
@@ -261,6 +261,7 @@
     "tsdown": "^0.22.4",
     "typescript": "^7.0.2",
     "vite": "^8.0.16",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "yaml": "^2.9.0"
   }
 }

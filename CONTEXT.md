@@ -436,7 +436,7 @@ Evidence: [ADR 0002](docs/adr/0002-persistent-platform-helper-sessions.md),
 [`find.test.ts`](src/daemon/handlers/__tests__/find.test.ts),
 [`snapshot-handler.test.ts`](src/daemon/handlers/__tests__/snapshot-handler.test.ts),
 [`snapshot-scoped-refs.test.ts`](src/daemon/handlers/__tests__/snapshot-scoped-refs.test.ts),
-[`runtime-targets-typed.test.ts`](src/compat/maestro/__tests__/runtime-targets-typed.test.ts), and
+[`runtime-targets-typed.test.ts`](packages/maestro/src/internal/__tests__/runtime-targets-typed.test.ts), and
 [`android-test-suite.test.ts`](test/integration/provider-scenarios/android-test-suite.test.ts).
 
 ## Testing Principles

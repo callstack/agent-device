@@ -1,6 +1,6 @@
 # Maestro conformance oracle
 
-A three-layer oracle that proves the agent-device Maestro engine (`src/compat/maestro`)
+A three-layer oracle that proves the private agent-device Maestro package (`packages/maestro`)
 stays faithful to a version-pinned upstream Maestro. It replaces the original
 hand-typed parser fixture, whose transcribed expectations let four bug classes
 slip through during #1217. Every expected value here is **generated from the
@@ -97,7 +97,8 @@ failure, not a pass.
   teeth (`invalid/`). To add a flow: drop the `.yaml` in, add a note to `NOTES`
   in `build-manifest.mjs`, and regenerate.
 - [`fixtures/`](./fixtures) — the generated, checked-in layer-1/layer-2 captures.
-- [`normalize.ts`](./normalize.ts) — canonical projection shared by both engines.
+- `packages/maestro/src/internal/conformance-normalize.ts` — package-private canonical projection
+  shared by the facade's conformance operations.
 - [`verify.ts`](./verify.ts) / [`verify.test.ts`](./verify.test.ts) — the deterministic verifier.
 - [`expected-divergence.ts`](./expected-divergence.ts) — declared, on-the-record divergences.
 - [`differential/`](./differential) — layer-3 scenarios, runner, engine-side

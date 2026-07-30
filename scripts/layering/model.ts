@@ -33,6 +33,7 @@ export type BackEdgeMap = Record<string, string[]>;
 const TARGET_DAG_RANK = new Map([
   ['cloud-webdriver', 1],
   ['contracts', 1],
+  ['maestro', 1],
   ['platforms', 1],
   ['recording', 1],
   ['replay', 1],

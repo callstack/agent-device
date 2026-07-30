@@ -132,19 +132,6 @@ export function findSnapshotAncestor<T>(
   return null;
 }
 
-export function isDescendantOfSnapshotNode(
-  nodes: SnapshotState['nodes'],
-  node: SnapshotNode,
-  ancestor: SnapshotNode,
-  nodeByIndex: ReadonlyMap<number, SnapshotNode>,
-): boolean {
-  return Boolean(
-    findSnapshotAncestor(nodes, node, nodeByIndex, (candidate) =>
-      candidate === ancestor || candidate.index === ancestor.index ? candidate : null,
-    ),
-  );
-}
-
 /**
  * Returns the nearest ancestor matching `predicate`; false means keep walking.
  */

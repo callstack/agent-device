@@ -247,8 +247,10 @@ test('test emits progress when attempts retry and pass', async () => {
 test('test emits skip progress without synthetic duration', async () => {
   const sessionStore = makeSessionStore();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-skip-progress-'));
-  fs.writeFileSync(path.join(root, '01-missing-platform.ad'), 'open "Demo"\n');
-  fs.writeFileSync(path.join(root, '02-android.ad'), 'context platform=android\nopen "Demo"\n');
+  const missingPlatformPath = path.join(root, '01-missing-platform.ad');
+  const androidPath = path.join(root, '02-android.ad');
+  fs.writeFileSync(missingPlatformPath, 'open "Demo"\n');
+  fs.writeFileSync(androidPath, 'context platform=android\nopen "Demo"\n');
 
   const events: RequestProgressEvent[] = [];
   const response = await withRequestProgressSink(
@@ -259,7 +261,7 @@ test('test emits skip progress without synthetic duration', async () => {
           token: 't',
           session: 'default',
           command: 'test',
-          positionals: [root],
+          positionals: [missingPlatformPath, androidPath],
           meta: { cwd: root, requestId: 'suite-skip-progress' },
           flags: { platform: 'android' },
         },
@@ -484,8 +486,10 @@ test('test stops the suite when the parent request is canceled during an active 
 test('test --shard-all runs each runnable entry on each selected device', async () => {
   const sessionStore = makeSessionStore();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-shard-all-'));
-  fs.writeFileSync(path.join(root, '01-login.ad'), 'context platform=android\nopen "Demo"\n');
-  fs.writeFileSync(path.join(root, '02-pay.ad'), 'context platform=android\nopen "Demo"\n');
+  const loginPath = path.join(root, '01-login.ad');
+  const payPath = path.join(root, '02-pay.ad');
+  fs.writeFileSync(loginPath, 'context platform=android\nopen "Demo"\n');
+  fs.writeFileSync(payPath, 'context platform=android\nopen "Demo"\n');
 
   const invoked: DaemonRequest[] = [];
   const response = await withDeviceInventoryProvider(
@@ -496,7 +500,7 @@ test('test --shard-all runs each runnable entry on each selected device', async 
           token: 't',
           session: 'default',
           command: 'test',
-          positionals: [root],
+          positionals: [loginPath, payPath],
           meta: { cwd: root, requestId: 'suite-shard-all' },
           flags: {
             platform: 'android',
@@ -553,10 +557,14 @@ test('test --shard-all runs each runnable entry on each selected device', async 
 test('test --shard-split distributes runnable entries by modulo and keeps skips once', async () => {
   const sessionStore = makeSessionStore();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-shard-split-'));
-  fs.writeFileSync(path.join(root, '01-missing-platform.ad'), 'open "Demo"\n');
-  fs.writeFileSync(path.join(root, '02-a.ad'), 'context platform=android\nopen "Demo"\n');
-  fs.writeFileSync(path.join(root, '03-b.ad'), 'context platform=android\nopen "Demo"\n');
-  fs.writeFileSync(path.join(root, '04-c.ad'), 'context platform=android\nopen "Demo"\n');
+  const missingPlatformPath = path.join(root, '01-missing-platform.ad');
+  const aPath = path.join(root, '02-a.ad');
+  const bPath = path.join(root, '03-b.ad');
+  const cPath = path.join(root, '04-c.ad');
+  fs.writeFileSync(missingPlatformPath, 'open "Demo"\n');
+  fs.writeFileSync(aPath, 'context platform=android\nopen "Demo"\n');
+  fs.writeFileSync(bPath, 'context platform=android\nopen "Demo"\n');
+  fs.writeFileSync(cPath, 'context platform=android\nopen "Demo"\n');
 
   const invoked: DaemonRequest[] = [];
   const response = await withDeviceInventoryProvider(
@@ -567,7 +575,7 @@ test('test --shard-split distributes runnable entries by modulo and keeps skips 
           token: 't',
           session: 'default',
           command: 'test',
-          positionals: [root],
+          positionals: [missingPlatformPath, aPath, bPath, cPath],
           meta: { cwd: root, requestId: 'suite-shard-split' },
           flags: { platform: 'android', shardSplit: 2 },
         },

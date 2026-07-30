@@ -4,7 +4,7 @@ import type { TargetAnnotationV1 } from './target-annotation.ts';
 
 // One recorded action in a session's script.
 //
-// `replay/` reads and writes these (6 modules) and `compat/maestro/` exports them, so declaring the
+// `replay/` reads and writes these and the Maestro package exports them, so declaring the
 // shape inside `daemon/types.ts` made both zones depend on the daemon server to describe a file
 // format neither of them asks the daemon to produce. The daemon still owns the RECORDING — it is
 // the only thing that appends actions; this is only the shape they are appended in.

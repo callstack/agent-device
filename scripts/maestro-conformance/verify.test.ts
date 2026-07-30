@@ -16,8 +16,7 @@ import {
   loadLayer1,
   loadLayer2,
 } from './verify.ts';
-import { parseMaestroProgram } from '../../src/compat/maestro/program-ir-parser.ts';
-import { canonicalizeAgentCommands } from './normalize.ts';
+import { parseMaestroConformanceSource } from '@agent-device/maestro';
 import {
   DOCUMENTED_DEVIATIONS,
   FLOW_DIVERGENCES,
@@ -94,8 +93,7 @@ test('layer 1: we-are-lenient flows preserve unresolved ${VAR} tokens in the age
     const flow = flowsById.get(result.id);
     assert.ok(flow, `missing layer-1 fixture for ${result.id}`);
     const script = fs.readFileSync(path.join(CORPUS_DIR, flow.file), 'utf8');
-    const program = parseMaestroProgram(script, { sourcePath: flow.file });
-    const canonical = canonicalizeAgentCommands(program);
+    const canonical = parseMaestroConformanceSource(script, flow.file).commands;
     assert.ok(
       JSON.stringify(canonical).includes('${'),
       `${result.id}: canonical model must preserve unresolved \${VAR} numeric tokens instead of substituting defaults`,

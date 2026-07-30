@@ -193,6 +193,13 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.ok(contractsPackage, 'contracts package must exist');
   assert.deepEqual([...contractsPackage.exportTargets.keys()].sort(), [...CONTRACT_EXPORTS].sort());
   assert.deepEqual([...contractsPackage.workspaceDependencies], ['@agent-device/kernel']);
+  const maestroPackage = packages.find((pkg) => pkg.name === '@agent-device/maestro');
+  assert.ok(maestroPackage, 'maestro package must exist');
+  assert.deepEqual([...maestroPackage.exportTargets.keys()], ['@agent-device/maestro']);
+  assert.deepEqual([...maestroPackage.workspaceDependencies].sort(), [
+    '@agent-device/contracts',
+    '@agent-device/kernel',
+  ]);
   assert.ok(
     rootWorkspaceDependencyNames(repoRoot).has('@agent-device/kernel'),
     'root must declare the kernel workspace dependency',
@@ -200,6 +207,10 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.ok(
     rootWorkspaceDependencyNames(repoRoot).has('@agent-device/contracts'),
     'root must declare the contracts workspace dependency',
+  );
+  assert.ok(
+    rootWorkspaceDependencyNames(repoRoot).has('@agent-device/maestro'),
+    'root must declare the maestro workspace dependency',
   );
   assert.deepEqual(checkPackageBoundaries(repoRoot, new Set()), []);
 });
