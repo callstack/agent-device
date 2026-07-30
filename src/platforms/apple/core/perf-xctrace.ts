@@ -10,6 +10,7 @@ import {
   type PublicPlatform,
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { parseXmlDocumentSync } from '@agent-device/xml';
 import {
   execFailureDetails,
   requireExecSuccess,
@@ -28,7 +29,6 @@ import {
   resolveIosDevicePerfTarget,
 } from './perf.ts';
 import { runXcrun } from './tool-provider.ts';
-import { parseXmlDocumentSync } from './xml.ts';
 
 const IOS_DEVICE_PERF_EXPORT_TIMEOUT_MS = 15_000;
 const IOS_DEVICE_TRACE_RECORD_MAX_ATTEMPTS = 3;

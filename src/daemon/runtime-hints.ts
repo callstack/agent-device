@@ -1,5 +1,6 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
+import { escapeXmlTextAndAttribute } from '@agent-device/xml';
 import { execFailureDetails, type ExecResult } from '../utils/exec.ts';
 import type { SessionRuntimeHints } from './types.ts';
 import {
@@ -273,12 +274,12 @@ function normalizeAndroidPrefsXml(xml: string): string {
 }
 
 function upsertAndroidStringPref(xml: string, key: string, value: string): string {
-  const entry = `  <string name="${escapeXmlText(key)}">${escapeXmlText(value)}</string>`;
+  const entry = `  <string name="${escapeXmlTextAndAttribute(key)}">${escapeXmlTextAndAttribute(value)}</string>`;
   return insertAndroidPrefEntry(removeAndroidPrefEntry(xml, key), entry);
 }
 
 function upsertAndroidBooleanPref(xml: string, key: string, value: boolean): string {
-  const entry = `  <boolean name="${escapeXmlText(key)}" value="${value ? 'true' : 'false'}" />`;
+  const entry = `  <boolean name="${escapeXmlTextAndAttribute(key)}" value="${value ? 'true' : 'false'}" />`;
   return insertAndroidPrefEntry(removeAndroidPrefEntry(xml, key), entry);
 }
 
@@ -308,15 +309,6 @@ function assertAndroidRuntimePackageName(packageName: string): void {
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function escapeXmlText(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;');
 }
 
 function isAndroidRunAsDeniedOutput(stdout: string, stderr: string): boolean {

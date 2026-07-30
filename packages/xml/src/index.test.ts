@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
-import { parseXmlDocumentSync } from '../xml.ts';
+import {
+  decodeXmlCharacterReferences,
+  escapeXmlTextAndAttribute,
+  parseXmlDocumentSync,
+} from '@agent-device/xml';
 
 test('parseXmlDocumentSync preserves ordered nodes with attributes and decoded text', () => {
   const nodes = parseXmlDocumentSync(
@@ -100,5 +104,21 @@ test('parseXmlDocumentSync rejects documents above the configured size limit', (
   assert.throws(
     () => parseXmlDocumentSync('<root>oversized</root>', { maxDocumentChars: 10 }),
     /XML document exceeds maximum supported size of 10 characters/,
+  );
+});
+
+test('decodeXmlCharacterReferences decodes predefined and numeric references only', () => {
+  assert.equal(
+    decodeXmlCharacterReferences('&amp;&lt;&gt;&quot;&apos;&#65;&#x1f680;&#X1F680;&custom;'),
+    '&<>"\'A🚀🚀&custom;',
+  );
+  assert.equal(decodeXmlCharacterReferences('unterminated &amp'), 'unterminated &amp');
+  assert.equal(decodeXmlCharacterReferences('invalid &#x110000;'), 'invalid &#x110000;');
+});
+
+test('escapeXmlTextAndAttribute escapes text and quoted attribute delimiters', () => {
+  assert.equal(
+    escapeXmlTextAndAttribute(`Fish & Chips <tag value="one">it's ready</tag>`),
+    'Fish &amp; Chips &lt;tag value=&quot;one&quot;&gt;it&apos;s ready&lt;/tag&gt;',
   );
 });

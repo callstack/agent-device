@@ -1,5 +1,5 @@
 import { roundOneDecimal, roundPercent } from '../../perf-utils.ts';
-import { parseXmlDocumentSync, type XmlNode } from './xml.ts';
+import { parseXmlDocumentSync, type XmlNode } from '@agent-device/xml';
 import {
   findAllXmlNodes,
   findFirstXmlNode,

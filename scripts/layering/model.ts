@@ -76,12 +76,13 @@ export function zoneRank(zone: string): number | null {
 // invent an order the architecture had not committed to. Once `utils` joined the spine and
 // `(root)` was emptied of shared contracts, every one of them turned out to have a
 // consistent rank already — so the order was there, just unasserted.
-// `kernel` and `provider-webdriver` are no longer src/ zones: R11 owns their
+// `kernel`, `provider-webdriver`, and `xml` are not src/ zones: R11 owns their
 // physical seams, and their zone names only appear in workspace-aware graphs.
 export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   '(root)',
   'kernel',
   'provider-webdriver',
+  'xml',
 ]);
 
 export type ZoneClassification = 'ranked' | 'unranked' | 'unclassified';

@@ -119,15 +119,6 @@ export function formatJUnitSeconds(durationMs: number): string {
   return (Math.max(0, durationMs) / 1000).toFixed(3);
 }
 
-export function xmlEscape(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;');
-}
-
 export function isDefinedString(value: string | undefined): value is string {
   return value !== undefined;
 }

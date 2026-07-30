@@ -36,6 +36,9 @@ importers:
       '@agent-device/provider-webdriver':
         specifier: workspace:*
         version: link:packages/provider-webdriver
+      '@agent-device/xml':
+        specifier: workspace:*
+        version: link:packages/xml
       '@chenglou/freerange':
         specifier: ^0.0.1
         version: 0.0.1
@@ -110,6 +113,11 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@agent-device/xml':
+        specifier: workspace:*
+        version: link:../xml
+
+  packages/xml: {}
 
   website:
     devDependencies:

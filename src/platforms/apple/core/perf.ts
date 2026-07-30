@@ -10,6 +10,7 @@ import {
   type PublicPlatform,
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { parseXmlDocumentSync, type XmlNode } from '@agent-device/xml';
 import { execFailureDetails, requireExecSuccess, type ExecResult } from '../../../utils/exec.ts';
 import { splitNonEmptyTrimmedLines } from '../../../utils/parsing.ts';
 import { roundPercent } from '../../perf-utils.ts';
@@ -20,7 +21,6 @@ import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 import { readInfoPlistString } from './plist.ts';
 import { buildSimctlArgsForDevice } from './simctl.ts';
 import { runAppleToolCommand, runXcrun } from './tool-provider.ts';
-import { parseXmlDocumentSync, type XmlNode } from './xml.ts';
 import {
   findAllXmlNodes,
   findFirstXmlNode,

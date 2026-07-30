@@ -1,8 +1,8 @@
 import net, { type Socket } from 'node:net';
 import { AppError } from '@agent-device/kernel/errors';
+import { escapeXmlTextAndAttribute, parseXmlDocumentSync, type XmlNode } from '@agent-device/xml';
 import { createRequestCanceledError } from '../../../../request/cancel.ts';
 import { Deadline } from '../../../../utils/retry.ts';
-import { parseXmlDocumentSync, type XmlNode } from '../../../../utils/xml.ts';
 
 const USBMUX_HEADER_BYTES = 16;
 const USBMUX_PROTOCOL_VERSION = 1;
@@ -205,8 +205,8 @@ function buildPlistMessage(
   const body = entries
     .map(([key, value]) =>
       typeof value === 'number'
-        ? `<key>${escapeXml(key)}</key><integer>${value}</integer>`
-        : `<key>${escapeXml(key)}</key><string>${escapeXml(value)}</string>`,
+        ? `<key>${escapeXmlTextAndAttribute(key)}</key><integer>${value}</integer>`
+        : `<key>${escapeXmlTextAndAttribute(key)}</key><string>${escapeXmlTextAndAttribute(value)}</string>`,
     )
     .join('');
   return `<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict>${body}</dict></plist>`;
@@ -266,13 +266,4 @@ function requireTimeRemaining(timeoutMs: number, action: string): void {
     backend: 'xctest',
     timeoutMs,
   });
-}
-
-function escapeXml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;');
 }

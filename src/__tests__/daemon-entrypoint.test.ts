@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
@@ -11,7 +12,7 @@ import {
 } from '../daemon/artifact-tracking.ts';
 import { runCmdBackground } from '../utils/exec.ts';
 import { isProcessAlive, waitForProcessExit } from '../utils/host-process.ts';
-import { waitForHttpOk } from './test-utils/index.ts';
+import { closeLoopbackServer, listenOnLoopback, waitForHttpOk } from './test-utils/index.ts';
 
 type DaemonInfoFile = {
   httpPort?: number;
@@ -164,6 +165,83 @@ test('daemon runtime publishes dual transport metadata', async () => {
     assert.equal(fs.existsSync(paths.infoPath), false);
     assert.equal(fs.existsSync(paths.lockPath), false);
   } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('daemon default provider composition serves cloud artifacts over RPC', async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-provider-'));
+  const providerRequests: string[] = [];
+  const providerServer = http.createServer((req, res) => {
+    providerRequests.push(req.url ?? '');
+    res.setHeader('content-type', 'application/json');
+    res.end(
+      JSON.stringify({
+        automation_session: { video_url: 'https://browserstack.example/video.mp4' },
+      }),
+    );
+  });
+  const providerPort = await listenOnLoopback(providerServer);
+  let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> = null;
+
+  try {
+    runtime = await startDaemonRuntime({
+      env: {
+        ...process.env,
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+        BROWSERSTACK_USERNAME: 'user',
+        BROWSERSTACK_ACCESS_KEY: 'key',
+        BROWSERSTACK_SESSION_DETAILS_ENDPOINT: `http://127.0.0.1:${providerPort}/sessions`,
+      },
+      exit: () => {},
+      registerProcessHandlers: false,
+      stderr: { write: () => {} },
+      stdout: { write: () => {} },
+    });
+    assert.ok(runtime?.httpPort);
+
+    const response = await fetch(`http://127.0.0.1:${runtime.httpPort}/rpc`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'cloud-artifacts',
+        method: 'agent_device.command',
+        params: {
+          token: runtime.token,
+          session: 'default',
+          command: 'artifacts',
+          positionals: [],
+          flags: { provider: 'browserstack', providerSessionId: 'wd-1' },
+        },
+      }),
+    });
+    const body = (await response.json()) as {
+      result?: { ok?: boolean; data?: Record<string, unknown> };
+    };
+
+    assert.equal(response.status, 200);
+    assert.equal(body.result?.ok, true);
+    assert.deepEqual(body.result?.data, {
+      provider: 'browserstack',
+      providerSessionId: 'wd-1',
+      status: 'ready',
+      cloudArtifacts: [
+        {
+          provider: 'browserstack',
+          providerSessionId: 'wd-1',
+          kind: 'video',
+          name: 'Session video',
+          url: 'https://browserstack.example/video.mp4',
+          availability: 'ready',
+        },
+      ],
+    });
+    assert.deepEqual(providerRequests, ['/sessions/wd-1.json']);
+  } finally {
+    await runtime?.shutdown();
+    await closeLoopbackServer(providerServer);
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });

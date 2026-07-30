@@ -1,5 +1,6 @@
 import type { RawSnapshotNode, Rect, SnapshotOptions } from '@agent-device/kernel/snapshot';
 import { parseBounds } from '@agent-device/kernel/bounds';
+import { decodeXmlCharacterReferences } from '@agent-device/xml';
 import { isScrollableType } from '../../utils/scrollable.ts';
 import { intersectArea } from '../../utils/screenshot-geometry.ts';
 import {
@@ -370,7 +371,7 @@ function readNextXmlAttribute(
   if (valueEnd < 0 || valueEnd >= end) return undefined;
   return {
     name,
-    value: decodeXmlAttributeValue(node.slice(valueStart, valueEnd)),
+    value: decodeXmlCharacterReferences(node.slice(valueStart, valueEnd)),
     nextCursor: valueEnd + 1,
   };
 }
@@ -403,74 +404,6 @@ function isXmlWhitespace(char: string): boolean {
 
 function isXmlAttributeNameTerminator(char: string): boolean {
   return char === '=' || char === '/' || char === '>' || isXmlWhitespace(char);
-}
-
-function decodeXmlAttributeValue(value: string): string {
-  let decoded = '';
-  let cursor = 0;
-  while (cursor < value.length) {
-    const entityStart = value.indexOf('&', cursor);
-    if (entityStart < 0) {
-      decoded += value.slice(cursor);
-      break;
-    }
-    decoded += value.slice(cursor, entityStart);
-    const entityEnd = value.indexOf(';', entityStart + 1);
-    if (entityEnd < 0) {
-      decoded += value.slice(entityStart);
-      break;
-    }
-    const rawEntity = value.slice(entityStart + 1, entityEnd);
-    decoded += decodeXmlEntity(rawEntity) ?? value.slice(entityStart, entityEnd + 1);
-    cursor = entityEnd + 1;
-  }
-  return decoded;
-}
-
-function decodeXmlEntity(entity: string): string | undefined {
-  switch (entity) {
-    case 'amp':
-      return '&';
-    case 'lt':
-      return '<';
-    case 'gt':
-      return '>';
-    case 'quot':
-      return '"';
-    case 'apos':
-      return "'";
-    default:
-      return decodeNumericXmlEntity(entity);
-  }
-}
-
-function decodeNumericXmlEntity(entity: string): string | undefined {
-  if (!entity.startsWith('#')) return undefined;
-  const radix = entity[1]?.toLowerCase() === 'x' ? 16 : 10;
-  const digits = radix === 16 ? entity.slice(2) : entity.slice(1);
-  if (!digits || !isValidNumericEntityDigits(digits, radix)) return undefined;
-  const codePoint = Number.parseInt(digits, radix);
-  if (!Number.isFinite(codePoint)) return undefined;
-  try {
-    return String.fromCodePoint(codePoint);
-  } catch {
-    return undefined;
-  }
-}
-
-function isValidNumericEntityDigits(digits: string, radix: 10 | 16): boolean {
-  for (const digit of digits) {
-    const code = digit.charCodeAt(0);
-    const isDecimal = code >= 48 && code <= 57;
-    if (radix === 10) {
-      if (!isDecimal) return false;
-      continue;
-    }
-    const isUpperHex = code >= 65 && code <= 70;
-    const isLowerHex = code >= 97 && code <= 102;
-    if (!isDecimal && !isUpperHex && !isLowerHex) return false;
-  }
-  return true;
 }
 
 function readXmlAttr(attrs: Map<string, string>, name: string): string | null {

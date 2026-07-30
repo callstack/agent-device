@@ -194,24 +194,6 @@ function uniqueProviderIds(providerIds: readonly string[]): string[] {
   return [...new Set(providerIds)];
 }
 
-export function composeCloudArtifactProviders(
-  ...providers: Array<CloudArtifactProvider | undefined>
-): CloudArtifactProvider | undefined {
-  const activeProviders = providers.filter(
-    (provider): provider is CloudArtifactProvider => provider !== undefined,
-  );
-  if (activeProviders.length === 0) return undefined;
-  return {
-    listCloudArtifacts: async (query) => {
-      for (const provider of activeProviders) {
-        const result = await provider.listCloudArtifacts?.(query);
-        if (result) return result;
-      }
-      return undefined;
-    },
-  };
-}
-
 function composeLeaseProvider(
   runtimes: ProviderDeviceRuntime[],
 ): LeaseLifecycleProvider | undefined {

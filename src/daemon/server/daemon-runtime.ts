@@ -5,11 +5,7 @@ import { cleanupStaleAppLogProcesses } from '../app-log-process.ts';
 import { resolveDaemonPaths, resolveDaemonServerMode } from '../config.ts';
 import { createDaemonHttpServer } from './http-server.ts';
 import { trackDownloadableArtifact } from '../artifact-tracking.ts';
-import { providerWebDriver } from '../../provider-webdriver.ts';
-import {
-  composeCloudArtifactProviders,
-  createProviderDeviceRuntimeRequestProviders,
-} from '../../provider-device-runtime.ts';
+import { createProviderDeviceRuntimeRequestProviders } from '../../provider-device-runtime.ts';
 import {
   createDefaultProviderDeviceRuntimes,
   DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS,
@@ -185,10 +181,7 @@ export async function startDaemonRuntime(
       void expiredProviderLeaseReleaser.release(lease);
     },
   });
-  const cloudArtifactProvider = composeCloudArtifactProviders(
-    providerRuntimeProviders.cloudArtifactProvider,
-    { listCloudArtifacts: (query) => providerWebDriver.listArtifactsFromEnv(query, env) },
-  );
+  const cloudArtifactProvider = providerRuntimeProviders.cloudArtifactProvider;
 
   const dispatchRequest = createRequestHandler({
     logPath,

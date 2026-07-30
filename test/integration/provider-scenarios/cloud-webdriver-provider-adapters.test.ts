@@ -54,6 +54,8 @@ test('BrowserStack facade prepares capabilities, uploads apps, and returns artif
         assert.equal(operationSupport(allocation, 'snapshot'), 'partial');
         assert.equal(operationSupport(allocation, 'install'), 'partial');
         assert.equal(operationSupport(allocation, 'artifacts'), 'supported');
+        assert.equal(operationSupport(allocation, 'nativeSnapshotBackend'), 'unsupported');
+        assert.match(operationNote(allocation, 'portReverse') ?? '', /BrowserStack Local/);
 
         const [device] =
           (await runtime.deviceInventoryProvider({
@@ -96,11 +98,15 @@ test('AWS Device Farm facade uses the injected host-command capability for its f
       assert.equal(allocation?.awsDeviceFarmSessionArn, host.sessionArn);
       assert.equal(operationSupport(allocation, 'install'), 'unsupported');
       assert.equal(operationSupport(allocation, 'artifacts'), 'supported');
+      assert.equal(operationSupport(allocation, 'nativeSnapshotBackend'), 'unsupported');
+      assert.match(operationNote(allocation, 'install') ?? '', /appArn/);
 
       const release = await runtime.leaseLifecycle.release?.(lease);
-      assert.equal(
-        (release?.cloudArtifacts as CloudArtifactsResult | undefined)?.cloudArtifacts.length,
-        3,
+      assert.deepEqual(
+        (release?.cloudArtifacts as CloudArtifactsResult | undefined)?.cloudArtifacts.map(
+          (artifact) => artifact.kind,
+        ),
+        ['video', 'device-log', 'appium-log'],
       );
     } finally {
       await runtime.shutdown();
@@ -220,6 +226,20 @@ function operationSupport(
   if (!entry || typeof entry !== 'object') return undefined;
   const support = (entry as { support?: unknown }).support;
   return typeof support === 'string' ? support : undefined;
+}
+
+function operationNote(
+  allocation: Record<string, unknown> | undefined,
+  operation: string,
+): string | undefined {
+  const capabilities = allocation?.capabilities;
+  if (!capabilities || typeof capabilities !== 'object') return undefined;
+  const operations = (capabilities as { operations?: unknown }).operations;
+  if (!operations || typeof operations !== 'object') return undefined;
+  const entry = (operations as Record<string, unknown>)[operation];
+  if (!entry || typeof entry !== 'object') return undefined;
+  const note = (entry as { note?: unknown }).note;
+  return typeof note === 'string' ? note : undefined;
 }
 
 function browserStackContext(lease: DeviceLease): LeaseLifecycleContext {

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { ReplaySuiteResult, ReplaySuiteTestResult } from '@agent-device/contracts/replay';
 import { AppError } from '@agent-device/kernel/errors';
+import { escapeXmlTextAndAttribute } from '@agent-device/xml';
 import type { ReplayTestReporter } from './types.ts';
 import {
   appendOptionalLine,
@@ -15,7 +16,6 @@ import {
   replayArtifactsLine,
   replayTestCaseName,
   replayTestWarningLines,
-  xmlEscape,
   type FailedReplayTestResult,
 } from './format.ts';
 
@@ -67,11 +67,11 @@ function buildReplayJunitXml(suite: ReplaySuiteResult): string {
 }
 
 function renderJUnitTestCase(test: ReplaySuiteTestResult): string[] {
-  const name = xmlEscape(replayTestCaseName(test));
-  const className = xmlEscape(
+  const name = escapeXmlTextAndAttribute(replayTestCaseName(test));
+  const className = escapeXmlTextAndAttribute(
     `${path.dirname(test.file) === '.' ? test.file : path.dirname(test.file)}${formatReplayTestShardSuffix(test)}`,
   );
-  const file = xmlEscape(test.file);
+  const file = escapeXmlTextAndAttribute(test.file);
   const time = formatJUnitSeconds(test.durationMs);
   const lines = [
     `    <testcase classname="${className}" name="${name}" file="${file}" time="${time}">`,
@@ -79,15 +79,15 @@ function renderJUnitTestCase(test: ReplaySuiteTestResult): string[] {
 
   if (test.status === 'failed') {
     lines.push(
-      `      <failure message="${xmlEscape(test.error.message)}">${xmlEscape(buildFailureDetails(test))}</failure>`,
+      `      <failure message="${escapeXmlTextAndAttribute(test.error.message)}">${escapeXmlTextAndAttribute(buildFailureDetails(test))}</failure>`,
     );
   } else if (test.status === 'skipped') {
-    lines.push(`      <skipped message="${xmlEscape(test.message)}" />`);
+    lines.push(`      <skipped message="${escapeXmlTextAndAttribute(test.message)}" />`);
   }
 
   const systemOut = buildSystemOut(test);
   if (systemOut) {
-    lines.push(`      <system-out>${xmlEscape(systemOut)}</system-out>`);
+    lines.push(`      <system-out>${escapeXmlTextAndAttribute(systemOut)}</system-out>`);
   }
 
   lines.push('    </testcase>');

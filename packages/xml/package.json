@@ -1,0 +1,13 @@
+{
+  "name": "@agent-device/xml",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Dependency-free XML parsing and character-reference decoding for agent-device. Internal workspace package bundled into the published artifact.",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  }
+}

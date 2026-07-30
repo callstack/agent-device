@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
+import { parseXmlDocumentSync } from '@agent-device/xml';
 import { readApplePlistJson, runAppleToolCommand } from './tool-provider.ts';
-import { parseXmlDocumentSync, visitXmlPlistEntries } from './xml.ts';
+import { visitXmlPlistEntries } from './plist-xml.ts';
 
 export async function readInfoPlistString(
   infoPlistPath: string,

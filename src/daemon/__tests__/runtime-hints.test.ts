@@ -321,6 +321,28 @@ test('port-only hint on an Android emulator defaults host to 10.0.2.2 and writes
   });
 });
 
+test('Android runtime hints escape XML text and quoted attribute delimiters', async () => {
+  await withMockedAdb(async ({ device, readWrittenPrefsFile }) => {
+    const packageName = 'com.example.demo';
+    await applyRuntimeHintsToApp({
+      device,
+      appId: packageName,
+      runtime: {
+        platform: 'android',
+        metroHost: `host&<>"'`,
+        metroPort: 8084,
+      },
+    });
+
+    const payload = await readWrittenPrefsFile(defaultPrefsPath(packageName));
+    assert.ok(payload, 'expected a write to the default RN preferences file');
+    assert.match(
+      payload ?? '',
+      /<string name="debug_http_host">host&amp;&lt;&gt;&quot;&apos;:8084<\/string>/,
+    );
+  });
+});
+
 test('port-only hint on a physical Android device stays ambiguous and writes nothing', async () => {
   await withMockedAdb(async ({ device, argsLogPath, readWrittenPrefsFile }) => {
     const physicalDevice: DeviceInfo = { ...device, id: 'R5CN30', kind: 'device' };

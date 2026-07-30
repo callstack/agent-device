@@ -1,9 +1,5 @@
-export type XmlNode = {
-  name: string;
-  attributes: Record<string, string>;
-  text: string | null;
-  children: XmlNode[];
-};
+import { decodeXmlCharacterReferences } from './entities.ts';
+import type { XmlNode, XmlParseOptions } from './types.ts';
 
 const MAX_XML_NESTING_DEPTH = 256;
 const MAX_XML_DOCUMENT_CHARS = 128 * 1024 * 1024;
@@ -19,10 +15,7 @@ const UNSAFE_XML_ATTRIBUTE_NAMES = new Set([
   'prototype',
 ]);
 
-export function parseXmlDocumentSync(
-  xml: string,
-  options: { maxDocumentChars?: number } = {},
-): XmlNode[] {
+export function parseXmlDocumentSync(xml: string, options: XmlParseOptions = {}): XmlNode[] {
   const maxDocumentChars = options.maxDocumentChars ?? MAX_XML_DOCUMENT_CHARS;
   if (xml.length > maxDocumentChars) {
     throw new Error(
@@ -30,24 +23,6 @@ export function parseXmlDocumentSync(
     );
   }
   return new LimitedXmlParser(xml).parse();
-}
-
-export function visitXmlPlistEntries(
-  nodes: XmlNode[],
-  visitor: (key: string, valueNode: XmlNode) => void,
-): void {
-  for (const node of nodes) {
-    if (node.name === 'dict') {
-      for (let index = 0; index < node.children.length - 1; index += 1) {
-        const entry = node.children[index];
-        const nextEntry = node.children[index + 1];
-        if (entry?.name === 'key' && entry.text && nextEntry) {
-          visitor(entry.text, nextEntry);
-        }
-      }
-    }
-    visitXmlPlistEntries(node.children, visitor);
-  }
 }
 
 class LimitedXmlParser {
@@ -198,7 +173,9 @@ class LimitedXmlParser {
     const node = this.stack[this.stack.length - 1];
     if (!node) return;
     // Preserve fast-xml-parser's trimValues behavior for each text segment we keep.
-    node.text = `${node.text ?? ''}${decodeEntities ? decodeXmlEntities(trimmed) : trimmed}`;
+    node.text = `${node.text ?? ''}${
+      decodeEntities ? decodeXmlCharacterReferences(trimmed) : trimmed
+    }`;
   }
 
   private addNode(node: XmlNode): void {
@@ -236,7 +213,7 @@ class LimitedXmlParser {
       throw new Error(`XML attribute "${attributeName}" is not closed.`);
     }
     this.index = endIndex + 1;
-    return decodeXmlEntities(this.xml.slice(startIndex, endIndex).trim());
+    return decodeXmlCharacterReferences(this.xml.slice(startIndex, endIndex).trim());
   }
 
   private skipDeclaration(): void {
@@ -318,41 +295,5 @@ function isDeclarationEnd(state: DeclarationScanState, char: string): boolean {
 function assertSafeXmlAttributeName(name: string): void {
   if (UNSAFE_XML_ATTRIBUTE_NAMES.has(name)) {
     throw new Error(`Unsupported XML attribute name "${name}".`);
-  }
-}
-
-function decodeXmlEntities(value: string): string {
-  return value.replace(
-    /&(#x[0-9a-fA-F]+|#[0-9]+|amp|lt|gt|quot|apos);/g,
-    (entity, body: string) => {
-      switch (body) {
-        case 'amp':
-          return '&';
-        case 'lt':
-          return '<';
-        case 'gt':
-          return '>';
-        case 'quot':
-          return '"';
-        case 'apos':
-          return "'";
-        default:
-          return decodeNumericXmlEntity(entity, body);
-      }
-    },
-  );
-}
-
-function decodeNumericXmlEntity(entity: string, body: string): string {
-  const codePoint = body.startsWith('#x')
-    ? Number.parseInt(body.slice(2), 16)
-    : Number(body.slice(1));
-  if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff) {
-    return entity;
-  }
-  try {
-    return String.fromCodePoint(codePoint);
-  } catch {
-    return entity;
   }
 }

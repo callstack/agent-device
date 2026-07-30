@@ -101,9 +101,9 @@ function specifierPackageName(specifier: string): string | undefined {
 }
 
 /**
- * Rules for files INSIDE a package: no relative escape past the package dir,
- * and any sibling-package import must be declared `workspace:*` and name an
- * exported subpath.
+ * Rules for files INSIDE a package: no relative escape past the package dir;
+ * exported package self-references are legal; any sibling-package import must
+ * be declared `workspace:*`; and every package specifier must name an export.
  */
 export function checkPackageInternalSites(
   pkg: WorkspacePackage,
@@ -140,7 +140,7 @@ export function checkPackageInternalSites(
       });
       continue;
     }
-    if (!pkg.workspaceDependencies.has(name)) {
+    if (name !== pkg.name && !pkg.workspaceDependencies.has(name)) {
       violations.push({
         rule: 'R11 package-boundaries',
         file: site.file,
