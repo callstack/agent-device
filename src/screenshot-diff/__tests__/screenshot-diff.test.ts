@@ -6,7 +6,7 @@ import path from 'node:path';
 
 vi.mock('../../utils/png-worker-client.ts', async () => {
   const [{ PNG }, { decodePng }, { computeScreenshotDiffPixels }] = await Promise.all([
-    import('../../utils/png-codec.ts'),
+    import('../../utils/png.ts'),
     import('../../utils/png.ts'),
     import('../../utils/screenshot-diff-pixels.ts'),
   ]);

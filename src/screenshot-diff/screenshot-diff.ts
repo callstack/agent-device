@@ -112,7 +112,8 @@ export async function compareScreenshots(
       : [];
 
   if (differentPixels > 0 && diffOutputPath) {
-    const diff = new PNG({ width: baseline.width, height: baseline.height, data: diffData });
+    const diff = new PNG({ width: baseline.width, height: baseline.height });
+    diff.data = diffData;
     annotateDiffRegions(diff, regions);
     await fs.mkdir(path.dirname(diffOutputPath), { recursive: true });
     await fs.writeFile(diffOutputPath, await encodePngAsync(diff));

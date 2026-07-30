@@ -241,6 +241,7 @@
   ],
   "dependencies": {
     "@limrun/api": "^0.24.5",
+    "pngjs": "^7.0.0",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
@@ -249,6 +250,7 @@
     "@stryker-mutator/core": "9.6.1",
     "@stryker-mutator/vitest-runner": "9.6.1",
     "@types/node": "^22.19.21",
+    "@types/pngjs": "^6.0.5",
     "@vitest/coverage-v8": "4.1.8",
     "fallow": "^2.95.0",
     "fast-check": "^4.9.0",

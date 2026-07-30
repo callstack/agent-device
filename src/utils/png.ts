@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { PNG } from './png-codec.ts';
+import { PNG } from 'pngjs';
 
 export { PNG };
 
