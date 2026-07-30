@@ -1,3 +1,4 @@
+import type { SnapshotDiffLine, SnapshotDiffSummary } from '@agent-device/contracts/capture';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   buildSnapshotDisplayLines,
@@ -6,23 +7,7 @@ import {
   formatSnapshotLine,
 } from './snapshot-lines.ts';
 
-export type SnapshotDiffLine = {
-  kind: 'added' | 'removed' | 'unchanged';
-  text: string;
-  /**
-   * Plain ref body (`e12`) of the CURRENT-tree node behind an added line.
-   * Only populated with `withRefs` (interaction `--settle`, #1101) so the
-   * `diff` command's wire shape stays byte-identical. Removed/unchanged lines
-   * never carry it: a removed line's ref names a node of the replaced tree.
-   */
-  ref?: string;
-};
-
-export type SnapshotDiffSummary = {
-  additions: number;
-  removals: number;
-  unchanged: number;
-};
+export type { SnapshotDiffLine, SnapshotDiffSummary } from '@agent-device/contracts/capture';
 
 export type SnapshotDiffResult = {
   summary: SnapshotDiffSummary;

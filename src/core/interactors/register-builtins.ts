@@ -1,3 +1,4 @@
+import type { RunnerContext } from '@agent-device/contracts/interaction';
 import type { PlatformPlugin } from '@agent-device/contracts/platform';
 import { registerPlatformPlugin } from '../platform-plugin-registry.ts';
 import { applePlugin } from '../../platforms/apple/plugin.ts';
@@ -6,7 +7,6 @@ import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { isAudioProbeSupportedDevice } from '@agent-device/contracts/platform';
 import { WEB_DESKTOP_DEVICE, type DeviceInventoryRequest } from '@agent-device/contracts/device';
 import type { Platform, DeviceInfo } from '@agent-device/kernel/device';
-import type { RunnerContext } from '../../contracts/interactor-types.ts';
 import { resolveAndroidDiscoverySerialAllowlist } from '../platform-inventory.ts';
 
 // The builtin-plugin wiring lives at the interactor seam (src/core/interactors/) —
