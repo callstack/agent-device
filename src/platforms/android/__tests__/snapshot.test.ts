@@ -98,21 +98,21 @@ function helperAdbOperation(args: string[]): 'instrument' | 'activity' | undefin
   return args.includes('dumpsys') && args.includes('activity') ? 'activity' : undefined;
 }
 
-function createPersistentSnapshotHelperProvider(options: {
+type PersistentSnapshotHelperProviderOptions = {
   calls: string[][];
   spawnArgs: string[][];
   processes: FakeAndroidProcess[];
-}): AndroidAdbProvider {
+  sessionResponseMode?: 'ok' | 'malformed';
+  stalledSessionCleanup?: boolean;
+  oneShotAttempts?: string[][];
+  oneShotXml?: string;
+};
+
+function createPersistentSnapshotHelperProvider(
+  options: PersistentSnapshotHelperProviderOptions,
+): AndroidAdbProvider {
   return {
-    exec: async (args) => {
-      options.calls.push(args);
-      if (args.includes('--show-versioncode')) return installedHelperProbe;
-      if (args[0] === 'forward') return { exitCode: 0, stdout: '', stderr: '' };
-      if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'force-stop') {
-        return { exitCode: 0, stdout: '', stderr: '' };
-      }
-      throw new Error(`unexpected persistent helper adb args: ${args.join(' ')}`);
-    },
+    exec: createPersistentSnapshotExec(options),
     spawn: (args) => {
       options.spawnArgs.push(args);
       const process = new FakeAndroidProcess();
@@ -126,6 +126,10 @@ function createPersistentSnapshotHelperProvider(options: {
           if (command.startsWith('quit')) {
             socket.end(sessionResponse({ requestId, body: '' }));
             server.close(() => process.emitExit(0, null));
+            return;
+          }
+          if (options.sessionResponseMode === 'malformed') {
+            socket.end('malformed session response');
             return;
           }
           snapshotCount += 1;
@@ -167,6 +171,61 @@ function createPersistentSnapshotHelperProvider(options: {
       return process;
     },
   };
+}
+
+function createPersistentSnapshotExec(
+  options: PersistentSnapshotHelperProviderOptions,
+): AndroidAdbExecutor {
+  return async (args, execOptions) => {
+    options.calls.push(args);
+    const stalledCleanup = stalledPersistentCleanup(options, args, execOptions?.signal);
+    if (stalledCleanup) return await stalledCleanup;
+    return persistentSnapshotExecResult(options, args);
+  };
+}
+
+function stalledPersistentCleanup(
+  options: PersistentSnapshotHelperProviderOptions,
+  args: string[],
+  signal: AbortSignal | undefined,
+): ReturnType<AndroidAdbExecutor> | undefined {
+  if (!options.stalledSessionCleanup || !signal) return undefined;
+  const removesForward = args[0] === 'forward' && args[1] === '--remove';
+  const forceStopsRuntime = args[0] === 'shell' && args[1] === 'am' && args[2] === 'force-stop';
+  return removesForward || forceStopsRuntime ? rejectWhenAborted(signal) : undefined;
+}
+
+function persistentSnapshotExecResult(
+  options: PersistentSnapshotHelperProviderOptions,
+  args: string[],
+): ReturnType<AndroidAdbExecutor> {
+  if (args.includes('--show-versioncode')) return Promise.resolve(installedHelperProbe);
+  if (args[0] === 'forward' || isHelperRuntimeReset(args)) {
+    return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+  }
+  if (args.includes('instrument')) {
+    options.oneShotAttempts?.push(args);
+    if (options.oneShotXml) {
+      return Promise.resolve({
+        exitCode: 0,
+        stdout: helperOutput(options.oneShotXml),
+        stderr: '',
+      });
+    }
+  }
+  return Promise.reject(new Error(`unexpected persistent helper adb args: ${args.join(' ')}`));
+}
+
+function rejectWhenAborted(signal: AbortSignal): Promise<{
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}> {
+  return new Promise((_resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) onAbort();
+  });
 }
 
 function sessionResponse(params: {
@@ -671,6 +730,58 @@ test('snapshotAndroid keeps daemon-session helper alive for reuse until session 
     adbCalls.some((args) => args[0] === 'forward' && args[1] === '--remove'),
     true,
   );
+});
+
+test('snapshotAndroid falls back to one-shot capture after retiring a failed session', async () => {
+  const adbCalls: string[][] = [];
+  const spawnArgs: string[][] = [];
+  const processes: FakeAndroidProcess[] = [];
+  const provider = createPersistentSnapshotHelperProvider({
+    calls: adbCalls,
+    spawnArgs,
+    processes,
+    sessionResponseMode: 'malformed',
+    oneShotXml: '<hierarchy><node text="one-shot fallback" bounds="[0,0][10,10]" /></hierarchy>',
+  });
+
+  const result = await snapshotAndroid(device, {
+    helperAdb: provider,
+    helperArtifact,
+    helperSessionScope: 'daemon-session',
+  });
+
+  assert.equal(result.nodes[0]?.label, 'one-shot fallback');
+  assert.equal(result.androidSnapshot.helperTransport, 'instrumentation');
+  assert.equal(processes[0]?.killed, true);
+  assert.equal(
+    adbCalls.some((args) => args[0] === 'forward' && args[1] === '--remove'),
+    true,
+  );
+});
+
+test('snapshotAndroid does not start one-shot capture when session retirement is unconfirmed', async () => {
+  const adbCalls: string[][] = [];
+  const oneShotAttempts: string[][] = [];
+  const provider = createPersistentSnapshotHelperProvider({
+    calls: adbCalls,
+    spawnArgs: [],
+    processes: [],
+    sessionResponseMode: 'malformed',
+    stalledSessionCleanup: true,
+    oneShotAttempts,
+    oneShotXml: '<hierarchy><node text="must not run" bounds="[0,0][10,10]" /></hierarchy>',
+  });
+
+  await assert.rejects(
+    snapshotAndroid(device, {
+      helperAdb: provider,
+      helperArtifact,
+      helperSessionScope: 'daemon-session',
+    }),
+    /could not confirm release of device automation ownership/,
+  );
+
+  assert.equal(oneShotAttempts.length, 0);
 });
 
 test('snapshotAndroid fails closed when the helper fails', async () => {

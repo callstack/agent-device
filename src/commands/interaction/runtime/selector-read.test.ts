@@ -457,6 +457,59 @@ test('runtime find wait skips hidden-content hint derivation on every poll (#127
   }
 });
 
+test('runtime find wait cancels and joins a capture that consumes its full deadline', async () => {
+  const initial = selectorReadSnapshot();
+  const sessions = createMemorySessionStore([{ name: 'default', snapshot: initial }]);
+  let captureCount = 0;
+  const device = createAgentDevice({
+    backend: {
+      platform: 'android',
+      captureSnapshot: async (context) => {
+        captureCount += 1;
+        return await new Promise((resolve) => {
+          context.signal?.addEventListener(
+            'abort',
+            () => {
+              setTimeout(
+                () =>
+                  resolve({
+                    snapshot: makeSnapshotState([
+                      { index: 0, depth: 0, type: 'Other', label: 'Late screen' },
+                    ]),
+                  }),
+                5,
+              );
+            },
+            { once: true },
+          );
+        });
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions,
+    policy: localCommandPolicy(),
+  });
+
+  await assert.rejects(
+    device.selectors.find({
+      session: 'default',
+      locator: 'text',
+      query: 'Never appears',
+      action: 'wait',
+      timeoutMs: 20,
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'wait_capture_stalled');
+      assert.equal(details?.captureStalled, true);
+      return true;
+    },
+  );
+  assert.equal(captureCount, 1);
+  assert.deepEqual((await sessions.get('default'))?.snapshot, initial);
+});
+
 test('runtime wait can use backend text search', async () => {
   const device = createSelectorDevice(selectorReadSnapshot(), {
     findText: true,
@@ -723,7 +776,7 @@ test('runtime wait keeps the plain timeout when readable polls simply never matc
   );
 });
 
-test('runtime wait reports a stalled final capture over an earlier unreadable verdict', async () => {
+test('runtime wait reports a deadline-truncated final capture over an earlier unreadable verdict', async () => {
   let captureCount = 0;
   const initial = makeSnapshotState([{ index: 0, depth: 0, type: 'Other', label: 'Initial' }]);
   const sessions = createMemorySessionStore([{ name: 'default', snapshot: initial }]);
@@ -768,12 +821,58 @@ test('runtime wait reports a stalled final capture over an earlier unreadable ve
       assert.equal(error.message, 'wait timed out for selector: label="Screen X"');
       assert.equal(
         (error as { details?: Record<string, unknown> }).details?.reason,
-        'wait_capture_stalled',
+        'wait_deadline_exceeded',
       );
       return true;
     },
   );
   assert.deepEqual((await sessions.get('default'))?.snapshot, initial);
+});
+
+test('runtime wait does not call a deadline-truncated poll stalled after a readable capture', async () => {
+  let captureCount = 0;
+  const loading = makeSnapshotState([{ index: 0, depth: 0, type: 'Other', label: 'Loading' }]);
+  const sessions = createMemorySessionStore([{ name: 'default' }]);
+  const device = createAgentDevice({
+    backend: {
+      platform: 'android',
+      captureSnapshot: async (context) => {
+        captureCount += 1;
+        if (captureCount === 1) return { snapshot: loading };
+        return await new Promise((resolve) => {
+          context.signal?.addEventListener(
+            'abort',
+            () => {
+              setTimeout(() => resolve({ snapshot: loading }), 5);
+            },
+            { once: true },
+          );
+        });
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions,
+    policy: localCommandPolicy(),
+    clock: createFakeClock(),
+  });
+
+  await assert.rejects(
+    device.selectors.wait({
+      session: 'default',
+      target: { kind: 'selector', selector: 'label="Screen X"', timeoutMs: 400 },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.message, 'wait timed out for selector: label="Screen X"');
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'wait_deadline_exceeded');
+      assert.equal(details?.captureTruncated, true);
+      assert.equal(details?.captureStalled, undefined);
+      return true;
+    },
+  );
+  assert.equal(captureCount, 2);
+  assert.deepEqual((await sessions.get('default'))?.snapshot, loading);
 });
 
 function failingWaitDevice(produceError: () => Error): {

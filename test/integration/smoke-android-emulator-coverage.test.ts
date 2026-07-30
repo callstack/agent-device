@@ -65,6 +65,22 @@ test('Android live command ownership is structural and exhaustive', () => {
   assert.equal(new Set(claimed).size, claimed.length, 'live commands need one primary owner');
 });
 
+test('Android app scenarios declare deterministic starting surfaces and IME modes', () => {
+  assert.deepEqual(
+    ANDROID_EMULATOR_LIVE_SCENARIOS.map((scenario) => ({
+      id: scenario.id,
+      start: scenario.start,
+    })),
+    [
+      { id: 'smoke:inventory-install', start: undefined },
+      { id: 'smoke:automation-system', start: { ime: 'system', route: 'home' } },
+      { id: 'smoke:form-input', start: { ime: 'test', route: 'form' } },
+      { id: 'smoke:keyboard-ime', start: { ime: 'system', route: 'form' } },
+      { id: 'smoke:capture-close', start: { ime: 'system', route: 'home' } },
+    ],
+  );
+});
+
 test('Android emulator non-live owners name executable repository modules', () => {
   for (const [command, entry] of Object.entries(ANDROID_EMULATOR_E2E_COVERAGE)) {
     if (entry.level === 'live') continue;

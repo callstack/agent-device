@@ -107,9 +107,23 @@ function snapshotSessionResponse(requestId: string): string {
 
 function createFakeTouchHelperSessionProvider(
   handleCommand: TouchSessionCommandHandler,
+  options: { stallCleanup?: boolean } = {},
 ): AndroidAdbProvider {
   return {
-    exec: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+    exec: async (args, execOptions) => {
+      const cleanupCommand =
+        (args[0] === 'forward' && args[1] === '--remove') ||
+        (args[0] === 'shell' && args[1] === 'am' && args[2] === 'force-stop');
+      const signal = execOptions?.signal;
+      if (options.stallCleanup && cleanupCommand && signal) {
+        return await new Promise<never>((_resolve, reject) => {
+          const onAbort = () => reject(signal.reason);
+          signal.addEventListener('abort', onAbort, { once: true });
+          if (signal.aborted) onAbort();
+        });
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
     spawn: (args) => {
       const port = readSessionPort(args);
       const process = new FakeAndroidProcess();
@@ -148,6 +162,47 @@ function createFakeTouchHelperSessionProvider(
     },
   };
 }
+
+test('touch helper does not run one-shot while snapshot retirement is unconfirmed', async () => {
+  const device = makeIsolatedDevice();
+  const deviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
+  const provider = createFakeTouchHelperSessionProvider(() => 'malformed snapshot response', {
+    stallCleanup: true,
+  });
+
+  await assert.rejects(
+    captureAndroidSnapshotWithHelperSession({
+      adb: provider.exec,
+      adbProvider: provider,
+      deviceKey,
+    }),
+    (error: unknown) =>
+      (error as { details?: { reason?: string } }).details?.reason ===
+      'android_snapshot_helper_retirement_unconfirmed',
+  );
+
+  let oneShotCalled = false;
+  await assert.rejects(
+    withAndroidAdbProvider(
+      {
+        exec: currentVersionAdb(async (args) => {
+          if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'force-stop') {
+            return { exitCode: 1, stdout: '', stderr: 'runtime still busy' };
+          }
+          if (args.includes('instrument')) oneShotCalled = true;
+          return { exitCode: 0, stdout: '', stderr: '' };
+        }),
+      },
+      { serial: device.id },
+      async () => await executeAndroidTouchHelperPlan(device, flingPlan()),
+    ),
+    (error: unknown) =>
+      (error as { details?: { reason?: string } }).details?.reason ===
+      'android_snapshot_helper_retirement_unconfirmed',
+  );
+
+  assert.equal(oneShotCalled, false);
+});
 
 async function startFakeTouchHelperSession(
   device: DeviceInfo,

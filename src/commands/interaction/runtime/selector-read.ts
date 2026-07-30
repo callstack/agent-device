@@ -498,19 +498,35 @@ async function waitForFindMatch(
   options: FindReadCommandOptions,
   locator: FindLocator,
 ): Promise<FindReadCommandResult> {
-  const timeout = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const start = now(runtime);
-  while (now(runtime) - start < timeout) {
+  const polling = createWaitPolling(runtime, options, options.timeoutMs);
+  let deadline: WaitPollDeadline | undefined;
+  while (polling.hasTimeRemaining()) {
     // A presence check never consumes scroll hints, so every poll skips deriving them —
     // otherwise a single pathological `dumpsys activity top` call can eat the whole wait
     // budget from inside this loop (#1270).
-    const { match } = await findFirstLocatorMatch(runtime, options, locator, {
-      includeHiddenContentHints: false,
-    });
-    if (match) return { kind: 'found', found: true, waitedMs: now(runtime) - start };
+    const poll = await polling.capture(
+      async (signal) =>
+        await findFirstLocatorMatch(runtime, { ...options, signal }, locator, {
+          includeHiddenContentHints: false,
+        }),
+    );
+    if (poll.timedOut) {
+      deadline = poll.deadline;
+      break;
+    }
+    if (poll.value?.match) {
+      return { kind: 'found', found: true, waitedMs: polling.waitedMs() };
+    }
     await sleep(runtime, POLL_INTERVAL_MS);
   }
-  throw new AppError('COMMAND_FAILED', 'find wait timed out');
+  if (deadline === 'capture-stalled') {
+    throw waitCaptureStalledError('find wait timed out', polling.timeoutMs);
+  }
+  if (deadline === 'capture-truncated') {
+    throw waitDeadlineExceededError('find wait timed out', polling.timeoutMs, true);
+  }
+  polling.rethrowIfNeverReadable();
+  throw waitDeadlineExceededError('find wait timed out', polling.timeoutMs, false);
 }
 
 async function findFirstLocatorMatch(
@@ -568,8 +584,7 @@ async function waitForSelector(
   timeoutMs: number | null | undefined,
   recordedLandmark: TargetAnnotationV1 | undefined,
 ): Promise<WaitCommandResult> {
-  const timeout = timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const start = now(runtime);
+  const polling = createWaitPolling(runtime, options, timeoutMs);
   const chain = parseSelectorChain(selectorExpression);
   const capturePolicy = deriveSelectorCapturePolicy({ selectorChain: chain });
   // ADR 0012 / #1349: the LAST poll whose capture matched the recorded
@@ -578,16 +593,10 @@ async function waitForSelector(
   // must not abort a wait whose job is to wait through it, so the loop keeps
   // polling; only the deadline turns this into the fail-closed refusal.
   let landmarkMismatch: WaitLandmarkMismatchEvidence | undefined;
-  const unreadable = createUnreadablePollTracker();
-  let captureStalled = false;
-  while (now(runtime) - start < timeout) {
+  let deadline: WaitPollDeadline | undefined;
+  while (polling.hasTimeRemaining()) {
     // Presence-only poll: skip scroll-hint derivation (#1270), same as waitForFindMatch.
-    const poll = await runUnreadableWaitPoll(
-      runtime,
-      options,
-      unreadable,
-      start,
-      timeout,
+    const poll = await polling.capture(
       async (signal) =>
         await captureSelectorSnapshot(
           runtime,
@@ -600,7 +609,7 @@ async function waitForSelector(
         ),
     );
     if (poll.timedOut) {
-      captureStalled = true;
+      deadline = poll.deadline;
       break;
     }
     const capture = poll.value;
@@ -615,7 +624,7 @@ async function waitForSelector(
           return {
             kind: 'selector',
             selector: matchList.selector.raw,
-            waitedMs: now(runtime) - start,
+            waitedMs: polling.waitedMs(),
             node: landmark.node,
             preActionNodes: nodes,
           };
@@ -625,8 +634,11 @@ async function waitForSelector(
     }
     await sleep(runtime, POLL_INTERVAL_MS);
   }
-  if (captureStalled) {
-    throw waitCaptureStalledError(`wait timed out for selector: ${selectorExpression}`, timeout);
+  if (deadline === 'capture-stalled') {
+    throw waitCaptureStalledError(
+      `wait timed out for selector: ${selectorExpression}`,
+      polling.timeoutMs,
+    );
   }
   if (landmarkMismatch) {
     throw new AppError(
@@ -635,8 +647,19 @@ async function waitForSelector(
       { reason: WAIT_LANDMARK_MISMATCH_REASON, ...landmarkMismatch },
     );
   }
-  unreadable.rethrowIfNeverReadable();
-  throw new AppError('COMMAND_FAILED', `wait timed out for selector: ${selectorExpression}`);
+  if (deadline === 'capture-truncated') {
+    throw waitDeadlineExceededError(
+      `wait timed out for selector: ${selectorExpression}`,
+      polling.timeoutMs,
+      true,
+    );
+  }
+  polling.rethrowIfNeverReadable();
+  throw waitDeadlineExceededError(
+    `wait timed out for selector: ${selectorExpression}`,
+    polling.timeoutMs,
+    false,
+  );
 }
 
 /**
@@ -721,56 +744,71 @@ async function waitForText(
   text: string,
   timeoutMs: number | null | undefined,
 ): Promise<WaitCommandResult> {
-  const timeout = timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const start = now(runtime);
-  const unreadable = createUnreadablePollTracker();
-  let captureStalled = false;
-  while (now(runtime) - start < timeout) {
-    const poll = await runUnreadableWaitPoll(
-      runtime,
-      options,
-      unreadable,
-      start,
-      timeout,
-      async (signal) =>
-        runtime.backend.findText
-          ? (
-              await runtime.backend.findText(
-                toBackendContext(runtime, { ...options, signal }),
-                text,
-              )
-            ).found
-          : await snapshotContainsText(runtime, { ...options, signal }, text),
+  const polling = createWaitPolling(runtime, options, timeoutMs);
+  let deadline: WaitPollDeadline | undefined;
+  while (polling.hasTimeRemaining()) {
+    const poll = await polling.capture(async (signal) =>
+      runtime.backend.findText
+        ? (await runtime.backend.findText(toBackendContext(runtime, { ...options, signal }), text))
+            .found
+        : await snapshotContainsText(runtime, { ...options, signal }, text),
     );
     if (poll.timedOut) {
-      captureStalled = true;
+      deadline = poll.deadline;
       break;
     }
     const found = poll.value;
-    if (found) return { kind: 'text', text, waitedMs: now(runtime) - start };
+    if (found) return { kind: 'text', text, waitedMs: polling.waitedMs() };
     await sleep(runtime, POLL_INTERVAL_MS);
   }
-  if (captureStalled) {
-    throw waitCaptureStalledError(`wait timed out for text: ${text}`, timeout);
+  if (deadline === 'capture-stalled') {
+    throw waitCaptureStalledError(`wait timed out for text: ${text}`, polling.timeoutMs);
   }
-  unreadable.rethrowIfNeverReadable();
-  throw new AppError('COMMAND_FAILED', `wait timed out for text: ${text}`);
+  if (deadline === 'capture-truncated') {
+    throw waitDeadlineExceededError(`wait timed out for text: ${text}`, polling.timeoutMs, true);
+  }
+  polling.rethrowIfNeverReadable();
+  throw waitDeadlineExceededError(`wait timed out for text: ${text}`, polling.timeoutMs, false);
 }
 
-async function runUnreadableWaitPoll<T>(
+type WaitPollDeadline = 'capture-stalled' | 'capture-truncated';
+
+function createWaitPolling(
   runtime: AgentDeviceRuntime,
-  options: WaitCommandOptions,
-  unreadable: UnreadablePollTracker,
-  start: number,
-  timeoutMs: number,
-  capture: (signal: AbortSignal) => Promise<T>,
+  options: CommandContext & SelectorSnapshotOptions,
+  requestedTimeoutMs: number | null | undefined,
 ) {
-  return await runWithinWaitDeadline(
-    runtime,
-    options,
-    timeoutMs - (now(runtime) - start),
-    async (signal) => await unreadable.attempt(() => capture(signal)),
-  );
+  const timeoutMs = requestedTimeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const startedAtMs = now(runtime);
+  const unreadable = createUnreadablePollTracker();
+  let capturesStarted = 0;
+  return {
+    capture: async <T>(capture: (signal: AbortSignal) => Promise<T>) => {
+      const remainingMs = timeoutMs - (now(runtime) - startedAtMs);
+      const receivedWholeWaitBudget = capturesStarted === 0;
+      capturesStarted += 1;
+      const result = await runWithinWaitDeadline(
+        runtime,
+        options,
+        remainingMs,
+        async (signal) => await unreadable.attempt(() => capture(signal)),
+      );
+      if (!result.timedOut) return result;
+      return {
+        timedOut: true as const,
+        // Only a capture given the wait's whole budget proves that capture itself stalled.
+        // A later poll is canceled by the enclosing wait deadline, so claiming a backend stall
+        // would confuse an ordinary slow capture with a helper lifecycle defect.
+        deadline: receivedWholeWaitBudget
+          ? ('capture-stalled' as const)
+          : ('capture-truncated' as const),
+      };
+    },
+    hasTimeRemaining: () => now(runtime) - startedAtMs < timeoutMs,
+    rethrowIfNeverReadable: unreadable.rethrowIfNeverReadable,
+    timeoutMs,
+    waitedMs: () => now(runtime) - startedAtMs,
+  };
 }
 
 function waitCaptureStalledError(message: string, timeoutMs: number): AppError {
@@ -780,6 +818,24 @@ function waitCaptureStalledError(message: string, timeoutMs: number): AppError {
     timeoutMs,
     hint: 'A snapshot capture stalled past the wait timeout. Retry, or use screenshot to inspect the current surface.',
   });
+}
+
+function waitDeadlineExceededError(
+  message: string,
+  timeoutMs: number,
+  captureTruncated: boolean,
+): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    message,
+    captureTruncated
+      ? {
+          reason: 'wait_deadline_exceeded',
+          captureTruncated: true,
+          timeoutMs,
+        }
+      : undefined,
+  );
 }
 
 async function snapshotContainsText(

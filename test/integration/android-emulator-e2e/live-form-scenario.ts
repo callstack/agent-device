@@ -15,7 +15,6 @@ import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live
 const C = PUBLIC_COMMANDS;
 
 export async function assertFormInput(context: LiveContext): Promise<void> {
-  await openFormTab(context);
   await runStep(context, 'fill full name', ['fill', 'id="field-name"', 'Ada Lovelace']);
   const name = await runStep(context, 'read filled full name', ['get', 'text', 'id="field-name"']);
   assertJsonContains(name, 'Ada Lovelace', 'filled name should be observable in Android UI');
@@ -36,14 +35,6 @@ export async function assertFormInput(context: LiveContext): Promise<void> {
 }
 
 export async function assertKeyboardIme(context: LiveContext): Promise<void> {
-  await runStep(context, 'close test-IME session before keyboard check', ['close']);
-  await runStep(context, 'open fixture with the emulator keyboard', [
-    'open',
-    context.appId,
-    '--no-test-ime',
-  ]);
-  await assertWaitText(context, 'Agent Device Tester');
-  await openFormTab(context);
   await runStep(context, 'focus email with the emulator keyboard', [
     'click',
     'id="field-email"',
@@ -82,9 +73,4 @@ export async function assertKeyboardIme(context: LiveContext): Promise<void> {
     'safe-keyboard-dismissal',
     'before/after pixels changed and Checkout form remained visible after non-Back dismissal',
   );
-}
-
-async function openFormTab(context: LiveContext): Promise<void> {
-  await runStep(context, 'open form tab', ['click', 'label="Form"']);
-  await assertWaitText(context, 'Checkout form');
 }

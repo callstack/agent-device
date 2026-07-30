@@ -7,13 +7,20 @@ import {
   writeCoverageReport,
 } from './live-harness.ts';
 import { ANDROID_EMULATOR_LIVE_SCENARIOS } from './scenarios.ts';
+import { prepareAndroidEmulatorScenario } from './scenario-start.ts';
 
 export async function runAndroidEmulatorE2E(): Promise<void> {
   const context = createContext();
   let primaryError: unknown;
   try {
     for (const scenario of ANDROID_EMULATOR_LIVE_SCENARIOS) {
-      await runScenario(context, scenario);
+      await runScenario(context, {
+        id: scenario.id,
+        run: async (scenarioContext) => {
+          await prepareAndroidEmulatorScenario(scenarioContext, scenario.start);
+          await scenario.run(scenarioContext);
+        },
+      });
     }
     assertCoverageComplete(context);
   } catch (error) {

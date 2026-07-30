@@ -15,22 +15,15 @@ import {
 import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';
 
 const C = PUBLIC_COMMANDS;
-const FIXTURE_HOME_TITLE = 'Agent Device Tester';
 const AUTOMATION_DEEP_LINK =
   'agent-device-test-app:///automation?event=cold.start&payload=%7B%22source%22%3A%22android-deep-link%22%7D';
 
 export async function assertAutomationSystem(context: LiveContext): Promise<void> {
-  await runStep(context, 'load fixture bundle before cold deep link', [
-    'open',
-    context.appId,
-    '--relaunch',
-  ]);
-  await assertWaitText(context, FIXTURE_HOME_TITLE);
-
   await runStep(context, 'cold launch fixture through Android deep link', [
     'open',
     context.appId,
     '--relaunch',
+    '--no-test-ime',
     AUTOMATION_DEEP_LINK,
   ]);
   await assertWaitText(context, 'Automation lab');

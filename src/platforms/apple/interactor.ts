@@ -79,7 +79,7 @@ export function createAppleInteractor(
                 scope: options?.scope,
                 raw: options?.raw,
               },
-              runnerOpts,
+              mergeRunnerCallSignal(runnerOpts, options?.signal),
             ),
           { backend: 'xctest' },
         ),
@@ -176,6 +176,17 @@ export function createAppleInteractor(
   };
   if (!runnerProvider) return interactor;
   return withInjectedAppleRunnerTransport(device, runnerContext, interactor, runnerProvider);
+}
+
+function mergeRunnerCallSignal(
+  options: RunnerCallOptions,
+  signal: AbortSignal | undefined,
+): RunnerCallOptions {
+  if (!signal) return options;
+  return {
+    ...options,
+    signal: options.signal ? AbortSignal.any([options.signal, signal]) : signal,
+  };
 }
 
 function readRunnerOrientation(result: Record<string, unknown>): DeviceRotation {

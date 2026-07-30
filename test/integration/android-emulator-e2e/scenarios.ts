@@ -5,6 +5,7 @@ import { assertCaptureAndClose } from './live-capture-scenario.ts';
 import { assertFormInput, assertKeyboardIme } from './live-form-scenario.ts';
 import type { LiveContext } from './live-harness.ts';
 import { assertInventoryAndInstall } from './live-inventory-scenario.ts';
+import type { AndroidEmulatorScenarioStart } from './scenario-start.ts';
 
 const C = PUBLIC_COMMANDS;
 
@@ -13,6 +14,7 @@ export type AndroidEmulatorScenario = {
   commands: readonly string[];
   id: string;
   run: (context: LiveContext) => Promise<void>;
+  start?: AndroidEmulatorScenarioStart;
 };
 
 export const ANDROID_EMULATOR_LIVE_SCENARIOS: readonly AndroidEmulatorScenario[] = [
@@ -49,23 +51,27 @@ export const ANDROID_EMULATOR_LIVE_SCENARIOS: readonly AndroidEmulatorScenario[]
     ],
     id: 'smoke:automation-system',
     run: assertAutomationSystem,
+    start: { ime: 'system', route: 'home' },
   },
   {
     behaviors: [],
     commands: [C.fill, C.focus, C.type],
     id: 'smoke:form-input',
     run: assertFormInput,
+    start: { ime: 'test', route: 'form' },
   },
   {
     behaviors: ['safe-keyboard-dismissal'],
     commands: [C.keyboard],
     id: 'smoke:keyboard-ime',
     run: assertKeyboardIme,
+    start: { ime: 'system', route: 'form' },
   },
   {
     behaviors: [],
     commands: [C.close, C.screenshot],
     id: 'smoke:capture-close',
     run: assertCaptureAndClose,
+    start: { ime: 'system', route: 'home' },
   },
 ];

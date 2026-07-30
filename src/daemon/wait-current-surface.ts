@@ -24,10 +24,15 @@ export async function maybeWaitTimeoutSurfaceResponse(
   response: DaemonResponse,
 ): Promise<DaemonResponse> {
   if (response.ok || !isWaitTimeoutMessage(response.error.message)) return response;
-  // A stable wait that just observed a stalled capture must not fire another
-  // capture for decoration: it would be just as slow (or hung) and push the
-  // response even further past the user-supplied timeout.
-  if (response.error.details?.captureStalled === true) return response;
+  // A wait whose final capture consumed the remaining budget must not fire another capture for
+  // decoration. A genuinely stalled capture would repeat the hang; an ordinary deadline truncation
+  // would still push the response further past the user-supplied timeout.
+  if (
+    response.error.details?.captureStalled === true ||
+    response.error.details?.captureTruncated === true
+  ) {
+    return response;
+  }
   const currentSurface = await inspectCurrentSurface(params).catch(() => null);
   if (!currentSurface) return response;
   return errorResponse(

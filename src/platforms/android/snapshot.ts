@@ -33,6 +33,7 @@ import {
   ensureAndroidSnapshotHelper,
   forgetAndroidSnapshotHelperInstall,
   getAndroidSnapshotHelperSessionDeviceKey,
+  isAndroidSnapshotHelperRetirementUnconfirmedError,
   parseAndroidSnapshotHelperManifest,
   stopAndroidSnapshotHelperSession,
   type AndroidAdbExecutor,
@@ -311,6 +312,9 @@ async function captureAndroidUiHierarchyFromHelper(params: {
     if (sessionCapture) return sessionCapture;
   } catch (error) {
     signal?.throwIfAborted();
+    if (isAndroidSnapshotHelperRetirementUnconfirmedError(error)) {
+      throw error;
+    }
     emitDiagnostic({
       level: 'warn',
       phase: 'android_snapshot_helper_session_fallback',

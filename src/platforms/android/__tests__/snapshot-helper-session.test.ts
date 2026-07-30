@@ -140,27 +140,22 @@ test('allows a persistent session snapshot to use the helper command budget', as
   assert.equal(output?.metadata.sessionReused, false);
 });
 
-test('caps a persistent session snapshot at the helper command budget', async () => {
+test('retires a persistent session that exceeds the helper command budget', async () => {
   const calls: string[][] = [];
   const provider = createSessionProvider({ calls, responseDelayMs: 50 });
 
-  await assert.rejects(
-    () =>
-      captureAndroidSnapshotWithHelperSession({
-        adb: provider.exec,
-        adbProvider: provider,
-        deviceKey: 'android:emulator-5554',
-        timeoutMs: 10,
-        commandTimeoutMs: 20,
-      }),
-    (error) => {
-      assert.equal((error as Error).message, 'Android snapshot helper session request timed out');
-      const details = (error as { details?: Record<string, unknown> }).details;
-      assert.equal(details?.timeoutMs, 20);
-      assert.match(String(details?.command), /^snapshot snapshot-/);
-      assert.equal(typeof details?.port, 'number');
-      return true;
-    },
+  const output = await captureAndroidSnapshotWithHelperSession({
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey: 'android:emulator-5554',
+    timeoutMs: 10,
+    commandTimeoutMs: 20,
+  });
+
+  assert.equal(output, undefined);
+  assert.equal(
+    calls.some((args) => args[0] === 'forward' && args[1] === '--remove'),
+    true,
   );
 });
 
@@ -192,6 +187,71 @@ test('cancels a stalled snapshot, retires its helper, and starts the next captur
   assert.match(next?.xml ?? '', /snapshot 1/);
   assert.equal(next?.metadata.sessionReused, false);
   assert.equal(processes.length, 2);
+});
+
+test('canceled capture joins canceled external cleanup before returning', async () => {
+  const calls: string[][] = [];
+  const cleanupAborts: string[][] = [];
+  const provider = createSessionProvider({
+    calls,
+    cleanupAborts,
+    stalledSnapshots: 1,
+    stalledCleanup: true,
+  });
+  const controller = new AbortController();
+  const capture = captureAndroidSnapshotWithHelperSession({
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey: 'android:emulator-5554',
+    signal: controller.signal,
+  });
+  setTimeout(() => controller.abort(new Error('wait deadline exceeded')), 10);
+
+  const outcome = await Promise.race([
+    capture.then(
+      () => 'resolved',
+      () => 'rejected',
+    ),
+    new Promise<'still-pending'>((resolve) => setTimeout(() => resolve('still-pending'), 750)),
+  ]);
+
+  assert.equal(outcome, 'rejected');
+  assert.equal(cleanupAborts.length, 2);
+});
+
+test('failed capture does not fall back when device runtime retirement is unconfirmed', async () => {
+  const calls: string[][] = [];
+  const processes: FakeAndroidProcess[] = [];
+  const provider = createSessionProvider({
+    calls,
+    processes,
+    recoveryFailure: true,
+    responseMode: 'malformed',
+    stalledCleanup: true,
+  });
+
+  await assert.rejects(
+    captureAndroidSnapshotWithHelperSession({
+      adb: provider.exec,
+      adbProvider: provider,
+      deviceKey: 'android:emulator-5554',
+    }),
+    (error: unknown) =>
+      (error as { details?: { reason?: string } }).details?.reason ===
+      'android_snapshot_helper_retirement_unconfirmed',
+  );
+
+  await assert.rejects(
+    captureAndroidSnapshotWithHelperSession({
+      adb: provider.exec,
+      adbProvider: { exec: provider.exec },
+      deviceKey: 'android:emulator-5554',
+    }),
+    (error: unknown) =>
+      (error as { details?: { reason?: string } }).details?.reason ===
+      'android_snapshot_helper_retirement_unconfirmed',
+  );
+  assert.equal(processes.length, 1);
 });
 
 test('restarts the helper session when capture options change', async () => {
@@ -258,7 +318,7 @@ test('force terminates the helper when quit is not acknowledged', async () => {
   assert.equal(processes[0]?.killed, true);
 });
 
-test('force terminates a session whose UiAutomation connection timed out', async () => {
+test('force terminates and falls back from a session whose UiAutomation connection timed out', async () => {
   const calls: string[][] = [];
   const processes: FakeAndroidProcess[] = [];
   const provider = createSessionProvider({
@@ -267,56 +327,51 @@ test('force terminates a session whose UiAutomation connection timed out', async
     responseMode: 'ui-automation-timeout',
   });
 
-  await assert.rejects(
-    captureAndroidSnapshotWithHelperSession({
-      adb: provider.exec,
-      adbProvider: provider,
-      deviceKey: 'android:emulator-5554',
-    }),
-    /Timed out waiting for Android UiAutomation to connect/,
-  );
+  const output = await captureAndroidSnapshotWithHelperSession({
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey: 'android:emulator-5554',
+  });
 
+  assert.equal(output, undefined);
   assert.equal(processes[0]?.killed, true);
 });
 
-test('invalidates the helper session after a malformed response', async () => {
+test('invalidates and falls back from the helper session after a malformed response', async () => {
   const calls: string[][] = [];
   const provider = createSessionProvider({ calls, responseMode: 'malformed' });
 
-  await assert.rejects(
-    () =>
-      captureAndroidSnapshotWithHelperSession({
-        adb: provider.exec,
-        adbProvider: provider,
-        deviceKey: 'android:emulator-5554',
-      }),
-    {
-      message: 'Android snapshot helper session returned malformed output',
-    },
-  );
+  const output = await captureAndroidSnapshotWithHelperSession({
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey: 'android:emulator-5554',
+  });
 
+  assert.equal(output, undefined);
   assert.equal(
     calls.some((args) => args[0] === 'forward' && args[1] === '--remove'),
     true,
   );
 });
 
-function createSessionProvider(options: {
+type SessionProviderOptions = {
   calls: string[][];
+  cleanupAborts?: string[][];
   processes?: FakeAndroidProcess[];
   quitExitDelayMs?: number;
   quitResponseMode?: 'ok' | 'malformed';
   spawnArgs?: string[][];
   responseMode?: 'ok' | 'malformed' | 'ui-automation-timeout';
   responseDelayMs?: number;
+  recoveryFailure?: boolean;
+  stalledCleanup?: boolean;
   stalledSnapshots?: number;
-}): AndroidAdbProvider {
+};
+
+function createSessionProvider(options: SessionProviderOptions): AndroidAdbProvider {
   let stalledSnapshots = options.stalledSnapshots ?? 0;
   return {
-    exec: async (args) => {
-      options.calls.push(args);
-      return { exitCode: 0, stdout: '', stderr: '' };
-    },
+    exec: createSessionExec(options),
     spawn: (args) => {
       options.spawnArgs?.push(args);
       const port = readSessionPort(args);
@@ -408,6 +463,32 @@ function createSessionProvider(options: {
       };
       return process;
     },
+  };
+}
+
+function createSessionExec(options: SessionProviderOptions): AndroidAdbExecutor {
+  return async (args, execOptions) => {
+    options.calls.push(args);
+    const forceStopsRuntime = args.join(' ').includes('am force-stop');
+    if (
+      options.stalledCleanup &&
+      execOptions?.signal &&
+      ((args[0] === 'forward' && args[1] === '--remove') || forceStopsRuntime)
+    ) {
+      return await new Promise<never>((_resolve, reject) => {
+        const signal = execOptions.signal;
+        const onAbort = () => {
+          options.cleanupAborts?.push(args);
+          reject(signal?.reason);
+        };
+        signal?.addEventListener('abort', onAbort, { once: true });
+        if (signal?.aborted) onAbort();
+      });
+    }
+    if (options.recoveryFailure && forceStopsRuntime) {
+      return { exitCode: 1, stdout: '', stderr: 'runtime still busy' };
+    }
+    return { exitCode: 0, stdout: '', stderr: '' };
   };
 }
 

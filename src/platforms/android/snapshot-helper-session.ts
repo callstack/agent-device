@@ -25,11 +25,13 @@ const SESSION_STOP_TIMEOUT_MS = 1_000;
 // connecting UiAutomation. Let an acknowledged quit complete that release before force-killing adb.
 const SESSION_GRACEFUL_EXIT_TIMEOUT_MS = 11_000;
 const SESSION_PROCESS_EXIT_TIMEOUT_MS = 2_000;
+const SESSION_FORCED_CLEANUP_GRACE_MS = 250;
 // Persistent capture is an optimization before the required one-shot path. Keep its native and
 // transport budgets shorter so a wedged UiAutomation connection leaves time for a clean fallback.
 const SESSION_CAPTURE_TIMEOUT_MS = 2_000;
 const SESSION_REQUEST_OVERHEAD_MS = 3_000;
 const FORWARD_TIMEOUT_MS = 5_000;
+const RETIREMENT_UNCONFIRMED_REASON = 'android_snapshot_helper_retirement_unconfirmed';
 
 type AndroidSnapshotHelperSessionHelperIdentity = {
   packageName: string;
@@ -52,18 +54,46 @@ type AndroidSnapshotHelperSession = {
 
 const sessions = new Map<string, AndroidSnapshotHelperSession>();
 const disabledSessionIdentities = new Map<string, string>();
+const unconfirmedRetirements = new Map<string, { packageName: string; cause: string }>();
 
 export async function captureAndroidSnapshotWithHelperSession(
   options: AndroidSnapshotHelperCaptureOptions,
 ): Promise<AndroidSnapshotHelperOutput | undefined> {
+  const deviceKey = options.deviceKey ?? 'android:default';
+  await recoverAndroidSnapshotHelperRetirement({
+    deviceKey,
+    adb: options.adb,
+    signal: options.signal,
+  });
   if (!isAndroidSnapshotHelperSessionEnabled() || !options.adbProvider?.spawn) {
     return undefined;
   }
   const resolved = resolvePersistentSessionCaptureOptions(
     resolveAndroidSnapshotHelperCaptureOptions(options),
   );
-  const deviceKey = options.deviceKey ?? 'android:default';
   const identity = createSessionIdentity(deviceKey, resolved, options);
+  const session = await resolveAndroidSnapshotHelperSession({
+    deviceKey,
+    identity,
+    options,
+    resolved,
+  });
+  if (!session) return undefined;
+  return await captureFromAndroidSnapshotHelperSession({
+    session,
+    deviceKey,
+    options,
+    resolved,
+  });
+}
+
+async function resolveAndroidSnapshotHelperSession(params: {
+  deviceKey: string;
+  identity: string;
+  options: AndroidSnapshotHelperCaptureOptions;
+  resolved: AndroidSnapshotHelperResolvedCaptureOptions;
+}): Promise<AndroidSnapshotHelperSession | undefined> {
+  const { deviceKey, identity, options, resolved } = params;
   if (disabledSessionIdentities.get(deviceKey) === identity) {
     return undefined;
   }
@@ -91,9 +121,22 @@ export async function captureAndroidSnapshotWithHelperSession(
           reason: error instanceof Error ? error.message : String(error),
         },
       });
+      if (isAndroidSnapshotHelperRetirementUnconfirmedError(error)) {
+        throw error;
+      }
       return undefined;
     }
   }
+  return session;
+}
+
+async function captureFromAndroidSnapshotHelperSession(params: {
+  session: AndroidSnapshotHelperSession;
+  deviceKey: string;
+  options: AndroidSnapshotHelperCaptureOptions;
+  resolved: AndroidSnapshotHelperResolvedCaptureOptions;
+}): Promise<AndroidSnapshotHelperOutput | undefined> {
+  const { session, deviceKey, options, resolved } = params;
   try {
     const reused = session.capturedCount > 0;
     const output = await requestSessionSnapshot(session, resolved, options.signal);
@@ -107,11 +150,18 @@ export async function captureAndroidSnapshotWithHelperSession(
       },
     };
   } catch (error) {
-    await stopAndroidSnapshotHelperSession(deviceKey, {
-      force: options.signal?.aborted === true || isUiAutomationConnectionTimeoutResponse(error),
-      signal: options.signal,
+    await stopAndroidSnapshotHelperSession(deviceKey, { force: true, cause: error });
+    options.signal?.throwIfAborted();
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'android_snapshot_helper_session_fallback',
+      data: {
+        deviceKey,
+        reason: error instanceof Error ? error.message : String(error),
+        uiAutomationConnectionTimeout: isUiAutomationConnectionTimeoutResponse(error),
+      },
     });
-    throw error;
+    return undefined;
   }
 }
 
@@ -233,46 +283,22 @@ function assertTouchSessionHeaders(headers: Record<string, string>, requestId: s
 
 export async function stopAndroidSnapshotHelperSession(
   deviceKey: string,
-  options: { force?: boolean; signal?: AbortSignal } = {},
+  options: { force?: boolean; signal?: AbortSignal; cause?: unknown } = {},
 ): Promise<void> {
   const session = sessions.get(deviceKey);
   if (!session) return;
   sessions.delete(deviceKey);
   const processExit = observeProcessExit(session.process);
-  const quitRequestId = `quit-${Date.now()}`;
-  let quitAcknowledged = false;
   const force = options.force === true || options.signal?.aborted === true;
-  if (!force) {
-    try {
-      const response = await sendSessionCommand(
-        session,
-        `quit ${quitRequestId}`,
-        SESSION_STOP_TIMEOUT_MS,
-        options.signal,
-      );
-      quitAcknowledged = isSessionCommandAcknowledged(response, quitRequestId);
-    } catch {
-      // The process may already be gone; adb forward cleanup and kill below are still enough.
-    }
-  }
-  const exitedGracefully =
-    !force &&
-    quitAcknowledged &&
-    (await waitForProcessExit(processExit, SESSION_GRACEFUL_EXIT_TIMEOUT_MS, options.signal));
-  if (!exitedGracefully) {
-    try {
-      session.process.kill('SIGTERM');
-    } catch {
-      // Best effort. A completed instrumentation process can reject/ignore kill.
-    }
-    await waitForProcessExit(processExit, SESSION_PROCESS_EXIT_TIMEOUT_MS);
-  }
-  const [runtimeStopResult] = await Promise.allSettled([
-    forceStopSessionHelperRuntime(session),
-    removeForward(session),
+  const graceful = await requestGracefulSessionExit(session, processExit, force, options.signal);
+  const cleanupTimeoutMs = force ? SESSION_FORCED_CLEANUP_GRACE_MS : FORWARD_TIMEOUT_MS;
+  const processExitTimeoutMs = force
+    ? SESSION_FORCED_CLEANUP_GRACE_MS
+    : SESSION_PROCESS_EXIT_TIMEOUT_MS;
+  const [processStopped, cleanup] = await Promise.all([
+    stopSessionHostProcess(session, processExit, graceful.exited, processExitTimeoutMs),
+    settleExternalCleanup(session, cleanupTimeoutMs),
   ]);
-  const runtimeForceStopped =
-    runtimeStopResult.status === 'fulfilled' ? runtimeStopResult.value : false;
   emitDiagnostic({
     phase: 'android_snapshot_helper_session_stop',
     data: {
@@ -280,12 +306,56 @@ export async function stopAndroidSnapshotHelperSession(
       port: session.port,
       capturedCount: session.capturedCount,
       lifetimeMs: Date.now() - session.startedAtMs,
-      quitAcknowledged,
-      forceKilled: !exitedGracefully,
+      quitAcknowledged: graceful.acknowledged,
+      forceKilled: !graceful.exited && processStopped,
       forced: force || options.signal?.aborted === true,
-      runtimeForceStopped,
+      runtimeForceStopped: cleanup.runtimeForceStopped,
+      externalCleanupTimedOut: cleanup.timedOut,
     },
   });
+  if (!graceful.exited && !cleanup.runtimeForceStopped) {
+    quarantineUnconfirmedRetirement(deviceKey, session.helper.packageName, options.cause);
+  }
+}
+
+async function requestGracefulSessionExit(
+  session: AndroidSnapshotHelperSession,
+  processExit: Promise<void>,
+  force: boolean,
+  signal: AbortSignal | undefined,
+): Promise<{ acknowledged: boolean; exited: boolean }> {
+  if (force) return { acknowledged: false, exited: false };
+  const requestId = `quit-${Date.now()}`;
+  try {
+    const response = await sendSessionCommand(
+      session,
+      `quit ${requestId}`,
+      SESSION_STOP_TIMEOUT_MS,
+      signal,
+    );
+    const acknowledged = isSessionCommandAcknowledged(response, requestId);
+    const exited =
+      acknowledged &&
+      (await waitForProcessExit(processExit, SESSION_GRACEFUL_EXIT_TIMEOUT_MS, signal));
+    return { acknowledged, exited };
+  } catch {
+    return { acknowledged: false, exited: false };
+  }
+}
+
+async function stopSessionHostProcess(
+  session: AndroidSnapshotHelperSession,
+  processExit: Promise<void>,
+  alreadyExited: boolean,
+  timeoutMs: number,
+): Promise<boolean> {
+  if (alreadyExited) return true;
+  try {
+    session.process.kill('SIGTERM');
+  } catch {
+    // A completed instrumentation process can reject or ignore the signal.
+  }
+  return await waitForProcessExit(processExit, timeoutMs);
 }
 
 export async function stopAndroidSnapshotHelperSessionForDevice(
@@ -319,6 +389,7 @@ export async function resetAndroidSnapshotHelperSessions(): Promise<void> {
     [...sessions.keys()].map((deviceKey) => stopAndroidSnapshotHelperSession(deviceKey)),
   );
   disabledSessionIdentities.clear();
+  unconfirmedRetirements.clear();
 }
 
 async function startAndroidSnapshotHelperSession(params: {
@@ -377,16 +448,69 @@ async function startAndroidSnapshotHelperSession(params: {
     });
     return session;
   } catch (error) {
-    await removeForward(session);
     const processExit = observeProcessExit(process);
     try {
       process.kill('SIGTERM');
     } catch {
       // Best effort after startup failure.
     }
-    await waitForProcessExit(processExit, SESSION_PROCESS_EXIT_TIMEOUT_MS);
+    const [, cleanup] = await Promise.all([
+      waitForProcessExit(processExit, SESSION_FORCED_CLEANUP_GRACE_MS),
+      settleExternalCleanup(session, SESSION_FORCED_CLEANUP_GRACE_MS),
+    ]);
+    if (!cleanup.runtimeForceStopped) {
+      quarantineUnconfirmedRetirement(params.deviceKey, session.helper.packageName, error);
+    }
     throw error;
   }
+}
+
+function quarantineUnconfirmedRetirement(
+  deviceKey: string,
+  packageName: string,
+  cause: unknown,
+): never {
+  const causeMessage = cause instanceof Error ? cause.message : String(cause);
+  unconfirmedRetirements.set(deviceKey, { packageName, cause: causeMessage });
+  throw new AppError(
+    'COMMAND_FAILED',
+    'Android snapshot helper could not confirm release of device automation ownership',
+    {
+      reason: RETIREMENT_UNCONFIRMED_REASON,
+      deviceKey,
+      cause: causeMessage,
+      hint: 'Retry after the helper process exits, or restart the device if Android still reports automation as busy.',
+    },
+  );
+}
+
+export async function recoverAndroidSnapshotHelperRetirement(params: {
+  deviceKey: string;
+  adb: AndroidAdbExecutor;
+  signal?: AbortSignal;
+}): Promise<void> {
+  const { deviceKey, adb, signal } = params;
+  const retirement = unconfirmedRetirements.get(deviceKey);
+  if (!retirement) return;
+  try {
+    const result = await adb(['shell', 'am', 'force-stop', retirement.packageName], {
+      allowFailure: true,
+      timeoutMs: FORWARD_TIMEOUT_MS,
+      signal,
+    });
+    signal?.throwIfAborted();
+    if (result.exitCode === 0) {
+      unconfirmedRetirements.delete(deviceKey);
+      return;
+    }
+  } catch {
+    signal?.throwIfAborted();
+  }
+  quarantineUnconfirmedRetirement(deviceKey, retirement.packageName, retirement.cause);
+}
+
+export function isAndroidSnapshotHelperRetirementUnconfirmedError(error: unknown): boolean {
+  return error instanceof AppError && error.details?.reason === RETIREMENT_UNCONFIRMED_REASON;
 }
 
 function observeProcessExit(process: AndroidAdbProcess): Promise<void> {
@@ -428,6 +552,23 @@ async function waitForProcessExit(
   if (timer) clearTimeout(timer);
   if (onAbort) signal?.removeEventListener('abort', onAbort);
   return exited;
+}
+
+async function settleExternalCleanup(
+  session: AndroidSnapshotHelperSession,
+  timeoutMs: number,
+): Promise<{ timedOut: boolean; runtimeForceStopped: boolean }> {
+  const signal = AbortSignal.timeout(timeoutMs);
+  const results = await Promise.allSettled([
+    forceStopSessionHelperRuntime(session, signal, timeoutMs),
+    removeForward(session, signal, timeoutMs),
+  ] as const);
+  const [runtimeStopResult] = results;
+  return {
+    timedOut: signal.aborted,
+    runtimeForceStopped:
+      runtimeStopResult?.status === 'fulfilled' ? runtimeStopResult.value : false,
+  };
 }
 
 function waitForSessionReady(
@@ -666,27 +807,39 @@ function readSessionMetadata(headers: Record<string, string>): AndroidSnapshotHe
   };
 }
 
-async function removeForward(session: AndroidSnapshotHelperSession): Promise<void> {
+async function removeForward(
+  session: AndroidSnapshotHelperSession,
+  signal?: AbortSignal,
+  timeoutMs: number = FORWARD_TIMEOUT_MS,
+): Promise<void> {
   await session.process.stdin?.end();
   await session.process.stdout?.destroy();
   await session.process.stderr?.destroy();
-  await sessionForwardRemove(session);
+  await sessionForwardRemove(session, signal, timeoutMs);
 }
 
-async function sessionForwardRemove(session: AndroidSnapshotHelperSession): Promise<void> {
+async function sessionForwardRemove(
+  session: AndroidSnapshotHelperSession,
+  signal?: AbortSignal,
+  timeoutMs: number = FORWARD_TIMEOUT_MS,
+): Promise<void> {
   await session.adb(['forward', '--remove', `tcp:${session.port}`], {
     allowFailure: true,
-    timeoutMs: FORWARD_TIMEOUT_MS,
+    timeoutMs,
+    signal,
   });
 }
 
 async function forceStopSessionHelperRuntime(
   session: AndroidSnapshotHelperSession,
+  signal?: AbortSignal,
+  timeoutMs: number = FORWARD_TIMEOUT_MS,
 ): Promise<boolean> {
   try {
     const result = await session.adb(['shell', 'am', 'force-stop', session.helper.packageName], {
       allowFailure: true,
-      timeoutMs: FORWARD_TIMEOUT_MS,
+      timeoutMs,
+      signal,
     });
     return result.exitCode === 0;
   } catch {

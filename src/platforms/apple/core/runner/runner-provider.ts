@@ -10,6 +10,7 @@ import type {
 } from './runner-xctestrun.ts';
 
 export type AppleRunnerCommandOptions = ExternalXctestRunnerOptions & {
+  signal?: AbortSignal;
   verbose?: boolean;
   logPath?: string;
   traceLogPath?: string;

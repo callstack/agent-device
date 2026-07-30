@@ -5,7 +5,11 @@ import type { DeviceRotation } from '../../../../contracts/device-rotation.ts';
 import type { ScrollDirection } from '../../../../contracts/scroll-gesture.ts';
 import type { GesturePlan } from '../../../../contracts/gesture-plan.ts';
 import type { ElementSelectorKey } from '../../../../contracts/interactor-types.ts';
-import { createRequestCanceledError, isRequestCanceled } from '../../../../request/cancel.ts';
+import {
+  createRequestCanceledError,
+  getRequestSignal,
+  isRequestCanceled,
+} from '../../../../request/cancel.ts';
 import { bootFailureHint, classifyBootFailure } from '../../../boot-diagnostics.ts';
 import type { RunnerSession } from './runner-session-types.ts';
 
@@ -108,6 +112,16 @@ export type RunnerSequenceStep = {
    */
   synthesized?: boolean;
 };
+
+export function resolveRunnerRequestSignal(options: {
+  requestId?: string;
+  signal?: AbortSignal;
+}): AbortSignal | undefined {
+  const registeredSignal = getRequestSignal(options.requestId);
+  if (!options.signal) return registeredSignal;
+  if (!registeredSignal || registeredSignal === options.signal) return options.signal;
+  return AbortSignal.any([registeredSignal, options.signal]);
+}
 
 export function isRetryableRunnerError(err: unknown): boolean {
   if (!(err instanceof AppError)) return false;

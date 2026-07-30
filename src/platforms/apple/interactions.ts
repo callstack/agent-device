@@ -60,6 +60,7 @@ export function iosRunnerOverrides(
   runnerOpts: RunnerOpts;
 } {
   const runnerOpts = {
+    signal: ctx.signal,
     verbose: ctx.verbose,
     logPath: ctx.logPath,
     traceLogPath: ctx.traceLogPath,

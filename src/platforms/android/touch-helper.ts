@@ -16,6 +16,7 @@ import { parseAndroidSnapshotHelperManifest } from './snapshot-helper-artifact.t
 import { ensureAndroidSnapshotHelper } from './snapshot-helper-install.ts';
 import {
   getAndroidSnapshotHelperSessionDeviceKey,
+  recoverAndroidSnapshotHelperRetirement,
   runAndroidSnapshotHelperSessionTouchCommand,
   stopAndroidSnapshotHelperSession,
 } from './snapshot-helper-session.ts';
@@ -159,6 +160,10 @@ async function prepareAndroidTouchHelper(device: DeviceInfo): Promise<PreparedAn
   const artifact =
     adbProvider.snapshotHelperArtifact ?? (await resolveAndroidTouchHelperArtifact());
   const deviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
+  await recoverAndroidSnapshotHelperRetirement({
+    deviceKey,
+    adb: adbProvider.exec,
+  });
   const install = await withDiagnosticTimer(
     'android_touch_helper_install',
     async () =>

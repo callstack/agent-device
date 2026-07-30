@@ -136,6 +136,27 @@ beforeEach(async () => {
   mockWaitForRunner.mockResolvedValue(runnerResponse({ uptimeMs: 1 }));
 });
 
+test('direct command cancellation reaches runner launch without a registered request', async () => {
+  const controller = new AbortController();
+  const device = { ...IOS_SIMULATOR, id: 'runner-direct-signal-sim' };
+  mockRunCmdBackground.mockImplementationOnce((_cmd, _args, options) => {
+    assert.equal(options?.signal, controller.signal);
+    controller.abort(new Error('wait deadline exceeded'));
+    return makeBackgroundRunner(4141);
+  });
+
+  await assert.rejects(
+    executeRunnerCommand(
+      device,
+      { command: 'snapshot', appBundleId: 'com.example.demo' },
+      { signal: controller.signal, logPath: '/tmp/runner.log' },
+    ),
+    (error: unknown) => isRequestCanceledError(error),
+  );
+
+  assert.equal(getRunnerSessionSnapshot(device.id), null);
+});
+
 test('prepare cancellation stops only its runner and preserves unrelated prep', async () => {
   const survivorRequestId = 'prepare-runner-survivor-B';
   const canceledRequestId = 'prepare-runner-canceled-A';

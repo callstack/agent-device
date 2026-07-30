@@ -1,6 +1,6 @@
-import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
-
 export type WaitDeadlineResult<T> = { timedOut: false; value: T } | { timedOut: true };
+
+type AbortSignalSource = { signal?: AbortSignal };
 
 /**
  * Applies a wait's remaining budget by cancellation, then waits for the operation to quiesce.
@@ -8,8 +8,8 @@ export type WaitDeadlineResult<T> = { timedOut: false; value: T } | { timedOut: 
  * session state or keep ownership of a platform helper after the wait has returned.
  */
 export async function runWithinWaitDeadline<T>(
-  runtime: Pick<AgentDeviceRuntime, 'signal'>,
-  options: Pick<CommandContext, 'signal'>,
+  runtime: AbortSignalSource,
+  options: AbortSignalSource,
   remainingMs: number,
   task: (signal: AbortSignal) => Promise<T>,
 ): Promise<WaitDeadlineResult<T>> {

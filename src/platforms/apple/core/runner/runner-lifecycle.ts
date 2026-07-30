@@ -1,7 +1,7 @@
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
-import { getRequestSignal, isRequestCanceledError } from '../../../../request/cancel.ts';
+import { isRequestCanceledError } from '../../../../request/cancel.ts';
 import { RUNNER_COMMAND_TIMEOUT_MS, RUNNER_STARTUP_TIMEOUT_MS } from './runner-transport.ts';
 import {
   type RunnerSession,
@@ -14,6 +14,7 @@ import {
 import {
   assertRunnerRequestActive,
   isRetryableRunnerError,
+  resolveRunnerRequestSignal,
   shouldRetryRunnerConnectError,
   withRunnerCommandId,
   type RunnerCommand,
@@ -48,7 +49,7 @@ export async function prepareLocalIosRunner(
   options: PrepareIosRunnerOptions,
 ): Promise<PrepareIosRunnerResult> {
   assertRunnerRequestActive(options.requestId);
-  const signal = getRequestSignal(options.requestId);
+  const signal = resolveRunnerRequestSignal(options);
   const command = withRunnerCommandId({ command: 'uptime' });
   let recoveryReason: string | undefined;
   for (let attempt = 1; attempt <= PREPARE_RUNNER_HEALTH_MAX_SESSION_ATTEMPTS; attempt += 1) {
@@ -256,7 +257,7 @@ export async function executeRunnerCommand(
   options: AppleRunnerCommandOptions,
 ): Promise<Record<string, unknown>> {
   assertRunnerRequestActive(options.requestId);
-  const signal = getRequestSignal(options.requestId);
+  const signal = resolveRunnerRequestSignal(options);
   const recycleKey = runnerRecycleLedgerKey(options, command);
   let session: RunnerSession | undefined;
   let recycleBootBegun = false;
