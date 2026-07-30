@@ -11,7 +11,10 @@ import {
   swipePayloadFromPositionals,
 } from '@agent-device/contracts/interaction';
 import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
-import { isCommandSupportedOnDevice } from '../../src/core/capabilities.ts';
+import {
+  isCommandSupportedOnDevice,
+  unsupportedHintForDevice,
+} from '../../src/core/capabilities.ts';
 import { parseReplayScriptDetailed } from '../../src/replay/script.ts';
 import { IOS_SIMULATOR_BEHAVIOR_COVERAGE } from './ios-simulator-e2e/behavior-coverage.ts';
 import {
@@ -44,9 +47,6 @@ test('iOS simulator coverage exhaustively classifies the public catalog', () => 
       assert.ok(entry.owner.path.trim().length > 0, `${command} needs an evidence path`);
       assert.ok(entry.owner.test.trim().length > 0, `${command} needs named evidence`);
     }
-    if (entry.level === 'known-gap') {
-      assert.match(entry.trackingIssue, /^#\d+$/, `${command} gap needs a tracking issue`);
-    }
   }
 });
 
@@ -56,7 +56,7 @@ test('live command claims are owned by executable scenarios', () => {
   );
 
   for (const [command, entry] of Object.entries(IOS_SIMULATOR_E2E_COVERAGE)) {
-    if (entry.level !== 'live' && entry.level !== 'known-gap') continue;
+    if (entry.level !== 'live') continue;
     const scenario = scenariosById.get(entry.owner);
     assert.ok(scenario, `${command} references missing scenario ${entry.owner}`);
     assert.ok(
@@ -96,7 +96,7 @@ test('mobile behavior patterns are owned by live scenarios or executable workflo
 
 test('non-live owners name concrete executable repository evidence', () => {
   for (const [command, entry] of Object.entries(IOS_SIMULATOR_E2E_COVERAGE)) {
-    if (entry.level === 'live' || entry.level === 'known-gap') continue;
+    if (entry.level === 'live') continue;
     const ownerPath = path.resolve(entry.owner.path);
     assert.ok(fs.existsSync(ownerPath), `${command} owner does not exist: ${entry.owner.path}`);
     assert.ok(
@@ -161,14 +161,12 @@ test('capability classifications match executable simulator behavior', () => {
   assert.equal(isCommandSupportedOnDevice(PUBLIC_COMMANDS.tvRemote, IOS_SIMULATOR), false);
   assert.equal(IOS_SIMULATOR_E2E_COVERAGE[PUBLIC_COMMANDS.tvRemote].level, 'capability-denial');
 
-  assert.equal(isCommandSupportedOnDevice(PUBLIC_COMMANDS.viewport, IOS_SIMULATOR), true);
-  assert.equal(IOS_SIMULATOR_E2E_COVERAGE[PUBLIC_COMMANDS.viewport].level, 'known-gap');
-  const viewportScenario = IOS_SIMULATOR_LIVE_SCENARIOS.find(
-    (scenario) => scenario.id === IOS_SIMULATOR_E2E_COVERAGE[PUBLIC_COMMANDS.viewport].owner,
-  );
-  assert.ok(
-    viewportScenario &&
-      liveCommandsForScenario(viewportScenario.id).includes(PUBLIC_COMMANDS.viewport),
+  assert.equal(isCommandSupportedOnDevice(PUBLIC_COMMANDS.viewport, IOS_SIMULATOR), false);
+  assert.equal(IOS_SIMULATOR_E2E_COVERAGE[PUBLIC_COMMANDS.viewport].level, 'capability-denial');
+  assert.match(
+    unsupportedHintForDevice(PUBLIC_COMMANDS.viewport, IOS_SIMULATOR) ?? '',
+    /--platform web/,
+    'viewport denial names the surface that does support it',
   );
 });
 

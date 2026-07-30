@@ -1144,9 +1144,13 @@ export const RAW_COMMAND_DESCRIPTORS = [
     recordingEffect: 'mutates-app',
     daemon: { route: 'generic', refFrameEffect: 'may-invalidate' },
     dispatch: {},
-    // Android has no durable viewport set/read/reset lifecycle. Deny it until
-    // that contract, including cleanup, exists instead of accepting a no-op.
-    capability: { apple: APPLE_SIM_AND_DEVICE, android: {}, linux: LINUX_NONE },
+    // Viewport resizing is a web-surface contract (`WEB_SETTING_COMMANDS` in
+    // src/core/capabilities.ts adds the only admitting bucket). No device platform
+    // has a durable viewport set/read/reset lifecycle: Apple screen geometry is
+    // fixed by the selected simulator/device type and neither simctl nor XCTest can
+    // resize it, and Android has no backend either. Deny both instead of admitting a
+    // command dispatch can only reject (#1407).
+    capability: { apple: {}, android: {}, linux: LINUX_NONE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
   },

@@ -63,14 +63,3 @@ export async function assertDeviceLifecycle(context: LiveContext): Promise<void>
   }
   throw primaryError;
 }
-
-export async function assertKnownGaps(context: LiveContext): Promise<void> {
-  const viewport = await runStep(
-    context,
-    'pin unsupported Apple viewport backend',
-    ['viewport', '390', '844'],
-    { expectFailure: true },
-  );
-  assert.equal(viewport.json?.error?.code, 'UNSUPPORTED_OPERATION', JSON.stringify(viewport.json));
-  verifyCommand(context, C.viewport, 'live Apple dispatch returns typed UNSUPPORTED_OPERATION');
-}

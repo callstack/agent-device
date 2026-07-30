@@ -10,7 +10,6 @@ type ScenarioRunnerKey =
   | 'fixtureReplays'
   | 'formInput'
   | 'inventoryInstall'
-  | 'knownGaps'
   | 'lifecycleSystem'
   | 'observabilityArtifacts';
 
@@ -29,7 +28,6 @@ const SCENARIO_DEFINITIONS: readonly ScenarioDefinition[] = [
     runner: 'observabilityArtifacts',
     tier: 'full',
   },
-  { id: 'full:known-gaps', runner: 'knownGaps', tier: 'full' },
   { id: 'full:fixture-replays', runner: 'fixtureReplays', tier: 'full' },
   { id: 'full:device-lifecycle', runner: 'deviceLifecycle', tier: 'full' },
 ] as const;

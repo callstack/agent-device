@@ -11,7 +11,7 @@ import {
   requireNodeRect,
 } from './live-assertions.ts';
 import { assertAutomationInput } from './live-automation-scenario.ts';
-import { assertDeviceLifecycle, assertKnownGaps } from './live-device-lifecycle.ts';
+import { assertDeviceLifecycle } from './live-device-lifecycle.ts';
 import {
   assertLifecycleAndSystem,
   assertObservabilityAndArtifacts,
@@ -42,10 +42,6 @@ const LIVE_SCENARIOS = bindIosSimulatorScenarios<LiveContext>({
   fixtureReplays: assertFixtureReplays,
   formInput: assertFormInput,
   inventoryInstall: assertInventoryAndInstall,
-  knownGaps: async (context) => {
-    await assertKnownGaps(context);
-    await assertClose(context);
-  },
   lifecycleSystem: assertLifecycleAndSystem,
   observabilityArtifacts: assertObservabilityAndArtifacts,
 });

@@ -17,12 +17,6 @@ export type IosSimulatorCoverageEntry =
       assertion: string;
       level: 'command-contract' | 'workflow-live' | 'capability-denial';
       owner: RepositoryEvidence;
-    }
-  | {
-      assertion: string;
-      level: 'known-gap';
-      owner: string;
-      trackingIssue: string;
     };
 
 const C = PUBLIC_COMMANDS;
@@ -199,19 +193,18 @@ export const IOS_SIMULATOR_E2E_COVERAGE = {
   },
   [C.type]: live('smoke:form-input', 'typed suffix is read back from a focused fixture field'),
   [C.viewport]: {
-    assertion: 'capability currently admits iOS while the Apple interactor has no viewport backend',
-    level: 'known-gap',
-    owner: 'full:known-gaps',
-    trackingIssue: '#1407',
+    assertion: 'iOS simulator capability model rejects viewport resizing, a web-only contract',
+    level: 'capability-denial',
+    owner: {
+      path: 'test/integration/smoke-ios-simulator-coverage.test.ts',
+      test: 'capability classifications match executable simulator behavior',
+    },
   },
   [C.wait]: live('smoke:automation-input', 'polling observes durable fixture state'),
 } satisfies Record<PublicCommand, IosSimulatorCoverageEntry>;
 
 export function liveCommandsForScenario(scenarioId: string): PublicCommand[] {
   return Object.entries(IOS_SIMULATOR_E2E_COVERAGE)
-    .filter(
-      ([, entry]) =>
-        (entry.level === 'live' || entry.level === 'known-gap') && entry.owner === scenarioId,
-    )
+    .filter(([, entry]) => entry.level === 'live' && entry.owner === scenarioId)
     .map(([command]) => command as PublicCommand);
 }

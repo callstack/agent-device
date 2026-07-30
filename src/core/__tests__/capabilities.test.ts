@@ -221,9 +221,9 @@ test('core commands support iOS simulator, iOS device, and Android', () => {
   );
 });
 
-test('Android denies Apple runner preparation and viewport mutation until durable backends exist', () => {
+test('Android denies Apple runner preparation until a durable backend exists', () => {
   assertCommandSupport(
-    ['prepare', 'viewport'],
+    ['prepare'],
     [
       { device: iosSimulator, expected: true, label: 'on iOS simulator' },
       { device: macOsDevice, expected: true, label: 'on macOS' },
@@ -232,6 +232,24 @@ test('Android denies Apple runner preparation and viewport mutation until durabl
       { device: androidEmulator, expected: false, label: 'on Android emulator' },
     ],
   );
+});
+
+test('viewport resizing is admitted only on web, where a backend exists', () => {
+  assertCommandSupport(
+    ['viewport'],
+    [
+      { device: webDevice, expected: true, label: 'on web' },
+      { device: iosSimulator, expected: false, label: 'on iOS simulator' },
+      { device: iosDevice, expected: false, label: 'on iOS device' },
+      { device: macOsDevice, expected: false, label: 'on macOS' },
+      { device: tvOsSimulator, expected: false, label: 'on tvOS simulator' },
+      { device: androidDevice, expected: false, label: 'on Android device' },
+      { device: androidEmulator, expected: false, label: 'on Android emulator' },
+      { device: linuxDevice, expected: false, label: 'on linux' },
+    ],
+  );
+  assert.match(unsupportedHintForDevice('viewport', iosSimulator) ?? '', /--platform web/);
+  assert.equal(unsupportedHintForDevice('viewport', webDevice), undefined);
 });
 
 test('capabilities reject CoreDevice-only commands for XCTest-backed devices', () => {
