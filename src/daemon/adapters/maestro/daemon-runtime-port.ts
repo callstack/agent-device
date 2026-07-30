@@ -2,8 +2,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   createMaestroRuntimePort,
   maestroTestFailure,
-  MAESTRO_COMPATIBILITY_PRESETS,
-  MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,
+  MAESTRO_RUNTIME_ADAPTER_POLICY,
   resolveMaestroScrollableGesture,
   type MaestroRuntimeMetrics,
   type MaestroRuntimeOperationContext,
@@ -75,7 +74,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     registerDiagnosticSensitiveValue(text);
     await invokeMutation({ kind: 'typeText', text }, context);
     const stable = await waitForTypedSnapshotStability({
-      timeoutMs: MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,
+      timeoutMs: MAESTRO_RUNTIME_ADAPTER_POLICY.settleTimeoutMs,
       context,
       snapshot: snapshots.capture,
       dependencies: options.dependencies,
@@ -168,7 +167,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
       await withMutation(
         () =>
           clickMaestroTargetPoint(options, input.target.point, {
-            holdMs: MAESTRO_COMPATIBILITY_PRESETS.command.longPressDurationMs,
+            holdMs: MAESTRO_RUNTIME_ADAPTER_POLICY.longPressDurationMs,
           }),
         context,
         'deferred',
@@ -190,7 +189,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     eraseText: async (input, context) =>
       await typeTextAndSettle(
         '\b'.repeat(
-          input.charactersToErase ?? MAESTRO_COMPATIBILITY_PRESETS.command.eraseTextMaxCharacters,
+          input.charactersToErase ?? MAESTRO_RUNTIME_ADAPTER_POLICY.eraseTextMaxCharacters,
         ),
         context,
       ),
@@ -226,7 +225,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
           );
           return (
             await waitForTypedSnapshotStability({
-              timeoutMs: Math.min(MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS, remainingMs),
+              timeoutMs: Math.min(MAESTRO_RUNTIME_ADAPTER_POLICY.settleTimeoutMs, remainingMs),
               context,
               snapshot: snapshots.capture,
               dependencies: options.dependencies,
@@ -234,10 +233,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
           ).snapshot;
         },
       });
-      if (
-        match.visiblePercentage !==
-        MAESTRO_COMPATIBILITY_PRESETS.command.scrollUntilVisiblePercentage
-      ) {
+      if (match.visiblePercentage !== MAESTRO_RUNTIME_ADAPTER_POLICY.scrollUntilVisiblePercentage) {
         throw maestroTestFailure('Maestro scrollUntilVisible target did not become visible.', {
           selector: input.selector,
           timeoutMs: input.timeoutMs,
@@ -258,8 +254,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     },
     waitForAnimationToEnd: async (input, context) => {
       const visualStabilityReached = await waitForMaestroAnimationToEnd({
-        timeoutMs:
-          input.timeoutMs ?? MAESTRO_COMPATIBILITY_PRESETS.command.waitForAnimationToEndTimeoutMs,
+        timeoutMs: input.timeoutMs ?? MAESTRO_RUNTIME_ADAPTER_POLICY.animationWaitTimeoutMs,
         now: options.dependencies.now,
         signal: context.signal,
         capture: async (screenshotPath) => {

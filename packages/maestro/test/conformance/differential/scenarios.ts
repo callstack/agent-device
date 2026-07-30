@@ -17,7 +17,7 @@
 // we do it engine-side via `engineInvariants` over agent-device's own replay
 // timing trace. Scenarios without invariants prove outcome parity ONLY; do not
 // read more into them than that.
-import { MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS } from '@agent-device/maestro';
+import { MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS } from '../harness.ts';
 import type { Invariant } from './invariants.ts';
 
 /** Bundle id of the fixture app the workflow installs before running scenarios. */
@@ -69,7 +69,7 @@ export type DifferentialScenario = {
   id: string;
   /** The #1217 bug class this scenario guards, when applicable. */
   bugClass?: 1 | 2 | 3 | 4;
-  /** Corpus flow, relative to scripts/maestro-conformance/. */
+  /** Differential flow, relative to this package's conformance test directory. */
   flow: string;
   /** Exactly what running both engines and comparing outcomes establishes. */
   comparesAcrossEngines: string;

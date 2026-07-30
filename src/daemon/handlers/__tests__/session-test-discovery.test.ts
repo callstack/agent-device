@@ -265,6 +265,7 @@ test('discoverReplayTestEntries rejects YAML without explicit Maestro routing', 
     (error: unknown) =>
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&
-      error.message === `test does not support this file type: ${flowPath}`,
+      error.message ===
+        `Maestro YAML requires explicit --maestro routing: test ${flowPath} --maestro`,
   );
 });

@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { isMaestroYamlPath } from '../../replay/format.ts';
 import type { DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 
@@ -116,18 +117,13 @@ function copyReplaySourceFile(filePath: string, attemptArtifactsDir: string): vo
   const genericReplayPath = path.join(attemptArtifactsDir, 'replay.ad');
   fs.copyFileSync(filePath, genericReplayPath);
 
-  if (!isMaestroFlowPath(filePath)) return;
+  if (!isMaestroYamlPath(filePath)) return;
   // Keep replay.ad for existing artifact consumers, and preserve the original
   // Maestro filename so CI artifacts point back to the source flow.
   const originalReplayPath = path.join(attemptArtifactsDir, path.basename(filePath));
   if (path.resolve(originalReplayPath) !== path.resolve(genericReplayPath)) {
     fs.copyFileSync(filePath, originalReplayPath);
   }
-}
-
-function isMaestroFlowPath(filePath: string): boolean {
-  const extension = path.extname(filePath).toLowerCase();
-  return extension === '.yml' || extension === '.yaml';
 }
 
 function buildUniqueArtifactFileName(fileName: string, usedNames: Map<string, number>): string {

@@ -4,7 +4,7 @@
 // the `maestro` CLI on PATH, and an installed target app, so it runs only from
 // the scheduled `conformance-differential` workflow or by hand.
 //
-//   node --experimental-strip-types scripts/maestro-conformance/differential/run.ts \
+//   node --experimental-strip-types packages/maestro/test/conformance/differential/run.ts \
 //     --platform ios --out-dir .tmp/conformance-differential
 //
 // `--dry-run` validates the scenario registry without a device (exercised by

@@ -20,6 +20,9 @@ importers:
       pngjs:
         specifier: ^7.0.0
         version: 7.0.0
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
     devDependencies:
       '@agent-device/contracts':
         specifier: workspace:*
@@ -75,9 +78,6 @@ importers:
       vitest:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@22.19.21)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.19.21)(yaml@2.9.0))
-      yaml:
-        specifier: ^2.9.0
-        version: 2.9.0
 
   packages/contracts:
     dependencies:

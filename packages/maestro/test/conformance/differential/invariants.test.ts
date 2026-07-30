@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS } from '@agent-device/maestro';
+import { MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS } from '../harness.ts';
 import { DIFFERENTIAL_SCENARIOS } from './scenarios.ts';
 import { type Invariant, evaluateInvariant, readTrace } from './invariants.ts';
 

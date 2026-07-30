@@ -106,9 +106,9 @@
     "package:npm": "pnpm build && pnpm build:xcuitest:ios && pnpm build:xcuitest:macos && pnpm build:xcuitest:tvos && pnpm build:xcuitest:visionos && pnpm build:macos-helper:clean && pnpm package:apple-runner:npm && pnpm build:android",
     "ad": "node bin/agent-device.mjs",
     "bench:help-conformance": "node scripts/help-conformance-bench.mjs",
-    "maestro:conformance": "node --experimental-strip-types --test scripts/maestro-conformance/verify.test.ts scripts/maestro-conformance/differential/run.test.ts scripts/maestro-conformance/differential/invariants.test.ts",
-    "maestro:conformance:regenerate": "node scripts/maestro-conformance/regenerate.mjs",
-    "maestro:conformance:differential": "node --experimental-strip-types scripts/maestro-conformance/differential/run.ts",
+    "maestro:conformance": "node --experimental-strip-types --test packages/maestro/test/conformance/verify.test.ts packages/maestro/test/conformance/differential/run.test.ts packages/maestro/test/conformance/differential/invariants.test.ts",
+    "maestro:conformance:regenerate": "node --experimental-strip-types scripts/maestro-conformance/regenerate.mjs",
+    "maestro:conformance:differential": "node --experimental-strip-types packages/maestro/test/conformance/differential/run.ts",
     "prototype:program-boundary": "node --experimental-strip-types scripts/prototypes/daemon-boundaries/program-boundary.ts",
     "prototype:session-boundary": "node --experimental-strip-types scripts/prototypes/daemon-boundaries/session-boundary.ts",
     "size": "node scripts/size-report.mjs",
@@ -241,7 +241,8 @@
   ],
   "dependencies": {
     "@limrun/api": "^0.24.5",
-    "pngjs": "^7.0.0"
+    "pngjs": "^7.0.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@agent-device/contracts": "workspace:*",
@@ -261,7 +262,6 @@
     "tsdown": "^0.22.4",
     "typescript": "^7.0.2",
     "vite": "^8.0.16",
-    "vitest": "^4.1.8",
-    "yaml": "^2.9.0"
+    "vitest": "^4.1.8"
   }
 }

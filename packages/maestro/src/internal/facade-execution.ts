@@ -109,11 +109,6 @@ export type MaestroExecutionOutcome =
       readonly failure?: MaestroFailedAction;
     };
 
-export type MaestroFailureCandidate = {
-  readonly node: SnapshotNode;
-  readonly basis: 'id' | 'label' | 'other';
-};
-
 export function inspectMaestroFlow(source: string, sourcePath: string): MaestroFlow {
   const program = parseMaestroProgram(source, { sourcePath });
   return {
@@ -170,10 +165,17 @@ export async function executeMaestroFlow(
   }
 }
 
-export function rankMaestroFailureCandidates(
+/**
+ * Converts a failed execution into report-ready values while retaining
+ * selector interpretation and ranking policy inside the Maestro package.
+ */
+export function collectMaestroFailureSuggestions(
   failure: MaestroFailedAction,
   snapshot: SnapshotState,
-): MaestroFailureCandidate[] {
+): ReadonlyArray<{
+  readonly node: SnapshotNode;
+  readonly basis: 'id' | 'label' | 'other';
+}> {
   const query = suggestionQuery(failure[failureCommand]);
   const platform = failure[failurePlan].platform;
   if (!query || (platform !== 'android' && platform !== 'ios')) return [];
@@ -289,7 +291,7 @@ function suggestionQuery(command: MaestroEngineEvent['command']): SuggestionQuer
 function suggestionBasis(
   selector: SuggestionQuery['selector'],
   node: SnapshotNode,
-): MaestroFailureCandidate['basis'] {
+): 'id' | 'label' | 'other' {
   if (selector.id !== undefined) return 'id';
   if (
     selector.text !== undefined &&

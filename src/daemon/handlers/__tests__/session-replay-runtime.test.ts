@@ -149,6 +149,31 @@ test('Maestro YAML uses the typed engine while .ad remains generic', async () =>
   expect(commands).toEqual(['open']);
 });
 
+test('bare Maestro YAML requires explicit --maestro routing', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-explicit-route-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const yamlPath = path.join(root, 'flow.yaml');
+  fs.writeFileSync(yamlPath, 'appId: com.example.app\n---\n- launchApp\n');
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [yamlPath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: vi.fn(),
+  });
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      code: 'INVALID_ARGS',
+      message: `Maestro YAML requires explicit --maestro routing: replay ${yamlPath} --maestro`,
+    },
+  });
+});
+
 test('ADR 0016 / #1384: a Maestro replay reports sessionActive: true (real producer, no fake HTTP)', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-session-active-'));
   const sessionStore = new SessionStore(path.join(root, 'sessions'));

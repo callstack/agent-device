@@ -97,14 +97,11 @@ failure, not a pass.
   teeth (`invalid/`). To add a flow: drop the `.yaml` in, add a note to `NOTES`
   in `build-manifest.mjs`, and regenerate.
 - [`fixtures/`](./fixtures) — the generated, checked-in layer-1/layer-2 captures.
-- `packages/maestro/src/internal/conformance-normalize.ts` — package-private canonical projection
-  shared by the facade's conformance operations.
-- [`verify.ts`](./verify.ts) / [`verify.test.ts`](./verify.test.ts) — the deterministic verifier.
-- [`expected-divergence.ts`](./expected-divergence.ts) — declared, on-the-record divergences.
-- [`differential/`](./differential) — layer-3 scenarios, runner, engine-side
-  invariants, and `flows/` (device flows against the fixture app).
-- [`fixture-seal.mjs`](./fixture-seal.mjs) — content seal shared by the generator
-  and the verifier.
+- `packages/maestro/src/internal/conformance-normalize.ts` — package-private canonical projection.
+- `packages/maestro/test/conformance/` — the deterministic verifier, declared divergences,
+  package-private harness, shared fixture seal, and layer-3 differential scenarios. Keeping this
+  code under package tests prevents parser/canonicalization tooling from widening the production
+  facade; regeneration imports the same package-owned seal implementation.
 - [`regenerate.mjs`](./regenerate.mjs) — SHA-verifies the jars, rebuilds the
   corpus manifest and fixtures, and seals them.
 
@@ -117,7 +114,7 @@ pnpm maestro:conformance
 The verifier fails on any **undeclared** divergence: a flow our engine parses
 that upstream rejects (a conformance regression), an undeclared parse mismatch,
 or an undeclared `we-reject`. Every `we-reject` must list the unsupported
-command/option in [`expected-divergence.ts`](./expected-divergence.ts) — that
+command/option in `packages/maestro/test/conformance/expected-divergence.ts` — that
 list is the mechanical parity record. A focused issue is attached only when
 implementation work is planned.
 

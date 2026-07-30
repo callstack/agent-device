@@ -43,13 +43,13 @@
     "scripts/write-xcuitest-cache-metadata.mjs",
     "scripts/help-conformance-sample-outputs.d.mts"
   ],
-  "ignoreDependencies": ["@theme"],
+  "ignoreDependencies": [
+    "@theme",
+    // @agent-device/maestro owns the source import, while the published root
+    // build externalizes yaml and retains runtime imports in packed chunks.
+    "yaml"
+  ],
   "ignoreExports": [
-    {
-      "comment": "Authoritative supported-command list; sole consumer is the conformance oracle (scripts/maestro-conformance, an ignored tooling tree).",
-      "file": "src/compat/maestro/program-ir-command-parser.ts",
-      "exports": ["SUPPORTED_MAESTRO_COMMAND_NAMES"]
-    },
     {
       "comment": "Daemon route handlers are reached only through the dynamic `import()` table in request-handler-chain.ts, which --production analysis cannot follow to a consumer.",
       "file": "src/daemon/handlers/{lease,session,snapshot,react-native,record-trace,find,interaction}.ts",

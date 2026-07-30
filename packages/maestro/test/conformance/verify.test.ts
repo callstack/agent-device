@@ -4,10 +4,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import {
   type FlowResult,
+  CONFORMANCE_DATA_DIR,
   CORPUS_DIR,
   checkCoverage,
   checkFixtureSeals,
@@ -16,17 +16,17 @@ import {
   loadLayer1,
   loadLayer2,
 } from './verify.ts';
-import { parseMaestroConformanceSource } from '@agent-device/maestro';
+import { parseMaestroConformanceSource } from './harness.ts';
 import {
   DOCUMENTED_DEVIATIONS,
   FLOW_DIVERGENCES,
   LAYER2_REFERENCE_ONLY,
 } from './expected-divergence.ts';
-// @ts-expect-error -- .mjs helper shared with regenerate.mjs; no type declarations.
-import { checkFixtureSeal } from './fixture-seal.mjs';
+import { checkFixtureSeal } from './fixture-seal.ts';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const PIN = JSON.parse(fs.readFileSync(path.join(HERE, 'pinned-upstream.json'), 'utf8'));
+const PIN = JSON.parse(
+  fs.readFileSync(path.join(CONFORMANCE_DATA_DIR, 'pinned-upstream.json'), 'utf8'),
+);
 
 function flowsById(): Map<string, FlowResult> {
   return new Map(classifyAllFlows().map((flow) => [flow.id, flow]));
@@ -47,7 +47,7 @@ test('fixture content is sealed against hand editing', () => {
 // rather than trusting that a hash comparison must work.
 test('the seal rejects an edited capture (proof the check has teeth)', () => {
   const original = JSON.parse(
-    fs.readFileSync(path.join(HERE, 'fixtures', 'layer2-semantics.json'), 'utf8'),
+    fs.readFileSync(path.join(CONFORMANCE_DATA_DIR, 'fixtures', 'layer2-semantics.json'), 'utf8'),
   );
   // Forge the retry cap the way a hand-transcribed fixture would have drifted.
   const tampered = structuredClone(original);

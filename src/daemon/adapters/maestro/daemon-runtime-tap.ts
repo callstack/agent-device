@@ -1,8 +1,7 @@
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import {
-  MAESTRO_COMPATIBILITY_PRESETS,
-  MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,
+  MAESTRO_RUNTIME_ADAPTER_POLICY,
   type MaestroDispatchSelector,
   type MaestroRuntimeOperationContext,
   type MaestroRuntimeOperations,
@@ -131,7 +130,7 @@ async function tapTargetWithRetry(
     (screenshotBaseline ? undefined : maestroSnapshotSignature(await snapshots.capture(context)));
   const settle = async () =>
     await waitForTypedSnapshotStability({
-      timeoutMs: MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,
+      timeoutMs: MAESTRO_RUNTIME_ADAPTER_POLICY.settleTimeoutMs,
       context,
       snapshot: snapshots.capture,
       dependencies: options.dependencies,
@@ -166,7 +165,7 @@ async function executeTapRetryLoop(params: {
   let attempts = 1;
   while (
     (params.baselineSignature === undefined || observed.signature === params.baselineSignature) &&
-    attempts < MAESTRO_COMPATIBILITY_PRESETS.command.retryTapMaxAttempts
+    attempts < MAESTRO_RUNTIME_ADAPTER_POLICY.retryTapMaxAttempts
   ) {
     if (params.screenshotBaseline && (await params.screenshotBaseline.matchesCurrent()) !== true) {
       break;

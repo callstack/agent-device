@@ -15,19 +15,19 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AppError } from '@agent-device/kernel/errors';
 import {
-  canonicalizeUpstreamMaestroFlow,
+  canonicalizeUpstreamFlow,
   MAESTRO_CONFORMANCE_CONSTANTS,
   parseMaestroConformanceSource,
   SUPPORTED_MAESTRO_COMMAND_NAMES,
-  type MaestroCanonicalCommand,
-} from '@agent-device/maestro';
+  type CanonicalCommand,
+} from './harness.ts';
 import { LAYER2_REFERENCE_ONLY, UNVERIFIED_COMMANDS } from './expected-divergence.ts';
-// @ts-expect-error -- .mjs helper shared with regenerate.mjs; no type declarations.
-import { checkFixtureSeal } from './fixture-seal.mjs';
+import { checkFixtureSeal } from './fixture-seal.ts';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-export const CORPUS_DIR = path.join(HERE, 'corpus');
-const FIXTURES_DIR = path.join(HERE, 'fixtures');
+export const CONFORMANCE_DATA_DIR = path.resolve(HERE, '../../../../scripts/maestro-conformance');
+export const CORPUS_DIR = path.join(CONFORMANCE_DATA_DIR, 'corpus');
+const FIXTURES_DIR = path.join(CONFORMANCE_DATA_DIR, 'fixtures');
 
 export type Classification =
   | 'identical'
@@ -112,7 +112,7 @@ function agentParseProgram(file: string): ReturnType<typeof parseMaestroConforma
 
 function agentParse(file: string): {
   status: 'parsed' | 'rejected';
-  commands?: MaestroCanonicalCommand[];
+  commands?: CanonicalCommand[];
 } {
   const program = agentParseProgram(file);
   if (!program) return { status: 'rejected' };
@@ -139,7 +139,7 @@ function classifyFlow(fixtureFlow: Layer1Fixture['flows'][number]): FlowResult {
   if (agent.status === 'rejected') {
     return { ...base, classification: 'we-reject' };
   }
-  const upstream = canonicalizeUpstreamMaestroFlow(fixtureFlow.commands ?? []);
+  const upstream = canonicalizeUpstreamFlow(fixtureFlow.commands ?? []);
   const agentCommands = agent.commands ?? [];
   const upstreamJson = JSON.stringify(upstream);
   const agentJson = JSON.stringify(agentCommands);

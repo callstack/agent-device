@@ -39,7 +39,11 @@ import {
 } from '@agent-device/contracts/capture';
 import type { ReplayCommandResult } from '@agent-device/contracts/replay';
 import type { ReplayDivergenceResume } from '../../replay/divergence.ts';
-import { resolveReplayFormat } from '../../replay/format.ts';
+import {
+  isMaestroYamlPath,
+  maestroBackendRequiredMessage,
+  resolveReplayFormat,
+} from '../../replay/format.ts';
 import { isRecord } from '../../utils/parsing.ts';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import { withReplayFailureDiagnostics } from './session-replay-runtime-failure.ts';
@@ -209,6 +213,9 @@ export async function runReplayScriptFile(params: {
   const artifactPaths = new Set<string>();
   try {
     resolved = SessionStore.expandHome(filePath, req.meta?.cwd);
+    if (isMaestroYamlPath(resolved) && req.flags?.replayBackend !== 'maestro') {
+      return errorResponse('INVALID_ARGS', maestroBackendRequiredMessage('replay', filePath));
+    }
     if (resolveReplayFormat(resolved, req.flags?.replayBackend) === 'maestro') {
       if (sessionStore.get(sessionName)?.saveScriptBoundary !== undefined) {
         return errorResponse(

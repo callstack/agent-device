@@ -2,6 +2,7 @@
   "name": "@agent-device/maestro",
   "version": "0.0.0",
   "private": true,
+  "sideEffects": false,
   "type": "module",
   "description": "Private Maestro compatibility engine for agent-device.",
   "dependencies": {

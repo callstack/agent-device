@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import {
   literalFromMaestroRegex,
   maestroObservationMatches,
-  MAESTRO_COMPATIBILITY_PRESETS,
+  MAESTRO_RUNTIME_ADAPTER_POLICY,
   resolveMaestroTargetFromSnapshot,
   type MaestroDispatchSelector,
   type MaestroObservation,
@@ -26,7 +26,7 @@ import { isPositiveFiniteRect, rectContains } from '@agent-device/kernel/rect';
 import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
 import { buildIosInteractiveSnapshotPresentation } from '../../snapshot-presentation/ios/index.ts';
 
-export const MAESTRO_OBSERVATION_POLL_MS = MAESTRO_COMPATIBILITY_PRESETS.observation.pollIntervalMs;
+export const MAESTRO_OBSERVATION_POLL_MS = MAESTRO_RUNTIME_ADAPTER_POLICY.observationPollMs;
 export type DaemonMaestroRuntimeDependencies = {
   readonly now: () => number;
   readonly sleep: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
@@ -199,8 +199,7 @@ export async function scrollUntilTypedMaestroTarget(params: {
       mode: 'observe',
     });
     if (
-      lastMatch.visiblePercentage ===
-      MAESTRO_COMPATIBILITY_PRESETS.command.scrollUntilVisiblePercentage
+      lastMatch.visiblePercentage === MAESTRO_RUNTIME_ADAPTER_POLICY.scrollUntilVisiblePercentage
     ) {
       return lastMatch;
     }

@@ -1,7 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import {
-  MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,
+  MAESTRO_RUNTIME_ADAPTER_POLICY,
   type MaestroObservationIdentity,
 } from '@agent-device/maestro';
 import {
@@ -110,7 +110,7 @@ export function createDaemonMaestroSnapshotSource(
       const initialSnapshot =
         cached?.generation === context.generation ? cached.snapshot : stabilityBaseline?.snapshot;
       const stable = await waitForTypedSnapshotStability({
-        timeoutMs: MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,
+        timeoutMs: MAESTRO_RUNTIME_ADAPTER_POLICY.settleTimeoutMs,
         context,
         snapshot: captureFresh,
         dependencies: options.dependencies,

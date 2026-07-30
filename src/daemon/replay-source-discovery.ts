@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
+import { isMaestroYamlPath, maestroBackendRequiredMessage } from '../replay/format.ts';
 import { SessionStore } from './session-store.ts';
 
 const GLOB_PATTERN_CHARS = /[*?[\]{}]/;
@@ -51,9 +52,7 @@ function expandReplayInput(
       };
     }
     if (stat.isFile()) {
-      if (!extensions.has(path.extname(expandedInput).toLowerCase())) {
-        throw new AppError('INVALID_ARGS', `test does not support this file type: ${input}`);
-      }
+      assertSupportedReplayFile(input, expandedInput, extensions);
       return { paths: [expandedInput], source: 'file' };
     }
     return { paths: [], source: 'file' };
@@ -75,6 +74,18 @@ function expandReplayInput(
         (match) => extensions.has(path.extname(match).toLowerCase()) && isExistingFile(match),
       ),
   };
+}
+
+function assertSupportedReplayFile(
+  input: string,
+  expandedInput: string,
+  extensions: ReadonlySet<string>,
+): void {
+  if (extensions.has(path.extname(expandedInput).toLowerCase())) return;
+  if (isMaestroYamlPath(expandedInput) && !extensions.has('.yaml')) {
+    throw new AppError('INVALID_ARGS', maestroBackendRequiredMessage('test', input));
+  }
+  throw new AppError('INVALID_ARGS', `test does not support this file type: ${input}`);
 }
 
 function readDirectoryPaths(directoryPath: string, extensions: ReadonlySet<string>): string[] {

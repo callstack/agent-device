@@ -21,7 +21,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { writeManifest } from './build-manifest.mjs';
-import { fixtureContentHash } from './fixture-seal.mjs';
+import { fixtureContentHash } from '../../packages/maestro/test/conformance/fixture-seal.ts';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const HARNESS_DIR = path.join(HERE, 'jvm-harness');
@@ -117,9 +117,7 @@ function main() {
   } finally {
     fs.rmSync(outDir, { recursive: true, force: true });
   }
-  console.log(
-    'Done. Review the diff, then run `node --experimental-strip-types scripts/maestro-conformance/verify.test.ts`.',
-  );
+  console.log('Done. Review the diff, then run `pnpm maestro:conformance`.');
 }
 
 main();

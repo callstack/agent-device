@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { MAESTRO_COMPATIBILITY_PRESETS } from '@agent-device/maestro';
+import { MAESTRO_RUNTIME_ADAPTER_POLICY } from '@agent-device/maestro';
 import { createRequestCanceledError, isRequestCanceledError } from '../../../request/cancel.ts';
 import { emitDiagnostic } from '../../../utils/diagnostics.ts';
 import { computePngRgbDifferenceAsync } from '../../../utils/png-worker-client.ts';
@@ -109,9 +109,7 @@ function screenshotsMatch(
     return false;
   }
   const differencePercent = comparison.differencePercent;
-  const matches =
-    differencePercent <=
-    MAESTRO_COMPATIBILITY_PRESETS.command.waitForAnimationToEndDifferencePercent;
+  const matches = differencePercent <= MAESTRO_RUNTIME_ADAPTER_POLICY.animationDifferencePercent;
   emitComparison(purpose, matches ? 'stable' : 'changed', comparison);
   return matches;
 }
