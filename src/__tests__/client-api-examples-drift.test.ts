@@ -38,7 +38,7 @@ const REQUIRED_EXAMPLE_SYMBOLS: readonly { subpath: string; symbol: string }[] =
   { subpath: 'agent-device/batch', symbol: 'runBatch' },
 ];
 
-// Parses the "Public subpath API" bullet list: a top-level `- \`agent-device...\``
+// Parses the "API reference" bullet list: a top-level `- \`agent-device...\``
 // bullet starts a subpath section; backtick-quoted identifiers on its nested
 // bullet lines (stripping a trailing `(...)` call signature) are that
 // subpath's documented symbols, until the next top-level bullet.
@@ -116,7 +116,7 @@ describe('examples/sdk vs client-api.md drift guard', () => {
     assert.ok(
       manifest.size > 0,
       `${CLIENT_API_DOC_PATH} did not yield a parseable subpath API manifest; ` +
-        'has the "Public subpath API exposed for Node consumers" list moved or changed format?',
+        'has the "API reference" entry-point list moved or changed format?',
     );
   });
 
