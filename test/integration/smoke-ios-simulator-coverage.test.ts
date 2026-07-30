@@ -105,6 +105,39 @@ test('non-live owners name concrete executable repository evidence', () => {
   }
 });
 
+test('live iOS scenarios reference fixture identifiers that exist', () => {
+  const fixtureIdentifiers = new Set(
+    fs
+      .readdirSync('examples/test-app/src/screens')
+      .filter((fileName) => fileName.endsWith('.tsx'))
+      .flatMap((fileName) => {
+        const source = fs.readFileSync(
+          path.join('examples/test-app/src/screens', fileName),
+          'utf8',
+        );
+        return [...source.matchAll(/\btestID="([^"]+)"/g)].map((match) => match[1]);
+      }),
+  );
+  const liveScenarioIdentifiers = new Set(
+    [
+      'test/integration/ios-simulator-e2e/live-automation-scenario.ts',
+      'test/integration/ios-simulator-e2e/live-full-scenarios.ts',
+    ].flatMap((scenarioPath) => {
+      const source = fs.readFileSync(scenarioPath, 'utf8');
+      return [
+        ...[...source.matchAll(/id=\\"([^"$]+)\\"/g)].map((match) => match[1]),
+        ...[...source.matchAll(/identifier === '([^']+)'/g)].map((match) => match[1]),
+      ];
+    }),
+  );
+
+  assert.deepEqual(
+    [...liveScenarioIdentifiers].filter((identifier) => !fixtureIdentifiers.has(identifier)).sort(),
+    [],
+    'live iOS scenarios must use test IDs defined by the fixture app',
+  );
+});
+
 test('capability classifications match executable simulator behavior', () => {
   for (const [command, entry] of Object.entries(IOS_SIMULATOR_E2E_COVERAGE)) {
     const supported = isCommandSupportedOnDevice(command, IOS_SIMULATOR);

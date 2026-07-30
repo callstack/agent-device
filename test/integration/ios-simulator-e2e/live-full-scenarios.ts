@@ -148,7 +148,7 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
     ? switcherSurface.json.data.nodes
     : [];
   const coveredFixtureControl = switcherNodes.find(
-    (node: { identifier?: unknown }) => node.identifier === 'automation-press-canary',
+    (node: { identifier?: unknown }) => node.identifier === 'automation-press',
   );
   assert.ok(coveredFixtureControl, JSON.stringify(switcherSurface.json));
   assert.equal(coveredFixtureControl.hittable, false, JSON.stringify(coveredFixtureControl));
