@@ -116,13 +116,13 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     const session = this.getSessionForDevice(device);
     if (!session) return undefined;
     return session.platform === 'ios'
-      ? createLimrunIosInteractor(session, this.dependencies.ios)
+      ? createLimrunIosInteractor(session)
       : createLimrunAndroidInteractor(session);
   }
 
   getDeviceSession(device: DeviceInfo): LimrunDeviceSession | undefined {
     const session = this.getSessionForDevice(device);
-    return session ? createLimrunDeviceSession(session, this.dependencies.ios) : undefined;
+    return session ? createLimrunDeviceSession(session) : undefined;
   }
 
   async installApp(
@@ -146,7 +146,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     const session = this.getSessionForDevice(device);
     if (!session) return undefined;
     return session.platform === 'ios'
-      ? await installLimrunIosApp(this.limrun, session, installablePath, this.dependencies, options)
+      ? await installLimrunIosApp(this.limrun, session, installablePath, options)
       : await installLimrunAndroidApp(this.limrun, session, installablePath, options);
   }
 
@@ -190,13 +190,16 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       if (!instance.status.apiUrl) {
         throw new AppError('COMMAND_FAILED', 'Limrun iOS instance did not expose apiUrl');
       }
-      return await createLimrunIosSession({
-        lease,
-        instanceId: instance.metadata.id,
-        device: buildLimrunDevice('ios', lease, instance.metadata.id),
-        apiUrl: instance.status.apiUrl,
-        token: instance.status.token,
-      });
+      return await createLimrunIosSession(
+        {
+          lease,
+          instanceId: instance.metadata.id,
+          device: buildLimrunDevice('ios', lease, instance.metadata.id),
+          apiUrl: instance.status.apiUrl,
+          token: instance.status.token,
+        },
+        this.dependencies,
+      );
     } catch (error) {
       await this.limrun.iosInstances.delete(instance.metadata.id).catch(() => {});
       throw error;

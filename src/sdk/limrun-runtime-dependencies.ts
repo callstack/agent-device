@@ -1,4 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
+// ProviderDeviceRuntime.getInteractor is synchronous, so this previously eager factory remains the
+// deliberate static edge; making it lazy would require a proxy interactor rather than this seam.
 import { createAndroidInteractor } from '../core/interactors/android.ts';
 import type { LimrunRuntimeDependencies } from '../providers/limrun/runtime-dependencies.ts';
 import { execFailureDetails, runCmd } from '../utils/exec.ts';
@@ -50,6 +52,7 @@ export function createLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
         });
       },
       adbError: async (message, result, details) => {
+        // Error construction is async so the platform helper remains lazy until an ADB failure.
         const { androidAdbResultError } = await import('../platforms/android/adb-executor.ts');
         return androidAdbResultError(message, result, details);
       },

@@ -2,6 +2,7 @@ import type { AppsFilter } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interaction';
 import type { AndroidInputOwner } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { AppError } from '@agent-device/kernel/errors';
 
 export type LimrunAdbCommandOptions = {
   allowFailure?: boolean;
@@ -71,8 +72,9 @@ export type LimrunAndroidKeyboardDismissResult = LimrunAndroidKeyboardState & {
 };
 
 export type LimrunAndroidRuntimeAdapter = {
+  // Interactors need provider-scoped capabilities; command helpers below need only ADB execution.
   createInteractor(device: DeviceInfo, adb: LimrunAdbProvider): Interactor;
-  createPortReverse(adb: LimrunAdbProvider): Promise<LimrunPortReverse>;
+  createPortReverse(adb: LimrunAdbExecutor): Promise<LimrunPortReverse>;
   inferAppName(packageName: string): Promise<string>;
   listApps(
     adb: LimrunAdbExecutor,
@@ -88,7 +90,7 @@ export type LimrunAndroidRuntimeAdapter = {
     message: string,
     result: LimrunAdbCommandResult,
     details?: Record<string, unknown>,
-  ): Promise<Error>;
+  ): Promise<AppError>;
 };
 
 export type LimrunHostAdapter = {

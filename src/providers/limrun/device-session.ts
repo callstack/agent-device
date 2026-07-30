@@ -5,7 +5,6 @@ import type {
   LimrunAdbProvider,
   LimrunAndroidKeyboardDismissResult,
   LimrunAndroidKeyboardState,
-  LimrunIosRuntimeAdapter,
 } from './runtime-dependencies.ts';
 import { createLimrunAndroidInteractor, type LimrunAndroidSession } from './android.ts';
 import {
@@ -93,11 +92,10 @@ export type LimrunDeviceSession = LimrunAndroidDeviceSession | LimrunIosDeviceSe
 
 export function createLimrunDeviceSession(
   session: LimrunAndroidSession | LimrunIosSession,
-  ios: LimrunIosRuntimeAdapter,
 ): LimrunDeviceSession {
   return session.platform === 'android'
     ? createAndroidDeviceSession(session)
-    : createIosDeviceSession(session, ios);
+    : createIosDeviceSession(session);
 }
 
 function createAndroidDeviceSession(session: LimrunAndroidSession): LimrunAndroidDeviceSession {
@@ -123,14 +121,11 @@ function createAndroidDeviceSession(session: LimrunAndroidSession): LimrunAndroi
   };
 }
 
-function createIosDeviceSession(
-  session: LimrunIosSession,
-  ios: LimrunIosRuntimeAdapter,
-): LimrunIosDeviceSession {
+function createIosDeviceSession(session: LimrunIosSession): LimrunIosDeviceSession {
   return {
     platform: 'ios',
     device: session.device,
-    interactor: createLimrunIosInteractor(session, ios),
+    interactor: createLimrunIosInteractor(session),
     viewport: {
       width: session.client.deviceInfo.screenWidth,
       height: session.client.deviceInfo.screenHeight,

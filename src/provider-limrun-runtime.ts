@@ -23,15 +23,23 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
   // Called through ProviderDeviceRuntime composition and the public Limrun SDK.
   // fallow-ignore-next-line unused-class-member
   readonly provider = LIMRUN_PROVIDER;
-  readonly leaseLifecycle: LeaseLifecycleProvider;
-  readonly recoverExpiredLease: ProviderExpiredLeaseRecovery;
-  readonly deviceInventoryProvider: DeviceInventoryProvider;
 
   constructor(options: LimrunRuntimeOptions) {
     this.implementation = createLimrunRuntime(options, createLimrunRuntimeDependencies());
-    this.leaseLifecycle = this.implementation.leaseLifecycle;
-    this.recoverExpiredLease = this.implementation.recoverExpiredLease;
-    this.deviceInventoryProvider = this.implementation.deviceInventoryProvider;
+  }
+
+  get leaseLifecycle(): LeaseLifecycleProvider {
+    return this.implementation.leaseLifecycle;
+  }
+
+  get recoverExpiredLease(): ProviderExpiredLeaseRecovery {
+    return this.implementation.recoverExpiredLease;
+  }
+
+  // Called through ProviderDeviceRuntime composition.
+  // fallow-ignore-next-line unused-class-member
+  get deviceInventoryProvider(): DeviceInventoryProvider {
+    return this.implementation.deviceInventoryProvider;
   }
 
   // Called through ProviderDeviceRuntime composition and the public Limrun SDK.

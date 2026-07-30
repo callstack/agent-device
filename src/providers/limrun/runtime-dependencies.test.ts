@@ -3,6 +3,7 @@ import { test, vi } from 'vitest';
 import type { AppsFilter, DeviceLease } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interaction';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { createLimrunRuntime } from './runtime.ts';
 import type {
   LimrunAdbProvider,
@@ -123,7 +124,7 @@ function createContractFixture() {
     clientVersion: 'test-version',
     android: {
       createInteractor,
-      createPortReverse: async (adb: LimrunAdbProvider) =>
+      createPortReverse: async (adb: LimrunAdbExecutor) =>
         createInMemoryPortReverse(adb, activeReverseMappings),
       inferAppName: async () => 'Example',
       listApps,
@@ -140,7 +141,7 @@ function createContractFixture() {
         dismissed: false,
       }),
       readLogs: async () => 'log line\n',
-      adbError: async (message: string) => new Error(message),
+      adbError: async (message: string) => new AppError('COMMAND_FAILED', message),
     },
     host: {
       runAdb: async (args: string[]) => {
@@ -157,22 +158,22 @@ function createContractFixture() {
   return { adbCalls, createInteractor, dependencies, getKeyboardState, interactor, listApps };
 }
 
-function createInMemoryPortReverse(adb: LimrunAdbProvider, mappings: LimrunPortReverseMapping[]) {
+function createInMemoryPortReverse(adb: LimrunAdbExecutor, mappings: LimrunPortReverseMapping[]) {
   return {
     ensure: async (mapping: LimrunPortReverseMapping) => {
       mappings.push(mapping);
-      await adb.exec(['reverse', mapping.local, mapping.remote]);
+      await adb(['reverse', mapping.local, mapping.remote]);
     },
     remove: async (local: LimrunPortReverseMapping['local']) => {
       const index = mappings.findIndex((mapping) => mapping.local === local);
       if (index >= 0) mappings.splice(index, 1);
-      await adb.exec(['reverse', '--remove', local]);
+      await adb(['reverse', '--remove', local]);
     },
     removeAllOwned: async (ownerId: string) => {
       const owned = mappings.filter((mapping) => mapping.ownerId === ownerId);
       for (const mapping of owned) {
         mappings.splice(mappings.indexOf(mapping), 1);
-        await adb.exec(['reverse', '--remove', mapping.local]);
+        await adb(['reverse', '--remove', mapping.local]);
       }
     },
     list: async () => [...mappings],

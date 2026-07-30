@@ -29,12 +29,8 @@ const IOS_APPS = [
   { bundleId: 'com.example.ios', name: 'Example', installType: 'User' },
 ];
 
-const TEST_IOS_ADAPTER = {
-  resolveAppAlias: async (app: string) => app,
-  readBundleAppName: async () => undefined,
-};
-
-const TEST_ANDROID_DEPENDENCIES = {
+const TEST_DEPENDENCIES = {
+  clientVersion: 'test-version',
   android: {
     createInteractor: createAndroidInteractor,
     createPortReverse: async (adb) => createAndroidPortReverseManager(adb),
@@ -63,7 +59,11 @@ const TEST_ANDROID_DEPENDENCIES = {
     runAdb: async () => adbResult(''),
     archiveDirectory: async () => undefined,
   },
-} satisfies Pick<LimrunRuntimeDependencies, 'android' | 'host'>;
+  ios: {
+    resolveAppAlias: async (app: string) => app,
+    readBundleAppName: async () => undefined,
+  },
+} satisfies LimrunRuntimeDependencies;
 
 test('iOS device session exposes reusable capabilities without its raw client', async () => {
   const pressKey = vi.fn(async () => undefined);
@@ -82,7 +82,6 @@ test('iOS device session exposes reusable capabilities without its raw client', 
       stopRecording,
       simctl,
     }),
-    TEST_IOS_ADAPTER,
   );
 
   assert.equal(session.platform, 'ios');
@@ -132,7 +131,6 @@ test('iOS remote install waits for eventually consistent app inventory', async (
       listApps,
       installApp,
     }),
-    TEST_IOS_ADAPTER,
   );
 
   assert.equal(session.platform, 'ios');
@@ -179,7 +177,6 @@ test('Android device session exposes semantic ADB capabilities without its raw c
   const sendAsset = vi.fn(async () => undefined);
   const session = createLimrunDeviceSession(
     androidSession(provider, { pressKey, startRecording, stopRecording, sendAsset }),
-    TEST_IOS_ADAPTER,
   );
 
   assert.equal(session.platform, 'android');
@@ -218,6 +215,7 @@ function iosSession(client: Record<string, unknown>): LimrunIosSession {
     instanceId: 'ios-instance',
     device: device('ios'),
     client,
+    dependencies: TEST_DEPENDENCIES,
   } as unknown as LimrunIosSession;
 }
 
@@ -232,7 +230,7 @@ function androidSession(
     device: device('android'),
     client,
     adbProvider,
-    dependencies: TEST_ANDROID_DEPENDENCIES,
+    dependencies: TEST_DEPENDENCIES,
   } as unknown as LimrunAndroidSession;
 }
 

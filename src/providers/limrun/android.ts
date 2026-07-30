@@ -33,7 +33,7 @@ type LimrunAndroidAdbSession = {
   adbTunnel?: LimrunAdbTunnel;
   adbSerial?: string;
   adbTunnelPromise?: Promise<string>;
-  dependencies: Pick<LimrunRuntimeDependencies, 'android' | 'host'>;
+  readonly dependencies: Pick<LimrunRuntimeDependencies, 'android' | 'host'>;
 };
 
 export type LimrunAndroidSession = LimrunAndroidAdbSession & {
@@ -71,7 +71,7 @@ export async function createLimrunAndroidSession(
       await client.setText(request.target, request.text);
     },
   };
-  adbProvider.reverse = await dependencies.android.createPortReverse(adbProvider);
+  adbProvider.reverse = await dependencies.android.createPortReverse(adbProvider.exec);
   return Object.assign(session, { adbProvider });
 }
 
