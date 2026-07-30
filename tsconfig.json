@@ -16,5 +16,6 @@
     "verbatimModuleSyntax": true,
     "types": ["node"]
   },
-  "include": ["src", "test", "packages", "scripts/help-conformance-command-validator.ts"]
+  "include": ["src", "test", "scripts/help-conformance-command-validator.ts"],
+  "references": [{ "path": "./packages/kernel" }]
 }

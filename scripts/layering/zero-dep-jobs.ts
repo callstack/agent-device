@@ -220,11 +220,11 @@ function resolveRelative(
  * A relative import that resolves to nothing is left alone — that is a broken import, which
  * typecheck reports far better than this can.
  */
-export function uninstallableImports(
+function walkJobClosure(
   job: ZeroDepJob,
   readSource: (file: string) => string | null,
   fileExists: (file: string) => boolean,
-): UninstallableImport[] {
+): { visited: Set<string>; found: UninstallableImport[] } {
   const found: UninstallableImport[] = [];
   const visited = new Set<string>();
   const queue = [...job.entries];
@@ -246,6 +246,33 @@ export function uninstallableImports(
       found.push({ workflow: job.workflow, job: job.job, file, line, spec });
     }
   }
+  return { visited, found };
+}
 
-  return found.sort((left, right) => left.file.localeCompare(right.file) || left.line - right.line);
+export function uninstallableImports(
+  job: ZeroDepJob,
+  readSource: (file: string) => string | null,
+  fileExists: (file: string) => boolean,
+): UninstallableImport[] {
+  return walkJobClosure(job, readSource, fileExists).found.sort(
+    (left, right) => left.file.localeCompare(right.file) || left.line - right.line,
+  );
+}
+
+/**
+ * Every repo file reachable from a zero-dep job's entries. R11 grants its
+ * relative-into-packages exception ONLY to these files: a zero-dep closure can
+ * never coexist with specifier loads (no node_modules), which is what makes a
+ * relative package-source import safe from dual instantiation.
+ */
+export function zeroDepClosureFiles(
+  jobs: readonly ZeroDepJob[],
+  readSource: (file: string) => string | null,
+  fileExists: (file: string) => boolean,
+): Set<string> {
+  const files = new Set<string>();
+  for (const job of jobs) {
+    for (const file of walkJobClosure(job, readSource, fileExists).visited) files.add(file);
+  }
+  return files;
 }

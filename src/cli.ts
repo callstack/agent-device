@@ -1,7 +1,7 @@
 import { parseRawArgs, usage, usageForCommand } from './cli/parser/args.ts';
 import { suggestCommandFor } from './cli/parser/command-suggestions.ts';
 import { asAppError, AppError, normalizeError } from '@agent-device/kernel/errors';
-import { throwDaemonError } from '@agent-device/kernel/daemon-error';
+import { throwDaemonError } from './client/daemon-error.ts';
 import { printHumanError, printJson } from './utils/output.ts';
 import { readVersion } from './utils/version.ts';
 import { pathToFileURL } from 'node:url';

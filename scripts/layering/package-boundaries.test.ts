@@ -94,23 +94,28 @@ test('a root src file tunnelling into packages/*/src relatively is a violation',
     'src/utils/exec.ts',
     "import { AppError } from '../../packages/kernel/src/errors.ts';",
   );
-  const violations = checkRootSites(sites, ALL, new Set([kernel.name]));
+  const violations = checkRootSites(sites, ALL, new Set([kernel.name]), new Set());
   assert.deepEqual(rules(violations), ['R11 package-boundaries']);
   assert.match(violations[0]!.message, /instantiate the module twice/);
 });
 
-test('the R8 exception holds only for scripts targeting an exports-named source', () => {
+test('the R8 exception requires zero-dep closure membership AND an exports-named target', () => {
+  const closure = new Set(['scripts/some-tool/run.ts']);
   const allowed = specifierSites(
     'scripts/some-tool/run.ts',
     "import { AppError } from '../../packages/kernel/src/errors.ts';",
   );
-  assert.deepEqual(checkRootSites(allowed, ALL, new Set([kernel.name])), []);
+  assert.deepEqual(checkRootSites(allowed, ALL, new Set([kernel.name]), closure), []);
+
+  // Same import, but the file is NOT in any zero-dep closure: scripts/
+  // placement alone proves nothing about dual instantiation.
+  assert.equal(checkRootSites(allowed, ALL, new Set([kernel.name]), new Set()).length, 1);
 
   const nonExported = specifierSites(
     'scripts/some-tool/run.ts',
     "import { hidden } from '../../packages/kernel/src/internal.ts';",
   );
-  assert.equal(checkRootSites(nonExported, ALL, new Set([kernel.name])).length, 1);
+  assert.equal(checkRootSites(nonExported, ALL, new Set([kernel.name]), closure).length, 1);
 });
 
 test('root workspace specifiers need a root workspace:* entry and an exported subpath', () => {
@@ -128,10 +133,10 @@ test('root workspace specifiers need a root workspace:* entry and an exported su
     'src/cli.ts',
     "import { x } from '@agent-device/kernel/src/errors.ts';",
   );
-  assert.equal(checkRootSites(deep, ALL, new Set([kernel.name])).length, 1);
+  assert.equal(checkRootSites(deep, ALL, new Set([kernel.name]), new Set()).length, 1);
 
   const unknown = specifierSites('src/cli.ts', "import { x } from '@agent-device/nope/thing';");
-  assert.equal(checkRootSites(unknown, ALL, new Set([kernel.name])).length, 1);
+  assert.equal(checkRootSites(unknown, ALL, new Set([kernel.name]), new Set()).length, 1);
 });
 
 test('the real tree parses, declares, and passes R11', () => {
@@ -145,7 +150,7 @@ test('the real tree parses, declares, and passes R11', () => {
     rootWorkspaceDependencyNames(repoRoot).has('@agent-device/kernel'),
     'root must declare the kernel workspace dependency',
   );
-  assert.deepEqual(checkPackageBoundaries(repoRoot), []);
+  assert.deepEqual(checkPackageBoundaries(repoRoot, new Set()), []);
 });
 
 test('Node resolution enforces the exports map at runtime', () => {

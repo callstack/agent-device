@@ -45,7 +45,7 @@ import {
   SESSION_STATE_FIELD_OWNERS,
   STORE_OWNED_SESSION_STATE_FIELDS,
 } from './session-state.ts';
-import { uninstallableImports, zeroDepJobs } from './zero-dep-jobs.ts';
+import { uninstallableImports, zeroDepClosureFiles, zeroDepJobs } from './zero-dep-jobs.ts';
 import {
   backEdgePair,
   findValueImportCycles,
@@ -61,7 +61,11 @@ import {
   daemonModularitySummary,
   TYPE_CYCLE_BASELINE,
 } from './daemon-modularity.ts';
-import { checkPackageBoundaries, packageBoundariesSummary } from './package-boundaries.ts';
+import {
+  checkPackageBoundaries,
+  packageBoundariesSummary,
+  workspaceSpecifierTargets,
+} from './package-boundaries.ts';
 import { policyLead, policyViolation, ZONE_POLICIES } from './zone-policy.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
@@ -366,7 +370,7 @@ function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Layer
 // R8: a CI job that runs with `install-deps: false` has no `node_modules`, so every script it
 // reaches must import only Node builtins and other repo files. Locally the opposite is true —
 // `node_modules` is always present — which is why this needs a gate rather than a convention.
-function checkZeroDepJobs(): LayeringViolation[] {
+function repoZeroDepJobs() {
   const workflows = readSources(
     execFileSync('git', ['ls-files', '.github/workflows/*.yml'], {
       cwd: repoRoot,
@@ -379,9 +383,12 @@ function checkZeroDepJobs(): LayeringViolation[] {
     scripts?: Record<string, string>;
   };
   const packageScripts = new Map(Object.entries(packageJson.scripts ?? {}));
+  return zeroDepJobs(workflows, fileExists, packageScripts);
+}
 
+function checkZeroDepJobs(): LayeringViolation[] {
   const violations: LayeringViolation[] = [];
-  for (const job of zeroDepJobs(workflows, fileExists, packageScripts)) {
+  for (const job of repoZeroDepJobs()) {
     // Fail closed: a zero-dep job whose commands the entry scan cannot recognize would
     // otherwise be silently exempt from the rule it is the whole reason for.
     if (job.entries.length === 0) {
@@ -464,7 +471,7 @@ function report(
 export function main(): number {
   const sourceFiles = listSourceFiles();
   const sources = readSources(sourceFiles);
-  const edges = resolveImportEdges(sources);
+  const edges = resolveImportEdges(sources, workspaceSpecifierTargets(repoRoot));
   // Computed once and threaded: the rule and the success line must report the same number.
   const typeCycleMembers = largestTypeCycleMembers(edges);
   const typeCycle = typeCycleMembers.length;
@@ -476,7 +483,10 @@ export function main(): number {
     ...checkSessionStateOwnership(sources),
     ...checkDaemonModularityRatchets(edges, typeCycleMembers),
     ...checkZeroDepJobs(),
-    ...checkPackageBoundaries(repoRoot),
+    ...checkPackageBoundaries(
+      repoRoot,
+      zeroDepClosureFiles(repoZeroDepJobs(), readSourceOrNull, fileExists),
+    ),
   ];
   return report(sourceFiles, violations, typeCycle);
 }

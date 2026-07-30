@@ -14,7 +14,7 @@ import {
 } from './commands/command-projection.ts';
 import { systemCommandFamily } from './commands/system/index.ts';
 import { buildRequestFlags } from './commands/command-flags.ts';
-import { throwDaemonError } from '@agent-device/kernel/daemon-error';
+import { throwDaemonError } from './client/daemon-error.ts';
 import {
   buildMeta,
   normalizeDeployResult,

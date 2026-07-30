@@ -176,6 +176,7 @@ export function checkRootSites(
   sites: readonly SpecifierSite[],
   packages: readonly WorkspacePackage[],
   rootWorkspaceDependencies: ReadonlySet<string>,
+  zeroDepClosureFiles: ReadonlySet<string>,
 ): PackageBoundaryViolation[] {
   const violations: PackageBoundaryViolation[] = [];
   const exportedSources = new Set(packages.flatMap((pkg) => [...pkg.exportTargets.values()]));
@@ -185,18 +186,23 @@ export function checkRootSites(
         path.posix.join(path.posix.dirname(site.file), site.specifier),
       );
       if (!/^packages\/[^/]+\//.test(resolved)) continue;
-      const isZeroDepScript = site.file.startsWith('scripts/');
-      if (isZeroDepScript && exportedSources.has(resolved)) continue;
+      // The R8 exception requires BOTH membership in an actual zero-dep job
+      // closure (no node_modules -> no coexisting specifier loads -> no dual
+      // instantiation) AND an exports-named target. `scripts/` placement alone
+      // proves neither.
+      const inZeroDepClosure = zeroDepClosureFiles.has(site.file);
+      if (inZeroDepClosure && exportedSources.has(resolved)) continue;
       violations.push({
         rule: 'R11 package-boundaries',
         file: site.file,
         line: site.line,
-        message: isZeroDepScript
+        message: inZeroDepClosure
           ? `'${site.specifier}' targets a non-exported package source — the R8 exception only ` +
             `covers files named by the package's exports map.`
           : `'${site.specifier}' bypasses the package boundary — import the package specifier ` +
-            `instead (relative routes into packages/ are reserved for R8 zero-dep scripts, and ` +
-            `dual specifier/relative loads would instantiate the module twice).`,
+            `instead. The relative route is reserved for files inside an R8 zero-dep job ` +
+            `closure; anywhere else, dual specifier/relative loads would instantiate the ` +
+            `module twice.`,
       });
       continue;
     }
@@ -259,8 +265,8 @@ function walkTsFiles(repoRoot: string, relativeDir: string): string[] {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (entry.name !== 'node_modules') queue.push(full);
-      } else if (entry.name.endsWith('.ts')) {
+        if (entry.name !== 'node_modules' && entry.name !== 'dist-types') queue.push(full);
+      } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
         files.push(path.relative(repoRoot, full).replaceAll(path.sep, '/'));
       }
     }
@@ -268,8 +274,20 @@ function walkTsFiles(repoRoot: string, relativeDir: string): string[] {
   return files.sort();
 }
 
+/** Flat `specifier -> repo-relative source` map across all workspace packages. */
+export function workspaceSpecifierTargets(repoRoot: string): Map<string, string> {
+  const targets = new Map<string, string>();
+  for (const pkg of readWorkspacePackages(repoRoot)) {
+    for (const [specifier, target] of pkg.exportTargets) targets.set(specifier, target);
+  }
+  return targets;
+}
+
 /** The real-tree R11 run used by check.ts. */
-export function checkPackageBoundaries(repoRoot: string): PackageBoundaryViolation[] {
+export function checkPackageBoundaries(
+  repoRoot: string,
+  zeroDepClosure: ReadonlySet<string>,
+): PackageBoundaryViolation[] {
   const packages = readWorkspacePackages(repoRoot);
   if (packages.length === 0) return [];
   const rootDependencies = rootWorkspaceDependencyNames(repoRoot);
@@ -287,7 +305,9 @@ export function checkPackageBoundaries(repoRoot: string): PackageBoundaryViolati
       // src/ and test/ suites stay covered — they import packages for real.
       if (root === 'scripts' && file.endsWith('.test.ts')) continue;
       const source = fs.readFileSync(path.join(repoRoot, file), 'utf8');
-      violations.push(...checkRootSites(specifierSites(file, source), packages, rootDependencies));
+      violations.push(
+        ...checkRootSites(specifierSites(file, source), packages, rootDependencies, zeroDepClosure),
+      );
     }
   }
   return violations;

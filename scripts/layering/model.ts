@@ -187,12 +187,18 @@ function resolveTargetFile(
   fromFile: string,
   spec: string,
   sourceFiles: ReadonlySet<string>,
+  workspaceExportTargets?: ReadonlyMap<string, string>,
 ): string | null {
   if (spec.startsWith('@agent-device/')) {
-    // Workspace specifier (#1490 W0): resolve against whichever home the
-    // module has in the provided source map — `packages/<name>/src/<sub>.ts`
-    // on the real tree, `src/<name>/<sub>.ts` in pre-move fixtures — so graph
-    // analyses keep following edges across the package seam.
+    // Workspace specifier (#1490 W0). Real runs pass the exports-derived map
+    // (workspaceSpecifierTargets), which is authoritative — it handles '.'
+    // facade exports and any source layout. The positional fallback exists
+    // only for map-less fixtures (the P0-pinned depgraph contract) and cannot
+    // resolve a bare facade specifier by construction.
+    if (workspaceExportTargets) {
+      const target = workspaceExportTargets.get(spec);
+      return target !== undefined && sourceFiles.has(target) ? target : null;
+    }
     const [name, ...subParts] = spec.slice('@agent-device/'.length).split('/');
     const sub = subParts.join('/');
     if (!name || !sub) return null;
@@ -214,12 +220,15 @@ function resolveTargetFile(
   return candidates.find((candidate) => sourceFiles.has(candidate)) ?? null;
 }
 
-export function resolveImportEdges(sources: ReadonlyMap<string, string>): ResolvedImportEdge[] {
+export function resolveImportEdges(
+  sources: ReadonlyMap<string, string>,
+  workspaceExportTargets?: ReadonlyMap<string, string>,
+): ResolvedImportEdge[] {
   const sourceFiles = new Set(sources.keys());
   const edges: ResolvedImportEdge[] = [];
   for (const [file, source] of sources) {
     for (const edge of parseImports(source)) {
-      const target = resolveTargetFile(file, edge.spec, sourceFiles);
+      const target = resolveTargetFile(file, edge.spec, sourceFiles, workspaceExportTargets);
       if (!target) continue;
       edges.push({
         ...edge,

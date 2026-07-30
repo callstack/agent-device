@@ -33,10 +33,6 @@
       "types": "./src/redaction.ts",
       "default": "./src/redaction.ts"
     },
-    "./daemon-error": {
-      "types": "./src/daemon-error.ts",
-      "default": "./src/daemon-error.ts"
-    },
     "./bounds": {
       "types": "./src/bounds.ts",
       "default": "./src/bounds.ts"

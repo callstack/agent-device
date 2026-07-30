@@ -36,7 +36,7 @@ const node = {
 
 test('public contracts error helpers do not load diagnostics module', () => {
   const errorsSource = fs.readFileSync(
-    path.join(import.meta.dirname, '..', 'kernel', 'errors.ts'),
+    path.join(import.meta.dirname, '..', '..', 'packages', 'kernel', 'src', 'errors.ts'),
     'utf8',
   );
 

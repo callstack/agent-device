@@ -39,3 +39,7 @@ android/snapshot-helper/build/
 android/snapshot-helper/dist/
 android/ime-helper/build/
 android/ime-helper/dist/
+
+# Workspace package declaration output (tsc -b project references)
+packages/*/dist-types/
+*.tsbuildinfo
