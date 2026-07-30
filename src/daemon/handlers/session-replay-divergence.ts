@@ -5,7 +5,8 @@ import {
 } from '../../snapshot/snapshot-quality.ts';
 import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
 import type { CommandFlags } from '../../core/dispatch.ts';
-import type { DaemonError, ResponseLevel } from '@agent-device/kernel/contracts';
+import type { ResponseLevel } from '@agent-device/kernel/contracts';
+import type { DaemonError } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { captureSnapshot } from './snapshot-capture.ts';
 import {

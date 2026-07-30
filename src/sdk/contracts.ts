@@ -1,5 +1,4 @@
 export type {
-  DaemonError,
   DaemonInstallSource,
   DaemonRequest,
   DaemonResponse,
@@ -9,5 +8,6 @@ export type {
   LeaseBackend,
   SessionRuntimeHints,
 } from '@agent-device/kernel/contracts';
+export type { DaemonError } from '@agent-device/kernel/errors';
 
 export { centerOfRect, defaultHintForCode, normalizeError } from '@agent-device/kernel/contracts';

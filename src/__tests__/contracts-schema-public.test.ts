@@ -16,6 +16,7 @@ import type {
 } from '../contracts/navigation.ts';
 import type { ViewportCommandResult } from '../contracts/viewport.ts';
 import { centerOfRect, defaultHintForCode, normalizeError } from '../sdk/contracts.ts';
+import type { DaemonError } from '../sdk/contracts.ts';
 import {
   daemonRuntimeSchema,
   jsonRpcRequestSchema,
@@ -173,6 +174,15 @@ test('public contract exports normalize and hint app errors', () => {
     defaultHintForCode('UNKNOWN'),
     'Unexpected internal error. Retry with --debug and report the diagnostics log if it persists.',
   );
+});
+
+test('public contracts retain the DaemonError type export', () => {
+  const daemonError = {
+    code: 'COMMAND_FAILED',
+    message: 'Daemon command failed',
+  } satisfies DaemonError;
+
+  assert.equal(daemonError.code, 'COMMAND_FAILED');
 });
 
 test('internal JSON-RPC schema rejects invalid payloads', () => {

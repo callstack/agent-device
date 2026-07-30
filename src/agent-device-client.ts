@@ -14,7 +14,7 @@ import {
 } from './commands/command-projection.ts';
 import { systemCommandFamily } from './commands/system/index.ts';
 import { buildRequestFlags } from './commands/command-flags.ts';
-import { throwDaemonError } from './client/daemon-error.ts';
+import { AppError, throwDaemonError } from '@agent-device/kernel/errors';
 import {
   buildMeta,
   normalizeDeployResult,
@@ -85,7 +85,6 @@ import { readSnapshotDiagnosticsSummary } from './contracts/snapshot-diagnostics
 import type { CommandFlags } from './core/dispatch-context.ts';
 import type { AgentArtifactsResult } from './contracts/cloud-artifacts.ts';
 import type { ProjectedNavigationCommandClient } from './commands/system/navigation-projection.ts';
-import { AppError } from '@agent-device/kernel/errors';
 
 type ProjectedSystemCommandClient = ProjectedNavigationCommandClient<InternalRequestOptions> &
   Pick<AgentDeviceCommandClient, 'appState' | 'keyboard' | 'clipboard' | 'rotate'>;

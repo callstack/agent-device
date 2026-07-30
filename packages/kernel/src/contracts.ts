@@ -1,3 +1,5 @@
+import type { DaemonError } from './errors.ts';
+
 export type { AppErrorCode } from './errors.ts';
 export { defaultHintForCode, normalizeError } from './errors.ts';
 import type { PlatformSelector } from './device.ts';
@@ -141,27 +143,6 @@ export type ResponseCost = {
 export type DaemonResponseData = Record<string, unknown> & {
   artifacts?: DaemonArtifact[];
   cost?: ResponseCost;
-};
-
-export type DaemonError = {
-  code: string;
-  message: string;
-  hint?: string;
-  diagnosticId?: string;
-  logPath?: string;
-  details?: Record<string, unknown>;
-  /**
-   * Machine-readable typed-error signals (Phase 2). Additive: present only when
-   * derivable, so the default error wire shape is unchanged.
-   *
-   * `retriable` flags a transient failure an agent should retry (vs. a
-   * deterministic one where a retry is wasted). `supportedOn` lists the platform
-   * families that DO support the command (derived from the capability matrix),
-   * surfaced on platform-mismatch errors so an agent self-corrects without a
-   * wasted round-trip.
-   */
-  retriable?: boolean;
-  supportedOn?: string;
 };
 
 export type DaemonResponse =

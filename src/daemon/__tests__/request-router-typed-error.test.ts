@@ -127,7 +127,7 @@ test('deterministic errors (INVALID_ARGS) are returned with the default shape �
 // ADR 0012 decision 6, BLOCKER 2 (second follow-up): a repair-armed `close`
 // whose targeted platform close fails must surface `retriable: true` at the
 // TOP level of the wire error — the location `enrichDaemonError` below and
-// the client actually read (`DaemonError.retriable` in kernel/contracts.ts) —
+// the client actually read (`DaemonError.retriable` in kernel/errors.ts) —
 // and must preserve the underlying platform error's own diagnosticId/logPath/
 // details rather than discarding them. Exercised through the REAL router
 // boundary (`createRequestHandler`), not just the raw response builder, so a

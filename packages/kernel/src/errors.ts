@@ -86,6 +86,23 @@ export type NormalizedError = {
   details?: Record<string, unknown>;
 };
 
+/**
+ * Error payload returned by the daemon transport. It is kept beside the local
+ * error representation because clients immediately rehydrate this wire shape
+ * into `AppError` before rendering or handling it.
+ */
+export type DaemonError = {
+  code: string;
+  message: string;
+  hint?: string;
+  diagnosticId?: string;
+  logPath?: string;
+  details?: Record<string, unknown>;
+  /** Additive retry and platform-support signals; absent when not derivable. */
+  retriable?: boolean;
+  supportedOn?: string;
+};
+
 export class AppError extends Error {
   code: AppErrorCode;
   details?: AppErrorDetails;
@@ -97,6 +114,18 @@ export class AppError extends Error {
     this.details = details;
     this.cause = cause;
   }
+}
+
+/** Rehydrate a daemon transport error into the error type used by local callers. */
+export function throwDaemonError(error: DaemonError): never {
+  throw new AppError(toAppErrorCode(error.code), error.message, {
+    ...(error.details ?? {}),
+    hint: error.hint,
+    diagnosticId: error.diagnosticId,
+    logPath: error.logPath,
+    retriable: error.retriable,
+    supportedOn: error.supportedOn,
+  });
 }
 
 export function asAppError(err: unknown, fallbackCode: AppErrorCode = 'UNKNOWN'): AppError {

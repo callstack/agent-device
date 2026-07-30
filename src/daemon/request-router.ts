@@ -3,10 +3,15 @@ import type {
   DeviceInventoryProvider,
   LeaseLifecycleProvider,
 } from '../contracts/device-provider.ts';
-import { AppError, normalizeError, retriableForErrorCode } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  normalizeError,
+  retriableForErrorCode,
+  type DaemonError,
+} from '@agent-device/kernel/errors';
 import { supportedPlatformsForCommand } from '../core/capabilities.ts';
 import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
-import type { DaemonArtifactType, DaemonError, ResponseCost } from '@agent-device/kernel/contracts';
+import type { DaemonArtifactType, ResponseCost } from '@agent-device/kernel/contracts';
 import type { CloudArtifactProvider } from '../contracts/cloud-artifacts.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, DaemonResponseData } from './types.ts';
 import { RESPONSE_VIEWS } from './response-views.ts';

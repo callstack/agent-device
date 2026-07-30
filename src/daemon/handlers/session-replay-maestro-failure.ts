@@ -8,7 +8,7 @@ import { evaluateMaestroReplayResume } from '../../compat/maestro/replay-plan.ts
 import type { MaestroReplayPlan } from '../../compat/maestro/replay-plan-types.ts';
 import { matchesMaestroTypedSelector } from '../../compat/maestro/runtime-target-policy.ts';
 import { rankMaestroCandidates } from '../../compat/maestro/runtime-target-ranking.ts';
-import type { DaemonError } from '@agent-device/kernel/contracts';
+import type { DaemonError } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
