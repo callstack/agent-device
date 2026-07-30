@@ -3,6 +3,13 @@ import { resolveIosPhysicalDeviceControl } from '../physical-device-control.ts';
 
 const RUNNER_DEVICE_TUNNEL_IP_CACHE_TTL_MS = 30_000;
 
+/**
+ * Experimental override for #1403: forces physical-device runner commands
+ * through usbmux regardless of backend. Read per-resolve so daemon restarts
+ * are not required between experiment runs.
+ */
+const RUNNER_ROUTE_OVERRIDE_ENV = 'AGENT_DEVICE_IOS_RUNNER_ROUTE';
+
 type DeviceTunnelIpCacheEntry = {
   ip: string;
   expiresAt: number;
@@ -33,13 +40,8 @@ export function createRunnerCommandRouteResolver(device: DeviceInfo, port: numbe
         return buildNetworkRoute(device, port, null, false);
       }
       const control = resolveIosPhysicalDeviceControl(device);
-      if (control.backend === 'xctest') {
-        const transport = await control.resolveRunnerTransport(device, timeoutBudgetMs);
-        return {
-          kind: transport.kind,
-          endpoints: [`usbmux://${device.id}:${port}/command`],
-          cachedTunnelIp: false,
-        };
+      if (control.backend === 'xctest' || readRunnerRouteOverride() === 'usbmux') {
+        return buildUsbmuxRoute(device, port);
       }
       if (!forceRefresh) {
         const cached = readDeviceTunnelIpCache(device.id);
@@ -50,11 +52,7 @@ export function createRunnerCommandRouteResolver(device: DeviceInfo, port: numbe
       }
       const transport = await control.resolveRunnerTransport(device, timeoutBudgetMs);
       if (transport.kind === 'usbmux') {
-        return {
-          kind: 'usbmux',
-          endpoints: [`usbmux://${device.id}:${port}/command`],
-          cachedTunnelIp: false,
-        };
+        return buildUsbmuxRoute(device, port);
       }
       const tunnelIp = transport.tunnelIp;
       requestTunnelIp = tunnelIp;
@@ -73,6 +71,18 @@ export function invalidateDeviceTunnelIpCache(deviceId: string): void {
  */
 export function clearDeviceTunnelIpCache(): void {
   deviceTunnelIpCache.clear();
+}
+
+function readRunnerRouteOverride(): 'usbmux' | null {
+  return process.env[RUNNER_ROUTE_OVERRIDE_ENV]?.trim() === 'usbmux' ? 'usbmux' : null;
+}
+
+function buildUsbmuxRoute(device: DeviceInfo, port: number): RunnerCommandRoute {
+  return {
+    kind: 'usbmux',
+    endpoints: [`usbmux://${device.id}:${port}/command`],
+    cachedTunnelIp: false,
+  };
 }
 
 function buildNetworkRoute(

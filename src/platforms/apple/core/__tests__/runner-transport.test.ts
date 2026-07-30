@@ -60,6 +60,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 test('waitForRunner propagates request cancellation without fallback', async () => {
@@ -222,6 +223,36 @@ test('sendRunnerCommandOnce routes xctest physical devices through usbmux', asyn
     8100,
     { command: 'uptime' },
   ]);
+});
+
+test('sendRunnerCommandOnce routes coredevice physical devices through usbmux when overridden', async () => {
+  vi.stubEnv('AGENT_DEVICE_IOS_RUNNER_ROUTE', 'usbmux');
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+
+  const response = await sendRunnerCommandOnce(iosDevice, 8100, { command: 'uptime' }, 5_000);
+
+  assert.equal(response.status, 200);
+  assert.equal(fetchMock.mock.calls.length, 0);
+  assert.equal(mockRunCmd.mock.calls.length, 0);
+  assert.deepEqual(mockUsbmuxPostCommand.mock.calls[0]?.slice(0, 3), [
+    iosDevice.id,
+    8100,
+    { command: 'uptime' },
+  ]);
+});
+
+test('waitForRunner routes coredevice physical devices through usbmux when overridden', async () => {
+  vi.stubEnv('AGENT_DEVICE_IOS_RUNNER_ROUTE', 'usbmux');
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+
+  const response = await waitForRunner(iosDevice, 8100, { command: 'snapshot' }, undefined, 5_000);
+
+  assert.equal(response.status, 200);
+  assert.equal(fetchMock.mock.calls.length, 0);
+  assert.equal(mockRunCmd.mock.calls.length, 0);
+  assert.equal(mockUsbmuxPostCommand.mock.calls.length, 1);
 });
 
 function stubSuccessfulFetch(): void {
