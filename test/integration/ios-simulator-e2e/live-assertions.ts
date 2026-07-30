@@ -1,18 +1,18 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
-import { isPlayableVideo } from '../../../src/utils/video.ts';
 import {
   assertFilesDiffer,
   assertJsonContains,
+  assertMp4File,
+  assertNonEmptyFile,
   createLiveDeviceAssertions,
 } from '../live-device-e2e/assertions.ts';
 import type { CliJsonResult } from '../cli-json.ts';
 import type { IosSimulatorBehaviorId } from './behavior-coverage.ts';
 import { type LiveContext, runStep, verifyCommand } from './live-harness.ts';
 
-export { assertFilesDiffer, assertJsonContains };
+export { assertFilesDiffer, assertJsonContains, assertMp4File, assertNonEmptyFile };
 
 export const { assertElementText, assertWaitText, capturePng } = createLiveDeviceAssertions<
   IosSimulatorBehaviorId,
@@ -38,19 +38,6 @@ export async function assertElementTextAfterScrolling(
     await runStep(context, `scroll toward ${selector}`, ['scroll', 'down', '0.75']);
   }
   assert.fail(`${selector} did not become visible after scrolling`);
-}
-
-export function assertNonEmptyFile(filePath: string, name: string): void {
-  assert.ok(fs.statSync(filePath).size > 0, `${name} artifact is empty: ${filePath}`);
-}
-
-export async function assertMp4File(filePath: string): Promise<void> {
-  assertNonEmptyFile(filePath, 'recording');
-  assert.equal(
-    await isPlayableVideo(filePath),
-    true,
-    `recording is not a finalized playable video: ${filePath}`,
-  );
 }
 
 function requireNode(
