@@ -625,7 +625,7 @@ test('largestTypeCycleSize counts type-only cycles and ignores dynamic ones', ()
   const acyclic = resolveImportEdges(
     new Map(
       Object.entries({
-        'src/core/a.ts': "import type { B } from '../contracts/b.ts';",
+        'src/core/a.ts': "import type { B } from '@agent-device/contracts/b';",
         'src/contracts/b.ts': 'export type B = 1;',
       }),
     ),

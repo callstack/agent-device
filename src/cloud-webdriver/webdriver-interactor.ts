@@ -1,25 +1,25 @@
+import type { DeviceRotation } from '@agent-device/contracts/device';
 import type {
+  BackMode,
+  GesturePlan,
   Interactor,
   ScreenshotOptions,
+  ScrollDirection,
   SnapshotOptions,
   SnapshotResult,
-} from '../contracts/interactor-types.ts';
-import type { BackMode } from '../contracts/back-mode.ts';
-import type { DeviceRotation } from '../contracts/device-rotation.ts';
-import type { ScrollDirection } from '../contracts/scroll-gesture.ts';
-import type { GesturePlan } from '../contracts/gesture-plan.ts';
-import type { TvRemoteButton } from '../contracts/tv-remote.ts';
-import type { SettingOptions } from '../platforms/permission-utils.ts';
+  TvRemoteButton,
+} from '@agent-device/contracts/interaction';
+import { buildScrollGesturePlan } from '@agent-device/contracts/interaction';
+import type { SettingOptions } from '@agent-device/contracts/settings';
 import { AppError } from '@agent-device/kernel/errors';
-import { buildScrollGesturePlan } from '../contracts/scroll-gesture.ts';
 import {
   capabilitySupported,
   unsupportedCapabilityMessage,
   type CloudWebDriverOperation,
   type CloudWebDriverProviderCapabilities,
 } from './capabilities.ts';
-import { touchPointer } from './webdriver-gestures.ts';
 import type { W3CPointerAction, WebDriverClient, WebDriverWindowRect } from './webdriver-client.ts';
+import { touchPointer } from './webdriver-gestures.ts';
 import { scrollFrameFromWebDriverSource } from './webdriver-scroll-frame.ts';
 import { parseWebDriverSource } from './webdriver-source.ts';
 

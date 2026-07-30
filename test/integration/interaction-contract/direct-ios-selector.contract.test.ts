@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { InteractionGuarantee } from '../../../src/contracts/interaction-guarantees.ts';
+import type { InteractionGuarantee } from '@agent-device/contracts/interaction';
 import { AppError } from '@agent-device/kernel/errors';
 import { assertRpcError, assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';

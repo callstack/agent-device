@@ -7,8 +7,8 @@ import type {
   BackendTvRemoteOptions,
 } from '../../../backend.ts';
 import type { CommandContext } from '../../../runtime-contract.ts';
-import type { BackMode } from '../../../contracts/back-mode.ts';
-import { parseTvRemoteButton } from '../../../contracts/tv-remote.ts';
+import type { BackMode } from '@agent-device/contracts/interaction';
+import { parseTvRemoteButton } from '@agent-device/contracts/interaction';
 import { AppError } from '@agent-device/kernel/errors';
 import { successText } from '../../../utils/success-text.ts';
 import { requireIntInRange } from '../../../utils/validation.ts';

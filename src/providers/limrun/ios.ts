@@ -1,25 +1,25 @@
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
+import { isDeepLinkTarget } from '@agent-device/contracts/command';
+import type {
+  DeviceLease,
+  DeviceRotation,
+  ProviderDeviceInstallOptions,
+  ProviderDeviceInstallResult,
+} from '@agent-device/contracts/device';
+import type {
+  Interactor,
+  SnapshotOptions,
+  SnapshotResult,
+} from '@agent-device/contracts/interaction';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import type Limrun from '@limrun/api';
 import {
   createInstanceClient as createIosInstanceClient,
   type InstanceClient as LimrunIosClient,
 } from '@limrun/api/ios-client';
-import type { DeviceRotation } from '../../contracts/device-rotation.ts';
-import { isDeepLinkTarget } from '../../contracts/open-target.ts';
-import type {
-  Interactor,
-  SnapshotOptions,
-  SnapshotResult,
-} from '../../contracts/interactor-types.ts';
-import type { DeviceLease } from '../../contracts/device-provider.ts';
-import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
-import type {
-  ProviderDeviceInstallOptions,
-  ProviderDeviceInstallResult,
-} from '../../provider-device-runtime.ts';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { execFailureDetails, runCmd } from '../../utils/exec.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import { flattenIosTree, toIosSelector, writeBase64File, type IosTreeNode } from './snapshot.ts';

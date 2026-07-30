@@ -156,7 +156,7 @@ The output tells you which gates to run and which live scenarios claim the behav
   are loaded through `import()`.
 - **live scenario owners** — the iOS simulator coverage manifest's owning scenario for each of
   those commands, when that manifest is in the tree.
-- **guarantee-matrix rows** — the ADR 0011 cells (`src/contracts/interaction-guarantees.ts`) whose
+- **guarantee-matrix rows** — the ADR 0011 cells (`packages/contracts/src/interaction-guarantees.ts`) whose
   `via` names the file, i.e. the guarantees your edit is the implementation of.
 
 Lists are bounded (`--limit`, default 10) and always disclose what they hid; `--json` is

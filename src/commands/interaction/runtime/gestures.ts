@@ -1,13 +1,16 @@
-import { AppError } from '@agent-device/kernel/errors';
-import type { Point } from '@agent-device/kernel/snapshot';
+import type {
+  LongPressCommandResult,
+  ScrollDirection,
+  ScrollInputDirection,
+} from '@agent-device/contracts/interaction';
 import {
   assertExclusiveScrollDistanceInputs,
   honoredScrollDurationMs,
   normalizeScrollDurationMs,
-} from '../../../contracts/scroll-command.ts';
+} from '@agent-device/contracts/interaction';
+import { AppError } from '@agent-device/kernel/errors';
+import type { Point } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
-import { requireIntInRange } from '../../../utils/validation.ts';
-import { successText } from '../../../utils/success-text.ts';
 import {
   captureScrollEdgeState,
   formatScrollEdgeMessage,
@@ -16,6 +19,8 @@ import {
   type ScrollEdgeState,
   type ScrollEdgeTarget,
 } from '../../../utils/scroll-edge-state.ts';
+import { successText } from '../../../utils/success-text.ts';
+import { requireIntInRange } from '../../../utils/validation.ts';
 import { toBackendContext } from '../../runtime-common.ts';
 import {
   toBackendResult,
@@ -23,19 +28,18 @@ import {
   type BackendResultVariant,
   type RuntimeCommand,
 } from '../../runtime-types.ts';
-import type { LongPressCommandResult } from '../../../contracts/interaction.ts';
-import {
-  assertSupportedInteractionSurface,
-  type ExpectedResolvedTarget,
-  type InteractionTarget,
-  type ResolvedInteractionTarget,
-  resolveInteractionTarget,
-} from './resolution.ts';
 import {
   applyPostActionObservation,
   planPostActionObservation,
   type SettlePostActionObservationOptions,
 } from './post-action-observation.ts';
+import {
+  assertSupportedInteractionSurface,
+  resolveInteractionTarget,
+  type ExpectedResolvedTarget,
+  type InteractionTarget,
+  type ResolvedInteractionTarget,
+} from './resolution.ts';
 
 export type FocusCommandOptions = CommandContext & {
   target: InteractionTarget;
@@ -58,8 +62,7 @@ export type GestureDirection = ScrollDirection;
 export {
   SCROLL_INPUT_DIRECTIONS,
   type ScrollInputDirection,
-} from '../../../contracts/scroll-gesture.ts';
-import type { ScrollDirection, ScrollInputDirection } from '../../../contracts/scroll-gesture.ts';
+} from '@agent-device/contracts/interaction';
 
 export type ScrollTarget =
   | InteractionTarget

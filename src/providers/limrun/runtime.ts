@@ -1,19 +1,17 @@
 import Limrun from '@limrun/api';
-import type { Interactor } from '../../contracts/interactor-types.ts';
+import type { Interactor } from '@agent-device/contracts/interaction';
 import type {
   DeviceInventoryProvider,
   DeviceLease,
   LeaseLifecycleProvider,
-} from '../../contracts/device-provider.ts';
-import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
-import type {
   ProviderDeviceInstallOptions,
   ProviderDeviceInstallResult,
   ProviderDeviceRuntime,
   ProviderExpiredLeaseRecovery,
   ProviderPortReverseOptions,
-} from '../../provider-device-runtime.ts';
+} from '@agent-device/contracts/device';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { readVersion } from '../../utils/version.ts';
 import {
   cleanupLimrunAndroidAdbTunnel,
@@ -77,6 +75,8 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
     await this.release(lease);
   };
 
+  // Called through ProviderDeviceRuntime composition, not by this concrete class.
+  // fallow-ignore-next-line unused-class-member
   readonly deviceInventoryProvider: DeviceInventoryProvider = async (request) => {
     if (request.leaseProvider !== this.provider || !request.leaseId) return null;
     const session = this.sessions.get(request.leaseId);
@@ -96,6 +96,8 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
     });
   }
 
+  // Called through ProviderDeviceRuntime composition, not by this concrete class.
+  // fallow-ignore-next-line unused-class-member
   ownsDevice(device: DeviceInfo): boolean {
     return parseLimrunDeviceId(device.id) !== undefined;
   }

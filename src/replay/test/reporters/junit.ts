@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ReplaySuiteResult, ReplaySuiteTestResult } from '../../../contracts/replay.ts';
+import type { ReplaySuiteResult, ReplaySuiteTestResult } from '@agent-device/contracts/replay';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ReplayTestReporter } from './types.ts';
 import {

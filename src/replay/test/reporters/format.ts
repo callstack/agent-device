@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { ReplaySuiteTestResult } from '../../../contracts/replay.ts';
+import type { ReplaySuiteTestResult } from '@agent-device/contracts/replay';
 
 export type PassedReplayTestResult = Extract<ReplaySuiteTestResult, { status: 'passed' }>;
 export type FailedReplayTestResult = Extract<ReplaySuiteTestResult, { status: 'failed' }>;

@@ -1,5 +1,8 @@
 import crypto from 'node:crypto';
-import type { CloudArtifact, CloudProviderSessionResult } from '../../contracts/cloud-artifacts.ts';
+import type {
+  CloudArtifact,
+  CloudProviderSessionResult,
+} from '@agent-device/contracts/observability';
 import { resolveDaemonPaths } from '../../daemon/config.ts';
 import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
 import {
@@ -36,7 +39,7 @@ import {
 } from './connection-runtime.ts';
 import { writeCommandOutput } from './shared.ts';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
-import type { CliFlags } from '../../contracts/cli-flags.ts';
+import type { CliFlags } from '@agent-device/contracts/command';
 import type { ClientCommandHandler } from './router-types.ts';
 
 export const connectCommand: ClientCommandHandler = async ({ positionals, flags, client }) => {

@@ -1,23 +1,25 @@
-import type { DeviceInventoryProvider } from '../contracts/device-provider.ts';
-import { AsyncLocalStorage } from 'node:async_hooks';
-import { AppError } from '@agent-device/kernel/errors';
+import type { CliFlags } from '@agent-device/contracts/command';
+import type {
+  DeviceInventoryProvider,
+  DeviceInventoryRequest,
+} from '@agent-device/contracts/device';
 import {
   isApplePlatform,
   isIosFamily,
   matchesDeviceSelector,
-  resolveDevice,
   resolveAppleSimulatorSetPathForSelector,
+  resolveDevice,
   type DeviceInfo,
   type DeviceTarget,
   type PlatformSelector,
 } from '@agent-device/kernel/device';
-import { withDiagnosticTimer } from '../utils/diagnostics.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   resolveAndroidSerialAllowlist,
   resolveIosSimulatorDeviceSetPath,
 } from '../utils/device-isolation.ts';
-import type { CliFlags } from '../contracts/cli-flags.ts';
-import type { DeviceInventoryRequest } from '../contracts/device-inventory.ts';
+import { withDiagnosticTimer } from '../utils/diagnostics.ts';
 import { listLocalDeviceInventory } from './platform-inventory.ts';
 export type ResolveDeviceFlags = Pick<
   CliFlags,

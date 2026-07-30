@@ -1,11 +1,11 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { recordingQualityInputToExportQuality } from '../contracts/recording-export-quality.ts';
-import { describeReplayGestureArityError } from '../contracts/gesture-normalization.ts';
-import { readScreenshotScriptFlag } from '../contracts/screenshot.ts';
+import { recordingQualityInputToExportQuality } from '@agent-device/contracts/recording';
+import { describeReplayGestureArityError } from '@agent-device/contracts/interaction';
+import { readScreenshotScriptFlag } from '@agent-device/contracts/capture';
 import type { DeviceTarget, PlatformSelector } from '@agent-device/kernel/device';
 import { PLATFORM_SELECTORS } from '@agent-device/kernel/device';
 import { parseReplayOpenFlags } from './open-script.ts';
-import type { SessionAction } from '../contracts/session-action.ts';
+import type { SessionAction } from '@agent-device/contracts/session';
 import {
   isClickLikeCommand,
   parseReplaySeriesFlags,

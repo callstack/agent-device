@@ -3,7 +3,7 @@ import {
   summarizeSnapshotTimingSamples,
   type SnapshotDiagnosticsSummary,
   type SnapshotTimingSample,
-} from '../../contracts/snapshot-diagnostics.ts';
+} from '@agent-device/contracts/capture';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionAction } from '../types.ts';
 import { buildReplayFailureDivergence } from './session-replay-divergence.ts';

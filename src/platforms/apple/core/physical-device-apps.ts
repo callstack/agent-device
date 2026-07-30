@@ -1,4 +1,4 @@
-import type { AppsFilter } from '../../../contracts/app-inventory.ts';
+import type { AppsFilter } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { IOS_DEVICE_INSTALL_TIMEOUT_MS } from './config.ts';
 import {

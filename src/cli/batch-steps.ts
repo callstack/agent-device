@@ -1,9 +1,9 @@
-import type { BatchStep } from '../contracts/client-replay.ts';
+import type { BatchStep } from '@agent-device/contracts/client';
 import { type SessionRuntimeHints } from '@agent-device/kernel/contracts';
-import { parseBatchStepRuntime } from '../contracts/batch-contract.ts';
+import { parseBatchStepRuntime } from '@agent-device/contracts/command';
 import { readInputFromCli } from '../commands/cli-grammar.ts';
 import { isCommandName, type CommandName } from '../commands/command-metadata.ts';
-import type { CliFlags } from '../contracts/cli-flags.ts';
+import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '../utils/parsing.ts';
 import { assertCommandPositionalArity } from '../cli-schema/command-schema.ts';

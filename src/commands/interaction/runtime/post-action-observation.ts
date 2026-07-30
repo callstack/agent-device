@@ -6,7 +6,7 @@ import type {
   ResolvedInteractionTarget,
   SettleObservation,
   SettleParams,
-} from '../../../contracts/interaction.ts';
+} from '@agent-device/contracts/interaction';
 import { captureInteractionSnapshot } from './resolution.ts';
 import { settleAfterInteraction, settleEvidence } from './settle.ts';
 

@@ -1,35 +1,35 @@
-import { AppError } from '@agent-device/kernel/errors';
-import type { ClickButton } from '../../../contracts/click-button.ts';
-import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
-import { isFillableType } from '../../../snapshot/snapshot-processing.ts';
-import type { Point } from '@agent-device/kernel/snapshot';
-import { requireIntInRange } from '../../../utils/validation.ts';
-import { successText } from '../../../utils/success-text.ts';
-import { findMistargetedTypeRefToken } from '../../../utils/type-target-warning.ts';
 import type {
+  ClickButton,
   FillCommandResult,
   PressCommandResult,
   ResolvedTarget,
-} from '../../../contracts/interaction.ts';
+} from '@agent-device/contracts/interaction';
+import { AppError } from '@agent-device/kernel/errors';
+import type { Point } from '@agent-device/kernel/snapshot';
+import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
+import { isFillableType } from '../../../snapshot/snapshot-processing.ts';
+import { successText } from '../../../utils/success-text.ts';
+import { findMistargetedTypeRefToken } from '../../../utils/type-target-warning.ts';
+import { requireIntInRange } from '../../../utils/validation.ts';
+import type { RepeatedInput } from '../../command-input.ts';
 import { toBackendContext } from '../../runtime-common.ts';
 import {
   toBackendResult,
   type BackendResultEnvelope,
   type RuntimeCommand,
 } from '../../runtime-types.ts';
-import type { RepeatedInput } from '../../command-input.ts';
-import {
-  EXACT_REF_RESOLUTION,
-  type ExpectedResolvedTarget,
-  type InteractionTarget,
-  preflightNativeRefInteraction,
-  resolveInteractionTarget,
-} from './resolution.ts';
 import {
   applyPostActionObservation,
   planPostActionObservation,
   type PostActionObservationOptions,
 } from './post-action-observation.ts';
+import {
+  EXACT_REF_RESOLUTION,
+  preflightNativeRefInteraction,
+  resolveInteractionTarget,
+  type ExpectedResolvedTarget,
+  type InteractionTarget,
+} from './resolution.ts';
 
 export { focusCommand, longPressCommand, scrollCommand } from './gestures.ts';
 export type {

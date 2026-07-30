@@ -1,11 +1,8 @@
-import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../command-catalog.ts';
-import { BACK_MODES } from '../contracts/back-mode.ts';
-import { RECORDING_SCOPE_VALUES } from '../contracts/recording-scope.ts';
-import { SESSION_SURFACES } from '../contracts/session-surface.ts';
-import { SWIPE_PATTERNS } from '../contracts/scroll-gesture.ts';
-import { CLICK_BUTTONS } from '../contracts/click-button.ts';
+import { BACK_MODES, CLICK_BUTTONS, SWIPE_PATTERNS } from '@agent-device/contracts/interaction';
+import { RECORDING_SCOPE_VALUES } from '@agent-device/contracts/recording';
+import { SESSION_SURFACES } from '@agent-device/contracts/session';
 import { DEVICE_TARGETS, PLATFORM_SELECTORS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
-import type { SessionAction } from './types.ts';
+import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../command-catalog.ts';
 import {
   buildInstallActionSummary,
   buildStructuredActionDetails,
@@ -13,11 +10,12 @@ import {
 } from './session-event-action-presentation.ts';
 import {
   compactSessionEventDetails as compactDetails,
-  readBoundedSessionEventString as readString,
   readSessionEventBoolean as readBoolean,
   readSessionEventEnum as readEnum,
   readSessionEventNumber as readNumber,
+  readBoundedSessionEventString as readString,
 } from './session-event-request.ts';
+import type { SessionAction } from './types.ts';
 
 export function buildActionSummary(action: SessionAction): string {
   switch (action.command) {

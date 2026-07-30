@@ -20,7 +20,7 @@ Normative summary, one entry per decision. The binding contracts, amendments, an
    `ref`/`exact` or `ref`/`label-fallback`, `direct-ios`/`not-observed`; coordinate dispatches and
    executed maestro-fallbacks carry none. Disclosed alternatives are pre-action diagnostics, never
    issued refs. Enforced as ADR 0011's `resolutionDisclosure` guarantee row
-   (`src/contracts/interaction-guarantees.ts`).
+   (`packages/contracts/src/interaction-guarantees.ts`).
 3. **Recording writes `target-v1` identity evidence; replay verifies it before acting.** One
    versioned JSON comment per element-targeting action carries identity (unique id, else
    role+label, plus a leaf-anchored ancestry prefix), disambiguation signals (`sibling`,
@@ -1216,7 +1216,7 @@ zero on the happy path and paying only where reality diverged from the recording
   a hint beats silently guessing" (`src/cli/parser/command-suggestions.ts:16-17`). Selector resolution
   took the opposite default, and ADR 0011's own registry records that choice precisely: the
   `disambiguation` cell for `runtime-selector` is classified `{ kind: 'runtime', via:
-  '...selectors-resolve.ts#resolveSelectorChain' }` (`src/contracts/interaction-guarantees.ts:176-179`)
+  '...selectors-resolve.ts#resolveSelectorChain' }` (`packages/contracts/src/interaction-guarantees.ts:176-179`)
   — proving the heuristic runs consistently across paths, not that the caller is told it ran. That
   default is not being revisited here; see the rejected hard-reject alternative below for why.
 - **(f) Issue #1037 / PR #1040 is the direct, partial precedent.** A UNIQUE-but-wrong match (Apple

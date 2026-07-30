@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { emitRequestProgress } from '../../request/progress.ts';
 import type { DaemonResponse } from '../types.ts';
-import type { ReplaySuiteTestFailed, ReplaySuiteTestResult } from '../../contracts/replay.ts';
+import type { ReplaySuiteTestFailed, ReplaySuiteTestResult } from '@agent-device/contracts/replay';
 import {
   buildReplayTestArtifactSlug,
   materializeReplayTestAttemptArtifacts,
@@ -17,7 +17,7 @@ import { runReplayTestAttempt } from './session-test-runtime.ts';
 import type { ReplayTestRuntimeDependencies } from './session-test-types.ts';
 import type { ReplayTestShardContext } from './session-test-sharding.ts';
 import { isRequestCanceled } from '../../request/cancel.ts';
-import { readSnapshotDiagnosticsSummary } from '../../contracts/snapshot-diagnostics.ts';
+import { readSnapshotDiagnosticsSummary } from '@agent-device/contracts/capture';
 
 type ReplayTestCaseResult = Extract<ReplaySuiteTestResult, { status: 'passed' | 'failed' }>;
 type ReplayTestAttemptFailure = NonNullable<

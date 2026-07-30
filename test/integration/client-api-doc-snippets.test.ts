@@ -119,9 +119,10 @@ function runTsc(tmpDir: string): string {
 function findKnownFreeNamesByFile(tscOutput: string): Map<string, Set<string>> {
   const freeNamesByFile = new Map<string, Set<string>>();
   for (const line of tscOutput.split('\n')) {
-    const match = /^(snippet-\d+\.ts)\(\d+,\d+\): error TS2304: Cannot find name '([^']+)'/.exec(
-      line,
-    );
+    const match =
+      /^(?:.*[/\\])?(snippet-\d+\.ts)\(\d+,\d+\): error TS2304: Cannot find name '([^']+)'/.exec(
+        line,
+      );
     const name = match?.[2];
     if (match?.[1] && name && name in KNOWN_FREE_NAME_STUB_TYPES) {
       const names = freeNamesByFile.get(match[1]) ?? new Set<string>();
@@ -160,6 +161,13 @@ function compileDocSnippets(snippets: string[]): string[] {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 }
+
+test('recognizes known free names when TypeScript prints a relative snippet path', () => {
+  const freeNames = findKnownFreeNamesByFile(
+    "../../../../tmp/client-api-doc-snippets/snippet-3.ts(2,7): error TS2304: Cannot find name 'client'.",
+  );
+  assert.deepEqual([...(freeNames.get('snippet-3.ts') ?? [])], ['client']);
+});
 
 test("every fenced ```ts snippet in client-api.md compiles against agent-device's real exports", () => {
   const snippets = extractTsSnippets(fs.readFileSync(CLIENT_API_DOC_PATH, 'utf8'));

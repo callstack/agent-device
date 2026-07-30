@@ -1,4 +1,4 @@
-import type { GesturePlan, PointerTrajectory } from '../../contracts/gesture-plan.ts';
+import type { GesturePlan, PointerTrajectory } from '@agent-device/contracts/interaction';
 import type { Rect } from '@agent-device/kernel/snapshot';
 
 export type AndroidLongPressTouchPlan = {

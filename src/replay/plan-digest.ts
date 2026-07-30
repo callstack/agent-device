@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { SessionAction } from '../contracts/session-action.ts';
+import type { SessionAction } from '@agent-device/contracts/session';
 import { canonicalJson } from '../utils/canonical-json.ts';
 
 /**

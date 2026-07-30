@@ -39,7 +39,7 @@ import type {
   ResolutionDiagnosticEntry,
   ResolutionDisclosure,
   ResolvedInteractionTarget,
-} from '../../../contracts/interaction.ts';
+} from '@agent-device/contracts/interaction';
 import { now, toBackendContext } from '../../runtime-common.ts';
 import { resolveActionableTouchResolution } from '../../../core/interaction-targeting.ts';
 import {

@@ -1,5 +1,5 @@
 import { centerOfRect, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import type { AlertInfo, AlertSource } from '../../contracts/alert-contract.ts';
+import type { AlertInfo, AlertSource } from '@agent-device/contracts/interaction';
 
 type AndroidAlertButtonRole = 'accept' | 'dismiss' | 'neutral';
 

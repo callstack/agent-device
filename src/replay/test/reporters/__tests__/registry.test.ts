@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { ReplaySuiteResult } from '../../../../contracts/replay.ts';
+import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import {
   getReplayTestReporterExitCode,
   runReplayTestReporterProgress,

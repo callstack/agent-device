@@ -11,7 +11,7 @@ import { resolveAndroidImeHelperArtifact } from '../../platforms/android/ime-hel
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { appendDoctorCheck } from './session-doctor-output.ts';
-import type { DoctorCheck } from '../../contracts/doctor.ts';
+import type { DoctorCheck } from '@agent-device/contracts/observability';
 
 const ANDROID_PROBE_TIMEOUT_MS = 2000;
 

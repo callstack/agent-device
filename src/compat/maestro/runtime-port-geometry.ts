@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { buildInPageSwipeGesturePlan } from '../../contracts/scroll-gesture.ts';
+import { buildInPageSwipeGesturePlan } from '@agent-device/contracts/interaction';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
 import {

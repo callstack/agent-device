@@ -9,7 +9,7 @@ import { waitForPlayableVideo, waitForStableFile } from '../utils/video.ts';
 import {
   DEFAULT_RECORDING_EXPORT_QUALITY,
   type RecordingExportQuality,
-} from '../contracts/recording-export-quality.ts';
+} from '@agent-device/contracts/recording';
 
 export function buildRecordingScriptPathCandidates(
   scriptName: string,

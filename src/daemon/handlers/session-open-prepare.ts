@@ -1,4 +1,4 @@
-import { isDeepLinkTarget } from '../../contracts/open-target.ts';
+import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import { ensureDeviceReady } from '../device-ready.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse, SessionRuntimeHints, SessionState } from '../types.ts';
@@ -21,7 +21,7 @@ import {
   resolveMacOsSurfaceAppState,
   resolveRequestedOpenSurface,
 } from './session-open-surface.ts';
-import type { SessionSurface } from '../../contracts/session-surface.ts';
+import type { SessionSurface } from '@agent-device/contracts/session';
 
 type OpenCommandDetails = {
   appBundleId?: string;

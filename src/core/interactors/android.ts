@@ -34,8 +34,8 @@ import { screenshotAndroid } from '../../platforms/android/screenshot.ts';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { withMethodScope } from '../../utils/method-scope.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { Interactor, RunnerContext } from '../../contracts/interactor-types.ts';
-import { snapshotCaptureAnnotationsFrom } from '../../contracts/snapshot-capture-annotations.ts';
+import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
+import { snapshotCaptureAnnotationsFrom } from '@agent-device/contracts/capture';
 
 export function createAndroidInteractor(
   device: DeviceInfo,

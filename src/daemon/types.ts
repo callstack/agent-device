@@ -1,37 +1,39 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import type {
+  GestureExecutionProfile,
+  GestureReferenceFrame,
+  ScrollDirection,
+} from '@agent-device/contracts/interaction';
+import type { LogBackend } from '@agent-device/contracts/observability';
+import type { RecordingExportQuality, RecordingScope } from '@agent-device/contracts/recording';
+import type { SessionAction, SessionSurface } from '@agent-device/contracts/session';
+import type {
+  LeaseBackend,
   DaemonArtifact as PublicDaemonArtifact,
-  DaemonRequest as WireRequest,
+  DaemonInstallSource as PublicDaemonInstallSource,
   DaemonRequestMeta as PublicDaemonRequestMeta,
   DaemonResponse as PublicDaemonResponse,
   DaemonResponseData as PublicDaemonResponseData,
-  DaemonInstallSource as PublicDaemonInstallSource,
-  LeaseBackend,
   SessionRuntimeHints as PublicSessionRuntimeHints,
+  DaemonRequest as WireRequest,
 } from '@agent-device/kernel/contracts';
-import type { CommandFlags } from '../contracts/command-flags.ts';
-import type { GestureReferenceFrame, ScrollDirection } from '../contracts/scroll-gesture.ts';
-import type { LogBackend } from '../contracts/logs.ts';
-import type { SessionSurface } from '../contracts/session-surface.ts';
-import type { RecordingExportQuality } from '../contracts/recording-export-quality.ts';
-import type { RecordingScope } from '../contracts/recording-scope.ts';
 import type { DeviceInfo, Platform, PlatformSelector } from '@agent-device/kernel/device';
-import type { ExecBackgroundResult, ExecResult } from '../utils/exec.ts';
 import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
-import type { GestureExecutionProfile } from '../contracts/gesture-plan-types.ts';
+import type { ExecBackgroundResult, ExecResult } from '../utils/exec.ts';
 // Type-only import; erased at runtime. ref-frame.ts imports SessionState from
 // here, so this back-edge must stay type-only to avoid a runtime cycle.
-import type { RefFrameScope, RefFrameState } from './ref-frame.ts';
-import type { TargetAnnotationV1 } from '../replay/target-identity.ts';
-import type { ReplayTargetGuardDenotation } from '../replay/target-identity-node.ts';
-import type { AppLogFailure, AppLogState } from './app-log-process.ts';
-import type { DeviceLease } from '../contracts/device-provider.ts';
+import type { SnapshotDiagnosticsState } from '@agent-device/contracts/capture';
+import type { DeviceLease } from '@agent-device/contracts/device';
+import type { AudioProbeSource } from '@agent-device/contracts/platform';
 import type { AndroidNativePerfSession } from '../platforms/android/perf.ts';
 import type {
   AppleXctracePerfCapture,
   AppleXctracePerfMode,
 } from '../platforms/apple/core/perf-xctrace.ts';
-import type { AudioProbeSource } from '../contracts/audio-probe-result.ts';
-import type { SnapshotDiagnosticsState } from '../contracts/snapshot-diagnostics.ts';
+import type { ReplayTargetGuardDenotation } from '../replay/target-identity-node.ts';
+import type { TargetAnnotationV1 } from '../replay/target-identity.ts';
+import type { AppLogFailure, AppLogState } from './app-log-process.ts';
+import type { RefFrameScope, RefFrameState } from './ref-frame.ts';
 export type DaemonInstallSource = PublicDaemonInstallSource;
 export type SessionRuntimeHints = PublicSessionRuntimeHints;
 export type DaemonArtifact = PublicDaemonArtifact;
@@ -514,5 +516,4 @@ export type SessionState = {
 
 // The recorded-action SHAPE lives in contracts/ so replay/ and compat/ can read a script
 // without depending on the server; re-exported here for the daemon's own consumers.
-export type { SessionAction } from '../contracts/session-action.ts';
-import type { SessionAction } from '../contracts/session-action.ts';
+export type { SessionAction } from '@agent-device/contracts/session';

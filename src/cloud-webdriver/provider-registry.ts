@@ -1,4 +1,7 @@
-import type { CloudArtifactsQuery, CloudArtifactsResult } from '../contracts/cloud-artifacts.ts';
+import type {
+  CloudArtifactsQuery,
+  CloudArtifactsResult,
+} from '@agent-device/contracts/observability';
 import {
   findCloudWebDriverProviderDefinition,
   type DefaultCloudWebDriverArtifactEnv,

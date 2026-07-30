@@ -1,33 +1,33 @@
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
-import { requireLocationCoordinates } from '../../../utils/location-coordinates.ts';
-import { requireExecSuccess } from '../../../utils/exec.ts';
-import { resolveIosSimulatorDeviceSetPath } from '../../../utils/device-isolation.ts';
-import { getUnsupportedMacOsSettingMessage } from '../../../contracts/settings-contract.ts';
 import {
+  getUnsupportedMacOsSettingMessage,
   parsePermissionAction,
   parsePermissionTarget,
   type SettingOptions,
-} from '../../permission-utils.ts';
+} from '@agent-device/contracts/settings';
+import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { resolveIosSimulatorDeviceSetPath } from '../../../utils/device-isolation.ts';
+import { requireExecSuccess } from '../../../utils/exec.ts';
+import { requireLocationCoordinates } from '../../../utils/location-coordinates.ts';
 import { parseAppearanceAction } from '../../appearance.ts';
-import { parseSettingState } from '../../setting-state.ts';
 import {
   summarizeCommandAttemptFailures,
   type CommandAttemptFailure,
 } from '../../command-attempts.ts';
-import { ensureBootedSimulator, requireSimulatorDevice } from './simulator.ts';
-import { runXcrun } from './tool-provider.ts';
+import { parseSettingState } from '../../setting-state.ts';
 import { setMacOsAppearance } from '../os/macos/apps.ts';
 import { runMacOsPermissionAction, type MacOsPermissionTarget } from '../os/macos/helper.ts';
+import { closeIosApp } from './app-launch.ts';
+import { resolveIosApp } from './app-resolution.ts';
+import { runSimctl, simctlArgs } from './apps-simctl.ts';
 import {
   invalidateSimulatorStatusBarOverrideCache,
   rememberClearedStatusBarOverrides,
 } from './screenshot-status-bar.ts';
-import { closeIosApp } from './app-launch.ts';
-import { resolveIosApp } from './app-resolution.ts';
-import { runSimctl, simctlArgs } from './apps-simctl.ts';
+import { ensureBootedSimulator, requireSimulatorDevice } from './simulator.ts';
+import { runXcrun } from './tool-provider.ts';
 
 let cachedSimctlPrivacyServices: Set<string> | null = null;
 let cachedSimctlPrivacyServicesCacheKey: string | undefined;

@@ -1,11 +1,11 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { CaptureScreenshotOptions } from '../../contracts/client-capture.ts';
-import { SESSION_SURFACES } from '../../contracts/session-surface.ts';
+import type { CaptureScreenshotOptions } from '@agent-device/contracts/client';
+import { SESSION_SURFACES } from '@agent-device/contracts/session';
 import {
   SCREENSHOT_COMMAND_FLAG_KEYS,
   screenshotFlagsFromOptions,
   screenshotOptionsFromFlags,
-} from '../../contracts/screenshot.ts';
+} from '@agent-device/contracts/capture';
 import { booleanField, enumField, integerField, stringField } from '../command-input.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { commonInputFromFlags, optionalString, request } from '../cli-grammar/common.ts';

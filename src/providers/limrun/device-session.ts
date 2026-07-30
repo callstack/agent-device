@@ -1,5 +1,5 @@
-import type { Interactor } from '../../contracts/interactor-types.ts';
-import { resolveAppsFilter, type AppsFilter } from '../../contracts/app-inventory.ts';
+import type { Interactor } from '@agent-device/contracts/interaction';
+import { resolveAppsFilter, type AppsFilter } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AndroidAdbProvider } from '../../platforms/android/adb-executor.ts';
 import type {

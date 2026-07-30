@@ -1,6 +1,6 @@
-import { SESSION_SURFACES } from '../../contracts/session-surface.ts';
+import { SESSION_SURFACES } from '@agent-device/contracts/session';
 import { PLATFORM_SELECTORS } from '@agent-device/kernel/device';
-import { PERF_KIND_VALUES } from '../../contracts/perf.ts';
+import { PERF_KIND_VALUES } from '@agent-device/contracts/observability';
 import type { FlagDefinition } from './flag-types.ts';
 
 export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [

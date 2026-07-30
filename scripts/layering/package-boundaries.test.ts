@@ -29,12 +29,26 @@ const contracts: WorkspacePackage = {
   dir: 'packages/contracts',
   name: '@agent-device/contracts',
   exportTargets: new Map([
-    ['@agent-device/contracts/gesture', 'packages/contracts/src/gesture.ts'],
+    ['@agent-device/contracts/interaction', 'packages/contracts/src/facades/interaction.ts'],
   ]),
   workspaceDependencies: new Set(['@agent-device/kernel']),
 };
 
 const ALL = [kernel, contracts];
+const CONTRACT_EXPORTS = [
+  '@agent-device/contracts/capture',
+  '@agent-device/contracts/client',
+  '@agent-device/contracts/command',
+  '@agent-device/contracts/device',
+  '@agent-device/contracts/interaction',
+  '@agent-device/contracts/observability',
+  '@agent-device/contracts/platform',
+  '@agent-device/contracts/recording',
+  '@agent-device/contracts/remote',
+  '@agent-device/contracts/replay',
+  '@agent-device/contracts/session',
+  '@agent-device/contracts/settings',
+] as const;
 
 function rules(violations: { rule: string }[]): string[] {
   return violations.map((violation) => violation.rule);
@@ -107,7 +121,7 @@ test('a cross-package import needs a workspace:* declaration and an exported sub
 
   const undeclared = specifierSites(
     'packages/kernel/src/errors.ts',
-    "import { g } from '@agent-device/contracts/gesture';",
+    "import { g } from '@agent-device/contracts/interaction';",
   );
   assert.equal(checkPackageInternalSites(kernel, undeclared, ALL).length, 1);
 
@@ -175,9 +189,17 @@ test('the real tree parses, declares, and passes R11', () => {
   const kernelPackage = packages.find((pkg) => pkg.name === '@agent-device/kernel');
   assert.ok(kernelPackage, 'kernel package must exist');
   assert.ok(kernelPackage.exportTargets.size >= 8, 'kernel exports its vocabulary subpaths');
+  const contractsPackage = packages.find((pkg) => pkg.name === '@agent-device/contracts');
+  assert.ok(contractsPackage, 'contracts package must exist');
+  assert.deepEqual([...contractsPackage.exportTargets.keys()].sort(), [...CONTRACT_EXPORTS].sort());
+  assert.deepEqual([...contractsPackage.workspaceDependencies], ['@agent-device/kernel']);
   assert.ok(
     rootWorkspaceDependencyNames(repoRoot).has('@agent-device/kernel'),
     'root must declare the kernel workspace dependency',
+  );
+  assert.ok(
+    rootWorkspaceDependencyNames(repoRoot).has('@agent-device/contracts'),
+    'root must declare the contracts workspace dependency',
   );
   assert.deepEqual(checkPackageBoundaries(repoRoot, new Set()), []);
 });
@@ -192,6 +214,9 @@ test('Node resolution enforces the exports map at runtime', () => {
     '@agent-device/kernel/src/errors.ts',
     '@agent-device/kernel/internal-not-exported',
     '@agent-device/kernel',
+    '@agent-device/contracts/gesture-plan',
+    '@agent-device/contracts/src/gesture-plan.ts',
+    '@agent-device/contracts',
   ]) {
     assert.throws(
       () => import.meta.resolve(deep),
@@ -199,4 +224,10 @@ test('Node resolution enforces the exports map at runtime', () => {
       `${deep} must not resolve`,
     );
   }
+
+  const contractsResolved = import.meta.resolve('@agent-device/contracts/interaction');
+  assert.ok(
+    contractsResolved.endsWith('packages/contracts/src/facades/interaction.ts'),
+    contractsResolved,
+  );
 });

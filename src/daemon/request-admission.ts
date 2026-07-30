@@ -10,7 +10,7 @@ import {
 } from './lease-context.ts';
 import { leaseScopeToHeartbeatRequest } from '../core/lease-scope.ts';
 import type { LeaseRegistry } from './lease-registry.ts';
-import type { DeviceLease } from '../contracts/device-provider.ts';
+import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DaemonRequest, SessionState } from './types.ts';
 
 export function scopeRequestSession(req: DaemonRequest): DaemonRequest {

@@ -3,7 +3,7 @@ import { parseReplayInput } from '../compat/replay-input.ts';
 import { parseMaestroProgram } from '../compat/maestro/program-ir-parser.ts';
 import type { ResolveTargetDeviceOptions } from '../core/dispatch-resolve.ts';
 import type { MaestroProgram } from '../compat/maestro/program-ir.ts';
-import { isDeepLinkTarget } from '../contracts/open-target.ts';
+import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import { appleSimulatorAppTargetForOpenTarget } from './open-device-selection.ts';
 import { SessionStore } from './session-store.ts';
 import type { CommandFlags } from '../core/dispatch.ts';

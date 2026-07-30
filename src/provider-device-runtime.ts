@@ -1,84 +1,33 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
-import type {
-  CloudArtifactProvider,
-  CloudArtifactsQuery,
-  CloudArtifactsResult,
-} from './contracts/cloud-artifacts.ts';
-import type { Interactor, RunnerContext } from './contracts/interactor-types.ts';
 import type {
   DeviceInventoryProvider,
   DeviceLease,
   LeaseLifecycleContext,
   LeaseLifecycleProvider,
-} from './contracts/device-provider.ts';
+  ProviderDeviceInstallOptions,
+  ProviderDeviceInstallResult,
+  ProviderDeviceRuntime,
+  ProviderExpiredLeaseRecovery,
+  ProviderPortReverseOptions,
+} from '@agent-device/contracts/device';
+import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
+import type {
+  CloudArtifactProvider,
+  CloudArtifactsQuery,
+  CloudArtifactsResult,
+} from '@agent-device/contracts/observability';
+import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { AppleRunnerProviderResolver } from './daemon/request-platform-providers.ts';
 import type {
   AppleRunnerCommandExecutor,
   AppleRunnerProvider,
 } from './platforms/apple/core/runner/runner-provider.ts';
-import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
 
-export type ProviderDeviceInstallResult = {
-  bundleId?: string;
-  packageName?: string;
-  appName?: string;
-  launchTarget?: string;
-};
-
-export type ProviderDeviceInstallOptions = {
-  relaunch?: boolean;
-  appIdentifierHint?: string;
-  packageNameHint?: string;
-};
-
-export type ProviderDeviceRuntime = {
-  provider: string;
-  leaseLifecycle: LeaseLifecycleProvider;
-  recoverExpiredLease?: ProviderExpiredLeaseRecovery;
-  cloudArtifacts?: CloudArtifactProvider;
-  deviceInventoryProvider: DeviceInventoryProvider;
-  ownsDevice(device: DeviceInfo): boolean;
-  /**
-   * Builds the interactor for an owned device. `runnerContext` carries the
-   * per-request context (requestId for cancellation, appBundleId, log paths);
-   * runtimes composing the shared Apple interactor should thread it through so
-   * runner calls stay attributable to the request that issued them.
-   */
-  getInteractor(device: DeviceInfo, runnerContext?: RunnerContext): Interactor | undefined;
-  /**
-   * Apple runner transport for an owned device. When present, the daemon scopes
-   * the WHOLE request with it (via the `appleRunnerProvider` request resolver),
-   * so daemon routes that issue runner commands outside interactor methods
-   * (keyboard, native alert, point read, iOS sequences) reach the provider
-   * transport instead of the local XCTest runtime.
-   */
-  getAppleRunnerProvider?(
+type AppleRunnerRuntimeExtension = ProviderDeviceRuntime & {
+  getAppleRunnerProvider(
     device: DeviceInfo,
   ): AppleRunnerProvider | AppleRunnerCommandExecutor | undefined;
-  installApp?(
-    device: DeviceInfo,
-    app: string,
-    appPath: string,
-    options?: ProviderDeviceInstallOptions,
-  ): Promise<ProviderDeviceInstallResult | undefined>;
-  installInstallablePath?(
-    device: DeviceInfo,
-    installablePath: string,
-    options?: ProviderDeviceInstallOptions,
-  ): Promise<ProviderDeviceInstallResult | undefined>;
-  configurePortReverse?(
-    options: ProviderPortReverseOptions,
-  ): Promise<Record<string, unknown> | undefined>;
-  shutdown(): Promise<void>;
-};
-
-export type ProviderPortReverseOptions = {
-  leaseId: string;
-  provider?: string;
-  devicePort: number;
-  hostPort: number;
-  name: string;
 };
 
 export type ProviderDeviceRuntimeRequestProviders = {
@@ -92,8 +41,6 @@ export type ProviderDeviceRuntimeRequestProviders = {
   appleRunnerProvider?: AppleRunnerProviderResolver;
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
 };
-
-export type ProviderExpiredLeaseRecovery = (lease: DeviceLease) => Promise<void>;
 
 let activeProviderDeviceRuntimes: ProviderDeviceRuntime[] = [];
 const providerDeviceRuntimeScope = new AsyncLocalStorage<ProviderDeviceRuntime[]>();
@@ -205,15 +152,23 @@ export function createProviderDeviceRuntimeRequestProviders(
 function composeAppleRunnerProviderResolver(
   runtimes: ProviderDeviceRuntime[],
 ): AppleRunnerProviderResolver | undefined {
-  if (!runtimes.some((runtime) => runtime.getAppleRunnerProvider !== undefined)) return undefined;
+  if (!runtimes.some(hasAppleRunnerProvider)) return undefined;
   return (context) => {
     for (const runtime of runtimes) {
-      if (!runtime.ownsDevice(context.device)) continue;
-      const provider = runtime.getAppleRunnerProvider?.(context.device);
+      if (!hasAppleRunnerProvider(runtime) || !runtime.ownsDevice(context.device)) continue;
+      const provider = runtime.getAppleRunnerProvider(context.device);
       if (provider) return provider;
     }
     return undefined;
   };
+}
+
+function hasAppleRunnerProvider(
+  runtime: ProviderDeviceRuntime,
+): runtime is AppleRunnerRuntimeExtension {
+  return (
+    'getAppleRunnerProvider' in runtime && typeof runtime.getAppleRunnerProvider === 'function'
+  );
 }
 
 function composeExpiredLeaseRecovery(

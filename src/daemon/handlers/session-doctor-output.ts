@@ -2,8 +2,8 @@ import { emitRequestProgress } from '../../request/progress.ts';
 import {
   formatDoctorCheckDetailLines,
   formatDoctorCheckSummaryLine,
-} from '../../contracts/doctor-output.ts';
-import type { DoctorCheck, DoctorStatus } from '../../contracts/doctor.ts';
+} from '../../utils/doctor-output.ts';
+import type { DoctorCheck, DoctorStatus } from '@agent-device/contracts/observability';
 
 export function summarizeDoctorStatus(checks: DoctorCheck[]): 'pass' | 'warn' | 'fail' {
   if (checks.some((check) => check.status === 'fail')) return 'fail';

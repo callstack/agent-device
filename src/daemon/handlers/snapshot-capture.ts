@@ -1,8 +1,9 @@
-import { dispatchCommand, type CommandFlags } from '../../core/dispatch.ts';
+import {
+  recordSnapshotTiming,
+  snapshotCaptureAnnotationsFrom,
+  type SnapshotCaptureAnnotations,
+} from '@agent-device/contracts/capture';
 import { isMacOs, isMobilePlatform, publicPlatformString } from '@agent-device/kernel/device';
-import { sleep } from '../../utils/timeouts.ts';
-import { runMacOsSnapshotAction } from '../../platforms/apple/os/macos/helper.ts';
-import { snapshotLinux } from '../../platforms/linux/snapshot.ts';
 import {
   attachRefs,
   buildSnapshotPresentationKey,
@@ -13,10 +14,18 @@ import {
   type SnapshotBackend,
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
-import { annotateCoveredSnapshotNodes } from '../../snapshot/snapshot-occlusion.ts';
-import { normalizeSnapshotTree } from '../../snapshot/snapshot-tree.ts';
+import { dispatchCommand, type CommandFlags } from '../../core/dispatch.ts';
+import { runMacOsSnapshotAction } from '../../platforms/apple/os/macos/helper.ts';
+import { snapshotLinux } from '../../platforms/linux/snapshot.ts';
 import { isAndroidInputMethodSnapshotNode } from '../../snapshot/android-input-method-overlays.ts';
-import type { SessionState } from '../types.ts';
+import { annotateCoveredSnapshotNodes } from '../../snapshot/snapshot-occlusion.ts';
+import {
+  findNodeByLabel,
+  pruneGroupNodes,
+  resolveRefLabel,
+} from '../../snapshot/snapshot-processing.ts';
+import { normalizeSnapshotTree } from '../../snapshot/snapshot-tree.ts';
+import { sleep } from '../../utils/timeouts.ts';
 import {
   ANDROID_FRESHNESS_RETRY_DEADLINE_MS,
   ANDROID_FRESHNESS_RETRY_DELAYS_MS,
@@ -37,18 +46,9 @@ import {
   retryPendingInteractionOutcome,
 } from '../interaction-outcome-policy.ts';
 import { capturePostGestureStabilizedResult } from '../post-gesture-stabilization.ts';
-import {
-  findNodeByLabel,
-  pruneGroupNodes,
-  resolveRefLabel,
-} from '../../snapshot/snapshot-processing.ts';
-import { errorResponse, type DaemonFailureResponse } from './response.ts';
 import { presentIosInteractiveSnapshot } from '../snapshot-presentation/ios/index.ts';
-import {
-  snapshotCaptureAnnotationsFrom,
-  type SnapshotCaptureAnnotations,
-} from '../../contracts/snapshot-capture-annotations.ts';
-import { recordSnapshotTiming } from '../../contracts/snapshot-diagnostics.ts';
+import type { SessionState } from '../types.ts';
+import { errorResponse, type DaemonFailureResponse } from './response.ts';
 
 type CaptureSnapshotParams = {
   device: SessionState['device'];

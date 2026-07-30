@@ -1,5 +1,5 @@
-import type { SessionAction } from '../../contracts/session-action.ts';
-import { GESTURE_FLING_DURATION_MS } from '../../contracts/gesture-plan.ts';
+import type { SessionAction } from '@agent-device/contracts/session';
+import { GESTURE_FLING_DURATION_MS } from '@agent-device/contracts/interaction';
 import { parseSelectorChain, type Selector } from '../../selectors/index.ts';
 import type { SelectorTerm } from '../../selectors/parse.ts';
 import { AppError } from '@agent-device/kernel/errors';

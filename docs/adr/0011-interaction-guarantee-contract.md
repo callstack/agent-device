@@ -58,7 +58,7 @@ parity only starts once the fixture tables (Layer 2) and contract scenarios
 unwatched cell becomes impossible; an unproven cell is at least a visible,
 owned claim.
 
-`src/contracts/interaction-guarantees.ts` declares both axes and requires
+`packages/contracts/src/interaction-guarantees.ts` declares both axes and requires
 every cell to be classified:
 
 ```ts

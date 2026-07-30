@@ -5,6 +5,8 @@ on:
     paths:
       - 'package.json'
       - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'packages/**'
       - 'tsdown.config.ts'
       - 'scripts/build-android-helper.sh'
       - 'scripts/build-xcuitest-apple.sh'
@@ -25,6 +27,8 @@ on:
     paths:
       - 'package.json'
       - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'packages/**'
       - 'tsdown.config.ts'
       - 'scripts/build-android-helper.sh'
       - 'scripts/build-xcuitest-apple.sh'

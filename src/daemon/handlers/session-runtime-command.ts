@@ -9,10 +9,8 @@ import {
   mergeRuntimeHints,
   toRuntimePlatform,
 } from './session-runtime.ts';
-import {
-  configureProviderPortReverse,
-  type ProviderPortReverseOptions,
-} from '../../provider-device-runtime.ts';
+import { type ProviderPortReverseOptions } from '@agent-device/contracts/device';
+import { configureProviderPortReverse } from '../../provider-device-runtime.ts';
 
 type RuntimeAction = 'set' | 'show' | 'clear';
 type PortReverseParseResult =

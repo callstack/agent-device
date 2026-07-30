@@ -4,7 +4,7 @@ import {
 } from '../snapshot/mobile-snapshot-semantics.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { isScrollableNodeLike } from './scrollable.ts';
-import type { ScrollDirection } from '../contracts/scroll-gesture.ts';
+import type { ScrollDirection } from '@agent-device/contracts/interaction';
 import type {
   HiddenContentHint,
   Point,

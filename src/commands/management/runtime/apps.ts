@@ -6,7 +6,7 @@ import type {
   BackendOpenTarget,
   BackendPushInput,
 } from '../../../backend.ts';
-import type { JsonObject } from '../../../contracts/json.ts';
+import type { JsonObject } from '@agent-device/contracts/client';
 import type { FileInputRef } from '../../../io.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { assertResolvedAppsFilter } from '../app-inventory-contract.ts';

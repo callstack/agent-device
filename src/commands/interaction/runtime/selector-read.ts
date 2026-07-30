@@ -23,7 +23,7 @@ import type {
   ElementTarget,
   ResolvedTarget,
   SelectorTarget,
-} from '../../../contracts/interaction.ts';
+} from '@agent-device/contracts/interaction';
 import type { RuntimeCommand } from '../../runtime-types.ts';
 import { assertExpectedResolvedTarget, type ExpectedResolvedTarget } from './resolution.ts';
 import {

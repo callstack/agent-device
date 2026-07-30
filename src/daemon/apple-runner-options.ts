@@ -1,5 +1,5 @@
-import { isDeepLinkTarget } from '../contracts/open-target.ts';
-import type { SessionSurface } from '../contracts/session-surface.ts';
+import { isDeepLinkTarget } from '@agent-device/contracts/command';
+import type { SessionSurface } from '@agent-device/contracts/session';
 import type { AppleRunnerLifecycleOptions } from '../platforms/apple/core/runner/runner-provider.ts';
 import { prewarmAppleRunnerCache } from '../platforms/apple/core/runner/runner-client.ts';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';

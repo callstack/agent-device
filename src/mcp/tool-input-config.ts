@@ -1,6 +1,6 @@
 import { isFlagSupportedForCommand } from '../cli-schema/option-schema.ts';
 import type { FlagKey } from '../commands/cli-grammar/flag-types.ts';
-import type { CliFlags } from '../contracts/cli-flags.ts';
+import type { CliFlags } from '@agent-device/contracts/command';
 import type { JsonSchema } from '../commands/command-contract.ts';
 import type { CommandName } from '../commands/command-metadata.ts';
 import { resolveConfigBackedFlagDefaults } from '../cli-schema/cli-config.ts';

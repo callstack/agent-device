@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolvePayloadInput } from '../utils/payload-input.ts';
-import type { JsonObject } from '../contracts/json.ts';
+import type { JsonObject } from '@agent-device/contracts/client';
 
 export async function readNotificationPayload(payloadArg: string): Promise<JsonObject> {
   const source = resolvePayloadInput(payloadArg, { subject: 'Push payload' });

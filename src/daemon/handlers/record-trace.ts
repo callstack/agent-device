@@ -5,7 +5,7 @@ import { SessionStore } from '../session-store.ts';
 import { handleRecordCommand } from './record-trace-recording.ts';
 import { errorResponse } from './response.ts';
 import { recordSessionAction } from './handler-utils.ts';
-import type { TraceCommandResult } from '../../contracts/recording.ts';
+import type { TraceCommandResult } from '@agent-device/contracts/recording';
 
 export async function handleRecordTraceCommands(params: {
   req: DaemonRequest;

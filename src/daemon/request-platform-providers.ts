@@ -1,7 +1,7 @@
-import type { PlatformGatedProviderResolverKey } from '../contracts/platform-providers.ts';
+import type { PlatformGatedProviderResolverKey } from '@agent-device/contracts/platform';
 import { resolveTargetDevice } from '../core/dispatch-resolve.ts';
 import { registerBuiltinPlatformPlugins } from '../core/interactors/register-builtins.ts';
-import { tryGetPlugin } from '../contracts/platform-plugin.ts';
+import { tryGetPlugin } from '../core/platform-plugin-registry.ts';
 import type { AndroidAdbExecutor, AndroidAdbProvider } from '../platforms/android/adb-executor.ts';
 import type {
   AppleRunnerCommandExecutor,

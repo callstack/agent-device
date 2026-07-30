@@ -2,7 +2,7 @@ import path from 'node:path';
 import type { SessionAction, SessionState } from '../types.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { isApplePlatform, publicPlatformString } from '@agent-device/kernel/device';
-import { tryGetPlugin } from '../../contracts/platform-plugin.ts';
+import { tryGetPlugin } from '../../core/platform-plugin-registry.ts';
 import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import {
@@ -29,7 +29,7 @@ import {
   sampleAppleFramePerf,
   sampleApplePerfMetrics,
 } from '../../platforms/apple/core/perf.ts';
-import type { PerfKind, PerfMetricsSamplerTag } from '../../contracts/perf.ts';
+import type { PerfKind, PerfMetricsSamplerTag } from '@agent-device/contracts/observability';
 import { SessionStore } from '../session-store.ts';
 import {
   PERF_STARTUP_SAMPLE_LIMIT,

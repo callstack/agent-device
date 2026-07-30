@@ -14,7 +14,7 @@ intentional compatibility change rather than hidden under a byte-compatibility c
 
 Normative summary of the proposal; contracts and rationale below.
 
-- One **event catalog** (`src/contracts/events.ts`) is the single declaration site for every
+- One **event catalog** (`packages/contracts/src/events.ts`) is the single declaration site for every
   diagnostic/telemetry event kind: key, subsystem, default level, and derivation traits. Emitting a
   kind not in the catalog is a compile error; consumers derive kind sets from traits, never from
   parsing kind names.
@@ -100,7 +100,7 @@ genuinely telemetry. Progress is not one of them (decision 3).
 
 ### 1. Event catalog: kinds are declared data
 
-`src/contracts/events.ts` exports one `EVENT_CATALOG` — a const object with one entry per event
+`packages/contracts/src/events.ts` exports one `EVENT_CATALOG` — a const object with one entry per event
 kind, keyed by today's diagnostics phase strings (no renames in this ADR):
 
 ```ts

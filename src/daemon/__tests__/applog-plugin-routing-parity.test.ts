@@ -19,10 +19,10 @@ import {
   TVOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
 } from '../../__tests__/test-utils/index.ts';
-import { getPlugin } from '../../contracts/platform-plugin.ts';
+import { getPlugin } from '../../core/platform-plugin-registry.ts';
 import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';
 import { resolveLogBackend } from '../app-log.ts';
-import type { LogBackend } from '../../contracts/logs.ts';
+import type { LogBackend } from '@agent-device/contracts/observability';
 
 // Phase 3 step b.3 (issue #974) parity gate for the daemon app-log facet. The
 // per-platform branch of `resolveLogBackend` now flows through the PlatformPlugin

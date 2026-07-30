@@ -5,7 +5,7 @@ import {
   parseBatchStepRuntime,
   readBatchStepInputObject,
   readBatchStepRecord,
-} from '../../contracts/batch-contract.ts';
+} from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { type SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import {

@@ -26,14 +26,14 @@ export type {
   TargetAnnotationV1,
   TargetScrollRegion,
   TargetVerification,
-} from '../contracts/target-annotation.ts';
+} from '@agent-device/contracts/replay';
 import type {
   TargetAncestryEntry,
   TargetAnnotationV1,
   TargetRect,
   TargetScrollRegion,
   TargetVerification,
-} from '../contracts/target-annotation.ts';
+} from '@agent-device/contracts/replay';
 
 // ---------------------------------------------------------------------------
 // Normalization (decision 3 "Normalization"): all strings NFC; `label` fields

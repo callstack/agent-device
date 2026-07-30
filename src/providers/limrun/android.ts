@@ -5,8 +5,13 @@ import {
   type InstanceClient as LimrunAndroidClient,
 } from '@limrun/api/instance-client';
 import { createAndroidInteractor } from '../../core/interactors/android.ts';
-import type { Interactor } from '../../contracts/interactor-types.ts';
-import type { DeviceLease } from '../../contracts/device-provider.ts';
+import type { Interactor } from '@agent-device/contracts/interaction';
+import type {
+  DeviceLease,
+  ProviderDeviceInstallOptions,
+  ProviderDeviceInstallResult,
+  ProviderPortReverseOptions,
+} from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
@@ -15,11 +20,6 @@ import {
   type AndroidAdbProvider,
   type AndroidPortReverseEndpoint,
 } from '../../platforms/android/adb-executor.ts';
-import type {
-  ProviderDeviceInstallOptions,
-  ProviderDeviceInstallResult,
-  ProviderPortReverseOptions,
-} from '../../provider-device-runtime.ts';
 import { runCmd } from '../../utils/exec.ts';
 import { normalizeOptionalString } from './strings.ts';
 

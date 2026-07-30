@@ -89,7 +89,7 @@
         "count": 1
       }
     },
-    "src/contracts/result-serialization.ts": {
+    "src/utils/result-serialization.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -597,7 +597,7 @@
     "src/utils/timeouts.ts:high impact",
     "src/commands/interaction/output.ts:high impact",
     "src/snapshot/snapshot-lines.ts:high impact",
-    "src/contracts/result-serialization.ts:high impact",
+    "src/utils/result-serialization.ts:high impact",
     "src/utils/rect-center.ts:high impact",
     "src/platforms/apple/core/app-launch.ts:complexity",
     "src/utils/parsing.ts:high impact",

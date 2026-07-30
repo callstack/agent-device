@@ -1,4 +1,4 @@
-import type { Interactor } from '../../contracts/interactor-types.ts';
+import type { Interactor } from '@agent-device/contracts/interaction';
 import { AppError } from '@agent-device/kernel/errors';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { resolveWebProvider } from '../../platforms/web/provider.ts';

@@ -1,4 +1,4 @@
-import { SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS } from '../../contracts/screenshot.ts';
+import { SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS } from '@agent-device/contracts/capture';
 import type { FlagDefinition } from './flag-types.ts';
 
 export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [

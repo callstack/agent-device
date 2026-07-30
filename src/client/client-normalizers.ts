@@ -1,7 +1,14 @@
-import type { DaemonRequest, SessionRuntimeHints } from '../daemon/types.ts';
-import { AppError, type NormalizedError } from '@agent-device/kernel/errors';
-import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { buildAppIdentifiers, buildDeviceIdentifiers } from '../contracts/result-serialization.ts';
+import type {
+  AgentDeviceDevice,
+  AgentDeviceSession,
+  AgentDeviceSessionDevice,
+  AppDeployResult,
+  AppInstallFromSourceResult,
+  InternalRequestOptions,
+  MaterializationReleaseResult,
+  StartupPerfSample,
+} from '@agent-device/contracts/client';
+import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import {
   isAppleOs,
   isApplePlatform,
@@ -9,20 +16,10 @@ import {
   isSerialAddressablePlatform,
   type AppleOS,
 } from '@agent-device/kernel/device';
+import { AppError, type NormalizedError } from '@agent-device/kernel/errors';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { leaseScopeFromOptions, leaseScopeToRequestMeta } from '../core/lease-scope.ts';
-import type {
-  AppDeployResult,
-  AppInstallFromSourceResult,
-  MaterializationReleaseResult,
-} from '../contracts/client-app.ts';
-import type {
-  AgentDeviceDevice,
-  AgentDeviceSession,
-  AgentDeviceSessionDevice,
-  StartupPerfSample,
-} from '../contracts/client-device-view.ts';
-import type { InternalRequestOptions } from '../contracts/client-request.ts';
-import type { TargetShutdownResult } from '../contracts/target-shutdown-contract.ts';
+import type { DaemonRequest, SessionRuntimeHints } from '../daemon/types.ts';
 import {
   asRecord,
   isRecord,
@@ -35,6 +32,7 @@ import {
   readRequiredString,
   stripUndefined,
 } from '../utils/parsing.ts';
+import { buildAppIdentifiers, buildDeviceIdentifiers } from '../utils/result-serialization.ts';
 
 export { readOptionalString, readRequiredString } from '../utils/parsing.ts';
 

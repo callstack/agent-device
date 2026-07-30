@@ -44,7 +44,7 @@ import { expireRefFrame } from '../ref-frame.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { PREPARE_REQUEST_TIMEOUT_MS } from '../../core/command-descriptor/timeout-policy.ts';
 import { Deadline } from '../../utils/retry.ts';
-import type { LeaseLifecycleProvider } from '../../contracts/device-provider.ts';
+import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
 
 const PREPARE_IOS_RUNNER_TIMING_NOTE =
   'Top-level prepare timing fields are diagnostic and may overlap; use timing.additiveParts for additive wall-clock phases.';

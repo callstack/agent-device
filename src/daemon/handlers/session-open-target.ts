@@ -2,7 +2,7 @@ import {
   isDeepLinkTarget,
   isWebUrl,
   resolveIosDeviceDeepLinkBundleId,
-} from '../../contracts/open-target.ts';
+} from '@agent-device/contracts/command';
 import {
   isIosFamily,
   isMacOs,

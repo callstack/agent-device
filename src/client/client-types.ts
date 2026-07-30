@@ -19,20 +19,7 @@
 
 // The relocated vocabulary keeps its published import path through this module — a wildcard per
 // family rather than 84 named re-exports, so no name is published twice under two spellings.
-export type * from '../contracts/client-app.ts';
-export type * from '../contracts/client-capture.ts';
-export type * from '../contracts/client-connection.ts';
-export type * from '../contracts/client-device-view.ts';
-export type * from '../contracts/client-gesture.ts';
-export type * from '../contracts/client-lease.ts';
-export type * from '../contracts/client-observability.ts';
-export type * from '../contracts/client-replay.ts';
-export type * from '../contracts/client-request.ts';
-export type * from '../contracts/client-selector-read.ts';
-export type * from '../contracts/client-session.ts';
-export type * from '../contracts/client-settings.ts';
-export type * from '../contracts/client-system.ts';
-export type * from '../contracts/client-target.ts';
+export type * from '@agent-device/contracts/client';
 
 // The Metro command vocabulary answers its question in the contracts/metro.ts domain file; named
 // rather than wildcarded so the daemon-side Metro shapes there stay out of the published surface.
@@ -41,7 +28,7 @@ export type {
   MetroPrepareResult,
   MetroReloadOptions,
   MetroReloadResult,
-} from '../contracts/metro.ts';
+} from '@agent-device/contracts/remote';
 
 // Contracts/kernel types re-exported into the PUBLISHED surface: `agent-device-client.ts` picks
 // these up via `export type *`, and that is their only job — every internal consumer imports
@@ -49,19 +36,27 @@ export type {
 // right and exactly not actionable: deleting them would remove names from the package's public
 // types. Suppressed per name rather than baselined so the reason travels with the code.
 // fallow-ignore-next-line unused-type
-export type { TargetShutdownResult } from '../contracts/target-shutdown-contract.ts';
+export type { TargetShutdownResult } from '@agent-device/contracts/device';
 // fallow-ignore-next-line unused-type
 export type { MetroBridgeScope } from './client-companion-tunnel-contract.ts';
 // fallow-ignore-next-line unused-type
-export type { AppsFilter } from '../contracts/app-inventory.ts';
+export type { AppsFilter } from '@agent-device/contracts/device';
 // fallow-ignore-next-line unused-type
-export type { AlertAction } from '../contracts/alert-contract.ts';
+export type { AlertAction } from '@agent-device/contracts/interaction';
 // fallow-ignore-next-line unused-type
 export type { AppleOS } from '@agent-device/kernel/device';
 // fallow-ignore-next-line unused-type
-export type { JsonObject } from '../contracts/json.ts';
+export type { JsonObject } from '@agent-device/contracts/client';
+export type { BatchRunResult } from '../core/batch.ts';
 
 import type {
+  AgentDeviceCapabilitiesResult,
+  AgentDeviceClientConfig,
+  AgentDeviceDevice,
+  AgentDeviceRequestOverrides,
+  AgentDeviceSelectionOptions,
+  AgentDeviceSession,
+  AlertCommandOptions,
   AppCloseOptions,
   AppCloseResult,
   AppDeployOptions,
@@ -73,93 +68,70 @@ import type {
   AppOpenOptions,
   AppOpenResult,
   AppPushOptions,
+  AppStateCommandOptions,
   AppTriggerEventOptions,
-  MaterializationReleaseOptions,
-  MaterializationReleaseResult,
-} from '../contracts/client-app.ts';
-import type {
+  AudioOptions,
+  BatchRunOptions,
   CaptureDiffOptions,
   CaptureScreenshotOptions,
   CaptureScreenshotResult,
   CaptureSnapshotOptions,
   CaptureSnapshotResult,
-} from '../contracts/client-capture.ts';
-import type {
-  AgentDeviceClientConfig,
-  AgentDeviceRequestOverrides,
-  AgentDeviceSelectionOptions,
-  DeviceCommandBaseOptions,
-} from '../contracts/client-connection.ts';
-import type {
-  AgentDeviceCapabilitiesResult,
-  AgentDeviceDevice,
-  AgentDeviceSession,
-  DeviceBootOptions,
-  DeviceShutdownOptions,
-} from '../contracts/client-device-view.ts';
-import type {
   ClickOptions,
+  ClipboardCommandOptions,
+  CloudArtifactsOptions,
+  CommandRequestResult,
+  DeviceBootOptions,
+  DeviceCommandBaseOptions,
+  DeviceShutdownOptions,
+  DoctorCommandOptions,
+  EventsOptions,
   FillOptions,
+  FindOptions,
   FlingOptions,
   FocusOptions,
-  LongPressOptions,
-  PanOptions,
-  PinchOptions,
-  PressOptions,
-  RotateGestureOptions,
-  ScrollOptions,
-  SwipeGestureOptions,
-  SwipeOptions,
-  TransformGestureOptions,
-  TypeTextOptions,
-} from '../contracts/client-gesture.ts';
-import type {
-  CloudArtifactsOptions,
+  GetOptions,
+  IsOptions,
+  KeyboardCommandOptions,
   Lease,
   LeaseAllocateOptions,
   LeaseScopedOptions,
-} from '../contracts/client-lease.ts';
-import type {
-  AudioOptions,
-  EventsOptions,
   LogsOptions,
+  LongPressOptions,
+  MaterializationReleaseOptions,
+  MaterializationReleaseResult,
   NetworkOptions,
+  PanOptions,
   PerfOptions,
+  PinchOptions,
+  PrepareCommandOptions,
+  PressOptions,
+  ReactNativeCommandOptions,
   RecordOptions,
-  TraceOptions,
-} from '../contracts/client-observability.ts';
-import type {
-  BatchRunOptions,
   ReplayRunOptions,
   ReplayTestOptions,
-} from '../contracts/client-replay.ts';
-import type { CommandRequestResult } from '../contracts/client-request.ts';
-import type { FindOptions, GetOptions, IsOptions } from '../contracts/client-selector-read.ts';
-import type {
+  RotateGestureOptions,
+  ScrollOptions,
   SessionCloseResult,
   SessionSaveScriptOptions,
   SessionSaveScriptResult,
-} from '../contracts/client-session.ts';
-import type { SettingsUpdateOptions } from '../contracts/client-settings.ts';
-import type {
-  AlertCommandOptions,
-  AppStateCommandOptions,
-  ClipboardCommandOptions,
-  DoctorCommandOptions,
-  KeyboardCommandOptions,
-  PrepareCommandOptions,
-  ReactNativeCommandOptions,
+  SettingsUpdateOptions,
+  SwipeGestureOptions,
+  SwipeOptions,
+  TraceOptions,
+  TransformGestureOptions,
+  TypeTextOptions,
   ViewportCommandOptions,
   WaitCommandOptions,
-} from '../contracts/client-system.ts';
+} from '@agent-device/contracts/client';
 import type {
   MetroPrepareOptions,
   MetroPrepareResult,
   MetroReloadOptions,
   MetroReloadResult,
-} from '../contracts/metro.ts';
+} from '@agent-device/contracts/remote';
 
-import type { RotateCommandResult } from '../contracts/navigation.ts';
+import type { RotateCommandResult } from '@agent-device/contracts/interaction';
 
 import type {
   NavigationCommandOptions,
@@ -167,29 +139,30 @@ import type {
 } from '../commands/system/navigation-projection.ts';
 
 import type { BatchRunResult } from '../core/batch.ts';
-export type { BatchRunResult } from '../core/batch.ts';
 
-import type { DebugSymbolsOptions, DebugSymbolsResult } from '../contracts/debug-symbols.ts';
-
-import type { CommandResult } from '../core/command-descriptor/command-result.ts';
 import type {
   AgentArtifactsResult,
   CloudProviderSessionResult,
-} from '../contracts/cloud-artifacts.ts';
+  DebugSymbolsOptions,
+  DebugSymbolsResult,
+} from '@agent-device/contracts/observability';
+import type { CommandResult } from '../core/command-descriptor/command-result.ts';
 
-export type { DebugSymbolsOptions, DebugSymbolsResult } from '../contracts/debug-symbols.ts';
+export type { DiffSnapshotCommandResult } from '@agent-device/contracts/capture';
+export type { PrepareCommandResult, PushCommandResult } from '@agent-device/contracts/command';
+export type { TriggerAppEventCommandResult } from '@agent-device/contracts/device';
 export type {
   /** @deprecated Renamed to `OrientationCommandResult`. Retained until the next major. */
   RotateCommandResult,
-} from '../contracts/navigation.ts';
-export type { WaitCommandResult } from '../contracts/wait.ts';
-export type { PrepareCommandResult } from '../contracts/prepare.ts';
-export type { PushCommandResult } from '../contracts/push.ts';
-export type { TriggerAppEventCommandResult } from '../contracts/app-events.ts';
-export type { DoctorCommandResult } from '../contracts/doctor.ts';
-export type { DiffSnapshotCommandResult } from '../contracts/diff.ts';
-export type { RecordingCommandResult, TraceCommandResult } from '../contracts/recording.ts';
-export type { ReplayCommandResult, ReplaySuiteResult } from '../contracts/replay.ts';
+  WaitCommandResult,
+} from '@agent-device/contracts/interaction';
+export type {
+  DebugSymbolsOptions,
+  DebugSymbolsResult,
+  DoctorCommandResult,
+} from '@agent-device/contracts/observability';
+export type { RecordingCommandResult, TraceCommandResult } from '@agent-device/contracts/recording';
+export type { ReplayCommandResult, ReplaySuiteResult } from '@agent-device/contracts/replay';
 
 export type BackCommandOptions = DeviceCommandBaseOptions & NavigationCommandOptions<'back'>;
 

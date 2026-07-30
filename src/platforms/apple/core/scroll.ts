@@ -1,4 +1,4 @@
-import { buildScrollGesturePlan, type ScrollDirection } from '../../../contracts/scroll-gesture.ts';
+import { buildScrollGesturePlan, type ScrollDirection } from '@agent-device/contracts/interaction';
 
 export type NormalizedScrollOptions = {
   amount?: number;

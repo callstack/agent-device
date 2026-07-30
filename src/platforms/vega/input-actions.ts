@@ -1,4 +1,4 @@
-import { toVegaTvRemoteKey, type TvRemoteButton } from '../../contracts/tv-remote.ts';
+import { toVegaTvRemoteKey, type TvRemoteButton } from '@agent-device/contracts/interaction';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { requireExecSuccess } from '../../utils/exec.ts';
 import { resolveVegaToolProvider } from './tool-provider.ts';

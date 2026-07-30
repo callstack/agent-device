@@ -15,7 +15,7 @@ import type {
   SettleObservation,
   SettleParams,
   SettleTailEntry,
-} from '../../../contracts/interaction.ts';
+} from '@agent-device/contracts/interaction';
 import type { CapturedSnapshot } from './selector-read-shared.ts';
 import {
   DEFAULT_STABLE_QUIET_MS,

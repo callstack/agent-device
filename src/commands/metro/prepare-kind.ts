@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { MetroPrepareKind } from '../../contracts/metro.ts';
+import type { MetroPrepareKind } from '@agent-device/contracts/remote';
 
 const METRO_PREPARE_KIND_VALUES: readonly MetroPrepareKind[] = [
   'auto',

@@ -20,7 +20,7 @@ import { copyAndroidRecordingChunksWithValidation } from './record-trace-android
 import {
   DEFAULT_RECORDING_EXPORT_QUALITY,
   type RecordingExportQuality,
-} from '../../contracts/recording-export-quality.ts';
+} from '@agent-device/contracts/recording';
 import {
   cleanupAndroidRecoveryMetadata,
   writeAndroidRecoveryMetadata,

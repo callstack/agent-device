@@ -3,7 +3,7 @@
 A new flag touches only the layers that need to understand it. Stop at the layer where it stops
 mattering — threading it further is the common failure, not stopping too early.
 
-1. `src/contracts/cli-flags.ts`: add to `CliFlags`; add the definition to the matching
+1. `packages/contracts/src/cli-flags.ts`: add to `CliFlags`; add the definition to the matching
    `src/commands/cli-grammar/flag-definitions-*.ts` owner and the relevant group in `flag-groups.ts`
    (for example `SNAPSHOT_FLAGS`). Then update the command family metadata/schema that exposes the
    flag; find the owner with
@@ -26,7 +26,7 @@ mattering — threading it further is the common failure, not stopping too early
 9. `scripts/integration-progress-model.ts`: classify the flag (device-observable vs
    intentionally-outside). The architecture-progress gate fails CI on unclassified public flags.
 10. If the flag changes interaction semantics, revisit the affected cells in
-    `src/contracts/interaction-guarantees.ts` (scope with `appliesTo` when the flag exists only on
+    `packages/contracts/src/interaction-guarantees.ts` (scope with `appliesTo` when the flag exists only on
     some commands).
 
 Command-only flags (like `find --first`) that never reach the platform layer usually stop at

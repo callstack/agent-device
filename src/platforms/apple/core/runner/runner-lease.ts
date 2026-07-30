@@ -7,7 +7,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { acquireProcessLock } from '../../../../utils/process-lock.ts';
 import { readProcessStartTime } from '../../../../utils/host-process.ts';
 import { classifyOwnerLiveness } from '../../../../utils/owner-identity.ts';
-import type { RunnerLogicalLeaseContext } from '../../../../contracts/runner-lease-context.ts';
+import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/platform';
 
 const RUNNER_LEASE_SCHEMA_VERSION = 1;
 const RUNNER_LEASE_LOCK_TIMEOUT_MS = 30_000;

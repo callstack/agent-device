@@ -1,8 +1,8 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { SettingsUpdateOptions } from '../../contracts/client-settings.ts';
-import { SETTINGS_USAGE_OVERRIDE } from '../../contracts/settings-contract.ts';
+import type { SettingsUpdateOptions } from '@agent-device/contracts/client';
+import { SETTINGS_USAGE_OVERRIDE } from '@agent-device/contracts/settings';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
-import type { CliFlags } from '../../contracts/cli-flags.ts';
+import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { readLocationCoordinate } from '../../utils/location-coordinates.ts';
 import { defineExecutableCommand } from '../command-contract.ts';

@@ -1,38 +1,38 @@
-import type { BackendSnapshotResult } from '../../../backend.ts';
-import type { DiffSnapshotCommandResult } from '../../../contracts/diff.ts';
-import type { SnapshotDiagnosticsSummary } from '../../../contracts/snapshot-diagnostics.ts';
-import type { AgentDeviceRuntime, CommandSessionRecord } from '../../../runtime-contract.ts';
 import {
   publicSnapshotCaptureAnnotations,
   snapshotCaptureAnnotationsFrom,
+  type DiffSnapshotCommandResult,
   type PublicSnapshotCaptureAnnotations,
   type SnapshotCaptureAnnotations,
-} from '../../../contracts/snapshot-capture-annotations.ts';
-import { renderSnapshotQualityWarnings } from '../../../snapshot/snapshot-quality.ts';
+  type SnapshotDiagnosticsSummary,
+} from '@agent-device/contracts/capture';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  buildSnapshotDiff,
-  countSnapshotComparableLines,
-} from '../../../snapshot/snapshot-diff.ts';
 import type {
   SnapshotNode,
   SnapshotState,
   SnapshotUnchanged,
   SnapshotVisibility,
 } from '@agent-device/kernel/snapshot';
+import type { BackendSnapshotResult } from '../../../backend.ts';
+import type { AgentDeviceRuntime, CommandSessionRecord } from '../../../runtime-contract.ts';
+import {
+  buildSnapshotDiff,
+  countSnapshotComparableLines,
+} from '../../../snapshot/snapshot-diff.ts';
+import { renderSnapshotQualityWarnings } from '../../../snapshot/snapshot-quality.ts';
 import { buildSnapshotVisibility } from '../../../snapshot/snapshot-visibility.ts';
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '../../../snapshot/system-surface-disclosure.ts';
 import { formatReactNativeOverlayWarning } from '../../react-native/overlay.ts';
-import {
-  buildUnchangedSnapshotMetadata,
-  ensureSnapshotPresentationKey,
-} from './snapshot-unchanged.ts';
+import { now } from '../../runtime-common.ts';
 import type {
   DiffSnapshotCommandOptions,
   RuntimeCommand,
   SnapshotCommandOptions,
 } from '../../runtime-types.ts';
-import { now } from '../../runtime-common.ts';
+import {
+  buildUnchangedSnapshotMetadata,
+  ensureSnapshotPresentationKey,
+} from './snapshot-unchanged.ts';
 
 export type SnapshotCommandResult = {
   nodes: SnapshotNode[];
@@ -44,7 +44,7 @@ export type SnapshotCommandResult = {
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
 } & PublicSnapshotCaptureAnnotations;
 
-export type { DiffSnapshotCommandResult } from '../../../contracts/diff.ts';
+export type { DiffSnapshotCommandResult } from '@agent-device/contracts/capture';
 
 type SnapshotCapture = {
   snapshot: SnapshotState;

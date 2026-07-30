@@ -1,5 +1,5 @@
-import type { SessionAction } from '../contracts/session-action.ts';
-import { appendScreenshotScriptFlags } from '../contracts/screenshot.ts';
+import type { SessionAction } from '@agent-device/contracts/session';
+import { appendScreenshotScriptFlags } from '@agent-device/contracts/capture';
 import { splitRefGenerationSuffix } from '@agent-device/kernel/snapshot';
 
 /**

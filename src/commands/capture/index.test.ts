@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import type { CliFlags } from '../../contracts/cli-flags.ts';
+import type { CliFlags } from '@agent-device/contracts/command';
 import { alertCliReader, alertDaemonWriter } from './alert.ts';
 import { diffCliReader } from './diff.ts';
 import { snapshotCliOutput } from './output.ts';

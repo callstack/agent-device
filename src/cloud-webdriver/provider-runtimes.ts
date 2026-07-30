@@ -1,4 +1,4 @@
-import type { ProviderDeviceRuntime } from '../provider-device-runtime.ts';
+import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import {
   CLOUD_WEBDRIVER_PROVIDER_DEFINITIONS,
   type DefaultCloudWebDriverProviderRuntimeEnv,

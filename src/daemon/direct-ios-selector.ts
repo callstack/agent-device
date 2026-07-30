@@ -3,7 +3,7 @@ import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 import type { SessionState } from './types.ts';
 import { tryParseSelectorChain } from '../selectors/index.ts';
 import { asAppError } from '@agent-device/kernel/errors';
-import type { ElementSelectorTapOptions } from '../contracts/interactor-types.ts';
+import type { ElementSelectorTapOptions } from '@agent-device/contracts/interaction';
 
 export type DirectIosSelectorTarget = ElementSelectorTapOptions & { raw: string };
 

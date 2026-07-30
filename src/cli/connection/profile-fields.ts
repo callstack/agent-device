@@ -1,5 +1,5 @@
-import type { RemoteConfigMetroOptions } from '../../contracts/remote-config-fields.ts';
-import type { CliFlags } from '../../contracts/cli-flags.ts';
+import type { RemoteConfigMetroOptions } from '@agent-device/contracts/remote';
+import type { CliFlags } from '@agent-device/contracts/command';
 
 export function readMetroProfileFields(flags: CliFlags): RemoteConfigMetroOptions {
   return {

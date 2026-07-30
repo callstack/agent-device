@@ -1,5 +1,5 @@
 import { RESPONSE_LEVELS } from '@agent-device/kernel/contracts';
-import { RECORDING_SCOPE_VALUES } from '../../contracts/recording-scope.ts';
+import { RECORDING_SCOPE_VALUES } from '@agent-device/contracts/recording';
 import type { FlagDefinition } from './flag-types.ts';
 
 export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [

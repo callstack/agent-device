@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { RunnerLogicalLeaseContext } from '../../../../contracts/runner-lease-context.ts';
+import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Deadline } from '../../../../utils/retry.ts';
 import type { RunnerCommand } from './runner-contract.ts';

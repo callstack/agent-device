@@ -2,7 +2,7 @@ import type { JsonSchema } from '../commands/command-contract.ts';
 import { projectedSystemCommandOutputSchemas } from '../commands/system/index.ts';
 import type { CommandResultMap } from '../core/command-descriptor/command-result.ts';
 import { booleanSchema, looseObjectSchema, stringSchema } from '../commands/command-input.ts';
-import { SESSION_SURFACES } from '../contracts/session-surface.ts';
+import { SESSION_SURFACES } from '@agent-device/contracts/session';
 import { DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
 
 /**
@@ -129,7 +129,7 @@ function interactionResponseDataSchema(extra: InteractionExtra = {}): JsonSchema
   );
 }
 
-// ResolutionDiagnosticEntry (src/contracts/interaction.ts) — a disambiguation
+// ResolutionDiagnosticEntry (packages/contracts/src/interaction.ts) — a disambiguation
 // winner or losing alternative. Never a snapshot ref.
 const resolutionDiagnosticEntrySchema: JsonSchema = objectSchema(
   {
@@ -142,7 +142,7 @@ const resolutionDiagnosticEntrySchema: JsonSchema = objectSchema(
   ['diagnosticRef'],
 );
 
-// ResolutionDisclosure (src/contracts/interaction.ts) — never ref-issuing;
+// ResolutionDisclosure (packages/contracts/src/interaction.ts) — never ref-issuing;
 // absent on paths where the guarantee is inapplicable (ADR 0012 decision 2).
 // `alternatives` rides default/full levels only; the digest view omits it.
 const resolutionDisclosureSchema: JsonSchema = {
@@ -197,7 +197,7 @@ const resolutionDisclosureSchema: JsonSchema = {
   ],
 };
 
-// InteractionEvidence (src/contracts/interaction.ts) — opt-in `--verify` cheap
+// InteractionEvidence (packages/contracts/src/interaction.ts) — opt-in `--verify` cheap
 // post-condition evidence (#1047).
 const interactionEvidenceSchema: JsonSchema = objectSchema(
   {
@@ -212,7 +212,7 @@ const interactionEvidenceSchema: JsonSchema = objectSchema(
   ['nodeCount', 'interactiveNodeCount', 'digest', 'changedFromBefore'],
 );
 
-// SettleObservation (src/contracts/interaction.ts) — opt-in `--settle` settled
+// SettleObservation (packages/contracts/src/interaction.ts) — opt-in `--settle` settled
 // diff observation (#1101).
 const settleObservationSchema: JsonSchema = objectSchema(
   {
@@ -280,7 +280,7 @@ const settleObservationSchema: JsonSchema = objectSchema(
   ['settled', 'waitedMs', 'captures', 'quietMs', 'timeoutMs'],
 );
 
-// boot / shutdown share the resolved-device header (src/contracts/device.ts).
+// boot / shutdown share the resolved-device header (packages/contracts/src/device.ts).
 const deviceHeaderProperties: Record<string, JsonSchema> = {
   // Public leaf vocabulary (ios | macos | android | linux | web): boot/shutdown
   // emit publicPlatformString, never the internal `apple` platform.
@@ -357,7 +357,7 @@ export const COMMAND_OUTPUT_SCHEMAS = {
     'Daemon response data for the find command.',
   ),
 
-  // src/contracts/device.ts
+  // packages/contracts/src/device.ts
   boot: objectSchema({ ...deviceHeaderProperties, booted: { type: 'boolean', const: true } }, [
     ...deviceHeaderRequired,
     'booted',
@@ -367,16 +367,16 @@ export const COMMAND_OUTPUT_SCHEMAS = {
     'shutdown',
   ]),
 
-  // src/contracts/viewport.ts
+  // packages/contracts/src/viewport.ts
   viewport: objectSchema(
     { width: numberSchema(), height: numberSchema(), message: stringSchema() },
     ['width', 'height', 'message'],
   ),
 
-  // src/contracts/navigation.ts, projected from executable command contracts.
+  // packages/contracts/src/navigation.ts, projected from executable command contracts.
   ...projectedSystemCommandOutputSchemas,
 
-  // src/contracts/wait.ts — compact public daemon projection.
+  // packages/contracts/src/wait.ts — compact public daemon projection.
   wait: objectSchema(
     {
       waitedMs: numberSchema(),
@@ -391,12 +391,12 @@ export const COMMAND_OUTPUT_SCHEMAS = {
     ['waitedMs'],
   ),
 
-  // src/contracts/prepare.ts — prepare is not MCP-exposed, but the schema stays
+  // packages/contracts/src/prepare.ts — prepare is not MCP-exposed, but the schema stays
   // map-complete with CommandResultMap.
   prepare: objectSchema(
     {
       action: constSchema('ios-runner'),
-      // PublicPlatform leaf, mirroring PrepareCommandResult (src/contracts/prepare.ts).
+      // PublicPlatform leaf, mirroring PrepareCommandResult (packages/contracts/src/prepare.ts).
       platform: enumSchema(PUBLIC_PLATFORMS),
       deviceId: stringSchema(),
       deviceName: stringSchema(),
@@ -450,7 +450,7 @@ export const COMMAND_OUTPUT_SCHEMAS = {
     ],
   ),
 
-  // src/contracts/push.ts — discriminated union on public platform.
+  // packages/contracts/src/push.ts — discriminated union on public platform.
   push: {
     type: 'object',
     oneOf: [
@@ -471,7 +471,7 @@ export const COMMAND_OUTPUT_SCHEMAS = {
     ],
   },
 
-  // src/contracts/app-events.ts
+  // packages/contracts/src/app-events.ts
   'trigger-app-event': objectSchema(
     {
       event: stringSchema(),
@@ -482,7 +482,7 @@ export const COMMAND_OUTPUT_SCHEMAS = {
     ['event', 'eventUrl', 'transport', 'message'],
   ),
 
-  // src/contracts/clipboard.ts — discriminated union on `action`.
+  // packages/contracts/src/clipboard.ts — discriminated union on `action`.
   clipboard: {
     type: 'object',
     oneOf: [
@@ -494,7 +494,7 @@ export const COMMAND_OUTPUT_SCHEMAS = {
     ],
   },
 
-  // src/contracts/app-state.ts — discriminated union on `platform`.
+  // packages/contracts/src/app-state.ts — discriminated union on `platform`.
   appstate: {
     type: 'object',
     oneOf: [
@@ -524,7 +524,7 @@ export const COMMAND_OUTPUT_SCHEMAS = {
     ],
   },
 
-  // src/contracts/keyboard.ts — flat closed shape; `platform`/`action` always present.
+  // packages/contracts/src/keyboard.ts — flat closed shape; `platform`/`action` always present.
   keyboard: objectSchema(
     {
       platform: enumSchema(['android', 'ios']),
@@ -544,7 +544,7 @@ export const COMMAND_OUTPUT_SCHEMAS = {
     ['platform', 'action'],
   ),
 
-  // src/contracts/doctor.ts
+  // packages/contracts/src/doctor.ts
   doctor: objectSchema(
     {
       status: enumSchema(['pass', 'warn', 'fail', 'info']),
@@ -572,7 +572,7 @@ export const COMMAND_OUTPUT_SCHEMAS = {
     ['status', 'summary', 'kind', 'checks'],
   ),
 
-  // src/contracts/diff.ts — the public Node command accepts snapshot diffs.
+  // packages/contracts/src/diff.ts — the public Node command accepts snapshot diffs.
   diff: objectSchema(
     {
       mode: constSchema('snapshot'),
@@ -601,7 +601,7 @@ export const COMMAND_OUTPUT_SCHEMAS = {
     ['mode', 'baselineInitialized', 'summary', 'lines'],
   ),
 
-  // src/contracts/replay.ts
+  // packages/contracts/src/replay.ts
   replay: objectSchema(
     {
       replayed: numberSchema(),
@@ -642,7 +642,7 @@ export const COMMAND_OUTPUT_SCHEMAS = {
     ],
   ),
 
-  // src/contracts/recording.ts
+  // packages/contracts/src/recording.ts
   record: {
     type: 'object',
     oneOf: [

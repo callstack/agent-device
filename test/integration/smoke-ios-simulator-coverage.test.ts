@@ -3,14 +3,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
 import {
+  buildGesturePlan,
   gesturePayloadFromPositionals,
   normalizePublicGesture,
   normalizePublicSwipeMotion,
   swipePayloadFromPositionals,
-} from '../../src/contracts/gesture-normalization.ts';
-import { buildGesturePlan } from '../../src/contracts/gesture-plan.ts';
+} from '@agent-device/contracts/interaction';
+import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
 import { isCommandSupportedOnDevice } from '../../src/core/capabilities.ts';
 import { parseReplayScriptDetailed } from '../../src/replay/script.ts';
 import { IOS_SIMULATOR_BEHAVIOR_COVERAGE } from './ios-simulator-e2e/behavior-coverage.ts';

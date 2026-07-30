@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { runCmd } from '../utils/exec.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import type { CliFlags } from '../contracts/cli-flags.ts';
+import type { CliFlags } from '@agent-device/contracts/command';
 import type { EnvMap } from '../utils/env-map.ts';
 import { readCloudJsonResponse } from './cloud-response.ts';
 

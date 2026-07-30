@@ -1,7 +1,7 @@
 import { createDefaultCloudWebDriverProviderRuntimes } from './cloud-webdriver/provider-runtimes.ts';
 import { CLOUD_WEBDRIVER_PROVIDER_DEFINITIONS } from './cloud-webdriver/provider-definitions.ts';
 import type { DefaultCloudWebDriverProviderRuntimeEnv } from './cloud-webdriver/provider-runtimes.ts';
-import type { ProviderDeviceRuntime } from './provider-device-runtime.ts';
+import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import { LIMRUN_PROVIDER } from './providers/limrun/device.ts';
 
 export type DefaultProviderDeviceRuntimeEnv = DefaultCloudWebDriverProviderRuntimeEnv &

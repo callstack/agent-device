@@ -6,9 +6,9 @@ import {
   getProviderDeviceInteractor,
   installProviderDeviceApp,
   setActiveProviderDeviceRuntimes,
-  type ProviderDeviceRuntime,
 } from '../provider-device-runtime.ts';
-import type { Interactor } from '../contracts/interactor-types.ts';
+import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
+import type { Interactor } from '@agent-device/contracts/interaction';
 import type { SimulatorLease } from '../daemon/lease-registry.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 

@@ -3,7 +3,7 @@ import type {
   EventsOptions,
   LogsOptions,
   NetworkOptions,
-} from '../../contracts/client-observability.ts';
+} from '@agent-device/contracts/client';
 import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { parseStringMember } from '../../utils/string-enum.ts';

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import type { DeviceLease } from '../../contracts/device-provider.ts';
+import type { DeviceLease } from '@agent-device/contracts/device';
 
 test('retries an expired live-only provider lease release after a transient failure', async () => {
   vi.useFakeTimers();

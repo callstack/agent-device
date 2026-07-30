@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { CloudArtifact, CloudArtifactsResult } from '../contracts/cloud-artifacts.ts';
+import type { CloudArtifact, CloudArtifactsResult } from '@agent-device/contracts/observability';
 import {
   createCloudWebDriverCapabilities,
   type CloudWebDriverCapabilityOverrides,
@@ -12,8 +12,7 @@ import {
   type CloudWebDriverRuntimeOptions,
   type CloudWebDriverUploadApp,
 } from './runtime.ts';
-import type { ProviderDeviceRuntime } from '../provider-device-runtime.ts';
-import type { DeviceLease } from '../contracts/device-provider.ts';
+import type { DeviceLease, ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
 import { agentDeviceRequestHeaders } from './request-headers.ts';

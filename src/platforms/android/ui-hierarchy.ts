@@ -5,7 +5,7 @@ import { intersectArea } from '../../utils/screenshot-geometry.ts';
 import {
   type AndroidSystemChromeProvenance,
   isAndroidSystemChromeWindowResourceId,
-} from '../../contracts/android-system-chrome.ts';
+} from '@agent-device/contracts/platform';
 
 type AndroidRawSnapshotNode = RawSnapshotNode & AndroidSystemChromeProvenance;
 

@@ -1,6 +1,6 @@
 import type { DaemonRequest } from './types.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { stripAndroidSystemChromeProvenanceFromNode } from '../contracts/android-system-chrome.ts';
+import { stripAndroidSystemChromeProvenanceFromNode } from '@agent-device/contracts/platform';
 import { SessionStore } from './session-store.ts';
 import { isInteractiveObservation } from './session-action-recorder.ts';
 import {

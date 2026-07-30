@@ -1,13 +1,14 @@
-import assert from 'node:assert/strict';
-import fc from 'fast-check';
-import { describe, test } from 'vitest';
-import { buildGesturePlan, GESTURE_SAMPLE_INTERVAL_MS } from '../../contracts/gesture-plan.ts';
 import {
+  buildGesturePlan,
+  GESTURE_SAMPLE_INTERVAL_MS,
   gesturePayloadFromPositionals,
   normalizePublicGesture,
-} from '../../contracts/gesture-normalization.ts';
+} from '@agent-device/contracts/interaction';
 import { PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import fc from 'fast-check';
+import assert from 'node:assert/strict';
+import { describe, test } from 'vitest';
 import {
   COMPACT_VIEWPORTS,
   gestureInViewportArb,

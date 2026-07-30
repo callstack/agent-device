@@ -17,8 +17,8 @@ import {
   type AppleRunnerCommandExecutor,
   type AppleRunnerProvider,
 } from './core/runner/runner-provider.ts';
-import { toAppleTvRemoteButton } from '../../contracts/tv-remote.ts';
-import { DEVICE_ROTATIONS, type DeviceRotation } from '../../contracts/device-rotation.ts';
+import { toAppleTvRemoteButton } from '@agent-device/contracts/interaction';
+import { DEVICE_ROTATIONS, type DeviceRotation } from '@agent-device/contracts/device';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -29,7 +29,7 @@ import type {
   RunnerCallOptions,
   RunnerContext,
   ScreenshotOptions,
-} from '../../contracts/interactor-types.ts';
+} from '@agent-device/contracts/interaction';
 import {
   readSnapshotQualityVerdict,
   type SnapshotQualityVerdict,

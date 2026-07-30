@@ -1,4 +1,4 @@
-import type { RecordingBackendTag } from '../../contracts/recording.ts';
+import type { RecordingBackendTag } from '@agent-device/contracts/recording';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
@@ -22,7 +22,7 @@ import {
   VISIONOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
 } from '../../__tests__/test-utils/index.ts';
-import { getPlugin, tryGetPlugin } from '../../contracts/platform-plugin.ts';
+import { getPlugin, tryGetPlugin } from '../../core/platform-plugin-registry.ts';
 import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';
 import { resolveRecordingBackendForDevice } from '../handlers/record-trace-recording-backends.ts';
 

@@ -12,7 +12,7 @@ import { requireIntInRange } from '../../../utils/validation.ts';
 import {
   recordingQualityInputToExportQuality,
   type RecordingExportQuality,
-} from '../../../contracts/recording-export-quality.ts';
+} from '@agent-device/contracts/recording';
 import type {
   BackendResultEnvelope,
   BackendResultVariant,

@@ -4,7 +4,7 @@ import {
   isPerfSubject,
   PERF_KIND_ERROR_MESSAGE,
   PERF_SUBJECT_ERROR_MESSAGE,
-} from '../../contracts/perf.ts';
+} from '@agent-device/contracts/observability';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import {
   startAndroidPerfettoTrace,

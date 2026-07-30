@@ -9,8 +9,8 @@ export type SessionCommandKind = 'inventory' | 'state' | 'observability' | 'publ
 
 // Declared in contracts/ so core/ can classify commands without importing the daemon;
 // re-exported here because the descriptor shape below is stated in terms of it.
-export type { RefFrameEffect } from '../contracts/ref-frame-effect.ts';
-import type { RefFrameEffect } from '../contracts/ref-frame-effect.ts';
+export type { RefFrameEffect } from '@agent-device/contracts/replay';
+import type { RefFrameEffect } from '@agent-device/contracts/replay';
 
 /**
  * Request-sensitive form of {@link RefFrameEffect}. Commands whose subactions

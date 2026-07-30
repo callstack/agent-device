@@ -7,7 +7,7 @@ import {
 } from '../../daemon/client/daemon-client-lifecycle.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { colorize, supportsColor } from '../../utils/output.ts';
-import type { CliFlags } from '../../contracts/cli-flags.ts';
+import type { CliFlags } from '@agent-device/contracts/command';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 

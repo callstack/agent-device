@@ -1,4 +1,4 @@
-import type { CloudArtifact, CloudArtifactsResult } from '../contracts/cloud-artifacts.ts';
+import type { CloudArtifact, CloudArtifactsResult } from '@agent-device/contracts/observability';
 import type { AwsDeviceFarmClient } from './aws-device-farm.ts';
 import { cloudArtifactsReadyOrPending } from './artifact-results.ts';
 

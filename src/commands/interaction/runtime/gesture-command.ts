@@ -1,6 +1,6 @@
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
-import type { GestureIntent, GestureSemanticInput } from '../../../contracts/gesture-plan-types.ts';
-import { buildGesturePlan } from '../../../contracts/gesture-plan.ts';
+import type { GestureIntent, GestureSemanticInput } from '@agent-device/contracts/interaction';
+import { buildGesturePlan } from '@agent-device/contracts/interaction';
 import type { Point, Rect } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import { successText } from '../../../utils/success-text.ts';

@@ -4,7 +4,7 @@ import {
   buildGesturePlan,
   type GesturePlan,
   type MultiTouchGesturePlan,
-} from '../../contracts/gesture-plan.ts';
+} from '@agent-device/contracts/interaction';
 
 export const PORTRAIT: Rect = { x: 0, y: 0, width: 390, height: 844 };
 export const LANDSCAPE: Rect = { x: 0, y: 0, width: 844, height: 390 };

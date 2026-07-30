@@ -1,29 +1,15 @@
-import type { ClipboardCommandOptions } from '../../contracts/client-system.ts';
-import type { BackMode } from '../../contracts/back-mode.ts';
-import { BACK_MODES } from '../../contracts/back-mode.ts';
-import { parseDeviceRotation, DEVICE_ROTATIONS } from '../../contracts/device-rotation.ts';
+import type { ClipboardCommandOptions } from '@agent-device/contracts/client';
+import { DEVICE_ROTATIONS, parseDeviceRotation } from '@agent-device/contracts/device';
+import type { BackMode } from '@agent-device/contracts/interaction';
 import {
+  BACK_MODES,
   parseTvRemoteButton,
   TV_REMOTE_BUTTON_USAGE,
   TV_REMOTE_BUTTONS,
   tvRemoteDurationMode,
-} from '../../contracts/tv-remote.ts';
+} from '@agent-device/contracts/interaction';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
-import {
-  defineCommandFacet,
-  defineCommandFamilyFromFacets,
-  projectCommandOutputSchemas,
-} from '../family/types.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
-import {
-  compactRecord,
-  enumField,
-  integerField,
-  requiredField,
-  stringField,
-} from '../command-input.ts';
-import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import {
   commonInputFromFlags,
   direct,
@@ -32,6 +18,20 @@ import {
   requiredDaemonString,
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
+import { defineExecutableCommand } from '../command-contract.ts';
+import {
+  compactRecord,
+  enumField,
+  integerField,
+  requiredField,
+  stringField,
+} from '../command-input.ts';
+import {
+  defineCommandFacet,
+  defineCommandFamilyFromFacets,
+  projectCommandOutputSchemas,
+} from '../family/types.ts';
+import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { NAVIGATION_COMMAND_PROJECTIONS } from './navigation-projection.ts';
 import { systemCliOutputFormatters } from './output.ts';
 

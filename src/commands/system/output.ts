@@ -1,6 +1,8 @@
-import type { AppStateCommandResult } from '../../contracts/app-state.ts';
-import type { ClipboardCommandResult } from '../../contracts/clipboard.ts';
-import type { KeyboardCommandResult } from '../../contracts/keyboard.ts';
+import type { AppStateCommandResult } from '@agent-device/contracts/device';
+import type {
+  ClipboardCommandResult,
+  KeyboardCommandResult,
+} from '@agent-device/contracts/interaction';
 import type { CliOutput } from '../command-contract.ts';
 import {
   messageCliOutput,

@@ -9,7 +9,7 @@ import type {
   FindCommandResponseData,
   LongPressCommandResponseData,
   PressCommandResponseData,
-} from '../contracts/interaction.ts';
+} from '@agent-device/contracts/interaction';
 import {
   createAgentDeviceClient,
   type AgentDeviceClient,

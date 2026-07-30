@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { createAgentDeviceClient } from '../../../agent-device-client.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import type { CliFlags } from '../../../contracts/cli-flags.ts';
+import type { CliFlags } from '@agent-device/contracts/command';
 import { screenshotCommand } from '../screenshot.ts';
 
 async function captureStdout(fn: () => Promise<unknown>): Promise<string> {

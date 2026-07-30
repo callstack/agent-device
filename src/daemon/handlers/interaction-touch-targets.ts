@@ -3,7 +3,7 @@ import type {
   InteractionTarget,
   LongPressCommandResult,
   PressCommandResult,
-} from '../../contracts/interaction.ts';
+} from '@agent-device/contracts/interaction';
 import {
   readFillTargetFromPositionals,
   type DecodedFillTarget,

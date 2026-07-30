@@ -10,7 +10,7 @@ type FinalizeRecordingOverlayParams = {
     gestureEvents: import('../types.ts').RecordingGestureEvent[];
     telemetryPath?: string;
     showTouches: boolean;
-    exportQuality?: import('../../contracts/recording-export-quality.ts').RecordingExportQuality;
+    exportQuality?: import('@agent-device/contracts/recording').RecordingExportQuality;
     overlayWarning?: string;
   };
   deps: Pick<RecordTraceDeps, 'overlayRecordingTouches'>;

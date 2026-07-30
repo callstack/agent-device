@@ -9,7 +9,7 @@ import {
   parsePermissionAction,
   parsePermissionTarget,
   type SettingOptions,
-} from '../permission-utils.ts';
+} from '@agent-device/contracts/settings';
 import { parseAppearanceAction } from '../appearance.ts';
 import { parseSettingState } from '../setting-state.ts';
 import { runAndroidAdb } from './adb.ts';

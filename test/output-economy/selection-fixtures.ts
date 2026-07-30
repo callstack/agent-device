@@ -1,4 +1,4 @@
-import type { DebugSymbolsResult } from '../../src/contracts/debug-symbols.ts';
+import type { DebugSymbolsResult } from '@agent-device/contracts/observability';
 import type { DaemonResponseData } from '../../src/daemon/types.ts';
 
 const requestBody = JSON.stringify({

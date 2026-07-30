@@ -6,7 +6,7 @@ import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
   gesturePayloadFromPositionals,
   swipePayloadFromPositionals,
-} from '../../contracts/gesture-normalization.ts';
+} from '@agent-device/contracts/interaction';
 import { buildDisplayPositionals } from '../session-event-action.ts';
 import { appendReplayTraceEvent } from './session-replay-trace.ts';
 import { inferFillText } from '../action-utils.ts';

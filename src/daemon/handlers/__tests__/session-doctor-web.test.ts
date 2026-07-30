@@ -5,7 +5,7 @@ import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
 import type { AgentBrowserProcessSummary } from '../../../platforms/web/agent-browser-lifecycle.ts';
 import { installFakeManagedAgentBrowser } from '../../../platforms/web/__tests__/test-utils.ts';
-import type { DoctorCheck } from '../../../contracts/doctor.ts';
+import type { DoctorCheck } from '@agent-device/contracts/observability';
 
 vi.mock('../../../platforms/web/agent-browser-lifecycle.ts', async () => {
   const actual = await vi.importActual<

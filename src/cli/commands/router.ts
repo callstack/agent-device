@@ -1,4 +1,4 @@
-import type { CliFlags } from '../../contracts/cli-flags.ts';
+import type { CliFlags } from '@agent-device/contracts/command';
 import type { AgentDeviceClient } from '../../agent-device-client.ts';
 import { isClientBackedCliCommandName, type ClientBackedCliCommandName } from './client-backed.ts';
 import { connectCommand, connectionCommand, disconnectCommand } from './connection.ts';

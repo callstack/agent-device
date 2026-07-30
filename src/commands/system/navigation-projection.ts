@@ -1,13 +1,15 @@
-import { BACK_MODES, type BackMode } from '../../contracts/back-mode.ts';
-import { DEVICE_ROTATIONS, type DeviceRotation } from '../../contracts/device-rotation.ts';
-import type {
-  AppSwitcherCommandResult,
-  BackCommandResult,
-  HomeCommandResult,
-  OrientationCommandResult,
-  TvRemoteCommandResult,
-} from '../../contracts/navigation.ts';
-import { TV_REMOTE_BUTTONS, type TvRemoteButton } from '../../contracts/tv-remote.ts';
+import { DEVICE_ROTATIONS, type DeviceRotation } from '@agent-device/contracts/device';
+import {
+  BACK_MODES,
+  TV_REMOTE_BUTTONS,
+  type AppSwitcherCommandResult,
+  type BackCommandResult,
+  type HomeCommandResult,
+  type OrientationCommandResult,
+  type TvRemoteCommandResult,
+  type BackMode,
+  type TvRemoteButton,
+} from '@agent-device/contracts/interaction';
 import type { ExecutableCommandProjection } from '../command-contract.ts';
 
 declare const navigationCommandProjectionType: unique symbol;

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { tryGetPlugin } from '../contracts/platform-plugin.ts';
+import { tryGetPlugin } from '../core/platform-plugin-registry.ts';
 import { registerBuiltinPlatformPlugins } from '../core/interactors/register-builtins.ts';
 import { createScopedProvider } from '../utils/scoped-provider.ts';
 import {
@@ -27,7 +27,7 @@ import {
   type NetworkDump,
   type NetworkIncludeMode,
 } from './network-log.ts';
-import type { LogBackend } from '../contracts/logs.ts';
+import type { LogBackend } from '@agent-device/contracts/observability';
 
 // Populate the PlatformPlugin registry once at module load (idempotent; registers
 // only lazy closures, so no leaf code is imported and CLI cold-start is unaffected

@@ -1,14 +1,16 @@
 // CommandFlags and MaestroRuntimeFlags are declared in contracts/ so both sides of the process
 // boundary can be stated in terms of them; re-exported here because this is where consumers
 // already import them from.
-export type { CommandFlags } from '../contracts/command-flags.ts';
-import type { ScreenshotDispatchFlags } from '../contracts/screenshot.ts';
-import type { BackMode } from '../contracts/back-mode.ts';
-import type { ClickButton } from '../contracts/click-button.ts';
-import type { ElementSelectorKey } from '../contracts/interactor-types.ts';
-import type { SwipePattern } from '../contracts/scroll-gesture.ts';
-import type { SessionSurface } from '../contracts/session-surface.ts';
-import type { RunnerLogicalLeaseContext } from '../contracts/runner-lease-context.ts';
+export type { CommandFlags } from '@agent-device/contracts/command';
+import type { ScreenshotDispatchFlags } from '@agent-device/contracts/capture';
+import type {
+  BackMode,
+  ClickButton,
+  ElementSelectorKey,
+  SwipePattern,
+} from '@agent-device/contracts/interaction';
+import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/platform';
+import type { SessionSurface } from '@agent-device/contracts/session';
 import type { Point } from '@agent-device/kernel/snapshot';
 
 export type DispatchContext = ScreenshotDispatchFlags & {

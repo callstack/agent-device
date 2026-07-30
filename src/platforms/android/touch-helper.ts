@@ -1,4 +1,4 @@
-import type { PointerTrajectory } from '../../contracts/gesture-plan.ts';
+import type { PointerTrajectory } from '@agent-device/contracts/interaction';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';

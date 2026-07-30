@@ -13,7 +13,7 @@ import type {
   MetroPrepareOptions,
   MetroReloadOptions,
 } from '../agent-device-client.ts';
-import type { SettingsUpdateOptions } from '../contracts/client-settings.ts';
+import type { SettingsUpdateOptions } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveCliOptions } from '../cli/resolve-cli-options.ts';
 

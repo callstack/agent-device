@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { iosRunnerOverrides, performGestureApple } from '../../interactions.ts';
 import { runAppleRunnerCommand } from '../runner/runner-client.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import type { GesturePlan } from '../../../../contracts/gesture-plan.ts';
+import type { GesturePlan } from '@agent-device/contracts/interaction';
 import { requireGestureSupported } from '../../../../core/capabilities.ts';
 import {
   IOS_TEST_DEVICE,

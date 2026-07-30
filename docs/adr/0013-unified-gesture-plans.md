@@ -21,7 +21,7 @@ the Android planned-touch executor.
 
 ## Decision
 
-Public gesture inputs normalize once in `src/contracts/gesture-normalization.ts`. This is the
+Public gesture inputs normalize once in `packages/contracts/src/gesture-normalization.ts`. This is the
 explicit public compatibility boundary: canonical semantic intent is produced before entering the
 runtime. Deprecated arguments that have been removed (timed `swipe`, timed `gesture fling`,
 `gesture rotate` `velocity`) are rejected with actionable `INVALID_ARGS` messages rather than
@@ -30,7 +30,7 @@ that do not appear on public surfaces; Maestro timed swipes use
 `internal.gestureExecutionProfile: 'endpoint-hold'` to preserve iOS fast-swipe-then-hold behavior
 while still routing through the canonical `pan` input.
 
-The runtime plans canonical intent in `src/contracts/gesture-plan.ts`. Contact topology is separate
+The runtime plans canonical intent in `packages/contracts/src/gesture-plan.ts`. Contact topology is separate
 from motion:
 
 - one contact: pan or fling with a complete pointer trajectory and an explicit execution profile;

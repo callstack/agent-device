@@ -1,6 +1,6 @@
 import type { BackendNetworkEntry } from '../../backend.ts';
 import type { NetworkIncludeMode } from '@agent-device/kernel/contracts';
-import type { NetworkEntry } from '../../contracts/network-log.ts';
+import type { NetworkEntry } from '@agent-device/contracts/observability';
 import type { CliOutput } from '../command-contract.ts';
 import { resultOutput, type CliOutputFormatter } from '../output-common.ts';
 

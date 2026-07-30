@@ -1,8 +1,8 @@
-import type { SnapshotResult } from '../contracts/interactor-types.ts';
+import type { SnapshotResult } from '@agent-device/contracts/interaction';
 import type {
   ProviderDeviceInstallOptions,
   ProviderDeviceInstallResult,
-} from '../provider-device-runtime.ts';
+} from '@agent-device/contracts/device';
 import type { CloudWebDriverPlatform, CloudWebDriverUploadResult } from './runtime.ts';
 
 export function providerInstallResult(

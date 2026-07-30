@@ -5,7 +5,7 @@ export type MetroRuntimeHints = SessionRuntimeHints;
 
 // The bridge RESULT shape is declared in contracts/metro.ts, because the public prepare result
 // embeds it and that shape had to move below both `metro/` and the command surface.
-export type { MetroBridgeResult } from '../contracts/metro.ts';
+export type { MetroBridgeResult } from '@agent-device/contracts/remote';
 
 export type MetroBridgeRuntimePayload = {
   metro_host?: string;

@@ -1,9 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { CloudArtifactsResult } from '../contracts/cloud-artifacts.ts';
-import type { DaemonRequest } from '@agent-device/kernel/contracts';
+import type { CloudArtifactsResult } from '@agent-device/contracts/observability';
+import type { LeaseLifecycleContext, ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
-import type { ProviderDeviceRuntime } from '../provider-device-runtime.ts';
 import {
   AWS_DEVICE_FARM_CAPABILITY_OVERRIDES,
   createAwsCliDeviceFarmClient,
@@ -98,7 +97,7 @@ export const CLOUD_WEBDRIVER_PROVIDER_DEFINITIONS: readonly CloudWebDriverProvid
               'providerApp',
               'BrowserStack requires --provider-app <bs://app-id-or-local-path>.',
             ),
-            cwd: request.meta?.cwd,
+            cwd: request.cwd,
             username,
             accessKey,
             uploadEndpoint: env.BROWSERSTACK_APP_UPLOAD_ENDPOINT,
@@ -239,7 +238,10 @@ function isProviderAppReference(value: string): boolean {
   return value.startsWith('bs://') || /^https?:\/\//.test(value);
 }
 
-function requireRequest(req: DaemonRequest | undefined, providerLabel: string): DaemonRequest {
+function requireRequest(
+  req: LeaseLifecycleContext | undefined,
+  providerLabel: string,
+): LeaseLifecycleContext {
   if (req) return req;
   throw new AppError(
     'INVALID_ARGS',
@@ -247,26 +249,22 @@ function requireRequest(req: DaemonRequest | undefined, providerLabel: string): 
   );
 }
 
-function requireRequestPlatform(req: DaemonRequest, providerLabel: string): CloudWebDriverPlatform {
+function requireRequestPlatform(
+  req: LeaseLifecycleContext,
+  providerLabel: string,
+): CloudWebDriverPlatform {
   const platform = req.flags?.platform;
   if (platform === 'android' || platform === 'ios') return platform;
   throw new AppError('INVALID_ARGS', `${providerLabel} requires --platform ios|android.`);
 }
 
-function requireFlag(
-  req: DaemonRequest,
-  key: keyof NonNullable<DaemonRequest['flags']>,
-  message: string,
-): string {
+function requireFlag(req: LeaseLifecycleContext, key: string, message: string): string {
   const value = readFlag(req, key);
   if (value) return value;
   throw new AppError('INVALID_ARGS', message);
 }
 
-function readFlag(
-  req: DaemonRequest,
-  key: keyof NonNullable<DaemonRequest['flags']>,
-): string | undefined {
+function readFlag(req: LeaseLifecycleContext, key: string): string | undefined {
   const value = req.flags?.[key];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
@@ -282,9 +280,9 @@ function requireEnv(
 }
 
 function requireAwsValue(
-  req: DaemonRequest,
+  req: LeaseLifecycleContext,
   env: DefaultCloudWebDriverProviderRuntimeEnv,
-  flagKey: keyof NonNullable<DaemonRequest['flags']>,
+  flagKey: string,
   primaryEnv: keyof DefaultCloudWebDriverProviderRuntimeEnv,
   fallbackEnv: keyof DefaultCloudWebDriverProviderRuntimeEnv,
 ): string {
@@ -297,7 +295,7 @@ function requireAwsValue(
 }
 
 function readAwsInteractionMode(
-  req: DaemonRequest,
+  req: LeaseLifecycleContext,
 ): 'INTERACTIVE' | 'NO_VIDEO' | 'VIDEO_ONLY' | undefined {
   const value = readFlag(req, 'awsInteractionMode');
   if (value === 'INTERACTIVE' || value === 'NO_VIDEO' || value === 'VIDEO_ONLY') return value;

@@ -11,7 +11,7 @@ import {
   buildScrollGesturePlan,
   type ScrollDirection,
   type SwipePattern,
-} from '../contracts/scroll-gesture.ts';
+} from '@agent-device/contracts/interaction';
 import {
   getSnapshotReferenceFrame,
   type TouchReferenceFrame as ReferenceFrame,

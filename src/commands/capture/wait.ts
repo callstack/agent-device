@@ -1,5 +1,5 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { WaitCommandOptions } from '../../contracts/client-system.ts';
+import type { WaitCommandOptions } from '@agent-device/contracts/client';
 import { parseWaitPositionals } from '../../core/wait-positionals.ts';
 import { SELECTOR_SNAPSHOT_FLAGS } from '../cli-grammar/flag-groups.ts';
 import { type CliFlags } from '../cli-grammar/flag-types.ts';

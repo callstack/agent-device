@@ -1,6 +1,6 @@
 import type { AgentBrowserToolStatus } from '../../platforms/web/agent-browser-tool.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import type { CliFlags } from '../../contracts/cli-flags.ts';
+import type { CliFlags } from '@agent-device/contracts/command';
 import { printJson } from '../../utils/output.ts';
 
 type PublicAgentBrowserToolStatus = Omit<AgentBrowserToolStatus, 'socketDir'>;

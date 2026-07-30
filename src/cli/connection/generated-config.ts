@@ -8,7 +8,7 @@ import type {
 } from '../../remote/remote-config-schema.ts';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import type { EnvMap } from '../../utils/env-map.ts';
-import type { CliFlags } from '../../contracts/cli-flags.ts';
+import type { CliFlags } from '@agent-device/contracts/command';
 import { profileToCliFlags } from '../remote-config-flags.ts';
 
 const GENERATED_REMOTE_CONFIG_SECRET_KEYS = new Set(['daemonAuthToken', 'metroBearerToken']);

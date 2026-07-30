@@ -15,8 +15,7 @@ import type {
   CloudWebDriverRuntimeOptions,
   CloudWebDriverPrepareSession,
 } from './runtime.ts';
-import type { DeviceLease } from '../contracts/device-provider.ts';
-import type { ProviderDeviceRuntime } from '../provider-device-runtime.ts';
+import type { DeviceLease, ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import { runCmd } from '../utils/exec.ts';
 import { sleep } from '../utils/timeouts.ts';
 import { AppError } from '@agent-device/kernel/errors';

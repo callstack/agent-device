@@ -1,72 +1,72 @@
-import type { GestureReferenceFrame } from '../../contracts/scroll-gesture.ts';
-import {
-  transformInteractionResponseData,
-  type InteractionResponseDataTransformCommand,
-} from '../../core/interaction-response-data-transform.ts';
-import { isApplePlatform, publicPlatformString } from '@agent-device/kernel/device';
-import { normalizeAppleRunnerResultForResponse } from '../../platforms/apple/core/runner/runner-result-response-normalization.ts';
+import type {
+  FillCommandResult,
+  GestureReferenceFrame,
+  InteractionTarget,
+  LongPressCommandResult,
+  PressCommandResult,
+} from '@agent-device/contracts/interaction';
 import {
   buttonTag,
   getClickButtonValidationError,
   resolveClickButton,
-} from '../../contracts/click-button.ts';
-import type {
-  FillCommandResult,
-  InteractionTarget,
-  LongPressCommandResult,
-  PressCommandResult,
-} from '../../contracts/interaction.ts';
+} from '@agent-device/contracts/interaction';
+import { isApplePlatform, publicPlatformString } from '@agent-device/kernel/device';
 import { asAppError, normalizeError } from '@agent-device/kernel/errors';
-import type { ReplayTargetGuardDenotation } from '../../replay/target-identity-node.ts';
-import type { DaemonResponse, SessionState } from '../types.ts';
-import { finalizeTouchInteraction, type InteractionHandlerParams } from './interaction-common.ts';
-import { markSessionPartialRefsIssued, resolveRefStalenessWarning } from '../session-snapshot.ts';
 import {
-  buildInteractionResponseData,
-  type InteractionResponsePayloads,
-} from './interaction-touch-response.ts';
-import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
+  commandSupportsSettleObservation,
+  commandSupportsVerifyEvidence,
+} from '../../core/command-descriptor/registry.ts';
+import { dispatchCommand, type CommandFlags } from '../../core/dispatch.ts';
+import {
+  transformInteractionResponseData,
+  type InteractionResponseDataTransformCommand,
+} from '../../core/interaction-response-data-transform.ts';
+import { normalizeAppleRunnerResultForResponse } from '../../platforms/apple/core/runner/runner-result-response-normalization.ts';
+import type { ReplayTargetGuardDenotation } from '../../replay/target-identity-node.ts';
+import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { getActiveAndroidSnapshotFreshness } from '../android-snapshot-freshness.ts';
+import {
+  ensureAndroidBlockingSystemDialogReady,
+  type AndroidBlockingDialogReadinessResult,
+} from '../android-system-dialog.ts';
+import {
+  isDirectIosSelectorFallbackError,
+  readSimpleIosSelectorTarget,
+  type DirectIosSelectorTarget,
+} from '../direct-ios-selector.ts';
+import { expireRefFrame } from '../ref-frame.ts';
+import { markSessionPartialRefsIssued, resolveRefStalenessWarning } from '../session-snapshot.ts';
+import type { DaemonResponse, SessionState } from '../types.ts';
+import {
+  assertAndroidPressStayedInApp,
+  isAndroidEscapeError,
+} from './interaction-android-escape.ts';
+import { finalizeTouchInteraction, type InteractionHandlerParams } from './interaction-common.ts';
 import {
   readSettleRequest,
   settleFlagGuardResponse,
   type RefSnapshotFlagGuardResponse,
 } from './interaction-flags.ts';
+import { assertRecordedFillParameterization } from './interaction-recorded-input.ts';
+import { refMutationAdmissionResponse } from './interaction-ref-policy.ts';
+import { createInteractionRuntime } from './interaction-runtime.ts';
+import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
+import { unsupportedMacOsDesktopSurfaceInteraction } from './interaction-touch-policy.ts';
 import {
   readSnapshotNodesReferenceFrame,
   resolveDirectTouchReferenceFrameSafely,
 } from './interaction-touch-reference-frame.ts';
-import { unsupportedMacOsDesktopSurfaceInteraction } from './interaction-touch-policy.ts';
-import { errorResponse, noActiveSessionError, requireCommandSupported } from './response.ts';
 import {
-  assertAndroidPressStayedInApp,
-  isAndroidEscapeError,
-} from './interaction-android-escape.ts';
-import { createInteractionRuntime } from './interaction-runtime.ts';
+  buildInteractionResponseData,
+  type InteractionResponsePayloads,
+} from './interaction-touch-response.ts';
 import {
   formatTouchTargetLabel,
   parseFillTarget,
   parseLongPressTarget,
   parseTouchTarget,
 } from './interaction-touch-targets.ts';
-import { getActiveAndroidSnapshotFreshness } from '../android-snapshot-freshness.ts';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { dispatchCommand, type CommandFlags } from '../../core/dispatch.ts';
-import {
-  commandSupportsSettleObservation,
-  commandSupportsVerifyEvidence,
-} from '../../core/command-descriptor/registry.ts';
-import {
-  isDirectIosSelectorFallbackError,
-  readSimpleIosSelectorTarget,
-  type DirectIosSelectorTarget,
-} from '../direct-ios-selector.ts';
-import {
-  ensureAndroidBlockingSystemDialogReady,
-  type AndroidBlockingDialogReadinessResult,
-} from '../android-system-dialog.ts';
-import { refMutationAdmissionResponse } from './interaction-ref-policy.ts';
-import { expireRefFrame } from '../ref-frame.ts';
-import { assertRecordedFillParameterization } from './interaction-recorded-input.ts';
+import { errorResponse, noActiveSessionError, requireCommandSupported } from './response.ts';
 
 export async function handleTouchInteractionCommands(
   params: InteractionHandlerParams & {

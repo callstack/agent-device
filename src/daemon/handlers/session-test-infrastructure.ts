@@ -1,6 +1,6 @@
 import { isInfrastructureBootFailureReason } from '../../platforms/boot-diagnostics.ts';
 import type { DaemonResponse } from '../types.ts';
-import type { ReplaySuiteTestResult } from '../../contracts/replay.ts';
+import type { ReplaySuiteTestResult } from '@agent-device/contracts/replay';
 
 const REPLAY_INFRASTRUCTURE_FAILURE_MESSAGE_PATTERNS = [
   'failed to start daemon',

@@ -4,7 +4,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import type { RequestProgressEvent, RequestProgressSink } from '../../request/progress.ts';
 import { consumeTextLines } from '../../utils/line-stream.ts';
-import { markDoctorProgressRendered } from '../../contracts/cli-doctor-output.ts';
+import { markDoctorProgressRendered } from '../../utils/doctor-progress.ts';
 import {
   isDaemonProgressEnvelope,
   isDaemonResponseEnvelope,

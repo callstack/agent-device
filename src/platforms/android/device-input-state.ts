@@ -13,7 +13,7 @@ import {
   isFallbackAndroidInputMethodResource,
   readAndroidActiveInputMethodPackage,
   type AndroidInputOwner,
-} from '../../contracts/android-input-ownership.ts';
+} from '@agent-device/contracts/platform';
 
 const ANDROID_INPUT_TYPE_CLASS_MASK = 0x0000000f;
 const ANDROID_INPUT_TYPE_CLASS_TEXT = 0x00000001;

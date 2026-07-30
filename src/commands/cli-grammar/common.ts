@@ -1,19 +1,22 @@
-import type { InternalRequestOptions } from '../../contracts/client-request.ts';
-import type { ElementTarget, InteractionTarget } from '../../contracts/client-target.ts';
-import { splitSelectorFromArgs } from '../../selectors/parse.ts';
+import type {
+  ElementTarget,
+  InteractionTarget,
+  InternalRequestOptions,
+} from '@agent-device/contracts/client';
+import type { CliFlags } from '@agent-device/contracts/command';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   checkElementTargetArgs,
   checkGetFormat,
   SELECTOR_EXPRESSION_REQUIRED_MESSAGE,
 } from '../../selectors/arguments.ts';
-import type { CliFlags } from '../../contracts/cli-flags.ts';
-import { AppError } from '@agent-device/kernel/errors';
+import { splitSelectorFromArgs } from '../../selectors/parse.ts';
 import { compactRecord, type SelectorSnapshotInput } from '../command-input.ts';
 import type {
+  CommandInput,
+  DaemonCommandRequest,
   DaemonWriter,
   SelectionOptions,
-  DaemonCommandRequest,
-  CommandInput,
 } from './types.ts';
 
 export function direct(

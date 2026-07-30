@@ -1,21 +1,24 @@
-import { promises as fs } from 'node:fs';
-import pathModule from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
-import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
-import { getInteractor } from './interactors.ts';
-import type { Interactor, RunnerContext } from '../contracts/interactor-types.ts';
-import { isDeepLinkTarget } from '../contracts/open-target.ts';
-import { parseTriggerAppEventArgs, resolveAppEventUrl } from './app-events.ts';
+import { screenshotOptionsFromFlags } from '@agent-device/contracts/capture';
+import { isDeepLinkTarget } from '@agent-device/contracts/command';
+import { parseDeviceRotation } from '@agent-device/contracts/device';
+import type { GesturePlan, Interactor, RunnerContext } from '@agent-device/contracts/interaction';
+import { parseTvRemoteButton } from '@agent-device/contracts/interaction';
 import {
   LAUNCH_CONSOLE_DIRECT_APP_ONLY_MESSAGE,
   LAUNCH_CONSOLE_IOS_SIMULATOR_ONLY_MESSAGE,
-} from '../contracts/launch-console.ts';
+} from '@agent-device/contracts/observability';
+import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
+import type { Rect } from '@agent-device/kernel/snapshot';
+import { promises as fs } from 'node:fs';
+import pathModule from 'node:path';
 import { emitDiagnostic, withDiagnosticTimer } from '../utils/diagnostics.ts';
+import { isKeyboardAction, type KeyboardAction } from '../utils/keyboard-actions.ts';
 import { readLocationCoordinate } from '../utils/location-coordinates.ts';
 import { successText, withSuccessText } from '../utils/success-text.ts';
 import { requireIntInRange } from '../utils/validation.ts';
-import { screenshotOptionsFromFlags } from '../contracts/screenshot.ts';
-import { isKeyboardAction, type KeyboardAction } from '../utils/keyboard-actions.ts';
+import { parseTriggerAppEventArgs, resolveAppEventUrl } from './app-events.ts';
+import type { DescriptorDispatchCommandName } from './command-descriptor/registry.ts';
 import type { DispatchContext } from './dispatch-context.ts';
 import {
   handleFillCommand,
@@ -27,15 +30,11 @@ import {
   handleTypeCommand,
 } from './dispatch-interactions.ts';
 import { readNotificationPayload } from './dispatch-payload.ts';
-import { parseDeviceRotation } from '../contracts/device-rotation.ts';
-import { parseTvRemoteButton } from '../contracts/tv-remote.ts';
+import { getInteractor } from './interactors.ts';
 import { readViewportDimension } from './viewport-dimension.ts';
-import type { DescriptorDispatchCommandName } from './command-descriptor/registry.ts';
-import type { GesturePlan } from '../contracts/gesture-plan-types.ts';
-import type { Rect } from '@agent-device/kernel/snapshot';
 
-export { resolveTargetDevice } from './dispatch-resolve.ts';
 export type { CommandFlags, DispatchContext } from './dispatch-context.ts';
+export { resolveTargetDevice } from './dispatch-resolve.ts';
 
 export async function dispatchCommand(
   device: DeviceInfo,

@@ -1,7 +1,7 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '../../../utils/exec.ts';
-import type { AppsFilter } from '../../../contracts/app-inventory.ts';
+import type { AppsFilter } from '@agent-device/contracts/device';
 import type { IosAppInfo, IosDeviceAppProcesses } from './app-info.ts';
 import {
   installCoreDeviceApp,

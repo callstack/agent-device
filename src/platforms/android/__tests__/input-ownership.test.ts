@@ -4,7 +4,7 @@ import {
   classifyAndroidInputOwnership,
   parseAndroidInputMethodPackage,
   readAndroidActiveInputMethodPackage,
-} from '../../../contracts/android-input-ownership.ts';
+} from '@agent-device/contracts/platform';
 
 test('classifies active input method package as IME-owned', () => {
   assert.deepEqual(

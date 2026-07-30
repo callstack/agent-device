@@ -1,9 +1,9 @@
-import type { LeaseLifecycleProvider } from '../../contracts/device-provider.ts';
+import type { LeaseLifecycleContext, LeaseLifecycleProvider } from '@agent-device/contracts/device';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type {
   AgentArtifactsResult,
   CloudArtifactProvider,
-} from '../../contracts/cloud-artifacts.ts';
+} from '@agent-device/contracts/observability';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 import type { SessionStore } from '../session-store.ts';
@@ -63,7 +63,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
       const lease = leaseRegistry.allocateLease(leaseScopeToAllocateRequest(leaseScope));
       let providerData: Record<string, unknown> | undefined;
       try {
-        providerData = await leaseLifecycleProvider?.allocate?.(lease, { req });
+        providerData = await leaseLifecycleProvider?.allocate?.(lease, leaseLifecycleContext(req));
       } catch (error) {
         leaseRegistry.releaseLease(
           leaseScopeToReleaseRequest({
@@ -85,7 +85,10 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     }
     case 'lease_heartbeat': {
       const lease = leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(leaseScope));
-      const providerData = await leaseLifecycleProvider?.heartbeat?.(lease, { req });
+      const providerData = await leaseLifecycleProvider?.heartbeat?.(
+        lease,
+        leaseLifecycleContext(req),
+      );
       return {
         ok: true,
         data: { lease, ...(providerData ? { provider: providerData } : {}) },
@@ -95,7 +98,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
       const releaseRequest = leaseScopeToReleaseRequest(leaseScope);
       const lease = leaseRegistry.getLease(releaseRequest);
       const providerData = lease
-        ? await leaseLifecycleProvider?.release?.(lease, { req })
+        ? await leaseLifecycleProvider?.release?.(lease, leaseLifecycleContext(req))
         : undefined;
       const result = leaseRegistry.releaseLease(releaseRequest);
       return {
@@ -106,6 +109,13 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     default:
       return null;
   }
+}
+
+function leaseLifecycleContext(req: DaemonRequest): LeaseLifecycleContext {
+  return {
+    flags: req.flags,
+    cwd: typeof req.meta?.cwd === 'string' ? req.meta.cwd : undefined,
+  };
 }
 
 function assertProviderRuntimeAvailable(

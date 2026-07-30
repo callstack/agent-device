@@ -36,8 +36,8 @@ import {
 import {
   summarizeSnapshotTimingSamples,
   type SnapshotTimingSample,
-} from '../../contracts/snapshot-diagnostics.ts';
-import type { ReplayCommandResult } from '../../contracts/replay.ts';
+} from '@agent-device/contracts/capture';
+import type { ReplayCommandResult } from '@agent-device/contracts/replay';
 import type { ReplayDivergenceResume } from '../../replay/divergence.ts';
 import { isRecord } from '../../utils/parsing.ts';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';

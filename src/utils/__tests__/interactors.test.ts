@@ -3,11 +3,9 @@ import assert from 'node:assert/strict';
 import type { RunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import type { Interactor, RunnerContext } from '../../contracts/interactor-types.ts';
-import {
-  setActiveProviderDeviceRuntimes,
-  type ProviderDeviceRuntime,
-} from '../../provider-device-runtime.ts';
+import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
+import { setActiveProviderDeviceRuntimes } from '../../provider-device-runtime.ts';
+import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 
 vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
   const actual =

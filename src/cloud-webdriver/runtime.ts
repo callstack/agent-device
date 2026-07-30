@@ -2,19 +2,17 @@ import type {
   CloudArtifactProvider,
   CloudArtifactsQuery,
   CloudArtifactsResult,
-} from '../contracts/cloud-artifacts.ts';
+} from '@agent-device/contracts/observability';
 import type {
   DeviceInventoryProvider,
   DeviceLease,
+  LeaseLifecycleContext,
   LeaseLifecycleProvider,
-} from '../contracts/device-provider.ts';
-import type { Interactor } from '../contracts/interactor-types.ts';
-import type { DaemonRequest } from '@agent-device/kernel/contracts';
-import type {
   ProviderDeviceInstallOptions,
   ProviderDeviceInstallResult,
   ProviderDeviceRuntime,
-} from '../provider-device-runtime.ts';
+} from '@agent-device/contracts/device';
+import type { Interactor } from '@agent-device/contracts/interaction';
 import {
   deviceFieldsFromPublicPlatform,
   publicPlatformString,
@@ -81,7 +79,7 @@ export type CloudWebDriverListArtifacts = (params: {
 
 export type CloudWebDriverPrepareSession = (params: {
   lease: DeviceLease;
-  req?: DaemonRequest;
+  req?: LeaseLifecycleContext;
   base: CloudWebDriverBaseSession;
 }) => Promise<CloudWebDriverPreparedSession>;
 
@@ -162,7 +160,7 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
       overrides: options.capabilityOverrides,
     });
     this.leaseLifecycle = {
-      allocate: async (lease, context) => await this.allocate(lease, context?.req),
+      allocate: async (lease, context) => await this.allocate(lease, context),
       heartbeat: async (lease) => this.heartbeat(lease),
       release: async (lease) => await this.release(lease),
     };
@@ -216,7 +214,7 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
 
   private async allocate(
     lease: DeviceLease,
-    req?: DaemonRequest,
+    req?: LeaseLifecycleContext,
   ): Promise<Record<string, unknown> | undefined> {
     if (lease.leaseProvider !== this.provider) return undefined;
     if (this.sessionsByLeaseId.has(lease.leaseId)) return this.heartbeat(lease);
@@ -308,7 +306,7 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
 
   private async prepareSession(
     lease: DeviceLease,
-    req: DaemonRequest | undefined,
+    req: LeaseLifecycleContext | undefined,
   ): Promise<CloudWebDriverPreparedSession> {
     const base = this.baseSessionForLease(lease);
     return this.options.prepareSession

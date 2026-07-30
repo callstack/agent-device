@@ -8,7 +8,7 @@ import {
   readScreenshotScriptFlag,
   screenshotFlagsFromOptions,
   screenshotOptionsFromFlags,
-} from '../../contracts/screenshot.ts';
+} from '@agent-device/contracts/capture';
 
 test('screenshot flag projection maps CLI flags to runtime options', () => {
   assert.deepEqual(

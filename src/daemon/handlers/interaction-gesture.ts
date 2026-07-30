@@ -1,26 +1,25 @@
-import { readGesturePayload, type GesturePayload } from '../../contracts/gesture-input.ts';
+import { readOptionalInteger } from '@agent-device/contracts/command';
 import {
   assertNoRemovedSwipeInput,
+  GESTURE_FLING_DURATION_MS,
   gesturePayloadToPositionals,
   normalizePublicGesture,
   normalizePublicSwipeMotion,
-  type SwipePayload,
-} from '../../contracts/gesture-normalization.ts';
-import { requireGestureSupported } from '../../core/capabilities.ts';
-import { GESTURE_FLING_DURATION_MS } from '../../contracts/gesture-plan.ts';
-import {
+  readGesturePayload,
   SWIPE_PAUSE_MAX_MS,
   SWIPE_REPETITION_MAX,
   SWIPE_SERIES_MAX_SCHEDULED_DURATION_MS,
-} from '../../contracts/scroll-gesture.ts';
+  type GesturePayload,
+  type GestureSemanticInput,
+  type SwipePayload,
+} from '@agent-device/contracts/interaction';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { readOptionalInteger } from '../../contracts/input-validation.ts';
 import type { Point } from '@agent-device/kernel/snapshot';
-import type { GestureSemanticInput } from '../../contracts/gesture-plan-types.ts';
+import { requireGestureSupported } from '../../core/capabilities.ts';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import { sleep } from '../../utils/timeouts.ts';
-import type { DaemonResponse, SessionState } from '../types.ts';
 import { ensureAndroidBlockingSystemDialogReady } from '../android-system-dialog.ts';
+import type { DaemonResponse, SessionState } from '../types.ts';
 import type { InteractionHandlerParams } from './interaction-common.ts';
 import { finalizeTouchInteraction } from './interaction-common.ts';
 import { createInteractionRuntime } from './interaction-runtime.ts';

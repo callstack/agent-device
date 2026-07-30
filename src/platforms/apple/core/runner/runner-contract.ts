@@ -1,10 +1,12 @@
 import crypto from 'node:crypto';
+import type { DeviceRotation } from '@agent-device/contracts/device';
+import type {
+  ClickButton,
+  ElementSelectorKey,
+  GesturePlan,
+  ScrollDirection,
+} from '@agent-device/contracts/interaction';
 import { AppError } from '@agent-device/kernel/errors';
-import type { ClickButton } from '../../../../contracts/click-button.ts';
-import type { DeviceRotation } from '../../../../contracts/device-rotation.ts';
-import type { ScrollDirection } from '../../../../contracts/scroll-gesture.ts';
-import type { GesturePlan } from '../../../../contracts/gesture-plan.ts';
-import type { ElementSelectorKey } from '../../../../contracts/interactor-types.ts';
 import {
   createRequestCanceledError,
   getRequestSignal,

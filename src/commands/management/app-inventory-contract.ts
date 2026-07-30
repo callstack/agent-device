@@ -1,1 +1,1 @@
-export * from '../../contracts/app-inventory.ts';
+export * from '@agent-device/contracts/device';

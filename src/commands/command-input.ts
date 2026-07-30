@@ -1,17 +1,18 @@
 import type {
   AgentDeviceRequestOverrides,
   AgentDeviceSelectionOptions,
-} from '../contracts/client-connection.ts';
-import type { ElementTarget, InteractionTarget } from '../contracts/client-target.ts';
+  ElementTarget,
+  InteractionTarget,
+} from '@agent-device/contracts/client';
+import { readOptionalInteger as optionalInteger } from '@agent-device/contracts/command';
 import {
   DEVICE_TARGETS,
   PLATFORM_SELECTORS,
   type DeviceTarget,
   type PlatformSelector,
 } from '@agent-device/kernel/device';
-import type { JsonSchema } from './command-contract.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { readOptionalInteger as optionalInteger } from '../contracts/input-validation.ts';
+import type { JsonSchema } from './command-contract.ts';
 
 const INTERACTION_TARGET_KINDS = ['ref', 'selector', 'point'] as const;
 

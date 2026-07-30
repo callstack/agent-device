@@ -87,7 +87,7 @@ export type AxEvidenceSummary = {
 
 /**
  * Summarizes one capture into the pieces `evidence` needs (see
- * src/contracts/interaction.ts: `InteractionEvidence`), without ever requiring
+ * packages/contracts/src/interaction.ts: `InteractionEvidence`), without ever requiring
  * the caller to serialize the node array itself. `interactiveNodeCount` counts
  * nodes the platform did not mark `hittable: false` within the given capture —
  * cheap since it's a filter over nodes already in hand, no extra signal needed.

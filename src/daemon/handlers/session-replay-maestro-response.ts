@@ -1,7 +1,7 @@
-import type { ReplayCommandResult } from '../../contracts/replay.ts';
+import type { ReplayCommandResult } from '@agent-device/contracts/replay';
 import type { MaestroReplayPlan } from '../../compat/maestro/replay-plan-types.ts';
 import { normalizeError } from '@agent-device/kernel/errors';
-import { summarizeSnapshotTimingSamples } from '../../contracts/snapshot-diagnostics.ts';
+import { summarizeSnapshotTimingSamples } from '@agent-device/contracts/capture';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import {

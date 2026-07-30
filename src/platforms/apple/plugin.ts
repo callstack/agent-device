@@ -1,18 +1,18 @@
 import { appleOsCapabilities } from './capabilities.ts';
-import type { PlatformPlugin } from '../../contracts/platform-plugin.ts';
+import type { PlatformPlugin } from '@agent-device/contracts/platform';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { isAudioProbeSupportedDevice } from '../../contracts/audio-probe-support.ts';
+import { isAudioProbeSupportedDevice } from '@agent-device/contracts/platform';
 import {
   shouldUseHostMacFastPath,
   type DeviceInventoryRequest,
-} from '../../contracts/device-inventory.ts';
+} from '@agent-device/contracts/device';
 import {
   isMacOs,
   isTvOsDevice,
   resolveDeviceAppleOs,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
-import type { RunnerContext } from '../../contracts/interactor-types.ts';
+import type { RunnerContext } from '@agent-device/contracts/interaction';
 
 // ---------------------------------------------------------------------------
 // Apple family per-command capability closures. Originally RELOCATED VERBATIM from

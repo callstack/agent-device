@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { SessionAction } from '../contracts/session-action.ts';
+import type { SessionAction } from '@agent-device/contracts/session';
 
 export type ReplayVarScope = {
   values: Readonly<Record<string, string>>;

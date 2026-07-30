@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { dispatchCommand, resolveTargetDevice } from '../../core/dispatch.ts';
-import type { SessionSurface } from '../../contracts/session-surface.ts';
+import type { SessionSurface } from '@agent-device/contracts/session';
 import { contextFromFlags } from '../context.ts';
 import { createRequestCanceledError, isRequestCanceled } from '../../request/cancel.ts';
 import {

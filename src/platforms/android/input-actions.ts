@@ -1,16 +1,21 @@
-import { AppError } from '@agent-device/kernel/errors';
+import type { DeviceRotation } from '@agent-device/contracts/device';
+import {
+  buildGesturePlan,
+  buildScrollGesturePlan,
+  GESTURE_DURATION_MIN_MS,
+  toAndroidTvRemoteKeyevent,
+  type ScrollDirection,
+  type TvRemoteButton,
+} from '@agent-device/contracts/interaction';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import type { DeviceRotation } from '../../contracts/device-rotation.ts';
-import { buildGesturePlan, GESTURE_DURATION_MIN_MS } from '../../contracts/gesture-plan.ts';
-import { buildScrollGesturePlan, type ScrollDirection } from '../../contracts/scroll-gesture.ts';
-import { toAndroidTvRemoteKeyevent, type TvRemoteButton } from '../../contracts/tv-remote.ts';
-import { runAndroidAdb, sleep } from './adb.ts';
 import {
   resolveAndroidAdbExecutor,
   resolveAndroidTextInjector,
   type AndroidTextInputAction,
 } from './adb-executor.ts';
+import { runAndroidAdb, sleep } from './adb.ts';
 import { getAndroidKeyboardState, type AndroidKeyboardState } from './device-input-state.ts';
 import {
   androidFillFailureDetails,
@@ -18,13 +23,13 @@ import {
   verifyAndroidFilledText,
   type AndroidFillVerification,
 } from './fill-verification.ts';
-import { isAndroidTestImeActive } from './ime-lifecycle.ts';
-import { executeAndroidTouchPlan, readAndroidGestureViewport } from './touch-executor.ts';
 import {
   clearAndroidImeHelperText,
   resolveAndroidImeHelperArtifact,
   sendAndroidImeHelperText,
 } from './ime-helper.ts';
+import { isAndroidTestImeActive } from './ime-lifecycle.ts';
+import { executeAndroidTouchPlan, readAndroidGestureViewport } from './touch-executor.ts';
 
 export { readAndroidTextAtPoint } from './fill-verification.ts';
 

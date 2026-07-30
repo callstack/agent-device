@@ -8,7 +8,7 @@ import type {
 import type {
   DebugSymbolsCrashFrame,
   DebugSymbolsCrashSummary,
-} from '../../../../contracts/debug-symbols.ts';
+} from '@agent-device/contracts/observability';
 import { isRecord } from '../../../../utils/parsing.ts';
 import {
   addressKey,

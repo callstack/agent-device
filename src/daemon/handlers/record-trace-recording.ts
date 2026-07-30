@@ -1,14 +1,16 @@
+import {
+  DEFAULT_RECORDING_EXPORT_QUALITY,
+  RECORDING_EXPORT_QUALITIES,
+  RECORDING_SCOPE_VALUES,
+  type RecordingCommandResult,
+  type RecordingScope,
+  isWholeScreenRecordingScope,
+  recordingQualityInputToExportQuality,
+} from '@agent-device/contracts/recording';
+import { AppError, toAppErrorCode } from '@agent-device/kernel/errors';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError, toAppErrorCode } from '@agent-device/kernel/errors';
-import { sleep } from '../../utils/timeouts.ts';
 import { resolveTargetDevice } from '../../core/dispatch.ts';
-import { ensureDeviceReady } from '../device-ready.ts';
-import { SessionStore } from '../session-store.ts';
-import type { DaemonArtifact, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
-import { runCmd } from '../../utils/exec.ts';
-import { isPlayableVideo, waitForStableFile } from '../../utils/video.ts';
-import { deriveRecordingTelemetryPath } from '../recording-telemetry.ts';
 import { runAppleRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 import { runXcrun } from '../../platforms/apple/core/tool-provider.ts';
 import {
@@ -16,18 +18,15 @@ import {
   resizeRecording,
   trimRecordingStart,
 } from '../../recording/overlay.ts';
-import {
-  DEFAULT_RECORDING_EXPORT_QUALITY,
-  RECORDING_EXPORT_QUALITIES,
-  recordingQualityInputToExportQuality,
-} from '../../contracts/recording-export-quality.ts';
-import {
-  RECORDING_SCOPE_VALUES,
-  type RecordingScope,
-  isWholeScreenRecordingScope,
-} from '../../contracts/recording-scope.ts';
+import { runCmd } from '../../utils/exec.ts';
+import { sleep } from '../../utils/timeouts.ts';
+import { isPlayableVideo, waitForStableFile } from '../../utils/video.ts';
+import { ensureDeviceReady } from '../device-ready.ts';
 import { resolveRecordingProvider } from '../recording-provider.ts';
-import { errorResponse, requireCommandSupported } from './response.ts';
+import { deriveRecordingTelemetryPath } from '../recording-telemetry.ts';
+import { hasExplicitSessionFlag, resolveImplicitSessionScope } from '../session-routing.ts';
+import { SessionStore } from '../session-store.ts';
+import type { DaemonArtifact, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { recordSessionAction } from './handler-utils.ts';
 import { deriveAndroidChunkOutPath } from './record-trace-android-chunks.ts';
 import {
@@ -35,8 +34,7 @@ import {
   stopActiveRecording,
 } from './record-trace-recording-backends.ts';
 import type { RecordTraceDeps, RecordingBase } from './record-trace-types.ts';
-import type { RecordingCommandResult } from '../../contracts/recording.ts';
-import { hasExplicitSessionFlag, resolveImplicitSessionScope } from '../session-routing.ts';
+import { errorResponse, requireCommandSupported } from './response.ts';
 
 const IOS_DEVICE_RECORD_MIN_FPS = 1;
 const IOS_DEVICE_RECORD_MAX_FPS = 120;

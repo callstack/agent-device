@@ -1,7 +1,7 @@
 import type { DaemonRequest } from './types.ts';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
-import type { DeviceLease } from '../contracts/device-provider.ts';
-import type { RunnerLogicalLeaseContext } from '../contracts/runner-lease-context.ts';
+import type { DeviceLease } from '@agent-device/contracts/device';
+import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/platform';
 import { stripUndefined } from '../utils/parsing.ts';
 import {
   DEFAULT_PROXY_LEASE_TTL_MS,

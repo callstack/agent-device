@@ -1,11 +1,11 @@
 import type { CommandFlags } from '../core/dispatch.ts';
-import type { CloudArtifactProvider } from '../contracts/cloud-artifacts.ts';
+import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
 import type { AndroidAdbExecutor } from '../platforms/android/adb-executor.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { getDaemonCommandRoute } from './daemon-command-registry.ts';
 import * as genericRequestHandlerModule from './request-generic-dispatch.ts';
 import type { DaemonCommandContext } from './context.ts';
-import type { LeaseLifecycleProvider } from '../contracts/device-provider.ts';
+import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
 import type { LeaseRegistry } from './lease-registry.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from './types.ts';

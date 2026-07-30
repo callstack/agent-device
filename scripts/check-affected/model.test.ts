@@ -141,17 +141,22 @@ test('skills guidance change is docs-only', () => {
 });
 
 test('workspace package source selects static gates, layering, and the build', () => {
-  const result = plan(['packages/kernel/src/errors.ts']);
-  assert.equal(result.failOpen, false);
-  for (const id of [
-    'format',
-    'lint',
-    'typecheck',
-    'layering',
-    'build',
-    'vitest-related',
-  ] as const) {
-    assert.ok(result.checks.includes(id), `expected ${id}`);
+  for (const file of [
+    'packages/kernel/src/errors.ts',
+    'packages/contracts/src/facades/device.ts',
+  ]) {
+    const result = plan([file]);
+    assert.equal(result.failOpen, false, file);
+    for (const id of [
+      'format',
+      'lint',
+      'typecheck',
+      'layering',
+      'build',
+      'vitest-related',
+    ] as const) {
+      assert.ok(result.checks.includes(id), `expected ${id} for ${file}`);
+    }
   }
 });
 

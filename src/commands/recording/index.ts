@@ -1,9 +1,12 @@
-import type { RecordOptions } from '../../contracts/client-observability.ts';
-import { RECORDING_EXPORT_QUALITIES } from '../../contracts/recording-export-quality.ts';
-import { RECORDING_SCOPE_VALUES } from '../../contracts/recording-scope.ts';
+import type { RecordOptions } from '@agent-device/contracts/client';
+import {
+  RECORDING_EXPORT_QUALITIES,
+  RECORDING_SCOPE_VALUES,
+} from '@agent-device/contracts/recording';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
-import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
+import { commonInputFromFlags, direct, optionalString } from '../cli-grammar/common.ts';
+import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import {
   booleanField,
@@ -12,9 +15,8 @@ import {
   requiredField,
   stringField,
 } from '../command-input.ts';
+import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
-import { commonInputFromFlags, direct, optionalString } from '../cli-grammar/common.ts';
-import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { recordingCliOutputFormatters } from './output.ts';
 
 const RECORD_COMMAND_NAME = 'record';

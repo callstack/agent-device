@@ -1,4 +1,4 @@
-import type { CommandRequestResult } from '../../contracts/client-request.ts';
+import type { CommandRequestResult } from '@agent-device/contracts/client';
 import type { CliOutput } from '../command-contract.ts';
 import { readCommandMessage } from '../../utils/success-text.ts';
 import { messageCliOutput, resultOutput, type CliOutputFormatter } from '../output-common.ts';

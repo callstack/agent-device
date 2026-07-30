@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'vitest';
-import { buildGesturePlan, GESTURE_INITIAL_ANGLE_DEGREES } from '../../contracts/gesture-plan.ts';
+import {
+  buildGesturePlan,
+  GESTURE_INITIAL_ANGLE_DEGREES,
+} from '@agent-device/contracts/interaction';
 import {
   centroid,
   distance,

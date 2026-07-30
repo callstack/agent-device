@@ -1,30 +1,32 @@
-import { expect, test } from 'vitest';
 import type {
-  FillCommandResponseData,
-  LongPressCommandResponseData,
-  PressCommandResponseData,
-  FindCommandResponseData,
-} from '../../../contracts/interaction.ts';
-import type { BootCommandResult, ShutdownCommandResult } from '../../../contracts/device.ts';
-import type { ViewportCommandResult } from '../../../contracts/viewport.ts';
+  DiffSnapshotCommandResult,
+  ViewportCommandResult,
+} from '@agent-device/contracts/capture';
+import type { PrepareCommandResult, PushCommandResult } from '@agent-device/contracts/command';
+import type {
+  AppStateCommandResult,
+  BootCommandResult,
+  ShutdownCommandResult,
+  TriggerAppEventCommandResult,
+} from '@agent-device/contracts/device';
 import type {
   AppSwitcherCommandResult,
   BackCommandResult,
+  ClipboardCommandResult,
+  FillCommandResponseData,
+  FindCommandResponseData,
   HomeCommandResult,
+  KeyboardCommandResult,
+  LongPressCommandResponseData,
   OrientationCommandResult,
+  PressCommandResponseData,
   TvRemoteCommandResult,
-} from '../../../contracts/navigation.ts';
-import type { ClipboardCommandResult } from '../../../contracts/clipboard.ts';
-import type { AppStateCommandResult } from '../../../contracts/app-state.ts';
-import type { KeyboardCommandResult } from '../../../contracts/keyboard.ts';
-import type { WaitCommandResult } from '../../../contracts/wait.ts';
-import type { PrepareCommandResult } from '../../../contracts/prepare.ts';
-import type { PushCommandResult } from '../../../contracts/push.ts';
-import type { TriggerAppEventCommandResult } from '../../../contracts/app-events.ts';
-import type { DoctorCommandResult } from '../../../contracts/doctor.ts';
-import type { DiffSnapshotCommandResult } from '../../../contracts/diff.ts';
-import type { RecordingCommandResult, TraceCommandResult } from '../../../contracts/recording.ts';
-import type { ReplayCommandResult, ReplaySuiteResult } from '../../../contracts/replay.ts';
+  WaitCommandResult,
+} from '@agent-device/contracts/interaction';
+import type { DoctorCommandResult } from '@agent-device/contracts/observability';
+import type { RecordingCommandResult, TraceCommandResult } from '@agent-device/contracts/recording';
+import type { ReplayCommandResult, ReplaySuiteResult } from '@agent-device/contracts/replay';
+import { expect, test } from 'vitest';
 import type { CommandResult, CommandResultMap } from '../command-result.ts';
 
 /**

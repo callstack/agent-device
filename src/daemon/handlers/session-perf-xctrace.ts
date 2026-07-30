@@ -9,7 +9,7 @@ import {
   type AppleXctracePerfMode,
   type AppleXctracePerfResult,
 } from '../../platforms/apple/core/perf-xctrace.ts';
-import { PERF_AREA_ERROR_MESSAGE } from '../../contracts/perf.ts';
+import { PERF_AREA_ERROR_MESSAGE } from '@agent-device/contracts/observability';
 import { errorResponse, type DaemonFailureResponse } from './response.ts';
 import { recordSessionAction } from './handler-utils.ts';
 

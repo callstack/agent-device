@@ -4,7 +4,7 @@ import {
   shouldUseHostMacFastPath,
   WEB_DESKTOP_DEVICE,
   type DeviceInventoryRequest,
-} from '../contracts/device-inventory.ts';
+} from '@agent-device/contracts/device';
 
 export async function listLocalDeviceInventory(
   request: DeviceInventoryRequest,

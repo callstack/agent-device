@@ -1,8 +1,8 @@
 import type { CommandCapability } from '../capabilities.ts';
 // The typed-flags request from contracts/, not the daemon's server-side refinement: these
 // descriptors read `command`, `positionals` and `flags` and never touch `internal`.
-import type { DispatchedCommand } from '../../contracts/dispatched-command.ts';
-import type { RefFrameEffect } from '../../contracts/ref-frame-effect.ts';
+import type { DispatchedCommand } from '@agent-device/contracts/command';
+import type { RefFrameEffect } from '@agent-device/contracts/replay';
 import { isReadOnlyFindAction, parseFindArgs } from '../../selectors/find.ts';
 import { resolveWaitBudgetMs } from '../wait-positionals.ts';
 import {

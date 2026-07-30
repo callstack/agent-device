@@ -1,4 +1,5 @@
 import { formatScreenshotDiffText, formatSnapshotDiffText } from '../../utils/output.ts';
+import type { ScreenshotDiffResult } from '../../screenshot-diff/screenshot-diff.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { isNonDefaultResponseLevel } from '@agent-device/kernel/contracts';
 import { resolveUserPath } from '../../utils/path-resolution.ts';
@@ -6,7 +7,7 @@ import type { AgentDeviceBackend } from '../../backend.ts';
 import type { AgentDeviceClient, CaptureScreenshotResult } from '../../agent-device-client.ts';
 import { runCliCommand } from '../../commands/cli-runner.ts';
 import { pickScreenshotResultData } from '../../utils/screenshot-result.ts';
-import type { CliFlags } from '../../contracts/cli-flags.ts';
+import type { CliFlags } from '@agent-device/contracts/command';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
@@ -82,7 +83,7 @@ export const diffCommand: ClientCommandHandler = async ({ positionals, flags, cl
     surface: flags.surface,
   });
 
-  writeCommandOutput(flags, result, () => formatScreenshotDiffText(result));
+  writeCommandOutput(flags, result, () => formatScreenshotDiffText(result as ScreenshotDiffResult));
   return true;
 };
 

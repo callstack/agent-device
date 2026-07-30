@@ -3,19 +3,22 @@ import {
   isPerfArea,
   isPerfKind,
   isPerfMemoryKind,
+  LOG_ACTION_VALUES as LOG_ACTIONS,
   PERF_ACTION_ERROR_MESSAGE,
   PERF_AREA_ERROR_MESSAGE,
   PERF_KIND_ERROR_MESSAGE,
   PERF_MEMORY_KIND_ERROR_MESSAGE,
+  type LogBackend,
+  type LogAction as LogsAction,
   type PerfAction,
   type PerfArea,
   type PerfKind,
-} from '../../contracts/perf.ts';
+} from '@agent-device/contracts/observability';
+import { uniqueStrings } from '@agent-device/kernel/collections';
+import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '@agent-device/kernel/contracts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { resolveWebProvider } from '../../platforms/web/provider.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
-import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } from '../types.ts';
-import type { SessionStore } from '../session-store.ts';
+import { resolveWebProvider } from '../../platforms/web/provider.ts';
 import {
   appendAppLogMarker,
   clearAppLogFiles,
@@ -29,22 +32,17 @@ import {
   type AppLogResult,
   type AppLogState,
 } from '../app-log.ts';
+import type { SessionStore } from '../session-store.ts';
+import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } from '../types.ts';
+import { errorResponse, requireCommandSupported, type DaemonFailureResponse } from './response.ts';
+import { handleAudioCommand } from './session-audio.ts';
+import { handleNativePerfCommand as handleAndroidNativePerfCommand } from './session-native-perf.ts';
+import { handleNativePerfCommand as handleAppleNativePerfCommand } from './session-perf-xctrace.ts';
 import {
   buildPerfFramesResponseData,
   buildPerfMemoryResponseData,
   buildPerfResponseData,
 } from './session-perf.ts';
-import { handleNativePerfCommand as handleAndroidNativePerfCommand } from './session-native-perf.ts';
-import { errorResponse, requireCommandSupported, type DaemonFailureResponse } from './response.ts';
-import { handleAudioCommand } from './session-audio.ts';
-import { handleNativePerfCommand as handleAppleNativePerfCommand } from './session-perf-xctrace.ts';
-import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '@agent-device/kernel/contracts';
-import { uniqueStrings } from '@agent-device/kernel/collections';
-import {
-  LOG_ACTION_VALUES as LOG_ACTIONS,
-  type LogAction as LogsAction,
-  type LogBackend,
-} from '../../contracts/logs.ts';
 
 const LOG_ACTIONS_MESSAGE = `logs requires ${LOG_ACTIONS.slice(0, -1).join(', ')}, or ${LOG_ACTIONS.at(-1)}`;
 const NETWORK_ACTIONS = ['dump', 'log'] as const;

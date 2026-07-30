@@ -1,4 +1,4 @@
-import type { PerfOptions } from '../../contracts/client-observability.ts';
+import type { PerfOptions } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { enumField, stringField } from '../command-input.ts';

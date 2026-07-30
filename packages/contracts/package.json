@@ -1,0 +1,60 @@
+{
+  "name": "@agent-device/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared agent-device command, snapshot, provider, and platform vocabulary. Internal workspace package bundled into the published agent-device artifact.",
+  "dependencies": {
+    "@agent-device/kernel": "workspace:*"
+  },
+  "exports": {
+    "./client": {
+      "types": "./src/facades/client.ts",
+      "default": "./src/facades/client.ts"
+    },
+    "./command": {
+      "types": "./src/facades/command.ts",
+      "default": "./src/facades/command.ts"
+    },
+    "./device": {
+      "types": "./src/facades/device.ts",
+      "default": "./src/facades/device.ts"
+    },
+    "./interaction": {
+      "types": "./src/facades/interaction.ts",
+      "default": "./src/facades/interaction.ts"
+    },
+    "./capture": {
+      "types": "./src/facades/capture.ts",
+      "default": "./src/facades/capture.ts"
+    },
+    "./platform": {
+      "types": "./src/facades/platform.ts",
+      "default": "./src/facades/platform.ts"
+    },
+    "./settings": {
+      "types": "./src/settings.ts",
+      "default": "./src/settings.ts"
+    },
+    "./session": {
+      "types": "./src/facades/session.ts",
+      "default": "./src/facades/session.ts"
+    },
+    "./recording": {
+      "types": "./src/facades/recording.ts",
+      "default": "./src/facades/recording.ts"
+    },
+    "./observability": {
+      "types": "./src/facades/observability.ts",
+      "default": "./src/facades/observability.ts"
+    },
+    "./remote": {
+      "types": "./src/facades/remote.ts",
+      "default": "./src/facades/remote.ts"
+    },
+    "./replay": {
+      "types": "./src/facades/replay.ts",
+      "default": "./src/facades/replay.ts"
+    }
+  }
+}

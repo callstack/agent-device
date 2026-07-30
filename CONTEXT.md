@@ -72,7 +72,7 @@ task touches:
   center coordinate when a frame is available. This keeps target selection semantic while avoiding
   `XCUIElement.tap()` post-action element re-resolution after normal navigation. tvOS remains
   focus/remote-driven.
-- Guarantee cell: one (dispatch path, guarantee) entry in `src/contracts/interaction-guarantees.ts`,
+- Guarantee cell: one (dispatch path, guarantee) entry in `packages/contracts/src/interaction-guarantees.ts`,
   classified as runtime/runner/delegated/inapplicable/waived. Completeness is a compile error;
   honesty is gate-tested.
 - Owned waiver: a `gap:`-prefixed waived cell carrying a `trackingIssue` URL. Waivers are diffable
@@ -227,7 +227,7 @@ task touches:
 
 ADR 0011 (interaction guarantee contract) is the interaction-semantics counterpart of ADR 0008's
 registry thesis: the dispatch-path × guarantee matrix is declared once in
-`src/contracts/interaction-guarantees.ts`, completeness is type-enforced, honesty and coverage are
+`packages/contracts/src/interaction-guarantees.ts`, completeness is type-enforced, honesty and coverage are
 gate-enforced, and cross-language rules are pinned by golden parity tables. New dispatch paths and
 guarantees are whole-matrix decisions, not local edits.
 
@@ -311,7 +311,7 @@ The perfect-shape refactor is complete and merged. Its end-state:
   theirs.
 - Type-cycle growth (R9). R4 keeps the VALUE import graph acyclic, so every remaining cycle is
   created by type-only imports — free at runtime, invisible to R5/R6, and the largest single
-  obstacle to reading a subsystem in isolation: inside a strongly-connected component of 102 files,
+  obstacle to reading a subsystem in isolation: inside a strongly-connected component of 76 files,
   no file has a self-contained slice. `TYPE_CYCLE_BASELINE`, derived from the zone ceilings in
   `scripts/layering/daemon-modularity.ts`, ratchets it for **growth only**, deliberately unlike R6: reducing it
   is a real refactor rather than a file move, so a hard equality would turn every unrelated
@@ -319,8 +319,8 @@ The perfect-shape refactor is complete and merged. Its end-state:
   failing. Hubs by in-component dependents: `runtime-contract.ts` (25),
   `commands/runtime-types.ts` (21), `backend.ts` (15), `commands/runtime-common.ts` (12).
 - Daemon modularity migration (R10). The same tooling-only declaration records R7 at 30
-  writer-owned fields / 42 owner-file claims, R9's 102 members by zone (`commands` 33,
-  `daemon-server` 30, `platforms` 19, `core` 12, root 5, `contracts` 2, `client` 1), and the four
+  writer-owned fields / 42 owner-file claims, R9's 76 members by zone (`commands` 33,
+  `daemon-server` 20, `core` 10, `platforms` 7, root 5, `client` 1), and the four
   production importers of `daemon/types.ts` from outside daemon. R7 counts and external importers may
   only shrink; no zone may grow inside R9, and replay/Maestro/replay-test engine files remain outside
   it. This per-zone migration ratchet is intentionally stricter than R9's ordinary total-growth

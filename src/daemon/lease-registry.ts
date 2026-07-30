@@ -1,4 +1,4 @@
-import type { DeviceLease } from '../contracts/device-provider.ts';
+import type { DeviceLease } from '@agent-device/contracts/device';
 import crypto from 'node:crypto';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';

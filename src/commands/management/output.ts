@@ -1,3 +1,25 @@
+import type {
+  AgentDeviceCapabilitiesResult,
+  AgentDeviceDevice,
+  AgentDeviceSession,
+  AppCloseResult,
+  AppDeployResult,
+  AppInstallFromSourceResult,
+  AppOpenResult,
+  CommandRequestResult,
+  SessionCloseResult,
+  SessionSaveScriptResult,
+} from '@agent-device/contracts/client';
+import type {
+  AgentArtifactsResult,
+  CloudArtifactsResult,
+  DaemonArtifactsResult,
+} from '@agent-device/contracts/observability';
+import {
+  consumeDoctorProgressRendered,
+  formatDoctorCheckDetailLines,
+  formatDoctorCheckSummaryLine,
+} from '../../utils/doctor-progress.ts';
 import {
   serializeCloseResult,
   serializeDeployResult,
@@ -5,35 +27,9 @@ import {
   serializeInstallFromSourceResult,
   serializeOpenResult,
   serializeSessionListEntry,
-} from '../../contracts/result-serialization.ts';
-import type {
-  AppCloseResult,
-  AppDeployResult,
-  AppInstallFromSourceResult,
-  AppOpenResult,
-} from '../../contracts/client-app.ts';
-import type {
-  AgentDeviceCapabilitiesResult,
-  AgentDeviceDevice,
-  AgentDeviceSession,
-} from '../../contracts/client-device-view.ts';
-import type { CommandRequestResult } from '../../contracts/client-request.ts';
-import type {
-  SessionCloseResult,
-  SessionSaveScriptResult,
-} from '../../contracts/client-session.ts';
-import type {
-  AgentArtifactsResult,
-  CloudArtifactsResult,
-  DaemonArtifactsResult,
-} from '../../contracts/cloud-artifacts.ts';
+} from '../../utils/result-serialization.ts';
 import { readCommandMessage } from '../../utils/success-text.ts';
 import type { CliOutput } from '../command-contract.ts';
-import {
-  consumeDoctorProgressRendered,
-  formatDoctorCheckDetailLines,
-  formatDoctorCheckSummaryLine,
-} from '../../contracts/cli-doctor-output.ts';
 import {
   messageCliOutput,
   messageOutput,

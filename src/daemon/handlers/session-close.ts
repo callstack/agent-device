@@ -26,7 +26,7 @@ import { expireRefFrame } from '../ref-frame.ts';
 import { stopSessionRecordingForTeardown } from './record-trace-recording.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 import { releaseSessionLease } from '../lease-lifecycle.ts';
-import type { LeaseLifecycleProvider } from '../../contracts/device-provider.ts';
+import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
 import {
   reportSessionCleanupFailures,
   restoreSessionAndroidIme,

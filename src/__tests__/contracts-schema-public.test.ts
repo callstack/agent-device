@@ -1,22 +1,17 @@
-import { test } from 'vitest';
-import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-import { AppError } from '../sdk/index.ts';
-import type { CommandResult } from '../core/command-descriptor/command-result.ts';
-import type { AppStateCommandResult } from '../contracts/app-state.ts';
-import type { ClipboardCommandResult } from '../contracts/clipboard.ts';
-import type { BootCommandResult, ShutdownCommandResult } from '../contracts/device.ts';
+import type { ViewportCommandResult } from '@agent-device/contracts/capture';
+import type {
+  AppStateCommandResult,
+  BootCommandResult,
+  ShutdownCommandResult,
+} from '@agent-device/contracts/device';
 import type {
   AppSwitcherCommandResult,
   BackCommandResult,
+  ClipboardCommandResult,
   HomeCommandResult,
   OrientationCommandResult,
   TvRemoteCommandResult,
-} from '../contracts/navigation.ts';
-import type { ViewportCommandResult } from '../contracts/viewport.ts';
-import { centerOfRect, defaultHintForCode, normalizeError } from '../sdk/contracts.ts';
-import type { DaemonError } from '../sdk/contracts.ts';
+} from '@agent-device/contracts/interaction';
 import {
   daemonRuntimeSchema,
   jsonRpcRequestSchema,
@@ -24,6 +19,14 @@ import {
   type Rect,
   type SnapshotNode,
 } from '@agent-device/kernel/contracts';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { test } from 'vitest';
+import type { CommandResult } from '../core/command-descriptor/command-result.ts';
+import { centerOfRect, defaultHintForCode, normalizeError } from '../sdk/contracts.ts';
+import type { DaemonError } from '../sdk/contracts.ts';
+import { AppError } from '../sdk/index.ts';
 
 const invalidArgsCode = 'INVALID_ARGS' satisfies AppErrorCode;
 const rect = { x: 1, y: 2, width: 3, height: 4 } satisfies Rect;

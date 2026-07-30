@@ -25,7 +25,7 @@ prose in this repo, including this file.
 ## Principles (expensive lessons — each cost an incident)
 
 - Guarantees erode at path boundaries. Any new dispatch path or fast path classifies its cells in
-  `src/contracts/interaction-guarantees.ts` first; the typechecker forces completeness, you supply
+  `packages/contracts/src/interaction-guarantees.ts` first; the typechecker forces completeness, you supply
   honesty. ADR 0011.
 - A registry claim is not a semantic check: never mark a cell `runner` without reading whether the
   Swift code implements the guarantee's *definition*, not just a similar-sounding behavior.
@@ -54,7 +54,7 @@ declaration site rather than any map someone wrote down:
   capabilities, MCP/CLI projection, batch policy, timeout policy — ADR 0008)
 - daemon route ownership + request-policy traits: `src/daemon/daemon-command-registry.ts`
   (parity-tested)
-- interaction dispatch paths × guarantees: `src/contracts/interaction-guarantees.ts` (ADR 0011)
+- interaction dispatch paths × guarantees: `packages/contracts/src/interaction-guarantees.ts` (ADR 0011)
 - command names: `src/command-catalog.ts` — never re-create command string sets in handlers
 - capabilities: `src/core/capabilities.ts` is the only home for command/device support checks
 
@@ -72,10 +72,10 @@ Invariants here are self-declaring gates. The correct response to a failure is t
 the new thing — never to suppress or allowlist it.
 
 - public CLI flags must be classified: `scripts/integration-progress-model.ts`
-- guarantee matrix completeness + honesty: `src/contracts/__tests__/interaction-guarantees.test.ts`
+- guarantee matrix completeness + honesty: `src/__tests__/contracts/interaction-guarantees.test.ts`
   (gap waivers need a `trackingIssue`; the pin list changes only in reviewed diffs)
 - every enforced/delegated matrix cell needs a contract scenario:
-  `src/contracts/__tests__/interaction-contract-coverage.test.ts` + `test/integration/interaction-contract/`
+  `src/__tests__/contracts/interaction-contract-coverage.test.ts` + `test/integration/interaction-contract/`
 - interaction responses build only through `buildInteractionResponseData` (construction-guard test)
 - every command declares a timeout policy on its descriptor (timeout-policy completeness test)
 - TS/Swift rule parity: golden tables under `contracts/fixtures/`, consumed by vitest and the gated

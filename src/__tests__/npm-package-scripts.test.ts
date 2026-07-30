@@ -29,6 +29,8 @@ test('prepack builds the complete package without stopping the development daemo
   assert.equal(packageJson.scripts['build:dev'], undefined);
   assert.match(packageSmokeWorkflow, /run: pnpm prepack/);
   for (const input of [
+    'pnpm-workspace.yaml',
+    'packages/**',
     'scripts/patch-xcuitest-runner-icon.ts',
     'scripts/sync-mcp-metadata.mjs',
     'scripts/write-xcuitest-cache-metadata.mjs',

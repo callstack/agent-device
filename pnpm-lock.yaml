@@ -24,6 +24,9 @@ importers:
         specifier: ^2.9.0
         version: 2.9.0
     devDependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:packages/contracts
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:packages/kernel
@@ -72,6 +75,12 @@ importers:
       vitest:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@22.19.21)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.19.21)(yaml@2.9.0))
+
+  packages/contracts:
+    dependencies:
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
 
   packages/kernel: {}
 

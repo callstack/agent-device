@@ -1,8 +1,3 @@
-export type {
-  DebugSymbolsCrashFrame,
-  DebugSymbolsCrashSummary,
-} from '../../../../contracts/debug-symbols.ts';
-
 export type AppleImage = {
   index?: number;
   name: string;

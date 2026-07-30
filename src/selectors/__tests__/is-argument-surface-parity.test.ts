@@ -4,7 +4,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { checkIsArgs } from '../arguments.ts';
 import { checkIsPredicate, IS_PREDICATE_USAGE_HINT } from '../predicates.ts';
 import { readInputFromCli } from '../../commands/cli-grammar.ts';
-import type { CliFlags } from '../../contracts/cli-flags.ts';
+import type { CliFlags } from '@agent-device/contracts/command';
 
 // Parity gate for the `is` argument contract across every surface that admits one.
 //

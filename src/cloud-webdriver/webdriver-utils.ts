@@ -1,4 +1,4 @@
-import type { DeviceLease } from '../contracts/device-provider.ts';
+import type { DeviceLease } from '@agent-device/contracts/device';
 
 export type LeaseValue<T> = T | ((lease: DeviceLease) => T);
 

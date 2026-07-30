@@ -9,7 +9,7 @@ import {
   resolveReplayString,
 } from '../vars.ts';
 import { parseReplayScriptDetailed, readReplayScriptMetadata } from '../script.ts';
-import type { SessionAction } from '../../contracts/session-action.ts';
+import type { SessionAction } from '@agent-device/contracts/session';
 
 const LOC = { file: 'test.ad', line: 1 };
 

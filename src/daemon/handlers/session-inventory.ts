@@ -1,6 +1,6 @@
 import { isCommandSupportedOnDevice, listCapabilityCommands } from '../../core/capabilities.ts';
 import { listDeviceInventory } from '../../core/dispatch-resolve.ts';
-import { assertResolvedAppsFilter } from '../../contracts/app-inventory.ts';
+import { assertResolvedAppsFilter } from '@agent-device/contracts/device';
 import { asAppError } from '@agent-device/kernel/errors';
 import {
   isApplePlatform,
@@ -114,17 +114,15 @@ export async function handleSessionInventoryCommands(params: {
   }
 
   if (req.command === 'capabilities') {
-    const session = sessionStore.get(sessionName);
-    const flags = req.flags ?? {};
-    const guard = requireSessionOrExplicitSelector(req.command, session, flags);
-    if (guard) return guard;
-
-    const device = await resolveCommandDevice({
-      session,
-      flags,
+    const resolution = await resolveInventoryCommandDevice({
+      req,
+      sessionName,
+      sessionStore,
       ensureReady: false,
       allowStoppedAndroidAvdPlaceholders: true,
     });
+    if ('response' in resolution) return resolution.response;
+    const { device } = resolution;
     return {
       ok: true,
       data: {
@@ -137,16 +135,14 @@ export async function handleSessionInventoryCommands(params: {
   }
 
   if (req.command === 'apps') {
-    const session = sessionStore.get(sessionName);
-    const flags = req.flags ?? {};
-    const guard = requireSessionOrExplicitSelector(req.command, session, flags);
-    if (guard) return guard;
-
-    const device = await resolveCommandDevice({
-      session,
-      flags,
+    const resolution = await resolveInventoryCommandDevice({
+      req,
+      sessionName,
+      sessionStore,
       ensureReady: true,
     });
+    if ('response' in resolution) return resolution.response;
+    const { device } = resolution;
     const unsupported = requireCommandSupported('apps', device);
     if (unsupported) return unsupported;
 
@@ -175,6 +171,30 @@ export async function handleSessionInventoryCommands(params: {
   }
 
   return null;
+}
+
+async function resolveInventoryCommandDevice(params: {
+  req: DaemonRequest;
+  sessionName: string;
+  sessionStore: SessionStore;
+  ensureReady: boolean;
+  allowStoppedAndroidAvdPlaceholders?: boolean;
+}): Promise<{ device: DeviceInfo } | { response: DaemonResponse }> {
+  const { req, sessionName, sessionStore, ensureReady, allowStoppedAndroidAvdPlaceholders } =
+    params;
+  const session = sessionStore.get(sessionName);
+  const flags = req.flags ?? {};
+  const response = requireSessionOrExplicitSelector(req.command, session, flags);
+  if (response) return { response };
+
+  return {
+    device: await resolveCommandDevice({
+      session,
+      flags,
+      ensureReady,
+      allowStoppedAndroidAvdPlaceholders,
+    }),
+  };
 }
 
 function publicDeviceInfo({

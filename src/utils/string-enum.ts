@@ -37,21 +37,3 @@ export function parseStringMember<const T extends readonly string[]>(
     message ?? `Invalid value: ${value}. Use ${values.join('|')}.`,
   );
 }
-
-export function defineStringEnum<const T extends readonly string[]>(
-  values: T,
-  options: {
-    normalize?: (raw: string) => string;
-    message?: string | ((raw: string | undefined) => string);
-  } = {},
-): {
-  readonly values: T;
-  is(value: string): value is T[number];
-  parse(value: string | undefined): T[number];
-} {
-  return {
-    values,
-    is: (value): value is T[number] => isStringMember(values, value),
-    parse: (value): T[number] => parseStringMember(values, value, options),
-  };
-}

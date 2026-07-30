@@ -1,19 +1,40 @@
-import { sendToDaemon } from './daemon/client/daemon-client.ts';
-import { prepareMetroRuntime, reloadMetro } from './metro/client-metro.ts';
 import {
-  clearMetroSessionHints,
-  readMetroSessionHints,
-  writeMetroSessionHints,
-  type MetroSessionHints,
-} from './metro/metro-session-hints.ts';
-import { resolveDaemonPaths } from './daemon/config.ts';
-import { INTERNAL_COMMANDS } from './command-catalog.ts';
+  readSerializedSnapshotCaptureAnnotations,
+  readSnapshotDiagnosticsSummary,
+} from '@agent-device/contracts/capture';
+import type {
+  AgentDeviceClientConfig,
+  AgentDeviceDaemonTransport,
+  AppCloseOptions,
+  AppDeployOptions,
+  AppInstallFromSourceOptions,
+  AppInstallOptions,
+  AppListOptions,
+  AppOpenOptions,
+  CaptureScreenshotOptions,
+  CaptureScreenshotResult,
+  CaptureSnapshotOptions,
+  CaptureSnapshotResult,
+  FlingOptions,
+  InternalRequestOptions,
+  Lease,
+  MaterializationReleaseOptions,
+  PanOptions,
+  PinchOptions,
+  RotateGestureOptions,
+  SessionSaveScriptOptions,
+  SessionSaveScriptResult,
+  SwipeGestureOptions,
+  TransformGestureOptions,
+} from '@agent-device/contracts/client';
+import type { OrientationCommandResult } from '@agent-device/contracts/interaction';
+import type { AgentArtifactsResult } from '@agent-device/contracts/observability';
+import type { MetroPrepareOptions } from '@agent-device/contracts/remote';
 import {
-  prepareDaemonCommandRequest,
-  type DaemonCommandName,
-} from './commands/command-projection.ts';
-import { systemCommandFamily } from './commands/system/index.ts';
-import { buildRequestFlags } from './commands/command-flags.ts';
+  isNonDefaultResponseLevel,
+  type ResponseLevel,
+  type SessionRuntimeHints,
+} from '@agent-device/kernel/contracts';
 import { AppError, throwDaemonError } from '@agent-device/kernel/errors';
 import {
   buildMeta,
@@ -31,60 +52,33 @@ import {
   readSnapshotNodes,
   resolveSessionName,
 } from './client/client-normalizers.ts';
-import { readScreenshotResultData } from './utils/screenshot-result.ts';
-import { isRecord } from './utils/parsing.ts';
 import type {
-  AppCloseOptions,
-  AppDeployOptions,
-  AppInstallFromSourceOptions,
-  AppInstallOptions,
-  AppListOptions,
-  AppOpenOptions,
-  MaterializationReleaseOptions,
-} from './contracts/client-app.ts';
-import type {
-  CaptureScreenshotOptions,
-  CaptureScreenshotResult,
-  CaptureSnapshotOptions,
-  CaptureSnapshotResult,
-} from './contracts/client-capture.ts';
-import type {
-  AgentDeviceClientConfig,
-  AgentDeviceDaemonTransport,
-} from './contracts/client-connection.ts';
-import type {
-  FlingOptions,
-  PanOptions,
-  PinchOptions,
-  RotateGestureOptions,
-  SwipeGestureOptions,
-  TransformGestureOptions,
-} from './contracts/client-gesture.ts';
-import type { Lease } from './contracts/client-lease.ts';
-import type { InternalRequestOptions } from './contracts/client-request.ts';
-import type {
-  SessionSaveScriptOptions,
-  SessionSaveScriptResult,
-} from './contracts/client-session.ts';
-import type { MetroPrepareOptions } from './contracts/metro.ts';
-import type {
-  AgentDeviceCommandClient,
   AgentDeviceClient,
+  AgentDeviceCommandClient,
   MetroPrepareResult,
   RotateCommandResult,
 } from './client/client-types.ts';
-import type { OrientationCommandResult } from './contracts/navigation.ts';
-import type { CommandResult } from './core/command-descriptor/command-result.ts';
+import { INTERNAL_COMMANDS } from './command-catalog.ts';
+import { buildRequestFlags } from './commands/command-flags.ts';
 import {
-  isNonDefaultResponseLevel,
-  type ResponseLevel,
-  type SessionRuntimeHints,
-} from '@agent-device/kernel/contracts';
-import { readSerializedSnapshotCaptureAnnotations } from './contracts/snapshot-capture-annotations.ts';
-import { readSnapshotDiagnosticsSummary } from './contracts/snapshot-diagnostics.ts';
-import type { CommandFlags } from './core/dispatch-context.ts';
-import type { AgentArtifactsResult } from './contracts/cloud-artifacts.ts';
+  prepareDaemonCommandRequest,
+  type DaemonCommandName,
+} from './commands/command-projection.ts';
+import { systemCommandFamily } from './commands/system/index.ts';
 import type { ProjectedNavigationCommandClient } from './commands/system/navigation-projection.ts';
+import type { CommandResult } from './core/command-descriptor/command-result.ts';
+import type { CommandFlags } from './core/dispatch-context.ts';
+import { sendToDaemon } from './daemon/client/daemon-client.ts';
+import { resolveDaemonPaths } from './daemon/config.ts';
+import { prepareMetroRuntime, reloadMetro } from './metro/client-metro.ts';
+import {
+  clearMetroSessionHints,
+  readMetroSessionHints,
+  writeMetroSessionHints,
+  type MetroSessionHints,
+} from './metro/metro-session-hints.ts';
+import { isRecord } from './utils/parsing.ts';
+import { readScreenshotResultData } from './utils/screenshot-result.ts';
 
 type ProjectedSystemCommandClient = ProjectedNavigationCommandClient<InternalRequestOptions> &
   Pick<AgentDeviceCommandClient, 'appState' | 'keyboard' | 'clipboard' | 'rotate'>;

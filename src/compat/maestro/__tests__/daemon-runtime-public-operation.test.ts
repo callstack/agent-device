@@ -1,8 +1,10 @@
+import {
+  buildGesturePlan,
+  normalizePublicGesture,
+  readGesturePayload,
+} from '@agent-device/contracts/interaction';
 import assert from 'node:assert/strict';
 import { describe, expect, test } from 'vitest';
-import { buildGesturePlan } from '../../../contracts/gesture-plan.ts';
-import { readGesturePayload } from '../../../contracts/gesture-input.ts';
-import { normalizePublicGesture } from '../../../contracts/gesture-normalization.ts';
 import {
   projectMaestroPublicOperation,
   type MaestroPublicOperation,

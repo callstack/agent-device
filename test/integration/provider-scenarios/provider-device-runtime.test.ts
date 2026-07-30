@@ -2,17 +2,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import {
-  createProviderDeviceRuntimeRequestProviders,
-  type ProviderDeviceRuntime,
-  type ProviderPortReverseOptions,
-} from '../../../src/provider-device-runtime.ts';
+import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
 import type {
   DeviceInventoryProvider,
   DeviceLease,
   LeaseLifecycleProvider,
-} from '../../../src/contracts/device-provider.ts';
-import type { Interactor, SnapshotResult } from '../../../src/contracts/interactor-types.ts';
+  ProviderDeviceRuntime,
+  ProviderPortReverseOptions,
+} from '@agent-device/contracts/device';
+import type { Interactor, SnapshotResult } from '@agent-device/contracts/interaction';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { assertRpcError, assertRpcOk } from './assertions.ts';

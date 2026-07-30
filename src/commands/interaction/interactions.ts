@@ -1,39 +1,40 @@
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type {
+  ElementTarget,
   FillOptions,
+  InteractionTarget,
   LongPressOptions,
   TypeTextOptions,
-} from '../../contracts/client-gesture.ts';
-import type { ElementTarget, InteractionTarget } from '../../contracts/client-target.ts';
+} from '@agent-device/contracts/client';
+import {
+  assertNoRemovedSwipeInput,
+  swipePayloadFromPositionals,
+} from '@agent-device/contracts/interaction';
+import { AppError } from '@agent-device/kernel/errors';
+import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import {
   readFillTargetFromPositionals,
   readInteractionTargetFromPositionals,
 } from '../../core/interaction-positionals.ts';
-import { AppError } from '@agent-device/kernel/errors';
-import {
-  assertNoRemovedSwipeInput,
-  swipePayloadFromPositionals,
-} from '../../contracts/gesture-normalization.ts';
-import type { ScrollInputDirection } from './runtime/gestures.ts';
 import {
   commonInputFromFlags,
   direct,
   elementTargetPositionals,
   interactionTargetPositionals,
   isFiniteNumberString,
+  observationRecordInputFromFlags,
   optionalCliNumber,
   optionalNumber,
   readElementTargetFromPositionals,
   readGetFormat,
-  observationRecordInputFromFlags,
+  repeatedInputFromFlags,
   request,
   requiredDaemonString,
-  repeatedInputFromFlags,
   selectorSnapshotInputFromFlags,
   settleInputFromFlags,
   targetInputFromClientTarget,
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
+import type { ScrollInputDirection } from './runtime/gestures.ts';
 
 export const interactionCliReaders = {
   click: (positionals, flags) => ({

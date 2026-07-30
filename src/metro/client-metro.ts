@@ -1,12 +1,12 @@
 // The result PAYLOADS are declared in contracts/metro.ts so the public API can name them
 // without depending on this zone; re-exported here for existing consumers.
-export type { PrepareMetroRuntimeResult, ReloadMetroResult } from '../contracts/metro.ts';
+export type { PrepareMetroRuntimeResult, ReloadMetroResult } from '@agent-device/contracts/remote';
 import type {
   MetroPrepareKind,
   PrepareMetroRuntimeResult,
   ReloadMetroResult,
   ResolvedMetroKind,
-} from '../contracts/metro.ts';
+} from '@agent-device/contracts/remote';
 import fs from 'node:fs';
 import path from 'node:path';
 import { sleep } from '../utils/timeouts.ts';

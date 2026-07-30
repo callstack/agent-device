@@ -17,8 +17,8 @@ import {
   listBrowserStackCloudArtifacts,
   uploadBrowserStackApp,
 } from '../../../src/cloud-webdriver/browserstack.ts';
-import type { CloudArtifactsResult } from '../../../src/contracts/cloud-artifacts.ts';
-import type { DeviceLease } from '../../../src/contracts/device-provider.ts';
+import type { CloudArtifactsResult } from '@agent-device/contracts/observability';
+import type { DeviceLease } from '@agent-device/contracts/device';
 import { withCommandExecutorOverride } from '../../../src/utils/exec.ts';
 import { withProviderScenarioResource, withProviderScenarioTempDir } from './harness.ts';
 import {

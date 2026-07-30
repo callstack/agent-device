@@ -1,14 +1,14 @@
-import type { GestureReferenceFrame } from '../../contracts/scroll-gesture.ts';
 import type {
   FillCommandResult,
+  GestureReferenceFrame,
   LongPressCommandResult,
   PressCommandResult,
   RecordingTargetOverride,
   ResolutionDisclosure,
   SettleObservation,
-} from '../../contracts/interaction.ts';
-import type { RecordedTargetCapture } from '../session-target-evidence.ts';
+} from '@agent-device/contracts/interaction';
 import { successText } from '../../utils/success-text.ts';
+import type { RecordedTargetCapture } from '../session-target-evidence.ts';
 import { interactionResultExtra } from './interaction-touch-targets.ts';
 
 /**

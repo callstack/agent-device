@@ -1,4 +1,4 @@
-import type { CloudArtifact, CloudArtifactsResult } from '../contracts/cloud-artifacts.ts';
+import type { CloudArtifact, CloudArtifactsResult } from '@agent-device/contracts/observability';
 
 export function cloudArtifactsReadyOrPending(options: {
   provider: string;

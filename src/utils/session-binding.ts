@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { CliFlags } from '../contracts/cli-flags.ts';
+import type { CliFlags } from '@agent-device/contracts/command';
 import type { DaemonLockPolicy } from '@agent-device/kernel/contracts';
 
 export type BindingSettings = {

@@ -6,10 +6,9 @@ const LARGEST_TYPE_CYCLE_ZONE_CEILINGS: Readonly<Record<string, number>> = {
   '(root)': 5,
   client: 1,
   commands: 33,
-  contracts: 2,
-  core: 12,
-  'daemon-server': 30,
-  platforms: 19,
+  core: 10,
+  'daemon-server': 20,
+  platforms: 7,
 };
 
 export const DAEMON_MODULARITY_BASELINE = {

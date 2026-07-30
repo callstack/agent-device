@@ -5,7 +5,7 @@ import type {
   ReplaySuiteResult,
   ReplaySuiteTestFailed,
   ReplaySuiteTestResult,
-} from '../../contracts/replay.ts';
+} from '@agent-device/contracts/replay';
 import { resolveReplayTestArtifactsDir } from './session-test-artifacts.ts';
 import { emitRequestProgress } from '../../request/progress.ts';
 import {
@@ -24,7 +24,7 @@ import {
   type ReplayTestShardPlan,
 } from './session-test-sharding.ts';
 import { isRequestCanceled } from '../../request/cancel.ts';
-import { mergeSnapshotDiagnostics } from '../../contracts/snapshot-diagnostics.ts';
+import { mergeSnapshotDiagnostics } from '@agent-device/contracts/capture';
 
 type ReplayTestEntry = ReturnType<typeof discoverReplayTestEntries>[number];
 type ReplayTestQueuedEntry = {

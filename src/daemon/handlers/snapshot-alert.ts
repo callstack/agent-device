@@ -4,7 +4,7 @@ import {
   ALERT_POLL_INTERVAL_MS as POLL_INTERVAL_MS,
   DEFAULT_ALERT_TIMEOUT_MS as DEFAULT_TIMEOUT_MS,
   type AlertAction,
-} from '../../contracts/alert-contract.ts';
+} from '@agent-device/contracts/interaction';
 import { sleep } from '../../utils/timeouts.ts';
 import { runAppleRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 import { runMacOsAlertAction } from '../../platforms/apple/os/macos/helper.ts';

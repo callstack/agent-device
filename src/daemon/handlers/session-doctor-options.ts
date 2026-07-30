@@ -3,7 +3,7 @@ import { publicPlatformString } from '@agent-device/kernel/device';
 import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import type { DoctorOptions } from './session-doctor-types.ts';
-import type { DoctorCheck, DoctorKind } from '../../contracts/doctor.ts';
+import type { DoctorCheck, DoctorKind } from '@agent-device/contracts/observability';
 
 const DEFAULT_METRO_HOST = '127.0.0.1';
 const DEFAULT_METRO_PORT = 8081;

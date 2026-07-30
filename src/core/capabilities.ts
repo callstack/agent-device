@@ -1,11 +1,11 @@
 import { deriveCapabilityMatrix } from './command-descriptor/derive.ts';
 import { commandDescriptors } from './command-descriptor/registry.ts';
-import { tryGetPlugin } from '../contracts/platform-plugin.ts';
+import { tryGetPlugin } from './platform-plugin-registry.ts';
 import { registerBuiltinPlatformPlugins } from './interactors/register-builtins.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import type { GestureSemanticInput } from '../contracts/gesture-plan-types.ts';
-import { assertAppleMultiTouchSupported } from '../contracts/apple-multitouch-support.ts';
+import type { GestureSemanticInput } from '@agent-device/contracts/interaction';
+import { assertAppleMultiTouchSupported } from '@agent-device/contracts/platform';
 
 // Populate the PlatformPlugin registry once at module load (idempotent; registers
 // only lazy closures, so no leaf code is imported and CLI cold-start is unaffected

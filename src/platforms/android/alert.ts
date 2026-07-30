@@ -1,9 +1,9 @@
-import type { AlertAction } from '../../contracts/alert-contract.ts';
+import type { AlertAction } from '@agent-device/contracts/interaction';
 import {
   ALERT_ACTION_RETRY_MS,
   ALERT_POLL_INTERVAL_MS,
   DEFAULT_ALERT_TIMEOUT_MS,
-} from '../../contracts/alert-contract.ts';
+} from '@agent-device/contracts/interaction';
 import { AppError } from '@agent-device/kernel/errors';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { successText } from '../../utils/success-text.ts';

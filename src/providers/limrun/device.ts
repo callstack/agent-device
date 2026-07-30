@@ -1,4 +1,4 @@
-import type { DeviceLease } from '../../contracts/device-provider.ts';
+import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 export type LimrunPlatform = 'ios' | 'android';
