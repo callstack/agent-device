@@ -4,9 +4,9 @@ title: Node.js API
 
 # Node.js API
 
-Use `createAgentDeviceClient()` when you want to drive the daemon from application code instead of shelling out to the CLI.
+Use `createAgentDeviceClient()` to give a Node.js agent typed access to device automation instead of shelling out to the CLI. Its methods can be exposed as model tools, called from deterministic orchestration code, or combined with another Node.js agent framework.
 
-For remote Metro-backed flows, import the reusable Node APIs instead of spawning the `agent-device` binary. The CLI uses the same helpers internally.
+Start with the [AI SDK](/docs/ai-sdk) or [Eve](/docs/eve) integration guide for complete tool-calling examples. The client is framework-neutral, so the same pattern works with other solutions that accept JavaScript or TypeScript functions as tools.
 
 ## Runnable examples
 

@@ -85,6 +85,16 @@
       },
       {
         "type": "custom-link",
+        "label": "AI SDK",
+        "link": "/docs/ai-sdk"
+      },
+      {
+        "type": "custom-link",
+        "label": "Eve",
+        "link": "/docs/eve"
+      },
+      {
+        "type": "custom-link",
         "label": "Remote Proxy",
         "link": "/docs/remote-proxy"
       },
