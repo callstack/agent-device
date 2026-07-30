@@ -48,7 +48,7 @@ export function createLinuxInteractor(): Interactor {
     snapshot: async (options) => {
       const result = await withDiagnosticTimer(
         'snapshot_capture',
-        async () => await snapshotLinux(options?.surface),
+        async () => await snapshotLinux(options?.surface, options?.signal),
         { backend: 'linux-atspi' },
       );
       return {

@@ -31,6 +31,7 @@ import {
   withDiagnosticsScope,
 } from '../../utils/diagnostics.ts';
 import { isEnvTruthy } from '../../utils/retry.ts';
+import { resetAndroidSnapshotHelperSessions } from '../../platforms/android/snapshot-helper.ts';
 import {
   acquireDaemonLock,
   parseIntegerEnv,
@@ -386,6 +387,15 @@ export async function startDaemonRuntime(
     } catch {}
     expiredProviderLeaseReleaser.beginShutdown();
     await teardownDaemonSessions();
+    try {
+      await resetAndroidSnapshotHelperSessions();
+    } catch (error) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'daemon_shutdown_android_snapshot_helper_cleanup_failed',
+        data: { error: error instanceof Error ? error.message : String(error) },
+      });
+    }
     const providerReleaseDrain = await expiredProviderLeaseReleaser.drain(
       DAEMON_PROVIDER_RELEASE_DRAIN_TIMEOUT_MS,
     );

@@ -6,6 +6,7 @@ export type LinuxTraversalOptions = {
   maxNodes?: number;
   maxDepth?: number;
   maxApps?: number;
+  signal?: AbortSignal;
 };
 
 export type LinuxAccessibilityTree = {

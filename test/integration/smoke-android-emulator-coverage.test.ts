@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import test from 'node:test';
 
 import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
@@ -10,7 +9,13 @@ import {
   ANDROID_EMULATOR_E2E_COVERAGE,
   liveCommandsForScenario,
 } from './android-emulator-e2e/coverage-manifest.ts';
-import { ANDROID_EMULATOR_LIVE_SCENARIOS } from './android-emulator-e2e/scenarios.ts';
+import { assertCoverageComplete } from './android-emulator-e2e/live-coverage-report.ts';
+import { scenarioIdsFromEnv } from './android-emulator-e2e/live-runner.ts';
+import {
+  ANDROID_EMULATOR_FIXTURE_BOOTSTRAP,
+  ANDROID_EMULATOR_LIVE_SCENARIOS,
+  selectAndroidEmulatorScenarios,
+} from './android-emulator-e2e/scenarios.ts';
 
 const ANDROID_EMULATOR = {
   id: 'ci-android-emulator',
@@ -28,8 +33,12 @@ test('Android emulator coverage exhaustively classifies the public catalog', () 
     assert.ok(entry.assertion.trim().length > 0, `${command} needs an observable assertion`);
     if (entry.level === 'live') {
       assert.ok(entry.scenario.trim().length > 0, `${command} needs a scenario owner`);
-    } else {
-      assert.ok(entry.evidence.path.trim().length > 0, `${command} needs an evidence path`);
+    } else if (entry.level === 'command-contract') {
+      assert.ok(entry.evidence.owner.trim().length > 0, `${command} needs a contract owner`);
+      assert.ok(
+        entry.evidence.commands.includes(command),
+        `${entry.evidence.owner} must declare ${command}`,
+      );
     }
   }
 });
@@ -50,6 +59,11 @@ test('Android coverage report summary accounts for every manifest classification
 });
 
 test('Android live command ownership is structural and exhaustive', () => {
+  assert.deepEqual(
+    [...ANDROID_EMULATOR_FIXTURE_BOOTSTRAP.commands].sort(),
+    liveCommandsForScenario(ANDROID_EMULATOR_FIXTURE_BOOTSTRAP.id).sort(),
+    'fixture bootstrap command declaration must match the coverage manifest',
+  );
   for (const scenario of ANDROID_EMULATOR_LIVE_SCENARIOS) {
     assert.deepEqual(
       [...scenario.commands].sort(),
@@ -57,7 +71,10 @@ test('Android live command ownership is structural and exhaustive', () => {
       `${scenario.id} command declaration must match the coverage manifest`,
     );
   }
-  const claimed = ANDROID_EMULATOR_LIVE_SCENARIOS.flatMap((scenario) => scenario.commands);
+  const claimed = [
+    ...ANDROID_EMULATOR_FIXTURE_BOOTSTRAP.commands,
+    ...ANDROID_EMULATOR_LIVE_SCENARIOS.flatMap((scenario) => scenario.commands),
+  ];
   const liveCommands = Object.entries(ANDROID_EMULATOR_E2E_COVERAGE)
     .filter(([, entry]) => entry.level === 'live')
     .map(([command]) => command);
@@ -67,28 +84,147 @@ test('Android live command ownership is structural and exhaustive', () => {
 
 test('Android app scenarios declare deterministic starting surfaces and IME modes', () => {
   assert.deepEqual(
+    {
+      id: ANDROID_EMULATOR_FIXTURE_BOOTSTRAP.id,
+      start: ANDROID_EMULATOR_FIXTURE_BOOTSTRAP.start,
+    },
+    { id: 'smoke:fixture-bootstrap', start: undefined },
+  );
+  assert.deepEqual(
     ANDROID_EMULATOR_LIVE_SCENARIOS.map((scenario) => ({
       id: scenario.id,
-      start: scenario.start,
+      start: 'start' in scenario ? scenario.start : undefined,
     })),
     [
-      { id: 'smoke:inventory-install', start: undefined },
-      { id: 'smoke:automation-system', start: { ime: 'system', route: 'home' } },
-      { id: 'smoke:form-input', start: { ime: 'test', route: 'form' } },
-      { id: 'smoke:keyboard-ime', start: { ime: 'system', route: 'form' } },
-      { id: 'smoke:capture-close', start: { ime: 'system', route: 'home' } },
+      { id: 'smoke:inventory', start: undefined },
+      {
+        id: 'smoke:automation-system',
+        start: {
+          ime: 'system',
+          landmark: 'Automation lab',
+          url: 'agent-device-test-app:///automation?event=cold.start&payload=%7B%22source%22%3A%22android-deep-link%22%7D',
+        },
+      },
+      {
+        id: 'smoke:form-input',
+        start: {
+          ime: 'test',
+          landmark: 'Checkout form',
+          url: 'agent-device-test-app:///form',
+        },
+      },
+      {
+        id: 'smoke:keyboard-ime',
+        start: {
+          ime: 'system',
+          landmark: 'Checkout form',
+          url: 'agent-device-test-app:///form',
+        },
+      },
+      {
+        id: 'smoke:capture-close',
+        start: {
+          ime: 'system',
+          landmark: 'Agent Device Tester',
+          url: 'agent-device-test-app:///',
+        },
+      },
     ],
   );
 });
 
-test('Android emulator non-live owners name executable repository modules', () => {
-  for (const [command, entry] of Object.entries(ANDROID_EMULATOR_E2E_COVERAGE)) {
-    if (entry.level === 'live') continue;
-    assert.ok(
-      fs.existsSync(entry.evidence.path),
-      `${command} evidence does not exist: ${entry.evidence.path}`,
-    );
+test('Android emulator scenarios can be selected as an ordered subset', () => {
+  assert.deepEqual(
+    selectAndroidEmulatorScenarios(['smoke:keyboard-ime', 'smoke:automation-system']).map(
+      ({ id }) => id,
+    ),
+    ['smoke:keyboard-ime', 'smoke:automation-system'],
+  );
+  assert.deepEqual(
+    selectAndroidEmulatorScenarios().map(({ id }) => id),
+    ANDROID_EMULATOR_LIVE_SCENARIOS.map(({ id }) => id),
+  );
+  assert.throws(
+    () => selectAndroidEmulatorScenarios(['smoke:keyboard-ime', 'smoke:keyboard-ime']),
+    /duplicate Android emulator E2E scenario: smoke:keyboard-ime/,
+  );
+  assert.throws(
+    () => selectAndroidEmulatorScenarios(['smoke:not-real']),
+    /unknown Android emulator E2E scenario: smoke:not-real/,
+  );
+  assert.throws(
+    () => selectAndroidEmulatorScenarios([]),
+    /select at least one Android emulator E2E scenario/,
+  );
+  assert.deepEqual(scenarioIdsFromEnv(' smoke:capture-close,smoke:inventory '), [
+    'smoke:capture-close',
+    'smoke:inventory',
+  ]);
+  assert.throws(() => scenarioIdsFromEnv(''), /contains no Android emulator E2E scenario ids/);
+  assert.equal(scenarioIdsFromEnv(undefined), undefined);
+});
+
+test('Android emulator coverage completeness is scoped to the executed subset', () => {
+  const captureScenario = selectAndroidEmulatorScenarios(['smoke:capture-close'])[0];
+  assert.ok(captureScenario);
+  const selected = [ANDROID_EMULATOR_FIXTURE_BOOTSTRAP, captureScenario];
+  const context = {
+    appId: 'com.example.fixture',
+    appPath: '/fixture.apk',
+    artifactDir: '/tmp/not-written',
+    behaviorEvidence: {},
+    commandEvidence: {
+      [PUBLIC_COMMANDS.close]: ['session released'],
+      [PUBLIC_COMMANDS.install]: ['fixture installed'],
+      [PUBLIC_COMMANDS.screenshot]: ['PNG captured'],
+    },
+    completedScenarios: selected.map(({ id }) => id),
+    currentScenario: captureScenario.id,
+    env: {},
+    serial: 'emulator-5554',
+    session: 'scoped-coverage',
+    sessionOpen: false,
+    startedAtMs: 0,
+    stepHistory: [],
+    timings: [],
+  };
+
+  assert.doesNotThrow(() => assertCoverageComplete(context, selected));
+  const incomplete = {
+    ...context,
+    commandEvidence: {
+      [PUBLIC_COMMANDS.close]: ['session released'],
+      [PUBLIC_COMMANDS.install]: ['fixture installed'],
+    },
+  };
+  assert.throws(
+    () => assertCoverageComplete(incomplete, selected),
+    /Android emulator E2E coverage is incomplete/,
+  );
+});
+
+test('Android command-contract declarations are unique and exhaustive', () => {
+  const contractEntries = Object.entries(ANDROID_EMULATOR_E2E_COVERAGE).filter(
+    (
+      entry,
+    ): entry is [
+      string,
+      Extract<
+        (typeof ANDROID_EMULATOR_E2E_COVERAGE)[keyof typeof ANDROID_EMULATOR_E2E_COVERAGE],
+        { level: 'command-contract' }
+      >,
+    ] => entry[1].level === 'command-contract',
+  );
+  const declarations = new Map(
+    contractEntries.map(([, entry]) => [entry.evidence.owner, entry.evidence] as const),
+  );
+  const declared = [...declarations.values()].flatMap((evidence) => evidence.commands);
+
+  for (const evidence of declarations.values()) {
+    assert.ok(evidence.testName.trim().length > 0, `${evidence.owner} needs an executable test`);
   }
+  assert.equal(new Set(declared).size, declared.length, 'contract commands need one owner');
+  assert.deepEqual([...declared].sort(), contractEntries.map(([command]) => command).sort());
 });
 
 test('Android behavior patterns are owned by live fixture journeys', () => {

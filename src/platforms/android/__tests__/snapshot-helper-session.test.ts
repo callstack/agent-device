@@ -6,8 +6,9 @@ import { afterEach, beforeEach, test } from 'vitest';
 import {
   captureAndroidSnapshotWithHelperSession,
   resetAndroidSnapshotHelperSessions,
-  resolveAndroidSnapshotHelperSessionRequestTimeoutMs,
 } from '../snapshot-helper-session.ts';
+import { resolveAndroidSnapshotHelperSessionRequestTimeoutMs } from '../snapshot-helper-session-protocol.ts';
+import { recoverAndroidSnapshotHelperRetirement } from '../snapshot-helper-retirement.ts';
 import type { AndroidAdbExecutor, AndroidAdbProcess, AndroidAdbProvider } from '../adb-executor.ts';
 
 beforeEach(async () => {
@@ -316,6 +317,40 @@ test('force terminates the helper when quit is not acknowledged', async () => {
 
   assert.equal(processes.length, 1);
   assert.equal(processes[0]?.killed, true);
+});
+
+test('failed whole-module reset preserves quarantine until recovery is confirmed', async () => {
+  const options: SessionProviderOptions = {
+    calls: [],
+    quitResponseMode: 'malformed',
+    recoveryFailure: true,
+  };
+  const provider = createSessionProvider(options);
+  const deviceKey = 'android:emulator-5554';
+
+  await captureAndroidSnapshotWithHelperSession({
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey,
+  });
+  await assert.rejects(
+    resetAndroidSnapshotHelperSessions(),
+    /Failed to retire every Android snapshot helper session/,
+  );
+  const forceStopsBeforeRecovery = options.calls.filter((args) =>
+    args.join(' ').includes('am force-stop'),
+  ).length;
+
+  options.recoveryFailure = false;
+  await recoverAndroidSnapshotHelperRetirement({
+    deviceKey,
+    adb: provider.exec,
+  });
+
+  assert.equal(
+    options.calls.filter((args) => args.join(' ').includes('am force-stop')).length,
+    forceStopsBeforeRecovery + 1,
+  );
 });
 
 test('force terminates and falls back from a session whose UiAutomation connection timed out', async () => {

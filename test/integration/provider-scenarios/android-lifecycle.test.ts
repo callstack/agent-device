@@ -13,6 +13,10 @@ import {
 import { createAndroidSettingsWorld, waitForFileContent } from './android-world.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
 import { createProviderScenarioTempPath, withProviderScenarioResource } from './harness.ts';
+import {
+  ANDROID_LIFECYCLE_CONTRACT_EVIDENCE,
+  ANDROID_TOUCH_CONTRACT_EVIDENCE,
+} from './android-lifecycle.coverage.ts';
 
 type AndroidSettingsWorld = Awaited<ReturnType<typeof createAndroidSettingsWorld>>;
 
@@ -27,15 +31,19 @@ const ANDROID_SYSTEM_SURFACE_XML = `<hierarchy>
   </node>
 </hierarchy>`;
 
-test('Provider-backed integration Android Settings flow uses scripted ADB provider', async () => {
-  await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {
-    const client = world.daemon.client();
-    await runAndroidSetupAndInstallWorkflow(world, client);
-    await runAndroidAppControlAndObservabilityWorkflow(world, client);
-    await runAndroidCaptureInteractionAndReplayWorkflow(world, client);
-    assertAndroidProviderContract(world);
-  });
-}, 15_000);
+test(
+  ANDROID_LIFECYCLE_CONTRACT_EVIDENCE.testName,
+  async () => {
+    await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {
+      const client = world.daemon.client();
+      await runAndroidSetupAndInstallWorkflow(world, client);
+      await runAndroidAppControlAndObservabilityWorkflow(world, client);
+      await runAndroidCaptureInteractionAndReplayWorkflow(world, client);
+      assertAndroidProviderContract(world);
+    });
+  },
+  15_000,
+);
 
 test('Provider-backed Android reads keep chrome provenance internal across public node payloads', async () => {
   await withProviderScenarioResource(
@@ -116,7 +124,7 @@ test('Provider-backed integration Android text provider handles Unicode without 
   );
 });
 
-test('Provider-backed integration Android touch provider handles multi-touch gestures', async () => {
+test(ANDROID_TOUCH_CONTRACT_EVIDENCE.testName, async () => {
   await withProviderScenarioResource(
     async () => await createAndroidSettingsWorld(),
     async (world) => {
@@ -821,6 +829,10 @@ async function runAndroidAppControlAndObservabilityWorkflow(
     ),
     JSON.stringify(sessionAfterTriggeredEvent?.actions),
   );
+  const tracePath = path.join(world.tempRoot, 'android-provider.adtrace');
+  const finalTracePath = path.join(world.tempRoot, 'android-provider-final.adtrace');
+  const traceStart = await daemon.callCommand('trace', ['start', tracePath], selection);
+  assert.equal(traceStart.json?.result?.data?.trace, 'started');
   await client.settings.update({
     setting: 'permission',
     state: 'grant',
@@ -902,6 +914,18 @@ async function runAndroidAppControlAndObservabilityWorkflow(
     ),
     JSON.stringify(metrics.fps),
   );
+
+  const events = await client.observability.events({ limit: 100, ...selection });
+  const eventEntries = Array.isArray(events.events)
+    ? (events.events as Array<{ command?: string }>)
+    : [];
+  assert.ok(eventEntries.some((event) => event.command === 'trigger-app-event'));
+  assert.ok(eventEntries.some((event) => event.command === 'perf'));
+
+  const traceStop = await daemon.callCommand('trace', ['stop', finalTracePath], selection);
+  assert.equal(traceStop.json?.result?.data?.trace, 'stopped');
+  assert.equal(traceStop.json?.result?.data?.outPath, finalTracePath);
+  assert.equal(fs.existsSync(finalTracePath), true);
 
   const explicitMetrics = await client.observability.perf({ area: 'metrics', ...selection });
   assert.deepEqual(Object.keys(explicitMetrics.metrics as Record<string, unknown>).sort(), [

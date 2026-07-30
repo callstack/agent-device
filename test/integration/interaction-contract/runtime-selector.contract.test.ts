@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { InteractionGuarantee } from '../../../src/contracts/interaction-guarantees.ts';
 import type { Point } from '@agent-device/kernel/snapshot';
-import { selector } from '../../../src/commands/interaction/runtime/selector-read.ts';
+import { selector } from '../../../src/commands/interaction/runtime/selector-read-utils.ts';
 import { assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { scenarioName, scenarioNames } from './coverage-manifest.ts';
 import { RUNTIME_SELECTOR_COVERAGE } from './runtime-selector.coverage.ts';

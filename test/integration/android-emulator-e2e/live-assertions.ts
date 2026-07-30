@@ -63,6 +63,23 @@ export function requireAndroidResourceId(
   return { identifier: node.identifier, rect: node.rect };
 }
 
+export function assertPersistentAndroidHelper(
+  result: CliJsonResult,
+  options: { reused?: boolean } = {},
+): void {
+  const metadata: unknown = result.json?.data?.androidSnapshot;
+  assert.ok(
+    typeof metadata === 'object' && metadata !== null,
+    `snapshot has no Android helper metadata: ${JSON.stringify(result.json)}`,
+  );
+  const helper = metadata as Record<string, unknown>;
+  assert.equal(helper.backend, 'android-helper', JSON.stringify(metadata));
+  assert.equal(helper.helperTransport, 'persistent-session', JSON.stringify(metadata));
+  if (options.reused !== undefined) {
+    assert.equal(helper.helperSessionReused, options.reused, JSON.stringify(metadata));
+  }
+}
+
 function isSnapshotNode(value: unknown): value is RawSnapshotNode & { identifier: string } {
   if (typeof value !== 'object' || value === null) return false;
   const node = value as RawSnapshotNode;

@@ -252,10 +252,14 @@ export async function startMacOsAudioProbeProcess(options: {
   );
 }
 
-async function runMacOsHelper<T extends Record<string, unknown>>(args: string[]): Promise<T> {
+async function runMacOsHelper<T extends Record<string, unknown>>(
+  args: string[],
+  options: { signal?: AbortSignal } = {},
+): Promise<T> {
   const helperOptions = {
     allowFailure: true,
     timeoutMs: 30_000,
+    signal: options.signal,
   };
   const helperProvider = resolveAppleToolProvider().macosHelper;
   const helperPath = helperProvider
@@ -343,7 +347,7 @@ export async function runMacOsAlertAction(
 
 export async function runMacOsSnapshotAction(
   surface: Exclude<SessionSurface, 'app'>,
-  options: { bundleId?: string } = {},
+  options: { bundleId?: string; signal?: AbortSignal } = {},
 ): Promise<{
   surface: Exclude<SessionSurface, 'app'>;
   nodes: MacOsSnapshotNode[];
@@ -352,7 +356,7 @@ export async function runMacOsSnapshotAction(
 }> {
   const args = ['snapshot', '--surface', surface];
   appendMacOsHelperContextArgs(args, options);
-  return await runMacOsHelper(args);
+  return await runMacOsHelper(args, { signal: options.signal });
 }
 
 export async function runMacOsReadTextAction(

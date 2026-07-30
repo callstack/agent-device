@@ -122,6 +122,7 @@ export async function captureAccessibilityTree(
   const result = await runLinuxToolCommand('python3', args, {
     allowFailure: true,
     timeoutMs: 30_000,
+    signal: options.signal,
   });
 
   if (result.exitCode !== 0) {

@@ -3,7 +3,10 @@ export type AndroidEmulatorBehaviorId =
   | 'cold-start-deep-link-navigation'
   | 'home-recents-restoration'
   | 'orientation-fixture-state'
-  | 'safe-keyboard-dismissal';
+  | 'safe-keyboard-dismissal'
+  | 'system-ime-keyboard'
+  | 'test-ime-restoration'
+  | 'test-ime-unicode-input';
 
 type BehaviorCoverageEntry = {
   assertion: string;
@@ -32,5 +35,18 @@ export const ANDROID_EMULATOR_BEHAVIOR_COVERAGE = {
   'safe-keyboard-dismissal': {
     assertion: 'keyboard dismiss hides the IME while Checkout form remains on screen',
     owner: 'smoke:keyboard-ime',
+  },
+  'system-ime-keyboard': {
+    assertion: 'visible keyboard belongs to the emulator system IME rather than the test helper',
+    owner: 'smoke:keyboard-ime',
+  },
+  'test-ime-restoration': {
+    assertion:
+      'closing the form session restores the prior system IME with structured doctor proof',
+    owner: 'smoke:form-input',
+  },
+  'test-ime-unicode-input': {
+    assertion: 'the exact test IME package commits a Unicode form value that is read back',
+    owner: 'smoke:form-input',
   },
 } as const satisfies Record<AndroidEmulatorBehaviorId, BehaviorCoverageEntry>;

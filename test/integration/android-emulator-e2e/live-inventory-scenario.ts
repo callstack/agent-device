@@ -23,13 +23,8 @@ export async function assertInventoryAndInstall(context: LiveContext): Promise<v
     'typed capability response includes fixture-driving commands',
   );
 
-  await runStep(context, 'install cached fixture APK through public CLI', [
-    'install',
-    context.appPath,
-  ]);
   const apps = await runStep(context, 'list installed user apps', ['apps']);
   assertJsonContains(apps, context.appId, 'app inventory should include fixture package');
-  verifyCommand(context, C.install, 'cached fixture APK installs through public CLI');
   verifyCommand(context, C.apps, 'installed fixture package appears in app inventory');
 
   const doctor = await runStep(context, 'doctor fixture package discovery', [

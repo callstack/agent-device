@@ -109,6 +109,19 @@ test('passes surface and limit args to Python script', async () => {
   assert.ok(callArgs.includes('10'));
 });
 
+test('passes capture cancellation to the AT-SPI process', async () => {
+  mockRunCmd.mockResolvedValue({
+    exitCode: 0,
+    stdout: makePythonResult([]),
+    stderr: '',
+  });
+  const controller = new AbortController();
+
+  await captureAccessibilityTree('desktop', { signal: controller.signal });
+
+  assert.equal(mockRunCmd.mock.calls[0]?.[2]?.signal, controller.signal);
+});
+
 test('throws TOOL_MISSING when python3 is not found', async () => {
   mockWhichCmd.mockResolvedValue(false);
 

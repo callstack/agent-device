@@ -66,9 +66,14 @@ test('producer, consumers, upload, and concurrency use the canonical platform-sc
 
 test('Android smoke consumes the restored APK through catalog fixture E2E', (t) => {
   const workflow = parse(fs.readFileSync('.github/workflows/android.yml', 'utf8'));
-  const smokeStep = workflow.jobs['smoke-android'].steps.find(
-    (step) => step.name === 'Run Android smoke checks',
+  const replayEvidence = JSON.parse(
+    fs.readFileSync('test/ci/android-workflow-evidence.json', 'utf8'),
   );
+  assert.equal(replayEvidence.workflow, '.github/workflows/android.yml');
+  const evidenceJob = workflow.jobs[replayEvidence.job];
+  assert.ok(evidenceJob, `missing declared Android replay job: ${replayEvidence.job}`);
+  const smokeStep = evidenceJob.steps.find((step) => step.name === replayEvidence.step);
+  assert.ok(smokeStep, `missing declared Android replay step: ${replayEvidence.step}`);
   const restoreStep = workflow.jobs['smoke-android'].steps.find(
     (step) => step.name === 'Restore fixture APK',
   );
@@ -82,6 +87,13 @@ test('Android smoke consumes the restored APK through catalog fixture E2E', (t) 
   assert.match(smokeStep.with.script, /steps\.fixture-app\.outputs\.apk-path/);
   assert.match(smokeStep.with.script, /steps\.fixture-app\.outputs\.app-id/);
   assert.match(smokeStep.with.script, /smoke-android-emulator\.test\.ts/);
+  assert.ok(
+    smokeStep.with.script
+      .split('\n')
+      .map((line) => line.trim())
+      .includes(replayEvidence.invocation),
+    `missing declared Android replay invocation: ${replayEvidence.invocation}`,
+  );
   assert.equal(restoreStep.with['wait-for-artifact-seconds'], '600');
   assert.match(sourceStep.run, /steps\.fixture-app\.outputs\.source/);
   assert.match(assertion, /metadata\.backend !== 'android-helper'/);

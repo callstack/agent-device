@@ -16,7 +16,7 @@ import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
 import {
   ref as interactionRef,
   selector,
-} from '../../../commands/interaction/runtime/selector-read.ts';
+} from '../../../commands/interaction/runtime/selector-read-utils.ts';
 import { createInteractionDevice } from '../../../commands/interaction/runtime/__tests__/test-utils/index.ts';
 import { classifyReplayTarget } from '../session-replay-target-classification.ts';
 

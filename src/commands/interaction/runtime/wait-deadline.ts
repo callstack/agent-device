@@ -14,10 +14,10 @@ export async function runWithinWaitDeadline<T>(
   task: (signal: AbortSignal) => Promise<T>,
 ): Promise<WaitDeadlineResult<T>> {
   const deadlineController = new AbortController();
-  const parentSignal = options.signal ?? runtime.signal;
-  const signal = parentSignal
-    ? AbortSignal.any([parentSignal, deadlineController.signal])
-    : deadlineController.signal;
+  const parentSignals = [options.signal, runtime.signal].filter(
+    (signal): signal is AbortSignal => signal !== undefined,
+  );
+  const signal = AbortSignal.any([...parentSignals, deadlineController.signal]);
   let deadlineExpired = false;
   const timer = setTimeout(
     () => {
@@ -30,11 +30,15 @@ export async function runWithinWaitDeadline<T>(
 
   try {
     const value = await task(signal);
-    if (deadlineExpired && !parentSignal?.aborted) return { timedOut: true };
+    if (deadlineExpired && !parentSignals.some((parent) => parent.aborted)) {
+      return { timedOut: true };
+    }
     signal.throwIfAborted();
     return { timedOut: false, value };
   } catch (error) {
-    if (deadlineExpired && !parentSignal?.aborted) return { timedOut: true };
+    if (deadlineExpired && !parentSignals.some((parent) => parent.aborted)) {
+      return { timedOut: true };
+    }
     throw error;
   } finally {
     clearTimeout(timer);

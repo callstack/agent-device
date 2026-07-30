@@ -8,24 +8,17 @@ import {
 } from './behavior-coverage.ts';
 import {
   ANDROID_EMULATOR_COVERAGE_CLASSIFICATION_SUMMARY,
-  ANDROID_EMULATOR_E2E_COVERAGE,
   liveCommandsForScenario,
 } from './coverage-manifest.ts';
 import type { LiveContext } from './live-harness.ts';
 
-const REQUIRED_SCENARIOS = [
-  ...new Set([
-    ...Object.values(ANDROID_EMULATOR_E2E_COVERAGE)
-      .filter((entry) => entry.level === 'live')
-      .map((entry) => entry.scenario),
-    ...Object.values(ANDROID_EMULATOR_BEHAVIOR_COVERAGE).map((entry) => entry.owner),
-  ]),
-].map((id) => ({ id }));
-
-export function assertCoverageComplete(context: LiveContext): void {
+export function assertCoverageComplete(
+  context: LiveContext,
+  selectedScenarios: readonly { id: string }[],
+): void {
   assertLiveCoverageComplete(
     context,
-    REQUIRED_SCENARIOS,
+    selectedScenarios,
     liveCommandsForScenario,
     liveBehaviorsForScenario,
     'Android emulator E2E coverage is incomplete',

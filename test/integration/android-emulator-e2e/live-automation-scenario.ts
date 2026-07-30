@@ -7,6 +7,7 @@ import {
   assertDiffLine,
   assertFilesDiffer,
   assertJsonContains,
+  assertPersistentAndroidHelper,
   assertWaitSelector,
   assertWaitText,
   capturePng,
@@ -15,18 +16,8 @@ import {
 import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';
 
 const C = PUBLIC_COMMANDS;
-const AUTOMATION_DEEP_LINK =
-  'agent-device-test-app:///automation?event=cold.start&payload=%7B%22source%22%3A%22android-deep-link%22%7D';
 
 export async function assertAutomationSystem(context: LiveContext): Promise<void> {
-  await runStep(context, 'cold launch fixture through Android deep link', [
-    'open',
-    context.appId,
-    '--relaunch',
-    '--no-test-ime',
-    AUTOMATION_DEEP_LINK,
-  ]);
-  await assertWaitText(context, 'Automation lab');
   await assertElementText(context, 'id="automation-event-name"', 'cold.start');
   await assertElementText(
     context,
@@ -49,6 +40,7 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
     'snapshot',
     '-i',
   ]);
+  assertPersistentAndroidHelper(catalogSnapshot, { reused: true });
   const settingsTab = (
     catalogSnapshot.json?.data?.nodes as { label?: unknown; ref?: unknown }[] | undefined
   )?.find((node) => typeof node.label === 'string' && node.label.startsWith('Settings'));
@@ -142,6 +134,16 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
 
   await runStep(context, 'open Android native alert', ['click', 'id="automation-open-alert"']);
   await assertWaitText(context, 'Automation confirmation');
+  const alertSnapshot = await runStep(context, 'capture native alert through persistent helper', [
+    'snapshot',
+    '-i',
+  ]);
+  assertPersistentAndroidHelper(alertSnapshot, { reused: true });
+  assertJsonContains(
+    alertSnapshot,
+    'Automation confirmation',
+    'persistent helper snapshot should expose fixture dialog',
+  );
   const alert = await runStep(context, 'inspect Android native alert', ['alert', 'get']);
   assertJsonContains(alert, 'Automation confirmation', 'alert get should expose fixture dialog');
   await runStep(context, 'dismiss Android native alert', ['alert', 'dismiss']);

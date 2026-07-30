@@ -22,12 +22,15 @@ function resolveLinuxSurface(surface: SessionSurface | undefined): SnapshotSurfa
   return 'desktop';
 }
 
-export async function snapshotLinux(surface: SessionSurface | undefined): Promise<{
+export async function snapshotLinux(
+  surface: SessionSurface | undefined,
+  signal?: AbortSignal,
+): Promise<{
   nodes: RawSnapshotNode[];
   truncated?: boolean;
 }> {
   const linuxSurface = resolveLinuxSurface(surface);
-  const result = await captureAccessibilityTree(linuxSurface);
+  const result = await captureAccessibilityTree(linuxSurface, { signal });
 
   return {
     nodes: result.nodes,

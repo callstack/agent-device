@@ -22,6 +22,7 @@ import {
   createLocalAppleToolProvider,
   withAppleToolProvider,
 } from '../apple/core/tool-provider.ts';
+import { ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE } from './install-source.coverage.ts';
 
 test('validateDownloadSourceUrl rejects localhost and private literal addresses by default', async () => {
   await assert.rejects(
@@ -181,7 +182,7 @@ test('prepareIosInstallArtifact rejects untrusted URL sources', async () => {
   );
 });
 
-test('prepareAndroidInstallArtifact resolves package identity for direct APK URL sources', async () => {
+test(ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE.testName, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-direct-apk-url-'));
   try {
     const manifestPath = path.join(tempRoot, 'AndroidManifest.xml');

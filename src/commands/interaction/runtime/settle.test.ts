@@ -9,7 +9,7 @@ import {
   localCommandPolicy,
 } from '../../../runtime.ts';
 import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
-import { ref, selector } from './selector-read.ts';
+import { ref, selector } from './selector-read-utils.ts';
 import { buildSettleTailEntries, NEVER_SETTLED_HINT } from './settle.ts';
 
 // #1101 --settle: quiet-window settle loop composition on the interaction

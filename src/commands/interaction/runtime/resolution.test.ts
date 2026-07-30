@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { BackendSnapshotOptions } from '../../../backend.ts';
-import { ref, selector } from './selector-read.ts';
+import { ref, selector } from './selector-read-utils.ts';
 import { resolveActionableTouchResolution } from '../../../core/interaction-targeting.ts';
 import { tryResolveRefNode } from './resolution.ts';
 import { parseSelectorChain, resolveSelectorChain } from '../../../selectors/index.ts';

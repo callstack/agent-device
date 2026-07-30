@@ -38,8 +38,8 @@ export function createAgentBrowserWebProvider(
   options: AgentBrowserProviderOptions = {},
 ): WebProvider {
   const session = options.session?.trim();
-  const runJson = async (args: string[]): Promise<unknown> =>
-    await runAgentBrowserJson(args, { session, options });
+  const runJson = async (args: string[], signal?: AbortSignal): Promise<unknown> =>
+    await runAgentBrowserJson(args, { session, options, signal });
 
   return {
     async open(target) {
@@ -55,7 +55,10 @@ export function createAgentBrowserWebProvider(
       await runJson(['record', 'stop']);
     },
     async snapshot(snapshotOptions) {
-      return await captureAgentBrowserSnapshot(runJson, snapshotOptions);
+      return await captureAgentBrowserSnapshot(
+        (args) => runJson(args, snapshotOptions?.signal),
+        snapshotOptions,
+      );
     },
     async screenshot(outPath, screenshotOptions) {
       await runJson(['screenshot', ...(screenshotOptions?.fullscreen ? ['--full'] : []), outPath]);
@@ -206,11 +209,15 @@ function isIgnorableBoxError(error: unknown): boolean {
 
 async function runAgentBrowserJson(
   args: string[],
-  params: { session: string | undefined; options: AgentBrowserProviderOptions },
+  params: {
+    session: string | undefined;
+    options: AgentBrowserProviderOptions;
+    signal?: AbortSignal;
+  },
 ): Promise<unknown> {
-  const { session, options } = params;
+  const { session, options, signal } = params;
   const cliArgs = [...args, '--json', ...(session ? ['--session', session] : [])];
-  const result = await runAgentBrowserCommand(cliArgs, options);
+  const result = await runAgentBrowserCommand(cliArgs, options, signal);
   const parsed = parseAgentBrowserJson(result.stdout, result.stderr, cliArgs, result.exitCode);
   return unwrapAgentBrowserJson(parsed, result, cliArgs);
 }
@@ -218,6 +225,7 @@ async function runAgentBrowserJson(
 async function runAgentBrowserCommand(
   cliArgs: string[],
   options: AgentBrowserProviderOptions,
+  signal?: AbortSignal,
 ): Promise<{
   stdout: string;
   stderr: string;
@@ -233,6 +241,7 @@ async function runAgentBrowserCommand(
       allowFailure: true,
       env: tool.env,
       timeoutMs: AGENT_BROWSER_TIMEOUT_MS,
+      signal,
     });
     stdout = result.stdout;
     stderr = result.stderr;

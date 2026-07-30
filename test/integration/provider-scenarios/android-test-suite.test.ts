@@ -4,8 +4,9 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { createAndroidSettingsWorld } from './android-world.ts';
 import { withProviderScenarioResource } from './harness.ts';
+import { ANDROID_TEST_SUITE_CONTRACT_EVIDENCE } from './android-test-suite.coverage.ts';
 
-test('Provider-backed integration Android replay test suite covers retries and fail-fast flags', async () => {
+test(ANDROID_TEST_SUITE_CONTRACT_EVIDENCE.testName, async () => {
   await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {
     const client = world.daemon.client();
     const suiteRoot = path.join(world.tempRoot, 'suite-flags');

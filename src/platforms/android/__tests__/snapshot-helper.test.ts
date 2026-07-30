@@ -21,6 +21,7 @@ import type {
   AndroidSnapshotHelperManifest,
 } from '../snapshot-helper-types.ts';
 import type { AndroidAdbProvider } from '../adb-executor.ts';
+import { resetAndroidSnapshotHelperRetirements } from '../snapshot-helper-retirement.ts';
 
 const manifest: AndroidSnapshotHelperManifest = {
   name: 'android-snapshot-helper',
@@ -39,6 +40,7 @@ const manifest: AndroidSnapshotHelperManifest = {
 
 beforeEach(() => {
   resetAndroidSnapshotHelperInstallCache();
+  resetAndroidSnapshotHelperRetirements();
 });
 
 test('parseAndroidSnapshotHelperOutput reconstructs XML chunks and metadata', () => {

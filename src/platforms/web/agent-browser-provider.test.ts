@@ -164,6 +164,26 @@ test('agent-browser provider normalizes snapshot refs, labels, values, and paren
   });
 });
 
+test('agent-browser provider passes snapshot cancellation to the CLI process', async () => {
+  await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
+    const controller = new AbortController();
+    let receivedSignal: AbortSignal | undefined;
+
+    await withCommandExecutorOverride(
+      async (_cmd, _args, options) => {
+        receivedSignal = options?.signal;
+        return jsonResult({
+          success: true,
+          data: { nodes: [], refs: [], truncated: false },
+        });
+      },
+      async () => await provider.snapshot({ signal: controller.signal }),
+    );
+
+    assert.equal(receivedSignal, controller.signal);
+  });
+});
+
 test('agent-browser provider fetches snapshot rects only when requested', async () => {
   await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
     const calls: AgentBrowserCall[] = [];

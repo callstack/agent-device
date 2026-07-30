@@ -3,18 +3,8 @@ import { type LiveContext, runStep } from './live-harness.ts';
 
 export type AndroidEmulatorScenarioStart = {
   ime: 'system' | 'test';
-  route: 'form' | 'home';
-};
-
-const ROUTES: Record<AndroidEmulatorScenarioStart['route'], { landmark: string; url: string }> = {
-  form: {
-    landmark: 'Checkout form',
-    url: 'agent-device-test-app:///form',
-  },
-  home: {
-    landmark: 'Agent Device Tester',
-    url: 'agent-device-test-app:///',
-  },
+  landmark: string;
+  url: string;
 };
 
 export async function prepareAndroidEmulatorScenario(
@@ -26,17 +16,12 @@ export async function prepareAndroidEmulatorScenario(
   }
   if (!start) return;
 
-  await runStep(context, 'install cached fixture APK for isolated scenario', [
-    'install',
-    context.appPath,
-  ]);
-  const route = ROUTES[start.route];
-  await runStep(context, `open ${start.route} with ${start.ime} IME`, [
+  await runStep(context, `open deterministic fixture route with ${start.ime} IME`, [
     'open',
     context.appId,
     '--relaunch',
     ...(start.ime === 'system' ? ['--no-test-ime'] : []),
-    route.url,
+    start.url,
   ]);
-  await assertWaitText(context, route.landmark);
+  await assertWaitText(context, start.landmark);
 }
