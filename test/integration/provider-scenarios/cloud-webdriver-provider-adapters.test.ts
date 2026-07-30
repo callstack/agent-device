@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import type { IncomingHttpHeaders, ServerResponse } from 'node:http';
+import type { IncomingHttpHeaders } from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
 import {
@@ -24,9 +24,9 @@ import { withProviderScenarioResource, withProviderScenarioTempDir } from './har
 import {
   CloudWebDriverTestServer,
   type CloudWebDriverHttpCall,
+  cloudWebDriverTestJson,
   startCloudWebDriverTestServer,
   type StartedCloudWebDriverTestServer,
-  writeCloudWebDriverTestJson,
 } from './cloud-webdriver-test-server.ts';
 
 test('BrowserStack adapter prepares App Automate capabilities and uploads install artifacts', async () => {
@@ -520,22 +520,19 @@ class FakeCloudProviderServer extends CloudWebDriverTestServer {
     return await startCloudWebDriverTestServer(new FakeCloudProviderServer());
   }
 
-  protected respond(call: CloudWebDriverHttpCall, res: ServerResponse): void {
+  protected respond(call: CloudWebDriverHttpCall) {
     if (call.method === 'POST' && call.path === '/wd/hub/session') {
       if (this.sessionFailuresRemaining > 0) {
         this.sessionFailuresRemaining -= 1;
-        writeCloudWebDriverTestJson(res, { value: { message: 'transient provider failure' } }, 503);
-        return;
+        return cloudWebDriverTestJson({ value: { message: 'transient provider failure' } }, 503);
       }
-      writeCloudWebDriverTestJson(res, { value: { sessionId: 'wd-1', capabilities: {} } });
-      return;
+      return cloudWebDriverTestJson({ value: { sessionId: 'wd-1', capabilities: {} } });
     }
     if (call.method === 'POST' && call.path === '/app-automate/upload') {
-      writeCloudWebDriverTestJson(res, { app_url: 'bs://uploaded-app' });
-      return;
+      return cloudWebDriverTestJson({ app_url: 'bs://uploaded-app' });
     }
     if (call.method === 'GET' && call.path === '/app-automate/sessions/wd-1.json') {
-      writeCloudWebDriverTestJson(res, {
+      return cloudWebDriverTestJson({
         automation_session: {
           video_url: 'https://browserstack.example/video.mp4',
           appium_logs_url: 'https://browserstack.example/appium.log',
@@ -544,9 +541,8 @@ class FakeCloudProviderServer extends CloudWebDriverTestServer {
           public_url: 'https://browserstack.example/public',
         },
       });
-      return;
     }
-    writeCloudWebDriverTestJson(res, { value: null });
+    return cloudWebDriverTestJson({ value: null });
   }
 }
 

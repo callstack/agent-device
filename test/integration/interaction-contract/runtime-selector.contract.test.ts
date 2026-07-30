@@ -4,6 +4,7 @@ import type { InteractionGuarantee } from '../../../src/contracts/interaction-gu
 import type { Point } from '@agent-device/kernel/snapshot';
 import { selector } from '../../../src/commands/interaction/runtime/selector-read.ts';
 import { assertRpcOk } from '../provider-scenarios/assertions.ts';
+import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';
 import { scenarioName, scenarioNames } from './coverage-manifest.ts';
 import { RUNTIME_SELECTOR_COVERAGE } from './runtime-selector.coverage.ts';
 import {
@@ -197,20 +198,24 @@ test(scenario('responseIdentity'), async () => {
   assert.ok(Array.isArray(result.selectorChain) && result.selectorChain.length > 0);
 });
 
-test(scenario('responseConstruction'), async () => {
-  await withIosContractDaemon(
-    [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerTapEntry({ x: 200, y: 322 })],
-    async (daemon) => {
-      const press = await daemon.callCommand('press', ['label=Continue']);
-      const data = assertRpcOk(press);
-      // Canonical selector response set from the shared construction site.
-      assert.equal(data.x, 200);
-      assert.equal(data.y, 322);
-      assert.equal(data.selector, 'label=Continue');
-      assert.ok(Array.isArray(data.selectorChain));
-    },
-  );
-});
+test(
+  scenario('responseConstruction'),
+  async () => {
+    await withIosContractDaemon(
+      [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerTapEntry({ x: 200, y: 322 })],
+      async (daemon) => {
+        const press = await daemon.callCommand('press', ['label=Continue']);
+        const data = assertRpcOk(press);
+        // Canonical selector response set from the shared construction site.
+        assert.equal(data.x, 200);
+        assert.equal(data.y, 322);
+        assert.equal(data.selector, 'label=Continue');
+        assert.ok(Array.isArray(data.selectorChain));
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
 
 test(scenarioNames(RUNTIME_SELECTOR_COVERAGE, 'resolutionDisclosure')[0]!, async () => {
   const device = createContractDevice(continueButtonSnapshot(), {

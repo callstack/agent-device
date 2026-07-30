@@ -4,6 +4,7 @@ import type { InteractionGuarantee } from '../../../src/contracts/interaction-gu
 import type { Point } from '@agent-device/kernel/snapshot';
 import { ref } from '../../../src/commands/interaction/runtime/selector-read.ts';
 import { assertRpcOk } from '../provider-scenarios/assertions.ts';
+import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';
 import { scenarioName, scenarioNames } from './coverage-manifest.ts';
 import { RUNTIME_REF_COVERAGE } from './runtime-ref.coverage.ts';
 import {
@@ -146,23 +147,29 @@ test(scenario('responseIdentity'), async () => {
   assert.ok(Array.isArray(result.selectorChain) && result.selectorChain.length > 0);
 });
 
-test(scenario('responseConstruction'), async () => {
-  await withIosContractDaemon(
-    [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerTapEntry({ x: 200, y: 322 })],
-    async (daemon) => {
-      const snapshot = await daemon.callCommand('snapshot', [], { snapshotInteractiveOnly: true });
-      assertRpcOk(snapshot);
+test(
+  scenario('responseConstruction'),
+  async () => {
+    await withIosContractDaemon(
+      [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerTapEntry({ x: 200, y: 322 })],
+      async (daemon) => {
+        const snapshot = await daemon.callCommand('snapshot', [], {
+          snapshotInteractiveOnly: true,
+        });
+        assertRpcOk(snapshot);
 
-      const press = await daemon.callCommand('press', ['@e2']);
-      const data = assertRpcOk(press);
-      // Canonical ref response set from the shared construction site.
-      assert.equal(data.ref, 'e2');
-      assert.equal(data.x, 200);
-      assert.equal(data.y, 322);
-      assert.match(String(data.message), /Tapped @e2/);
-    },
-  );
-});
+        const press = await daemon.callCommand('press', ['@e2']);
+        const data = assertRpcOk(press);
+        // Canonical ref response set from the shared construction site.
+        assert.equal(data.ref, 'e2');
+        assert.equal(data.x, 200);
+        assert.equal(data.y, 322);
+        assert.match(String(data.message), /Tapped @e2/);
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
 
 test(scenarioNames(RUNTIME_REF_COVERAGE, 'resolutionDisclosure')[0]!, async () => {
   const device = createContractDevice(continueButtonSnapshot(), {

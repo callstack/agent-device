@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ServerResponse } from 'node:http';
 import { test } from 'vitest';
 import { createCloudWebDriverRuntime } from '../../../src/cloud-webdriver/runtime.ts';
 import { createDefaultCloudWebDriverProviderRuntimes } from '../../../src/cloud-webdriver/provider-runtimes.ts';
@@ -23,9 +22,9 @@ import { runProviderScenario, type ProviderScenarioStep } from './scenario.ts';
 import {
   CloudWebDriverTestServer,
   type CloudWebDriverHttpCall,
+  cloudWebDriverTestJson,
   startCloudWebDriverTestServer,
   type StartedCloudWebDriverTestServer,
-  writeCloudWebDriverTestJson,
 } from './cloud-webdriver-test-server.ts';
 
 const WEBDRIVER_PROVIDER = 'webdriver-fake';
@@ -502,48 +501,42 @@ class FakeWebDriverServer extends CloudWebDriverTestServer {
     return await startCloudWebDriverTestServer(new FakeWebDriverServer());
   }
 
-  protected respond(call: CloudWebDriverHttpCall, res: ServerResponse): void {
-    respondToFakeWebDriverCall(this, call, res);
+  protected respond(call: CloudWebDriverHttpCall) {
+    return respondToFakeWebDriverCall(this, call);
   }
 }
 
 function respondToFakeWebDriverCall(
   server: FakeWebDriverServer,
   call: CloudWebDriverHttpCall,
-  res: ServerResponse,
-): void {
+): ReturnType<typeof cloudWebDriverTestJson> {
   switch (`${call.method} ${call.path}`) {
     case 'POST /wd/hub/session':
-      writeFakeCreateSessionResponse(server, res);
-      return;
+      return fakeCreateSessionResponse(server);
     case 'GET /wd/hub/session/wd-1/source':
-      writeCloudWebDriverTestJson(res, { value: fakeWebDriverSource() });
-      return;
+      return cloudWebDriverTestJson({ value: fakeWebDriverSource() });
     case 'GET /wd/hub/session/wd-1/window/rect':
-      writeCloudWebDriverTestJson(res, { value: { x: 0, y: 0, width: 1080, height: 1920 } });
-      return;
+      return cloudWebDriverTestJson({ value: { x: 0, y: 0, width: 1080, height: 1920 } });
     case 'DELETE /wd/hub/session/wd-1/actions':
-      writeCloudWebDriverTestJson(
-        res,
+      return cloudWebDriverTestJson(
         { value: { message: 'The requested resource could not be found.' } },
         500,
       );
-      return;
     case 'DELETE /wd/hub/session/wd-1':
-      writeFakeDeleteSessionResponse(server, res);
-      return;
+      return fakeDeleteSessionResponse(server);
     default:
-      writeCloudWebDriverTestJson(res, { value: null });
+      return cloudWebDriverTestJson({ value: null });
   }
 }
 
-function writeFakeCreateSessionResponse(server: FakeWebDriverServer, res: ServerResponse): void {
+function fakeCreateSessionResponse(
+  server: FakeWebDriverServer,
+): ReturnType<typeof cloudWebDriverTestJson> {
   if (server.createSessionFailuresRemaining > 0) {
     server.createSessionFailuresRemaining -= 1;
-    writeCloudWebDriverTestJson(res, { value: { message: 'create session failed' } }, 500);
-    return;
+    return cloudWebDriverTestJson({ value: { message: 'create session failed' } }, 500);
   }
-  writeCloudWebDriverTestJson(res, {
+  return cloudWebDriverTestJson({
     value: {
       sessionId: 'wd-1',
       capabilities: { platformName: 'Android' },
@@ -551,13 +544,14 @@ function writeFakeCreateSessionResponse(server: FakeWebDriverServer, res: Server
   });
 }
 
-function writeFakeDeleteSessionResponse(server: FakeWebDriverServer, res: ServerResponse): void {
+function fakeDeleteSessionResponse(
+  server: FakeWebDriverServer,
+): ReturnType<typeof cloudWebDriverTestJson> {
   if (server.sessionDeleteFailuresRemaining > 0) {
     server.sessionDeleteFailuresRemaining -= 1;
-    writeCloudWebDriverTestJson(res, { value: { message: 'stale webdriver session' } }, 500);
-    return;
+    return cloudWebDriverTestJson({ value: { message: 'stale webdriver session' } }, 500);
   }
-  writeCloudWebDriverTestJson(res, { value: null });
+  return cloudWebDriverTestJson({ value: null });
 }
 
 function fakeWebDriverSource(): string {

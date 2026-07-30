@@ -1,9 +1,4 @@
-import assert from 'node:assert/strict';
-import http, {
-  type IncomingHttpHeaders,
-  type IncomingMessage,
-  type ServerResponse,
-} from 'node:http';
+import type { IncomingHttpHeaders } from 'node:http';
 
 export type CloudWebDriverHttpCall = {
   method: string;
@@ -12,32 +7,43 @@ export type CloudWebDriverHttpCall = {
   body?: unknown;
 };
 
+export type CloudWebDriverTestResponse = {
+  body: unknown;
+  status?: number;
+};
+
+/**
+ * In-memory Fetch transport for Cloud WebDriver integration scenarios.
+ *
+ * The production client still uses Fetch; this fixture observes the exact
+ * request URL, headers and body, then supplies a real Response. Avoiding a
+ * loopback listener keeps the suite hermetic in sandboxes that prohibit
+ * binding ports without reducing request/response transport coverage.
+ */
 export abstract class CloudWebDriverTestServer {
   readonly calls: CloudWebDriverHttpCall[] = [];
-  url = '';
+  // fallow-ignore-next-line unused-class-member
+  readonly url = 'http://cloud-webdriver.test';
 
-  constructor() {
-    const server = http.createServer();
-    server.on('request', async (req, res) => await this.handle(req, res));
-    cloudWebDriverHttpServers.set(this, server);
-  }
+  protected abstract respond(call: CloudWebDriverHttpCall): CloudWebDriverTestResponse;
 
-  protected abstract respond(call: CloudWebDriverHttpCall, res: ServerResponse): void;
-
-  private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const body = await readRequestBody(req);
+  // fallow-ignore-next-line unused-class-member
+  readonly fetch: typeof globalThis.fetch = async (input, init) => {
+    const request = new Request(input, init);
     const call: CloudWebDriverHttpCall = {
-      method: req.method ?? 'GET',
-      path: req.url ?? '/',
-      headers: req.headers,
-      ...(body === undefined ? {} : { body }),
+      method: request.method,
+      path: new URL(request.url).pathname,
+      headers: Object.fromEntries(request.headers.entries()),
+      ...(await requestBody(request)),
     };
     this.calls.push(call);
-    this.respond(call, res);
-  }
+    const response = this.respond(call);
+    return new Response(JSON.stringify(response.body), {
+      status: response.status ?? 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
 }
-
-const cloudWebDriverHttpServers = new WeakMap<CloudWebDriverTestServer, http.Server>();
 
 export type StartedCloudWebDriverTestServer<T extends CloudWebDriverTestServer> = T & {
   close(): Promise<void>;
@@ -46,50 +52,25 @@ export type StartedCloudWebDriverTestServer<T extends CloudWebDriverTestServer> 
 export async function startCloudWebDriverTestServer<T extends CloudWebDriverTestServer>(
   testServer: T,
 ): Promise<StartedCloudWebDriverTestServer<T>> {
-  const server = getCloudWebDriverHttpServer(testServer);
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', resolve);
-  });
-  const address = server.address();
-  assert.ok(address && typeof address === 'object');
-  testServer.url = `http://127.0.0.1:${address.port}`;
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = testServer.fetch;
   return Object.assign(testServer, {
-    close: async () => await closeCloudWebDriverTestServer(testServer),
+    close: async () => {
+      if (globalThis.fetch === testServer.fetch) globalThis.fetch = previousFetch;
+    },
   });
 }
 
-export function writeCloudWebDriverTestJson(
-  res: ServerResponse,
-  body: unknown,
-  status = 200,
-): void {
-  res.writeHead(status, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify(body));
+export function cloudWebDriverTestJson(body: unknown, status = 200): CloudWebDriverTestResponse {
+  return { body, status };
 }
 
-async function readRequestBody(req: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) {
-    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
-  }
-  const buffer = Buffer.concat(chunks);
-  if (req.headers['content-type']?.startsWith('multipart/form-data') === true) {
-    return { multipartBytes: buffer.length };
+async function requestBody(request: Request): Promise<{ body?: unknown }> {
+  if (!request.body) return {};
+  const buffer = Buffer.from(await request.arrayBuffer());
+  if (request.headers.get('content-type')?.startsWith('multipart/form-data')) {
+    return { body: { multipartBytes: buffer.length } };
   }
   const text = buffer.toString('utf8');
-  return text ? (JSON.parse(text) as unknown) : undefined;
-}
-
-function getCloudWebDriverHttpServer(testServer: CloudWebDriverTestServer): http.Server {
-  const server = cloudWebDriverHttpServers.get(testServer);
-  assert.ok(server);
-  return server;
-}
-
-async function closeCloudWebDriverTestServer(testServer: CloudWebDriverTestServer): Promise<void> {
-  const server = getCloudWebDriverHttpServer(testServer);
-  await new Promise<void>((resolve, reject) => {
-    server.close((error) => (error ? reject(error) : resolve()));
-  });
+  return text ? { body: JSON.parse(text) as unknown } : {};
 }

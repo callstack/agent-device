@@ -1,3 +1,6 @@
+import os from 'node:os';
+import path from 'node:path';
+
 // Unit tests must be hermetic with respect to the host's daemon-connection
 // environment. A machine actually running agent-device — including this repo's
 // own remote dev containers — exports AGENT_DEVICE_DAEMON_BASE_URL and
@@ -21,3 +24,15 @@ const AMBIENT_DAEMON_ENV_VARS = [
 for (const name of AMBIENT_DAEMON_ENV_VARS) {
   delete process.env[name];
 }
+
+// Provider-backed scenarios intentionally use local device identities so their
+// request path covers advisory-claim ownership. Each Vitest fork, however,
+// mocks the same identities (for example `sim-1`). Keeping claims under the
+// host-global default makes unrelated workers poll one process lock and can
+// push otherwise instant scenarios past Vitest's timeout. Scope claims to the
+// worker process: the production claim mechanism still runs, while workers no
+// longer contend for mocked devices or inherit a host's real claims.
+process.env.AGENT_DEVICE_CLAIMS_DIR = path.join(
+  os.tmpdir(),
+  `agent-device-vitest-claims-${process.pid}`,
+);

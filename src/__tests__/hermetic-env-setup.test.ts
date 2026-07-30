@@ -1,3 +1,5 @@
+import os from 'node:os';
+import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import vitestConfig from '../../vitest.config.ts';
@@ -7,6 +9,7 @@ const AMBIENT_DAEMON_VARS = [
   'AGENT_DEVICE_DAEMON_BASE_URL',
   'AGENT_DEVICE_DAEMON_AUTH_TOKEN',
 ] as const;
+const VITEST_CLAIMS_DIR = path.join(os.tmpdir(), `agent-device-vitest-claims-${process.pid}`);
 
 type ProjectShape = { test?: { name?: string; setupFiles?: readonly string[] } };
 
@@ -38,4 +41,11 @@ test('importing hermetic-env-setup scrubs the ambient daemon connection vars', a
   for (const name of AMBIENT_DAEMON_VARS) {
     assert.equal(process.env[name], undefined, `${name} must be scrubbed when the setup loads`);
   }
+});
+
+test('importing hermetic-env-setup isolates advisory claims from the host and other workers', async () => {
+  process.env.AGENT_DEVICE_CLAIMS_DIR = '/host/device-claims';
+  vi.resetModules();
+  await import('./hermetic-env-setup.ts');
+  assert.equal(process.env.AGENT_DEVICE_CLAIMS_DIR, VITEST_CLAIMS_DIR);
 });

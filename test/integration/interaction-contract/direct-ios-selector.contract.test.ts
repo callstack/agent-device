@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import type { InteractionGuarantee } from '../../../src/contracts/interaction-guarantees.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { assertRpcError, assertRpcOk } from '../provider-scenarios/assertions.ts';
+import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';
 import { scenarioName } from './coverage-manifest.ts';
 import { DIRECT_IOS_SELECTOR_COVERAGE } from './direct-ios-selector.coverage.ts';
 import {
@@ -54,25 +55,32 @@ const RECORDING_TARGET_NODES = [
   },
 ] as const;
 
-test(scenario('responseConstruction'), async () => {
-  await withIosContractDaemon([runnerTapEntry({ x: 150, y: 200 })], async (daemon, transcript) => {
-    const click = await daemon.callCommand('click', ['label=Continue']);
-    const data = assertRpcOk(click);
+test(
+  scenario('responseConstruction'),
+  async () => {
+    await withIosContractDaemon(
+      [runnerTapEntry({ x: 150, y: 200 })],
+      async (daemon, transcript) => {
+        const click = await daemon.callCommand('click', ['label=Continue']);
+        const data = assertRpcOk(click);
 
-    // The direct path really ran: the single runner call is a selector-keyed
-    // tap, with no snapshot capture before it.
-    const tapRequest = transcript.calls[0]?.request as Record<string, unknown> | undefined;
-    assert.equal(transcript.calls[0]?.command, 'ios.runner.tap');
-    assert.equal(tapRequest?.selectorKey, 'label');
-    assert.equal(tapRequest?.selectorValue, 'Continue');
+        // The direct path really ran: the single runner call is a selector-keyed
+        // tap, with no snapshot capture before it.
+        const tapRequest = transcript.calls[0]?.request as Record<string, unknown> | undefined;
+        assert.equal(transcript.calls[0]?.command, 'ios.runner.tap');
+        assert.equal(tapRequest?.selectorKey, 'label');
+        assert.equal(tapRequest?.selectorValue, 'Continue');
 
-    // Canonical runner-payload response set from the shared construction site.
-    assert.equal(data.x, 150);
-    assert.equal(data.y, 200);
-    assert.equal(data.selector, 'label=Continue');
-    assert.match(String(data.message), /Tapped label=Continue/);
-  });
-});
+        // Canonical runner-payload response set from the shared construction site.
+        assert.equal(data.x, 150);
+        assert.equal(data.y, 200);
+        assert.equal(data.selector, 'label=Continue');
+        assert.match(String(data.message), /Tapped label=Continue/);
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
 
 test(scenario('resolutionDisclosure'), async () => {
   await withIosContractDaemon([runnerTapEntry({ x: 150, y: 200 })], async (daemon) => {
