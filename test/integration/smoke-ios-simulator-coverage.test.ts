@@ -19,6 +19,7 @@ import {
   liveCommandsForScenario,
 } from './ios-simulator-e2e/coverage-manifest.ts';
 import { collectPagedEventTimeline } from './ios-simulator-e2e/event-timeline.ts';
+import { findMissingFixtureIdentifiers } from './ios-simulator-e2e/fixture-identifier-coverage.ts';
 import { IOS_SIMULATOR_LIVE_SCENARIOS } from './ios-simulator-e2e/scenarios.ts';
 
 const IOS_SIMULATOR = {
@@ -105,34 +106,35 @@ test('non-live owners name concrete executable repository evidence', () => {
   }
 });
 
-test('live iOS scenarios reference fixture identifiers that exist', () => {
-  const fixtureIdentifiers = new Set(
-    fs
-      .readdirSync('examples/test-app/src/screens')
-      .filter((fileName) => fileName.endsWith('.tsx'))
-      .flatMap((fileName) => {
-        const source = fs.readFileSync(
-          path.join('examples/test-app/src/screens', fileName),
-          'utf8',
-        );
-        return [...source.matchAll(/\btestID="([^"]+)"/g)].map((match) => match[1]);
-      }),
+test('fixture identifier coverage rejects direct-selector drift', () => {
+  assert.deepEqual(
+    findMissingFixtureIdentifiers(
+      ['<Text testID="field-name" />'],
+      [
+        `await runStep(context, 'read field', ['get', 'text', 'id="field-typo"']);
+nodes.find((node) => node.identifier === 'field-snapshot-typo');`,
+      ],
+    ),
+    ['field-snapshot-typo', 'field-typo'],
   );
-  const liveScenarioIdentifiers = new Set(
-    [
-      'test/integration/ios-simulator-e2e/live-automation-scenario.ts',
-      'test/integration/ios-simulator-e2e/live-full-scenarios.ts',
-    ].flatMap((scenarioPath) => {
-      const source = fs.readFileSync(scenarioPath, 'utf8');
-      return [
-        ...[...source.matchAll(/id=\\"([^"$]+)\\"/g)].map((match) => match[1]),
-        ...[...source.matchAll(/identifier === '([^']+)'/g)].map((match) => match[1]),
-      ];
-    }),
+});
+
+test('live iOS scenarios reference fixture identifiers that exist', () => {
+  const readSources = (directory: string, includes: (fileName: string) => boolean) =>
+    fs
+      .readdirSync(directory)
+      .filter(includes)
+      .map((fileName) => fs.readFileSync(path.join(directory, fileName), 'utf8'));
+  const fixtureSources = readSources('examples/test-app/src/screens', (fileName) =>
+    fileName.endsWith('.tsx'),
+  );
+  const liveScenarioSources = readSources(
+    'test/integration/ios-simulator-e2e',
+    (fileName) => fileName.startsWith('live-') && fileName.endsWith('.ts'),
   );
 
   assert.deepEqual(
-    [...liveScenarioIdentifiers].filter((identifier) => !fixtureIdentifiers.has(identifier)).sort(),
+    findMissingFixtureIdentifiers(fixtureSources, liveScenarioSources),
     [],
     'live iOS scenarios must use test IDs defined by the fixture app',
   );
