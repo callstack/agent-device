@@ -19,7 +19,7 @@ export async function createDefaultProviderDeviceRuntimes(
   const apiKey = env.LIMRUN_API_KEY?.trim();
   if (!apiKey) return runtimes;
 
-  const { LimrunRuntime } = await import('./providers/limrun/runtime.ts');
+  const { LimrunRuntime } = await import('./provider-limrun-runtime.ts');
   return [
     ...runtimes,
     new LimrunRuntime({
