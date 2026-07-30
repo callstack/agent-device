@@ -32,9 +32,11 @@ Public subpath API exposed for Node consumers:
   - `createLocalArtifactAdapter(options?)`
   - `AppError`, `isAgentDeviceError(error)`, `normalizeAgentDeviceError(error)`
   - `centerOfRect(rect)`
-  - root types are limited to the typed client contracts used by hosted adapters, such as `AppListOptions`, `BackCommandOptions`, `ScrollOptions`, and command result types.
 - `agent-device/io`
-  - artifact adapter types, file input refs, and file output refs
+  - `createLocalArtifactAdapter(options?)`
+  - types: `ArtifactAdapter`, `ArtifactDescriptor`, `CreateTempFileOptions`, `FileInputRef`,
+    `FileOutputRef`, `LocalArtifactAdapterOptions`, `OutputVisibility`, `ReserveOutputOptions`,
+    `ReservedOutputFile`, `ResolveInputOptions`, `ResolvedInputFile`, `TemporaryFile`
 - `agent-device/metro`
   - `buildBundleUrl(baseUrl, platform)`
   - `normalizeBaseUrl(baseUrl)`
@@ -65,6 +67,7 @@ Public subpath API exposed for Node consumers:
   - `parseFindArgs(args)`
   - types: `FindMatchOptions`
 - `agent-device/install-source`
+  - `ARCHIVE_EXTENSIONS`
   - `isTrustedInstallSourceUrl(sourceUrl)`
   - `validateDownloadSourceUrl(url)`
   - types: `MaterializeInstallSource`
@@ -85,8 +88,10 @@ Public subpath API exposed for Node consumers:
   - `new LimrunRuntime(options)`
   - `runtime.getDeviceSession(device)`
   - types: `LimrunRuntimeOptions`, `LimrunDeviceSession`, `LimrunAndroidDeviceSession`,
-    `LimrunIosDeviceSession`, `AndroidAdbProvider`, `AndroidKeyboardState`,
-    `AndroidKeyboardDismissResult`
+    `LimrunIosDeviceSession`, `LimrunForegroundApp`, `LimrunInstalledApp`,
+    `LimrunIosCommandExecution`, `LimrunIosCommandResult`, `LimrunRecordingQuality`,
+    `LimrunIosRemoteInstallOptions`, `LimrunIosRemoteInstallResult`, `AndroidAdbProvider`,
+    `AndroidKeyboardState`, `AndroidKeyboardDismissResult`
 
 The `contracts`, `selectors`, `finders`, `install-source`, `android-adb`, `limrun`, `artifacts`, `batch`, `metro`, `remote-config`, and `io` subpaths are the supported Node entry points. The former compatibility subpaths `agent-device/android-apps` and `agent-device/daemon`, plus hosted-runtime subpaths `agent-device/cloud-webdriver`, `agent-device/commands`, `agent-device/backend`, `agent-device/testing/conformance`, and `agent-device/observability`, are not published.
 
@@ -254,6 +259,7 @@ Vega OS client support is currently VVD-only and covers device discovery, app op
 Supported command methods:
 
 - `wait`
+- `alert`
 - `appState`
 - `back`
 - `home`
@@ -262,20 +268,27 @@ Supported command methods:
 - `keyboard`
 - `clipboard`
 - `tvRemote`
-- `alert`
+- `reactNative`
+- `doctor`
+- `prepare`
+- `viewport`
 
-Additional CLI-backed methods are exposed on their domain groups with typed option objects so Node consumers do not need to build raw daemon requests:
+The deprecated `rotate()` alias remains available for compatibility; use `orientation()` in new integrations.
 
-- `client.devices.boot()`
-- `client.devices.capabilities()`
-- `client.devices.shutdown()`
-- `client.apps.push()`
-- `client.apps.triggerEvent()`
-- `client.capture.diff()`
-- `client.interactions.click()`, `press()`, `longPress()`, `swipe()`, `pan()`, `fling()`, `focus()`, `type()`, `fill()`, `scroll()`, `pinch()`, `rotateGesture()`, `transformGesture()`, `get()`, `is()`, `find()`
+The complete domain-client method map is:
+
+- `client.devices.list()`, `capabilities()`, `boot()`, `shutdown()`
+- `client.sessions.list()`, `stateDir()`, `close()`, `saveScript()`, `artifacts()`
+- `client.apps.install()`, `reinstall()`, `installFromSource()`, `list()`, `open()`, `close()`, `push()`, `triggerEvent()`
+- `client.materializations.release()`
+- `client.leases.allocate()`, `heartbeat()`, `release()`
+- `client.metro.prepare()`, `reload()`
+- `client.capture.snapshot()`, `screenshot()`, `diff()`
+- `client.interactions.click()`, `press()`, `longPress()`, `swipe()`, `pan()`, `fling()`, `swipeGesture()`, `focus()`, `type()`, `fill()`, `scroll()`, `pinch()`, `rotateGesture()`, `transformGesture()`, `get()`, `is()`, `find()`
 - `client.replay.run()` and `client.replay.test()`
 - `client.batch.run()`
 - `client.observability.perf()`, `logs()`, `events()`, `network()`, and `audio()`
+- `client.debug.symbols()`
 - `client.recording.record()` and `client.recording.trace()`
 - `client.settings.update()`
 

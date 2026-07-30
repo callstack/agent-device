@@ -24,6 +24,7 @@ import { describe, test } from 'vitest';
 
 const CLIENT_API_DOC_PATH = 'website/docs/docs/client-api.md';
 const EXAMPLES_SDK_DIR = 'examples/sdk';
+const PACKAGE_JSON_PATH = 'package.json';
 
 type SubpathManifest = ReadonlyMap<string, ReadonlySet<string>>;
 
@@ -100,6 +101,12 @@ function listExampleFiles(dir: string): string[] {
 
 const manifest = parseSubpathManifest(fs.readFileSync(CLIENT_API_DOC_PATH, 'utf8'));
 const exampleFiles = listExampleFiles(EXAMPLES_SDK_DIR);
+const packageExports = Object.keys(
+  (JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, 'utf8')) as { exports?: Record<string, unknown> })
+    .exports ?? {},
+)
+  .map((subpath) => (subpath === '.' ? 'agent-device' : `agent-device${subpath.slice(1)}`))
+  .sort();
 const importsByFile = new Map(
   exampleFiles.map((file) => [file, extractImportedSymbols(fs.readFileSync(file, 'utf8'))]),
 );
@@ -110,6 +117,14 @@ describe('examples/sdk vs client-api.md drift guard', () => {
       manifest.size > 0,
       `${CLIENT_API_DOC_PATH} did not yield a parseable subpath API manifest; ` +
         'has the "Public subpath API exposed for Node consumers" list moved or changed format?',
+    );
+  });
+
+  test('client-api.md documents every published package entry point', () => {
+    assert.deepEqual(
+      [...manifest.keys()].sort(),
+      packageExports,
+      `${CLIENT_API_DOC_PATH}'s public subpath manifest must match ${PACKAGE_JSON_PATH}#exports`,
     );
   });
 
