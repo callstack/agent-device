@@ -320,6 +320,10 @@ test('a failing suite reaches the reporter with the failure message, hint fields
     retrying: undefined,
     session: 'default:test:suite-reporter-fail:1-01-fail:attempt-1',
     message: 'Replay failed at step 1 (open "Demo"): selector not found',
+    // `hint` is a shipped reporter field: assert it on the real hook value, not
+    // just as test input, so dropping `hint: error.hint` from the scheduler
+    // path cannot pass this ratchet.
+    hint: 'try replay --from',
   });
   expect(suite.failed).toBe(1);
   expect(exitCode).toBe(1);
