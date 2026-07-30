@@ -21,6 +21,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { workspaceSpecifierTargets } from '../layering/package-boundaries.ts';
 import { walkFiles } from '../lib/walk-files.ts';
 import {
   affectedModules,
@@ -38,38 +39,16 @@ export function isTestFile(filePath: string): boolean {
 }
 
 /**
- * Workspace package specifiers resolved through each package's `exports` map,
- * derived from each `packages/<name>/package.json` — never hand-listed. Without this the
- * graph walk stops at every `@agent-device/*` edge and a kernel living in
+ * Workspace package specifiers resolved through the shared exports-map reader
+ * (scripts/layering/package-boundaries.ts) — never hand-listed. Without this
+ * the graph walk stops at every `@agent-device/*` edge and a kernel living in
  * `packages/` silently loses all of its owned tests.
  */
-function workspaceExportTargets(repoRoot: string): Map<string, string> {
-  const targets = new Map<string, string>();
-  const packagesDir = path.join(repoRoot, 'packages');
-  if (!fs.existsSync(packagesDir)) return targets;
-  for (const entry of fs.readdirSync(packagesDir)) {
-    const manifestPath = path.join(packagesDir, entry, 'package.json');
-    if (!fs.existsSync(manifestPath)) continue;
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as {
-      name?: string;
-      exports?: Record<string, { default?: string } | string>;
-    };
-    if (!manifest.name || !manifest.exports) continue;
-    for (const [subpath, target] of Object.entries(manifest.exports)) {
-      const file = typeof target === 'string' ? target : target.default;
-      if (!file) continue;
-      const specifier = path.posix.join(manifest.name, subpath);
-      targets.set(specifier, path.posix.join('packages', entry, path.posix.normalize(file)));
-    }
-  }
-  return targets;
-}
-
 let cachedExportTargets: { repoRoot: string; targets: Map<string, string> } | undefined;
 
 function exportTargetsFor(repoRoot: string): Map<string, string> {
   if (cachedExportTargets?.repoRoot !== repoRoot) {
-    cachedExportTargets = { repoRoot, targets: workspaceExportTargets(repoRoot) };
+    cachedExportTargets = { repoRoot, targets: workspaceSpecifierTargets(repoRoot) };
   }
   return cachedExportTargets.targets;
 }

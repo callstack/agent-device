@@ -1,7 +1,7 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
+import { workspaceSpecifierTargets } from './scripts/layering/package-boundaries.ts';
 import { readTestScope, threadHostileTestFiles } from './scripts/mutation/test-scope.ts';
 import { SUBPROCESS_STUB_TESTS } from './vitest.config.ts';
 
@@ -11,35 +11,15 @@ const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 // the tree into .stryker-tmp and symlinks node_modules back to the real repo,
 // so a `@agent-device/*` specifier resolved through pnpm's link escapes the
 // sandbox: mutants written into the sandbox copy never load, and
-// `vitest related` finds no tests for a mutated package file ("No tests were
-// executed"). Aliasing each EXPORTED specifier to its source file — resolved
-// relative to this config, which Stryker copies into the sandbox — keeps
-// resolution inside the mutated tree. Entries are derived from each package's
-// exports map, never a wildcard, so this cannot resolve package internals the
-// boundary forbids (R11).
-function workspaceExportAliases(): { find: string; replacement: string }[] {
-  const aliases: { find: string; replacement: string }[] = [];
-  const packagesDir = path.join(repoRoot, 'packages');
-  if (!fs.existsSync(packagesDir)) return aliases;
-  for (const entry of fs.readdirSync(packagesDir).sort()) {
-    const manifestPath = path.join(packagesDir, entry, 'package.json');
-    if (!fs.existsSync(manifestPath)) continue;
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as {
-      name?: string;
-      exports?: Record<string, { default?: string } | string>;
-    };
-    if (!manifest.name || !manifest.exports) continue;
-    for (const [subpath, target] of Object.entries(manifest.exports)) {
-      const file = typeof target === 'string' ? target : target.default;
-      if (!file) continue;
-      aliases.push({
-        find: path.posix.join(manifest.name, subpath),
-        replacement: path.join(packagesDir, entry, file),
-      });
-    }
-  }
-  return aliases;
-}
+// `vitest related` finds no tests for a mutated package file. Aliasing each
+// EXPORTED specifier to its source file — resolved relative to this config,
+// which Stryker copies into the sandbox — keeps resolution inside the mutated
+// tree. Entries come from the shared exports-map reader, never a wildcard, so
+// this cannot resolve package internals the boundary forbids (R11).
+const workspaceAliases = [...workspaceSpecifierTargets(repoRoot)].map(([find, target]) => ({
+  find,
+  replacement: path.join(repoRoot, target),
+}));
 
 // Test scope for the decision-kernel mutation lane (issue #1415).
 //
@@ -54,7 +34,7 @@ const scope = readTestScope();
 
 export default defineConfig({
   resolve: {
-    alias: workspaceExportAliases(),
+    alias: workspaceAliases,
   },
   test: {
     include: scope ?? ['src/**/*.test.ts'],
