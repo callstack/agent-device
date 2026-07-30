@@ -121,11 +121,24 @@ async function sendOverHttp(
     });
     const body = (await response.json()) as {
       result?: { ok: boolean; data?: Record<string, unknown> };
-      error?: { data?: { code?: string; message?: string; hint?: string } };
+      // Project the ADR 0010 diagnostics fields too: dropping them here would
+      // let `diagnosticId`/`logPath` regress while these tests stayed green.
+      error?: {
+        data?: {
+          code?: string;
+          message?: string;
+          hint?: string;
+          diagnosticId?: string;
+          logPath?: string;
+        };
+      };
     };
     if (body.error?.data) {
-      const { code, message, hint } = body.error.data;
-      return { ok: false, error: { code: code ?? 'UNKNOWN', message: message ?? '', hint } };
+      const { code, message, hint, diagnosticId, logPath } = body.error.data;
+      return {
+        ok: false,
+        error: { code: code ?? 'UNKNOWN', message: message ?? '', hint, diagnosticId, logPath },
+      };
     }
     return (body.result ?? {
       ok: false,
@@ -166,6 +179,13 @@ for (const [transport, send] of TRANSPORTS) {
     expect(rejected.error.code).toBe('INVALID_ARGS');
     expect(rejected.error.message).toBe(UNSUPPORTED_MESSAGE);
     expect(rejected.error.hint).toMatch(/session save-script/);
+    // ADR 0010 decision 6: a failed request stays traceable. Asserted on both
+    // transports so the HTTP projection cannot silently drop these again.
+    expect(rejected.error.diagnosticId).toBeTruthy();
+    expect(rejected.error.logPath).toBeTruthy();
+    const rejectionLogPath = rejected.error.logPath as string;
+    expect(fs.existsSync(rejectionLogPath)).toBe(true);
+    expect(fs.readFileSync(rejectionLogPath, 'utf8')).toMatch(/save_script_flag_rejected/);
 
     // No handler work: the trace never started and no action was recorded.
     expect(session.trace).toBe(undefined);
