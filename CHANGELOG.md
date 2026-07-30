@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `--save-script` is now accepted only by the commands that declare it — `open`, `close`, and `replay`. A hand-built daemon request (or a `batch` step) that set `saveScript` on any other command, such as `record` or `trace`, used to arm script publication and could write a `.ad` artifact; it is now rejected with `INVALID_ARGS` before the request reaches admission, the device, or any handler. CLI, Node, and MCP usage of `--save-script` on its documented commands is unchanged.
 - `diff screenshot` no longer runs the retired best-effort OCR and non-text analyzers. Their optional `ocr` and `nonTextDeltas` fields remain in the result type for source compatibility but are no longer emitted; use the baseline/current images and diff artifact with vision for qualitative interpretation.
 - Breaking: removed the deprecated `--session-locked` and `--session-lock-conflicts` flags. Use `--session-lock reject|strip` instead; passing either old flag now fails with `Unknown flag: ... Use --session-lock reject|strip instead.`
 - Breaking: removed the `replay export --format` flag. `replay export` always writes Maestro YAML.

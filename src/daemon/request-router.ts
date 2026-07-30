@@ -49,6 +49,7 @@ import {
   type RequestExecutionScope,
 } from './request-execution-scope.ts';
 import { buildRequestFinishedEvent, shouldRecordEventForRequest } from './session-event-log.ts';
+import { unsupportedSaveScriptFlagResponse } from './request-save-script-policy.ts';
 import { canRunReplayScopedAction } from './daemon-command-registry.ts';
 import { createAgentBrowserWebProvider } from '../platforms/web/agent-browser-provider.ts';
 import { openWebSessionNames } from './web-session-names.ts';
@@ -148,6 +149,10 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     registerParameterizedFillDiagnosticValue(req);
     const invalidRecordingFlags = recordingFlagsResponse(req);
     if (invalidRecordingFlags) return invalidRecordingFlags;
+    // #1478: raw `flags.saveScript` on a non-owner command never reaches
+    // admission, device work, or a handler that could arm publication.
+    const unsupportedSaveScript = unsupportedSaveScriptFlagResponse(req);
+    if (unsupportedSaveScript) return unsupportedSaveScript;
 
     let scope: RequestExecutionScope | undefined;
     try {
