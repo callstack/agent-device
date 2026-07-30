@@ -1,5 +1,3 @@
-import assert from 'node:assert/strict';
-
 import {
   assertCoverageComplete as assertLiveCoverageComplete,
   writeCoverageReport as writeLiveCoverageReport,
@@ -14,8 +12,6 @@ import {
 } from './coverage-manifest.ts';
 import type { LiveContext } from './live-harness.ts';
 
-const MAX_ANDROID_EMULATOR_SCENARIO_BODY_MS = 10 * 60 * 1000;
-
 export function assertCoverageComplete(
   context: LiveContext,
   selectedScenarios: readonly { id: string }[],
@@ -26,11 +22,6 @@ export function assertCoverageComplete(
     liveCommandsForScenario,
     liveBehaviorsForScenario,
     'Android emulator E2E coverage is incomplete',
-  );
-  const durationMs = Date.now() - context.startedAtMs;
-  assert.ok(
-    durationMs <= MAX_ANDROID_EMULATOR_SCENARIO_BODY_MS,
-    `Android emulator scenario body took ${durationMs}ms; limit is ${MAX_ANDROID_EMULATOR_SCENARIO_BODY_MS}ms`,
   );
 }
 

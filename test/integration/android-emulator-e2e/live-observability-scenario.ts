@@ -5,7 +5,10 @@ import path from 'node:path';
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
 import { readDaemonInfo } from '../../../src/daemon/client/daemon-client-metadata.ts';
 import { resolveDaemonPaths } from '../../../src/daemon/config.ts';
-import { collectPagedEventTimeline, type EventTimelinePage } from './event-timeline.ts';
+import {
+  collectPagedEventTimeline,
+  type EventTimelinePage,
+} from '../live-device-e2e/event-timeline.ts';
 import { assertMp4File, assertNonEmptyFile, assertWaitText } from './live-assertions.ts';
 import { type LiveContext, runStep, verifyCommand } from './live-harness.ts';
 

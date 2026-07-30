@@ -15,7 +15,7 @@ import {
   readReplayCommands,
   replayAttemptTimeoutMs,
   replaySuiteHostTimeoutMs,
-} from './replay-evidence.ts';
+} from '../live-device-e2e/replay-evidence.ts';
 
 const C = PUBLIC_COMMANDS;
 

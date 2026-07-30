@@ -6,7 +6,7 @@ import { parseReplayScriptDetailed, readReplayScriptMetadata } from '../../../sr
 const DEFAULT_REPLAY_TIMEOUT_MS = 90_000;
 const HOST_TIMEOUT_MARGIN_MS = 60_000;
 
-export function replayCommands(replayPath: string): string[] {
+export function readReplayCommands(replayPath: string): string[] {
   return parseReplayScriptDetailed(fs.readFileSync(replayPath, 'utf8')).actions.map(
     (action) => action.command,
   );
@@ -29,9 +29,10 @@ export function replayAttemptTimeoutMs(replayPath: string): number {
   );
 }
 
-export function replaySuiteHostTimeoutMs(replayPaths: readonly string[]): number {
-  return (
-    replayPaths.reduce((total, replayPath) => total + replayAttemptTimeoutMs(replayPath), 0) +
-    HOST_TIMEOUT_MARGIN_MS
+export function replaySuiteHostTimeoutMs(replayPaths: readonly string[], retries: number): number {
+  const maximumAttemptTime = replayPaths.reduce(
+    (total, replayPath) => total + replayAttemptTimeoutMs(replayPath),
+    0,
   );
+  return maximumAttemptTime * (retries + 1) + HOST_TIMEOUT_MARGIN_MS;
 }

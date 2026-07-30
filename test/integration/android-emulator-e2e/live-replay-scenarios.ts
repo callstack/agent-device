@@ -12,10 +12,10 @@ import {
 } from './live-harness.ts';
 import {
   assertReplayCommands,
+  readReplayCommands,
   replayAttemptTimeoutMs,
-  replayCommands,
   replaySuiteHostTimeoutMs,
-} from './live-replay-evidence.ts';
+} from '../live-device-e2e/replay-evidence.ts';
 
 const C = PUBLIC_COMMANDS;
 
@@ -43,7 +43,7 @@ export async function assertFixtureReplays(context: LiveContext): Promise<void> 
   const navigationReplay = path.resolve(
     'test/integration/replays/android/fixture/01-navigation-scroll.ad',
   );
-  const navigationActions = replayCommands(navigationReplay);
+  const navigationActions = readReplayCommands(navigationReplay);
   const replay = await runStep(
     context,
     'run Android fixture catalog traversal through replay',
@@ -91,7 +91,7 @@ export async function assertFixtureReplays(context: LiveContext): Promise<void> 
       '--report-junit',
       junitPath,
     ],
-    { timeoutMs: replaySuiteHostTimeoutMs([checkoutReplay, gestureReplay]) },
+    { timeoutMs: replaySuiteHostTimeoutMs([checkoutReplay, gestureReplay], 0) },
   );
   assert.equal(suite.json?.data?.failed, 0, JSON.stringify(suite.json));
   assert.equal(suite.json?.data?.passed, 2, JSON.stringify(suite.json));
@@ -103,9 +103,13 @@ export async function assertFixtureReplays(context: LiveContext): Promise<void> 
         | undefined
     )?.find((entry) => path.resolve(String(entry.file)) === replayPath);
     assert.equal(result?.status, 'passed', JSON.stringify(suite.json));
-    assert.equal(result?.replayed, replayCommands(replayPath).length, JSON.stringify(suite.json));
+    assert.equal(
+      result?.replayed,
+      readReplayCommands(replayPath).length,
+      JSON.stringify(suite.json),
+    );
   }
-  assertReplayCommands(gestureReplay, replayCommands(gestureReplay), [C.gesture]);
+  assertReplayCommands(gestureReplay, readReplayCommands(gestureReplay), [C.gesture]);
   verifyCommand(context, C.test, 'retry-free Android fixture suite emits non-empty JUnit evidence');
   verifyNestedReplayCommand(
     context,

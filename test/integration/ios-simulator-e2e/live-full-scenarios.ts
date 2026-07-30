@@ -13,7 +13,10 @@ import {
   assertWaitText,
   capturePng,
 } from './live-assertions.ts';
-import { collectPagedEventTimeline, type EventTimelinePage } from './event-timeline.ts';
+import {
+  collectPagedEventTimeline,
+  type EventTimelinePage,
+} from '../live-device-e2e/event-timeline.ts';
 import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';
 
 const C = PUBLIC_COMMANDS;
