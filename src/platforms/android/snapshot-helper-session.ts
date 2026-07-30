@@ -22,7 +22,8 @@ import {
   waitForAndroidSnapshotHelperSessionReady,
 } from './snapshot-helper-session-protocol.ts';
 import {
-  ANDROID_SNAPSHOT_HELPER_FORCED_RETIREMENT_GRACE_MS,
+  ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS,
+  ANDROID_SNAPSHOT_HELPER_HOST_PROCESS_EXIT_GRACE_MS,
   getAndroidSnapshotHelperSessionDeviceKey,
   isAndroidSnapshotHelperRetirementUnconfirmedError,
   observeAndroidSnapshotHelperProcessExit,
@@ -171,7 +172,11 @@ async function captureFromAndroidSnapshotHelperSession(params: {
       },
     };
   } catch (error) {
-    await stopAndroidSnapshotHelperSession(deviceKey, { force: true, cause: error });
+    await stopAndroidSnapshotHelperSession(deviceKey, {
+      force: true,
+      signal: options.signal,
+      cause: error,
+    });
     options.signal?.throwIfAborted();
     emitDiagnostic({
       level: 'warn',
@@ -289,11 +294,13 @@ export async function stopAndroidSnapshotHelperSession(
   const processExit = observeAndroidSnapshotHelperProcessExit(session.process);
   const force = options.force === true || options.signal?.aborted === true;
   const graceful = await requestGracefulSessionExit(session, processExit, force, options.signal);
-  const cleanupTimeoutMs = force
-    ? ANDROID_SNAPSHOT_HELPER_FORCED_RETIREMENT_GRACE_MS
-    : FORWARD_TIMEOUT_MS;
+  const cleanupTimeoutMs = !force
+    ? FORWARD_TIMEOUT_MS
+    : options.signal?.aborted === true
+      ? ANDROID_SNAPSHOT_HELPER_HOST_PROCESS_EXIT_GRACE_MS
+      : ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS;
   const processExitTimeoutMs = force
-    ? ANDROID_SNAPSHOT_HELPER_FORCED_RETIREMENT_GRACE_MS
+    ? ANDROID_SNAPSHOT_HELPER_HOST_PROCESS_EXIT_GRACE_MS
     : SESSION_PROCESS_EXIT_TIMEOUT_MS;
   const [processStopped, cleanup] = await Promise.all([
     stopAndroidSnapshotHelperHostProcess({
@@ -451,14 +458,14 @@ async function startAndroidSnapshotHelperSession(params: {
     const [, cleanup] = await Promise.all([
       waitForAndroidSnapshotHelperProcessExit(
         processExit,
-        ANDROID_SNAPSHOT_HELPER_FORCED_RETIREMENT_GRACE_MS,
+        ANDROID_SNAPSHOT_HELPER_HOST_PROCESS_EXIT_GRACE_MS,
       ),
       settleAndroidSnapshotHelperSessionCleanup({
         adb: session.adb,
         process: session.process,
         port: session.port,
         packageName: session.helper.packageName,
-        timeoutMs: ANDROID_SNAPSHOT_HELPER_FORCED_RETIREMENT_GRACE_MS,
+        timeoutMs: ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS,
       }),
     ]);
     if (!cleanup.runtimeForceStopped) {

@@ -353,13 +353,14 @@ test('failed whole-module reset preserves quarantine until recovery is confirmed
   );
 });
 
-test('force terminates and falls back from a session whose UiAutomation connection timed out', async () => {
+test('allows device retirement beyond host-process grace before falling back', async () => {
   const calls: string[][] = [];
   const processes: FakeAndroidProcess[] = [];
   const provider = createSessionProvider({
     calls,
     processes,
     responseMode: 'ui-automation-timeout',
+    forceStopDelayMs: 300,
   });
 
   const output = await captureAndroidSnapshotWithHelperSession({
@@ -398,6 +399,7 @@ type SessionProviderOptions = {
   spawnArgs?: string[][];
   responseMode?: 'ok' | 'malformed' | 'ui-automation-timeout';
   responseDelayMs?: number;
+  forceStopDelayMs?: number;
   recoveryFailure?: boolean;
   stalledCleanup?: boolean;
   stalledSnapshots?: number;
@@ -505,26 +507,55 @@ function createSessionExec(options: SessionProviderOptions): AndroidAdbExecutor 
   return async (args, execOptions) => {
     options.calls.push(args);
     const forceStopsRuntime = args.join(' ').includes('am force-stop');
-    if (
-      options.stalledCleanup &&
-      execOptions?.signal &&
-      ((args[0] === 'forward' && args[1] === '--remove') || forceStopsRuntime)
-    ) {
-      return await new Promise<never>((_resolve, reject) => {
-        const signal = execOptions.signal;
-        const onAbort = () => {
-          options.cleanupAborts?.push(args);
-          reject(signal?.reason);
-        };
-        signal?.addEventListener('abort', onAbort, { once: true });
-        if (signal?.aborted) onAbort();
-      });
-    }
+    await stallSessionCleanupIfConfigured(options, args, execOptions?.signal, forceStopsRuntime);
     if (options.recoveryFailure && forceStopsRuntime) {
       return { exitCode: 1, stdout: '', stderr: 'runtime still busy' };
     }
+    await delayForceStopIfConfigured(options, execOptions?.signal, forceStopsRuntime);
     return { exitCode: 0, stdout: '', stderr: '' };
   };
+}
+
+async function stallSessionCleanupIfConfigured(
+  options: SessionProviderOptions,
+  args: string[],
+  signal: AbortSignal | undefined,
+  forceStopsRuntime: boolean,
+): Promise<void> {
+  const removesForward = args[0] === 'forward' && args[1] === '--remove';
+  if (!options.stalledCleanup || !signal || (!removesForward && !forceStopsRuntime)) return;
+  await new Promise<never>((_resolve, reject) => {
+    const onAbort = () => {
+      options.cleanupAborts?.push(args);
+      reject(signal.reason);
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) onAbort();
+  });
+}
+
+async function delayForceStopIfConfigured(
+  options: SessionProviderOptions,
+  signal: AbortSignal | undefined,
+  forceStopsRuntime: boolean,
+): Promise<void> {
+  if (!forceStopsRuntime || !options.forceStopDelayMs) return;
+  await waitForDelay(options.forceStopDelayMs, signal);
+}
+
+async function waitForDelay(delayMs: number, signal: AbortSignal | undefined): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, delayMs);
+    signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+  });
 }
 
 function sessionResponse(params: {

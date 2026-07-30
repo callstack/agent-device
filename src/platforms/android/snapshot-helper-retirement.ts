@@ -4,7 +4,11 @@ import type { AndroidAdbProcess } from './adb-executor.ts';
 import type { AndroidAdbExecutor } from './snapshot-helper-types.ts';
 
 const RETIREMENT_RECOVERY_TIMEOUT_MS = 5_000;
-export const ANDROID_SNAPSHOT_HELPER_FORCED_RETIREMENT_GRACE_MS = 250;
+// Host-process termination is local and should be nearly immediate. Device-side force-stop is an
+// adb round trip and needs its own budget; sharing the host grace caused healthy CI force-stops to
+// time out before Android could confirm UiAutomation release.
+export const ANDROID_SNAPSHOT_HELPER_HOST_PROCESS_EXIT_GRACE_MS = 250;
+export const ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS = 2_000;
 const RETIREMENT_UNCONFIRMED_REASON = 'android_snapshot_helper_retirement_unconfirmed';
 
 type UnconfirmedRetirement = {
@@ -29,7 +33,7 @@ export async function retireCanceledAndroidSnapshotHelperCapture(params: {
   const runtimeForceStopped = await forceStopAndroidSnapshotHelperRuntime({
     adb: params.adb,
     packageName: params.packageName,
-    timeoutMs: ANDROID_SNAPSHOT_HELPER_FORCED_RETIREMENT_GRACE_MS,
+    timeoutMs: ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS,
   });
   if (!runtimeForceStopped) {
     quarantineAndroidSnapshotHelperRetirement(params);
