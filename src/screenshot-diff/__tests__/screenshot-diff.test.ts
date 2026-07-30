@@ -148,15 +148,6 @@ test('changed pixels are summarized into nearby diff regions', async () => {
   assert.equal(result.regions?.[0]?.differentPixels, 32);
   assert.equal(result.regions?.[0]?.shareOfDiffPercentage, 66.67);
   assert.deepEqual(result.regions?.[0]?.normalizedRect, { x: 5, y: 10, width: 30, height: 20 });
-  assert.equal(result.regions?.[0]?.densityPercentage, 66.67);
-  assert.equal(result.regions?.[0]?.shape, 'horizontal-band');
-  assert.equal(result.regions?.[0]?.size, 'large');
-  assert.equal(result.regions?.[0]?.averageBaselineColorHex, '#000000');
-  assert.equal(result.regions?.[0]?.averageCurrentColorHex, '#ffffff');
-  assert.equal(result.regions?.[0]?.baselineLuminance, 0);
-  assert.equal(result.regions?.[0]?.currentLuminance, 255);
-  assert.equal(result.regions?.[0]?.location, 'top-left');
-  assert.equal(result.regions?.[0]?.dominantChange, 'brighter');
   assert.deepEqual(result.regions?.[1]?.rect, { x: 30, y: 15, width: 4, height: 4 });
 
   const diffPng = PNG.sync.read(fs.readFileSync(diffOut));
@@ -310,8 +301,6 @@ test('dimension mismatch returns expected vs actual sizes', async () => {
   assert.equal(result.mismatchPercentage, 100);
   assert.equal(result.diffPath, undefined, 'diffPath should not be set for dimension mismatch');
   assert.equal(result.regions, undefined);
-  assert.equal(result.ocr, undefined);
-  assert.equal(result.nonTextDeltas, undefined);
   assert.deepEqual(result.dimensionMismatch, {
     expected: { width: 10, height: 20 },
     actual: { width: 15, height: 25 },

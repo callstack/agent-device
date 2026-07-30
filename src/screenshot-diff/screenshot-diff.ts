@@ -8,11 +8,6 @@ import {
   encodePngAsync,
 } from '../utils/png-worker-client.ts';
 import { annotateDiffRegions } from './screenshot-diff-region-overlay.ts';
-import {
-  summarizeNonTextDiffDeltas,
-  type ScreenshotNonTextDelta,
-} from './screenshot-diff-non-text.ts';
-import { summarizeScreenshotOcr, type ScreenshotOcrSummary } from './screenshot-diff-ocr.ts';
 import { summarizeDiffRegions, type ScreenshotDiffRegion } from './screenshot-diff-regions.ts';
 import type { ImageDimensions } from '../utils/screenshot-geometry.ts';
 
@@ -31,8 +26,6 @@ export type ScreenshotDiffResult = {
   regions?: ScreenshotDiffRegion[];
   currentOverlayPath?: string;
   currentOverlayRefCount?: number;
-  ocr?: ScreenshotOcrSummary;
-  nonTextDeltas?: ScreenshotNonTextDelta[];
 };
 
 export type ScreenshotDiffOptions = {
@@ -104,9 +97,8 @@ export async function compareScreenshots(
     differentPixels > 0
       ? summarizeDiffRegions({
           diffMask,
-          baseline,
-          current,
-          totalPixels,
+          width: baseline.width,
+          height: baseline.height,
           differentPixels,
         })
       : [];
@@ -120,38 +112,6 @@ export async function compareScreenshots(
     await removeStaleDiffOutput(options.outputPath);
   }
 
-  const ocrAnalysis =
-    differentPixels > 0
-      ? await summarizeScreenshotOcr({
-          baselinePath,
-          currentPath,
-          width: baseline.width,
-          height: baseline.height,
-        })
-      : undefined;
-  const shouldIncludeOcr =
-    ocrAnalysis &&
-    (ocrAnalysis.matches.length > 0 || (ocrAnalysis.movementClusters?.length ?? 0) > 0);
-  const ocr = shouldIncludeOcr
-    ? {
-        provider: ocrAnalysis.provider,
-        baselineBlocks: ocrAnalysis.baselineBlocks,
-        currentBlocks: ocrAnalysis.currentBlocks,
-        matches: ocrAnalysis.matches,
-        ...(ocrAnalysis.movementClusters ? { movementClusters: ocrAnalysis.movementClusters } : {}),
-      }
-    : undefined;
-  const nonTextDeltas =
-    differentPixels > 0 && ocrAnalysis
-      ? summarizeNonTextDiffDeltas({
-          diffMask,
-          width: baseline.width,
-          height: baseline.height,
-          regions,
-          ocr: ocrAnalysis,
-        })
-      : [];
-
   // Round to 2 decimal places: multiply percentage by 100 before rounding,
   // then divide back. e.g. 0.12345 → 12.345% → round(1234.5)/100 → 12.35%
   const mismatchPercentage =
@@ -160,8 +120,6 @@ export async function compareScreenshots(
   return {
     ...(differentPixels > 0 && diffOutputPath ? { diffPath: diffOutputPath } : {}),
     ...(regions.length > 0 ? { regions } : {}),
-    ...(ocr ? { ocr } : {}),
-    ...(nonTextDeltas.length > 0 ? { nonTextDeltas } : {}),
     totalPixels,
     differentPixels,
     mismatchPercentage,

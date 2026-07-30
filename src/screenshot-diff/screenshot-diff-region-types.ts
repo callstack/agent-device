@@ -4,10 +4,4 @@ export type MutableDiffRegion = {
   maxX: number;
   maxY: number;
   differentPixels: number;
-  baselineRed: number;
-  baselineGreen: number;
-  baselineBlue: number;
-  currentRed: number;
-  currentGreen: number;
-  currentBlue: number;
 };

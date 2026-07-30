@@ -10,12 +10,10 @@ import { buildSnapshotDisplayLines, formatSnapshotLine } from '../snapshot/snaps
 import {
   isSnapshotBackend,
   usesMobileSnapshotPresentation,
-  type Rect,
   type SnapshotNode,
   type SnapshotUnchanged,
   type SnapshotVisibility,
 } from '@agent-device/kernel/snapshot';
-import type { MovementRange } from '../screenshot-diff/screenshot-diff-ocr.ts';
 import type { ScreenshotDiffResult } from '../screenshot-diff/screenshot-diff.ts';
 import type { ScreenshotDiffRegion } from '../screenshot-diff/screenshot-diff-regions.ts';
 import { styleText } from 'node:util';
@@ -323,10 +321,7 @@ export function formatScreenshotDiffText(data: ScreenshotDiffResult): string {
 
   if (!match && !dimensionMismatch) {
     lines.push(...formatScreenshotDiffPixelCountLines(data, useColor));
-    lines.push(...formatScreenshotDiffHintLines(data, useColor));
     lines.push(...formatScreenshotDiffRegionLines(data, useColor));
-    lines.push(...formatScreenshotDiffOcrLines(data, useColor));
-    lines.push(...formatScreenshotDiffNonTextLines(data, useColor));
   }
 
   return `${lines.join('\n')}\n`;
@@ -395,12 +390,6 @@ function formatScreenshotDiffPixelCountLines(
   return [`  ${diffCount} different / ${totalPixels} total pixels`];
 }
 
-function formatScreenshotDiffHintLines(data: ScreenshotDiffResult, useColor: boolean): string[] {
-  const hints = formatScreenshotDiffHints(data);
-  if (hints.length === 0) return [];
-  return [`  ${formatMuted('Hints:', useColor)}`, ...hints.map((hint) => `    - ${hint}`)];
-}
-
 function formatScreenshotDiffRegionLines(data: ScreenshotDiffResult, useColor: boolean): string[] {
   const regions = Array.isArray(data.regions) ? data.regions : [];
   if (regions.length === 0) return [];
@@ -419,14 +408,9 @@ function formatScreenshotDiffRegionEntryLines(region: ScreenshotDiffRegion): str
       : String(region.shareOfDiffPercentage);
   const rect = region.rect;
   const lines = [
-    `    ${region.index}. ${region.location} x=${rect.x} y=${rect.y} ` +
-      `${rect.width}x${rect.height}, ${share}% of diff, change=${region.dominantChange}`,
+    `    ${region.index}. x=${rect.x} y=${rect.y} ${rect.width}x${rect.height}, ` +
+      `${share}% of diff`,
   ];
-
-  const detailLine = formatScreenshotRegionDetails(region);
-  if (detailLine) {
-    lines.push(`       ${detailLine}`);
-  }
 
   const bestMatch = region.currentOverlayMatches?.[0];
   if (bestMatch) {
@@ -438,134 +422,6 @@ function formatScreenshotDiffRegionEntryLines(region: ScreenshotDiffRegion): str
   }
 
   return lines;
-}
-
-function formatScreenshotDiffOcrLines(data: ScreenshotDiffResult, useColor: boolean): string[] {
-  const ocrMatches = data.ocr?.matches ?? [];
-  if (ocrMatches.length === 0) return [];
-
-  const shownOcrMatches = ocrMatches.slice(0, 8);
-  const lines = [
-    `  ${formatMuted(
-      `OCR text deltas (${data.ocr?.provider}; baselineBlocks=${data.ocr?.baselineBlocks} ` +
-        `currentBlocks=${data.ocr?.currentBlocks}; showing ${shownOcrMatches.length}/${ocrMatches.length}; px):`,
-      useColor,
-    )}`,
-    `    ${formatMuted(
-      'item | text | movePx | sizeDeltaPx | bboxBaseline | bboxCurrent | confidence | issueHint',
-      useColor,
-    )}`,
-  ];
-
-  for (const [index, ocrMatch] of shownOcrMatches.entries()) {
-    const delta = ocrMatch.delta;
-    lines.push(
-      `    ${index + 1} | ${JSON.stringify(ocrMatch.text)} | ` +
-        `${formatSignedPixels(delta.x)},${formatSignedPixels(delta.y)} | ` +
-        `${formatSignedPixels(delta.width)},${formatSignedPixels(delta.height)} | ` +
-        `${formatRect(ocrMatch.baselineRect)} | ${formatRect(ocrMatch.currentRect)} | ` +
-        `${ocrMatch.confidence} | ` +
-        `${ocrMatch.possibleTextMetricMismatch ? 'ocr-bbox-size-change' : '-'}`,
-    );
-  }
-
-  return lines;
-}
-
-function formatScreenshotDiffNonTextLines(data: ScreenshotDiffResult, useColor: boolean): string[] {
-  const nonTextDeltas = data.nonTextDeltas ?? [];
-  if (nonTextDeltas.length === 0) return [];
-
-  const shownNonTextDeltas = nonTextDeltas.slice(0, 8);
-  const lines = [
-    `  ${formatMuted(
-      `Non-text visual deltas (showing ${shownNonTextDeltas.length}/${nonTextDeltas.length}; px):`,
-      useColor,
-    )}`,
-    `    ${formatMuted('item | region | slot | kind | bboxCurrent | nearestText', useColor)}`,
-  ];
-
-  for (const delta of shownNonTextDeltas) {
-    lines.push(
-      `    ${delta.index} | ${delta.regionIndex ? `r${delta.regionIndex}` : '-'} | ` +
-        `${delta.slot} | ${delta.likelyKind} | ${formatRect(delta.rect)} | ` +
-        `${delta.nearestText ? JSON.stringify(delta.nearestText) : '-'}`,
-    );
-  }
-
-  return lines;
-}
-
-function formatRect(rect: Rect): string {
-  return `x=${rect.x},y=${rect.y},w=${rect.width},h=${rect.height}`;
-}
-
-function formatSignedPixels(value: number): string {
-  return value > 0 ? `+${value}` : String(value);
-}
-
-function formatScreenshotDiffHints(data: ScreenshotDiffResult): string[] {
-  const hints: string[] = [];
-  const clusters = data.ocr?.movementClusters ?? [];
-  for (const cluster of clusters.slice(0, 2)) {
-    hints.push(
-      `text movement cluster: ${formatQuotedList(cluster.texts)} dx=${formatRange(cluster.xRange)}px ` +
-        `dy=${formatRange(cluster.yRange)}px`,
-    );
-  }
-
-  const controlDeltas = (data.nonTextDeltas ?? [])
-    .filter((delta) => ['icon', 'toggle', 'chevron'].includes(delta.likelyKind))
-    .slice(0, 3);
-  if (controlDeltas.length > 0) {
-    hints.push(`non-text controls: ${controlDeltas.map(formatNonTextHint).join('; ')}`);
-  }
-
-  const boundaryDeltas = (data.nonTextDeltas ?? [])
-    .filter((delta) => delta.likelyKind === 'separator')
-    .slice(0, 2);
-  if (boundaryDeltas.length > 0) {
-    hints.push(`non-text boundaries: ${boundaryDeltas.map(formatNonTextHint).join('; ')}`);
-  }
-
-  return hints.slice(0, 6);
-}
-
-function formatNonTextHint(delta: {
-  likelyKind: string;
-  nearestText?: string;
-  regionIndex?: number;
-}): string {
-  const anchor = delta.nearestText ? ` near ${JSON.stringify(delta.nearestText)}` : '';
-  const region = delta.regionIndex ? ` r${delta.regionIndex}` : '';
-  return `${delta.likelyKind}${anchor}${region}`;
-}
-
-function formatRange(range: MovementRange): string {
-  return range.min === range.max
-    ? formatSignedPixels(range.min)
-    : `${formatSignedPixels(range.min)}..${formatSignedPixels(range.max)}`;
-}
-
-function formatQuotedList(values: string[]): string {
-  const shown = values.slice(0, 4).map((value) => JSON.stringify(value));
-  const suffix = values.length > shown.length ? ` +${values.length - shown.length} more` : '';
-  return `${shown.join(', ')}${suffix}`;
-}
-
-function formatScreenshotRegionDetails(region: ScreenshotDiffRegion): string | null {
-  const details = [
-    region.size ? `size=${region.size}` : null,
-    region.shape ? `shape=${region.shape}` : null,
-    typeof region.densityPercentage === 'number' ? `density=${region.densityPercentage}%` : null,
-    region.averageBaselineColorHex && region.averageCurrentColorHex
-      ? `avgColor=${region.averageBaselineColorHex}->${region.averageCurrentColorHex}`
-      : null,
-    typeof region.baselineLuminance === 'number' && typeof region.currentLuminance === 'number'
-      ? `luminance=${region.baselineLuminance}->${region.currentLuminance}`
-      : null,
-  ].filter((entry): entry is string => entry !== null);
-  return details.length > 0 ? details.join(' ') : null;
 }
 
 function toRelativePath(filePath: string): string {
