@@ -114,18 +114,24 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
   verifyCommand(context, C.find, 'find reports the automation heading');
 
   await assertElementTextAfterScrolling(context, 'id="automation-press"', 'Press canary');
-  for (const identifier of ['automation-press', 'automation-longpress']) {
-    const inputVisible = await runStep(context, `assert ${identifier} is visible`, [
-      'is',
-      'visible',
-      `id="${identifier}"`,
-    ]);
-    assert.equal(inputVisible.json?.data?.pass, true, JSON.stringify(inputVisible.json));
-  }
+  const pressVisible = await runStep(context, 'assert automation-press is visible', [
+    'is',
+    'visible',
+    'id="automation-press"',
+  ]);
+  assert.equal(pressVisible.json?.data?.pass, true, JSON.stringify(pressVisible.json));
 
   await runStep(context, 'press semantic canary', ['press', 'id="automation-press"']);
   await assertWaitText(context, 'Last input: press');
   verifyCommand(context, C.press, 'semantic press changes the durable fixture canary');
+
+  await assertElementTextAfterScrolling(context, 'id="automation-longpress"', 'Long press canary');
+  const longPressVisible = await runStep(context, 'assert automation-longpress is visible', [
+    'is',
+    'visible',
+    'id="automation-longpress"',
+  ]);
+  assert.equal(longPressVisible.json?.data?.pass, true, JSON.stringify(longPressVisible.json));
 
   await runStep(context, 'long press semantic canary', [
     'longpress',

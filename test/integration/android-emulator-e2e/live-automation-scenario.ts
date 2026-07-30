@@ -164,6 +164,7 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
   verifyCommand(context, C.alert, 'alert wait/get/dismiss/accept produce fixture-visible results');
 
   await assertHomeAndRecentsRestoration(context);
+  await runStep(context, 'reveal Android alert canary for diff baseline', ['scroll', 'down', '1']);
   await runStep(context, 'establish automation diff baseline', ['snapshot', '-i']);
   await runStep(context, 'return from automation route with Back', ['back']);
   const diff = await runStep(context, 'observe automation-to-settings diff', [
