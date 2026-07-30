@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
+import type { Rect } from '@agent-device/kernel/snapshot';
 import { PNG } from '../utils/png.ts';
 import {
   computeScreenshotDiffPixelsAsync,
@@ -16,13 +17,35 @@ export type ScreenshotDimensionMismatch = {
   actual: ImageDimensions;
 };
 
+type ScreenshotOcrSummary = {
+  provider: 'tesseract';
+  baselineBlocks: number;
+  currentBlocks: number;
+  matches: Array<{
+    text: string;
+    baselineRect: Rect;
+    currentRect: Rect;
+    delta: Rect;
+    confidence: number;
+    possibleTextMetricMismatch: boolean;
+  }>;
+  movementClusters?: Array<{
+    texts: string[];
+    xRange: { min: number; max: number };
+    yRange: { min: number; max: number };
+  }>;
+};
+
+type ScreenshotNonTextDelta = {
+  index: number;
+  regionIndex?: number;
+  slot: 'leading' | 'trailing' | 'background' | 'separator' | 'unknown';
+  likelyKind: 'icon' | 'toggle' | 'chevron' | 'separator' | 'visual';
+  rect: Rect;
+  nearestText?: string;
+};
+
 export type ScreenshotDiffResult = {
-  /**
-   * Version of the structured screenshot-diff result. Version 2 removes the
-   * retired analysis payloads while preserving the established pixel and
-   * region contracts.
-   */
-  schemaVersion: 2;
   diffPath?: string;
   totalPixels: number;
   differentPixels: number;
@@ -32,6 +55,10 @@ export type ScreenshotDiffResult = {
   regions?: ScreenshotDiffRegion[];
   currentOverlayPath?: string;
   currentOverlayRefCount?: number;
+  /** @deprecated Retained for source compatibility; OCR analysis is no longer emitted. */
+  ocr?: ScreenshotOcrSummary;
+  /** @deprecated Retained for source compatibility; non-text analysis is no longer emitted. */
+  nonTextDeltas?: ScreenshotNonTextDelta[];
 };
 
 export type ScreenshotDiffOptions = {
@@ -77,7 +104,6 @@ export async function compareScreenshots(
     await removeStaleDiffOutput(options.outputPath);
     return {
       match: false,
-      schemaVersion: 2,
       mismatchPercentage: 100,
       totalPixels,
       differentPixels: totalPixels,
@@ -126,7 +152,6 @@ export async function compareScreenshots(
     totalPixels > 0 ? Math.round((differentPixels / totalPixels) * 100 * 100) / 100 : 0;
 
   return {
-    schemaVersion: 2,
     ...(differentPixels > 0 && diffOutputPath ? { diffPath: diffOutputPath } : {}),
     ...(regions.length > 0 ? { regions } : {}),
     totalPixels,

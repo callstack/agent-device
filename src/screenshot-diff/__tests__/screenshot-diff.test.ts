@@ -74,7 +74,8 @@ test('identical images produce match: true with 0% mismatch', async () => {
   assert.equal(result.differentPixels, 0);
   assert.equal(result.mismatchPercentage, 0);
   assert.equal(result.totalPixels, 100);
-  assert.equal(result.schemaVersion, 2);
+  assert.equal(result.ocr, undefined);
+  assert.equal(result.nonTextDeltas, undefined);
   assert.equal(Object.hasOwn(result, 'ocr'), false);
   assert.equal(Object.hasOwn(result, 'nonTextDeltas'), false);
   assert.equal(result.dimensionMismatch, undefined);

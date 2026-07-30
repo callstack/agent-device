@@ -202,7 +202,9 @@ describe('cli diff commands', () => {
       const payload = JSON.parse(result.stdout);
       assert.equal(payload.success, true);
       assert.equal(payload.data.match, true);
-      assert.equal(payload.data.schemaVersion, 2);
+      assert.equal(Object.hasOwn(payload.data, 'schemaVersion'), false);
+      assert.equal(Object.hasOwn(payload.data, 'ocr'), false);
+      assert.equal(Object.hasOwn(payload.data, 'nonTextDeltas'), false);
       assert.equal(payload.data.differentPixels, 0);
       assert.equal(payload.data.totalPixels, 100);
       assert.equal(payload.data.mismatchPercentage, 0);
