@@ -8,6 +8,23 @@ Use `createAgentDeviceClient()` when you want to drive the daemon from applicati
 
 For remote Metro-backed flows, import the reusable Node APIs instead of spawning the `agent-device` binary. The CLI uses the same helpers internally.
 
+## Runnable examples
+
+The repository includes [runnable, typechecked Node.js examples](https://github.com/callstack/agent-device/tree/main/examples/sdk) that import the same published `agent-device/*` entry points used by consumers:
+
+| Example | Demonstrates |
+| --- | --- |
+| [`client-session.ts`](https://github.com/callstack/agent-device/blob/main/examples/sdk/client-session.ts) | Open, snapshot, interact, handle typed errors, and always close the session |
+| [`contracts-result.ts`](https://github.com/callstack/agent-device/blob/main/examples/sdk/contracts-result.ts) | Consume snapshot results with helpers from `agent-device/contracts` |
+| [`batch-orchestration.ts`](https://github.com/callstack/agent-device/blob/main/examples/sdk/batch-orchestration.ts) | Run a batch through a custom transport |
+| [`metro-runtime.ts`](https://github.com/callstack/agent-device/blob/main/examples/sdk/metro-runtime.ts) | Normalize a Metro URL and resolve runtime transport hints |
+
+The examples are checked against the source SDK using their dedicated [`tsconfig.json`](https://github.com/callstack/agent-device/blob/main/examples/sdk/tsconfig.json). After building the package with `pnpm build`, run an example directly with Node:
+
+```bash
+node --experimental-strip-types examples/sdk/client-session.ts
+```
+
 Public subpath API exposed for Node consumers:
 
 - `agent-device`
@@ -75,39 +92,9 @@ The `contracts`, `selectors`, `finders`, `install-source`, `android-adb`, `limru
 
 ## Basic usage
 
-```ts
-import { createAgentDeviceClient } from 'agent-device';
+The canonical client example is embedded below. It is also runnable from [`examples/sdk/client-session.ts`](https://github.com/callstack/agent-device/blob/main/examples/sdk/client-session.ts).
 
-const client = createAgentDeviceClient({
-  session: 'qa-ios',
-  lockPolicy: 'reject',
-  lockPlatform: 'ios',
-});
-
-const devices = await client.devices.list({ platform: 'ios' });
-const capabilities = await client.devices.capabilities({ platform: 'ios' });
-const apps = await client.apps.list({ platform: 'ios' });
-const device = devices.find((candidate) => candidate.name === 'iPhone 16') ?? devices[0];
-if (!device) {
-  throw new Error('No iOS device available');
-}
-if (!capabilities.availableCommands.includes('snapshot')) {
-  throw new Error('Selected target does not support snapshots');
-}
-
-await client.apps.open({
-  app: 'com.apple.Preferences',
-  platform: 'ios',
-  udid: device.id,
-  runtime: {
-    metroHost: '127.0.0.1',
-    metroPort: 8081,
-  },
-});
-
-const snapshot = await client.capture.snapshot({ interactiveOnly: true });
-
-await client.sessions.close();
+```ts file="<root>/../examples/sdk/client-session.ts"
 ```
 
 `client.devices.capabilities()` returns `{ device, availableCommands }`, using the same capability matrix as the CLI. Use it when a dynamic integration needs to decide which command names are valid for the selected target.
@@ -331,21 +318,9 @@ executor.
 
 Use `agent-device/batch` when a bridge or in-process runner receives daemon-shaped requests but owns command dispatch itself. The helper keeps validation, inherited flags, serial execution, partial results, and error envelopes aligned with the daemon batch command.
 
-```ts
-import { runBatch } from 'agent-device/batch';
-import type { DaemonResponse } from 'agent-device/contracts';
+The standalone custom-transport example is embedded below from [`examples/sdk/batch-orchestration.ts`](https://github.com/callstack/agent-device/blob/main/examples/sdk/batch-orchestration.ts).
 
-type BatchRequest = Parameters<typeof runBatch>[0];
-
-async function handleBatch(req: BatchRequest): Promise<DaemonResponse> {
-  return await runBatch(req, req.session ?? 'default', async (stepReq) => {
-    try {
-      return { ok: true, data: await dispatch(stepReq) };
-    } catch (error) {
-      return bridgeErrorToDaemonResponse(error);
-    }
-  });
-}
+```ts file="<root>/../examples/sdk/batch-orchestration.ts"
 ```
 
 ## Android `installFromSource()`
