@@ -173,10 +173,7 @@ export const ANDROID_EMULATOR_E2E_COVERAGE = {
     'full:fixture-replays',
     'direct fixture swipe moves the catalog before edge-aware recovery',
   ),
-  [C.test]: live(
-    'full:fixture-replays',
-    'deterministic fixture suite emits JUnit without retries',
-  ),
+  [C.test]: live('full:fixture-replays', 'deterministic fixture suite emits JUnit without retries'),
   [C.trace]: live(
     'full:observability-artifacts',
     'a visible fixture mutation creates non-empty trace diagnostics at the requested path',
