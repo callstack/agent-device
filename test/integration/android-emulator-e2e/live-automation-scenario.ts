@@ -138,11 +138,21 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
     'snapshot',
     '-i',
   ]);
-  assertPersistentAndroidHelper(alertSnapshot, { reused: true });
+  assertPersistentAndroidHelper(alertSnapshot);
   assertJsonContains(
     alertSnapshot,
     'Automation confirmation',
     'persistent helper snapshot should expose fixture dialog',
+  );
+  const reusedAlertSnapshot = await runStep(context, 'reuse persistent helper on native alert', [
+    'snapshot',
+    '-i',
+  ]);
+  assertPersistentAndroidHelper(reusedAlertSnapshot, { reused: true });
+  assertJsonContains(
+    reusedAlertSnapshot,
+    'Automation confirmation',
+    'reused persistent helper snapshot should retain the fixture dialog',
   );
   const alert = await runStep(context, 'inspect Android native alert', ['alert', 'get']);
   assertJsonContains(alert, 'Automation confirmation', 'alert get should expose fixture dialog');
