@@ -113,6 +113,9 @@ the new thing — never to suppress or allowlist it.
 - Use `unknown` only at trust boundaries — parsed JSON, daemon/runtime payloads, catch values,
   generic I/O, parser callbacks. Once validated, narrow to a domain type instead of carrying
   `unknown` through internal helper and formatter signatures.
+- When asked to make a change, do not unilaterally add a fallback. Complete the migration and remove
+  superseded code and documentation rather than preserving an old path “just in case.” Get explicit
+  approval before adding compatibility or fallback behavior.
 - Before finalizing, do one tightening pass over touched and adjacent areas: drop obsolete code,
   redundant tests, stale helpers/fixtures, and duplication the change made unnecessary.
 - Name durable module concepts with `CONTEXT.md` vocabulary. Do not coin parallel names across docs,
