@@ -74,6 +74,9 @@ test('identical images produce match: true with 0% mismatch', async () => {
   assert.equal(result.differentPixels, 0);
   assert.equal(result.mismatchPercentage, 0);
   assert.equal(result.totalPixels, 100);
+  assert.equal(result.schemaVersion, 2);
+  assert.equal(Object.hasOwn(result, 'ocr'), false);
+  assert.equal(Object.hasOwn(result, 'nonTextDeltas'), false);
   assert.equal(result.dimensionMismatch, undefined);
   assert.equal(result.diffPath, undefined, 'diffPath should not be set when images match');
   // No diff image should be written when images match
@@ -148,6 +151,15 @@ test('changed pixels are summarized into nearby diff regions', async () => {
   assert.equal(result.regions?.[0]?.differentPixels, 32);
   assert.equal(result.regions?.[0]?.shareOfDiffPercentage, 66.67);
   assert.deepEqual(result.regions?.[0]?.normalizedRect, { x: 5, y: 10, width: 30, height: 20 });
+  assert.equal(result.regions?.[0]?.densityPercentage, 66.67);
+  assert.equal(result.regions?.[0]?.shape, 'horizontal-band');
+  assert.equal(result.regions?.[0]?.size, 'large');
+  assert.equal(result.regions?.[0]?.averageBaselineColorHex, '#000000');
+  assert.equal(result.regions?.[0]?.averageCurrentColorHex, '#ffffff');
+  assert.equal(result.regions?.[0]?.baselineLuminance, 0);
+  assert.equal(result.regions?.[0]?.currentLuminance, 255);
+  assert.equal(result.regions?.[0]?.location, 'top-left');
+  assert.equal(result.regions?.[0]?.dominantChange, 'brighter');
   assert.deepEqual(result.regions?.[1]?.rect, { x: 30, y: 15, width: 4, height: 4 });
 
   const diffPng = PNG.sync.read(fs.readFileSync(diffOut));

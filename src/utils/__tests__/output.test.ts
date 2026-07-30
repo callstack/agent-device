@@ -1550,6 +1550,7 @@ function withColor<T>(fn: () => T): T {
 test('formatScreenshotDiffText renders match success without color', () => {
   const text = withNoColor(() =>
     formatScreenshotDiffText({
+      schemaVersion: 2,
       match: true,
       differentPixels: 0,
       totalPixels: 100,
@@ -1563,6 +1564,7 @@ test('formatScreenshotDiffText renders match success without color', () => {
 test('formatScreenshotDiffText renders mismatch with pixel counts without color', () => {
   const text = withNoColor(() =>
     formatScreenshotDiffText({
+      schemaVersion: 2,
       match: false,
       differentPixels: 500,
       totalPixels: 10000,
@@ -1577,6 +1579,15 @@ test('formatScreenshotDiffText renders mismatch with pixel counts without color'
           normalizedRect: normalizedRect({ x: 10, y: 20, width: 100, height: 40 }),
           differentPixels: 350,
           shareOfDiffPercentage: 70,
+          densityPercentage: 87.5,
+          shape: 'horizontal-band',
+          size: 'small',
+          location: 'top-left',
+          averageBaselineColorHex: '#000000',
+          averageCurrentColorHex: '#ffffff',
+          baselineLuminance: 0,
+          currentLuminance: 255,
+          dominantChange: 'brighter',
           currentOverlayMatches: [
             {
               ref: 'e1',
@@ -1603,6 +1614,7 @@ test('formatScreenshotDiffText renders mismatch with pixel counts without color'
 test('formatScreenshotDiffText renders dimension mismatch', () => {
   const text = withNoColor(() =>
     formatScreenshotDiffText({
+      schemaVersion: 2,
       match: false,
       differentPixels: 100,
       totalPixels: 100,
@@ -1623,6 +1635,7 @@ test('formatScreenshotDiffText renders diff path relative to cwd', () => {
   const cwd = process.cwd();
   const text = withNoColor(() =>
     formatScreenshotDiffText({
+      schemaVersion: 2,
       match: false,
       differentPixels: 10,
       totalPixels: 100,
@@ -1641,6 +1654,7 @@ test('formatScreenshotDiffText keeps absolute diff path outside cwd', () => {
   const diffPath = path.join(siblingDir, 'diff.png');
   const text = withNoColor(() =>
     formatScreenshotDiffText({
+      schemaVersion: 2,
       match: false,
       differentPixels: 10,
       totalPixels: 100,
@@ -1655,6 +1669,7 @@ test('formatScreenshotDiffText keeps absolute diff path outside cwd', () => {
 test('formatScreenshotDiffText uses ANSI colors when enabled', () => {
   const text = withColor(() =>
     formatScreenshotDiffText({
+      schemaVersion: 2,
       match: false,
       differentPixels: 10,
       totalPixels: 100,
@@ -1670,6 +1685,7 @@ test('formatScreenshotDiffText uses ANSI colors when enabled', () => {
 test('formatScreenshotDiffText does not show diff path when images match', () => {
   const text = withNoColor(() =>
     formatScreenshotDiffText({
+      schemaVersion: 2,
       match: true,
       differentPixels: 0,
       totalPixels: 100,

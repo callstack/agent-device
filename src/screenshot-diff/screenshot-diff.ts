@@ -17,6 +17,12 @@ export type ScreenshotDimensionMismatch = {
 };
 
 export type ScreenshotDiffResult = {
+  /**
+   * Version of the structured screenshot-diff result. Version 2 removes the
+   * retired analysis payloads while preserving the established pixel and
+   * region contracts.
+   */
+  schemaVersion: 2;
   diffPath?: string;
   totalPixels: number;
   differentPixels: number;
@@ -71,6 +77,7 @@ export async function compareScreenshots(
     await removeStaleDiffOutput(options.outputPath);
     return {
       match: false,
+      schemaVersion: 2,
       mismatchPercentage: 100,
       totalPixels,
       differentPixels: totalPixels,
@@ -86,10 +93,10 @@ export async function compareScreenshots(
   // Per-pixel comparison is CPU-heavy for full-resolution screenshots, so it
   // runs on the PNG worker thread (with an in-process synchronous fallback).
   const { diffData, diffMask, differentPixels } = await computeScreenshotDiffPixelsAsync({
-    width: baseline.width,
-    height: baseline.height,
     baselineData: baseline.data,
     currentData: current.data,
+    width: baseline.width,
+    height: baseline.height,
     maxColorDistance,
   });
 
@@ -97,8 +104,9 @@ export async function compareScreenshots(
     differentPixels > 0
       ? summarizeDiffRegions({
           diffMask,
-          width: baseline.width,
-          height: baseline.height,
+          baseline,
+          current,
+          totalPixels,
           differentPixels,
         })
       : [];
@@ -118,6 +126,7 @@ export async function compareScreenshots(
     totalPixels > 0 ? Math.round((differentPixels / totalPixels) * 100 * 100) / 100 : 0;
 
   return {
+    schemaVersion: 2,
     ...(differentPixels > 0 && diffOutputPath ? { diffPath: diffOutputPath } : {}),
     ...(regions.length > 0 ? { regions } : {}),
     totalPixels,

@@ -1,3 +1,4 @@
+import type { PNG } from '../utils/png.ts';
 import type { MutableDiffRegion } from './screenshot-diff-region-types.ts';
 
 // Region splitting is based on screen-relative heights so it works on phone,
@@ -13,11 +14,15 @@ const ROW_SMOOTHING_RADIUS = 3;
 
 export function splitLargeDiffRegions(
   regions: MutableDiffRegion[],
-  params: { diffMask: Uint8Array; width: number; height: number },
+  params: { diffMask: Uint8Array; baseline: PNG; current: PNG },
 ): MutableDiffRegion[] {
   return regions.flatMap((region) =>
-    shouldSplitRegion(region, params.width, params.height)
-      ? splitRegionByHorizontalDensity(region, params, minSplitSegmentHeight(params.height))
+    shouldSplitRegion(region, params.baseline.width, params.baseline.height)
+      ? splitRegionByHorizontalDensity(
+          region,
+          params,
+          minSplitSegmentHeight(params.baseline.height),
+        )
       : [region],
   );
 }
@@ -37,10 +42,10 @@ function shouldSplitRegion(
 
 function splitRegionByHorizontalDensity(
   region: MutableDiffRegion,
-  params: { diffMask: Uint8Array; width: number },
+  params: { diffMask: Uint8Array; baseline: PNG; current: PNG },
   minSegmentHeight: number,
 ): MutableDiffRegion[] {
-  const rowCounts = measureRowDiffCounts(region, params.diffMask, params.width);
+  const rowCounts = measureRowDiffCounts(region, params.diffMask, params.baseline.width);
   const smoothed = smoothCounts(rowCounts);
   const lowDensityBands = findLowDensityBands(
     smoothed,
@@ -141,15 +146,15 @@ function buildRegionSlice(
   region: MutableDiffRegion,
   minY: number,
   maxY: number,
-  params: { diffMask: Uint8Array; width: number },
+  params: { diffMask: Uint8Array; baseline: PNG; current: PNG },
 ): MutableDiffRegion | null {
   let slice: MutableDiffRegion | null = null;
   for (let y = minY; y <= maxY; y += 1) {
     for (let x = region.minX; x <= region.maxX; x += 1) {
-      const pixelIndex = y * params.width + x;
+      const pixelIndex = y * params.baseline.width + x;
       if (params.diffMask[pixelIndex] !== 1) continue;
       slice ??= createEmptyRegion(x, y);
-      addPixelToSlice(slice, x, y);
+      addPixelToSlice(slice, pixelIndex, x, y, params.baseline, params.current);
     }
   }
   return slice;
@@ -162,13 +167,33 @@ function createEmptyRegion(x: number, y: number): MutableDiffRegion {
     maxX: x,
     maxY: y,
     differentPixels: 0,
+    baselineRed: 0,
+    baselineGreen: 0,
+    baselineBlue: 0,
+    currentRed: 0,
+    currentGreen: 0,
+    currentBlue: 0,
   };
 }
 
-function addPixelToSlice(slice: MutableDiffRegion, x: number, y: number): void {
+function addPixelToSlice(
+  slice: MutableDiffRegion,
+  pixelIndex: number,
+  x: number,
+  y: number,
+  baseline: PNG,
+  current: PNG,
+): void {
+  const dataIndex = pixelIndex * 4;
   slice.minX = Math.min(slice.minX, x);
   slice.minY = Math.min(slice.minY, y);
   slice.maxX = Math.max(slice.maxX, x);
   slice.maxY = Math.max(slice.maxY, y);
   slice.differentPixels += 1;
+  slice.baselineRed += baseline.data[dataIndex]!;
+  slice.baselineGreen += baseline.data[dataIndex + 1]!;
+  slice.baselineBlue += baseline.data[dataIndex + 2]!;
+  slice.currentRed += current.data[dataIndex]!;
+  slice.currentGreen += current.data[dataIndex + 1]!;
+  slice.currentBlue += current.data[dataIndex + 2]!;
 }

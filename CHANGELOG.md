@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Breaking: `diff screenshot` structured results now carry `schemaVersion: 2`. The retired `ocr` and `nonTextDeltas` payloads are no longer emitted; use the baseline/current images and diff artifact with vision for qualitative interpretation. Existing pixel counts and region fields remain available.
 - Breaking: removed the deprecated `--session-locked` and `--session-lock-conflicts` flags. Use `--session-lock reject|strip` instead; passing either old flag now fails with `Unknown flag: ... Use --session-lock reject|strip instead.`
 - Breaking: removed the `replay export --format` flag. `replay export` always writes Maestro YAML.
 - Breaking: removed the unused `LeaseAllocatePayload`, `LeaseHeartbeatPayload`, and `LeaseReleasePayload` type exports from `agent-device/contracts`. Lease request metadata is fully described by `DaemonRequestMeta`.

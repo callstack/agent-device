@@ -1,8 +1,15 @@
 import type { Rect } from '@agent-device/kernel/snapshot';
+import type { PNG } from '../utils/png.ts';
 import { normalizedRect, type NormalizedRect } from '../utils/screenshot-geometry.ts';
 import { findConnectedMaskComponents } from './screenshot-diff-components.ts';
 import { splitLargeDiffRegions } from './screenshot-diff-region-split.ts';
 import type { MutableDiffRegion } from './screenshot-diff-region-types.ts';
+
+type ScreenshotDiffColor = {
+  r: number;
+  g: number;
+  b: number;
+};
 
 export type ScreenshotDiffRegion = {
   index: number;
@@ -10,6 +17,15 @@ export type ScreenshotDiffRegion = {
   normalizedRect: NormalizedRect;
   differentPixels: number;
   shareOfDiffPercentage: number;
+  densityPercentage: number;
+  shape: 'compact' | 'horizontal-band' | 'vertical-band' | 'large-area';
+  size: 'small' | 'medium' | 'large';
+  location: string;
+  averageBaselineColorHex: string;
+  averageCurrentColorHex: string;
+  baselineLuminance: number;
+  currentLuminance: number;
+  dominantChange: 'brighter' | 'darker' | 'color-shift' | 'mixed';
   currentOverlayMatches?: ScreenshotDiffRegionOverlayMatch[];
 };
 
@@ -23,10 +39,17 @@ export type ScreenshotDiffRegionOverlayMatch = {
 const DEFAULT_MAX_DIFF_REGIONS = 8;
 const REGION_MERGE_GAP_PX = 12;
 const MAX_REGIONS_TO_MERGE = 2000;
+const DOMINANT_CHANGE_MIN_CHANNEL_DELTA = 12;
+const LARGE_AREA_MIN_WIDTH_RATIO = 0.55;
+const LARGE_AREA_MIN_HEIGHT_RATIO = 0.12;
+const BAND_MIN_ASPECT_RATIO = 2.5;
+const LARGE_REGION_MIN_AREA_RATIO = 0.04;
+const MEDIUM_REGION_MIN_AREA_RATIO = 0.01;
 export function summarizeDiffRegions(params: {
   diffMask: Uint8Array;
-  width: number;
-  height: number;
+  baseline: PNG;
+  current: PNG;
+  totalPixels: number;
   differentPixels: number;
 }): ScreenshotDiffRegion[] {
   const rawRegions = findConnectedDiffRegions(params);
@@ -48,8 +71,9 @@ export function summarizeDiffRegions(params: {
     .slice(0, DEFAULT_MAX_DIFF_REGIONS)
     .map((region, index) =>
       toScreenshotDiffRegion(region, index + 1, {
-        width: params.width,
-        height: params.height,
+        width: params.baseline.width,
+        height: params.baseline.height,
+        totalPixels: params.totalPixels,
         differentPixels: params.differentPixels,
       }),
     );
@@ -57,17 +81,18 @@ export function summarizeDiffRegions(params: {
 
 function findConnectedDiffRegions(params: {
   diffMask: Uint8Array;
-  width: number;
-  height: number;
+  baseline: PNG;
+  current: PNG;
 }): MutableDiffRegion[] {
-  const { diffMask, width, height } = params;
+  const { diffMask, baseline, current } = params;
+  const { width, height } = baseline;
   return findConnectedMaskComponents({
     mask: diffMask,
     width,
     height,
     hooks: {
       create: (pixelIndex) => createDiffRegion(pixelIndex, width),
-      visit: (region, pixelIndex) => addPixelToRegion(region, pixelIndex, width),
+      visit: (region, pixelIndex) => addPixelToRegion(region, pixelIndex, width, baseline, current),
     },
   });
 }
@@ -81,17 +106,36 @@ function createDiffRegion(pixelIndex: number, width: number): MutableDiffRegion 
     maxX: startX,
     maxY: startY,
     differentPixels: 0,
+    baselineRed: 0,
+    baselineGreen: 0,
+    baselineBlue: 0,
+    currentRed: 0,
+    currentGreen: 0,
+    currentBlue: 0,
   };
 }
 
-function addPixelToRegion(region: MutableDiffRegion, pixelIndex: number, width: number): void {
+function addPixelToRegion(
+  region: MutableDiffRegion,
+  pixelIndex: number,
+  width: number,
+  baseline: PNG,
+  current: PNG,
+): void {
   const x = pixelIndex % width;
   const y = Math.floor(pixelIndex / width);
+  const dataIndex = pixelIndex * 4;
   region.minX = Math.min(region.minX, x);
   region.minY = Math.min(region.minY, y);
   region.maxX = Math.max(region.maxX, x);
   region.maxY = Math.max(region.maxY, y);
   region.differentPixels += 1;
+  region.baselineRed += baseline.data[dataIndex]!;
+  region.baselineGreen += baseline.data[dataIndex + 1]!;
+  region.baselineBlue += baseline.data[dataIndex + 2]!;
+  region.currentRed += current.data[dataIndex]!;
+  region.currentGreen += current.data[dataIndex + 1]!;
+  region.currentBlue += current.data[dataIndex + 2]!;
 }
 
 function mergeNearbyRegions(regions: MutableDiffRegion[], gapPx: number): MutableDiffRegion[] {
@@ -126,12 +170,18 @@ function mergeRegionInto(target: MutableDiffRegion, source: MutableDiffRegion): 
   target.maxX = Math.max(target.maxX, source.maxX);
   target.maxY = Math.max(target.maxY, source.maxY);
   target.differentPixels += source.differentPixels;
+  target.baselineRed += source.baselineRed;
+  target.baselineGreen += source.baselineGreen;
+  target.baselineBlue += source.baselineBlue;
+  target.currentRed += source.currentRed;
+  target.currentGreen += source.currentGreen;
+  target.currentBlue += source.currentBlue;
 }
 
 function toScreenshotDiffRegion(
   region: MutableDiffRegion,
   index: number,
-  image: { width: number; height: number; differentPixels: number },
+  image: { width: number; height: number; totalPixels: number; differentPixels: number },
 ): ScreenshotDiffRegion {
   const rect = {
     x: region.minX,
@@ -139,6 +189,23 @@ function toScreenshotDiffRegion(
     width: region.maxX - region.minX + 1,
     height: region.maxY - region.minY + 1,
   };
+  const center = {
+    x: Math.round(region.minX + rect.width / 2),
+    y: Math.round(region.minY + rect.height / 2),
+  };
+  const averageBaselineColor = averageRegionColor(
+    region.baselineRed,
+    region.baselineGreen,
+    region.baselineBlue,
+    region.differentPixels,
+  );
+  const averageCurrentColor = averageRegionColor(
+    region.currentRed,
+    region.currentGreen,
+    region.currentBlue,
+    region.differentPixels,
+  );
+  const regionArea = rect.width * rect.height;
   return {
     index,
     rect,
@@ -150,7 +217,92 @@ function toScreenshotDiffRegion(
     }),
     differentPixels: region.differentPixels,
     shareOfDiffPercentage: roundPercentage(region.differentPixels / image.differentPixels),
+    densityPercentage: roundPercentage(region.differentPixels / regionArea),
+    shape: describeRegionShape(rect, image.width, image.height),
+    size: describeRegionSize(regionArea, image.totalPixels),
+    location: describeRegionLocation(center, image.width, image.height),
+    averageBaselineColorHex: toHexColor(averageBaselineColor),
+    averageCurrentColorHex: toHexColor(averageCurrentColor),
+    baselineLuminance: Math.round(luminance(averageBaselineColor)),
+    currentLuminance: Math.round(luminance(averageCurrentColor)),
+    dominantChange: describeDominantChange(averageBaselineColor, averageCurrentColor),
   };
+}
+
+function averageRegionColor(
+  red: number,
+  green: number,
+  blue: number,
+  pixels: number,
+): ScreenshotDiffColor {
+  return {
+    r: Math.round(red / pixels),
+    g: Math.round(green / pixels),
+    b: Math.round(blue / pixels),
+  };
+}
+
+function describeRegionLocation(
+  center: { x: number; y: number },
+  width: number,
+  height: number,
+): string {
+  const horizontal =
+    center.x < width / 3 ? 'left' : center.x > (width * 2) / 3 ? 'right' : 'center';
+  const vertical =
+    center.y < height / 3 ? 'top' : center.y > (height * 2) / 3 ? 'bottom' : 'middle';
+  return horizontal === 'center' && vertical === 'middle' ? 'center' : `${vertical}-${horizontal}`;
+}
+
+function describeDominantChange(
+  baseline: ScreenshotDiffColor,
+  current: ScreenshotDiffColor,
+): ScreenshotDiffRegion['dominantChange'] {
+  const luminanceDelta = luminance(current) - luminance(baseline);
+  if (Math.abs(luminanceDelta) >= DOMINANT_CHANGE_MIN_CHANNEL_DELTA) {
+    return luminanceDelta > 0 ? 'brighter' : 'darker';
+  }
+  const maxChannelDelta = Math.max(
+    Math.abs(current.r - baseline.r),
+    Math.abs(current.g - baseline.g),
+    Math.abs(current.b - baseline.b),
+  );
+  return maxChannelDelta >= DOMINANT_CHANGE_MIN_CHANNEL_DELTA ? 'color-shift' : 'mixed';
+}
+
+function describeRegionShape(
+  rect: { width: number; height: number },
+  imageWidth: number,
+  imageHeight: number,
+): ScreenshotDiffRegion['shape'] {
+  if (
+    rect.width >= imageWidth * LARGE_AREA_MIN_WIDTH_RATIO &&
+    rect.height >= imageHeight * LARGE_AREA_MIN_HEIGHT_RATIO
+  ) {
+    return 'large-area';
+  }
+  if (rect.width >= rect.height * BAND_MIN_ASPECT_RATIO) return 'horizontal-band';
+  if (rect.height >= rect.width * BAND_MIN_ASPECT_RATIO) return 'vertical-band';
+  return 'compact';
+}
+
+function describeRegionSize(regionArea: number, totalPixels: number): ScreenshotDiffRegion['size'] {
+  const areaRatio = regionArea / totalPixels;
+  if (areaRatio >= LARGE_REGION_MIN_AREA_RATIO) return 'large';
+  if (areaRatio >= MEDIUM_REGION_MIN_AREA_RATIO) return 'medium';
+  return 'small';
+}
+
+function luminance(color: ScreenshotDiffColor): number {
+  return color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722;
+}
+
+function toHexColor(color: ScreenshotDiffColor): string {
+  return `#${toHexChannel(color.r)}${toHexChannel(color.g)}${toHexChannel(color.b)}`;
+}
+
+function toHexChannel(value: number): string {
+  return value.toString(16).padStart(2, '0');
 }
 
 function roundPercentage(ratio: number): number {
