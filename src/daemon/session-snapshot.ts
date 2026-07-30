@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import type { SnapshotState } from '../kernel/snapshot.ts';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { activatePartialRefFrame, refFrameEpoch, refFrameState } from './ref-frame.ts';
 import type { SessionState } from './types.ts';
 

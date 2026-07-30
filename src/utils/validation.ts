@@ -1,4 +1,4 @@
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 export function requireIntInRange(value: number, name: string, min: number, max: number): number {
   if (!Number.isFinite(value) || !Number.isInteger(value) || value < min || value > max) {

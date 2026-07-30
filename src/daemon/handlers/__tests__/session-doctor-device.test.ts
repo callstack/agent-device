@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { withDeviceInventoryProvider } from '../../../core/dispatch-resolve.ts';
-import { AppError } from '../../../kernel/errors.ts';
-import type { DeviceInfo } from '../../../kernel/device.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { attachAdbFailureHint } from '../../../platforms/android/adb-executor.ts';
 import type { DaemonRequest } from '../../types.ts';
 import { appendDeviceInventoryCheck } from '../session-doctor-device.ts';

@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { AppError } from '../../../../kernel/errors.ts';
-import { isIosFamily, type DeviceInfo } from '../../../../kernel/device.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { resolveIosSimulatorDeviceSetPath } from '../../../../utils/device-isolation.ts';
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
 import { readProcessStartTime } from '../../../../utils/host-process.ts';

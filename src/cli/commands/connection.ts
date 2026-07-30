@@ -13,7 +13,7 @@ import {
   type RemoteConnectionState,
   type RemoteConnectionRequestMetadata,
 } from '../../remote/remote-connection-state.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { resolveCloudConnectProfile } from '../connection/cloud-profile.ts';
 import {
   connectProviderNamesForError,
@@ -35,7 +35,7 @@ import {
   stopReactDevtoolsCleanup,
 } from './connection-runtime.ts';
 import { writeCommandOutput } from './shared.ts';
-import type { LeaseBackend } from '../../kernel/contracts.ts';
+import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '../../contracts/cli-flags.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 

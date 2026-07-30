@@ -1,5 +1,5 @@
-import type { Point, SnapshotNode } from '../kernel/snapshot.ts';
-import type { ResponseCost } from '../kernel/contracts.ts';
+import type { Point, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { ResponseCost } from '@agent-device/kernel/contracts';
 import type { ClickButton } from './click-button.ts';
 
 export type SelectorTarget = {

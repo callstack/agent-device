@@ -1,7 +1,7 @@
 import { isCommandSupportedOnDevice, listCapabilityCommands } from '../../core/capabilities.ts';
 import { listDeviceInventory } from '../../core/dispatch-resolve.ts';
 import { assertResolvedAppsFilter } from '../../contracts/app-inventory.ts';
-import { asAppError } from '../../kernel/errors.ts';
+import { asAppError } from '@agent-device/kernel/errors';
 import {
   isApplePlatform,
   isMacOs,
@@ -10,7 +10,7 @@ import {
   resolveAppleSimulatorSetPathForSelector,
   type DeviceInfo,
   type PlatformSelector,
-} from '../../kernel/device.ts';
+} from '@agent-device/kernel/device';
 import {
   resolveAndroidSerialAllowlist,
   resolveIosSimulatorDeviceSetPath,

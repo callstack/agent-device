@@ -1,10 +1,10 @@
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   isMacOs,
   isApplePlatform,
   resolveApplePlatformName,
   type DeviceInfo,
-} from '../../../kernel/device.ts';
+} from '@agent-device/kernel/device';
 
 export type RunnerApplePlatformName = 'iOS' | 'tvOS' | 'macOS' | 'visionOS';
 

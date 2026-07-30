@@ -6,7 +6,7 @@ import { afterEach, test, vi } from 'vitest';
 import { LimrunRuntime } from '../sdk/limrun.ts';
 import { createExpiredProviderLeaseReleaser } from '../daemon/provider-lease-expiry.ts';
 import type { SimulatorLease } from '../daemon/lease-registry.ts';
-import type { DeviceInfo } from '../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { runCmd } from '../utils/exec.ts';
 import { readVersion } from '../utils/version.ts';
 

@@ -1,8 +1,8 @@
-import { isIosFamily } from '../kernel/device.ts';
+import { isIosFamily } from '@agent-device/kernel/device';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 import type { SessionState } from './types.ts';
 import { tryParseSelectorChain } from '../selectors/index.ts';
-import { asAppError } from '../kernel/errors.ts';
+import { asAppError } from '@agent-device/kernel/errors';
 import type { ElementSelectorTapOptions } from '../contracts/interactor-types.ts';
 
 export type DirectIosSelectorTarget = ElementSelectorTapOptions & { raw: string };

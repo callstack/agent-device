@@ -1,4 +1,4 @@
-import { AppError, toAppErrorCode } from '../../../../kernel/errors.ts';
+import { AppError, toAppErrorCode } from '@agent-device/kernel/errors';
 import type { RunnerCommand, RunnerSequenceStep } from './runner-contract.ts';
 
 export const SEQUENCEABLE_RUNNER_STEP_KINDS = ['tap', 'doubleTap', 'longPress'] as const;

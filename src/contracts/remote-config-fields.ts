@@ -3,7 +3,7 @@ import type {
   DaemonTransportPreference,
   LeaseBackend,
   SessionIsolationMode,
-} from '../kernel/contracts.ts';
+} from '@agent-device/kernel/contracts';
 
 // The remote-config profile field groups that `CliFlags` is composed from.
 //

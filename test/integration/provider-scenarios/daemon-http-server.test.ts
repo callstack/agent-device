@@ -5,7 +5,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
-import { AppError } from '../../../src/kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   cleanupUploadedArtifact,
   prepareUploadedArtifact,

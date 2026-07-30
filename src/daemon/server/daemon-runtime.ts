@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { asAppError, AppError } from '../../kernel/errors.ts';
+import { asAppError, AppError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../session-store.ts';
 import { cleanupStaleAppLogProcesses } from '../app-log-process.ts';
 import { resolveDaemonPaths, resolveDaemonServerMode } from '../config.ts';

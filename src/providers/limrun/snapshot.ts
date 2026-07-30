@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { RawSnapshotNode } from '../../kernel/snapshot.ts';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 
 type LimrunSelector = { key: 'id' | 'label' | 'text' | 'value'; value: string };
 

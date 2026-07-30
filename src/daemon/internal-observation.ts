@@ -1,4 +1,4 @@
-import type { SnapshotState } from '../kernel/snapshot.ts';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { readSessionRuntimeRevision } from './ref-frame.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from './session-snapshot.ts';
 import { SessionStore } from './session-store.ts';

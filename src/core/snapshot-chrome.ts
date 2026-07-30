@@ -3,7 +3,7 @@ import {
   hasAndroidSystemChromeProvenance,
   isAndroidSystemChromeWindowResourceId,
 } from '../contracts/android-system-chrome.ts';
-import type { SnapshotNode } from '../kernel/snapshot.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isAndroidInputMethodSnapshotNode } from '../snapshot/android-input-method-overlays.ts';
 import { normalizeType } from '../utils/text-surface.ts';
 

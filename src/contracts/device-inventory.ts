@@ -4,7 +4,7 @@ import {
   type DeviceInfo,
   type DeviceTarget,
   type PlatformSelector,
-} from '../kernel/device.ts';
+} from '@agent-device/kernel/device';
 
 export const LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS = [
   'android',

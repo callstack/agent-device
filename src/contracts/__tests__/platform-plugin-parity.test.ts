@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { PLATFORMS, type Platform } from '../../kernel/device.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { PLATFORMS, type Platform } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   getPlugin,
   registeredPlatforms,

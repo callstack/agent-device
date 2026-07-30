@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import http from 'node:http';
-import { normalizeError } from '../kernel/errors.ts';
+import { normalizeError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from './types.ts';
 import {
   cleanupDownloadableArtifact,

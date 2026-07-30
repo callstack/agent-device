@@ -33,7 +33,7 @@ import { snapshotAndroid } from '../../platforms/android/snapshot.ts';
 import { screenshotAndroid } from '../../platforms/android/screenshot.ts';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { withMethodScope } from '../../utils/method-scope.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Interactor } from '../../contracts/interactor-types.ts';
 import { snapshotCaptureAnnotationsFrom } from '../../contracts/snapshot-capture-annotations.ts';
 

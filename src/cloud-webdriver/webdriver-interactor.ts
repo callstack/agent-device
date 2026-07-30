@@ -10,7 +10,7 @@ import type { ScrollDirection } from '../contracts/scroll-gesture.ts';
 import type { GesturePlan } from '../contracts/gesture-plan.ts';
 import type { TvRemoteButton } from '../contracts/tv-remote.ts';
 import type { SettingOptions } from '../platforms/permission-utils.ts';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { buildScrollGesturePlan } from '../contracts/scroll-gesture.ts';
 import {
   capabilitySupported,

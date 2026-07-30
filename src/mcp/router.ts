@@ -1,7 +1,7 @@
 import { listCommandTools, commandToolExecutor, type ToolResult } from './command-tools.ts';
 import { readVersion } from '../utils/version.ts';
-import type { JsonRpcId, JsonRpcRequestEnvelope } from '../kernel/contracts.ts';
-import { AppError } from '../kernel/errors.ts';
+import type { JsonRpcId, JsonRpcRequestEnvelope } from '@agent-device/kernel/contracts';
+import { AppError } from '@agent-device/kernel/errors';
 import { formatToolErrorText, normalizeToolError } from './tool-error.ts';
 
 const MCP_SERVER_NAME = 'agent-device';

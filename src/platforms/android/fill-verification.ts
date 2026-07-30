@@ -1,6 +1,6 @@
-import type { DeviceInfo } from '../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import type { Rect } from '../../kernel/snapshot.ts';
+import type { Rect } from '@agent-device/kernel/snapshot';
 import {
   buildFillFailureDetails,
   isSensitiveFillDiagnosticNode,

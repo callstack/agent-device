@@ -22,8 +22,8 @@ vi.mock('../../../utils/timeouts.ts', async (importOriginal) => {
 });
 
 import { dispatchCommand } from '../../../core/dispatch.ts';
-import type { RawSnapshotNode } from '../../../kernel/snapshot.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   makeAndroidSession,
   makeIosSession,

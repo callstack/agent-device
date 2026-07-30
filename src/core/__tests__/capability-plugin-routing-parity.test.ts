@@ -9,7 +9,7 @@ import {
   type DeviceKind,
   type DeviceTarget,
   type Platform,
-} from '../../kernel/device.ts';
+} from '@agent-device/kernel/device';
 import {
   ANDROID_EMULATOR,
   ANDROID_TV_DEVICE,

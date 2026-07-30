@@ -1,5 +1,5 @@
-import { AppError, asAppError } from '../../../../kernel/errors.ts';
-import type { DeviceInfo } from '../../../../kernel/device.ts';
+import { AppError, asAppError } from '@agent-device/kernel/errors';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
 import { getRequestSignal, isRequestCanceledError } from '../../../../request/cancel.ts';
 import { RUNNER_COMMAND_TIMEOUT_MS, RUNNER_STARTUP_TIMEOUT_MS } from './runner-transport.ts';

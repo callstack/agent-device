@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import type { SnapshotNode } from '../kernel/snapshot.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { findBestMatchesByLocator } from './find.ts';
 
 function makeNode(ref: string, label?: string, identifier?: string): SnapshotNode {

@@ -1,6 +1,6 @@
 import type { CliFlags, DaemonExcludedCliFlag } from './cli-flags.ts';
 import type { DaemonBatchStep } from './batch-step.ts';
-import type { Point } from '../kernel/snapshot.ts';
+import type { Point } from '@agent-device/kernel/snapshot';
 
 // The flag vocabulary a dispatched command is stated in terms of.
 //

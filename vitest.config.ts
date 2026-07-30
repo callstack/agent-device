@@ -53,6 +53,7 @@ export default defineConfig({
           // unit suite without waking every ad-hoc *.test.ts under scripts/.
           include: [
             'src/**/*.test.ts',
+            'packages/*/src/**/*.test.ts',
             'scripts/__tests__/help-conformance-bench.test.ts',
             'scripts/__tests__/help-conformance-error-recovery-coverage.test.ts',
             'scripts/__tests__/help-conformance-sample-outputs.test.ts',
@@ -114,7 +115,7 @@ export default defineConfig({
         statements: 78,
         lines: 80,
       },
-      include: ['src/**/*.ts'],
+      include: ['src/**/*.ts', 'packages/*/src/**/*.ts'],
       exclude: [
         'src/**/*.test.ts',
         'src/**/__tests__/**',

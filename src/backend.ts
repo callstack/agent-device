@@ -7,9 +7,14 @@ import type {
   SnapshotNode,
   SnapshotOptions,
   SnapshotState,
-} from './kernel/snapshot.ts';
-import type { NetworkIncludeMode } from './kernel/contracts.ts';
-import type { DeviceTarget, Platform, PlatformSelector, PublicPlatform } from './kernel/device.ts';
+} from '@agent-device/kernel/snapshot';
+import type { NetworkIncludeMode } from '@agent-device/kernel/contracts';
+import type {
+  DeviceTarget,
+  Platform,
+  PlatformSelector,
+  PublicPlatform,
+} from '@agent-device/kernel/device';
 import type { BackMode } from './contracts/back-mode.ts';
 import type { RepeatedInput } from './commands/command-input.ts';
 import type { ClickButton } from './contracts/click-button.ts';

@@ -13,7 +13,7 @@ import {
   forgetAndroidSnapshotHelperInstall,
   resetAndroidSnapshotHelperInstallCache,
 } from '../snapshot-helper-install.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { parseAndroidSnapshotHelperManifest } from '../snapshot-helper-artifact.ts';
 import { verifyAndroidHelperApkChecksum } from '../helper-package-install.ts';
 import type {

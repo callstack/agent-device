@@ -1,6 +1,6 @@
 // The public API vocabulary for replay and batch execution.
 
-import type { SessionRuntimeHints } from '../kernel/contracts.ts';
+import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import type {
   AgentDeviceRequestOverrides,
   AgentDeviceSelectionOptions,

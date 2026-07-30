@@ -1,5 +1,5 @@
-import { AppError } from '../../kernel/errors.ts';
-import type { SnapshotState } from '../../kernel/snapshot.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type { MaestroObservationIdentity } from './engine-types.ts';
 import { MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS } from './compatibility-policy.ts';
 import {

@@ -5,7 +5,7 @@
 // PRE-ACTION in that case instead of tapping a different element.
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import type { SnapshotNode, SnapshotState } from '../../../kernel/snapshot.ts';
+import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import type { TargetAnnotationV1 } from '../../../replay/target-identity.ts';
 import {
   readNodeLocalIdentity,

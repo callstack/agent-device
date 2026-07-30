@@ -1,5 +1,5 @@
 import { SESSION_SURFACES } from '../../contracts/session-surface.ts';
-import { PLATFORM_SELECTORS } from '../../kernel/device.ts';
+import { PLATFORM_SELECTORS } from '@agent-device/kernel/device';
 import { PERF_KIND_VALUES } from '../../contracts/perf.ts';
 import type { FlagDefinition } from './flag-types.ts';
 

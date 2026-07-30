@@ -21,7 +21,7 @@
  * — not a flat identity-string search.
  */
 
-import type { SnapshotNode } from '../../kernel/snapshot.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { ReplayDivergenceKind, ReplayRepairHint } from '../../replay/divergence.ts';
 import {
   matchesAncestryPrefix,

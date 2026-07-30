@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isIosFamily, isMacOs, type DeviceInfo } from '../../../kernel/device.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import type { AppsFilter } from '../../../contracts/app-inventory.ts';
 import {
   createAppResolutionCache,

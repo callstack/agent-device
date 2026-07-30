@@ -1,8 +1,8 @@
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { ClickButton } from '../../../contracts/click-button.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { isFillableType } from '../../../snapshot/snapshot-processing.ts';
-import type { Point } from '../../../kernel/snapshot.ts';
+import type { Point } from '@agent-device/kernel/snapshot';
 import { requireIntInRange } from '../../../utils/validation.ts';
 import { successText } from '../../../utils/success-text.ts';
 import { findMistargetedTypeRefToken } from '../../../utils/type-target-warning.ts';

@@ -9,7 +9,7 @@ import type { ElementSelectorKey } from '../contracts/interactor-types.ts';
 import type { SwipePattern } from '../contracts/scroll-gesture.ts';
 import type { SessionSurface } from '../contracts/session-surface.ts';
 import type { RunnerLogicalLeaseContext } from '../contracts/runner-lease-context.ts';
-import type { Point } from '../kernel/snapshot.ts';
+import type { Point } from '@agent-device/kernel/snapshot';
 
 export type DispatchContext = ScreenshotDispatchFlags & {
   requestId?: string;

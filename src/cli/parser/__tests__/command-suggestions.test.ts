@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { isKnownCliCommandName } from '../../../command-catalog.ts';
 import { keyboardCliReader } from '../../../commands/system/index.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { parseArgs } from '../args.ts';
 import type { CliFlags } from '../../../contracts/cli-flags.ts';
 import { listCommandAliasSuggestionEntries, suggestCommandFor } from '../command-suggestions.ts';

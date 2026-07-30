@@ -4,7 +4,7 @@ import { RECORDING_SCOPE_VALUES } from '../contracts/recording-scope.ts';
 import { SESSION_SURFACES } from '../contracts/session-surface.ts';
 import { SWIPE_PATTERNS } from '../contracts/scroll-gesture.ts';
 import { CLICK_BUTTONS } from '../contracts/click-button.ts';
-import { DEVICE_TARGETS, PLATFORM_SELECTORS, PUBLIC_PLATFORMS } from '../kernel/device.ts';
+import { DEVICE_TARGETS, PLATFORM_SELECTORS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
 import type { SessionAction } from './types.ts';
 import {
   buildInstallActionSummary,

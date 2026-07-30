@@ -7,7 +7,7 @@ import {
   SELECTOR_EXPRESSION_REQUIRED_MESSAGE,
 } from '../../selectors/arguments.ts';
 import type { CliFlags } from '../../contracts/cli-flags.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { compactRecord, type SelectorSnapshotInput } from '../command-input.ts';
 import type {
   DaemonWriter,

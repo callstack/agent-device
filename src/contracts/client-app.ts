@@ -4,8 +4,8 @@ import type { AppsFilter } from './app-inventory.ts';
 import type { JsonObject } from './json.ts';
 import type { SessionSurface } from './session-surface.ts';
 import type { TargetShutdownResult } from './target-shutdown-contract.ts';
-import type { DaemonInstallSource, SessionRuntimeHints } from '../kernel/contracts.ts';
-import type { PublicPlatform } from '../kernel/device.ts';
+import type { DaemonInstallSource, SessionRuntimeHints } from '@agent-device/kernel/contracts';
+import type { PublicPlatform } from '@agent-device/kernel/device';
 import type {
   AgentDeviceIdentifiers,
   AgentDeviceRequestOverrides,

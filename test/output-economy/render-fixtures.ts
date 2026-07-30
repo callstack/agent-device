@@ -2,7 +2,7 @@ import { snapshotCliOutput } from '../../src/commands/capture/output.ts';
 import { interactionCliOutputFormatters } from '../../src/commands/interaction/output.ts';
 import type { AgentDeviceClient } from '../../src/client/client-types.ts';
 import { RESPONSE_VIEWS } from '../../src/daemon/response-views.ts';
-import { normalizeError } from '../../src/kernel/errors.ts';
+import { normalizeError } from '@agent-device/kernel/errors';
 import { createCommandToolExecutor } from '../../src/mcp/command-tools.ts';
 import type { EconomySample } from './economy-metrics.ts';
 import { renderRoutineWorkflow } from './routine-workflow.ts';

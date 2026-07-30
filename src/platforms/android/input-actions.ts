@@ -1,5 +1,5 @@
-import { AppError } from '../../kernel/errors.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import type { DeviceRotation } from '../../contracts/device-rotation.ts';
 import { buildGesturePlan, GESTURE_DURATION_MIN_MS } from '../../contracts/gesture-plan.ts';

@@ -8,7 +8,7 @@
  * enforces parsed evidence at replay time until step 4.
  */
 
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 const TARGET_ANNOTATION_TAG = 'agent-device:target-v1';
 // Captures the rest of the line verbatim: a line claiming the tag with a

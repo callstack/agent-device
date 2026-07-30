@@ -1,4 +1,4 @@
-import type { Point, SnapshotNode } from '../../../kernel/snapshot.ts';
+import type { Point, SnapshotNode } from '@agent-device/kernel/snapshot';
 import type {
   AgentDeviceRuntime,
   CommandContext,

@@ -4,7 +4,7 @@ import {
   findBestMatchesByLocator as findBestMatchesByLocatorInternal,
   type FindLocator,
 } from './selectors/find.ts';
-import type { SnapshotNode } from './kernel/snapshot.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 
 export type FindMatchOptions = {
   requireRect?: boolean;

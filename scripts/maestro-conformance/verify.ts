@@ -13,7 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AppError } from '../../src/kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { MaestroProgram } from '../../src/compat/maestro/program-ir.ts';
 import { parseMaestroProgram } from '../../src/compat/maestro/program-ir-parser.ts';
 import { SUPPORTED_MAESTRO_COMMAND_NAMES } from '../../src/compat/maestro/program-ir-command-parser.ts';

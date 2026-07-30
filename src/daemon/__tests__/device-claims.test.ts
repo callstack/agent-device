@@ -10,7 +10,7 @@ import {
   clearAdvisoryDeviceClaim,
 } from '../device-claims.ts';
 import { inspectDeviceClaims } from '../device-claim-inspection.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 
 const device: DeviceInfo = {
   platform: 'android',

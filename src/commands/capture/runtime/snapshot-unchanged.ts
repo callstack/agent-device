@@ -4,7 +4,7 @@ import {
   type SnapshotNode,
   type SnapshotState,
   type SnapshotUnchanged,
-} from '../../../kernel/snapshot.ts';
+} from '@agent-device/kernel/snapshot';
 
 type SnapshotIdentity = {
   previousAppBundleId?: string;

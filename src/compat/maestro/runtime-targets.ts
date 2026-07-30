@@ -3,7 +3,7 @@ import {
   type Rect,
   type SnapshotNode,
   type SnapshotState,
-} from '../../kernel/snapshot.ts';
+} from '@agent-device/kernel/snapshot';
 import {
   buildIosInteractiveSnapshotPresentation,
   type IosInteractiveSnapshotPresentation,

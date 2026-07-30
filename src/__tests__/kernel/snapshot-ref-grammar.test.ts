@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 import { expect, test } from 'vitest';
-import { formatRef, PROPERTY_RUNS, refArb } from '../../__tests__/test-utils/index.ts';
-import { normalizeRef, splitRefGenerationSuffix } from '../snapshot.ts';
+import { formatRef, PROPERTY_RUNS, refArb } from '../test-utils/index.ts';
+import { normalizeRef, splitRefGenerationSuffix } from '@agent-device/kernel/snapshot';
 
 // #1076 versioned refs: `~s<generation>` is accepted INPUT on every ref parse
 // site; node lookup strips it, and callers that care read the generation.

@@ -5,7 +5,7 @@ import { test } from 'vitest';
 import type { DaemonRequest, DaemonResponse } from '../daemon/types.ts';
 import type { RequestProgressEvent } from '../request/progress.ts';
 import { readDaemonSocketProgressResponse } from '../daemon/client/daemon-client-progress.ts';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 type MockSocket = EventEmitter & {
   ended: boolean;

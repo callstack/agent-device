@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { IOS_SIMULATOR } from '../../../__tests__/test-utils/index.ts';
 import { createAppleInteractor } from '../interactor.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { GesturePlan } from '../../../contracts/gesture-plan-types.ts';
 import type { Interactor, RunnerContext } from '../../../contracts/interactor-types.ts';
 import type {

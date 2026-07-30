@@ -1,4 +1,4 @@
-import { normalizeError, type NormalizedError } from '../kernel/errors.ts';
+import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { formatReplayDivergenceReport } from '../replay/divergence.ts';
 
 /**

@@ -9,7 +9,7 @@ import {
   publicPlatformString,
   resolveDevice,
   type DeviceInfo,
-} from '../device.ts';
+} from '@agent-device/kernel/device';
 import {
   ANDROID_EMULATOR,
   IOS_DEVICE,
@@ -20,7 +20,7 @@ import {
   TVOS_SIMULATOR,
   VISIONOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
-} from '../../__tests__/test-utils/device-fixtures.ts';
+} from '../test-utils/device-fixtures.ts';
 import { readReplayScriptMetadata } from '../../replay/script.ts';
 
 // Parity gate for the ios/macos -> apple Platform collapse (issue #979, approach b).

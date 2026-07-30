@@ -12,8 +12,8 @@ import {
   resolveAndroidApp,
 } from '../app-lifecycle.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
-import type { DeviceInfo } from '../../../kernel/device.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { withScriptedAdb } from '../../../__tests__/test-utils/mocked-binaries.ts';
 
 test('parseAndroidLaunchComponent extracts final resolved component', () => {

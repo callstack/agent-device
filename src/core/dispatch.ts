@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import pathModule from 'node:path';
-import { AppError } from '../kernel/errors.ts';
-import { isIosFamily, type DeviceInfo } from '../kernel/device.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { getInteractor } from './interactors.ts';
 import type { Interactor, RunnerContext } from '../contracts/interactor-types.ts';
 import { isDeepLinkTarget } from '../contracts/open-target.ts';
@@ -32,7 +32,7 @@ import { parseTvRemoteButton } from '../contracts/tv-remote.ts';
 import { readViewportDimension } from './viewport-dimension.ts';
 import type { DescriptorDispatchCommandName } from './command-descriptor/registry.ts';
 import type { GesturePlan } from '../contracts/gesture-plan-types.ts';
-import type { Rect } from '../kernel/snapshot.ts';
+import type { Rect } from '@agent-device/kernel/snapshot';
 
 export { resolveTargetDevice } from './dispatch-resolve.ts';
 export type { CommandFlags, DispatchContext } from './dispatch-context.ts';

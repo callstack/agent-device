@@ -8,7 +8,7 @@ const repoRoot = path.resolve(import.meta.dirname, '../..');
 
 test('mutate globs expand to real kernel sources and exclude selector tests', () => {
   const files = expandMutateFiles(mutateGlobs(), repoRoot);
-  assert.ok(files.includes('src/kernel/errors.ts'));
+  assert.ok(files.includes('packages/kernel/src/errors.ts'));
   assert.ok(files.some((file) => file.startsWith('src/selectors/')));
   assert.deepEqual(
     files.filter((file) => file.endsWith('.test.ts')),

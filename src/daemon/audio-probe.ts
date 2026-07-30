@@ -6,7 +6,7 @@ import {
   type AudioProbeResult,
 } from '../contracts/audio-probe-result.ts';
 import type { HostAudioProbeBackend } from '../platforms/audio-probe-backend.ts';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { sleep } from '../utils/timeouts.ts';
 import type { SessionStore } from './session-store.ts';
 import type { SessionState } from './types.ts';

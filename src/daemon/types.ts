@@ -7,16 +7,16 @@ import type {
   DaemonInstallSource as PublicDaemonInstallSource,
   LeaseBackend,
   SessionRuntimeHints as PublicSessionRuntimeHints,
-} from '../kernel/contracts.ts';
+} from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '../contracts/command-flags.ts';
 import type { GestureReferenceFrame, ScrollDirection } from '../contracts/scroll-gesture.ts';
 import type { LogBackend } from '../contracts/logs.ts';
 import type { SessionSurface } from '../contracts/session-surface.ts';
 import type { RecordingExportQuality } from '../contracts/recording-export-quality.ts';
 import type { RecordingScope } from '../contracts/recording-scope.ts';
-import type { DeviceInfo, Platform, PlatformSelector } from '../kernel/device.ts';
+import type { DeviceInfo, Platform, PlatformSelector } from '@agent-device/kernel/device';
 import type { ExecBackgroundResult, ExecResult } from '../utils/exec.ts';
-import type { Rect, SnapshotState } from '../kernel/snapshot.ts';
+import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
 import type { GestureExecutionProfile } from '../contracts/gesture-plan-types.ts';
 // Type-only import; erased at runtime. ref-frame.ts imports SessionState from
 // here, so this back-edge must stay type-only to avoid a runtime cycle.

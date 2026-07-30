@@ -1,8 +1,8 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { isMacOs, type DeviceInfo } from '../../../kernel/device.ts';
+import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '../../../utils/diagnostics.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { ExecOptions } from '../../../utils/exec.ts';
 import { resizePngFile } from '../../../utils/png-resize.ts';
 import { readPngSize } from '../../../utils/png-size.ts';

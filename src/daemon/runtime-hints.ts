@@ -1,5 +1,5 @@
-import { isIosFamily, type DeviceInfo } from '../kernel/device.ts';
-import { AppError, asAppError } from '../kernel/errors.ts';
+import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { execFailureDetails, type ExecResult } from '../utils/exec.ts';
 import type { SessionRuntimeHints } from './types.ts';
 import {

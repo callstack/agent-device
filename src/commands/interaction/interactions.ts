@@ -9,7 +9,7 @@ import {
   readFillTargetFromPositionals,
   readInteractionTargetFromPositionals,
 } from '../../core/interaction-positionals.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   assertNoRemovedSwipeInput,
   swipePayloadFromPositionals,

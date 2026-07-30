@@ -1,4 +1,4 @@
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { MetroPrepareKind } from '../../contracts/metro.ts';
 
 const METRO_PREPARE_KIND_VALUES: readonly MetroPrepareKind[] = [

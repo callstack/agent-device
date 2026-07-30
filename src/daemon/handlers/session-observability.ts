@@ -11,7 +11,7 @@ import {
   type PerfArea,
   type PerfKind,
 } from '../../contracts/perf.ts';
-import { AppError, normalizeError } from '../../kernel/errors.ts';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { resolveWebProvider } from '../../platforms/web/provider.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } from '../types.ts';
@@ -38,8 +38,8 @@ import { handleNativePerfCommand as handleAndroidNativePerfCommand } from './ses
 import { errorResponse, requireCommandSupported, type DaemonFailureResponse } from './response.ts';
 import { handleAudioCommand } from './session-audio.ts';
 import { handleNativePerfCommand as handleAppleNativePerfCommand } from './session-perf-xctrace.ts';
-import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '../../kernel/contracts.ts';
-import { uniqueStrings } from '../../kernel/collections.ts';
+import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '@agent-device/kernel/contracts';
+import { uniqueStrings } from '@agent-device/kernel/collections';
 import {
   LOG_ACTION_VALUES as LOG_ACTIONS,
   type LogAction as LogsAction,

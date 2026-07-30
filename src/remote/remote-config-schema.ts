@@ -7,7 +7,11 @@ import type {
 // re-exported here because this module is where consumers already import it from.
 export type { RemoteConnectionProfileFields } from '../contracts/remote-config-fields.ts';
 import { buildPrimaryEnvVarName } from '../utils/source-value.ts';
-import { PLATFORM_SELECTORS, type DeviceTarget, type PlatformSelector } from '../kernel/device.ts';
+import {
+  PLATFORM_SELECTORS,
+  type DeviceTarget,
+  type PlatformSelector,
+} from '@agent-device/kernel/device';
 
 export type RemoteConfigProfile = RemoteConfigMetroOptions &
   CloudProviderProfileFields &

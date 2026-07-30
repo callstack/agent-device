@@ -2,7 +2,7 @@ import { test, expect, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   mockDispatch,
   mockResolveTargetDevice,

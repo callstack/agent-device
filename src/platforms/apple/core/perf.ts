@@ -8,12 +8,12 @@ import {
   publicPlatformString,
   type DeviceInfo,
   type PublicPlatform,
-} from '../../../kernel/device.ts';
-import { AppError } from '../../../kernel/errors.ts';
+} from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails, requireExecSuccess, type ExecResult } from '../../../utils/exec.ts';
 import { splitNonEmptyTrimmedLines } from '../../../utils/parsing.ts';
 import { roundPercent } from '../../perf-utils.ts';
-import { uniqueStrings } from '../../../kernel/collections.ts';
+import { uniqueStrings } from '@agent-device/kernel/collections';
 import { IOS_DEVICECTL_DEFAULT_HINT, resolveIosDevicectlHint } from './devicectl.ts';
 import type { IosDeviceProcessInfo } from './app-info.ts';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';

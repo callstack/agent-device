@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import type { Point, Rect } from '../../kernel/snapshot.ts';
+import type { Point, Rect } from '@agent-device/kernel/snapshot';
 import {
   buildGesturePlan,
   type GesturePlan,

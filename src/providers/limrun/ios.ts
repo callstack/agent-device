@@ -14,8 +14,8 @@ import type {
   SnapshotResult,
 } from '../../contracts/interactor-types.ts';
 import type { DeviceLease } from '../../contracts/device-provider.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
-import { AppError } from '../../kernel/errors.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import type {
   ProviderDeviceInstallOptions,
   ProviderDeviceInstallResult,

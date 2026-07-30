@@ -1,4 +1,4 @@
-import type { SessionRuntimeHints } from '../kernel/contracts.ts';
+import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 
 export type CommandRuntimeHintInput = Pick<
   SessionRuntimeHints,

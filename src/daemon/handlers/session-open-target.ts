@@ -3,7 +3,12 @@ import {
   isWebUrl,
   resolveIosDeviceDeepLinkBundleId,
 } from '../../contracts/open-target.ts';
-import { isIosFamily, isMacOs, isApplePlatform, type DeviceInfo } from '../../kernel/device.ts';
+import {
+  isIosFamily,
+  isMacOs,
+  isApplePlatform,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 
 async function resolveIosBundleIdForOpen(

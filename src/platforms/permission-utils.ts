@@ -1,4 +1,4 @@
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 export type PermissionAction = 'grant' | 'deny' | 'reset';
 export type PermissionTarget =

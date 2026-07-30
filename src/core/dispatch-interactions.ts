@@ -1,11 +1,11 @@
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   isIosFamily,
   isMacOs,
   isTvOsDevice,
   publicPlatformString,
   type DeviceInfo,
-} from '../kernel/device.ts';
+} from '@agent-device/kernel/device';
 import { successText, withSuccessText } from '../utils/success-text.ts';
 import { findMistargetedTypeRefToken } from '../utils/type-target-warning.ts';
 import { parseScrollDirection, type ScrollDirection } from '../contracts/scroll-gesture.ts';

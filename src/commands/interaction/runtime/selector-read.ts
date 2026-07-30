@@ -5,15 +5,15 @@ import {
   type FindAction,
   type FindLocator,
 } from '../../../selectors/find.ts';
-import type { SnapshotNode } from '../../../kernel/snapshot.ts';
-import { findNodeByRef, normalizeRef } from '../../../kernel/snapshot.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import { findNodeByRef, normalizeRef } from '@agent-device/kernel/snapshot';
 import {
   isSparseSnapshotQualityVerdict,
   isUnreadableCaptureContentError,
   type SnapshotQualityVerdict,
 } from '../../../snapshot/snapshot-quality.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { parseSelectorChain, type SelectorChain } from '../../../selectors/parse.ts';
 import {
   findSelectorChainMatch,

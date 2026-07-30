@@ -140,6 +140,27 @@ test('skills guidance change is docs-only', () => {
   assert.deepEqual(result.checks, []);
 });
 
+test('workspace package source selects static gates, layering, and the build', () => {
+  const result = plan(['packages/kernel/src/errors.ts']);
+  assert.equal(result.failOpen, false);
+  for (const id of [
+    'format',
+    'lint',
+    'typecheck',
+    'layering',
+    'build',
+    'vitest-related',
+  ] as const) {
+    assert.ok(result.checks.includes(id), `expected ${id}`);
+  }
+});
+
+test('a workspace package manifest fails open — it rewires resolution globally', () => {
+  const result = plan(['packages/kernel/package.json']);
+  assert.equal(result.failOpen, true);
+  assert.equal(result.failOpenReasons[0]?.rule, 'workflow-tooling');
+});
+
 test('workflow/tooling and selector-owning changes fail open', () => {
   assert.equal(plan(['.github/workflows/ci.yml']).failOpenReasons[0]?.rule, 'workflow-tooling');
   assert.equal(plan(['package.json']).failOpenReasons[0]?.rule, 'workflow-tooling');

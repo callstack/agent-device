@@ -8,8 +8,8 @@ import {
   ANDROID_TEST_IME_SETTINGS_KEYS,
 } from '../../platforms/android/ime-lifecycle.ts';
 import { resolveAndroidImeHelperArtifact } from '../../platforms/android/ime-helper.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
-import { normalizeError } from '../../kernel/errors.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { normalizeError } from '@agent-device/kernel/errors';
 import { appendDoctorCheck } from './session-doctor-output.ts';
 import type { DoctorCheck } from '../../contracts/doctor.ts';
 

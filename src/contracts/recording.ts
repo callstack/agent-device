@@ -1,4 +1,4 @@
-import type { DaemonArtifact } from '../kernel/contracts.ts';
+import type { DaemonArtifact } from '@agent-device/kernel/contracts';
 import type { RecordingScope } from './recording-scope.ts';
 
 export type RecordingAppIdentity = {

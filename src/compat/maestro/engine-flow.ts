@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { createRequestCanceledError } from '../../request/cancel.ts';
 import {
   MAESTRO_NUMERIC_FIELD_CONSTRAINTS,

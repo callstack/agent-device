@@ -1,6 +1,11 @@
 // The public API vocabulary for what a device and an open session look like to a client.
 
-import type { AppleOS, DeviceKind, DeviceTarget, PublicPlatform } from '../kernel/device.ts';
+import type {
+  AppleOS,
+  DeviceKind,
+  DeviceTarget,
+  PublicPlatform,
+} from '@agent-device/kernel/device';
 import type { AgentDeviceIdentifiers, DeviceCommandBaseOptions } from './client-connection.ts';
 
 export type AgentDeviceDevice = {

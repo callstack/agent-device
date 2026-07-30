@@ -12,7 +12,7 @@ import { handleSessionInventoryCommands } from '../session-inventory.ts';
 import { listDeviceInventory } from '../../../core/dispatch-resolve.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import type { DaemonRequest, DaemonResponse } from '../../types.ts';
-import type { AppleOS, DeviceInfo } from '../../../kernel/device.ts';
+import type { AppleOS, DeviceInfo } from '@agent-device/kernel/device';
 import {
   ANDROID_EMULATOR,
   IOS_SIMULATOR,

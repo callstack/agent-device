@@ -1,7 +1,7 @@
 import { test, expect } from 'vitest';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED,
   IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_NOTE,

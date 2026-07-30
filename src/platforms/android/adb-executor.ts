@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Readable, Writable } from 'node:stream';
-import type { DeviceInfo } from '../../kernel/device.ts';
-import type { Rect } from '../../kernel/snapshot.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { Rect } from '@agent-device/kernel/snapshot';
 import type { AndroidSnapshotHelperArtifact } from './snapshot-helper-types.ts';
 import type { AndroidProviderTouchPlan } from './touch-plan.ts';
 import {
@@ -16,7 +16,7 @@ import {
   type ExecOptions,
   type ExecResult,
 } from '../../utils/exec.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 export type AndroidAdbExecutorOptions = Pick<
   ExecOptions,

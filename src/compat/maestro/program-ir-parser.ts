@@ -1,5 +1,5 @@
 import { isMap, isSeq, LineCounter, parseAllDocuments, type Node } from 'yaml';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { stripUndefined } from '../../utils/parsing.ts';
 import type {
   MaestroProgram,

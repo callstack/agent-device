@@ -1,4 +1,4 @@
-import type { DeviceTarget, PlatformSelector } from '../kernel/device.ts';
+import type { DeviceTarget, PlatformSelector } from '@agent-device/kernel/device';
 
 export type DoctorStatus = 'pass' | 'warn' | 'fail' | 'info';
 

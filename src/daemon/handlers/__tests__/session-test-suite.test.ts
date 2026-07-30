@@ -30,7 +30,7 @@ import {
   registerRequestAbort,
 } from '../../../request/cancel.ts';
 import { withDeviceInventoryProvider } from '../../../core/dispatch-resolve.ts';
-import type { DeviceInfo } from '../../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeAndroidSession } from '../../../__tests__/test-utils/index.ts';
 
 function makeSessionStore(): SessionStore {

@@ -1,9 +1,9 @@
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { recordingQualityInputToExportQuality } from '../contracts/recording-export-quality.ts';
 import { describeReplayGestureArityError } from '../contracts/gesture-normalization.ts';
 import { readScreenshotScriptFlag } from '../contracts/screenshot.ts';
-import type { DeviceTarget, PlatformSelector } from '../kernel/device.ts';
-import { PLATFORM_SELECTORS } from '../kernel/device.ts';
+import type { DeviceTarget, PlatformSelector } from '@agent-device/kernel/device';
+import { PLATFORM_SELECTORS } from '@agent-device/kernel/device';
 import { parseReplayOpenFlags } from './open-script.ts';
 import type { SessionAction } from '../contracts/session-action.ts';
 import {

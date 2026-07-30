@@ -2,8 +2,8 @@ import { deriveCapabilityMatrix } from './command-descriptor/derive.ts';
 import { commandDescriptors } from './command-descriptor/registry.ts';
 import { tryGetPlugin } from '../contracts/platform-plugin.ts';
 import { registerBuiltinPlatformPlugins } from './interactors/register-builtins.ts';
-import type { DeviceInfo } from '../kernel/device.ts';
-import { AppError } from '../kernel/errors.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import type { GestureSemanticInput } from '../contracts/gesture-plan-types.ts';
 import { assertAppleMultiTouchSupported } from '../contracts/apple-multitouch-support.ts';
 

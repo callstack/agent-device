@@ -1,4 +1,4 @@
-import type { Rect } from '../kernel/snapshot.ts';
+import type { Rect } from '@agent-device/kernel/snapshot';
 import { runCmd, whichCmd } from '../utils/exec.ts';
 
 export type MovementRange = { min: number; max: number };

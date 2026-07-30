@@ -13,7 +13,7 @@ import type {
   Rect,
   SnapshotBackend,
   SnapshotOptions as BaseSnapshotOptions,
-} from '../kernel/snapshot.ts';
+} from '@agent-device/kernel/snapshot';
 
 export type RunnerContext = {
   requestId?: string;

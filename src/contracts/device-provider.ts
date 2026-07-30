@@ -5,8 +5,8 @@
 // daemon in the spine, the shapes have to be declared below both — here — rather than
 // inside the daemon module that happens to consume them first.
 
-import type { DeviceInfo } from '../kernel/device.ts';
-import type { DaemonRequest, LeaseBackend } from '../kernel/contracts.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { DaemonRequest, LeaseBackend } from '@agent-device/kernel/contracts';
 import type { DeviceInventoryRequest } from './device-inventory.ts';
 
 export type DeviceLease = {

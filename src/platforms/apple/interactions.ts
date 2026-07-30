@@ -1,10 +1,10 @@
-import { isIosFamily, isMacOs, isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
+import { isIosFamily, isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { assertScrollGestureInput, type ScrollDirection } from '../../contracts/scroll-gesture.ts';
 import {
   normalizeScrollDurationMs,
   SCROLL_DURATION_MAX_MS,
 } from '../../contracts/scroll-command.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { singlePointerPlanEndpoints, type GesturePlan } from '../../contracts/gesture-plan.ts';
 import { assertAppleMultiTouchSupported } from '../../contracts/apple-multitouch-support.ts';
 import { runAppleRunnerCommand } from './core/runner/runner-client.ts';

@@ -9,7 +9,7 @@ import type {
   LeaseLifecycleProvider,
 } from '../contracts/device-provider.ts';
 import type { Interactor } from '../contracts/interactor-types.ts';
-import type { DaemonRequest } from '../kernel/contracts.ts';
+import type { DaemonRequest } from '@agent-device/kernel/contracts';
 import type {
   ProviderDeviceInstallOptions,
   ProviderDeviceInstallResult,
@@ -19,8 +19,8 @@ import {
   deviceFieldsFromPublicPlatform,
   publicPlatformString,
   type DeviceInfo,
-} from '../kernel/device.ts';
-import { AppError } from '../kernel/errors.ts';
+} from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { unavailableCloudArtifactsResult } from './artifact-results.ts';
 import {
   capabilitySupported,

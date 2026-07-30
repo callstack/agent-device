@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
-import { AppError, normalizeError } from '../../kernel/errors.ts';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { runCmdSync } from '../../utils/exec.ts';
 import { stripUndefined } from '../../utils/parsing.ts';
 

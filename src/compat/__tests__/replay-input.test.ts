@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { parseReplayInput } from '../replay-input.ts';
 
 test('parseReplayInput keeps .ad parsing generic for Maestro suites', () => {

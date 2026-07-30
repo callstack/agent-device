@@ -13,12 +13,24 @@ const packageJson = JSON.parse(
 const publicSdkChunkGroups = [
   [
     'sdk-contracts',
-    /src[\\/]kernel[\\/]contracts\.d\.[cm]?ts$/,
-    /src[\\/]kernel[\\/]contracts\.ts$/,
+    /packages[\\/]kernel[\\/]src[\\/]contracts\.d\.[cm]?ts$/,
+    /packages[\\/]kernel[\\/]src[\\/]contracts\.ts$/,
   ],
-  ['sdk-errors', /src[\\/]kernel[\\/]errors\.d\.[cm]?ts$/, /src[\\/]kernel[\\/]errors\.ts$/],
-  ['sdk-device', /src[\\/]kernel[\\/]device\.d\.[cm]?ts$/, /src[\\/]kernel[\\/]device\.ts$/],
-  ['sdk-snapshot', /src[\\/]kernel[\\/]snapshot\.d\.[cm]?ts$/, /src[\\/]kernel[\\/]snapshot\.ts$/],
+  [
+    'sdk-errors',
+    /packages[\\/]kernel[\\/]src[\\/]errors\.d\.[cm]?ts$/,
+    /packages[\\/]kernel[\\/]src[\\/]errors\.ts$/,
+  ],
+  [
+    'sdk-device',
+    /packages[\\/]kernel[\\/]src[\\/]device\.d\.[cm]?ts$/,
+    /packages[\\/]kernel[\\/]src[\\/]device\.ts$/,
+  ],
+  [
+    'sdk-snapshot',
+    /packages[\\/]kernel[\\/]src[\\/]snapshot\.d\.[cm]?ts$/,
+    /packages[\\/]kernel[\\/]src[\\/]snapshot\.ts$/,
+  ],
   ['sdk-io', /src[\\/]io\.d\.[cm]?ts$/, /src[\\/]io\.ts$/],
   ['sdk-batch', /src[\\/]batch-policy\.d\.[cm]?ts$/, /src[\\/]batch-policy\.ts$/],
   ['sdk-batch-runner', /src[\\/]core[\\/]batch\.d\.[cm]?ts$/, /src[\\/]core[\\/]batch\.ts$/],
@@ -61,6 +73,7 @@ export default defineConfig({
     'internal/png-worker': 'src/utils/png-worker.ts',
     'internal/update-check-entry': 'src/utils/update-check-entry.ts',
   },
+  noExternal: [/^@agent-device\//],
   format: 'esm',
   platform: 'node',
   target: 'es2022',

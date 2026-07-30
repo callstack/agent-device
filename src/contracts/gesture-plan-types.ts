@@ -1,4 +1,4 @@
-import type { Point, Rect } from '../kernel/snapshot.ts';
+import type { Point, Rect } from '@agent-device/kernel/snapshot';
 import type { ScrollDirection, SwipePreset } from './scroll-gesture.ts';
 
 export type GesturePointerCount = 1 | 2;

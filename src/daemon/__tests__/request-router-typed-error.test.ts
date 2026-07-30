@@ -21,7 +21,7 @@ import { createRequestHandler } from '../request-router.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { AppError, retriableForErrorCode } from '../../kernel/errors.ts';
+import { AppError, retriableForErrorCode } from '@agent-device/kernel/errors';
 import { supportedPlatformsForCommand } from '../../core/capabilities.ts';
 
 const mockDispatch = vi.mocked(dispatchCommand);

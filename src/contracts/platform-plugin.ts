@@ -1,5 +1,5 @@
-import { AppError } from '../kernel/errors.ts';
-import type { DeviceInfo, Platform, PlatformSelector } from '../kernel/device.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { DeviceInfo, Platform, PlatformSelector } from '@agent-device/kernel/device';
 import type { LogBackend } from './logs.ts';
 import type { RecordingBackendTag } from './recording.ts';
 import type { PerfMetricsSamplerTag } from './perf.ts';

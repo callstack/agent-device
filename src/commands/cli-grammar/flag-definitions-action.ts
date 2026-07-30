@@ -1,4 +1,4 @@
-import { RESPONSE_LEVELS } from '../../kernel/contracts.ts';
+import { RESPONSE_LEVELS } from '@agent-device/kernel/contracts';
 import { RECORDING_SCOPE_VALUES } from '../../contracts/recording-scope.ts';
 import type { FlagDefinition } from './flag-types.ts';
 

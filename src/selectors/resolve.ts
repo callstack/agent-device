@@ -1,6 +1,6 @@
-import type { Platform, PublicPlatform } from '../kernel/device.ts';
+import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { DisambiguationTiebreak } from '../contracts/interaction.ts';
-import type { SnapshotNode, SnapshotState } from '../kernel/snapshot.ts';
+import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { isNodeVisibleOnScreen } from '../snapshot/mobile-snapshot-semantics.ts';
 import { buildSnapshotNodeMap } from '../snapshot/snapshot-tree.ts';
 import { matchesSelector } from './match.ts';

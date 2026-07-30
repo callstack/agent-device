@@ -1,4 +1,4 @@
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 const canceledRequestIds = new Set<string>();
 const requestAbortControllers = new Map<string, AbortController>();

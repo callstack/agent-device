@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { applyRuntimeHintsToApp, clearRuntimeHintsFromApp } from '../runtime-hints.ts';
 import { applyDeviceDefaultMetroHost } from '../handlers/session-runtime.ts';
 import { resolveRuntimeTransportHints } from '../../utils/runtime-transport.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 
 const LEGACY_PREFS_PATH = 'shared_prefs/ReactNativeDevPrefs.xml';
 

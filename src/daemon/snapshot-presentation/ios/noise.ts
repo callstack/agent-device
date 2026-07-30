@@ -1,5 +1,5 @@
-import type { RawSnapshotNode } from '../../../kernel/snapshot.ts';
-import { rectArea, rectContains } from '../../../kernel/rect.ts';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import { rectArea, rectContains } from '@agent-device/kernel/rect';
 import {
   isReactNativeCollapsedWarningWrapperCandidate,
   isReactNativeCollapsedWarningWrapperWithVisibleBanner,

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { AppError } from '../../../src/kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import {

@@ -4,7 +4,7 @@ import type {
   MaestroEngineObserver,
   MaestroRuntimeMetrics,
 } from '../../compat/maestro/engine-types.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { emitRequestProgress, readReplayTestActionProgress } from '../../request/progress.ts';
 import { stripUndefined } from '../../utils/parsing.ts';
 import type { MaestroFailedEngineEvent } from './session-replay-maestro-failure.ts';

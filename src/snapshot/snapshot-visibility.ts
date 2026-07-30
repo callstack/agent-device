@@ -3,7 +3,7 @@ import {
   usesMobileSnapshotPresentation,
   type SnapshotState,
   type SnapshotVisibility,
-} from '../kernel/snapshot.ts';
+} from '@agent-device/kernel/snapshot';
 
 export function buildSnapshotVisibility(params: {
   nodes: SnapshotState['nodes'];

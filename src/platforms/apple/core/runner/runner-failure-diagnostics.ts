@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
-import { AppError, type AppErrorCode } from '../../../../kernel/errors.ts';
+import { AppError, type AppErrorCode } from '@agent-device/kernel/errors';
 
 const RUNNER_LOG_TAIL_BYTES = 64 * 1024;
 

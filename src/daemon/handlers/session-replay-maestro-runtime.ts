@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   dispatchGestureViewport,
   resolveTargetDevice,
@@ -25,7 +25,7 @@ import {
 } from '../../compat/maestro/replay-plan.ts';
 import type { MaestroPlatform, MaestroProgram } from '../../compat/maestro/program-ir.ts';
 import type { MaestroReplayPlan } from '../../compat/maestro/replay-plan-types.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../types.ts';
 import { assertSessionSelectorMatches } from '../session-selector.ts';
 import { SessionStore } from '../session-store.ts';

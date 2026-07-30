@@ -1,5 +1,5 @@
 import { buildSimctlArgsForDevice } from '../platforms/apple/core/simctl.ts';
-import type { DeviceInfo } from '../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { runCmdBackground, type ExecBackgroundResult, type ExecResult } from '../utils/exec.ts';
 import { createScopedProvider } from '../utils/scoped-provider.ts';
 

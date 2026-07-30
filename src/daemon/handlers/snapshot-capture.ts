@@ -1,5 +1,5 @@
 import { dispatchCommand, type CommandFlags } from '../../core/dispatch.ts';
-import { isMacOs, isMobilePlatform, publicPlatformString } from '../../kernel/device.ts';
+import { isMacOs, isMobilePlatform, publicPlatformString } from '@agent-device/kernel/device';
 import { sleep } from '../../utils/timeouts.ts';
 import { runMacOsSnapshotAction } from '../../platforms/apple/os/macos/helper.ts';
 import { snapshotLinux } from '../../platforms/linux/snapshot.ts';
@@ -12,7 +12,7 @@ import {
   type RawSnapshotNode,
   type SnapshotBackend,
   type SnapshotState,
-} from '../../kernel/snapshot.ts';
+} from '@agent-device/kernel/snapshot';
 import { annotateCoveredSnapshotNodes } from '../../snapshot/snapshot-occlusion.ts';
 import { normalizeSnapshotTree } from '../../snapshot/snapshot-tree.ts';
 import { isAndroidInputMethodSnapshotNode } from '../../snapshot/android-input-method-overlays.ts';

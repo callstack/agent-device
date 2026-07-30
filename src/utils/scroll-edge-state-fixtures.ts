@@ -3,8 +3,8 @@ import {
   type ScrollEdgeState,
   type ScrollEdgeTarget,
 } from './scroll-edge-state.ts';
-import { AppError } from '../kernel/errors.ts';
-import type { RawSnapshotNode, SnapshotNode } from '../kernel/snapshot.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 export function windowRoot(): SnapshotNode {
   return {

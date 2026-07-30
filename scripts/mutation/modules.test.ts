@@ -26,13 +26,13 @@ test('every enumerated kernel path exists', () => {
 });
 
 test('changed sources map onto the module that owns them', () => {
-  assert.equal(moduleForFile('src/kernel/errors.ts'), 'kernel-errors');
+  assert.equal(moduleForFile('packages/kernel/src/errors.ts'), 'kernel-errors');
   assert.equal(moduleForFile('./src/daemon/ref-frame.ts'), 'daemon-ref-frame');
   assert.equal(moduleForFile('src/selectors/parse.ts'), 'selectors');
   // Selector tests live under the owned prefix; every other kernel's tests are
   // attributed by ownership.ts, not by this path match.
   assert.equal(moduleForFile('src/selectors/__tests__/resolve.test.ts'), 'selectors');
-  assert.equal(moduleForFile('src/kernel/rect.ts'), undefined);
+  assert.equal(moduleForFile('packages/kernel/src/rect.ts'), undefined);
   assert.equal(moduleForFile('README.md'), undefined);
 });
 
@@ -41,7 +41,7 @@ test('affected selection is deduplicated and registry-ordered', () => {
     affectedModules([
       'src/selectors/parse.ts',
       'src/selectors/match.ts',
-      'src/kernel/errors.ts',
+      'packages/kernel/src/errors.ts',
       'docs/agents/testing.md',
     ]),
     ['kernel-errors', 'selectors'],
@@ -51,7 +51,7 @@ test('affected selection is deduplicated and registry-ordered', () => {
 
 test('mutate globs default to every module and narrow on request', () => {
   assert.deepEqual(mutateGlobs(), mutateGlobs(ALL_MODULE_IDS));
-  assert.deepEqual(mutateGlobs(['kernel-errors']), ['src/kernel/errors.ts']);
+  assert.deepEqual(mutateGlobs(['kernel-errors']), ['packages/kernel/src/errors.ts']);
 });
 
 // One job per module is only affordable while a module fits the lane's budget;

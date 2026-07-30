@@ -6,7 +6,7 @@ import { resolveActionableTouchResolution } from '../../../core/interaction-targ
 import { tryResolveRefNode } from './resolution.ts';
 import { parseSelectorChain, resolveSelectorChain } from '../../../selectors/index.ts';
 import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
-import type { Point } from '../../../kernel/snapshot.ts';
+import type { Point } from '@agent-device/kernel/snapshot';
 import {
   clickRefE2,
   coveredByTabBarSnapshot,

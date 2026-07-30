@@ -4,7 +4,7 @@ import {
   buildSnapshotPresentationKey,
   snapshotPresentationOptionsFromFlags,
   type SnapshotState,
-} from '../kernel/snapshot.ts';
+} from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '../snapshot/snapshot-quality.ts';
 import type { DaemonRequest, SessionState } from './types.ts';
 import { SessionStore } from './session-store.ts';

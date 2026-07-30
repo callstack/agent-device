@@ -1,6 +1,6 @@
 import type { AgentDeviceBackend, BackendSnapshotResult } from '../../../../../backend.ts';
 import { createLocalArtifactAdapter } from '../../../../../io.ts';
-import type { SnapshotState } from '../../../../../kernel/snapshot.ts';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import {
   createAgentDevice,
   createMemorySessionStore,

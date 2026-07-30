@@ -1,6 +1,6 @@
 import { afterAll, test } from 'vitest';
 import assert from 'node:assert/strict';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { PNG } from '../png-codec.ts';
 import {
   computePngRgbDifferenceAsync,

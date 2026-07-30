@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 import { test } from 'vitest';
 
 import { IOS_DEVICE } from '../../../../__tests__/test-utils/index.ts';
-import { AppError } from '../../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { closeIosApp } from '../app-launch.ts';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
 

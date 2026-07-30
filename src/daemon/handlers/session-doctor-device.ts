@@ -15,8 +15,8 @@ import {
   type DeviceTarget,
   type PlatformSelector,
   type PublicPlatform,
-} from '../../kernel/device.ts';
-import { normalizeError } from '../../kernel/errors.ts';
+} from '@agent-device/kernel/device';
+import { normalizeError } from '@agent-device/kernel/errors';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import type { DoctorCheck } from '../../contracts/doctor.ts';
 import { appendDoctorCheck } from './session-doctor-output.ts';

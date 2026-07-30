@@ -2,7 +2,7 @@ import fc from 'fast-check';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { GESTURE_KINDS, type GesturePayload } from '../../contracts/gesture-input.ts';
 import { SCROLL_DIRECTIONS, SWIPE_PRESETS } from '../../contracts/scroll-gesture.ts';
-import type { Point, RawSnapshotNode, Rect } from '../../kernel/snapshot.ts';
+import type { Point, RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import { SELECTOR_KEY_NAMES, type SelectorKey, type SelectorTerm } from '../../selectors/parse.ts';
 
 /**

@@ -6,7 +6,7 @@ import path from 'node:path';
 import type { CliFlags } from '../../contracts/cli-flags.ts';
 import { parseArgs } from '../../cli/parser/args.ts';
 import { createAgentDeviceClient } from '../../agent-device-client.ts';
-import type { DaemonRequest, DaemonResponse } from '../../kernel/contracts.ts';
+import type { DaemonRequest, DaemonResponse } from '@agent-device/kernel/contracts';
 import { readMetroSessionHints, writeMetroSessionHints } from '../../metro/metro-session-hints.ts';
 import { openCommandFacet } from './app.ts';
 

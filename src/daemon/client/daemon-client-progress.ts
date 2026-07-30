@@ -1,6 +1,6 @@
 import http from 'node:http';
 import type { Socket } from 'node:net';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import type { RequestProgressEvent, RequestProgressSink } from '../../request/progress.ts';
 import { consumeTextLines } from '../../utils/line-stream.ts';

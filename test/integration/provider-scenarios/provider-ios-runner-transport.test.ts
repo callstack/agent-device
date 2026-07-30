@@ -11,7 +11,7 @@ import type {
 } from '../../../src/contracts/device-provider.ts';
 import type { Interactor, RunnerContext } from '../../../src/contracts/interactor-types.ts';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';
-import type { DeviceInfo } from '../../../src/kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createAppleInteractor } from '../../../src/platforms/apple/interactor.ts';
 import type { RunnerCommand } from '../../../src/platforms/apple/core/runner/runner-contract.ts';
 import type {

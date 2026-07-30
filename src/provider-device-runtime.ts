@@ -16,8 +16,8 @@ import type {
   AppleRunnerCommandExecutor,
   AppleRunnerProvider,
 } from './platforms/apple/core/runner/runner-provider.ts';
-import { publicPlatformString, type DeviceInfo } from './kernel/device.ts';
-import { AppError } from './kernel/errors.ts';
+import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 
 export type ProviderDeviceInstallResult = {
   bundleId?: string;

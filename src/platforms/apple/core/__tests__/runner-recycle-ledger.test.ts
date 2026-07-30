@@ -1,6 +1,6 @@
 import { beforeEach, test } from 'vitest';
 import assert from 'node:assert/strict';
-import { AppError } from '../../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   buildRunnerRecycleBudgetExhaustedError,
   commitRunnerRecycle,

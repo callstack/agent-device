@@ -1,5 +1,5 @@
 import { promises as fs } from 'node:fs';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { PNG } from './png-codec.ts';
 import { decodePngAsync, encodePngAsync } from './png-worker-client.ts';
 

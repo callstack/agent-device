@@ -8,15 +8,15 @@ import {
   resolveApplePlatformName,
   resolveAppleSimulatorSetPathForSelector,
   resolveDevice,
-} from '../../kernel/device.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+} from '@agent-device/kernel/device';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   ANDROID_TV_DEVICE,
   IOS_SIMULATOR,
   MACOS_DEVICE,
   TVOS_SIMULATOR,
 } from '../../__tests__/test-utils/device-fixtures.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 test('isTvOsDevice selects only the Apple tvOS leaf, not any TV target', () => {
   assert.equal(isTvOsDevice(TVOS_SIMULATOR), true);

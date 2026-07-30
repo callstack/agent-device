@@ -17,7 +17,7 @@ import {
 } from './__tests__/test-utils/index.ts';
 import { computeTargetEvidence } from '../../../daemon/session-target-evidence.ts';
 import { WAIT_LANDMARK_MISMATCH_REASON } from '../../../replay/target-identity-node.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 test('runtime get reads text from a selector target', async () => {
   const snapshot = selectorReadSnapshot();

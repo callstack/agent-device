@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { executeRunScriptFile } from '../run-script-execution.ts';
 
 test('executeRunScriptFile exposes env and serializes output values', () => {

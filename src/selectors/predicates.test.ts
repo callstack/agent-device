@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { SnapshotNode } from '../kernel/snapshot.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { evaluateIsPredicate, normalizeIsPositionals } from './predicates.ts';
 
 test('normalizeIsPositionals keeps canonical predicate-first arguments untouched', () => {

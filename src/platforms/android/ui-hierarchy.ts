@@ -1,5 +1,5 @@
-import type { RawSnapshotNode, Rect, SnapshotOptions } from '../../kernel/snapshot.ts';
-import { parseBounds } from '../../utils/bounds.ts';
+import type { RawSnapshotNode, Rect, SnapshotOptions } from '@agent-device/kernel/snapshot';
+import { parseBounds } from '@agent-device/kernel/bounds';
 import { isScrollableType } from '../../utils/scrollable.ts';
 import { intersectArea } from '../../utils/screenshot-geometry.ts';
 import {

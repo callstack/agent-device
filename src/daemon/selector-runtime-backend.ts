@@ -5,9 +5,9 @@ import type {
 } from '../backend.ts';
 import { resolveTargetDevice, type CommandFlags } from '../core/dispatch.ts';
 import { createAgentDevice } from '../runtime.ts';
-import { isMacOs, isApplePlatform, publicPlatformString } from '../kernel/device.ts';
+import { isMacOs, isApplePlatform, publicPlatformString } from '@agent-device/kernel/device';
 import { noActiveSessionError, requireCommandSupported } from './handlers/response.ts';
-import type { SnapshotState, SnapshotNode } from '../kernel/snapshot.ts';
+import type { SnapshotState, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { findNodeByLabel } from '../snapshot/snapshot-processing.ts';
 import { runAppleRunnerCommand } from '../platforms/apple/core/runner/runner-client.ts';
 import { buildAppleRunnerRequestOptions } from './apple-runner-options.ts';

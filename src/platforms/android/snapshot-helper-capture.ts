@@ -1,4 +1,4 @@
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '../../utils/exec.ts';
 import {
   parseInstrumentationRecords,

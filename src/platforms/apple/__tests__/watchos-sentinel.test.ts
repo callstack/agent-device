@@ -1,8 +1,8 @@
 import { test, expect } from 'vitest';
 import { createAppleInteractor } from '../interactor.ts';
-import type { DeviceInfo } from '../../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RunnerContext } from '../../../contracts/interactor-types.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 // watchOS is an explicit unsupported sentinel: XCUITest cannot drive watchOS UI,
 // so a `appleOs: 'watchos'` device must be rejected at interactor creation (the

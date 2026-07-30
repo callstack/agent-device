@@ -22,7 +22,7 @@ import {
   type AppErrorCode,
   type Rect,
   type SnapshotNode,
-} from '../kernel/contracts.ts';
+} from '@agent-device/kernel/contracts';
 
 const invalidArgsCode = 'INVALID_ARGS' satisfies AppErrorCode;
 const rect = { x: 1, y: 2, width: 3, height: 4 } satisfies Rect;

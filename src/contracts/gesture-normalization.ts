@@ -1,5 +1,5 @@
-import type { Point } from '../kernel/snapshot.ts';
-import { AppError } from '../kernel/errors.ts';
+import type { Point } from '@agent-device/kernel/snapshot';
+import { AppError } from '@agent-device/kernel/errors';
 import { readGesturePayload, type GESTURE_KINDS, type GesturePayload } from './gesture-input.ts';
 import type { GestureSemanticInput } from './gesture-plan-types.ts';
 

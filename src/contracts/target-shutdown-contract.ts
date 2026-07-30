@@ -1,4 +1,4 @@
-import type { NormalizedError } from '../kernel/errors.ts';
+import type { NormalizedError } from '@agent-device/kernel/errors';
 
 export type TargetShutdownResult = {
   success: boolean;

@@ -1,5 +1,5 @@
-import type { ResponseLevel } from '../kernel/contracts.ts';
-import type { ScreenshotOverlayRef, SnapshotNode } from '../kernel/snapshot.ts';
+import type { ResponseLevel } from '@agent-device/kernel/contracts';
+import type { ScreenshotOverlayRef, SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { DaemonResponseData } from './types.ts';
 
 /**

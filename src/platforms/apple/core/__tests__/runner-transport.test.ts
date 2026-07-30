@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import type { DeviceInfo } from '../../../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ExecBackgroundResult } from '../../../../utils/exec.ts';
-import { AppError } from '../../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { RunnerSession } from '../runner/runner-session-types.ts';
 
 const { mockRunCmd, mockUsbmuxPostCommand } = vi.hoisted(() => ({

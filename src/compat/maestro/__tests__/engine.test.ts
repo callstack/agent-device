@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { maestroTestFailure } from '../compatibility-errors.ts';
 import { parseMaestroProgram } from '../program-ir-parser.ts';
 import type {

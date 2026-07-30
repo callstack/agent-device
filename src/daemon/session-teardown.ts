@@ -1,6 +1,6 @@
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
-import { isMacOs, isApplePlatform } from '../kernel/device.ts';
+import { isMacOs, isApplePlatform } from '@agent-device/kernel/device';
 import { runMacOsAlertAction } from '../platforms/apple/os/macos/helper.ts';
 import { stopAppLog } from './app-log.ts';
 import { stopIosRunnerSession } from '../platforms/apple/core/runner/runner-client.ts';

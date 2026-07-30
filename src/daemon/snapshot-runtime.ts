@@ -1,8 +1,8 @@
-import { isIosFamily, publicPlatformString } from '../kernel/device.ts';
+import { isIosFamily, publicPlatformString } from '@agent-device/kernel/device';
 import type { AgentDeviceBackend, BackendSnapshotResult } from '../backend.ts';
 import type { CommandSessionRecord } from '../runtime.ts';
 import { createAgentDevice } from '../runtime.ts';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { SnapshotDiffSummary } from '../snapshot/snapshot-diff.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } from './types.ts';
 import { SessionStore } from './session-store.ts';

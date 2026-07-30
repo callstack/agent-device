@@ -3,7 +3,7 @@ import type { SettingsUpdateOptions } from '../../contracts/client-settings.ts';
 import { SETTINGS_USAGE_OVERRIDE } from '../../contracts/settings-contract.ts';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import type { CliFlags } from '../../contracts/cli-flags.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { readLocationCoordinate } from '../../utils/location-coordinates.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { enumField, numberField, requiredField, stringField } from '../command-input.ts';

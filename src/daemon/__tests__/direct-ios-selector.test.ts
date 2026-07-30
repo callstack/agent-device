@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { isDirectIosSelectorFallbackError } from '../direct-ios-selector.ts';
 
 test('runner ELEMENT_OFFSCREEN delegates normally but stays typed for Maestro replay', () => {

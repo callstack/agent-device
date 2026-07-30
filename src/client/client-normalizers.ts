@@ -1,6 +1,6 @@
 import type { DaemonRequest, SessionRuntimeHints } from '../daemon/types.ts';
-import { AppError, type NormalizedError } from '../kernel/errors.ts';
-import type { SnapshotNode } from '../kernel/snapshot.ts';
+import { AppError, type NormalizedError } from '@agent-device/kernel/errors';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { buildAppIdentifiers, buildDeviceIdentifiers } from '../contracts/result-serialization.ts';
 import {
   isAppleOs,
@@ -8,7 +8,7 @@ import {
   isPublicPlatform,
   isSerialAddressablePlatform,
   type AppleOS,
-} from '../kernel/device.ts';
+} from '@agent-device/kernel/device';
 import { leaseScopeFromOptions, leaseScopeToRequestMeta } from '../core/lease-scope.ts';
 import type {
   AppDeployResult,

@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { publicPlatformString } from '../kernel/device.ts';
+import { publicPlatformString } from '@agent-device/kernel/device';
 import { inferFillText } from './action-utils.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   formatPortableActionLine,
   formatTargetAnnotationLines,

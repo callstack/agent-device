@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { isAgentDeviceDaemonProcess, trySignalProcess } from './daemon-process.ts';
 import { isProcessAlive, waitForProcessExit } from '../utils/host-process.ts';
 import { sleep } from '../utils/timeouts.ts';

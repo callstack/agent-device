@@ -1,4 +1,4 @@
-import { isIosFamily, isMacOs } from '../../kernel/device.ts';
+import { isIosFamily, isMacOs } from '@agent-device/kernel/device';
 import {
   ALERT_ACTION_RETRY_MS,
   ALERT_POLL_INTERVAL_MS as POLL_INTERVAL_MS,
@@ -9,7 +9,7 @@ import { sleep } from '../../utils/timeouts.ts';
 import { runAppleRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 import { runMacOsAlertAction } from '../../platforms/apple/os/macos/helper.ts';
 import { handleAndroidAlert } from '../../platforms/android/alert.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { buildAppleRunnerRequestOptions } from '../apple-runner-options.ts';

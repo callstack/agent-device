@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { bootFailureHint, classifyBootFailure } from '../boot-diagnostics.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 test('classifyBootFailure maps timeout errors', () => {
   const reason = classifyBootFailure({

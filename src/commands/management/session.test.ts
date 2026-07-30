@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { createAgentDeviceClient } from '../../agent-device-client.ts';
 import { parseArgs } from '../../cli/parser/args.ts';
 import { buildCommandUsageText } from '../../cli/parser/cli-help.ts';
-import type { DaemonRequest, DaemonResponse } from '../../kernel/contracts.ts';
+import type { DaemonRequest, DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '../../contracts/cli-flags.ts';
 import { sessionCommandFacet } from './session.ts';
 

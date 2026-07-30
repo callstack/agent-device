@@ -31,7 +31,6 @@ export type BackEdgeMap = Record<string, string[]>;
 // ranked here or listed as unranked — `unclassifiedZones` and `model.test.ts` guard
 // that no zone is silently unclassified.
 const TARGET_DAG_RANK = new Map([
-  ['kernel', 0],
   ['cloud-webdriver', 1],
   ['contracts', 1],
   ['platforms', 1],
@@ -79,7 +78,10 @@ export function zoneRank(zone: string): number | null {
 // invent an order the architecture had not committed to. Once `utils` joined the spine and
 // `(root)` was emptied of shared contracts, every one of them turned out to have a
 // consistent rank already — so the order was there, just unasserted.
-export const UNRANKED_ZONES: ReadonlySet<string> = new Set(['(root)']);
+// 'kernel' is unranked because it is no longer a src/ zone at all: it lives in
+// packages/kernel (#1490 W0), R11 package-boundaries owns that seam, and its
+// zone name only appears in graphs that follow workspace specifiers.
+export const UNRANKED_ZONES: ReadonlySet<string> = new Set(['(root)', 'kernel']);
 
 export type ZoneClassification = 'ranked' | 'unranked' | 'unclassified';
 
@@ -156,6 +158,8 @@ export function parseImports(source: string): ImportEdge[] {
 }
 
 export function topFolder(file: string): string {
+  const packageMatch = /^packages\/([^/]+)\//.exec(file);
+  if (packageMatch) return packageMatch[1]!;
   const match = /^src\/([^/]+)\//.exec(file);
   return match ? match[1]! : '(root)';
 }
@@ -184,6 +188,20 @@ function resolveTargetFile(
   spec: string,
   sourceFiles: ReadonlySet<string>,
 ): string | null {
+  if (spec.startsWith('@agent-device/')) {
+    // Workspace specifier (#1490 W0): resolve against whichever home the
+    // module has in the provided source map — `packages/<name>/src/<sub>.ts`
+    // on the real tree, `src/<name>/<sub>.ts` in pre-move fixtures — so graph
+    // analyses keep following edges across the package seam.
+    const [name, ...subParts] = spec.slice('@agent-device/'.length).split('/');
+    const sub = subParts.join('/');
+    if (!name || !sub) return null;
+    return (
+      [`packages/${name}/src/${sub}.ts`, `src/${name}/${sub}.ts`].find((candidate) =>
+        sourceFiles.has(candidate),
+      ) ?? null
+    );
+  }
   if (!spec.startsWith('.')) return null;
   const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(fromFile), spec));
   if (!resolved.startsWith('src/')) return null;

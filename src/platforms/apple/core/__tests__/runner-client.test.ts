@@ -39,7 +39,7 @@ vi.mock('../../../../utils/host-process.ts', async (importOriginal) => {
   return { ...actual, readProcessStartTime: vi.fn(() => 'test-process-start') };
 });
 
-import type { DeviceInfo } from '../../../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   type RequestProgressEvent,
   withRequestProgressSink,
@@ -49,7 +49,7 @@ import {
   flushDiagnosticsToSessionFile,
   withDiagnosticsScope,
 } from '../../../../utils/diagnostics.ts';
-import { AppError } from '../../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { isReadOnlyRunnerCommand } from '../runner/runner-command-traits.ts';
 import {
   isRetryableRunnerError,

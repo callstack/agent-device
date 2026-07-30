@@ -1,4 +1,4 @@
-import { isIosFamily, publicPlatformString } from '../kernel/device.ts';
+import { isIosFamily, publicPlatformString } from '@agent-device/kernel/device';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,7 +7,7 @@ import type { ArtifactAdapter } from '../io.ts';
 import { createAgentDevice, localCommandPolicy } from '../runtime.ts';
 import { dispatchCommand } from '../core/dispatch.ts';
 import { screenshotFlagsFromOptions, screenshotOptionsFromFlags } from '../contracts/screenshot.ts';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { readScreenshotResultData } from '../utils/screenshot-result.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { SessionState } from './types.ts';

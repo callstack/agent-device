@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import { buildGesturePlan } from '../../../contracts/gesture-plan.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session.ts';
 import {

@@ -1,4 +1,4 @@
-import type { DeviceKind, PublicPlatform } from '../kernel/device.ts';
+import type { DeviceKind, PublicPlatform } from '@agent-device/kernel/device';
 import type { JsonObject } from './json.ts';
 
 export type PrepareIosRunnerCacheKind = 'exact' | 'restore-key' | 'miss' | 'external';

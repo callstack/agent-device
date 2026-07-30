@@ -14,7 +14,7 @@ import {
   runXcrun,
 } from '../../platforms/apple/core/tool-provider.ts';
 import { resolveWebProvider, type WebProvider } from '../../platforms/web/provider.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { withRequestPlatformProviderScope } from '../request-platform-providers.ts';
 import type { DaemonRequest } from '../types.ts';
 

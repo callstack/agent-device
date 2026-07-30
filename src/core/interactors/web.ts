@@ -1,5 +1,5 @@
 import type { Interactor } from '../../contracts/interactor-types.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { resolveWebProvider } from '../../platforms/web/provider.ts';
 import { createUnsupportedInteractor } from '../../platforms/unsupported-interactor.ts';

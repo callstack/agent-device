@@ -37,18 +37,63 @@ export function isTestFile(filePath: string): boolean {
   return normalized.startsWith('src/') && normalized.endsWith('.test.ts');
 }
 
-/** Repository-relative modules a file imports, following relative specifiers only. */
+/**
+ * Workspace package specifiers resolved through each package's `exports` map,
+ * derived from each `packages/<name>/package.json` — never hand-listed. Without this the
+ * graph walk stops at every `@agent-device/*` edge and a kernel living in
+ * `packages/` silently loses all of its owned tests.
+ */
+function workspaceExportTargets(repoRoot: string): Map<string, string> {
+  const targets = new Map<string, string>();
+  const packagesDir = path.join(repoRoot, 'packages');
+  if (!fs.existsSync(packagesDir)) return targets;
+  for (const entry of fs.readdirSync(packagesDir)) {
+    const manifestPath = path.join(packagesDir, entry, 'package.json');
+    if (!fs.existsSync(manifestPath)) continue;
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as {
+      name?: string;
+      exports?: Record<string, { default?: string } | string>;
+    };
+    if (!manifest.name || !manifest.exports) continue;
+    for (const [subpath, target] of Object.entries(manifest.exports)) {
+      const file = typeof target === 'string' ? target : target.default;
+      if (!file) continue;
+      const specifier = path.posix.join(manifest.name, subpath);
+      targets.set(specifier, path.posix.join('packages', entry, path.posix.normalize(file)));
+    }
+  }
+  return targets;
+}
+
+let cachedExportTargets: { repoRoot: string; targets: Map<string, string> } | undefined;
+
+function exportTargetsFor(repoRoot: string): Map<string, string> {
+  if (cachedExportTargets?.repoRoot !== repoRoot) {
+    cachedExportTargets = { repoRoot, targets: workspaceExportTargets(repoRoot) };
+  }
+  return cachedExportTargets.targets;
+}
+
+/**
+ * Repository-relative modules a file imports: relative specifiers plus
+ * workspace package specifiers resolved through their `exports` maps.
+ */
 function importsOf(file: string, repoRoot: string, cache: Map<string, string[]>): string[] {
   const cached = cache.get(file);
   if (cached) return cached;
   const absolute = path.join(repoRoot, file);
   const text = fs.existsSync(absolute) ? fs.readFileSync(absolute, 'utf8') : '';
-  const specifiers = [...text.matchAll(/(?:from|import)\s*\(?\s*'(?<spec>\.[^']+)'/g)].map(
+  const specifiers = [...text.matchAll(/(?:from|import)\s*\(?\s*'(?<spec>[.@][^']+)'/g)].map(
     (match) => match.groups!.spec,
   );
+  const exportTargets = exportTargetsFor(repoRoot);
   const resolved = [
     ...new Set(
       specifiers.flatMap((specifier) => {
+        if (specifier.startsWith('@')) {
+          const target = exportTargets.get(specifier);
+          return target && fs.existsSync(path.join(repoRoot, target)) ? [target] : [];
+        }
         const base = path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier));
         return [base, `${base}.ts`, `${base}/index.ts`].filter((candidate) =>
           fs.existsSync(path.join(repoRoot, candidate)),

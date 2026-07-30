@@ -36,7 +36,7 @@ import { createRequestHandler } from '../request-router.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { commandRpcParamsSchema } from '../../kernel/contracts.ts';
+import { commandRpcParamsSchema } from '@agent-device/kernel/contracts';
 
 const mockDispatch = vi.mocked(dispatchCommand);
 

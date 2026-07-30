@@ -11,8 +11,8 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { AppError } from '../../kernel/errors.ts';
-import type { RawSnapshotNode, Rect } from '../../kernel/snapshot.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import { normalizeAtspiRole } from './role-map.ts';
 import { resolveLinuxToolProvider, runLinuxToolCommand } from './tool-provider.ts';
 import type {

@@ -14,7 +14,7 @@ vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOrigi
 import { handlePressCommand } from '../dispatch-interactions.ts';
 import type { Interactor } from '../../contracts/interactor-types.ts';
 import type { RunnerCommand } from '../../platforms/apple/core/runner/runner-contract.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 
 vi.mock('../../platforms/apple/os/macos/helper.ts', async (importOriginal) => {

@@ -1,7 +1,7 @@
 import { isDeepLinkTarget } from '../../contracts/open-target.ts';
 import type { Interactor, RunnerContext } from '../../contracts/interactor-types.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
-import { AppError } from '../../kernel/errors.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { createUnsupportedInteractor } from '../unsupported-interactor.ts';
 import { closeVegaApp, openVegaApp, openVegaDevice } from './app-lifecycle.ts';
 import { pressVegaTvRemote } from './input-actions.ts';

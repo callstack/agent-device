@@ -3,7 +3,11 @@
 import type { SessionSurface } from './session-surface.ts';
 import type { PublicSnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
-import type { SnapshotNode, SnapshotUnchanged, SnapshotVisibility } from '../kernel/snapshot.ts';
+import type {
+  SnapshotNode,
+  SnapshotUnchanged,
+  SnapshotVisibility,
+} from '@agent-device/kernel/snapshot';
 import type { ScreenshotResultData } from '../utils/screenshot-result.ts';
 import type {
   AgentDeviceIdentifiers,

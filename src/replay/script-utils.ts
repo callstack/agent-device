@@ -1,6 +1,6 @@
 import type { SessionAction } from '../contracts/session-action.ts';
 import { appendScreenshotScriptFlags } from '../contracts/screenshot.ts';
-import { splitRefGenerationSuffix } from '../kernel/snapshot.ts';
+import { splitRefGenerationSuffix } from '@agent-device/kernel/snapshot';
 
 /**
  * #1076 versioned refs: a recorded ref positional may carry a `~s<generation>`

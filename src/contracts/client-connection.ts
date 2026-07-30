@@ -8,8 +8,8 @@ import type {
   ResponseLevel,
   SessionIsolationMode,
   SessionRuntimeHints,
-} from '../kernel/contracts.ts';
-import type { DeviceTarget, PlatformSelector } from '../kernel/device.ts';
+} from '@agent-device/kernel/contracts';
+import type { DeviceTarget, PlatformSelector } from '@agent-device/kernel/device';
 import type {
   CloudProviderProfileFields,
   RemoteConnectionProfileFields,

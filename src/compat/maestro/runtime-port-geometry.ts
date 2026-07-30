@@ -1,7 +1,7 @@
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { buildInPageSwipeGesturePlan } from '../../contracts/scroll-gesture.ts';
-import { isPositiveFiniteRect } from '../../kernel/rect.ts';
-import type { Rect, SnapshotState } from '../../kernel/snapshot.ts';
+import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
+import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
 import {
   findLargestViewportRect,
   findNearestScrollableContainer,

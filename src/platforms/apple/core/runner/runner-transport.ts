@@ -1,8 +1,8 @@
 import { createRequestCanceledError, isRequestCanceledError } from '../../../../request/cancel.ts';
-import { AppError } from '../../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { requireExecSuccess } from '../../../../utils/exec.ts';
 import { Deadline, retryWithPolicy } from '../../../../utils/retry.ts';
-import type { DeviceInfo } from '../../../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { classifyBootFailure, bootFailureHint } from '../../../boot-diagnostics.ts';
 import { buildSimctlArgsForDevice } from '../simctl.ts';
 import { runXcrun } from '../tool-provider.ts';

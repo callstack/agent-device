@@ -1,4 +1,4 @@
-import type { SessionRuntimeHints } from '../kernel/contracts.ts';
+import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 
 /**
  * One step of a daemon batch, as submitted.

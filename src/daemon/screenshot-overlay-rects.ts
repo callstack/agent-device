@@ -1,5 +1,5 @@
-import type { Rect } from '../kernel/snapshot.ts';
-import { rectContains } from '../kernel/rect.ts';
+import type { Rect } from '@agent-device/kernel/snapshot';
+import { rectContains } from '@agent-device/kernel/rect';
 
 export { rectContains };
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { pressVegaTvRemote } from '../input-actions.ts';
 import { createLocalVegaToolProvider, withVegaToolProvider } from '../tool-provider.ts';
 

@@ -1,6 +1,6 @@
 import type { DeviceInventoryProvider } from '../contracts/device-provider.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   isApplePlatform,
   isIosFamily,
@@ -10,7 +10,7 @@ import {
   type DeviceInfo,
   type DeviceTarget,
   type PlatformSelector,
-} from '../kernel/device.ts';
+} from '@agent-device/kernel/device';
 import { withDiagnosticTimer } from '../utils/diagnostics.ts';
 import {
   resolveAndroidSerialAllowlist,

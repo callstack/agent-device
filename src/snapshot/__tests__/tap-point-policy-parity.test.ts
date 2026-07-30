@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { isTapPointInsideViewport } from '../mobile-snapshot-semantics.ts';
-import type { Rect } from '../../kernel/snapshot.ts';
+import type { Rect } from '@agent-device/kernel/snapshot';
 
 // ADR 0011 Layer 2 golden parity table: the SAME JSON is asserted against the
 // Swift twin (TapPointPolicy in apple/runner/AgentDeviceRunner/

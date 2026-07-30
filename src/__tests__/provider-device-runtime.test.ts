@@ -10,7 +10,7 @@ import {
 } from '../provider-device-runtime.ts';
 import type { Interactor } from '../contracts/interactor-types.ts';
 import type { SimulatorLease } from '../daemon/lease-registry.ts';
-import type { DeviceInfo } from '../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 
 afterEach(() => {
   setActiveProviderDeviceRuntimes([]);

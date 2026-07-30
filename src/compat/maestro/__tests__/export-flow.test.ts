@@ -1,6 +1,6 @@
 import { parseAllDocuments } from 'yaml';
 import { describe, expect, test } from 'vitest';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { exportReplayScriptToMaestro } from '../export-flow.ts';
 import { parseMaestroProgram } from '../program-ir-parser.ts';
 

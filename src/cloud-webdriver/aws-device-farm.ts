@@ -19,7 +19,7 @@ import type { DeviceLease } from '../contracts/device-provider.ts';
 import type { ProviderDeviceRuntime } from '../provider-device-runtime.ts';
 import { runCmd } from '../utils/exec.ts';
 import { sleep } from '../utils/timeouts.ts';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
 import { resolveLeaseValue, type LeaseValue } from './webdriver-utils.ts';
 

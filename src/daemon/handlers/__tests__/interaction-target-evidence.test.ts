@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { handleInteractionCommands } from '../interaction.ts';
-import { attachRefs, type RawSnapshotNode } from '../../../kernel/snapshot.ts';
+import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { SessionScriptWriter } from '../../session-script-writer.ts';

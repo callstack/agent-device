@@ -1,5 +1,5 @@
 import { getAndroidAppState } from '../../platforms/android/app-lifecycle.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { SessionState } from '../types.ts';
 
 export type AndroidEscapeSurface = {

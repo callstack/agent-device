@@ -1,7 +1,7 @@
 import type { DsymMatch, SymbolicatedAddress, SymbolicationGroup } from './types.ts';
 import { addressKey, hex, unique } from './utils.ts';
 import { requireExecSuccess, runCmd } from '../../../../utils/exec.ts';
-import { AppError } from '../../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 export async function symbolicateAddresses(
   addresses: SymbolicatedAddress[],

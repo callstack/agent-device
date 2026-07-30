@@ -8,9 +8,9 @@ import {
   PLATFORM_SELECTORS,
   type DeviceTarget,
   type PlatformSelector,
-} from '../kernel/device.ts';
+} from '@agent-device/kernel/device';
 import type { JsonSchema } from './command-contract.ts';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { readOptionalInteger as optionalInteger } from '../contracts/input-validation.ts';
 
 const INTERACTION_TARGET_KINDS = ['ref', 'selector', 'point'] as const;

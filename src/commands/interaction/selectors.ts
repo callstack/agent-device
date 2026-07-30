@@ -1,7 +1,7 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { FindOptions, IsOptions } from '../../contracts/client-selector-read.ts';
 import type { CliFlags } from '../../contracts/cli-flags.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { checkIsPredicate, normalizeIsPositionals } from '../../selectors/predicates.ts';
 import {
   direct,

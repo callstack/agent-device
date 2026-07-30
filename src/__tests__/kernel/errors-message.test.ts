@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { AppError, normalizeError } from '../errors.ts';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 
 // maybeEnrichCommandFailedMessage / firstStderrLine: how normalizeError turns a
 // raw process-exit stderr blob into (or leaves alone) the reported message.

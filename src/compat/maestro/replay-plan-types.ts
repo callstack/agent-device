@@ -1,7 +1,7 @@
 import type { MaestroProgramLoader } from './program-loader.ts';
 import type { MaestroPlatform, MaestroSourceLocation } from './program-ir.ts';
 import type { MaestroControlCommandDescriptor, MaestroRuntimeCommand } from './engine-types.ts';
-import type { SessionRuntimeHints } from '../../kernel/contracts.ts';
+import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 
 export type MaestroReplayPlanScope = Readonly<Record<string, string | number | boolean>>;
 

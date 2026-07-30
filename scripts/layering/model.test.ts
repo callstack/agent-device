@@ -119,7 +119,7 @@ test('type-only edges are ranked by R6 and ignored by R5, and vice versa', () =>
       ['src/client/client-types.ts', 'export type Shape = { a: 1 };'],
       ['src/contracts/value.ts', "import '../core/logic.ts';"],
       ['src/core/logic.ts', 'export const logic = true;'],
-      ['src/kernel/lazy.ts', "void import('../commands/surface.ts');"],
+      ['src/contracts/lazy.ts', "void import('../commands/surface.ts');"],
     ]),
   );
 
@@ -144,7 +144,7 @@ test('ranked and unranked zones are disjoint and both non-empty', () => {
 });
 
 test('classifyZone separates the ranked spine from intentionally-unranked zones', () => {
-  assert.equal(classifyZone('kernel'), 'ranked');
+  assert.equal(classifyZone('contracts'), 'ranked');
   assert.equal(classifyZone('daemon-server'), 'ranked');
   assert.equal(classifyZone('(root)'), 'unranked');
   assert.equal(classifyZone('utils'), 'ranked');
@@ -529,7 +529,18 @@ test("the repo's own zero-dep jobs resolve without node_modules", () => {
     exists,
     packageScripts,
   );
-  assert.ok(jobs.length > 0, 'expected ci.yml to still declare at least one zero-dep job');
+  // #1490 W0 removed the last zero-dep job: affected-selector's entry closure
+  // reaches `@agent-device/kernel` workspace specifiers through src/utils, and
+  // the R8 relative-import exception is unsafe for production src files (Node's
+  // ESM loader does not realpath, so a file loaded both relatively and via its
+  // package specifier would instantiate twice in one process — duplicate
+  // AppError, broken instanceof). Pin the empty set deliberately: a NEW
+  // zero-dep job re-engages R8 automatically and must update this expectation.
+  assert.deepEqual(
+    jobs.map((job) => job.job),
+    [],
+    'zero-dep jobs changed: verify the new job satisfies R8 and update this pin',
+  );
   for (const job of jobs) {
     assert.ok(job.entries.length > 0, `${job.job} must name an entry script`);
     assert.deepEqual(

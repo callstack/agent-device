@@ -1,6 +1,6 @@
-import { AppError } from '../kernel/errors.ts';
-import type { PublicPlatform } from '../kernel/device.ts';
-import type { Point, Rect } from '../kernel/snapshot.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { PublicPlatform } from '@agent-device/kernel/device';
+import type { Point, Rect } from '@agent-device/kernel/snapshot';
 import {
   buildSwipePresetGesturePlan,
   gestureDirectionDelta,

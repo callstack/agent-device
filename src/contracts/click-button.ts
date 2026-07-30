@@ -1,4 +1,4 @@
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 export const CLICK_BUTTONS = ['primary', 'secondary', 'middle'] as const;
 export type ClickButton = (typeof CLICK_BUTTONS)[number];

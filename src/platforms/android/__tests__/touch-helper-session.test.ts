@@ -10,8 +10,8 @@ import { EventEmitter } from 'node:events';
 import net from 'node:net';
 import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, test, vi } from 'vitest';
-import type { DeviceInfo } from '../../../kernel/device.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   withAndroidAdbProvider,
   type AndroidAdbProcess,

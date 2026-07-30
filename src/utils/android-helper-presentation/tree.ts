@@ -1,4 +1,4 @@
-import type { SnapshotNode } from '../../kernel/snapshot.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 
 export function findAncestor(
   node: SnapshotNode,

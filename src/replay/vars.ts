@@ -1,4 +1,4 @@
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { SessionAction } from '../contracts/session-action.ts';
 
 export type ReplayVarScope = {

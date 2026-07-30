@@ -1,4 +1,4 @@
-import { AppError, toAppErrorCode } from '../../kernel/errors.ts';
+import { AppError, toAppErrorCode } from '@agent-device/kernel/errors';
 import { createRequestId } from '../../utils/diagnostics.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { materializeRemoteArtifacts } from '../../remote/daemon-artifacts.ts';

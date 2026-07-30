@@ -17,7 +17,7 @@ import {
   leaseScopeToHeartbeatRequest,
   leaseScopeToReleaseRequest,
 } from '../../core/lease-scope.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { listDownloadableArtifacts } from '../artifact-tracking.ts';
 
 type LeaseHandlerArgs = {

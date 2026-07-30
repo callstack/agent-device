@@ -1,4 +1,4 @@
-import type { SnapshotNode } from '../../kernel/snapshot.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { areSameVisualRow, hasRenderableArea, isRectContainedBy } from './geometry.ts';
 import { normalizeStructuralNodeLabel, visibleNodeLabel } from './labels.ts';
 import { isEditableNode, isRootNode } from './predicates.ts';

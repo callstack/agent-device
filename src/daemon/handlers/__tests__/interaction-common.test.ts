@@ -1,7 +1,7 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
-import { attachRefs, type RawSnapshotNode } from '../../../kernel/snapshot.ts';
+import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { CommandFlags } from '../../../core/dispatch.ts';
 import { handleInteractionCommands } from '../interaction.ts';
 import { finalizeTouchInteraction } from '../interaction-common.ts';

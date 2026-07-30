@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { interactionCliReaders, interactionDaemonWriters } from './interactions.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '../../contracts/cli-flags.ts';
 
 const BASE_FLAGS: CliFlags = { json: false, help: false, version: false };

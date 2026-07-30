@@ -6,7 +6,7 @@ import {
   KNOWN_APP_ERROR_CODES,
   normalizeError,
   retriableForErrorCode,
-} from '../errors.ts';
+} from '@agent-device/kernel/errors';
 
 // hint/diagnosticId/logPath/retriable/supportedOn: what normalizeError lifts
 // out of details onto the wire shape, and what it strips back out.

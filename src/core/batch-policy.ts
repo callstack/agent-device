@@ -1,6 +1,6 @@
 import { deriveStructuredBatchCommandNames } from './command-descriptor/derive.ts';
 import { commandDescriptors } from './command-descriptor/registry.ts';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 /**
  * The exact set of command names exposed through `batch`, as a narrow union.

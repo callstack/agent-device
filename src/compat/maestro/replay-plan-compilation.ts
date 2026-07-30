@@ -2,7 +2,7 @@ import { computeMaestroReplayPlanDigest } from './replay-plan-digest.ts';
 import type { MaestroProgram } from './program-ir.ts';
 import { compileMaestroReplayPlanSteps } from './replay-plan-steps.ts';
 import type { MaestroReplayPlan, MaestroReplayPlanOptions } from './replay-plan-types.ts';
-import type { SessionRuntimeHints } from '../../kernel/contracts.ts';
+import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import { stripUndefined } from '../../utils/parsing.ts';
 
 export async function compileMaestroReplayPlan(

@@ -18,7 +18,7 @@ const ANDROID_NEARBY_LINE_RADIUS = 5;
 const ANDROID_PACKET_SCAN_RADIUS = 12;
 const NETWORK_LOG_MEMORY_PATH = '<memory>';
 
-import type { NetworkIncludeMode } from '../kernel/contracts.ts';
+import type { NetworkIncludeMode } from '@agent-device/kernel/contracts';
 import type { LogBackend } from '../contracts/logs.ts';
 import type { NetworkEntry } from '../contracts/network-log.ts';
 export type { NetworkIncludeMode };

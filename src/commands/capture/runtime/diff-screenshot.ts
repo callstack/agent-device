@@ -9,7 +9,7 @@ import type {
   ResolvedInputFile,
 } from '../../../io.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   compareScreenshots,
   type ScreenshotDiffResult,

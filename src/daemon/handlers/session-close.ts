@@ -1,7 +1,7 @@
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { AppError, normalizeError } from '../../kernel/errors.ts';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { scheduleIosRunnerIdleStop } from '../../platforms/apple/core/runner/runner-client.ts';
-import { isApplePlatform, type DeviceInfo } from '../../kernel/device.ts';
+import { isApplePlatform, type DeviceInfo } from '@agent-device/kernel/device';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import { dispatchCommand } from '../../core/dispatch.ts';
 import { contextFromFlags } from '../context.ts';

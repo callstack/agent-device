@@ -1,4 +1,4 @@
-import { isIosFamily } from '../../kernel/device.ts';
+import { isIosFamily } from '@agent-device/kernel/device';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';

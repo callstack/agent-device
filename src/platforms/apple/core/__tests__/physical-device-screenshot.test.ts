@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { shouldFallbackToRunnerForIosScreenshot } from '../physical-device-screenshot.ts';
-import { AppError } from '../../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 test('shouldFallbackToRunnerForIosScreenshot detects removed devicectl subcommand output', () => {
   const error = new AppError('COMMAND_FAILED', 'Failed to capture iOS screenshot', {

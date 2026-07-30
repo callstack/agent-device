@@ -2,7 +2,7 @@ import { test, expect } from 'vitest';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { buildSnapshotSignatures } from '../../android-snapshot-freshness.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   mockDispatch,
   mockResolveTargetDevice,

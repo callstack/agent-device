@@ -1,6 +1,6 @@
 import { runCmd, whichCmd, type ExecOptions, type ExecResult } from '../../utils/exec.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { createScopedProvider } from '../../utils/scoped-provider.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import type { ClickButton } from '../../contracts/click-button.ts';

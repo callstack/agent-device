@@ -1,6 +1,6 @@
 import { isDeepLinkTarget } from '../../contracts/open-target.ts';
 import { dispatchCommand } from '../../core/dispatch.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest, SessionRuntimeHints } from '../types.ts';
 import { contextFromFlags } from '../context.ts';
 

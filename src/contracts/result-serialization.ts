@@ -16,7 +16,7 @@ import {
   publicSnapshotCaptureAnnotations,
   type SnapshotCaptureAnnotations,
 } from './snapshot-capture-annotations.ts';
-import { isSerialAddressablePlatform, type PublicPlatform } from '../kernel/device.ts';
+import { isSerialAddressablePlatform, type PublicPlatform } from '@agent-device/kernel/device';
 import { successText, withSuccessText } from '../utils/success-text.ts';
 
 export function buildAppIdentifiers(params: {

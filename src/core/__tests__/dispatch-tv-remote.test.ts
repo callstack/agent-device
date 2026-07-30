@@ -9,7 +9,7 @@ vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOrigi
 });
 
 import { dispatchCommand } from '../dispatch.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { runAppleRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 import {
   ANDROID_EMULATOR,

@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import type { DeviceInfo } from '../../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { prewarmAppleRunnerCache } from '../../../platforms/apple/core/runner/runner-client.ts';
 import { resolveCommandDevice } from '../session-device-utils.ts';
 import { ensureDeviceReady } from '../../device-ready.ts';

@@ -4,9 +4,9 @@ import {
   getSnapshotReferenceFrame,
   type TouchReferenceFrame,
 } from '../../daemon/touch-reference-frame.ts';
-import { AppError } from '../../kernel/errors.ts';
-import { isPositiveFiniteRect, rectContains } from '../../kernel/rect.ts';
-import type { Rect, SnapshotState } from '../../kernel/snapshot.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import { isPositiveFiniteRect, rectContains } from '@agent-device/kernel/rect';
+import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
 import type {
   MaestroObservation,
   MaestroObservationCondition,

@@ -1,4 +1,4 @@
-import { AppError, type AppErrorDetails } from '../../kernel/errors.ts';
+import { AppError, type AppErrorDetails } from '@agent-device/kernel/errors';
 
 const MAESTRO_TEST_FAILURE_REASON = 'maestro-test-failure';
 

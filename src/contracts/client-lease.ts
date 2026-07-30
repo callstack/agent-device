@@ -1,6 +1,6 @@
 // The public API vocabulary for device lease allocation and cloud artifacts.
 
-import type { LeaseBackend } from '../kernel/contracts.ts';
+import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import type {
   AgentDeviceRequestOverrides,
   AgentDeviceSelectionOptions,

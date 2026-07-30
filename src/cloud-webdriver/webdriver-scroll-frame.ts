@@ -1,4 +1,4 @@
-import type { RawSnapshotNode } from '../kernel/snapshot.ts';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { WebDriverWindowRect } from './webdriver-client.ts';
 import { parseWebDriverSource } from './webdriver-source.ts';
 

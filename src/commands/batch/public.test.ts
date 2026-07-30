@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { runBatch } from '../../sdk/batch.ts';
-import type { DaemonRequest } from '../../kernel/contracts.ts';
+import type { DaemonRequest } from '@agent-device/kernel/contracts';
 
 test('public batch entrypoint exports daemon-compatible orchestration helpers', async () => {
   const seenCommands: string[] = [];

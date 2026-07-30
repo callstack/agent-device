@@ -1,6 +1,6 @@
 import { formatScreenshotDiffText, formatSnapshotDiffText } from '../../utils/output.ts';
-import { AppError } from '../../kernel/errors.ts';
-import { isNonDefaultResponseLevel } from '../../kernel/contracts.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import { isNonDefaultResponseLevel } from '@agent-device/kernel/contracts';
 import { resolveUserPath } from '../../utils/path-resolution.ts';
 import type { AgentDeviceBackend } from '../../backend.ts';
 import type { AgentDeviceClient, CaptureScreenshotResult } from '../../agent-device-client.ts';

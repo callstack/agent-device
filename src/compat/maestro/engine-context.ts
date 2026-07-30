@@ -1,4 +1,4 @@
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { MaestroObservation } from './engine-types.ts';
 
 export type MaestroExecutionContext = ReturnType<typeof createMaestroExecutionContext>;

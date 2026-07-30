@@ -1,5 +1,5 @@
-import { AppError, asAppError } from '../../kernel/errors.ts';
-import type { Rect } from '../../kernel/snapshot.ts';
+import { AppError, asAppError } from '@agent-device/kernel/errors';
+import type { Rect } from '@agent-device/kernel/snapshot';
 import { emitDiagnostic, registerDiagnosticSensitiveValue } from '../../utils/diagnostics.ts';
 import { stripUndefined } from '../../utils/parsing.ts';
 import { executeRunScriptFile } from './run-script-execution.ts';

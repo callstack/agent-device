@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { attachRefs, type RawSnapshotNode, type SnapshotNode } from '../../kernel/snapshot.ts';
+import { attachRefs, type RawSnapshotNode, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import { collectSettleChromeRefs, withoutSettleChrome } from '../snapshot-chrome.ts';
 import {
   ANDROID_IME_CAPTURE_RAW_NODES,

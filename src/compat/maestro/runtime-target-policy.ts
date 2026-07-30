@@ -1,5 +1,5 @@
 import type { MaestroSelector } from './program-ir.ts';
-import type { SnapshotNode, SnapshotState } from '../../kernel/snapshot.ts';
+import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { evaluateIsPredicate } from '../../selectors/predicates.ts';
 import { normalizeText } from '../../selectors/find.ts';
 import { matchesMaestroRegex } from './selector-regex.ts';

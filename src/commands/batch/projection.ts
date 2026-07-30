@@ -9,7 +9,7 @@ import {
   readBatchStepRecord,
 } from '../../contracts/batch-contract.ts';
 import type { DaemonBatchStep } from '../../core/batch.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { request } from '../cli-grammar/common.ts';
 import type { CommandInput, DaemonCommandRequest, DaemonWriter } from '../cli-grammar/types.ts';
 import { buildRequestFlags } from '../command-flags.ts';

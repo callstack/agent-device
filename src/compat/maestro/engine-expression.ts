@@ -1,4 +1,4 @@
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { MaestroExecutionContext } from './engine-context.ts';
 import type { MaestroPlatform } from './program-ir.ts';
 

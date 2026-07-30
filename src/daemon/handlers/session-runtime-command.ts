@@ -1,5 +1,5 @@
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
-import { publicPlatformString } from '../../kernel/device.ts';
+import { publicPlatformString } from '@agent-device/kernel/device';
 import { SessionStore } from '../session-store.ts';
 import { clearRuntimeHintsFromApp, hasRuntimeTransportHints } from '../runtime-hints.ts';
 import { errorResponse } from './response.ts';

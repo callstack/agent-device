@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { DeviceInfo } from '../../../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { PNG } from '../../../../utils/png.ts';
 import { screenshotIos } from '../screenshot.ts';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';

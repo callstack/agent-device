@@ -1,4 +1,4 @@
-import type { ScreenshotOverlayRef } from '../kernel/snapshot.ts';
+import type { ScreenshotOverlayRef } from '@agent-device/kernel/snapshot';
 import { isRecord, parsePoint, parseRect } from './parsing.ts';
 
 export type ScreenshotResultData = {

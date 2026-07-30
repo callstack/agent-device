@@ -1,5 +1,5 @@
 import { retryWithPolicy } from '../../../../utils/retry.ts';
-import { isIosFamily, type DeviceInfo } from '../../../../kernel/device.ts';
+import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
 import {
   stopIosRunnerSession,

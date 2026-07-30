@@ -15,7 +15,7 @@ import {
   whichCmd,
   type ExecResult,
 } from '../exec.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 test('runCmd enforces timeoutMs and rejects with COMMAND_FAILED', async () => {
   await assert.rejects(

@@ -13,7 +13,7 @@ import type {
   DaemonResponseData,
   NetworkIncludeMode,
   SessionRuntimeHints,
-} from '../kernel/contracts.ts';
+} from '@agent-device/kernel/contracts';
 import type { DaemonBatchStep } from './batch-step.ts';
 import type { AgentDeviceClientConfig, AgentDeviceSelectionOptions } from './client-connection.ts';
 

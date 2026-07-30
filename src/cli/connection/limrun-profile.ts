@@ -1,6 +1,6 @@
 import { resolveDaemonPaths } from '../../daemon/config.ts';
 import type { RemoteConfigProfile } from '../../remote/remote-config-schema.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '../../contracts/cli-flags.ts';
 import type { EnvMap } from '../../utils/env-map.ts';
 import { readMetroProfileFields } from './profile-fields.ts';

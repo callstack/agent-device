@@ -1,4 +1,4 @@
-import type { DeviceInfo } from '../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 
 export const ANDROID_EMULATOR: DeviceInfo = {
   platform: 'android',

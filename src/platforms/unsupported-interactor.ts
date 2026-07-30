@@ -1,4 +1,4 @@
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { Interactor } from '../contracts/interactor-types.ts';
 
 export function createUnsupportedInteractor(platformLabel: string): Interactor {

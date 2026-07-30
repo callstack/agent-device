@@ -1,4 +1,4 @@
-import type { DaemonError } from '../kernel/contracts.ts';
+import type { DaemonError } from '@agent-device/kernel/contracts';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
 
 export type ReplayCommandResult = {

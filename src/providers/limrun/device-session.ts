@@ -1,6 +1,6 @@
 import type { Interactor } from '../../contracts/interactor-types.ts';
 import { resolveAppsFilter, type AppsFilter } from '../../contracts/app-inventory.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AndroidAdbProvider } from '../../platforms/android/adb-executor.ts';
 import type {
   AndroidKeyboardDismissResult,

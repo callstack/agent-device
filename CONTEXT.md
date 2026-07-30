@@ -252,7 +252,7 @@ The perfect-shape refactor is complete and merged. Its end-state:
 - Apple platform model. Internally `Platform` is `apple` (plus `android`/`vega`/`linux`/`web`) with an
   `appleOs` discriminant (`ios | ipados | tvos | watchos | visionos | macos`); the shared Apple engine
   lives under `src/platforms/apple/core/` with per-OS leaves under `src/platforms/apple/os/<os>/`.
-  The public wire stays non-breaking: `PUBLIC_PLATFORMS` (`src/kernel/device.ts`) still emits
+  The public wire stays non-breaking: `PUBLIC_PLATFORMS` (`packages/kernel/src/device.ts`) still emits
   `ios`/`macos` leaf output. See [ADR 0009](docs/adr/0009-apple-platform-consolidation.md).
 - Vega platform model. Initial Vega OS support is deliberately **VVD-only**: discovery returns
   `VirtualDevice`, and platform capability admission rejects physical Fire TV devices until durable
@@ -270,7 +270,7 @@ The perfect-shape refactor is complete and merged. Its end-state:
   it ranks an explicit target spine — as rank groups, lowest (kernel sink) to highest, where `A ◄ B`
   means B may not be outranked by A (the back-edge order the gate rejects), NOT that every displayed
   import exists:
-  `kernel ◄ { contracts, request, selectors, platforms, utils, replay, recording, snapshot, screenshot-diff, cloud-webdriver } ◄ { core, providers } ◄ { commands, cli-schema, mcp } ◄ { client, daemon-server, compat, remote, metro, sdk } ◄ daemon-client ◄ cli` —
+  `{ contracts, request, selectors, platforms, utils, replay, recording, snapshot, screenshot-diff, cloud-webdriver } ◄ { core, providers } ◄ { commands, cli-schema, mcp } ◄ { client, daemon-server, compat, remote, metro, sdk } ◄ daemon-client ◄ cli` (the former rank-0 kernel zone lives in `packages/kernel` since #1490 W0; R11 package-boundaries owns that seam, and R1 kernel-sink is retired as physically subsumed) —
   and rejects every back-edge within it. Only `(root)` is unranked (`UNRANKED_ZONES` in
   `scripts/layering/model.ts`): it holds the entrypoints and the composition roots that wire the
   command surface into the daemon, and R2 forbids `daemon/` from importing `commands/`, so those

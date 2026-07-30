@@ -12,7 +12,7 @@
  * `recordingTarget` — consumed exclusively at the recording boundary
  * (`interaction-touch-response.ts`), never in the wire response.
  */
-import type { SnapshotNode } from '../kernel/snapshot.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { containsPoint } from '../utils/rect-visibility.ts';
 import { resolveRectCenter } from '../utils/rect-center.ts';
 import {

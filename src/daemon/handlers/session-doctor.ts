@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
-import { isIosFamily, publicPlatformString, type DeviceInfo } from '../../kernel/device.ts';
+import { isIosFamily, publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { emitRequestProgress } from '../../request/progress.ts';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import { readVersion } from '../../utils/version.ts';

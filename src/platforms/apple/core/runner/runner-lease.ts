@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
-import { AppError } from '../../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { acquireProcessLock } from '../../../../utils/process-lock.ts';
 import { readProcessStartTime } from '../../../../utils/host-process.ts';
 import { classifyOwnerLiveness } from '../../../../utils/owner-identity.ts';

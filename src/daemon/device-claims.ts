@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { publicPlatformString, type DeviceInfo } from '../kernel/device.ts';
+import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { acquireProcessLock } from '../utils/process-lock.ts';
 import { ownerIdentityMatches, readCurrentOwnerIdentity } from '../utils/owner-identity.ts';

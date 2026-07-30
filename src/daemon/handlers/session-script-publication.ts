@@ -1,5 +1,5 @@
 import { INTERNAL_COMMANDS } from '../../command-catalog.ts';
-import { AppError, normalizeError } from '../../kernel/errors.ts';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { successText } from '../../utils/success-text.ts';
 import { applySaveScriptRetarget } from '../session-action-recorder.ts';
 import { expandSessionPath } from '../session-paths.ts';

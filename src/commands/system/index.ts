@@ -8,7 +8,7 @@ import {
   TV_REMOTE_BUTTONS,
   tvRemoteDurationMode,
 } from '../../contracts/tv-remote.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import {
   defineCommandFacet,

@@ -9,7 +9,7 @@
  * daemon.
  */
 
-import type { SnapshotNode } from '../kernel/snapshot.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { readNodeLocalIdentity } from './target-identity-node.ts';
 import {
   matchesAncestryPrefix,

@@ -7,7 +7,7 @@ import {
   WEB_DESKTOP_DEVICE,
   type DeviceInventoryRequest,
 } from '../../contracts/device-inventory.ts';
-import type { Platform, DeviceInfo } from '../../kernel/device.ts';
+import type { Platform, DeviceInfo } from '@agent-device/kernel/device';
 import { resolveAndroidDiscoverySerialAllowlist } from '../platform-inventory.ts';
 
 // The builtin-plugin wiring lives at the interactor seam (src/core/interactors/) —

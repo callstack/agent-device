@@ -1,4 +1,4 @@
-import { asAppError, normalizeError } from '../../kernel/errors.ts';
+import { asAppError, normalizeError } from '@agent-device/kernel/errors';
 import { errorResponse } from './response.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import type {

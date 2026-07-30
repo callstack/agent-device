@@ -4,8 +4,8 @@ import {
   type RawSnapshotNode,
   type Rect,
   type SnapshotNode,
-} from '../kernel/snapshot.ts';
-import { rectArea } from '../kernel/rect.ts';
+} from '@agent-device/kernel/snapshot';
+import { rectArea } from '@agent-device/kernel/rect';
 
 type ReactNativeOverlayNode = Pick<
   RawSnapshotNode,

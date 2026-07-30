@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { getFlagDefinition } from './flag-registry.ts';
-import { PLATFORM_SELECTORS } from '../../kernel/device.ts';
+import { PLATFORM_SELECTORS } from '@agent-device/kernel/device';
 
 test('--platform enumValues are derived from the canonical PLATFORM_SELECTORS tuple', () => {
   const platformFlag = getFlagDefinition('--platform');

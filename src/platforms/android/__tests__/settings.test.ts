@@ -4,8 +4,8 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { setAndroidSetting } from '../settings.ts';
-import type { DeviceInfo } from '../../../kernel/device.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { withScriptedAdb } from '../../../__tests__/test-utils/mocked-binaries.ts';
 
 test('setAndroidSetting appearance toggle flips current mode', async () => {

@@ -1,5 +1,5 @@
 import type { MetroBridgeScope } from './companion-tunnel-scope.ts';
-import type { SessionRuntimeHints } from '../kernel/contracts.ts';
+import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 
 // Metro vocabulary shared by the command surface (which validates it) and metro/ (which
 // acts on it).

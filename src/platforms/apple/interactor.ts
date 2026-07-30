@@ -20,10 +20,10 @@ import {
 import { toAppleTvRemoteButton } from '../../contracts/tv-remote.ts';
 import { DEVICE_ROTATIONS, type DeviceRotation } from '../../contracts/device-rotation.ts';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
-import { isMacOs, isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { withMethodScope } from '../../utils/method-scope.ts';
-import type { RawSnapshotNode } from '../../kernel/snapshot.ts';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type {
   Interactor,
   RunnerCallOptions,

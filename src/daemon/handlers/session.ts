@@ -6,8 +6,8 @@ import {
   prepareIosRunner,
   type PrepareIosRunnerResult,
 } from '../../platforms/apple/core/runner/runner-client.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
-import { publicPlatformString } from '../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { publicPlatformString } from '@agent-device/kernel/device';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { contextFromFlags } from '../context.ts';

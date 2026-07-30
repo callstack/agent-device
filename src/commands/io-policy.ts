@@ -9,7 +9,7 @@ import type {
   TemporaryFile,
 } from '../io.ts';
 import type { AgentDeviceRuntime } from '../runtime-contract.ts';
-import { AppError, asAppError } from '../kernel/errors.ts';
+import { AppError, asAppError } from '@agent-device/kernel/errors';
 
 export async function resolveCommandInput(
   runtime: AgentDeviceRuntime,

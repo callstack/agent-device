@@ -3,7 +3,7 @@ import {
   transformInteractionResponseData,
   type InteractionResponseDataTransformCommand,
 } from '../../core/interaction-response-data-transform.ts';
-import { isApplePlatform, publicPlatformString } from '../../kernel/device.ts';
+import { isApplePlatform, publicPlatformString } from '@agent-device/kernel/device';
 import { normalizeAppleRunnerResultForResponse } from '../../platforms/apple/core/runner/runner-result-response-normalization.ts';
 import {
   buttonTag,
@@ -16,7 +16,7 @@ import type {
   LongPressCommandResult,
   PressCommandResult,
 } from '../../contracts/interaction.ts';
-import { asAppError, normalizeError } from '../../kernel/errors.ts';
+import { asAppError, normalizeError } from '@agent-device/kernel/errors';
 import type { ReplayTargetGuardDenotation } from '../../replay/target-identity-node.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
 import { finalizeTouchInteraction, type InteractionHandlerParams } from './interaction-common.ts';

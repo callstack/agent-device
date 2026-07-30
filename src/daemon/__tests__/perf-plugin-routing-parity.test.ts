@@ -1,7 +1,7 @@
 import type { PerfMetricsSamplerTag } from '../../contracts/perf.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   isIosFamily,
   isMacOs,
@@ -10,7 +10,7 @@ import {
   type DeviceInfo,
   type DeviceKind,
   type DeviceTarget,
-} from '../../kernel/device.ts';
+} from '@agent-device/kernel/device';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import {
   ANDROID_EMULATOR,

@@ -364,7 +364,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       errorTaxonomy: {
         kind: 'runtime',
-        via: 'src/kernel/errors.ts#normalizeError',
+        via: 'packages/kernel/src/errors.ts#normalizeError',
       },
       resolutionDisclosure: {
         kind: 'inapplicable',

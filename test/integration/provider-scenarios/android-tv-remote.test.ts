@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { DeviceInfo } from '../../../src/kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AndroidAdbProvider } from '../../../src/platforms/android/adb-executor.ts';
 import { assertCommandCall } from './assertions.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';

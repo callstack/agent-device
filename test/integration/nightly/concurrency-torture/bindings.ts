@@ -18,7 +18,7 @@
 // (by the deterministic scheduler) because `withKeyedLock`'s native microtask
 // hand-off cannot be reproduced from a seed.
 
-import type { DeviceInfo } from '../../../../src/kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { CommandFlags } from '../../../../src/core/dispatch-context.ts';
 import type { DaemonRequest } from '../../../../src/daemon/types.ts';
 import type { SessionStore } from '../../../../src/daemon/session-store.ts';

@@ -18,7 +18,7 @@ import { makeIosSession } from '../../../__tests__/test-utils/session-factories.
 import { baseReplayRequest as baseReq } from './session-replay-runtime.fixtures.ts';
 import type { MaestroCommand } from '../../../compat/maestro/program-ir.ts';
 import type { MaestroReplayPlan } from '../../../compat/maestro/replay-plan-types.ts';
-import type { SnapshotNode } from '../../../kernel/snapshot.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 
 const mockDispatchCommand = vi.mocked(dispatchCommand);
 

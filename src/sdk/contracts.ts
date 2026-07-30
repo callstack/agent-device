@@ -8,6 +8,6 @@ export type {
   JsonRpcRequestEnvelope,
   LeaseBackend,
   SessionRuntimeHints,
-} from '../kernel/contracts.ts';
+} from '@agent-device/kernel/contracts';
 
-export { centerOfRect, defaultHintForCode, normalizeError } from '../kernel/contracts.ts';
+export { centerOfRect, defaultHintForCode, normalizeError } from '@agent-device/kernel/contracts';

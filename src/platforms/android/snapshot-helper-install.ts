@@ -1,4 +1,4 @@
-import { asAppError, type AppError } from '../../kernel/errors.ts';
+import { asAppError, type AppError } from '@agent-device/kernel/errors';
 import { readAndroidSnapshotHelperInstallOptions } from './snapshot-helper-artifact.ts';
 import {
   inspectInstalledAndroidHelper,

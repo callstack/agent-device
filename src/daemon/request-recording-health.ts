@@ -1,4 +1,4 @@
-import { isIosFamily } from '../kernel/device.ts';
+import { isIosFamily } from '@agent-device/kernel/device';
 import { getRunnerSessionSnapshot } from '../platforms/apple/core/runner/runner-client.ts';
 import type { SessionState } from './types.ts';
 

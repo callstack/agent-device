@@ -93,12 +93,12 @@ the new thing — never to suppress or allowlist it.
 - `keyboard dismiss` is the iOS keyboard dismissal path. It may tap safe native controls such as
   `Done`, but must not fall back to system back navigation.
 - Do not remove shared snapshot/session model behavior without full migration.
-- Apple-family target changes keep `src/kernel/device.ts`, `src/core/capabilities.ts`,
+- Apple-family target changes keep `packages/kernel/src/device.ts`, `src/core/capabilities.ts`,
   `src/core/dispatch-resolve.ts`, `src/platforms/apple/core/devices.ts`, and
   `src/platforms/apple/core/runner/runner-xctestrun.ts` in sync.
 - iOS simulator-set scoping is iOS-specific: `iosSimulatorDeviceSet` must not hide the host macOS
   desktop target when `--platform macos` or `--target desktop` is requested.
-- Use `inferFillText` (`src/daemon/action-utils.ts`), `uniqueStrings` (`src/kernel/collections.ts`),
+- Use `inferFillText` (`src/daemon/action-utils.ts`), `uniqueStrings` (`@agent-device/kernel/collections`),
   and `evaluateIsPredicate` (`src/selectors/predicates.ts`) rather than reimplementing them.
 - Do not update `skills/**/SKILL.md` for command behavior or workflow guidance unless the user asks.
   Skills are thin routers to versioned CLI help; they must not carry behavior details.
@@ -188,7 +188,7 @@ connect errors, retry policy, or command typing, start in
   and must not duplicate backend logic. App/device logs stay in `app.log`; Apple runner and
   `xcodebuild` subprocess output belongs in the session-scoped `runner.log`. Preserve the external
   grep/tail workflow documented in help/skills.
-- Normalize user-facing failures via `normalizeError` (`src/kernel/errors.ts`). Payload contract:
+- Normalize user-facing failures via `normalizeError` (`@agent-device/kernel/errors`). Payload contract:
   `code`, `message`, `hint`, `diagnosticId`, `logPath`, `details`. Preserve `hint`, `diagnosticId`,
   and `logPath` when wrapping or rethrowing. Errors say what failed, why when known, and how to
   recover — recovery steps go in `hint` when the action is not obvious.

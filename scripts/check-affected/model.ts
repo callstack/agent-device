@@ -120,7 +120,15 @@ function isSelectorOwning(file: string): boolean {
 }
 
 function isWorkflowTooling(file: string): boolean {
-  return file.startsWith('.github/') || file.startsWith('scripts/') || ROOT_TOOLING.has(file);
+  // A workspace package manifest or tsconfig rewires module resolution for
+  // every consumer, so it fails open like root tooling does.
+  const packageTooling = /^packages\/[^/]+\/(?:package\.json|tsconfig\.json)$/.test(file);
+  return (
+    file.startsWith('.github/') ||
+    file.startsWith('scripts/') ||
+    packageTooling ||
+    ROOT_TOOLING.has(file)
+  );
 }
 
 function isDocs(file: string): boolean {
@@ -215,6 +223,32 @@ const vitestRelatedOwnership: OwnershipRule = ({ file, isTs, underSrc, underTest
         ),
       ]
     : [];
+
+// Workspace package source (#1490 W0): bundled into the published artifact,
+// type-checked in the root graph, covered by Vitest's module graph, and
+// guarded by layering R11. Fallow deliberately ignores packages/** (its
+// resolver cannot follow workspace specifiers), so fallow is not selected.
+const workspacePackageOwnership: OwnershipRule = ({ file, isTs }) => {
+  if (!isTs || !/^packages\/[^/]+\/src\//.test(file)) return [];
+  const selections = [
+    reason('format', file, 'gate:format', 'oxfmt covers packages/'),
+    reason('lint', file, 'gate:lint', 'oxlint covers packages/'),
+    reason('typecheck', file, 'gate:typecheck', 'tsc includes packages/'),
+    reason('layering', file, 'package-src', 'layering R11 guards workspace package boundaries'),
+    reason(
+      'vitest-related',
+      file,
+      'vitest:related',
+      'Vitest resolves affected tests through its static module graph',
+    ),
+  ];
+  if (!isTestPath(file)) {
+    selections.push(
+      reason('build', file, 'package-src', 'package source is bundled into the published artifact'),
+    );
+  }
+  return selections;
+};
 
 const nodeIntegrationOwnership: OwnershipRule = ({ file }) =>
   isNodeIntegrationPath(file)
@@ -314,6 +348,7 @@ const OWNERSHIP_RULES: readonly OwnershipRule[] = [
   staticTsGates,
   srcProdGate,
   vitestRelatedOwnership,
+  workspacePackageOwnership,
   nodeIntegrationOwnership,
   testAppOwnership,
   replayCompatOwnership,

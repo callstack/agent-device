@@ -1,4 +1,4 @@
-import type { DeviceInfo } from '../../../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { resolveIosPhysicalDeviceControl } from '../physical-device-control.ts';
 
 const RUNNER_DEVICE_TUNNEL_IP_CACHE_TTL_MS = 30_000;

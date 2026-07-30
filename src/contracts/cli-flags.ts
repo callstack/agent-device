@@ -3,7 +3,7 @@ import type { RecordingExportQuality } from './recording-export-quality.ts';
 import type { BackMode } from './back-mode.ts';
 import type { ClickButton } from './click-button.ts';
 import type { SwipePattern } from './scroll-gesture.ts';
-import type { DeviceTarget, PlatformSelector } from '../kernel/device.ts';
+import type { DeviceTarget, PlatformSelector } from '@agent-device/kernel/device';
 import type {
   DaemonInstallSource,
   DaemonServerMode,
@@ -13,7 +13,7 @@ import type {
   ResponseLevel,
   SessionIsolationMode,
   SessionRuntimeHints,
-} from '../kernel/contracts.ts';
+} from '@agent-device/kernel/contracts';
 import type {
   CloudProviderProfileFields,
   RemoteConfigMetroOptions,

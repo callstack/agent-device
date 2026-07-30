@@ -12,7 +12,7 @@ import {
   summarizeCliSession,
   writeCliSession,
 } from '../auth-session.ts';
-import { normalizeError } from '../../kernel/errors.ts';
+import { normalizeError } from '@agent-device/kernel/errors';
 
 const baseFlags = {
   json: false,

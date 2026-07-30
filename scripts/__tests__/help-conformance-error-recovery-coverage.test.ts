@@ -8,7 +8,7 @@ import {
   defaultHintForCode,
   KNOWN_APP_ERROR_CODES,
   retriableForErrorCode,
-} from '../../src/kernel/errors.ts';
+} from '@agent-device/kernel/errors';
 
 // "What enumerates N" for the error surface. The benchmark's recovery quizzes
 // (a pinned rendered error plus "what command runs next?") are keyed to the

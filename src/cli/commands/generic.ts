@@ -5,7 +5,7 @@ import type { CliOutput } from '../../commands/command-contract.ts';
 import type { ReplaySuiteResult } from '../../contracts/replay.ts';
 import type { CliFlags } from '../../contracts/cli-flags.ts';
 import { readCommandMessage } from '../../utils/success-text.ts';
-import { isNonDefaultResponseLevel } from '../../kernel/contracts.ts';
+import { isNonDefaultResponseLevel } from '@agent-device/kernel/contracts';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientBackedCliCommandName } from './client-backed.ts';
 import type { ClientCommandParams } from './router-types.ts';

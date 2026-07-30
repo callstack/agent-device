@@ -19,13 +19,13 @@ vi.mock('./agent-browser-lifecycle.ts', async (importOriginal) => {
 import { createAgentBrowserWebProvider } from './agent-browser-provider.ts';
 import type { WebSnapshotResult } from './provider.ts';
 import { withCommandExecutorOverride, type ExecResult } from '../../utils/exec.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   buildSelectorChainForNode,
   parseSelectorChain,
   resolveSelectorChain,
 } from '../../selectors/index.ts';
-import { attachRefs } from '../../kernel/snapshot.ts';
+import { attachRefs } from '@agent-device/kernel/snapshot';
 import { installFakeManagedAgentBrowser } from './__tests__/test-utils.ts';
 
 type AgentBrowserCall = {

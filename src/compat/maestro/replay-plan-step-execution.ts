@@ -1,4 +1,4 @@
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { stripUndefined } from '../../utils/parsing.ts';
 import { isMaestroTestFailure, maestroTestFailure } from './compatibility-errors.ts';
 import {

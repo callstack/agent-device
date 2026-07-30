@@ -3,7 +3,7 @@ import { projectedSystemCommandOutputSchemas } from '../commands/system/index.ts
 import type { CommandResultMap } from '../core/command-descriptor/command-result.ts';
 import { booleanSchema, looseObjectSchema, stringSchema } from '../commands/command-input.ts';
 import { SESSION_SURFACES } from '../contracts/session-surface.ts';
-import { DEVICE_TARGETS, PUBLIC_PLATFORMS } from '../kernel/device.ts';
+import { DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
 
 /**
  * Registry of per-command MCP `outputSchema`s, keyed by the daemon command

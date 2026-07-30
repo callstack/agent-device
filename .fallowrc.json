@@ -33,6 +33,7 @@
     "website/rspress.config.ts"
   ],
   "ignorePatterns": [
+    "packages/**",
     "examples/test-app/**",
     "scripts/perf/**",
     "scripts/layering/**",

@@ -3,7 +3,7 @@ import {
   buildAndroidHelperPresentationInput,
   type AndroidHelperPresentationInput,
 } from './android-helper-snapshot-presentation.ts';
-import { AppError, normalizeError, type NormalizedError } from '../kernel/errors.ts';
+import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { detectPossibleRepeatedNavSubtree } from './repeated-nav-subtree.ts';
 import { formatReplayDivergenceReport } from '../replay/divergence.ts';
 import { buildSnapshotDisplayLines, formatSnapshotLine } from '../snapshot/snapshot-lines.ts';
@@ -14,7 +14,7 @@ import {
   type SnapshotNode,
   type SnapshotUnchanged,
   type SnapshotVisibility,
-} from '../kernel/snapshot.ts';
+} from '@agent-device/kernel/snapshot';
 import type { MovementRange } from '../screenshot-diff/screenshot-diff-ocr.ts';
 import type { ScreenshotDiffResult } from '../screenshot-diff/screenshot-diff.ts';
 import type { ScreenshotDiffRegion } from '../screenshot-diff/screenshot-diff-regions.ts';

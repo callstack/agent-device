@@ -1,5 +1,5 @@
-import { AppError } from '../../../kernel/errors.ts';
-import type { Point } from '../../../kernel/snapshot.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { Point } from '@agent-device/kernel/snapshot';
 import {
   assertExclusiveScrollDistanceInputs,
   honoredScrollDurationMs,

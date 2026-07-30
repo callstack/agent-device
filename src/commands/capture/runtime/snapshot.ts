@@ -9,7 +9,7 @@ import {
   type SnapshotCaptureAnnotations,
 } from '../../../contracts/snapshot-capture-annotations.ts';
 import { renderSnapshotQualityWarnings } from '../../../snapshot/snapshot-quality.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   buildSnapshotDiff,
   countSnapshotComparableLines,
@@ -19,7 +19,7 @@ import type {
   SnapshotState,
   SnapshotUnchanged,
   SnapshotVisibility,
-} from '../../../kernel/snapshot.ts';
+} from '@agent-device/kernel/snapshot';
 import { buildSnapshotVisibility } from '../../../snapshot/snapshot-visibility.ts';
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '../../../snapshot/system-surface-disclosure.ts';
 import { formatReactNativeOverlayWarning } from '../../react-native/overlay.ts';

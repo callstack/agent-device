@@ -11,7 +11,7 @@ import {
   retriableForErrorCode,
   toAppErrorCode,
   type KnownAppErrorCode,
-} from '../errors.ts';
+} from '@agent-device/kernel/errors';
 
 test('toAppErrorCode falls back when code is missing or empty', () => {
   assert.equal(toAppErrorCode(undefined), 'COMMAND_FAILED');

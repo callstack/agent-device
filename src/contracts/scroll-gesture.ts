@@ -1,6 +1,6 @@
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { defineStringEnum } from '../utils/string-enum.ts';
-import type { Rect, SnapshotNode } from '../kernel/snapshot.ts';
+import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 // What a caller may ASK for, as opposed to `ScrollDirection` (what the gesture resolves to):
 // `top`/`bottom` are scroll-to-extreme requests with no direction of their own. Declared here

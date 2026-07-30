@@ -8,8 +8,8 @@ import {
   publicPlatformString,
   type DeviceInfo,
   type PublicPlatform,
-} from '../../../kernel/device.ts';
-import { AppError } from '../../../kernel/errors.ts';
+} from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   execFailureDetails,
   requireExecSuccess,
@@ -17,7 +17,7 @@ import {
   type ExecBackgroundResult,
   type ExecResult,
 } from '../../../utils/exec.ts';
-import { uniqueStrings } from '../../../kernel/collections.ts';
+import { uniqueStrings } from '@agent-device/kernel/collections';
 import { findAllXmlNodes } from './perf-xml.ts';
 import {
   isRetryableIosDeviceTraceRecordFailure,

@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import type { RunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
-import { AppError } from '../../kernel/errors.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import type { Interactor, RunnerContext } from '../../contracts/interactor-types.ts';
 import {
   setActiveProviderDeviceRuntimes,

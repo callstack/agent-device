@@ -1,4 +1,4 @@
-import type { SnapshotNode, SnapshotState } from '../../../kernel/snapshot.ts';
+import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 
 export type SnapshotNodeFixture = Omit<SnapshotNode, 'ref'> & { ref?: string };
 

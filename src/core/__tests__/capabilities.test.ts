@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { isCommandSupportedOnDevice, unsupportedHintForDevice } from '../capabilities.ts';
-import { matchesPlatformSelector, type DeviceInfo } from '../../kernel/device.ts';
+import { matchesPlatformSelector, type DeviceInfo } from '@agent-device/kernel/device';
 import { WEB_DESKTOP_DEVICE } from '../../__tests__/test-utils/index.ts';
 
 const iosSimulator: DeviceInfo = {

@@ -1,15 +1,17 @@
 // Import-direction lint — enforces the folder DAG established by the Phase-5
 // folder moves (see CONTEXT.md, "Architecture: folder DAG + layering lint").
 //
-// Ranked target spine, as rank groups lowest (kernel sink) to highest. `A ◄ B` means B may not
+// Ranked target spine, as rank groups lowest to highest. `A ◄ B` means B may not
 // be outranked by A (the back-edge order the gate rejects), NOT that every displayed import exists:
-//   kernel ◄ { contracts, request, selectors, platforms } ◄ core ◄ { commands, cli-schema }
+//   { contracts, request, selectors, platforms } ◄ core ◄ { commands, cli-schema }
 //         ◄ { client, daemon-server } ◄ daemon-client ◄ cli
-// (authoritative ranks: `TARGET_DAG_RANK` in model.ts)
+// (authoritative ranks: `TARGET_DAG_RANK` in model.ts. The former rank-0 kernel
+// zone lives in packages/kernel since #1490 W0; R11 owns its boundary.)
 //
 // This gate enforces five things, across four scopes:
-//   - GLOBALLY, across every production source file: the R1-R3 move rules and
-//     rejection of all production static value-import cycles (R4).
+//   - GLOBALLY, across every production source file: the R2-R3 move rules and
+//     rejection of all production static value-import cycles (R4). R1 kernel-sink
+//     retired with the kernel's move to packages/kernel (#1490 W0).
 //   - Over the RANKED SPINE only: rejection of every spine back-edge (R5), i.e.
 //     an import whose source zone outranks its target zone, plus a ratchet on the
 //     same inversion measured over TYPE-ONLY edges (R6).
@@ -24,6 +26,8 @@
 //   - Across the DAEMON MODULARITY MIGRATION: R7 ownership pressure and external
 //     daemon/types.ts importers only shrink, R9 zone membership cannot grow or absorb
 //     engine files, and planned logical modules start with zero forbidden/internal imports (R10).
+//   - Over the WORKSPACE PACKAGES: no root back-imports, no relative tunnelling past
+//     an exports map, and every workspace specifier declared + exports-named (R11).
 // Only `(root)` is unranked (see `UNRANKED_ZONES` in model.ts): it holds the
 // entrypoints and the composition roots that wire the command surface into the
 // daemon, which R2 forbids the daemon from importing, so they sit outside the
@@ -57,6 +61,7 @@ import {
   daemonModularitySummary,
   TYPE_CYCLE_BASELINE,
 } from './daemon-modularity.ts';
+import { checkPackageBoundaries, packageBoundariesSummary } from './package-boundaries.ts';
 import { policyLead, policyViolation, ZONE_POLICIES } from './zone-policy.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
@@ -67,10 +72,17 @@ export function listSourceFiles(): string[] {
   // `src/**/*.ts` only matches nested files; root-level `src/*.ts` (e.g.
   // src/cli.ts, src/command-catalog.ts) needs its own pathspec or it silently
   // drops out of cycle/back-edge analysis.
-  const out = execFileSync('git', ['ls-files', 'src/*.ts', 'src/**/*.ts'], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-  });
+  // Workspace package sources are production files too (#1490 W0): R4 cycle
+  // rejection and the zone staleness guard must see them, and workspace
+  // specifiers resolve across the seam in resolveTargetFile.
+  const out = execFileSync(
+    'git',
+    ['ls-files', 'src/*.ts', 'src/**/*.ts', 'packages/*/src/*.ts', 'packages/*/src/**/*.ts'],
+    {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    },
+  );
   return out.split('\n').filter(Boolean).filter(isProductionSourceFile);
 }
 
@@ -417,13 +429,13 @@ function report(
 ): number {
   if (violations.length === 0) {
     process.stdout.write(
-      `Layering guard: OK — ${files.length} source files satisfy R1-R3 and contain no ` +
+      `Layering guard: OK — ${files.length} source files satisfy R2-R3 and contain no ` +
         `value-import cycles (both checked globally); the ranked target spine contains no ` +
         `back-edges (only the composition root is unranked), and its type-only ` +
         `inversions match the R6 ratchet (${Object.values(TYPE_INVERSION_BASELINE).reduce((sum, count) => sum + count, 0)} remaining); ` +
         `all ${sessionStateFieldCount()} SessionState fields are classified and every write is ` +
         `inside its declared owner (R7); every zero-dep CI job resolves without ` +
-        `node_modules (R8); ${typeCycleNote(typeCycle)}; and ${daemonModularitySummary()}.\n`,
+        `node_modules (R8); ${typeCycleNote(typeCycle)}; ${daemonModularitySummary()}; and ${packageBoundariesSummary(repoRoot)}.\n`,
     );
     return 0;
   }
@@ -464,6 +476,7 @@ export function main(): number {
     ...checkSessionStateOwnership(sources),
     ...checkDaemonModularityRatchets(edges, typeCycleMembers),
     ...checkZeroDepJobs(),
+    ...checkPackageBoundaries(repoRoot),
   ];
   return report(sourceFiles, violations, typeCycle);
 }

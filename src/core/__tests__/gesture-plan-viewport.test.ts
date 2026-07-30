@@ -6,8 +6,8 @@ import {
   gesturePayloadFromPositionals,
   normalizePublicGesture,
 } from '../../contracts/gesture-normalization.ts';
-import { PUBLIC_PLATFORMS } from '../../kernel/device.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   COMPACT_VIEWPORTS,
   gestureInViewportArb,

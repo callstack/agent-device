@@ -1,8 +1,8 @@
 import { refuse, type SelectorArgumentRefusal } from './argument-refusal.ts';
 
-import type { Platform, PublicPlatform } from '../kernel/device.ts';
-import type { SnapshotState } from '../kernel/snapshot.ts';
-import { isPositiveFiniteRect } from '../kernel/rect.ts';
+import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import { isNodeVisibleInEffectiveViewport } from '../snapshot/mobile-snapshot-semantics.ts';
 import { isNodeEditable, isNodeVisible } from './node.ts';
 import { tryParseSelectorChain } from './parse.ts';

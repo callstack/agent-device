@@ -1,4 +1,4 @@
-import type { SnapshotNode } from '../kernel/snapshot.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 
 /**
  * Android status-bar/navigation-bar chrome identity, shared by the settle-chrome

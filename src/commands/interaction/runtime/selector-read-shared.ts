@@ -3,9 +3,9 @@ import type {
   CommandContext,
   CommandSessionRecord,
 } from '../../../runtime-contract.ts';
-import { AppError } from '../../../kernel/errors.ts';
-import type { SnapshotNode, SnapshotState } from '../../../kernel/snapshot.ts';
-import { findNodeByRef, normalizeRef } from '../../../kernel/snapshot.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import { findNodeByRef, normalizeRef } from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '../../../snapshot/snapshot-quality.ts';
 import { extractReadableText } from '../../../utils/text-surface.ts';
 import { now, toBackendContext } from '../../runtime-common.ts';

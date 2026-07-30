@@ -1,5 +1,5 @@
 import { detectProjectRuntimeKind } from '../../utils/project-runtime.ts';
-import { publicPlatformString } from '../../kernel/device.ts';
+import { publicPlatformString } from '@agent-device/kernel/device';
 import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import type { DoctorOptions } from './session-doctor-types.ts';

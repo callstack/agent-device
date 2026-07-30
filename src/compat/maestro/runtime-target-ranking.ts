@@ -1,5 +1,5 @@
-import type { Rect, SnapshotNode, SnapshotState } from '../../kernel/snapshot.ts';
-import { isPositiveFiniteRect } from '../../kernel/rect.ts';
+import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import {
   buildSnapshotNodeByIndex,
   isDescendantOfSnapshotNode,

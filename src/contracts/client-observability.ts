@@ -4,7 +4,7 @@ import type { LogAction } from './logs.ts';
 import type { PerfAction, PerfArea, PerfKind, PerfSubject } from './perf.ts';
 import type { RecordingExportQuality } from './recording-export-quality.ts';
 import type { RecordingScope } from './recording-scope.ts';
-import type { NetworkIncludeMode } from '../kernel/contracts.ts';
+import type { NetworkIncludeMode } from '@agent-device/kernel/contracts';
 import type { AgentDeviceRequestOverrides, DeviceCommandBaseOptions } from './client-connection.ts';
 
 export type PerfOptions = DeviceCommandBaseOptions & {

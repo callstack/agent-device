@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError, toAppErrorCode } from '../../kernel/errors.ts';
+import { AppError, toAppErrorCode } from '@agent-device/kernel/errors';
 import { sleep } from '../../utils/timeouts.ts';
 import { resolveTargetDevice } from '../../core/dispatch.ts';
 import { ensureDeviceReady } from '../device-ready.ts';

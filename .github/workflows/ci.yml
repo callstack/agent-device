@@ -124,16 +124,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      # The selector's entry closure reaches `@agent-device/kernel` workspace
+      # specifiers through src/utils/exec.ts and diagnostics.ts (#1490 W0), and
+      # workspace package resolution needs the pnpm link in node_modules. The
+      # R8 relative-import exception is reserved for scripts, not production
+      # src files, so this job installs dependencies instead.
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
-        with:
-          install-deps: false
 
       # The selector is fail-open and advisory (GitHub CI stays authoritative),
-      # so the gate only guards the derivation model. Invoked with no deps,
-      # mirroring the layering guard. R8 (scripts/layering/zero-dep-jobs.ts)
-      # resolves this bare pnpm script name back to package.json's own command
-      # to find its entry scripts, so this is not a `pnpm install` for the job.
+      # so the gate only guards the derivation model.
       - name: Check affected-selector model
         run: pnpm check:affected:test
 

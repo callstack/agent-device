@@ -14,7 +14,7 @@ import type {
   MetroReloadOptions,
 } from '../agent-device-client.ts';
 import type { SettingsUpdateOptions } from '../contracts/client-settings.ts';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { resolveCliOptions } from '../cli/resolve-cli-options.ts';
 
 test('install-from-source forwards URL and repeated headers to client.apps.installFromSource', async () => {

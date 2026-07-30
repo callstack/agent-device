@@ -1,7 +1,7 @@
 import type { PointerTrajectory } from '../../contracts/gesture-plan.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
-import type { Rect } from '../../kernel/snapshot.ts';
-import { AppError } from '../../kernel/errors.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { Rect } from '@agent-device/kernel/snapshot';
+import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '../../utils/exec.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { resolveAndroidAdbProvider, type AndroidAdbExecutor } from './adb-executor.ts';

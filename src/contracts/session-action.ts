@@ -1,4 +1,4 @@
-import type { SessionRuntimeHints } from '../kernel/contracts.ts';
+import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from './command-flags.ts';
 import type { TargetAnnotationV1 } from './target-annotation.ts';
 

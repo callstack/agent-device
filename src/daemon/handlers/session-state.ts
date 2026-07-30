@@ -1,11 +1,11 @@
-import { asAppError } from '../../kernel/errors.ts';
+import { asAppError } from '@agent-device/kernel/errors';
 import {
   isApplePlatform,
   isIosFamily,
   isMacOs,
   publicPlatformString,
   type DeviceInfo,
-} from '../../kernel/device.ts';
+} from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { ensureDeviceReady } from '../device-ready.ts';

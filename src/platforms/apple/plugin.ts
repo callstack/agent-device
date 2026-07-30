@@ -11,7 +11,7 @@ import {
   isTvOsDevice,
   resolveDeviceAppleOs,
   type DeviceInfo,
-} from '../../kernel/device.ts';
+} from '@agent-device/kernel/device';
 import type { RunnerContext } from '../../contracts/interactor-types.ts';
 
 // ---------------------------------------------------------------------------

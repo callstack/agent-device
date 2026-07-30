@@ -1,5 +1,5 @@
 import type { DaemonRequest } from '../../../daemon/types.ts';
-import type { SnapshotNode, SnapshotState } from '../../../kernel/snapshot.ts';
+import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import type { CreateDaemonMaestroRuntimeOperationsOptions } from '../daemon-runtime-port.ts';
 
 export function makeSnapshot(

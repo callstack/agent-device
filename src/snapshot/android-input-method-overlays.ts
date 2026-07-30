@@ -1,5 +1,5 @@
 import { classifyAndroidInputOwnership } from '../contracts/android-input-ownership.ts';
-import type { RawSnapshotNode } from '../kernel/snapshot.ts';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 
 export function isAndroidInputMethodSnapshotNode(
   node: Pick<RawSnapshotNode, 'bundleId' | 'identifier'> | undefined,

@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { runCmd } from '../../utils/exec.ts';
-import { AppError, asAppError } from '../../kernel/errors.ts';
+import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { acquireProcessLock } from '../../utils/process-lock.ts';
 import { readProcessStartTime } from '../../utils/host-process.ts';
 import {

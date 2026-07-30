@@ -57,7 +57,7 @@ export type { AppsFilter } from '../contracts/app-inventory.ts';
 // fallow-ignore-next-line unused-type
 export type { AlertAction } from '../contracts/alert-contract.ts';
 // fallow-ignore-next-line unused-type
-export type { AppleOS } from '../kernel/device.ts';
+export type { AppleOS } from '@agent-device/kernel/device';
 // fallow-ignore-next-line unused-type
 export type { JsonObject } from '../contracts/json.ts';
 

@@ -1,5 +1,5 @@
-import type { ResponseLevel, DaemonError } from '../../kernel/contracts.ts';
-import type { SnapshotNode } from '../../kernel/snapshot.ts';
+import type { ResponseLevel, DaemonError } from '@agent-device/kernel/contracts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
 import { formatDivergenceActionLabel } from '../../replay/script-utils.ts';
 import {

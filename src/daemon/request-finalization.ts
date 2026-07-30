@@ -1,12 +1,12 @@
 import path from 'node:path';
-import { AppError, normalizeError, toAppErrorCode } from '../kernel/errors.ts';
+import { AppError, normalizeError, toAppErrorCode } from '@agent-device/kernel/errors';
 import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   getDiagnosticsMeta,
 } from '../utils/diagnostics.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData } from './types.ts';
-import type { DaemonArtifact, DaemonArtifactType } from '../kernel/contracts.ts';
+import type { DaemonArtifact, DaemonArtifactType } from '@agent-device/kernel/contracts';
 
 export function finalizeDaemonResponse(
   req: DaemonRequest,

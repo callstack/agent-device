@@ -7,8 +7,8 @@ import {
   type DaemonResponse,
   type ResponseLevel,
   isNonDefaultResponseLevel,
-} from '../kernel/contracts.ts';
-import { AppError, asAppError } from '../kernel/errors.ts';
+} from '@agent-device/kernel/contracts';
+import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { isRecord } from '../utils/parsing.ts';
 import {
   DEFAULT_BATCH_MAX_STEPS,

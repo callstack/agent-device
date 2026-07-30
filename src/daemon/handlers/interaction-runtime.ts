@@ -3,14 +3,14 @@ import {
   dispatchGesturePlan,
   dispatchGestureViewport,
 } from '../../core/dispatch.ts';
-import { publicPlatformString } from '../../kernel/device.ts';
+import { publicPlatformString } from '@agent-device/kernel/device';
 import type {
   AgentDeviceBackend,
   BackendActionResult,
   BackendSnapshotResult,
 } from '../../backend.ts';
 import { createAgentDevice } from '../../runtime.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { SessionState } from '../types.ts';
 import { setSessionSnapshot } from '../session-snapshot.ts';
 import { expireRefFrame } from '../ref-frame.ts';
@@ -21,7 +21,7 @@ import { createDaemonRuntimeSessionStore } from '../runtime-session.ts';
 import { resolveWebProvider, type WebProvider } from '../../platforms/web/provider.ts';
 import { stripAtPrefix } from './interaction-touch-targets.ts';
 import { NO_ACTIVE_SESSION_MESSAGE } from './response.ts';
-import type { Rect } from '../../kernel/snapshot.ts';
+import type { Rect } from '@agent-device/kernel/snapshot';
 
 type InteractionRuntimeParams = InteractionHandlerParams & {
   captureSnapshotForSession: CaptureSnapshotForSession;

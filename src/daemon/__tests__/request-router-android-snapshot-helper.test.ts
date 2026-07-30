@@ -2,7 +2,7 @@ import { beforeEach, expect, test } from 'vitest';
 import { createRequestHandler } from '../request-router.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { SessionStore } from '../session-store.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { resetAndroidSnapshotHelperInstallCache } from '../../platforms/android/snapshot-helper-install.ts';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../__tests__/test-utils/index.ts';
 import type { AndroidAdbProvider } from '../../platforms/android/adb-executor.ts';

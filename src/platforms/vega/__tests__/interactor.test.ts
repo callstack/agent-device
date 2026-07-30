@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 import type { Interactor } from '../../../contracts/interactor-types.ts';
-import { AppError } from '../../../kernel/errors.ts';
-import type { DeviceInfo } from '../../../kernel/device.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createVegaInteractor } from '../interactor.ts';
 import { pressVegaTvRemote } from '../input-actions.ts';
 import { closeVegaApp, openVegaApp, openVegaDevice } from '../app-lifecycle.ts';

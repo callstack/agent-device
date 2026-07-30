@@ -22,7 +22,7 @@ const NOW = '2026-07-27T00:00:00.000Z';
 function mutants(statuses: readonly string[]): StrykerReport {
   return {
     files: {
-      'src/kernel/errors.ts': {
+      'packages/kernel/src/errors.ts': {
         mutants: statuses.map((status, index) => ({
           status,
           mutatorName: 'ConditionalExpression',
@@ -83,7 +83,7 @@ test('a lowered score is a regression, and gating makes it fail with its survivo
 
   const markdown = renderReport(result, baseline, PROVENANCE);
   assert.match(markdown, /Surviving mutants:/);
-  assert.match(markdown, /`src\/kernel\/errors\.ts:2` ConditionalExpression/);
+  assert.match(markdown, /`packages\/kernel\/src\/errors\.ts:2` ConditionalExpression/);
   assert.match(markdown, /scores may only rise/);
 });
 

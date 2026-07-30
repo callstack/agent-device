@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError } from '../../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { DefinedEnvMap as EnvMap } from '../../../../utils/env-map.ts';
 import { requireExecSuccess } from '../../../../utils/exec.ts';
 import { runAppleToolCommand } from '../tool-provider.ts';

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { discoverReplayTestEntries } from '../session-test-discovery.ts';
 
 test('discoverReplayTestEntries expands directories in deterministic path order', () => {

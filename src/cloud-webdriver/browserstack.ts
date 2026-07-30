@@ -14,7 +14,7 @@ import {
 } from './runtime.ts';
 import type { ProviderDeviceRuntime } from '../provider-device-runtime.ts';
 import type { DeviceLease } from '../contracts/device-provider.ts';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
 import { agentDeviceRequestHeaders } from './request-headers.ts';
 import { cloudArtifactsReadyOrPending } from './artifact-results.ts';

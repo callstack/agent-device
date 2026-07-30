@@ -18,7 +18,7 @@ import type {
   MetroBridgeRuntimePayload,
   MetroRuntimeHints,
 } from './metro-types.ts';
-import { AppError, asAppError } from '../kernel/errors.ts';
+import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { runCmdSync, runCmdDetached } from '../utils/exec.ts';
 import { resolveUserPath } from '../utils/path-resolution.ts';
 import { waitForProcessExit } from '../utils/host-process.ts';

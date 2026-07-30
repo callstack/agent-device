@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseReplayInput } from '../../compat/replay-input.ts';
-import { asAppError } from '../../kernel/errors.ts';
+import { asAppError } from '@agent-device/kernel/errors';
 import type {
   DaemonInvokeFn,
   DaemonRequest,
@@ -24,7 +24,7 @@ import type { TargetAnnotationV1 } from '../../replay/target-identity.ts';
 import { errorResponse, noActiveSessionError } from './response.ts';
 import { invokeReplayAction } from './session-replay-action-runtime.ts';
 import { tryParseSelectorChain } from '../../selectors/index.ts';
-import type { ResponseLevel } from '../../kernel/contracts.ts';
+import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import {
   buildReplayVarScope,
   collectReplayShellEnv,

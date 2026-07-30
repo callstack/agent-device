@@ -2,7 +2,7 @@ import type { AgentDeviceClientConfig } from '../contracts/client-connection.ts'
 import type { AgentDeviceClient } from '../client/client-types.ts';
 import type { JsonSchema } from '../commands/command-contract.ts';
 import type { CommandExecutionResult } from '../commands/command-surface.ts';
-import { RESPONSE_LEVELS, type ResponseLevel } from '../kernel/contracts.ts';
+import { RESPONSE_LEVELS, type ResponseLevel } from '@agent-device/kernel/contracts';
 import { formatCliOutput } from '../commands/cli-output.ts';
 import {
   findCommandMetadata,
@@ -12,7 +12,7 @@ import {
 } from '../commands/command-metadata.ts';
 import { resolveCommandRecordsSessionAction } from '../core/command-descriptor/registry.ts';
 import { MCP_COMMAND_OUTPUT_SCHEMAS } from './mcp-output-schemas.ts';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { formatToolErrorText, normalizeToolError } from './tool-error.ts';
 import { resolveMcpConfigDefaults } from './tool-input-config.ts';
 import { projectStructuredContent } from './tool-result.ts';

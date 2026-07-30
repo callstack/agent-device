@@ -1,8 +1,8 @@
 import { execFailureDetails, runCmd } from '../../utils/exec.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { sleep } from '../../utils/timeouts.ts';
-import type { Rect } from '../../kernel/snapshot.ts';
+import type { Rect } from '@agent-device/kernel/snapshot';
 import {
   buildAudioProbeEvalScript,
   normalizeAgentBrowserAudioProbeResult,

@@ -2,7 +2,7 @@ import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { iosRunnerOverrides, performGestureApple } from '../../interactions.ts';
 import { runAppleRunnerCommand } from '../runner/runner-client.ts';
-import { AppError } from '../../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { GesturePlan } from '../../../../contracts/gesture-plan.ts';
 import { requireGestureSupported } from '../../../../core/capabilities.ts';
 import {

@@ -1,5 +1,5 @@
 import http, { type IncomingHttpHeaders } from 'node:http';
-import { AppError, normalizeError, toAppErrorCode } from '../../kernel/errors.ts';
+import { AppError, normalizeError, toAppErrorCode } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { timingSafeStringEqual } from '../../utils/timing-safe-equal.ts';
 import type {
@@ -7,8 +7,8 @@ import type {
   JsonRpcId,
   JsonRpcRequestEnvelope,
   LeaseBackend,
-} from '../../kernel/contracts.ts';
-import { commandRpcParamsSchema } from '../../kernel/contracts.ts';
+} from '@agent-device/kernel/contracts';
+import { commandRpcParamsSchema } from '@agent-device/kernel/contracts';
 import type { DaemonInstallSource, DaemonInvokeFn, DaemonRequest } from '../types.ts';
 import { normalizeTenantId } from '../config.ts';
 import {

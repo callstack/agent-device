@@ -1,7 +1,7 @@
 import path from 'node:path';
 import type { SessionAction, SessionState } from '../types.ts';
-import { AppError, normalizeError } from '../../kernel/errors.ts';
-import { isApplePlatform, publicPlatformString } from '../../kernel/device.ts';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { isApplePlatform, publicPlatformString } from '@agent-device/kernel/device';
 import { tryGetPlugin } from '../../contracts/platform-plugin.ts';
 import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';

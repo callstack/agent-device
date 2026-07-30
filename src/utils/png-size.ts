@@ -1,5 +1,5 @@
 import { promises as fs } from 'node:fs';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 export async function readPngSize(filePath: string): Promise<{ width: number; height: number }> {
   const file = await fs.open(filePath, 'r');

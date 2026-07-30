@@ -8,7 +8,7 @@ import {
   setAndroidOrientation,
   typeAndroid,
 } from '../input-actions.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { withScriptedAdb } from '../../../__tests__/test-utils/mocked-binaries.ts';
 import {
   ANDROID_EMULATOR,

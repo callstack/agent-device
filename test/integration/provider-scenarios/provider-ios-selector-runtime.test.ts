@@ -11,7 +11,7 @@ import type {
 } from '../../../src/contracts/device-provider.ts';
 import type { Interactor, SnapshotResult } from '../../../src/contracts/interactor-types.ts';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';
-import type { DeviceInfo } from '../../../src/kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { assertRpcOk } from './assertions.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
 

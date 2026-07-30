@@ -1,4 +1,4 @@
-import type { Rect } from '../kernel/snapshot.ts';
+import type { Rect } from './snapshot.ts';
 
 export function parseBounds(bounds: string | null): Rect | undefined {
   if (!bounds) return undefined;

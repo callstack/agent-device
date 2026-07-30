@@ -6,7 +6,7 @@ import type {
   DaemonResponse,
   DaemonResponseData,
 } from '../../daemon/types.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { MaestroPlatform } from './program-ir.ts';
 import type { MaestroObservation } from './engine-types.ts';
 import type {
@@ -15,7 +15,7 @@ import type {
   MaestroTargetMatch,
   MaestroTargetQuery,
 } from './runtime-port-types.ts';
-import type { Rect } from '../../kernel/snapshot.ts';
+import type { Rect } from '@agent-device/kernel/snapshot';
 import type { DaemonMaestroRuntimeDependencies } from './daemon-runtime-port-observation.ts';
 import { stripUndefined } from '../../utils/parsing.ts';
 import {

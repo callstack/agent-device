@@ -1,5 +1,5 @@
-import { daemonRuntimeSchema, type SessionRuntimeHints } from '../kernel/contracts.ts';
-import { AppError } from '../kernel/errors.ts';
+import { daemonRuntimeSchema, type SessionRuntimeHints } from '@agent-device/kernel/contracts';
+import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '../utils/parsing.ts';
 
 export const DEFAULT_BATCH_MAX_STEPS = 100;

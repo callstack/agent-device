@@ -2,7 +2,7 @@ import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { ensureBootedSimulator, openIosSimulatorApp } from '../simulator.ts';
 import { IOS_SIMULATOR_FOCUS_TIMEOUT_MS } from '../config.ts';
-import { AppError } from '../../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '../../../../utils/exec.ts';
 import { IOS_TEST_SIMULATOR } from './apple-core-stub-helpers.ts';
 

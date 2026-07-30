@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { exportReplayScriptToMaestro } from '../../compat/maestro/export-flow.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { resolveUserPath } from '../../utils/path-resolution.ts';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';

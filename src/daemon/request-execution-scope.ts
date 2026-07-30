@@ -1,12 +1,12 @@
 import type { CommandFlags } from '../core/dispatch.ts';
-import type { DaemonArtifactType } from '../kernel/contracts.ts';
+import type { DaemonArtifactType } from '@agent-device/kernel/contracts';
 import {
   emitDiagnostic,
   getDiagnosticsMeta,
   updateDiagnosticsScope,
 } from '../utils/diagnostics.ts';
 import { applyCommandDefaults } from '../cli-schema/command-schema.ts';
-import { normalizeError } from '../kernel/errors.ts';
+import { normalizeError } from '@agent-device/kernel/errors';
 import type { DaemonCommandContext } from './context.ts';
 import { contextFromFlags as contextFromFlagsWithLog } from './context.ts';
 import { assertSessionSelectorMatches } from './session-selector.ts';

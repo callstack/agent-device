@@ -1,4 +1,4 @@
-import type { DaemonRequest as WireRequest } from '../kernel/contracts.ts';
+import type { DaemonRequest as WireRequest } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from './command-flags.ts';
 
 /**

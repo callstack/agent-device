@@ -1,10 +1,10 @@
 import type { BatchStep } from '../contracts/client-replay.ts';
-import { type SessionRuntimeHints } from '../kernel/contracts.ts';
+import { type SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import { parseBatchStepRuntime } from '../contracts/batch-contract.ts';
 import { readInputFromCli } from '../commands/cli-grammar.ts';
 import { isCommandName, type CommandName } from '../commands/command-metadata.ts';
 import type { CliFlags } from '../contracts/cli-flags.ts';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '../utils/parsing.ts';
 import { assertCommandPositionalArity } from '../cli-schema/command-schema.ts';
 

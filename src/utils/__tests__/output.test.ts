@@ -10,7 +10,7 @@ import {
 } from '../output.ts';
 import { formatRole, formatSnapshotLine } from '../../snapshot/snapshot-lines.ts';
 import { normalizedRect } from '../screenshot-geometry.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 function captureStderr(run: () => void): string {
   const original = process.stderr.write.bind(process.stderr);

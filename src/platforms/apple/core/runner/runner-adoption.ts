@@ -3,7 +3,7 @@ import { resolveIosSimulatorDeviceSetPath } from '../../../../utils/device-isola
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
 import { isProcessAlive } from '../../../../utils/host-process.ts';
 import { parseBooleanLiteral } from '../../../../utils/source-value.ts';
-import type { DeviceInfo } from '../../../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ExecResult } from '../../../../utils/exec.ts';
 import { sendRunnerCommandOnce } from './runner-transport.ts';
 import { withRunnerCommandId } from './runner-contract.ts';

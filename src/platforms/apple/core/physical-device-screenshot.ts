@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
-import type { DeviceInfo } from '../../../kernel/device.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../../../utils/diagnostics.ts';
 import { runIosDevicectl } from './devicectl.ts';
 import { copyCoreDeviceRunnerFile } from './physical-device-files.ts';

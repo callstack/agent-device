@@ -2,7 +2,7 @@ import type { SessionAction } from '../../contracts/session-action.ts';
 import { GESTURE_FLING_DURATION_MS } from '../../contracts/gesture-plan.ts';
 import { parseSelectorChain, type Selector } from '../../selectors/index.ts';
 import type { SelectorTerm } from '../../selectors/parse.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   parseReplayScriptDetailed,
   readReplayScriptMetadata,

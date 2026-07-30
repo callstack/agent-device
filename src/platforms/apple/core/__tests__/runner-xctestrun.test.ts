@@ -22,7 +22,7 @@ vi.mock('../../../../utils/exec.ts', async () => {
   return { ...actual, runCmdSync: mockRunCmdSync };
 });
 
-import type { DeviceInfo } from '../../../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { withCommandExecutorOverride } from '../../../../utils/exec.ts';
 import { findXctestrun, scoreXctestrunCandidate } from '../runner/runner-artifact.ts';
 import { resolveXcodebuildSimulatorDeviceSetPath } from '../runner/runner-device-set.ts';

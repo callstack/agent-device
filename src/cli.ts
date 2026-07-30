@@ -1,7 +1,7 @@
 import { parseRawArgs, usage, usageForCommand } from './cli/parser/args.ts';
 import { suggestCommandFor } from './cli/parser/command-suggestions.ts';
-import { asAppError, AppError, normalizeError } from './kernel/errors.ts';
-import { throwDaemonError } from './kernel/daemon-error.ts';
+import { asAppError, AppError, normalizeError } from '@agent-device/kernel/errors';
+import { throwDaemonError } from '@agent-device/kernel/daemon-error';
 import { printHumanError, printJson } from './utils/output.ts';
 import { readVersion } from './utils/version.ts';
 import { pathToFileURL } from 'node:url';
@@ -38,7 +38,7 @@ import {
 import { resolveRemoteAuthForCli } from './cli/auth-session.ts';
 import type { FlagKey } from './commands/cli-grammar/flag-types.ts';
 import type { CliFlags } from './contracts/cli-flags.ts';
-import type { SessionRuntimeHints } from './kernel/contracts.ts';
+import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import { INTERNAL_COMMANDS, isKnownCliCommandName } from './command-catalog.ts';
 
 type CliDeps = {

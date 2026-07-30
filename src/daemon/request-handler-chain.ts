@@ -1,7 +1,7 @@
 import type { CommandFlags } from '../core/dispatch.ts';
 import type { CloudArtifactProvider } from '../contracts/cloud-artifacts.ts';
 import type { AndroidAdbExecutor } from '../platforms/android/adb-executor.ts';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { getDaemonCommandRoute } from './daemon-command-registry.ts';
 import * as genericRequestHandlerModule from './request-generic-dispatch.ts';
 import type { DaemonCommandContext } from './context.ts';

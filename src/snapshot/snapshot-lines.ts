@@ -1,5 +1,5 @@
 import { isSystemScrollIndicatorLabel } from '../utils/scroll-indicator.ts';
-import type { SnapshotNode } from '../kernel/snapshot.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { buildTextPreview, describeTextSurface, trimText } from '../utils/text-surface.ts';
 
 type SnapshotDisplayLine = {

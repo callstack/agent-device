@@ -5,7 +5,7 @@ import {
   formatScrollEdgeMessage,
   runScrollEdgePasses,
 } from './scroll-edge-state.ts';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { captureThrows, scrollSnapshot, windowRoot } from './scroll-edge-state-fixtures.ts';
 
 // ---------------------------------------------------------------------------

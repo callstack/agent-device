@@ -1,4 +1,4 @@
-import { isIosFamily } from '../../../../kernel/device.ts';
+import { isIosFamily } from '@agent-device/kernel/device';
 import { beforeEach, test } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';

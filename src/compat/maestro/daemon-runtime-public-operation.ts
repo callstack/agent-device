@@ -1,6 +1,6 @@
 import type { CommandFlags } from '../../core/dispatch.ts';
 import type { DaemonRequest } from '../../daemon/types.ts';
-import type { Point, Rect } from '../../kernel/snapshot.ts';
+import type { Point, Rect } from '@agent-device/kernel/snapshot';
 import type {
   MaestroDispatchSelector,
   MaestroSinglePointerGestureInput,

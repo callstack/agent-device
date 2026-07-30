@@ -7,7 +7,7 @@ import {
   parseOptionValueFromSource,
   resolveSourceValueDefinition,
 } from './option-schema.ts';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   REMOTE_CONFIG_FIELD_SPECS,
   getRemoteConfigEnvNames,

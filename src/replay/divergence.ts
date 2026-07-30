@@ -1,5 +1,5 @@
-import type { ResponseLevel } from '../kernel/contracts.ts';
-import { redactDiagnosticData } from '../kernel/redaction.ts';
+import type { ResponseLevel } from '@agent-device/kernel/contracts';
+import { redactDiagnosticData } from '@agent-device/kernel/redaction';
 
 /**
  * ADR 0012 migration steps 2 + 4: structured replay divergence report.

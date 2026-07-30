@@ -10,7 +10,7 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
 
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
-import type { SnapshotState } from '../../../kernel/snapshot.ts';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type { ReplayDivergence } from '../../../replay/divergence.ts';
 import { bindInternalObservationAuthority } from '../../internal-observation.ts';
 import { expireRefFrame } from '../../ref-frame.ts';

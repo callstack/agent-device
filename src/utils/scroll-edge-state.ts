@@ -2,7 +2,7 @@ import {
   deriveMobileSnapshotHiddenContentHints,
   isNodeVisibleInEffectiveViewport,
 } from '../snapshot/mobile-snapshot-semantics.ts';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { isScrollableNodeLike } from './scrollable.ts';
 import type { ScrollDirection } from '../contracts/scroll-gesture.ts';
 import type {
@@ -10,7 +10,7 @@ import type {
   Point,
   RawSnapshotNode,
   SnapshotNode,
-} from '../kernel/snapshot.ts';
+} from '@agent-device/kernel/snapshot';
 
 export type ScrollEdge = 'top' | 'bottom';
 

@@ -1,4 +1,4 @@
-import { isIosFamily, isMacOs, type DeviceInfo } from '../kernel/device.ts';
+import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { runXcrun } from '../platforms/apple/core/tool-provider.ts';
 import { runAndroidAdb } from '../platforms/android/adb.ts';
 import { runCmd } from '../utils/exec.ts';

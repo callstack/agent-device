@@ -40,7 +40,7 @@ vi.mock('../../android-system-dialog.ts', async (importOriginal) => {
 
 import { handleInteractionCommands } from '../interaction.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
-import { attachRefs } from '../../../kernel/snapshot.ts';
+import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeAndroidSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 

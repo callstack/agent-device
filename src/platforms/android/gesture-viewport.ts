@@ -1,5 +1,5 @@
-import { AppError } from '../../kernel/errors.ts';
-import type { Rect } from '../../kernel/snapshot.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { Rect } from '@agent-device/kernel/snapshot';
 
 export function validateAndroidGestureViewport(viewport: Rect): Rect {
   if (

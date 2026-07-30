@@ -2,7 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
-import type { SnapshotState } from '../../kernel/snapshot.ts';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { bindInternalObservationAuthority } from '../internal-observation.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from '../session-snapshot.ts';

@@ -1,5 +1,5 @@
-import { AppError } from '../../../kernel/errors.ts';
-import type { Rect, SnapshotNode, SnapshotState } from '../../../kernel/snapshot.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { isNodeVisibleInEffectiveViewport } from '../../../snapshot/mobile-snapshot-semantics.ts';
 
 export function resolveVisibleSnapshotViewport(
