@@ -22,6 +22,7 @@ import { resolveWebProvider, type WebProvider } from '../../platforms/web/provid
 import { stripAtPrefix } from './interaction-touch-targets.ts';
 import { NO_ACTIVE_SESSION_MESSAGE } from './response.ts';
 import type { Rect } from '@agent-device/kernel/snapshot';
+import { getRequestSignal } from '../../request/cancel.ts';
 
 type InteractionRuntimeParams = InteractionHandlerParams & {
   captureSnapshotForSession: CaptureSnapshotForSession;
@@ -50,6 +51,7 @@ export function createInteractionRuntime(params: InteractionRuntimeParams) {
         params.sessionStore.set(params.sessionName, session);
       },
     }),
+    signal: getRequestSignal(params.req.meta?.requestId),
   });
 }
 
@@ -60,7 +62,7 @@ function createInteractionBackend(
   const webProvider = resolveNativeWebInteractionProvider(session);
   return {
     platform: publicPlatformString(session.device),
-    captureSnapshot: async (_context, options): Promise<BackendSnapshotResult> => ({
+    captureSnapshot: async (context, options): Promise<BackendSnapshotResult> => ({
       snapshot: await params.captureSnapshotForSession(
         session,
         req.flags,
@@ -69,6 +71,7 @@ function createInteractionBackend(
         {
           interactiveOnly: options?.interactiveOnly === true,
           includeRects: options?.includeRects === true,
+          signal: context.signal,
         },
       ),
     }),

@@ -9,6 +9,8 @@ import { setSessionSnapshot } from '../../session-snapshot.ts';
 import { activateCompleteRefFrame } from '../../ref-frame.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { createInteractionRuntime } from '../interaction-runtime.ts';
+import { clearRequestAbortRegistration, registerRequestAbort } from '../../../request/cancel.ts';
 
 // #1101 --settle daemon response shape: the settle payload (diff + settled +
 // refsGeneration) rides the wire response through the shared builder, and a
@@ -99,6 +101,35 @@ function seedSession(sessionName: string, sessionStore: ReturnType<typeof makeSe
   sessionStore.set(sessionName, session);
   return session;
 }
+
+test('interaction runtime inherits the registered daemon request signal', () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'request-signal';
+  const requestId = 'request-signal-id';
+  seedSession(sessionName, sessionStore);
+  const registration = registerRequestAbort(requestId);
+  expect(registration).toBeDefined();
+
+  try {
+    const runtime = createInteractionRuntime({
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'press',
+        positionals: ['label=Continue'],
+        meta: { requestId },
+      },
+      sessionName,
+      sessionStore,
+      contextFromFlags,
+      captureSnapshotForSession: mockCaptureSnapshotForSession,
+    });
+
+    expect(runtime.signal).toBe(registration?.controller.signal);
+  } finally {
+    clearRequestAbortRegistration(registration);
+  }
+});
 
 function mockCommandDispatch(params: { snapshots: Array<typeof BEFORE_NODES> }) {
   let snapshotCalls = 0;
@@ -333,6 +364,57 @@ test('a settle observation without a diff leaves ref staleness untouched', async
   // The press mutated (expiring the frame) and no partial frame was published,
   // so the frame stays expired — refs are stale until a fresh snapshot.
   expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+});
+
+test('a stalled settle capture receives its deadline signal and leaves the interaction responsive', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'settle-capture-deadline';
+  seedSession(sessionName, sessionStore);
+  let captureCalls = 0;
+  let observedAbort = false;
+  mockCaptureSnapshotForSession.mockImplementation(
+    async (_session, _flags, _sessionStore, _contextFromFlags, options) => {
+      captureCalls += 1;
+      if (captureCalls === 1) {
+        return buildSnapshotState({ nodes: BEFORE_NODES, backend: 'xctest' }, {});
+      }
+      return await new Promise((_resolve, reject) => {
+        const fallback = setTimeout(
+          () => reject(new Error('settle capture did not receive cancellation')),
+          1_000,
+        );
+        const onAbort = () => {
+          clearTimeout(fallback);
+          observedAbort = true;
+          reject(options.signal?.reason);
+        };
+        options.signal?.addEventListener('abort', onAbort, { once: true });
+        if (options.signal?.aborted) onAbort();
+      });
+    },
+  );
+
+  const startedAt = Date.now();
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'press',
+      positionals: ['label=Continue'],
+      flags: { settle: true, settleQuietMs: 25, timeoutMs: 75 },
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+
+  const data = expectOkData(response);
+  const settle = data.settle as SettlePayload;
+  expect(settle.settled).toBe(false);
+  expect(settle.diff).toBeUndefined();
+  expect(settle.hint).toMatch(/capture stalled past the settle budget/i);
+  expect(observedAbort).toBe(true);
+  expect(Date.now() - startedAt).toBeLessThan(500);
 });
 
 test('bare timeout without --settle stays compatible', async () => {
