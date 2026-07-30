@@ -211,6 +211,7 @@ async function assertHomeAndRecentsRestoration(context: LiveContext): Promise<vo
   verifyCommand(context, C.appSwitcher, 'Recents pixels differ from Home system surface');
 
   await runStep(context, 'restore fixture after Android system UI', ['open', context.appId]);
+  await runStep(context, 'restore automation route top after Android system UI', ['scroll', 'top']);
   await assertWaitSelector(context, 'id="automation-open-sheet"');
   const restored = await runStep(context, 'verify restored Android fixture foreground state', [
     'appstate',

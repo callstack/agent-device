@@ -3,7 +3,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
-import { assertElementText, assertJsonContains, assertWaitText } from './live-assertions.ts';
+import {
+  assertElementText,
+  assertElementTextAfterScrolling,
+  assertJsonContains,
+  assertWaitText,
+} from './live-assertions.ts';
 import { clearStateLaunchUrlMaestroFlow } from './live-fixtures.ts';
 import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';
 
@@ -108,7 +113,7 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
   assert.equal(found.json?.data?.found, true, JSON.stringify(found.json));
   verifyCommand(context, C.find, 'find reports the automation heading');
 
-  await runStep(context, 'reveal automation input canaries', ['scroll', 'down', '--pixels', '120']);
+  await assertElementTextAfterScrolling(context, 'id="automation-press"', 'Press canary');
   for (const identifier of ['automation-press', 'automation-longpress']) {
     const inputVisible = await runStep(context, `assert ${identifier} is visible`, [
       'is',
