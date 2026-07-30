@@ -190,6 +190,55 @@ test('reports rejected live hooks and never awaits pending live promises', async
   resolvePending();
 });
 
+// #1478 P3 characterization: live hooks are isolated (above), final hooks are not. A throwing
+// `onSuiteEnd` propagates out of suite completion and skips the reporters after it. Pinned as
+// shipped so the extraction cannot quietly start swallowing it.
+test('a throwing onSuiteEnd propagates and stops later reporters from finishing', async () => {
+  const calls: string[] = [];
+  const reporters: ReplayTestReporter[] = [
+    {
+      name: 'throwing-end',
+      onSuiteEnd() {
+        calls.push('throwing-end');
+        throw new Error('final boom');
+      },
+    },
+    {
+      name: 'later',
+      onSuiteEnd() {
+        calls.push('later:end');
+      },
+    },
+  ];
+
+  await assert.rejects(runReplayTestReporters(reporters, suite(), context), /final boom/);
+  assert.deepEqual(calls, ['throwing-end']);
+});
+
+test('getExitCode sees the same suite value onSuiteEnd received', async () => {
+  const seen: ReplaySuiteResult[] = [];
+  const value = suite(2);
+  const reporters: ReplayTestReporter[] = [
+    {
+      name: 'observer',
+      onSuiteEnd: (endSuite) => void seen.push(endSuite),
+      getExitCode: (exitSuite) => {
+        seen.push(exitSuite);
+        return undefined;
+      },
+    },
+  ];
+
+  await runReplayTestReporters(reporters, value, context);
+  const exitCode = getReplayTestReporterExitCode(reporters, value);
+
+  assert.equal(seen.length, 2);
+  assert.equal(seen[0], value);
+  assert.equal(seen[1], value);
+  // Two failures still recommend the shipped generic failure exit code, not a failure count.
+  assert.equal(exitCode, 1);
+});
+
 test('reporter exit codes can raise but never lower the suite exit code', () => {
   const reporters: ReplayTestReporter[] = [
     { name: 'lower', getExitCode: () => 0 },

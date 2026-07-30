@@ -36,6 +36,14 @@ type LogicalModulePolicy = {
   name: string;
   roots: readonly string[];
   forbiddenTargetRoots: readonly string[];
+  /**
+   * Imports that already violate `forbiddenTargetRoots` on the day the rule was written, recorded
+   * as `source -> target`. The rule enforces immediately for everything else, so a new violation
+   * cannot be added while the module waits for its extraction PR; each recorded edge must be
+   * deleted from this list by the change that removes the import, and re-adding one is a diff a
+   * reviewer sees.
+   */
+  recordedMigrationImports?: readonly string[];
 };
 
 /**
@@ -61,9 +69,28 @@ export const LOGICAL_MODULE_POLICIES: readonly LogicalModulePolicy[] = [
     forbiddenTargetRoots: ['src/daemon/', 'src/platforms/', 'src/providers/', 'src/ad-replay/'],
   },
   {
+    // Replay-test schedules and reports; it must stay format-neutral. `src/request/` is
+    // request-global daemon plumbing (progress sinks, cancellation, AsyncLocalStorage), and the
+    // remaining roots are engine internals — reaching into either is how a scheduler quietly
+    // acquires daemon authority or an engine-specific value shape.
     name: 'replay-test',
     roots: ['src/replay/test/'],
-    forbiddenTargetRoots: ['src/daemon/', 'src/platforms/', 'src/providers/'],
+    forbiddenTargetRoots: [
+      'src/daemon/',
+      'src/platforms/',
+      'src/providers/',
+      'src/request/',
+      'src/replay/',
+      'src/compat/',
+      'src/maestro/',
+      'src/ad-replay/',
+    ],
+    recordedMigrationImports: [
+      'src/replay/test/reporters/default.ts -> src/replay/divergence.ts',
+      'src/replay/test/reporters/progress.ts -> src/request/progress.ts',
+      'src/replay/test/reporters/registry.ts -> src/request/progress.ts',
+      'src/replay/test/reporting.ts -> src/request/progress.ts',
+    ],
   },
 ];
 
@@ -185,6 +212,7 @@ function checkDaemonTypesImporters(edges: readonly ResolvedImportEdge[]): Layeri
 
 function checkLogicalModuleImports(edges: readonly ResolvedImportEdge[]): LayeringViolation[] {
   const violations: LayeringViolation[] = [];
+  const observedMigrationImports = new Set<string>();
   for (const edge of edges) {
     const sourceModule = moduleForFile(edge.file);
     const targetModule = moduleForFile(edge.target);
@@ -203,14 +231,36 @@ function checkLogicalModuleImports(edges: readonly ResolvedImportEdge[]): Layeri
     }
 
     if (!sourceModule) continue;
-    if (sourceModule.forbiddenTargetRoots.some((root) => edge.target.startsWith(root))) {
+    // A module's own files are never a forbidden target: `replay-test` sits inside the wider
+    // `src/replay/` engine root it may not import from.
+    if (sourceModule.roots.some((root) => edge.target.startsWith(root))) continue;
+    if (!sourceModule.forbiddenTargetRoots.some((root) => edge.target.startsWith(root))) continue;
+    const migrationImport = `${edge.file} -> ${edge.target}`;
+    if (sourceModule.recordedMigrationImports?.includes(migrationImport)) {
+      observedMigrationImports.add(migrationImport);
+      continue;
+    }
+    violations.push({
+      rule: 'R10 daemon-modularity',
+      file: edge.file,
+      line: edge.line,
+      message: `${sourceModule.name} must not import ${edge.target}; communicate through its façade and a narrow port with two real adapters.`,
+    });
+  }
+  return [...violations, ...checkRecordedMigrationImports(observedMigrationImports)];
+}
+
+function checkRecordedMigrationImports(observed: ReadonlySet<string>): LayeringViolation[] {
+  const violations: LayeringViolation[] = [];
+  for (const module of LOGICAL_MODULE_POLICIES) {
+    for (const migrationImport of module.recordedMigrationImports ?? []) {
+      if (observed.has(migrationImport)) continue;
       violations.push({
         rule: 'R10 daemon-modularity',
-        file: edge.file,
-        line: edge.line,
-        message: `${sourceModule.name} must not import ${edge.target}; communicate through its façade and a narrow port with two real adapters.`,
+        file: 'scripts/layering/daemon-modularity.ts',
+        line: 1,
+        message: `${migrationImport} no longer exists — delete it from ${module.name}'s recordedMigrationImports in the same change so the import cannot return.`,
       });
-      continue;
     }
   }
   return violations;
@@ -237,10 +287,14 @@ function countBy(values: readonly string[], keyOf: (value: string) => string): M
 
 export function daemonModularitySummary(): string {
   const session = DAEMON_MODULARITY_BASELINE.sessionState;
+  const recordedMigrationImports = LOGICAL_MODULE_POLICIES.reduce(
+    (sum, module) => sum + (module.recordedMigrationImports?.length ?? 0),
+    0,
+  );
   return (
     `R10 pins R7 at ${session.writerOwnedFields} writer-owned fields / ` +
     `${session.ownerFileClaims} owner claims, R9 at ${TYPE_CYCLE_BASELINE} files with zone ceilings, ` +
     `${DAEMON_MODULARITY_BASELINE.externalDaemonTypesImporters.length} external daemon/types.ts importers, ` +
-    'and zero forbidden logical-module imports'
+    `and zero forbidden logical-module imports beyond ${recordedMigrationImports} recorded migration import(s)`
   );
 }
