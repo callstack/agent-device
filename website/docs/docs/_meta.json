@@ -63,7 +63,7 @@
       },
       {
         "type": "custom-link",
-        "label": "Replay & E2E",
+        "label": "Replay & E2E testing",
         "link": "/docs/replay-e2e"
       },
       {
