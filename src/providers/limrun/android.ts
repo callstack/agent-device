@@ -71,7 +71,7 @@ export async function createLimrunAndroidSession(
       await client.setText(request.target, request.text);
     },
   };
-  adbProvider.reverse = dependencies.android.createPortReverse(adbProvider);
+  adbProvider.reverse = await dependencies.android.createPortReverse(adbProvider);
   return Object.assign(session, { adbProvider });
 }
 
@@ -96,7 +96,9 @@ export async function installLimrunAndroidApp(
     name: buildAndroidAssetName(packageName, installablePath),
   });
   await session.client.sendAsset(asset.signedDownloadUrl);
-  const appName = packageName ? session.dependencies.android.inferAppName(packageName) : undefined;
+  const appName = packageName
+    ? await session.dependencies.android.inferAppName(packageName)
+    : undefined;
   return {
     ...(packageName ? { packageName, launchTarget: packageName } : {}),
     ...(appName ? { appName } : {}),
@@ -186,7 +188,7 @@ async function requireSuccessfulLimrunAndroidAdb(
   dependencies: Pick<LimrunRuntimeDependencies, 'android'>,
 ): Promise<LimrunAdbCommandResult> {
   if (result.exitCode !== 0 && allowFailure !== true) {
-    throw dependencies.android.adbError('Limrun Android ADB command failed', result, {
+    throw await dependencies.android.adbError('Limrun Android ADB command failed', result, {
       command: ['adb', ...adbArgs].join(' '),
     });
   }

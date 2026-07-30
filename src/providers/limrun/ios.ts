@@ -146,7 +146,7 @@ class LimrunIosInteractor implements Interactor {
 
   async open(app: string, options?: { url?: string }): Promise<void> {
     if (options?.url) {
-      await this.session.client.launchApp(this.ios.resolveAppAlias(app));
+      await this.session.client.launchApp(await this.ios.resolveAppAlias(app));
       await this.session.client.openUrl(options.url);
       return;
     }
@@ -154,13 +154,15 @@ class LimrunIosInteractor implements Interactor {
       await this.session.client.openUrl(app);
       return;
     }
-    await this.session.client.launchApp(this.ios.resolveAppAlias(app));
+    await this.session.client.launchApp(await this.ios.resolveAppAlias(app));
   }
 
   async openDevice(): Promise<void> {}
 
   async close(app: string): Promise<void> {
-    if (app) await this.session.client.terminateApp(this.ios.resolveAppAlias(app)).catch(() => {});
+    if (app) {
+      await this.session.client.terminateApp(await this.ios.resolveAppAlias(app)).catch(() => {});
+    }
   }
 
   async tap(x: number, y: number): Promise<void> {

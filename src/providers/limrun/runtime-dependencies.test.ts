@@ -123,9 +123,9 @@ function createContractFixture() {
     clientVersion: 'test-version',
     android: {
       createInteractor,
-      createPortReverse: (adb: LimrunAdbProvider) =>
+      createPortReverse: async (adb: LimrunAdbProvider) =>
         createInMemoryPortReverse(adb, activeReverseMappings),
-      inferAppName: () => 'Example',
+      inferAppName: async () => 'Example',
       listApps,
       getForegroundApp: async () => ({
         appId: 'com.example.app',
@@ -140,7 +140,7 @@ function createContractFixture() {
         dismissed: false,
       }),
       readLogs: async () => 'log line\n',
-      adbError: (message: string) => new Error(message),
+      adbError: async (message: string) => new Error(message),
     },
     host: {
       runAdb: async (args: string[]) => {
@@ -150,7 +150,7 @@ function createContractFixture() {
       archiveDirectory: async () => undefined,
     },
     ios: {
-      resolveAppAlias: (app: string) => app,
+      resolveAppAlias: async (app: string) => app,
       readBundleAppName: async () => undefined,
     },
   } satisfies LimrunRuntimeDependencies;

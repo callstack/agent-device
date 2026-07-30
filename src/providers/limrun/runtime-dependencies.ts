@@ -72,8 +72,8 @@ export type LimrunAndroidKeyboardDismissResult = LimrunAndroidKeyboardState & {
 
 export type LimrunAndroidRuntimeAdapter = {
   createInteractor(device: DeviceInfo, adb: LimrunAdbProvider): Interactor;
-  createPortReverse(adb: LimrunAdbProvider): LimrunPortReverse;
-  inferAppName(packageName: string): string;
+  createPortReverse(adb: LimrunAdbProvider): Promise<LimrunPortReverse>;
+  inferAppName(packageName: string): Promise<string>;
   listApps(
     adb: LimrunAdbExecutor,
     filter: AppsFilter,
@@ -88,7 +88,7 @@ export type LimrunAndroidRuntimeAdapter = {
     message: string,
     result: LimrunAdbCommandResult,
     details?: Record<string, unknown>,
-  ): Error;
+  ): Promise<Error>;
 };
 
 export type LimrunHostAdapter = {
@@ -101,7 +101,7 @@ export type LimrunHostAdapter = {
 };
 
 export type LimrunIosRuntimeAdapter = {
-  resolveAppAlias(app: string): string;
+  resolveAppAlias(app: string): Promise<string>;
   readBundleAppName(appPath: string): Promise<string | undefined>;
 };
 

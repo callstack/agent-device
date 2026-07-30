@@ -30,15 +30,15 @@ const IOS_APPS = [
 ];
 
 const TEST_IOS_ADAPTER = {
-  resolveAppAlias: (app: string) => app,
+  resolveAppAlias: async (app: string) => app,
   readBundleAppName: async () => undefined,
 };
 
 const TEST_ANDROID_DEPENDENCIES = {
   android: {
     createInteractor: createAndroidInteractor,
-    createPortReverse: createAndroidPortReverseManager,
-    inferAppName: inferAndroidAppName,
+    createPortReverse: async (adb) => createAndroidPortReverseManager(adb),
+    inferAppName: async (packageName) => inferAndroidAppName(packageName),
     listApps: async (adb, filter) =>
       (
         await listAndroidAppsWithAdb(adb, {
@@ -57,7 +57,7 @@ const TEST_ANDROID_DEPENDENCIES = {
         lines: lineLimit,
         timeoutMs: 5_000,
       }),
-    adbError: androidAdbResultError,
+    adbError: async (message, result, details) => androidAdbResultError(message, result, details),
   },
   host: {
     runAdb: async () => adbResult(''),

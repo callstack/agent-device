@@ -1,21 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { createAndroidInteractor } from '../core/interactors/android.ts';
-import {
-  androidAdbResultError,
-  createAndroidPortReverseManager,
-} from '../platforms/android/adb-executor.ts';
-import {
-  getAndroidAppStateWithAdb,
-  listAndroidAppsWithAdb,
-} from '../platforms/android/app-helpers.ts';
-import { inferAndroidAppName } from '../platforms/android/app-lifecycle.ts';
-import {
-  dismissAndroidKeyboardWithAdb,
-  getAndroidKeyboardStatusWithAdb,
-} from '../platforms/android/device-input-state.ts';
-import { captureAndroidLogcatWithAdb } from '../platforms/android/logcat.ts';
-import { resolveIosAppAlias } from '../platforms/apple/core/app-resolution.ts';
-import { readIosBundleInfo } from '../platforms/apple/core/install-artifact.ts';
 import type { LimrunRuntimeDependencies } from '../providers/limrun/runtime-dependencies.ts';
 import { execFailureDetails, runCmd } from '../utils/exec.ts';
 import { readVersion } from '../utils/version.ts';
@@ -25,27 +9,50 @@ export function createLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
     clientVersion: readVersion(),
     android: {
       createInteractor: (device, adb) => createAndroidInteractor(device, adb),
-      createPortReverse: (adb) => createAndroidPortReverseManager(adb),
-      inferAppName: inferAndroidAppName,
-      listApps: async (adb, filter) =>
-        (
+      createPortReverse: async (adb) => {
+        const { createAndroidPortReverseManager } =
+          await import('../platforms/android/adb-executor.ts');
+        return createAndroidPortReverseManager(adb);
+      },
+      inferAppName: async (packageName) => {
+        const { inferAndroidAppName } = await import('../platforms/android/app-lifecycle.ts');
+        return inferAndroidAppName(packageName);
+      },
+      listApps: async (adb, filter) => {
+        const { listAndroidAppsWithAdb } = await import('../platforms/android/app-helpers.ts');
+        return (
           await listAndroidAppsWithAdb(adb, {
             filter,
             target: 'mobile',
           })
-        ).map((app) => ({ id: app.package, name: app.name })),
+        ).map((app) => ({ id: app.package, name: app.name }));
+      },
       getForegroundApp: async (adb) => {
+        const { getAndroidAppStateWithAdb } = await import('../platforms/android/app-helpers.ts');
         const app = await getAndroidAppStateWithAdb(adb);
         return app.package ? { appId: app.package, activity: app.activity } : undefined;
       },
-      getKeyboardState: getAndroidKeyboardStatusWithAdb,
-      dismissKeyboard: dismissAndroidKeyboardWithAdb,
-      readLogs: async (adb, lineLimit) =>
-        await captureAndroidLogcatWithAdb(adb, {
+      getKeyboardState: async (adb) => {
+        const { getAndroidKeyboardStatusWithAdb } =
+          await import('../platforms/android/device-input-state.ts');
+        return await getAndroidKeyboardStatusWithAdb(adb);
+      },
+      dismissKeyboard: async (adb) => {
+        const { dismissAndroidKeyboardWithAdb } =
+          await import('../platforms/android/device-input-state.ts');
+        return await dismissAndroidKeyboardWithAdb(adb);
+      },
+      readLogs: async (adb, lineLimit) => {
+        const { captureAndroidLogcatWithAdb } = await import('../platforms/android/logcat.ts');
+        return await captureAndroidLogcatWithAdb(adb, {
           lines: lineLimit,
           timeoutMs: 5_000,
-        }),
-      adbError: androidAdbResultError,
+        });
+      },
+      adbError: async (message, result, details) => {
+        const { androidAdbResultError } = await import('../platforms/android/adb-executor.ts');
+        return androidAdbResultError(message, result, details);
+      },
     },
     host: {
       runAdb: async (args, options) => await runCmd('adb', args, options),
@@ -64,8 +71,14 @@ export function createLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
       },
     },
     ios: {
-      resolveAppAlias: resolveIosAppAlias,
-      readBundleAppName: async (appPath) => (await readIosBundleInfo(appPath)).appName,
+      resolveAppAlias: async (app) => {
+        const { resolveIosAppAlias } = await import('../platforms/apple/core/app-resolution.ts');
+        return resolveIosAppAlias(app);
+      },
+      readBundleAppName: async (appPath) => {
+        const { readIosBundleInfo } = await import('../platforms/apple/core/install-artifact.ts');
+        return (await readIosBundleInfo(appPath)).appName;
+      },
     },
   };
 }
