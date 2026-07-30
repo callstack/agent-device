@@ -1,4 +1,4 @@
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { isUnreadableCaptureContentError } from '../../../snapshot/snapshot-quality.ts';
 import { runWithinWaitDeadline } from './wait-deadline.ts';
 

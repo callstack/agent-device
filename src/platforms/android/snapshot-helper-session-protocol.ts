@@ -1,5 +1,5 @@
 import net from 'node:net';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   readInstrumentationResultBoolean,
   readInstrumentationResultNumber,

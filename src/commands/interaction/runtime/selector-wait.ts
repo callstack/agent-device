@@ -1,5 +1,5 @@
-import { AppError } from '../../../kernel/errors.ts';
-import { findNodeByRef, normalizeRef, type SnapshotNode } from '../../../kernel/snapshot.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import { findNodeByRef, normalizeRef, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   readNodeLocalIdentity,
   WAIT_LANDMARK_MISMATCH_REASON,
@@ -14,7 +14,7 @@ import {
   annotationLocalIdentity,
   type TargetAnnotationV1,
 } from '../../../replay/target-identity.ts';
-import type { PublicPlatform } from '../../../kernel/device.ts';
+import type { PublicPlatform } from '@agent-device/kernel/device';
 import { checkWaitText } from '../../../selectors/arguments.ts';
 import { listSelectorChainMatches } from '../../../selectors/index.ts';
 import { parseSelectorChain } from '../../../selectors/parse.ts';

@@ -1,5 +1,5 @@
 import type { RefTarget, SelectorTarget } from '../../../contracts/interaction.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { SnapshotQualityVerdict } from '../../../snapshot/snapshot-quality.ts';
 import type { FindLocator } from '../../../selectors/find.ts';
 import type { SelectorChain } from '../../../selectors/parse.ts';
