@@ -2,8 +2,7 @@
   {
     "type": "custom-link",
     "label": "Getting Started",
-    "collapsible": true,
-    "collapsed": false,
+    "collapsible": false,
     "items": [
       {
         "type": "custom-link",
@@ -30,8 +29,7 @@
   {
     "type": "custom-link",
     "label": "Using agent-device",
-    "collapsible": true,
-    "collapsed": true,
+    "collapsible": false,
     "items": [
       {
         "type": "custom-link",
@@ -78,12 +76,11 @@
   {
     "type": "custom-link",
     "label": "Integrations",
-    "collapsible": true,
-    "collapsed": true,
+    "collapsible": false,
     "items": [
       {
         "type": "custom-link",
-        "label": "Typed Client",
+        "label": "Node.js API",
         "link": "/docs/client-api"
       },
       {
@@ -101,18 +98,12 @@
   {
     "type": "custom-link",
     "label": "Reference",
-    "collapsible": true,
-    "collapsed": true,
+    "collapsible": false,
     "items": [
       {
         "type": "custom-link",
         "label": "Security & Trust",
         "link": "/docs/security-trust"
-      },
-      {
-        "type": "custom-link",
-        "label": "iOS Snapshot Elements",
-        "link": "/docs/ios-snapshot-elements"
       },
       {
         "type": "custom-link",

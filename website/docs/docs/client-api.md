@@ -1,8 +1,8 @@
 ---
-title: Typed Client
+title: Node.js API
 ---
 
-# Typed Client
+# Node.js API
 
 Use `createAgentDeviceClient()` when you want to drive the daemon from application code instead of shelling out to the CLI.
 

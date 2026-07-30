@@ -43,7 +43,6 @@ It does not automatically switch to AX.
 - Use `diff snapshot` between mutations to validate structural changes with lower output volume.
 - Use `snapshot --diff` when you discover the feature from snapshot help, but keep `diff snapshot` as the default exploration command.
 - Keep `--raw` for troubleshooting only when you need the full tree instead of visible-first output.
-- For the current iOS interaction-element support matrix, see [iOS Snapshot Element Support](/docs/ios-snapshot-elements).
 
 `diff snapshot` and `snapshot --diff` behavior:
 - First run initializes baseline (`baselineInitialized: true` in JSON).
