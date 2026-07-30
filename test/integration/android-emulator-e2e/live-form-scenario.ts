@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
+import { parseRect } from '../../../src/utils/parsing.ts';
+import type { CliJsonResult } from '../cli-json.ts';
 import {
   assertElementText,
   assertFilesDiffer,
@@ -15,6 +17,8 @@ import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live
 const C = PUBLIC_COMMANDS;
 const ANDROID_TEST_IME_PACKAGE = 'com.callstack.agentdevice.imehelper';
 const ANDROID_TEST_IME_SERVICE = `${ANDROID_TEST_IME_PACKAGE}/.TestInputMethodService`;
+const KEYBOARD_VISIBILITY_TIMEOUT_MS = 10_000;
+const KEYBOARD_VISIBILITY_POLL_MS = 250;
 
 export async function assertFormInput(context: LiveContext): Promise<void> {
   const keyboardStatus = await runStep(context, 'verify deterministic test IME active', [
@@ -86,15 +90,18 @@ export async function assertFormInput(context: LiveContext): Promise<void> {
 }
 
 export async function assertKeyboardIme(context: LiveContext): Promise<void> {
-  await runStep(context, 'focus email with the emulator keyboard', [
-    'click',
+  const email = await runStep(context, 'resolve email from the prepared form snapshot', [
+    'get',
+    'attrs',
     'id="field-email"',
-    '--settle',
   ]);
-  const keyboardStatus = await runStep(context, 'verify Android keyboard visible', [
-    'keyboard',
-    'status',
+  const emailRect = requireResultNodeRect(email, 'field-email');
+  await runStep(context, 'focus email with the emulator keyboard', [
+    'focus',
+    String(emailRect.x + emailRect.width / 2),
+    String(emailRect.y + emailRect.height / 2),
   ]);
+  const keyboardStatus = await waitForKeyboardVisible(context);
   assert.equal(keyboardStatus.json?.data?.visible, true, JSON.stringify(keyboardStatus.json));
   assert.equal(
     typeof keyboardStatus.json?.data?.inputMethodPackage,
@@ -143,5 +150,31 @@ export async function assertKeyboardIme(context: LiveContext): Promise<void> {
     context,
     'system-ime-keyboard',
     `visible and dismissed keyboard used ${String(keyboardStatus.json?.data?.inputMethodPackage)}`,
+  );
+}
+
+function requireResultNodeRect(result: CliJsonResult, label: string) {
+  const node: unknown = result.json?.data?.node;
+  assert.ok(typeof node === 'object' && node !== null, `${label} result has no node`);
+  const rect = parseRect((node as { rect?: unknown }).rect);
+  assert.ok(rect, `${label} result has an invalid rect`);
+  return rect;
+}
+
+async function waitForKeyboardVisible(context: LiveContext): Promise<CliJsonResult> {
+  const deadline = Date.now() + KEYBOARD_VISIBILITY_TIMEOUT_MS;
+  let attempt = 0;
+  let status: CliJsonResult;
+  do {
+    attempt += 1;
+    status = await runStep(context, `inspect Android keyboard visibility (${attempt})`, [
+      'keyboard',
+      'status',
+    ]);
+    if (status.json?.data?.visible === true) return status;
+    await new Promise((resolve) => setTimeout(resolve, KEYBOARD_VISIBILITY_POLL_MS));
+  } while (Date.now() < deadline);
+  assert.fail(
+    `Android keyboard did not become visible within ${KEYBOARD_VISIBILITY_TIMEOUT_MS}ms: ${JSON.stringify(status.json)}`,
   );
 }
