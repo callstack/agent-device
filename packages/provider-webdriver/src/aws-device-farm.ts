@@ -16,9 +16,9 @@ import type {
   CloudWebDriverPrepareSession,
 } from './runtime.ts';
 import type { DeviceLease, ProviderDeviceRuntime } from '@agent-device/contracts/device';
-import { runCmd } from '../utils/exec.ts';
-import { sleep } from '../utils/timeouts.ts';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { AppError } from '@agent-device/kernel/errors';
+import type { RunHostCommand } from './dependencies.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
 import { resolveLeaseValue, type LeaseValue } from './webdriver-utils.ts';
 
@@ -79,6 +79,7 @@ export type AwsCreateRemoteAccessSessionInput = {
 };
 
 export type AwsDeviceFarmWebDriverRuntimeOptions = {
+  clientVersion: string;
   projectArn: string;
   deviceArn: string;
   region?: string;
@@ -118,10 +119,17 @@ export function getAwsDeviceFarmWebDriverCapabilities(
 export function createAwsDeviceFarmWebDriverRuntime(
   options: AwsDeviceFarmWebDriverRuntimeOptions,
 ): ProviderDeviceRuntime {
-  const client = options.client ?? createAwsCliDeviceFarmClient({ region: options.region });
+  if (!options.client) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'AWS Device Farm runtime construction requires a client from the package facade.',
+    );
+  }
+  const client = options.client;
   const platform = options.platform ?? 'android';
   const deviceName = options.deviceName ?? 'AWS Device Farm device';
   return createCloudWebDriverRuntime({
+    clientVersion: options.clientVersion,
     provider: AWS_DEVICE_FARM_PROVIDER,
     endpoint: 'http://127.0.0.1/',
     platform,
@@ -144,12 +152,13 @@ export function createAwsDeviceFarmWebDriverRuntime(
 }
 
 export type AwsCliDeviceFarmClientOptions = {
+  runHostCommand: RunHostCommand;
   region?: string;
   awsCommand?: string;
 };
 
 export function createAwsCliDeviceFarmClient(
-  options: AwsCliDeviceFarmClientOptions = {},
+  options: AwsCliDeviceFarmClientOptions,
 ): AwsDeviceFarmClient {
   const runDeviceFarmJson = createAwsDeviceFarmCommandRunner(options);
   return {
@@ -189,7 +198,10 @@ export function createAwsDeviceFarmPrepareSession(
       'client' | 'platform' | 'deviceName' | 'projectArn' | 'deviceArn'
     >
   > &
-    Omit<AwsDeviceFarmWebDriverRuntimeOptions, 'client' | 'platform' | 'deviceName'>,
+    Omit<
+      AwsDeviceFarmWebDriverRuntimeOptions,
+      'client' | 'platform' | 'deviceName' | 'clientVersion'
+    >,
 ): CloudWebDriverPrepareSession {
   return async ({ lease, base }) => {
     const remoteAccess = await options.client.createRemoteAccessSession({
@@ -289,8 +301,12 @@ async function waitForRunningRemoteAccessSession(
   });
 }
 
-async function runAwsJson(command: string, args: string[]): Promise<unknown> {
-  const result = await runCmd(command, args, { maxBuffer: 10 * 1024 * 1024 });
+async function runAwsJson(
+  runHostCommand: RunHostCommand,
+  command: string,
+  args: string[],
+): Promise<unknown> {
+  const result = await runHostCommand(command, args);
   return JSON.parse(result.stdout) as unknown;
 }
 
@@ -300,7 +316,7 @@ function createAwsDeviceFarmCommandRunner(
   const regionArgs = options.region ? ['--region', options.region] : [];
   const awsCommand = options.awsCommand ?? 'aws';
   return async (subcommand, args) =>
-    await runAwsJson(awsCommand, [
+    await runAwsJson(options.runHostCommand, awsCommand, [
       'devicefarm',
       subcommand,
       ...regionArgs,

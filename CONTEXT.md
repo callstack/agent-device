@@ -270,11 +270,12 @@ The perfect-shape refactor is complete and merged. Its end-state:
   it ranks an explicit target spine — as rank groups, lowest (kernel sink) to highest, where `A ◄ B`
   means B may not be outranked by A (the back-edge order the gate rejects), NOT that every displayed
   import exists:
-  `{ contracts, request, selectors, platforms, utils, replay, recording, snapshot, screenshot-diff, cloud-webdriver } ◄ { core, providers } ◄ { commands, cli-schema, mcp } ◄ { client, daemon-server, compat, remote, metro, sdk } ◄ daemon-client ◄ cli` (the former rank-0 kernel zone lives in `packages/kernel` since #1490 W0; R11 package-boundaries owns that seam, and R1 kernel-sink is retired as physically subsumed) —
-  and rejects every back-edge within it. Only `(root)` is unranked (`UNRANKED_ZONES` in
-  `scripts/layering/model.ts`): it holds the entrypoints and the composition roots that wire the
-  command surface into the daemon, and R2 forbids `daemon/` from importing `commands/`, so those
-  files sit outside the spine by construction. The satellite zones used to be unranked too, on the
+  `{ contracts, request, selectors, platforms, utils, replay, recording, snapshot, screenshot-diff } ◄ { core, providers } ◄ { commands, cli-schema, mcp } ◄ { client, daemon-server, compat, remote, metro, sdk } ◄ daemon-client ◄ cli` (the former rank-0 kernel zone lives in `packages/kernel` since #1490 W0, and the former `cloud-webdriver` leaf lives behind the single `@agent-device/provider-webdriver` facade since W1b; R11 package-boundaries owns both physical seams) —
+  and rejects every back-edge within it. Only `(root)` is unranked among `src/` zones
+  (`UNRANKED_ZONES` in `scripts/layering/model.ts`): it holds the entrypoints and the composition
+  roots that wire the command surface into the daemon, and R2 forbids `daemon/` from importing
+  `commands/`, so those files sit outside the spine by construction. Extracted workspace packages
+  are classified separately and enforced by R11. The satellite zones used to be unranked too, on the
   grounds that ranking them would invent an order the architecture had not committed to; once
   `utils` joined the spine and `(root)` was emptied of shared contracts, every one of them turned
   out to have a consistent rank already. `model.test.ts` guards that no new zone escapes this

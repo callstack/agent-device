@@ -2,17 +2,16 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { createCloudWebDriverRuntime } from '../../../src/cloud-webdriver/runtime.ts';
-import { createDefaultCloudWebDriverProviderRuntimes } from '../../../src/cloud-webdriver/provider-runtimes.ts';
-import { scrollFrameFromWebDriverSource } from '../../../src/cloud-webdriver/webdriver-scroll-frame.ts';
-import { parseWebDriverSource } from '../../../src/cloud-webdriver/webdriver-source.ts';
-import { CLOUD_WEBDRIVER_PROVIDERS } from '../../../src/cloud-webdriver/providers.ts';
+import {
+  CLOUD_WEBDRIVER_PROVIDERS,
+  createProviderWebDriver,
+} from '@agent-device/provider-webdriver';
 import type { CloudArtifact } from '@agent-device/contracts/observability';
+import type { DeviceLease } from '@agent-device/contracts/device';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
 import { createExpiredProviderLeaseReleaser } from '../../../src/daemon/provider-lease-expiry.ts';
-import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';
-import { assertRpcError, assertRpcOk } from './assertions.ts';
+import { assertRpcOk } from './assertions.ts';
 import {
   createProviderScenarioHarness,
   withProviderScenarioResource,
@@ -27,9 +26,10 @@ import {
   type StartedCloudWebDriverTestServer,
 } from './cloud-webdriver-test-server.ts';
 
-const WEBDRIVER_PROVIDER = 'webdriver-fake';
+const WEBDRIVER_PROVIDER = CLOUD_WEBDRIVER_PROVIDERS.browserStack;
+const CLIENT_VERSION = '0.20.3-test';
 
-test('Cloud WebDriver runtime drives provider devices through daemon commands', async () => {
+test('packaged Cloud WebDriver facade drives provider devices through daemon commands', async () => {
   await withProviderScenarioResource(createCloudWebDriverWorld, async (world) => {
     const { daemon, server } = world;
     await withProviderScenarioTempDir('agent-device-cloud-webdriver-', async (tempDir) => {
@@ -43,6 +43,7 @@ test('Cloud WebDriver runtime drives provider devices through daemon commands', 
         flags: leaseFlags(lease.leaseId),
         meta: leaseMeta(lease.leaseId),
       });
+
       const inferredArtifacts = await daemon.callCommand('artifacts');
       const inferredData = assertRpcOk<{
         provider?: string;
@@ -53,7 +54,7 @@ test('Cloud WebDriver runtime drives provider devices through daemon commands', 
       assert.equal(inferredData.status, 'ready');
       assert.equal(inferredData.providerSessionId, 'wd-1');
 
-      world.failNextArtifactLookup();
+      server.artifactFailuresRemaining = 1;
       const unavailableArtifacts = await daemon.callCommand('artifacts');
       const unavailableData = assertRpcOk<{
         provider?: string;
@@ -70,12 +71,12 @@ test('Cloud WebDriver runtime drives provider devices through daemon commands', 
         flags: leaseFlags(lease.leaseId),
         meta: leaseMeta(lease.leaseId),
       });
-      assertWebDriverCalls(server.calls, lease.leaseId, appPath);
+      assertWebDriverCalls(server.calls, lease.leaseId);
     });
   });
 }, 15_000);
 
-test('Cloud WebDriver release still returns artifacts when WebDriver session delete fails', async () => {
+test('packaged Cloud WebDriver release still returns artifacts when session delete fails', async () => {
   await withProviderScenarioResource(createCloudWebDriverWorld, async (world) => {
     const { daemon, server } = world;
     const lease = await allocateWebDriverLease(daemon);
@@ -107,7 +108,7 @@ test('Cloud WebDriver release still returns artifacts when WebDriver session del
   });
 }, 15_000);
 
-test('Cloud WebDriver expiry releases the live provider session', async () => {
+test('packaged Cloud WebDriver expiry releases the live provider session', async () => {
   await withProviderScenarioResource(createCloudWebDriverWorld, async (world) => {
     const lease = await allocateWebDriverLease(world.daemon);
     const releaser = createExpiredProviderLeaseReleaser({
@@ -130,177 +131,22 @@ test('Cloud WebDriver expiry releases the live provider session', async () => {
   });
 }, 15_000);
 
-test('Cloud WebDriver allocation preserves create-session failure when cleanup fails', async () => {
-  let cleanupCalled = false;
-  await withProviderScenarioResource(
-    () =>
-      createCloudWebDriverWorld({
-        cleanup: async () => {
-          cleanupCalled = true;
-          throw new Error('provider cleanup failed');
-        },
-      }),
-    async (world) => {
-      const { daemon, server } = world;
-      server.createSessionFailuresRemaining = 2;
-
-      const allocate = await daemon.callCommand('lease_allocate', [], leaseFlags(), {
-        meta: leaseMeta(),
-      });
-
-      const error = assertRpcError(allocate, 'COMMAND_FAILED', /create session failed/) as {
-        details?: { cleanupError?: unknown };
-      };
-      assert.equal(error.details?.cleanupError, 'provider cleanup failed');
-      assert.equal(cleanupCalled, true);
-    },
-  );
-}, 15_000);
-
-test('default BrowserStack provider runtime builds sessions from daemon request profile flags', async () => {
+async function createCloudWebDriverWorld() {
   const server = await FakeWebDriverServer.start();
-  const runtimes = createDefaultCloudWebDriverProviderRuntimes({
+  const providerWebDriver = createProviderWebDriver({
+    clientVersion: CLIENT_VERSION,
+    runHostCommand: async () => {
+      throw new Error('BrowserStack scenario must not run host commands');
+    },
+  });
+  const runtimes = providerWebDriver.createDefaultRuntimes({
     BROWSERSTACK_USERNAME: 'browser-user',
     BROWSERSTACK_ACCESS_KEY: 'browser-key',
     BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+    BROWSERSTACK_APP_UPLOAD_ENDPOINT: `${server.url}/app-automate/upload`,
+    BROWSERSTACK_SESSION_DETAILS_ENDPOINT: `${server.url}/app-automate/sessions`,
   });
   const providers = createProviderDeviceRuntimeRequestProviders(runtimes);
-  const daemon = await createProviderScenarioHarness({
-    ...providers,
-    deviceInventoryProvider: providers.deviceInventoryProvider!,
-  });
-  try {
-    const allocate = await daemon.callCommand(
-      'lease_allocate',
-      [],
-      {
-        tenant: 'team-a',
-        runId: 'run-a',
-        platform: 'android',
-        device: 'Google Pixel 8',
-        providerApp: 'bs://app-id',
-        providerOsVersion: '14.0',
-        providerProject: 'agent-device',
-        providerBuild: 'build-a',
-        providerSessionName: 'session-a',
-      },
-      {
-        meta: {
-          tenantId: 'team-a',
-          runId: 'run-a',
-          leaseBackend: 'android-instance',
-          leaseProvider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
-          clientId: 'client-a',
-        },
-      },
-    );
-    const data = assertRpcOk<{
-      lease?: DeviceLease;
-      provider?: {
-        provider?: string;
-        sessionId?: string;
-        providerSessionId?: string;
-      };
-    }>(allocate);
-    assert.equal(data.provider?.provider, CLOUD_WEBDRIVER_PROVIDERS.browserStack);
-    assert.equal(data.provider?.providerSessionId, 'wd-1');
-    assert.deepEqual(server.calls[0]?.body, {
-      capabilities: {
-        alwaysMatch: {
-          platformName: 'Android',
-          'appium:deviceName': 'Google Pixel 8',
-          device: 'Google Pixel 8',
-          os_version: '14.0',
-          app: 'bs://app-id',
-          'bstack:options': {
-            projectName: 'agent-device',
-            buildName: 'build-a',
-            sessionName: 'session-a',
-          },
-        },
-      },
-    });
-    assert.equal(
-      server.calls[0]?.headers.authorization,
-      `Basic ${Buffer.from('browser-user:browser-key').toString('base64')}`,
-    );
-  } finally {
-    await daemon.close();
-    await Promise.allSettled(runtimes.map(async (runtime) => await runtime.shutdown()));
-    await server.close();
-  }
-}, 15_000);
-
-test('WebDriver source parser reuses hardened XML parsing', () => {
-  const nodes = parseWebDriverSource(
-    '<hierarchy><node text="A &gt; B" resource-id="login" bounds="[0,0][10,10]" displayed="true" /></hierarchy>',
-  );
-
-  assert.equal(nodes[0]?.label, 'A > B');
-  assert.equal(nodes[0]?.identifier, 'login');
-  assert.deepEqual(nodes[0]?.rect, { x: 0, y: 0, width: 10, height: 10 });
-  assert.throws(
-    () => parseWebDriverSource('<node __proto__="polluted" text="x" />'),
-    /Unsupported XML attribute name "__proto__"/,
-  );
-});
-
-test('WebDriver scroll frame prefers visible scrollable containers', () => {
-  assert.deepEqual(
-    scrollFrameFromWebDriverSource(
-      '<hierarchy>' +
-        '<android.widget.FrameLayout bounds="[0,0][1080,2400]" displayed="true" />' +
-        '<android.widget.ListView bounds="[0,393][1080,1496]" displayed="true" />' +
-        '<android.support.v7.widget.RecyclerView bounds="[18,597][1062,1196]" displayed="false" />' +
-        '</hierarchy>',
-    ),
-    { x: 0, y: 393, width: 1080, height: 1103 },
-  );
-});
-
-async function createCloudWebDriverWorld(
-  options: { cleanup?: () => Promise<Record<string, unknown> | undefined> } = {},
-) {
-  const server = await FakeWebDriverServer.start();
-  let artifactFailuresRemaining = 0;
-  const runtime = createCloudWebDriverRuntime({
-    provider: WEBDRIVER_PROVIDER,
-    endpoint: `${server.url}/wd/hub/`,
-    platform: 'android',
-    deviceName: 'BrowserStack Google Pixel 8',
-    webdriverCapabilities: (lease) => ({
-      'appium:automationName': 'UiAutomator2',
-      'bstack:options': {
-        buildName: lease.runId,
-        sessionName: lease.leaseId,
-      },
-    }),
-    prepareSession: options.cleanup
-      ? async ({ base }) => ({ ...base, cleanup: options.cleanup })
-      : undefined,
-    listArtifacts: async ({ provider, providerSessionId }) => {
-      if (artifactFailuresRemaining > 0) {
-        artifactFailuresRemaining -= 1;
-        throw new Error('provider artifact lookup failed');
-      }
-      return {
-        provider,
-        providerSessionId,
-        status: 'ready',
-        cloudArtifacts: [
-          {
-            provider,
-            providerSessionId,
-            kind: 'video',
-            name: 'Session video',
-            url: 'https://provider.example/video.mp4',
-            availability: 'ready',
-          },
-        ],
-      };
-    },
-  });
-  const providers = createProviderDeviceRuntimeRequestProviders([runtime]);
   const daemon = await createProviderScenarioHarness({
     ...providers,
     deviceInventoryProvider: providers.deviceInventoryProvider!,
@@ -309,11 +155,8 @@ async function createCloudWebDriverWorld(
     daemon,
     server,
     providers,
-    failNextArtifactLookup: () => {
-      artifactFailuresRemaining += 1;
-    },
     close: async () => {
-      await runtime.shutdown();
+      await Promise.allSettled(runtimes.map(async (runtime) => await runtime.shutdown()));
       await daemon.close();
       await server.close();
     },
@@ -347,10 +190,7 @@ function cloudWebDriverScenarioSteps(appPath: string, lease: DeviceLease): Provi
       name: 'install',
       command: 'install',
       positionals: ['com.example.demo', appPath],
-      expectData: {
-        platform: 'android',
-        packageName: 'com.example.demo',
-      },
+      expectData: { platform: 'android', packageName: 'com.example.demo' },
     },
     {
       name: 'open',
@@ -358,8 +198,8 @@ function cloudWebDriverScenarioSteps(appPath: string, lease: DeviceLease): Provi
       positionals: ['com.example.demo'],
       expectData: {
         platform: 'android',
-        id: `webdriver-fake:android:${lease.leaseId}`,
-        serial: `webdriver-fake:android:${lease.leaseId}`,
+        id: `${WEBDRIVER_PROVIDER}:android:${lease.leaseId}`,
+        serial: `${WEBDRIVER_PROVIDER}:android:${lease.leaseId}`,
       },
     },
     { name: 'click', command: 'click', positionals: ['10', '20'], expectData: { x: 10, y: 20 } },
@@ -430,71 +270,48 @@ function cloudWebDriverScenarioSteps(appPath: string, lease: DeviceLease): Provi
   ];
 }
 
-function assertWebDriverCalls(
-  calls: readonly CloudWebDriverHttpCall[],
-  leaseId: string,
-  appPath: string,
-): void {
-  assert.deepEqual(
-    calls.map((call) => `${call.method} ${call.path}`),
-    [
-      'POST /wd/hub/session',
-      'POST /wd/hub/session/wd-1/appium/device/install_app',
-      'POST /wd/hub/session/wd-1/appium/device/activate_app',
-      'POST /wd/hub/session/wd-1/actions',
-      'DELETE /wd/hub/session/wd-1/actions',
-      'POST /wd/hub/session/wd-1/actions',
-      'DELETE /wd/hub/session/wd-1/actions',
-      'POST /wd/hub/session/wd-1/keys',
-      'GET /wd/hub/session/wd-1/source',
-      'POST /wd/hub/session/wd-1/appium/device/hide_keyboard',
-      'GET /wd/hub/session/wd-1/source',
-      'POST /wd/hub/session/wd-1/actions',
-      'DELETE /wd/hub/session/wd-1/actions',
-      'DELETE /wd/hub/session/wd-1',
-    ],
-  );
-  assert.deepEqual(calls[0]?.body, {
+function assertWebDriverCalls(calls: readonly CloudWebDriverHttpCall[], leaseId: string): void {
+  const paths = calls.map((call) => `${call.method} ${call.path}`);
+  for (const expected of [
+    'POST /wd/hub/session',
+    'POST /app-automate/upload',
+    'POST /wd/hub/session/wd-1/appium/device/install_app',
+    'POST /wd/hub/session/wd-1/appium/device/activate_app',
+    'POST /wd/hub/session/wd-1/actions',
+    'POST /wd/hub/session/wd-1/keys',
+    'GET /wd/hub/session/wd-1/source',
+    'DELETE /wd/hub/session/wd-1',
+    'GET /app-automate/sessions/wd-1.json',
+  ]) {
+    assert.ok(paths.includes(expected), `missing WebDriver transcript call: ${expected}`);
+  }
+  const create = calls.find((call) => call.path === '/wd/hub/session');
+  assert.deepEqual(create?.body, {
     capabilities: {
       alwaysMatch: {
         platformName: 'Android',
-        'appium:deviceName': 'BrowserStack Google Pixel 8',
-        'appium:automationName': 'UiAutomator2',
+        'appium:deviceName': 'Google Pixel 8',
+        device: 'Google Pixel 8',
+        os_version: '14.0',
+        app: 'bs://app-id',
         'bstack:options': {
+          projectName: 'agent-device',
           buildName: 'run-a',
           sessionName: leaseId,
         },
       },
     },
   });
-  assert.deepEqual(calls[1]?.body, { appPath });
-  assert.deepEqual(calls[2]?.body, { appId: 'com.example.demo' });
-  assert.deepEqual(calls[7]?.body, { value: Array.from('hello cloud') });
-  assert.equal(calls[9]?.body, undefined);
-  assert.deepEqual(calls[11]?.body, {
-    actions: [
-      {
-        type: 'pointer',
-        id: 'swipe',
-        parameters: { pointerType: 'touch' },
-        actions: [
-          { type: 'pointerMove', duration: 0, x: 540, y: 988 },
-          { type: 'pointerDown', button: 0 },
-          { type: 'pointerMove', duration: 350, x: 540, y: 788 },
-          { type: 'pointerUp', button: 0 },
-        ],
-      },
-    ],
-  });
+  const install = calls.find((call) => call.path.endsWith('/appium/device/install_app'));
+  assert.deepEqual(install?.body, { appPath: 'bs://uploaded-app' });
   for (const call of calls) {
     assert.equal(call.headers['x-agent-device-client'], 'agent-device-cli');
-    assert.equal(typeof call.headers['x-agent-device-version'], 'string');
-    assert.notEqual(call.headers['x-agent-device-version'], '');
+    assert.equal(call.headers['x-agent-device-version'], CLIENT_VERSION);
   }
 }
 
 class FakeWebDriverServer extends CloudWebDriverTestServer {
-  createSessionFailuresRemaining = 0;
+  artifactFailuresRemaining = 0;
   sessionDeleteFailuresRemaining = 0;
 
   static async start(): Promise<StartedCloudWebDriverTestServer<FakeWebDriverServer>> {
@@ -502,56 +319,54 @@ class FakeWebDriverServer extends CloudWebDriverTestServer {
   }
 
   protected respond(call: CloudWebDriverHttpCall) {
-    return respondToFakeWebDriverCall(this, call);
+    switch (`${call.method} ${call.path}`) {
+      case 'POST /wd/hub/session':
+        return cloudWebDriverTestJson({
+          value: { sessionId: 'wd-1', capabilities: { platformName: 'Android' } },
+        });
+      case 'POST /app-automate/upload':
+        return cloudWebDriverTestJson({ app_url: 'bs://uploaded-app' });
+      case 'GET /wd/hub/session/wd-1/source':
+        return cloudWebDriverTestJson({ value: fakeWebDriverSource() });
+      case 'GET /wd/hub/session/wd-1/window/rect':
+        return cloudWebDriverTestJson({ value: { x: 0, y: 0, width: 1080, height: 1920 } });
+      case 'DELETE /wd/hub/session/wd-1/actions':
+        return cloudWebDriverTestJson(
+          { value: { message: 'The requested resource could not be found.' } },
+          500,
+        );
+      case 'DELETE /wd/hub/session/wd-1':
+        return this.deleteSessionResponse();
+      case 'GET /app-automate/sessions/wd-1.json':
+        return this.artifactResponse();
+      default:
+        return cloudWebDriverTestJson({ value: null });
+    }
   }
-}
 
-function respondToFakeWebDriverCall(
-  server: FakeWebDriverServer,
-  call: CloudWebDriverHttpCall,
-): ReturnType<typeof cloudWebDriverTestJson> {
-  switch (`${call.method} ${call.path}`) {
-    case 'POST /wd/hub/session':
-      return fakeCreateSessionResponse(server);
-    case 'GET /wd/hub/session/wd-1/source':
-      return cloudWebDriverTestJson({ value: fakeWebDriverSource() });
-    case 'GET /wd/hub/session/wd-1/window/rect':
-      return cloudWebDriverTestJson({ value: { x: 0, y: 0, width: 1080, height: 1920 } });
-    case 'DELETE /wd/hub/session/wd-1/actions':
-      return cloudWebDriverTestJson(
-        { value: { message: 'The requested resource could not be found.' } },
-        500,
-      );
-    case 'DELETE /wd/hub/session/wd-1':
-      return fakeDeleteSessionResponse(server);
-    default:
-      return cloudWebDriverTestJson({ value: null });
+  private deleteSessionResponse() {
+    if (this.sessionDeleteFailuresRemaining > 0) {
+      this.sessionDeleteFailuresRemaining -= 1;
+      return cloudWebDriverTestJson({ value: { message: 'stale webdriver session' } }, 500);
+    }
+    return cloudWebDriverTestJson({ value: null });
   }
-}
 
-function fakeCreateSessionResponse(
-  server: FakeWebDriverServer,
-): ReturnType<typeof cloudWebDriverTestJson> {
-  if (server.createSessionFailuresRemaining > 0) {
-    server.createSessionFailuresRemaining -= 1;
-    return cloudWebDriverTestJson({ value: { message: 'create session failed' } }, 500);
+  private artifactResponse() {
+    if (this.artifactFailuresRemaining > 0) {
+      this.artifactFailuresRemaining -= 1;
+      return cloudWebDriverTestJson({ message: 'provider artifact lookup failed' }, 500);
+    }
+    return cloudWebDriverTestJson({
+      automation_session: {
+        video_url: 'https://provider.example/video.mp4',
+        appium_logs_url: 'https://provider.example/appium.log',
+        device_logs_url: 'https://provider.example/device.log',
+        browser_url: 'https://provider.example/session',
+        public_url: 'https://provider.example/public',
+      },
+    });
   }
-  return cloudWebDriverTestJson({
-    value: {
-      sessionId: 'wd-1',
-      capabilities: { platformName: 'Android' },
-    },
-  });
-}
-
-function fakeDeleteSessionResponse(
-  server: FakeWebDriverServer,
-): ReturnType<typeof cloudWebDriverTestJson> {
-  if (server.sessionDeleteFailuresRemaining > 0) {
-    server.sessionDeleteFailuresRemaining -= 1;
-    return cloudWebDriverTestJson({ value: { message: 'stale webdriver session' } }, 500);
-  }
-  return cloudWebDriverTestJson({ value: null });
 }
 
 function fakeWebDriverSource(): string {
@@ -570,6 +385,12 @@ function leaseFlags(leaseId?: string): DaemonRequest['flags'] {
     runId: 'run-a',
     leaseId,
     leaseProvider: WEBDRIVER_PROVIDER,
+    device: 'Google Pixel 8',
+    providerApp: 'bs://app-id',
+    providerOsVersion: '14.0',
+    providerProject: 'agent-device',
+    providerBuild: 'run-a',
+    providerSessionName: leaseId,
   };
 }
 

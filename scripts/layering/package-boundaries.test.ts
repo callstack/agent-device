@@ -200,6 +200,18 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/contracts',
     '@agent-device/kernel',
   ]);
+  const providerWebDriverPackage = packages.find(
+    (pkg) => pkg.name === '@agent-device/provider-webdriver',
+  );
+  assert.ok(providerWebDriverPackage, 'provider-webdriver package must exist');
+  assert.deepEqual(
+    [...providerWebDriverPackage.exportTargets.keys()],
+    ['@agent-device/provider-webdriver'],
+  );
+  assert.deepEqual([...providerWebDriverPackage.workspaceDependencies].sort(), [
+    '@agent-device/contracts',
+    '@agent-device/kernel',
+  ]);
   assert.ok(
     rootWorkspaceDependencyNames(repoRoot).has('@agent-device/kernel'),
     'root must declare the kernel workspace dependency',
@@ -211,6 +223,10 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.ok(
     rootWorkspaceDependencyNames(repoRoot).has('@agent-device/maestro'),
     'root must declare the maestro workspace dependency',
+  );
+  assert.ok(
+    rootWorkspaceDependencyNames(repoRoot).has('@agent-device/provider-webdriver'),
+    'root must declare the provider-webdriver workspace dependency',
   );
   assert.deepEqual(checkPackageBoundaries(repoRoot, new Set()), []);
 });
@@ -228,6 +244,8 @@ test('Node resolution enforces the exports map at runtime', () => {
     '@agent-device/contracts/gesture-plan',
     '@agent-device/contracts/src/gesture-plan.ts',
     '@agent-device/contracts',
+    '@agent-device/provider-webdriver/runtime',
+    '@agent-device/provider-webdriver/src/runtime.ts',
   ]) {
     assert.throws(
       () => import.meta.resolve(deep),
@@ -240,5 +258,10 @@ test('Node resolution enforces the exports map at runtime', () => {
   assert.ok(
     contractsResolved.endsWith('packages/contracts/src/facades/interaction.ts'),
     contractsResolved,
+  );
+  const providerWebDriverResolved = import.meta.resolve('@agent-device/provider-webdriver');
+  assert.ok(
+    providerWebDriverResolved.endsWith('packages/provider-webdriver/src/index.ts'),
+    providerWebDriverResolved,
   );
 });

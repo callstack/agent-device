@@ -2,7 +2,7 @@ import {
   CLOUD_WEBDRIVER_PROVIDERS,
   isCloudWebDriverProviderName,
   type CloudWebDriverKnownProviderName,
-} from '../../cloud-webdriver/providers.ts';
+} from '@agent-device/provider-webdriver';
 
 export type DirectDeviceConnectProvider = CloudWebDriverKnownProviderName | 'limrun';
 export type ConnectProvider = 'cloud' | 'proxy' | DirectDeviceConnectProvider;

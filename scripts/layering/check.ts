@@ -28,10 +28,9 @@
 //     engine files, and planned logical modules start with zero forbidden/internal imports (R10).
 //   - Over the WORKSPACE PACKAGES: no root back-imports, no relative tunnelling past
 //     an exports map, and every workspace specifier declared + exports-named (R11).
-// Only `(root)` is unranked (see `UNRANKED_ZONES` in model.ts): it holds the
-// entrypoints and the composition roots that wire the command surface into the
-// daemon, which R2 forbids the daemon from importing, so they sit outside the
-// spine by construction. Every other zone is ranked.
+// Only `(root)` is unranked among src/ zones (see `UNRANKED_ZONES` in model.ts):
+// it holds entrypoints and composition roots. Extracted workspace package zones
+// are classified separately and held behind R11 instead of the src folder spine.
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -438,7 +437,7 @@ function report(
     process.stdout.write(
       `Layering guard: OK — ${files.length} source files satisfy R2-R3 and contain no ` +
         `value-import cycles (both checked globally); the ranked target spine contains no ` +
-        `back-edges (only the composition root is unranked), and its type-only ` +
+        `back-edges (only the composition root is unranked among src zones), and its type-only ` +
         `inversions match the R6 ratchet (${Object.values(TYPE_INVERSION_BASELINE).reduce((sum, count) => sum + count, 0)} remaining); ` +
         `all ${sessionStateFieldCount()} SessionState fields are classified and every write is ` +
         `inside its declared owner (R7); every zero-dep CI job resolves without ` +

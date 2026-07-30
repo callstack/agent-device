@@ -46,6 +46,7 @@ export const BROWSERSTACK_CAPABILITY_OVERRIDES = {
 } as const satisfies CloudWebDriverCapabilityOverrides;
 
 export type BrowserStackWebDriverRuntimeOptions = {
+  clientVersion: string;
   username: string;
   accessKey: string;
   platform: CloudWebDriverPlatform;
@@ -97,11 +98,13 @@ export function createBrowserStackWebDriverRuntime(
 ): ProviderDeviceRuntime {
   const uploadEndpoint = options.uploadEndpoint ?? BROWSERSTACK_APP_UPLOAD_ENDPOINT;
   const artifactOptions = {
+    clientVersion: options.clientVersion,
     username: options.username,
     accessKey: options.accessKey,
     endpoint: options.sessionDetailsEndpoint ?? BROWSERSTACK_SESSION_DETAILS_ENDPOINT,
   };
   return createCloudWebDriverRuntime({
+    clientVersion: options.clientVersion,
     provider: BROWSERSTACK_PROVIDER,
     endpoint: options.endpoint ?? BROWSERSTACK_APP_AUTOMATE_ENDPOINT,
     platform: options.platform,
@@ -121,6 +124,7 @@ export function createBrowserStackWebDriverRuntime(
         configured: resolveConfiguredBrowserStackCapabilities(options, lease),
       }),
     uploadApp: createBrowserStackUploadApp({
+      clientVersion: options.clientVersion,
       username: options.username,
       accessKey: options.accessKey,
       endpoint: uploadEndpoint,
@@ -135,6 +139,7 @@ export function createBrowserStackWebDriverRuntime(
 }
 
 export type BrowserStackSessionDetailsOptions = {
+  clientVersion: string;
   username: string;
   accessKey: string;
   endpoint?: string | URL;
@@ -157,6 +162,7 @@ export async function listBrowserStackCloudArtifacts(
 }
 
 export type BrowserStackUploadOptions = {
+  clientVersion: string;
   username: string;
   accessKey: string;
   endpoint?: string | URL;
@@ -172,7 +178,7 @@ export async function uploadBrowserStackApp(
   const response = await fetch(options.endpoint ?? BROWSERSTACK_APP_UPLOAD_ENDPOINT, {
     method: 'POST',
     headers: {
-      ...agentDeviceRequestHeaders(),
+      ...agentDeviceRequestHeaders(options.clientVersion),
       Authorization: basicAuthHeader(options),
     },
     body: form,
@@ -236,7 +242,7 @@ async function fetchBrowserStackSessionDetails(
   );
   const response = await fetch(endpoint, {
     headers: {
-      ...agentDeviceRequestHeaders(),
+      ...agentDeviceRequestHeaders(options.clientVersion),
       Authorization: basicAuthHeader(options),
     },
   });

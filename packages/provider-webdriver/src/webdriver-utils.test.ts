@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { trimLeadingSlash, trimTrailingSlash } from '../webdriver-utils.ts';
+import { trimLeadingSlash, trimTrailingSlash } from './webdriver-utils.ts';
 
 test('slash trimming utilities handle slash-heavy strings without regular expressions', () => {
   const slashRun = '/'.repeat(10_000);

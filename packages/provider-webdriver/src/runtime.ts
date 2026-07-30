@@ -84,6 +84,7 @@ export type CloudWebDriverPrepareSession = (params: {
 }) => Promise<CloudWebDriverPreparedSession>;
 
 export type CloudWebDriverRuntimeOptions = {
+  clientVersion: string;
   provider: string;
   endpoint: string | URL;
   platform: CloudWebDriverPlatform;
@@ -220,6 +221,7 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
     if (this.sessionsByLeaseId.has(lease.leaseId)) return this.heartbeat(lease);
     const prepared = await this.prepareSession(lease, req);
     const client = new WebDriverClient({
+      clientVersion: this.options.clientVersion,
       endpoint: prepared.endpoint,
       auth: prepared.auth,
       headers: prepared.headers,

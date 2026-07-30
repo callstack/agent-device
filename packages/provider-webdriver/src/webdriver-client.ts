@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { AppError } from '@agent-device/kernel/errors';
-import { sleep } from '../utils/timeouts.ts';
 import { agentDeviceRequestHeaders } from './request-headers.ts';
 import { basicAuthHeader, trimLeadingSlash, withTrailingSlash } from './webdriver-utils.ts';
 
@@ -10,6 +10,7 @@ export type WebDriverAuth = {
 };
 
 export type WebDriverClientOptions = {
+  clientVersion: string;
   endpoint: string | URL;
   auth?: WebDriverAuth;
   headers?: Record<string, string>;
@@ -75,7 +76,7 @@ export class WebDriverClient {
   constructor(options: WebDriverClientOptions) {
     this.endpoint = withTrailingSlash(new URL(options.endpoint));
     this.headers = {
-      ...agentDeviceRequestHeaders(),
+      ...agentDeviceRequestHeaders(options.clientVersion),
       ...(options.auth ? { Authorization: basicAuthHeader(options.auth) } : {}),
       ...options.headers,
     };

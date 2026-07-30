@@ -33,6 +33,9 @@ importers:
       '@agent-device/maestro':
         specifier: workspace:*
         version: link:packages/maestro
+      '@agent-device/provider-webdriver':
+        specifier: workspace:*
+        version: link:packages/provider-webdriver
       '@chenglou/freerange':
         specifier: ^0.0.1
         version: 0.0.1
@@ -98,6 +101,15 @@ importers:
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
+
+  packages/provider-webdriver:
+    dependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
 
   website:
     devDependencies:

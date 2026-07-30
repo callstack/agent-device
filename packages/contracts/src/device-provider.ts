@@ -1,6 +1,6 @@
 // The device-provider port.
 //
-// A provider adapter (`providers/`, `cloud-webdriver/`) implements these; the daemon calls
+// A provider adapter (`providers/`, `@agent-device/provider-webdriver`) implements these; the daemon calls
 // them. Both sides therefore name the same shapes, and since the adapters sit below the
 // daemon in the spine, the shapes have to be declared below both — here — rather than
 // inside the daemon module that happens to consume them first.

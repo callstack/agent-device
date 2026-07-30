@@ -30,7 +30,7 @@ import type { CloudProviderSessionResult } from '@agent-device/contracts/observa
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { readMetroPrepareKind } from '../../commands/metro/prepare-kind.ts';
 import { connectionProviderRequiresRemoteDaemon } from '../connection/provider-policy.ts';
-import { isCloudWebDriverProviderName } from '../../cloud-webdriver/providers.ts';
+import { isCloudWebDriverProviderName } from '@agent-device/provider-webdriver';
 
 const leaseDeferredCommands = new Set([
   'artifacts',

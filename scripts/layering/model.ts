@@ -31,7 +31,6 @@ export type BackEdgeMap = Record<string, string[]>;
 // ranked here or listed as unranked — `unclassifiedZones` and `model.test.ts` guard
 // that no zone is silently unclassified.
 const TARGET_DAG_RANK = new Map([
-  ['cloud-webdriver', 1],
   ['contracts', 1],
   ['maestro', 1],
   ['platforms', 1],
@@ -68,21 +67,22 @@ export function zoneRank(zone: string): number | null {
   return TARGET_DAG_RANK.get(zone) ?? null;
 }
 
-// The one zone deliberately left OUT of the ranked spine. It is NOT unenforced: every file
-// in it is still subject to the global production value-import cycle rejection (R4) and the
-// R1-R3 move rules. It opts out of spine back-edge ranking because `(root)` holds the
-// entrypoints and the composition roots that wire the command surface into the daemon —
-// and R2 forbids `daemon/` from importing `commands/`, so those files must sit outside the
-// spine by construction, composing it from above.
+// Zones deliberately left OUT of the src folder spine. They are NOT unenforced:
+// every file remains under the global value-cycle rule (R4). `(root)` composes
+// the spine from above; extracted package zones are held by R11 package exports
+// and the no-root-back-import rule instead of their former src folder rank.
 //
 // The satellite zones used to be listed here too, on the grounds that ranking them would
 // invent an order the architecture had not committed to. Once `utils` joined the spine and
 // `(root)` was emptied of shared contracts, every one of them turned out to have a
 // consistent rank already — so the order was there, just unasserted.
-// 'kernel' is unranked because it is no longer a src/ zone at all: it lives in
-// packages/kernel (#1490 W0), R11 package-boundaries owns that seam, and its
-// zone name only appears in graphs that follow workspace specifiers.
-export const UNRANKED_ZONES: ReadonlySet<string> = new Set(['(root)', 'kernel']);
+// `kernel` and `provider-webdriver` are no longer src/ zones: R11 owns their
+// physical seams, and their zone names only appear in workspace-aware graphs.
+export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
+  '(root)',
+  'kernel',
+  'provider-webdriver',
+]);
 
 export type ZoneClassification = 'ranked' | 'unranked' | 'unclassified';
 

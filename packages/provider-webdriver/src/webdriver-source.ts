@@ -1,12 +1,12 @@
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import { parseBounds } from '@agent-device/kernel/bounds';
-import { parseXmlDocumentSync, type XmlNode } from '../utils/xml.ts';
+import { parseWebDriverXml, type WebDriverXmlNode } from './webdriver-xml.ts';
 
 export function parseWebDriverSource(source: string): RawSnapshotNode[] {
-  let roots: XmlNode[];
+  let roots: WebDriverXmlNode[];
   try {
-    roots = parseXmlDocumentSync(source);
+    roots = parseWebDriverXml(source);
   } catch (error) {
     throw new AppError(
       'COMMAND_FAILED',
@@ -24,7 +24,7 @@ export function parseWebDriverSource(source: string): RawSnapshotNode[] {
 
 function appendSourceNodes(
   nodes: RawSnapshotNode[],
-  xmlNode: XmlNode,
+  xmlNode: WebDriverXmlNode,
   parentIndex?: number,
   depth = 0,
 ): void {
@@ -40,7 +40,7 @@ function appendSourceNodes(
 
 function appendSourceNode(
   nodes: RawSnapshotNode[],
-  xmlNode: XmlNode,
+  xmlNode: WebDriverXmlNode,
   parentIndex: number | undefined,
   depth: number,
 ): number {

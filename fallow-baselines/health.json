@@ -623,7 +623,7 @@
     "src/selectors/build.ts:high impact",
     "src/kernel/redaction.ts:high impact",
     "src/utils/rect-visibility.ts:high impact",
-    "src/cloud-webdriver/webdriver-utils.ts:high impact",
+    "packages/provider-webdriver/src/webdriver-utils.ts:high impact",
     "src/utils/keyed-lock.ts:high impact",
     "src/daemon/request-progress-protocol.ts:high impact",
     "src/replay/test/reporters/format.ts:high impact",

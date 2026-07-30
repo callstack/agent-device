@@ -1,5 +1,7 @@
-import { CLOUD_WEBDRIVER_PROVIDERS } from '../../cloud-webdriver/providers.ts';
-import type { CloudWebDriverKnownProviderName } from '../../cloud-webdriver/providers.ts';
+import {
+  CLOUD_WEBDRIVER_PROVIDERS,
+  type CloudWebDriverKnownProviderName,
+} from '@agent-device/provider-webdriver';
 import type { RemoteConfigProfile } from '../../remote/remote-config-schema.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { PlatformSelector } from '@agent-device/kernel/device';
