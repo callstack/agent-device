@@ -18,6 +18,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { parseImports } from './model.ts';
 
 export type PackageBoundaryViolation = {
   rule: string;
@@ -42,17 +43,14 @@ export type SpecifierSite = {
   specifier: string;
 };
 
-const SPECIFIER_PATTERN = /(?:from|import)\s*\(?\s*'(?<spec>[^']+)'/g;
-
-/** Every import specifier in `source`, with its 1-based line. */
+/**
+ * Every import specifier in `source`, with its 1-based line — through the
+ * layering model's own parser, so static/dynamic/side-effect/re-export sites
+ * and both quote styles are covered by one scanner instead of a private regex
+ * that silently missed double-quoted routes.
+ */
 export function specifierSites(file: string, source: string): SpecifierSite[] {
-  const sites: SpecifierSite[] = [];
-  for (const match of source.matchAll(SPECIFIER_PATTERN)) {
-    const specifier = match.groups!.spec!;
-    const line = source.slice(0, match.index).split('\n').length;
-    sites.push({ file, line, specifier });
-  }
-  return sites;
+  return parseImports(source).map((edge) => ({ file, line: edge.line, specifier: edge.spec }));
 }
 
 export function readWorkspacePackages(repoRoot: string): WorkspacePackage[] {

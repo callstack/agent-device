@@ -51,6 +51,35 @@ test('specifier sites carry 1-based lines for static and dynamic imports', () =>
   );
 });
 
+test('double-quoted and re-export routes into packages are not invisible to R11', () => {
+  // The scanner is the layering parser, so quote style and statement form
+  // cannot carve out a bypass: a double-quoted import, a re-export, and a
+  // double-quoted dynamic import into packages/*/src all reach the rule.
+  const doubleQuoted = specifierSites(
+    'src/utils/exec.ts',
+    'import { AppError } from "../../packages/kernel/src/errors.ts";',
+  );
+  assert.equal(checkRootSites(doubleQuoted, ALL, new Set([kernel.name]), new Set()).length, 1);
+
+  const reExport = specifierSites(
+    'src/utils/exec.ts',
+    'export { AppError } from "../../packages/kernel/src/errors.ts";',
+  );
+  assert.equal(checkRootSites(reExport, ALL, new Set([kernel.name]), new Set()).length, 1);
+
+  const dynamic = specifierSites(
+    'src/utils/exec.ts',
+    'void import("../../packages/kernel/src/errors.ts");',
+  );
+  assert.equal(checkRootSites(dynamic, ALL, new Set([kernel.name]), new Set()).length, 1);
+
+  const packageEscape = specifierSites(
+    'packages/kernel/src/errors.ts',
+    'export * from "../../../src/utils/exec.ts";',
+  );
+  assert.equal(checkPackageInternalSites(kernel, packageEscape, ALL).length, 1);
+});
+
 test('a package file importing root src is a violation', () => {
   const sites = specifierSites(
     'packages/kernel/src/errors.ts',
