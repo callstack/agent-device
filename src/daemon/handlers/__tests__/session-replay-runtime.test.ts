@@ -11,7 +11,10 @@ import path from 'node:path';
 import { runReplayScriptFile } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import {
+  makeIosSession,
+  makeRepairArmedSession,
+} from '../../../__tests__/test-utils/session-factories.ts';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,
@@ -384,9 +387,7 @@ test('Maestro YAML cannot append commands to an active .ad repair session', asyn
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-typed-maestro-active-repair-'));
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  const session = makeIosSession(sessionName);
-  session.recordSession = true;
-  session.saveScriptBoundary = 0;
+  const session = makeRepairArmedSession(sessionName);
   sessionStore.set(sessionName, session);
   const yamlPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(yamlPath, 'appId: com.example.app\n---\n- launchApp\n');

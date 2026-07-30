@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, expect, test } from 'vitest';
 import { INTERNAL_COMMANDS } from '../../../command-catalog.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/index.ts';
+import { makeIosSession, makeAuthoringSession } from '../../../__tests__/test-utils/index.ts';
 import type { TargetAnnotationV1 } from '../../../replay/target-identity.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, SessionState } from '../../types.ts';
@@ -39,8 +39,7 @@ beforeEach(() => {
 });
 
 function armedSession(overrides: Partial<SessionState> = {}): SessionState {
-  return makeIosSession('authoring', {
-    recordSession: true,
+  return makeAuthoringSession('authoring', {
     scriptRecordingState: 'armed',
     actions: [
       { ts: 1, command: 'open', positionals: ['Demo'], flags: { saveScript: true } },

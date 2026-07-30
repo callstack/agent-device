@@ -62,7 +62,10 @@ import { SessionStore } from '../../session-store.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import {
+  makeIosSession,
+  makeRepairCompleteSession,
+} from '../../../__tests__/test-utils/session-factories.ts';
 import { HEAL_COMPLETE_SENTINEL } from '../../session-script-writer.ts';
 import { parseReplayScriptDetailed } from '../../../replay/script.ts';
 import type { DaemonRequest } from '../../types.ts';
@@ -426,23 +429,21 @@ test('BLOCKER 1: a --from continuation on a reaped session returns SESSION_NOT_F
 
 /** A COMPLETE, committable repair-armed session at the default healed sibling path. */
 function makeCompleteRepairSession(sessionStore: SessionStore, sessionName: string, root: string) {
-  const session = makeIosSession(sessionName, { appBundleId: 'com.example.app' });
-  session.recordSession = true;
-  session.saveScriptBoundary = 0;
-  session.saveScriptComplete = true;
-  session.saveScriptPath = path.join(root, 'flow.healed.ad');
-  session.saveScriptDefaultedHealedPath = true;
-  session.actions = [
-    { ts: 1, command: 'open', positionals: ['Demo'], flags: {} },
-    {
-      ts: 2,
-      command: 'press',
-      positionals: ['@e7'],
-      flags: {},
-      result: { selectorChain: ['id="save-v2"'] },
-      targetEvidence: freshEvidence('save-v2', 'Save V2'),
-    },
-  ];
+  const session = makeRepairCompleteSession(sessionName, {
+    appBundleId: 'com.example.app',
+    saveScriptPath: path.join(root, 'flow.healed.ad'),
+    actions: [
+      { ts: 1, command: 'open', positionals: ['Demo'], flags: {} },
+      {
+        ts: 2,
+        command: 'press',
+        positionals: ['@e7'],
+        flags: {},
+        result: { selectorChain: ['id="save-v2"'] },
+        targetEvidence: freshEvidence('save-v2', 'Save V2'),
+      },
+    ],
+  });
   sessionStore.set(sessionName, session);
   return session;
 }

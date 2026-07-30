@@ -39,7 +39,7 @@ import { SessionStore } from '../../session-store.ts';
 import { handleCloseCommand } from '../session-close.ts';
 import { handleOpenCommand } from '../session-open.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { SessionState } from '../../types.ts';
+import { makeAuthoringSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
 const mockDispatch = vi.mocked(dispatchCommand);
@@ -267,15 +267,11 @@ test('#1391: a close-time script save failure still clears the advisory claim an
   // after `handleCloseCommand` deletes it from the store — `store.delete` only
   // drops the map entry, it doesn't touch the object this variable still
   // points at.
-  const session: SessionState = {
-    name: 'close-save-script-failure',
+  const session = makeAuthoringSession('close-save-script-failure', {
     device: android,
     deviceClaim: acquired.ownership,
-    createdAt: Date.now(),
-    actions: [],
-    recordSession: true,
     saveScriptPath: targetPath,
-  };
+  });
   store.set('close-save-script-failure', session);
   mockDispatch.mockResolvedValue({});
 

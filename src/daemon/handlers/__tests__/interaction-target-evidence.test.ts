@@ -5,7 +5,10 @@ import path from 'node:path';
 import { handleInteractionCommands } from '../interaction.ts';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import {
+  makeIosSession,
+  makeAuthoringSession,
+} from '../../../__tests__/test-utils/session-factories.ts';
 import { SessionScriptWriter } from '../../session-script-writer.ts';
 import type { CommandFlags } from '../../../core/dispatch.ts';
 import type { SessionState } from '../../types.ts';
@@ -66,8 +69,10 @@ function makeSessionWithSnapshot(
   sessionName: string,
   options: { recordSession: boolean },
 ): SessionState {
-  const session = makeIosSession(sessionName, { appBundleId: 'com.example.app' });
-  session.recordSession = options.recordSession;
+  const session = makeIosSession(sessionName, {
+    appBundleId: 'com.example.app',
+    recordSession: options.recordSession,
+  });
   session.snapshot = {
     nodes: attachRefs(SAVE_BUTTON_NODES),
     createdAt: Date.now(),
@@ -178,8 +183,7 @@ test('get text @ref without recording never computes target-v1 evidence', async 
 test('get text simple iOS id selector while recording skips the direct runner query and records evidence from the snapshot path', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'recording-get-direct-gate';
-  const session = makeIosSession(sessionName, { appBundleId: 'com.example.app' });
-  session.recordSession = true;
+  const session = makeAuthoringSession(sessionName, { appBundleId: 'com.example.app' });
   sessionStore.set(sessionName, session);
   mockDispatch.mockImplementation(async (_device, command) => {
     if (command === 'snapshot') {
@@ -318,8 +322,7 @@ test('press on an identity-empty container: container-based daemon response, des
   // on the runtime resolution path (the direct-iOS fast path is gated during
   // recording) without Android's real-adb dialog-readiness probes, which
   // would burn wall-clock time this unit lane must not spend.
-  const session = makeIosSession(sessionName, { appBundleId: 'com.example.app' });
-  session.recordSession = true;
+  const session = makeAuthoringSession(sessionName, { appBundleId: 'com.example.app' });
   sessionStore.set(sessionName, session);
   mockDispatch.mockImplementation(async (_device, command) => {
     if (command === 'snapshot') {

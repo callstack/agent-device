@@ -856,18 +856,14 @@ function armReplaySaveScriptStep(params: {
   if (!session) return;
   session.recordSession = true;
   if (typeof saveScript === 'string') {
-    // An EXPLICIT `--save-script=<path>` clears the defaulted marker
-    // (invariant: the marker is set iff the current `saveScriptPath` was
-    // defaulted, not caller-directed). This no longer affects the publish
-    // decision either way — the writer's refuse-on-exist guard is uniform
-    // (`publishHealedScriptAtomically`) and refuses ANY pre-existing target,
-    // an explicit caller-directed path included, exactly like the default
-    // healed sibling.
+    // An EXPLICIT `--save-script=<path>` retargets. Which of the two ways the
+    // path was chosen does not affect the publish decision: the writer's
+    // refuse-on-exist guard is uniform (`publishHealedScriptAtomically`) and
+    // refuses ANY pre-existing target, an explicit caller-directed path
+    // included, exactly like the default healed sibling.
     applySaveScriptRetarget(session, expandSessionPath(saveScript), force);
-    session.saveScriptDefaultedHealedPath = false;
   } else if (session.saveScriptPath === undefined) {
     session.saveScriptPath = healedScriptSiblingPath(sourcePath);
-    session.saveScriptDefaultedHealedPath = true;
   }
   // #1258: force is per-target — a LIVE `--force`/`--overwrite` persists onto
   // the session (`saveScriptForce`) so a LATER `--from` continuation leg or an

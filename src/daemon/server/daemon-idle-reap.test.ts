@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, test, vi } from 'vitest';
-import { IOS_SIMULATOR } from '../../__tests__/test-utils/index.ts';
+import { makeIosSession } from '../../__tests__/test-utils/index.ts';
 import { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
 import {
@@ -28,13 +28,7 @@ afterEach(() => {
 });
 
 function makeSession(overrides: Partial<SessionState> = {}): SessionState {
-  return {
-    name: 'default',
-    device: IOS_SIMULATOR,
-    createdAt: Date.now(),
-    actions: [],
-    ...overrides,
-  };
+  return makeIosSession('default', overrides);
 }
 
 test('resolveDaemonIdleReapMs falls back to the 5 minute default', () => {

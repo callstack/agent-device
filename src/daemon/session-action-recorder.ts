@@ -69,18 +69,17 @@ export function recordActionEntry(
     session.recordSession = true;
     if (typeof entry.flags.saveScript === 'string') {
       // ADR 0012 decision 6: an explicit `--save-script=<path>` (e.g. `close
-      // --save-script=<path>`) clears the defaulted-healed marker, since this
-      // path was no longer defaulted to the healed sibling. This marker plays
-      // no role in the publish decision itself: the writer's refuse-on-exist
-      // guard is uniform (see `publishHealedScriptAtomically`) and refuses
-      // ANY pre-existing target — an explicit, caller-DIRECTED path included.
-      // Directing the path is not the same as authorizing an overwrite.
+      // --save-script=<path>`) retargets away from the defaulted healed
+      // sibling. How the path was chosen plays no role in the publish
+      // decision: the writer's refuse-on-exist guard is uniform (see
+      // `publishHealedScriptAtomically`) and refuses ANY pre-existing target —
+      // an explicit, caller-DIRECTED path included. Directing the path is not
+      // the same as authorizing an overwrite.
       applySaveScriptRetarget(
         session,
         expandSessionPath(entry.flags.saveScript),
         entry.flags.force,
       );
-      session.saveScriptDefaultedHealedPath = false;
     }
     // #1258: persist `--force`/`--overwrite`, like `saveScriptPath`, so a
     // LATER write that does not repeat the flag (a bare `close` finishing a
