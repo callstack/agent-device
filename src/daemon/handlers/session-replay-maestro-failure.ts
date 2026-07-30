@@ -7,7 +7,7 @@ import {
   createReplayDivergenceSanitizer,
   type ReplayDivergence,
   type ReplayVarScrubEntry,
-} from '../../replay/divergence.ts';
+} from '@agent-device/contracts/divergence';
 import { formatScriptArg } from '../../replay/script-utils.ts';
 import { getRequestSignal } from '../../request/cancel.ts';
 import { SessionStore } from '../session-store.ts';

@@ -1,4 +1,4 @@
-import type { RequestProgressEvent } from '../../request/progress.ts';
+import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import {
   getReplayTestReporterExitCode,

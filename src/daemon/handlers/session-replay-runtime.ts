@@ -9,11 +9,6 @@ import type {
   SessionAction,
   SessionState,
 } from '../types.ts';
-import {
-  emitRequestProgress,
-  readReplayTestActionProgress,
-  type ReplayTestProgressEvent,
-} from '../../request/progress.ts';
 import { SessionStore } from '../session-store.ts';
 import { clearPendingRecordAndHealWatermark } from './session-replay-resume.ts';
 import { expandSessionPath } from '../session-paths.ts';
@@ -38,7 +33,7 @@ import {
   type SnapshotTimingSample,
 } from '@agent-device/contracts/capture';
 import type { ReplayCommandResult } from '@agent-device/contracts/replay';
-import type { ReplayDivergenceResume } from '../../replay/divergence.ts';
+import type { ReplayDivergenceResume } from '@agent-device/contracts/divergence';
 import {
   isMaestroYamlPath,
   maestroBackendRequiredMessage,
@@ -62,6 +57,7 @@ import {
 } from './session-replay-target-verification.ts';
 import { buildReplayBuiltinVars } from './session-replay-vars.ts';
 import { runTypedMaestroReplayFile } from './session-replay-maestro-runtime.ts';
+import type { ReplayTestAttemptStep, ReplayTestAttemptStepSink } from './session-test-types.ts';
 import { getRequestSignal } from '../../request/cancel.ts';
 
 /** Per-run invariants for a single replay step (ADR 0012 step 4 verify + dispatch + guard). */
@@ -200,9 +196,15 @@ export async function runReplayScriptFile(params: {
   logPath: string;
   sessionStore: SessionStore;
   tracePath?: string;
+  /**
+   * Per-attempt step sink supplied by the replay-test scheduler through its host (#1478 P3).
+   * Threaded alongside `tracePath` rather than read from request-global storage, so a direct
+   * `replay` simply has no sink and emits nothing.
+   */
+  onStep?: ReplayTestAttemptStepSink;
   invoke: DaemonInvokeFn;
 }): Promise<DaemonResponse> {
-  const { req, sessionName, logPath, sessionStore, tracePath, invoke } = params;
+  const { req, sessionName, logPath, sessionStore, tracePath, onStep, invoke } = params;
   const filePath = req.positionals?.[0];
   if (!filePath) {
     return errorResponse('INVALID_ARGS', 'replay requires a path');
@@ -285,6 +287,7 @@ export async function runReplayScriptFile(params: {
       stepContext,
       artifactPaths,
       snapshotDiagnosticSamples,
+      onStep,
       armSaveScript: sessionPreparation.armSaveScript,
     });
     if (failure) return failure;
@@ -323,6 +326,7 @@ type ReplayActionExecution = {
   stepContext: ReplayStepContext;
   artifactPaths: Set<string>;
   snapshotDiagnosticSamples: SnapshotTimingSample[];
+  onStep: ReplayTestAttemptStepSink | undefined;
   armSaveScript: () => void;
 };
 
@@ -332,12 +336,12 @@ async function executeReplayActions(
   const {
     sessionName,
     sessionStore,
-    resolved,
     actions,
     entryIndex,
     stepContext,
     artifactPaths,
     snapshotDiagnosticSamples,
+    onStep,
     armSaveScript,
   } = params;
   for (let index = entryIndex; index < actions.length; index += 1) {
@@ -357,7 +361,7 @@ async function executeReplayActions(
     ) {
       continue;
     }
-    emitReplayTestActionProgress(resolved, index, actions.length, action);
+    onStep?.(replayActionStep(index, actions.length, action));
     const sampleStart = readSessionSnapshotSampleCount(sessionStore, sessionName);
     const response = await resolveReplayStepResponse(stepContext, action, index, [
       ...artifactPaths,
@@ -452,42 +456,25 @@ function completeReplayRun(params: {
   };
 }
 
-function emitReplayTestActionProgress(
-  file: string,
+function replayActionStep(
   actionIndex: number,
   actionTotal: number,
   action: SessionAction,
-): void {
-  const progress = readReplayTestActionProgress();
-  if (!progress) return;
-  emitRequestProgress({
-    type: 'replay-test',
-    ...progress,
-    file: progress.file || file,
-    status: 'progress',
-    stepIndex: actionIndex + 1,
-    stepTotal: actionTotal,
-    ...formatReplayTestActionProgress(action),
-  });
-}
-
-function formatReplayTestActionProgress(
-  action: SessionAction,
-): Pick<ReplayTestProgressEvent, 'stepCommand' | 'stepValue'> {
+): ReplayTestAttemptStep {
   return {
-    stepCommand: action.command,
-    ...formatReplayTestProgressValue(action),
+    index: actionIndex + 1,
+    total: actionTotal,
+    command: action.command,
+    ...replayActionStepValue(action),
   };
 }
 
-function formatReplayTestProgressValue(
-  action: SessionAction,
-): Pick<ReplayTestProgressEvent, 'stepValue'> {
+function replayActionStepValue(action: SessionAction): Pick<ReplayTestAttemptStep, 'value'> {
   const positionals = action.positionals ?? [];
   const selectorValue = readSelectorDisplayValue(positionals[0]);
-  if (selectorValue) return { stepValue: selectorValue };
+  if (selectorValue) return { value: selectorValue };
   if (positionals.length === 0) return {};
-  return { stepValue: positionals.join(' ') };
+  return { value: positionals.join(' ') };
 }
 
 function readSelectorDisplayValue(selector: string | undefined): string | undefined {

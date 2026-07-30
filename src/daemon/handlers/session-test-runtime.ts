@@ -9,15 +9,14 @@ import {
   markRequestCanceled,
   registerRequestAbort,
 } from '../../request/cancel.ts';
-import {
-  type ReplayTestActionProgressContext,
-  withReplayTestActionProgress,
-} from '../../request/progress.ts';
-import type { DaemonResponse } from '../types.ts';
 import type { ReplayScriptMetadata } from '../../replay/script.ts';
-import type {
-  ReplayTestRunReplayParams,
-  ReplayTestRuntimeDependencies,
+import {
+  replayTestAttemptFailure,
+  type ReplayTestAttemptFailed,
+  type ReplayTestAttemptOutcome,
+  type ReplayTestAttemptStepSink,
+  type ReplayTestRunReplayParams,
+  type ReplayTestRuntimeDependencies,
 } from './session-test-types.ts';
 
 const REPLAY_TIMEOUT_CLEANUP_GRACE_MS = 2_000;
@@ -36,9 +35,9 @@ export async function runReplayTestAttempt(
     target?: ReplayScriptMetadata['target'];
     artifactsDir?: string;
     shard?: ReplayTestRunReplayParams['shard'];
-    progress?: ReplayTestActionProgressContext;
+    onStep?: ReplayTestAttemptStepSink;
   } & ReplayTestRuntimeDependencies,
-): Promise<DaemonResponse> {
+): Promise<ReplayTestAttemptOutcome> {
   const {
     filePath,
     sessionName,
@@ -49,7 +48,7 @@ export async function runReplayTestAttempt(
     target,
     artifactsDir,
     shard,
-    progress,
+    onStep,
     runReplay,
     cleanupSession,
     finalizeAttempt,
@@ -59,7 +58,7 @@ export async function runReplayTestAttempt(
   const artifactPaths = new Set<string>();
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   let timedOut = false;
-  let response: DaemonResponse | undefined;
+  let outcome: ReplayTestAttemptOutcome | undefined;
   const attemptStartedAt = Date.now();
   const tracePath = prepareReplayTestTimingTrace({
     artifactsDir,
@@ -71,43 +70,34 @@ export async function runReplayTestAttempt(
     platform,
     target,
   });
-  const replayPromise = withReplayTestActionProgress(
-    progress,
-    async () =>
-      await runReplay({
-        filePath,
-        sessionName,
-        platform,
-        target,
-        requestId,
-        artifactsDir,
-        artifactPaths,
-        tracePath,
-        shard,
-      }),
-  )
-    .catch((error) => {
-      const appErr = normalizeError(error);
-      return {
-        ok: false,
-        error: appErr,
-      } satisfies DaemonResponse;
-    })
+  const replayPromise = runReplay({
+    filePath,
+    sessionName,
+    platform,
+    target,
+    requestId,
+    artifactsDir,
+    artifactPaths,
+    tracePath,
+    shard,
+    onStep,
+  })
+    .catch((error) => replayTestAttemptFailure({ error: normalizeError(error) }))
     .finally(() => {
       clearParentAbortRelay();
       clearRequestCanceled(requestId);
     });
 
   try {
-    response =
+    outcome =
       typeof timeoutMs === 'number'
         ? await Promise.race([
             replayPromise,
-            new Promise<DaemonResponse>((resolve) => {
+            new Promise<ReplayTestAttemptOutcome>((resolve) => {
               timeoutHandle = setTimeout(() => {
                 timedOut = true;
                 markRequestCanceled(requestId);
-                resolve(createReplayTestTimeoutResponse(timeoutMs, [...artifactPaths]));
+                resolve(createReplayTestTimeoutOutcome(timeoutMs, [...artifactPaths]));
               }, timeoutMs);
             }),
           ])
@@ -116,17 +106,17 @@ export async function runReplayTestAttempt(
       type: 'replay_test_attempt_stop',
       ts: new Date().toISOString(),
       session: sessionName,
-      ok: response.ok,
+      ok: outcome.status === 'passed',
       timedOut,
       durationMs: Date.now() - attemptStartedAt,
-      errorCode: response.ok ? undefined : response.error.code,
+      errorCode: outcome.status === 'passed' ? undefined : outcome.error.code,
     });
   } finally {
     if (timeoutHandle) clearTimeout(timeoutHandle);
     if (timedOut) {
       const settled = await waitForReplayAfterTimeout(replayPromise);
       if (!settled) {
-        markReplayTimeoutCleanupPending(response);
+        outcome = markReplayTimeoutCleanupPending(outcome);
         emitDiagnostic({
           level: 'warn',
           phase: 'test_timeout_cleanup_race',
@@ -144,17 +134,17 @@ export async function runReplayTestAttempt(
         });
       }
     }
-    const finalizedResponse = await finalizeReplayTestAttempt({
+    const finalizeFailure = await finalizeReplayTestAttempt({
       finalizeAttempt,
       sessionName,
       artifactPaths,
       artifactsDir,
       tracePath,
     });
-    if (response?.ok && finalizedResponse && !finalizedResponse.ok) {
-      appendReplayTestWarning(
-        response,
-        `Replay test finalization failed: ${finalizedResponse.error.message}`,
+    if (outcome?.status === 'passed' && finalizeFailure) {
+      outcome = appendReplayTestWarning(
+        outcome,
+        `Replay test finalization failed: ${finalizeFailure.error.message}`,
       );
     }
     const cleanupStartedAt = Date.now();
@@ -193,13 +183,10 @@ export async function runReplayTestAttempt(
     }
   }
   return (
-    response ?? {
-      ok: false,
-      error: {
-        code: 'COMMAND_FAILED',
-        message: 'Unknown replay test failure',
-      },
-    }
+    outcome ??
+    replayTestAttemptFailure({
+      error: { code: 'COMMAND_FAILED', message: 'Unknown replay test failure' },
+    })
   );
 }
 
@@ -224,7 +211,9 @@ function relayReplayTestAbortFromParent(
   };
 }
 
-async function waitForReplayAfterTimeout(replayPromise: Promise<DaemonResponse>): Promise<boolean> {
+async function waitForReplayAfterTimeout(
+  replayPromise: Promise<ReplayTestAttemptOutcome>,
+): Promise<boolean> {
   return await Promise.race([
     replayPromise.then(() => true),
     sleep(REPLAY_TIMEOUT_CLEANUP_GRACE_MS).then(() => false),
@@ -232,7 +221,7 @@ async function waitForReplayAfterTimeout(replayPromise: Promise<DaemonResponse>)
 }
 
 async function cleanupSessionAfterLateReplay(params: {
-  replayPromise: Promise<DaemonResponse>;
+  replayPromise: Promise<ReplayTestAttemptOutcome>;
   cleanupSession: ReplayTestRuntimeDependencies['cleanupSession'];
   sessionName: string;
   requestId: string;
@@ -264,7 +253,7 @@ async function finalizeReplayTestAttempt(params: {
   artifactPaths: Set<string>;
   artifactsDir?: string;
   tracePath?: string;
-}): Promise<DaemonResponse | undefined> {
+}): Promise<ReplayTestAttemptFailed | undefined> {
   const { finalizeAttempt, sessionName, artifactPaths, artifactsDir, tracePath } = params;
   if (!finalizeAttempt) return undefined;
   const finalizeStartedAt = Date.now();
@@ -284,9 +273,9 @@ async function finalizeReplayTestAttempt(params: {
       type: 'replay_test_finalize_stop',
       ts: new Date().toISOString(),
       session: sessionName,
-      ok: finalized?.ok ?? true,
+      ok: finalized === undefined,
       durationMs: Date.now() - finalizeStartedAt,
-      errorCode: finalized?.ok === false ? finalized.error.code : undefined,
+      errorCode: finalized?.error.code,
     });
     return finalized;
   } catch (error) {
@@ -307,28 +296,35 @@ async function finalizeReplayTestAttempt(params: {
         error: appErr.message,
       },
     });
-    return { ok: false, error: appErr };
+    return replayTestAttemptFailure({ error: appErr });
   }
 }
 
-function markReplayTimeoutCleanupPending(response: DaemonResponse | undefined): void {
-  if (!response || response.ok) return;
-  response.error.details = {
-    ...(response.error.details ?? {}),
-    reason: REPLAY_TIMEOUT_CLEANUP_PENDING_REASON,
-    timeoutCleanupPending: true,
+function markReplayTimeoutCleanupPending(
+  outcome: ReplayTestAttemptOutcome | undefined,
+): ReplayTestAttemptOutcome | undefined {
+  if (!outcome || outcome.status === 'passed') return outcome;
+  return {
+    ...outcome,
+    // The abandoned replay is still running against the device, so the attempt is an
+    // environmental failure rather than a test failure: the suite must stop rather than retry.
+    infrastructure: true,
+    error: {
+      ...outcome.error,
+      details: {
+        ...(outcome.error.details ?? {}),
+        reason: REPLAY_TIMEOUT_CLEANUP_PENDING_REASON,
+        timeoutCleanupPending: true,
+      },
+    },
   };
 }
 
 function appendReplayTestWarning(
-  response: Extract<DaemonResponse, { ok: true }>,
+  outcome: Extract<ReplayTestAttemptOutcome, { status: 'passed' }>,
   warning: string,
-): void {
-  const data = (response.data ??= {});
-  const warnings = Array.isArray(data.warnings)
-    ? data.warnings.filter((entry): entry is string => typeof entry === 'string')
-    : [];
-  data.warnings = [...warnings, warning];
+): ReplayTestAttemptOutcome {
+  return { ...outcome, warnings: [...outcome.warnings, warning] };
 }
 
 function prepareReplayTestTimingTrace(params: {
@@ -377,12 +373,12 @@ export function appendReplayTestTimingEvent(
   fs.appendFileSync(tracePath, `${JSON.stringify(event)}\n`);
 }
 
-function createReplayTestTimeoutResponse(
+function createReplayTestTimeoutOutcome(
   timeoutMs: number,
   artifactPaths: string[] = [],
-): DaemonResponse {
-  return {
-    ok: false,
+): ReplayTestAttemptOutcome {
+  return replayTestAttemptFailure({
+    artifactPaths,
     error: {
       code: 'COMMAND_FAILED',
       message: `TIMEOUT after ${timeoutMs}ms`,
@@ -394,5 +390,5 @@ function createReplayTestTimeoutResponse(
         artifactPaths,
       },
     },
-  };
+  });
 }

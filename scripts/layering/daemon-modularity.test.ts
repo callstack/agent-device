@@ -128,21 +128,20 @@ test('replay-test may still import its own files inside the wider replay engine 
   assert.deepEqual(checkDaemonModularityRatchets([...baselineEdges(), ...edges], []), []);
 });
 
-test('recorded replay-test migration imports are exempt until the import is deleted', () => {
-  const recorded = LOGICAL_MODULE_POLICIES.find(
-    ({ name }) => name === 'replay-test',
-  )?.recordedMigrationImports;
-  assert.deepEqual(recorded, [
-    'src/replay/test/reporters/default.ts -> src/replay/divergence.ts',
-    'src/replay/test/reporters/progress.ts -> src/request/progress.ts',
-    'src/replay/test/reporters/registry.ts -> src/request/progress.ts',
-    'src/replay/test/reporting.ts -> src/request/progress.ts',
-  ]);
+// #1478 P3 cleared every recorded replay-test migration import: the ADR 0012 divergence
+// vocabulary became a neutral contracts leaf, and the reporter tree now reads the progress
+// wire vocabulary from contracts instead of request-global plumbing. The rule enforces
+// unconditionally for replay-test from here on.
+test('replay-test carries no recorded migration imports', () => {
+  assert.equal(
+    LOGICAL_MODULE_POLICIES.find(({ name }) => name === 'replay-test')?.recordedMigrationImports,
+    undefined,
+  );
+  assert.deepEqual(
+    LOGICAL_MODULE_POLICIES.flatMap((module) => module.recordedMigrationImports ?? []),
+    [],
+  );
   assert.deepEqual(checkDaemonModularityRatchets(baselineEdges(), []), []);
-
-  const withoutOne = checkDaemonModularityRatchets(baselineEdges().slice(0, -1), []);
-  assert.equal(withoutOne.length, 1);
-  assert.match(withoutOne[0]!.message, /delete it from replay-test's recordedMigrationImports/);
 });
 
 test('internal trees reject deep imports globally, including from daemon', () => {

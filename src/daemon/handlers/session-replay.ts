@@ -8,6 +8,7 @@ import { collectReplayActionArtifactPaths } from './session-replay-runtime-artif
 import { errorResponse } from './response.ts';
 import type { ReplayScriptMetadata } from '../../replay/script.ts';
 import { buildReplayTestShardFlags, type ReplayTestShardContext } from './session-test-sharding.ts';
+import { toReplayTestAttemptOutcome, toReplayTestFinalizeFailure } from './session-test-outcome.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 import {
   buildReplayTestVideoOpenLifecycle,
@@ -104,6 +105,7 @@ export async function handleSessionReplayCommands(params: {
         artifactPaths,
         tracePath,
         shard,
+        onStep,
       }) => {
         const captureArtifacts = (response: DaemonResponse): DaemonResponse => {
           if (!artifactPaths) return response;
@@ -152,6 +154,7 @@ export async function handleSessionReplayCommands(params: {
           logPath,
           sessionStore,
           tracePath,
+          onStep,
           invoke: async (nestedReq) => {
             const startResponse = await startReplayTestVideoRecordingIfReady(videoRecordingParams);
             if (startResponse && !startResponse.ok) return startResponse;
@@ -159,7 +162,7 @@ export async function handleSessionReplayCommands(params: {
             return response;
           },
         });
-        return replayResponse;
+        return toReplayTestAttemptOutcome(replayResponse);
       },
       finalizeAttempt: async ({
         sessionName: testSessionName,
@@ -167,15 +170,17 @@ export async function handleSessionReplayCommands(params: {
         artifactsDir,
         tracePath,
       }) =>
-        await finalizeReplayTestVideoRecording({
-          req,
-          sessionName: testSessionName,
-          logPath,
-          sessionStore,
-          artifactsDir,
-          tracePath,
-          artifactPaths,
-        }),
+        toReplayTestFinalizeFailure(
+          await finalizeReplayTestVideoRecording({
+            req,
+            sessionName: testSessionName,
+            logPath,
+            sessionStore,
+            artifactsDir,
+            tracePath,
+            artifactPaths,
+          }),
+        ),
       cleanupSession: async (testSessionName) => {
         if (!sessionStore.get(testSessionName)) return;
         await handleCloseCommand({

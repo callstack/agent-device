@@ -7,7 +7,7 @@
 // `in`, so a key that exists today with an `undefined` value is part of the contract.
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { RequestProgressEvent } from '../../../../request/progress.ts';
+import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import { toReplayTestReporterProgressEvent } from '../progress.ts';
 
 const SESSION = 'default:test:req-7:1-checkout:attempt-2';

@@ -1,69 +1,12 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type { RequestProgressEvent, RequestProgressSink } from '@agent-device/contracts/progress';
 
-export type ReplayTestSuiteProgressEvent = {
-  type: 'replay-test-suite';
-  status: 'start';
-  total: number;
-  runnable: number;
-  skipped: number;
-  artifactsDir: string;
-  shardMode?: 'all' | 'split';
-  shardCount?: number;
-};
-
-export type ReplayTestProgressEvent = {
-  type: 'replay-test';
-  file: string;
-  title?: string;
-  status: 'start' | 'progress' | 'pass' | 'fail' | 'skip';
-  index: number;
-  total: number;
-  stepIndex?: number;
-  stepTotal?: number;
-  stepCommand?: string;
-  stepValue?: string;
-  attempt?: number;
-  maxAttempts?: number;
-  durationMs?: number;
-  retrying?: boolean;
-  message?: string;
-  hint?: string;
-  session?: string;
-  artifactsDir?: string;
-  shardIndex?: number;
-  shardCount?: number;
-  deviceId?: string;
-  deviceName?: string;
-};
-
-export type CommandProgressEvent = {
-  type: 'command';
-  status: 'progress';
-  message: string;
-};
-
-export type RequestProgressEvent =
-  | ReplayTestSuiteProgressEvent
-  | ReplayTestProgressEvent
-  | CommandProgressEvent;
-export type RequestProgressSink = (event: RequestProgressEvent) => void;
-export type ReplayTestActionProgressContext = Omit<
-  ReplayTestProgressEvent,
-  | 'type'
-  | 'status'
-  | 'stepIndex'
-  | 'stepTotal'
-  | 'stepCommand'
-  | 'stepValue'
-  | 'durationMs'
-  | 'retrying'
-  | 'message'
->;
+// The event vocabulary is a wire contract shared with the CLI reporter path, so it lives in
+// `@agent-device/contracts/progress`. This module owns only the request-global plumbing that
+// carries it: the per-request sink and its AsyncLocalStorage binding.
+export type { RequestProgressEvent, RequestProgressSink } from '@agent-device/contracts/progress';
 
 const requestProgress = new AsyncLocalStorage<RequestProgressSink | undefined>();
-const replayTestActionProgress = new AsyncLocalStorage<
-  ReplayTestActionProgressContext | undefined
->();
 
 export async function withRequestProgressSink<T>(
   sink: RequestProgressSink | undefined,
@@ -74,15 +17,4 @@ export async function withRequestProgressSink<T>(
 
 export function emitRequestProgress(event: RequestProgressEvent): void {
   requestProgress.getStore()?.(event);
-}
-
-export async function withReplayTestActionProgress<T>(
-  context: ReplayTestActionProgressContext | undefined,
-  run: () => Promise<T>,
-): Promise<T> {
-  return await replayTestActionProgress.run(context, run);
-}
-
-export function readReplayTestActionProgress(): ReplayTestActionProgressContext | undefined {
-  return replayTestActionProgress.getStore();
 }

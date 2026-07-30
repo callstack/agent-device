@@ -58,7 +58,7 @@ import {
   type LocalIdentity,
   type TargetAnnotationV1,
 } from '../../replay/target-identity.ts';
-import type { ReplayDivergenceTargetBindingKind } from '../../replay/divergence.ts';
+import type { ReplayDivergenceTargetBindingKind } from '@agent-device/contracts/divergence';
 
 // ---------------------------------------------------------------------------
 // Pure classification core — no capture, no session, no wire shaping.

@@ -19,7 +19,7 @@ import {
   type ReplayDivergenceTargetBindingKind,
   type ReplayDivergenceTargetCandidate,
   type ReplayDivergenceTargetIdentity,
-} from '../../replay/divergence.ts';
+} from '@agent-device/contracts/divergence';
 import {
   readNodeStructuralDenotation,
   REPLAY_TARGET_GUARD_MISMATCH_REASON,

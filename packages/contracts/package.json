@@ -55,6 +55,14 @@
     "./replay": {
       "types": "./src/facades/replay.ts",
       "default": "./src/facades/replay.ts"
+    },
+    "./divergence": {
+      "types": "./src/facades/divergence.ts",
+      "default": "./src/facades/divergence.ts"
+    },
+    "./progress": {
+      "types": "./src/facades/progress.ts",
+      "default": "./src/facades/progress.ts"
     }
   }
 }

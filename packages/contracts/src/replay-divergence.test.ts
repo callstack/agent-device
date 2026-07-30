@@ -11,7 +11,7 @@ import {
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
   truncateUtf8Field,
   type ReplayDivergence,
-} from '../divergence.ts';
+} from './replay-divergence.ts';
 
 function buildDivergence(overrides: Partial<ReplayDivergence> = {}): ReplayDivergence {
   return {
@@ -239,7 +239,7 @@ test('sanitizeReplayDivergenceField redacts sensitive content even when no trunc
 // --- Text report carries the repair data (bounded refs + unavailable hint) ---
 
 test('formatReplayDivergenceReport lists a bounded ref/role/label subset for an available screen', async () => {
-  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const { formatReplayDivergenceReport } = await import('./replay-divergence.ts');
   const report = formatReplayDivergenceReport({
     divergence: {
       version: 1,
@@ -272,7 +272,7 @@ test('formatReplayDivergenceReport lists a bounded ref/role/label subset for an 
 });
 
 test('formatReplayDivergenceReport carries the unavailable-screen hint', async () => {
-  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const { formatReplayDivergenceReport } = await import('./replay-divergence.ts');
   const report = formatReplayDivergenceReport({
     divergence: {
       version: 1,
@@ -295,7 +295,7 @@ test('formatReplayDivergenceReport carries the unavailable-screen hint', async (
 });
 
 test('scrubReplayVarValues replaces every occurrence with a named marker, longest value first', async () => {
-  const { scrubReplayVarValues } = await import('../divergence.ts');
+  const { scrubReplayVarValues } = await import('./replay-divergence.ts');
   const entries = [
     { name: 'LONG', value: 'abc-def' },
     { name: 'SHORT', value: 'abc' },
@@ -414,7 +414,7 @@ test('boundReplayDivergence keeps targetBinding on the minimal overflow fallback
 });
 
 test('formatReplayDivergenceReport renders matchCount, mismatches, and candidates for a target-binding divergence', async () => {
-  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const { formatReplayDivergenceReport } = await import('./replay-divergence.ts');
   const report = formatReplayDivergenceReport({
     divergence: {
       version: 1,
@@ -442,7 +442,7 @@ test('formatReplayDivergenceReport renders matchCount, mismatches, and candidate
 });
 
 test('formatReplayDivergenceReport lists candidates for an identity-unverifiable target-binding divergence', async () => {
-  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const { formatReplayDivergenceReport } = await import('./replay-divergence.ts');
   const report = formatReplayDivergenceReport({
     divergence: {
       version: 1,
@@ -477,7 +477,7 @@ test('formatReplayDivergenceReport lists candidates for an identity-unverifiable
 // refused — it surfaces `resume.reason` instead. ---
 
 test('formatReplayDivergenceReport embeds the concrete resume command for an allowed record-and-heal divergence', async () => {
-  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const { formatReplayDivergenceReport } = await import('./replay-divergence.ts');
   const report = formatReplayDivergenceReport({
     divergence: {
       version: 1,
@@ -502,7 +502,7 @@ test('formatReplayDivergenceReport embeds the concrete resume command for an all
 });
 
 test('formatReplayDivergenceReport never renders a --from command when resume is NOT allowed, surfacing the reason instead', async () => {
-  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const { formatReplayDivergenceReport } = await import('./replay-divergence.ts');
   const report = formatReplayDivergenceReport({
     divergence: {
       version: 1,
@@ -532,7 +532,7 @@ test('formatReplayDivergenceReport never renders a --from command when resume is
 });
 
 test('formatReplayDivergenceReport falls back to a generic non-resumable sentence when resume carries no reason', async () => {
-  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const { formatReplayDivergenceReport } = await import('./replay-divergence.ts');
   const report = formatReplayDivergenceReport({
     divergence: {
       version: 1,
@@ -561,7 +561,7 @@ test('formatReplayDivergenceReport falls back to a generic non-resumable sentenc
 // NEVER re-derives resumability, so text and structured wire never disagree. ---
 
 test('formatReplayDivergenceReport embeds BOTH concrete resume commands for a caution divergence whose wire carries alternateFrom', async () => {
-  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const { formatReplayDivergenceReport } = await import('./replay-divergence.ts');
   const report = formatReplayDivergenceReport({
     divergence: {
       version: 1,
@@ -594,7 +594,7 @@ test('formatReplayDivergenceReport embeds BOTH concrete resume commands for a ca
 });
 
 test('formatReplayDivergenceReport embeds BOTH concrete resume commands for a manual divergence whose wire carries alternateFrom', async () => {
-  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const { formatReplayDivergenceReport } = await import('./replay-divergence.ts');
   const report = formatReplayDivergenceReport({
     divergence: {
       version: 1,
@@ -622,7 +622,7 @@ test('formatReplayDivergenceReport embeds BOTH concrete resume commands for a ma
 });
 
 test('formatReplayDivergenceReport renders ONLY the state-fix command for a caution divergence WITHOUT alternateFrom (the diverged step is not skip-safe)', async () => {
-  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const { formatReplayDivergenceReport } = await import('./replay-divergence.ts');
   // resume.allowed is true (resuming AT N is fine), but the diverged step N
   // is a runScript/control-flow action, so `--from N + 1` would be refused —
   // the daemon omits alternateFrom, and the text must NOT offer `--from N + 1`.
@@ -654,7 +654,7 @@ test('formatReplayDivergenceReport renders ONLY the state-fix command for a caut
 });
 
 test('formatReplayDivergenceReport renders neither caution command when resume is NOT allowed', async () => {
-  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const { formatReplayDivergenceReport } = await import('./replay-divergence.ts');
   const report = formatReplayDivergenceReport({
     divergence: {
       version: 1,
@@ -695,7 +695,7 @@ const REPAIR_DIAGNOSTICS_CLAUSE_PATTERN =
   /Read-only inspection while armed \(snapshot -i, get attrs, find, is\) is excluded from the healed script by default — no --no-record needed\. If the step you are repairing is itself a read, add --record to that command so it lands in the heal\./;
 
 test('formatReplayDivergenceReport appends the diagnostics default-exclusion clause for record-and-heal when repairSessionHeld is true', async () => {
-  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const { formatReplayDivergenceReport } = await import('./replay-divergence.ts');
   const report = formatReplayDivergenceReport({
     divergence: {
       version: 1,
@@ -718,7 +718,7 @@ test('formatReplayDivergenceReport appends the diagnostics default-exclusion cla
 });
 
 test('formatReplayDivergenceReport OMITS the diagnostics clause for record-and-heal when repairSessionHeld is absent (plain, non-repair divergence)', async () => {
-  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const { formatReplayDivergenceReport } = await import('./replay-divergence.ts');
   const report = formatReplayDivergenceReport({
     divergence: {
       version: 1,
@@ -741,7 +741,7 @@ test('formatReplayDivergenceReport OMITS the diagnostics clause for record-and-h
 });
 
 test('formatReplayDivergenceReport appends the diagnostics clause for state-repair when armed, distinct from the existing app-state --no-record clause', async () => {
-  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const { formatReplayDivergenceReport } = await import('./replay-divergence.ts');
   const report = formatReplayDivergenceReport({
     divergence: {
       version: 1,
@@ -765,7 +765,7 @@ test('formatReplayDivergenceReport appends the diagnostics clause for state-repa
 });
 
 test('formatReplayDivergenceReport OMITS the diagnostics clause for state-repair when repairSessionHeld is absent', async () => {
-  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const { formatReplayDivergenceReport } = await import('./replay-divergence.ts');
   const report = formatReplayDivergenceReport({
     divergence: {
       version: 1,
@@ -786,7 +786,7 @@ test('formatReplayDivergenceReport OMITS the diagnostics clause for state-repair
 });
 
 test('formatReplayDivergenceReport appends the diagnostics clause for caution when armed, alongside the dual-path resume commands', async () => {
-  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const { formatReplayDivergenceReport } = await import('./replay-divergence.ts');
   const report = formatReplayDivergenceReport({
     divergence: {
       version: 1,
@@ -816,7 +816,7 @@ test('formatReplayDivergenceReport appends the diagnostics clause for caution wh
 });
 
 test('formatReplayDivergenceReport OMITS the diagnostics clause for caution when repairSessionHeld is absent', async () => {
-  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const { formatReplayDivergenceReport } = await import('./replay-divergence.ts');
   const report = formatReplayDivergenceReport({
     divergence: {
       version: 1,
@@ -836,7 +836,7 @@ test('formatReplayDivergenceReport OMITS the diagnostics clause for caution when
 });
 
 test('formatReplayDivergenceReport appends the diagnostics clause for manual when armed, even when resume is NOT allowed', async () => {
-  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const { formatReplayDivergenceReport } = await import('./replay-divergence.ts');
   // `repairSessionHeld` reports the daemon KEPT THE SESSION LIVE, independent
   // of `resume.allowed` (plan-resumability) — the diagnostics clause must
   // still render here: the agent may still inspect the (held) session while
@@ -868,7 +868,7 @@ test('formatReplayDivergenceReport appends the diagnostics clause for manual whe
 });
 
 test('formatReplayDivergenceReport OMITS the diagnostics clause for manual when repairSessionHeld is absent', async () => {
-  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const { formatReplayDivergenceReport } = await import('./replay-divergence.ts');
   const report = formatReplayDivergenceReport({
     divergence: {
       version: 1,

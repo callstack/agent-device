@@ -2,9 +2,17 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import type { DaemonResponse } from '../../types.ts';
 import { isRequestCanceled } from '../../../request/cancel.ts';
 import { runReplayTestAttempt } from '../session-test-runtime.ts';
+import type { ReplayTestAttemptOutcome } from '../session-test-types.ts';
+
+const PASSED: ReplayTestAttemptOutcome = {
+  status: 'passed',
+  replayed: 1,
+  healed: 0,
+  warnings: [],
+  artifactPaths: [],
+};
 
 afterEach(() => {
   vi.useRealTimers();
@@ -25,8 +33,8 @@ function readTimingEventTypes(artifactsDir: string): string[] {
 test('runReplayTestAttempt keeps cancellation active until a timed-out replay settles', async () => {
   vi.useFakeTimers();
 
-  let resolveReplay: ((response: DaemonResponse) => void) | undefined;
-  const replayPromise = new Promise<DaemonResponse>((resolve) => {
+  let resolveReplay: ((outcome: ReplayTestAttemptOutcome) => void) | undefined;
+  const replayPromise = new Promise<ReplayTestAttemptOutcome>((resolve) => {
     resolveReplay = resolve;
   });
   const replaySettled = replayPromise.then(() => undefined);
@@ -55,11 +63,14 @@ test('runReplayTestAttempt keeps cancellation active until a timed-out replay se
   await vi.advanceTimersByTimeAsync(2_000);
 
   const result = await attemptPromise;
-  expect(result.ok).toBe(false);
-  if (!result.ok) {
+  expect(result.status).toBe('failed');
+  if (result.status === 'failed') {
     expect(result.error.message).toContain('TIMEOUT after 10ms');
     expect(result.error.details?.reason).toBe('timeout_cleanup_pending');
     expect(result.error.details?.timeoutCleanupPending).toBe(true);
+    // The abandoned replay still owns the device, so the outcome is tagged infrastructure and
+    // the scheduler stops the suite instead of retrying into a contended session.
+    expect(result.infrastructure).toBe(true);
   }
   expect(cleanupSession).toHaveBeenCalledWith('default:test:timeout');
   expect(finalizeAttempt).toHaveBeenCalledWith(
@@ -76,8 +87,10 @@ test('runReplayTestAttempt keeps cancellation active until a timed-out replay se
   expect(cleanupSession).toHaveBeenCalledTimes(1);
 
   resolveReplay?.({
-    ok: false,
+    status: 'failed',
     error: { code: 'COMMAND_FAILED', message: 'request canceled' },
+    artifactPaths: [],
+    infrastructure: false,
   });
   await replaySettled;
   await vi.waitFor(() => {
@@ -97,19 +110,19 @@ test('runReplayTestAttempt keeps a passing replay passed when finalization fails
     filePath: '01-pass.ad',
     sessionName: 'default:test:pass',
     requestId: 'req-pass',
-    runReplay: async () => ({ ok: true, data: { replayed: 1, healed: 0 } }),
+    runReplay: async () => PASSED,
     finalizeAttempt: async () => ({
-      ok: false,
+      status: 'failed',
       error: { code: 'COMMAND_FAILED', message: 'failed to stop recording' },
+      artifactPaths: [],
+      infrastructure: false,
     }),
     cleanupSession,
   });
 
-  expect(result.ok).toBe(true);
-  if (!result.ok) throw new Error(result.error.message);
-  expect(result.data?.warnings).toEqual([
-    'Replay test finalization failed: failed to stop recording',
-  ]);
+  expect(result.status).toBe('passed');
+  if (result.status !== 'passed') throw new Error(result.error.message);
+  expect(result.warnings).toEqual(['Replay test finalization failed: failed to stop recording']);
   expect(cleanupSession).toHaveBeenCalledWith('default:test:pass');
 });
 
@@ -127,7 +140,7 @@ test('runReplayTestAttempt finalizes before cleanup and records that order in th
     artifactsDir,
     runReplay: async () => {
       lifecycleEvents.push('replay');
-      return { ok: true, data: { replayed: 1, healed: 0 } };
+      return PASSED;
     },
     finalizeAttempt: async () => {
       lifecycleEvents.push('finalize');
@@ -138,7 +151,7 @@ test('runReplayTestAttempt finalizes before cleanup and records that order in th
     },
   });
 
-  expect(result.ok).toBe(true);
+  expect(result.status).toBe('passed');
   expect(lifecycleEvents).toEqual(['replay', 'finalize', 'cleanup']);
   expect(readTimingEventTypes(artifactsDir)).toEqual([
     'replay_test_attempt_start',
@@ -154,8 +167,8 @@ test('runReplayTestAttempt cleans up once when a timed-out replay settles inside
   vi.useFakeTimers();
   const artifactsDir = makeArtifactsDir('grace');
 
-  let resolveReplay: ((response: DaemonResponse) => void) | undefined;
-  const replayPromise = new Promise<DaemonResponse>((resolve) => {
+  let resolveReplay: ((outcome: ReplayTestAttemptOutcome) => void) | undefined;
+  const replayPromise = new Promise<ReplayTestAttemptOutcome>((resolve) => {
     resolveReplay = resolve;
   });
   const lifecycleEvents: string[] = [];
@@ -179,16 +192,17 @@ test('runReplayTestAttempt cleans up once when a timed-out replay settles inside
 
   await vi.advanceTimersByTimeAsync(10);
   // The replay comes back inside the 2s grace window, so no cleanup race is declared.
-  resolveReplay?.({ ok: true, data: { replayed: 1, healed: 0 } });
+  resolveReplay?.(PASSED);
 
   const result = await attemptPromise;
-  // The raced timeout response still wins: a late success does not un-fail the attempt.
-  expect(result.ok).toBe(false);
-  if (!result.ok) {
+  // The raced timeout outcome still wins: a late success does not un-fail the attempt.
+  expect(result.status).toBe('failed');
+  if (result.status === 'failed') {
     expect(result.error.message).toBe('TIMEOUT after 10ms');
     expect(result.error.details?.reason).toBe('timeout');
     expect(result.error.details?.timeoutCleanupPending).toBe(undefined);
     expect(result.error.details?.timeoutMode).toBe('cooperative');
+    expect(result.infrastructure).toBe(false);
   }
   expect(lifecycleEvents).toEqual(['finalize', 'cleanup']);
   expect(cleanupSession).toHaveBeenCalledTimes(1);
@@ -209,12 +223,12 @@ test('runReplayTestAttempt cleans up without a finalizer and adds no finalizatio
     filePath: '01-no-finalizer.ad',
     sessionName: 'default:test:no-finalizer',
     requestId: 'req-no-finalizer',
-    runReplay: async () => ({ ok: true, data: { replayed: 1, healed: 0 } }),
+    runReplay: async () => PASSED,
     cleanupSession,
   });
 
-  expect(result.ok).toBe(true);
-  if (!result.ok) throw new Error(result.error.message);
-  expect(result.data?.warnings).toBe(undefined);
+  expect(result.status).toBe('passed');
+  if (result.status !== 'passed') throw new Error(result.error.message);
+  expect(result.warnings).toEqual([]);
   expect(cleanupSession).toHaveBeenCalledWith('default:test:no-finalizer');
 });

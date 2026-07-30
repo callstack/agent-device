@@ -41,7 +41,7 @@ import {
   type ReplayDivergenceSuggestion,
   type ReplayDivergenceSuggestionBasis,
   type ReplayVarScrubEntry,
-} from '../../replay/divergence.ts';
+} from '@agent-device/contracts/divergence';
 
 export type DivergenceFieldSanitizer = (value: string, limit?: number) => string;
 

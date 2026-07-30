@@ -83,12 +83,6 @@ export const LOGICAL_MODULE_POLICIES: readonly LogicalModulePolicy[] = [
       'src/maestro/',
       'src/ad-replay/',
     ],
-    recordedMigrationImports: [
-      'src/replay/test/reporters/default.ts -> src/replay/divergence.ts',
-      'src/replay/test/reporters/progress.ts -> src/request/progress.ts',
-      'src/replay/test/reporters/registry.ts -> src/request/progress.ts',
-      'src/replay/test/reporting.ts -> src/request/progress.ts',
-    ],
   },
 ];
 

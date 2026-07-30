@@ -5,20 +5,21 @@ import type {
   MaestroFailedAction,
 } from '@agent-device/maestro';
 import { AppError } from '@agent-device/kernel/errors';
-import { emitRequestProgress, readReplayTestActionProgress } from '../../request/progress.ts';
+import type { ReplayTestAttemptStepSink } from './session-test-types.ts';
 import { stripUndefined } from '../../utils/parsing.ts';
 import { appendReplayTraceEvent } from './session-replay-trace.ts';
 
 export function createMaestroReplayObserver(params: {
   filePath: string;
   tracePath: string | undefined;
+  onStep?: ReplayTestAttemptStepSink;
 }): MaestroExecutionObserver {
-  const { filePath, tracePath } = params;
+  const { filePath, tracePath, onStep } = params;
   const traceStarts = new Map<number, MaestroActionEvent>();
   return {
     actionStarted: (event) => {
       traceStarts.set(event.stepIndex, event);
-      runTelemetrySink(() => emitMaestroProgress(filePath, event));
+      runTelemetrySink(() => emitMaestroStep(onStep, event));
       runTelemetrySink(() => appendMaestroTraceStart(tracePath, filePath, event));
     },
     actionCompleted: (event) => {
@@ -64,18 +65,15 @@ function traceStopEvent(
   });
 }
 
-function emitMaestroProgress(file: string, event: MaestroActionEvent): void {
-  const progress = readReplayTestActionProgress();
-  if (!progress) return;
-  emitRequestProgress({
-    type: 'replay-test',
-    ...progress,
-    file: progress.file || file,
-    status: 'progress',
-    stepIndex: event.stepIndex,
-    stepTotal: event.stepTotal,
-    stepCommand: event.action,
-    ...(event.value ? { stepValue: event.value } : {}),
+function emitMaestroStep(
+  onStep: ReplayTestAttemptStepSink | undefined,
+  event: MaestroActionEvent,
+): void {
+  onStep?.({
+    index: event.stepIndex,
+    total: event.stepTotal,
+    command: event.action,
+    ...(event.value ? { value: event.value } : {}),
   });
 }
 

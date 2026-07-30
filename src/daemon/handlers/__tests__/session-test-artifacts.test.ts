@@ -7,6 +7,7 @@ import {
   materializeReplayTestAttemptArtifacts,
   prepareReplayTestAttemptArtifacts,
 } from '../session-test-artifacts.ts';
+import { toReplayTestAttemptOutcome } from '../session-test-outcome.ts';
 import type { DaemonResponse } from '../../types.ts';
 
 test('materializeReplayTestAttemptArtifacts writes replay and result manifests for passing attempts', () => {
@@ -27,7 +28,7 @@ test('materializeReplayTestAttemptArtifacts writes replay and result manifests f
     },
   };
   materializeReplayTestAttemptArtifacts({
-    response,
+    outcome: toReplayTestAttemptOutcome(response),
     filePath: replayPath,
     sessionName: 'default:test:suite:1',
     attempts: 1,
@@ -83,7 +84,7 @@ test('materializeReplayTestAttemptArtifacts writes failure manifest and copies l
     },
   };
   materializeReplayTestAttemptArtifacts({
-    response,
+    outcome: toReplayTestAttemptOutcome(response),
     filePath: replayPath,
     sessionName: 'default:test:suite:2',
     attempts: 2,

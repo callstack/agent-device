@@ -22,7 +22,7 @@
  */
 
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import type { ReplayDivergenceKind, ReplayRepairHint } from '../../replay/divergence.ts';
+import type { ReplayDivergenceKind, ReplayRepairHint } from '@agent-device/contracts/divergence';
 import {
   matchesAncestryPrefix,
   type TargetAnnotationV1,

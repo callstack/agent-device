@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isMaestroYamlPath } from '../../replay/format.ts';
-import type { DaemonResponse } from '../types.ts';
+import type { ReplayTestAttemptOutcome } from './session-test-types.ts';
 import { SessionStore } from '../session-store.ts';
 
 const DEFAULT_TEST_ARTIFACTS_ROOT = '.agent-device/test-artifacts';
@@ -40,18 +40,18 @@ export function prepareReplayTestAttemptArtifacts(
 }
 
 export function materializeReplayTestAttemptArtifacts(params: {
-  response: DaemonResponse;
+  outcome: ReplayTestAttemptOutcome;
   filePath: string;
   sessionName: string;
   attempts: number;
   maxAttempts: number;
   attemptArtifactsDir: string;
 }): void {
-  const { response, filePath, sessionName, attempts, maxAttempts, attemptArtifactsDir } = params;
-  const artifactPaths = getReplayTestArtifactPaths(response);
-  const sourcePaths = [...artifactPaths];
-  if (!response.ok && typeof response.error.logPath === 'string') {
-    sourcePaths.push(response.error.logPath);
+  const { outcome, filePath, sessionName, attempts, maxAttempts, attemptArtifactsDir } = params;
+  const passed = outcome.status === 'passed';
+  const sourcePaths = [...new Set(outcome.artifactPaths)];
+  if (outcome.status === 'failed' && typeof outcome.error.logPath === 'string') {
+    sourcePaths.push(outcome.error.logPath);
   }
   const copiedArtifacts = copyReplayTestArtifacts(sourcePaths, attemptArtifactsDir);
 
@@ -59,19 +59,17 @@ export function materializeReplayTestAttemptArtifacts(params: {
     `file: ${filePath}`,
     `session: ${sessionName}`,
     `attempt: ${attempts}/${maxAttempts}`,
-    `status: ${response.ok ? 'passed' : 'failed'}`,
+    `status: ${passed ? 'passed' : 'failed'}`,
   ];
 
-  if (response.ok) {
-    const replayed = typeof response.data?.replayed === 'number' ? response.data.replayed : 0;
-    const healed = typeof response.data?.healed === 'number' ? response.data.healed : 0;
-    lines.push(`replayed: ${replayed}`, `healed: ${healed}`);
+  if (outcome.status === 'passed') {
+    lines.push(`replayed: ${outcome.replayed}`, `healed: ${outcome.healed}`);
   } else {
-    lines.push(`code: ${response.error.code}`, `message: ${response.error.message}`);
-    if (response.error.hint) lines.push(`hint: ${response.error.hint}`);
-    if (response.error.diagnosticId) lines.push(`diagnosticId: ${response.error.diagnosticId}`);
-    if (response.error.logPath) lines.push(`logPath: ${response.error.logPath}`);
-    if (response.error.details?.reason === 'timeout') {
+    lines.push(`code: ${outcome.error.code}`, `message: ${outcome.error.message}`);
+    if (outcome.error.hint) lines.push(`hint: ${outcome.error.hint}`);
+    if (outcome.error.diagnosticId) lines.push(`diagnosticId: ${outcome.error.diagnosticId}`);
+    if (outcome.error.logPath) lines.push(`logPath: ${outcome.error.logPath}`);
+    if (outcome.error.details?.reason === 'timeout') {
       lines.push('timeoutMode: cooperative');
     }
   }
@@ -85,17 +83,9 @@ export function materializeReplayTestAttemptArtifacts(params: {
   const resultPath = path.join(attemptArtifactsDir, 'result.txt');
   const output = `${lines.join('\n')}\n`;
   fs.writeFileSync(resultPath, output);
-  if (!response.ok) {
+  if (!passed) {
     fs.writeFileSync(path.join(attemptArtifactsDir, 'failure.txt'), output);
   }
-}
-
-function getReplayTestArtifactPaths(response: DaemonResponse): string[] {
-  const raw = response.ok
-    ? (response.data as Record<string, unknown> | undefined)?.artifactPaths
-    : response.error.details?.artifactPaths;
-  if (!Array.isArray(raw)) return [];
-  return [...new Set(raw.filter((entry): entry is string => typeof entry === 'string'))];
 }
 
 function copyReplayTestArtifacts(paths: string[], attemptArtifactsDir: string): string[] {

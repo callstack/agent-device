@@ -15,8 +15,7 @@ import {
   resolveReplayTestRetries,
   resolveReplayTestTimeout,
 } from './session-test-discovery.ts';
-import { isReplayInfrastructureFailure } from './session-test-infrastructure.ts';
-import { runReplayTestCase } from './session-test-attempt.ts';
+import { runReplayTestCase, type ReplayTestCaseReport } from './session-test-attempt.ts';
 import type { ReplayTestRuntimeDependencies } from './session-test-types.ts';
 import {
   buildReplayTestShardPlan,
@@ -309,7 +308,7 @@ async function runReplayTestEntriesInDiscoveryOrder(
       continue;
     }
     executed += 1;
-    const result = await runReplayTestCase({
+    const report = await runReplayTestCase({
       entry,
       sessionName,
       suiteInvocationId,
@@ -325,8 +324,8 @@ async function runReplayTestEntriesInDiscoveryOrder(
       cleanupSession,
       finalizeAttempt,
     });
-    results.push(result);
-    if (shouldStopReplayTestExecution(result, flags, requestId)) break;
+    results.push(report.result);
+    if (shouldStopReplayTestExecution(report, flags, requestId)) break;
   }
   return results;
 }
@@ -362,7 +361,7 @@ async function runReplayTestEntries(
   for (const [entryIndex, queued] of entries.entries()) {
     if (isRequestCanceled(requestId)) break;
     const { entry, suiteIndex } = queued;
-    const result = await runReplayTestCase({
+    const report = await runReplayTestCase({
       entry,
       sessionName,
       suiteInvocationId,
@@ -379,21 +378,21 @@ async function runReplayTestEntries(
       cleanupSession,
       finalizeAttempt,
     });
-    results.push(result);
-    if (shouldStopReplayTestExecution(result, flags, requestId)) break;
+    results.push(report.result);
+    if (shouldStopReplayTestExecution(report, flags, requestId)) break;
   }
   return results;
 }
 
 function shouldStopReplayTestExecution(
-  result: ReplaySuiteTestResult,
+  report: ReplayTestCaseReport,
   flags: DaemonRequest['flags'],
   requestId: string | undefined,
 ): boolean {
   return (
     isRequestCanceled(requestId) ||
-    (flags?.failFast === true && result.status === 'failed') ||
-    isReplayInfrastructureFailure(result)
+    (flags?.failFast === true && report.result.status === 'failed') ||
+    report.infrastructure
   );
 }
 

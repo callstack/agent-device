@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import { redactDiagnosticData } from '@agent-device/kernel/redaction';
-import { boundReplayDivergence, type ReplayDivergence } from '../../replay/divergence.ts';
+import { boundReplayDivergence, type ReplayDivergence } from '@agent-device/contracts/divergence';
 import {
   bindInternalObservationAuthority,
   type InternalObservationEvidence,

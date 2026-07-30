@@ -28,6 +28,7 @@ import { SessionStore } from '../session-store.ts';
 import { errorResponse } from './response.ts';
 import { buildReplayBuiltinVars } from './session-replay-vars.ts';
 import { createMaestroReplayObserver } from './session-replay-maestro-observer.ts';
+import type { ReplayTestAttemptStepSink } from './session-test-types.ts';
 import {
   buildTypedMaestroReplayErrorResponse,
   buildTypedMaestroSuccessResponse,
@@ -42,6 +43,7 @@ type TypedMaestroReplayParams = {
   logPath: string;
   sessionStore: SessionStore;
   tracePath?: string;
+  onStep?: ReplayTestAttemptStepSink;
   invoke: DaemonInvokeFn;
 };
 
@@ -104,7 +106,7 @@ async function executeTypedMaestroReplay(
     state: TypedMaestroReplayState;
   },
 ): Promise<DaemonResponse> {
-  const { req, sessionName, sessionStore, tracePath, invoke, state } = params;
+  const { req, sessionName, sessionStore, tracePath, onStep, invoke, state } = params;
   const context = await prepareTypedMaestroReplay(params);
   const port = createMaestroReplayPort({
     req,
@@ -130,6 +132,7 @@ async function executeTypedMaestroReplay(
     observer: createMaestroReplayObserver({
       filePath: context.filePath,
       tracePath,
+      onStep,
     }),
   });
   if (!outcome.ok) {
