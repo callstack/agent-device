@@ -127,7 +127,11 @@ test('screenshotIos retries simulator capture timeouts and eventually succeeds',
   const outPath = path.join(tmpDir, 'screen.png');
   const sourcePngPath = path.join(tmpDir, 'source.png');
 
-  await fs.writeFile(sourcePngPath, PNG.sync.write(new PNG({ width: 1206, height: 2622 })));
+  // Dimensions divisible by 3 so the implicit density-1 rescale (against the stub's native
+  // scale 3) stays exact. This test is about capture retry, not resolution, so the source is
+  // small rather than the 1206x2622 iPhone 16 Pro frame it used to allocate and resize —
+  // 3.2 megapixels to prove arithmetic that 34k pixels prove just as well (1176ms -> 233ms).
+  await fs.writeFile(sourcePngPath, PNG.sync.write(new PNG({ width: 126, height: 273 })));
 
   await fs.writeFile(
     xcrunPath,
@@ -205,8 +209,8 @@ test('screenshotIos retries simulator capture timeouts and eventually succeeds',
   try {
     await screenshotIos(IOS_TEST_SIMULATOR, outPath);
     const png = PNG.sync.read(await fs.readFile(outPath));
-    assert.equal(png.width, 402);
-    assert.equal(png.height, 874);
+    assert.equal(png.width, 42);
+    assert.equal(png.height, 91);
     assert.equal(await fs.readFile(screenshotCountPath, 'utf8'), '3\n');
 
     const logLines = (await fs.readFile(commandLogPath, 'utf8')).trim().split('\n').filter(Boolean);
@@ -246,7 +250,11 @@ test('screenshotIos keeps requested simulator pixel density', async () => {
   const outPath = path.join(tmpDir, 'screen.png');
   const sourcePngPath = path.join(tmpDir, 'source.png');
 
-  await fs.writeFile(sourcePngPath, PNG.sync.write(new PNG({ width: 1206, height: 2622 })));
+  // Both dimensions divisible by 3 so the 2/3 rescale (density 2 against the stub's native
+  // scale 3) stays exact. What this pins is that ratio, not an absolute resolution: it used
+  // to allocate and resize a 1206x2622 iPhone 16 Pro frame — 3.2 megapixels, ~90x more than
+  // the arithmetic needs (1021ms -> 34ms).
+  await fs.writeFile(sourcePngPath, PNG.sync.write(new PNG({ width: 126, height: 273 })));
   await fs.writeFile(
     xcrunPath,
     [
@@ -279,8 +287,8 @@ test('screenshotIos keeps requested simulator pixel density', async () => {
   try {
     await screenshotIos(IOS_TEST_SIMULATOR, outPath, { pixelDensity: 2 });
     const png = PNG.sync.read(await fs.readFile(outPath));
-    assert.equal(png.width, 804);
-    assert.equal(png.height, 1748);
+    assert.equal(png.width, 84);
+    assert.equal(png.height, 182);
   } finally {
     process.env.PATH = previousPath;
     if (previousScreenshotSourceFile === undefined)

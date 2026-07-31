@@ -751,7 +751,13 @@ test('handleFindCommands wait captures fresh snapshots while polling', async () 
   if (!response.ok) {
     expect(response.error.message).toContain('find wait timed out');
   }
-  expect(mockDispatch).toHaveBeenCalledTimes(2);
+  // What this test guards is that every poll re-captures instead of reusing the first tree.
+  // The exact poll count is a timing artifact and is not assertable: the loop's last sleep
+  // consumes whatever remains of the budget, so it lands on `remainingMs() === 0`, and a
+  // sleep that returns a millisecond early admits one more poll. Pinning this to 2 made the
+  // test fail under CI load on unrelated PRs. Assert the property, not the artifact.
+  expect(mockDispatch.mock.calls.length).toBeGreaterThanOrEqual(2);
+  expect(mockDispatch.mock.calls.every(([, command]) => command === 'snapshot')).toBe(true);
 });
 
 test('handleFindCommands click omits refsGeneration — a mutating find never issues a pinnable ref (ADR 0014)', async () => {
