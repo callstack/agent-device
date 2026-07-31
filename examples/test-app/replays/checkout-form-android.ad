@@ -1,5 +1,5 @@
 context platform=android timeout=60000
-env APP_TARGET="Agent Device Tester"
+env APP_TARGET="com.callstack.agentdevicelab"
 env APP_URL=""
 open "${APP_TARGET}" --relaunch --launch-url "${APP_URL}"
 react-native dismiss-overlay
