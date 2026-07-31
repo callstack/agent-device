@@ -15,11 +15,12 @@ import {
 import {
   buildRunnerConnectError,
   buildRunnerEarlyExitError,
+  isUsbmuxDeviceUnattachedError,
   shouldRetryRunnerConnectError,
   type RunnerCommand,
 } from './runner-contract.ts';
 import type { RunnerSession } from './runner-session-types.ts';
-import { isUsbmuxDeviceUnattachedError, usbmuxRunnerTransport } from './runner-usbmux.ts';
+import { usbmuxRunnerTransport } from './runner-usbmux.ts';
 
 export { cleanupTempFile, getFreePort, logChunk } from './runner-io.ts';
 
@@ -88,6 +89,7 @@ export async function waitForRunner(
     if (signal?.aborted || isRequestCanceledError(error)) {
       throw createRequestCanceledError();
     }
+    if (isUsbmuxDeviceUnattachedError(error)) throw error;
     if (!lastError) {
       lastError = error;
     }
@@ -382,7 +384,13 @@ async function tryRunnerRoute(
     if (params.signal?.aborted || isRequestCanceledError(error)) {
       throw createRequestCanceledError();
     }
-    if (canFallBackFromUsbmux(device, error)) {
+    if (isUsbmuxDeviceUnattachedError(error)) {
+      if (!canFallBackFromUsbmux(device, error)) {
+        // No tunnel exists for this device, so retrying cannot attach a cable.
+        // Throw the typed verdict so its recovery hint survives instead of
+        // being replaced by a generic connect failure.
+        throw error;
+      }
       params.onUsbmuxUnattached?.();
       return null;
     }

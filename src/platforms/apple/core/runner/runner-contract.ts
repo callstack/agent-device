@@ -139,7 +139,26 @@ export function isRetryableRunnerError(err: unknown): boolean {
   return false;
 }
 
+/**
+ * True when usbmuxd answered and the device is simply not attached by cable.
+ * A CoreDevice-backed device falls back to its network tunnel; an XCTest-backed
+ * device has no second route, so this verdict is terminal rather than retryable.
+ *
+ * Lives here rather than beside the usbmux transport because the retry policy
+ * below needs it, and that transport already depends on this module.
+ */
+export function isUsbmuxDeviceUnattachedError(error: unknown): boolean {
+  if (!(error instanceof AppError) || error.code !== 'DEVICE_NOT_FOUND') return false;
+  return (
+    (error.details as { usbmuxDeviceAttached?: unknown } | undefined)?.usbmuxDeviceAttached ===
+    false
+  );
+}
+
 export function shouldRetryRunnerConnectError(error: unknown): boolean {
+  // Retrying cannot attach a cable, and the typed verdict carries the recovery
+  // hint that a generic connect failure would replace.
+  if (isUsbmuxDeviceUnattachedError(error)) return false;
   if (!(error instanceof AppError)) return true;
   if (error.code !== 'COMMAND_FAILED') return true;
   const message = String(error.message ?? '').toLowerCase();

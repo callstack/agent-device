@@ -276,6 +276,29 @@ test('sendRunnerCommandOnce keeps the usbmux verdict for xctest devices that hav
   assert.equal(mockRunCmd.mock.calls.length, 0);
 });
 
+test('waitForRunner reports the usbmux verdict for xctest devices without retrying', async () => {
+  // Regression: an XCTest device has no tunnel, so retrying cannot attach a
+  // cable. Before this was terminal, readiness preflight and read-only
+  // commands burned the whole connect budget and lost the recovery hint.
+  stubUsbmuxDeviceUnattached();
+  stubSuccessfulFetch();
+
+  await assert.rejects(
+    () => waitForRunner(xctestIosDevice, 8100, { command: 'snapshot' }, undefined, 5_000),
+    (error: unknown) => {
+      const appError = error as AppError;
+      assert.equal(appError.code, 'DEVICE_NOT_FOUND');
+      assert.match(String(appError.details?.hint), /Connect the device by cable/);
+      assert.equal(appError.message.includes('Runner did not accept connection'), false);
+      return true;
+    },
+  );
+
+  assert.equal(mockUsbmuxPostCommand.mock.calls.length, 1);
+  assert.equal(vi.mocked(fetch).mock.calls.length, 0);
+  assert.equal(mockRunCmd.mock.calls.length, 0);
+});
+
 test('waitForRunner routes coredevice physical devices through usbmux first', async () => {
   const fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);
@@ -306,6 +329,7 @@ function stubUsbmuxDeviceUnattached(): void {
     new AppError('DEVICE_NOT_FOUND', 'iOS device is not available through usbmux', {
       deviceId: iosDevice.id,
       usbmuxDeviceAttached: false,
+      hint: 'Connect the device by cable, trust this Mac, keep it unlocked, and retry.',
     }),
   );
 }
