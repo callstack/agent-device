@@ -1,5 +1,9 @@
 import type { ReplaySuiteTestFailed } from '@agent-device/contracts/replay';
 import type { SnapshotDiagnosticsSummary } from '@agent-device/contracts/capture';
+import type {
+  ReplayTestProgressEvent,
+  ReplayTestSuiteProgressEvent,
+} from '@agent-device/contracts/progress';
 import type { DeviceTarget, PlatformSelector } from '@agent-device/kernel/device';
 import type { ReplayTestShardContext } from './session-test-sharding.ts';
 
@@ -93,10 +97,25 @@ export type ReplayTestFinalizeAttempt = (params: {
   tracePath?: string;
 }) => Promise<ReplayTestAttemptFailed | undefined>;
 
+/**
+ * Publishes one reporter-facing progress event (#1478 P3b).
+ *
+ * The scheduler used to call `emitRequestProgress` directly, which reads a sink out of a
+ * request-global `AsyncLocalStorage`. That is ambient authority a format-neutral scheduler
+ * cannot hold once it lives in `packages/replay-test`, so the host injects the sink instead.
+ *
+ * The port is deliberately narrower than `RequestProgressSink`: the scheduler emits suite and
+ * per-test events, never `CommandProgressEvent`, so it is not handed the ability to.
+ */
+export type ReplayTestEmitProgress = (
+  event: ReplayTestSuiteProgressEvent | ReplayTestProgressEvent,
+) => void;
+
 export type ReplayTestRuntimeDependencies = {
   runReplay: ReplayTestRunReplay;
   cleanupSession: ReplayTestCleanupSession;
   finalizeAttempt?: ReplayTestFinalizeAttempt;
+  emitProgress: ReplayTestEmitProgress;
 };
 
 /** Neutral failure outcome helper; keeps timeout/unknown construction in one place. */

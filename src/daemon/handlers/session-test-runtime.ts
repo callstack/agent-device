@@ -9,13 +9,14 @@ import {
   markRequestCanceled,
   registerRequestAbort,
 } from '../../request/cancel.ts';
-import type { ReplayScriptMetadata } from '../../replay/script.ts';
 import {
   replayTestAttemptFailure,
   type ReplayTestAttemptFailed,
   type ReplayTestAttemptOutcome,
   type ReplayTestAttemptStepSink,
+  type ReplayTestPlatform,
   type ReplayTestRunReplayParams,
+  type ReplayTestTarget,
   type ReplayTestRuntimeDependencies,
 } from './session-test-types.ts';
 
@@ -31,12 +32,14 @@ export async function runReplayTestAttempt(
     requestId: string;
     parentRequestId?: string;
     timeoutMs?: number;
-    platform?: ReplayScriptMetadata['platform'];
-    target?: ReplayScriptMetadata['target'];
+    platform?: ReplayTestPlatform;
+    target?: ReplayTestTarget;
     artifactsDir?: string;
     shard?: ReplayTestRunReplayParams['shard'];
     onStep?: ReplayTestAttemptStepSink;
-  } & ReplayTestRuntimeDependencies,
+    // Only the capabilities this attempt actually exercises. It never publishes progress, so
+    // it is not handed `emitProgress` — authority narrows across every hop (#1478 P3b).
+  } & Pick<ReplayTestRuntimeDependencies, 'runReplay' | 'cleanupSession' | 'finalizeAttempt'>,
 ): Promise<ReplayTestAttemptOutcome> {
   const {
     filePath,
@@ -334,8 +337,8 @@ function prepareReplayTestTimingTrace(params: {
   sessionName: string;
   requestId: string;
   timeoutMs?: number;
-  platform?: ReplayScriptMetadata['platform'];
-  target?: ReplayScriptMetadata['target'];
+  platform?: ReplayTestPlatform;
+  target?: ReplayTestTarget;
 }): string | undefined {
   const {
     artifactsDir,

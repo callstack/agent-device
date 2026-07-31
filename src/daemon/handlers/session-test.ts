@@ -7,7 +7,6 @@ import type {
   ReplaySuiteTestResult,
 } from '@agent-device/contracts/replay';
 import { resolveReplayTestArtifactsDir } from './session-test-artifacts.ts';
-import { emitRequestProgress } from '../../request/progress.ts';
 import {
   buildReplayTestInvocationId,
   discoverReplayTestEntries,
@@ -16,7 +15,10 @@ import {
   resolveReplayTestTimeout,
 } from './session-test-discovery.ts';
 import { runReplayTestCase, type ReplayTestCaseReport } from './session-test-attempt.ts';
-import type { ReplayTestRuntimeDependencies } from './session-test-types.ts';
+import type {
+  ReplayTestEmitProgress,
+  ReplayTestRuntimeDependencies,
+} from './session-test-types.ts';
 import {
   buildReplayTestShardPlan,
   type ReplayTestShardContext,
@@ -46,7 +48,7 @@ export async function runReplayTestSuite(
     sessionName: string;
   } & ReplayTestRuntimeDependencies,
 ): Promise<DaemonResponse> {
-  const { req, sessionName, runReplay, cleanupSession, finalizeAttempt } = params;
+  const { req, sessionName, runReplay, cleanupSession, finalizeAttempt, emitProgress } = params;
   if ((req.positionals?.length ?? 0) === 0) {
     return errorResponse('INVALID_ARGS', 'test requires at least one path or glob');
   }
@@ -54,11 +56,12 @@ export async function runReplayTestSuite(
   try {
     const suiteStartedAt = Date.now();
     const plan = await prepareReplayTestSuitePlan(req);
-    emitReplayTestSuiteStart(plan);
+    emitReplayTestSuiteStart(plan, emitProgress);
     const results: ReplaySuiteTestResult[] = plan.shardPlan
       ? emitSkippedReplayTestResults({
           entries: plan.entries,
           total: plan.total,
+          emitProgress,
         })
       : [];
 
@@ -76,6 +79,7 @@ export async function runReplayTestSuite(
           runReplay,
           cleanupSession,
           finalizeAttempt,
+          emitProgress,
         })),
       );
     } else {
@@ -92,6 +96,7 @@ export async function runReplayTestSuite(
           runReplay,
           cleanupSession,
           finalizeAttempt,
+          emitProgress,
         })),
       );
     }
@@ -143,8 +148,11 @@ function replayTestSuiteArtifactsDir(req: DaemonRequest, suiteInvocationId: stri
   });
 }
 
-function emitReplayTestSuiteStart(plan: ReplayTestSuitePlan): void {
-  emitRequestProgress({
+function emitReplayTestSuiteStart(
+  plan: ReplayTestSuitePlan,
+  emitProgress: ReplayTestEmitProgress,
+): void {
+  emitProgress({
     type: 'replay-test-suite',
     status: 'start',
     total: plan.total,
@@ -159,12 +167,13 @@ function emitReplayTestSuiteStart(plan: ReplayTestSuitePlan): void {
 function emitSkippedReplayTestResults(params: {
   entries: ReplayTestEntry[];
   total: number;
+  emitProgress: ReplayTestEmitProgress;
 }): ReplaySuiteTestResult[] {
   const { entries, total } = params;
   const results: ReplaySuiteTestResult[] = [];
   for (const [entryIndex, entry] of entries.entries()) {
     if (entry.kind !== 'skip') continue;
-    emitRequestProgress({
+    params.emitProgress({
       type: 'replay-test',
       file: entry.path,
       status: 'skip',
@@ -284,13 +293,14 @@ async function runReplayTestEntriesInDiscoveryOrder(
     runReplay,
     cleanupSession,
     finalizeAttempt,
+    emitProgress,
   } = params;
   const results: ReplaySuiteTestResult[] = [];
   let executed = 0;
   for (const [entryIndex, entry] of discoveryEntries.entries()) {
     if (isRequestCanceled(requestId)) break;
     if (entry.kind === 'skip') {
-      emitRequestProgress({
+      emitProgress({
         type: 'replay-test',
         file: entry.path,
         status: 'skip',
@@ -323,6 +333,7 @@ async function runReplayTestEntriesInDiscoveryOrder(
       runReplay,
       cleanupSession,
       finalizeAttempt,
+      emitProgress,
     });
     results.push(report.result);
     if (shouldStopReplayTestExecution(report, flags, requestId)) break;
@@ -356,6 +367,7 @@ async function runReplayTestEntries(
     runReplay,
     cleanupSession,
     finalizeAttempt,
+    emitProgress,
   } = params;
   const results: ReplaySuiteTestResult[] = [];
   for (const [entryIndex, queued] of entries.entries()) {
@@ -377,6 +389,7 @@ async function runReplayTestEntries(
       runReplay,
       cleanupSession,
       finalizeAttempt,
+      emitProgress,
     });
     results.push(report.result);
     if (shouldStopReplayTestExecution(report, flags, requestId)) break;

@@ -1,5 +1,4 @@
 import path from 'node:path';
-import { emitRequestProgress } from '../../request/progress.ts';
 import type { ReplaySuiteTestFailed, ReplaySuiteTestResult } from '@agent-device/contracts/replay';
 import type { ReplayTestProgressEvent } from '@agent-device/contracts/progress';
 import {
@@ -176,7 +175,7 @@ async function runSingleReplayTestAttempt(
     artifactsDir: attemptArtifactsDir,
     shard,
     onStep: (step) => {
-      emitRequestProgress({
+      params.emitProgress({
         type: 'replay-test',
         ...attemptProgress,
         status: 'progress',
@@ -223,7 +222,7 @@ function emitReplayTestStartProgress(
 ): void {
   const { entry, sessionName, suiteInvocationId, caseIndex, suiteIndex, suiteTotal, shard } =
     params;
-  emitRequestProgress({
+  params.emitProgress({
     type: 'replay-test',
     file: entry.path,
     title: entry.title,
@@ -272,7 +271,7 @@ function emitReplayTestRetryProgress(
   attempt: ReplayTestAttemptResult,
 ): void {
   if (attempt.outcome.status === 'passed') return;
-  emitRequestProgress({
+  params.emitProgress({
     type: 'replay-test',
     file: params.entry.path,
     title: params.entry.title,
@@ -312,7 +311,7 @@ function buildReplayTestPassedResult(
   const { entry, suiteIndex, suiteTotal, shard } = params;
   const attemptOutcome = outcome.finalOutcome;
   if (attemptOutcome?.status !== 'passed') throw new Error('Expected passing replay test outcome.');
-  emitRequestProgress({
+  params.emitProgress({
     type: 'replay-test',
     file: entry.path,
     title: entry.title,
@@ -358,7 +357,7 @@ function buildReplayTestFailedResult(
     attemptOutcome?.status === 'failed'
       ? attemptOutcome.error
       : { code: 'COMMAND_FAILED', message: 'Unknown replay test failure' };
-  emitRequestProgress({
+  params.emitProgress({
     type: 'replay-test',
     file: entry.path,
     title: entry.title,

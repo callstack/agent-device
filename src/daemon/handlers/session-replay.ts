@@ -6,6 +6,7 @@ import { handleCloseCommand } from './session-close.ts';
 import { runReplayScriptFile } from './session-replay-runtime.ts';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import { errorResponse } from './response.ts';
+import { emitRequestProgress } from '../../request/progress.ts';
 import type { ReplayScriptMetadata } from '../../replay/script.ts';
 import { buildReplayTestShardFlags, type ReplayTestShardContext } from './session-test-sharding.ts';
 import { toReplayTestAttemptOutcome, toReplayTestFinalizeFailure } from './session-test-outcome.ts';
@@ -95,6 +96,9 @@ export async function handleSessionReplayCommands(params: {
     return await runReplayTestSuite({
       req,
       sessionName,
+      // The host owns the request-global progress sink; the scheduler receives only the
+      // narrow emit capability (#1478 P3b).
+      emitProgress: emitRequestProgress,
       runReplay: async ({
         filePath,
         sessionName: testSessionName,
