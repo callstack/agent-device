@@ -8,7 +8,7 @@ import {
   resolveReplayAction,
   resolveReplayString,
 } from '../vars.ts';
-import { parseReplayScriptDetailed, readReplayScriptMetadata } from '../script.ts';
+import { parseReplayScriptDetailed, readReplayScriptMetadata } from '@agent-device/ad-script';
 import type { SessionAction } from '@agent-device/contracts/session';
 
 const LOC = { file: 'test.ad', line: 1 };

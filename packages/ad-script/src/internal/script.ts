@@ -12,8 +12,17 @@ import {
   parseReplayRuntimeFlags,
   stripRecordedRefGeneration,
 } from './script-utils.ts';
-import { parseTargetAnnotationCommentLine } from './target-identity.ts';
-import { REPLAY_VAR_KEY_RE } from './vars.ts';
+import { parseTargetAnnotationCommentLine } from './target-annotation-serde.ts';
+
+/**
+ * The `.ad` script env/var key shape: uppercase letters, digits, and
+ * underscores, leading with a letter or underscore. Canonical here because
+ * `env KEY=VALUE` directive parsing is script grammar; `src/replay/vars.ts`
+ * (runtime `${VAR}` resolution, outside this package) and
+ * `src/replay/recorded-input.ts` import it from this package rather than
+ * duplicating the rule.
+ */
+export const REPLAY_VAR_KEY_RE = /^[A-Z_][A-Z0-9_]*$/;
 
 // Replay metadata `context platform=` lines support every accepted `--platform`
 // selector except 'web' (not yet a supported replay target). Legacy `ios`/`macos`

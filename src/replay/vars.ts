@@ -1,5 +1,9 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { SessionAction } from '@agent-device/contracts/session';
+// The env/var key shape is `.ad` script grammar (env directive parsing lives
+// in the codec package); re-exported here rather than duplicated (#1478 P5).
+export { REPLAY_VAR_KEY_RE } from '@agent-device/ad-script';
+import { REPLAY_VAR_KEY_RE } from '@agent-device/ad-script';
 
 export type ReplayVarScope = {
   values: Readonly<Record<string, string>>;
@@ -14,7 +18,6 @@ export type ReplayVarSources = {
   cliEnv?: Record<string, string>;
 };
 
-export const REPLAY_VAR_KEY_RE = /^[A-Z_][A-Z0-9_]*$/;
 const INTERPOLATION_RE = /(\\\$\{)|\$\{([A-Za-z_][A-Za-z0-9_.]*)(?::-((?:[^}\\]|\\.)*))?\}/g;
 const SHELL_PREFIX = 'AD_VAR_';
 const RESERVED_NAMESPACE_PREFIX = 'AD_';

@@ -12,7 +12,7 @@ import { SessionStore } from '../session-store.ts';
 import { expandSessionPath } from '../session-paths.ts';
 import { buildReplayScriptPlatformFlags } from '../replay-device-selection.ts';
 import { computeReplayPlanDigest } from '../../replay/plan-digest.ts';
-import type { TargetAnnotationV1 } from '../../replay/target-identity.ts';
+import type { TargetAnnotationV1 } from '@agent-device/ad-script';
 import { errorResponse, noActiveSessionError } from './response.ts';
 import { invokeReplayAction } from './session-replay-action-runtime.ts';
 import { tryParseSelectorChain } from '../../selectors/index.ts';

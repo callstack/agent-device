@@ -1,7 +1,7 @@
 import { resolveCommandRecordingEffect } from '../core/command-descriptor/registry.ts';
 import { parseWaitPositionals } from '../core/wait-positionals.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { isTouchTargetCommand } from '../replay/script-utils.ts';
+import { isTouchTargetCommand } from '@agent-device/ad-script';
 import { tryParseSelectorChain } from '../selectors/parse.ts';
 import type { SessionAction } from './types.ts';
 

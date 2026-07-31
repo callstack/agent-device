@@ -1,7 +1,7 @@
 import { splitIsSelectorArgs, splitSelectorFromArgs } from '../../selectors/index.ts';
 import { uniqueStrings } from '@agent-device/kernel/collections';
 import type { ReplayReportAction } from './session-replay-report-action.ts';
-import { isTouchTargetCommand } from '../../replay/script-utils.ts';
+import { isTouchTargetCommand } from '@agent-device/ad-script';
 
 /**
  * ADR 0012 decision 1 / migration step 6: `--update` retired as an actor —

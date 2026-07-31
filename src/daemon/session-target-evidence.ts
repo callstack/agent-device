@@ -30,16 +30,18 @@ import {
 import {
   classifyTargetBindingMatch,
   matchesLocalIdentity,
+  type LocalIdentity,
+} from '../replay/target-identity.ts';
+import {
   serializeTargetAnnotationV1,
   utf8ByteLength,
   TARGET_ANNOTATION_MAX_ANCESTRY,
   TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
-  type LocalIdentity,
   type TargetAncestryEntry,
   type TargetAnnotationV1,
   type TargetScrollRegion,
   type TargetVerification,
-} from '../replay/target-identity.ts';
+} from '@agent-device/ad-script';
 
 /** ADR 0012 decision 3: the resolved winner and the tree it was resolved from. */
 export type RecordedTargetCapture = {

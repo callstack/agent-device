@@ -1,5 +1,5 @@
 import { scrubReplayVarValues, type ReplayVarScrubEntry } from '@agent-device/contracts/divergence';
-import { formatDivergenceActionLabel } from '../../replay/script-utils.ts';
+import { formatDivergenceActionLabel } from '@agent-device/ad-script';
 import type { SnapshotDiagnosticsSummary } from '@agent-device/contracts/capture';
 import { buildDisplayPositionals } from '../session-event-action.ts';
 import type { DaemonResponse, SessionAction } from '../types.ts';

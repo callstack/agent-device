@@ -13,7 +13,7 @@ import {
 } from '../../__tests__/test-utils/session-factories.ts';
 import { markRepairTransactionComplete } from '../session-replay-transaction.ts';
 import { NO_SCRIPT_PUBLICATION, scriptTargetPath } from '../session-script-publication-state.ts';
-import { parseReplayScriptDetailed } from '../../replay/script.ts';
+import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import type { SessionAction } from '../types.ts';
 
 function action(overrides: Partial<SessionAction> = {}): SessionAction {

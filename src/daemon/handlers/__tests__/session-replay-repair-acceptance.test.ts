@@ -21,7 +21,7 @@ import { SessionStore } from '../../session-store.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import type { DaemonRequest } from '../../types.ts';
-import { parseReplayScriptDetailed } from '../../../replay/script.ts';
+import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,

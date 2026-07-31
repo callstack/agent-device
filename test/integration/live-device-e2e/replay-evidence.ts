@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-import { parseReplayScriptDetailed, readReplayScriptMetadata } from '../../../src/replay/script.ts';
+import { parseReplayScriptDetailed, readReplayScriptMetadata } from '@agent-device/ad-script';
 
 const DEFAULT_REPLAY_TIMEOUT_MS = 90_000;
 const HOST_TIMEOUT_MARGIN_MS = 60_000;

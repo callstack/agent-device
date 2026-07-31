@@ -15,7 +15,7 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import { dispatchWaitViaRuntime } from '../../selector-runtime.ts';
 import type { DaemonRequest } from '../../types.ts';
 import { WAIT_LANDMARK_MISMATCH_REASON } from '../../../replay/target-identity-node.ts';
-import type { TargetAnnotationV1 } from '../../../replay/target-identity.ts';
+import type { TargetAnnotationV1 } from '@agent-device/ad-script';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { makeAndroidSession } from '../../../__tests__/test-utils/session-factories.ts';
 

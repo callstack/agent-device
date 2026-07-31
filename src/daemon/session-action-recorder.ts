@@ -4,7 +4,7 @@ import { emitDiagnostic } from '../utils/diagnostics.ts';
 import type { DaemonRequest, SessionAction, SessionRuntimeHints, SessionState } from './types.ts';
 import { applyRecordedSaveScriptFlags } from './session-script-publication-capability.ts';
 import { repairSessionBoundary } from './session-replay-transaction.ts';
-import type { TargetAnnotationV1 } from '../replay/target-identity.ts';
+import type { TargetAnnotationV1 } from '@agent-device/ad-script';
 import { inferFillText } from './action-utils.ts';
 import {
   recordedInputPlaceholder,

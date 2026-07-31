@@ -19,7 +19,7 @@ import { collectReplaySelectorCandidates } from './session-replay-heal.ts';
 import { collectSettleChromeRefs } from '../../core/snapshot-chrome.ts';
 import { buildAndPersistReplayDivergenceResume } from './session-replay-resume.ts';
 import { rankAndDedupeReplaySuggestions } from './session-replay-suggestion-ranking.ts';
-import { formatDivergenceActionLabel, isTouchTargetCommand } from '../../replay/script-utils.ts';
+import { formatDivergenceActionLabel, isTouchTargetCommand } from '@agent-device/ad-script';
 import {
   computeReplayRepairHint,
   type ReplayRepairHintCapture,

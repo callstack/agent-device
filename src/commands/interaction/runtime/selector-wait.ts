@@ -10,10 +10,8 @@ import {
   buildIndexMap,
   filterIdentitySet,
 } from '../../../replay/target-evidence-tree.ts';
-import {
-  annotationLocalIdentity,
-  type TargetAnnotationV1,
-} from '../../../replay/target-identity.ts';
+import { annotationLocalIdentity } from '../../../replay/target-identity.ts';
+import type { TargetAnnotationV1 } from '@agent-device/ad-script';
 import type { PublicPlatform } from '@agent-device/kernel/device';
 import { checkWaitText } from '../../../selectors/arguments.ts';
 import { listSelectorChainMatches } from '../../../selectors/index.ts';

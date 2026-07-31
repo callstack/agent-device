@@ -8,7 +8,7 @@ import {
   authoringPublication,
   repairPublication,
 } from '../../../__tests__/test-utils/session-factories.ts';
-import type { TargetAnnotationV1 } from '../../../replay/target-identity.ts';
+import type { TargetAnnotationV1 } from '@agent-device/ad-script';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, SessionState } from '../../types.ts';
 import { handleSessionScriptPublication } from '../session-script-publication.ts';

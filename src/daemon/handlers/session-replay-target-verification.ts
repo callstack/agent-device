@@ -2,17 +2,13 @@ import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
-import { formatDivergenceActionLabel } from '../../replay/script-utils.ts';
+import { formatDivergenceActionLabel, type TargetAnnotationV1 } from '@agent-device/ad-script';
 import {
   collectReplayScrubbableVarValues,
   resolveReplayAction,
   type ReplayVarScope,
 } from '../../replay/vars.ts';
-import {
-  annotationLocalIdentity,
-  type LocalIdentity,
-  type TargetAnnotationV1,
-} from '../../replay/target-identity.ts';
+import { annotationLocalIdentity, type LocalIdentity } from '../../replay/target-identity.ts';
 import {
   createReplayDivergenceSanitizer,
   type ReplayDivergence,

@@ -6,9 +6,8 @@ import path from 'node:path';
 import { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
 import { buildRequestFinishedEvent } from '../session-event-log.ts';
-import type { TargetAnnotationV1 } from '../../replay/target-identity.ts';
 import { HEAL_COMPLETE_SENTINEL } from '../session-script-writer.ts';
-import { parseReplayScriptDetailed } from '../../replay/script.ts';
+import { parseReplayScriptDetailed, type TargetAnnotationV1 } from '@agent-device/ad-script';
 import { repairPublication } from '../../__tests__/test-utils/session-factories.ts';
 
 type RecordActionEntry = Parameters<SessionStore['recordAction']>[1];

@@ -15,7 +15,7 @@ import {
   isCommandSupportedOnDevice,
   unsupportedHintForDevice,
 } from '../../src/core/capabilities.ts';
-import { parseReplayScriptDetailed } from '../../src/replay/script.ts';
+import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import { IOS_SIMULATOR_BEHAVIOR_COVERAGE } from './ios-simulator-e2e/behavior-coverage.ts';
 import {
   IOS_SIMULATOR_E2E_COVERAGE,

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { computeTargetEvidence } from '../../session-target-evidence.ts';
-import type { TargetAnnotationV1 } from '../../../replay/target-identity.ts';
+import type { TargetAnnotationV1 } from '@agent-device/ad-script';
 
 export function toSnapshotNodes(raw: RawSnapshotNode[]): SnapshotNode[] {
   return raw.map((node, position) => ({ ...node, ref: `e${position + 1}` }));

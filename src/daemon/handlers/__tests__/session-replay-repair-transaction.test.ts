@@ -78,7 +78,7 @@ import {
   scriptTargetPath,
   scriptTargetForce,
 } from '../../session-script-publication-state.ts';
-import { parseReplayScriptDetailed } from '../../../replay/script.ts';
+import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import type { DaemonRequest, SessionState } from '../../types.ts';
 import {
   baseReplayRequest as baseReq,

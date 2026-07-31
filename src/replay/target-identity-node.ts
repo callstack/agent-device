@@ -18,8 +18,8 @@ import {
   normalizeRoleField,
   truncateToUtf8Bytes,
   TARGET_ANNOTATION_MAX_FIELD_BYTES,
-  type LocalIdentity,
-} from './target-identity.ts';
+} from '@agent-device/ad-script';
+import type { LocalIdentity } from './target-identity.ts';
 
 type IdentityTreeNode = Pick<RawSnapshotNode, 'type' | 'identifier' | 'label'>;
 

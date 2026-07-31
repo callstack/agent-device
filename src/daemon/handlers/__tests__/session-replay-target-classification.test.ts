@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
-import type { TargetAnnotationV1 } from '../../../replay/target-identity.ts';
+import type { TargetAnnotationV1 } from '@agent-device/ad-script';
 import { computeTargetEvidence } from '../../session-target-evidence.ts';
 import { buildSelectorChainForNode } from '../../../selectors/build.ts';
 import { parseSelectorChain, resolveSelectorChain } from '../../../selectors/index.ts';

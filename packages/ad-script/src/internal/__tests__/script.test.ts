@@ -1,7 +1,5 @@
-import fc from 'fast-check';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { PROPERTY_RUNS, replayScriptArb } from '../../__tests__/test-utils/index.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   parseReplayScriptDetailed,
@@ -9,7 +7,7 @@ import {
   REPLAY_METADATA_PLATFORMS,
 } from '../script.ts';
 import { formatPortableActionLine, formatTargetAnnotationLines } from '../script-formatting.ts';
-import type { TargetAnnotationV1 } from '../target-identity.ts';
+import type { TargetAnnotationV1 } from '../target-annotation-serde.ts';
 import type { SessionAction } from '@agent-device/contracts/session';
 
 // `writeReplayScript` (the `--update` heal-and-rewrite serializer) was
@@ -624,24 +622,10 @@ test('formatDivergenceActionLabel categorically drops fill/type text but keeps t
   );
 });
 
-// Property, not another example: `.ad` scripts are written by hand, recorded,
-// and rewritten, so the parser and the line formatter must agree on ONE
-// canonical form — re-serializing a parsed script has to be a fixed point.
-// Generated lines come from the shared `.ad` generator, so a new command shape
-// extends the generator rather than adding another pinned script here.
-test('serializing a parsed script is a fixed point for generated scripts', () => {
-  fc.assert(
-    fc.property(replayScriptArb, (script) => {
-      const parsed = parseReplayScriptDetailed(script).actions;
-      const canonical = formatReplayScriptForTest(parsed);
-      const reparsed = parseReplayScriptDetailed(canonical).actions;
-      assert.equal(formatReplayScriptForTest(reparsed), canonical);
-      // The action identity survives the rewrite: same commands, same targets.
-      assert.deepEqual(
-        reparsed.map((action) => [action.command, action.positionals]),
-        parsed.map((action) => [action.command, action.positionals]),
-      );
-    }),
-    { numRuns: PROPERTY_RUNS },
-  );
-});
+// The property test asserting "serializing a parsed script is a fixed point
+// for generated scripts" stays at `src/replay/__tests__/ad-script-round-trip.test.ts`:
+// its script generator (`replayScriptArb`) is derived from the root command
+// catalog and selector grammar (`src/__tests__/test-utils/property-arbitraries.ts`),
+// which this package cannot import without an R11 package→root-src escape
+// (#1478 P5 scoping dossier §5d). It exercises this package's exports via
+// the `@agent-device/ad-script` specifier instead of duplicating the codec.

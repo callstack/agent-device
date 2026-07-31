@@ -2,7 +2,7 @@ import { parseAllDocuments } from 'yaml';
 import { describe, expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { exportReplayActionsToMaestro, inspectMaestroFlow } from '@agent-device/maestro';
-import { parseReplayScriptDetailed, readReplayScriptMetadata } from '../../../replay/script.ts';
+import { parseReplayScriptDetailed, readReplayScriptMetadata } from '@agent-device/ad-script';
 import { parseSelectorChain } from '../../../selectors/index.ts';
 
 describe('exportReplayScriptToMaestro', () => {

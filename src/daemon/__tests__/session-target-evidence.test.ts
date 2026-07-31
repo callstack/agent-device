@@ -9,7 +9,7 @@ import {
   TARGET_ANNOTATION_MAX_ANCESTRY,
   TARGET_ANNOTATION_MAX_FIELD_BYTES,
   TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
-} from '../../replay/target-identity.ts';
+} from '@agent-device/ad-script';
 
 function toSnapshotNodes(raw: RawSnapshotNode[]): SnapshotNode[] {
   return raw.map((node, position) => ({ ...node, ref: `e${position + 1}` }));

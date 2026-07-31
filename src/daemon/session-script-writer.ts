@@ -5,18 +5,16 @@ import { inferFillText } from './action-utils.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
-  formatPortableActionLine,
-  formatTargetAnnotationLines,
-} from '../replay/script-formatting.ts';
-import { expandSessionPath, safeSessionName } from './session-paths.ts';
-import {
   appendScriptSeriesFlags,
+  formatPortableActionLine,
   formatScriptArg,
   formatScriptStringLiteral,
+  formatTargetAnnotationLines,
   isClickLikeCommand,
   isTouchTargetCommand,
   stripRecordedRefGeneration,
-} from '../replay/script-utils.ts';
+} from '@agent-device/ad-script';
+import { expandSessionPath, safeSessionName } from './session-paths.ts';
 import type { SessionAction, SessionState } from './types.ts';
 import {
   NO_SCRIPT_PUBLICATION,

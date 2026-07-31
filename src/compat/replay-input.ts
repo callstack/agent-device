@@ -5,7 +5,7 @@ import {
   readReplayScriptMetadata,
   type ParsedReplayScript,
   type ReplayScriptMetadata,
-} from '../replay/script.ts';
+} from '@agent-device/ad-script';
 
 export type ParsedReplayInput = ParsedReplayScript & {
   metadata: ReplayScriptMetadata;

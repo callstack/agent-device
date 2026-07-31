@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { exportReplayActionsToMaestro } from '@agent-device/maestro';
 import { AppError } from '@agent-device/kernel/errors';
-import { parseReplayScriptDetailed, readReplayScriptMetadata } from '../../replay/script.ts';
+import { parseReplayScriptDetailed, readReplayScriptMetadata } from '@agent-device/ad-script';
 import { parseSelectorChain } from '../../selectors/index.ts';
 import { resolveUserPath } from '../../utils/path-resolution.ts';
 import { writeCommandOutput } from './shared.ts';

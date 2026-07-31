@@ -9,7 +9,7 @@
 
 import { parseArgs } from '../../src/cli/parser/args.ts';
 import { parseSelectorChain } from '../../src/selectors/parse.ts';
-import { parseReplayScriptDetailed } from '../../src/replay/script.ts';
+import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import { readCliBatchStepsJson } from '../../src/cli/batch-steps.ts';
 import { inspectMaestroFlow } from '@agent-device/maestro';
 import type { FuzzTarget } from './target-types.ts';

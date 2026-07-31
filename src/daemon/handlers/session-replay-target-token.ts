@@ -1,4 +1,4 @@
-import { isTouchTargetCommand } from '../../replay/script-utils.ts';
+import { isTouchTargetCommand } from '@agent-device/ad-script';
 import { splitIsSelectorArgs } from '../../selectors/index.ts';
 import type { SessionAction } from '../types.ts';
 

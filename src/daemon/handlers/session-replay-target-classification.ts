@@ -56,8 +56,8 @@ import {
   annotationLocalIdentity,
   classifyTargetBindingMatch,
   type LocalIdentity,
-  type TargetAnnotationV1,
 } from '../../replay/target-identity.ts';
+import type { TargetAnnotationV1 } from '@agent-device/ad-script';
 import type { ReplayDivergenceTargetBindingKind } from '@agent-device/contracts/divergence';
 
 // ---------------------------------------------------------------------------

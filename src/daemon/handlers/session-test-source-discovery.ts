@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { inspectMaestroFlow } from '@agent-device/maestro';
 import { resolveReplayFormat } from '../../replay/format.ts';
-import { readReplayScriptMetadata } from '../../replay/script.ts';
+import { readReplayScriptMetadata } from '@agent-device/ad-script';
 import { discoverReplaySourcePaths } from '../replay-source-discovery.ts';
 import type {
   ReplayTestDiscoverSources,

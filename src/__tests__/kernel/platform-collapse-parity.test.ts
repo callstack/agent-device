@@ -21,7 +21,7 @@ import {
   VISIONOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
 } from '../test-utils/device-fixtures.ts';
-import { readReplayScriptMetadata } from '../../replay/script.ts';
+import { readReplayScriptMetadata } from '@agent-device/ad-script';
 
 // Parity gate for the ios/macos -> apple Platform collapse (issue #979, approach b).
 // Internal `DeviceInfo.platform` is `apple`; the daemon still ACCEPTS the legacy

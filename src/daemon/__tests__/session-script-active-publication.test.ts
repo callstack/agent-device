@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import type { TargetAnnotationV1 } from '../../replay/target-identity.ts';
+import type { TargetAnnotationV1 } from '@agent-device/ad-script';
 import type { SessionAction } from '../types.ts';
 import {
   assertActivePublicationPortability,
