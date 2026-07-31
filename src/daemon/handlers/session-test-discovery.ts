@@ -3,7 +3,6 @@ import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { isApplePlatform, type PlatformSelector } from '@agent-device/kernel/device';
 import { inspectMaestroFlow } from '@agent-device/maestro';
-import { resolveRequestTrackingId } from '../../request/cancel.ts';
 import { resolveReplayFormat } from '../../replay/format.ts';
 import { readReplayScriptMetadata, type ReplayScriptMetadata } from '../../replay/script.ts';
 import { discoverReplaySourcePaths } from '../replay-source-discovery.ts';
@@ -112,10 +111,12 @@ export function buildReplayTestAttemptRequestId(params: {
 }): string {
   const { requestId, suiteInvocationId, filePath, caseIndex, attemptIndex, shardIndex } = params;
   const shardPart = shardIndex === undefined ? '' : `:shard:${shardIndex + 1}`;
-  return resolveRequestTrackingId(
-    `${requestId ?? suiteInvocationId}${shardPart}:test:${caseIndex + 1}:${path.basename(filePath)}:attempt:${attemptIndex + 1}`,
-    suiteInvocationId,
-  );
+  // The scheduler mints attempt identity itself (#1478 P3b). This used to be wrapped in
+  // `resolveRequestTrackingId`, whose only job is to substitute a generated id for an empty
+  // one — and this template always contains `:test:`, so it is never empty and the wrapper
+  // always returned it unchanged. Dropping the dead call removes a `request/cancel.ts`
+  // import from the scheduler without altering a single produced id.
+  return `${requestId ?? suiteInvocationId}${shardPart}:test:${caseIndex + 1}:${path.basename(filePath)}:attempt:${attemptIndex + 1}`;
 }
 
 export function resolveReplayTestTimeout(
