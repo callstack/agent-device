@@ -121,12 +121,48 @@ export type ReplayTestEmitProgress = (
  */
 export type ReplayTestIsCanceled = () => boolean;
 
+/**
+ * One operational diagnostic (#1478 P3b). `emitDiagnostic` reads a request-global
+ * `AsyncLocalStorage` scope, so the scheduler receives the narrow publish capability instead
+ * of the module. The level set is spelled out rather than imported so the vocabulary crossing
+ * the seam stays neutral.
+ */
+export type ReplayTestEmitDiagnostic = (event: {
+  level?: 'info' | 'warn' | 'error' | 'debug';
+  phase: string;
+  durationMs?: number;
+  data?: Record<string, unknown>;
+}) => void;
+
+/**
+ * Cancellation binding for one attempt (#1478 P3b).
+ *
+ * The brief gives the daemon adapter the job of mapping an engine-neutral attempt id to
+ * daemon request identifiers and *binding cancellation*. The scheduler still owns timeout
+ * policy — it decides when an attempt has run too long — so it needs to say "stop this
+ * attempt" and "I am done with it", and nothing more. Registering the abort, relaying a
+ * parent request's abort, and clearing the registry entry are all host concerns behind this.
+ */
+export type ReplayTestAttemptCancellation = {
+  /** Signal the running attempt to stop. The scheduler calls this on timeout. */
+  cancel: () => void;
+  /** Release whatever the host bound for this attempt. Always called once it settles. */
+  release: () => void;
+};
+
+export type ReplayTestBindAttemptCancellation = (params: {
+  attemptId: string;
+  parentAttemptId?: string;
+}) => ReplayTestAttemptCancellation;
+
 export type ReplayTestRuntimeDependencies = {
   runReplay: ReplayTestRunReplay;
   cleanupSession: ReplayTestCleanupSession;
   finalizeAttempt?: ReplayTestFinalizeAttempt;
   emitProgress: ReplayTestEmitProgress;
   isCanceled: ReplayTestIsCanceled;
+  emitDiagnostic: ReplayTestEmitDiagnostic;
+  bindAttemptCancellation: ReplayTestBindAttemptCancellation;
 };
 
 /** Neutral failure outcome helper; keeps timeout/unknown construction in one place. */

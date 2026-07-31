@@ -4,7 +4,17 @@ import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { isRequestCanceled } from '../../../request/cancel.ts';
 import { runReplayTestAttempt } from '../session-test-runtime.ts';
+import { bindReplayTestAttemptCancellation } from '../session-replay.ts';
+import { emitDiagnostic } from '../../../utils/diagnostics.ts';
 import type { ReplayTestAttemptOutcome } from '../session-test-types.ts';
+
+// The real host capabilities (#1478 P3b). These tests assert cancellation through
+// `isRequestCanceled`, so they must drive the actual daemon binding rather than a stub —
+// a stubbed binding would keep the assertions passing while proving nothing.
+const HOST_CAPABILITIES = {
+  emitDiagnostic,
+  bindAttemptCancellation: bindReplayTestAttemptCancellation,
+};
 
 const PASSED: ReplayTestAttemptOutcome = {
   status: 'passed',
@@ -57,6 +67,7 @@ test('runReplayTestAttempt keeps cancellation active until a timed-out replay se
     runReplay: async () => await replayPromise,
     finalizeAttempt,
     cleanupSession,
+    ...HOST_CAPABILITIES,
   });
 
   await vi.advanceTimersByTimeAsync(10);
@@ -118,6 +129,7 @@ test('runReplayTestAttempt keeps a passing replay passed when finalization fails
       infrastructure: false,
     }),
     cleanupSession,
+    ...HOST_CAPABILITIES,
   });
 
   expect(result.status).toBe('passed');
@@ -149,6 +161,7 @@ test('runReplayTestAttempt finalizes before cleanup and records that order in th
     cleanupSession: async () => {
       lifecycleEvents.push('cleanup');
     },
+    ...HOST_CAPABILITIES,
   });
 
   expect(result.status).toBe('passed');
@@ -188,6 +201,7 @@ test('runReplayTestAttempt cleans up once when a timed-out replay settles inside
       return undefined;
     },
     cleanupSession,
+    ...HOST_CAPABILITIES,
   });
 
   await vi.advanceTimersByTimeAsync(10);
@@ -225,6 +239,7 @@ test('runReplayTestAttempt cleans up without a finalizer and adds no finalizatio
     requestId: 'req-no-finalizer',
     runReplay: async () => PASSED,
     cleanupSession,
+    ...HOST_CAPABILITIES,
   });
 
   expect(result.status).toBe('passed');

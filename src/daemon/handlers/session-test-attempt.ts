@@ -187,6 +187,8 @@ async function runSingleReplayTestAttempt(
     runReplay: params.runReplay,
     cleanupSession: params.cleanupSession,
     finalizeAttempt: params.finalizeAttempt,
+    emitDiagnostic: params.emitDiagnostic,
+    bindAttemptCancellation: params.bindAttemptCancellation,
   });
   const durationMs = Date.now() - startedAt;
   materializeReplayTestAttemptArtifacts({

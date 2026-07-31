@@ -7,7 +7,15 @@ import { runReplayScriptFile } from './session-replay-runtime.ts';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import { errorResponse } from './response.ts';
 import { emitRequestProgress } from '../../request/progress.ts';
-import { isRequestCanceled } from '../../request/cancel.ts';
+import {
+  clearRequestCanceled,
+  getRequestSignal,
+  isRequestCanceled,
+  markRequestCanceled,
+  registerRequestAbort,
+} from '../../request/cancel.ts';
+import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import type { ReplayTestBindAttemptCancellation } from './session-test-types.ts';
 import type { ReplayScriptMetadata } from '../../replay/script.ts';
 import { buildReplayTestShardFlags, type ReplayTestShardContext } from './session-test-sharding.ts';
 import { toReplayTestAttemptOutcome, toReplayTestFinalizeFailure } from './session-test-outcome.ts';
@@ -17,6 +25,50 @@ import {
   finalizeReplayTestVideoRecording,
   startReplayTestVideoRecordingIfReady,
 } from './session-replay-video-recording.ts';
+
+/**
+ * Binds one replay-test attempt to daemon request cancellation (#1478 P3b).
+ *
+ * The scheduler owns timeout policy and says only "cancel this attempt" / "release it". Every
+ * registry interaction — registering the abort, relaying the parent request's abort so a
+ * canceled suite stops its in-flight attempt, and clearing the entry — is host work and lives
+ * here, next to the rest of the daemon adapter.
+ */
+export const bindReplayTestAttemptCancellation: ReplayTestBindAttemptCancellation = ({
+  attemptId,
+  parentAttemptId,
+}) => {
+  registerRequestAbort(attemptId);
+  const clearParentRelay = relayReplayTestAbortFromParent(attemptId, parentAttemptId);
+  return {
+    cancel: () => markRequestCanceled(attemptId),
+    release: () => {
+      clearParentRelay();
+      clearRequestCanceled(attemptId);
+    },
+  };
+};
+
+function relayReplayTestAbortFromParent(
+  requestId: string,
+  parentRequestId: string | undefined,
+): () => void {
+  if (!parentRequestId || parentRequestId === requestId) return () => {};
+  const parentSignal = getRequestSignal(parentRequestId);
+  if (!parentSignal) return () => {};
+
+  const cancelRequest = () => {
+    markRequestCanceled(requestId);
+  };
+  if (parentSignal.aborted) {
+    cancelRequest();
+    return () => {};
+  }
+  parentSignal.addEventListener('abort', cancelRequest, { once: true });
+  return () => {
+    parentSignal.removeEventListener('abort', cancelRequest);
+  };
+}
 
 export function buildNestedReplayFlags(params: {
   parentFlags: CommandFlags | undefined;
@@ -101,6 +153,8 @@ export async function handleSessionReplayCommands(params: {
       // narrow emit capability (#1478 P3b).
       emitProgress: emitRequestProgress,
       isCanceled: () => isRequestCanceled(req.meta?.requestId),
+      emitDiagnostic,
+      bindAttemptCancellation: bindReplayTestAttemptCancellation,
       runReplay: async ({
         filePath,
         sessionName: testSessionName,

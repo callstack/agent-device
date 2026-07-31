@@ -48,8 +48,17 @@ export async function runReplayTestSuite(
     sessionName: string;
   } & ReplayTestRuntimeDependencies,
 ): Promise<DaemonResponse> {
-  const { req, sessionName, runReplay, cleanupSession, finalizeAttempt, emitProgress, isCanceled } =
-    params;
+  const {
+    req,
+    sessionName,
+    runReplay,
+    cleanupSession,
+    finalizeAttempt,
+    emitProgress,
+    isCanceled,
+    emitDiagnostic,
+    bindAttemptCancellation,
+  } = params;
   if ((req.positionals?.length ?? 0) === 0) {
     return errorResponse('INVALID_ARGS', 'test requires at least one path or glob');
   }
@@ -82,6 +91,8 @@ export async function runReplayTestSuite(
           finalizeAttempt,
           emitProgress,
           isCanceled,
+          emitDiagnostic,
+          bindAttemptCancellation,
         })),
       );
     } else {
@@ -100,6 +111,8 @@ export async function runReplayTestSuite(
           finalizeAttempt,
           emitProgress,
           isCanceled,
+          emitDiagnostic,
+          bindAttemptCancellation,
         })),
       );
     }
@@ -298,6 +311,8 @@ async function runReplayTestEntriesInDiscoveryOrder(
     finalizeAttempt,
     emitProgress,
     isCanceled,
+    emitDiagnostic,
+    bindAttemptCancellation,
   } = params;
   const results: ReplaySuiteTestResult[] = [];
   let executed = 0;
@@ -339,6 +354,8 @@ async function runReplayTestEntriesInDiscoveryOrder(
       finalizeAttempt,
       emitProgress,
       isCanceled,
+      emitDiagnostic,
+      bindAttemptCancellation,
     });
     results.push(report.result);
     if (shouldStopReplayTestExecution(report, flags, isCanceled)) break;
@@ -374,6 +391,8 @@ async function runReplayTestEntries(
     finalizeAttempt,
     emitProgress,
     isCanceled,
+    emitDiagnostic,
+    bindAttemptCancellation,
   } = params;
   const results: ReplaySuiteTestResult[] = [];
   for (const [entryIndex, queued] of entries.entries()) {
@@ -397,6 +416,8 @@ async function runReplayTestEntries(
       finalizeAttempt,
       emitProgress,
       isCanceled,
+      emitDiagnostic,
+      bindAttemptCancellation,
     });
     results.push(report.result);
     if (shouldStopReplayTestExecution(report, flags, isCanceled)) break;

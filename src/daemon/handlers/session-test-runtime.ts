@@ -1,19 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { normalizeError } from '@agent-device/kernel/errors';
-import {
-  clearRequestCanceled,
-  getRequestSignal,
-  markRequestCanceled,
-  registerRequestAbort,
-} from '../../request/cancel.ts';
 import {
   replayTestAttemptFailure,
   type ReplayTestAttemptFailed,
   type ReplayTestAttemptOutcome,
   type ReplayTestAttemptStepSink,
+  type ReplayTestEmitDiagnostic,
   type ReplayTestPlatform,
   type ReplayTestRunReplayParams,
   type ReplayTestTarget,
@@ -39,7 +33,14 @@ export async function runReplayTestAttempt(
     onStep?: ReplayTestAttemptStepSink;
     // Only the capabilities this attempt actually exercises. It never publishes progress, so
     // it is not handed `emitProgress` — authority narrows across every hop (#1478 P3b).
-  } & Pick<ReplayTestRuntimeDependencies, 'runReplay' | 'cleanupSession' | 'finalizeAttempt'>,
+  } & Pick<
+    ReplayTestRuntimeDependencies,
+    | 'runReplay'
+    | 'cleanupSession'
+    | 'finalizeAttempt'
+    | 'emitDiagnostic'
+    | 'bindAttemptCancellation'
+  >,
 ): Promise<ReplayTestAttemptOutcome> {
   const {
     filePath,
@@ -55,9 +56,13 @@ export async function runReplayTestAttempt(
     runReplay,
     cleanupSession,
     finalizeAttempt,
+    emitDiagnostic,
+    bindAttemptCancellation,
   } = params;
-  registerRequestAbort(requestId);
-  const clearParentAbortRelay = relayReplayTestAbortFromParent(requestId, parentRequestId);
+  const cancellation = bindAttemptCancellation({
+    attemptId: requestId,
+    parentAttemptId: parentRequestId,
+  });
   const artifactPaths = new Set<string>();
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   let timedOut = false;
@@ -87,8 +92,7 @@ export async function runReplayTestAttempt(
   })
     .catch((error) => replayTestAttemptFailure({ error: normalizeError(error) }))
     .finally(() => {
-      clearParentAbortRelay();
-      clearRequestCanceled(requestId);
+      cancellation.release();
     });
 
   try {
@@ -99,7 +103,7 @@ export async function runReplayTestAttempt(
             new Promise<ReplayTestAttemptOutcome>((resolve) => {
               timeoutHandle = setTimeout(() => {
                 timedOut = true;
-                markRequestCanceled(requestId);
+                cancellation.cancel();
                 resolve(createReplayTestTimeoutOutcome(timeoutMs, [...artifactPaths]));
               }, timeoutMs);
             }),
@@ -134,6 +138,7 @@ export async function runReplayTestAttempt(
           cleanupSession,
           sessionName,
           requestId,
+          emitDiagnostic,
         });
       }
     }
@@ -143,6 +148,7 @@ export async function runReplayTestAttempt(
       artifactPaths,
       artifactsDir,
       tracePath,
+      emitDiagnostic,
     });
     if (outcome?.status === 'passed' && finalizeFailure) {
       outcome = appendReplayTestWarning(
@@ -193,27 +199,6 @@ export async function runReplayTestAttempt(
   );
 }
 
-function relayReplayTestAbortFromParent(
-  requestId: string,
-  parentRequestId: string | undefined,
-): () => void {
-  if (!parentRequestId || parentRequestId === requestId) return () => {};
-  const parentSignal = getRequestSignal(parentRequestId);
-  if (!parentSignal) return () => {};
-
-  const cancelRequest = () => {
-    markRequestCanceled(requestId);
-  };
-  if (parentSignal.aborted) {
-    cancelRequest();
-    return () => {};
-  }
-  parentSignal.addEventListener('abort', cancelRequest, { once: true });
-  return () => {
-    parentSignal.removeEventListener('abort', cancelRequest);
-  };
-}
-
 async function waitForReplayAfterTimeout(
   replayPromise: Promise<ReplayTestAttemptOutcome>,
 ): Promise<boolean> {
@@ -228,8 +213,9 @@ async function cleanupSessionAfterLateReplay(params: {
   cleanupSession: ReplayTestRuntimeDependencies['cleanupSession'];
   sessionName: string;
   requestId: string;
+  emitDiagnostic: ReplayTestEmitDiagnostic;
 }): Promise<void> {
-  const { replayPromise, cleanupSession, sessionName, requestId } = params;
+  const { replayPromise, cleanupSession, sessionName, requestId, emitDiagnostic } = params;
   try {
     await replayPromise;
   } finally {
@@ -256,8 +242,10 @@ async function finalizeReplayTestAttempt(params: {
   artifactPaths: Set<string>;
   artifactsDir?: string;
   tracePath?: string;
+  emitDiagnostic: ReplayTestEmitDiagnostic;
 }): Promise<ReplayTestAttemptFailed | undefined> {
-  const { finalizeAttempt, sessionName, artifactPaths, artifactsDir, tracePath } = params;
+  const { finalizeAttempt, sessionName, artifactPaths, artifactsDir, tracePath, emitDiagnostic } =
+    params;
   if (!finalizeAttempt) return undefined;
   const finalizeStartedAt = Date.now();
   appendReplayTestTimingEvent(tracePath, {
