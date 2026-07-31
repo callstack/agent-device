@@ -299,20 +299,28 @@ export async function handleSessionReplayCommands(params: {
  * been applied here when building the source-discovery and shard-target capabilities.
  */
 function toReplayTestSuiteRequest(req: DaemonRequest, sessionName: string): ReplayTestSuiteRequest {
-  const shard = readReplayTestShardSelection(req.flags);
+  const flags = req.flags ?? {};
+  const cwd = req.meta?.cwd;
+  const artifactsDir = stringFlag(flags.artifactsDir);
   return {
     inputs: req.positionals ?? [],
     sessionName,
-    cwd: req.meta?.cwd,
+    cwd,
     requestId: req.meta?.requestId,
-    platformFilter: req.flags?.platform,
+    platformFilter: flags.platform,
     artifactsDir:
-      typeof req.flags?.artifactsDir === 'string'
-        ? SessionStore.expandHome(req.flags.artifactsDir, req.meta?.cwd)
-        : undefined,
-    failFast: req.flags?.failFast === true,
-    ...(typeof req.flags?.retries === 'number' ? { retries: req.flags.retries } : {}),
-    ...(typeof req.flags?.timeoutMs === 'number' ? { timeoutMs: req.flags.timeoutMs } : {}),
-    ...(shard ? { shard } : {}),
+      artifactsDir === undefined ? undefined : SessionStore.expandHome(artifactsDir, cwd),
+    failFast: flags.failFast === true,
+    retries: numberFlag(flags.retries),
+    timeoutMs: numberFlag(flags.timeoutMs),
+    shard: readReplayTestShardSelection(flags),
   };
+}
+
+function numberFlag(value: unknown): number | undefined {
+  return typeof value === 'number' ? value : undefined;
+}
+
+function stringFlag(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
 }
