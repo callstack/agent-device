@@ -1843,7 +1843,14 @@ test('press @ref fails when Android tap escapes to Settings', async () => {
   });
 });
 
-test.each(['com.google.android.permissioncontroller', 'com.android.permissioncontroller'])(
+const ANDROID_PERMISSION_PROMPT_PACKAGES = [
+  'com.android.permissioncontroller',
+  'com.google.android.permissioncontroller',
+  'com.google.android.packageinstaller',
+  'com.android.packageinstaller',
+] as const;
+
+test.each(ANDROID_PERMISSION_PROMPT_PACKAGES)(
   'press @ref succeeds with a pending-alert warning when %s foregrounds',
   async (packageName) => {
     const sessionStore = makeSessionStore();
