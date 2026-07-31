@@ -169,8 +169,13 @@ async function runSingleReplayTestAttempt(
     requestId: attemptRequestId,
     parentRequestId: requestId,
     timeoutMs,
-    platform: entry.metadata.platform,
-    target: entry.metadata.target,
+    // The scheduler only ever names a declared platform; caller-bound and unspecified both
+    // mean "do not pin one on the nested request" (#1478 P3b).
+    platform:
+      entry.manifest.device.platform.kind === 'declared'
+        ? entry.manifest.device.platform.value
+        : undefined,
+    target: entry.manifest.device.target,
     artifactsDir: attemptArtifactsDir,
     shard,
     onStep: (step) => {

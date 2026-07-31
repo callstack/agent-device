@@ -15,6 +15,7 @@ import {
   resolveReplayTestTimeout,
 } from './session-test-discovery.ts';
 import { runReplayTestCase, type ReplayTestCaseReport } from './session-test-attempt.ts';
+import { buildReplayTestSourceDiscovery } from './session-test-source-discovery.ts';
 import type {
   ReplayTestEmitProgress,
   ReplayTestIsCanceled,
@@ -146,7 +147,7 @@ function discoverReplayTestSuiteEntries(req: DaemonRequest): ReplayTestEntry[] {
     inputs: req.positionals ?? [],
     cwd: req.meta?.cwd,
     platformFilter: req.flags?.platform,
-    replayBackend: req.flags?.replayBackend,
+    discoverSources: buildReplayTestSourceDiscovery(req.flags?.replayBackend),
   });
 }
 
@@ -344,8 +345,11 @@ async function runReplayTestEntriesInDiscoveryOrder(
       caseIndex: executed - 1,
       cwd,
       requestId,
-      retries: resolveReplayTestRetries(flags?.retries, entry.metadata.retries),
-      timeoutMs: resolveReplayTestTimeout(flags?.timeoutMs, entry.metadata.timeoutMs),
+      retries: resolveReplayTestRetries(flags?.retries, entry.manifest.attemptDefaults?.retries),
+      timeoutMs: resolveReplayTestTimeout(
+        flags?.timeoutMs,
+        entry.manifest.attemptDefaults?.timeoutMs,
+      ),
       suiteArtifactsDir,
       suiteIndex: entryIndex + 1,
       suiteTotal,
@@ -405,8 +409,11 @@ async function runReplayTestEntries(
       caseIndex: entryIndex,
       cwd,
       requestId,
-      retries: resolveReplayTestRetries(flags?.retries, entry.metadata.retries),
-      timeoutMs: resolveReplayTestTimeout(flags?.timeoutMs, entry.metadata.timeoutMs),
+      retries: resolveReplayTestRetries(flags?.retries, entry.manifest.attemptDefaults?.retries),
+      timeoutMs: resolveReplayTestTimeout(
+        flags?.timeoutMs,
+        entry.manifest.attemptDefaults?.timeoutMs,
+      ),
       suiteArtifactsDir,
       suiteIndex,
       suiteTotal,

@@ -1,11 +1,11 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { isApplePlatform, type PlatformSelector } from '@agent-device/kernel/device';
-import { inspectMaestroFlow } from '@agent-device/maestro';
-import { resolveReplayFormat } from '../../replay/format.ts';
-import { readReplayScriptMetadata, type ReplayScriptMetadata } from '../../replay/script.ts';
-import { discoverReplaySourcePaths } from '../replay-source-discovery.ts';
+import type {
+  ReplayTestDiscoverSources,
+  ReplayTestManifest,
+  ReplayTestPlatform,
+} from './session-test-types.ts';
 
 const MAX_REPLAY_TEST_RETRIES = 3;
 
@@ -14,7 +14,7 @@ export type ReplayTestDiscoveryEntry =
       kind: 'run';
       path: string;
       title?: string;
-      metadata: ReplayScriptMetadata;
+      manifest: ReplayTestManifest;
     }
   | {
       kind: 'skip';
@@ -25,46 +25,54 @@ export type ReplayTestDiscoveryEntry =
 
 export type ReplayTestRunEntry = Extract<ReplayTestDiscoveryEntry, { kind: 'run' }>;
 
+/**
+ * Applies discovery policy to host-inspected sources (#1478 P3b).
+ *
+ * This used to expand paths, read each file, and call `readReplayScriptMetadata` /
+ * `inspectMaestroFlow` / `resolveReplayFormat` itself — three engine and format imports a
+ * format-neutral scheduler cannot hold. Inspection is now the host's `discoverSources`
+ * capability; what remains here is the genuinely neutral part: deciding which sources a
+ * `--platform` filter runs, which it skips and with what message, and rejecting a suite that
+ * matched nothing.
+ */
 export function discoverReplayTestEntries(params: {
   inputs: string[];
   cwd?: string;
   platformFilter?: PlatformSelector;
-  replayBackend?: string;
+  discoverSources: ReplayTestDiscoverSources;
 }): ReplayTestDiscoveryEntry[] {
-  const { inputs, cwd, platformFilter, replayBackend } = params;
-  const resolvedCwd = cwd ?? process.cwd();
-  const filePaths = discoverReplaySourcePaths({
-    inputs,
-    cwd: resolvedCwd,
-    replayBackend,
-  });
+  const { inputs, cwd, platformFilter, discoverSources } = params;
+  const sources = discoverSources({ inputs, cwd });
 
   const entries: ReplayTestDiscoveryEntry[] = [];
-  for (const filePath of filePaths) {
-    const script = fs.readFileSync(filePath, 'utf8');
-    const metadata = readReplayScriptMetadata(script);
-    const title = readReplayTestTitle(script, filePath, replayBackend);
+  for (const source of sources) {
+    const { path: filePath, manifest } = source;
+    const run = { kind: 'run', path: filePath, title: manifest.title, manifest } as const;
     if (!platformFilter) {
-      entries.push({ kind: 'run', path: filePath, title, metadata });
+      entries.push(run);
       continue;
     }
-    if (!metadata.platform) {
-      if (resolveReplayFormat(filePath, replayBackend) === 'maestro') {
-        entries.push({ kind: 'run', path: filePath, title, metadata });
-      } else {
-        entries.push({
-          kind: 'skip',
-          path: filePath,
-          reason: 'skipped-by-filter',
-          message: `missing platform metadata for --platform ${platformFilter}`,
-        });
-      }
+    const declared = manifest.device.platform;
+    // A caller-bound source takes its platform from the invocation, so a filter never skips
+    // it for lacking declared metadata; an unspecified one declared nothing and is skipped
+    // with the message the suite result has always carried.
+    if (declared.kind === 'caller-bound') {
+      entries.push(run);
       continue;
     }
-    if (!matchesPlatformFilter(platformFilter, metadata.platform)) {
+    if (declared.kind === 'unspecified') {
+      entries.push({
+        kind: 'skip',
+        path: filePath,
+        reason: 'skipped-by-filter',
+        message: `missing platform metadata for --platform ${platformFilter}`,
+      });
       continue;
     }
-    entries.push({ kind: 'run', path: filePath, title, metadata });
+    if (!matchesPlatformFilter(platformFilter, declared.value)) {
+      continue;
+    }
+    entries.push(run);
   }
 
   const runnableCount = entries.filter((entry) => entry.kind === 'run').length;
@@ -135,17 +143,7 @@ export function resolveReplayTestRetries(
   return Math.max(0, Math.min(MAX_REPLAY_TEST_RETRIES, resolved));
 }
 
-function readReplayTestTitle(
-  script: string,
-  filePath: string,
-  replayBackend: string | undefined,
-): string | undefined {
-  return resolveReplayFormat(filePath, replayBackend) === 'maestro'
-    ? inspectMaestroFlow(script, filePath).name
-    : undefined;
-}
-
-function matchesPlatformFilter(filter: PlatformSelector, candidate: PlatformSelector): boolean {
+function matchesPlatformFilter(filter: PlatformSelector, candidate: ReplayTestPlatform): boolean {
   if (filter === 'apple') {
     return isApplePlatform(candidate);
   }

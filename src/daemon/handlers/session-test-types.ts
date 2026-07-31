@@ -18,6 +18,62 @@ export type ReplayTestPlatform = Exclude<PlatformSelector, 'web'>;
 export type ReplayTestTarget = DeviceTarget;
 
 /**
+ * Everything the scheduler may know about one discovered source (#1478 P3b).
+ *
+ * Discovery used to read each file and call both engines directly — `readReplayScriptMetadata`
+ * for `.ad` and `inspectMaestroFlow` for Maestro — plus `resolveReplayFormat` to pick between
+ * them. A format-neutral scheduler cannot do that, so the host inspects sources and hands back
+ * this manifest.
+ *
+ * The fields are exactly the four the scheduler consumes (platform, target, retries,
+ * timeoutMs) plus the title reporters display. Per the brief, nothing else is added here
+ * without a demonstrated scheduler or reporter call site — no source format, app ID,
+ * environment, Maestro tags/steps, digest, includes, config, or source path.
+ */
+export type ReplayTestManifest = Readonly<{
+  title?: string;
+  device: Readonly<{
+    /**
+     * How the source determines its platform. This is what replaced the scheduler's old
+     * `resolveReplayFormat(...) === 'maestro'` check: it needs to know whether a missing
+     * platform means "the caller supplies it" or "this source declared nothing", never which
+     * engine produced it.
+     *
+     * - `declared` — the source names a platform, and a `--platform` filter compares against it;
+     * - `caller-bound` — the format leaves platform to the caller (Maestro), so a filter runs it;
+     * - `unspecified` — the source declared none, so a filter skips it as unmatched.
+     */
+    platform:
+      | Readonly<{ kind: 'declared'; value: ReplayTestPlatform }>
+      | Readonly<{ kind: 'caller-bound' }>
+      | Readonly<{ kind: 'unspecified' }>;
+    target?: ReplayTestTarget;
+  }>;
+  attemptDefaults?: Readonly<{
+    timeoutMs?: number;
+    retries?: number;
+  }>;
+}>;
+
+/** One source the host found and inspected, ready for scheduler filtering policy. */
+export type ReplayTestSource = Readonly<{
+  path: string;
+  manifest: ReplayTestManifest;
+}>;
+
+/**
+ * Expands the caller's inputs and inspects each source (#1478 P3b).
+ *
+ * Path expansion, file reading, format routing, and per-engine inspection are all host work.
+ * The scheduler keeps discovery *policy* — platform filtering, run/skip classification, and
+ * the "no replay tests matched" error — which is the part that is genuinely format-neutral.
+ */
+export type ReplayTestDiscoverSources = (params: {
+  inputs: string[];
+  cwd?: string;
+}) => readonly ReplayTestSource[];
+
+/**
  * One execution step an engine reports while an attempt runs (#1478 P3, finding 1).
  *
  * Step payloads originate below the attempt boundary, inside engine execution, and used to
