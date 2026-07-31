@@ -17,6 +17,7 @@ import {
 import { runReplayTestCase, type ReplayTestCaseReport } from './session-test-attempt.ts';
 import type {
   ReplayTestEmitProgress,
+  ReplayTestIsCanceled,
   ReplayTestRuntimeDependencies,
 } from './session-test-types.ts';
 import {
@@ -24,7 +25,6 @@ import {
   type ReplayTestShardContext,
   type ReplayTestShardPlan,
 } from './session-test-sharding.ts';
-import { isRequestCanceled } from '../../request/cancel.ts';
 import { mergeSnapshotDiagnostics } from '@agent-device/contracts/capture';
 
 type ReplayTestEntry = ReturnType<typeof discoverReplayTestEntries>[number];
@@ -48,7 +48,8 @@ export async function runReplayTestSuite(
     sessionName: string;
   } & ReplayTestRuntimeDependencies,
 ): Promise<DaemonResponse> {
-  const { req, sessionName, runReplay, cleanupSession, finalizeAttempt, emitProgress } = params;
+  const { req, sessionName, runReplay, cleanupSession, finalizeAttempt, emitProgress, isCanceled } =
+    params;
   if ((req.positionals?.length ?? 0) === 0) {
     return errorResponse('INVALID_ARGS', 'test requires at least one path or glob');
   }
@@ -80,6 +81,7 @@ export async function runReplayTestSuite(
           cleanupSession,
           finalizeAttempt,
           emitProgress,
+          isCanceled,
         })),
       );
     } else {
@@ -97,6 +99,7 @@ export async function runReplayTestSuite(
           cleanupSession,
           finalizeAttempt,
           emitProgress,
+          isCanceled,
         })),
       );
     }
@@ -294,11 +297,12 @@ async function runReplayTestEntriesInDiscoveryOrder(
     cleanupSession,
     finalizeAttempt,
     emitProgress,
+    isCanceled,
   } = params;
   const results: ReplaySuiteTestResult[] = [];
   let executed = 0;
   for (const [entryIndex, entry] of discoveryEntries.entries()) {
-    if (isRequestCanceled(requestId)) break;
+    if (isCanceled()) break;
     if (entry.kind === 'skip') {
       emitProgress({
         type: 'replay-test',
@@ -334,9 +338,10 @@ async function runReplayTestEntriesInDiscoveryOrder(
       cleanupSession,
       finalizeAttempt,
       emitProgress,
+      isCanceled,
     });
     results.push(report.result);
-    if (shouldStopReplayTestExecution(report, flags, requestId)) break;
+    if (shouldStopReplayTestExecution(report, flags, isCanceled)) break;
   }
   return results;
 }
@@ -368,10 +373,11 @@ async function runReplayTestEntries(
     cleanupSession,
     finalizeAttempt,
     emitProgress,
+    isCanceled,
   } = params;
   const results: ReplaySuiteTestResult[] = [];
   for (const [entryIndex, queued] of entries.entries()) {
-    if (isRequestCanceled(requestId)) break;
+    if (isCanceled()) break;
     const { entry, suiteIndex } = queued;
     const report = await runReplayTestCase({
       entry,
@@ -390,9 +396,10 @@ async function runReplayTestEntries(
       cleanupSession,
       finalizeAttempt,
       emitProgress,
+      isCanceled,
     });
     results.push(report.result);
-    if (shouldStopReplayTestExecution(report, flags, requestId)) break;
+    if (shouldStopReplayTestExecution(report, flags, isCanceled)) break;
   }
   return results;
 }
@@ -400,10 +407,10 @@ async function runReplayTestEntries(
 function shouldStopReplayTestExecution(
   report: ReplayTestCaseReport,
   flags: DaemonRequest['flags'],
-  requestId: string | undefined,
+  isCanceled: ReplayTestIsCanceled,
 ): boolean {
   return (
-    isRequestCanceled(requestId) ||
+    isCanceled() ||
     (flags?.failFast === true && report.result.status === 'failed') ||
     report.infrastructure
   );

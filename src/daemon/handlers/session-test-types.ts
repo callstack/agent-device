@@ -111,11 +111,22 @@ export type ReplayTestEmitProgress = (
   event: ReplayTestSuiteProgressEvent | ReplayTestProgressEvent,
 ) => void;
 
+/**
+ * Whether the suite this scheduler is running has been canceled (#1478 P3b).
+ *
+ * The scheduler used to call `isRequestCanceled(requestId)`, which both reaches a
+ * request-global registry and makes it name a daemon request id as the cancellation key.
+ * The host binds the predicate to its own request instead, so the scheduler asks a question
+ * it is entitled to ask and learns nothing about how cancellation is tracked.
+ */
+export type ReplayTestIsCanceled = () => boolean;
+
 export type ReplayTestRuntimeDependencies = {
   runReplay: ReplayTestRunReplay;
   cleanupSession: ReplayTestCleanupSession;
   finalizeAttempt?: ReplayTestFinalizeAttempt;
   emitProgress: ReplayTestEmitProgress;
+  isCanceled: ReplayTestIsCanceled;
 };
 
 /** Neutral failure outcome helper; keeps timeout/unknown construction in one place. */

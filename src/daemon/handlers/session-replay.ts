@@ -7,6 +7,7 @@ import { runReplayScriptFile } from './session-replay-runtime.ts';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import { errorResponse } from './response.ts';
 import { emitRequestProgress } from '../../request/progress.ts';
+import { isRequestCanceled } from '../../request/cancel.ts';
 import type { ReplayScriptMetadata } from '../../replay/script.ts';
 import { buildReplayTestShardFlags, type ReplayTestShardContext } from './session-test-sharding.ts';
 import { toReplayTestAttemptOutcome, toReplayTestFinalizeFailure } from './session-test-outcome.ts';
@@ -99,6 +100,7 @@ export async function handleSessionReplayCommands(params: {
       // The host owns the request-global progress sink; the scheduler receives only the
       // narrow emit capability (#1478 P3b).
       emitProgress: emitRequestProgress,
+      isCanceled: () => isRequestCanceled(req.meta?.requestId),
       runReplay: async ({
         filePath,
         sessionName: testSessionName,

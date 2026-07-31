@@ -17,7 +17,6 @@ import type {
   ReplayTestRuntimeDependencies,
 } from './session-test-types.ts';
 import type { ReplayTestShardContext } from './session-test-sharding.ts';
-import { isRequestCanceled } from '../../request/cancel.ts';
 
 type ReplayTestCaseResult = Extract<ReplaySuiteTestResult, { status: 'passed' | 'failed' }>;
 type ReplayTestAttemptFailure = NonNullable<
@@ -107,7 +106,7 @@ async function runReplayTestCaseAttempts(
   };
 
   for (let attemptIndex = 0; attemptIndex <= params.retries; attemptIndex += 1) {
-    if (isRequestCanceled(params.requestId)) break;
+    if (params.isCanceled()) break;
     const attempt = await runSingleReplayTestAttempt(params, context, attemptIndex);
     updateReplayTestCaseOutcome(outcome, attempt);
     if (shouldStopReplayTestAttempts(params, attempt.outcome, attemptIndex)) break;
@@ -259,7 +258,7 @@ function shouldStopReplayTestAttempts(
 ): boolean {
   return (
     outcome.status === 'passed' ||
-    isRequestCanceled(params.requestId) ||
+    params.isCanceled() ||
     outcome.infrastructure ||
     attemptIndex >= params.retries
   );
