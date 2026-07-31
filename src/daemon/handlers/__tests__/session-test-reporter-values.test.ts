@@ -160,7 +160,17 @@ async function runRetrySuite(): Promise<{
     invoke: async () => {
       attempts += 1;
       return attempts === 1
-        ? { ok: false, error: { code: 'COMMAND_FAILED', message: 'first attempt failed' } }
+        ? {
+            ok: false,
+            error: {
+              code: 'COMMAND_FAILED',
+              message: 'first attempt failed',
+              // Carried so the retry-path `hint` below is asserted on a real hook value. The
+              // final-attempt path has its own hint coverage; without a hint here the retry
+              // emit site was reachable by no assertion at all.
+              hint: 'retry hint from the failed attempt',
+            },
+          }
         : { ok: true, data: { replayed: 1, healed: 0 } };
     },
   });
@@ -276,6 +286,10 @@ test('reporter step and result sessions track the running attempt, not the start
     retrying: true,
     session: 'default:test:suite-reporter:1-02-retry:attempt-1',
     message: 'Replay failed at step 1 (open "Demo"): first attempt failed',
+    // The retry emit site publishes `hint` separately from the final one. Assert it on the
+    // real hook value so deleting it from the scheduler fails here rather than shipping a
+    // reporter that silently loses the field on every retried failure.
+    hint: 'retry hint from the failed attempt',
   });
   const finalResult = hookValue(hooks, 6, 'onTestResult');
   expect(finalResult).toMatchObject({
