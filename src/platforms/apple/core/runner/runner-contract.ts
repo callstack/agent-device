@@ -12,7 +12,11 @@ import {
   getRequestSignal,
   isRequestCanceled,
 } from '../../../../request/cancel.ts';
-import { bootFailureHint, classifyBootFailure } from '../../../boot-diagnostics.ts';
+import {
+  bootFailureHint,
+  classifyBootFailure,
+  type BootFailureReason,
+} from '../../../boot-diagnostics.ts';
 import type { RunnerSession } from './runner-session-types.ts';
 
 const RUNNER_CACHE_RECOVERY_HINT =
@@ -170,12 +174,18 @@ export function resolveRunnerEarlyExitHint(
   message: string,
   stdout: string,
   stderr: string,
+  reason?: BootFailureReason,
 ): string {
   const haystack = `${message}\n${stdout}\n${stderr}`.toLowerCase();
   if (haystack.includes('device is busy') && haystack.includes('connecting')) {
     return 'Target iOS device is still connecting. Keep it unlocked, wait for device trust/connection to settle, then retry.';
   }
-  return `${bootFailureHint('IOS_RUNNER_CONNECT_TIMEOUT')} ${RUNNER_CACHE_RECOVERY_HINT}`;
+  const classified = reason ?? 'IOS_RUNNER_CONNECT_TIMEOUT';
+  // Clearing cached build products cannot put a device into a provisioning
+  // profile, so that recovery advice is withheld where it would only add noise
+  // to an already actionable instruction.
+  if (classified === 'IOS_RUNNER_DEVICE_NOT_PROVISIONED') return bootFailureHint(classified);
+  return `${bootFailureHint(classified)} ${RUNNER_CACHE_RECOVERY_HINT}`;
 }
 
 export function buildRunnerConnectError(params: {
@@ -226,7 +236,7 @@ export async function buildRunnerEarlyExitError(params: {
       stderr: result.stderr,
     },
     reason,
-    hint: resolveRunnerEarlyExitHint(message, result.stdout, result.stderr),
+    hint: resolveRunnerEarlyExitHint(message, result.stdout, result.stderr, reason),
   });
 }
 
