@@ -1,6 +1,7 @@
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
+import { isUncommittedRepairSession } from '../session-replay-transaction.ts';
 
 // Bounds the daemon's own lifetime when nothing is using it. Each
 // AGENT_DEVICE_STATE_DIR spawns a dedicated daemon that otherwise never exits
@@ -46,7 +47,7 @@ export function hasReapBlockingOpenSessions(sessionStore: SessionStore): boolean
 }
 
 function isReapableRepairSession(session: SessionState): boolean {
-  return session.saveScriptBoundary !== undefined && session.saveScriptCommitted !== true;
+  return isUncommittedRepairSession(session);
 }
 
 // Recording lifecycle is session-scoped (session.recording), so a recording

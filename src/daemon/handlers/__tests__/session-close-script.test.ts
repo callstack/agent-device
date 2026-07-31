@@ -54,7 +54,12 @@ test('failed repair publication removes only its synthetic close before retry', 
 
 test('repair close failure keeps normalized metadata and is explicitly retriable', () => {
   const { session } = setup('repair-error');
-  session.saveScriptPath = '/tmp/repaired.ad';
+  session.scriptPublication = {
+    kind: 'repair',
+    status: 'armed',
+    target: { kind: 'explicit', path: '/tmp/repaired.ad', force: false },
+    boundary: 0,
+  };
   const failure = new AppError('COMMAND_FAILED', 'publish failed', {
     reason: 'target-exists',
     hint: 'Choose another path.',

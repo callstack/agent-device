@@ -42,8 +42,13 @@ function tombstonedSession(name: string): SessionState {
     device: { platform: 'apple', id: 'sim-1', name: 'iPhone', kind: 'simulator', booted: true },
     createdAt: Date.now(),
     actions: [],
-    saveScriptBoundary: 0,
-    repairSourcePath: '/flows/login.ad',
+    scriptPublication: {
+      kind: 'repair',
+      status: 'armed',
+      target: { kind: 'default', force: false },
+      boundary: 0,
+      sourcePath: '/flows/login.ad',
+    },
   };
 }
 

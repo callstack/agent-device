@@ -1,19 +1,16 @@
 /**
- * The tagged script-publication aggregate (#1478 P4a).
+ * The tagged script-publication aggregate (#1478 P4a): `SessionState.scriptPublication`.
  *
- * Nine co-resident optional fields on `SessionState` encode two lifecycles plus a shared output
- * target: `scriptRecordingState` (the ADR 0016 ordinary authoring lifecycle), the ADR 0012
- * decision 6 repair transaction (`saveScriptBoundary`, `saveScriptComplete`,
- * `saveScriptCommitted`, `repairPlatformCloseReceipt`, `repairSourcePath`), and the target
- * itself (`saveScriptPath`, `saveScriptForce`).
+ * One state machine holds both publication lifecycles and their shared output target: the ADR
+ * 0016 ordinary authoring lifecycle, the ADR 0012 decision 6 repair transaction, and the
+ * per-target force authorization (#1258). The disjointness of the two lifecycles is structural —
+ * a session publishes nothing, authors ordinarily, or is under repair — so no reader re-derives
+ * it from field combinations and no writer clears siblings.
  *
- * Nothing in that shape says the two lifecycles are disjoint, so every reader re-derived it from
- * field combinations and every writer had to remember which siblings to clear. This aggregate
- * makes the disjointness structural: a session is publishing nothing, authoring ordinarily, or
- * under repair.
- *
- * Values and pure transitions only; no authority. The capability that performs close sequencing
- * and atomic publication is separate, and no engine can reach either.
+ * Values and pure transitions only; no authority. Writes go through the daemon-private
+ * projections (`session-replay-transaction.ts`, `session-script-publication-capability.ts`) and
+ * the writer's commit transition — the R7 ownership gate enforces exactly that set — and no
+ * engine can reach any of them.
  */
 
 /**
@@ -88,12 +85,12 @@ export const NO_SCRIPT_PUBLICATION: SessionScriptPublicationState = { kind: 'non
  * the caller never opted into. Because authorization is a field of the target, replacing the
  * target replaces its authorization — there is no separate flag left behind to forget.
  *
- * Two retentions are deliberate, and both reproduce today's `applySaveScriptRetarget`:
+ * Two retentions are deliberate:
  *
  * - re-arming the SAME explicit path keeps an existing grant; a bare re-arm is not a withdrawal;
- * - moving from `default` to an explicit path keeps it. Today's retarget check requires a
- *   previously PERSISTED path, so `open --save-script --force` followed by
- *   `close --save-script=out.ad` is not treated as a retarget and the grant survives.
+ * - moving from `default` to an explicit path keeps it, so `open --save-script --force`
+ *   followed by `close --save-script=out.ad` is not treated as a retarget and the grant
+ *   survives.
  *
  * That second case is arguably a #1258 gap — the caller authorized overwriting an unnamed
  * default, not `out.ad`. It is preserved here so the migration changes no behavior; tightening
@@ -101,17 +98,19 @@ export const NO_SCRIPT_PUBLICATION: SessionScriptPublicationState = { kind: 'non
  */
 export function resolveScriptTarget(
   previous: SessionScriptTarget | undefined,
-  requested: Readonly<{ path?: string; force: boolean }>,
+  requested: Readonly<{ path?: string | undefined; force: boolean }>,
 ): SessionScriptTarget {
+  if (requested.path === undefined) {
+    // A bare re-arm is not a retarget: the previous target — explicit path included — survives
+    // untouched, gaining a live force grant if one accompanies the re-arm. This is what keeps a
+    // per-step repair armer or a repeated `--save-script` from wiping the materialized healed
+    // sibling back to the daemon default.
+    const base = previous ?? { kind: 'default', force: false };
+    return requested.force ? { ...base, force: true } : base;
+  }
   const retainsAuthorization =
-    previous?.force === true &&
-    (previous.kind === 'default' ||
-      previous.path === requested.path ||
-      requested.path === undefined);
-  const force = requested.force || retainsAuthorization;
-  return requested.path === undefined
-    ? { kind: 'default', force }
-    : { kind: 'explicit', path: requested.path, force };
+    previous?.force === true && (previous.kind === 'default' || previous.path === requested.path);
+  return { kind: 'explicit', path: requested.path, force: requested.force || retainsAuthorization };
 }
 
 /**
@@ -151,4 +150,129 @@ export function isRepairCommittable(state: SessionScriptPublicationState): boole
 export function isScriptPublished(state: SessionScriptPublicationState): boolean {
   if (state.kind === 'repair') return state.status === 'committed';
   return state.kind === 'authoring' && state.status === 'published';
+}
+
+/** ADR 0016: `open --save-script` on a fresh session arms ordinary authoring. */
+export function armAuthoring(
+  requested: Readonly<{ path?: string | undefined; force: boolean }>,
+): SessionScriptPublicationState {
+  return { kind: 'authoring', status: 'armed', target: resolveScriptTarget(undefined, requested) };
+}
+
+/**
+ * ADR 0016: a second successful `open` on an armed authoring session terminates the recording —
+ * the journey no longer starts where the script says it does. Any other state passes through.
+ */
+export function abortAuthoring(
+  state: SessionScriptPublicationState,
+): SessionScriptPublicationState {
+  if (state.kind !== 'authoring' || state.status !== 'armed') return state;
+  return { ...state, status: 'aborted' };
+}
+
+/** Active publication succeeded; the written path becomes the explicit target. */
+export function markAuthoringPublished(
+  state: SessionScriptPublicationState,
+  writtenPath: string,
+): SessionScriptPublicationState {
+  if (state.kind !== 'authoring') return state;
+  return {
+    kind: 'authoring',
+    status: 'published',
+    target: { kind: 'explicit', path: writtenPath, force: state.target.force },
+  };
+}
+
+/**
+ * ADR 0012 decision 6, R1/R6: `replay --save-script` arms (or re-arms, per step) the repair
+ * transaction. The boundary and source path stamp once — later arms of the same run retarget and
+ * re-authorize but never move the watermark or forget the original input.
+ */
+export function armRepair(
+  state: SessionScriptPublicationState,
+  params: Readonly<{
+    requested: Readonly<{ path?: string | undefined; force: boolean }>;
+    boundary: number;
+    sourcePath?: string | undefined;
+  }>,
+): SessionScriptPublicationState {
+  const previous = state.kind === 'repair' ? state : undefined;
+  const sourcePath = previous?.sourcePath ?? params.sourcePath;
+  return {
+    kind: 'repair',
+    status: previous?.status ?? 'armed',
+    target: resolveScriptTarget(previous?.target, params.requested),
+    boundary: previous?.boundary ?? params.boundary,
+    ...(sourcePath !== undefined ? { sourcePath } : {}),
+    ...(previous?.closeReceipt !== undefined ? { closeReceipt: previous.closeReceipt } : {}),
+  };
+}
+
+/** The plan reached its final executable step with no outstanding divergence (C2). */
+export function markRepairComplete(
+  state: SessionScriptPublicationState,
+): SessionScriptPublicationState {
+  if (state.kind !== 'repair' || state.status !== 'armed') return state;
+  return { ...state, status: 'complete' };
+}
+
+/**
+ * The platform close for `operationIdentity` succeeded. `close-succeeded` is only reachable from
+ * completeness; an incomplete repair's close still records the receipt so a retry after a failed
+ * commit does not re-dispatch, which is the receipt's whole job.
+ */
+export function recordRepairCloseSucceeded(
+  state: SessionScriptPublicationState,
+  operationIdentity: string,
+): SessionScriptPublicationState {
+  if (state.kind !== 'repair') return state;
+  return {
+    ...state,
+    status: state.status === 'complete' ? 'close-succeeded' : state.status,
+    closeReceipt: operationIdentity,
+  };
+}
+
+/** Terminal success: the healed script is on disk. Receipt cleanup is part of terminality. */
+export function commitRepair(state: SessionScriptPublicationState): SessionScriptPublicationState {
+  if (state.kind !== 'repair') return state;
+  const { closeReceipt: _closeReceipt, ...rest } = state;
+  return { ...rest, status: 'committed' };
+}
+
+/** Terminal failure: the transaction never completed, so publication is refused forever. */
+export function abortRepair(state: SessionScriptPublicationState): SessionScriptPublicationState {
+  if (state.kind !== 'repair') return state;
+  const { closeReceipt: _closeReceipt, ...rest } = state;
+  return { ...rest, status: 'aborted' };
+}
+
+/** The repair watermark (R6), or `undefined` when the session is not under repair. */
+export function repairBoundary(state: SessionScriptPublicationState): number | undefined {
+  return state.kind === 'repair' ? state.boundary : undefined;
+}
+
+/** The original `replay` input path stashed for reap tombstones (C5a). */
+export function repairSourcePath(state: SessionScriptPublicationState): string | undefined {
+  return state.kind === 'repair' ? state.sourcePath : undefined;
+}
+
+/**
+ * An uncommitted repair transaction — the state that blocks nothing (idle-reap proceeds) but
+ * demands a tombstone when torn down. Aborted repairs still qualify: they hold a boundary and
+ * never committed, exactly the sessions R7's expiry tombstone exists for.
+ */
+export function isUncommittedRepair(state: SessionScriptPublicationState): boolean {
+  return state.kind === 'repair' && state.status !== 'committed';
+}
+
+/** The explicit output path, or `undefined` for none/default (writer resolves its own). */
+export function scriptTargetPath(state: SessionScriptPublicationState): string | undefined {
+  const target = scriptPublicationTarget(state);
+  return target?.kind === 'explicit' ? target.path : undefined;
+}
+
+/** The persisted per-target overwrite authorization (#1258). */
+export function scriptTargetForce(state: SessionScriptPublicationState): boolean {
+  return scriptPublicationTarget(state)?.force === true;
 }

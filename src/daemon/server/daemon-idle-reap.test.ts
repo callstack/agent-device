@@ -91,13 +91,33 @@ test('isDaemonIdle requires no in-flight requests, no sessions, and no recording
 // reaped (with a tombstone) rather than pinning the daemon forever. ---
 
 test('a repair-armed, un-committed session does NOT block idle-reap', () => {
-  sessionStore.set('default', makeSession({ saveScriptBoundary: 0 }));
+  sessionStore.set(
+    'default',
+    makeSession({
+      scriptPublication: {
+        kind: 'repair',
+        status: 'armed',
+        target: { kind: 'default', force: false },
+        boundary: 0,
+      },
+    }),
+  );
   assert.equal(hasReapBlockingOpenSessions(sessionStore), false);
   assert.equal(isDaemonIdle({ sessionStore, inFlightRequestCount: 0 }), true);
 });
 
 test('a repair-armed session that has already COMMITTED still blocks idle-reap (until close deletes it)', () => {
-  sessionStore.set('default', makeSession({ saveScriptBoundary: 0, saveScriptCommitted: true }));
+  sessionStore.set(
+    'default',
+    makeSession({
+      scriptPublication: {
+        kind: 'repair',
+        status: 'committed',
+        target: { kind: 'default', force: false },
+        boundary: 0,
+      },
+    }),
+  );
   assert.equal(hasReapBlockingOpenSessions(sessionStore), true);
   assert.equal(isDaemonIdle({ sessionStore, inFlightRequestCount: 0 }), false);
 });
@@ -109,7 +129,18 @@ test('an ordinary (non-repair) open session still blocks idle-reap', () => {
 });
 
 test('a normal session alongside a reapable repair session still blocks idle-reap', () => {
-  sessionStore.set('default', makeSession({ name: 'default', saveScriptBoundary: 0 }));
+  sessionStore.set(
+    'default',
+    makeSession({
+      name: 'default',
+      scriptPublication: {
+        kind: 'repair',
+        status: 'armed',
+        target: { kind: 'default', force: false },
+        boundary: 0,
+      },
+    }),
+  );
   sessionStore.set('other', makeSession({ name: 'other' }));
   assert.equal(hasReapBlockingOpenSessions(sessionStore), true);
   assert.equal(isDaemonIdle({ sessionStore, inFlightRequestCount: 0 }), false);

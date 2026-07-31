@@ -28,6 +28,11 @@ import type { LeaseRegistry } from '../lease-registry.ts';
 import { releaseSessionLease } from '../lease-lifecycle.ts';
 import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
 import {
+  hasRepairPlatformCloseReceipt,
+  isRepairArmedSession,
+  recordRepairPlatformClose,
+} from '../session-replay-transaction.ts';
+import {
   reportSessionCleanupFailures,
   restoreSessionAndroidIme,
   stopAppleRunnerForClose,
@@ -152,11 +157,13 @@ async function prepareRepairClose(params: {
   sessionStore: SessionStore;
 }): Promise<RepairClosePreparation> {
   const { req, session, logPath, sessionStore } = params;
-  const repairArmed = session.saveScriptBoundary !== undefined;
+  const repairArmed = isRepairArmedSession(session);
   const closeReceipt = buildRepairPlatformCloseReceipt(req);
-  if (repairArmed && session.repairPlatformCloseReceipt !== closeReceipt) {
+  if (repairArmed && !hasRepairPlatformCloseReceipt(session, closeReceipt)) {
     const platformCloseError = await dispatchTargetedPlatformClose({ req, session, logPath });
     if (platformCloseError) {
+      // Platform-close failure leaves the transaction state unchanged: no receipt is recorded,
+      // so the retry dispatches afresh.
       return {
         response: buildRetriableRepairCloseFailureResponse(
           session,
@@ -164,15 +171,16 @@ async function prepareRepairClose(params: {
         ),
       };
     }
-    session.repairPlatformCloseReceipt = closeReceipt;
+    recordRepairPlatformClose(session, closeReceipt);
   }
   const repairCommit = commitRepairScriptBeforeClose(sessionStore, session, req);
   if (repairCommit.kind === 'failed') {
+    // Publication failure retains target, force, and the close receipt; the same-identity retry
+    // skips close dispatch above.
     return {
       response: buildRetriableRepairCloseFailureResponse(session, repairCommit.error),
     };
   }
-  session.repairPlatformCloseReceipt = undefined;
   return {
     repairArmed,
     ...(repairCommit.kind === 'committed' && repairCommit.path
@@ -278,12 +286,11 @@ async function stopOrRetainAppleRunnerAfterClose(
 
 function assertTerminalRecordingCloseAllowed(req: DaemonRequest, session: SessionState): void {
   if (!req.flags?.saveScript) return;
-  if (session.scriptRecordingState !== 'aborted' && session.scriptRecordingState !== 'published') {
-    return;
-  }
+  const state = session.scriptPublication;
+  if (state?.kind !== 'authoring' || state.status === 'armed') return;
   throw new AppError(
     'INVALID_ARGS',
-    `close --save-script cannot ${session.scriptRecordingState === 'published' ? 're-publish' : 'publish'} this terminal recording. Retry with plain close; it will tear down the session without writing.`,
+    `close --save-script cannot ${state.status === 'published' ? 're-publish' : 'publish'} this terminal recording. Retry with plain close; it will tear down the session without writing.`,
   );
 }
 

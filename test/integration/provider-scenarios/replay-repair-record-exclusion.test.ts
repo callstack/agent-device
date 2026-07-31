@@ -69,9 +69,10 @@ test('Provider-backed integration: a repair-armed segment excludes diagnostic re
     // R7/C1: the divergence reports the repair transaction as held — the exact
     // signal the #1271 stage-1 guidance clause is gated on.
     assert.equal(divergenceReport.resume.repairSessionHeld, true);
-    // The session is repair-armed: `saveScriptBoundary` is the boundary the
+    // The session is repair-armed: the repair variant's boundary is what the
     // exclusion keys off (an ordinary `open --save-script` never sets it).
-    const armedBoundary = daemon.session()?.saveScriptBoundary;
+    const publication = daemon.session()?.scriptPublication;
+    const armedBoundary = publication?.kind === 'repair' ? publication.boundary : undefined;
     assert.equal(typeof armedBoundary, 'number');
 
     // --- The exclusion contrast: the SAME observation-only command, against the

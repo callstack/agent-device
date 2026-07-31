@@ -9,6 +9,7 @@ import { buildRequestFinishedEvent } from '../session-event-log.ts';
 import type { TargetAnnotationV1 } from '../../replay/target-identity.ts';
 import { HEAL_COMPLETE_SENTINEL } from '../session-script-writer.ts';
 import { parseReplayScriptDetailed } from '../../replay/script.ts';
+import { repairPublication } from '../../__tests__/test-utils/session-factories.ts';
 
 type RecordActionEntry = Parameters<SessionStore['recordAction']>[1];
 
@@ -723,8 +724,10 @@ test('writeRepairTombstone/readRepairTombstone round-trips owner + source path',
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-tombstone-'));
   const store = new SessionStore(path.join(root, 'sessions'));
   const session = makeSession('default');
-  session.saveScriptBoundary = 0;
-  session.repairSourcePath = '/flows/login.ad';
+  session.scriptPublication = repairPublication('armed', {
+    boundary: 0,
+    sourcePath: '/flows/login.ad',
+  });
 
   store.writeRepairTombstone(session);
   const tombstone = store.readRepairTombstone('default');
@@ -774,10 +777,11 @@ test('BLOCKER 2: finalizeRepairTeardown of a COMPLETE transaction whose commit F
 
   const session = makeSession('default');
   session.recordSession = true;
-  session.saveScriptBoundary = 0;
-  session.saveScriptComplete = true;
-  session.saveScriptPath = healedPath;
-  session.repairSourcePath = '/flows/login.ad';
+  session.scriptPublication = repairPublication('complete', {
+    boundary: 0,
+    path: healedPath,
+    sourcePath: '/flows/login.ad',
+  });
   session.actions = [{ ts: 1, command: 'open', positionals: ['Demo'], flags: {} }];
 
   // Idle-reap/shutdown teardown (never routes through close's handler).
@@ -788,7 +792,10 @@ test('BLOCKER 2: finalizeRepairTeardown of a COMPLETE transaction whose commit F
   assert.equal(fs.readFileSync(healedPath, 'utf8'), before);
   // Never committed (the write failed), so the ordinary success bookkeeping
   // never ran.
-  assert.notEqual(session.saveScriptCommitted, true);
+  assert.notEqual(
+    session.scriptPublication?.kind === 'repair' ? session.scriptPublication.status : undefined,
+    'committed',
+  );
 
   const tombstone = store.readRepairTombstone('default');
   assert.ok(tombstone, 'expected a tombstone to preserve the failed-commit outcome');
@@ -811,9 +818,7 @@ test('BLOCKER 3: finalizeRepairTeardown auto-commit records a terminal close, pr
 
   const session = makeSession('default');
   session.recordSession = true;
-  session.saveScriptBoundary = 0;
-  session.saveScriptComplete = true;
-  session.saveScriptPath = healedPath;
+  session.scriptPublication = repairPublication('complete', { boundary: 0, path: healedPath });
   session.actions = [
     { ts: 1, command: 'open', positionals: ['Demo'], flags: {} },
     { ts: 2, command: 'click', positionals: ['id="save-v2"'], flags: {} },
@@ -824,7 +829,10 @@ test('BLOCKER 3: finalizeRepairTeardown auto-commit records a terminal close, pr
   // must synthesize it itself before auto-committing.
   store.finalizeRepairTeardown(session);
 
-  assert.equal(session.saveScriptCommitted, true);
+  assert.equal(
+    session.scriptPublication?.kind === 'repair' ? session.scriptPublication.status : undefined,
+    'committed',
+  );
   assert.equal(store.readRepairTombstone('default'), undefined);
   const script = fs.readFileSync(healedPath, 'utf8');
   assert.ok(script.includes(HEAL_COMPLETE_SENTINEL));

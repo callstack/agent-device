@@ -36,6 +36,8 @@ import { runReplayScriptFile } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { repairSessionBoundary } from '../../session-replay-transaction.ts';
+import type { SessionState } from '../../types.ts';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,
@@ -46,6 +48,13 @@ import {
   recordArticleEvidence,
   toSnapshotNodes,
 } from './session-replay-target-classification-fixtures.ts';
+
+/** Repair-transaction status, or `undefined` outside a repair publication. */
+function sessionRepairStatus(session: SessionState | undefined) {
+  return session?.scriptPublication?.kind === 'repair'
+    ? session.scriptPublication.status
+    : undefined;
+}
 
 const mockDispatchCommand = vi.mocked(dispatchCommand);
 
@@ -104,7 +113,7 @@ test('a record-and-heal divergence on the LAST step resumes with an empty tail a
 
   const session = sessionStore.get(sessionName)!;
   expect(session.actions.map((a) => a.command)).toEqual(['open']);
-  expect(session.saveScriptComplete).toBeFalsy();
+  expect(sessionRepairStatus(session)).toBe('armed');
 
   // --- A blind resume at the reported target BEFORE performing the
   // corrective press is rejected: no new action was recorded since the
@@ -163,7 +172,7 @@ test('a record-and-heal divergence on the LAST step resumes with an empty tail a
     expect((leg2.data as { replayed: number }).replayed).toBe(0);
   }
   expect(session.actions.map((a) => a.command)).toEqual(['open', 'press']);
-  expect(session.saveScriptComplete).toBe(true);
+  expect(sessionRepairStatus(session)).toBe('complete');
 
   // --- Commit: the transaction is COMPLETE, so the healed script actually
   // publishes — the corrective press survives, "click" (never recorded) does
@@ -231,7 +240,7 @@ test('a manual divergence (unannotated action-failure) on the LAST step resumes 
 
   const session = sessionStore.get(sessionName)!;
   expect(session.actions.map((a) => a.command)).toEqual(['open']);
-  expect(session.saveScriptComplete).toBeFalsy();
+  expect(sessionRepairStatus(session)).toBe('armed');
   // The watermark IS now stamped for `manual` (#1262) — targeting N + 1 (3),
   // a DIFFERENT ordinal than the unshifted `resume.from` (2) above.
   expect(session.pendingRecordAndHeal).toEqual({ expectedFrom: 3, actionsCountAtDivergence: 1 });
@@ -285,7 +294,7 @@ test('a manual divergence (unannotated action-failure) on the LAST step resumes 
     expect((leg2.data as { replayed: number }).replayed).toBe(0);
   }
   expect(session.actions.map((a) => a.command)).toEqual(['open', 'press']);
-  expect(session.saveScriptComplete).toBe(true);
+  expect(sessionRepairStatus(session)).toBe('complete');
 
   // --- Commit: the transaction is COMPLETE, so the healed script actually
   // publishes — the corrective press survives, "click" (never recorded,
@@ -362,7 +371,7 @@ test('a caution (identity-mismatch) divergence on the LAST step resumes with an 
 
   const session = sessionStore.get(sessionName)!;
   expect(session.actions.map((a) => a.command)).toEqual(['open']);
-  expect(session.saveScriptComplete).toBeFalsy();
+  expect(sessionRepairStatus(session)).toBe('armed');
   expect(session.pendingRecordAndHeal).toEqual({ expectedFrom: 3, actionsCountAtDivergence: 1 });
 
   // --- A blind resume at the empty-tail target BEFORE performing the
@@ -412,7 +421,7 @@ test('a caution (identity-mismatch) divergence on the LAST step resumes with an 
     expect((leg2.data as { replayed: number }).replayed).toBe(0);
   }
   expect(session.actions.map((a) => a.command)).toEqual(['open', 'press']);
-  expect(session.saveScriptComplete).toBe(true);
+  expect(sessionRepairStatus(session)).toBe('complete');
 
   // --- Commit: COMPLETE, so the healed script publishes the corrective
   // press; the pre-action "click" (never dispatched) does not appear. ---
@@ -519,7 +528,7 @@ test('--from N stays legal for a caution divergence even after the N + 1 empty-t
     expect((resumeAtN.data as { replayed: number }).replayed).toBe(1);
   }
   expect(session.actions.map((a) => a.command)).toEqual(['open', 'click']);
-  expect(session.saveScriptComplete).toBe(true);
+  expect(sessionRepairStatus(session)).toBe('complete');
 });
 
 test('an unauthorized --from one past the plan end is rejected on an ARMED session whose last-step divergence hint is state-repair, not record-and-heal', async () => {
@@ -581,7 +590,7 @@ test('an unauthorized --from one past the plan end is rejected on an ARMED sessi
   expect(divergence.resume.from).toBe(2);
   const session = sessionStore.get(sessionName)!;
   expect(session.pendingRecordAndHeal).toBeUndefined();
-  expect(session.saveScriptBoundary).toBeDefined(); // genuinely armed
+  expect(repairSessionBoundary(session)).toBeDefined(); // genuinely armed
 
   // --- Exploit attempt: `--from 3` (one past the plan's end) — exactly the
   // ordinal a record-and-heal empty-tail resume would use — on an armed
@@ -604,7 +613,7 @@ test('an unauthorized --from one past the plan end is rejected on an ARMED sessi
     expect(exploitAttempt.error.code).toBe('INVALID_ARGS');
     expect(exploitAttempt.error.message).toMatch(/out of range/);
   }
-  expect(session.saveScriptComplete).toBeFalsy();
+  expect(sessionRepairStatus(session)).toBe('armed');
 });
 
 test('a stale --plan-digest on an empty-tail resume is rejected WITHOUT consuming the watermark, so a subsequent correct retry still succeeds', async () => {
@@ -699,6 +708,6 @@ test('a stale --plan-digest on an empty-tail resume is rejected WITHOUT consumin
     invoke,
   });
   expect(retry.ok).toBe(true);
-  expect(session.saveScriptComplete).toBe(true);
+  expect(sessionRepairStatus(session)).toBe('complete');
   expect(session.pendingRecordAndHeal).toBeUndefined();
 });

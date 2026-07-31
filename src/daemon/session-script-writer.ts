@@ -19,6 +19,13 @@ import {
 } from '../replay/script-utils.ts';
 import type { SessionAction, SessionState } from './types.ts';
 import {
+  NO_SCRIPT_PUBLICATION,
+  commitRepair,
+  isRepairCommittable,
+  scriptTargetPath,
+} from './session-script-publication-state.ts';
+import { isRepairArmedSession, repairSessionBoundary } from './session-replay-transaction.ts';
+import {
   assertActivePublicationPortability,
   toActivePublicationFailure,
   validateActivePublicationActions,
@@ -51,8 +58,8 @@ export type SessionScriptWriteOptions = {
  * only recognizes the `target-v1` prefix), so it never participates in the
  * target-annotation binding rule. Written only when a repair-armed session's
  * write reaches this point at all, since `write()` already gated that on the
- * transaction being COMPLETE (`saveScriptComplete`) — so every write carrying
- * it IS a complete, committed transaction.
+ * transaction being COMPLETE — so every write carrying it IS a complete,
+ * committed transaction.
  */
 export const HEAL_COMPLETE_SENTINEL = '# agent-device:heal-complete';
 
@@ -66,7 +73,7 @@ export const HEAL_COMPLETE_SENTINEL = '# agent-device:heal-complete';
  *   after a divergence but before the plan finishes from committing a PREFIX;
  *   every non-completion teardown (divergence-only exit, daemon shutdown,
  *   idle-reap) lands here too.
- * Ordinary (non-repair) recording is never blocked here (no `saveScriptBoundary`) —
+ * Ordinary (non-repair) recording is never blocked here (no repair variant) —
  * this gate only decides whether `write()` attempts a publish AT ALL. It says
  * nothing about what happens once it does: `publishHealedScriptAtomically`'s
  * refuse-on-exist applies to that attempted publish uniformly, repair-armed or
@@ -74,9 +81,10 @@ export const HEAL_COMPLETE_SENTINEL = '# agent-device:heal-complete';
  * but it can still be refused if the target already exists.
  */
 function isRepairArmedWriteBlocked(session: SessionState): boolean {
-  if (session.saveScriptBoundary === undefined) return false;
-  if (session.saveScriptCommitted) return true;
-  return !session.saveScriptComplete;
+  const state = session.scriptPublication ?? NO_SCRIPT_PUBLICATION;
+  if (state.kind !== 'repair') return false;
+  if (state.status === 'committed') return true;
+  return !isRepairCommittable(state);
 }
 
 export class SessionScriptWriter {
@@ -87,7 +95,7 @@ export class SessionScriptWriter {
   }
 
   write(session: SessionState, options?: SessionScriptWriteOptions): SessionScriptWriteResult {
-    const repairArmed = session.saveScriptBoundary !== undefined;
+    const repairArmed = isRepairArmedSession(session);
     const activePublication = options?.publication === 'active';
     let scriptPath: string | undefined;
     try {
@@ -101,16 +109,20 @@ export class SessionScriptWriter {
       const scriptDir = path.dirname(scriptPath);
       if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir, { recursive: true });
       // #1258: `options.force` is the caller's already-merged decision
-      // (typically `req.flags?.force || session.saveScriptForce` — see
-      // `session-close.ts`/`session-store.ts`), not read from `session`
-      // directly here, so this stays a pure formatting+publish step.
+      // (`effectiveWriteForce` — a live flag or the per-target grant), not
+      // read from `session` directly here, so this stays a pure
+      // formatting+publish step.
       publishHealedScriptAtomically({
         scriptPath,
         script: prepared.script,
         force: options?.force,
       });
       // COMMITTED: idempotent guard above + teardown's abort/tombstone routing.
-      if (repairArmed) session.saveScriptCommitted = true;
+      if (repairArmed) {
+        session.scriptPublication = commitRepair(
+          session.scriptPublication ?? NO_SCRIPT_PUBLICATION,
+        );
+      }
       return { written: true, path: scriptPath, actionCount: prepared.actionCount };
     } catch (error) {
       return handleSessionScriptWriteFailure({
@@ -124,8 +136,9 @@ export class SessionScriptWriter {
   }
 
   private resolveScriptPath(session: SessionState): string {
-    if (session.saveScriptPath) {
-      return expandSessionPath(session.saveScriptPath);
+    const targetPath = scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION);
+    if (targetPath) {
+      return expandSessionPath(targetPath);
     }
     const safeName = safeSessionName(session.name);
     const timestamp = new Date(session.createdAt).toISOString().replace(/[:.]/g, '-');
@@ -280,13 +293,14 @@ function buildOptimizedActions(
   session: SessionState,
   options: { strictPortableRefs?: boolean } = {},
 ): SessionAction[] {
-  // ADR 0012 decision 6, R6: a repair-armed session (`saveScriptBoundary` set
-  // by `replay --save-script`) serializes only the actions from that
-  // watermark onward — the repair run's own execution path — never the
-  // whole session history. Absent a boundary (ordinary `open`/`close
-  // --save-script`), this slices from 0: unchanged, full-history behavior.
-  const repairArmed = session.saveScriptBoundary !== undefined;
-  const relevantActions = session.actions.slice(session.saveScriptBoundary ?? 0);
+  // ADR 0012 decision 6, R6: a repair-armed session (armed by `replay
+  // --save-script`) serializes only the actions from its boundary watermark
+  // onward — the repair run's own execution path — never the whole session
+  // history. Absent a boundary (ordinary `open`/`close --save-script`), this
+  // slices from 0: unchanged, full-history behavior.
+  const boundary = repairSessionBoundary(session);
+  const repairArmed = boundary !== undefined;
+  const relevantActions = session.actions.slice(boundary ?? 0);
   const optimized: SessionAction[] = [];
   for (const action of relevantActions) {
     if (action.command === 'snapshot') continue;

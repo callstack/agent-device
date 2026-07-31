@@ -49,35 +49,23 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
   lastComparisonSafeSnapshot: ['src/daemon/session-snapshot.ts'],
   androidSnapshotFreshness: ['src/daemon/android-snapshot-freshness.ts'],
 
-  // ADR 0016 active-session publication. `scriptRecordingState` tracks the armed -> published
-  // lifecycle; `recordSession` is the broader "record actions" flag and is deliberately set
-  // on its own by paths that record without arming a publication.
-  scriptRecordingState: [
-    'src/daemon/handlers/session-open.ts',
-    'src/daemon/handlers/session-script-publication.ts',
+  // #1478 P4a script publication. The tagged aggregate replaced the eight co-resident
+  // `saveScript*`/`scriptRecordingState`/`repair*` fields; its ONLY writers are the two
+  // daemon-private projections (`session-replay-transaction.ts`,
+  // `session-script-publication-capability.ts`) and the writer's commit transition.
+  // `recordSession` is the broader "record actions" flag and is deliberately set on its own by
+  // paths that record without arming a publication.
+  scriptPublication: [
+    'src/daemon/session-replay-transaction.ts',
+    'src/daemon/session-script-publication-capability.ts',
+    'src/daemon/session-script-writer.ts',
   ],
   recordSession: [
     'src/daemon/handlers/session-close-script.ts',
-    'src/daemon/handlers/session-open.ts',
-    'src/daemon/handlers/session-replay-runtime.ts',
-    'src/daemon/handlers/session-script-publication.ts',
-    'src/daemon/session-action-recorder.ts',
+    'src/daemon/session-replay-transaction.ts',
+    'src/daemon/session-script-publication-capability.ts',
   ],
-  saveScriptPath: [
-    'src/daemon/handlers/session-replay-runtime.ts',
-    'src/daemon/handlers/session-script-publication.ts',
-    'src/daemon/session-action-recorder.ts',
-  ],
-  saveScriptForce: [
-    'src/daemon/handlers/session-replay-runtime.ts',
-    'src/daemon/handlers/session-script-publication.ts',
-    'src/daemon/session-action-recorder.ts',
-  ],
-  saveScriptBoundary: ['src/daemon/handlers/session-replay-runtime.ts'],
-  saveScriptCommitted: ['src/daemon/session-script-writer.ts'],
-  repairSourcePath: ['src/daemon/handlers/session-replay-runtime.ts'],
   pendingRecordAndHeal: ['src/daemon/handlers/session-replay-resume.ts'],
-  repairPlatformCloseReceipt: ['src/daemon/handlers/session-close.ts'],
 
   trace: ['src/daemon/handlers/record-trace.ts'],
   recording: ['src/daemon/handlers/record-trace-recording.ts'],
@@ -93,7 +81,6 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
   appName: ['src/daemon/snapshot-runtime.ts'],
   lease: ['src/daemon/handlers/session-open.ts'],
   deviceClaim: ['src/daemon/handlers/session-open.ts'],
-  saveScriptComplete: ['src/daemon/handlers/session-replay-runtime.ts'],
 };
 
 /**

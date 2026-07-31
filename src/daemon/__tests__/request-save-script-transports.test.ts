@@ -11,6 +11,7 @@
  * `.ad` artifact behind.
  */
 import fs from 'node:fs';
+import { NO_SCRIPT_PUBLICATION, scriptTargetPath } from '../session-script-publication-state.ts';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -192,7 +193,7 @@ for (const [transport, send] of TRANSPORTS) {
     expect(session.actions).toEqual([]);
     // No arming: neither the recording marker nor the publication target moved.
     expect(session.recordSession).toBe(undefined);
-    expect(session.saveScriptPath).toBe(undefined);
+    expect(session.scriptPublication).toBe(undefined);
     // No artifact: the write a later close/teardown would attempt publishes nothing.
     expect(sessionStore.writeSessionLog(session)).toEqual({ written: false });
     expect(listAdArtifacts(root)).toEqual([]);
@@ -283,7 +284,7 @@ test('an owner-armed session still records its target and publishes its script',
     result: { session: SESSION },
   });
   expect(session.recordSession).toBe(true);
-  expect(session.saveScriptPath).toBe(target);
+  expect(scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION)).toBe(target);
 
   const result = sessionStore.writeSessionLog(session);
   expect(result).toEqual({ written: true, path: target, actionCount: 1 });

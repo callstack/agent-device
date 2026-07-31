@@ -3,6 +3,13 @@ import { successText } from '../../utils/success-text.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { recordSessionAction } from './handler-utils.ts';
+import { NO_SCRIPT_PUBLICATION, scriptTargetPath } from '../session-script-publication-state.ts';
+import {
+  effectiveWriteForce,
+  isSessionScriptPublished,
+  markCloseGeneratedPublicationDone,
+} from '../session-script-publication-capability.ts';
+import { abortRepairTransaction, isRepairArmedSession } from '../session-replay-transaction.ts';
 
 export type RepairCloseCommit =
   | { kind: 'not-armed' }
@@ -10,24 +17,21 @@ export type RepairCloseCommit =
   | { kind: 'aborted' }
   | { kind: 'failed'; error: AppError };
 
-function shouldOverwriteSavedScript(req: DaemonRequest, session: SessionState): boolean {
-  return Boolean(req.flags?.force || session.saveScriptForce);
-}
-
 export function commitRepairScriptBeforeClose(
   sessionStore: SessionStore,
   session: SessionState,
   req: DaemonRequest,
 ): RepairCloseCommit {
-  if (session.saveScriptBoundary === undefined) return { kind: 'not-armed' };
+  if (!isRepairArmedSession(session)) return { kind: 'not-armed' };
 
   const actionsBeforeClose = session.actions.length;
   recordSessionAction(sessionStore, session, req, 'close', {
     session: session.name,
     ...successText(`Closed: ${session.name}`),
   });
+  const alreadyPublished = isSessionScriptPublished(session);
   const result = sessionStore.writeSessionLog(session, {
-    force: shouldOverwriteSavedScript(req, session),
+    force: effectiveWriteForce(session, req.flags?.force),
   });
   if (result.written) return { kind: 'committed', path: result.path };
   if (result.error) {
@@ -35,7 +39,9 @@ export function commitRepairScriptBeforeClose(
     session.actions.length = actionsBeforeClose;
     return { kind: 'failed', error: result.error };
   }
-  return session.saveScriptComplete ? { kind: 'committed' } : { kind: 'aborted' };
+  if (alreadyPublished) return { kind: 'committed' };
+  abortRepairTransaction(session);
+  return { kind: 'aborted' };
 }
 
 export function buildRetriableRepairCloseFailureResponse(
@@ -43,6 +49,7 @@ export function buildRetriableRepairCloseFailureResponse(
   error: AppError,
 ): DaemonResponse {
   const normalized = normalizeError(error);
+  const savedScript = scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION);
   return {
     ok: false,
     error: {
@@ -50,7 +57,7 @@ export function buildRetriableRepairCloseFailureResponse(
       details: {
         ...normalized.details,
         session: session.name,
-        ...(session.saveScriptPath ? { savedScript: session.saveScriptPath } : {}),
+        ...(savedScript ? { savedScript } : {}),
       },
       retriable: true,
     },
@@ -70,12 +77,16 @@ export function finalizeOrdinaryCloseScript(params: {
       ...successText(`Closed: ${session.name}`),
     });
   }
+  // The recorded close action already armed target/force through the recorder's flag ingress.
+  // On a platform-close failure that action was never recorded; the log still publishes, but —
+  // as before this migration — to the session default, not the request's explicit path.
   if (req.flags?.saveScript) session.recordSession = true;
 
   try {
-    sessionStore.writeSessionLog(session, {
-      force: shouldOverwriteSavedScript(req, session),
+    const result = sessionStore.writeSessionLog(session, {
+      force: effectiveWriteForce(session, req.flags?.force),
     });
+    if (result.written) markCloseGeneratedPublicationDone(session, result.path);
     return undefined;
   } catch (error) {
     return toOrdinaryCloseSaveScriptFailure(error);

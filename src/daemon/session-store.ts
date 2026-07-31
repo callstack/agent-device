@@ -4,6 +4,12 @@ import { emitDiagnostic } from '../utils/diagnostics.ts';
 import type { SessionRuntimeHints, SessionState } from './types.ts';
 import { recordActionEntry, type RecordActionEntry } from './session-action-recorder.ts';
 import { expandSessionPath, safeSessionName } from './session-paths.ts';
+import { NO_SCRIPT_PUBLICATION, isRepairCommittable } from './session-script-publication-state.ts';
+import { effectiveWriteForce } from './session-script-publication-capability.ts';
+import {
+  isUncommittedRepairSession,
+  repairSessionSourcePath,
+} from './session-replay-transaction.ts';
 import {
   SessionScriptWriter,
   type SessionScriptWriteOptions,
@@ -173,8 +179,10 @@ export class SessionStore {
     // #1258: no live request here (idle-reap/daemon-shutdown teardown), so
     // the only source of `force` is whatever was persisted on the session at
     // arm time.
-    const result = this.writeSessionLog(session, { force: session.saveScriptForce });
-    if (session.saveScriptBoundary !== undefined && session.saveScriptCommitted !== true) {
+    const result = this.writeSessionLog(session, {
+      force: effectiveWriteForce(session, undefined),
+    });
+    if (isUncommittedRepairSession(session)) {
       if (!result.written && result.error) {
         this.writeRepairTombstone(session, REPAIR_TOMBSTONE_TTL_MS, {
           code: String(result.error.code),
@@ -195,9 +203,8 @@ export class SessionStore {
    * nothing to make self-contained.
    */
   private recordRepairFinalizeCloseIfCommitting(session: SessionState): void {
-    if (session.saveScriptBoundary === undefined) return;
-    if (session.saveScriptComplete !== true) return;
-    if (session.saveScriptCommitted === true) return;
+    const state = session.scriptPublication ?? NO_SCRIPT_PUBLICATION;
+    if (!isRepairCommittable(state)) return;
     this.recordAction(session, {
       command: 'close',
       positionals: [],
@@ -229,7 +236,9 @@ export class SessionStore {
         owner: session.name,
         reapedAt: Date.now(),
         expiresAt: Date.now() + ttlMs,
-        ...(session.repairSourcePath ? { sourcePath: session.repairSourcePath } : {}),
+        ...(repairSessionSourcePath(session)
+          ? { sourcePath: repairSessionSourcePath(session) }
+          : {}),
         ...(commitFailure ? { commitFailure } : {}),
       };
       fs.writeFileSync(this.repairTombstonePath(session.name), `${JSON.stringify(tombstone)}\n`);

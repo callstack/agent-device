@@ -270,7 +270,11 @@ test('#1391: a close-time script save failure still clears the advisory claim an
   const session = makeAuthoringSession('close-save-script-failure', {
     device: android,
     deviceClaim: acquired.ownership,
-    saveScriptPath: targetPath,
+    scriptPublication: {
+      kind: 'authoring',
+      status: 'armed',
+      target: { kind: 'explicit', path: targetPath, force: false },
+    },
   });
   store.set('close-save-script-failure', session);
   mockDispatch.mockResolvedValue({});

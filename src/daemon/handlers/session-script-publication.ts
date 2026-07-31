@@ -1,8 +1,12 @@
 import { INTERNAL_COMMANDS } from '../../command-catalog.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { successText } from '../../utils/success-text.ts';
-import { applySaveScriptRetarget } from '../session-action-recorder.ts';
-import { expandSessionPath } from '../session-paths.ts';
+import {
+  effectiveWriteForce,
+  markActivePublicationDone,
+  retargetActivePublication,
+} from '../session-script-publication-capability.ts';
+import { isRepairArmedSession } from '../session-replay-transaction.ts';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 
@@ -34,13 +38,10 @@ export function handleSessionScriptPublication(params: {
   if (req.positionals?.[0] !== undefined && !explicitPath) {
     return failure(new AppError('INVALID_ARGS', 'session save-script path cannot be empty.'));
   }
-  if (explicitPath) {
-    applySaveScriptRetarget(session, expandSessionPath(explicitPath), req.flags?.force);
-  }
-  if (req.flags?.force) session.saveScriptForce = true;
+  retargetActivePublication(session, { explicitPath, liveForce: req.flags?.force });
 
   const result = sessionStore.writeSessionLog(session, {
-    force: Boolean(req.flags?.force || session.saveScriptForce),
+    force: effectiveWriteForce(session, req.flags?.force),
     publication: 'active',
   });
   if (!result.written) {
@@ -53,9 +54,7 @@ export function handleSessionScriptPublication(params: {
     );
   }
 
-  session.scriptRecordingState = 'published';
-  session.recordSession = false;
-  session.saveScriptPath = result.path;
+  markActivePublicationDone(session, result.path);
   return {
     ok: true,
     data: {
@@ -68,7 +67,7 @@ export function handleSessionScriptPublication(params: {
 }
 
 function validatePublicationEligibility(session: SessionState): AppError | undefined {
-  if (session.saveScriptBoundary !== undefined) {
+  if (isRepairArmedSession(session)) {
     return new AppError(
       'COMMAND_FAILED',
       'This session has an active .ad repair transaction and cannot use ordinary active-session publication.',
@@ -77,19 +76,20 @@ function validatePublicationEligibility(session: SessionState): AppError | undef
       },
     );
   }
-  if (session.scriptRecordingState === 'aborted') {
+  const state = session.scriptPublication;
+  if (state?.kind === 'authoring' && state.status === 'aborted') {
     return new AppError(
       'COMMAND_FAILED',
       'This script recording was aborted by a second successful open and cannot be published.',
       { hint: 'Close this session and start a fresh one with open <app> --save-script[=<path>].' },
     );
   }
-  if (session.scriptRecordingState === 'published') {
+  if (state?.kind === 'authoring' && state.status === 'published') {
     return new AppError('COMMAND_FAILED', 'This script recording has already been published.', {
       hint: 'Continue using the live session, or close it and start a fresh authoring session.',
     });
   }
-  if (session.scriptRecordingState !== 'armed' || !session.recordSession) {
+  if (state?.kind !== 'authoring' || state.status !== 'armed' || !session.recordSession) {
     return new AppError(
       'COMMAND_FAILED',
       'Script recording was not armed before this journey began; session history cannot be published without recording-time target evidence.',

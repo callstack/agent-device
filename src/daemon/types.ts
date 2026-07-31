@@ -26,6 +26,7 @@ import type { SnapshotDiagnosticsState } from '@agent-device/contracts/capture';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { AudioProbeSource } from '@agent-device/contracts/platform';
 import type { AndroidNativePerfSession } from '../platforms/android/perf.ts';
+import type { SessionScriptPublicationState } from './session-script-publication-state.ts';
 import type {
   AppleXctracePerfCapture,
   AppleXctracePerfMode,
@@ -367,63 +368,15 @@ export type SessionState = {
   /** Session was created by record start and should be released when recording stops. */
   recordOnlySession?: boolean;
   recordSession?: boolean;
-  /** ADR 0016 ordinary open-to-destination authoring lifecycle. Repair state is separate. */
-  scriptRecordingState?: 'armed' | 'aborted' | 'published';
-  saveScriptPath?: string;
   /**
-   * #1258: `--force`/`--overwrite` captured at the moment `--save-script` was
-   * armed (`open --save-script --force`, `close --save-script --force`, or
-   * `replay --save-script --force`'s first arm) — persisted here, like
-   * `saveScriptPath`, so a LATER write that does not repeat the flag (a bare
-   * `close` finishing a session opened with `open --save-script --force`, a
-   * `--from` continuation leg, or an unattended auto-commit teardown with no
-   * live request at all) still honors the overwrite the caller opted into up
-   * front. The effective decision at any write site is `req.flags?.force ||
-   * session.saveScriptForce`.
-   *
-   * Force is PER-TARGET, not a session-wide standing grant: it stays set while
-   * the target is unchanged, but re-arming a DIFFERENT `--save-script=<other>`
-   * without a live `--force` CLEARS it (`applySaveScriptRetarget`), so a later
-   * retarget can never silently overwrite a file the caller never opted into.
-   * A live `--force` on the retarget re-grants it for the new target.
+   * The tagged script-publication aggregate (#1478 P4a): ordinary authoring (ADR 0016), the
+   * ADR 0012 decision 6 repair transaction, and the shared output target with its per-target
+   * force authorization, in one state machine. `undefined` means `NO_SCRIPT_PUBLICATION` —
+   * mutate only through the daemon-private `ReplaySessionTransaction`/`SessionScriptPublication`
+   * projections; ordinary readers use the read helpers in
+   * `session-script-publication-state.ts`.
    */
-  saveScriptForce?: boolean;
-  /**
-   * ADR 0012 decision 6, R6: `session.actions.length` at the `replay
-   * --save-script` invocation that armed this session — the repair-run
-   * boundary. The healed `.ad` serializes only `session.actions` from this
-   * index onward, so a reused session's earlier, unrelated actions never
-   * leak into the healed script.
-   */
-  saveScriptBoundary?: number;
-  /**
-   * ADR 0012 decision 6, R7 + commit semantics (C2): the repair TRANSACTION
-   * completion flag. `true` iff the last repair-armed replay run reached its
-   * final EXECUTABLE step with no outstanding divergence (the terminal source
-   * `close` is excluded — C4). Commit is gated on this, NOT merely on a
-   * `close`: `SessionScriptWriter.write` publishes a repair-armed session's
-   * healed `.ad` only when complete, so a `close`/`close --save-script`
-   * issued after a divergence but before the plan finishes discards a prefix
-   * instead of committing it. States: ARMED (`saveScriptBoundary` set,
-   * complete unset) -> COMPLETE (this true) -> COMMITTED (`saveScriptCommitted`).
-   */
-  saveScriptComplete?: boolean;
-  /**
-   * ADR 0012 decision 6 (C2): set by the writer after a repair-armed session's
-   * healed `.ad` is atomically published. Makes re-publish idempotent (a second
-   * `writeSessionLog` no-ops) and lets teardown distinguish a COMMITTED session
-   * (nothing to tombstone) from an aborted/reaped one.
-   */
-  saveScriptCommitted?: boolean;
-  /** Target identity of a successful repair close awaiting script commit. */
-  repairPlatformCloseReceipt?: string;
-  /**
-   * ADR 0012 decision 6, R7 (C5a): the original replay input path of an armed
-   * repair, stashed so an idle-reap tombstone can hand the agent an actionable
-   * `replay <path> --save-script` re-run command instead of a bare
-   * SESSION_NOT_FOUND.
-   */
-  repairSourcePath?: string;
+  scriptPublication?: SessionScriptPublicationState;
   /**
    * ADR 0012 decision 6, R2/R3, extended per #1262: set whenever a
    * `record-and-heal` divergence's `resume` reports `allowed: true` — its

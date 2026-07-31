@@ -189,7 +189,11 @@ test('#1391: an ordinary close-time script-save failure surfaces details.reason/
     `agent-device-router-typed-error-${Date.now()}-${Math.random().toString(36).slice(2)}.ad`,
   );
   fs.writeFileSync(targetPath, 'pre-existing\n');
-  session.saveScriptPath = targetPath;
+  session.scriptPublication = {
+    kind: 'authoring',
+    status: 'armed',
+    target: { kind: 'explicit', path: targetPath, force: false },
+  };
   sessionStore.set('typed-error', session);
 
   try {

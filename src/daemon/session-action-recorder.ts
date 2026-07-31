@@ -2,7 +2,8 @@ import type { CommandFlags } from '../core/dispatch.ts';
 import { SCREENSHOT_ACTION_FLAG_KEYS } from '@agent-device/contracts/capture';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import type { DaemonRequest, SessionAction, SessionRuntimeHints, SessionState } from './types.ts';
-import { expandSessionPath } from './session-paths.ts';
+import { applyRecordedSaveScriptFlags } from './session-script-publication-capability.ts';
+import { repairSessionBoundary } from './session-replay-transaction.ts';
 import type { TargetAnnotationV1 } from '../replay/target-identity.ts';
 import { inferFillText } from './action-utils.ts';
 import {
@@ -37,61 +38,13 @@ export type RecordActionEntry = {
   interactiveObservation?: boolean;
 };
 
-/**
- * #1258: point the session at `nextPath` and, when this is a RETARGET to a
- * different path than the one currently persisted AND no live
- * `--force`/`--overwrite` accompanies it, drop any `saveScriptForce` persisted
- * for the OLD target. Force is authorization for the target it was opted into
- * (`--save-script=a.ad --force`), NOT a session-wide standing grant that
- * silently follows a later `--save-script=b.ad` and overwrites a file nobody
- * opted to overwrite. A live `force` on this same retarget re-grants it for the
- * new target (handled by the caller, AFTER this — so a live flag always wins).
- * Shared by both re-arming paths: `armReplaySaveScriptStep` (replay) and
- * `recordActionEntry` (close --save-script).
- */
-export function applySaveScriptRetarget(
-  session: SessionState,
-  nextPath: string,
-  liveForce: boolean | undefined,
-): void {
-  const retargeted = session.saveScriptPath !== undefined && session.saveScriptPath !== nextPath;
-  if (retargeted && !liveForce) session.saveScriptForce = undefined;
-  session.saveScriptPath = nextPath;
-}
-
 export function recordActionEntry(
   session: SessionState,
   entry: RecordActionEntry,
 ): SessionAction | undefined {
   if (entry.flags?.noRecord) return undefined;
   if (isExcludedRepairSegmentObservation(session, entry)) return undefined;
-  if (entry.flags?.saveScript) {
-    session.recordSession = true;
-    if (typeof entry.flags.saveScript === 'string') {
-      // ADR 0012 decision 6: an explicit `--save-script=<path>` (e.g. `close
-      // --save-script=<path>`) retargets away from the defaulted healed
-      // sibling. How the path was chosen plays no role in the publish
-      // decision: the writer's refuse-on-exist guard is uniform (see
-      // `publishHealedScriptAtomically`) and refuses ANY pre-existing target —
-      // an explicit, caller-DIRECTED path included. Directing the path is not
-      // the same as authorizing an overwrite.
-      applySaveScriptRetarget(
-        session,
-        expandSessionPath(entry.flags.saveScript),
-        entry.flags.force,
-      );
-    }
-    // #1258: persist `--force`/`--overwrite`, like `saveScriptPath`, so a
-    // LATER write that does not repeat the flag (a bare `close` finishing a
-    // session opened with `open --save-script --force`, or an unattended
-    // auto-commit teardown with no live request) still honors it. Sticky FOR
-    // THE SAME TARGET — a retarget to a different path without a live `force`
-    // drops it (see `applySaveScriptRetarget`); a same-path later action
-    // carrying `saveScript` without `force` still must not clear it.
-    if (entry.flags.force) {
-      session.saveScriptForce = true;
-    }
-  }
+  if (entry.flags) applyRecordedSaveScriptFlags(session, entry.flags);
   const recordedEntry = parameterizeRecordedFill(entry);
   const action: SessionAction = {
     ts: Date.now(),
@@ -184,7 +137,7 @@ const OBSERVATION_ONLY_COMMANDS: ReadonlySet<string> = new Set(['snapshot', 'get
  * (2) is why this is a PROVENANCE rule, not a command-class rule. Replayed
  * plan steps dispatch through the ordinary request path and land in
  * `session.actions` like any other action; the healed script is that slice
- * (`buildOptimizedActions` over `session.actions.slice(saveScriptBoundary)`).
+ * (`buildOptimizedActions` over `session.actions` from the repair boundary).
  * So excluding by command class alone would replay an authored `is visible`
  * assertion and then silently drop it from its own heal — the healed flow
  * would quietly stop checking what it used to check. Authored observations
@@ -199,7 +152,7 @@ export function isInteractiveObservation(req: DaemonRequest): boolean {
 /**
  * #1271 stage 2 (ADR 0012 amendment): the repair-segment default exclusion.
  *
- * `session.saveScriptBoundary !== undefined` is set ONLY by a repair-armed
+ * A repair boundary is set ONLY by a repair-armed
  * `replay --save-script` (decision 6, R1/R6) — an ordinary, non-repair
  * `open --save-script`/`close --save-script` authoring recording never sets
  * it (see the ADR's "Scope" note under decision 6). Gating on this field,
@@ -224,7 +177,7 @@ function isExcludedRepairSegmentObservation(
   entry: RecordActionEntry,
 ): boolean {
   if (!entry.interactiveObservation) return false;
-  if (session.saveScriptBoundary === undefined) return false;
+  if (repairSessionBoundary(session) === undefined) return false;
   return entry.flags?.record !== true;
 }
 

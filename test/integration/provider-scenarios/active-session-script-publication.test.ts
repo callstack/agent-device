@@ -8,6 +8,14 @@ import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { androidSettingsXml, createAndroidSettingsWorld } from './android-world.ts';
 import { withProviderScenarioResource } from './harness.ts';
 
+/** The authoring lifecycle status of the world's live session, or `undefined` outside authoring. */
+function authoringPublicationStatus(world: {
+  daemon: { session: () => { scriptPublication?: { kind: string; status?: string } } | undefined };
+}): string | undefined {
+  const publication = world.daemon.session()?.scriptPublication;
+  return publication?.kind === 'authoring' ? publication.status : undefined;
+}
+
 test('provider route publishes and replays an open-to-destination script with a live handoff', async () => {
   await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-active-script-provider-'));
@@ -25,7 +33,7 @@ test('provider route publishes and replays an open-to-destination script with a 
       assert.equal(published.savedScript, scriptPath);
       assert.equal(published.session, 'default');
       assert.equal(published.actionCount, 2);
-      assert.equal(world.daemon.session()?.scriptRecordingState, 'published');
+      assert.equal(authoringPublicationStatus(world), 'published');
 
       const liveSnapshot = await client.capture.snapshot({ interactiveOnly: true });
       assert.ok(liveSnapshot.nodes.some((node) => node.label === 'Search'));
@@ -132,7 +140,7 @@ test('a second successful open aborts publication and terminal save flags fail b
         saveScript: scriptPath,
       });
       assertRpcError(rearm, 'INVALID_ARGS', /only arm a fresh session/);
-      assert.equal(world.daemon.session()?.scriptRecordingState, 'armed');
+      assert.equal(authoringPublicationStatus(world), 'armed');
 
       const second = await world.daemon.callCommand('open', ['settings'], {
         ...world.selection,
@@ -140,7 +148,7 @@ test('a second successful open aborts publication and terminal save flags fail b
       });
       const secondData = assertRpcOk<{ warnings?: string[] }>(second);
       assert.match(String(secondData.warnings), /publication was aborted/i);
-      assert.equal(world.daemon.session()?.scriptRecordingState, 'aborted');
+      assert.equal(authoringPublicationStatus(world), 'aborted');
 
       const publication = await world.daemon.callCommand('session_save_script', [scriptPath]);
       assertRpcError(publication, 'COMMAND_FAILED', /aborted by a second successful open/);

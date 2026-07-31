@@ -8,7 +8,11 @@ import {
   makeAuthoringSession,
   makeRepairArmedSession,
   makeRepairCompleteSession,
+  repairPublication,
+  authoringPublication,
 } from '../../__tests__/test-utils/session-factories.ts';
+import { markRepairTransactionComplete } from '../session-replay-transaction.ts';
+import { NO_SCRIPT_PUBLICATION, scriptTargetPath } from '../session-script-publication-state.ts';
 import { parseReplayScriptDetailed } from '../../replay/script.ts';
 import type { SessionAction } from '../types.ts';
 
@@ -35,7 +39,7 @@ test('write() slices session.actions from saveScriptBoundary onward, excluding p
   // (`close --save-script`) — COMPLETE here to isolate THIS test's own concern
   // (boundary slicing), covered separately below.
   const session = makeRepairCompleteSession('default', {
-    saveScriptBoundary: 2,
+    scriptPublication: repairPublication('complete', { boundary: 2 }),
     actions: [
       action({ command: 'open', positionals: ['Demo'] }),
       action({ command: 'click', positionals: ['label="Old"'] }),
@@ -69,7 +73,7 @@ test('a boundary-sliced script still strips diagnostic snapshot actions', () => 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-snapshot-strip-'));
   const writer = new SessionScriptWriter(path.join(root, 'sessions'));
   const session = makeRepairCompleteSession('default', {
-    saveScriptBoundary: 1,
+    scriptPublication: repairPublication('complete', { boundary: 1 }),
     actions: [
       action({ command: 'open', positionals: ['Demo'] }),
       action({ command: 'snapshot', positionals: [] }),
@@ -189,7 +193,7 @@ test('write() publishes cleanly when the target does not exist yet', () => {
   const healedPath = path.join(root, 'flows', 'login.healed.ad');
 
   const session = makeRepairCompleteSession('default', {
-    saveScriptPath: healedPath,
+    scriptPublication: repairPublication('complete', { path: healedPath }),
     actions: [action({ command: 'click', positionals: ['id="new"'] })],
   });
 
@@ -219,7 +223,7 @@ test('write() refuses to clobber an existing COMPLETE DEFAULT .healed.ad', () =>
   const before = fs.readFileSync(healedPath, 'utf8');
 
   const session = makeRepairCompleteSession('default', {
-    saveScriptPath: healedPath,
+    scriptPublication: repairPublication('complete', { path: healedPath }),
     actions: [action({ command: 'click', positionals: ['id="new"'] })],
   });
 
@@ -248,7 +252,7 @@ test('write() now refuses to clobber a stale PARTIAL (non-sentinel) .healed.ad a
   const before = fs.readFileSync(healedPath, 'utf8');
 
   const session = makeRepairCompleteSession('default', {
-    saveScriptPath: healedPath,
+    scriptPublication: repairPublication('complete', { path: healedPath }),
     actions: [action({ command: 'click', positionals: ['id="new"'] })],
   });
 
@@ -272,7 +276,7 @@ test('write(session, { force: true }) overwrites an existing COMPLETE target ato
   );
 
   const session = makeRepairCompleteSession('default', {
-    saveScriptPath: healedPath,
+    scriptPublication: repairPublication('complete', { path: healedPath }),
     actions: [action({ command: 'click', positionals: ['id="new"'] })],
   });
 
@@ -295,7 +299,7 @@ test('write(session, { force: true }) overwrites an existing target for ORDINARY
 
   // Ordinary open/close --save-script recording, not a repair.
   const session = makeAuthoringSession('default', {
-    saveScriptPath: outPath,
+    scriptPublication: authoringPublication('armed', { path: outPath }),
     actions: [action({ command: 'click', positionals: ['id="new"'] })],
   });
 
@@ -314,7 +318,7 @@ test('write(session) without { force: true } still refuses, even when a prior wr
   const before = fs.readFileSync(outPath, 'utf8');
 
   const session = makeAuthoringSession('default', {
-    saveScriptPath: outPath,
+    scriptPublication: authoringPublication('armed', { path: outPath }),
     actions: [action({ command: 'click', positionals: ['id="new"'] })],
   });
 
@@ -335,11 +339,11 @@ test('two writers racing on the SAME ABSENT target: exactly one linkSync wins, t
   fs.mkdirSync(path.dirname(healedPath), { recursive: true });
 
   const sessionA = makeRepairCompleteSession('writer-a', {
-    saveScriptPath: healedPath,
+    scriptPublication: repairPublication('complete', { path: healedPath }),
     actions: [action({ command: 'click', positionals: ['id="from-a"'] })],
   });
   const sessionB = makeRepairCompleteSession('writer-b', {
-    saveScriptPath: healedPath,
+    scriptPublication: repairPublication('complete', { path: healedPath }),
     actions: [action({ command: 'click', positionals: ['id="from-b"'] })],
   });
 
@@ -402,7 +406,7 @@ test('write() refuses to clobber an existing COMPLETE artifact at an EXPLICIT --
   // An explicit, caller-DIRECTED target — the protection must apply here too,
   // not just the default healed sibling.
   const session = makeRepairCompleteSession('default', {
-    saveScriptPath: explicitOut,
+    scriptPublication: repairPublication('complete', { path: explicitOut }),
     actions: [action({ command: 'click', positionals: ['id="new"'] })],
   });
 
@@ -427,7 +431,7 @@ test('write() now refuses an explicit --save-script=<path> pointing at an existi
   // The caller directed this path explicitly rather than defaulting to the
   // healed sibling.
   const session = makeRepairCompleteSession('default', {
-    saveScriptPath: outPath,
+    scriptPublication: repairPublication('complete', { path: outPath }),
     actions: [action({ command: 'click', positionals: ['id="new"'] })],
   });
 
@@ -459,7 +463,7 @@ test('an ordinary (non-repair) recording now refuses an existing target too (beh
   // An ordinary open/close --save-script recording, never armed via `replay
   // --save-script` — this is NOT a repair.
   const session = makeAuthoringSession('default', {
-    saveScriptPath: outPath,
+    scriptPublication: authoringPublication('armed', { path: outPath }),
     actions: [action({ command: 'click', positionals: ['id="new"'] })],
   });
 
@@ -485,7 +489,7 @@ test('an ordinary (non-repair) recording still publishes cleanly when its target
 
   // Ordinary recording, not a repair.
   const session = makeAuthoringSession('default', {
-    saveScriptPath: outPath,
+    scriptPublication: authoringPublication('armed', { path: outPath }),
     actions: [action({ command: 'click', positionals: ['id="new"'] })],
   });
 
@@ -506,7 +510,7 @@ test('close --save-script=<explicit path> re-points a defaulted-healed repair, a
 
   // The repair defaulted its target to the `.healed.ad` sibling.
   const session = makeRepairArmedSession('default', {
-    saveScriptPath: defaultedHealed,
+    scriptPublication: repairPublication('armed', { path: defaultedHealed }),
     actions: [action({ command: 'click', positionals: ['id="new"'] })],
   });
 
@@ -519,11 +523,11 @@ test('close --save-script=<explicit path> re-points a defaulted-healed repair, a
     positionals: [],
     flags: { saveScript: explicitOut },
   });
-  expect(session.saveScriptPath).toBe(explicitOut);
+  expect(scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION)).toBe(explicitOut);
   // `recordActionEntry` is the low-level action recorder `close`'s handler
   // calls on its way to setting the finalize signal (Fix 2) — set here to
   // isolate this test's own concern (the retarget).
-  session.saveScriptComplete = true;
+  markRepairTransactionComplete(session);
 
   const result = writer.write(session);
   expect(result.written).toBe(true);
@@ -551,7 +555,7 @@ test('C2 abort-before-complete: a repair-armed but NOT-complete write discards �
   expect(result).toEqual({ written: false });
   expect(fs.existsSync(path.join(root, 'sessions'))).toBe(false);
   // Not committed — teardown will tombstone it (C5a).
-  expect(session.saveScriptCommitted).toBeFalsy();
+  expect(session.scriptPublication).toMatchObject({ kind: 'repair', status: 'armed' });
 });
 
 test('C2 commit-when-complete: a repair-armed COMPLETE write publishes and marks the session COMMITTED', () => {
@@ -560,14 +564,14 @@ test('C2 commit-when-complete: a repair-armed COMPLETE write publishes and marks
   const outPath = path.join(root, 'flows', 'flow.healed.ad');
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   const session = makeRepairCompleteSession('default', {
-    saveScriptPath: outPath,
+    scriptPublication: repairPublication('complete', { path: outPath }),
     actions: [action({ command: 'click', positionals: ['id="save"'] })],
   });
 
   const result = writer.write(session);
   expect(result.written).toBe(true);
   expect(fs.readFileSync(outPath, 'utf8')).toContain(HEAL_COMPLETE_SENTINEL);
-  expect(session.saveScriptCommitted).toBe(true);
+  expect(session.scriptPublication).toMatchObject({ kind: 'repair', status: 'committed' });
 });
 
 test('C2 idempotent post-commit: a second write on a COMMITTED session no-ops (no re-publish, no error)', () => {
@@ -576,7 +580,7 @@ test('C2 idempotent post-commit: a second write on a COMMITTED session no-ops (n
   const outPath = path.join(root, 'flows', 'flow.healed.ad');
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   const session = makeRepairCompleteSession('default', {
-    saveScriptPath: outPath,
+    scriptPublication: repairPublication('complete', { path: outPath }),
     actions: [action({ command: 'click', positionals: ['id="save"'] })],
   });
 
@@ -626,7 +630,7 @@ test('write() publishes atomically: no stray temp file survives a successful rep
   const outPath = path.join(root, 'flows', 'atomic.healed.ad');
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   const session = makeRepairCompleteSession('default', {
-    saveScriptPath: outPath,
+    scriptPublication: repairPublication('complete', { path: outPath }),
     actions: [action({ command: 'click', positionals: ['id="save"'] })],
   });
 

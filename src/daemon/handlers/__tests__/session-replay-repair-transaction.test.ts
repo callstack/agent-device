@@ -65,10 +65,21 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   makeIosSession,
   makeRepairCompleteSession,
+  repairPublication,
 } from '../../../__tests__/test-utils/session-factories.ts';
 import { HEAL_COMPLETE_SENTINEL } from '../../session-script-writer.ts';
+import {
+  repairSessionBoundary,
+  repairSessionSourcePath,
+  markRepairTransactionComplete,
+} from '../../session-replay-transaction.ts';
+import {
+  NO_SCRIPT_PUBLICATION,
+  scriptTargetPath,
+  scriptTargetForce,
+} from '../../session-script-publication-state.ts';
 import { parseReplayScriptDetailed } from '../../../replay/script.ts';
-import type { DaemonRequest } from '../../types.ts';
+import type { DaemonRequest, SessionState } from '../../types.ts';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,
@@ -76,6 +87,23 @@ import {
 import { freshEvidence, makeRecordingReplayInvoke } from './session-replay-repair.fixtures.ts';
 
 const mockDispatchCommand = vi.mocked(dispatchCommand);
+
+/** The persisted per-target overwrite grant (#1258), or `false` outside any publication. */
+function sessionTargetForce(session: SessionState | undefined): boolean {
+  return scriptTargetForce(session?.scriptPublication ?? NO_SCRIPT_PUBLICATION);
+}
+
+/** The explicit publication target path, or `undefined` for none/default. */
+function sessionTargetPath(session: SessionState | undefined): string | undefined {
+  return scriptTargetPath(session?.scriptPublication ?? NO_SCRIPT_PUBLICATION);
+}
+
+/** The recorded platform-close receipt identity, or `undefined` outside a repair transaction. */
+function sessionCloseReceipt(session: SessionState | undefined): string | undefined {
+  return session?.scriptPublication?.kind === 'repair'
+    ? session.scriptPublication.closeReceipt
+    : undefined;
+}
 
 beforeEach(() => {
   mockDispatchCommand.mockReset();
@@ -162,7 +190,10 @@ test('end-to-end repair transaction: cold divergence stays alive, corrective res
   expect(sessionStore.get(sessionName)!.actions.map((a) => a.command)).toEqual(['open']);
   // C2: the transaction is NOT complete yet — a `close` here would abort, not
   // commit a prefix.
-  expect(sessionStore.get(sessionName)!.saveScriptComplete).toBeFalsy();
+  expect(sessionStore.get(sessionName)!.scriptPublication).toMatchObject({
+    kind: 'repair',
+    status: 'armed',
+  });
 
   // --- Agent performs the corrective press (blessed @ref), recorded live. ---
   const session = sessionStore.get(sessionName)!;
@@ -193,7 +224,7 @@ test('end-to-end repair transaction: cold divergence stays alive, corrective res
   expect(session.actions.some((a) => a.command === 'close')).toBe(false);
   // C2: the resume reached the last executable step (terminal close skipped) —
   // the transaction is now COMPLETE and commit-eligible.
-  expect(session.saveScriptComplete).toBe(true);
+  expect(session.scriptPublication).toMatchObject({ kind: 'repair', status: 'complete' });
 
   // --- The agent finalizes: `close --save-script` (the real handler, not a
   // direct writer call) commits the now-COMPLETE healed `.ad`. ---
@@ -307,8 +338,8 @@ test('C5a: an incomplete repair reaped by idle-reap leaves a tombstone (no heale
   });
   expect(leg1.ok).toBe(false);
   const session = sessionStore.get(sessionName)!;
-  expect(session.saveScriptComplete).toBeFalsy();
-  expect(session.repairSourcePath).toBe(filePath);
+  expect(session.scriptPublication).toMatchObject({ kind: 'repair', status: 'armed' });
+  expect(repairSessionSourcePath(session)).toBe(filePath);
 
   // Idle-reap tears the still-incomplete repair session down: the writer commits
   // nothing (not complete) and a tombstone is left behind (the exact teardown
@@ -355,7 +386,7 @@ test('C5a/BLOCKER 3: teardown of a COMPLETE repair auto-commits a self-contained
   });
   expect(response.ok).toBe(true);
   const session = sessionStore.get(sessionName)!;
-  expect(session.saveScriptComplete).toBe(true);
+  expect(session.scriptPublication).toMatchObject({ kind: 'repair', status: 'complete' });
   // Fix 3: the source plan's terminal `close` never dispatched or recorded —
   // this is exactly the skip BLOCKER 3 must still account for at teardown.
   expect(session.actions.map((a) => a.command)).toEqual(['open', 'click']);
@@ -431,7 +462,7 @@ test('BLOCKER 1: a --from continuation on a reaped session returns SESSION_NOT_F
 function makeCompleteRepairSession(sessionStore: SessionStore, sessionName: string, root: string) {
   const session = makeRepairCompleteSession(sessionName, {
     appBundleId: 'com.example.app',
-    saveScriptPath: path.join(root, 'flow.healed.ad'),
+    scriptPublication: repairPublication('complete', { path: path.join(root, 'flow.healed.ad') }),
     actions: [
       { ts: 1, command: 'open', positionals: ['Demo'], flags: {} },
       {
@@ -585,7 +616,7 @@ test('#1258 arm-time preflight: an existing --save-script target rejects BEFORE 
   expect(spy).toHaveLength(0);
   // The session was never armed (no boundary stamped) either — the whole
   // repair-arm side effect is skipped, not just the dispatch.
-  expect(sessionStore.get(sessionName)?.saveScriptBoundary).toBeUndefined();
+  expect(repairSessionBoundary(sessionStore.get(sessionName))).toBeUndefined();
 });
 
 test('#1258: --force skips the arm-time preflight and the replay proceeds despite the existing target', async () => {
@@ -613,7 +644,7 @@ test('#1258: --force skips the arm-time preflight and the replay proceeds despit
   expect(spy.map((r) => r.command)).toEqual(['open']);
   // `force` is persisted on the session from arm time, so a LATER commit
   // (e.g. a bare `close`, or teardown) still honors the overwrite.
-  expect(sessionStore.get(sessionName)?.saveScriptForce).toBe(true);
+  expect(sessionTargetForce(sessionStore.get(sessionName))).toBe(true);
 });
 
 test('#1258 preflight honors PERSISTED force: a --from continuation without --force is NOT rejected on an existing target a prior --force leg authorized', async () => {
@@ -650,7 +681,7 @@ test('#1258 preflight honors PERSISTED force: a --from continuation without --fo
   if (leg1.ok) return;
   expect(leg1.error.code).toBe('REPLAY_DIVERGENCE');
   const divergence = leg1.error.details?.divergence as { resume: { planDigest: string } };
-  expect(sessionStore.get(sessionName)?.saveScriptForce).toBe(true);
+  expect(sessionTargetForce(sessionStore.get(sessionName))).toBe(true);
 
   // The agent's corrective press (blessed @ref), recorded live.
   const session = sessionStore.get(sessionName)!;
@@ -678,9 +709,12 @@ test('#1258 preflight honors PERSISTED force: a --from continuation without --fo
   // Not rejected by the arm-time preflight (no "already exists"): the
   // transaction reached completion instead.
   expect(leg2.ok).toBe(true);
-  expect(sessionStore.get(sessionName)?.saveScriptComplete).toBe(true);
+  expect(sessionStore.get(sessionName)?.scriptPublication).toMatchObject({
+    kind: 'repair',
+    status: 'complete',
+  });
   // A bare-boolean continuation never retargets, so force stays persisted.
-  expect(sessionStore.get(sessionName)?.saveScriptForce).toBe(true);
+  expect(sessionTargetForce(sessionStore.get(sessionName))).toBe(true);
 });
 
 test('#1258 preflight is per-target: a --from continuation RETARGETING to an existing <b> WITHOUT live force is refused BEFORE dispatch, preserves the prior COMPLETE transaction, and a later close still commits the ORIGINAL <a>', async () => {
@@ -721,8 +755,8 @@ test('#1258 preflight is per-target: a --from continuation RETARGETING to an exi
   if (leg1.ok) return;
   const divergence = leg1.error.details?.divergence as { resume: { planDigest: string } };
   const session = sessionStore.get(sessionName)!;
-  expect(session.saveScriptPath).toBe(targetA);
-  expect(session.saveScriptForce).toBe(true);
+  expect(sessionTargetPath(session)).toBe(targetA);
+  expect(sessionTargetForce(session)).toBe(true);
   // The agent's corrective press.
   sessionStore.recordAction(session, {
     command: 'press',
@@ -736,7 +770,7 @@ test('#1258 preflight is per-target: a --from continuation RETARGETING to an exi
   // convention, to isolate THIS test's concern: a later retarget REJECTION must
   // not corrupt this flag (BLOCKER 2 — the C2 `saveScriptComplete = false`
   // reset must run AFTER the preflight's early-return, never before it).
-  session.saveScriptComplete = true;
+  markRepairTransactionComplete(session);
   const dispatchesBeforeLeg2 = spy.length;
 
   // Leg 2: `--from N --save-script=<b>` (explicit RETARGET, NO live force) — <b>
@@ -763,11 +797,14 @@ test('#1258 preflight is per-target: a --from continuation RETARGETING to an exi
   expect(spy.length).toBe(dispatchesBeforeLeg2);
   // READ-ONLY: the rejected request left the session target untouched — still
   // armed/forced for <a>, never retargeted to <b>.
-  expect(sessionStore.get(sessionName)?.saveScriptPath).toBe(targetA);
-  expect(sessionStore.get(sessionName)?.saveScriptForce).toBe(true);
+  expect(sessionTargetPath(sessionStore.get(sessionName))).toBe(targetA);
+  expect(sessionTargetForce(sessionStore.get(sessionName))).toBe(true);
   // BLOCKER 2 (a): the prior COMPLETE transaction SURVIVES the rejection — the
   // C2 completion reset never ran, because the preflight returned first.
-  expect(sessionStore.get(sessionName)?.saveScriptComplete).toBe(true);
+  expect(sessionStore.get(sessionName)?.scriptPublication).toMatchObject({
+    kind: 'repair',
+    status: 'complete',
+  });
   // <b> is byte-for-byte untouched.
   expect(fs.readFileSync(targetB, 'utf8')).toBe(beforeB);
 
@@ -796,7 +833,11 @@ test('#1258 force is per-target: re-arming --save-script=<b> WITHOUT --force dro
   );
   // Armed and forced for target <a> (flow.healed.ad).
   const session = makeCompleteRepairSession(sessionStore, sessionName, root);
-  session.saveScriptForce = true;
+  session.scriptPublication = repairPublication('complete', {
+    boundary: 0,
+    path: path.join(root, 'flow.healed.ad'),
+    force: true,
+  });
   // A DIFFERENT, unrelated file already sits at the retarget destination <b>
   // (flow.promoted.ad) — nobody opted to overwrite THIS one.
   const promotedPath = path.join(root, 'flow.promoted.ad');
@@ -829,7 +870,7 @@ test('#1258 force is per-target: re-arming --save-script=<b> WITHOUT --force dro
   // <b> is untouched, and the session is kept for retry.
   expect(fs.readFileSync(promotedPath, 'utf8')).toBe(before);
   expect(sessionStore.get(sessionName)).toBeDefined();
-  expect(sessionStore.get(sessionName)?.saveScriptForce).toBeUndefined();
+  expect(sessionTargetForce(sessionStore.get(sessionName))).toBe(false);
 });
 
 test('#1258 force per-target, contrast: re-arming --save-script=<b> WITH --force DOES overwrite <b>', async () => {
@@ -837,7 +878,11 @@ test('#1258 force per-target, contrast: re-arming --save-script=<b> WITH --force
     'agent-device-repair-transaction-retarget-force-overwrites-',
   );
   const session = makeCompleteRepairSession(sessionStore, sessionName, root);
-  session.saveScriptForce = true;
+  session.scriptPublication = repairPublication('complete', {
+    boundary: 0,
+    path: path.join(root, 'flow.healed.ad'),
+    force: true,
+  });
   const promotedPath = path.join(root, 'flow.promoted.ad');
   fs.writeFileSync(
     promotedPath,
@@ -985,7 +1030,7 @@ test('BLOCKER 3 (second follow-up): a retry after a SUCCESSFUL platform close bu
   if (!closeResponse.ok) expect(closeResponse.error.message).toMatch(/already exists/);
   expect(sessionStore.get(sessionName)).toBeDefined();
   expect(fs.readFileSync(healedPath, 'utf8')).toBe(before);
-  expect(sessionStore.get(sessionName)!.repairPlatformCloseReceipt).toBeDefined();
+  expect(sessionCloseReceipt(sessionStore.get(sessionName))).toBeDefined();
 
   // Retry with an explicit path: the ALREADY-SUCCEEDED platform close must
   // NEVER be dispatched again — a non-idempotent backend could fail (or
@@ -1116,7 +1161,7 @@ test('BLOCKER 3 (third follow-up): a retry targeting a DIFFERENT app than the su
   });
   expect(first.ok).toBe(false);
   expect(mockDispatchCommand).toHaveBeenCalledTimes(1);
-  expect(sessionStore.get(sessionName)!.repairPlatformCloseReceipt).toBeDefined();
+  expect(sessionCloseReceipt(sessionStore.get(sessionName))).toBeDefined();
 
   // Retry targets a DIFFERENT app (app-b) — a genuinely different platform
   // operation. The prior session-wide marker would wrongly treat app-b as

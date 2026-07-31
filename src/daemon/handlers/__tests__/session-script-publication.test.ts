@@ -4,10 +4,19 @@ import path from 'node:path';
 import { beforeEach, expect, test } from 'vitest';
 import { INTERNAL_COMMANDS } from '../../../command-catalog.ts';
 import { makeIosSession, makeAuthoringSession } from '../../../__tests__/test-utils/index.ts';
+import {
+  authoringPublication,
+  repairPublication,
+} from '../../../__tests__/test-utils/session-factories.ts';
 import type { TargetAnnotationV1 } from '../../../replay/target-identity.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, SessionState } from '../../types.ts';
 import { handleSessionScriptPublication } from '../session-script-publication.ts';
+import {
+  NO_SCRIPT_PUBLICATION,
+  scriptTargetPath,
+  scriptTargetForce,
+} from '../../session-script-publication-state.ts';
 
 const TARGET_EVIDENCE: TargetAnnotationV1 = {
   id: 'continue',
@@ -40,7 +49,7 @@ beforeEach(() => {
 
 function armedSession(overrides: Partial<SessionState> = {}): SessionState {
   return makeAuthoringSession('authoring', {
-    scriptRecordingState: 'armed',
+    scriptPublication: authoringPublication('armed'),
     actions: [
       { ts: 1, command: 'open', positionals: ['Demo'], flags: { saveScript: true } },
       {
@@ -90,7 +99,7 @@ test('publishes without close, returns the path/count, and leaves a terminal liv
   expect(fs.readFileSync(outputPath, 'utf8')).toContain('wait "id=\\"screen-x\\""');
   expect(fs.readFileSync(outputPath, 'utf8')).not.toContain('\nclose');
   expect(store.get('authoring')).toBe(session);
-  expect(session.scriptRecordingState).toBe('published');
+  expect(session.scriptPublication).toMatchObject({ kind: 'authoring', status: 'published' });
   expect(session.recordSession).toBe(false);
 
   const repeated = handleSessionScriptPublication({
@@ -117,8 +126,8 @@ test('no-clobber failure preserves bytes and armed state, then --force retries s
   });
   expect(refused).toMatchObject({ ok: false, error: { retriable: true } });
   expect(fs.readFileSync(outputPath, 'utf8')).toBe('original\n');
-  expect(session.scriptRecordingState).toBe('armed');
-  expect(session.saveScriptPath).toBe(outputPath);
+  expect(session.scriptPublication).toMatchObject({ kind: 'authoring', status: 'armed' });
+  expect(scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION)).toBe(outputPath);
 
   const replaced = handleSessionScriptPublication({
     req: request(outputPath, true),
@@ -127,7 +136,7 @@ test('no-clobber failure preserves bytes and armed state, then --force retries s
   });
   expect(replaced?.ok).toBe(true);
   expect(fs.readFileSync(outputPath, 'utf8')).toContain('context platform=ios');
-  expect(session.scriptRecordingState).toBe('published');
+  expect(session.scriptPublication).toMatchObject({ kind: 'authoring', status: 'published' });
 });
 
 test('retargeting without --force clears force authorization from the previous target', () => {
@@ -135,8 +144,7 @@ test('retargeting without --force clears force authorization from the previous t
   const retargetPath = path.join(root, 'retarget.ad');
   fs.writeFileSync(retargetPath, 'protected\n');
   const session = armedSession({
-    saveScriptPath: originalPath,
-    saveScriptForce: true,
+    scriptPublication: authoringPublication('armed', { path: originalPath, force: true }),
   });
   store.set('authoring', session);
 
@@ -148,9 +156,9 @@ test('retargeting without --force clears force authorization from the previous t
 
   expect(response).toMatchObject({ ok: false, error: { retriable: true } });
   expect(fs.readFileSync(retargetPath, 'utf8')).toBe('protected\n');
-  expect(session.scriptRecordingState).toBe('armed');
-  expect(session.saveScriptPath).toBe(retargetPath);
-  expect(session.saveScriptForce).toBeUndefined();
+  expect(session.scriptPublication).toMatchObject({ kind: 'authoring', status: 'armed' });
+  expect(scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION)).toBe(retargetPath);
+  expect(scriptTargetForce(session.scriptPublication ?? NO_SCRIPT_PUBLICATION)).toBe(false);
 });
 
 test('refuses unarmed and repair-owned sessions before filesystem work', () => {
@@ -167,7 +175,10 @@ test('refuses unarmed and repair-owned sessions before filesystem work', () => {
   });
   expect(fs.existsSync(path.dirname(outputPath))).toBe(false);
 
-  store.set('authoring', armedSession({ saveScriptBoundary: 0 }));
+  store.set(
+    'authoring',
+    armedSession({ scriptPublication: repairPublication('armed', { boundary: 0 }) }),
+  );
   const repair = handleSessionScriptPublication({
     req: request(outputPath),
     sessionName: 'authoring',
@@ -194,7 +205,7 @@ test('rejects an explicitly empty destination path', () => {
     ok: false,
     error: { code: 'INVALID_ARGS', message: expect.stringMatching(/path cannot be empty/) },
   });
-  expect(session.scriptRecordingState).toBe('armed');
+  expect(session.scriptPublication).toMatchObject({ kind: 'authoring', status: 'armed' });
 });
 
 test('invalid destination guard remains armed and creates no target directory', () => {
@@ -216,7 +227,7 @@ test('invalid destination guard remains armed and creates no target directory', 
     ok: false,
     error: { message: expect.stringMatching(/destination guard/), retriable: true },
   });
-  expect(session.scriptRecordingState).toBe('armed');
+  expect(session.scriptPublication).toMatchObject({ kind: 'authoring', status: 'armed' });
   expect(fs.existsSync(path.dirname(outputPath))).toBe(false);
 });
 
@@ -249,7 +260,7 @@ test('missing initial open is non-retriable within the armed session', () => {
       retriable: false,
     },
   });
-  expect(session.scriptRecordingState).toBe('armed');
+  expect(session.scriptPublication).toMatchObject({ kind: 'authoring', status: 'armed' });
   expect(fs.existsSync(path.dirname(outputPath))).toBe(false);
 });
 

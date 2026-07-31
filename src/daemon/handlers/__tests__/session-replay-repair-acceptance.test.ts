@@ -6,6 +6,7 @@
  * the original recorded, so the fresh replay needs no hand-fixing.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
+import { markRepairTransactionComplete } from '../../session-replay-transaction.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -127,7 +128,7 @@ test('a healed script survives repair + fresh-session replay: self-contained ope
   // path reuses exactly this writer; ADR 0012 decision 6 Fix 2 gates a
   // repair-armed write on the same explicit finalize signal `close
   // --save-script` sets). ---
-  session.saveScriptComplete = true;
+  markRepairTransactionComplete(session);
   sessionStore.writeSessionLog(session);
   const healedPath = path.join(root, 'flow.healed.ad');
   expect(fs.existsSync(healedPath)).toBe(true);
