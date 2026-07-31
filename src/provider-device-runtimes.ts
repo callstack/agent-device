@@ -1,5 +1,6 @@
 import type { DefaultCloudWebDriverProviderRuntimeEnv } from '@agent-device/provider-webdriver';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
+import type { LIMRUN_PROVIDER } from '@agent-device/provider-limrun';
 import { providerWebDriver } from './provider-webdriver.ts';
 
 export type DefaultProviderDeviceRuntimeEnv = DefaultCloudWebDriverProviderRuntimeEnv &
@@ -7,7 +8,7 @@ export type DefaultProviderDeviceRuntimeEnv = DefaultCloudWebDriverProviderRunti
 
 export const DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS = [
   ...providerWebDriver.providerIds,
-  'limrun',
+  'limrun' satisfies typeof LIMRUN_PROVIDER,
 ] as const;
 
 export async function createDefaultProviderDeviceRuntimes(

@@ -4,12 +4,7 @@ import type { AppsFilter, DeviceLease } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interaction';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import type {
-  LimrunAdbExecutor,
-  LimrunAdbProvider,
-  LimrunPortReverseMapping,
-  LimrunRuntimeDependencies,
-} from './index.ts';
+import type { LimrunAdbExecutor, LimrunAdbProvider, LimrunRuntimeDependencies } from './index.ts';
 import type { LimrunAndroidSession } from './android.ts';
 import { createLimrunDeviceSession, type LimrunIosCommandExecution } from './device-session.ts';
 import type { LimrunIosSession } from './ios.ts';
@@ -23,7 +18,11 @@ const TEST_DEPENDENCIES = {
   clientVersion: 'test-version',
   android: {
     createInteractor: () => ({}) as Interactor,
-    createPortReverse: async (adb) => createInMemoryPortReverse(adb, []),
+    createPortReverse: async () => ({
+      ensure: async () => undefined,
+      remove: async () => undefined,
+      removeAllOwned: async () => undefined,
+    }),
     inferAppName: async () => 'Example',
     listApps: async (_adb: LimrunAdbExecutor, _filter: AppsFilter) => [
       { id: 'com.example.android', name: 'Example' },
@@ -138,18 +137,7 @@ test('iOS remote install waits for eventually consistent app inventory', async (
 });
 
 test('Android device session exposes semantic ADB capabilities without its raw client', async () => {
-  const adb = vi.fn(async (args: string[]) => {
-    if (args.includes('query-activities')) return adbResult('com.example.android/.MainActivity\n');
-    if (args.includes('packages')) return adbResult('package:com.example.android\n');
-    if (args.includes('window')) {
-      return adbResult('mCurrentFocus=Window{42 u0 com.example.android/.MainActivity}\n');
-    }
-    if (args.includes('input_method')) {
-      return adbResult('mInputShown=false mCurMethodId=com.android.inputmethod.latin/.LatinIME');
-    }
-    if (args.includes('logcat')) return adbResult('log line\n');
-    return adbResult('');
-  }) as LimrunAdbExecutor;
+  const adb = vi.fn(async () => adbResult('')) as LimrunAdbExecutor;
   const removeReverse = vi.fn(async () => undefined);
   const provider: LimrunAdbProvider = {
     exec: adb,
@@ -261,26 +249,4 @@ function commandExecution(
 
 function adbResult(stdout: string) {
   return { stdout, stderr: '', exitCode: 0, stdoutBuffer: undefined };
-}
-
-function createInMemoryPortReverse(adb: LimrunAdbExecutor, mappings: LimrunPortReverseMapping[]) {
-  return {
-    ensure: async (mapping: LimrunPortReverseMapping) => {
-      mappings.push(mapping);
-      await adb(['reverse', mapping.local, mapping.remote]);
-    },
-    remove: async (local: LimrunPortReverseMapping['local']) => {
-      const index = mappings.findIndex((mapping) => mapping.local === local);
-      if (index >= 0) mappings.splice(index, 1);
-      await adb(['reverse', '--remove', local]);
-    },
-    removeAllOwned: async (ownerId: string) => {
-      const owned = mappings.filter((mapping) => mapping.ownerId === ownerId);
-      for (const mapping of owned) {
-        mappings.splice(mappings.indexOf(mapping), 1);
-        await adb(['reverse', '--remove', mapping.local]);
-      }
-    },
-    list: async () => [...mappings],
-  };
 }

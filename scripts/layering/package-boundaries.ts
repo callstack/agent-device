@@ -35,6 +35,8 @@ export type WorkspacePackage = {
   exportTargets: ReadonlyMap<string, string>;
   /** Declared `workspace:*` dependencies on sibling internal packages. */
   workspaceDependencies: ReadonlySet<string>;
+  /** Non-workspace dependencies that the root build must externalize. */
+  externalDependencies: ReadonlyMap<string, string>;
 };
 
 export type SpecifierSite = {
@@ -81,11 +83,17 @@ export function readWorkspacePackages(repoRoot: string): WorkspacePackage[] {
         .filter(([, range]) => range.startsWith('workspace:'))
         .map(([name]) => name),
     );
+    const externalDependencies = new Map(
+      Object.entries(manifest.dependencies ?? {}).filter(
+        ([, range]) => !range.startsWith('workspace:'),
+      ),
+    );
     packages.push({
       dir: `packages/${entry}`,
       name: manifest.name,
       exportTargets,
       workspaceDependencies,
+      externalDependencies,
     });
   }
   return packages;
@@ -251,6 +259,14 @@ export function rootWorkspaceDependencyNames(repoRoot: string): Set<string> {
       .filter(([, range]) => range.startsWith('workspace:'))
       .map(([name]) => name),
   );
+}
+
+/** Root runtime dependency ranges used by the published bundle. */
+export function rootExternalDependencyRanges(repoRoot: string): Map<string, string> {
+  const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as {
+    dependencies?: Record<string, string>;
+  };
+  return new Map(Object.entries(manifest.dependencies ?? {}));
 }
 
 function walkTsFiles(repoRoot: string, relativeDir: string): string[] {
