@@ -1,5 +1,5 @@
-import { test, expect } from 'vitest';
-import * as fs from 'node:fs';
+import { test, expect, vi } from 'vitest';
+import fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { clearRequestCanceled, markRequestCanceled } from '../../../request/cancel.ts';
@@ -123,8 +123,28 @@ test('test filters replay scripts by context platform and skips untyped files', 
 test('test binds each replay script to its declared platform metadata', async () => {
   const sessionStore = makeSessionStore();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-platforms-'));
-  fs.writeFileSync(path.join(root, '01-android.ad'), 'context platform=android\nopen "Demo"\n');
-  fs.writeFileSync(path.join(root, '02-ios.ad'), 'context platform=ios\nopen "Settings"\n');
+  const scripts = ['01-android.ad', '02-ios.ad'];
+  fs.writeFileSync(path.join(root, scripts[0]!), 'context platform=android\nopen "Demo"\n');
+  fs.writeFileSync(path.join(root, scripts[1]!), 'context platform=ios\nopen "Settings"\n');
+
+  // Directory expansion deliberately PRESERVES filesystem order to match Maestro — only glob
+  // expansion sorts, and `preserves Maestro directory filesystem order` pins that. So this test
+  // cannot assume two freshly written files enumerate in creation order; on filesystems where
+  // they do not, the platform-to-script binding it asserts appears reversed. Pinning the
+  // enumeration keeps the subject (each script binds to ITS declared platform, and session
+  // numbering follows discovery order) without depending on the host filesystem.
+  const opendirSync = vi.spyOn(fs, 'opendirSync').mockImplementation((directory) => {
+    expect(directory).toBe(root);
+    let index = 0;
+    return {
+      readSync: () => {
+        const name = scripts[index++];
+        if (!name) return null;
+        return { name, isDirectory: () => false, isFile: () => true } as fs.Dirent;
+      },
+      closeSync: () => {},
+    } as fs.Dir;
+  });
 
   const invoked: DaemonRequest[] = [];
   const response = await handleSessionCommands({
@@ -144,6 +164,7 @@ test('test binds each replay script to its declared platform metadata', async ()
     },
   });
 
+  opendirSync.mockRestore();
   expect(response?.ok).toBeTruthy();
   expect(invoked.map((req) => req.flags?.platform)).toEqual(['android', 'ios']);
   expect(invoked.map((req) => req.session)).toEqual([
