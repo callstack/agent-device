@@ -73,17 +73,17 @@ export function classifyBootFailure(input: {
     .toLowerCase();
 
   // Matched before the connect-timeout branch: a runner that could not be
-  // installed also never accepts a connection, and the timeout reading would
-  // send the user to look at the screen or the network instead of the signing
-  // account. Anchored on the CoreDevice error code and the English framework
-  // strings, because the surrounding installer prose is localized.
+  // installed also never accepts a connection. The stable CoreDevice code is
+  // specific to a profile that does not cover the target device; generic
+  // profile text also appears for unrelated signing failures.
+  if (platform === 'ios' && haystack.includes('0xe8008012')) {
+    return 'IOS_RUNNER_DEVICE_NOT_PROVISIONED';
+  }
   if (
     platform === 'ios' &&
-    (haystack.includes('0xe8008012') ||
-      haystack.includes('provisioning profile') ||
-      haystack.includes('embedded profile'))
+    (haystack.includes('provisioning profile') || haystack.includes('embedded profile'))
   ) {
-    return 'IOS_RUNNER_DEVICE_NOT_PROVISIONED';
+    return 'BOOT_COMMAND_FAILED';
   }
   if (
     platform === 'ios' &&

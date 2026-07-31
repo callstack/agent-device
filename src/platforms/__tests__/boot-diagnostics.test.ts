@@ -90,6 +90,19 @@ test('a provisioning failure is not treated as retryable infrastructure', () => 
   assert.equal(isInfrastructureBootFailureReason('IOS_RUNNER_DEVICE_NOT_PROVISIONED'), false);
 });
 
+test.each([
+  'Provisioning profile "Agent Device" has expired.',
+  'Failed to install embedded profile: signing certificate is not valid.',
+])('does not mistake an unrelated signing failure for an unregistered device: %s', (stderr) => {
+  const reason = classifyBootFailure({
+    message: 'Runner did not accept connection (xcodebuild exited early)',
+    stderr,
+    context: { platform: 'ios', phase: 'connect' },
+  });
+
+  assert.equal(reason, 'BOOT_COMMAND_FAILED');
+});
+
 test('still classifies a genuine runner connect timeout as such', () => {
   assert.equal(
     classifyBootFailure({
