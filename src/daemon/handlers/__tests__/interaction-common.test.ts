@@ -1,5 +1,8 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import {
+  makeIosSession,
+  makeAuthoringSession,
+} from '../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { CommandFlags } from '../../../core/dispatch.ts';
@@ -27,8 +30,7 @@ test('parameterized fill scrubs backend and nested settle echoes at the response
   const secret = 'OpaqueValue1348';
   const placeholder = '${PASSWORD}';
   const sessionStore = makeSessionStore();
-  const session = makeIosSession('parameterized-fill');
-  session.recordSession = true;
+  const session = makeAuthoringSession('parameterized-fill');
   sessionStore.set(session.name, session);
   const payload = {
     text: secret,
@@ -185,8 +187,7 @@ test('parameterized fill collapses whitespace-only backend echoes through the ha
   const placeholder = '${SPACES}';
   const sessionStore = makeSessionStore();
   const sessionName = 'parameterized-whitespace-fill-handler-route';
-  const session = makeIosSession(sessionName, { appBundleId: 'com.example.app' });
-  session.recordSession = true;
+  const session = makeAuthoringSession(sessionName, { appBundleId: 'com.example.app' });
   session.snapshot = {
     nodes: attachRefs([
       {
@@ -254,8 +255,7 @@ test.each([
   ({ literal, recordAs }) => {
     const placeholder = `\${${recordAs}}`;
     const sessionStore = makeSessionStore();
-    const session = makeIosSession(`parameterized-overlap-${recordAs}`);
-    session.recordSession = true;
+    const session = makeAuthoringSession(`parameterized-overlap-${recordAs}`);
     sessionStore.set(session.name, session);
     const payload = {
       text: literal,

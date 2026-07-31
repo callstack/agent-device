@@ -12,7 +12,6 @@ import type {
 } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { readVersion } from '../../utils/version.ts';
 import {
   cleanupLimrunAndroidAdbTunnel,
   configureLimrunAndroidPortReverse,
@@ -34,6 +33,7 @@ import {
   type LimrunIosSession,
 } from './ios.ts';
 import { createLimrunDeviceSession, type LimrunDeviceSession } from './device-session.ts';
+import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 
 type LimrunInstance = {
   metadata: { id: string };
@@ -53,10 +53,23 @@ export type LimrunRuntimeOptions = {
 
 const LIMRUN_CLIENT_HEADER = 'agent-device-cli';
 
-export class LimrunRuntime implements ProviderDeviceRuntime {
+export type LimrunRuntime = ProviderDeviceRuntime & {
+  recoverExpiredLease: ProviderExpiredLeaseRecovery;
+  getDeviceSession(device: DeviceInfo): LimrunDeviceSession | undefined;
+};
+
+export function createLimrunRuntime(
+  options: LimrunRuntimeOptions,
+  dependencies: LimrunRuntimeDependencies,
+): LimrunRuntime {
+  return new LimrunRuntimeImplementation(options, dependencies);
+}
+
+class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private readonly limrun: Limrun;
   private readonly sessions = new Map<string, LimrunRuntimeSession>();
   private readonly options: LimrunRuntimeOptions;
+  private readonly dependencies: LimrunRuntimeDependencies;
   readonly provider = LIMRUN_PROVIDER;
 
   readonly leaseLifecycle: LeaseLifecycleProvider = {
@@ -75,8 +88,6 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
     await this.release(lease);
   };
 
-  // Called through ProviderDeviceRuntime composition, not by this concrete class.
-  // fallow-ignore-next-line unused-class-member
   readonly deviceInventoryProvider: DeviceInventoryProvider = async (request) => {
     if (request.leaseProvider !== this.provider || !request.leaseId) return null;
     const session = this.sessions.get(request.leaseId);
@@ -85,19 +96,18 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
     return [session.device];
   };
 
-  constructor(options: LimrunRuntimeOptions) {
+  constructor(options: LimrunRuntimeOptions, dependencies: LimrunRuntimeDependencies) {
     this.options = options;
+    this.dependencies = dependencies;
     this.limrun = new Limrun({
       apiKey: options.apiKey,
       defaultHeaders: {
         'x-agent-device-client': LIMRUN_CLIENT_HEADER,
-        'x-agent-device-version': readVersion(),
+        'x-agent-device-version': dependencies.clientVersion,
       },
     });
   }
 
-  // Called through ProviderDeviceRuntime composition, not by this concrete class.
-  // fallow-ignore-next-line unused-class-member
   ownsDevice(device: DeviceInfo): boolean {
     return parseLimrunDeviceId(device.id) !== undefined;
   }
@@ -180,13 +190,16 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
       if (!instance.status.apiUrl) {
         throw new AppError('COMMAND_FAILED', 'Limrun iOS instance did not expose apiUrl');
       }
-      return await createLimrunIosSession({
-        lease,
-        instanceId: instance.metadata.id,
-        device: buildLimrunDevice('ios', lease, instance.metadata.id),
-        apiUrl: instance.status.apiUrl,
-        token: instance.status.token,
-      });
+      return await createLimrunIosSession(
+        {
+          lease,
+          instanceId: instance.metadata.id,
+          device: buildLimrunDevice('ios', lease, instance.metadata.id),
+          apiUrl: instance.status.apiUrl,
+          token: instance.status.token,
+        },
+        this.dependencies,
+      );
     } catch (error) {
       await this.limrun.iosInstances.delete(instance.metadata.id).catch(() => {});
       throw error;
@@ -206,14 +219,17 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
           'Limrun Android instance did not expose API and ADB websocket endpoints',
         );
       }
-      return await createLimrunAndroidSession({
-        lease,
-        instanceId: instance.metadata.id,
-        device: buildLimrunDevice('android', lease, instance.metadata.id),
-        apiUrl: instance.status.apiUrl,
-        adbUrl: instance.status.adbWebSocketUrl,
-        token: instance.status.token,
-      });
+      return await createLimrunAndroidSession(
+        {
+          lease,
+          instanceId: instance.metadata.id,
+          device: buildLimrunDevice('android', lease, instance.metadata.id),
+          apiUrl: instance.status.apiUrl,
+          adbUrl: instance.status.adbWebSocketUrl,
+          token: instance.status.token,
+        },
+        this.dependencies,
+      );
     } catch (error) {
       await this.limrun.androidInstances.delete(instance.metadata.id).catch(() => {});
       throw error;

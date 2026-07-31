@@ -777,7 +777,6 @@ test('BLOCKER 2: finalizeRepairTeardown of a COMPLETE transaction whose commit F
   session.saveScriptBoundary = 0;
   session.saveScriptComplete = true;
   session.saveScriptPath = healedPath;
-  session.saveScriptDefaultedHealedPath = true;
   session.repairSourcePath = '/flows/login.ad';
   session.actions = [{ ts: 1, command: 'open', positionals: ['Demo'], flags: {} }];
 
@@ -815,7 +814,6 @@ test('BLOCKER 3: finalizeRepairTeardown auto-commit records a terminal close, pr
   session.saveScriptBoundary = 0;
   session.saveScriptComplete = true;
   session.saveScriptPath = healedPath;
-  session.saveScriptDefaultedHealedPath = true;
   session.actions = [
     { ts: 1, command: 'open', positionals: ['Demo'], flags: {} },
     { ts: 2, command: 'click', positionals: ['id="save-v2"'], flags: {} },

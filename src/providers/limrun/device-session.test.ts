@@ -2,18 +2,68 @@ import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type {
-  AndroidAdbExecutor,
-  AndroidAdbProvider,
+import { createAndroidInteractor } from '../../core/interactors/android.ts';
+import {
+  androidAdbResultError,
+  createAndroidPortReverseManager,
+  type AndroidAdbExecutor,
+  type AndroidAdbProvider,
 } from '../../platforms/android/adb-executor.ts';
+import {
+  getAndroidAppStateWithAdb,
+  listAndroidAppsWithAdb,
+} from '../../platforms/android/app-helpers.ts';
+import { inferAndroidAppName } from '../../platforms/android/app-lifecycle.ts';
+import {
+  dismissAndroidKeyboardWithAdb,
+  getAndroidKeyboardStatusWithAdb,
+} from '../../platforms/android/device-input-state.ts';
+import { captureAndroidLogcatWithAdb } from '../../platforms/android/logcat.ts';
 import type { LimrunAndroidSession } from './android.ts';
 import { createLimrunDeviceSession, type LimrunIosCommandExecution } from './device-session.ts';
 import type { LimrunIosSession } from './ios.ts';
+import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 
 const IOS_APPS = [
   { bundleId: 'com.apple.Preferences', name: 'Settings', installType: 'System' },
   { bundleId: 'com.example.ios', name: 'Example', installType: 'User' },
 ];
+
+const TEST_DEPENDENCIES = {
+  clientVersion: 'test-version',
+  android: {
+    createInteractor: createAndroidInteractor,
+    createPortReverse: async (adb) => createAndroidPortReverseManager(adb),
+    inferAppName: async (packageName) => inferAndroidAppName(packageName),
+    listApps: async (adb, filter) =>
+      (
+        await listAndroidAppsWithAdb(adb, {
+          filter,
+          target: 'mobile',
+        })
+      ).map((app) => ({ id: app.package, name: app.name })),
+    getForegroundApp: async (adb) => {
+      const app = await getAndroidAppStateWithAdb(adb);
+      return app.package ? { appId: app.package, activity: app.activity } : undefined;
+    },
+    getKeyboardState: getAndroidKeyboardStatusWithAdb,
+    dismissKeyboard: dismissAndroidKeyboardWithAdb,
+    readLogs: async (adb, lineLimit) =>
+      await captureAndroidLogcatWithAdb(adb, {
+        lines: lineLimit,
+        timeoutMs: 5_000,
+      }),
+    adbError: async (message, result, details) => androidAdbResultError(message, result, details),
+  },
+  host: {
+    runAdb: async () => adbResult(''),
+    archiveDirectory: async () => undefined,
+  },
+  ios: {
+    resolveAppAlias: async (app: string) => app,
+    readBundleAppName: async () => undefined,
+  },
+} satisfies LimrunRuntimeDependencies;
 
 test('iOS device session exposes reusable capabilities without its raw client', async () => {
   const pressKey = vi.fn(async () => undefined);
@@ -165,6 +215,7 @@ function iosSession(client: Record<string, unknown>): LimrunIosSession {
     instanceId: 'ios-instance',
     device: device('ios'),
     client,
+    dependencies: TEST_DEPENDENCIES,
   } as unknown as LimrunIosSession;
 }
 
@@ -179,6 +230,7 @@ function androidSession(
     device: device('android'),
     client,
     adbProvider,
+    dependencies: TEST_DEPENDENCIES,
   } as unknown as LimrunAndroidSession;
 }
 

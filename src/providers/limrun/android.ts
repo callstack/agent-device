@@ -4,7 +4,6 @@ import {
   createInstanceClient as createAndroidInstanceClient,
   type InstanceClient as LimrunAndroidClient,
 } from '@limrun/api/instance-client';
-import { createAndroidInteractor } from '../../core/interactors/android.ts';
 import type { Interactor } from '@agent-device/contracts/interaction';
 import type {
   DeviceLease,
@@ -14,13 +13,13 @@ import type {
 } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  type AndroidAdbExecutorOptions,
-  type AndroidAdbExecutorResult,
-  type AndroidAdbProvider,
-  type AndroidPortReverseEndpoint,
-} from '../../platforms/android/adb-executor.ts';
-import { runCmd } from '../../utils/exec.ts';
+import type {
+  LimrunAdbCommandOptions,
+  LimrunAdbCommandResult,
+  LimrunAdbProvider,
+  LimrunPortReverseEndpoint,
+  LimrunRuntimeDependencies,
+} from './runtime-dependencies.ts';
 import { normalizeOptionalString } from './strings.ts';
 
 type LimrunAdbTunnel = Awaited<ReturnType<LimrunAndroidClient['startAdbTunnel']>>;
@@ -34,20 +33,24 @@ type LimrunAndroidAdbSession = {
   adbTunnel?: LimrunAdbTunnel;
   adbSerial?: string;
   adbTunnelPromise?: Promise<string>;
+  readonly dependencies: Pick<LimrunRuntimeDependencies, 'android' | 'host'>;
 };
 
 export type LimrunAndroidSession = LimrunAndroidAdbSession & {
-  adbProvider: AndroidAdbProvider;
+  adbProvider: LimrunAdbProvider;
 };
 
-export async function createLimrunAndroidSession(options: {
-  lease: DeviceLease;
-  instanceId: string;
-  device: DeviceInfo;
-  apiUrl: string;
-  adbUrl: string;
-  token: string;
-}): Promise<LimrunAndroidSession> {
+export async function createLimrunAndroidSession(
+  options: {
+    lease: DeviceLease;
+    instanceId: string;
+    device: DeviceInfo;
+    apiUrl: string;
+    adbUrl: string;
+    token: string;
+  },
+  dependencies: Pick<LimrunRuntimeDependencies, 'android' | 'host'>,
+): Promise<LimrunAndroidSession> {
   const client = await createAndroidInstanceClient({
     apiUrl: options.apiUrl,
     adbUrl: options.adbUrl,
@@ -60,21 +63,20 @@ export async function createLimrunAndroidSession(options: {
     instanceId: options.instanceId,
     device: options.device,
     client,
+    dependencies,
   };
-  const adbProvider: AndroidAdbProvider = {
+  const adbProvider: LimrunAdbProvider = {
     exec: async (args, execOptions) => await runLimrunAndroidAdb(session, args, execOptions),
     text: async (request) => {
       await client.setText(request.target, request.text);
     },
   };
-  const { createAndroidPortReverseManager } =
-    await import('../../platforms/android/adb-executor.ts');
-  adbProvider.reverse = createAndroidPortReverseManager(adbProvider);
+  adbProvider.reverse = await dependencies.android.createPortReverse(adbProvider.exec);
   return Object.assign(session, { adbProvider });
 }
 
 export function createLimrunAndroidInteractor(session: LimrunAndroidSession): Interactor {
-  return createAndroidInteractor(session.device, session.adbProvider);
+  return session.dependencies.android.createInteractor(session.device, session.adbProvider);
 }
 
 export async function installLimrunAndroidApp(
@@ -95,7 +97,7 @@ export async function installLimrunAndroidApp(
   });
   await session.client.sendAsset(asset.signedDownloadUrl);
   const appName = packageName
-    ? (await import('../../platforms/android/app-lifecycle.ts')).inferAndroidAppName(packageName)
+    ? await session.dependencies.android.inferAppName(packageName)
     : undefined;
   return {
     ...(packageName ? { packageName, launchTarget: packageName } : {}),
@@ -119,10 +121,12 @@ export async function cleanupLimrunAndroidAdbTunnel(session: LimrunAndroidSessio
   const serial = session.adbSerial;
   if (serial) {
     await cleanupAndroidPortReverse(session);
-    await runCmd('adb', ['disconnect', serial], {
-      allowFailure: true,
-      timeoutMs: 10_000,
-    }).catch(() => {});
+    await session.dependencies.host
+      .runAdb(['disconnect', serial], {
+        allowFailure: true,
+        timeoutMs: 10_000,
+      })
+      .catch(() => {});
   }
   session.adbTunnel?.close();
   session.adbTunnel = undefined;
@@ -135,7 +139,7 @@ async function cleanupAndroidPortReverse(session: LimrunAndroidSession): Promise
   if (!reverse?.list) return;
   const mappings = await reverse.list().catch(() => []);
   const owners = new Set<string>();
-  const unownedLocals: AndroidPortReverseEndpoint[] = [];
+  const unownedLocals: LimrunPortReverseEndpoint[] = [];
   for (const mapping of mappings) {
     if (mapping.ownerId) owners.add(mapping.ownerId);
     else unownedLocals.push(mapping.local);
@@ -149,20 +153,25 @@ async function cleanupAndroidPortReverse(session: LimrunAndroidSession): Promise
 async function runLimrunAndroidAdb(
   session: LimrunAndroidAdbSession,
   args: string[],
-  options?: AndroidAdbExecutorOptions,
-): Promise<AndroidAdbExecutorResult> {
+  options?: LimrunAdbCommandOptions,
+): Promise<LimrunAdbCommandResult> {
   const { adbArgs, result } = await executeLimrunAndroidAdb(session, args, options);
-  return await requireSuccessfulLimrunAndroidAdb(adbArgs, result, options?.allowFailure);
+  return await requireSuccessfulLimrunAndroidAdb(
+    adbArgs,
+    result,
+    options?.allowFailure,
+    session.dependencies,
+  );
 }
 
 async function executeLimrunAndroidAdb(
   session: LimrunAndroidAdbSession,
   args: string[],
-  options?: AndroidAdbExecutorOptions,
-): Promise<{ adbArgs: string[]; result: AndroidAdbExecutorResult }> {
+  options?: LimrunAdbCommandOptions,
+): Promise<{ adbArgs: string[]; result: LimrunAdbCommandResult }> {
   const serial = await ensurePersistentAndroidAdbSerial(session);
   const adbArgs = ['-s', serial, ...args];
-  const result = await runCmd('adb', adbArgs, {
+  const result = await session.dependencies.host.runAdb(adbArgs, {
     allowFailure: options?.allowFailure,
     binaryStdout: options?.binaryStdout,
     stdin: options?.stdin,
@@ -174,12 +183,12 @@ async function executeLimrunAndroidAdb(
 
 async function requireSuccessfulLimrunAndroidAdb(
   adbArgs: string[],
-  result: AndroidAdbExecutorResult,
+  result: LimrunAdbCommandResult,
   allowFailure: boolean | undefined,
-): Promise<AndroidAdbExecutorResult> {
+  dependencies: Pick<LimrunRuntimeDependencies, 'android'>,
+): Promise<LimrunAdbCommandResult> {
   if (result.exitCode !== 0 && allowFailure !== true) {
-    const { androidAdbResultError } = await import('../../platforms/android/adb-executor.ts');
-    throw androidAdbResultError('Limrun Android ADB command failed', result, {
+    throw await dependencies.android.adbError('Limrun Android ADB command failed', result, {
       command: ['adb', ...adbArgs].join(' '),
     });
   }
@@ -206,7 +215,7 @@ async function startAndroidAdbTunnel(session: LimrunAndroidAdbSession): Promise<
   return serial;
 }
 
-function tcpEndpoint(port: number): AndroidPortReverseEndpoint {
+function tcpEndpoint(port: number): LimrunPortReverseEndpoint {
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new AppError('INVALID_ARGS', `Invalid Android tcp reverse port: ${port}`);
   }

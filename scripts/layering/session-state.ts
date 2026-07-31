@@ -73,10 +73,6 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
     'src/daemon/handlers/session-script-publication.ts',
     'src/daemon/session-action-recorder.ts',
   ],
-  saveScriptDefaultedHealedPath: [
-    'src/daemon/handlers/session-replay-runtime.ts',
-    'src/daemon/session-action-recorder.ts',
-  ],
   saveScriptBoundary: ['src/daemon/handlers/session-replay-runtime.ts'],
   saveScriptCommitted: ['src/daemon/session-script-writer.ts'],
   repairSourcePath: ['src/daemon/handlers/session-replay-runtime.ts'],

@@ -21,26 +21,36 @@ import { createRequestHandler } from '../request-router.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import {
+  makeAuthoringSession,
+  makeRepairCompleteSession,
+  makeSession,
+} from '../../__tests__/test-utils/session-factories.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, retriableForErrorCode } from '@agent-device/kernel/errors';
 import { supportedPlatformsForCommand } from '../../core/capabilities.ts';
 
 const mockDispatch = vi.mocked(dispatchCommand);
 
+/**
+ * This file pins its own simulator rather than reusing the shared iOS fixture:
+ * the tenant-scoped `simulatorSetPath` is part of what the router under test
+ * carries through. Everything else comes from the shared session factories.
+ */
+const TENANT_SIMULATOR: DeviceInfo = {
+  platform: 'apple',
+  target: 'mobile',
+  id: 'SIM-001',
+  name: 'iPhone 16',
+  kind: 'simulator',
+  booted: true,
+  simulatorSetPath: '/tmp/tenant-a/set',
+};
+
+const TENANT_SESSION_DEFAULTS = { device: TENANT_SIMULATOR, createdAt: 1_700_000_000_000 } as const;
+
 function makeIosSession(name: string): SessionState {
-  return {
-    name,
-    createdAt: 1_700_000_000_000,
-    actions: [],
-    device: {
-      platform: 'apple',
-      target: 'mobile',
-      id: 'SIM-001',
-      name: 'iPhone 16',
-      kind: 'simulator',
-      booted: true,
-      simulatorSetPath: '/tmp/tenant-a/set',
-    },
-  };
+  return makeSession(name, TENANT_SESSION_DEFAULTS);
 }
 
 function makeHandler(sessionStore = makeSessionStore('agent-device-router-typed-error-')) {
@@ -135,11 +145,10 @@ test('deterministic errors (INVALID_ARGS) are returned with the default shape â€
 // `error.retriable ?? retriableForErrorCode(error.code)` fallback is caught.
 test('BLOCKER 2 (second follow-up): a repair-close platform-close failure surfaces retriable:true and diagnosticId/logPath/details at the TOP level through the router', async () => {
   const { sessionStore, handler } = makeHandler();
-  const session = makeIosSession('typed-error');
-  session.recordSession = true;
-  session.saveScriptBoundary = 0;
-  session.saveScriptComplete = true;
-  session.actions = [{ ts: 1, command: 'open', positionals: ['Demo'], flags: {} }];
+  const session = makeRepairCompleteSession('typed-error', {
+    ...TENANT_SESSION_DEFAULTS,
+    actions: [{ ts: 1, command: 'open', positionals: ['Demo'], flags: {} }],
+  });
   sessionStore.set('typed-error', session);
 
   // DEVICE_NOT_FOUND is not in `retriableForErrorCode`'s conservative allow
@@ -174,8 +183,7 @@ test('BLOCKER 2 (second follow-up): a repair-close platform-close failure surfac
 // details.retriable hoisting.
 test('#1391: an ordinary close-time script-save failure surfaces details.reason/path and retriable:false through the router, and the session is torn down', async () => {
   const { sessionStore, handler } = makeHandler();
-  const session = makeIosSession('typed-error');
-  session.recordSession = true;
+  const session = makeAuthoringSession('typed-error', TENANT_SESSION_DEFAULTS);
   const targetPath = path.join(
     os.tmpdir(),
     `agent-device-router-typed-error-${Date.now()}-${Math.random().toString(36).slice(2)}.ad`,

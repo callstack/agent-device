@@ -20,10 +20,10 @@ import {
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFailureDetails, runCmd } from '../../utils/exec.ts';
-import { sleep } from '../../utils/timeouts.ts';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { flattenIosTree, toIosSelector, writeBase64File, type IosTreeNode } from './snapshot.ts';
 import { normalizeOptionalString } from './strings.ts';
+import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 
 export type LimrunIosSession = {
   platform: 'ios';
@@ -31,6 +31,7 @@ export type LimrunIosSession = {
   instanceId: string;
   device: DeviceInfo;
   client: LimrunIosClient;
+  readonly dependencies: Pick<LimrunRuntimeDependencies, 'host' | 'ios'>;
 };
 
 export type LimrunIosRemoteInstallOptions = {
@@ -45,13 +46,16 @@ export type LimrunIosRemoteInstallResult = {
 
 type LimrunIosApp = Awaited<ReturnType<LimrunIosClient['listApps']>>[number];
 
-export async function createLimrunIosSession(options: {
-  lease: DeviceLease;
-  instanceId: string;
-  device: DeviceInfo;
-  apiUrl: string;
-  token: string;
-}): Promise<LimrunIosSession> {
+export async function createLimrunIosSession(
+  options: {
+    lease: DeviceLease;
+    instanceId: string;
+    device: DeviceInfo;
+    apiUrl: string;
+    token: string;
+  },
+  dependencies: Pick<LimrunRuntimeDependencies, 'host' | 'ios'>,
+): Promise<LimrunIosSession> {
   const client = await createIosInstanceClient({
     apiUrl: options.apiUrl,
     token: options.token,
@@ -63,6 +67,7 @@ export async function createLimrunIosSession(options: {
     instanceId: options.instanceId,
     device: options.device,
     client,
+    dependencies,
   };
 }
 
@@ -72,7 +77,7 @@ export async function installLimrunIosApp(
   installablePath: string,
   options?: ProviderDeviceInstallOptions,
 ): Promise<ProviderDeviceInstallResult> {
-  const prepared = await prepareLimrunIosAsset(installablePath);
+  const prepared = await prepareLimrunIosAsset(installablePath, session.dependencies);
   try {
     const asset = await limrun.assets.getOrUpload({
       path: prepared.uploadPath,
@@ -140,7 +145,7 @@ class LimrunIosInteractor implements Interactor {
 
   async open(app: string, options?: { url?: string }): Promise<void> {
     if (options?.url) {
-      await this.session.client.launchApp(await resolveIosTarget(app));
+      await this.session.client.launchApp(await this.session.dependencies.ios.resolveAppAlias(app));
       await this.session.client.openUrl(options.url);
       return;
     }
@@ -148,13 +153,17 @@ class LimrunIosInteractor implements Interactor {
       await this.session.client.openUrl(app);
       return;
     }
-    await this.session.client.launchApp(await resolveIosTarget(app));
+    await this.session.client.launchApp(await this.session.dependencies.ios.resolveAppAlias(app));
   }
 
   async openDevice(): Promise<void> {}
 
   async close(app: string): Promise<void> {
-    if (app) await this.session.client.terminateApp(await resolveIosTarget(app)).catch(() => {});
+    if (app) {
+      await this.session.client
+        .terminateApp(await this.session.dependencies.ios.resolveAppAlias(app))
+        .catch(() => {});
+    }
   }
 
   async tap(x: number, y: number): Promise<void> {
@@ -265,7 +274,10 @@ class LimrunIosInteractor implements Interactor {
   }
 }
 
-async function prepareLimrunIosAsset(artifactPath: string): Promise<{
+async function prepareLimrunIosAsset(
+  artifactPath: string,
+  dependencies: Pick<LimrunRuntimeDependencies, 'host' | 'ios'>,
+): Promise<{
   uploadPath: string;
   assetName: string;
   appName?: string;
@@ -283,30 +295,26 @@ async function prepareLimrunIosAsset(artifactPath: string): Promise<{
 
   const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'agent-device-limrun-ios-app-'));
   const zipPath = path.join(tempDir, `${path.basename(artifactPath)}.zip`);
-  const result = await runCmd('zip', ['-qr', zipPath, path.basename(artifactPath)], {
-    cwd: path.dirname(artifactPath),
-    timeoutMs: 120_000,
-  });
-  if (result.exitCode !== 0) {
-    await fs.promises.rm(tempDir, { recursive: true, force: true });
-    throw new AppError('COMMAND_FAILED', 'Failed to package iOS .app for Limrun install', {
-      command: ['zip', '-qr', zipPath, path.basename(artifactPath)].join(' '),
-      ...execFailureDetails(result),
+  try {
+    await dependencies.host.archiveDirectory({
+      sourceDirectory: path.dirname(artifactPath),
+      entryName: path.basename(artifactPath),
+      archivePath: zipPath,
     });
+  } catch (error) {
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+    throw error;
   }
   return {
     uploadPath: zipPath,
     assetName: path.basename(zipPath),
-    appName: await readIosBundleAppName(artifactPath),
+    appName:
+      (await dependencies.ios.readBundleAppName(artifactPath)) ??
+      inferAppNameFromPath(artifactPath),
     cleanup: async () => {
       await fs.promises.rm(tempDir, { recursive: true, force: true });
     },
   };
-}
-
-async function resolveIosTarget(app: string): Promise<string> {
-  const { resolveIosAppAlias } = await import('../../platforms/apple/core/app-resolution.ts');
-  return resolveIosAppAlias(app);
 }
 
 function inferAppNameFromPath(appPath: string): string | undefined {
@@ -350,11 +358,6 @@ export function isUserInstalledIosApp(app: LimrunIosApp): boolean {
   return (
     !app.bundleId.startsWith('com.apple.') && !app.installType.toLowerCase().includes('system')
   );
-}
-
-async function readIosBundleAppName(appPath: string): Promise<string | undefined> {
-  const { readIosBundleInfo } = await import('../../platforms/apple/core/install-artifact.ts');
-  return (await readIosBundleInfo(appPath)).appName ?? inferAppNameFromPath(appPath);
 }
 
 function unsupported(command: string, message: string): never {
