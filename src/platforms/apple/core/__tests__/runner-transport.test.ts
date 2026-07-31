@@ -324,6 +324,28 @@ test('waitForRunner falls back to the tunnel route inside the same attempt', asy
   assert.equal(vi.mocked(fetch).mock.calls[0]?.[0], 'http://[fd00::123]:8100/command');
 });
 
+test('falls back to the tunnel when usbmux loses the device mid-connect', async () => {
+  // usbmuxd listed the device, then answered Connect with "no such device"
+  // (result 2) because it went away in between. That must reach the same
+  // fallback as a missing ListDevices entry, or a CoreDevice device fails with
+  // a cable hint while its Wi-Fi tunnel is sitting there working.
+  mockUsbmuxPostCommand.mockRejectedValue(
+    new AppError('DEVICE_NOT_FOUND', 'iOS device is no longer available through usbmux', {
+      deviceId: iosDevice.id,
+      usbmuxDeviceAttached: false,
+      usbmuxResult: 2,
+      hint: 'Connect the device by cable, trust this Mac, keep it unlocked, and retry.',
+    }),
+  );
+  stubSuccessfulFetch();
+  stubTunnelIpLookup('fd00::123');
+
+  const response = await sendRunnerCommandOnce(iosDevice, 8100, { command: 'uptime' }, 5_000);
+
+  assert.equal(response.status, 200);
+  assert.equal(vi.mocked(fetch).mock.calls[0]?.[0], 'http://[fd00::123]:8100/command');
+});
+
 function stubUsbmuxDeviceUnattached(): void {
   mockUsbmuxPostCommand.mockRejectedValue(
     new AppError('DEVICE_NOT_FOUND', 'iOS device is not available through usbmux', {

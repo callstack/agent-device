@@ -8,6 +8,17 @@ const USBMUX_HEADER_BYTES = 16;
 const USBMUX_PROTOCOL_VERSION = 1;
 const USBMUX_MESSAGE_PLIST = 8;
 const USBMUX_MAX_PACKET_BYTES = 4 * 1024 * 1024;
+/**
+ * usbmuxd `Connect` result codes, confirmed against the daemon on macOS 15:
+ * connecting to a closed port on an attached device answers 3, and connecting
+ * with a DeviceID usbmuxd does not know answers 2.
+ */
+const USBMUX_RESULT_OK = 0;
+const USBMUX_RESULT_BAD_DEVICE = 2;
+const USBMUX_RESULT_CONNECTION_REFUSED = 3;
+
+const USBMUX_DEVICE_UNATTACHED_HINT =
+  'Connect the device by cable, trust this Mac, keep it unlocked, and retry.';
 
 export async function openUsbmuxRunnerSocket(
   socketPath: string,
@@ -18,7 +29,14 @@ export async function openUsbmuxRunnerSocket(
 ): Promise<Socket> {
   const deadline = Deadline.fromTimeoutMs(timeoutMs);
   const deviceId = await resolveUsbmuxDeviceId(socketPath, udid, deadline.remainingMs(), signal);
-  return await openUsbmuxDeviceSocket(socketPath, deviceId, port, deadline.remainingMs(), signal);
+  return await openUsbmuxDeviceSocket(
+    socketPath,
+    udid,
+    deviceId,
+    port,
+    deadline.remainingMs(),
+    signal,
+  );
 }
 
 async function resolveUsbmuxDeviceId(
@@ -40,7 +58,7 @@ async function resolveUsbmuxDeviceId(
       // device is simply not attached by cable, so a CoreDevice-backed device
       // can fall back to its network tunnel instead of retrying this transport.
       usbmuxDeviceAttached: false,
-      hint: 'Connect the device by cable, trust this Mac, keep it unlocked, and retry.',
+      hint: USBMUX_DEVICE_UNATTACHED_HINT,
     });
   } finally {
     socket.destroy();
@@ -49,6 +67,7 @@ async function resolveUsbmuxDeviceId(
 
 async function openUsbmuxDeviceSocket(
   socketPath: string,
+  udid: string,
   deviceId: number,
   port: number,
   timeoutMs: number,
@@ -66,14 +85,8 @@ async function openUsbmuxDeviceSocket(
     );
     const packet = await readUsbmuxPacket(socket, timeoutMs, signal);
     const result = readPlistInteger(packet.payload.toString('utf8'), 'Number');
-    if (result !== 0) {
-      throw new AppError('COMMAND_FAILED', 'Failed to connect to XCTest runner through usbmux', {
-        backend: 'xctest',
-        deviceId,
-        port,
-        usbmuxResult: result,
-        hint: 'Keep the device connected by cable and unlocked, then retry.',
-      });
+    if (result !== USBMUX_RESULT_OK) {
+      throw buildUsbmuxConnectError({ result, udid, deviceId, port });
     }
     return socket;
   } catch (error) {
@@ -258,6 +271,47 @@ function* walkXmlNodes(nodes: readonly XmlNode[]): Generator<XmlNode> {
     yield node;
     yield* walkXmlNodes(node.children);
   }
+}
+
+/**
+ * A device usbmuxd no longer knows is the same verdict as one missing from
+ * `ListDevices` — it must reach the unattached path so a CoreDevice device can
+ * fall back to its network tunnel, rather than failing with a cable hint while
+ * Wi-Fi is available. A refused port means the opposite: the device is there
+ * and only the runner is not listening yet.
+ */
+function buildUsbmuxConnectError(params: {
+  result: number | undefined;
+  udid: string;
+  deviceId: number;
+  port: number;
+}): AppError {
+  const { result, udid, deviceId, port } = params;
+  if (result === USBMUX_RESULT_BAD_DEVICE) {
+    return new AppError('DEVICE_NOT_FOUND', 'iOS device is no longer available through usbmux', {
+      deviceId: udid,
+      backend: 'xctest',
+      usbmuxDeviceAttached: false,
+      usbmuxResult: result,
+      hint: USBMUX_DEVICE_UNATTACHED_HINT,
+    });
+  }
+  if (result === USBMUX_RESULT_CONNECTION_REFUSED) {
+    return new AppError('COMMAND_FAILED', 'XCTest runner is not listening on the device port', {
+      backend: 'xctest',
+      deviceId,
+      port,
+      usbmuxResult: result,
+      hint: 'The device is reachable but nothing is bound to the runner port yet; this resolves once the runner finishes starting.',
+    });
+  }
+  return new AppError('COMMAND_FAILED', 'Failed to connect to XCTest runner through usbmux', {
+    backend: 'xctest',
+    deviceId,
+    port,
+    usbmuxResult: result,
+    hint: 'Keep the device connected by cable and unlocked, then retry.',
+  });
 }
 
 function hostToNetworkPort(port: number): number {
