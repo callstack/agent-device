@@ -133,8 +133,13 @@ test('test binds each replay script to its declared platform metadata', async ()
   // they do not, the platform-to-script binding it asserts appears reversed. Pinning the
   // enumeration keeps the subject (each script binds to ITS declared platform, and session
   // numbering follows discovery order) without depending on the host filesystem.
-  const opendirSync = vi.spyOn(fs, 'opendirSync').mockImplementation((directory) => {
-    expect(directory).toBe(root);
+  // Only this suite's own directory is intercepted, and the spy is restored in a `finally`.
+  // A mock that asserted on its argument, or that leaked past a throw, would fire from inside
+  // `fs` for whatever else shares the worker — which surfaces as a worker crash with no failed
+  // test rather than a readable assertion.
+  const realOpendirSync = fs.opendirSync;
+  const opendirSync = vi.spyOn(fs, 'opendirSync').mockImplementation(((directory, ...rest) => {
+    if (directory !== root) return realOpendirSync(directory, ...(rest as []));
     let index = 0;
     return {
       readSync: () => {
@@ -144,27 +149,31 @@ test('test binds each replay script to its declared platform metadata', async ()
       },
       closeSync: () => {},
     } as fs.Dir;
-  });
+  }) as typeof fs.opendirSync);
 
   const invoked: DaemonRequest[] = [];
-  const response = await handleSessionCommands({
-    req: {
-      token: 't',
-      session: 'default',
-      command: 'test',
-      positionals: [root],
-      meta: { cwd: root, requestId: 'suite-platforms' },
-    },
-    sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: {} };
-    },
-  });
+  let response;
+  try {
+    response = await handleSessionCommands({
+      req: {
+        token: 't',
+        session: 'default',
+        command: 'test',
+        positionals: [root],
+        meta: { cwd: root, requestId: 'suite-platforms' },
+      },
+      sessionName: 'default',
+      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      sessionStore,
+      invoke: async (req) => {
+        invoked.push(req);
+        return { ok: true, data: {} };
+      },
+    });
+  } finally {
+    opendirSync.mockRestore();
+  }
 
-  opendirSync.mockRestore();
   expect(response?.ok).toBeTruthy();
   expect(invoked.map((req) => req.flags?.platform)).toEqual(['android', 'ios']);
   expect(invoked.map((req) => req.session)).toEqual([
