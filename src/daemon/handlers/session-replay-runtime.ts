@@ -222,8 +222,7 @@ export async function runReplayScriptFile(params: {
   let resolved = '';
   const artifactPaths = new Set<string>();
   // #1478 P4b: the one locked coordinator this request reaches the repair
-  // transaction through — created once, threaded everywhere this file used
-  // to import `session-replay-transaction.ts` or `session.pendingRecordAndHeal` directly.
+  // transaction and resume watermark through.
   const coordinator = createReplayCoordinator({ sessionStore, sessionName });
   try {
     resolved = SessionStore.expandHome(filePath, req.meta?.cwd);
