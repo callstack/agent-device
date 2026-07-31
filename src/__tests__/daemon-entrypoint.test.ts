@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -292,5 +293,69 @@ test('daemon entrypoint publishes HTTP metadata and cleans up on shutdown', asyn
     }
     await daemon.wait.catch(() => {});
     fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('daemon runtime records the startup device-claim prune in daemon.log', async () => {
+  // Regression: the prune ran before publishDaemonInfo, which truncates
+  // daemon.log — so the event was written and then wiped, leaving nothing in
+  // the log users are told to inspect. Asserted against a real runtime start
+  // rather than the prune in isolation, since the ordering is the bug.
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-prune-log-'));
+  const claimsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-prune-claims-'));
+  const paths = resolveDaemonPaths(stateDir);
+  const deviceKey = 'local:android:none:prune-log';
+  // resolveDeviceClaimRoot reads process.env directly, not the env passed to
+  // startDaemonRuntime, so the store has to be redirected on the process.
+  const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
+  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
+  let exitCode: number | undefined;
+
+  try {
+    fs.writeFileSync(
+      path.join(claimsDir, `${crypto.createHash('sha256').update(deviceKey).digest('hex')}.json`),
+      JSON.stringify({
+        schemaVersion: 1,
+        deviceKey,
+        device: { platform: 'android', id: 'prune-log', name: 'Prune Log', kind: 'emulator' },
+        session: 'dead-session',
+        workspace: '/worktrees/dead',
+        stateDir: process.cwd(),
+        ownerPid: 999_999_999,
+        ownerStartTime: 'old-start-time',
+        ownerToken: 'dead-token',
+        createdAtMs: 1,
+        updatedAtMs: 1,
+      }),
+    );
+
+    const runtime = await startDaemonRuntime({
+      env: {
+        ...process.env,
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+        AGENT_DEVICE_CLAIMS_DIR: claimsDir,
+      },
+      exit: (code) => {
+        exitCode = code;
+      },
+      registerProcessHandlers: false,
+      stderr: { write: () => {} },
+      stdout: { write: () => {} },
+    });
+
+    assert.notEqual(runtime, null);
+    assert.deepEqual(fs.readdirSync(claimsDir), [], 'the dead claim should be pruned');
+
+    const log = fs.readFileSync(paths.logPath, 'utf8');
+    assert.match(log, /"phase":"device_claim_prune"/);
+    assert.match(log, /"pruned":1/);
+
+    await runtime?.shutdown();
+    assert.equal(exitCode, 0);
+  } finally {
+    process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+    fs.rmSync(stateDir, { recursive: true, force: true });
+    fs.rmSync(claimsDir, { recursive: true, force: true });
   }
 });

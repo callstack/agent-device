@@ -330,7 +330,6 @@ export async function startDaemonRuntime(
   let socketPort: number | undefined;
   let httpPort: number | undefined;
   try {
-    await pruneDeviceClaimsForDaemonStartup(logPath);
     await cleanupWebBrowserOrphansForDaemonStartup({ stateDir: baseDir, sessionStore });
     // Fire-and-forget: gated on a state-dir marker so it only touches adb when a prior run here
     // actually activated the test IME (never on hosts that don't use it, e.g. the macOS runner).
@@ -343,6 +342,9 @@ export async function startDaemonRuntime(
     socketPort = opened.socketPort;
     httpPort = opened.httpPort;
     publishDaemonInfo(socketPort, httpPort);
+    // After publication: publishDaemonInfo truncates daemon.log, so anything
+    // written before it is lost — including the prune's own diagnostic.
+    await pruneDeviceClaimsForDaemonStartup(logPath);
     // Arms the initial idle-reap timer: a daemon that starts and never
     // receives a request must still be able to reap itself.
     idleReap.noteActivity();
