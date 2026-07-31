@@ -52,19 +52,23 @@ function tapCliOutput(result: CommandRequestResult): CliOutput {
   const y = data.y;
   if (!ref || typeof x !== 'number' || typeof y !== 'number') {
     const output = defaultCommandCliOutput(data);
-    return { data: output.data, text: appendSettleText(output.text, data.settle) };
+    return { data: output.data, text: appendResponseNotes(output.text, data) };
   }
-  return { data, text: appendSettleText(`Tapped @${ref} (${x}, ${y})`, data.settle) };
+  return { data, text: appendResponseNotes(`Tapped @${ref} (${x}, ${y})`, data) };
 }
 
 function messageWithSettleCliOutput(result: CommandRequestResult): CliOutput {
   const data = result as Record<string, unknown>;
   const output = defaultCommandCliOutput(data);
-  return { data: output.data, text: appendSettleText(output.text, data.settle) };
+  return { data: output.data, text: appendResponseNotes(output.text, data) };
 }
 
-function appendSettleText(text: string | null | undefined, settle: unknown): string {
-  return `${text ?? ''}${formatSettleText(settle)}`;
+function appendResponseNotes(
+  text: string | null | undefined,
+  data: Record<string, unknown>,
+): string {
+  const warning = typeof data.warning === 'string' ? `\nWarning: ${data.warning}` : '';
+  return `${text ?? ''}${warning}${formatSettleText(data.settle)}`;
 }
 
 type SettleTextView = {

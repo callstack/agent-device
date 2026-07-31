@@ -209,8 +209,8 @@ async function dispatchTargetedTouchViaRuntime(
         expectedResolvedTarget: replayTargetGuard,
       }),
     afterRun: async (result) => {
-      if (session.lease?.leaseProvider) return;
-      await assertAndroidPressStayedInApp(
+      if (session.lease?.leaseProvider) return undefined;
+      return await assertAndroidPressStayedInApp(
         session,
         formatTouchTargetLabel(parsedTarget.target, result),
       );
@@ -766,7 +766,8 @@ async function dispatchRuntimeInteraction<
      */
     refContext?: RefAdmissionContext;
     run(runtime: ReturnType<typeof createInteractionRuntime>): Promise<TResult>;
-    afterRun?(result: TResult): Promise<void>;
+    /** May return a warning to append to the successful response (e.g. a pending Android permission dialog). */
+    afterRun?(result: TResult): Promise<string | undefined>;
     buildPayloads(
       result: TResult,
     ): InteractionResponsePayloads | Promise<InteractionResponsePayloads>;
@@ -777,13 +778,14 @@ async function dispatchRuntimeInteraction<
   const runtime = createInteractionRuntime(params);
   const actionStartedAt = Date.now();
   try {
+    let afterRunWarning: string | undefined;
     const outcome = await runWithAndroidDialogReadinessCheck(
       session,
       params.req.command,
       { refContext: options.refContext },
       async () => {
         const result = await options.run(runtime);
-        await options.afterRun?.(result);
+        afterRunWarning = await options.afterRun?.(result);
         return result;
       },
     );
@@ -791,13 +793,17 @@ async function dispatchRuntimeInteraction<
     const { readiness, runtimeResult } = outcome;
     const actionFinishedAt = Date.now();
     const { result, responseData, recordedTarget } = await options.buildPayloads(runtimeResult);
-    if (readiness.status === 'recovered') {
-      // Append, don't clobber — the builder may already carry a warning
-      // (e.g. stale-refs, #1076).
-      const warning =
-        typeof responseData.warning === 'string'
-          ? `${responseData.warning} ${readiness.warning}`
-          : readiness.warning;
+    // Append, don't clobber — the builder may already carry a warning
+    // (e.g. stale-refs, #1076).
+    const appendedWarnings = [
+      ...(readiness.status === 'recovered' ? [readiness.warning] : []),
+      ...(afterRunWarning ? [afterRunWarning] : []),
+    ];
+    if (appendedWarnings.length > 0) {
+      const warning = [
+        ...(typeof responseData.warning === 'string' ? [responseData.warning] : []),
+        ...appendedWarnings,
+      ].join(' ');
       result.warning = warning;
       responseData.warning = warning;
     }

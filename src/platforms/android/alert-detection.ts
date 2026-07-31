@@ -30,6 +30,11 @@ const ANDROID_PERMISSION_PACKAGES = new Set([
   'com.google.android.packageinstaller',
   'com.android.packageinstaller',
 ]);
+
+/** Packages that host runtime-permission and install prompts — a legitimate `alert` source, never an app escape. */
+export function isAndroidPermissionPackage(packageName: string): boolean {
+  return ANDROID_PERMISSION_PACKAGES.has(packageName);
+}
 const ANDROID_SYSTEM_DIALOG_PACKAGES = new Set(['android', 'com.android.systemui']);
 const ANDROID_ALERT_ID_PATTERN =
   /^android:id\/(?:alertTitle|message|button[123]|parentPanel|buttonPanel|contentPanel)$/i;

@@ -1843,6 +1843,56 @@ test('press @ref fails when Android tap escapes to Settings', async () => {
   });
 });
 
+test.each([
+  'com.google.android.permissioncontroller',
+  'com.android.permissioncontroller',
+])('press @ref succeeds with a pending-alert warning when %s foregrounds', async (packageName) => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-permission-prompt';
+  const session = makeAndroidSession(sessionName);
+  session.snapshot = {
+    nodes: attachRefs([
+      {
+        index: 0,
+        type: 'android.widget.Button',
+        label: 'Request microphone',
+        rect: { x: 16, y: 40, width: 120, height: 48 },
+        enabled: true,
+        hittable: true,
+      },
+    ]),
+    createdAt: Date.now(),
+    backend: 'android',
+  };
+  sessionStore.set(sessionName, session);
+
+  mockDispatch.mockResolvedValue({ pressed: true });
+  mockGetAndroidAppState.mockResolvedValue({
+    package: packageName,
+    activity: 'com.android.permissioncontroller.permission.ui.GrantPermissionsActivity',
+  });
+
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'press',
+      positionals: ['@e1'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+
+  expect(response?.ok).toBe(true);
+  if (response?.ok) {
+    expect(response.data?.warning).toMatch(/opened an Android permission dialog/);
+    expect(response.data?.warning).toMatch(/"alert get"/);
+  }
+  expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
+});
+
 test('press @ref --verify surfaces evidence through the interactionResultExtra allowlist', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'verify-press';
