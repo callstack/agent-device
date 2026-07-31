@@ -129,7 +129,10 @@ jobs:
           target: google_apis_playstore
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
           script: |
-            set -euo pipefail
+            # android-emulator-runner executes this with /usr/bin/sh, which is dash on
+            # ubuntu runners and rejects `-o pipefail`. The serial assignment below is
+            # validated by the `test -n` guard instead.
+            set -eu
             ANDROID_SERIAL="$(adb devices | awk 'NR > 1 && $2 == "device" { print $1; exit }')"
             test -n "$ANDROID_SERIAL"
             BOOT_FINISHED_AT="$(date +%s)"
