@@ -92,7 +92,10 @@ export function buildRunnerRecycleBudgetExhaustedError(
       command: command.command,
       commandId: command.commandId,
       recovery: 'runner_recycle_budget_exhausted',
-      hint: 'The current screen is overwhelming the iOS accessibility capture (usually heavy or animating content). The app session is preserved: run `screenshot` for visual truth and interact with coordinate commands, or navigate to another screen and retry. Re-running the same command immediately will likely wedge again.',
+      // This path only knows that a restart was already spent, never why the
+      // runner failed. Naming the heavy-screen case as the cause sent people
+      // to change screens when the runner had in fact failed to install.
+      hint: 'Check the runner log for the underlying failure before retrying — a provisioning or code-signing error there means the runner cannot install on this device, and no retry will help. If the runner is healthy, the current screen is likely too heavy or animating for accessibility capture: the app session is preserved, so run `screenshot` for visual truth and interact by coordinates, or navigate to another screen.',
       logPath: options.logPath,
     },
   );

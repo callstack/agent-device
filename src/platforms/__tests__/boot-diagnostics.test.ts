@@ -1,6 +1,10 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { bootFailureHint, classifyBootFailure } from '../boot-diagnostics.ts';
+import {
+  bootFailureHint,
+  classifyBootFailure,
+  isInfrastructureBootFailureReason,
+} from '../boot-diagnostics.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
 test('classifyBootFailure maps timeout errors', () => {
@@ -56,4 +60,42 @@ test('connect phase does not classify non-timeout errors as connect timeout', ()
     context: { platform: 'ios', phase: 'connect' },
   });
   assert.equal(reason, 'BOOT_COMMAND_FAILED');
+});
+
+test('classifies a runner install blocked by provisioning, not as a connect timeout', () => {
+  // Real xcodebuild output from an iPhone that was not in the signing account.
+  // The installer prose around it is localized by macOS, so only the CoreDevice
+  // error code and the English framework strings can be matched.
+  const stderr = [
+    'AgentDeviceRunnerUITests-Runner encountered an error (Failed to install or launch the test runner.',
+    '(Underlying Error: Nie można zainstalować „AgentDeviceRunnerUITests-Runner”.',
+    'Failed to install embedded profile for com.callstack.agentdevice.runner.uitests.xctrunner :',
+    '0xe8008012 (This provisioning profile cannot be installed on this device.)))',
+    '** TEST EXECUTE FAILED **',
+  ].join('\n');
+
+  const reason = classifyBootFailure({
+    message: 'Runner did not accept connection (xcodebuild exited early)',
+    stderr,
+    context: { platform: 'ios', phase: 'connect' },
+  });
+
+  assert.equal(reason, 'IOS_RUNNER_DEVICE_NOT_PROVISIONED');
+  assert.match(bootFailureHint(reason), /provisioning profile does not cover it/);
+  assert.match(bootFailureHint(reason), /Register the device/);
+});
+
+test('a provisioning failure is not treated as retryable infrastructure', () => {
+  // Retrying cannot register a device with a signing team.
+  assert.equal(isInfrastructureBootFailureReason('IOS_RUNNER_DEVICE_NOT_PROVISIONED'), false);
+});
+
+test('still classifies a genuine runner connect timeout as such', () => {
+  assert.equal(
+    classifyBootFailure({
+      message: 'Runner did not accept connection',
+      context: { platform: 'ios', phase: 'connect' },
+    }),
+    'IOS_RUNNER_CONNECT_TIMEOUT',
+  );
 });
