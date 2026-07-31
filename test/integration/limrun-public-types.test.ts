@@ -45,16 +45,14 @@ test('compiled Limrun subpath preserves root Android provider capabilities', () 
     );
     fs.writeFileSync(
       path.join(tempRoot, 'fixture.ts'),
-      `import type { AndroidAdbProvider, LimrunAndroidDeviceSession } from 'agent-device/limrun';
+      `import type { LimrunAndroidDeviceSession } from 'agent-device/limrun';
 
 declare const session: LimrunAndroidDeviceSession;
-const provider: AndroidAdbProvider = session.adb;
-
-void provider.spawn;
-void provider.pull;
-void provider.install;
-void provider.touch;
-void provider.gestureViewport;
+void session.adb.spawn;
+void session.adb.pull;
+void session.adb.install;
+void session.adb.touch;
+void session.adb.gestureViewport;
 `,
     );
 

@@ -26,20 +26,12 @@ test('screenshotIos caches simulator screen scale per device', async () => {
     booted: true,
   };
 
-  await fs.writeFile(sourcePngPath, PNG.sync.write(new PNG({ width: 1206, height: 2622 })));
+  await fs.writeFile(sourcePngPath, PNG.sync.write(new PNG({ width: 2, height: 2 })));
   const calls: string[][] = [];
   const provider = createLocalAppleToolProvider({
     simctl: {
       run: async (args) => {
         calls.push(args);
-        if (startsWithArgs(args, ['list', 'devices', '-j'])) {
-          return {
-            exitCode: 0,
-            stdout:
-              '{"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-18-0":[{"udid":"sim-scale-cache","state":"Booted"}]}}',
-            stderr: '',
-          };
-        }
         if (startsWithArgs(args, ['getenv', device.id, 'SIMULATOR_MAINSCREEN_SCALE'])) {
           return { exitCode: 0, stdout: '3\n', stderr: '' };
         }
@@ -54,8 +46,9 @@ test('screenshotIos caches simulator screen scale per device', async () => {
 
   try {
     await withAppleToolProvider(provider, async () => {
-      await screenshotIos(device, outPath);
-      await screenshotIos(device, outPath);
+      const options = { pixelDensity: 3, skipIosSimulatorBootCheck: true } as const;
+      await screenshotIos(device, outPath, options);
+      await screenshotIos(device, outPath, options);
     });
 
     assert.equal(
