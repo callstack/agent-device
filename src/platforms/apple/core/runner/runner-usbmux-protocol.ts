@@ -36,6 +36,10 @@ async function resolveUsbmuxDeviceId(
     throw new AppError('DEVICE_NOT_FOUND', 'iOS device is not available through usbmux', {
       deviceId: udid,
       backend: 'xctest',
+      // Discriminator for the usbmux-first route: usbmuxd answered and the
+      // device is simply not attached by cable, so a CoreDevice-backed device
+      // can fall back to its network tunnel instead of retrying this transport.
+      usbmuxDeviceAttached: false,
       hint: 'Connect the device by cable, trust this Mac, keep it unlocked, and retry.',
     });
   } finally {

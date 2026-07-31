@@ -59,16 +59,27 @@ xctestrun prep (~13 s cold) and runner startup; fresh device resolution costs
    devices; DeviceID (10) is the mux handle. Multi-device disambiguation is
    structural. (Multi-attached-device matrix not exercised: one device only.)
 
-## Implied design (matches the issue's desired outcome, minus full deletion)
+## Shipped design (matches the issue's desired outcome, minus full deletion)
 
-- One private route resolver: physical devices try usbmux first; on usbmux
-  DEVICE_NOT_FOUND (not attached via USB) resolve the CoreDevice tunnel and
-  use the network route. Tunnel cache/invalidations stay but only run on the
-  fallback path, so cabled devices never pay the probe/TTL tax.
-- Failure semantics: usbmux DEVICE_NOT_FOUND → immediate fallback attempt;
-  if the fallback also fails, surface the usbmux hint (cable/trust/unlock).
-- The xctest backend keeps usbmux-only (CoreDevice unavailable by definition)
-  but needs the same non-retryable classification for DEVICE_NOT_FOUND.
+Implemented on top of this evidence; the experiment's
+`AGENT_DEVICE_IOS_RUNNER_ROUTE` override is gone because usbmux-first is now
+the real behaviour rather than something to opt into.
+
+- One private route resolver: physical devices resolve to usbmux first. When
+  usbmuxd answers that the device is not attached, the resolver is marked for
+  the rest of the request and re-resolves to the CoreDevice tunnel route.
+  Callers never choose a transport; `waitForRunner` and `sendRunnerCommandOnce`
+  both go through the same resolver.
+- The tunnel lookup, its 30 s cache, and the cache invalidation now only run on
+  the fallback path, so a cabled device never pays the probe/TTL tax that cost
+  ~4.5 s per idle gap.
+- Failure semantics: the usbmux "device not attached" verdict carries
+  `usbmuxDeviceAttached: false`, and `isUsbmuxDeviceUnattachedError` is the only
+  thing that triggers fallback. It is answered inside the same connect attempt
+  rather than by burning a retry, so a Wi-Fi-only device is not slowed down.
+- The xctest backend stays usbmux-only (it has no CoreDevice tunnel by
+  definition), so its verdict is terminal and surfaces the cable/trust/unlock
+  hint instead of being retried for the full budget.
 
 ## Pitfalls for whoever implements/re-measures
 
