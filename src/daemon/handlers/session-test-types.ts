@@ -1,7 +1,17 @@
 import type { ReplaySuiteTestFailed } from '@agent-device/contracts/replay';
 import type { SnapshotDiagnosticsSummary } from '@agent-device/contracts/capture';
-import type { ReplayScriptMetadata } from '../../replay/script.ts';
+import type { DeviceTarget, PlatformSelector } from '@agent-device/kernel/device';
 import type { ReplayTestShardContext } from './session-test-sharding.ts';
+
+/**
+ * The device vocabulary a scheduler may name, sourced from the neutral kernel rather than
+ * through `replay/script.ts` (#1478 P3b). These resolve to exactly what the `.ad` metadata
+ * types resolved to — `Exclude<PlatformSelector, 'web'>` and `DeviceTarget` — so the manifest
+ * shape is unchanged; only the import direction is. A format-neutral scheduler must not name
+ * an engine module, and P5 relocates that engine into `packages/ad-replay` regardless.
+ */
+export type ReplayTestPlatform = Exclude<PlatformSelector, 'web'>;
+export type ReplayTestTarget = DeviceTarget;
 
 /**
  * One execution step an engine reports while an attempt runs (#1478 P3, finding 1).
@@ -56,8 +66,8 @@ export type ReplayTestAttemptOutcome = ReplayTestAttemptPassed | ReplayTestAttem
 export type ReplayTestRunReplayParams = {
   filePath: string;
   sessionName: string;
-  platform?: ReplayScriptMetadata['platform'];
-  target?: ReplayScriptMetadata['target'];
+  platform?: ReplayTestPlatform;
+  target?: ReplayTestTarget;
   requestId?: string;
   artifactsDir?: string;
   artifactPaths?: Set<string>;
