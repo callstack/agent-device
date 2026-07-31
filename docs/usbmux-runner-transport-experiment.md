@@ -3,8 +3,12 @@
 Live results from 2026-07-30, thymikee-iphone (iPhone 17 Pro, iOS 26.5.2, UDID
 00008150-001849640CF8401C), macOS host with Xcode 26.2. Method: forced-route
 env override `AGENT_DEVICE_IOS_RUNNER_ROUTE=usbmux` in `runner-command-route.ts`
-(uncommitted experiment patch), isolated `--state-dir` daemons per leg, timings
-from per-request `--debug` ndjson plus wall-clock. Every timing sample was
+(committed with this doc), isolated `--state-dir` daemons per leg, timings
+from per-request `--debug` ndjson plus wall-clock. The override is
+**daemon-scoped**: the daemon captures its environment at launch, so setting
+the variable on a later CLI invocation against a running daemon silently
+keeps the previous route — every route leg needs a fresh isolated
+state-dir/daemon launched with the desired value. Every timing sample was
 validated against real command output after an early instrument artifact (see
 Pitfalls).
 
@@ -77,5 +81,9 @@ xctestrun prep (~13 s cold) and runner startup; fresh device resolution costs
   error latency is indistinguishable from a fast success unless output is
   asserted. Runner-lease contention ("already owned by another daemon")
   produced exactly this artifact.
+- The route override is daemon-scoped (env captured at daemon launch). Never
+  flip `AGENT_DEVICE_IOS_RUNNER_ROUTE` between commands against the same
+  daemon and expect the route to change — start a fresh isolated
+  state-dir/daemon per leg, then verify with `ps eww <daemon-pid>`.
 - Sessions are cwd-scoped; run every command of a leg from the same cwd.
 - Auto-Lock must be Never during measurement or the runner dies mid-series.

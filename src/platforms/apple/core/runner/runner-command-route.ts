@@ -5,8 +5,10 @@ const RUNNER_DEVICE_TUNNEL_IP_CACHE_TTL_MS = 30_000;
 
 /**
  * Experimental override for #1403: forces physical-device runner commands
- * through usbmux regardless of backend. Read per-resolve so daemon restarts
- * are not required between experiment runs.
+ * through usbmux regardless of backend. Daemon-scoped: the value is re-read
+ * on every resolve, but from the daemon's environment, which is captured at
+ * daemon launch — a later CLI invocation cannot change it. Use a fresh
+ * isolated state-dir/daemon per experiment route leg.
  */
 const RUNNER_ROUTE_OVERRIDE_ENV = 'AGENT_DEVICE_IOS_RUNNER_ROUTE';
 

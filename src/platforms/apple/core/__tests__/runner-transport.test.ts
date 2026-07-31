@@ -242,6 +242,25 @@ test('sendRunnerCommandOnce routes coredevice physical devices through usbmux wh
   ]);
 });
 
+test('runner route override follows the daemon process env across resolves', async () => {
+  // The override is daemon-scoped: resolves re-read the daemon's process env,
+  // which is fixed at daemon launch. Clearing it here models a fresh daemon
+  // launched without the variable — the only way the route can change.
+  vi.stubEnv('AGENT_DEVICE_IOS_RUNNER_ROUTE', 'usbmux');
+  stubSuccessfulFetch();
+  mockRunCmd.mockImplementation(async () => ({ exitCode: 1, stdout: '', stderr: '' }));
+
+  await sendRunnerCommandOnce(iosDevice, 8100, { command: 'uptime' }, 5_000);
+  assert.equal(mockUsbmuxPostCommand.mock.calls.length, 1);
+  assert.equal(vi.mocked(fetch).mock.calls.length, 0);
+
+  vi.unstubAllEnvs();
+  await sendRunnerCommandOnce(iosDevice, 8100, { command: 'uptime' }, 5_000);
+
+  assert.equal(mockUsbmuxPostCommand.mock.calls.length, 1);
+  assert.equal(vi.mocked(fetch).mock.calls[0]?.[0], 'http://127.0.0.1:8100/command');
+});
+
 test('waitForRunner routes coredevice physical devices through usbmux when overridden', async () => {
   vi.stubEnv('AGENT_DEVICE_IOS_RUNNER_ROUTE', 'usbmux');
   const fetchMock = vi.fn();
