@@ -28,12 +28,9 @@ export type ReplayTestRunEntry = Extract<ReplayTestDiscoveryEntry, { kind: 'run'
 /**
  * Applies discovery policy to host-inspected sources (#1478 P3b).
  *
- * This used to expand paths, read each file, and call `readReplayScriptMetadata` /
- * `inspectMaestroFlow` / `resolveReplayFormat` itself — three engine and format imports a
- * format-neutral scheduler cannot hold. Inspection is now the host's `discoverSources`
- * capability; what remains here is the genuinely neutral part: deciding which sources a
- * `--platform` filter runs, which it skips and with what message, and rejecting a suite that
- * matched nothing.
+ * Inspection belongs to the host, which has the engines. This is the neutral half: which
+ * sources a `--platform` filter runs, which it skips and with what message, and rejecting a
+ * suite that matched nothing.
  */
 export function discoverReplayTestEntries(params: {
   inputs: string[];
@@ -118,13 +115,15 @@ export function buildReplayTestAttemptRequestId(params: {
   shardIndex?: number;
 }): string {
   const { requestId, suiteInvocationId, filePath, caseIndex, attemptIndex, shardIndex } = params;
-  const shardPart = shardIndex === undefined ? '' : `:shard:${shardIndex + 1}`;
-  // The scheduler mints attempt identity itself (#1478 P3b). This used to be wrapped in
-  // `resolveRequestTrackingId`, whose only job is to substitute a generated id for an empty
-  // one — and this template always contains `:test:`, so it is never empty and the wrapper
-  // always returned it unchanged. Dropping the dead call removes a `request/cancel.ts`
-  // import from the scheduler without altering a single produced id.
-  return `${requestId ?? suiteInvocationId}${shardPart}:test:${caseIndex + 1}:${path.basename(filePath)}:attempt:${attemptIndex + 1}`;
+  return [
+    requestId ?? suiteInvocationId,
+    ...(shardIndex === undefined ? [] : ['shard', shardIndex + 1]),
+    'test',
+    caseIndex + 1,
+    path.basename(filePath),
+    'attempt',
+    attemptIndex + 1,
+  ].join(':');
 }
 
 export function resolveReplayTestTimeout(

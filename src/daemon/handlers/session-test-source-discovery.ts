@@ -12,13 +12,12 @@ import type {
 /**
  * The daemon adapter's source-inspection capability (#1478 P3b).
  *
- * Path expansion, file reading, format routing, and per-engine inspection all live here, on
- * the host side of the seam. The scheduler receives neutral manifests and keeps only discovery
- * policy — which sources a `--platform` filter runs, which it skips, and the empty-suite error.
+ * Path expansion, file reading, format routing, and per-engine inspection live here; the
+ * scheduler receives neutral manifests and keeps discovery policy.
  *
- * This is the one place that still knows a source can be `.ad` or Maestro. That knowledge
- * converts into the manifest's platform tag and then disappears: `caller-bound` is what Maestro
- * looks like from the scheduler's side, and nothing downstream can recover the format from it.
+ * This is the one place that knows a source can be `.ad` or Maestro. That knowledge converts
+ * into the manifest's platform tag and then disappears: `caller-bound` is what Maestro looks
+ * like from the scheduler's side, and nothing downstream can recover the format from it.
  */
 export function buildReplayTestSourceDiscovery(
   replayBackend: string | undefined,

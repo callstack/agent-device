@@ -20,15 +20,12 @@ export type ReplayTestTarget = DeviceTarget;
 /**
  * Everything the scheduler may know about one discovered source (#1478 P3b).
  *
- * Discovery used to read each file and call both engines directly — `readReplayScriptMetadata`
- * for `.ad` and `inspectMaestroFlow` for Maestro — plus `resolveReplayFormat` to pick between
- * them. A format-neutral scheduler cannot do that, so the host inspects sources and hands back
- * this manifest.
+ * Inspecting a source needs an engine, so the host does it and the scheduler receives this.
  *
  * The fields are exactly the four the scheduler consumes (platform, target, retries,
- * timeoutMs) plus the title reporters display. Per the brief, nothing else is added here
- * without a demonstrated scheduler or reporter call site — no source format, app ID,
- * environment, Maestro tags/steps, digest, includes, config, or source path.
+ * timeoutMs) plus the title reporters display. Nothing else belongs here without a
+ * demonstrated scheduler or reporter call site — no source format, app ID, environment,
+ * Maestro tags/steps, digest, includes, config, or source path.
  */
 export type ReplayTestManifest = Readonly<{
   title?: string;
@@ -156,12 +153,9 @@ export type ReplayTestFinalizeAttempt = (params: {
 /**
  * Publishes one reporter-facing progress event (#1478 P3b).
  *
- * The scheduler used to call `emitRequestProgress` directly, which reads a sink out of a
- * request-global `AsyncLocalStorage`. That is ambient authority a format-neutral scheduler
- * cannot hold once it lives in `packages/replay-test`, so the host injects the sink instead.
- *
- * The port is deliberately narrower than `RequestProgressSink`: the scheduler emits suite and
- * per-test events, never `CommandProgressEvent`, so it is not handed the ability to.
+ * The host owns the request-global sink and injects this; the scheduler holds no ambient
+ * authority to publish. Deliberately narrower than `RequestProgressSink`: the scheduler emits
+ * suite and per-test events, never `CommandProgressEvent`, so it is not handed the ability to.
  */
 export type ReplayTestEmitProgress = (
   event: ReplayTestSuiteProgressEvent | ReplayTestProgressEvent,
@@ -170,10 +164,8 @@ export type ReplayTestEmitProgress = (
 /**
  * Whether the suite this scheduler is running has been canceled (#1478 P3b).
  *
- * The scheduler used to call `isRequestCanceled(requestId)`, which both reaches a
- * request-global registry and makes it name a daemon request id as the cancellation key.
- * The host binds the predicate to its own request instead, so the scheduler asks a question
- * it is entitled to ask and learns nothing about how cancellation is tracked.
+ * The host binds this to its own request, so the scheduler asks a question it is entitled to
+ * ask and learns nothing about how cancellation is tracked or keyed.
  */
 export type ReplayTestIsCanceled = () => boolean;
 
