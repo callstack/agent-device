@@ -87,6 +87,7 @@ export function iosRunnerOverrides(
             ...(selector.expectedPoint
               ? { x: selector.expectedPoint.x, y: selector.expectedPoint.y }
               : {}),
+            ...(shouldUseSynthesizedIosGesture(device) ? { synthesized: true } : {}),
             appBundleId: ctx.appBundleId,
           },
           runnerOpts,

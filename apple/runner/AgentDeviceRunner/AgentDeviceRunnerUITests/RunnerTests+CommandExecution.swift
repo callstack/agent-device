@@ -1529,6 +1529,50 @@ extension RunnerTests {
             x: touchPoint.x,
             y: touchPoint.y
           )
+          if command.synthesized == true {
+            let policyKind = SynthesizedGesturePolicyKind.coordinateTap
+            let context = synthesizedCoordinateContext(
+              app: activeApp,
+              policy: synthesizedGesturePolicy(policyKind)
+            )
+            let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
+              synthesizedTapAt(
+                app: activeApp,
+                x: touchPoint.x,
+                y: touchPoint.y,
+                context: context
+              )
+            }
+            if case .performed = outcome {
+              logSynthesizedGesturePolicyDecision(
+                kind: policyKind,
+                context: context,
+                fallbackAttempted: false
+              )
+              if isTextEntry {
+                waitForTextEntryReadinessAfterTap(app: activeApp, element: element)
+              }
+              return gestureResponse(
+                message: match.usedNonHittableFallback
+                  ? "tapped via non-hittable coordinate fallback"
+                  : "tapped",
+                timing: timing,
+                frame: .touch(touchFrame),
+                maestroNonHittableCoordinateFallbackUsed:
+                  command.allowNonHittableCoordinateFallback == true
+                  ? match.usedNonHittableFallback
+                  : nil
+              )
+            }
+            logSynthesizedGesturePolicyDecision(
+              kind: policyKind,
+              context: context,
+              fallbackAttempted: false
+            )
+            if let response = unsupportedResponse(for: outcome) {
+              return response
+            }
+          }
           let (timing, outcome) = performGesture(activeApp) {
             if expectedPoint != nil || match.usedNonHittableFallback {
               // Maestro compatibility: RN E2E backdoor controls can be 1x1 and
@@ -1561,7 +1605,10 @@ extension RunnerTests {
         var fallback: GestureFallback?
         if command.synthesized == true {
           let policyKind = SynthesizedGesturePolicyKind.coordinateTap
-          let context = synthesizedCoordinateContext(policy: synthesizedGesturePolicy(policyKind))
+          let context = synthesizedCoordinateContext(
+            app: activeApp,
+            policy: synthesizedGesturePolicy(policyKind)
+          )
           let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
             synthesizedTapAt(app: activeApp, x: x, y: y, context: context)
           }
@@ -1652,7 +1699,10 @@ extension RunnerTests {
         )
       }
       let scrollPolicyKind = SynthesizedGesturePolicyKind.scroll
-      guard let scrollContext = synthesizedCoordinateContext(policy: synthesizedGesturePolicy(scrollPolicyKind)) else {
+      guard let scrollContext = synthesizedCoordinateContext(
+        app: activeApp,
+        policy: synthesizedGesturePolicy(scrollPolicyKind)
+      ) else {
         return Response(
           ok: false,
           error: ErrorPayload(message: "scroll could not resolve a usable interaction frame")
@@ -2046,7 +2096,10 @@ extension RunnerTests {
     var fallback: GestureFallback?
     if synthesized {
       let durationMs = min(max(durationMs ?? 250, 16), 10000)
-      let context = synthesizedCoordinateContext(policy: synthesizedGesturePolicy(synthesizedPolicyKind))
+      let context = synthesizedCoordinateContext(
+        app: activeApp,
+        policy: synthesizedGesturePolicy(synthesizedPolicyKind)
+      )
       let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
         synthesizedDragAt(
           app: activeApp,
@@ -2102,7 +2155,7 @@ extension RunnerTests {
   ) -> Response? {
 #if os(iOS)
     let policy = synthesizedGesturePolicy(policyKind)
-    let context = context ?? synthesizedCoordinateContext(policy: policy)
+    let context = context ?? synthesizedCoordinateContext(app: activeApp, policy: policy)
     guard let plan = axFreeSynthesizedDragPlan(
       app: activeApp,
       x: x,

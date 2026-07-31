@@ -617,7 +617,10 @@ extension RunnerTests {
       )
     }
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
-    guard let context = context ?? synthesizedCoordinateContext(policy: synthesizedGesturePolicy(.synthesizedDrag)) else {
+    guard let context = context ?? synthesizedCoordinateContext(
+      app: app,
+      policy: synthesizedGesturePolicy(.synthesizedDrag)
+    ) else {
       return .unsupported(
         message: "synthesized coordinate drag could not resolve a finite screen frame",
         hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
@@ -680,7 +683,10 @@ extension RunnerTests {
       )
     }
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
-    guard let context = context ?? synthesizedCoordinateContext(policy: synthesizedGesturePolicy(.coordinateTap)) else {
+    guard let context = context ?? synthesizedCoordinateContext(
+      app: app,
+      policy: synthesizedGesturePolicy(.coordinateTap)
+    ) else {
       return .unsupported(
         message: "synthesized coordinate tap could not resolve a finite screen frame",
         hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
@@ -852,7 +858,10 @@ extension RunnerTests {
     context: SynthesizedCoordinateContext? = nil
   ) -> SynthesizedDragPlan? {
 #if os(iOS)
-    let context = context ?? synthesizedCoordinateContext(policy: synthesizedGesturePolicy(.synthesizedDrag))
+    let context = context ?? synthesizedCoordinateContext(
+      app: app,
+      policy: synthesizedGesturePolicy(.synthesizedDrag)
+    )
     guard x.isFinite, y.isFinite, x2.isFinite, y2.isFinite,
       let context
     else {
@@ -892,11 +901,18 @@ extension RunnerTests {
     )
   }
 
-  func synthesizedCoordinateContext(policy: SynthesizedGesturePolicy) -> SynthesizedCoordinateContext? {
+  func synthesizedCoordinateContext(
+    app: XCUIApplication? = nil,
+    policy: SynthesizedGesturePolicy
+  ) -> SynthesizedCoordinateContext? {
 #if os(iOS)
     let health = runnerAccessibilityHealth
-    guard let referenceFrame = synthesizedScreenshotReferenceFrame(
-      screenshotSize: { XCUIScreen.main.screenshot().image.size }
+    let orientation = Int(
+      RunnerSynthesizedGesture.interfaceOrientation(forApplication: app ?? currentApp ?? self.app)
+    )
+    guard let referenceFrame = orientedSynthesizedScreenshotReferenceFrame(
+      screenshotSize: XCUIScreen.main.screenshot().image.size,
+      interfaceOrientation: orientation
     ) else {
       return nil
     }
@@ -912,14 +928,29 @@ extension RunnerTests {
   }
 
   func synthesizedScreenshotReferenceFrame(screenshotSize: () -> CGSize) -> CGRect? {
-    let screenshotSize = screenshotSize()
+    orientedSynthesizedScreenshotReferenceFrame(
+      screenshotSize: screenshotSize(),
+      interfaceOrientation: RunnerInterfaceOrientation.portrait
+    )
+  }
+
+  func orientedSynthesizedScreenshotReferenceFrame(
+    screenshotSize: CGSize,
+    interfaceOrientation: Int
+  ) -> CGRect? {
+    // Physical iOS screenshots can retain portrait dimensions after the interface rotates,
+    // while accessibility frames remain in the logical landscape coordinate space.
     guard screenshotSize.width.isFinite, screenshotSize.height.isFinite,
       screenshotSize.width > 0,
       screenshotSize.height > 0
     else {
       return nil
     }
-    return CGRect(x: 0, y: 0, width: screenshotSize.width, height: screenshotSize.height)
+    let isLandscape = interfaceOrientation == RunnerInterfaceOrientation.landscapeLeft
+      || interfaceOrientation == RunnerInterfaceOrientation.landscapeRight
+    let width = isLandscape ? max(screenshotSize.width, screenshotSize.height) : screenshotSize.width
+    let height = isLandscape ? min(screenshotSize.width, screenshotSize.height) : screenshotSize.height
+    return CGRect(x: 0, y: 0, width: width, height: height)
   }
 
   func synthesizedFrameAvoidingKeyboardWhenAllowed(
@@ -1256,6 +1287,31 @@ extension RunnerTests {
     )
 
     XCTAssertEqual(resolved, CGRect(x: 0, y: 0, width: 430, height: 932))
+  }
+
+  func testOrientedSynthesizedScreenshotReferenceFrameUsesLandscapeLogicalDimensions() {
+    let portraitCapture = CGSize(width: 430, height: 932)
+    let landscapeCapture = CGSize(width: 932, height: 430)
+
+    for orientation in [
+      RunnerInterfaceOrientation.landscapeLeft,
+      RunnerInterfaceOrientation.landscapeRight,
+    ] {
+      XCTAssertEqual(
+        orientedSynthesizedScreenshotReferenceFrame(
+          screenshotSize: portraitCapture,
+          interfaceOrientation: orientation
+        ),
+        CGRect(x: 0, y: 0, width: 932, height: 430)
+      )
+      XCTAssertEqual(
+        orientedSynthesizedScreenshotReferenceFrame(
+          screenshotSize: landscapeCapture,
+          interfaceOrientation: orientation
+        ),
+        CGRect(x: 0, y: 0, width: 932, height: 430)
+      )
+    }
   }
 
   func testSynthesizedScreenshotReferenceFrameRejectsInvalidSize() {

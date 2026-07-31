@@ -100,6 +100,31 @@ test('iosRunnerOverrides uses synthesized iOS coordinate taps', async () => {
   });
 });
 
+test('iosRunnerOverrides uses synthesized iOS coordinate taps for selectors', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValue({});
+
+  const { overrides } = iosRunnerOverrides(IOS_TEST_DEVICE, {
+    appBundleId: 'com.example.App',
+  });
+
+  await overrides.tapElementSelector!({
+    key: 'label',
+    value: 'General',
+    expectedPoint: { x: 200, y: 300 },
+  });
+
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
+    command: 'tap',
+    selectorKey: 'label',
+    selectorValue: 'General',
+    allowNonHittableCoordinateFallback: undefined,
+    x: 200,
+    y: 300,
+    synthesized: true,
+    appBundleId: 'com.example.App',
+  });
+});
+
 test('iosRunnerOverrides reads and validates the fresh gesture viewport', async () => {
   mockRunAppleRunnerCommand.mockResolvedValue({ x: 10, y: 20, x2: 300, y2: 500 });
   const { overrides } = iosRunnerOverrides(IOS_TEST_SIMULATOR, {
