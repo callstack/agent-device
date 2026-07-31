@@ -6,7 +6,7 @@ import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { acquireProcessLock } from '../utils/process-lock.ts';
 import { ownerIdentityMatches, readCurrentOwnerIdentity } from '../utils/owner-identity.ts';
 import { inspectDeviceClaimFile, type InspectedDeviceClaim } from './device-claim-inspection.ts';
-import { resolveDeviceClaimPath } from './device-claim-paths.ts';
+import { resolveDeviceClaimPath, resolveDeviceClaimRoot } from './device-claim-paths.ts';
 
 const DEVICE_CLAIM_SCHEMA_VERSION = 1;
 const DEVICE_CLAIM_LOCK_TIMEOUT_MS = 30_000;
@@ -147,6 +147,55 @@ export async function clearAdvisoryDeviceClaim(
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
   });
+}
+
+/**
+ * Deletes claim files whose owning process is provably gone.
+ *
+ * Claims are released on session close and daemon shutdown, but a process that
+ * dies abruptly leaves its file behind forever and nothing else reaps them.
+ *
+ * The liveness check is repeated under the per-device lock immediately before
+ * unlinking: claim paths are derived from the device key, so a concurrent
+ * daemon can prune the same dead claim and a new session can write its live
+ * successor to that exact path while this scan is still running. Deleting on
+ * the first read would take the successor with it.
+ *
+ * Deliberately narrower than the CLI's stale filter: `owner-state-dir-gone`
+ * describes a LIVE process whose state dir vanished, and deleting that claim
+ * could hand its device to a second session.
+ */
+export async function pruneDeadDeviceClaims(): Promise<{ pruned: number }> {
+  const root = resolveDeviceClaimRoot();
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true });
+  } catch {
+    return { pruned: 0 };
+  }
+  let pruned = 0;
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+    const filePath = path.join(root, entry.name);
+    const scanned = inspectDeviceClaimFile(filePath);
+    if (scanned?.classification !== 'owner-process-dead' || !scanned.claim) continue;
+    const { deviceKey, ownerToken } = scanned.claim;
+    // A file whose name is not the hash of its own device key is not the file
+    // the lock protects, so leave it rather than unlink something else.
+    if (resolveDeviceClaimPath(deviceKey) !== filePath) continue;
+    await withDeviceClaimLock(deviceKey, async () => {
+      const current = inspectDeviceClaimFile(filePath);
+      if (current?.classification !== 'owner-process-dead') return;
+      if (current.claim?.ownerToken !== ownerToken) return;
+      try {
+        fs.unlinkSync(filePath);
+        pruned += 1;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+    });
+  }
+  return { pruned };
 }
 
 function writeClaim(claim: DeviceClaim): void {

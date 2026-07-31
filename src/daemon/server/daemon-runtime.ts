@@ -20,8 +20,7 @@ import { closeDaemonServers } from './server-shutdown.ts';
 import type { DaemonInvokeFn, SessionState } from '../types.ts';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';
 import { finalizeDaemonSessionLease } from './daemon-session-lease-finalizer.ts';
-import { clearAdvisoryDeviceClaim } from '../device-claims.ts';
-import { pruneDeadDeviceClaims } from '../device-claim-inspection.ts';
+import { clearAdvisoryDeviceClaim, pruneDeadDeviceClaims } from '../device-claims.ts';
 import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
@@ -331,7 +330,7 @@ export async function startDaemonRuntime(
   let socketPort: number | undefined;
   let httpPort: number | undefined;
   try {
-    pruneDeviceClaimsForDaemonStartup();
+    await pruneDeviceClaimsForDaemonStartup(logPath);
     await cleanupWebBrowserOrphansForDaemonStartup({ stateDir: baseDir, sessionStore });
     // Fire-and-forget: gated on a state-dir marker so it only touches adb when a prior run here
     // actually activated the test IME (never on hosts that don't use it, e.g. the macOS runner).
@@ -450,19 +449,28 @@ export async function startDaemonRuntime(
   };
 }
 
-function pruneDeviceClaimsForDaemonStartup(): void {
-  try {
-    const { pruned } = pruneDeadDeviceClaims();
-    if (pruned > 0) {
-      emitDiagnostic({ phase: 'device_claim_prune', data: { pruned } });
-    }
-  } catch (error) {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'device_claim_prune_failed',
-      data: { error: error instanceof Error ? error.message : String(error) },
-    });
-  }
+async function pruneDeviceClaimsForDaemonStartup(logPath: string): Promise<void> {
+  // Startup runs outside any diagnostics scope, where emitDiagnostic is a no-op,
+  // so the prune has to open one of its own for its events to be recorded.
+  await withDiagnosticsScope(
+    { command: 'daemon', session: 'daemon', logPath, debug: true },
+    async () => {
+      try {
+        const { pruned } = await pruneDeadDeviceClaims();
+        if (pruned > 0) {
+          emitDiagnostic({ phase: 'device_claim_prune', data: { pruned } });
+          flushDiagnosticsToSessionFile({ force: true });
+        }
+      } catch (error) {
+        emitDiagnostic({
+          level: 'warn',
+          phase: 'device_claim_prune_failed',
+          data: { error: error instanceof Error ? error.message : String(error) },
+        });
+        flushDiagnosticsToSessionFile({ force: true });
+      }
+    },
+  );
 }
 
 export async function cleanupWebBrowserOrphansForDaemonStartup(params: {
