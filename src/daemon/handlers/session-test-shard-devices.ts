@@ -12,10 +12,11 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import type { CommandFlags } from '../../core/dispatch.ts';
 import type {
+  ReplayTestShardMode,
   ReplayTestResolveShardTargets,
   ReplayTestShardContext,
   ReplayTestShardTarget,
-} from './session-test-sharding.ts';
+} from '@agent-device/replay-test';
 
 /**
  * The daemon adapter's shard-device binding (#1478 P3b).
@@ -171,4 +172,30 @@ function normalizeDeviceName(value: string): string {
 
 function compareShardDevices(a: DeviceInfo, b: DeviceInfo): number {
   return a.id.localeCompare(b.id);
+}
+
+/**
+ * Reads the `--shard-all` / `--shard-split` selection from daemon flags (#1478 P3b).
+ *
+ * Flag parsing is host work; the scheduler receives a resolved mode and count.
+ */
+export function readReplayTestShardSelection(
+  flags: CommandFlags | undefined,
+): { mode: ReplayTestShardMode; count: number } | undefined {
+  const shardAll = readPositiveShardCount(flags?.shardAll, '--shard-all');
+  const shardSplit = readPositiveShardCount(flags?.shardSplit, '--shard-split');
+  if (shardAll !== undefined && shardSplit !== undefined) {
+    throw new AppError('INVALID_ARGS', '--shard-all and --shard-split are mutually exclusive');
+  }
+  if (shardAll !== undefined) return { mode: 'all', count: shardAll };
+  if (shardSplit !== undefined) return { mode: 'split', count: shardSplit };
+  return undefined;
+}
+
+function readPositiveShardCount(value: unknown, flagName: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+    throw new AppError('INVALID_ARGS', `${flagName} requires a positive integer`);
+  }
+  return value;
 }

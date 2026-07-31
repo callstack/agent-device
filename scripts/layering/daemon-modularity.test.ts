@@ -79,7 +79,10 @@ test('external daemon/types.ts importer membership changes require the baseline 
 test('planned logical modules start with zero forbidden imports', () => {
   const edges = resolveImportEdges(
     new Map([
-      ['src/replay/test/scheduler.ts', "import type { Device } from '../../platforms/device.ts';"],
+      [
+        'packages/replay-test/src/internal/scheduler.ts',
+        "import type { Device } from '../../../../src/platforms/device.ts';",
+      ],
       ['src/platforms/device.ts', 'export type Device = { id: string };'],
     ]),
   );
@@ -93,11 +96,11 @@ test('replay-test rejects request-global and engine-internal imports', () => {
   const edges = resolveImportEdges(
     new Map([
       [
-        'src/replay/test/scheduler.ts',
+        'packages/replay-test/src/internal/scheduler.ts',
         [
-          "import { emitRequestProgress } from '../../request/progress.ts';",
-          "import { readReplayScriptMetadata } from '../script.ts';",
-          "import { parseMaestroProgram } from '../../compat/maestro/program-ir-parser.ts';",
+          "import { emitRequestProgress } from '../../../../src/request/progress.ts';",
+          "import { readReplayScriptMetadata } from '../../../../src/replay/script.ts';",
+          "import { parseMaestroProgram } from '../../../../src/compat/maestro/program-ir-parser.ts';",
         ].join('\n'),
       ],
       ['src/request/progress.ts', 'export function emitRequestProgress() {}'],
@@ -117,11 +120,14 @@ test('replay-test rejects request-global and engine-internal imports', () => {
   );
 });
 
-test('replay-test may still import its own files inside the wider replay engine root', () => {
+test('replay-test may still import its own files inside the package', () => {
   const edges = resolveImportEdges(
     new Map([
-      ['src/replay/test/reporting.ts', "import { spec } from './reporters/spec.ts';"],
-      ['src/replay/test/reporters/spec.ts', 'export const spec = 1;'],
+      [
+        'packages/replay-test/src/internal/reporting.ts',
+        "import { spec } from './reporters/spec.ts';",
+      ],
+      ['packages/replay-test/src/internal/reporters/spec.ts', 'export const spec = 1;'],
     ]),
   );
 

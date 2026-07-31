@@ -1,11 +1,13 @@
 import type { CommandFlags } from '../../core/dispatch.ts';
+import type { ReplayScriptMetadata } from '../../replay/script.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
-import { runReplayTestSuite } from './session-test.ts';
+import { runReplayTestSuite } from '@agent-device/replay-test';
 import { handleCloseCommand } from './session-close.ts';
 import { runReplayScriptFile } from './session-replay-runtime.ts';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import { errorResponse } from './response.ts';
+import { asAppError } from '@agent-device/kernel/errors';
 import { emitRequestProgress } from '../../request/progress.ts';
 import {
   clearRequestCanceled,
@@ -15,10 +17,17 @@ import {
   registerRequestAbort,
 } from '../../request/cancel.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import type { ReplayTestBindAttemptCancellation } from './session-test-types.ts';
-import type { ReplayScriptMetadata } from '../../replay/script.ts';
-import type { ReplayTestShardContext } from './session-test-sharding.ts';
-import { buildReplayTestShardFlags } from './session-test-shard-devices.ts';
+import type {
+  ReplayTestBindAttemptCancellation,
+  ReplayTestShardContext,
+  ReplayTestSuiteRequest,
+} from '@agent-device/replay-test';
+import { buildReplayTestSourceDiscovery } from './session-test-source-discovery.ts';
+import {
+  buildReplayTestShardFlags,
+  buildReplayTestShardTargetResolver,
+  readReplayTestShardSelection,
+} from './session-test-shard-devices.ts';
 import { toReplayTestAttemptOutcome, toReplayTestFinalizeFailure } from './session-test-outcome.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 import {
@@ -147,9 +156,18 @@ export async function handleSessionReplayCommands(params: {
         'test does not support --save-script; the agent-supervised repair loop is replay-only. Repair the failing script directly with replay --save-script.',
       );
     }
-    return await runReplayTestSuite({
-      req,
-      sessionName,
+    // Translating flags can reject them (mutually exclusive or non-positive shard counts).
+    // That rejection has always surfaced as an INVALID_ARGS response, so it is caught here
+    // rather than escaping the handler now that translation happens before the suite runs.
+    let suiteRequest: ReplayTestSuiteRequest;
+    try {
+      suiteRequest = toReplayTestSuiteRequest(req, sessionName);
+    } catch (err) {
+      const appErr = asAppError(err);
+      return errorResponse(appErr.code, appErr.message);
+    }
+    const outcome = await runReplayTestSuite({
+      request: suiteRequest,
       // The host owns the request-global progress sink; the scheduler receives only the
       // narrow emit capability (#1478 P3b).
       emitProgress: emitRequestProgress,
@@ -165,6 +183,7 @@ export async function handleSessionReplayCommands(params: {
         artifactsDir,
         artifactPaths,
         tracePath,
+        appendTimingEvent,
         shard,
         onStep,
       }) => {
@@ -189,6 +208,7 @@ export async function handleSessionReplayCommands(params: {
           sessionStore,
           artifactsDir,
           tracePath,
+          appendTimingEvent,
         };
         const openLifecycle = buildReplayTestVideoOpenLifecycle(videoRecordingParams);
         const replayResponse = await runReplayScriptFile({
@@ -230,6 +250,7 @@ export async function handleSessionReplayCommands(params: {
         artifactPaths,
         artifactsDir,
         tracePath,
+        appendTimingEvent,
       }) =>
         toReplayTestFinalizeFailure(
           await finalizeReplayTestVideoRecording({
@@ -239,9 +260,12 @@ export async function handleSessionReplayCommands(params: {
             sessionStore,
             artifactsDir,
             tracePath,
+            appendTimingEvent,
             artifactPaths,
           }),
         ),
+      discoverSources: buildReplayTestSourceDiscovery(req.flags?.replayBackend),
+      resolveShardTargets: buildReplayTestShardTargetResolver(req.flags),
       cleanupSession: async (testSessionName) => {
         if (!sessionStore.get(testSessionName)) return;
         await handleCloseCommand({
@@ -260,7 +284,35 @@ export async function handleSessionReplayCommands(params: {
         });
       },
     });
+    return outcome.status === 'completed'
+      ? { ok: true, data: outcome.data }
+      : errorResponse(outcome.error.code, outcome.error.message);
   }
 
   return null;
+}
+
+/**
+ * Translates a daemon `test` request into the scheduler's neutral request (#1478 P3b).
+ *
+ * `replayBackend` is deliberately not carried across: it selects an engine, and it has already
+ * been applied here when building the source-discovery and shard-target capabilities.
+ */
+function toReplayTestSuiteRequest(req: DaemonRequest, sessionName: string): ReplayTestSuiteRequest {
+  const shard = readReplayTestShardSelection(req.flags);
+  return {
+    inputs: req.positionals ?? [],
+    sessionName,
+    cwd: req.meta?.cwd,
+    requestId: req.meta?.requestId,
+    platformFilter: req.flags?.platform,
+    artifactsDir:
+      typeof req.flags?.artifactsDir === 'string'
+        ? SessionStore.expandHome(req.flags.artifactsDir, req.meta?.cwd)
+        : undefined,
+    failFast: req.flags?.failFast === true,
+    ...(typeof req.flags?.retries === 'number' ? { retries: req.flags.retries } : {}),
+    ...(typeof req.flags?.timeoutMs === 'number' ? { timeoutMs: req.flags.timeoutMs } : {}),
+    ...(shard ? { shard } : {}),
+  };
 }

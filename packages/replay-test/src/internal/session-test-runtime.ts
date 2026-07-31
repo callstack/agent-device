@@ -87,6 +87,7 @@ export async function runReplayTestAttempt(
     artifactsDir,
     artifactPaths,
     tracePath,
+    appendTimingEvent: (event) => appendReplayTestTimingEvent(tracePath, event),
     shard,
     onStep,
   })
@@ -259,6 +260,7 @@ async function finalizeReplayTestAttempt(params: {
       artifactPaths,
       artifactsDir,
       tracePath,
+      appendTimingEvent: (event) => appendReplayTestTimingEvent(tracePath, event),
     });
     appendReplayTestTimingEvent(tracePath, {
       type: 'replay_test_finalize_stop',

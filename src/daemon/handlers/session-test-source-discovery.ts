@@ -7,7 +7,7 @@ import type {
   ReplayTestDiscoverSources,
   ReplayTestManifest,
   ReplayTestSource,
-} from './session-test-types.ts';
+} from '@agent-device/replay-test';
 
 /**
  * The daemon adapter's source-inspection capability (#1478 P3b).

@@ -28,7 +28,7 @@ import { SessionStore } from '../session-store.ts';
 import { errorResponse } from './response.ts';
 import { buildReplayBuiltinVars } from './session-replay-vars.ts';
 import { createMaestroReplayObserver } from './session-replay-maestro-observer.ts';
-import type { ReplayTestAttemptStepSink } from './session-test-types.ts';
+import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
 import {
   buildTypedMaestroReplayErrorResponse,
   buildTypedMaestroSuccessResponse,

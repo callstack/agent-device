@@ -6,9 +6,21 @@ import path from 'node:path';
 import {
   materializeReplayTestAttemptArtifacts,
   prepareReplayTestAttemptArtifacts,
-} from '../session-test-artifacts.ts';
-import { toReplayTestAttemptOutcome } from '../session-test-outcome.ts';
-import type { DaemonResponse } from '../../types.ts';
+} from '../src/internal/session-test-artifacts.ts';
+import type { ReplayTestAttemptOutcome } from '../src/internal/session-test-types.ts';
+
+// Building outcomes from a DaemonResponse is the adapter's job and is pinned on that side; a
+// package test states the neutral outcome directly (#1478 P3b).
+const passedOutcome = (
+  overrides: Partial<Extract<ReplayTestAttemptOutcome, { status: 'passed' }>> = {},
+): ReplayTestAttemptOutcome => ({
+  status: 'passed',
+  replayed: 1,
+  healed: 0,
+  warnings: [],
+  artifactPaths: [],
+  ...overrides,
+});
 
 test('materializeReplayTestAttemptArtifacts writes replay and result manifests for passing attempts', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-artifacts-pass-'));
@@ -19,16 +31,8 @@ test('materializeReplayTestAttemptArtifacts writes replay and result manifests f
   fs.writeFileSync(screenshotPath, 'png');
 
   prepareReplayTestAttemptArtifacts(replayPath, attemptDir);
-  const response: DaemonResponse = {
-    ok: true,
-    data: {
-      replayed: 4,
-      healed: 1,
-      artifactPaths: [screenshotPath],
-    },
-  };
   materializeReplayTestAttemptArtifacts({
-    outcome: toReplayTestAttemptOutcome(response),
+    outcome: passedOutcome({ replayed: 4, healed: 1, artifactPaths: [screenshotPath] }),
     filePath: replayPath,
     sessionName: 'default:test:suite:1',
     attempts: 1,
@@ -70,21 +74,19 @@ test('materializeReplayTestAttemptArtifacts writes failure manifest and copies l
   fs.writeFileSync(logPath, 'log');
 
   prepareReplayTestAttemptArtifacts(replayPath, attemptDir);
-  const response: DaemonResponse = {
-    ok: false,
-    error: {
-      code: 'COMMAND_FAILED',
-      message: 'TIMEOUT after 5000ms',
-      hint: 'Replay test timeouts are cooperative.',
-      logPath,
-      details: {
-        reason: 'timeout',
-        artifactPaths: [screenshotPath],
-      },
-    },
-  };
   materializeReplayTestAttemptArtifacts({
-    outcome: toReplayTestAttemptOutcome(response),
+    outcome: {
+      status: 'failed',
+      error: {
+        code: 'COMMAND_FAILED',
+        message: 'Replay test timed out',
+        hint: 'Replay test timeouts are cooperative.',
+        logPath,
+        details: { reason: 'timeout', artifactPaths: [screenshotPath] },
+      },
+      artifactPaths: [screenshotPath],
+      infrastructure: false,
+    },
     filePath: replayPath,
     sessionName: 'default:test:suite:2',
     attempts: 2,

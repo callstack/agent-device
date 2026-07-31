@@ -1,8 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { isMaestroYamlPath } from '../../replay/format.ts';
-import type { ReplayTestAttemptOutcome } from './session-test-types.ts';
-import { SessionStore } from '../session-store.ts';
+import type { ReplayTestAttemptOutcome } from '@agent-device/replay-test';
 
 const DEFAULT_TEST_ARTIFACTS_ROOT = '.agent-device/test-artifacts';
 
@@ -12,7 +10,9 @@ export function resolveReplayTestArtifactsDir(params: {
   suiteInvocationId: string;
 }): string {
   const { artifactsDir, cwd, suiteInvocationId } = params;
-  const resolvedRoot = SessionStore.expandHome(artifactsDir ?? DEFAULT_TEST_ARTIFACTS_ROOT, cwd);
+  // `artifactsDir` arrives already home-expanded: resolving `~` and the caller's cwd is host
+  // work, done once when the daemon builds the suite request.
+  const resolvedRoot = path.resolve(cwd ?? '.', artifactsDir ?? DEFAULT_TEST_ARTIFACTS_ROOT);
   return path.join(resolvedRoot, suiteInvocationId);
 }
 
@@ -107,7 +107,10 @@ function copyReplaySourceFile(filePath: string, attemptArtifactsDir: string): vo
   const genericReplayPath = path.join(attemptArtifactsDir, 'replay.ad');
   fs.copyFileSync(filePath, genericReplayPath);
 
-  if (!isMaestroYamlPath(filePath)) return;
+  // Sources that are not native `.ad` keep their original filename alongside `replay.ad`, so
+  // CI artifacts point back at the flow the author wrote. This is artifact naming, not format
+  // routing — it asks what the file is called, never which engine will run it.
+  if (path.extname(filePath).toLowerCase() === '.ad') return;
   // Keep replay.ad for existing artifact consumers, and preserve the original
   // Maestro filename so CI artifacts point back to the source flow.
   const originalReplayPath = path.join(attemptArtifactsDir, path.basename(filePath));

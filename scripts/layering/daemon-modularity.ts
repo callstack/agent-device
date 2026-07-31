@@ -72,7 +72,7 @@ export const LOGICAL_MODULE_POLICIES: readonly LogicalModulePolicy[] = [
     // remaining roots are engine internals — reaching into either is how a scheduler quietly
     // acquires daemon authority or an engine-specific value shape.
     name: 'replay-test',
-    roots: ['src/replay/test/'],
+    roots: ['packages/replay-test/src/'],
     forbiddenTargetRoots: [
       'src/daemon/',
       'src/platforms/',
@@ -80,7 +80,7 @@ export const LOGICAL_MODULE_POLICIES: readonly LogicalModulePolicy[] = [
       'src/request/',
       'src/replay/',
       'src/compat/',
-      'src/maestro/',
+      'packages/maestro/',
       'src/ad-replay/',
     ],
   },
@@ -91,7 +91,7 @@ const ENGINE_FILE_PREFIXES = [
   'packages/maestro/src/',
   'src/replay/',
   'src/daemon/handlers/session-replay',
-  'src/daemon/handlers/session-test',
+  'packages/replay-test/src/',
 ] as const;
 
 export function checkDaemonModularityRatchets(

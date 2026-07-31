@@ -250,6 +250,7 @@
     "@agent-device/maestro": "workspace:*",
     "@agent-device/provider-limrun": "workspace:*",
     "@agent-device/provider-webdriver": "workspace:*",
+    "@agent-device/replay-test": "workspace:*",
     "@agent-device/xml": "workspace:*",
     "@chenglou/freerange": "^0.0.1",
     "@stryker-mutator/core": "9.6.1",

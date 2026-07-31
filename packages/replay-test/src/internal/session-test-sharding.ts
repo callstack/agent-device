@@ -1,5 +1,3 @@
-import { AppError } from '@agent-device/kernel/errors';
-import type { CommandFlags } from '../../core/dispatch.ts';
 import type { ReplayTestPlatform, ReplayTestTarget } from './session-test-types.ts';
 
 export type ReplayTestShardMode = 'all' | 'split';
@@ -43,12 +41,11 @@ export type ReplayTestShardPlan<TEntry> = {
 };
 
 export async function buildReplayTestShardPlan<TEntry>(
-  flags: CommandFlags | undefined,
+  mode: Readonly<{ kind: ReplayTestShardMode; count: number }> | undefined,
   runnableEntries: TEntry[],
   skippedCount: number,
   resolveShardTargets: ReplayTestResolveShardTargets,
 ): Promise<ReplayTestShardPlan<TEntry> | undefined> {
-  const mode = readReplayTestShardMode(flags);
   if (!mode) return undefined;
   if (runnableEntries.length === 0) return undefined;
 
@@ -69,25 +66,4 @@ export async function buildReplayTestShardPlan<TEntry>(
           : runnableEntries.filter((_entry, entryIndex) => entryIndex % mode.count === index),
     })),
   };
-}
-
-function readReplayTestShardMode(
-  flags: CommandFlags | undefined,
-): { kind: ReplayTestShardMode; count: number } | undefined {
-  const shardAll = readPositiveShardCount(flags?.shardAll, '--shard-all');
-  const shardSplit = readPositiveShardCount(flags?.shardSplit, '--shard-split');
-  if (shardAll !== undefined && shardSplit !== undefined) {
-    throw new AppError('INVALID_ARGS', '--shard-all and --shard-split are mutually exclusive');
-  }
-  if (shardAll !== undefined) return { kind: 'all', count: shardAll };
-  if (shardSplit !== undefined) return { kind: 'split', count: shardSplit };
-  return undefined;
-}
-
-function readPositiveShardCount(value: unknown, flagName: string): number | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
-    throw new AppError('INVALID_ARGS', `${flagName} requires a positive integer`);
-  }
-  return value;
 }

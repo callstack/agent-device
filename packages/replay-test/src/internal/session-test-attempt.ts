@@ -14,7 +14,7 @@ import {
 import { runReplayTestAttempt } from './session-test-runtime.ts';
 import type {
   ReplayTestAttemptOutcome,
-  ReplayTestRuntimeDependencies,
+  ReplayTestExecutionDependencies,
 } from './session-test-types.ts';
 import type { ReplayTestShardContext } from './session-test-sharding.ts';
 
@@ -57,7 +57,7 @@ type ReplayTestCaseParams = {
   suiteIndex: number;
   suiteTotal: number;
   shard?: ReplayTestShardContext;
-} & ReplayTestRuntimeDependencies;
+} & ReplayTestExecutionDependencies;
 
 type ReplayTestCaseContext = {
   testStartedAt: number;

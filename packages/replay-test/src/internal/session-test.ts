@@ -1,6 +1,4 @@
 import { asAppError, normalizeError } from '@agent-device/kernel/errors';
-import { errorResponse } from './response.ts';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import type {
   ReplaySuiteResult,
   ReplaySuiteTestFailed,
@@ -15,15 +13,18 @@ import {
   resolveReplayTestTimeout,
 } from './session-test-discovery.ts';
 import { runReplayTestCase, type ReplayTestCaseReport } from './session-test-attempt.ts';
-import { buildReplayTestSourceDiscovery } from './session-test-source-discovery.ts';
-import { buildReplayTestShardTargetResolver } from './session-test-shard-devices.ts';
 import type {
   ReplayTestEmitProgress,
   ReplayTestIsCanceled,
+  ReplayTestExecutionDependencies,
   ReplayTestRuntimeDependencies,
+  ReplayTestSuiteOutcome,
+  ReplayTestSuiteRequest,
+  ReplayTestDiscoverSources,
 } from './session-test-types.ts';
 import {
   buildReplayTestShardPlan,
+  type ReplayTestResolveShardTargets,
   type ReplayTestShardContext,
   type ReplayTestShardPlan,
 } from './session-test-sharding.ts';
@@ -46,13 +47,11 @@ type ReplayTestSuitePlan = {
 
 export async function runReplayTestSuite(
   params: {
-    req: DaemonRequest;
-    sessionName: string;
+    request: ReplayTestSuiteRequest;
   } & ReplayTestRuntimeDependencies,
-): Promise<DaemonResponse> {
+): Promise<ReplayTestSuiteOutcome> {
   const {
-    req,
-    sessionName,
+    request,
     runReplay,
     cleanupSession,
     finalizeAttempt,
@@ -60,14 +59,20 @@ export async function runReplayTestSuite(
     isCanceled,
     emitDiagnostic,
     bindAttemptCancellation,
+    discoverSources,
+    resolveShardTargets,
   } = params;
-  if ((req.positionals?.length ?? 0) === 0) {
-    return errorResponse('INVALID_ARGS', 'test requires at least one path or glob');
+  const sessionName = request.sessionName;
+  if (request.inputs.length === 0) {
+    return {
+      status: 'failed',
+      error: { code: 'INVALID_ARGS', message: 'test requires at least one path or glob' },
+    };
   }
 
   try {
     const suiteStartedAt = Date.now();
-    const plan = await prepareReplayTestSuitePlan(req);
+    const plan = await prepareReplayTestSuitePlan(request, discoverSources, resolveShardTargets);
     emitReplayTestSuiteStart(plan, emitProgress);
     const results: ReplaySuiteTestResult[] = plan.shardPlan
       ? emitSkippedReplayTestResults({
@@ -83,9 +88,9 @@ export async function runReplayTestSuite(
           shards: plan.shardPlan.shards,
           sessionName,
           suiteInvocationId: plan.suiteInvocationId,
-          cwd: req.meta?.cwd,
-          requestId: req.meta?.requestId,
-          flags: req.flags,
+          cwd: request.cwd,
+          requestId: request.requestId,
+          request,
           suiteArtifactsDir: plan.suiteArtifactsDir,
           suiteTotal: plan.total,
           runReplay,
@@ -103,9 +108,9 @@ export async function runReplayTestSuite(
           discoveryEntries: plan.entries,
           sessionName,
           suiteInvocationId: plan.suiteInvocationId,
-          cwd: req.meta?.cwd,
-          requestId: req.meta?.requestId,
-          flags: req.flags,
+          cwd: request.cwd,
+          requestId: request.requestId,
+          request,
           suiteArtifactsDir: plan.suiteArtifactsDir,
           suiteTotal: plan.total,
           runReplay,
@@ -120,40 +125,47 @@ export async function runReplayTestSuite(
     }
 
     const data = summarizeReplayTestResults(plan.total, results, Date.now() - suiteStartedAt);
-    return { ok: true, data };
+    return { status: 'completed', data };
   } catch (err) {
     const appErr = asAppError(err);
-    return errorResponse(appErr.code, appErr.message);
+    return { status: 'failed', error: { code: appErr.code, message: appErr.message } };
   }
 }
 
-async function prepareReplayTestSuitePlan(req: DaemonRequest): Promise<ReplayTestSuitePlan> {
-  const entries = discoverReplayTestSuiteEntries(req);
+async function prepareReplayTestSuitePlan(
+  request: ReplayTestSuiteRequest,
+  discoverSources: ReplayTestDiscoverSources,
+  resolveShardTargets: ReplayTestResolveShardTargets,
+): Promise<ReplayTestSuitePlan> {
+  const entries = discoverReplayTestSuiteEntries(request, discoverSources);
   const runnable = runnableReplayTestEntries(entries);
   const skippedCount = entries.length - runnable.length;
-  const suiteInvocationId = buildReplayTestInvocationId(req.meta?.requestId);
+  const suiteInvocationId = buildReplayTestInvocationId(request.requestId);
   const shardPlan = await buildReplayTestShardPlan(
-    req.flags,
+    request.shard ? { kind: request.shard.mode, count: request.shard.count } : undefined,
     runnable,
     skippedCount,
-    buildReplayTestShardTargetResolver(req.flags),
+    resolveShardTargets,
   );
   return {
     entries,
     runnable,
     shardPlan,
     suiteInvocationId,
-    suiteArtifactsDir: replayTestSuiteArtifactsDir(req, suiteInvocationId),
+    suiteArtifactsDir: replayTestSuiteArtifactsDir(request, suiteInvocationId),
     total: shardPlan?.total ?? entries.length,
   };
 }
 
-function discoverReplayTestSuiteEntries(req: DaemonRequest): ReplayTestEntry[] {
+function discoverReplayTestSuiteEntries(
+  request: ReplayTestSuiteRequest,
+  discoverSources: ReplayTestDiscoverSources,
+): ReplayTestEntry[] {
   return discoverReplayTestEntries({
-    inputs: req.positionals ?? [],
-    cwd: req.meta?.cwd,
-    platformFilter: req.flags?.platform,
-    discoverSources: buildReplayTestSourceDiscovery(req.flags?.replayBackend),
+    inputs: [...request.inputs],
+    cwd: request.cwd,
+    platformFilter: request.platformFilter,
+    discoverSources,
   });
 }
 
@@ -163,10 +175,13 @@ function runnableReplayTestEntries(entries: ReplayTestEntry[]): ReplayTestQueued
   );
 }
 
-function replayTestSuiteArtifactsDir(req: DaemonRequest, suiteInvocationId: string): string {
+function replayTestSuiteArtifactsDir(
+  request: ReplayTestSuiteRequest,
+  suiteInvocationId: string,
+): string {
   return resolveReplayTestArtifactsDir({
-    artifactsDir: typeof req.flags?.artifactsDir === 'string' ? req.flags.artifactsDir : undefined,
-    cwd: req.meta?.cwd,
+    artifactsDir: typeof request.artifactsDir === 'string' ? request.artifactsDir : undefined,
+    cwd: request.cwd,
     suiteInvocationId,
   });
 }
@@ -222,10 +237,10 @@ async function runReplayTestShards(
     suiteInvocationId: string;
     cwd?: string;
     requestId?: string;
-    flags: DaemonRequest['flags'];
+    request: ReplayTestSuiteRequest;
     suiteArtifactsDir: string;
     suiteTotal: number;
-  } & ReplayTestRuntimeDependencies,
+  } & ReplayTestExecutionDependencies,
 ): Promise<ReplaySuiteTestResult[]> {
   const settled = await Promise.allSettled(
     params.shards.map(async (shard) => await runReplayTestShard({ ...params, shard })),
@@ -271,10 +286,10 @@ async function runReplayTestShard(
     suiteInvocationId: string;
     cwd?: string;
     requestId?: string;
-    flags: DaemonRequest['flags'];
+    request: ReplayTestSuiteRequest;
     suiteArtifactsDir: string;
     suiteTotal: number;
-  } & ReplayTestRuntimeDependencies,
+  } & ReplayTestExecutionDependencies,
 ): Promise<ReplaySuiteTestResult[]> {
   const { shard, sessionName } = params;
   return await runReplayTestEntries({
@@ -299,10 +314,10 @@ async function runReplayTestEntriesInDiscoveryOrder(
     suiteInvocationId: string;
     cwd?: string;
     requestId?: string;
-    flags: DaemonRequest['flags'];
+    request: ReplayTestSuiteRequest;
     suiteArtifactsDir: string;
     suiteTotal: number;
-  } & ReplayTestRuntimeDependencies,
+  } & ReplayTestExecutionDependencies,
 ): Promise<ReplaySuiteTestResult[]> {
   const {
     discoveryEntries,
@@ -310,7 +325,7 @@ async function runReplayTestEntriesInDiscoveryOrder(
     suiteInvocationId,
     cwd,
     requestId,
-    flags,
+    request,
     suiteArtifactsDir,
     suiteTotal,
     runReplay,
@@ -351,9 +366,9 @@ async function runReplayTestEntriesInDiscoveryOrder(
       caseIndex: executed - 1,
       cwd,
       requestId,
-      retries: resolveReplayTestRetries(flags?.retries, entry.manifest.attemptDefaults?.retries),
+      retries: resolveReplayTestRetries(request.retries, entry.manifest.attemptDefaults?.retries),
       timeoutMs: resolveReplayTestTimeout(
-        flags?.timeoutMs,
+        request.timeoutMs,
         entry.manifest.attemptDefaults?.timeoutMs,
       ),
       suiteArtifactsDir,
@@ -368,7 +383,7 @@ async function runReplayTestEntriesInDiscoveryOrder(
       bindAttemptCancellation,
     });
     results.push(report.result);
-    if (shouldStopReplayTestExecution(report, flags, isCanceled)) break;
+    if (shouldStopReplayTestExecution(report, request, isCanceled)) break;
   }
   return results;
 }
@@ -380,11 +395,11 @@ async function runReplayTestEntries(
     suiteInvocationId: string;
     cwd?: string;
     requestId?: string;
-    flags: DaemonRequest['flags'];
+    request: ReplayTestSuiteRequest;
     suiteArtifactsDir: string;
     suiteTotal: number;
     shard?: ReplayTestShardContext;
-  } & ReplayTestRuntimeDependencies,
+  } & ReplayTestExecutionDependencies,
 ): Promise<ReplaySuiteTestResult[]> {
   const {
     entries,
@@ -392,7 +407,7 @@ async function runReplayTestEntries(
     suiteInvocationId,
     cwd,
     requestId,
-    flags,
+    request,
     suiteArtifactsDir,
     suiteTotal,
     shard,
@@ -415,9 +430,9 @@ async function runReplayTestEntries(
       caseIndex: entryIndex,
       cwd,
       requestId,
-      retries: resolveReplayTestRetries(flags?.retries, entry.manifest.attemptDefaults?.retries),
+      retries: resolveReplayTestRetries(request.retries, entry.manifest.attemptDefaults?.retries),
       timeoutMs: resolveReplayTestTimeout(
-        flags?.timeoutMs,
+        request.timeoutMs,
         entry.manifest.attemptDefaults?.timeoutMs,
       ),
       suiteArtifactsDir,
@@ -433,19 +448,19 @@ async function runReplayTestEntries(
       bindAttemptCancellation,
     });
     results.push(report.result);
-    if (shouldStopReplayTestExecution(report, flags, isCanceled)) break;
+    if (shouldStopReplayTestExecution(report, request, isCanceled)) break;
   }
   return results;
 }
 
 function shouldStopReplayTestExecution(
   report: ReplayTestCaseReport,
-  flags: DaemonRequest['flags'],
+  request: ReplayTestSuiteRequest,
   isCanceled: ReplayTestIsCanceled,
 ): boolean {
   return (
     isCanceled() ||
-    (flags?.failFast === true && report.result.status === 'failed') ||
+    (request.failFast === true && report.result.status === 'failed') ||
     report.infrastructure
   );
 }

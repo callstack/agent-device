@@ -4,27 +4,20 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { discoverReplayTestEntries } from '../session-test-discovery.ts';
 import { buildReplayTestSourceDiscovery } from '../session-test-source-discovery.ts';
 
-// Discovery split into host inspection + scheduler policy in #1478 P3b. These tests drive the
-// real inspection capability rather than a fake one: they write actual .ad and Maestro sources
-// and assert the resulting entries, so stubbing the host half would keep them passing while
-// proving nothing about the composition they exist to pin.
+// Path expansion, traversal ordering and format routing are host work (#1478 P3b). These pin
+// the inspection capability directly; scheduler filtering policy is pinned in the package.
 const discoverSources = (replayBackend?: string) => buildReplayTestSourceDiscovery(replayBackend);
 
-test('discoverReplayTestEntries discovers nested .ad suites through native DFS traversal', () => {
+test('replay-test source discovery discovers nested .ad suites through native DFS traversal', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-discovery-'));
   const nested = path.join(root, 'nested');
   fs.mkdirSync(nested, { recursive: true });
   fs.writeFileSync(path.join(nested, '02-second.ad'), 'context platform=android\nopen "Second"\n');
   fs.writeFileSync(path.join(root, '01-first.ad'), 'context platform=ios\nopen "First"\n');
 
-  const entries = discoverReplayTestEntries({
-    inputs: [root],
-    cwd: root,
-    discoverSources: discoverSources(),
-  });
+  const entries = discoverSources()({ inputs: [root], cwd: root });
 
   assert.deepEqual(
     new Set(entries.map((entry) => entry.path)),
@@ -32,47 +25,7 @@ test('discoverReplayTestEntries discovers nested .ad suites through native DFS t
   );
 });
 
-test('discoverReplayTestEntries skips untyped scripts when platform filter is set', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-discovery-filter-'));
-  fs.writeFileSync(path.join(root, '01-untyped.ad'), 'open "Demo"\n');
-  fs.writeFileSync(path.join(root, '02-android.ad'), 'context platform=android\nopen "Demo"\n');
-
-  const entries = discoverReplayTestEntries({
-    inputs: [root],
-    cwd: root,
-    platformFilter: 'android',
-    discoverSources: discoverSources(),
-  });
-
-  const untyped = entries.find((entry) => path.basename(entry.path) === '01-untyped.ad');
-  const android = entries.find((entry) => path.basename(entry.path) === '02-android.ad');
-  assert.equal(untyped?.kind, 'skip');
-  assert.equal(android?.kind, 'run');
-  if (untyped?.kind === 'skip') {
-    assert.match(untyped.message, /missing platform metadata for --platform android/);
-  }
-});
-
-test('discoverReplayTestEntries rejects empty post-filter suites', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-discovery-empty-'));
-  fs.writeFileSync(path.join(root, '01-ios.ad'), 'context platform=ios\nopen "Settings"\n');
-
-  assert.throws(
-    () =>
-      discoverReplayTestEntries({
-        inputs: [root],
-        cwd: root,
-        platformFilter: 'android',
-        discoverSources: discoverSources(),
-      }),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.code === 'INVALID_ARGS' &&
-      error.message === 'No replay tests matched for --platform android.',
-  );
-});
-
-test('discoverReplayTestEntries includes Maestro yaml flows for Maestro test suites', () => {
+test('replay-test source discovery includes Maestro yaml flows for Maestro test suites', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-discovery-maestro-'));
   fs.writeFileSync(
     path.join(root, '01-flow.yaml'),
@@ -81,28 +34,25 @@ test('discoverReplayTestEntries includes Maestro yaml flows for Maestro test sui
   fs.writeFileSync(path.join(root, '02-flow.yml'), 'appId: demo\n---\n- launchApp\n');
   fs.writeFileSync(path.join(root, '03-flow.ad'), 'open "Demo"\n');
 
-  const entries = discoverReplayTestEntries({
-    inputs: [root],
-    cwd: root,
-    platformFilter: 'android',
-    discoverSources: discoverSources('maestro'),
-  });
+  const entries = discoverSources('maestro')({ inputs: [root], cwd: root });
 
   assert.deepEqual(
     new Set(entries.map((entry) => path.basename(entry.path))),
     new Set(['01-flow.yaml', '02-flow.yml', '03-flow.ad']),
   );
-  assert.equal(entries.find((entry) => path.basename(entry.path) === '01-flow.yaml')?.kind, 'run');
-  assert.equal(entries.find((entry) => path.basename(entry.path) === '02-flow.yml')?.kind, 'run');
-  assert.equal(entries.find((entry) => path.basename(entry.path) === '03-flow.ad')?.kind, 'skip');
+  // Maestro sources take their platform from the invocation; a native source in Maestro mode
+  // is still native and declares none. What a --platform filter then does with each is pinned
+  // in the package's policy tests.
+  const platformKind = (basename: string) =>
+    entries.find((entry) => path.basename(entry.path) === basename)?.manifest.device.platform.kind;
+  assert.equal(platformKind('01-flow.yaml'), 'caller-bound');
+  assert.equal(platformKind('02-flow.yml'), 'caller-bound');
+  assert.equal(platformKind('03-flow.ad'), 'unspecified');
   const namedFlow = entries.find((entry) => path.basename(entry.path) === '01-flow.yaml');
-  assert.equal(namedFlow?.kind, 'run');
-  if (namedFlow?.kind === 'run') {
-    assert.equal(namedFlow.title, 'Bottom Tabs - Dynamic');
-  }
+  assert.equal(namedFlow?.manifest.title, 'Bottom Tabs - Dynamic');
 });
 
-test('discoverReplayTestEntries preserves Maestro directory filesystem order', () => {
+test('replay-test source discovery preserves Maestro directory filesystem order', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-discovery-maestro-sort-'));
   const flowFiles = ['10-legacy.ad', '30-zeta.yaml', '05-compat.ad', '20-beta.yml'];
   for (const fileName of flowFiles) {
@@ -128,11 +78,7 @@ test('discoverReplayTestEntries preserves Maestro directory filesystem order', (
   });
 
   try {
-    const entries = discoverReplayTestEntries({
-      inputs: [root],
-      cwd: root,
-      discoverSources: discoverSources('maestro'),
-    });
+    const entries = discoverSources('maestro')({ inputs: [root], cwd: root });
 
     assert.deepEqual(
       entries.map((entry) => path.basename(entry.path)),
@@ -143,7 +89,7 @@ test('discoverReplayTestEntries preserves Maestro directory filesystem order', (
   }
 });
 
-test('discoverReplayTestEntries preserves Maestro nested directory DFS order', () => {
+test('replay-test source discovery preserves Maestro nested directory DFS order', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-discovery-maestro-dfs-'));
   const nested = path.join(root, 'nested');
   fs.mkdirSync(nested, { recursive: true });
@@ -179,11 +125,7 @@ test('discoverReplayTestEntries preserves Maestro nested directory DFS order', (
   });
 
   try {
-    const entries = discoverReplayTestEntries({
-      inputs: [root],
-      cwd: root,
-      discoverSources: discoverSources('maestro'),
-    });
+    const entries = discoverSources('maestro')({ inputs: [root], cwd: root });
 
     assert.deepEqual(
       entries.map((entry) => path.relative(root, entry.path)),
@@ -194,18 +136,14 @@ test('discoverReplayTestEntries preserves Maestro nested directory DFS order', (
   }
 });
 
-test('discoverReplayTestEntries preserves explicit Maestro file order', () => {
+test('replay-test source discovery preserves explicit Maestro file order', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-discovery-maestro-order-'));
   const second = path.join(root, '02-second.yaml');
   const first = path.join(root, '01-first.yaml');
   fs.writeFileSync(first, 'appId: demo\n---\n- launchApp\n');
   fs.writeFileSync(second, 'appId: demo\n---\n- launchApp\n');
 
-  const entries = discoverReplayTestEntries({
-    inputs: [second, first],
-    cwd: root,
-    discoverSources: discoverSources('maestro'),
-  });
+  const entries = discoverSources('maestro')({ inputs: [second, first], cwd: root });
 
   assert.deepEqual(
     entries.map((entry) => path.basename(entry.path)),
@@ -213,7 +151,7 @@ test('discoverReplayTestEntries preserves explicit Maestro file order', () => {
   );
 });
 
-test('discoverReplayTestEntries orders Maestro file inputs before expanded flows', () => {
+test('replay-test source discovery orders Maestro file inputs before expanded flows', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-discovery-maestro-files-'));
   const suite = path.join(root, 'suite');
   const globSuite = path.join(root, 'glob-suite');
@@ -224,10 +162,9 @@ test('discoverReplayTestEntries orders Maestro file inputs before expanded flows
   fs.writeFileSync(path.join(suite, '01-directory.yaml'), 'appId: demo\n---\n- launchApp\n');
   fs.writeFileSync(path.join(globSuite, '02-glob.yaml'), 'appId: demo\n---\n- launchApp\n');
 
-  const entries = discoverReplayTestEntries({
+  const entries = discoverSources('maestro')({
     inputs: [suite, path.join(globSuite, '*.yaml'), explicit],
     cwd: root,
-    discoverSources: discoverSources('maestro'),
   });
 
   assert.deepEqual(
@@ -236,16 +173,15 @@ test('discoverReplayTestEntries orders Maestro file inputs before expanded flows
   );
 });
 
-test('discoverReplayTestEntries de-duplicates overlapping Maestro file and glob inputs', () => {
+test('replay-test source discovery de-duplicates overlapping Maestro file and glob inputs', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-discovery-overlap-'));
   const explicit = path.join(root, '02-explicit.yaml');
   fs.writeFileSync(explicit, 'appId: demo\n---\n- launchApp\n');
   fs.writeFileSync(path.join(root, '01-expanded.yaml'), 'appId: demo\n---\n- launchApp\n');
 
-  const entries = discoverReplayTestEntries({
+  const entries = discoverSources('maestro')({
     inputs: [explicit, path.join(root, '*.yaml')],
     cwd: root,
-    discoverSources: discoverSources('maestro'),
   });
 
   assert.deepEqual(
@@ -254,17 +190,16 @@ test('discoverReplayTestEntries de-duplicates overlapping Maestro file and glob 
   );
 });
 
-test('discoverReplayTestEntries sorts mixed Maestro glob matches by YAML-first compatibility order', () => {
+test('replay-test source discovery sorts mixed Maestro glob matches by YAML-first compatibility order', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-discovery-mixed-glob-'));
   fs.writeFileSync(path.join(root, '20-zeta.yaml'), 'appId: demo\n---\n- launchApp\n');
   fs.writeFileSync(path.join(root, '10-alpha.yml'), 'appId: demo\n---\n- launchApp\n');
   fs.writeFileSync(path.join(root, '00-native.ad'), 'open "Demo"\n');
   fs.writeFileSync(path.join(root, '30-native.ad'), 'open "Demo"\n');
 
-  const entries = discoverReplayTestEntries({
+  const entries = discoverSources('maestro')({
     inputs: [path.join(root, '*.{yaml,yml,ad}')],
     cwd: root,
-    discoverSources: discoverSources('maestro'),
   });
 
   assert.deepEqual(
@@ -273,18 +208,13 @@ test('discoverReplayTestEntries sorts mixed Maestro glob matches by YAML-first c
   );
 });
 
-test('discoverReplayTestEntries rejects YAML without explicit Maestro routing', () => {
+test('replay-test source discovery rejects YAML without explicit Maestro routing', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-discovery-yaml-route-'));
   const flowPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(flowPath, 'appId: demo\n---\n- launchApp\n');
 
   assert.throws(
-    () =>
-      discoverReplayTestEntries({
-        inputs: [flowPath],
-        cwd: root,
-        discoverSources: discoverSources(),
-      }),
+    () => discoverSources()({ inputs: [flowPath], cwd: root }),
     (error: unknown) =>
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&

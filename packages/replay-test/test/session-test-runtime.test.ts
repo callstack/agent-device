@@ -2,19 +2,35 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import { isRequestCanceled } from '../../../request/cancel.ts';
-import { runReplayTestAttempt } from '../session-test-runtime.ts';
-import { bindReplayTestAttemptCancellation } from '../session-replay.ts';
-import { emitDiagnostic } from '../../../utils/diagnostics.ts';
-import type { ReplayTestAttemptOutcome } from '../session-test-types.ts';
 
-// The real host capabilities (#1478 P3b). These tests assert cancellation through
-// `isRequestCanceled`, so they must drive the actual daemon binding rather than a stub —
-// a stubbed binding would keep the assertions passing while proving nothing.
-const HOST_CAPABILITIES = {
-  emitDiagnostic,
-  bindAttemptCancellation: bindReplayTestAttemptCancellation,
-};
+import { runReplayTestAttempt } from '@agent-device/replay-test';
+
+import type { ReplayTestAttemptOutcome } from '@agent-device/replay-test';
+
+// What the scheduler owes its host around cancellation (#1478 P3b): cancel exactly once when
+// an attempt times out, and always release when it settles. How the daemon then maps that onto
+// its request registry is the adapter's contract, pinned in
+// `src/daemon/handlers/__tests__/session-replay-cancellation.test.ts`.
+const cancellations: Array<{ attemptId: string; canceled: number; released: number }> = [];
+
+function trackCancellation() {
+  cancellations.length = 0;
+  return {
+    emitDiagnostic: () => {},
+    bindAttemptCancellation: ({ attemptId }: { attemptId: string }) => {
+      const record = { attemptId, canceled: 0, released: 0 };
+      cancellations.push(record);
+      return {
+        cancel: () => {
+          record.canceled += 1;
+        },
+        release: () => {
+          record.released += 1;
+        },
+      };
+    },
+  };
+}
 
 const PASSED: ReplayTestAttemptOutcome = {
   status: 'passed',
@@ -67,7 +83,7 @@ test('runReplayTestAttempt keeps cancellation active until a timed-out replay se
     runReplay: async () => await replayPromise,
     finalizeAttempt,
     cleanupSession,
-    ...HOST_CAPABILITIES,
+    ...trackCancellation(),
   });
 
   await vi.advanceTimersByTimeAsync(10);
@@ -91,7 +107,7 @@ test('runReplayTestAttempt keeps cancellation active until a timed-out replay se
     }),
   );
   expect(lifecycleEvents).toEqual(['finalize', 'cleanup']);
-  expect(isRequestCanceled('req-timeout-open')).toBe(true);
+  expect(cancellations[0]?.canceled).toBe(1);
   // #1478 P3: the second cleanup is strictly deferred until the abandoned replay settles, so
   // the attempt returns having cleaned up exactly once. P3 keeps this orchestration inside
   // replay-test while the cleanup effect itself stays in the daemon adapter.
@@ -105,7 +121,7 @@ test('runReplayTestAttempt keeps cancellation active until a timed-out replay se
   });
   await replaySettled;
   await vi.waitFor(() => {
-    expect(isRequestCanceled('req-timeout-open')).toBe(false);
+    expect(cancellations[0]?.released).toBe(1);
   });
   await vi.waitFor(() => {
     expect(cleanupSession).toHaveBeenCalledTimes(2);
@@ -129,7 +145,7 @@ test('runReplayTestAttempt keeps a passing replay passed when finalization fails
       infrastructure: false,
     }),
     cleanupSession,
-    ...HOST_CAPABILITIES,
+    ...trackCancellation(),
   });
 
   expect(result.status).toBe('passed');
@@ -161,7 +177,7 @@ test('runReplayTestAttempt finalizes before cleanup and records that order in th
     cleanupSession: async () => {
       lifecycleEvents.push('cleanup');
     },
-    ...HOST_CAPABILITIES,
+    ...trackCancellation(),
   });
 
   expect(result.status).toBe('passed');
@@ -201,7 +217,7 @@ test('runReplayTestAttempt cleans up once when a timed-out replay settles inside
       return undefined;
     },
     cleanupSession,
-    ...HOST_CAPABILITIES,
+    ...trackCancellation(),
   });
 
   await vi.advanceTimersByTimeAsync(10);
@@ -239,7 +255,7 @@ test('runReplayTestAttempt cleans up without a finalizer and adds no finalizatio
     requestId: 'req-no-finalizer',
     runReplay: async () => PASSED,
     cleanupSession,
-    ...HOST_CAPABILITIES,
+    ...trackCancellation(),
   });
 
   expect(result.status).toBe('passed');

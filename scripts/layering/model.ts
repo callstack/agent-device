@@ -36,6 +36,7 @@ const TARGET_DAG_RANK = new Map([
   ['platforms', 1],
   ['recording', 1],
   ['replay', 1],
+  ['replay-test', 1],
   ['request', 1],
   ['screenshot-diff', 1],
   ['selectors', 1],

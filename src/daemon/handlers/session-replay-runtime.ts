@@ -57,7 +57,7 @@ import {
 } from './session-replay-target-verification.ts';
 import { buildReplayBuiltinVars } from './session-replay-vars.ts';
 import { runTypedMaestroReplayFile } from './session-replay-maestro-runtime.ts';
-import type { ReplayTestAttemptStep, ReplayTestAttemptStepSink } from './session-test-types.ts';
+import type { ReplayTestAttemptStep, ReplayTestAttemptStepSink } from '@agent-device/replay-test';
 import { getRequestSignal } from '../../request/cancel.ts';
 
 /** Per-run invariants for a single replay step (ADR 0012 step 4 verify + dispatch + guard). */

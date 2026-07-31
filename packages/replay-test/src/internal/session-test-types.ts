@@ -1,11 +1,15 @@
-import type { ReplaySuiteTestFailed } from '@agent-device/contracts/replay';
+import type { ReplaySuiteResult, ReplaySuiteTestFailed } from '@agent-device/contracts/replay';
 import type { SnapshotDiagnosticsSummary } from '@agent-device/contracts/capture';
 import type {
   ReplayTestProgressEvent,
   ReplayTestSuiteProgressEvent,
 } from '@agent-device/contracts/progress';
 import type { DeviceTarget, PlatformSelector } from '@agent-device/kernel/device';
-import type { ReplayTestShardContext } from './session-test-sharding.ts';
+import type {
+  ReplayTestResolveShardTargets,
+  ReplayTestShardContext,
+  ReplayTestShardMode,
+} from './session-test-sharding.ts';
 
 /**
  * The device vocabulary a scheduler may name, sourced from the neutral kernel rather than
@@ -16,6 +20,41 @@ import type { ReplayTestShardContext } from './session-test-sharding.ts';
  */
 export type ReplayTestPlatform = Exclude<PlatformSelector, 'web'>;
 export type ReplayTestTarget = DeviceTarget;
+
+/**
+ * One suite run, in vocabulary the scheduler owns (#1478 P3b).
+ *
+ * The façade takes this instead of a `DaemonRequest`. Every field is one the scheduler
+ * actually reads; the adapter translates flags and meta into it and translates the result
+ * back to a daemon response. Nothing here names a transport, a command, or a session store.
+ *
+ * `replayBackend` is absent by design: it selects an engine, and the adapter has already
+ * applied it when building the source-discovery and shard-target capabilities.
+ */
+export type ReplayTestSuiteRequest = Readonly<{
+  /** Paths and globs to expand. Never empty; the adapter rejects an empty invocation. */
+  inputs: readonly string[];
+  cwd?: string;
+  /** Correlation id for attempt identity and the suite invocation id. */
+  requestId?: string;
+  /** Base session name that attempt sessions derive from. */
+  sessionName: string;
+  platformFilter?: PlatformSelector;
+  artifactsDir?: string;
+  failFast?: boolean;
+  retries?: number;
+  timeoutMs?: number;
+  shard?: Readonly<{ mode: ReplayTestShardMode; count: number }>;
+}>;
+
+/**
+ * What a suite run produces. Nothing throws across the façade: an invalid invocation or a
+ * discovery failure resolves as `failed` with ADR 0010 error fields, which the adapter maps to
+ * a daemon error response exactly as the in-handler `errorResponse` calls used to.
+ */
+export type ReplayTestSuiteOutcome =
+  | Readonly<{ status: 'completed'; data: ReplaySuiteResult }>
+  | Readonly<{ status: 'failed'; error: Readonly<{ code: string; message: string }> }>;
 
 /**
  * Everything the scheduler may know about one discovered source (#1478 P3b).
@@ -129,6 +168,13 @@ export type ReplayTestRunReplayParams = {
   artifactsDir?: string;
   artifactPaths?: Set<string>;
   tracePath?: string;
+  /**
+   * Appends one event to this attempt's timing trace. The host records video lifecycle events
+   * into the same trace the scheduler writes; handing it this closure keeps the trace format
+   * private to the package instead of exporting a writer from the façade, and scopes the
+   * authority to exactly this attempt's trace.
+   */
+  appendTimingEvent: (event: Record<string, unknown>) => void;
   shard?: ReplayTestShardContext;
   onStep?: ReplayTestAttemptStepSink;
 };
@@ -148,6 +194,8 @@ export type ReplayTestFinalizeAttempt = (params: {
   artifactPaths: Set<string>;
   artifactsDir?: string;
   tracePath?: string;
+  /** Same per-attempt trace appender the run receives; finalization records video events too. */
+  appendTimingEvent: (event: Record<string, unknown>) => void;
 }) => Promise<ReplayTestAttemptFailed | undefined>;
 
 /**
@@ -211,7 +259,18 @@ export type ReplayTestRuntimeDependencies = {
   isCanceled: ReplayTestIsCanceled;
   emitDiagnostic: ReplayTestEmitDiagnostic;
   bindAttemptCancellation: ReplayTestBindAttemptCancellation;
+  discoverSources: ReplayTestDiscoverSources;
+  resolveShardTargets: ReplayTestResolveShardTargets;
 };
+
+/**
+ * What attempt execution needs. Discovery and shard resolution happen once, in the suite entry
+ * point, so nothing below it is handed the ability to enumerate sources or bind devices.
+ */
+export type ReplayTestExecutionDependencies = Omit<
+  ReplayTestRuntimeDependencies,
+  'discoverSources' | 'resolveShardTargets'
+>;
 
 /** Neutral failure outcome helper; keeps timeout/unknown construction in one place. */
 export function replayTestAttemptFailure(params: {
