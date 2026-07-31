@@ -66,37 +66,47 @@ export function handleSessionScriptPublication(params: {
   };
 }
 
-function validatePublicationEligibility(session: SessionState): AppError | undefined {
-  if (isRepairArmedSession(session)) {
-    return new AppError(
+type PublicationIneligibility = 'repair' | 'aborted' | 'published' | 'not-armed';
+
+/** Why this session cannot publish its active recording, or `undefined` when it can. */
+function publicationIneligibility(session: SessionState): PublicationIneligibility | undefined {
+  if (isRepairArmedSession(session)) return 'repair';
+  const state = session.scriptPublication;
+  if (state?.kind !== 'authoring') return 'not-armed';
+  if (state.status === 'armed') return session.recordSession ? undefined : 'not-armed';
+  return state.status;
+}
+
+const PUBLICATION_INELIGIBILITY_ERRORS: Record<PublicationIneligibility, () => AppError> = {
+  repair: () =>
+    new AppError(
       'COMMAND_FAILED',
       'This session has an active .ad repair transaction and cannot use ordinary active-session publication.',
       {
         hint: 'Finish or abort the repair through replay --from and its existing close/teardown protocol.',
       },
-    );
-  }
-  const state = session.scriptPublication;
-  if (state?.kind === 'authoring' && state.status === 'aborted') {
-    return new AppError(
+    ),
+  aborted: () =>
+    new AppError(
       'COMMAND_FAILED',
       'This script recording was aborted by a second successful open and cannot be published.',
       { hint: 'Close this session and start a fresh one with open <app> --save-script[=<path>].' },
-    );
-  }
-  if (state?.kind === 'authoring' && state.status === 'published') {
-    return new AppError('COMMAND_FAILED', 'This script recording has already been published.', {
+    ),
+  published: () =>
+    new AppError('COMMAND_FAILED', 'This script recording has already been published.', {
       hint: 'Continue using the live session, or close it and start a fresh authoring session.',
-    });
-  }
-  if (state?.kind !== 'authoring' || state.status !== 'armed' || !session.recordSession) {
-    return new AppError(
+    }),
+  'not-armed': () =>
+    new AppError(
       'COMMAND_FAILED',
       'Script recording was not armed before this journey began; session history cannot be published without recording-time target evidence.',
       { hint: 'Close this session and start a fresh one with open <app> --save-script[=<path>].' },
-    );
-  }
-  return undefined;
+    ),
+};
+
+function validatePublicationEligibility(session: SessionState): AppError | undefined {
+  const reason = publicationIneligibility(session);
+  return reason ? PUBLICATION_INELIGIBILITY_ERRORS[reason]() : undefined;
 }
 
 function failure(error: AppError): Extract<DaemonResponse, { ok: false }> {

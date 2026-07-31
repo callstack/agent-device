@@ -62,6 +62,7 @@ import {
   NO_SCRIPT_PUBLICATION,
   scriptTargetForce,
   scriptTargetPath,
+  type SessionScriptPublicationState,
 } from '../session-script-publication-state.ts';
 import {
   armRepairStep,
@@ -649,6 +650,32 @@ function validateReplaySessionEntry(params: {
   return undefined;
 }
 
+/**
+ * Rejects arming a repair over an ordinary authoring recording (R2's disjointness) and runs the
+ * arm-time EEXIST preflight against the target this request resolves to.
+ */
+function rejectSaveScriptArming(params: {
+  saveScript: boolean | string | undefined;
+  force: boolean | undefined;
+  preRunState: SessionScriptPublicationState;
+  sourcePath: string;
+}): DaemonResponse | undefined {
+  const { saveScript, force, preRunState, sourcePath } = params;
+  if (saveScript && preRunState.kind === 'authoring') {
+    return errorResponse(
+      'INVALID_ARGS',
+      `replay --save-script cannot re-arm an ordinary recording in terminal/active state ${preRunState.status}. Close this session and use a fresh one for repair authoring.`,
+    );
+  }
+  return preflightSaveScriptTarget({
+    saveScript,
+    liveForce: force,
+    persistedForce: scriptTargetForce(preRunState) || undefined,
+    sourcePath,
+    existingSaveScriptPath: scriptTargetPath(preRunState),
+  });
+}
+
 function prepareSaveScriptSession(params: {
   req: DaemonRequest;
   sessionStore: SessionStore;
@@ -658,24 +685,13 @@ function prepareSaveScriptSession(params: {
   const { req, sessionStore, sessionName, sourcePath } = params;
   const preRunSession = sessionStore.get(sessionName);
   const { saveScript, force } = req.flags ?? {};
-  const preRunState = preRunSession?.scriptPublication ?? NO_SCRIPT_PUBLICATION;
-  if (saveScript && preRunState.kind === 'authoring') {
-    return {
-      ok: false,
-      response: errorResponse(
-        'INVALID_ARGS',
-        `replay --save-script cannot re-arm an ordinary recording in terminal/active state ${preRunState.status}. Close this session and use a fresh one for repair authoring.`,
-      ),
-    };
-  }
-  const saveScriptPreflight = preflightSaveScriptTarget({
+  const rejection = rejectSaveScriptArming({
     saveScript,
-    liveForce: force,
-    persistedForce: scriptTargetForce(preRunState) || undefined,
+    force,
+    preRunState: preRunSession?.scriptPublication ?? NO_SCRIPT_PUBLICATION,
     sourcePath,
-    existingSaveScriptPath: scriptTargetPath(preRunState),
   });
-  if (saveScriptPreflight) return { ok: false, response: saveScriptPreflight };
+  if (rejection) return { ok: false, response: rejection };
 
   if (preRunSession && repairSessionBoundary(preRunSession) !== undefined) {
     resetRepairCompletionForRerun(preRunSession);

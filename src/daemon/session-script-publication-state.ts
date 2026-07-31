@@ -128,7 +128,7 @@ export function demoteRepairToArmed(
 }
 
 /** The target a state publishes to, or `undefined` when it publishes nothing. */
-export function scriptPublicationTarget(
+function scriptPublicationTarget(
   state: SessionScriptPublicationState,
 ): SessionScriptTarget | undefined {
   return state.kind === 'none' ? undefined : state.target;
