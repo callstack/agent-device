@@ -19,7 +19,7 @@ function ensureBuiltPackage(): void {
   });
 }
 
-test('compiled Limrun subpath preserves root Android provider capabilities', () => {
+test('compiled Limrun subpath preserves its downstream type surface', () => {
   ensureBuiltPackage();
 
   // Keep the fixture under the package root so TypeScript resolves the
@@ -45,14 +45,20 @@ test('compiled Limrun subpath preserves root Android provider capabilities', () 
     );
     fs.writeFileSync(
       path.join(tempRoot, 'fixture.ts'),
-      `import type { LimrunAndroidDeviceSession } from 'agent-device/limrun';
+      `import type {
+  LimrunDeviceSession,
+  LimrunIosCommandExecution,
+  LimrunIosDeviceSession,
+  LimrunRuntime,
+  LimrunRuntimeOptions,
+} from 'agent-device/limrun';
 
-declare const session: LimrunAndroidDeviceSession;
-void session.adb.spawn;
-void session.adb.pull;
-void session.adb.install;
-void session.adb.touch;
-void session.adb.gestureViewport;
+declare const runtime: LimrunRuntime;
+declare const options: LimrunRuntimeOptions;
+declare const session: LimrunDeviceSession;
+declare const iosSession: LimrunIosDeviceSession;
+declare const execution: LimrunIosCommandExecution;
+void [runtime, options, session, iosSession, execution];
 `,
     );
 
@@ -69,7 +75,7 @@ void session.adb.gestureViewport;
     assert.equal(
       result.exitCode,
       0,
-      `The compiled agent-device/limrun declarations no longer preserve the root Android provider contract:\n${result.stdout}${result.stderr}`,
+      `The compiled agent-device/limrun declarations no longer preserve the downstream contract:\n${result.stdout}${result.stderr}`,
     );
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
