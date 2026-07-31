@@ -50,7 +50,7 @@ export type PendingRecordAndHeal = { expectedFrom: number; actionsCountAtDiverge
  * performs the diverged step's intent as a recorded action, and that resume
  * must execute zero device actions before reaching the normal completion
  * path. That allowance is scoped to the EXACT session + target that actually
- * produced it (`stampPendingRecordAndHealWatermark`, `session-replay-resume.ts`),
+ * produced it (the `ReplayCoordinator`'s `stampCorrectiveWatermark`, `session-replay-coordinator.ts`, #1478 P4b),
  * and only once a new action proves the corrective press happened — never a
  * blanket "one past the end is fine" for any session, which would let an
  * unrelated or blind `--from actionCount + 1` silently skip the plan's tail
@@ -117,8 +117,8 @@ function validateReplayResumeRequest(params: {
 /**
  * `actionCount + 1` (one past the plan's end) is a legal EMPTY-TAIL resume
  * ONLY when it matches THIS session's own record-and-heal-shaped divergence
- * watermark (`stampPendingRecordAndHealWatermark`, `session-replay-resume.ts`
- * — stamped for `record-and-heal`, and per #1262 also for `caution`/`manual`'s
+ * watermark (the `ReplayCoordinator`'s `stampCorrectiveWatermark`,
+ * `session-replay-coordinator.ts`, #1478 P4b — stamped for `record-and-heal`, and per #1262 also for `caution`/`manual`'s
  * recorded-action alternate) — never a blanket "one past the end is fine" for
  * any session or repair kind. Absent a matching watermark, `actionCount + 1`
  * is exactly as out-of-range as any other ordinal beyond the plan.
@@ -145,8 +145,8 @@ function describeOutOfRangeResumeFrom(params: {
  * (mid-plan, `record-and-heal` only) or the empty-tail boundary the range
  * check above authorizes (`record-and-heal`, or per #1262 also
  * `caution`/`manual`'s alternate repair, which is ONLY ever stamped at that
- * boundary — see `stampPendingRecordAndHealWatermark`,
- * `session-replay-resume.ts`) — requires proof the agent actually performed
+ * boundary — see the `ReplayCoordinator`'s `stampCorrectiveWatermark`,
+ * `session-replay-coordinator.ts`) — requires proof the agent actually performed
  * the diverged step: the session's recorded action count must have grown
  * since the divergence. Without that proof, this would silently resume past
  * an unrepaired step instead of rejecting. `caution`/`manual`'s own

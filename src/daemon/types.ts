@@ -389,8 +389,8 @@ export type SessionState = {
    * failed step's index unchanged (never made illegal) — but ONLY when the
    * diverged step is the plan's LAST one: those hints have a legitimate
    * record-and-heal-SHAPED alternate repair targeting `failedIndex + 1`,
-   * stamped by `stampPendingRecordAndHealWatermark`
-   * (`session-replay-resume.ts`). A MID-PLAN `caution`/`manual`
+   * stamped by the `ReplayCoordinator`'s `stampCorrectiveWatermark`
+   * (`session-replay-coordinator.ts`, #1478 P4b). A MID-PLAN `caution`/`manual`
    * `failedIndex + 1` was already unconditionally
    * legal (in range) and un-gated before #1262 — these hints never mandate a
    * corrective action the way `record-and-heal` does, so an agent may

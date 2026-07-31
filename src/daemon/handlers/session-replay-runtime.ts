@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import { parseReplayInput } from '../../compat/replay-input.ts';
 import { asAppError } from '@agent-device/kernel/errors';
 import type {
@@ -10,7 +9,6 @@ import type {
   SessionState,
 } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
-import { clearPendingRecordAndHealWatermark } from './session-replay-resume.ts';
 import { expandSessionPath } from '../session-paths.ts';
 import { buildReplayScriptPlatformFlags } from '../replay-device-selection.ts';
 import { computeReplayPlanDigest } from '../../replay/plan-digest.ts';
@@ -32,13 +30,11 @@ import {
   type SnapshotTimingSample,
 } from '@agent-device/contracts/capture';
 import type { ReplayCommandResult } from '@agent-device/contracts/replay';
-import type { ReplayDivergenceResume } from '@agent-device/contracts/divergence';
 import {
   isMaestroYamlPath,
   maestroBackendRequiredMessage,
   resolveReplayFormat,
 } from '../../replay/format.ts';
-import { isRecord } from '../../utils/parsing.ts';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import { withReplayFailureDiagnostics } from './session-replay-runtime-failure.ts';
 import {
@@ -65,12 +61,10 @@ import {
   type SessionScriptPublicationState,
 } from '../session-script-publication-state.ts';
 import {
-  armRepairStep,
-  isUncommittedRepairSession,
-  markRepairTransactionComplete,
-  repairSessionBoundary,
-  resetRepairCompletionForRerun,
-} from '../session-replay-transaction.ts';
+  createReplayCoordinator,
+  healedScriptSiblingPath,
+  type ReplayCoordinator,
+} from '../session-replay-coordinator.ts';
 
 /** Per-run invariants for a single replay step (ADR 0012 step 4 verify + dispatch + guard). */
 type ReplayStepContext = {
@@ -88,6 +82,8 @@ type ReplayStepContext = {
   responseLevel: ResponseLevel | undefined;
   invoke: DaemonInvokeFn;
   signal: AbortSignal | undefined;
+  /** #1478 P4b: the one locked gateway to this request's repair transaction. */
+  coordinator: ReplayCoordinator;
 };
 
 /**
@@ -225,13 +221,17 @@ export async function runReplayScriptFile(params: {
   const startedAt = Date.now();
   let resolved = '';
   const artifactPaths = new Set<string>();
+  // #1478 P4b: the one locked coordinator this request reaches the repair
+  // transaction through — created once, threaded everywhere this file used
+  // to import `session-replay-transaction.ts` or `session.pendingRecordAndHeal` directly.
+  const coordinator = createReplayCoordinator({ sessionStore, sessionName });
   try {
     resolved = SessionStore.expandHome(filePath, req.meta?.cwd);
     if (isMaestroYamlPath(resolved) && req.flags?.replayBackend !== 'maestro') {
       return errorResponse('INVALID_ARGS', maestroBackendRequiredMessage('replay', filePath));
     }
     if (resolveReplayFormat(resolved, req.flags?.replayBackend) === 'maestro') {
-      if (repairSessionBoundary(sessionStore.get(sessionName)) !== undefined) {
+      if (coordinator.view()?.repairBoundary !== undefined) {
         return errorResponse(
           'INVALID_ARGS',
           'This session has an active .ad --save-script repair run; finish it with replay --from or close before running Maestro YAML.',
@@ -245,6 +245,7 @@ export async function runReplayScriptFile(params: {
       sessionStore,
       tracePath,
       resolved,
+      coordinator,
     });
     if (!planPreparation.ok) return planPreparation.response;
     const {
@@ -253,7 +254,6 @@ export async function runReplayScriptFile(params: {
       actionLines,
       actionSourcePaths,
       planDigest,
-      preEntrySession,
       entryIndex,
       scope,
       actionTracePath,
@@ -262,10 +262,10 @@ export async function runReplayScriptFile(params: {
     const sessionPreparation = prepareReplaySession({
       req,
       entryIndex,
-      preEntrySession,
       sessionStore,
       sessionName,
       sourcePath: resolved,
+      coordinator,
     });
     if (!sessionPreparation.ok) return sessionPreparation.response;
     const stepContext: ReplayStepContext = {
@@ -283,6 +283,7 @@ export async function runReplayScriptFile(params: {
       responseLevel: req.meta?.responseLevel,
       invoke,
       signal: getRequestSignal(req.meta?.requestId),
+      coordinator,
     };
     const failure = await executeReplayActions({
       req,
@@ -312,6 +313,7 @@ export async function runReplayScriptFile(params: {
       artifactPaths,
       snapshotDiagnosticSamples,
       armSaveScript: sessionPreparation.armSaveScript,
+      coordinator,
     });
   } catch (err) {
     const appErr = asAppError(err);
@@ -367,8 +369,7 @@ async function executeReplayActions(
         action,
         index,
         totalActions: actions.length,
-        sessionStore,
-        sessionName,
+        coordinator: stepContext.coordinator,
       })
     ) {
       continue;
@@ -399,11 +400,7 @@ async function buildReplayActionFailure(
   response: Extract<DaemonResponse, { ok: false }>,
 ): Promise<DaemonResponse> {
   const heldResponse = (failure: DaemonResponse): DaemonResponse =>
-    markRepairSessionHeldIfArmed({
-      response: failure,
-      sessionStore: params.sessionStore,
-      sessionName: params.sessionName,
-    });
+    params.stepContext.coordinator.markSessionHeldIfArmed(failure);
   if (isCompleteTargetBindingDivergenceResponse(response)) return heldResponse(response);
   return heldResponse(
     await withReplayFailureDiagnostics({
@@ -435,6 +432,7 @@ function completeReplayRun(params: {
   artifactPaths: Set<string>;
   snapshotDiagnosticSamples: SnapshotTimingSample[];
   armSaveScript: () => void;
+  coordinator: ReplayCoordinator;
 }): DaemonResponse {
   const {
     startedAt,
@@ -445,13 +443,11 @@ function completeReplayRun(params: {
     artifactPaths,
     snapshotDiagnosticSamples,
     armSaveScript,
+    coordinator,
   } = params;
   armSaveScript();
+  coordinator.markCompleteIfArmed();
   const completedSession = sessionStore.get(sessionName);
-  if (completedSession && repairSessionBoundary(completedSession) !== undefined) {
-    markRepairTransactionComplete(completedSession);
-    sessionStore.set(sessionName, completedSession);
-  }
   const replayedCount = actions.length - entryIndex;
   const snapshotDiagnosticsSummary = summarizeSnapshotTimingSamples(snapshotDiagnosticSamples);
   return {
@@ -527,8 +523,9 @@ function prepareReplayPlan(params: {
   sessionStore: SessionStore;
   tracePath: string | undefined;
   resolved: string;
+  coordinator: ReplayCoordinator;
 }): { ok: true; value: PreparedReplayPlan } | { ok: false; response: DaemonResponse } {
-  const { req, sessionName, sessionStore, tracePath, resolved } = params;
+  const { req, sessionName, sessionStore, tracePath, resolved, coordinator } = params;
   const parsedResult = parseReplayScript(resolved, req);
   if (!parsedResult.ok) return parsedResult;
   const parsed = parsedResult.value;
@@ -548,7 +545,7 @@ function prepareReplayPlan(params: {
     req.flags,
     actions.length,
     planDigest,
-    preEntrySession?.pendingRecordAndHeal,
+    coordinator.view()?.pendingRecordAndHeal,
     preEntrySession?.actions.length ?? 0,
   );
   if (!entryIndex.ok) return entryIndex;
@@ -620,27 +617,29 @@ function buildPreparedReplayScope(params: {
 function prepareReplaySession(params: {
   req: DaemonRequest;
   entryIndex: number;
-  preEntrySession: SessionState | undefined;
   sessionStore: SessionStore;
   sessionName: string;
   sourcePath: string;
+  coordinator: ReplayCoordinator;
 }): { ok: true; armSaveScript: () => void } | { ok: false; response: DaemonResponse } {
-  const { req, entryIndex, preEntrySession, sessionStore, sessionName, sourcePath } = params;
+  const { req, entryIndex, sessionStore, sessionName, sourcePath, coordinator } = params;
   const sessionPreflight = validateReplaySessionEntry({
     entryIndex,
     sessionStore,
     sessionName,
+    coordinator,
   });
   if (sessionPreflight) return { ok: false, response: sessionPreflight };
 
-  consumeReplayResumeState({ req, preEntrySession, sessionStore, sessionName });
-  return prepareSaveScriptSession({ req, sessionStore, sessionName, sourcePath });
+  consumeReplayResumeState({ req, coordinator });
+  return prepareSaveScriptSession({ req, sessionStore, sessionName, sourcePath, coordinator });
 }
 
 function validateReplaySessionEntry(params: {
   entryIndex: number;
   sessionStore: SessionStore;
   sessionName: string;
+  coordinator: ReplayCoordinator;
 }): DaemonResponse | undefined {
   const repairPreflight = preflightReplayAgainstActiveRepair(params);
   if (repairPreflight) return repairPreflight;
@@ -681,8 +680,9 @@ function prepareSaveScriptSession(params: {
   sessionStore: SessionStore;
   sessionName: string;
   sourcePath: string;
+  coordinator: ReplayCoordinator;
 }): { ok: true; armSaveScript: () => void } | { ok: false; response: DaemonResponse } {
-  const { req, sessionStore, sessionName, sourcePath } = params;
+  const { req, sessionStore, sessionName, sourcePath, coordinator } = params;
   const preRunSession = sessionStore.get(sessionName);
   const { saveScript, force } = req.flags ?? {};
   const rejection = rejectSaveScriptArming({
@@ -693,16 +693,13 @@ function prepareSaveScriptSession(params: {
   });
   if (rejection) return { ok: false, response: rejection };
 
-  if (preRunSession && repairSessionBoundary(preRunSession) !== undefined) {
-    resetRepairCompletionForRerun(preRunSession);
-  }
+  coordinator.demoteForRerunIfArmed();
   return {
     ok: true,
     armSaveScript: createReplaySaveScriptArmer({
       saveScript,
       force,
-      sessionStore,
-      sessionName,
+      coordinator,
       sourcePath,
     }),
   };
@@ -710,19 +707,11 @@ function prepareSaveScriptSession(params: {
 
 function consumeReplayResumeState(params: {
   req: DaemonRequest;
-  preEntrySession: SessionState | undefined;
-  sessionStore: SessionStore;
-  sessionName: string;
+  coordinator: ReplayCoordinator;
 }): void {
-  const { req, preEntrySession, sessionStore, sessionName } = params;
-  if (
-    preEntrySession &&
-    preEntrySession.pendingRecordAndHeal?.expectedFrom === req.flags?.replayFrom
-  ) {
-    clearPendingRecordAndHealWatermark(preEntrySession);
-    sessionStore.set(sessionName, preEntrySession);
-  }
-  if (req.flags?.saveScript) sessionStore.clearRepairTombstone(sessionName);
+  const { req, coordinator } = params;
+  coordinator.clearCorrectiveWatermarkIfExpected(req.flags?.replayFrom);
+  if (req.flags?.saveScript) coordinator.clearTombstone();
 }
 
 /**
@@ -737,12 +726,11 @@ function consumeReplayResumeState(params: {
  */
 function preflightReplayAgainstActiveRepair(params: {
   entryIndex: number;
-  sessionStore: SessionStore;
-  sessionName: string;
+  coordinator: ReplayCoordinator;
 }): DaemonResponse | undefined {
-  const { entryIndex, sessionStore, sessionName } = params;
+  const { entryIndex, coordinator } = params;
   if (entryIndex > 0) return undefined;
-  if (repairSessionBoundary(sessionStore.get(sessionName)) === undefined) return undefined;
+  if (coordinator.view()?.repairBoundary === undefined) return undefined;
   return errorResponse(
     'INVALID_ARGS',
     'This session has an active --save-script repair run; continue it with replay --from <n> --plan-digest <sha256>, or finish with close, before starting a fresh full replay.',
@@ -755,7 +743,7 @@ function preflightReplayAgainstActiveRepair(params: {
  * `close`/completion) — by then the ENTIRE repair (agent's corrective steps
  * included) may already have executed against the device, only to fail on a
  * pre-existing target at the very end. Resolves the SAME target
- * `armReplaySaveScriptStep` would (explicit `--save-script=<path>` always
+ * the coordinator's `armStep` would (explicit `--save-script=<path>` always
  * wins; otherwise an already-armed session's existing path if this is a
  * `--from` continuation leg reusing it, else the default `<stem>.healed.ad`
  * sibling) WITHOUT needing the session to exist yet, so it runs before step 1
@@ -814,115 +802,33 @@ function isRepairArmedTerminalClose(params: {
   action: SessionAction;
   index: number;
   totalActions: number;
-  sessionStore: SessionStore;
-  sessionName: string;
+  coordinator: ReplayCoordinator;
 }): boolean {
-  const { action, index, totalActions, sessionStore, sessionName } = params;
+  const { action, index, totalActions, coordinator } = params;
   if (action.command !== 'close') return false;
   if (index !== totalActions - 1) return false;
-  return repairSessionBoundary(sessionStore.get(sessionName)) !== undefined;
+  return coordinator.view()?.repairBoundary !== undefined;
 }
 
 /**
  * ADR 0012 decision 6, R1/R6: returns a per-step armer that sets
- * `recordSession` and stamps the repair-run boundary watermark ONCE. Absent
- * `--save-script` it is a no-op, so replay is byte-identical to today.
+ * `recordSession` and stamps the repair-run boundary watermark ONCE, through
+ * the request's `ReplayCoordinator` (#1478 P4b). Absent `--save-script` it is
+ * a no-op, so replay is byte-identical to today.
  */
 function createReplaySaveScriptArmer(params: {
   saveScript: boolean | string | undefined;
   force: boolean | undefined;
-  sessionStore: SessionStore;
-  sessionName: string;
+  coordinator: ReplayCoordinator;
   sourcePath: string;
 }): () => void {
-  const { saveScript, force, sessionStore, sessionName, sourcePath } = params;
+  const { saveScript, force, coordinator, sourcePath } = params;
   if (!saveScript) return () => {};
   let firstArm = true;
   return () => {
-    armReplaySaveScriptStep({ sessionStore, sessionName, saveScript, force, sourcePath, firstArm });
+    coordinator.armStep({ saveScript, force, sourcePath, firstArm });
     firstArm = false;
   };
-}
-
-/**
- * Arms recording on the CURRENT session (a no-op until step 1 creates it) and
- * records the boundary watermark once. `firstArm` captures the pre-run action
- * count on the pre-loop session, so a reused session's earlier actions stay
- * excluded. A LATER arm reaching an unset boundary means step-1 `open`
- * REPLACED the session with a fresh `actions: []`
- * (`session-open-surface.ts:113-123`), so the replaced session is entirely
- * this run's — its boundary is 0, keeping the healed `open` in the slice
- * instead of amputating it. An explicit `<out>` always wins; absent one, the
- * healed script defaults to the `<original-stem>.healed.ad` sibling (R6).
- */
-function armReplaySaveScriptStep(params: {
-  sessionStore: SessionStore;
-  sessionName: string;
-  saveScript: boolean | string;
-  force: boolean | undefined;
-  sourcePath: string;
-  firstArm: boolean;
-}): void {
-  const { sessionStore, sessionName, saveScript, force, sourcePath, firstArm } = params;
-  const session = sessionStore.get(sessionName);
-  if (!session) return;
-  armRepairStep(session, {
-    saveScript,
-    force,
-    sourcePath,
-    healedSiblingPath: healedScriptSiblingPath(sourcePath),
-    firstArm,
-  });
-  sessionStore.set(sessionName, session);
-}
-
-/**
- * ADR 0012 decision 6, R7 (C1): stamps the `resume.repairSessionHeld` liveness
- * signal on a repair-armed divergence — the honest wire marker that the owning
- * session was kept live (this daemon never tears it down on a divergence) and
- * remains addressable for the corrective press + `replay --from`/`close`. Set
- * only when the session is genuinely held (armed): a plain non-repair
- * divergence, or one before step-1 `open` created/armed the session, gets no
- * signal (and no keep-alive). Never `false` — absent when not held.
- */
-function markRepairSessionHeldIfArmed(params: {
-  response: DaemonResponse;
-  sessionStore: SessionStore;
-  sessionName: string;
-}): DaemonResponse {
-  const { response, sessionStore, sessionName } = params;
-  if (response.ok) return response;
-  // The transaction is active iff the session is repair-armed and not yet
-  // committed — the PERSISTED state, NOT this request's `--save-script` flag.
-  // A `replay --from` continuation (which does not repeat `--save-script`, per
-  // R2) is therefore still held on divergence and stays in the transaction.
-  const session = sessionStore.get(sessionName);
-  if (!isUncommittedRepairSession(session)) return response;
-  const resume = readDivergenceResumeRecord(response);
-  if (resume) resume.repairSessionHeld = true;
-  return response;
-}
-
-/** The mutable `details.divergence.resume` record on a failed response, or `undefined`. */
-function readDivergenceResumeRecord(
-  response: Extract<DaemonResponse, { ok: false }>,
-): ReplayDivergenceResume | undefined {
-  const divergence = response.error.details?.divergence;
-  if (!isRecord(divergence) || !isReplayDivergenceResume(divergence.resume)) return undefined;
-  return divergence.resume;
-}
-
-function isReplayDivergenceResume(value: unknown): value is ReplayDivergenceResume {
-  if (!isRecord(value) || typeof value.allowed !== 'boolean') return false;
-  if (!Number.isInteger(value.from) || typeof value.planDigest !== 'string') return false;
-  return value.allowed || typeof value.reason === 'string';
-}
-
-/** `flows/login.ad` -> `flows/login.healed.ad`, beside the original (R6). */
-function healedScriptSiblingPath(sourcePath: string): string {
-  const dir = path.dirname(sourcePath);
-  const base = path.basename(sourcePath, path.extname(sourcePath));
-  return path.join(dir, `${base}.healed.ad`);
 }
 
 function formatReplaySuccessMessage(replayed: number, wallClockMs: number): string {

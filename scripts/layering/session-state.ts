@@ -65,7 +65,10 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
     'src/daemon/session-replay-transaction.ts',
     'src/daemon/session-script-publication-capability.ts',
   ],
-  pendingRecordAndHeal: ['src/daemon/handlers/session-replay-resume.ts'],
+  // #1478 P4b: moved from `session-replay-resume.ts` into the `ReplayCoordinator`
+  // (`session-replay-coordinator.ts`) — the one locked gateway a native replay request uses to
+  // reach both this watermark and the P4a `scriptPublication` transitions above.
+  pendingRecordAndHeal: ['src/daemon/session-replay-coordinator.ts'],
 
   trace: ['src/daemon/handlers/record-trace.ts'],
   recording: ['src/daemon/handlers/record-trace-recording.ts'],
