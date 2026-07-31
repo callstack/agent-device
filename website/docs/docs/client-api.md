@@ -90,10 +90,7 @@ Supported public entry points for Node consumers:
   - `new LimrunRuntime(options)`
   - `runtime.getDeviceSession(device)`
   - types: `LimrunRuntimeOptions`, `LimrunDeviceSession`, `LimrunAndroidDeviceSession`,
-    `LimrunIosDeviceSession`, `LimrunForegroundApp`, `LimrunInstalledApp`,
-    `LimrunIosCommandExecution`, `LimrunIosCommandResult`, `LimrunRecordingQuality`,
-    `LimrunIosRemoteInstallOptions`, `LimrunIosRemoteInstallResult`, `AndroidAdbProvider`,
-    `AndroidKeyboardState`, `AndroidKeyboardDismissResult`
+    `LimrunIosDeviceSession`, `LimrunIosCommandExecution`
 
 ## Basic usage
 
