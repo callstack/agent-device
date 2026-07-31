@@ -270,7 +270,7 @@ The perfect-shape refactor is complete and merged. Its end-state:
   it ranks an explicit target spine — as rank groups, lowest (kernel sink) to highest, where `A ◄ B`
   means B may not be outranked by A (the back-edge order the gate rejects), NOT that every displayed
   import exists:
-  `{ contracts, request, selectors, platforms, utils, replay, recording, snapshot, screenshot-diff } ◄ { core, providers } ◄ { commands, cli-schema, mcp } ◄ { client, daemon-server, compat, remote, metro, sdk } ◄ daemon-client ◄ cli` (the former rank-0 kernel zone lives in `packages/kernel` since #1490 W0, the former `cloud-webdriver` leaf lives behind the single `@agent-device/provider-webdriver` facade since W1b, and the dependency-free XML codec lives behind the single `@agent-device/xml` facade; R11 package-boundaries owns these physical seams) —
+  `{ contracts, request, selectors, platforms, utils, replay, recording, snapshot, screenshot-diff } ◄ core ◄ { commands, cli-schema, mcp } ◄ { client, daemon-server, compat, remote, metro, sdk } ◄ daemon-client ◄ cli` (the former rank-0 kernel zone lives in `packages/kernel` since #1490 W0, the former `cloud-webdriver` leaf lives behind the single `@agent-device/provider-webdriver` facade since W1b, Limrun lives behind the single `@agent-device/provider-limrun` facade since W1d, and the dependency-free XML codec lives behind the single `@agent-device/xml` facade; R11 package-boundaries owns these physical seams) —
   and rejects every back-edge within it. Only `(root)` is unranked among `src/` zones
   (`UNRANKED_ZONES` in `scripts/layering/model.ts`): it holds the entrypoints and the composition
   roots that wire the command surface into the daemon, and R2 forbids `daemon/` from importing

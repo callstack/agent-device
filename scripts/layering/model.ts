@@ -42,7 +42,6 @@ const TARGET_DAG_RANK = new Map([
   ['snapshot', 1],
   ['utils', 1],
   ['core', 2],
-  ['providers', 2],
   ['cli-schema', 3],
   ['commands', 3],
   ['mcp', 3],
@@ -76,12 +75,13 @@ export function zoneRank(zone: string): number | null {
 // invent an order the architecture had not committed to. Once `utils` joined the spine and
 // `(root)` was emptied of shared contracts, every one of them turned out to have a
 // consistent rank already — so the order was there, just unasserted.
-// `kernel`, `provider-webdriver`, and `xml` are not src/ zones: R11 owns their
+// `kernel`, `provider-webdriver`, `provider-limrun`, and `xml` are not src/ zones: R11 owns their
 // physical seams, and their zone names only appear in workspace-aware graphs.
 export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   '(root)',
   'kernel',
   'provider-webdriver',
+  'provider-limrun',
   'xml',
 ]);
 

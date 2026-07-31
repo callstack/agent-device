@@ -1,0 +1,18 @@
+{
+  "name": "@agent-device/provider-limrun",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Limrun provider runtime for agent-device. Internal workspace package bundled into the published artifact.",
+  "dependencies": {
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "@limrun/api": "^0.24.5"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  }
+}

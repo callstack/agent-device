@@ -47,7 +47,10 @@
     "@theme",
     // @agent-device/maestro owns the source import, while the published root
     // build externalizes yaml and retains runtime imports in packed chunks.
-    "yaml"
+    "yaml",
+    // @agent-device/provider-limrun owns the source import, while the published
+    // root build externalizes @limrun/api and retains runtime imports in packed chunks.
+    "@limrun/api"
   ],
   "ignoreExports": [
     {

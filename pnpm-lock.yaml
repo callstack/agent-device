@@ -33,6 +33,9 @@ importers:
       '@agent-device/maestro':
         specifier: workspace:*
         version: link:packages/maestro
+      '@agent-device/provider-limrun':
+        specifier: workspace:*
+        version: link:packages/provider-limrun
       '@agent-device/provider-webdriver':
         specifier: workspace:*
         version: link:packages/provider-webdriver
@@ -104,6 +107,18 @@ importers:
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
+
+  packages/provider-limrun:
+    dependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@limrun/api':
+        specifier: ^0.24.5
+        version: 0.24.5(supports-color@7.2.0)
 
   packages/provider-webdriver:
     dependencies:

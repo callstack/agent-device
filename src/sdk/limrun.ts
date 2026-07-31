@@ -1,10 +1,11 @@
 export { LimrunRuntime, type LimrunRuntimeOptions } from '../provider-limrun-runtime.ts';
-export type { LimrunAndroidDeviceSession, LimrunDeviceSession } from '../limrun-runtime-types.ts';
-export type { AndroidAdbProvider } from '../platforms/android/adb-executor.ts';
 export type {
-  AndroidKeyboardDismissResult,
-  AndroidKeyboardState,
-} from '../platforms/android/device-input-state.ts';
+  LimrunAdbProvider as AndroidAdbProvider,
+  LimrunAndroidDeviceSession,
+  LimrunDeviceSession,
+  LimrunAndroidKeyboardDismissResult as AndroidKeyboardDismissResult,
+  LimrunAndroidKeyboardState as AndroidKeyboardState,
+} from '@agent-device/provider-limrun';
 export type {
   LimrunForegroundApp,
   LimrunInstalledApp,
@@ -12,8 +13,8 @@ export type {
   LimrunIosCommandResult,
   LimrunIosDeviceSession,
   LimrunRecordingQuality,
-} from '../providers/limrun/device-session.ts';
+} from '@agent-device/provider-limrun';
 export type {
   LimrunIosRemoteInstallOptions,
   LimrunIosRemoteInstallResult,
-} from '../providers/limrun/ios.ts';
+} from '@agent-device/provider-limrun';

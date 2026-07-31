@@ -1,8 +1,8 @@
 import { AppError } from '@agent-device/kernel/errors';
+import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 // ProviderDeviceRuntime.getInteractor is synchronous, so this previously eager factory remains the
 // deliberate static edge; making it lazy would require a proxy interactor rather than this seam.
 import { createAndroidInteractor } from '../core/interactors/android.ts';
-import type { LimrunRuntimeDependencies } from '../providers/limrun/runtime-dependencies.ts';
 import { execFailureDetails, runCmd } from '../utils/exec.ts';
 import { readVersion } from '../utils/version.ts';
 
