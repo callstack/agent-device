@@ -16,6 +16,7 @@ import {
 } from './session-test-discovery.ts';
 import { runReplayTestCase, type ReplayTestCaseReport } from './session-test-attempt.ts';
 import { buildReplayTestSourceDiscovery } from './session-test-source-discovery.ts';
+import { buildReplayTestShardTargetResolver } from './session-test-shard-devices.ts';
 import type {
   ReplayTestEmitProgress,
   ReplayTestIsCanceled,
@@ -131,7 +132,12 @@ async function prepareReplayTestSuitePlan(req: DaemonRequest): Promise<ReplayTes
   const runnable = runnableReplayTestEntries(entries);
   const skippedCount = entries.length - runnable.length;
   const suiteInvocationId = buildReplayTestInvocationId(req.meta?.requestId);
-  const shardPlan = await buildReplayTestShardPlan(req.flags, runnable, skippedCount);
+  const shardPlan = await buildReplayTestShardPlan(
+    req.flags,
+    runnable,
+    skippedCount,
+    buildReplayTestShardTargetResolver(req.flags),
+  );
   return {
     entries,
     runnable,

@@ -17,7 +17,8 @@ import {
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import type { ReplayTestBindAttemptCancellation } from './session-test-types.ts';
 import type { ReplayScriptMetadata } from '../../replay/script.ts';
-import { buildReplayTestShardFlags, type ReplayTestShardContext } from './session-test-sharding.ts';
+import type { ReplayTestShardContext } from './session-test-sharding.ts';
+import { buildReplayTestShardFlags } from './session-test-shard-devices.ts';
 import { toReplayTestAttemptOutcome, toReplayTestFinalizeFailure } from './session-test-outcome.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 import {

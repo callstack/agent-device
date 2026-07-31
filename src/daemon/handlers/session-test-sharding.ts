@@ -1,24 +1,39 @@
-import { listDeviceInventory, type DeviceInventoryRequest } from '../../core/dispatch-resolve.ts';
-import {
-  resolveAndroidSerialAllowlist,
-  resolveIosSimulatorDeviceSetPath,
-} from '../../utils/device-isolation.ts';
-import {
-  isMobilePlatform,
-  matchesPlatformSelector,
-  resolveAppleSimulatorSetPathForSelector,
-  type DeviceInfo,
-} from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CommandFlags } from '../../core/dispatch.ts';
+import type { ReplayTestPlatform, ReplayTestTarget } from './session-test-types.ts';
 
 export type ReplayTestShardMode = 'all' | 'split';
+
+/**
+ * The device a shard runs against, in neutral vocabulary.
+ *
+ * The scheduler reads `id`/`name` for session labels and progress metadata. `platform` and
+ * `target` are here because the host needs them to bind a nested request, and both are already
+ * neutral kernel types — so `DeviceInfo` itself never crosses into scheduling.
+ */
+export type ReplayTestShardTarget = Readonly<{
+  id: string;
+  name: string;
+  platform: ReplayTestPlatform;
+  target?: ReplayTestTarget;
+}>;
 
 export type ReplayTestShardContext = {
   shardIndex: number;
   shardCount: number;
-  device: DeviceInfo;
+  device: ReplayTestShardTarget;
 };
+
+/**
+ * Resolves the devices a sharded run will use (#1478 P3b).
+ *
+ * Enumerating inventory, applying allowlists and simulator set paths, and rejecting a run with
+ * too few devices are all host concerns. The scheduler decides how many shards there are and
+ * which entries go to each; it never enumerates hardware.
+ */
+export type ReplayTestResolveShardTargets = (
+  shardCount: number,
+) => Promise<readonly ReplayTestShardTarget[]>;
 
 export type ReplayTestShardPlan<TEntry> = {
   mode: ReplayTestShardMode;
@@ -31,12 +46,13 @@ export async function buildReplayTestShardPlan<TEntry>(
   flags: CommandFlags | undefined,
   runnableEntries: TEntry[],
   skippedCount: number,
+  resolveShardTargets: ReplayTestResolveShardTargets,
 ): Promise<ReplayTestShardPlan<TEntry> | undefined> {
   const mode = readReplayTestShardMode(flags);
   if (!mode) return undefined;
   if (runnableEntries.length === 0) return undefined;
 
-  const devices = await resolveReplayTestShardDevices(flags, mode.count);
+  const devices = await resolveShardTargets(mode.count);
   return {
     mode: mode.kind,
     shardCount: mode.count,
@@ -53,28 +69,6 @@ export async function buildReplayTestShardPlan<TEntry>(
           : runnableEntries.filter((_entry, entryIndex) => entryIndex % mode.count === index),
     })),
   };
-}
-
-export function buildReplayTestShardFlags(
-  parentFlags: CommandFlags | undefined,
-  shard: ReplayTestShardContext | undefined,
-): CommandFlags | undefined {
-  if (!shard) return parentFlags;
-  const base = {
-    ...(parentFlags ?? {}),
-    device: undefined,
-    udid: undefined,
-    serial: undefined,
-    platform: shard.device.platform,
-    target: shard.device.target,
-    shardAll: undefined,
-    shardSplit: undefined,
-    shardCount: shard.shardCount,
-    shardIndex: shard.shardIndex,
-  };
-  return shard.device.platform === 'android'
-    ? { ...base, serial: shard.device.id }
-    : { ...base, udid: shard.device.id };
 }
 
 function readReplayTestShardMode(
@@ -96,104 +90,4 @@ function readPositiveShardCount(value: unknown, flagName: string): number | unde
     throw new AppError('INVALID_ARGS', `${flagName} requires a positive integer`);
   }
   return value;
-}
-
-async function resolveReplayTestShardDevices(
-  flags: CommandFlags | undefined,
-  shardCount: number,
-): Promise<DeviceInfo[]> {
-  const explicitSelectors = explicitShardDeviceSelectors(flags);
-  const inventory = await listDeviceInventory(buildReplayTestShardInventoryRequest(flags));
-  const devices = selectReplayTestShardDevices(inventory, explicitSelectors, flags);
-
-  if (devices.length < shardCount) {
-    throw new AppError(
-      'DEVICE_NOT_FOUND',
-      `test sharding requires ${formatDeviceCount(shardCount)}, but only ${devices.length} matched`,
-    );
-  }
-  return devices.slice(0, shardCount);
-}
-
-function buildReplayTestShardInventoryRequest(
-  flags: CommandFlags | undefined,
-): DeviceInventoryRequest {
-  const androidSerialAllowlist = resolveAndroidSerialAllowlist(flags?.androidDeviceAllowlist);
-  return {
-    platform: flags?.platform,
-    target: flags?.target,
-    iosSimulatorSetPath: resolveAppleSimulatorSetPathForSelector({
-      simulatorSetPath: resolveIosSimulatorDeviceSetPath(flags?.iosSimulatorDeviceSet),
-      platform: flags?.platform,
-      target: flags?.target,
-    }),
-    androidSerialAllowlist: androidSerialAllowlist
-      ? Array.from(androidSerialAllowlist).sort()
-      : undefined,
-  };
-}
-
-function selectReplayTestShardDevices(
-  inventory: DeviceInfo[],
-  explicitSelectors: string[],
-  flags: CommandFlags | undefined,
-): DeviceInfo[] {
-  if (explicitSelectors.length > 0) {
-    return resolveExplicitShardDevices(inventory, explicitSelectors, flags);
-  }
-  return inventory
-    .filter((device) => isImplicitShardDevice(device, flags))
-    .sort(compareShardDevices);
-}
-
-function formatDeviceCount(count: number): string {
-  return `${count} device${count === 1 ? '' : 's'}`;
-}
-
-function explicitShardDeviceSelectors(flags: CommandFlags | undefined): string[] {
-  const raw = flags?.device;
-  if (typeof raw !== 'string' || raw.trim().length === 0) return [];
-  return raw
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-}
-
-function resolveExplicitShardDevices(
-  inventory: DeviceInfo[],
-  selectors: string[],
-  flags: CommandFlags | undefined,
-): DeviceInfo[] {
-  return selectors.map((selector) => {
-    const normalizedSelector = normalizeDeviceName(selector);
-    const match = inventory.find(
-      (device) =>
-        isShardDeviceCandidate(device, flags) &&
-        (device.id === selector || normalizeDeviceName(device.name) === normalizedSelector),
-    );
-    if (!match) {
-      throw new AppError('DEVICE_NOT_FOUND', `No shard device matched ${selector}`);
-    }
-    return match;
-  });
-}
-
-function isImplicitShardDevice(device: DeviceInfo, flags: CommandFlags | undefined): boolean {
-  if (!isShardDeviceCandidate(device, flags)) return false;
-  if (!isMobilePlatform(device)) return false;
-  return device.booted !== false;
-}
-
-function isShardDeviceCandidate(device: DeviceInfo, flags: CommandFlags | undefined): boolean {
-  if (!matchesPlatformSelector(device, flags?.platform)) return false;
-  if (flags?.target && (device.target ?? 'mobile') !== flags.target) return false;
-  return true;
-}
-
-function normalizeDeviceName(value: string): string {
-  return value.toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function compareShardDevices(a: DeviceInfo, b: DeviceInfo): number {
-  return a.id.localeCompare(b.id);
 }
