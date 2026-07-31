@@ -73,7 +73,9 @@ function renderDeviceStatus(
     if (options.hiddenStaleClaims === 0) return 'No local advisory device claims found.';
   }
   return [
-    ...claimLines,
+    // Without this the all-stale case renders only the hidden-claim notice, so
+    // the answer to "what holds this device" reads as a maintenance warning.
+    ...(claimLines.length === 0 ? ['No live local advisory device claims found.'] : claimLines),
     !options.staleOnly && options.hiddenStaleClaims > 0
       ? `${options.hiddenStaleClaims} stale ${options.hiddenStaleClaims === 1 ? 'claim' : 'claims'} hidden; inspect with: ${options.staleCommand}`
       : null,

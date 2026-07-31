@@ -21,6 +21,7 @@ import type { DaemonInvokeFn, SessionState } from '../types.ts';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';
 import { finalizeDaemonSessionLease } from './daemon-session-lease-finalizer.ts';
 import { clearAdvisoryDeviceClaim } from '../device-claims.ts';
+import { pruneDeadDeviceClaims } from '../device-claim-inspection.ts';
 import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
@@ -330,6 +331,7 @@ export async function startDaemonRuntime(
   let socketPort: number | undefined;
   let httpPort: number | undefined;
   try {
+    pruneDeviceClaimsForDaemonStartup();
     await cleanupWebBrowserOrphansForDaemonStartup({ stateDir: baseDir, sessionStore });
     // Fire-and-forget: gated on a state-dir marker so it only touches adb when a prior run here
     // actually activated the test IME (never on hosts that don't use it, e.g. the macOS runner).
@@ -446,6 +448,21 @@ export async function startDaemonRuntime(
     socketPort,
     token,
   };
+}
+
+function pruneDeviceClaimsForDaemonStartup(): void {
+  try {
+    const { pruned } = pruneDeadDeviceClaims();
+    if (pruned > 0) {
+      emitDiagnostic({ phase: 'device_claim_prune', data: { pruned } });
+    }
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'device_claim_prune_failed',
+      data: { error: error instanceof Error ? error.message : String(error) },
+    });
+  }
 }
 
 export async function cleanupWebBrowserOrphansForDaemonStartup(params: {

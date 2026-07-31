@@ -153,3 +153,34 @@ function isPositiveInteger(value: unknown): value is number {
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
+
+/**
+ * Deletes claim files whose owning process is provably gone.
+ *
+ * Claims are released on session close and daemon shutdown, but a process that
+ * dies abruptly leaves its file behind forever, and nothing else reaps them.
+ * The conflict path already steps over such a claim, so removing it changes no
+ * behaviour — it only stops the store from growing without bound.
+ *
+ * Deliberately narrower than the CLI's stale filter: `owner-state-dir-gone`
+ * describes a LIVE process whose state dir vanished, and deleting that claim
+ * could hand its device to a second session.
+ */
+export function pruneDeadDeviceClaims(): { pruned: number } {
+  const root = resolveDeviceClaimRoot();
+  const listed = readClaimEntries(root);
+  if ('claims' in listed) return { pruned: 0 };
+  let pruned = 0;
+  for (const entry of listed.entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+    const filePath = path.join(root, entry.name);
+    if (inspectDeviceClaimFile(filePath)?.classification !== 'owner-process-dead') continue;
+    try {
+      fs.rmSync(filePath);
+      pruned += 1;
+    } catch {
+      // Another daemon may be pruning the same store; leave it to that one.
+    }
+  }
+  return { pruned };
+}
