@@ -37,13 +37,13 @@ async function assertMetrics(context: LiveContext): Promise<void> {
   assert.equal(metrics?.startup?.available, true, JSON.stringify(perf.json));
   assert.ok(Number(metrics?.startup?.lastDurationMs) > 0, JSON.stringify(perf.json));
   assert.equal(metrics?.memory?.available, true, JSON.stringify(perf.json));
-  assert.ok(Number(metrics?.memory?.residentMemoryKb) > 0, JSON.stringify(perf.json));
+  assert.ok(Number(metrics?.memory?.totalPssKb) > 0, JSON.stringify(perf.json));
   assert.equal(metrics?.cpu?.available, true, JSON.stringify(perf.json));
   assert.ok(Number.isFinite(Number(metrics?.cpu?.usagePercent)), JSON.stringify(perf.json));
   verifyCommand(
     context,
     C.perf,
-    'Android startup, resident memory, and CPU metrics are typed and numeric',
+    'Android startup, PSS memory, and CPU metrics are typed and numeric',
   );
 }
 
@@ -65,6 +65,7 @@ async function assertLogs(context: LiveContext): Promise<void> {
 
 async function assertTraceAndRecording(context: LiveContext): Promise<void> {
   const tracePath = path.join(context.artifactDir, 'fixture.adtrace');
+  await runStep(context, 'reveal Android quick actions before trace', ['scroll', 'down', '0.7']);
   await runStep(context, 'start Android interaction trace', ['trace', 'start', tracePath]);
   await runStep(context, 'trace Android visible mutation', ['press', 'id="home-open-catalog"']);
   await runStep(context, 'stop Android interaction trace', ['trace', 'stop', tracePath]);
@@ -88,6 +89,12 @@ async function assertTraceAndRecording(context: LiveContext): Promise<void> {
     'click',
     'label="Home"',
   ]);
+  await runStep(context, 'restore Android fixture home scroll top', ['scroll', 'top']);
+  await runStep(context, 'reveal Android quick actions before recording', [
+    'scroll',
+    'down',
+    '0.7',
+  ]);
   await runStep(context, 'record Android visible mutation', ['press', 'id="home-open-settings"']);
   await assertWaitText(context, 'Settings');
   await runStep(context, 'stop short Android screen recording', ['record', 'stop']);
@@ -97,6 +104,7 @@ async function assertTraceAndRecording(context: LiveContext): Promise<void> {
 
 async function assertBatchAndEvents(context: LiveContext): Promise<void> {
   await runStep(context, 'return to Android fixture home before batch', ['click', 'label="Home"']);
+  await runStep(context, 'restore Android fixture home title before batch', ['scroll', 'top']);
   await assertWaitText(context, 'Agent Device Tester');
   const batch = await runStep(context, 'run Android nested semantic read batch', [
     'batch',
@@ -104,7 +112,7 @@ async function assertBatchAndEvents(context: LiveContext): Promise<void> {
     JSON.stringify([
       {
         command: 'get',
-        input: { format: 'text', target: { kind: 'selector', selector: 'id="home-title"' } },
+        input: { format: 'text', target: { kind: 'selector', selector: 'id="dismiss-notice"' } },
       },
       {
         command: 'is',
@@ -119,11 +127,12 @@ async function assertBatchAndEvents(context: LiveContext): Promise<void> {
   );
   assert.equal(results.length, 2, JSON.stringify(batch.json));
   assert.equal(results[0]?.command, 'get', JSON.stringify(batch.json));
-  assert.equal(results[0]?.data?.text, 'Agent Device Tester', JSON.stringify(batch.json));
+  assert.equal(results[0]?.data?.text, 'Dismiss notice', JSON.stringify(batch.json));
   assert.equal(results[1]?.command, 'is', JSON.stringify(batch.json));
   assert.equal(results[1]?.data?.pass, true, JSON.stringify(batch.json));
   verifyCommand(context, C.batch, 'Android batch retains nested get and is evidence');
 
+  await runStep(context, 'capture Android snapshot for the event timeline', ['snapshot']);
   const timeline = await collectPagedEventTimeline(async (cursor) => {
     const result = await runStep(
       context,
@@ -150,15 +159,9 @@ async function assertArtifactInventory(context: LiveContext): Promise<void> {
   const inventory = await runStep(context, 'list Android daemon artifacts', ['artifacts']);
   const artifacts = inventory.json?.data?.artifacts;
   assert.ok(Array.isArray(artifacts), JSON.stringify(inventory.json));
-  for (const type of ['screen-recording', 'trace-log']) {
-    assert.ok(
-      artifacts.some(
-        (artifact: { artifactType?: unknown; sizeBytes?: unknown }) =>
-          artifact.artifactType === type && Number(artifact.sizeBytes) > 0,
-      ),
-      `artifact inventory missing non-empty ${type}: ${JSON.stringify(artifacts)}`,
-    );
-  }
+  // Recordings are absent by design for local clients: record stop hands the MP4
+  // to the caller's path directly (asserted above), and only remote clients get a
+  // downloadable inventory entry. The trace is tracked unconditionally.
   const trace = artifacts.find(
     (artifact: { artifactType?: unknown; id?: unknown; sizeBytes?: unknown }) =>
       artifact.artifactType === 'trace-log' &&
@@ -186,7 +189,7 @@ async function assertArtifactInventory(context: LiveContext): Promise<void> {
   verifyCommand(
     context,
     C.artifacts,
-    'daemon inventory lists non-empty recording and trace artifacts, and a trace download consumes its entry',
+    'daemon inventory lists a non-empty trace artifact and its download consumes the entry',
   );
 }
 
@@ -204,6 +207,8 @@ async function downloadDaemonArtifact(
     `http://127.0.0.1:${daemon.httpPort}/artifacts/${encodeURIComponent(artifactId)}`,
     { headers: { authorization: `Bearer ${daemon.token}` } },
   );
-  assert.equal(response.status, 200, `artifact download failed: ${await response.text()}`);
+  if (response.status !== 200) {
+    assert.fail(`artifact download failed: ${response.status} ${await response.text()}`);
+  }
   return response.arrayBuffer();
 }
