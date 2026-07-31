@@ -902,13 +902,13 @@ extension RunnerTests {
   }
 
   func synthesizedCoordinateContext(
-    app: XCUIApplication? = nil,
+    app: XCUIApplication,
     policy: SynthesizedGesturePolicy
   ) -> SynthesizedCoordinateContext? {
 #if os(iOS)
     let health = runnerAccessibilityHealth
     let orientation = Int(
-      RunnerSynthesizedGesture.interfaceOrientation(forApplication: app ?? currentApp ?? self.app)
+      RunnerSynthesizedGesture.interfaceOrientation(forApplication: app)
     )
     guard let referenceFrame = orientedSynthesizedScreenshotReferenceFrame(
       screenshotSize: XCUIScreen.main.screenshot().image.size,
@@ -927,13 +927,6 @@ extension RunnerTests {
 #endif
   }
 
-  func synthesizedScreenshotReferenceFrame(screenshotSize: () -> CGSize) -> CGRect? {
-    orientedSynthesizedScreenshotReferenceFrame(
-      screenshotSize: screenshotSize(),
-      interfaceOrientation: RunnerInterfaceOrientation.portrait
-    )
-  }
-
   func orientedSynthesizedScreenshotReferenceFrame(
     screenshotSize: CGSize,
     interfaceOrientation: Int
@@ -948,8 +941,20 @@ extension RunnerTests {
     }
     let isLandscape = interfaceOrientation == RunnerInterfaceOrientation.landscapeLeft
       || interfaceOrientation == RunnerInterfaceOrientation.landscapeRight
-    let width = isLandscape ? max(screenshotSize.width, screenshotSize.height) : screenshotSize.width
-    let height = isLandscape ? min(screenshotSize.width, screenshotSize.height) : screenshotSize.height
+    let isPortrait = interfaceOrientation == RunnerInterfaceOrientation.portrait
+      || interfaceOrientation == RunnerInterfaceOrientation.portraitUpsideDown
+    let width: CGFloat
+    let height: CGFloat
+    if isLandscape {
+      width = max(screenshotSize.width, screenshotSize.height)
+      height = min(screenshotSize.width, screenshotSize.height)
+    } else if isPortrait {
+      width = min(screenshotSize.width, screenshotSize.height)
+      height = max(screenshotSize.width, screenshotSize.height)
+    } else {
+      width = screenshotSize.width
+      height = screenshotSize.height
+    }
     return CGRect(x: 0, y: 0, width: width, height: height)
   }
 
@@ -1283,7 +1288,10 @@ extension RunnerTests {
 
   func testSynthesizedScreenshotReferenceFrameUsesScreenshotSize() throws {
     let resolved = try XCTUnwrap(
-      synthesizedScreenshotReferenceFrame(screenshotSize: { CGSize(width: 430, height: 932) })
+      orientedSynthesizedScreenshotReferenceFrame(
+        screenshotSize: CGSize(width: 430, height: 932),
+        interfaceOrientation: RunnerInterfaceOrientation.portrait
+      )
     )
 
     XCTAssertEqual(resolved, CGRect(x: 0, y: 0, width: 430, height: 932))
@@ -1312,12 +1320,41 @@ extension RunnerTests {
         CGRect(x: 0, y: 0, width: 932, height: 430)
       )
     }
+
+    for orientation in [
+      RunnerInterfaceOrientation.portrait,
+      RunnerInterfaceOrientation.portraitUpsideDown,
+    ] {
+      XCTAssertEqual(
+        orientedSynthesizedScreenshotReferenceFrame(
+          screenshotSize: portraitCapture,
+          interfaceOrientation: orientation
+        ),
+        CGRect(x: 0, y: 0, width: 430, height: 932)
+      )
+      XCTAssertEqual(
+        orientedSynthesizedScreenshotReferenceFrame(
+          screenshotSize: landscapeCapture,
+          interfaceOrientation: orientation
+        ),
+        CGRect(x: 0, y: 0, width: 430, height: 932)
+      )
+    }
+
+    XCTAssertEqual(
+      orientedSynthesizedScreenshotReferenceFrame(
+        screenshotSize: landscapeCapture,
+        interfaceOrientation: RunnerInterfaceOrientation.unknown
+      ),
+      CGRect(x: 0, y: 0, width: 932, height: 430)
+    )
   }
 
   func testSynthesizedScreenshotReferenceFrameRejectsInvalidSize() {
     XCTAssertNil(
-      synthesizedScreenshotReferenceFrame(
-        screenshotSize: { CGSize(width: CGFloat.infinity, height: 932) }
+      orientedSynthesizedScreenshotReferenceFrame(
+        screenshotSize: CGSize(width: CGFloat.infinity, height: 932),
+        interfaceOrientation: RunnerInterfaceOrientation.portrait
       )
     )
   }

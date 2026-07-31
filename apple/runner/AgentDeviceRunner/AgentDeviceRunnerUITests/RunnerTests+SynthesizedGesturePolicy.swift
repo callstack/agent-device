@@ -110,7 +110,7 @@ func sequenceHasSynthesizedCoordinateStep(_ steps: [SequenceStep]) -> Bool {
 extension RunnerTests {
   func synthesizedSequenceCoordinateContext(
     steps: [SequenceStep],
-    app: XCUIApplication? = nil
+    app: XCUIApplication
   ) -> SynthesizedCoordinateContext? {
     guard sequenceHasSynthesizedCoordinateStep(steps) else { return nil }
     return synthesizedCoordinateContext(
