@@ -14,9 +14,9 @@ import {
   type LimrunRuntime as LimrunRuntimeImplementation,
   type LimrunRuntimeOptions,
   LIMRUN_PROVIDER,
-  type LimrunDeviceSession,
 } from '@agent-device/provider-limrun';
 import { createLimrunRuntimeDependencies } from './sdk/limrun-runtime-dependencies.ts';
+import type { LimrunDeviceSession } from './sdk/limrun-runtime-types.ts';
 
 export class LimrunRuntime implements ProviderDeviceRuntime {
   private readonly implementation: LimrunRuntimeImplementation;
