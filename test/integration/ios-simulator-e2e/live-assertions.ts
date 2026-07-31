@@ -19,25 +19,51 @@ export const { assertElementText, assertWaitText, capturePng } = createLiveDevic
   LiveContext
 >(runStep, verifyCommand, PUBLIC_COMMANDS.wait);
 
+// The whole budget goes to the first capture of each attempt, so it has to cover one snapshot of
+// the current surface — 1s did not on a loaded simulator, and every sibling wait in these scenarios
+// already budgets 2.5s or more.
+const SCROLL_SEARCH_WAIT_MS = 2500;
+const SCROLL_SEARCH_ATTEMPTS = 4;
+// A stalled capture says nothing about where the element is, so it must not consume the scroll
+// budget outright; a couple of retries absorb a slow runner without masking a real absence.
+const SCROLL_SEARCH_STALL_RETRIES = 2;
+
 export async function assertElementTextAfterScrolling(
   context: LiveContext,
   selector: string,
   expected: string,
 ): Promise<void> {
-  for (let attempt = 1; attempt <= 4; attempt += 1) {
+  let stallRetriesLeft = SCROLL_SEARCH_STALL_RETRIES;
+  let lastFailure: CliJsonResult | undefined;
+
+  for (let attempt = 1; attempt <= SCROLL_SEARCH_ATTEMPTS; ) {
     const visible = await runStep(
       context,
       `wait for ${selector} after scroll (attempt ${attempt})`,
-      ['wait', selector, '1000'],
-      { allowFailure: attempt < 4 },
+      ['wait', selector, String(SCROLL_SEARCH_WAIT_MS)],
+      { allowFailure: true },
     );
     if (visible.status === 0) {
       await assertElementText(context, selector, expected);
       return;
     }
-    await runStep(context, `scroll toward ${selector}`, ['scroll', 'down', '0.75']);
+    lastFailure = visible;
+
+    // The snapshot never came back, so the surface was never read. Scrolling here would move the
+    // surface for a reason unrelated to visibility and spend an attempt on no evidence.
+    if (visible.json?.error?.details?.captureStalled === true && stallRetriesLeft > 0) {
+      stallRetriesLeft -= 1;
+      continue;
+    }
+
+    attempt += 1;
+    if (attempt <= SCROLL_SEARCH_ATTEMPTS) {
+      await runStep(context, `scroll toward ${selector}`, ['scroll', 'down', '0.75']);
+    }
   }
-  assert.fail(`${selector} did not become visible after scrolling`);
+  assert.fail(
+    `${selector} did not become visible after scrolling\nlast wait: ${JSON.stringify(lastFailure?.json ?? null)}`,
+  );
 }
 
 function requireNode(
