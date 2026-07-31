@@ -109,7 +109,10 @@ const interactionCliSchemas = {
   },
   swipe: {
     helpDescription: 'Quick coordinate fling with optional repeat pattern.',
-    positionalArgs: ['x1', 'y1', 'x2', 'y2', 'durationMs?'],
+    positionalArgs: ['x1', 'y1', 'x2', 'y2'],
+    // Arity is enforced by swipePayloadFromPositionals (assertGestureArity), so
+    // an extra positional reaches that migration-hint error, not this schema's.
+    allowsExtraPositionals: true,
     allowedFlags: ['count', 'pauseMs', 'pattern'],
   },
   gesture: {
