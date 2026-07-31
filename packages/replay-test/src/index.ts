@@ -39,7 +39,6 @@ export type {
   ReplayTestTarget,
 } from './internal/session-test-types.ts';
 
-export { replayTestAttemptFailure } from './internal/session-test-types.ts';
 
 export type {
   ReplayTestResolveShardTargets,

@@ -3,9 +3,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 
-import { runReplayTestAttempt } from '@agent-device/replay-test';
+import { runReplayTestAttempt } from '../session-test-runtime.ts';
 
-import type { ReplayTestAttemptOutcome } from '@agent-device/replay-test';
+import type { ReplayTestAttemptOutcome } from '../session-test-runtime.ts';
 
 // What the scheduler owes its host around cancellation (#1478 P3b): cancel exactly once when
 // an attempt times out, and always release when it settles. How the daemon then maps that onto

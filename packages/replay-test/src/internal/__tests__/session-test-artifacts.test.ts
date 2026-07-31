@@ -6,8 +6,8 @@ import path from 'node:path';
 import {
   materializeReplayTestAttemptArtifacts,
   prepareReplayTestAttemptArtifacts,
-} from '../src/internal/session-test-artifacts.ts';
-import type { ReplayTestAttemptOutcome } from '../src/internal/session-test-types.ts';
+} from '../session-test-artifacts.ts';
+import type { ReplayTestAttemptOutcome } from '../session-test-types.ts';
 
 // Building outcomes from a DaemonResponse is the adapter's job and is pinned on that side; a
 // package test states the neutral outcome directly (#1478 P3b).

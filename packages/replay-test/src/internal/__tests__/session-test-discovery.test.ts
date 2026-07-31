@@ -1,8 +1,8 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
-import { discoverReplayTestEntries } from '../src/internal/session-test-discovery.ts';
-import type { ReplayTestManifest, ReplayTestSource } from '../src/internal/session-test-types.ts';
+import { discoverReplayTestEntries } from '../session-test-discovery.ts';
+import type { ReplayTestManifest, ReplayTestSource } from '../session-test-types.ts';
 
 // Scheduler-owned discovery policy (#1478 P3b): which sources a --platform filter runs, which
 // it skips and with what message, and rejecting a suite that matched nothing. Inspection is the
