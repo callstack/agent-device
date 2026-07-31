@@ -843,6 +843,54 @@ test('snapshotAndroid fails closed when helper returns only system windows', asy
   );
 });
 
+test('snapshotAndroid re-captures past a transient system-window-only sample', async () => {
+  const instrumentCalls: string[][] = [];
+  const helperAdb = createHelperAdb({
+    instrument: async (args) => {
+      instrumentCalls.push(args);
+      // First sample lands mid-transition with no application window; the screen
+      // settles by the next one.
+      if (instrumentCalls.length === 1) {
+        return {
+          exitCode: 0,
+          stdout: helperOutput(androidSystemWindowOnlyXml(), { nodeCount: 3 }),
+          stderr: '',
+        };
+      }
+      return {
+        exitCode: 0,
+        stdout: helperOutput('<hierarchy><node text="helper" bounds="[0,0][10,10]" /></hierarchy>'),
+        stderr: '',
+      };
+    },
+  });
+
+  const snapshot = await snapshotAndroidWithHelper(helperAdb);
+
+  assert.equal(instrumentCalls.length, 2);
+  assert.equal(snapshot.nodes.length > 0, true);
+});
+
+test('snapshotAndroid still fails closed when every re-capture stays unreadable', async () => {
+  const instrumentCalls: string[][] = [];
+  const helperAdb = createHelperAdb({
+    instrument: async (args) => {
+      instrumentCalls.push(args);
+      return {
+        exitCode: 0,
+        stdout: helperOutput(androidSystemWindowOnlyXml(), { nodeCount: 3 }),
+        stderr: '',
+      };
+    },
+  });
+
+  await assert.rejects(
+    () => snapshotAndroidWithHelper(helperAdb),
+    /Android snapshot helper returned only non-application windows/,
+  );
+  assert.equal(instrumentCalls.length, 3);
+});
+
 test('snapshotAndroid fails closed when helper returns no nodes', async () => {
   const helperXml = '<?xml version="1.0" encoding="UTF-8"?><hierarchy rotation="0"></hierarchy>';
   const helperAdb = createHelperAdb({

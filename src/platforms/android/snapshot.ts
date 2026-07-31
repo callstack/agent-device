@@ -47,11 +47,20 @@ import {
   classifyAndroidHelperContent,
   type AndroidHelperContentRecoveryDecision,
 } from './snapshot-content-recovery.ts';
+import type { AndroidContentRecoveryReason } from '../../snapshot/snapshot-quality.ts';
 
 const HELPER_INSTALL_TIMEOUT_MS = 30_000;
 const HELPER_CAPTURE_TIMEOUT_MS = 5_000;
 const HELPER_COMMAND_TIMEOUT_MS = 30_000;
 const HELPER_RUNTIME_RESET_DELAY_MS = 150;
+/**
+ * A content verdict means the capture mechanism worked but sampled a screen
+ * mid-transition, which resolves on its own within a frame or two. Sampling
+ * once turns that instant into a command failure, so re-capture a bounded
+ * number of times before reporting the verdict.
+ */
+const HELPER_CONTENT_CAPTURE_ATTEMPTS = 3;
+const HELPER_CONTENT_RECAPTURE_DELAY_MS = 250;
 const HELPER_RUNTIME_RESET_TIMEOUT_MS = 2_000;
 export type AndroidSnapshotOptions = SnapshotOptions & {
   appBundleId?: string;
@@ -180,56 +189,30 @@ async function captureAndroidUiHierarchyWithHelper(
   const adbProvider = resolveAndroidAdbProvider(device, options.helperAdb);
   const commandScopedHelperSession = options.helperSessionScope !== 'daemon-session';
   try {
-    let helperCapture: { xml: string; metadata: AndroidSnapshotBackendMetadata };
-    try {
-      const install = await installAndroidSnapshotHelper(
+    let previousContentReason: AndroidContentRecoveryReason | undefined;
+    for (let attempt = 0; ; attempt += 1) {
+      if (attempt > 0) await delayBeforeContentRecapture(options.signal);
+      const settled = await captureAndroidHelperContentAttempt({
         options,
         adb,
         adbProvider,
         artifact,
         helperDeviceKey,
-      );
-      if (install.installed) {
-        await stopAndroidSnapshotHelperSession(helperDeviceKey);
+        attempt,
+        previousContentReason,
+      });
+      if (settled.outcome === 'captured') return settled.capture;
+      if (attempt + 1 >= HELPER_CONTENT_CAPTURE_ATTEMPTS) {
+        return await rejectAndroidHelperContentUnavailable({
+          contentRecovery: settled.decision,
+          attempts: attempt + 1,
+          helperDeviceKey,
+          artifact,
+          adb,
+        });
       }
-      const capture = await captureAndroidUiHierarchyFromHelper({
-        signal: options.signal,
-        adb,
-        adbProvider,
-        artifact,
-        helperDeviceKey,
-      });
-      helperCapture = formatAndroidHelperCaptureResult(capture, artifact, install.reason);
-    } catch (error) {
-      options.signal?.throwIfAborted();
-      return await rejectAndroidHelperCaptureFailure({
-        error,
-        helperDeviceKey,
-        artifact,
-        adb,
-      });
+      previousContentReason = settled.decision.reason;
     }
-
-    const content = classifyAndroidHelperContent(helperCapture.xml, helperCapture.metadata, {
-      foregroundAppPackage: options.appBundleId,
-    });
-    if (content.outcome === 'system-surface-only') {
-      emitDiagnostic({
-        phase: 'android_snapshot_helper_system_surface',
-        data: { foregroundAppPackage: options.appBundleId },
-      });
-      return {
-        xml: helperCapture.xml,
-        metadata: { ...helperCapture.metadata, systemSurfaceOnly: true },
-      };
-    }
-    if (content.outcome === 'ok') return helperCapture;
-    return await rejectAndroidHelperContentUnavailable({
-      contentRecovery: content.decision,
-      helperDeviceKey,
-      artifact,
-      adb,
-    });
   } finally {
     if (commandScopedHelperSession) {
       await stopAndroidSnapshotHelperSession(helperDeviceKey);
@@ -363,8 +346,90 @@ function formatAndroidHelperCaptureResult(
   };
 }
 
+type AndroidHelperContentAttempt =
+  | { outcome: 'captured'; capture: { xml: string; metadata: AndroidSnapshotBackendMetadata } }
+  | { outcome: 'unusable'; decision: AndroidHelperContentRecoveryDecision };
+
+async function captureAndroidHelperContentAttempt(params: {
+  options: AndroidSnapshotOptions;
+  adb: AndroidAdbExecutor;
+  adbProvider: AndroidAdbProvider;
+  artifact: AndroidSnapshotHelperArtifact;
+  helperDeviceKey: string;
+  attempt: number;
+  previousContentReason: AndroidContentRecoveryReason | undefined;
+}): Promise<AndroidHelperContentAttempt> {
+  const { options, adb, adbProvider, artifact, helperDeviceKey, attempt } = params;
+  let helperCapture: { xml: string; metadata: AndroidSnapshotBackendMetadata };
+  try {
+    const install = await installAndroidSnapshotHelper(
+      options,
+      adb,
+      adbProvider,
+      artifact,
+      helperDeviceKey,
+    );
+    if (install.installed) {
+      await stopAndroidSnapshotHelperSession(helperDeviceKey);
+    }
+    const capture = await captureAndroidUiHierarchyFromHelper({
+      signal: options.signal,
+      adb,
+      adbProvider,
+      artifact,
+      helperDeviceKey,
+    });
+    helperCapture = formatAndroidHelperCaptureResult(capture, artifact, install.reason);
+  } catch (error) {
+    options.signal?.throwIfAborted();
+    return {
+      outcome: 'captured',
+      capture: await rejectAndroidHelperCaptureFailure({
+        error,
+        helperDeviceKey,
+        artifact,
+        adb,
+      }),
+    };
+  }
+
+  const content = classifyAndroidHelperContent(helperCapture.xml, helperCapture.metadata, {
+    foregroundAppPackage: options.appBundleId,
+  });
+  if (content.outcome === 'system-surface-only') {
+    emitDiagnostic({
+      phase: 'android_snapshot_helper_system_surface',
+      data: { foregroundAppPackage: options.appBundleId },
+    });
+    return {
+      outcome: 'captured',
+      capture: {
+        xml: helperCapture.xml,
+        metadata: { ...helperCapture.metadata, systemSurfaceOnly: true },
+      },
+    };
+  }
+  if (content.outcome === 'ok') {
+    if (attempt > 0) {
+      emitDiagnostic({
+        phase: 'android_snapshot_helper_content_recaptured',
+        data: { attempts: attempt + 1, recoveredFromReason: params.previousContentReason },
+      });
+    }
+    return { outcome: 'captured', capture: helperCapture };
+  }
+  return { outcome: 'unusable', decision: content.decision };
+}
+
+async function delayBeforeContentRecapture(signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  await sleep(HELPER_CONTENT_RECAPTURE_DELAY_MS);
+  signal?.throwIfAborted();
+}
+
 async function rejectAndroidHelperContentUnavailable(params: {
   contentRecovery: AndroidHelperContentRecoveryDecision;
+  attempts: number;
   helperDeviceKey: string;
   artifact: AndroidSnapshotHelperArtifact;
   adb: AndroidAdbExecutor;
@@ -375,6 +440,7 @@ async function rejectAndroidHelperContentUnavailable(params: {
     data: {
       reason: params.contentRecovery.reason,
       failureReason: params.contentRecovery.failureReason,
+      attempts: params.attempts,
       ...params.contentRecovery.diagnostics,
     },
   });
@@ -382,6 +448,7 @@ async function rejectAndroidHelperContentUnavailable(params: {
   throw new AppError('COMMAND_FAILED', params.contentRecovery.failureReason, {
     ...params.contentRecovery.diagnostics,
     androidSnapshotHelperFailureReason: params.contentRecovery.reason,
+    attempts: params.attempts,
     retriable: true,
     hint: 'Retry after the app UI stabilizes. If this persists, capture a screenshot and report the helper diagnostics; agent-device does not substitute a second snapshot engine.',
   });
