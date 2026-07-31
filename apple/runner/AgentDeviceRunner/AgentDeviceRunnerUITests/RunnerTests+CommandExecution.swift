@@ -16,6 +16,13 @@ private final class RunnerSynthesizedSwipeFailureStub: NSObject {
     "forced private synthesis failure"
   }
 }
+
+private final class RunnerSynthesizedTapFailureStub: NSObject {
+  @objc(synthesizeTapWithApplication:x:y:)
+  class func synthesizeTap(application: XCUIApplication, x: Double, y: Double) -> String? {
+    "forced private synthesis failure"
+  }
+}
 #endif
 
 extension RunnerTests {
@@ -281,6 +288,44 @@ extension RunnerTests {
     XCTAssertNil(response.data?.y)
     XCTAssertNil(response.data?.x2)
     XCTAssertNil(response.data?.y2)
+  }
+
+  func testSelectorTapFallsBackToXCTestCoordinateWhenPrivateSynthesisFails() throws {
+    let selector = NSSelectorFromString("synthesizeTapWithApplication:x:y:")
+    guard
+      let synthesizedTapMethod = class_getClassMethod(RunnerSynthesizedGesture.self, selector),
+      let failureStubMethod = class_getClassMethod(RunnerSynthesizedTapFailureStub.self, selector)
+    else {
+      XCTFail("unable to install synthesized tap failure stub")
+      return
+    }
+    let originalImplementation = method_getImplementation(synthesizedTapMethod)
+    method_setImplementation(
+      synthesizedTapMethod,
+      method_getImplementation(failureStubMethod)
+    )
+    app.launch()
+    currentApp = app
+    runnerAccessibilityHealth = .healthy
+    defer {
+      method_setImplementation(synthesizedTapMethod, originalImplementation)
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let command = try runnerCommandFixture(
+      #"{"command":"tap","commandId":"selector-tap-fallback","selectorKey":"label","selectorValue":"Agent Device Runner","synthesized":true}"#
+    )
+
+    let response = try executeOnMainPrepared(command: command, activeApp: app)
+
+    XCTAssertTrue(response.ok)
+    XCTAssertEqual(response.data?.message, "tapped")
+    XCTAssertEqual(response.data?.gestureFallback, "xctest-coordinate-tap")
+    XCTAssertEqual(response.data?.gestureFallbackMessage, "forced private synthesis failure")
+    XCTAssertEqual(
+      response.data?.gestureFallbackHint,
+      "Falling back to XCTest coordinate tap may be slower and can still need a healthy accessibility tree."
+    )
   }
 #endif
 
@@ -1529,6 +1574,7 @@ extension RunnerTests {
             x: touchPoint.x,
             y: touchPoint.y
           )
+          var fallback: GestureFallback?
           if command.synthesized == true {
             let policyKind = SynthesizedGesturePolicyKind.coordinateTap
             let context = synthesizedCoordinateContext(
@@ -1567,11 +1613,9 @@ extension RunnerTests {
             logSynthesizedGesturePolicyDecision(
               kind: policyKind,
               context: context,
-              fallbackAttempted: false
+              fallbackAttempted: true
             )
-            if let response = unsupportedResponse(for: outcome) {
-              return response
-            }
+            fallback = gestureFallback(strategy: "xctest-coordinate-tap", from: outcome)
           }
           let (timing, outcome) = performGesture(activeApp) {
             if expectedPoint != nil || match.usedNonHittableFallback {
@@ -1593,6 +1637,7 @@ extension RunnerTests {
             message: match.usedNonHittableFallback ? "tapped via non-hittable coordinate fallback" : "tapped",
             timing: timing,
             frame: .touch(touchFrame),
+            fallback: fallback,
             maestroNonHittableCoordinateFallbackUsed:
               command.allowNonHittableCoordinateFallback == true
               ? match.usedNonHittableFallback
