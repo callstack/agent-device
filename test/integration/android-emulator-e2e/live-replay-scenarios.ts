@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
-import { assertNonEmptyFile } from './live-assertions.ts';
 import {
   type LiveContext,
   runStep,
@@ -14,8 +13,8 @@ import {
   assertReplayCommands,
   readReplayCommands,
   replayAttemptTimeoutMs,
-  replaySuiteHostTimeoutMs,
 } from '../live-device-e2e/replay-evidence.ts';
+import { runLiveReplayTestSuite } from '../live-device-e2e/replay-suite.ts';
 
 const C = PUBLIC_COMMANDS;
 
@@ -77,39 +76,13 @@ export async function assertFixtureReplays(context: LiveContext): Promise<void> 
 
   const checkoutReplay = path.resolve('examples/test-app/replays/checkout-form-android.ad');
   const gestureReplay = path.resolve('examples/test-app/replays/gesture-lab-android.ad');
-  const junitPath = path.join(context.artifactDir, 'fixture-replays.junit.xml');
-  const suiteArtifacts = path.join(context.artifactDir, 'fixture-replays');
-  const suite = await runStep(
+  const { commandsByScript } = await runLiveReplayTestSuite({
     context,
-    'run Android fixture suite without retries',
-    [
-      'test',
-      checkoutReplay,
-      gestureReplay,
-      '--artifacts-dir',
-      suiteArtifacts,
-      '--report-junit',
-      junitPath,
-    ],
-    { timeoutMs: replaySuiteHostTimeoutMs([checkoutReplay, gestureReplay], 0) },
-  );
-  assert.equal(suite.json?.data?.failed, 0, JSON.stringify(suite.json));
-  assert.equal(suite.json?.data?.passed, 2, JSON.stringify(suite.json));
-  assertNonEmptyFile(junitPath, 'fixture JUnit');
-  for (const replayPath of [checkoutReplay, gestureReplay]) {
-    const result = (
-      suite.json?.data?.tests as
-        | Array<{ file?: unknown; replayed?: unknown; status?: unknown }>
-        | undefined
-    )?.find((entry) => path.resolve(String(entry.file)) === replayPath);
-    assert.equal(result?.status, 'passed', JSON.stringify(suite.json));
-    assert.equal(
-      result?.replayed,
-      readReplayCommands(replayPath).length,
-      JSON.stringify(suite.json),
-    );
-  }
-  assertReplayCommands(gestureReplay, readReplayCommands(gestureReplay), [C.gesture]);
+    runStep,
+    step: 'run Android fixture suite without retries',
+    scripts: [checkoutReplay, gestureReplay],
+  });
+  assertReplayCommands(gestureReplay, commandsByScript.get(gestureReplay) ?? [], [C.gesture]);
   verifyCommand(context, C.test, 'retry-free Android fixture suite emits non-empty JUnit evidence');
   verifyNestedReplayCommand(
     context,

@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
-import { assertNonEmptyFile } from './live-assertions.ts';
 import {
   type LiveContext,
   runStep,
@@ -14,8 +13,8 @@ import {
   assertReplayCommands,
   readReplayCommands,
   replayAttemptTimeoutMs,
-  replaySuiteHostTimeoutMs,
 } from '../live-device-e2e/replay-evidence.ts';
+import { runLiveReplayTestSuite } from '../live-device-e2e/replay-suite.ts';
 
 const C = PUBLIC_COMMANDS;
 
@@ -50,47 +49,23 @@ export async function assertFixtureReplays(context: LiveContext): Promise<void> 
     'replay proved down, bottom footer, up, and top rediscovery in one fixture journey',
   );
 
-  const junitPath = path.join(context.artifactDir, 'fixture-replays.junit.xml');
-  const suiteArtifacts = path.join(context.artifactDir, 'fixture-replays');
   const checkoutReplay = path.resolve(
     'test/integration/replays/ios/fixture/02-checkout-release.ad',
   );
   const gestureReplay = path.resolve('examples/test-app/replays/gesture-lab.ad');
-  const suiteRetries = 2;
-  const suite = await runStep(
+  const { commandsByScript } = await runLiveReplayTestSuite({
     context,
-    'run fixture suite through public test command',
-    [
-      'test',
-      checkoutReplay,
-      gestureReplay,
-      '--retries',
-      String(suiteRetries),
-      '--artifacts-dir',
-      suiteArtifacts,
-      '--report-junit',
-      junitPath,
-    ],
-    {
-      timeoutMs: replaySuiteHostTimeoutMs([checkoutReplay, gestureReplay], suiteRetries),
-    },
-  );
-  assert.equal(suite.json?.data?.failed, 0, JSON.stringify(suite.json));
-  assert.equal(suite.json?.data?.passed, 2, JSON.stringify(suite.json));
-  const suiteTests = Array.isArray(suite.json?.data?.tests) ? suite.json.data.tests : [];
+    runStep,
+    step: 'run fixture suite through public test command',
+    scripts: [checkoutReplay, gestureReplay],
+    retries: 2,
+  });
   for (const [replayPath, expectedCommands] of [
     [checkoutReplay, [C.swipe]],
     [gestureReplay, [C.gesture]],
   ] as const) {
-    const commands = readReplayCommands(replayPath);
-    const result = suiteTests.find(
-      (entry: { file?: unknown }) => path.resolve(String(entry.file)) === replayPath,
-    );
-    assert.equal(result?.status, 'passed', JSON.stringify(suite.json));
-    assert.equal(result?.replayed, commands.length, JSON.stringify(result));
-    assertReplayCommands(replayPath, commands, expectedCommands);
+    assertReplayCommands(replayPath, commandsByScript.get(replayPath) ?? [], expectedCommands);
   }
-  assertNonEmptyFile(junitPath, 'fixture JUnit');
   verifyNestedReplayCommand(
     context,
     C.gesture,
