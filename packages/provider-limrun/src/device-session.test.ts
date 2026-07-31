@@ -4,7 +4,11 @@ import type { AppsFilter, DeviceLease } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interaction';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import type { LimrunAdbExecutor, LimrunAdbProvider, LimrunRuntimeDependencies } from './index.ts';
+import type {
+  LimrunAdbExecutor,
+  LimrunAdbProvider,
+  LimrunRuntimeDependencies,
+} from './runtime-dependencies.ts';
 import type { LimrunAndroidSession } from './android.ts';
 import { createLimrunDeviceSession, type LimrunIosCommandExecution } from './device-session.ts';
 import type { LimrunIosSession } from './ios.ts';

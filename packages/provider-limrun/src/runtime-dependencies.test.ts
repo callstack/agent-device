@@ -4,13 +4,13 @@ import type { AppsFilter, DeviceLease } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interaction';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  createLimrunRuntime,
-  type LimrunAdbProvider,
-  type LimrunAdbExecutor,
-  type LimrunPortReverseMapping,
-  type LimrunRuntimeDependencies,
-} from './index.ts';
+import { createLimrunRuntime } from './runtime.ts';
+import type {
+  LimrunAdbProvider,
+  LimrunAdbExecutor,
+  LimrunPortReverseMapping,
+  LimrunRuntimeDependencies,
+} from './runtime-dependencies.ts';
 
 const state = vi.hoisted(() => ({
   constructorOptions: [] as Array<{ defaultHeaders?: Record<string, string> }>,
