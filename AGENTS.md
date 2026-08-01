@@ -93,8 +93,10 @@ the new thing — never to suppress or allowlist it.
   `runCmdBackground`, `runCmdDetached`). Do not import raw `spawn`/`spawnSync` elsewhere — extend an
   exec helper instead. Plain `.mjs` packaging fixtures that cannot import TS helpers keep
   child-process usage local and prefer `execFile`/`execFileSync`.
+- Interactions use the daemon session flow: `open` before, `close` after.
 - `keyboard dismiss` is the iOS keyboard dismissal path. It may tap safe native controls such as
   `Done`, but must not fall back to system back navigation.
+- Do not remove shared snapshot/session model behavior without full migration.
 - Apple-family target changes keep `packages/kernel/src/device.ts`, `src/core/capabilities.ts`,
   `src/core/dispatch-resolve.ts`, `src/platforms/apple/core/devices.ts`, and
   `src/platforms/apple/core/runner/runner-xctestrun.ts` in sync.
@@ -154,6 +156,8 @@ one question so `rg` → read-whole-file stays one cheap bounded read.
   under `~/.agent-device/dev/<basename-slug>-<hash>`. Inspect with `pnpm daemon:state-dir`, override
   with `--state-dir`/`AGENT_DEVICE_STATE_DIR`, prune with `pnpm clean:daemon --prune-dev`. Daemons
   are isolated per worktree; **devices are not** — target different devices for concurrent worktrees.
+- Node ≥22. Prefer built-ins (`fetch`, Web Streams, `AbortSignal.timeout`) over compatibility
+  wrappers unless the surrounding code needs a lower-level transport.
 - Emit with `tsdown` (Rolldown), typecheck with TypeScript 7 via `tsc`. Declaration generation uses
   the TS7 native executable and is stricter than a plain typecheck: if it fails, inspect
   `tsconfig.lib.json` (it needs an explicit `rootDir: "./src"`) and `tsdown.config.ts` first, and run
@@ -161,9 +165,8 @@ one question so `rg` → read-whole-file stays one cheap bounded read.
 - Prefer the aggregate `package.json` scripts; they encode the expected validation bundles better
   than ad hoc command lists. `pnpm format` formats the whole repo (`oxfmt` with no path list), and
   the only exclusion list is `.oxfmtrc.json` `ignorePatterns` — Markdown, the Maestro conformance
-  corpus, and generated baselines. Run `pnpm format`, never `oxfmt <path>`: a path argument not only
-  hides drift elsewhere, it bypasses `ignorePatterns` — one path-scoped run re-quoted 44 conformance
-  corpus files that the config excludes.
+  corpus, and generated baselines. Run `pnpm format`, never `oxfmt <path>`: a path argument
+  reformats a subset and hides whatever else drifted.
 - Before pushing, default to **`pnpm check:affected --run`**. It selects the relevant local gates and
   reports native/device checks left to GitHub. Use **`pnpm check`**
   (`check:tooling && check:fallow && check:unit`) for broad refactors or an explicitly requested full
