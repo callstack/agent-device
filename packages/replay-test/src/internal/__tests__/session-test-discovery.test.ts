@@ -1,8 +1,12 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
-import { discoverReplayTestEntries } from '../session-test-discovery.ts';
-import { trimEdgeDashes } from '../session-test-artifacts.ts';
+import {
+  buildReplayTestInvocationId,
+  buildReplayTestSessionName,
+  discoverReplayTestEntries,
+} from '../session-test-discovery.ts';
+import { buildReplayTestArtifactSlug, trimEdgeDashes } from '../session-test-artifacts.ts';
 import type { ReplayTestManifest, ReplayTestSource } from '../session-test-types.ts';
 
 // Scheduler-owned discovery policy (#1478 P3b): which sources a --platform filter runs, which
@@ -89,4 +93,14 @@ test('edge-dash trimming stays linear on an interior dash run (CodeQL js/polynom
   const trimmed = trimEdgeDashes(interiorRun);
   assert.ok(performance.now() - startedAt < 1000);
   assert.equal(trimmed, interiorRun);
+});
+
+test('all-dash inputs land on the documented fallbacks instead of empty identifiers', () => {
+  assert.equal(buildReplayTestArtifactSlug('/tmp/####', '/tmp'), 'test');
+  assert.equal(buildReplayTestInvocationId('----'), 'suite');
+  // A session-name slug that trims to nothing is omitted entirely — no dangling separator.
+  assert.equal(
+    buildReplayTestSessionName('s', 'suite1', '/tmp/----.ad', 0),
+    's:test:suite1:1:attempt-1',
+  );
 });
