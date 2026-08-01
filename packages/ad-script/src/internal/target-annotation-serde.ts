@@ -28,7 +28,8 @@ const TARGET_ANNOTATION_TAG = 'agent-device:target-v1';
 // against an already-`.trim()`-ed line, whose last character (when the tag
 // matches at all) is never whitespace, so a payload section that `\S.*`
 // would reject (all-whitespace) can never reach this regex in practice.
-const TARGET_ANNOTATION_LINE_RE = /^#\s*agent-device:target-v(\d+)(?:\s+(\S.*))?$/;
+/** Internal-test visibility only: the pattern itself is the ReDoS regression surface. */
+export const TARGET_ANNOTATION_LINE_RE = /^#\s*agent-device:target-v(\d+)(?:\s+(\S.*))?$/;
 
 export const TARGET_ANNOTATION_MAX_FIELD_BYTES = 256;
 export const TARGET_ANNOTATION_MAX_PAYLOAD_BYTES = 4096;

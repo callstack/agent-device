@@ -12,6 +12,7 @@ import {
   TARGET_ANNOTATION_MAX_FIELD_BYTES,
   TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
   type TargetAnnotationV1,
+  TARGET_ANNOTATION_LINE_RE,
 } from '../target-annotation-serde.ts';
 
 function baseEvidence(overrides: Partial<TargetAnnotationV1> = {}): TargetAnnotationV1 {
@@ -314,29 +315,29 @@ test('parser accepts an explicit empty-string role (writer-legal for typeless no
 });
 
 // ---------------------------------------------------------------------------
-// CodeQL js/polynomial-redos (#1536 review): the target-v1 comment-line regex
-// used to backtrack polynomially on a run of separator whitespace that never
-// resolves to a full match — `\s+` and a bare `.*` both accept whitespace, so
-// there were exponentially many ways to split the run between them before
-// concluding failure.
+// CodeQL js/polynomial-redos (#1536 review): with the retired `\s+(.*)` form,
+// the separator and payload both accepted whitespace, so a failing match
+// re-split a long run quadratically. The public entry point can never feed
+// the slow shape (trim strips edge whitespace and a per-line input carries no
+// newline, so the old form matched greedily in one attempt there) — the
+// regression surface is the pattern itself, pinned directly below; the
+// entry-point case documents the behavior contract.
 // ---------------------------------------------------------------------------
 
-test('parseTargetAnnotationCommentLine resolves an adversarial whitespace-run line in well under a second', () => {
-  // A trailing non-whitespace character is deliberate: `parseTargetAnnotationCommentLine`
-  // trims the line before matching, so a purely-trailing whitespace run (the
-  // literal CodeQL-cited shape) would already be stripped before it ever
-  // reaches the regex. Appending one non-whitespace byte keeps the long tab
-  // run internal, so this test genuinely exercises the flagged pattern
-  // through the public entry point rather than being neutralized by trim().
-  const adversarial = `#agent-device:target-v0\t${'\t\t'.repeat(20_000)}x`;
+test('the annotation-line pattern rejects an interior-whitespace non-match in linear time', () => {
+  // `x\n` tail: `.` cannot cross the newline and `$` needs true end-of-input,
+  // so the match FAILS — the retired form re-tried every split of the tab run
+  // (quadratic; multi-second at this size), while the `\S` anchor admits a
+  // single split point.
+  const adversarial = `#agent-device:target-v1${'\t'.repeat(100_000)}x\n`;
   const startedAt = Date.now();
-  const result = parseTargetAnnotationCommentLine(adversarial);
+  const match = TARGET_ANNOTATION_LINE_RE.exec(adversarial);
   const elapsedMs = Date.now() - startedAt;
-  assert.ok(
-    elapsedMs < 1000,
-    `expected the adversarial line to parse quickly, took ${elapsedMs}ms`,
-  );
-  // v0 is a future-version comment to this (v1) reader — verifies the regex still
-  // matches the tag/version correctly, not just that it fails fast.
-  assert.deepEqual(result, { kind: 'future-version' });
+  assert.equal(match, null);
+  assert.ok(elapsedMs < 1000, `expected linear rejection, took ${elapsedMs}ms`);
+});
+
+test('parseTargetAnnotationCommentLine still recognizes versions across an interior whitespace run', () => {
+  const line = `#agent-device:target-v0\t${'\t\t'.repeat(20_000)}x`;
+  assert.deepEqual(parseTargetAnnotationCommentLine(line), { kind: 'future-version' });
 });
