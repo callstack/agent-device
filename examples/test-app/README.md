@@ -232,6 +232,13 @@ pnpm test-app:replay:android
 
 These run the `.ad` replay suite in `examples/test-app/replays`.
 
+The Android gesture replay pins coordinates to the CI emulator profile —
+**pixel_7, 1080x2400 @ 420 dpi** (`gh workflow` uses exactly this AVD). Run it
+on a matching emulator; on a different size or density the gesture card moves
+and the canary waits fail with a wait timeout naming the missed state, which
+is fixture geometry, not a product regression. The checkout replay is
+selector-driven and runs on any emulator.
+
 The iOS `gesture-lab.ad` and Android `gesture-lab-android.ad` replays verify
 `gesture pan`, `gesture fling`, `gesture pinch`, and `gesture rotate` against the
 gesture metrics rendered by the Home screen. They also prove that the default pan

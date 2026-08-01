@@ -1,3 +1,4 @@
+# Selector-driven; safe on any emulator size. The gesture twin is geometry-pinned.
 context platform=android timeout=60000
 env APP_TARGET="com.callstack.agentdevicelab"
 env APP_URL=""

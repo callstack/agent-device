@@ -1,3 +1,6 @@
+# Coordinates target the CI emulator profile: pixel_7, 1080x2400 @ 420 dpi
+# (gesture card spans y=754-1329 there). Another size/density moves the card
+# and the canary waits below fail honestly rather than silently passing.
 context platform=android kind=emulator timeout=60000
 
 env APP_TARGET="com.callstack.agentdevicelab"
