@@ -25,9 +25,9 @@ export default function TabsLayout() {
       <NativeTabs.Trigger name="catalog">
         <NativeTabs.Trigger.Icon md="storefront" sf="square.grid.2x2.fill" />
         <NativeTabs.Trigger.Label>Catalog</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Badge hidden={cartCount === 0}>
-          {String(cartCount)}
-        </NativeTabs.Trigger.Badge>
+        {cartCount > 0 ? (
+          <NativeTabs.Trigger.Badge>{String(cartCount)}</NativeTabs.Trigger.Badge>
+        ) : null}
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="form">
         <NativeTabs.Trigger.Icon md="fact_check" sf="doc.text.fill" />
@@ -40,7 +40,9 @@ export default function TabsLayout() {
       <NativeTabs.Trigger name="settings">
         <NativeTabs.Trigger.Icon md="settings" sf="gearshape.fill" />
         <NativeTabs.Trigger.Label>Settings</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Badge hidden={diagnosticsState !== 'error'}>!</NativeTabs.Trigger.Badge>
+        {diagnosticsState === 'error' ? (
+          <NativeTabs.Trigger.Badge>!</NativeTabs.Trigger.Badge>
+        ) : null}
       </NativeTabs.Trigger>
     </NativeTabs>
   );

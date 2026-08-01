@@ -270,7 +270,7 @@ test('setAndroidSetting permission reset notifications clears permission flags f
   );
 });
 
-test('setAndroidSetting permission reset camera maps to pm revoke', async () => {
+test('setAndroidSetting permission reset camera clears permission flags for reprompt', async () => {
   await withScriptedAdb(
     'agent-device-android-permission-reset-',
     '#!/bin/sh\nprintf "__CMD__\\n" >> "$AGENT_DEVICE_TEST_ARGS_FILE"\nprintf "%s\\n" "$@" >> "$AGENT_DEVICE_TEST_ARGS_FILE"\nexit 0\n',
@@ -280,6 +280,53 @@ test('setAndroidSetting permission reset camera maps to pm revoke', async () => 
       });
       const logged = await fs.readFile(argsLogPath, 'utf8');
       assert.match(logged, /shell\npm\nrevoke\ncom\.example\.app\nandroid\.permission\.CAMERA/);
+      assert.match(
+        logged,
+        /shell\npm\nclear-permission-flags\ncom\.example\.app\nandroid\.permission\.CAMERA\nuser-set/,
+      );
+      assert.match(
+        logged,
+        /shell\npm\nclear-permission-flags\ncom\.example\.app\nandroid\.permission\.CAMERA\nuser-fixed/,
+      );
+    },
+  );
+});
+
+test('setAndroidSetting permission reset photos clears flags for the resolved permission', async () => {
+  await withScriptedAdb(
+    'agent-device-android-permission-photos-reset-',
+    [
+      '#!/bin/sh',
+      'printf "__CMD__\\n" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
+      'printf "%s\\n" "$@" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
+      'if [ "$1" = "-s" ]; then',
+      '  shift',
+      '  shift',
+      'fi',
+      'if [ "$1" = "shell" ] && [ "$2" = "getprop" ] && [ "$3" = "ro.build.version.sdk" ]; then',
+      '  echo "36"',
+      '  exit 0',
+      'fi',
+      'exit 0',
+      '',
+    ].join('\n'),
+    async ({ argsLogPath, device }) => {
+      await setAndroidSetting(device, 'permission', 'reset', 'com.example.app', {
+        permissionTarget: 'photos',
+      });
+      const logged = await fs.readFile(argsLogPath, 'utf8');
+      assert.match(
+        logged,
+        /shell\npm\nrevoke\ncom\.example\.app\nandroid\.permission\.READ_MEDIA_IMAGES/,
+      );
+      assert.match(
+        logged,
+        /shell\npm\nclear-permission-flags\ncom\.example\.app\nandroid\.permission\.READ_MEDIA_IMAGES\nuser-set/,
+      );
+      assert.match(
+        logged,
+        /shell\npm\nclear-permission-flags\ncom\.example\.app\nandroid\.permission\.READ_MEDIA_IMAGES\nuser-fixed/,
+      );
     },
   );
 });

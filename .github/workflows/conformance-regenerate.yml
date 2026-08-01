@@ -63,4 +63,4 @@ jobs:
       # The seal check also runs per-PR, but assert it here too so a regeneration
       # that produced an unsealed/mis-sealed fixture cannot pass silently.
       - name: Verify fixture seals and conformance
-        run: node --experimental-strip-types --test scripts/maestro-conformance/verify.test.ts
+        run: node --experimental-strip-types --test packages/maestro/test/conformance/verify.test.ts

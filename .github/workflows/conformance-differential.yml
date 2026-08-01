@@ -87,7 +87,7 @@ jobs:
         run: |
           set -euo pipefail
           EXPECTED=$(node --experimental-strip-types -e \
-            "import('./scripts/maestro-conformance/differential/scenarios.ts').then(m => console.log(m.DIFFERENTIAL_APP_ID))")
+            "import('./packages/maestro/test/conformance/differential/scenarios.ts').then(m => console.log(m.DIFFERENTIAL_APP_ID))")
           ACTUAL="${{ steps.fixture-app.outputs.app-id }}"
           echo "expected=$EXPECTED actual=$ACTUAL (source=${{ steps.fixture-app.outputs.source }})"
           if [ "$ACTUAL" != "$EXPECTED" ]; then
