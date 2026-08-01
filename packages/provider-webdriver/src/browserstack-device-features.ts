@@ -121,6 +121,23 @@ export function buildBrowserStackDeviceFeatureCapabilities(
 }
 
 /**
+ * Canonical CLI flags for every device-feature capability set on `flags`.
+ *
+ * These capabilities are BrowserStack-owned. Other providers have no equivalent, so a caller who
+ * passes them to AWS Device Farm would otherwise have them accepted, persisted into the profile,
+ * and then silently dropped — the session runs with provider defaults and nothing says why.
+ * Callers use this to reject them at the point the provider is known.
+ */
+export function browserStackOnlyDeviceFeatureFlags(
+  flags: Record<string, unknown> | undefined,
+): string[] {
+  return BROWSERSTACK_DEVICE_FEATURE_SPECS.filter((spec) => {
+    const value = flags?.[spec.field];
+    return value !== undefined && value !== false && value !== '';
+  }).map((spec) => spec.flag);
+}
+
+/**
  * Reads device-feature fields off an untyped flag bag (a daemon request), so the daemon-side
  * capability build and the CLI-side profile build stay driven by the same table.
  *

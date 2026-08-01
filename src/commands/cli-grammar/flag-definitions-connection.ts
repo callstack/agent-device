@@ -1,4 +1,4 @@
-import { PROVIDER_DEVICE_ORIENTATIONS } from '../../contracts/remote-config-fields.ts';
+import { PROVIDER_DEVICE_ORIENTATIONS } from '@agent-device/contracts/remote';
 import type { FlagDefinition } from './flag-types.ts';
 
 export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [

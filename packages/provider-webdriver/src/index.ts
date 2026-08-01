@@ -12,6 +12,7 @@ import {
 import { CLOUD_WEBDRIVER_PROVIDERS, isCloudWebDriverProviderName } from './providers.ts';
 
 export { CLOUD_WEBDRIVER_PROVIDERS, isCloudWebDriverProviderName };
+export { browserStackOnlyDeviceFeatureFlags } from './browserstack-device-features.ts';
 export type { CloudWebDriverKnownProviderName } from './providers.ts';
 export type { ProviderWebDriverDependencies, RunHostCommand } from './dependencies.ts';
 export type {

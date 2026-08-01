@@ -1,7 +1,4 @@
-import {
-  DEVICE_ROTATION_SURFACE_INDEX,
-  type DeviceRotation,
-} from '@agent-device/contracts/device';
+import { DEVICE_ROTATION_SURFACE_INDEX, type DeviceRotation } from '@agent-device/contracts/device';
 import {
   buildGesturePlan,
   buildScrollGesturePlan,

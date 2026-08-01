@@ -21,6 +21,7 @@ import { runProviderScenario, type ProviderScenarioStep } from './scenario.ts';
 import {
   CloudWebDriverTestServer,
   type CloudWebDriverHttpCall,
+  type CloudWebDriverTestResponse,
   cloudWebDriverTestJson,
   startCloudWebDriverTestServer,
   type StartedCloudWebDriverTestServer,
@@ -108,6 +109,82 @@ test('packaged Cloud WebDriver release still returns artifacts when session dele
   });
 }, 15_000);
 
+test('packaged Cloud WebDriver orientation rotates through the four-way endpoint', async () => {
+  await withProviderScenarioResource(createCloudWebDriverWorld, async (world) => {
+    const { daemon, server } = world;
+    const lease = await openWebDriverSession(daemon);
+
+    const response = await daemon.callCommand(
+      'orientation',
+      ['landscape-right'],
+      {
+        ...leaseFlags(lease.leaseId),
+      },
+      { meta: leaseMeta(lease.leaseId) },
+    );
+    const data = assertRpcOk<{ action?: string; orientation?: string }>(response);
+    assert.equal(data.action, 'orientation');
+    assert.equal(data.orientation, 'landscape-right');
+
+    const rotation = rotationCalls(server);
+    assert.deepEqual(
+      rotation.map((call) => call.body),
+      [{ x: 0, y: 0, z: 270 }],
+    );
+    // The exact four-way endpoint answered, so the two-way one is never consulted.
+    assert.equal(orientationCalls(server).length, 0);
+  });
+}, 15_000);
+
+test('packaged Cloud WebDriver orientation falls back when the driver lacks the rotation route', async () => {
+  await withProviderScenarioResource(createCloudWebDriverWorld, async (world) => {
+    const { daemon, server } = world;
+    const lease = await openWebDriverSession(daemon);
+    server.rotationBehavior = 'unsupported';
+
+    const response = await daemon.callCommand(
+      'orientation',
+      ['portrait'],
+      {
+        ...leaseFlags(lease.leaseId),
+      },
+      { meta: leaseMeta(lease.leaseId) },
+    );
+    assert.equal(assertRpcOk<{ orientation?: string }>(response).orientation, 'portrait');
+
+    assert.equal(rotationCalls(server).length, 1);
+    // Four-way intent collapses onto the two-way endpoint's vocabulary.
+    assert.deepEqual(
+      orientationCalls(server).map((call) => call.body),
+      [{ orientation: 'PORTRAIT' }],
+    );
+  });
+}, 15_000);
+
+test('packaged Cloud WebDriver orientation surfaces a provider failure instead of falling back', async () => {
+  await withProviderScenarioResource(createCloudWebDriverWorld, async (world) => {
+    const { daemon, server } = world;
+    const lease = await openWebDriverSession(daemon);
+    server.rotationBehavior = 'server-error';
+
+    const response = await daemon.callCommand(
+      'orientation',
+      ['portrait'],
+      {
+        ...leaseFlags(lease.leaseId),
+      },
+      { meta: leaseMeta(lease.leaseId) },
+    );
+    const error = response.json.error;
+    assert.ok(error, 'expected orientation to fail');
+    assert.match(error.message ?? '', /provider rotation backend failed/);
+
+    // A driver that implements the route and failed must not be retried against a different one:
+    // doing so would report a backend outage as an orientation-support problem.
+    assert.equal(orientationCalls(server).length, 0);
+  });
+}, 15_000);
+
 test('packaged Cloud WebDriver expiry releases the live provider session', async () => {
   await withProviderScenarioResource(createCloudWebDriverWorld, async (world) => {
     const lease = await allocateWebDriverLease(world.daemon);
@@ -177,6 +254,30 @@ async function allocateWebDriverLease(
   }>(allocate);
   assert.equal(data.provider?.capabilities?.operations?.snapshot?.support, 'partial');
   return data.lease;
+}
+
+/** Allocates a lease and opens the app, so interaction commands have a live provider session. */
+async function openWebDriverSession(
+  daemon: Awaited<ReturnType<typeof createProviderScenarioHarness>>,
+): Promise<DeviceLease> {
+  const lease = await allocateWebDriverLease(daemon);
+  const open = await daemon.callCommand('open', ['com.example.demo'], leaseFlags(lease.leaseId), {
+    meta: leaseMeta(lease.leaseId),
+  });
+  assertRpcOk(open);
+  return lease;
+}
+
+function rotationCalls(server: FakeWebDriverServer): readonly CloudWebDriverHttpCall[] {
+  return server.calls.filter(
+    (call) => call.method === 'POST' && call.path === '/wd/hub/session/wd-1/rotation',
+  );
+}
+
+function orientationCalls(server: FakeWebDriverServer): readonly CloudWebDriverHttpCall[] {
+  return server.calls.filter(
+    (call) => call.method === 'POST' && call.path === '/wd/hub/session/wd-1/orientation',
+  );
 }
 
 function cloudWebDriverScenarioSteps(appPath: string, lease: DeviceLease): ProviderScenarioStep[] {
@@ -313,35 +414,61 @@ function assertWebDriverCalls(calls: readonly CloudWebDriverHttpCall[], leaseId:
 class FakeWebDriverServer extends CloudWebDriverTestServer {
   artifactFailuresRemaining = 0;
   sessionDeleteFailuresRemaining = 0;
+  /**
+   * How the driver answers `POST /rotation`. `unsupported` is a driver that does not implement the
+   * route; `server-error` is one that implements it and failed. Orientation must treat those
+   * differently — only the first earns a fallback.
+   */
+  rotationBehavior: 'ok' | 'unsupported' | 'server-error' = 'ok';
 
   static async start(): Promise<StartedCloudWebDriverTestServer<FakeWebDriverServer>> {
     return await startCloudWebDriverTestServer(new FakeWebDriverServer());
   }
 
   protected respond(call: CloudWebDriverHttpCall) {
-    switch (`${call.method} ${call.path}`) {
-      case 'POST /wd/hub/session':
-        return cloudWebDriverTestJson({
+    // Routes are a table rather than a switch: every added endpoint would otherwise widen one
+    // function's branch count, and this fake grows an endpoint per provider feature.
+    const route = this.routes[`${call.method} ${call.path}`];
+    return route ? route() : cloudWebDriverTestJson({ value: null });
+  }
+
+  private get routes(): Record<string, () => CloudWebDriverTestResponse> {
+    return {
+      'POST /wd/hub/session': () =>
+        cloudWebDriverTestJson({
           value: { sessionId: 'wd-1', capabilities: { platformName: 'Android' } },
-        });
-      case 'POST /app-automate/upload':
-        return cloudWebDriverTestJson({ app_url: 'bs://uploaded-app' });
-      case 'GET /wd/hub/session/wd-1/source':
-        return cloudWebDriverTestJson({ value: fakeWebDriverSource() });
-      case 'GET /wd/hub/session/wd-1/window/rect':
-        return cloudWebDriverTestJson({ value: { x: 0, y: 0, width: 1080, height: 1920 } });
-      case 'DELETE /wd/hub/session/wd-1/actions':
-        return cloudWebDriverTestJson(
+        }),
+      'POST /app-automate/upload': () => cloudWebDriverTestJson({ app_url: 'bs://uploaded-app' }),
+      'GET /wd/hub/session/wd-1/source': () =>
+        cloudWebDriverTestJson({ value: fakeWebDriverSource() }),
+      'GET /wd/hub/session/wd-1/window/rect': () =>
+        cloudWebDriverTestJson({ value: { x: 0, y: 0, width: 1080, height: 1920 } }),
+      'DELETE /wd/hub/session/wd-1/actions': () =>
+        cloudWebDriverTestJson(
           { value: { message: 'The requested resource could not be found.' } },
           500,
-        );
-      case 'DELETE /wd/hub/session/wd-1':
-        return this.deleteSessionResponse();
-      case 'GET /app-automate/sessions/wd-1.json':
-        return this.artifactResponse();
-      default:
-        return cloudWebDriverTestJson({ value: null });
+        ),
+      'POST /wd/hub/session/wd-1/rotation': () => this.rotationResponse(),
+      'POST /wd/hub/session/wd-1/orientation': () => cloudWebDriverTestJson({ value: null }),
+      'DELETE /wd/hub/session/wd-1': () => this.deleteSessionResponse(),
+      'GET /app-automate/sessions/wd-1.json': () => this.artifactResponse(),
+    };
+  }
+
+  private rotationResponse() {
+    if (this.rotationBehavior === 'unsupported') {
+      return cloudWebDriverTestJson(
+        { value: { error: 'unknown command', message: 'Unknown command: rotation' } },
+        404,
+      );
     }
+    if (this.rotationBehavior === 'server-error') {
+      return cloudWebDriverTestJson(
+        { value: { message: 'provider rotation backend failed' } },
+        502,
+      );
+    }
+    return cloudWebDriverTestJson({ value: 'ROTATION_0' });
   }
 
   private deleteSessionResponse() {

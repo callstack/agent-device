@@ -12,6 +12,8 @@ import {
   type RemoteConnectionState,
 } from '../remote/remote-connection-state.ts';
 import type { AgentDeviceClient } from '../agent-device-client.ts';
+import { resolveCloudWebDriverConnectProfile } from '../cli/connection/cloud-webdriver-profile.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 vi.mock('../cli/auth-session.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../cli/auth-session.ts')>()),
@@ -357,6 +359,46 @@ test('connect aws-device-farm generates local provider profile from flags', asyn
     assert.equal(generated.awsAppArn, 'arn:aws:devicefarm:us-west-2:123:upload:app-a');
     assert.equal(generated.awsRegion, 'us-west-2');
     assert.equal(generated.awsInteractionMode, 'INTERACTIVE');
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('connect aws-device-farm rejects BrowserStack-only device-feature flags', () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-aws-reject-'));
+
+  try {
+    assert.throws(
+      () =>
+        resolveCloudWebDriverConnectProfile({
+          provider: 'aws-device-farm',
+          stateDir: path.join(tempRoot, '.state'),
+          cwd: tempRoot,
+          env: {},
+          flags: {
+            json: false,
+            help: false,
+            version: false,
+            platform: 'android',
+            device: 'Google Pixel 8',
+            providerDeviceOrientation: 'portrait',
+            providerTimezone: 'New_York',
+          },
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'INVALID_ARGS');
+        // Names every offending flag, and fires before the provider's own required-arg checks so
+        // the caller is told what is unsupported rather than what else is missing.
+        assert.match(error.message, /--provider-device-orientation, --provider-timezone/);
+        assert.match(error.message, /only supported by connect browserstack/);
+        assert.deepEqual(error.details?.flags, [
+          '--provider-device-orientation',
+          '--provider-timezone',
+        ]);
+        return true;
+      },
+    );
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
