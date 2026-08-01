@@ -35,6 +35,21 @@ type OcclusionScan = {
   nodes: RawSnapshotNode[];
   byIndex: Map<number, RawSnapshotNode>;
   overlayPositions: number[];
+  /**
+   * Memoizes `findCoveringNode` by the position it was asked about. Every
+   * overlay-position's "is IT covered by something later" question has
+   * exactly one answer for the lifetime of one `annotateCoveredSnapshotNodes`
+   * call (the scan is immutable input, never mutated mid-pass), so caching it
+   * is safe. Without this, `findCoveringNode` -> `visibleCoverRect` ->
+   * `findCoveringNode` recurses once per (position, later-position) pair
+   * without bound, which is O(2^overlayPositions.length): a snapshot with
+   * ~40 mutually-overlapping overlay-like nodes (e.g. every individual key of
+   * an open Android IME keyboard, each classified overlay-like via
+   * `isAdditionalOverlayNode`) pins the event loop for minutes (#1478 P5
+   * codec-extraction regression report — root-caused as pre-existing here,
+   * exposed by the .ad test/replay path's fill-to-fill snapshot timing).
+   */
+  coverCache: Map<number, RawSnapshotNode | null>;
 };
 
 export type SnapshotOcclusionOptions = {
@@ -55,6 +70,7 @@ export function annotateCoveredSnapshotNodes(
     overlayPositions: annotated.flatMap((node, position) =>
       isOverlayLikeNode(node, byIndex, options) ? [position] : [],
     ),
+    coverCache: new Map(),
   };
   let changed = false;
   for (const [position, node] of annotated.entries()) {
@@ -87,19 +103,38 @@ function findCoveringNode(
   target: RawSnapshotNode,
   options: SnapshotOcclusionOptions,
 ): RawSnapshotNode | null {
+  const cached = scan.coverCache.get(targetPosition);
+  if (cached !== undefined) return cached;
+  // Reentrancy guard: `visibleCoverRect` recurses into `findCoveringNode` for
+  // the SAME targetPosition only through a cycle in `overlayPositions`
+  // ordering, which cannot happen (positions strictly increase along any
+  // recursive path — see the `position <= targetPosition` filter below) —
+  // but seed `null` before recursing regardless, so a future edit that
+  // breaks that invariant fails closed (no cover) instead of re-entering.
+  scan.coverCache.set(targetPosition, null);
+
   const targetRect = positiveRect(target.rect);
-  if (!targetRect) return null;
+  if (!targetRect) return finishFindCoveringNode(scan, targetPosition, null);
   const center = centerOfRect(targetRect);
 
   for (const position of scan.overlayPositions) {
     if (position <= targetPosition) continue;
     const candidate = scan.nodes[position];
     if (candidate && canCoverPoint(scan, position, target, targetRect, center, options)) {
-      return candidate;
+      return finishFindCoveringNode(scan, targetPosition, candidate);
     }
   }
 
-  return null;
+  return finishFindCoveringNode(scan, targetPosition, null);
+}
+
+function finishFindCoveringNode(
+  scan: OcclusionScan,
+  targetPosition: number,
+  result: RawSnapshotNode | null,
+): RawSnapshotNode | null {
+  scan.coverCache.set(targetPosition, result);
+  return result;
 }
 
 function canCoverPoint(
