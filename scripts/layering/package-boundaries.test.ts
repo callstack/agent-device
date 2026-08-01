@@ -219,6 +219,15 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/contracts',
     '@agent-device/kernel',
   ]);
+  const adScriptPackage = packages.find((pkg) => pkg.name === '@agent-device/ad-script');
+  assert.ok(adScriptPackage, 'ad-script package must exist');
+  // Locks the "exports only `.`" boundary: a future `/codec` (or any other)
+  // subpath widens this key list and fails the assertion (#1478 P5 dossier).
+  assert.deepEqual([...adScriptPackage.exportTargets.keys()], ['@agent-device/ad-script']);
+  assert.deepEqual([...adScriptPackage.workspaceDependencies].sort(), [
+    '@agent-device/contracts',
+    '@agent-device/kernel',
+  ]);
   const providerWebDriverPackage = packages.find(
     (pkg) => pkg.name === '@agent-device/provider-webdriver',
   );
@@ -271,6 +280,10 @@ test('the real tree parses, declares, and passes R11', () => {
     'root must declare the maestro workspace dependency',
   );
   assert.ok(
+    rootWorkspaceDependencyNames(repoRoot).has('@agent-device/ad-script'),
+    'root must declare the ad-script workspace dependency',
+  );
+  assert.ok(
     rootWorkspaceDependencyNames(repoRoot).has('@agent-device/provider-webdriver'),
     'root must declare the provider-webdriver workspace dependency',
   );
@@ -304,6 +317,9 @@ test('Node resolution enforces the exports map at runtime', () => {
     '@agent-device/provider-limrun/src/runtime.ts',
     '@agent-device/xml/internal/parser',
     '@agent-device/xml/src/index.ts',
+    '@agent-device/ad-script/codec',
+    '@agent-device/ad-script/internal/script.ts',
+    '@agent-device/ad-script/src/index.ts',
   ]) {
     assert.throws(
       () => import.meta.resolve(deep),
@@ -329,4 +345,6 @@ test('Node resolution enforces the exports map at runtime', () => {
   );
   const xmlResolved = import.meta.resolve('@agent-device/xml');
   assert.ok(xmlResolved.endsWith('packages/xml/src/index.ts'), xmlResolved);
+  const adScriptResolved = import.meta.resolve('@agent-device/ad-script');
+  assert.ok(adScriptResolved.endsWith('packages/ad-script/src/index.ts'), adScriptResolved);
 });

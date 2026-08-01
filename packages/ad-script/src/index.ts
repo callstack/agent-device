@@ -29,7 +29,6 @@ export {
   formatScriptStringLiteral,
   isClickLikeCommand,
   isTouchTargetCommand,
-  parseReplaySeriesFlags,
   stripRecordedRefGeneration,
 } from './internal/script-utils.ts';
 
@@ -39,11 +38,9 @@ export {
 } from './internal/script-formatting.ts';
 
 export {
-  formatTargetAnnotationCommentLine,
   normalizeIdentifierField,
   normalizeLabelField,
   normalizeRoleField,
-  parseTargetAnnotationCommentLine,
   parseTargetAnnotationV1Payload,
   serializeTargetAnnotationV1,
   truncateToUtf8Bytes,
@@ -54,9 +51,7 @@ export {
 } from './internal/target-annotation-serde.ts';
 export type {
   TargetAncestryEntry,
-  TargetAnnotationLineParseResult,
   TargetAnnotationV1,
-  TargetRect,
   TargetScrollRegion,
   TargetVerification,
 } from './internal/target-annotation-serde.ts';
