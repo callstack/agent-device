@@ -22,6 +22,7 @@ import {
 import {
   buildBrowserStackDeviceFeatureCapabilities,
   readBrowserStackDeviceFeatureFields,
+  rejectBrowserStackOnlyDeviceFeatures,
 } from './browserstack-device-features.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS, type CloudWebDriverKnownProviderName } from './providers.ts';
 import {
@@ -185,6 +186,13 @@ export function createCloudWebDriverProviderDefinitions(
           },
           prepareSession: async ({ req, lease, base }) => {
             const request = requireRequest(req, 'AWS Device Farm');
+            // Enforced here, not only in the CLI profile builder: the typed client and
+            // hand-authored remote-config profiles both reach session preparation without passing
+            // through `connect`, and would otherwise have these capabilities silently dropped.
+            rejectBrowserStackOnlyDeviceFeatures(
+              request.flags,
+              CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+            );
             const platform = requireRequestPlatform(request, 'AWS Device Farm');
             const sessionOptions = {
               client: createAwsCliDeviceFarmClient({

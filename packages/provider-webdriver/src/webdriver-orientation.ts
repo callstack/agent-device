@@ -80,9 +80,13 @@ function isUnsupportedEndpointError(error: unknown): boolean {
   if (!(error instanceof AppError)) return false;
   // A session that never opened, or died, is not an unsupported endpoint.
   if (error.code === 'SESSION_NOT_FOUND') return false;
+  // The W3C code wins whenever the driver sent one: several real failures share the statuses
+  // below, most importantly a 404 carrying `invalid session id`, which is a dead session rather
+  // than a missing route. Bare status is only consulted when no code was returned at all.
+  const code = readW3CErrorCode(error.details?.response);
+  if (code) return UNSUPPORTED_ENDPOINT_W3C_ERRORS.has(code);
   const status = error.details?.status;
-  if (typeof status === 'number') return UNSUPPORTED_ENDPOINT_STATUSES.has(status);
-  return UNSUPPORTED_ENDPOINT_W3C_ERRORS.has(readW3CErrorCode(error.details?.response));
+  return typeof status === 'number' && UNSUPPORTED_ENDPOINT_STATUSES.has(status);
 }
 
 function readW3CErrorCode(response: unknown): string {

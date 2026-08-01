@@ -101,6 +101,24 @@ const NON_FALLBACK_FAILURES: readonly { name: string; error: () => unknown }[] =
     name: 'a dead session',
     error: () => new AppError('SESSION_NOT_FOUND', 'WebDriver session has not been created yet.'),
   },
+  {
+    // The status alone says "not found", but the W3C code says the session died. Reading the code
+    // first is what keeps this from being misread as a missing route.
+    name: 'a 404 carrying invalid session id',
+    error: () =>
+      new AppError('COMMAND_FAILED', 'A session is either terminated or not started', {
+        status: 404,
+        response: { value: { error: 'invalid session id' } },
+      }),
+  },
+  {
+    name: 'a 405 carrying a non-routing error code',
+    error: () =>
+      new AppError('COMMAND_FAILED', 'Session timed out', {
+        status: 405,
+        response: { value: { error: 'timeout' } },
+      }),
+  },
 ];
 
 for (const failure of NON_FALLBACK_FAILURES) {

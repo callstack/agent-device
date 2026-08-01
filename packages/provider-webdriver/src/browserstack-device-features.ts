@@ -138,6 +138,32 @@ export function browserStackOnlyDeviceFeatureFlags(
 }
 
 /**
+ * Fails when a non-BrowserStack provider was given BrowserStack-owned device features.
+ *
+ * Called from both the CLI profile builder and the provider's own session preparation. The second
+ * is the one that actually closes the hole: the typed client and hand-authored remote-config
+ * profiles reach session preparation without passing through `connect`, so a CLI-only check leaves
+ * those routes accepting the capabilities and dropping them.
+ */
+export function rejectBrowserStackOnlyDeviceFeatures(
+  flags: Record<string, unknown> | undefined,
+  provider: string,
+): void {
+  const configured = browserStackOnlyDeviceFeatureFlags(flags);
+  if (configured.length === 0) return;
+  const plural = configured.length !== 1;
+  throw new AppError(
+    'INVALID_ARGS',
+    `${configured.join(', ')} ${plural ? 'are' : 'is'} only supported by BrowserStack, not ${provider}.`,
+    {
+      hint: `Drop ${plural ? 'those flags' : 'the flag'} or use the browserstack provider.`,
+      provider,
+      flags: configured,
+    },
+  );
+}
+
+/**
  * Reads device-feature fields off an untyped flag bag (a daemon request), so the daemon-side
  * capability build and the CLI-side profile build stay driven by the same table.
  *

@@ -1,6 +1,6 @@
 import {
-  browserStackOnlyDeviceFeatureFlags,
   CLOUD_WEBDRIVER_PROVIDERS,
+  rejectBrowserStackOnlyDeviceFeatures,
   type CloudWebDriverKnownProviderName,
 } from '@agent-device/provider-webdriver';
 import type { RemoteConfigProfile } from '../../remote/remote-config-schema.ts';
@@ -142,25 +142,6 @@ function awsDeviceFarmProfileFields(options: {
     awsInteractionMode: flags.awsInteractionMode,
     providerSessionName: flags.providerSessionName,
   };
-}
-
-/**
- * Device-feature capabilities are BrowserStack-owned. Rejecting them here — where the provider is
- * known — keeps a caller from having them accepted, persisted into the profile, and then silently
- * dropped at session creation with no indication the session ignored them.
- */
-function rejectBrowserStackOnlyDeviceFeatures(flags: CliFlags, provider: string): void {
-  const configured = browserStackOnlyDeviceFeatureFlags(flags as Record<string, unknown>);
-  if (configured.length === 0) return;
-  throw new AppError(
-    'INVALID_ARGS',
-    `${configured.join(', ')} ${configured.length === 1 ? 'is' : 'are'} only supported by connect browserstack, not ${provider}.`,
-    {
-      hint: `Drop ${configured.length === 1 ? 'the flag' : 'those flags'} or connect with browserstack.`,
-      provider,
-      flags: configured,
-    },
-  );
 }
 
 function requireCloudWebDriverPlatform(

@@ -136,6 +136,49 @@ test('BrowserStack facade nests device-feature capabilities inside bstack:option
   });
 }, 15_000);
 
+test('AWS Device Farm facade rejects BrowserStack-owned device features at session preparation', async () => {
+  await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
+    const host = new FakeAwsHostCommand(`${server.url}/wd/hub/`);
+    const provider = createProviderWebDriver({
+      clientVersion: CLIENT_VERSION,
+      runHostCommand: host.run,
+    });
+    const runtime = runtimeFor(
+      provider.createDefaultRuntimes({ AWS_REGION: 'us-west-2' }),
+      CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+    );
+    const lease = makeLease(CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm);
+    const context = awsContext(lease);
+
+    try {
+      // Straight at the runtime boundary, bypassing the CLI profile builder entirely — this is the
+      // route a typed client or a hand-authored remote-config profile takes.
+      await assert.rejects(
+        async () =>
+          await runtime.leaseLifecycle.allocate?.(lease, {
+            ...context,
+            flags: {
+              ...context.flags,
+              providerDeviceOrientation: 'portrait',
+              providerNetworkProfile: '4g-lte-advanced-good',
+            },
+          }),
+        (error: unknown) => {
+          assert.match(
+            (error as Error).message,
+            /--provider-device-orientation, --provider-network-profile are only supported by BrowserStack, not aws-device-farm/,
+          );
+          return true;
+        },
+      );
+      // Rejected before any provider session was created, so nothing needs unwinding.
+      assert.deepEqual(host.calls, []);
+    } finally {
+      await runtime.shutdown();
+    }
+  });
+}, 15_000);
+
 test('AWS Device Farm facade uses the injected host-command capability for its full lifecycle', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
     const host = new FakeAwsHostCommand(`${server.url}/wd/hub/`);

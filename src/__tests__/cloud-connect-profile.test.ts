@@ -391,7 +391,7 @@ test('connect aws-device-farm rejects BrowserStack-only device-feature flags', (
         // Names every offending flag, and fires before the provider's own required-arg checks so
         // the caller is told what is unsupported rather than what else is missing.
         assert.match(error.message, /--provider-device-orientation, --provider-timezone/);
-        assert.match(error.message, /only supported by connect browserstack/);
+        assert.match(error.message, /only supported by BrowserStack, not aws-device-farm/);
         assert.deepEqual(error.details?.flags, [
           '--provider-device-orientation',
           '--provider-timezone',
