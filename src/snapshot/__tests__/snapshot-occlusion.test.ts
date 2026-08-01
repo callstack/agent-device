@@ -174,3 +174,50 @@ test('a covered target still counts as covered by a live overlay above the chain
   assert.equal(annotated[1]?.interactionBlocked, undefined);
   assert.equal(annotated[2]?.interactionBlocked, undefined);
 });
+
+test('cover decisions ignore annotations even through a mutation-sensitive predicate and ancestor walk', () => {
+  // P (a touch target) is covered by dialog D and gets annotated. Overlay O is
+  // P's child and is classified through the caller predicate, whose ancestor
+  // walk reads P: a predicate that (pathologically) also matches annotated
+  // nodes would, against a mutable byIndex, see the annotated P as a
+  // renderable overlay ancestor and declassify O mid-pass — flipping T's
+  // outcome based on evaluation order. Decisions must read pristine input:
+  // P never matches, O stays an overlay root, T is covered.
+  const p: RawSnapshotNode = {
+    index: 10,
+    type: 'group',
+    role: 'group',
+    label: 'Parent',
+    rect: { x: 0, y: 0, width: 50, height: 50 },
+  };
+  const t: RawSnapshotNode = {
+    index: 11,
+    type: 'button',
+    role: 'button',
+    hittable: true,
+    label: 'Pay',
+    rect: { x: 100, y: 100, width: 80, height: 40 },
+  };
+  const o: RawSnapshotNode = {
+    index: 12,
+    parentIndex: 10,
+    type: 'group',
+    role: 'group',
+    identifier: 'ov-root',
+    rect: { x: 60, y: 60, width: 200, height: 200 },
+  };
+  const d: RawSnapshotNode = {
+    index: 13,
+    type: 'dialog',
+    role: 'dialog',
+    rect: { x: 0, y: 0, width: 60, height: 60 },
+  };
+
+  const annotated = annotateCoveredSnapshotNodes([p, t, o, d], {
+    isAdditionalOverlayNode: (node) =>
+      node.identifier === 'ov-root' || node.interactionBlocked === 'covered',
+  });
+
+  assert.equal(annotated.find((n) => n.index === 10)?.interactionBlocked, 'covered');
+  assert.equal(annotated.find((n) => n.index === 11)?.interactionBlocked, 'covered');
+});
