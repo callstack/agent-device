@@ -312,3 +312,31 @@ test('parser accepts an explicit empty-string role (writer-legal for typeless no
   assert.equal(parsed.role, '');
   assert.deepEqual(parsed.ancestry, [{ role: '' }]);
 });
+
+// ---------------------------------------------------------------------------
+// CodeQL js/polynomial-redos (#1536 review): the target-v1 comment-line regex
+// used to backtrack polynomially on a run of separator whitespace that never
+// resolves to a full match — `\s+` and a bare `.*` both accept whitespace, so
+// there were exponentially many ways to split the run between them before
+// concluding failure.
+// ---------------------------------------------------------------------------
+
+test('parseTargetAnnotationCommentLine resolves an adversarial whitespace-run line in well under a second', () => {
+  // A trailing non-whitespace character is deliberate: `parseTargetAnnotationCommentLine`
+  // trims the line before matching, so a purely-trailing whitespace run (the
+  // literal CodeQL-cited shape) would already be stripped before it ever
+  // reaches the regex. Appending one non-whitespace byte keeps the long tab
+  // run internal, so this test genuinely exercises the flagged pattern
+  // through the public entry point rather than being neutralized by trim().
+  const adversarial = `#agent-device:target-v0\t${'\t\t'.repeat(20_000)}x`;
+  const startedAt = Date.now();
+  const result = parseTargetAnnotationCommentLine(adversarial);
+  const elapsedMs = Date.now() - startedAt;
+  assert.ok(
+    elapsedMs < 1000,
+    `expected the adversarial line to parse quickly, took ${elapsedMs}ms`,
+  );
+  // v0 is a future-version comment to this (v1) reader — verifies the regex still
+  // matches the tag/version correctly, not just that it fails fast.
+  assert.deepEqual(result, { kind: 'future-version' });
+});

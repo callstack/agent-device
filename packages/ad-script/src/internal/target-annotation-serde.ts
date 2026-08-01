@@ -17,7 +17,18 @@ import { AppError } from '@agent-device/kernel/errors';
 const TARGET_ANNOTATION_TAG = 'agent-device:target-v1';
 // Captures the rest of the line verbatim: a line claiming the tag with a
 // garbage payload is a malformed v1 annotation, never an ordinary comment.
-const TARGET_ANNOTATION_LINE_RE = /^#\s*agent-device:target-v(\d+)(?:\s+(.*))?$/;
+//
+// The payload group is anchored on `\S` (CodeQL js/polynomial-redos,
+// #1536 review): `\s+` and a bare `.*` both accept whitespace, so a run of
+// separator characters that ultimately fails to match `$` (e.g. many tabs
+// with no trailing content) has exponentially many `\s+`/`.*` splits to
+// backtrack through. `\S` is `\s`'s complement, so it can never overlap with
+// the mandatory `\s+` before it — the split point is unique, no backtracking
+// possible. Behavior-preserving: the only caller (below) always matches
+// against an already-`.trim()`-ed line, whose last character (when the tag
+// matches at all) is never whitespace, so a payload section that `\S.*`
+// would reject (all-whitespace) can never reach this regex in practice.
+const TARGET_ANNOTATION_LINE_RE = /^#\s*agent-device:target-v(\d+)(?:\s+(\S.*))?$/;
 
 export const TARGET_ANNOTATION_MAX_FIELD_BYTES = 256;
 export const TARGET_ANNOTATION_MAX_PAYLOAD_BYTES = 4096;
