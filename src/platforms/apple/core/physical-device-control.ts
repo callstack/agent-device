@@ -32,9 +32,12 @@ import {
 import { runXcrun } from './tool-provider.ts';
 
 export type IosPhysicalDeviceBackend = 'coredevice' | 'xctest';
-export type IosPhysicalDeviceRunnerTransport =
-  | { kind: 'network'; tunnelIp: string | null }
-  | { kind: 'usbmux' };
+/**
+ * Only the CoreDevice tunnel address is resolved here. Which transport a runner
+ * command uses is decided by the route resolver, which reaches this at all only
+ * after usbmux has reported the device unattached.
+ */
+export type IosPhysicalDeviceTunnel = { tunnelIp: string | null };
 
 type IosPhysicalDeviceLaunchOptions = {
   payloadUrl?: string;
@@ -75,10 +78,7 @@ export type IosPhysicalDeviceControl = {
     outPath: string,
     timeoutMs?: number,
   ): Promise<void>;
-  resolveRunnerTransport(
-    device: DeviceInfo,
-    timeoutBudgetMs?: number,
-  ): Promise<IosPhysicalDeviceRunnerTransport>;
+  resolveTunnel(device: DeviceInfo, timeoutBudgetMs?: number): Promise<IosPhysicalDeviceTunnel>;
 };
 
 const CONTROLS: Record<IosPhysicalDeviceBackend, IosPhysicalDeviceControl> = {
@@ -94,8 +94,7 @@ const CONTROLS: Record<IosPhysicalDeviceBackend, IosPhysicalDeviceControl> = {
     resolveAppProcesses: resolveCoreDeviceAppProcesses,
     captureScreenshot: captureCoreDeviceScreenshot,
     copyRunnerFile: copyCoreDeviceRunnerFile,
-    resolveRunnerTransport: async (device, timeoutBudgetMs) => ({
-      kind: 'network',
+    resolveTunnel: async (device, timeoutBudgetMs) => ({
       tunnelIp: await resolveCoreDeviceTunnelIp(device, timeoutBudgetMs),
     }),
   },
@@ -111,7 +110,7 @@ const CONTROLS: Record<IosPhysicalDeviceBackend, IosPhysicalDeviceControl> = {
     resolveAppProcesses: rejectXctestProcessLookup,
     captureScreenshot: captureXctestDeviceScreenshot,
     copyRunnerFile: rejectXctestRunnerFileCopy,
-    resolveRunnerTransport: async () => ({ kind: 'usbmux' }),
+    resolveTunnel: rejectXctestTunnelLookup,
   },
 };
 
@@ -155,6 +154,18 @@ async function rejectXctestProcessLookup(device: DeviceInfo): Promise<never> {
       deviceId: device.id,
       backend: 'xctest',
       hint: 'Use a CoreDevice-backed iOS device for performance sampling.',
+    },
+  );
+}
+
+async function rejectXctestTunnelLookup(device: DeviceInfo): Promise<never> {
+  throw new AppError(
+    'UNSUPPORTED_OPERATION',
+    'XCTest-backed physical iOS devices have no CoreDevice tunnel.',
+    {
+      deviceId: device.id,
+      backend: 'xctest',
+      hint: 'Connect the device by cable so it is reachable through usbmux.',
     },
   );
 }

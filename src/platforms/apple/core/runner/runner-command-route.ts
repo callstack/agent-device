@@ -61,11 +61,7 @@ export function createRunnerCommandRouteResolver(device: DeviceInfo, port: numbe
           return buildNetworkRoute(device, port, requestTunnelIp, false);
         }
       }
-      const transport = await control.resolveRunnerTransport(device, timeoutBudgetMs);
-      if (transport.kind === 'usbmux') {
-        return buildUsbmuxRoute(device, port);
-      }
-      const tunnelIp = transport.tunnelIp;
+      const { tunnelIp } = await control.resolveTunnel(device, timeoutBudgetMs);
       requestTunnelIp = tunnelIp;
       if (tunnelIp) writeDeviceTunnelIpCache(device.id, tunnelIp);
       return buildNetworkRoute(device, port, tunnelIp, false);

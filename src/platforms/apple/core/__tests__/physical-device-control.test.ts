@@ -5,6 +5,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { IOS_DEVICE as SHARED_IOS_DEVICE } from '../../../../__tests__/test-utils/index.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { AppError } from '@agent-device/kernel/errors';
 import { createAppleInteractor } from '../../interactor.ts';
 import { installIosApp } from '../app-install.ts';
 import { closeIosApp, openIosApp } from '../app-launch.ts';
@@ -47,11 +48,15 @@ test('XCTest readiness uses xcdevice instead of devicectl', async () => {
       args: ['xcdevice', 'wait', '--both', '--timeout=15', XCTEST_IOS_DEVICE.id],
     },
   ]);
-  assert.deepEqual(
-    await resolveIosPhysicalDeviceControl(XCTEST_IOS_DEVICE).resolveRunnerTransport(
-      XCTEST_IOS_DEVICE,
-    ),
-    { kind: 'usbmux' },
+  // An XCTest-backed device has no CoreDevice tunnel, and the route resolver
+  // never asks it for one: it returns a usbmux route before reaching this.
+  await assert.rejects(
+    async () =>
+      await resolveIosPhysicalDeviceControl(XCTEST_IOS_DEVICE).resolveTunnel(XCTEST_IOS_DEVICE),
+    (error: unknown) => {
+      assert.equal((error as AppError).code, 'UNSUPPORTED_OPERATION');
+      return true;
+    },
   );
 });
 
