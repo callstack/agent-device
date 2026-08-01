@@ -104,3 +104,16 @@ test('all-dash inputs land on the documented fallbacks instead of empty identifi
     's:test:suite1:1:attempt-1',
   );
 });
+
+test('slug construction remains linear for non-terminal hyphen runs', () => {
+  const requestId = `x${'-'.repeat(50_000)}x`;
+  const startedAt = performance.now();
+
+  assert.equal(buildReplayTestInvocationId(requestId), 'x-x');
+  assert.equal(
+    buildReplayTestSessionName('default', 'suite', `${requestId}.ad`, 0),
+    'default:test:suite:1-x-x:attempt-1',
+  );
+
+  assert.ok(performance.now() - startedAt < 100, 'slug construction should not backtrack');
+});
