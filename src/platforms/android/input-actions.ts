@@ -1,7 +1,10 @@
 import { AppError } from '../../kernel/errors.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import type { DeviceRotation } from '../../contracts/device-rotation.ts';
+import {
+  DEVICE_ROTATION_SURFACE_INDEX,
+  type DeviceRotation,
+} from '../../contracts/device-rotation.ts';
 import { buildGesturePlan, GESTURE_DURATION_MIN_MS } from '../../contracts/gesture-plan.ts';
 import { buildScrollGesturePlan, type ScrollDirection } from '../../contracts/scroll-gesture.ts';
 import { toAndroidTvRemoteKeyevent, type TvRemoteButton } from '../../contracts/tv-remote.ts';
@@ -315,18 +318,11 @@ export async function scrollAndroid(
 }
 
 function resolveAndroidUserRotation(orientation: DeviceRotation): string {
-  switch (orientation) {
-    case 'portrait':
-      return '0';
-    case 'landscape-left':
-      return '1';
-    case 'portrait-upside-down':
-      return '2';
-    case 'landscape-right':
-      return '3';
-    default:
-      throw new AppError('INVALID_ARGS', `Unsupported Android rotation: ${orientation}`);
+  const index = DEVICE_ROTATION_SURFACE_INDEX[orientation];
+  if (index === undefined) {
+    throw new AppError('INVALID_ARGS', `Unsupported Android rotation: ${orientation}`);
   }
+  return String(index);
 }
 
 async function assertAndroidShellInputIsAppOwned(

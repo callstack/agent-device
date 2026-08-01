@@ -145,6 +145,16 @@ export class WebDriverClient {
     await this.sessionRequest('POST', '/back');
   }
 
+  /** Exact four-way display rotation. `z` is degrees: 0, 90, 180, or 270. */
+  async setRotation(degrees: number): Promise<void> {
+    await this.sessionRequest('POST', '/rotation', { x: 0, y: 0, z: degrees });
+  }
+
+  /** Two-way orientation. Values are uppercase per the WebDriver protocol. */
+  async setOrientation(orientation: 'PORTRAIT' | 'LANDSCAPE'): Promise<void> {
+    await this.sessionRequest('POST', '/orientation', { orientation });
+  }
+
   async source(): Promise<string> {
     const value = await this.sessionRequest('GET', '/source');
     if (typeof value !== 'string') {

@@ -94,7 +94,7 @@ const BASE_WEBDRIVER_CAPABILITIES: CloudWebDriverCapabilityMap = {
   },
   orientation: {
     support: 'partial',
-    note: 'Uses provider/Appium mobile rotate support where available.',
+    note: 'Uses the WebDriver rotation/orientation endpoints; four-way rotation collapses to portrait/landscape on drivers that only accept the two-way endpoint. Rotates the current display, so an activity that does not pin its orientation may need rotating again once it is foreground.',
   },
   appSwitcher: {
     support: 'partial',

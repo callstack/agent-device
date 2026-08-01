@@ -22,6 +22,7 @@ import { touchPointer } from './webdriver-gestures.ts';
 import type { W3CPointerAction, WebDriverClient, WebDriverWindowRect } from './webdriver-client.ts';
 import { scrollFrameFromWebDriverSource } from './webdriver-scroll-frame.ts';
 import { parseWebDriverSource } from './webdriver-source.ts';
+import { setWebDriverOrientation } from './webdriver-orientation.ts';
 
 export type WebDriverInteractorOptions = {
   client: WebDriverClient;
@@ -223,8 +224,7 @@ class WebDriverInteractor implements Interactor {
 
   async setOrientation(orientation: DeviceRotation): Promise<void> {
     this.requireSupport('orientation');
-    // `mobile: rotate` is Appium's device-orientation script command.
-    await this.client.executeScript('mobile: rotate', [{ orientation }]);
+    await setWebDriverOrientation(this.client, this.backend, orientation);
   }
 
   async appSwitcher(): Promise<void> {

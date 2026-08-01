@@ -8,6 +8,30 @@ export const DEVICE_ROTATIONS = [
 ] as const;
 export type DeviceRotation = (typeof DEVICE_ROTATIONS)[number];
 
+/**
+ * Android `Surface.ROTATION_*` index per rotation, which is also the value the `user_rotation`
+ * system setting takes and, multiplied by 90, the `z` degrees the WebDriver `/rotation` endpoint
+ * takes. One table so the adb path and the cloud WebDriver path cannot drift apart.
+ */
+export const DEVICE_ROTATION_SURFACE_INDEX = {
+  portrait: 0,
+  'landscape-left': 1,
+  'portrait-upside-down': 2,
+  'landscape-right': 3,
+} as const satisfies Record<DeviceRotation, 0 | 1 | 2 | 3>;
+
+export function deviceRotationSurfaceDegrees(rotation: DeviceRotation): 0 | 90 | 180 | 270 {
+  return (DEVICE_ROTATION_SURFACE_INDEX[rotation] * 90) as 0 | 90 | 180 | 270;
+}
+
+/**
+ * Collapses the four-way rotation onto the two values the WebDriver `/orientation` endpoint accepts.
+ * Lossy by nature: both landscape rotations report `LANDSCAPE`, both portraits `PORTRAIT`.
+ */
+export function deviceRotationOrientation(rotation: DeviceRotation): 'PORTRAIT' | 'LANDSCAPE' {
+  return DEVICE_ROTATION_SURFACE_INDEX[rotation] % 2 === 0 ? 'PORTRAIT' : 'LANDSCAPE';
+}
+
 export function parseDeviceRotation(input: string | undefined): DeviceRotation {
   if (input === undefined) {
     throw new AppError(
