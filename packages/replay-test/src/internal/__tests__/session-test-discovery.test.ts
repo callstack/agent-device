@@ -5,6 +5,7 @@ import {
   discoverReplayTestEntries,
   buildReplayTestInvocationId,
 } from '../session-test-discovery.ts';
+import { trimEdgeDashes } from '../session-test-artifacts.ts';
 import type { ReplayTestManifest, ReplayTestSource } from '../session-test-types.ts';
 
 // Scheduler-owned discovery policy (#1478 P3b): which sources a --platform filter runs, which
@@ -79,10 +80,16 @@ test('a suite that matched nothing after filtering is rejected', () => {
   );
 });
 
-test('slug building stays linear on adversarial dash runs (CodeQL js/polynomial-redos)', () => {
-  const adversarial = `${'-'.repeat(50_000)}x${'-'.repeat(50_000)}`;
+test('edge-dash trimming stays linear on an interior dash run (CodeQL js/polynomial-redos)', () => {
+  // The slug pipeline collapses character runs before trimming, so only a
+  // direct call can carry a long interior run — which is exactly the shape
+  // the retired /^-+|-+$/g form re-scans quadratically (each interior dash
+  // restarts a -+$ attempt that fails at the trailing x). 100k dashes take
+  // seconds there and must stay well under a second here, with the input
+  // returned byte-identical since nothing sits at the edges.
+  const interiorRun = `x${'-'.repeat(100_000)}x`;
   const startedAt = performance.now();
-  const slugged = buildReplayTestInvocationId(adversarial);
+  const trimmed = trimEdgeDashes(interiorRun);
   assert.ok(performance.now() - startedAt < 1000);
-  assert.ok(slugged.startsWith('x'));
+  assert.equal(trimmed, interiorRun);
 });
