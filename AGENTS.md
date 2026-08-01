@@ -33,6 +33,10 @@ prose in this repo, including this file.
   succeed on a candidate the shared rules would refuse.
 - Do not measure before confirming the code path can fire. An A/B whose B-arm cannot execute returns
   two green runs masquerading as evidence.
+- A green check is evidence only once you have seen it red. Prove a new regression test against the
+  pre-fix code (revert, run, quote the failing number), a moved test against its gates (planted type
+  error, discovered-count delta), a structural gate against a planted violation. Three vacuous
+  regression tests shipped in one day before this rule; review caught all three.
 - Typed signals over message sniffing: key on structured details (`details.timeoutMs`, reason codes),
   never on error text. Remaining sniffs are owned debt with in-code rationale — do not copy them.
 - Snapshot output is the token budget. Never add per-node bytes to the tree; response-level metadata

@@ -55,6 +55,17 @@ it through the barrel.
 
 Keep tests behavioral. Do not assert shapes or cases TypeScript already proves.
 
+A test added as a regression pin must be shown to fail without the change it pins — vacuity is the
+default failure mode, not the exception, because the adversarial input you imagine is rarely the one
+the old code was slow or wrong on (edge runs that the old regex handled in one pass; invariants the
+old implementation already satisfied; entry points whose trimming defuses the exploit before it
+reaches the flagged pattern). The proof is mechanical: revert the production change locally, watch
+the test fail, note the failing number, restore. Same rule at other layers: after relocating tests,
+prove the runner discovers them (file/test counts must move) and the typechecker reaches them (plant
+a type error, watch it surface, remove it); after adding an ownership/structural gate, plant a
+violation and watch it name the invariant. Quote the red run in the PR — a reviewer who cannot see
+the red has to re-derive it.
+
 Test through public interfaces where practical, and do not add unrelated production exports solely
 to make a test easier — widening the public surface for a test is a product change, and the exports
 outlive the test that motivated them. If a seam is genuinely missing, add it as a real one rather
