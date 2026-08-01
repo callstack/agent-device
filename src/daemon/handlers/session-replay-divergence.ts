@@ -24,7 +24,8 @@ import {
   computeReplayRepairHint,
   type ReplayRepairHintCapture,
 } from './session-replay-repair-hint.ts';
-import { SessionStore } from '../session-store.ts';
+import type { SessionStore } from '../session-store.ts';
+import type { ReplayResumeStamper } from '../session-replay-coordinator.ts';
 import {
   bindInternalObservationAuthority,
   type InternalObservationEvidence,
@@ -61,6 +62,8 @@ export async function buildReplayFailureDivergence(params: {
   session: SessionState | undefined;
   sessionName: string;
   sessionStore: SessionStore;
+  /** #1478 P4b: the request's bound resume-stamping capability — never a second-constructed coordinator. */
+  resumeStamper: ReplayResumeStamper;
   logPath: string;
   responseLevel: ResponseLevel | undefined;
   /** Replay-scope values scrubbed from every divergence string (ADR 0012: expanded variables are never serialized). */
@@ -80,6 +83,7 @@ export async function buildReplayFailureDivergence(params: {
     session,
     sessionName,
     sessionStore,
+    resumeStamper,
     logPath,
     responseLevel,
     scrubVars = [],
@@ -129,8 +133,7 @@ export async function buildReplayFailureDivergence(params: {
     actions: planActions,
     planDigest,
     repairHint,
-    sessionStore,
-    sessionName,
+    resumeStamper,
   });
 
   const divergence: ReplayDivergence = {

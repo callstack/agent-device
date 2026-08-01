@@ -29,7 +29,8 @@ import {
 import { resolveTargetIdentityVerification } from '../../core/command-descriptor/registry.ts';
 import { parseWaitPositionals } from '../../core/wait-positionals.ts';
 import type { DaemonResponse, SessionAction } from '../types.ts';
-import { SessionStore } from '../session-store.ts';
+import type { SessionStore } from '../session-store.ts';
+import type { ReplayResumeStamper } from '../session-replay-coordinator.ts';
 import type { InternalObservationEvidence } from '../internal-observation.ts';
 import { boundedLocalIdentity } from '../session-target-evidence.ts';
 import { tryParseSelectorChain } from '../../selectors/index.ts';
@@ -97,6 +98,8 @@ type TargetBindingDivergenceContext = {
   artifactPaths: string[];
   sessionName: string;
   sessionStore: SessionStore;
+  /** #1478 P4b: the request's bound resume-stamping capability — never a second-constructed coordinator. */
+  resumeStamper: ReplayResumeStamper;
   responseLevel: ResponseLevel | undefined;
   scrubVars: ReturnType<typeof collectReplayScrubbableVarValues>;
   /** ADR 0012 step 5: the full top-level plan + its digest, for `resume`. */
@@ -135,6 +138,7 @@ function buildTargetBindingDivergenceResponse(
     artifactPaths,
     sessionName,
     sessionStore,
+    resumeStamper,
     responseLevel,
     scrubVars,
     planActions,
@@ -161,8 +165,7 @@ function buildTargetBindingDivergenceResponse(
     actions: planActions,
     planDigest,
     repairHint,
-    sessionStore,
-    sessionName,
+    resumeStamper,
   });
 
   const divergence: ReplayDivergence = {
@@ -219,6 +222,8 @@ type ReplayTargetDivergenceParams = {
   step: number;
   sessionName: string;
   sessionStore: SessionStore;
+  /** #1478 P4b: the request's bound resume-stamping capability — never a second-constructed coordinator. */
+  resumeStamper: ReplayResumeStamper;
   logPath: string;
   artifactPaths: string[];
   responseLevel: ResponseLevel | undefined;
@@ -239,6 +244,7 @@ export async function verifyReplayActionTarget(
     step,
     sessionName,
     sessionStore,
+    resumeStamper,
     logPath,
     artifactPaths,
     responseLevel,
@@ -271,6 +277,7 @@ export async function verifyReplayActionTarget(
     artifactPaths,
     sessionName,
     sessionStore,
+    resumeStamper,
     responseLevel,
     scrubVars,
     planActions,
@@ -478,6 +485,7 @@ async function buildPostDispatchIdentityMismatchResponse(
       artifactPaths: params.artifactPaths,
       sessionName,
       sessionStore,
+      resumeStamper: params.resumeStamper,
       responseLevel: params.responseLevel,
       scrubVars,
       planActions: params.planActions,

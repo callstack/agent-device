@@ -4,7 +4,8 @@ import {
   type SnapshotDiagnosticsSummary,
   type SnapshotTimingSample,
 } from '@agent-device/contracts/capture';
-import { SessionStore } from '../session-store.ts';
+import type { SessionStore } from '../session-store.ts';
+import type { ReplayResumeStamper } from '../session-replay-coordinator.ts';
 import type { DaemonRequest, DaemonResponse, SessionAction } from '../types.ts';
 import { buildReplayFailureDivergence } from './session-replay-divergence.ts';
 import {
@@ -26,6 +27,8 @@ export async function withReplayFailureDiagnostics(params: {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
+  /** #1478 P4b: the request's bound resume-stamping capability — never a second-constructed coordinator. */
+  resumeStamper: ReplayResumeStamper;
   logPath: string;
   planActions: SessionAction[];
   planDigest: string;
@@ -49,6 +52,8 @@ async function withReplayFailureContext(params: {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
+  /** #1478 P4b: the request's bound resume-stamping capability — never a second-constructed coordinator. */
+  resumeStamper: ReplayResumeStamper;
   logPath: string;
   planActions: SessionAction[];
   planDigest: string;
@@ -66,6 +71,7 @@ async function withReplayFailureContext(params: {
     req,
     sessionName,
     sessionStore,
+    resumeStamper,
     logPath,
     planActions,
     planDigest,
@@ -83,6 +89,7 @@ async function withReplayFailureContext(params: {
     session: sessionStore.get(sessionName),
     sessionName,
     sessionStore,
+    resumeStamper,
     logPath,
     responseLevel: req.meta?.responseLevel,
     scrubVars,

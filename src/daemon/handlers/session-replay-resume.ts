@@ -1,12 +1,13 @@
 import type { SessionAction } from '../types.ts';
 import type { ReplayDivergenceResume, ReplayRepairHint } from '@agent-device/contracts/divergence';
-import { SessionStore } from '../session-store.ts';
-import { createReplayCoordinator } from '../session-replay-coordinator.ts';
+import type { ReplayResumeStamper } from '../session-replay-coordinator.ts';
 
 /**
- * Builds the `resume` object and, through the request's `ReplayCoordinator` (#1478 P4b), stamps
- * #1262's corrective-resume watermark on the session — the sole write this module performs
- * against `SessionState`. Both divergence sites (`session-replay-target-verification.ts`,
+ * Builds the `resume` object and, through the caller's `ReplayResumeStamper` — the narrow
+ * capability bound to the request's single `ReplayCoordinator` instance (#1478 P4b) — stamps
+ * #1262's corrective-resume watermark on the session. This module never constructs a
+ * coordinator or touches a `SessionStore` itself: it can only act through the capability it was
+ * handed. Both divergence sites (`session-replay-target-verification.ts`,
  * `session-replay-divergence.ts`) call this as their one `resume`-building entry point.
  */
 export function buildAndPersistReplayDivergenceResume(params: {
@@ -14,21 +15,16 @@ export function buildAndPersistReplayDivergenceResume(params: {
   readonly actions: SessionAction[];
   readonly planDigest: string;
   readonly repairHint: ReplayRepairHint;
-  readonly sessionStore: SessionStore;
-  readonly sessionName: string;
+  readonly resumeStamper: ReplayResumeStamper;
 }): ReplayDivergenceResume {
-  const coordinator = createReplayCoordinator({
-    sessionStore: params.sessionStore,
-    sessionName: params.sessionName,
-  });
   const resume = buildReplayDivergenceResume({
     failedIndex: params.failedIndex,
     actions: params.actions,
     planDigest: params.planDigest,
     repairHint: params.repairHint,
-    sessionExists: coordinator.view() !== undefined,
+    sessionExists: params.resumeStamper.sessionExists(),
   });
-  coordinator.stampCorrectiveWatermark({
+  params.resumeStamper.stampCorrectiveWatermark({
     resume,
     repairHint: params.repairHint,
     failedIndex: params.failedIndex,
@@ -103,7 +99,7 @@ export function buildReplayDivergenceResume(params: {
  *    plan's end): the range check accepts this ordinal ONLY when it matches a
  *    stamped `pendingRecordAndHeal` watermark (`describeOutOfRangeResumeFrom`),
  *    and that watermark can only be stamped on a LIVE session (the
- *    `ReplayCoordinator`'s `stampCorrectiveWatermark`, called from both
+ *    `ReplayResumeStamper`'s `stampCorrectiveWatermark`, called from both
  *    divergence sites via `buildAndPersistReplayDivergenceResume` above, is a
  *    no-op without one). With no session — a one-step `open` failure, or a
  *    session closed mid-replay —

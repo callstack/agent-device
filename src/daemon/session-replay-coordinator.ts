@@ -39,6 +39,25 @@ export type ReplaySessionView = Readonly<{
     | undefined;
 }>;
 
+/**
+ * The one capability the divergence-report chain (`session-replay-resume.ts`,
+ * `session-replay-divergence.ts`, `session-replay-target-verification.ts`) needs from a
+ * `ReplayCoordinator`, bound to the SAME instance the owning `runReplayScriptFile` call
+ * created — never a second construction from a bare session name. Carries no `SessionStore`
+ * and cannot name or reacquire a different session.
+ */
+export type ReplayResumeStamper = Readonly<{
+  /** Whether the request's session currently exists (gates the empty-tail `alternateFrom`). */
+  sessionExists(): boolean;
+  /** Stamps the corrective-resume watermark for a divergence; a no-op before step 1 creates the session. */
+  stampCorrectiveWatermark(params: {
+    resume: ReplayDivergenceResume;
+    repairHint: ReplayRepairHint;
+    failedIndex: number;
+    actions: SessionAction[];
+  }): void;
+}>;
+
 export type ReplayCoordinator = {
   /** Reads the request's current session state, or `undefined` before step 1 creates it. */
   view(): ReplaySessionView | undefined;
@@ -63,16 +82,11 @@ export type ReplayCoordinator = {
   /** ADR 0012 R7 (C5a): clears this session key's reap tombstone. */
   clearTombstone(): void;
 
-  /** #1262: stamps the corrective-resume watermark for a divergence; a no-op before step 1 creates the session. */
-  stampCorrectiveWatermark(params: {
-    resume: ReplayDivergenceResume;
-    repairHint: ReplayRepairHint;
-    failedIndex: number;
-    actions: SessionAction[];
-  }): void;
-
   /** Retires the watermark once a `--from` matching `expectedFrom` has actually been entered. */
   clearCorrectiveWatermarkIfExpected(expectedFrom: number | undefined): void;
+
+  /** The narrow capability threaded into the divergence-report chain. */
+  readonly resumeStamper: ReplayResumeStamper;
 };
 
 export function createReplayCoordinator(params: {
@@ -81,6 +95,16 @@ export function createReplayCoordinator(params: {
 }): ReplayCoordinator {
   const { sessionStore, sessionName } = params;
   const current = (): SessionState | undefined => sessionStore.get(sessionName);
+
+  const resumeStamper: ReplayResumeStamper = {
+    sessionExists: () => current() !== undefined,
+    stampCorrectiveWatermark(watermarkParams): void {
+      const session = current();
+      if (!session) return;
+      stampPendingRecordAndHealWatermark({ session, ...watermarkParams });
+      sessionStore.set(sessionName, session);
+    },
+  };
 
   return {
     view(): ReplaySessionView | undefined {
@@ -135,19 +159,14 @@ export function createReplayCoordinator(params: {
       sessionStore.clearRepairTombstone(sessionName);
     },
 
-    stampCorrectiveWatermark(watermarkParams): void {
-      const session = current();
-      if (!session) return;
-      stampPendingRecordAndHealWatermark({ session, ...watermarkParams });
-      sessionStore.set(sessionName, session);
-    },
-
     clearCorrectiveWatermarkIfExpected(expectedFrom): void {
       const session = current();
       if (!session || session.pendingRecordAndHeal?.expectedFrom !== expectedFrom) return;
       clearPendingRecordAndHealWatermark(session);
       sessionStore.set(sessionName, session);
     },
+
+    resumeStamper,
   };
 }
 
