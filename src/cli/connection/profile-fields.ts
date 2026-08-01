@@ -1,5 +1,38 @@
-import type { RemoteConfigMetroOptions } from '../../contracts/remote-config-fields.ts';
+import type {
+  CloudProviderProfileFields,
+  RemoteConfigMetroOptions,
+} from '../../contracts/remote-config-fields.ts';
 import type { CliFlags } from '../../contracts/cli-flags.ts';
+
+/**
+ * Hosted-provider device-feature fields (orientation, geolocation, locale, network shape, app
+ * re-signing). Read as a group because every hosted-provider profile carries the same set, and the
+ * capability projection for them lives with the provider, not here.
+ */
+export function readCloudDeviceFeatureProfileFields(
+  flags: CliFlags,
+): Pick<
+  CloudProviderProfileFields,
+  | 'providerDeviceOrientation'
+  | 'providerGeoLocation'
+  | 'providerTimezone'
+  | 'providerLanguage'
+  | 'providerLocale'
+  | 'providerNetworkProfile'
+  | 'providerCustomNetwork'
+  | 'providerNoResignApp'
+> {
+  return {
+    providerDeviceOrientation: flags.providerDeviceOrientation,
+    providerGeoLocation: flags.providerGeoLocation,
+    providerTimezone: flags.providerTimezone,
+    providerLanguage: flags.providerLanguage,
+    providerLocale: flags.providerLocale,
+    providerNetworkProfile: flags.providerNetworkProfile,
+    providerCustomNetwork: flags.providerCustomNetwork,
+    providerNoResignApp: flags.providerNoResignApp,
+  };
+}
 
 export function readMetroProfileFields(flags: CliFlags): RemoteConfigMetroOptions {
   return {

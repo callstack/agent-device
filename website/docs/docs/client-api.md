@@ -139,6 +139,9 @@ const client = createAgentDeviceClient({
   device: 'Google Pixel 8',
   providerOsVersion: '14.0',
   providerApp: 'bs://app-id',
+  // Optional hosted device features, applied when the session is created.
+  providerDeviceOrientation: 'portrait',
+  providerTimezone: 'New_York',
 });
 
 await client.apps.open({ app: 'com.example.app' });

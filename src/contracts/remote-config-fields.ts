@@ -12,12 +12,28 @@ import type {
 
 import type { MetroPrepareKind } from './metro.ts';
 
+/**
+ * Screen orientation a hosted provider session starts in. Distinct from `DeviceRotation`
+ * (`contracts/device-rotation.ts`): that is a four-way runtime rotation command, this is the
+ * two-way session-creation capability hosted providers accept.
+ */
+export const PROVIDER_DEVICE_ORIENTATIONS = ['portrait', 'landscape'] as const;
+export type ProviderDeviceOrientation = (typeof PROVIDER_DEVICE_ORIENTATIONS)[number];
+
 export type CloudProviderProfileFields = {
   providerApp?: string;
   providerOsVersion?: string;
   providerProject?: string;
   providerBuild?: string;
   providerSessionName?: string;
+  providerDeviceOrientation?: ProviderDeviceOrientation;
+  providerGeoLocation?: string;
+  providerTimezone?: string;
+  providerLanguage?: string;
+  providerLocale?: string;
+  providerNetworkProfile?: string;
+  providerCustomNetwork?: string;
+  providerNoResignApp?: boolean;
   awsProjectArn?: string;
   awsDeviceArn?: string;
   awsAppArn?: string;

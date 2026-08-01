@@ -30,6 +30,7 @@ import type { CloudProviderSessionResult } from '../../contracts/cloud-artifacts
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { readMetroPrepareKind } from '../../commands/metro/prepare-kind.ts';
 import { connectionProviderRequiresRemoteDaemon } from '../connection/provider-policy.ts';
+import { readCloudDeviceFeatureProfileFields } from '../connection/profile-fields.ts';
 import { isCloudWebDriverProviderName } from '../../cloud-webdriver/providers.ts';
 
 const leaseDeferredCommands = new Set([
@@ -687,6 +688,7 @@ async function allocateOrReuseLease(
     providerProject: flags.providerProject,
     providerBuild: flags.providerBuild,
     providerSessionName: flags.providerSessionName,
+    ...readCloudDeviceFeatureProfileFields(flags),
     awsProjectArn: flags.awsProjectArn,
     awsDeviceArn: flags.awsDeviceArn,
     awsAppArn: flags.awsAppArn,

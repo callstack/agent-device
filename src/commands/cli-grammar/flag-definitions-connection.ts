@@ -1,3 +1,4 @@
+import { PROVIDER_DEVICE_ORIENTATIONS } from '../../contracts/remote-config-fields.ts';
 import type { FlagDefinition } from './flag-types.ts';
 
 export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
@@ -156,6 +157,67 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--provider-session-name <name>',
     usageDescription: 'Hosted cloud provider session label',
+  },
+  {
+    key: 'providerDeviceOrientation',
+    names: ['--provider-device-orientation', '--device-orientation'],
+    type: 'enum',
+    enumValues: PROVIDER_DEVICE_ORIENTATIONS,
+    usageLabel: '--provider-device-orientation portrait|landscape',
+    usageDescription:
+      'Screen orientation a hosted cloud provider session starts in. Set this rather than rotating after launch: a session that boots landscape renders login webviews landscape',
+  },
+  {
+    key: 'providerGeoLocation',
+    names: ['--provider-geo-location', '--geo-location'],
+    type: 'string',
+    usageLabel: '--provider-geo-location <country>',
+    usageDescription: 'Hosted cloud provider IP geolocation country code, for example US',
+  },
+  {
+    key: 'providerTimezone',
+    names: ['--provider-timezone', '--timezone'],
+    type: 'string',
+    usageLabel: '--provider-timezone <zone>',
+    usageDescription: 'Hosted cloud provider device time zone, for example New_York',
+  },
+  {
+    key: 'providerLanguage',
+    names: ['--provider-language', '--language'],
+    type: 'string',
+    usageLabel: '--provider-language <language>',
+    usageDescription: 'Hosted cloud provider app language, for example Fr',
+  },
+  {
+    key: 'providerLocale',
+    names: ['--provider-locale', '--locale'],
+    type: 'string',
+    usageLabel: '--provider-locale <locale>',
+    usageDescription: 'Hosted cloud provider device locale, for example Fr',
+  },
+  {
+    key: 'providerNetworkProfile',
+    names: ['--provider-network-profile', '--network-profile'],
+    type: 'string',
+    usageLabel: '--provider-network-profile <profile>',
+    usageDescription:
+      'Hosted cloud provider named network condition profile, for example 4g-lte-advanced-good. Mutually exclusive with --provider-custom-network',
+  },
+  {
+    key: 'providerCustomNetwork',
+    names: ['--provider-custom-network', '--custom-network'],
+    type: 'string',
+    usageLabel: '--provider-custom-network <shape>',
+    usageDescription:
+      'Hosted cloud provider custom network shape. Mutually exclusive with --provider-network-profile',
+  },
+  {
+    key: 'providerNoResignApp',
+    names: ['--provider-no-resign-app'],
+    type: 'boolean',
+    usageLabel: '--provider-no-resign-app',
+    usageDescription:
+      'iOS only: keep an Enterprise-signed app as uploaded instead of letting the provider re-sign it, which strips entitlements such as push notifications',
   },
   {
     key: 'awsProjectArn',

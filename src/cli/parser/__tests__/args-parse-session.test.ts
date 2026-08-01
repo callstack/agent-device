@@ -727,6 +727,46 @@ test('parseArgs recognizes connect browserstack provider flags', () => {
   assert.equal(parsed.flags.providerSessionName, 'session-a');
 });
 
+test('parseArgs recognizes connect device-feature flags and their short aliases', () => {
+  const parsed = parseArgs(
+    [
+      'connect',
+      'browserstack',
+      '--provider-device-orientation',
+      'portrait',
+      '--geo-location',
+      'US',
+      '--timezone',
+      'New_York',
+      '--language',
+      'Fr',
+      '--locale',
+      'Fr',
+      '--network-profile',
+      '4g-lte-advanced-good',
+      '--provider-no-resign-app',
+    ],
+    { strictFlags: true },
+  );
+  assert.equal(parsed.flags.providerDeviceOrientation, 'portrait');
+  assert.equal(parsed.flags.providerGeoLocation, 'US');
+  assert.equal(parsed.flags.providerTimezone, 'New_York');
+  assert.equal(parsed.flags.providerLanguage, 'Fr');
+  assert.equal(parsed.flags.providerLocale, 'Fr');
+  assert.equal(parsed.flags.providerNetworkProfile, '4g-lte-advanced-good');
+  assert.equal(parsed.flags.providerNoResignApp, true);
+});
+
+test('parseArgs rejects an orientation the provider cannot start a session in', () => {
+  assert.throws(
+    () =>
+      parseArgs(['connect', 'browserstack', '--provider-device-orientation', 'landscape-left'], {
+        strictFlags: true,
+      }),
+    /Invalid provider-device-orientation: landscape-left/,
+  );
+});
+
 test('parseArgs recognizes connect aws-device-farm provider flags', () => {
   const parsed = parseArgs(
     [

@@ -5,7 +5,7 @@ import { AppError } from '../../kernel/errors.ts';
 import type { PlatformSelector } from '../../kernel/device.ts';
 import type { CliFlags } from '../../contracts/cli-flags.ts';
 import type { EnvMap } from '../../utils/env-map.ts';
-import { readMetroProfileFields } from './profile-fields.ts';
+import { readCloudDeviceFeatureProfileFields, readMetroProfileFields } from './profile-fields.ts';
 import { persistAndResolveGeneratedProfile } from './generated-config.ts';
 import { resolveRequestedLeaseBackend } from '../commands/connection-runtime.ts';
 import { buildConnectClientId } from './client-id.ts';
@@ -102,6 +102,7 @@ function browserStackProfileFields(options: {
     providerProject: options.flags.providerProject,
     providerBuild: options.flags.providerBuild,
     providerSessionName: options.flags.providerSessionName,
+    ...readCloudDeviceFeatureProfileFields(options.flags),
   };
 }
 

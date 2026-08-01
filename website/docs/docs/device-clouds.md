@@ -111,6 +111,31 @@ Optional labels:
 --provider-session-name "$GITHUB_JOB"
 ```
 
+Optional device features:
+
+```bash
+--provider-device-orientation portrait   # or landscape        (alias --device-orientation)
+--provider-geo-location US                                   # (alias --geo-location)
+--provider-timezone New_York                                 # (alias --timezone)
+--provider-language Fr                                       # (alias --language)
+--provider-locale Fr                                         # (alias --locale)
+--provider-network-profile 4g-lte-advanced-good              # (alias --network-profile)
+--provider-custom-network 1000                               # (alias --custom-network)
+--provider-no-resign-app                                     # iOS only
+```
+
+These become BrowserStack vendor capabilities inside `bstack:options` when the hosted session is
+created. Notes:
+
+- This sets the orientation the session *starts* in. It does not constrain activities launched later:
+  an activity that does not pin its own orientation — a Chrome Custom Tab hosting an OAuth page, for
+  example — follows the device's persistent rotation instead, and can still come up landscape. Use
+  `agent-device orientation portrait` once that activity is in the foreground to correct it.
+- `--provider-network-profile` and `--provider-custom-network` are mutually exclusive — pass one.
+- `--provider-no-resign-app` applies to iOS only, and is rejected on an Android session. BrowserStack
+  re-signs uploaded iOS apps with its own provisioning profile, which strips entitlements; opt out
+  when testing entitlement-dependent features such as push notifications.
+
 Full flow:
 
 ```bash

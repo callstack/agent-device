@@ -11,6 +11,10 @@ import {
   listAwsDeviceFarmCloudArtifacts,
 } from './aws-device-farm.ts';
 import {
+  buildBrowserStackDeviceFeatureCapabilities,
+  readBrowserStackDeviceFeatureFields,
+} from './browserstack-device-features.ts';
+import {
   BROWSERSTACK_APP_AUTOMATE_ENDPOINT,
   BROWSERSTACK_APP_UPLOAD_ENDPOINT,
   BROWSERSTACK_CAPABILITY_OVERRIDES,
@@ -120,6 +124,10 @@ export const CLOUD_WEBDRIVER_PROVIDER_DEFINITIONS: readonly CloudWebDriverProvid
               projectName: readFlag(request, 'providerProject'),
               buildName: readFlag(request, 'providerBuild') ?? lease.runId,
               sessionName: readFlag(request, 'providerSessionName') ?? lease.leaseId,
+              deviceFeatures: buildBrowserStackDeviceFeatureCapabilities(
+                readBrowserStackDeviceFeatureFields(request.flags),
+                platform,
+              ),
               configured: buildCloudWebDriverBaseCapabilities(platform, deviceName),
             }),
           };

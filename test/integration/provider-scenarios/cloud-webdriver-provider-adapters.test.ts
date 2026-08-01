@@ -74,6 +74,59 @@ test('BrowserStack adapter prepares App Automate capabilities and uploads instal
   });
 }, 15_000);
 
+test('BrowserStack adapter nests device-feature capabilities inside bstack:options', async () => {
+  await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
+    const lease = makeLease('browserstack');
+    const runtime = createBrowserStackWebDriverRuntime({
+      username: 'user',
+      accessKey: 'key',
+      endpoint: `${server.url}/wd/hub/`,
+      sessionDetailsEndpoint: `${server.url}/app-automate/sessions`,
+      platform: 'android',
+      deviceName: 'Google Pixel 8',
+      osVersion: '14.0',
+      app: 'bs://preuploaded',
+      projectName: 'agent-device',
+      buildName: 'build-1',
+      sessionName: 'session-1',
+      deviceFeatures: {
+        providerDeviceOrientation: 'portrait',
+        providerGeoLocation: 'US',
+        providerTimezone: 'New_York',
+        providerLanguage: 'Fr',
+        providerLocale: 'Fr',
+        providerNetworkProfile: '4g-lte-advanced-good',
+      },
+      // Carries its own vendor option: it must merge with the built ones, not replace the object.
+      webdriverCapabilities: { 'bstack:options': { networkLogs: true } },
+    });
+    try {
+      await runtime.leaseLifecycle.allocate?.(lease);
+    } finally {
+      await runtime.shutdown();
+    }
+
+    const session = server.calls.find((call) => call.path === '/wd/hub/session');
+    const alwaysMatch = (
+      session?.body as { capabilities?: { alwaysMatch?: Record<string, unknown> } } | undefined
+    )?.capabilities?.alwaysMatch;
+    assert.deepEqual(alwaysMatch?.['bstack:options'], {
+      projectName: 'agent-device',
+      buildName: 'build-1',
+      sessionName: 'session-1',
+      deviceOrientation: 'portrait',
+      geoLocation: 'US',
+      timezone: 'New_York',
+      language: 'Fr',
+      locale: 'Fr',
+      networkProfile: '4g-lte-advanced-good',
+      networkLogs: true,
+    });
+    // Vendor capabilities stay nested; only BrowserStack's legacy selectors sit at the top level.
+    assert.equal(alwaysMatch?.deviceOrientation, undefined);
+  });
+}, 15_000);
+
 test('cloud provider adapters declare command capabilities explicitly', () => {
   const browserStack = getBrowserStackWebDriverCapabilities('android');
   assert.equal(browserStack.operations.snapshot.support, 'partial');
