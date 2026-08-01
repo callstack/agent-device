@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
+  buildReplayTestArtifactSlug,
   materializeReplayTestAttemptArtifacts,
   prepareReplayTestAttemptArtifacts,
 } from '../session-test-artifacts.ts';
@@ -102,4 +103,8 @@ test('materializeReplayTestAttemptArtifacts writes failure manifest and copies l
   assert.match(resultText, /status: failed/);
   assert.match(resultText, /timeoutMode: cooperative/);
   assert.match(resultText, /copiedArtifacts: capture\.png, daemon\.log/);
+});
+
+test('artifact slugs remove leading and trailing separator runs', () => {
+  assert.equal(buildReplayTestArtifactSlug('---Replay Suite---'), 'replay-suite');
 });
