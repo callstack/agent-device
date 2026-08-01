@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { dedupeInheritedSnapshotLabels } from '../snapshot-label-dedup.ts';
-import { attachRefs, type RawSnapshotNode } from '../../kernel/snapshot.ts';
+import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 
 function nodes(raw: RawSnapshotNode[]) {
   return attachRefs(raw);

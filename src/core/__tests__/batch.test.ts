@@ -6,7 +6,7 @@ import {
   type BatchRequest,
   type DaemonBatchStep,
 } from '../batch.ts';
-import type { DaemonResponse, ResponseLevel } from '../../kernel/contracts.ts';
+import type { DaemonResponse, ResponseLevel } from '@agent-device/kernel/contracts';
 
 test('validateAndNormalizeBatchSteps rejects unknown top-level step fields', () => {
   assert.throws(

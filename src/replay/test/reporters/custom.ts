@@ -1,7 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { ReplayTestReporter, ReplayTestReporterFactory } from './types.ts';
 import type { ReplayTestReporterSpec } from './spec.ts';
 

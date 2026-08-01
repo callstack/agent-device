@@ -1,5 +1,5 @@
-import { isIosFamily, type DeviceInfo } from '../kernel/device.ts';
-import { AppError } from '../kernel/errors.ts';
+import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import type { ScreenshotResultData } from './screenshot-result.ts';
 import { readPngSize } from './png-size.ts';
 

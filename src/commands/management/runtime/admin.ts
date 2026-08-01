@@ -7,7 +7,7 @@ import type {
   BackendInstallSource,
 } from '../../../backend.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { successText } from '../../../utils/success-text.ts';
 import {
   toBackendResult,

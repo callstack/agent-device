@@ -28,6 +28,7 @@ vi.mock('../../../platforms/apple/os/macos/helper.ts', async (importOriginal) =>
   };
 });
 import { handleSessionObservabilityCommands } from '../session-observability.ts';
+import { ANDROID_AUDIO_CONTRACT_EVIDENCE } from './session-audio.coverage.ts';
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -203,7 +204,7 @@ test('audio probe starts host helper for iOS simulator audio', async () => {
   assert.match(String(response.data.notes[0]), /iOS simulator/);
 });
 
-test('audio probe starts host helper for Android emulator audio', async () => {
+test(ANDROID_AUDIO_CONTRACT_EVIDENCE.testName, async () => {
   const sessionStore = makeSessionStore('agent-device-session-audio-');
   sessionStore.set('android', makeAndroidSession('android'));
   mockHostAudioProbeStart({

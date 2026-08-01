@@ -1,5 +1,5 @@
 import type { SessionAction, SessionState } from '../types.ts';
-import type { ReplayDivergenceResume, ReplayRepairHint } from '../../replay/divergence.ts';
+import type { ReplayDivergenceResume, ReplayRepairHint } from '@agent-device/contracts/divergence';
 import { SessionStore } from '../session-store.ts';
 
 export function buildAndPersistReplayDivergenceResume(params: {
@@ -40,7 +40,7 @@ export function buildAndPersistReplayDivergenceResume(params: {
  * `failedIndex` would re-diverge on the step the agent already performed).
  * Every other repair hint (including a plain `action-failure`) resumes AT
  * `failedIndex` unchanged. This must agree with the text guidance rendered by
- * `formatReplayDivergenceReport` (`src/replay/divergence.ts`) — both are
+ * `formatReplayDivergenceReport` (`packages/contracts/src/replay-divergence.ts`) — both are
  * derived from the same computed `from` value.
  *
  * `failedIndex` is always a valid 1-based index into `actions` (both call

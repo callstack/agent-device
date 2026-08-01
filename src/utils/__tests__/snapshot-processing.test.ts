@@ -5,7 +5,7 @@ import {
   findNearestAncestor,
   findSnapshotAncestor,
 } from '../../snapshot/snapshot-processing.ts';
-import type { SnapshotNode } from '../../kernel/snapshot.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 
 test('findSnapshotAncestor walks non-contiguous parent indexes until resolver returns a value', () => {
   const nodes: SnapshotNode[] = [

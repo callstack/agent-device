@@ -1,19 +1,18 @@
+import { DEVICE_ROTATIONS } from '@agent-device/contracts/device';
+import { BACK_MODES, TV_REMOTE_BUTTONS } from '@agent-device/contracts/interaction';
 import { PUBLIC_COMMANDS } from '../command-catalog.ts';
-import { BACK_MODES } from '../contracts/back-mode.ts';
-import { DEVICE_ROTATIONS } from '../contracts/device-rotation.ts';
-import { TV_REMOTE_BUTTONS } from '../contracts/tv-remote.ts';
 import { isKeyboardAction } from '../utils/keyboard-actions.ts';
-import type { DaemonRequest, SessionAction } from './types.ts';
 import {
   compactSessionEventDetails as compactDetails,
-  readBoundedSessionEventString,
-  readRequestedScreenshotFileName,
   readSessionEventBoolean as readBoolean,
+  readBoundedSessionEventString,
   readSessionEventEnum as readEnum,
+  readRequestedScreenshotFileName,
   readSessionEventFileName,
   readSessionEventNumber,
   readSessionEventString,
 } from './session-event-request.ts';
+import type { DaemonRequest, SessionAction } from './types.ts';
 
 const SCROLL_DIRECTIONS = ['up', 'down', 'left', 'right'] as const;
 const SCROLL_EDGES = ['top', 'bottom'] as const;

@@ -260,7 +260,7 @@ test('open --relaunch on iOS simulator collapses into one terminate-running open
   );
 });
 
-test('open <app> <url> --relaunch on iOS simulator keeps close-first ordering', async () => {
+test('open <app> <url> --relaunch on iOS simulator delegates termination to the URL open', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-simulator-url-relaunch-session';
   sessionStore.set(sessionName, {
@@ -305,10 +305,8 @@ test('open <app> <url> --relaunch on iOS simulator keeps close-first ordering', 
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
-  // The URL dispatch path cannot carry the terminate, so the relaunch keeps
-  // the explicit close-then-open sequence.
-  expect(calls).toEqual(['close:com.example.app', 'open:com.example.app https://example.com/deal']);
-  expect(openContext?.terminateRunningApp).toBeUndefined();
+  expect(calls).toEqual(['open:com.example.app https://example.com/deal']);
+  expect(openContext?.terminateRunningApp).toBe(true);
 });
 
 test('open --relaunch --clear-app-state on iOS simulator keeps close-first ordering', async () => {

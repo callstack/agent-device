@@ -108,9 +108,15 @@ func sequenceHasSynthesizedCoordinateStep(_ steps: [SequenceStep]) -> Bool {
 }
 
 extension RunnerTests {
-  func synthesizedSequenceCoordinateContext(steps: [SequenceStep]) -> SynthesizedCoordinateContext? {
+  func synthesizedSequenceCoordinateContext(
+    steps: [SequenceStep],
+    app: XCUIApplication
+  ) -> SynthesizedCoordinateContext? {
     guard sequenceHasSynthesizedCoordinateStep(steps) else { return nil }
-    return synthesizedCoordinateContext(policy: synthesizedGesturePolicy(.synthesizedDrag))
+    return synthesizedCoordinateContext(
+      app: app,
+      policy: synthesizedGesturePolicy(.synthesizedDrag)
+    )
   }
 
   func logSynthesizedGesturePolicyDecision(

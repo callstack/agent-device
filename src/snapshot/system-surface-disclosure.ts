@@ -1,4 +1,4 @@
-import type { SnapshotState } from '../kernel/snapshot.ts';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
 
 /**
  * The one agent-facing explanation for an Android capture that faithfully shows an occluding

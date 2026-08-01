@@ -4,7 +4,7 @@ import path from 'node:path';
 import { once } from 'node:events';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 const MAX_ARTIFACT_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
 const TEMP_PREFIX = 'agent-device-artifact-';

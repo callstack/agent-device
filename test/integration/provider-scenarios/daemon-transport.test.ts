@@ -43,12 +43,21 @@ test('Provider-backed integration daemon socket transport frames requests and no
         command: 'session_list',
         positionals: [],
         meta: { requestId: 'req-socket-1' },
+        internal: {
+          observationOnly: true,
+          replayPlanStep: true,
+        },
       }),
       '{not-json}',
     ]);
 
     assert.equal(observedRequests.length, 1);
     assert.equal(observedRequests[0]?.meta?.requestId, 'req-socket-1');
+    assert.equal(
+      observedRequests[0]?.internal,
+      undefined,
+      'socket clients must not forge daemon-internal request capabilities',
+    );
     assert.deepEqual(responses[0], {
       ok: true,
       data: {

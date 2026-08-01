@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { AgentDeviceBackend, BackendSnapshotResult } from '../../../backend.ts';
-import type { SnapshotState } from '../../../kernel/snapshot.ts';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { createLocalArtifactAdapter } from '../../../io.ts';
 import {
   createAgentDevice,
@@ -9,7 +9,7 @@ import {
   localCommandPolicy,
 } from '../../../runtime.ts';
 import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
-import { ref, selector } from './selector-read.ts';
+import { ref, selector } from './selector-read-utils.ts';
 import { buildSettleTailEntries, NEVER_SETTLED_HINT } from './settle.ts';
 
 // #1101 --settle: quiet-window settle loop composition on the interaction

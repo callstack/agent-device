@@ -1,0 +1,20 @@
+# Fixture-backed Android catalog traversal. This is deterministic and intentionally retry-free.
+context platform=android kind=emulator timeout=120000
+
+env APP_TARGET="com.callstack.agentdevicelab"
+
+open "${APP_TARGET}" --relaunch
+wait "Agent Device Tester" 30000
+click "label=Catalog"
+wait "Catalog scroll: top" 5000
+swipe 220 700 220 380
+wait "Catalog scroll: down" 5000
+scroll bottom
+wait "Catalog scroll: bottom" 5000
+wait "Seasonal footer target" 5000
+swipe 220 380 220 700
+wait "Catalog scroll: up" 5000
+scroll top
+wait "Catalog scroll: top" 5000
+wait "Search, filter, scroll, favorite, and drill into detail without extra dependencies." 5000
+close

@@ -3,11 +3,11 @@ import {
   isMacOs,
   publicPlatformString,
   type DeviceInfo,
-} from '../../kernel/device.ts';
-import { AppError, normalizeError } from '../../kernel/errors.ts';
+} from '@agent-device/kernel/device';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { SessionState } from '../types.ts';
 import { appendDoctorCheck } from './session-doctor-output.ts';
-import type { DoctorCheck } from '../../contracts/doctor.ts';
+import type { DoctorCheck } from '@agent-device/contracts/observability';
 
 export async function appendAppChecks(
   checks: DoctorCheck[],

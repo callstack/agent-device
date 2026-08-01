@@ -1,4 +1,4 @@
-import { isIosFamily, type DeviceInfo } from '../../../../kernel/device.ts';
+import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import type { HostAudioProbeBackend } from '../../../audio-probe-backend.ts';
 import { startMacOsAudioProbeProcess } from './helper.ts';
 

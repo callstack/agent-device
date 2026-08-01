@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseReplayInput } from '../../compat/replay-input.ts';
-import { asAppError } from '../../kernel/errors.ts';
+import { asAppError } from '@agent-device/kernel/errors';
 import type {
   DaemonInvokeFn,
   DaemonRequest,
@@ -9,22 +9,16 @@ import type {
   SessionAction,
   SessionState,
 } from '../types.ts';
-import {
-  emitRequestProgress,
-  readReplayTestActionProgress,
-  type ReplayTestProgressEvent,
-} from '../../request/progress.ts';
 import { SessionStore } from '../session-store.ts';
 import { clearPendingRecordAndHealWatermark } from './session-replay-resume.ts';
 import { expandSessionPath } from '../session-paths.ts';
 import { buildReplayScriptPlatformFlags } from '../replay-device-selection.ts';
-import { applySaveScriptRetarget } from '../session-action-recorder.ts';
 import { computeReplayPlanDigest } from '../../replay/plan-digest.ts';
 import type { TargetAnnotationV1 } from '../../replay/target-identity.ts';
 import { errorResponse, noActiveSessionError } from './response.ts';
 import { invokeReplayAction } from './session-replay-action-runtime.ts';
 import { tryParseSelectorChain } from '../../selectors/index.ts';
-import type { ResponseLevel } from '../../kernel/contracts.ts';
+import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import {
   buildReplayVarScope,
   collectReplayShellEnv,
@@ -36,9 +30,14 @@ import {
 import {
   summarizeSnapshotTimingSamples,
   type SnapshotTimingSample,
-} from '../../contracts/snapshot-diagnostics.ts';
-import type { ReplayCommandResult } from '../../contracts/replay.ts';
-import type { ReplayDivergenceResume } from '../../replay/divergence.ts';
+} from '@agent-device/contracts/capture';
+import type { ReplayCommandResult } from '@agent-device/contracts/replay';
+import type { ReplayDivergenceResume } from '@agent-device/contracts/divergence';
+import {
+  isMaestroYamlPath,
+  maestroBackendRequiredMessage,
+  resolveReplayFormat,
+} from '../../replay/format.ts';
 import { isRecord } from '../../utils/parsing.ts';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import { withReplayFailureDiagnostics } from './session-replay-runtime-failure.ts';
@@ -56,10 +55,22 @@ import {
   type ReplayVerifiedTargetGuard,
 } from './session-replay-target-verification.ts';
 import { buildReplayBuiltinVars } from './session-replay-vars.ts';
+import { runTypedMaestroReplayFile } from './session-replay-maestro-runtime.ts';
+import type { ReplayTestAttemptStep, ReplayTestAttemptStepSink } from '@agent-device/replay-test';
+import { getRequestSignal } from '../../request/cancel.ts';
 import {
-  isTypedMaestroReplay,
-  runTypedMaestroReplayFile,
-} from './session-replay-maestro-runtime.ts';
+  NO_SCRIPT_PUBLICATION,
+  scriptTargetForce,
+  scriptTargetPath,
+  type SessionScriptPublicationState,
+} from '../session-script-publication-state.ts';
+import {
+  armRepairStep,
+  isUncommittedRepairSession,
+  markRepairTransactionComplete,
+  repairSessionBoundary,
+  resetRepairCompletionForRerun,
+} from '../session-replay-transaction.ts';
 
 /** Per-run invariants for a single replay step (ADR 0012 step 4 verify + dispatch + guard). */
 type ReplayStepContext = {
@@ -76,6 +87,7 @@ type ReplayStepContext = {
   actionTracePath: string | undefined;
   responseLevel: ResponseLevel | undefined;
   invoke: DaemonInvokeFn;
+  signal: AbortSignal | undefined;
 };
 
 /**
@@ -109,6 +121,7 @@ async function resolveReplayStepResponse(
     responseLevel: ctx.responseLevel,
     planActions: ctx.actions,
     planDigest: ctx.planDigest,
+    signal: ctx.signal,
   });
   if (!verification.verified) return verification.response;
   const guard = verification.guard;
@@ -178,6 +191,7 @@ async function convertIdentityRefusalResponse(params: {
     responseLevel: ctx.responseLevel,
     planActions: ctx.actions,
     planDigest: ctx.planDigest,
+    signal: ctx.signal,
   };
   if (params.guard && isReplayTargetGuardMismatchResponse(response)) {
     return await buildReplayTargetGuardMismatchResponse({ ...mismatchParams, guard: params.guard });
@@ -194,9 +208,15 @@ export async function runReplayScriptFile(params: {
   logPath: string;
   sessionStore: SessionStore;
   tracePath?: string;
+  /**
+   * Per-attempt step sink supplied by the replay-test scheduler through its host (#1478 P3).
+   * Threaded alongside `tracePath` rather than read from request-global storage, so a direct
+   * `replay` simply has no sink and emits nothing.
+   */
+  onStep?: ReplayTestAttemptStepSink;
   invoke: DaemonInvokeFn;
 }): Promise<DaemonResponse> {
-  const { req, sessionName, logPath, sessionStore, tracePath, invoke } = params;
+  const { req, sessionName, logPath, sessionStore, tracePath, onStep, invoke } = params;
   const filePath = req.positionals?.[0];
   if (!filePath) {
     return errorResponse('INVALID_ARGS', 'replay requires a path');
@@ -207,8 +227,18 @@ export async function runReplayScriptFile(params: {
   const artifactPaths = new Set<string>();
   try {
     resolved = SessionStore.expandHome(filePath, req.meta?.cwd);
-    const typedResponse = await runTypedReplayIfNeeded({ ...params, resolved });
-    if (typedResponse) return typedResponse;
+    if (isMaestroYamlPath(resolved) && req.flags?.replayBackend !== 'maestro') {
+      return errorResponse('INVALID_ARGS', maestroBackendRequiredMessage('replay', filePath));
+    }
+    if (resolveReplayFormat(resolved, req.flags?.replayBackend) === 'maestro') {
+      if (repairSessionBoundary(sessionStore.get(sessionName)) !== undefined) {
+        return errorResponse(
+          'INVALID_ARGS',
+          'This session has an active .ad --save-script repair run; finish it with replay --from or close before running Maestro YAML.',
+        );
+      }
+      return await runTypedMaestroReplayFile(params);
+    }
     const planPreparation = prepareReplayPlan({
       req,
       sessionName,
@@ -252,6 +282,7 @@ export async function runReplayScriptFile(params: {
       actionTracePath,
       responseLevel: req.meta?.responseLevel,
       invoke,
+      signal: getRequestSignal(req.meta?.requestId),
     };
     const failure = await executeReplayActions({
       req,
@@ -268,6 +299,7 @@ export async function runReplayScriptFile(params: {
       stepContext,
       artifactPaths,
       snapshotDiagnosticSamples,
+      onStep,
       armSaveScript: sessionPreparation.armSaveScript,
     });
     if (failure) return failure;
@@ -306,6 +338,7 @@ type ReplayActionExecution = {
   stepContext: ReplayStepContext;
   artifactPaths: Set<string>;
   snapshotDiagnosticSamples: SnapshotTimingSample[];
+  onStep: ReplayTestAttemptStepSink | undefined;
   armSaveScript: () => void;
 };
 
@@ -315,12 +348,12 @@ async function executeReplayActions(
   const {
     sessionName,
     sessionStore,
-    resolved,
     actions,
     entryIndex,
     stepContext,
     artifactPaths,
     snapshotDiagnosticSamples,
+    onStep,
     armSaveScript,
   } = params;
   for (let index = entryIndex; index < actions.length; index += 1) {
@@ -340,7 +373,7 @@ async function executeReplayActions(
     ) {
       continue;
     }
-    emitReplayTestActionProgress(resolved, index, actions.length, action);
+    onStep?.(replayActionStep(index, actions.length, action));
     const sampleStart = readSessionSnapshotSampleCount(sessionStore, sessionName);
     const response = await resolveReplayStepResponse(stepContext, action, index, [
       ...artifactPaths,
@@ -415,8 +448,8 @@ function completeReplayRun(params: {
   } = params;
   armSaveScript();
   const completedSession = sessionStore.get(sessionName);
-  if (completedSession?.saveScriptBoundary !== undefined) {
-    completedSession.saveScriptComplete = true;
+  if (completedSession && repairSessionBoundary(completedSession) !== undefined) {
+    markRepairTransactionComplete(completedSession);
     sessionStore.set(sessionName, completedSession);
   }
   const replayedCount = actions.length - entryIndex;
@@ -435,42 +468,25 @@ function completeReplayRun(params: {
   };
 }
 
-function emitReplayTestActionProgress(
-  file: string,
+function replayActionStep(
   actionIndex: number,
   actionTotal: number,
   action: SessionAction,
-): void {
-  const progress = readReplayTestActionProgress();
-  if (!progress) return;
-  emitRequestProgress({
-    type: 'replay-test',
-    ...progress,
-    file: progress.file || file,
-    status: 'progress',
-    stepIndex: actionIndex + 1,
-    stepTotal: actionTotal,
-    ...formatReplayTestActionProgress(action),
-  });
-}
-
-function formatReplayTestActionProgress(
-  action: SessionAction,
-): Pick<ReplayTestProgressEvent, 'stepCommand' | 'stepValue'> {
+): ReplayTestAttemptStep {
   return {
-    stepCommand: action.command,
-    ...formatReplayTestProgressValue(action),
+    index: actionIndex + 1,
+    total: actionTotal,
+    command: action.command,
+    ...replayActionStepValue(action),
   };
 }
 
-function formatReplayTestProgressValue(
-  action: SessionAction,
-): Pick<ReplayTestProgressEvent, 'stepValue'> {
+function replayActionStepValue(action: SessionAction): Pick<ReplayTestAttemptStep, 'value'> {
   const positionals = action.positionals ?? [];
   const selectorValue = readSelectorDisplayValue(positionals[0]);
-  if (selectorValue) return { stepValue: selectorValue };
+  if (selectorValue) return { value: selectorValue };
   if (positionals.length === 0) return {};
-  return { stepValue: positionals.join(' ') };
+  return { value: positionals.join(' ') };
 }
 
 function readSelectorDisplayValue(selector: string | undefined): string | undefined {
@@ -504,25 +520,6 @@ type PreparedReplayPlan = {
 };
 
 type ParsedReplayInput = ReturnType<typeof parseReplayInput>;
-
-async function runTypedReplayIfNeeded(params: {
-  req: DaemonRequest;
-  sessionName: string;
-  logPath: string;
-  sessionStore: SessionStore;
-  tracePath?: string;
-  invoke: DaemonInvokeFn;
-  resolved: string;
-}): Promise<DaemonResponse | undefined> {
-  if (!isTypedMaestroReplay(params.req, params.resolved)) return undefined;
-  if (params.sessionStore.get(params.sessionName)?.saveScriptBoundary !== undefined) {
-    return errorResponse(
-      'INVALID_ARGS',
-      'This session has an active .ad --save-script repair run; finish it with replay --from or close before running Maestro YAML.',
-    );
-  }
-  return await runTypedMaestroReplayFile(params);
-}
 
 function prepareReplayPlan(params: {
   req: DaemonRequest;
@@ -653,6 +650,32 @@ function validateReplaySessionEntry(params: {
   return undefined;
 }
 
+/**
+ * Rejects arming a repair over an ordinary authoring recording (R2's disjointness) and runs the
+ * arm-time EEXIST preflight against the target this request resolves to.
+ */
+function rejectSaveScriptArming(params: {
+  saveScript: boolean | string | undefined;
+  force: boolean | undefined;
+  preRunState: SessionScriptPublicationState;
+  sourcePath: string;
+}): DaemonResponse | undefined {
+  const { saveScript, force, preRunState, sourcePath } = params;
+  if (saveScript && preRunState.kind === 'authoring') {
+    return errorResponse(
+      'INVALID_ARGS',
+      `replay --save-script cannot re-arm an ordinary recording in terminal/active state ${preRunState.status}. Close this session and use a fresh one for repair authoring.`,
+    );
+  }
+  return preflightSaveScriptTarget({
+    saveScript,
+    liveForce: force,
+    persistedForce: scriptTargetForce(preRunState) || undefined,
+    sourcePath,
+    existingSaveScriptPath: scriptTargetPath(preRunState),
+  });
+}
+
 function prepareSaveScriptSession(params: {
   req: DaemonRequest;
   sessionStore: SessionStore;
@@ -662,30 +685,17 @@ function prepareSaveScriptSession(params: {
   const { req, sessionStore, sessionName, sourcePath } = params;
   const preRunSession = sessionStore.get(sessionName);
   const { saveScript, force } = req.flags ?? {};
-  const {
-    saveScriptForce: persistedForce,
-    saveScriptPath: existingSaveScriptPath,
-    saveScriptBoundary,
-  } = preRunSession ?? {};
-  if (saveScript && preRunSession?.scriptRecordingState !== undefined) {
-    return {
-      ok: false,
-      response: errorResponse(
-        'INVALID_ARGS',
-        `replay --save-script cannot re-arm an ordinary recording in terminal/active state ${preRunSession.scriptRecordingState}. Close this session and use a fresh one for repair authoring.`,
-      ),
-    };
-  }
-  const saveScriptPreflight = preflightSaveScriptTarget({
+  const rejection = rejectSaveScriptArming({
     saveScript,
-    liveForce: force,
-    persistedForce,
+    force,
+    preRunState: preRunSession?.scriptPublication ?? NO_SCRIPT_PUBLICATION,
     sourcePath,
-    existingSaveScriptPath,
   });
-  if (saveScriptPreflight) return { ok: false, response: saveScriptPreflight };
+  if (rejection) return { ok: false, response: rejection };
 
-  if (preRunSession && saveScriptBoundary !== undefined) preRunSession.saveScriptComplete = false;
+  if (preRunSession && repairSessionBoundary(preRunSession) !== undefined) {
+    resetRepairCompletionForRerun(preRunSession);
+  }
   return {
     ok: true,
     armSaveScript: createReplaySaveScriptArmer({
@@ -732,7 +742,7 @@ function preflightReplayAgainstActiveRepair(params: {
 }): DaemonResponse | undefined {
   const { entryIndex, sessionStore, sessionName } = params;
   if (entryIndex > 0) return undefined;
-  if (sessionStore.get(sessionName)?.saveScriptBoundary === undefined) return undefined;
+  if (repairSessionBoundary(sessionStore.get(sessionName)) === undefined) return undefined;
   return errorResponse(
     'INVALID_ARGS',
     'This session has an active --save-script repair run; continue it with replay --from <n> --plan-digest <sha256>, or finish with close, before starting a fresh full replay.',
@@ -751,15 +761,15 @@ function preflightReplayAgainstActiveRepair(params: {
  * sibling) WITHOUT needing the session to exist yet, so it runs before step 1
  * dispatches even when that step is the `open` that creates the session.
  * READ-ONLY: it never mutates the session (it runs before
- * `applySaveScriptRetarget`).
+ * `resolveScriptTarget`).
  *
- * The effective-force decision MATCHES `applySaveScriptRetarget`'s per-target
+ * The effective-force decision MATCHES `resolveScriptTarget`'s per-target
  * contract, computed against the target THIS request resolves to: a live
- * `--force`/`--overwrite` always bypasses; a PERSISTED `saveScriptForce`
+ * `--force`/`--overwrite` always bypasses; a PERSISTED per-target grant
  * bypasses ONLY when this request writes to the SAME target it was granted for
  * (`targetPath === existingSaveScriptPath`). An explicit RETARGET to a
  * different path without a live force does NOT bypass here — because
- * `applySaveScriptRetarget` will CLEAR that persisted force for the new target
+ * `resolveScriptTarget` will CLEAR that persisted force for the new target
  * before publication anyway, so letting the run execute (mutating the session
  * mid-flight) only to refuse the existing target at the end is exactly what
  * this preflight exists to prevent. A no-op when `--save-script` was not passed.
@@ -810,7 +820,7 @@ function isRepairArmedTerminalClose(params: {
   const { action, index, totalActions, sessionStore, sessionName } = params;
   if (action.command !== 'close') return false;
   if (index !== totalActions - 1) return false;
-  return sessionStore.get(sessionName)?.saveScriptBoundary !== undefined;
+  return repairSessionBoundary(sessionStore.get(sessionName)) !== undefined;
 }
 
 /**
@@ -856,33 +866,13 @@ function armReplaySaveScriptStep(params: {
   const { sessionStore, sessionName, saveScript, force, sourcePath, firstArm } = params;
   const session = sessionStore.get(sessionName);
   if (!session) return;
-  session.recordSession = true;
-  if (typeof saveScript === 'string') {
-    // An EXPLICIT `--save-script=<path>` clears the defaulted marker
-    // (invariant: the marker is set iff the current `saveScriptPath` was
-    // defaulted, not caller-directed). This no longer affects the publish
-    // decision either way — the writer's refuse-on-exist guard is uniform
-    // (`publishHealedScriptAtomically`) and refuses ANY pre-existing target,
-    // an explicit caller-directed path included, exactly like the default
-    // healed sibling.
-    applySaveScriptRetarget(session, expandSessionPath(saveScript), force);
-    session.saveScriptDefaultedHealedPath = false;
-  } else if (session.saveScriptPath === undefined) {
-    session.saveScriptPath = healedScriptSiblingPath(sourcePath);
-    session.saveScriptDefaultedHealedPath = true;
-  }
-  // #1258: force is per-target — a LIVE `--force`/`--overwrite` persists onto
-  // the session (`saveScriptForce`) so a LATER `--from` continuation leg or an
-  // unattended auto-commit teardown (no live request) still honors it. Set
-  // AFTER `applySaveScriptRetarget` so a live flag always wins over a
-  // retarget-clear.
-  if (force) session.saveScriptForce = true;
-  if (session.saveScriptBoundary === undefined) {
-    session.saveScriptBoundary = firstArm ? session.actions.length : 0;
-  }
-  // ADR 0012 decision 6, R7 (C5a): stash the original replay input so a reap
-  // tombstone can hand back an actionable `replay <path> --save-script` re-run.
-  if (session.repairSourcePath === undefined) session.repairSourcePath = sourcePath;
+  armRepairStep(session, {
+    saveScript,
+    force,
+    sourcePath,
+    healedSiblingPath: healedScriptSiblingPath(sourcePath),
+    firstArm,
+  });
   sessionStore.set(sessionName, session);
 }
 
@@ -907,7 +897,7 @@ function markRepairSessionHeldIfArmed(params: {
   // A `replay --from` continuation (which does not repeat `--save-script`, per
   // R2) is therefore still held on divergence and stays in the transaction.
   const session = sessionStore.get(sessionName);
-  if (session?.saveScriptBoundary === undefined || session.saveScriptCommitted) return response;
+  if (!isUncommittedRepairSession(session)) return response;
   const resume = readDivergenceResumeRecord(response);
   if (resume) resume.repairSessionHeld = true;
   return response;

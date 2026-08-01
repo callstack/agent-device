@@ -1,5 +1,5 @@
 import type { CommandFlags } from '../../core/dispatch.ts';
-import type { SnapshotState } from '../../kernel/snapshot.ts';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type { DaemonCommandContext } from '../context.ts';
 import { recordTouchVisualizationEvent } from '../recording-gestures.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';

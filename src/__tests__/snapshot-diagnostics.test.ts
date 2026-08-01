@@ -3,7 +3,7 @@ import {
   mergeSnapshotDiagnostics,
   recordSnapshotTiming,
   summarizeSnapshotDiagnostics,
-} from '../contracts/snapshot-diagnostics.ts';
+} from '@agent-device/contracts/capture';
 
 test('records session snapshot timing stats', () => {
   const session = {};

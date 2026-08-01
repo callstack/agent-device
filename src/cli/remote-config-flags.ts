@@ -1,4 +1,4 @@
-import type { CliFlags } from '../contracts/cli-flags.ts';
+import type { CliFlags } from '@agent-device/contracts/command';
 import {
   REMOTE_CONFIG_FIELD_SPECS,
   type RemoteConfigProfile,

@@ -4,7 +4,7 @@ import {
   deviceFieldsFromPublicPlatform,
   matchesPlatformSelector,
   type PlatformSelector,
-} from '../kernel/device.ts';
+} from '@agent-device/kernel/device';
 import { classifyOwnerLiveness, type OwnerLiveness } from '../utils/owner-identity.ts';
 import { resolveDeviceClaimRoot } from './device-claim-paths.ts';
 import type { DeviceClaim } from './device-claims.ts';

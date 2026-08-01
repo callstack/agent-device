@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { applyRuntimeHintsToApp, clearRuntimeHintsFromApp } from '../runtime-hints.ts';
 import { applyDeviceDefaultMetroHost } from '../handlers/session-runtime.ts';
 import { resolveRuntimeTransportHints } from '../../utils/runtime-transport.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 
 const LEGACY_PREFS_PATH = 'shared_prefs/ReactNativeDevPrefs.xml';
 
@@ -318,6 +318,28 @@ test('port-only hint on an Android emulator defaults host to 10.0.2.2 and writes
     const defaultPayload = await readWrittenPrefsFile(defaultPrefsPath(packageName));
     assert.ok(defaultPayload, 'expected a write to the default RN preferences file');
     assert.match(defaultPayload ?? '', /<string name="debug_http_host">10\.0\.2\.2:8084<\/string>/);
+  });
+});
+
+test('Android runtime hints escape XML text and quoted attribute delimiters', async () => {
+  await withMockedAdb(async ({ device, readWrittenPrefsFile }) => {
+    const packageName = 'com.example.demo';
+    await applyRuntimeHintsToApp({
+      device,
+      appId: packageName,
+      runtime: {
+        platform: 'android',
+        metroHost: `host&<>"'`,
+        metroPort: 8084,
+      },
+    });
+
+    const payload = await readWrittenPrefsFile(defaultPrefsPath(packageName));
+    assert.ok(payload, 'expected a write to the default RN preferences file');
+    assert.match(
+      payload ?? '',
+      /<string name="debug_http_host">host&amp;&lt;&gt;&quot;&apos;:8084<\/string>/,
+    );
   });
 });
 

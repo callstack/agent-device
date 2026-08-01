@@ -19,13 +19,13 @@ vi.mock('./agent-browser-lifecycle.ts', async (importOriginal) => {
 import { createAgentBrowserWebProvider } from './agent-browser-provider.ts';
 import type { WebSnapshotResult } from './provider.ts';
 import { withCommandExecutorOverride, type ExecResult } from '../../utils/exec.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   buildSelectorChainForNode,
   parseSelectorChain,
   resolveSelectorChain,
 } from '../../selectors/index.ts';
-import { attachRefs } from '../../kernel/snapshot.ts';
+import { attachRefs } from '@agent-device/kernel/snapshot';
 import { installFakeManagedAgentBrowser } from './__tests__/test-utils.ts';
 
 type AgentBrowserCall = {
@@ -161,6 +161,26 @@ test('agent-browser provider normalizes snapshot refs, labels, values, and paren
     assert.equal(calls.length, 1);
     assertNormalizedSnapshot(snapshot);
     assertRoleSelectorResolves(snapshot);
+  });
+});
+
+test('agent-browser provider passes snapshot cancellation to the CLI process', async () => {
+  await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
+    const controller = new AbortController();
+    let receivedSignal: AbortSignal | undefined;
+
+    await withCommandExecutorOverride(
+      async (_cmd, _args, options) => {
+        receivedSignal = options?.signal;
+        return jsonResult({
+          success: true,
+          data: { nodes: [], refs: [], truncated: false },
+        });
+      },
+      async () => await provider.snapshot({ signal: controller.signal }),
+    );
+
+    assert.equal(receivedSignal, controller.signal);
   });
 });
 

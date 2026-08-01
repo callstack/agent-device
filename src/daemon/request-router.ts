@@ -2,12 +2,17 @@ import { withTargetDeviceResolutionScope } from '../core/dispatch-resolve.ts';
 import type {
   DeviceInventoryProvider,
   LeaseLifecycleProvider,
-} from '../contracts/device-provider.ts';
-import { AppError, normalizeError, retriableForErrorCode } from '../kernel/errors.ts';
+} from '@agent-device/contracts/device';
+import {
+  AppError,
+  normalizeError,
+  retriableForErrorCode,
+  type DaemonError,
+} from '@agent-device/kernel/errors';
 import { supportedPlatformsForCommand } from '../core/capabilities.ts';
 import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
-import type { DaemonArtifactType, DaemonError, ResponseCost } from '../kernel/contracts.ts';
-import type { CloudArtifactProvider } from '../contracts/cloud-artifacts.ts';
+import type { DaemonArtifactType, ResponseCost } from '@agent-device/kernel/contracts';
+import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, DaemonResponseData } from './types.ts';
 import { RESPONSE_VIEWS } from './response-views.ts';
 import { SessionStore } from './session-store.ts';
@@ -44,6 +49,7 @@ import {
   type RequestExecutionScope,
 } from './request-execution-scope.ts';
 import { buildRequestFinishedEvent, shouldRecordEventForRequest } from './session-event-log.ts';
+import { unsupportedSaveScriptFlagResponse } from './request-save-script-policy.ts';
 import { canRunReplayScopedAction } from './daemon-command-registry.ts';
 import { createAgentBrowserWebProvider } from '../platforms/web/agent-browser-provider.ts';
 import { openWebSessionNames } from './web-session-names.ts';
@@ -143,6 +149,10 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     registerParameterizedFillDiagnosticValue(req);
     const invalidRecordingFlags = recordingFlagsResponse(req);
     if (invalidRecordingFlags) return invalidRecordingFlags;
+    // #1478: raw `flags.saveScript` on a non-owner command never reaches
+    // admission, device work, or a handler that could arm publication.
+    const unsupportedSaveScript = unsupportedSaveScriptFlagResponse(req);
+    if (unsupportedSaveScript) return unsupportedSaveScript;
 
     let scope: RequestExecutionScope | undefined;
     try {
@@ -258,7 +268,17 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
 
       let childScope: RequestExecutionScope | undefined;
       try {
-        childScope = await createRequestExecutionScope({ req, sessionStore, leaseRegistry });
+        const scopedReq = bindReplayDeviceExecutionLock(req, parentScope);
+        childScope = await createRequestExecutionScope({
+          req: scopedReq,
+          sessionStore,
+          leaseRegistry,
+        });
+        // The outer replay keeps its stable session lock plus the device lock
+        // from the first device binding through response projection and ref
+        // finalization. A same-session replay action reuses that admitted scope
+        // instead of reacquiring the non-reentrant locks. Nested changes remain
+        // visible to capture lineage through snapshot/frame/runtime/store state.
         return childScope.sessionName === parentScope.sessionName
           ? await executeRequestScope(childScope, providerScope)
           : await executeRequestScope(childScope);
@@ -349,6 +369,24 @@ async function dispatchGenericForLockedScope(params: {
     contextFromFlags: lockedScope.contextFromFlags,
   });
   return lockedScope.finalize(dispatchResponse);
+}
+
+function bindReplayDeviceExecutionLock(
+  req: DaemonRequest,
+  parentScope: LockedRequestScope,
+): DaemonRequest {
+  if (req.command !== 'open') return req;
+  const retainDeviceExecutionLock = req.internal?.retainDeviceExecutionLock;
+  return {
+    ...req,
+    internal: {
+      ...req.internal,
+      retainDeviceExecutionLock: async (deviceId) => {
+        await parentScope.retainDeviceExecutionLock(deviceId);
+        await retainDeviceExecutionLock?.(deviceId);
+      },
+    },
+  };
 }
 
 function canRunReplayActionInCurrentScope(

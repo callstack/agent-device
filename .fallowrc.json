@@ -2,6 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
   "entry": [
     "tsdown.config.ts",
+    "vitest.mutation.config.ts",
     "src/sdk/index.ts",
     "src/sdk/io.ts",
     "src/sdk/artifacts.ts",
@@ -18,13 +19,22 @@
     "src/utils/png-worker.ts",
     "scripts/patch-xcuitest-runner-icon.ts",
     "scripts/runner-request-count/run.ts",
+    "scripts/lib/contention-retry-run.ts",
+    "scripts/vitest-runner-timeout-setup.ts",
+    "test/contention-retry-fixtures/vitest.fixture.config.ts",
+    "test/contention-retry-fixtures/timeout-provenance.fixture.ts",
     "src/utils/update-check-entry.ts",
+    "examples/sdk/client-session.ts",
+    "examples/sdk/metro-runtime.ts",
+    "examples/sdk/contracts-result.ts",
+    "examples/sdk/batch-orchestration.ts",
     "test/scripts/metro-prepare-packaged-smoke.mjs",
     "test/integration/*.test.ts",
     "website/docs/404.mdx",
     "website/rspress.config.ts"
   ],
   "ignorePatterns": [
+    "packages/**",
     "examples/test-app/**",
     "scripts/perf/**",
     "scripts/layering/**",
@@ -33,13 +43,16 @@
     "scripts/write-xcuitest-cache-metadata.mjs",
     "scripts/help-conformance-sample-outputs.d.mts"
   ],
-  "ignoreDependencies": ["@theme"],
+  "ignoreDependencies": [
+    "@theme",
+    // @agent-device/maestro owns the source import, while the published root
+    // build externalizes yaml and retains runtime imports in packed chunks.
+    "yaml",
+    // @agent-device/provider-limrun owns the source import, while the published
+    // root build externalizes @limrun/api and retains runtime imports in packed chunks.
+    "@limrun/api"
+  ],
   "ignoreExports": [
-    {
-      "comment": "Authoritative supported-command list; sole consumer is the conformance oracle (scripts/maestro-conformance, an ignored tooling tree).",
-      "file": "src/compat/maestro/program-ir-command-parser.ts",
-      "exports": ["SUPPORTED_MAESTRO_COMMAND_NAMES"]
-    },
     {
       "comment": "Daemon route handlers are reached only through the dynamic `import()` table in request-handler-chain.ts, which --production analysis cannot follow to a consumer.",
       "file": "src/daemon/handlers/{lease,session,snapshot,react-native,record-trace,find,interaction}.ts",
@@ -60,7 +73,7 @@
     },
     {
       "comment": "Tool config default exports, loaded by the tool rather than imported.",
-      "file": "{tsdown.config.ts,vitest.mutation.config.ts,website/rspress.config.ts,test/skillgym/skillgym.config.ts,test/skillgym/suites/*.ts}",
+      "file": "{tsdown.config.ts,vitest.mutation.config.ts,website/rspress.config.ts}",
       "exports": ["default"]
     },
     {
@@ -74,6 +87,16 @@
       ]
     },
     {
+      "comment": "Contention retry lane (#1419): the reporter default is loaded by Vitest from a `--reporter=<path>` string, and SUBPROCESS_STUB_TESTS is consumed by vitest.config.ts \u2014 a tool config outside --production analysis.",
+      "file": "scripts/lib/{contention-retry.ts,contention-retry-reporter.ts}",
+      "exports": ["default", "SUBPROCESS_STUB_TESTS"]
+    },
+    {
+      "comment": "Contention retry gate fixtures (#1419): the config default is loaded by the child `vitest run --config` the gate test spawns.",
+      "file": "test/contention-retry-fixtures/vitest.fixture.config.ts",
+      "exports": ["default"]
+    },
+    {
       "comment": "Mutation-lane seam: readTestScope is consumed by vitest.mutation.config.ts, a tool config outside --production analysis.",
       "file": "scripts/mutation/test-scope.ts",
       "exports": ["readTestScope"]
@@ -84,7 +107,7 @@
       "exports": ["ownedTestFiles"]
     },
     {
-      "comment": "Help-benchmark conformance seams: helpTopicIds feeds the topic-coverage gate and PRIVATE_AX_RECOVERY_SAMPLE feeds the skillgym suite; both consumers are test-tree files outside --production analysis.",
+      "comment": "Help-benchmark conformance seams: helpTopicIds feeds the topic-coverage gate and PRIVATE_AX_RECOVERY_SAMPLE feeds the bench sample producers; both consumers are test-tree files outside --production analysis.",
       "file": "{src/cli/parser/cli-help.ts,scripts/help-conformance-sample-outputs.mjs}",
       "exports": ["helpTopicIds", "PRIVATE_AX_RECOVERY_SAMPLE"]
     },

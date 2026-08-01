@@ -1,7 +1,7 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { AppCloseOptions, AppOpenOptions } from '../../contracts/client-app.ts';
-import { DEFAULT_APPS_FILTER } from '../../contracts/app-inventory.ts';
-import { SESSION_SURFACES } from '../../contracts/session-surface.ts';
+import type { AppCloseOptions, AppOpenOptions } from '@agent-device/contracts/client';
+import { DEFAULT_APPS_FILTER } from '@agent-device/contracts/device';
+import { SESSION_SURFACES } from '@agent-device/contracts/session';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { assertResolvedAppsFilter } from './app-inventory-contract.ts';
 import {

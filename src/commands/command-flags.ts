@@ -1,9 +1,9 @@
-import { screenshotFlagsFromOptions } from '../contracts/screenshot.ts';
+import { screenshotFlagsFromOptions } from '@agent-device/contracts/capture';
 import type { CommandFlags } from '../core/dispatch-context.ts';
 import { leaseScopeFromOptions, leaseScopeToCommandFlags } from '../core/lease-scope.ts';
 import { stripUndefined } from '../utils/parsing.ts';
 import { getFlagDefinitions } from './cli-grammar/flag-registry.ts';
-import type { InternalRequestOptions } from '../contracts/client-request.ts';
+import type { InternalRequestOptions } from '@agent-device/contracts/client';
 import type { CommandMetadata } from './command-contract.ts';
 
 const CLI_FLAG_KEYS: ReadonlySet<string> = new Set(

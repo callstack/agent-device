@@ -11,7 +11,7 @@ vi.mock('../../../utils/exec.ts', async (importOriginal) => {
 const execActual =
   await vi.importActual<typeof import('../../../utils/exec.ts')>('../../../utils/exec.ts');
 
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { runCmdDetached, withCommandExecutorOverride } from '../../../utils/exec.ts';
 import type { CommandExecutorOverride, ExecResult } from '../../../utils/exec.ts';
 import {

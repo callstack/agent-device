@@ -2,8 +2,8 @@ import {
   ANDROID_SYSTEM_CHROME_PACKAGE,
   hasAndroidSystemChromeProvenance,
   isAndroidSystemChromeWindowResourceId,
-} from '../contracts/android-system-chrome.ts';
-import type { SnapshotNode } from '../kernel/snapshot.ts';
+} from '@agent-device/contracts/platform';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isAndroidInputMethodSnapshotNode } from '../snapshot/android-input-method-overlays.ts';
 import { normalizeType } from '../utils/text-surface.ts';
 

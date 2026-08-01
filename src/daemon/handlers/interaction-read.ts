@@ -1,9 +1,9 @@
-import { isIosFamily } from '../../kernel/device.ts';
+import { isIosFamily } from '@agent-device/kernel/device';
 import { dispatchCommand, type CommandFlags } from '../../core/dispatch.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { extractNodeReadText } from '../../snapshot/snapshot-processing.ts';
 import type { SessionState } from '../types.ts';
-import type { SnapshotNode } from '../../kernel/snapshot.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { prefersValueForReadableText } from '../../utils/text-surface.ts';
 import type { ContextFromFlags } from './interaction-common.ts';
 import { resolveRectCenter } from './interaction-targeting.ts';

@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import type { ReplaySuiteResult } from '../../../contracts/replay.ts';
+import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import { createDefaultReplayTestReporter } from '../reporters/default.ts';
 import type { ReplayTestReporterContext } from '../reporters/types.ts';
 

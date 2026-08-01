@@ -1,27 +1,29 @@
-import { isIosFamily, publicPlatformString } from '../kernel/device.ts';
+import {
+  snapshotCaptureAnnotationsFrom,
+  summarizeSnapshotDiagnostics,
+} from '@agent-device/contracts/capture';
+import { stripAndroidSystemChromeProvenance } from '@agent-device/contracts/platform';
+import { isIosFamily, publicPlatformString } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import type { AgentDeviceBackend, BackendSnapshotResult } from '../backend.ts';
 import type { CommandSessionRecord } from '../runtime.ts';
 import { createAgentDevice } from '../runtime.ts';
-import { AppError } from '../kernel/errors.ts';
 import type { SnapshotDiffSummary } from '../snapshot/snapshot-diff.ts';
-import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } from './types.ts';
-import { SessionStore } from './session-store.ts';
-import { isInteractiveObservation } from './session-action-recorder.ts';
+import { maybeBuildAndroidSnapshotTimeoutFailure } from './android-snapshot-timeout-evidence.ts';
 import { errorResponse, requireCommandSupported } from './handlers/response.ts';
 import { captureSnapshot, resolveSnapshotScope } from './handlers/snapshot-capture.ts';
-import { snapshotCaptureAnnotationsFrom } from '../contracts/snapshot-capture-annotations.ts';
 import {
   buildSnapshotSession,
   resolveSessionDevice,
   withSessionlessRunnerCleanup,
 } from './handlers/snapshot-session.ts';
+import { activateCompleteRefFrame } from './ref-frame.ts';
 import { createDaemonRuntimePolicy } from './runtime-policy.ts';
 import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
-import { maybeBuildAndroidSnapshotTimeoutFailure } from './android-snapshot-timeout-evidence.ts';
-import { summarizeSnapshotDiagnostics } from '../contracts/snapshot-diagnostics.ts';
+import { isInteractiveObservation } from './session-action-recorder.ts';
 import { setSnapshotLineage } from './session-snapshot.ts';
-import { activateCompleteRefFrame } from './ref-frame.ts';
-import { stripAndroidSystemChromeProvenance } from '../contracts/android-system-chrome.ts';
+import { SessionStore } from './session-store.ts';
+import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } from './types.ts';
 
 export async function dispatchSnapshotViaRuntime(params: {
   req: DaemonRequest;
@@ -47,7 +49,7 @@ export async function dispatchSnapshotViaRuntime(params: {
       // the node tree itself stays plain `e12` refs (token economy). The
       // capture above already stored the next session via setRecord, so the
       // store holds the generation these refs were minted from.
-      const refsGeneration = params.sessionStore.get(sessionName)?.snapshotGeneration;
+      const refsGeneration = publishedSnapshotGeneration(req, params.sessionStore.get(sessionName));
       // ADR 0014: retain provenance in the immutable operational/ref-frame tree;
       // project only the published copy so settle and replay keep the full evidence.
       const publicNodes = stripAndroidSystemChromeProvenance(result.nodes);
@@ -63,6 +65,13 @@ export async function dispatchSnapshotViaRuntime(params: {
       };
     },
   });
+}
+
+function publishedSnapshotGeneration(
+  req: DaemonRequest,
+  session: SessionState | undefined,
+): number | undefined {
+  return req.internal?.observationOnly === true ? undefined : session?.snapshotGeneration;
 }
 
 export async function dispatchSnapshotDiffViaRuntime(params: {
@@ -227,7 +236,8 @@ function createSnapshotRuntime(params: {
             // Only the snapshot command's response carries every stored node's
             // ref back to the client; diff returns a summary, so its refreshed
             // tree leaves client refs stale (#1076).
-            issuesRefsToClient: req.command === 'snapshot',
+            issuesRefsToClient:
+              req.command === 'snapshot' && req.internal?.observationOnly !== true,
           }),
         );
       },

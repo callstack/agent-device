@@ -9,7 +9,7 @@ import { RUNTIME_SELECTOR_COVERAGE } from './runtime-selector.coverage.ts';
 /**
  * Static aggregation of every scenario file's coverage manifest (no dynamic
  * globbing — a new scenario file must be added here, and the coverage gate in
- * src/contracts/__tests__/interaction-contract-coverage.test.ts fails when an
+ * src/__tests__/contracts/interaction-contract-coverage.test.ts fails when an
  * enforced matrix cell has no entry).
  */
 export const CONTRACT_COVERAGE: readonly ContractCoverageEntry[] = [

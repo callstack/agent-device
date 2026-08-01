@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { AppError } from '../../../src/kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
+import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from './test-timeouts.ts';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import {
   createProviderScenarioHarness,
@@ -258,6 +259,7 @@ test('Provider-backed integration maestro replay dispatch keeps runner AMBIGUOUS
         selectorKey: 'label',
         selectorValue: 'Continue',
         allowNonHittableCoordinateFallback: true,
+        synthesized: true,
         appBundleId: APP,
       },
       error: new AppError('AMBIGUOUS_MATCH', 'Selector matched multiple elements'),
@@ -272,27 +274,32 @@ test('Provider-backed integration maestro replay dispatch keeps runner AMBIGUOUS
   });
 });
 
-test('Provider-backed integration maestro replay dispatch keeps runner ELEMENT_OFFSCREEN without fallback', async () => {
-  const transcript = createProviderTranscript([
-    {
-      command: 'ios.runner.tap',
-      deviceId: DEVICE_ID,
-      platform: 'apple',
-      request: {
-        command: 'tap',
-        selectorKey: 'label',
-        selectorValue: 'Continue',
-        allowNonHittableCoordinateFallback: true,
-        appBundleId: APP,
+test(
+  'Provider-backed integration maestro replay dispatch keeps runner ELEMENT_OFFSCREEN without fallback',
+  async () => {
+    const transcript = createProviderTranscript([
+      {
+        command: 'ios.runner.tap',
+        deviceId: DEVICE_ID,
+        platform: 'apple',
+        request: {
+          command: 'tap',
+          selectorKey: 'label',
+          selectorValue: 'Continue',
+          allowNonHittableCoordinateFallback: true,
+          synthesized: true,
+          appBundleId: APP,
+        },
+        error: new AppError('ELEMENT_OFFSCREEN', 'element resolved off-screen at (-161, 265)'),
       },
-      error: new AppError('ELEMENT_OFFSCREEN', 'element resolved off-screen at (-161, 265)'),
-    },
-  ]);
+    ]);
 
-  await withDirectSelectorScenario(transcript, async (daemon) => {
-    const click = await daemon.callCommand('click', ['label="Continue"'], {
-      maestro: { allowNonHittableCoordinateFallback: true },
+    await withDirectSelectorScenario(transcript, async (daemon) => {
+      const click = await daemon.callCommand('click', ['label="Continue"'], {
+        maestro: { allowNonHittableCoordinateFallback: true },
+      });
+      assertRpcError(click, 'ELEMENT_OFFSCREEN', /resolved off-screen/);
     });
-    assertRpcError(click, 'ELEMENT_OFFSCREEN', /resolved off-screen/);
-  });
-});
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);

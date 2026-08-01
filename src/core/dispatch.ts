@@ -1,21 +1,24 @@
-import { promises as fs } from 'node:fs';
-import pathModule from 'node:path';
-import { AppError } from '../kernel/errors.ts';
-import { isIosFamily, type DeviceInfo } from '../kernel/device.ts';
-import { getInteractor } from './interactors.ts';
-import type { Interactor, RunnerContext } from '../contracts/interactor-types.ts';
-import { isDeepLinkTarget } from '../contracts/open-target.ts';
-import { parseTriggerAppEventArgs, resolveAppEventUrl } from './app-events.ts';
+import { screenshotOptionsFromFlags } from '@agent-device/contracts/capture';
+import { isDeepLinkTarget } from '@agent-device/contracts/command';
+import { parseDeviceRotation } from '@agent-device/contracts/device';
+import type { GesturePlan, Interactor, RunnerContext } from '@agent-device/contracts/interaction';
+import { parseTvRemoteButton } from '@agent-device/contracts/interaction';
 import {
   LAUNCH_CONSOLE_DIRECT_APP_ONLY_MESSAGE,
   LAUNCH_CONSOLE_IOS_SIMULATOR_ONLY_MESSAGE,
-} from '../contracts/launch-console.ts';
+} from '@agent-device/contracts/observability';
+import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
+import type { Rect } from '@agent-device/kernel/snapshot';
+import { promises as fs } from 'node:fs';
+import pathModule from 'node:path';
 import { emitDiagnostic, withDiagnosticTimer } from '../utils/diagnostics.ts';
+import { isKeyboardAction, type KeyboardAction } from '../utils/keyboard-actions.ts';
 import { readLocationCoordinate } from '../utils/location-coordinates.ts';
 import { successText, withSuccessText } from '../utils/success-text.ts';
 import { requireIntInRange } from '../utils/validation.ts';
-import { screenshotOptionsFromFlags } from '../contracts/screenshot.ts';
-import { isKeyboardAction, type KeyboardAction } from '../utils/keyboard-actions.ts';
+import { parseTriggerAppEventArgs, resolveAppEventUrl } from './app-events.ts';
+import type { DescriptorDispatchCommandName } from './command-descriptor/registry.ts';
 import type { DispatchContext } from './dispatch-context.ts';
 import {
   handleFillCommand,
@@ -27,15 +30,11 @@ import {
   handleTypeCommand,
 } from './dispatch-interactions.ts';
 import { readNotificationPayload } from './dispatch-payload.ts';
-import { parseDeviceRotation } from '../contracts/device-rotation.ts';
-import { parseTvRemoteButton } from '../contracts/tv-remote.ts';
+import { getInteractor } from './interactors.ts';
 import { readViewportDimension } from './viewport-dimension.ts';
-import type { DescriptorDispatchCommandName } from './command-descriptor/registry.ts';
-import type { GesturePlan } from '../contracts/gesture-plan-types.ts';
-import type { Rect } from '../kernel/snapshot.ts';
 
-export { resolveTargetDevice } from './dispatch-resolve.ts';
 export type { CommandFlags, DispatchContext } from './dispatch-context.ts';
+export { resolveTargetDevice } from './dispatch-resolve.ts';
 
 export async function dispatchCommand(
   device: DeviceInfo,
@@ -98,6 +97,7 @@ export async function dispatchGestureViewport(
 function runnerContextFromDispatchContext(context?: DispatchContext): RunnerContext {
   return {
     requestId: context?.requestId,
+    signal: context?.signal,
     appBundleId: context?.appBundleId,
     verbose: context?.verbose,
     logPath: context?.logPath,
@@ -168,8 +168,9 @@ const DISPATCH_HANDLERS: Record<DispatchCommand, DispatchHandler> = {
     return { action: 'home', ...successText('Home') };
   },
   orientation: async ({ interactor, positionals }) => {
-    const orientation = parseDeviceRotation(positionals[0]);
-    await interactor.setOrientation(orientation);
+    const requestedOrientation = parseDeviceRotation(positionals[0]);
+    const result = await interactor.setOrientation(requestedOrientation);
+    const orientation = result?.orientation ?? requestedOrientation;
     return { action: 'orientation', orientation, ...successText(`Rotated to ${orientation}`) };
   },
   'app-switcher': async ({ interactor }) => {
@@ -267,6 +268,7 @@ async function handleOpenCommand(
       activity: context?.activity,
       appBundleId: context?.appBundleId,
       launchArgs,
+      terminateRunningApp: context?.terminateRunningApp,
       url,
     });
     return { app, url, ...successText(`Opened: ${app}`) };
@@ -629,15 +631,17 @@ async function handleSnapshotCommand(
   interactor: Interactor,
   context: DispatchContext | undefined,
 ): Promise<Record<string, unknown>> {
+  const snapshotContext = context ?? {};
   return await interactor.snapshot({
-    appBundleId: context?.appBundleId,
-    interactiveOnly: context?.snapshotInteractiveOnly,
-    depth: context?.snapshotDepth,
-    scope: context?.snapshotScope,
-    raw: context?.snapshotRaw,
-    includeRects: context?.snapshotIncludeRects,
-    includeHiddenContentHints: context?.snapshotIncludeHiddenContentHints,
-    surface: context?.surface,
+    appBundleId: snapshotContext.appBundleId,
+    signal: snapshotContext.signal,
+    interactiveOnly: snapshotContext.snapshotInteractiveOnly,
+    depth: snapshotContext.snapshotDepth,
+    scope: snapshotContext.snapshotScope,
+    raw: snapshotContext.snapshotRaw,
+    includeRects: snapshotContext.snapshotIncludeRects,
+    includeHiddenContentHints: snapshotContext.snapshotIncludeHiddenContentHints,
+    surface: snapshotContext.surface,
   });
 }
 

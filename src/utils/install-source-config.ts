@@ -1,5 +1,5 @@
-import type { DaemonInstallSource } from '../kernel/contracts.ts';
-import { AppError } from '../kernel/errors.ts';
+import type { DaemonInstallSource } from '@agent-device/kernel/contracts';
+import { AppError } from '@agent-device/kernel/errors';
 
 export function parseGitHubActionsArtifactInstallSourceSpec(
   spec: string,

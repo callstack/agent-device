@@ -5,9 +5,9 @@ import type {
 } from '../backend.ts';
 import { resolveTargetDevice, type CommandFlags } from '../core/dispatch.ts';
 import { createAgentDevice } from '../runtime.ts';
-import { isMacOs, isApplePlatform, publicPlatformString } from '../kernel/device.ts';
+import { isMacOs, isApplePlatform, publicPlatformString } from '@agent-device/kernel/device';
 import { noActiveSessionError, requireCommandSupported } from './handlers/response.ts';
-import type { SnapshotState, SnapshotNode } from '../kernel/snapshot.ts';
+import type { SnapshotState, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { findNodeByLabel } from '../snapshot/snapshot-processing.ts';
 import { runAppleRunnerCommand } from '../platforms/apple/core/runner/runner-client.ts';
 import { buildAppleRunnerRequestOptions } from './apple-runner-options.ts';
@@ -22,6 +22,7 @@ import { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { createSelectorCaptureRuntime } from './selector-capture-runtime.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
+import { getRequestSignal } from '../request/cancel.ts';
 
 export type SelectorRuntimeParams = {
   req: DaemonRequest;
@@ -32,6 +33,7 @@ export type SelectorRuntimeParams = {
   // Filled by the capture runtime with the snapshot each selector command actually consumed;
   // sessionless routes disclose from here because no session record stores the capture.
   consumedSnapshot?: { state?: SnapshotState };
+  signal?: AbortSignal;
 };
 
 type SelectorRuntimeDeviceParams = SelectorRuntimeParams & {
@@ -70,6 +72,7 @@ export function createSelectorRuntimeForDevice(params: SelectorRuntimeDevicePara
         params.sessionStore.set(params.sessionName, params.session);
       },
     }),
+    signal: params.signal ?? getRequestSignal(params.req.meta?.requestId),
   });
 }
 
@@ -115,7 +118,7 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
   });
   return {
     platform: publicPlatformString(device),
-    captureSnapshot: async (_context, options): Promise<BackendSnapshotResult> => {
+    captureSnapshot: async (context, options): Promise<BackendSnapshotResult> => {
       const flags = {
         ...req.flags,
         ...snapshotFlagOverrides(options),
@@ -128,6 +131,7 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
         (includeRects && device.platform === 'web');
       return await captureRuntime.capture({
         flags,
+        signal: context.signal,
         snapshotScope,
         includeRects,
         cache: {
@@ -151,8 +155,8 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
             contextFromFlags(logPath ?? '', flags, appBundleId, traceLogPath)),
       }),
     }),
-    findText: async (_context, text) => ({
-      found: await findText(params, text),
+    findText: async (context, text) => ({
+      found: await findText(params, text, context.signal),
     }),
   };
 }
@@ -170,33 +174,41 @@ function snapshotFlagOverrides(options: BackendSnapshotOptions | undefined): Sna
   return flags;
 }
 
-async function findText(params: SelectorRuntimeDeviceParams, text: string): Promise<boolean> {
-  const macosSurfaceResult = await findTextInMacosNonAppSurface(params, text);
+async function findText(
+  params: SelectorRuntimeDeviceParams,
+  text: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const macosSurfaceResult = await findTextInMacosNonAppSurface(params, text, signal);
   if (macosSurfaceResult !== null) return macosSurfaceResult;
-  const appleRunnerResult = await findTextWithAppleRunner(params, text);
-  if (appleRunnerResult !== null) return appleRunnerResult;
-  return await findTextInWaitSnapshot(params, text);
+  const appleRunnerResult = await findTextWithAppleRunner(params, text, signal);
+  // The runner query is a fast path, not the semantic source of truth. XCTest can report a
+  // transient miss for visible SwiftUI text that the canonical snapshot already contains.
+  if (appleRunnerResult === true) return true;
+  return await findTextInWaitSnapshot(params, text, signal);
 }
 
 async function findTextInMacosNonAppSurface(
   params: SelectorRuntimeDeviceParams,
   text: string,
+  signal?: AbortSignal,
 ): Promise<boolean | null> {
   if (!isMacOs(params.device)) return null;
   if (!params.session?.surface || params.session.surface === 'app') return null;
-  return await findTextInWaitSnapshot(params, text);
+  return await findTextInWaitSnapshot(params, text, signal);
 }
 
 async function findTextWithAppleRunner(
   params: SelectorRuntimeDeviceParams,
   text: string,
+  signal?: AbortSignal,
 ): Promise<boolean | null> {
   const target = readAppleRunnerFindTextTarget(params);
   if (!target) return null;
   const result = (await runAppleRunnerCommand(
     target.device,
     { command: 'findText', text, appBundleId: target.appBundleId },
-    buildAppleRunnerFindTextOptions(params, target),
+    { ...buildAppleRunnerFindTextOptions(params, target), signal },
   )) as { found?: boolean };
   return result?.found === true;
 }
@@ -228,12 +240,13 @@ function buildAppleRunnerFindTextOptions(
 async function findTextInWaitSnapshot(
   params: SelectorRuntimeDeviceParams,
   text: string,
+  signal?: AbortSignal,
 ): Promise<boolean> {
-  const snapshot = await captureWaitSnapshot(params);
+  const snapshot = await captureWaitSnapshot(params, signal);
   return Boolean(findNodeByLabel(snapshot.nodes, text));
 }
 
-async function captureWaitSnapshot(params: SelectorRuntimeDeviceParams) {
+async function captureWaitSnapshot(params: SelectorRuntimeDeviceParams, signal?: AbortSignal) {
   const captureRuntime = createSelectorCaptureRuntime({
     device: params.device,
     session: params.session,
@@ -251,6 +264,7 @@ async function captureWaitSnapshot(params: SelectorRuntimeDeviceParams) {
       // skip scroll-hint derivation (#1270).
       snapshotIncludeHiddenContentHints: false,
     },
+    signal,
     cache: {
       forceFresh: true,
       bypassForPostGestureStabilization: true,

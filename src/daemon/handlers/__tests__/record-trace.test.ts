@@ -96,6 +96,7 @@ const mockWaitForStableFile = vi.mocked(waitForStableFile);
 const mockIsPlayableVideo = vi.mocked(isPlayableVideo);
 
 const overlaySupportWarning = getRecordingOverlaySupportWarning();
+const mockedIosRecordingOutputs: string[] = [];
 
 function makeSessionStore(): SessionStore {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-record-trace-'));
@@ -198,6 +199,35 @@ function makeIosSimulatorRecordingSession(
   return session;
 }
 
+function mockIosSimulatorRecordingStart(
+  options: { pid?: number; onStart?: () => void } = {},
+): void {
+  mockRunCmdBackground.mockImplementation((_cmd, args) => {
+    options.onStart?.();
+    const outPath = args.at(-1);
+    if (!outPath) throw new Error('simctl recordVideo output path is required');
+    const resolvedOutPath = path.resolve(outPath);
+    fs.writeFileSync(resolvedOutPath, '');
+    mockedIosRecordingOutputs.push(resolvedOutPath);
+    let resolveWait:
+      | ((value: { stdout: string; stderr: string; exitCode: number }) => void)
+      | undefined;
+    const wait = new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve) => {
+      resolveWait = resolve;
+    });
+    return {
+      child: {
+        kill: () => {
+          resolveWait?.({ stdout: '', stderr: '', exitCode: 0 });
+          return true;
+        },
+        pid: options.pid,
+      } as any,
+      wait,
+    };
+  });
+}
+
 function isAndroidScreenrecordStartCommand(command: string): boolean {
   return /^-s emulator-5554 shell screenrecord (?:--size 756x1344 )?--bit-rate (?:8000000|20000000) \/(?:sdcard|data\/local\/tmp)\/agent-device-recording-\d+\.mp4 >\/dev\/null 2>&1 & echo \$!$/.test(
     command,
@@ -289,6 +319,9 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  for (const outPath of mockedIosRecordingOutputs.splice(0)) {
+    fs.rmSync(outPath, { force: true });
+  }
 });
 
 test('record stop derives telemetry artifact local path from client outPath', async () => {
@@ -900,10 +933,7 @@ test('record stop resizes iOS simulator recording when max-size is explicit', as
   const sessionName = 'ios-sim-quality';
   sessionStore.set(sessionName, makeOpenedIosSimulatorSession(sessionName));
 
-  mockRunCmdBackground.mockImplementation(() => ({
-    child: { kill: () => {} } as any,
-    wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-  }));
+  mockIosSimulatorRecordingStart();
 
   await runRecordCommand({
     sessionStore,
@@ -932,10 +962,7 @@ test('record stop forwards the requested quality to the resize step', async () =
   const sessionName = 'ios-sim-export-quality';
   sessionStore.set(sessionName, makeOpenedIosSimulatorSession(sessionName));
 
-  mockRunCmdBackground.mockImplementation(() => ({
-    child: { kill: () => {} } as any,
-    wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-  }));
+  mockIosSimulatorRecordingStart();
 
   await runRecordCommand({
     sessionStore,
@@ -1246,10 +1273,7 @@ test('record start with explicit missing session can opt into device scope', asy
     kind: 'simulator',
     booted: true,
   });
-  mockRunCmdBackground.mockImplementation(() => ({
-    child: { kill: () => {}, pid: 5153 } as any,
-    wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-  }));
+  mockIosSimulatorRecordingStart({ pid: 5153 });
 
   const response = await runRecordCommand({
     sessionStore,
@@ -1300,10 +1324,7 @@ test('record start on iOS simulator supports explicit device-scope capture witho
     kind: 'simulator',
     booted: true,
   });
-  mockRunCmdBackground.mockImplementation(() => ({
-    child: { kill: () => {}, pid: 5152 } as any,
-    wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-  }));
+  mockIosSimulatorRecordingStart({ pid: 5152 });
 
   const response = await runRecordCommand({
     sessionStore,
@@ -1325,10 +1346,7 @@ test('record start stores iOS simulator recorder pid for scoped cleanup', async 
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-recorder-pid';
   sessionStore.set(sessionName, makeOpenedIosSimulatorSession(sessionName));
-  mockRunCmdBackground.mockImplementation(() => ({
-    child: { kill: () => {}, pid: 5151 } as any,
-    wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-  }));
+  mockIosSimulatorRecordingStart({ pid: 5151 });
 
   const response = await runRecordCommand({
     sessionStore,
@@ -1405,7 +1423,7 @@ test('record stop prefers session-owned iOS recorder processes before path fallb
       ['-P', '1111'],
     ]);
     expect(processKill.mock.calls.map((call) => call[0])).toEqual([
-      1111, 2222, 1111, 2222, 1111, 2222,
+      1111, 2222, 1111, 2222, 1111, 2222, 1111,
     ]);
     expect(processKill.mock.calls.map((call) => call[1])).toEqual([
       'SIGINT',
@@ -1414,6 +1432,7 @@ test('record stop prefers session-owned iOS recorder processes before path fallb
       'SIGTERM',
       'SIGKILL',
       'SIGKILL',
+      0,
     ]);
   } finally {
     processKill.mockRestore();
@@ -1475,10 +1494,7 @@ test('record stop keeps iOS simulator video when overlay export fails', async ()
   const sessionName = 'ios-sim-overlay-warning';
   sessionStore.set(sessionName, makeOpenedIosSimulatorSession(sessionName));
 
-  mockRunCmdBackground.mockImplementation(() => ({
-    child: { kill: () => {} } as any,
-    wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-  }));
+  mockIosSimulatorRecordingStart();
   mockOverlayRecordingTouches.mockImplementation(async () => {
     throw new Error('swift export failed');
   });
@@ -1512,10 +1528,7 @@ test('record stop skips touch overlay export when no gestures were recorded', as
   const sessionName = 'ios-sim-no-gestures';
   sessionStore.set(sessionName, makeOpenedIosSimulatorSession(sessionName));
 
-  mockRunCmdBackground.mockImplementation(() => ({
-    child: { kill: () => {} } as any,
-    wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-  }));
+  mockIosSimulatorRecordingStart();
 
   await runRecordCommand({
     sessionStore,
@@ -1539,10 +1552,7 @@ test('record stop keeps iOS simulator video when resize export fails', async () 
   const sessionName = 'ios-sim-resize-fail';
   sessionStore.set(sessionName, makeOpenedIosSimulatorSession(sessionName));
 
-  mockRunCmdBackground.mockImplementation(() => ({
-    child: { kill: () => {} } as any,
-    wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-  }));
+  mockIosSimulatorRecordingStart();
 
   mockResizeRecording.mockImplementation(async () => {
     throw new Error('resize failed');
@@ -1579,13 +1589,7 @@ test('record start does not fail when iOS simulator runner warm-up fails', async
   sessionStore.set(sessionName, session);
 
   let started = false;
-  mockRunCmdBackground.mockImplementation(() => {
-    started = true;
-    return {
-      child: { kill: () => {} } as any,
-      wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-    };
-  });
+  mockIosSimulatorRecordingStart({ onStart: () => (started = true) });
   const runnerCalls: RunnerCall[] = [];
   mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
     runnerCalls.push({ command: command.command });
@@ -1625,10 +1629,7 @@ test('record start anchors gesture clock from simulator warm-up and skips standa
   session.appBundleId = 'com.apple.Preferences';
   sessionStore.set(sessionName, session);
 
-  mockRunCmdBackground.mockImplementation(() => ({
-    child: { kill: () => {} } as any,
-    wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-  }));
+  mockIosSimulatorRecordingStart();
   const runnerCalls: RunnerCall[] = [];
   mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
     runnerCalls.push({ command: command.command });
@@ -1670,10 +1671,7 @@ test('record start falls back to standalone uptime when warm response lacks curr
   session.appBundleId = 'com.apple.Preferences';
   sessionStore.set(sessionName, session);
 
-  mockRunCmdBackground.mockImplementation(() => ({
-    child: { kill: () => {} } as any,
-    wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-  }));
+  mockIosSimulatorRecordingStart();
   const runnerCalls: RunnerCall[] = [];
   mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
     runnerCalls.push({ command: command.command });
@@ -1712,10 +1710,7 @@ test('record start rejects non-finite or non-positive warm anchors', async () =>
     session.appBundleId = 'com.apple.Preferences';
     sessionStore.set(sessionName, session);
 
-    mockRunCmdBackground.mockImplementation(() => ({
-      child: { kill: () => {} } as any,
-      wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-    }));
+    mockIosSimulatorRecordingStart();
     const runnerCalls: RunnerCall[] = [];
     mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
       runnerCalls.push({ command: command.command });
@@ -1754,10 +1749,7 @@ test('record start degrades to wall-clock when warm anchor missing and uptime fa
   session.appBundleId = 'com.apple.Preferences';
   sessionStore.set(sessionName, session);
 
-  mockRunCmdBackground.mockImplementation(() => ({
-    child: { kill: () => {} } as any,
-    wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-  }));
+  mockIosSimulatorRecordingStart();
   mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
     if (command.command === 'uptime') {
       throw new Error('uptime unavailable');
@@ -1793,10 +1785,7 @@ test('record start skips iOS simulator runner warm-up when touch overlays are hi
   session.appBundleId = 'com.apple.Preferences';
   sessionStore.set(sessionName, session);
 
-  mockRunCmdBackground.mockImplementation(() => ({
-    child: { kill: () => {} } as any,
-    wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-  }));
+  mockIosSimulatorRecordingStart();
 
   const response = await runRecordCommand({
     sessionStore,

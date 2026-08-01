@@ -3,7 +3,7 @@ import {
   buildUnchangedSnapshotMetadata,
   ensureSnapshotPresentationKey,
 } from './snapshot-unchanged.ts';
-import type { SnapshotState } from '../../../kernel/snapshot.ts';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
 
 function snapshot(
   label: string,

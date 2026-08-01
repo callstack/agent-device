@@ -2,8 +2,8 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import type { DeviceInfo } from '../../../kernel/device.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '../../../utils/exec.ts';
 
 import { IOS_DEVICECTL_TIMEOUT_MS } from './config.ts';
@@ -298,6 +298,17 @@ export function resolveIosDevicectlHint(stdout: string, stderr: string): string 
   }
   if (text.includes('coredeviceservice') && text.includes('timed out')) {
     return 'CoreDevice service timed out. Reconnect the device and retry; if it persists restart Xcode and the iOS device.';
+  }
+  // A device that is unlocked, trusted and `available (paired)` still cannot
+  // mount its developer disk image while Developer Mode is off, which is the
+  // usual state of a phone that has never been used for development. The
+  // default hint sends people to check trust and Xcode, none of which is wrong
+  // yet none of which is the cause.
+  if (text.includes('developer disk image') || text.includes('developer mode is disabled')) {
+    return 'Enable Developer Mode on the iOS device (Settings > Privacy & Security > Developer Mode), restart it when prompted, unlock it, then retry.';
+  }
+  if (text.includes('must be paired')) {
+    return 'Pair the iOS device with this Mac: connect it by cable, unlock it, accept the Trust prompt, and enter the device passcode, then retry.';
   }
   return null;
 }

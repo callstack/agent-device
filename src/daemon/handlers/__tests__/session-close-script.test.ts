@@ -2,8 +2,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import { AppError } from '../../../kernel/errors.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import {
+  makeIosSession,
+  makeRepairCompleteSession,
+} from '../../../__tests__/test-utils/session-factories.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest } from '../../types.ts';
 import {
@@ -19,11 +22,10 @@ afterEach(() => {
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
-function setup(name: string) {
+function setup(name: string, session = makeIosSession(name, { appBundleId: 'com.example.app' })) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-session-close-script-'));
   roots.push(root);
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  const session = makeIosSession(name, { appBundleId: 'com.example.app' });
   sessionStore.set(name, session);
   const req: DaemonRequest = {
     token: 'token',
@@ -36,10 +38,10 @@ function setup(name: string) {
 }
 
 test('failed repair publication removes only its synthetic close before retry', () => {
-  const { req, session, sessionStore } = setup('repair');
-  session.saveScriptBoundary = 0;
-  session.saveScriptComplete = true;
-  session.recordSession = true;
+  const { req, session, sessionStore } = setup(
+    'repair',
+    makeRepairCompleteSession('repair', { appBundleId: 'com.example.app' }),
+  );
   const failure = new AppError('COMMAND_FAILED', 'publish failed');
   vi.spyOn(sessionStore, 'writeSessionLog').mockReturnValue({ written: false, error: failure });
 
@@ -52,7 +54,12 @@ test('failed repair publication removes only its synthetic close before retry', 
 
 test('repair close failure keeps normalized metadata and is explicitly retriable', () => {
   const { session } = setup('repair-error');
-  session.saveScriptPath = '/tmp/repaired.ad';
+  session.scriptPublication = {
+    kind: 'repair',
+    status: 'armed',
+    target: { kind: 'explicit', path: '/tmp/repaired.ad', force: false },
+    boundary: 0,
+  };
   const failure = new AppError('COMMAND_FAILED', 'publish failed', {
     reason: 'target-exists',
     hint: 'Choose another path.',

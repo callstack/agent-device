@@ -133,16 +133,16 @@ test('collectCycles separates gate-rejected value cycles from type-only and dyna
 
 test('buildGraph reports zone membership, degrees, and cross-zone edge counts', () => {
   const files = sources({
-    'src/kernel/errors.ts': 'export const fail = 1;\n',
-    'src/core/interactors/tap.ts': "import { fail } from '../../kernel/errors.ts';\n",
+    'packages/kernel/src/errors.ts': 'export const fail = 1;\n',
+    'src/core/interactors/tap.ts': "import { fail } from '@agent-device/kernel/errors';\n",
     'src/commands/tap.ts': [
-      "import { fail } from '../kernel/errors.ts';",
+      "import { fail } from '@agent-device/kernel/errors';",
       "import '../core/interactors/tap.ts';",
     ].join('\n'),
   });
   const graph = buildGraph(files, resolveImportEdges(files));
 
-  const kernel = graph.nodes.find((node) => node.id === 'src/kernel/errors.ts')!;
+  const kernel = graph.nodes.find((node) => node.id === 'packages/kernel/src/errors.ts')!;
   assert.equal(kernel.zone, 'kernel');
   assert.equal(kernel.fanIn, 2);
   assert.equal(kernel.fanOut, 0);
@@ -156,8 +156,8 @@ test('buildGraph reports zone membership, degrees, and cross-zone edge counts', 
     ['commands -> core (1)', 'commands -> kernel (1)', 'core -> kernel (1)'],
   );
   assert.deepEqual(
-    graph.zones.map((zone) => zone.classification),
-    ['ranked', 'ranked', 'ranked'],
+    graph.zones.map((zone) => `${zone.id}:${zone.classification}`),
+    ['kernel:unranked', 'core:ranked', 'commands:ranked'],
   );
 });
 

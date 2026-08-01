@@ -7,7 +7,7 @@ import {
   buildUiHierarchySnapshot,
   type AndroidUiHierarchy,
 } from '../../platforms/android/ui-hierarchy.ts';
-import type { RawSnapshotNode } from '../../kernel/snapshot.ts';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 
 /**
  * Reconstructs the `AndroidUiHierarchy` tree `buildUiHierarchySnapshot` expects

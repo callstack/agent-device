@@ -9,7 +9,7 @@ import type {
   DaemonServerMode,
   DaemonTransportPreference,
   SessionIsolationMode,
-} from '../kernel/contracts.ts';
+} from '@agent-device/kernel/contracts';
 export type { DaemonServerMode, DaemonTransportPreference, SessionIsolationMode };
 
 export type DaemonPaths = {

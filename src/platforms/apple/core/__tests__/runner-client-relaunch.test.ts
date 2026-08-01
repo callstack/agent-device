@@ -10,7 +10,7 @@ vi.mock('../runner/runner-session.ts', async (importOriginal) => ({
   stopIosRunnerSession: mockStopIosRunnerSession,
 }));
 
-import type { DeviceInfo } from '../../../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   type AppleRunnerCommandExecutor,
   withAppleRunnerProvider,

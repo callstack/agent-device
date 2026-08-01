@@ -1,25 +1,26 @@
-import { AppError } from '../kernel/errors.ts';
+import {
+  assertExclusiveScrollDistanceInputs,
+  getClickButtonValidationError,
+  honoredScrollDurationMs,
+  MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE,
+  normalizeScrollDurationMs,
+  parseScrollDirection,
+  resolveClickButton,
+  type ClickButton,
+  type Interactor,
+  type RunnerCallOptions,
+  type ScrollCommandOptions,
+  type ScrollDirection,
+} from '@agent-device/contracts/interaction';
 import {
   isIosFamily,
   isMacOs,
   isTvOsDevice,
   publicPlatformString,
   type DeviceInfo,
-} from '../kernel/device.ts';
-import { successText, withSuccessText } from '../utils/success-text.ts';
-import { findMistargetedTypeRefToken } from '../utils/type-target-warning.ts';
-import { parseScrollDirection, type ScrollDirection } from '../contracts/scroll-gesture.ts';
-import {
-  assertExclusiveScrollDistanceInputs,
-  honoredScrollDurationMs,
-  normalizeScrollDurationMs,
-  type ScrollCommandOptions,
-} from '../contracts/scroll-command.ts';
-import {
-  getClickButtonValidationError,
-  resolveClickButton,
-  type ClickButton,
-} from '../contracts/click-button.ts';
+} from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
+import type { RunnerSequenceStep } from '../platforms/apple/core/runner/runner-contract.ts';
 import {
   captureScrollEdgeState,
   formatScrollEdgeMessage,
@@ -27,20 +28,16 @@ import {
   type ScrollEdge,
   type ScrollEdgeState,
 } from '../utils/scroll-edge-state.ts';
-import {
-  requireIntInRange,
-  shouldUseIosPressSequence,
-  chunkRunnerSequenceStepsByBudget,
-  computeDeterministicJitter,
-  runRepeatedSeries,
-} from './dispatch-series.ts';
-import type { RunnerSequenceStep } from '../platforms/apple/core/runner/runner-contract.ts';
+import { successText, withSuccessText } from '../utils/success-text.ts';
+import { findMistargetedTypeRefToken } from '../utils/type-target-warning.ts';
 import type { DispatchContext } from './dispatch-context.ts';
 import {
-  MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE,
-  type Interactor,
-  type RunnerCallOptions,
-} from '../contracts/interactor-types.ts';
+  chunkRunnerSequenceStepsByBudget,
+  computeDeterministicJitter,
+  requireIntInRange,
+  runRepeatedSeries,
+  shouldUseIosPressSequence,
+} from './dispatch-series.ts';
 
 type ScrollTarget = {
   direction: ScrollDirection;

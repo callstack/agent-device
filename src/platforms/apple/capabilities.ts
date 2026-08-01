@@ -3,7 +3,7 @@ import {
   resolveDeviceAppleOs,
   type AppleOS,
   type DeviceInfo,
-} from '../../kernel/device.ts';
+} from '@agent-device/kernel/device';
 
 // ---------------------------------------------------------------------------
 // Per-`AppleOS` capability data table (ADR-0009 "per-AppleOS capability table").

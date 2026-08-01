@@ -132,3 +132,37 @@ test('keeps corrupt and state-dir-gone claims visible in normal status', async (
     fs.rmSync(claimsDir, { recursive: true, force: true });
   }
 });
+
+test('states that nothing is claimed when every claim is stale', async () => {
+  // Regression: the all-stale case rendered only the hidden-claim notice, so a
+  // user asking what holds a device saw a maintenance warning and no answer.
+  const claimsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-cli-claims-'));
+  try {
+    fs.writeFileSync(
+      path.join(claimsDir, 'stale.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        deviceKey: 'local:apple:ios:stale-phone',
+        device: { platform: 'ios', id: 'stale-phone', name: 'Dead iPhone', kind: 'device' },
+        session: 'dead-session',
+        workspace: '/worktrees/dead',
+        stateDir: process.cwd(),
+        ownerPid: 999_999_999,
+        ownerStartTime: 'old-start-time',
+        ownerToken: 'stale-token',
+        createdAtMs: 1,
+        updatedAtMs: 1,
+      }),
+    );
+
+    const result = await runCliCapture(['device', 'status'], {
+      env: { AGENT_DEVICE_CLAIMS_DIR: claimsDir },
+    });
+
+    assert.match(result.stdout, /No live local advisory device claims found\./);
+    assert.match(result.stdout, /1 stale claim hidden/);
+    assert.doesNotMatch(result.stdout, /Dead iPhone/);
+  } finally {
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+  }
+});

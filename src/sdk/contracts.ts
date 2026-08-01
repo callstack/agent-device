@@ -1,5 +1,4 @@
 export type {
-  DaemonError,
   DaemonInstallSource,
   DaemonRequest,
   DaemonResponse,
@@ -8,6 +7,7 @@ export type {
   JsonRpcRequestEnvelope,
   LeaseBackend,
   SessionRuntimeHints,
-} from '../kernel/contracts.ts';
+} from '@agent-device/kernel/contracts';
+export type { DaemonError } from '@agent-device/kernel/errors';
 
-export { centerOfRect, defaultHintForCode, normalizeError } from '../kernel/contracts.ts';
+export { centerOfRect, defaultHintForCode, normalizeError } from '@agent-device/kernel/contracts';

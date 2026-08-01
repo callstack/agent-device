@@ -1,4 +1,9 @@
+import type { Reporter } from 'vitest/node';
 import { defineConfig } from 'vitest/config';
+import contentionRetryReporter, {
+  FAILURE_FILE_ENV,
+} from './scripts/lib/contention-retry-reporter.ts';
+import { SUBPROCESS_STUB_TESTS } from './scripts/lib/contention-retry.ts';
 import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
 
 // Tests that stub a real binary (adb/xcrun/npx) by mutating process.env.PATH and
@@ -10,19 +15,24 @@ import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
 // docs/agents/testing.md "tests must not wait real time"). Serialized below with
 // per-file isolation so only one such file spawns stubs at a time, the same
 // execution contract the pre-split android index.test.ts aggregation provided.
-export const SUBPROCESS_STUB_TESTS = [
-  'src/platforms/android/__tests__/{app-lifecycle-install,app-lifecycle-open,device-input-state,input-actions,notifications,settings}.test.ts',
-  'src/daemon/__tests__/runtime-hints.test.ts',
-  'src/platforms/apple/core/__tests__/{apps,interactions,simulator,physical-device-screenshot,screenshot,screenshot-status-bar,devicectl}.test.ts',
-  // Stubs npx + the package managers on PATH and spawns a real Metro dev server per case.
-  'src/__tests__/client-metro.test.ts',
-  // Proves the parser fuzz harness still fails (#1414): every case spawns a node subprocess or a
-  // worker thread and one target is a deliberate hang, so it waits real watchdog time.
-  'scripts/fuzz/harness.test.ts',
-  // Replays the fuzz regression corpus (#1414) through that same worker watchdog, so a promoted
-  // hang case fails against its per-case budget instead of wedging the unit job.
-  'scripts/fuzz/corpus-replay.test.ts',
+// The enumerated file list, with each file's contention reason and its owned
+// waiver, lives in scripts/lib/contention-retry.ts — the same constant the CI
+// single-retry policy (#1419) reads, so the two cannot drift.
+export { SUBPROCESS_STUB_TESTS };
+
+/** Every project loads the same setup, including the runner-timeout provenance hook. */
+const SETUP_FILES = [
+  'scripts/vitest-runner-timeout-setup.ts',
+  'src/__tests__/hermetic-env-setup.ts',
+  'src/__tests__/process-memo-setup.ts',
 ];
+
+/** Reporters for every lane; a `--reporter` flag would replace them, so no lane passes one. */
+export function reporters(env: NodeJS.ProcessEnv = process.env): Array<string | Reporter> {
+  const gates: Array<string | Reporter> = ['default', slowTestGateReporter()];
+  // The failure sink drains the gates' verdicts, so it reports after them.
+  return env[FAILURE_FILE_ENV] ? [...gates, contentionRetryReporter()] : gates;
+}
 
 export default defineConfig({
   test: {
@@ -34,7 +44,7 @@ export default defineConfig({
     // --no-isolate = 205s wall vs 48s (module state thrashes across files),
     // threads = no change.
     slowTestThreshold: 500,
-    reporters: ['default', slowTestGateReporter()],
+    reporters: reporters(),
     projects: [
       {
         test: {
@@ -43,13 +53,13 @@ export default defineConfig({
           // unit suite without waking every ad-hoc *.test.ts under scripts/.
           include: [
             'src/**/*.test.ts',
+            'packages/*/src/**/*.test.ts',
             'scripts/__tests__/help-conformance-bench.test.ts',
             'scripts/__tests__/help-conformance-error-recovery-coverage.test.ts',
             'scripts/__tests__/help-conformance-sample-outputs.test.ts',
             'scripts/__tests__/help-conformance-topic-coverage.test.ts',
             // Parses CI configuration only, so this action guard needs no device or subprocess lane.
             'test/ci/upload-agent-device-artifacts.test.ts',
-            'test/skillgym/suites/local-cli-help-policy.test.ts',
             // The frozen replay-compat corpus (#1417): parse-only, no device or
             // subprocess work, so it belongs in the fast lane next to the
             // grammar it guards.
@@ -57,11 +67,8 @@ export default defineConfig({
             // The Maestro conformance oracle runs via `node --test` in its own CI
             // job (scripts/maestro-conformance), like the layering guard.
           ],
-          exclude: SUBPROCESS_STUB_TESTS,
-          setupFiles: [
-            'src/__tests__/hermetic-env-setup.ts',
-            'src/__tests__/process-memo-setup.ts',
-          ],
+          exclude: [...SUBPROCESS_STUB_TESTS],
+          setupFiles: SETUP_FILES,
         },
       },
       {
@@ -72,11 +79,8 @@ export default defineConfig({
         // provided without leaking module caches between split files.
         test: {
           name: 'subprocess-stub',
-          include: SUBPROCESS_STUB_TESTS,
-          setupFiles: [
-            'src/__tests__/hermetic-env-setup.ts',
-            'src/__tests__/process-memo-setup.ts',
-          ],
+          include: [...SUBPROCESS_STUB_TESTS],
+          setupFiles: SETUP_FILES,
           fileParallelism: false,
           isolate: true,
           maxWorkers: 1,
@@ -86,30 +90,21 @@ export default defineConfig({
         test: {
           name: 'provider-integration',
           include: ['test/integration/provider-scenarios/**/*.test.ts'],
-          setupFiles: [
-            'src/__tests__/hermetic-env-setup.ts',
-            'src/__tests__/process-memo-setup.ts',
-          ],
+          setupFiles: SETUP_FILES,
         },
       },
       {
         test: {
           name: 'interaction-contract',
           include: ['test/integration/interaction-contract/**/*.test.ts'],
-          setupFiles: [
-            'src/__tests__/hermetic-env-setup.ts',
-            'src/__tests__/process-memo-setup.ts',
-          ],
+          setupFiles: SETUP_FILES,
         },
       },
       {
         test: {
           name: 'output-economy',
           include: ['test/output-economy/**/*.test.ts'],
-          setupFiles: [
-            'src/__tests__/hermetic-env-setup.ts',
-            'src/__tests__/process-memo-setup.ts',
-          ],
+          setupFiles: SETUP_FILES,
         },
       },
     ],
@@ -120,7 +115,7 @@ export default defineConfig({
         statements: 78,
         lines: 80,
       },
-      include: ['src/**/*.ts'],
+      include: ['src/**/*.ts', 'packages/*/src/**/*.ts'],
       exclude: [
         'src/**/*.test.ts',
         'src/**/__tests__/**',

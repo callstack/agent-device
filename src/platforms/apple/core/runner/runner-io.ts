@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
-import { AppError } from '../../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 export async function getFreePort(): Promise<number> {
   return await new Promise((resolve, reject) => {

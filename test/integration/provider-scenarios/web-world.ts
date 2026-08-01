@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import type { WebProvider } from '../../../src/platforms/web/provider.ts';
-import type { RawSnapshotNode } from '../../../src/kernel/snapshot.ts';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { validPng } from './assertions.ts';
 import { PROVIDER_SCENARIO_WEB } from './fixtures.ts';
 import { createProviderScenarioHarness, type ProviderScenarioHarness } from './harness.ts';

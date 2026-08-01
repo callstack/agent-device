@@ -25,7 +25,7 @@ prose in this repo, including this file.
 ## Principles (expensive lessons — each cost an incident)
 
 - Guarantees erode at path boundaries. Any new dispatch path or fast path classifies its cells in
-  `src/contracts/interaction-guarantees.ts` first; the typechecker forces completeness, you supply
+  `packages/contracts/src/interaction-guarantees.ts` first; the typechecker forces completeness, you supply
   honesty. ADR 0011.
 - A registry claim is not a semantic check: never mark a cell `runner` without reading whether the
   Swift code implements the guarantee's *definition*, not just a similar-sounding behavior.
@@ -41,8 +41,9 @@ prose in this repo, including this file.
   shipped before this rule.
 - Unreleased API surface dies free. Before treating a field as wire-compat, check
   `git tag --contains <commit>`; if it never shipped, delete it now.
-- Push only behind `&&`-chained gates: `format:check && typecheck && lint && vitest && git push`. A
-  push that can run after a failed gate eventually will.
+- Push only behind an `&&`-chained affected gate:
+  `pnpm check:affected --run && git push`. A push that can run after a failed gate eventually will;
+  GitHub remains authoritative for reported device/toolchain lanes.
 
 ## Derived registries — read the declaration site, not prose
 
@@ -53,7 +54,7 @@ declaration site rather than any map someone wrote down:
   capabilities, MCP/CLI projection, batch policy, timeout policy — ADR 0008)
 - daemon route ownership + request-policy traits: `src/daemon/daemon-command-registry.ts`
   (parity-tested)
-- interaction dispatch paths × guarantees: `src/contracts/interaction-guarantees.ts` (ADR 0011)
+- interaction dispatch paths × guarantees: `packages/contracts/src/interaction-guarantees.ts` (ADR 0011)
 - command names: `src/command-catalog.ts` — never re-create command string sets in handlers
 - capabilities: `src/core/capabilities.ts` is the only home for command/device support checks
 
@@ -71,10 +72,10 @@ Invariants here are self-declaring gates. The correct response to a failure is t
 the new thing — never to suppress or allowlist it.
 
 - public CLI flags must be classified: `scripts/integration-progress-model.ts`
-- guarantee matrix completeness + honesty: `src/contracts/__tests__/interaction-guarantees.test.ts`
+- guarantee matrix completeness + honesty: `src/__tests__/contracts/interaction-guarantees.test.ts`
   (gap waivers need a `trackingIssue`; the pin list changes only in reviewed diffs)
 - every enforced/delegated matrix cell needs a contract scenario:
-  `src/contracts/__tests__/interaction-contract-coverage.test.ts` + `test/integration/interaction-contract/`
+  `src/__tests__/contracts/interaction-contract-coverage.test.ts` + `test/integration/interaction-contract/`
 - interaction responses build only through `buildInteractionResponseData` (construction-guard test)
 - every command declares a timeout policy on its descriptor (timeout-policy completeness test)
 - TS/Swift rule parity: golden tables under `contracts/fixtures/`, consumed by vitest and the gated
@@ -92,12 +93,12 @@ the new thing — never to suppress or allowlist it.
 - `keyboard dismiss` is the iOS keyboard dismissal path. It may tap safe native controls such as
   `Done`, but must not fall back to system back navigation.
 - Do not remove shared snapshot/session model behavior without full migration.
-- Apple-family target changes keep `src/kernel/device.ts`, `src/core/capabilities.ts`,
+- Apple-family target changes keep `packages/kernel/src/device.ts`, `src/core/capabilities.ts`,
   `src/core/dispatch-resolve.ts`, `src/platforms/apple/core/devices.ts`, and
   `src/platforms/apple/core/runner/runner-xctestrun.ts` in sync.
 - iOS simulator-set scoping is iOS-specific: `iosSimulatorDeviceSet` must not hide the host macOS
   desktop target when `--platform macos` or `--target desktop` is requested.
-- Use `inferFillText` (`src/daemon/action-utils.ts`), `uniqueStrings` (`src/kernel/collections.ts`),
+- Use `inferFillText` (`src/daemon/action-utils.ts`), `uniqueStrings` (`@agent-device/kernel/collections`),
   and `evaluateIsPredicate` (`src/selectors/predicates.ts`) rather than reimplementing them.
 - Do not update `skills/**/SKILL.md` for command behavior or workflow guidance unless the user asks.
   Skills are thin routers to versioned CLI help; they must not carry behavior details.
@@ -112,6 +113,9 @@ the new thing — never to suppress or allowlist it.
 - Use `unknown` only at trust boundaries — parsed JSON, daemon/runtime payloads, catch values,
   generic I/O, parser callbacks. Once validated, narrow to a domain type instead of carrying
   `unknown` through internal helper and formatter signatures.
+- When asked to make a change, do not unilaterally add a fallback. Complete the migration and remove
+  superseded code and documentation rather than preserving an old path “just in case.” Get explicit
+  approval before adding compatibility or fallback behavior.
 - Before finalizing, do one tightening pass over touched and adjacent areas: drop obsolete code,
   redundant tests, stale helpers/fixtures, and duplication the change made unnecessary.
 - Name durable module concepts with `CONTEXT.md` vocabulary. Do not coin parallel names across docs,
@@ -159,9 +163,10 @@ one question so `rg` → read-whole-file stays one cheap bounded read.
   the only exclusion list is `.oxfmtrc.json` `ignorePatterns` — Markdown, the Maestro conformance
   corpus, and generated baselines. Run `pnpm format`, never `oxfmt <path>`: a path argument
   reformats a subset and hides whatever else drifted.
-- Before pushing, the aggregate is **`pnpm check`** (`check:tooling && check:fallow &&
-  check:unit`). `pnpm check:tooling` is a *subset*: it stops before the Fallow audit, so dead
-  exports and complexity findings your diff introduces still fail CI after it passes clean.
+- Before pushing, default to **`pnpm check:affected --run`**. It selects the relevant local gates and
+  reports native/device checks left to GitHub. Use **`pnpm check`**
+  (`check:tooling && check:fallow && check:unit`) for broad refactors or an explicitly requested full
+  deterministic core gate. Neither command claims to reproduce every GitHub job.
   Fallow's baselines are keyed by path, so a change that RENAMES a file must move that file's
   entry in `fallow-baselines/health.json` — regenerating the baselines would silently accept
   every other outstanding finding too.
@@ -186,7 +191,7 @@ connect errors, retry policy, or command typing, start in
   and must not duplicate backend logic. App/device logs stay in `app.log`; Apple runner and
   `xcodebuild` subprocess output belongs in the session-scoped `runner.log`. Preserve the external
   grep/tail workflow documented in help/skills.
-- Normalize user-facing failures via `normalizeError` (`src/kernel/errors.ts`). Payload contract:
+- Normalize user-facing failures via `normalizeError` (`@agent-device/kernel/errors`). Payload contract:
   `code`, `message`, `hint`, `diagnosticId`, `logPath`, `details`. Preserve `hint`, `diagnosticId`,
   and `logPath` when wrapping or rethrowing. Errors say what failed, why when known, and how to
   recover — recovery steps go in `hint` when the action is not obvious.
@@ -224,7 +229,9 @@ connect errors, retry policy, or command typing, start in
 - Contention flakes: `request-handler-catalog` ("specialized daemon routes...") and the doctor
   provider scenario time out under host load. Before believing a regression, rerun in isolation AND
   reproduce on plain `origin/main` under the same load. A changing failure set that passes in
-  isolation is contention, not your change.
+  isolation is contention, not your change. The files CI may rerun once for a timeout-shaped failure
+  are enumerated in `scripts/lib/contention-retry.ts` (docs/agents/testing.md, "Contention retry
+  policy").
 
 ## Docs & skills
 
@@ -233,10 +240,8 @@ connect errors, retry policy, or command typing, start in
   layer after writing is how the same contract ends up duplicated across two of them.
   `docs/agents/cli-flags.md` walks the layers for the flag case.
 - Decide docs impact with the change, not after. For behavior/CLI-surface changes: update
-  help/metadata, README or `website/docs/**` when user-facing, and a SkillGym case in
-  `test/skillgym/suites/agent-device-smoke-suite.ts` when command-planning guidance changes.
-- Keep SkillGym cases behavioral and command-planning oriented: assert the user-visible contract and
-  expected command family, forbid known bad patterns, avoid brittle exact output.
+  help/metadata, README or `website/docs/**` when user-facing, and a help-conformance bench case
+  (`scripts/help-conformance-*.mjs`) when command-planning guidance changes.
 - State in the final summary whether docs/skills were updated, and why not if they weren't.
 
 When guidance conflicts, Hard Rules win, then scope, then testing, then style.

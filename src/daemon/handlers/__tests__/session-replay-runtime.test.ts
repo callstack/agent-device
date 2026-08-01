@@ -11,7 +11,10 @@ import path from 'node:path';
 import { runReplayScriptFile } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import {
+  makeIosSession,
+  makeRepairArmedSession,
+} from '../../../__tests__/test-utils/session-factories.ts';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,
@@ -147,6 +150,31 @@ test('Maestro YAML uses the typed engine while .ad remains generic', async () =>
   });
   expect(adResponse).toMatchObject({ ok: true, data: { replayed: 1 } });
   expect(commands).toEqual(['open']);
+});
+
+test('bare Maestro YAML requires explicit --maestro routing', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-explicit-route-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const yamlPath = path.join(root, 'flow.yaml');
+  fs.writeFileSync(yamlPath, 'appId: com.example.app\n---\n- launchApp\n');
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [yamlPath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: vi.fn(),
+  });
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      code: 'INVALID_ARGS',
+      message: `Maestro YAML requires explicit --maestro routing: replay ${yamlPath} --maestro`,
+    },
+  });
 });
 
 test('ADR 0016 / #1384: a Maestro replay reports sessionActive: true (real producer, no fake HTTP)', async () => {
@@ -359,9 +387,7 @@ test('Maestro YAML cannot append commands to an active .ad repair session', asyn
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-typed-maestro-active-repair-'));
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  const session = makeIosSession(sessionName);
-  session.recordSession = true;
-  session.saveScriptBoundary = 0;
+  const session = makeRepairArmedSession(sessionName);
   sessionStore.set(sessionName, session);
   const yamlPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(yamlPath, 'appId: com.example.app\n---\n- launchApp\n');

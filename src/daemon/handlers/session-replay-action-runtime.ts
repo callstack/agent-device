@@ -2,11 +2,11 @@ import type { CommandFlags } from '../../core/dispatch.ts';
 import { resolveReplayAction, type ReplayVarScope } from '../../replay/vars.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionAction } from '../types.ts';
 import { mergeParentFlags } from '../../core/batch.ts';
-import { AppError, normalizeError } from '../../kernel/errors.ts';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
   gesturePayloadFromPositionals,
   swipePayloadFromPositionals,
-} from '../../contracts/gesture-normalization.ts';
+} from '@agent-device/contracts/interaction';
 import { buildDisplayPositionals } from '../session-event-action.ts';
 import { appendReplayTraceEvent } from './session-replay-trace.ts';
 import { inferFillText } from '../action-utils.ts';

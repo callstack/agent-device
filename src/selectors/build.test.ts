@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import type { SnapshotNode } from '../kernel/snapshot.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { buildNodes } from '../__tests__/test-utils/snapshot-builders.ts';
 import { computeTargetEvidence } from '../daemon/session-target-evidence.ts';
 import { buildSelectorChainForNode } from './build.ts';

@@ -1,8 +1,8 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { dispatchCommand } from '../dispatch.ts';
-import { AppError } from '../../kernel/errors.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { openIosApp, setIosSetting } from '../../platforms/apple/core/apps.ts';
 import { openAndroidApp } from '../../platforms/android/app-lifecycle.ts';
 import { setAndroidSetting } from '../../platforms/android/settings.ts';
@@ -75,6 +75,23 @@ test('dispatch open rejects launch arguments without an app target', async () =>
       return true;
     },
   );
+});
+
+test('dispatch open forwards terminate-running semantics with an iOS app URL', async () => {
+  await dispatchCommand(
+    IOS_SIMULATOR,
+    'open',
+    ['com.example.app', 'myapp://automation'],
+    undefined,
+    {
+      terminateRunningApp: true,
+    },
+  );
+
+  assert.equal(mockOpenIosApp.mock.calls.length, 1);
+  assert.deepEqual(mockOpenIosApp.mock.calls[0]?.slice(0, 2), [IOS_SIMULATOR, 'com.example.app']);
+  assert.equal(mockOpenIosApp.mock.calls[0]?.[2]?.url, 'myapp://automation');
+  assert.equal(mockOpenIosApp.mock.calls[0]?.[2]?.terminateRunningApp, true);
 });
 
 test('dispatch open forwards Android launch arguments to openAndroidApp', async () => {

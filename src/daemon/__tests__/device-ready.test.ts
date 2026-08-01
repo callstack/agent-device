@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 
 vi.mock('../../utils/exec.ts', () => ({
   runCmd: vi.fn(),

@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { Rect } from '@agent-device/kernel/snapshot';
 import { PNG } from '../utils/png.ts';
 import {
   computeScreenshotDiffPixelsAsync,
@@ -8,17 +9,40 @@ import {
   encodePngAsync,
 } from '../utils/png-worker-client.ts';
 import { annotateDiffRegions } from './screenshot-diff-region-overlay.ts';
-import {
-  summarizeNonTextDiffDeltas,
-  type ScreenshotNonTextDelta,
-} from './screenshot-diff-non-text.ts';
-import { summarizeScreenshotOcr, type ScreenshotOcrSummary } from './screenshot-diff-ocr.ts';
 import { summarizeDiffRegions, type ScreenshotDiffRegion } from './screenshot-diff-regions.ts';
 import type { ImageDimensions } from '../utils/screenshot-geometry.ts';
 
 export type ScreenshotDimensionMismatch = {
   expected: ImageDimensions;
   actual: ImageDimensions;
+};
+
+type ScreenshotOcrSummary = {
+  provider: 'tesseract';
+  baselineBlocks: number;
+  currentBlocks: number;
+  matches: Array<{
+    text: string;
+    baselineRect: Rect;
+    currentRect: Rect;
+    delta: Rect;
+    confidence: number;
+    possibleTextMetricMismatch: boolean;
+  }>;
+  movementClusters?: Array<{
+    texts: string[];
+    xRange: { min: number; max: number };
+    yRange: { min: number; max: number };
+  }>;
+};
+
+type ScreenshotNonTextDelta = {
+  index: number;
+  regionIndex?: number;
+  slot: 'leading' | 'trailing' | 'background' | 'separator' | 'unknown';
+  likelyKind: 'icon' | 'toggle' | 'chevron' | 'separator' | 'visual';
+  rect: Rect;
+  nearestText?: string;
 };
 
 export type ScreenshotDiffResult = {
@@ -31,7 +55,9 @@ export type ScreenshotDiffResult = {
   regions?: ScreenshotDiffRegion[];
   currentOverlayPath?: string;
   currentOverlayRefCount?: number;
+  /** @deprecated Retained for source compatibility; OCR analysis is no longer emitted. */
   ocr?: ScreenshotOcrSummary;
+  /** @deprecated Retained for source compatibility; non-text analysis is no longer emitted. */
   nonTextDeltas?: ScreenshotNonTextDelta[];
 };
 
@@ -93,10 +119,10 @@ export async function compareScreenshots(
   // Per-pixel comparison is CPU-heavy for full-resolution screenshots, so it
   // runs on the PNG worker thread (with an in-process synchronous fallback).
   const { diffData, diffMask, differentPixels } = await computeScreenshotDiffPixelsAsync({
-    width: baseline.width,
-    height: baseline.height,
     baselineData: baseline.data,
     currentData: current.data,
+    width: baseline.width,
+    height: baseline.height,
     maxColorDistance,
   });
 
@@ -112,45 +138,14 @@ export async function compareScreenshots(
       : [];
 
   if (differentPixels > 0 && diffOutputPath) {
-    const diff = new PNG({ width: baseline.width, height: baseline.height, data: diffData });
+    const diff = new PNG({ width: baseline.width, height: baseline.height });
+    diff.data = diffData;
     annotateDiffRegions(diff, regions);
     await fs.mkdir(path.dirname(diffOutputPath), { recursive: true });
     await fs.writeFile(diffOutputPath, await encodePngAsync(diff));
   } else {
     await removeStaleDiffOutput(options.outputPath);
   }
-
-  const ocrAnalysis =
-    differentPixels > 0
-      ? await summarizeScreenshotOcr({
-          baselinePath,
-          currentPath,
-          width: baseline.width,
-          height: baseline.height,
-        })
-      : undefined;
-  const shouldIncludeOcr =
-    ocrAnalysis &&
-    (ocrAnalysis.matches.length > 0 || (ocrAnalysis.movementClusters?.length ?? 0) > 0);
-  const ocr = shouldIncludeOcr
-    ? {
-        provider: ocrAnalysis.provider,
-        baselineBlocks: ocrAnalysis.baselineBlocks,
-        currentBlocks: ocrAnalysis.currentBlocks,
-        matches: ocrAnalysis.matches,
-        ...(ocrAnalysis.movementClusters ? { movementClusters: ocrAnalysis.movementClusters } : {}),
-      }
-    : undefined;
-  const nonTextDeltas =
-    differentPixels > 0 && ocrAnalysis
-      ? summarizeNonTextDiffDeltas({
-          diffMask,
-          width: baseline.width,
-          height: baseline.height,
-          regions,
-          ocr: ocrAnalysis,
-        })
-      : [];
 
   // Round to 2 decimal places: multiply percentage by 100 before rounding,
   // then divide back. e.g. 0.12345 → 12.345% → round(1234.5)/100 → 12.35%
@@ -160,8 +155,6 @@ export async function compareScreenshots(
   return {
     ...(differentPixels > 0 && diffOutputPath ? { diffPath: diffOutputPath } : {}),
     ...(regions.length > 0 ? { regions } : {}),
-    ...(ocr ? { ocr } : {}),
-    ...(nonTextDeltas.length > 0 ? { nonTextDeltas } : {}),
     totalPixels,
     differentPixels,
     mismatchPercentage,

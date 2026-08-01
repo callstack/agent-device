@@ -1,9 +1,10 @@
 import { createRequestCanceledError, isRequestCanceledError } from '../../../../request/cancel.ts';
-import { AppError } from '../../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { requireExecSuccess } from '../../../../utils/exec.ts';
 import { Deadline, retryWithPolicy } from '../../../../utils/retry.ts';
-import type { DeviceInfo } from '../../../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { classifyBootFailure, bootFailureHint } from '../../../boot-diagnostics.ts';
+import { resolveIosPhysicalDeviceControl } from '../physical-device-control.ts';
 import { buildSimctlArgsForDevice } from '../simctl.ts';
 import { runXcrun } from '../tool-provider.ts';
 import {
@@ -14,6 +15,7 @@ import {
 import {
   buildRunnerConnectError,
   buildRunnerEarlyExitError,
+  isUsbmuxDeviceUnattachedError,
   shouldRetryRunnerConnectError,
   type RunnerCommand,
 } from './runner-contract.ts';
@@ -40,7 +42,7 @@ export async function waitForRunner(
   signal?: AbortSignal,
 ): Promise<Response> {
   const deadline = Deadline.fromTimeoutMs(timeoutMs);
-  const { resolveRoute } = createRunnerCommandRouteResolver(device, port);
+  const { resolveRoute, markUsbmuxUnattached } = createRunnerCommandRouteResolver(device, port);
   let route = await resolveRoute(deadline.remainingMs());
   let lastError: unknown = null;
   const maxAttempts = Math.max(1, Math.ceil(timeoutMs / RUNNER_CONNECT_ATTEMPT_INTERVAL_MS));
@@ -56,6 +58,7 @@ export async function waitForRunner(
           session,
           route,
           resolveRoute,
+          markUsbmuxUnattached,
           signal,
           attemptDeadline,
           setRoute: (nextRoute) => {
@@ -86,6 +89,7 @@ export async function waitForRunner(
     if (signal?.aborted || isRequestCanceledError(error)) {
       throw createRequestCanceledError();
     }
+    if (isUsbmuxDeviceUnattachedError(error)) throw error;
     if (!lastError) {
       lastError = error;
     }
@@ -118,6 +122,7 @@ async function attemptRunnerConnection(params: {
   session?: RunnerSession;
   route: RunnerCommandRoute;
   resolveRoute: RunnerRouteResolver;
+  markUsbmuxUnattached: () => void;
   signal?: AbortSignal;
   attemptDeadline?: Deadline;
   setRoute: (route: RunnerCommandRoute) => void;
@@ -167,6 +172,7 @@ async function tryPrimaryRunnerRoute(params: {
   attemptDeadline?: Deadline;
   setRoute: (route: RunnerCommandRoute) => void;
   setLastError: (error: unknown) => void;
+  markUsbmuxUnattached: () => void;
 }): Promise<{ response: Response | null; usedCachedTunnelIp: boolean }> {
   let route = params.route;
   let usedCachedTunnelIp = false;
@@ -176,21 +182,35 @@ async function tryPrimaryRunnerRoute(params: {
     params.setRoute(route);
   }
 
-  const cachedTunnelEndpoint = usedCachedTunnelIp ? route.endpoints[0] : null;
-  const response = await tryRunnerRoute(params.device, route, {
-    command: params.command,
-    port: params.port,
-    timeoutMs: params.timeoutMs,
-    signal: params.signal,
-    attemptDeadline: params.attemptDeadline,
-    onError: (endpoint, err) => {
-      params.setLastError(err);
-      if (params.device.kind === 'device' && endpoint === cachedTunnelEndpoint) {
-        invalidateDeviceTunnelIpCache(params.device.id);
-      }
-    },
-  });
-  return { response, usedCachedTunnelIp };
+  const runRoute = async (current: RunnerCommandRoute) => {
+    // Derived per route: a usbmux-first attempt only learns its cached tunnel
+    // endpoint after falling back, and a stale one must still be invalidated.
+    const cachedTunnelEndpoint = current.cachedTunnelIp ? current.endpoints[0] : null;
+    return await tryRunnerRoute(params.device, current, {
+      command: params.command,
+      port: params.port,
+      timeoutMs: params.timeoutMs,
+      signal: params.signal,
+      attemptDeadline: params.attemptDeadline,
+      onUsbmuxUnattached: params.markUsbmuxUnattached,
+      onError: (endpoint, err) => {
+        params.setLastError(err);
+        if (params.device.kind === 'device' && endpoint === cachedTunnelEndpoint) {
+          invalidateDeviceTunnelIpCache(params.device.id);
+        }
+      },
+    });
+  };
+
+  const response = await runRoute(route);
+  if (response || route.kind !== 'usbmux') return { response, usedCachedTunnelIp };
+
+  // usbmux reported the device as unattached: resolve the CoreDevice tunnel
+  // route and try it within the same attempt instead of burning a retry.
+  const fallback = await params.resolveRoute(params.attemptDeadline?.remainingMs());
+  if (fallback.kind === 'usbmux') return { response: null, usedCachedTunnelIp };
+  params.setRoute(fallback);
+  return { response: await runRoute(fallback), usedCachedTunnelIp: fallback.cachedTunnelIp };
 }
 
 async function tryReadySimulatorEndpoint(params: {
@@ -267,14 +287,20 @@ export async function sendRunnerCommandOnce(
     throw createRequestCanceledError();
   }
   const deadline = Deadline.fromTimeoutMs(timeoutMs);
-  const { resolveRoute } = createRunnerCommandRouteResolver(device, port);
-  const route = await resolveRoute(deadline.remainingMs());
+  const resolver = createRunnerCommandRouteResolver(device, port);
+  let route = await resolver.resolveRoute(deadline.remainingMs());
+  if (route.kind === 'usbmux') {
+    try {
+      return await postUsbmuxRunnerCommand(device, port, command, deadline, signal);
+    } catch (error) {
+      if (!canFallBackFromUsbmux(device, error)) throw error;
+      resolver.markUsbmuxUnattached();
+      route = await resolver.resolveRoute(deadline.remainingMs());
+    }
+  }
   const remainingMs = deadline.remainingMs();
   if (remainingMs <= 0) {
     throw new AppError('COMMAND_FAILED', 'Runner command deadline exceeded', { timeoutMs });
-  }
-  if (route.kind === 'usbmux') {
-    return await usbmuxRunnerTransport.postCommand(device.id, port, command, remainingMs, signal);
   }
   const endpoint = route.endpoints[0];
   if (!endpoint) {
@@ -295,6 +321,33 @@ export async function sendRunnerCommandOnce(
   );
 }
 
+async function postUsbmuxRunnerCommand(
+  device: DeviceInfo,
+  port: number,
+  command: RunnerCommand,
+  deadline: Deadline,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const remainingMs = deadline.remainingMs();
+  if (remainingMs <= 0) {
+    throw new AppError('COMMAND_FAILED', 'Runner command deadline exceeded', {
+      port,
+      timeoutMs: remainingMs,
+    });
+  }
+  return await usbmuxRunnerTransport.postCommand(device.id, port, command, remainingMs, signal);
+}
+
+/**
+ * A CoreDevice-backed device that usbmuxd does not list is reachable over its
+ * network tunnel instead. XCTest-backed devices have no such tunnel, so their
+ * usbmux verdict stands.
+ */
+function canFallBackFromUsbmux(device: DeviceInfo, error: unknown): boolean {
+  if (!isUsbmuxDeviceUnattachedError(error)) return false;
+  return resolveIosPhysicalDeviceControl(device).backend !== 'xctest';
+}
+
 async function tryRunnerRoute(
   device: DeviceInfo,
   route: RunnerCommandRoute,
@@ -304,6 +357,7 @@ async function tryRunnerRoute(
     timeoutMs: number;
     signal?: AbortSignal;
     attemptDeadline?: Deadline;
+    onUsbmuxUnattached?: () => void;
     onError: (endpoint: string, error: unknown) => void;
   },
 ): Promise<Response | null> {
@@ -329,6 +383,16 @@ async function tryRunnerRoute(
   } catch (error) {
     if (params.signal?.aborted || isRequestCanceledError(error)) {
       throw createRequestCanceledError();
+    }
+    if (isUsbmuxDeviceUnattachedError(error)) {
+      if (!canFallBackFromUsbmux(device, error)) {
+        // No tunnel exists for this device, so retrying cannot attach a cable.
+        // Throw the typed verdict so its recovery hint survives instead of
+        // being replaced by a generic connect failure.
+        throw error;
+      }
+      params.onUsbmuxUnattached?.();
+      return null;
     }
     params.onError(endpoint, error);
     return null;

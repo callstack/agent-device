@@ -1,4 +1,4 @@
-import type { DebugSymbolsResult } from '../../contracts/debug-symbols.ts';
+import type { DebugSymbolsResult } from '@agent-device/contracts/observability';
 import type { CliOutput } from '../command-contract.ts';
 import { resultOutput, type CliOutputFormatter } from '../output-common.ts';
 

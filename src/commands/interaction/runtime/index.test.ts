@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { commands } from '../../index.ts';
-import { selector } from './selector-read.ts';
+import { selector } from './selector-read-utils.ts';
 import { createInteractionDevice, selectorSnapshot } from './__tests__/test-utils/index.ts';
 
 test('runtime interaction commands are available from the command namespace', async () => {

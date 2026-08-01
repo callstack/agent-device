@@ -1,8 +1,12 @@
 import { INTERNAL_COMMANDS } from '../../command-catalog.ts';
-import { AppError, normalizeError } from '../../kernel/errors.ts';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { successText } from '../../utils/success-text.ts';
-import { applySaveScriptRetarget } from '../session-action-recorder.ts';
-import { expandSessionPath } from '../session-paths.ts';
+import {
+  effectiveWriteForce,
+  markActivePublicationDone,
+  retargetActivePublication,
+} from '../session-script-publication-capability.ts';
+import { isRepairArmedSession } from '../session-replay-transaction.ts';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 
@@ -34,13 +38,10 @@ export function handleSessionScriptPublication(params: {
   if (req.positionals?.[0] !== undefined && !explicitPath) {
     return failure(new AppError('INVALID_ARGS', 'session save-script path cannot be empty.'));
   }
-  if (explicitPath) {
-    applySaveScriptRetarget(session, expandSessionPath(explicitPath), req.flags?.force);
-  }
-  if (req.flags?.force) session.saveScriptForce = true;
+  retargetActivePublication(session, { explicitPath, liveForce: req.flags?.force });
 
   const result = sessionStore.writeSessionLog(session, {
-    force: Boolean(req.flags?.force || session.saveScriptForce),
+    force: effectiveWriteForce(session, req.flags?.force),
     publication: 'active',
   });
   if (!result.written) {
@@ -53,9 +54,7 @@ export function handleSessionScriptPublication(params: {
     );
   }
 
-  session.scriptRecordingState = 'published';
-  session.recordSession = false;
-  session.saveScriptPath = result.path;
+  markActivePublicationDone(session, result.path);
   return {
     ok: true,
     data: {
@@ -67,36 +66,47 @@ export function handleSessionScriptPublication(params: {
   };
 }
 
-function validatePublicationEligibility(session: SessionState): AppError | undefined {
-  if (session.saveScriptBoundary !== undefined) {
-    return new AppError(
+type PublicationIneligibility = 'repair' | 'aborted' | 'published' | 'not-armed';
+
+/** Why this session cannot publish its active recording, or `undefined` when it can. */
+function publicationIneligibility(session: SessionState): PublicationIneligibility | undefined {
+  if (isRepairArmedSession(session)) return 'repair';
+  const state = session.scriptPublication;
+  if (state?.kind !== 'authoring') return 'not-armed';
+  if (state.status === 'armed') return session.recordSession ? undefined : 'not-armed';
+  return state.status;
+}
+
+const PUBLICATION_INELIGIBILITY_ERRORS: Record<PublicationIneligibility, () => AppError> = {
+  repair: () =>
+    new AppError(
       'COMMAND_FAILED',
       'This session has an active .ad repair transaction and cannot use ordinary active-session publication.',
       {
         hint: 'Finish or abort the repair through replay --from and its existing close/teardown protocol.',
       },
-    );
-  }
-  if (session.scriptRecordingState === 'aborted') {
-    return new AppError(
+    ),
+  aborted: () =>
+    new AppError(
       'COMMAND_FAILED',
       'This script recording was aborted by a second successful open and cannot be published.',
       { hint: 'Close this session and start a fresh one with open <app> --save-script[=<path>].' },
-    );
-  }
-  if (session.scriptRecordingState === 'published') {
-    return new AppError('COMMAND_FAILED', 'This script recording has already been published.', {
+    ),
+  published: () =>
+    new AppError('COMMAND_FAILED', 'This script recording has already been published.', {
       hint: 'Continue using the live session, or close it and start a fresh authoring session.',
-    });
-  }
-  if (session.scriptRecordingState !== 'armed' || !session.recordSession) {
-    return new AppError(
+    }),
+  'not-armed': () =>
+    new AppError(
       'COMMAND_FAILED',
       'Script recording was not armed before this journey began; session history cannot be published without recording-time target evidence.',
       { hint: 'Close this session and start a fresh one with open <app> --save-script[=<path>].' },
-    );
-  }
-  return undefined;
+    ),
+};
+
+function validatePublicationEligibility(session: SessionState): AppError | undefined {
+  const reason = publicationIneligibility(session);
+  return reason ? PUBLICATION_INELIGIBILITY_ERRORS[reason]() : undefined;
 }
 
 function failure(error: AppError): Extract<DaemonResponse, { ok: false }> {

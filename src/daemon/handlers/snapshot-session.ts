@@ -1,4 +1,4 @@
-import { isIosFamily } from '../../kernel/device.ts';
+import { isIosFamily } from '@agent-device/kernel/device';
 import { resolveTargetDevice } from '../../core/dispatch.ts';
 import {
   resolveRunnerAppBundleId,

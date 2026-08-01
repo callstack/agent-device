@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -47,6 +47,10 @@ vi.mock('../../../platforms/android/ime-lifecycle.ts', async (importOriginal) =>
   const actual =
     await importOriginal<typeof import('../../../platforms/android/ime-lifecycle.ts')>();
   return { ...actual, activateAndroidTestIme: vi.fn(async () => ({ activated: false })) };
+});
+vi.mock('../../../utils/host-process.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../utils/host-process.ts')>();
+  return { ...actual, readProcessStartTime: vi.fn(() => 'test-process-start') };
 });
 
 import { handleSessionCommands } from '../session.ts';

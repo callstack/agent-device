@@ -1,8 +1,9 @@
-import { asAppError } from '../kernel/errors.ts';
+import { asAppError } from '@agent-device/kernel/errors';
 
 export type BootFailureReason =
   | 'IOS_BOOT_TIMEOUT'
   | 'IOS_RUNNER_CONNECT_TIMEOUT'
+  | 'IOS_RUNNER_DEVICE_NOT_PROVISIONED'
   | 'IOS_TOOL_MISSING'
   | 'ANDROID_BOOT_TIMEOUT'
   | 'ADB_TRANSPORT_UNAVAILABLE'
@@ -71,6 +72,19 @@ export function classifyBootFailure(input: {
     .join('\n')
     .toLowerCase();
 
+  // Matched before the connect-timeout branch: a runner that could not be
+  // installed also never accepts a connection. The stable CoreDevice code is
+  // specific to a profile that does not cover the target device; generic
+  // profile text also appears for unrelated signing failures.
+  if (platform === 'ios' && haystack.includes('0xe8008012')) {
+    return 'IOS_RUNNER_DEVICE_NOT_PROVISIONED';
+  }
+  if (
+    platform === 'ios' &&
+    (haystack.includes('provisioning profile') || haystack.includes('embedded profile'))
+  ) {
+    return 'BOOT_COMMAND_FAILED';
+  }
   if (
     platform === 'ios' &&
     (haystack.includes('runner did not accept connection') ||
@@ -129,6 +143,8 @@ export function bootFailureHint(reason: BootFailureReason): string {
       return 'Retry simulator boot and inspect simctl bootstatus logs; in CI reduce parallel jobs or use a larger runner.';
     case 'IOS_RUNNER_CONNECT_TIMEOUT':
       return 'Retry runner startup, inspect xcodebuild logs, and verify simulator responsiveness before command execution.';
+    case 'IOS_RUNNER_DEVICE_NOT_PROVISIONED':
+      return 'The XCTest runner cannot be installed on this device: its provisioning profile does not cover it. Register the device with the signing team (Xcode > Settings > Accounts, or add its UDID to the provisioning profile) and retry. Retrying without that will keep failing.';
     case 'ANDROID_BOOT_TIMEOUT':
       return 'Retry emulator startup and verify sys.boot_completed reaches 1; consider increasing startup budget in CI.';
     case 'ADB_TRANSPORT_UNAVAILABLE':

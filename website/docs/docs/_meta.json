@@ -1,97 +1,130 @@
 [
   {
-    "name": "introduction",
-    "type": "file",
-    "label": "Introduction"
+    "type": "custom-link",
+    "label": "Getting Started",
+    "collapsible": false,
+    "items": [
+      {
+        "type": "custom-link",
+        "label": "Introduction",
+        "link": "/docs/introduction"
+      },
+      {
+        "type": "custom-link",
+        "label": "Installation",
+        "link": "/docs/installation"
+      },
+      {
+        "type": "custom-link",
+        "label": "AI Agent Setup",
+        "link": "/docs/agent-setup"
+      },
+      {
+        "type": "custom-link",
+        "label": "Quick Start",
+        "link": "/docs/quick-start"
+      }
+    ]
   },
   {
-    "name": "installation",
-    "type": "file",
-    "label": "Installation"
+    "type": "custom-link",
+    "label": "Using agent-device",
+    "collapsible": false,
+    "items": [
+      {
+        "type": "custom-link",
+        "label": "Commands",
+        "link": "/docs/commands"
+      },
+      {
+        "type": "custom-link",
+        "label": "Configuration",
+        "link": "/docs/configuration"
+      },
+      {
+        "type": "custom-link",
+        "label": "Selectors",
+        "link": "/docs/selectors"
+      },
+      {
+        "type": "custom-link",
+        "label": "Sessions",
+        "link": "/docs/sessions"
+      },
+      {
+        "type": "custom-link",
+        "label": "Batching",
+        "link": "/docs/batching"
+      },
+      {
+        "type": "custom-link",
+        "label": "Snapshots",
+        "link": "/docs/snapshots"
+      },
+      {
+        "type": "custom-link",
+        "label": "Replay & E2E testing",
+        "link": "/docs/replay-e2e"
+      },
+      {
+        "type": "custom-link",
+        "label": "Debugging & Profiling",
+        "link": "/docs/debugging-profiling"
+      }
+    ]
   },
   {
-    "name": "agent-setup",
-    "type": "file",
-    "label": "AI Agent Setup"
+    "type": "custom-link",
+    "label": "Integrations",
+    "collapsible": false,
+    "items": [
+      {
+        "type": "custom-link",
+        "label": "Node.js API",
+        "link": "/docs/client-api"
+      },
+      {
+        "type": "custom-link",
+        "label": "AI SDK",
+        "link": "/docs/ai-sdk"
+      },
+      {
+        "type": "custom-link",
+        "label": "Eve",
+        "link": "/docs/eve"
+      },
+      {
+        "type": "custom-link",
+        "label": "Remote Proxy",
+        "link": "/docs/remote-proxy"
+      },
+      {
+        "type": "custom-link",
+        "label": "Device Clouds",
+        "link": "/docs/device-clouds"
+      }
+    ]
   },
   {
-    "name": "quick-start",
-    "type": "file",
-    "label": "Quick Start"
-  },
-  {
-    "name": "debugging-profiling",
-    "type": "file",
-    "label": "Debugging & Profiling"
-  },
-  {
-    "name": "client-api",
-    "type": "file",
-    "label": "Typed Client"
-  },
-  {
-    "name": "commands",
-    "type": "file",
-    "label": "Commands"
-  },
-  {
-    "name": "configuration",
-    "type": "file",
-    "label": "Configuration"
-  },
-  {
-    "name": "remote-proxy",
-    "type": "file",
-    "label": "Remote Proxy"
-  },
-  {
-    "name": "device-clouds",
-    "type": "file",
-    "label": "Device Clouds"
-  },
-  {
-    "name": "security-trust",
-    "type": "file",
-    "label": "Security & Trust"
-  },
-  {
-    "name": "batching",
-    "type": "file",
-    "label": "Batching"
-  },
-  {
-    "name": "selectors",
-    "type": "file",
-    "label": "Selectors"
-  },
-  {
-    "name": "sessions",
-    "type": "file",
-    "label": "Sessions"
-  },
-  {
-    "name": "replay-e2e",
-    "type": "file",
-    "label": "Replay & E2E"
-  },
-  {
-    "name": "snapshots",
-    "type": "file",
-    "label": "Snapshots"
-  },
-  {
-    "name": "ios-snapshot-elements",
-    "type": "file",
-    "label": "iOS Snapshot Elements"
-  },
-  {
-    "name": "known-limitations",
-    "type": "file",
-    "label": "Known Limitations"
-  },
-  {
-    "name": "migrating-gestures",
-    "type": "file",
-    "label": "Migrating Gestures"
+    "type": "custom-link",
+    "label": "Reference",
+    "collapsible": false,
+    "items": [
+      {
+        "type": "custom-link",
+        "label": "Security & Trust",
+        "link": "/docs/security-trust"
+      },
+      {
+        "type": "custom-link",
+        "label": "Known Limitations",
+        "link": "/docs/known-limitations"
+      },
+      {
+        "type": "custom-link",
+        "label": "Migrating Gestures",
+        "link": "/docs/migrating-gestures"
+      }
+    ]
   }
 ]

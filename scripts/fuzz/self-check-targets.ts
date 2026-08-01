@@ -6,7 +6,7 @@
 // deliberately kept out of FUZZ_TARGETS: only the registry resolves them by name, so a normal
 // run never sees them and no production module gains a test-only seam.
 
-import { AppError } from '../../src/kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { FuzzTarget, SelfCheckTargetName } from './target-types.ts';
 
 const SEEDS = ['self-check'];

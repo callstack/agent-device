@@ -1,15 +1,14 @@
+import type { GesturePlan, Interactor, RunnerContext } from '@agent-device/contracts/interaction';
+import { AppError } from '@agent-device/kernel/errors';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { IOS_SIMULATOR } from '../../../__tests__/test-utils/index.ts';
-import { createAppleInteractor } from '../interactor.ts';
-import { AppError } from '../../../kernel/errors.ts';
-import type { GesturePlan } from '../../../contracts/gesture-plan-types.ts';
-import type { Interactor, RunnerContext } from '../../../contracts/interactor-types.ts';
+import type { RunnerCommand } from '../core/runner/runner-contract.ts';
 import type {
   AppleRunnerCommandOptions,
   AppleRunnerProvider,
 } from '../core/runner/runner-provider.ts';
-import type { RunnerCommand } from '../core/runner/runner-contract.ts';
+import { createAppleInteractor } from '../interactor.ts';
 
 type RecordedRunnerCall = { command: RunnerCommand; options: AppleRunnerCommandOptions };
 
@@ -110,6 +109,38 @@ test('injected transport still resolves when the runner context carries a reques
   assert.equal(calls[0]!.options.requestId, 'req-42');
 });
 
+test('injected transport receives the active interaction cancellation signal', async () => {
+  const calls: RecordedRunnerCall[] = [];
+  const controller = new AbortController();
+  const interactor = createAppleInteractor(
+    IOS_SIMULATOR,
+    { signal: controller.signal },
+    recordingRunnerProvider(calls),
+  );
+
+  await interactor.snapshot();
+
+  assert.equal(calls[0]?.options.signal, controller.signal);
+});
+
+test('snapshot merges its per-call cancellation signal with the interaction context', async () => {
+  const calls: RecordedRunnerCall[] = [];
+  const contextController = new AbortController();
+  const snapshotController = new AbortController();
+  const interactor = createAppleInteractor(
+    IOS_SIMULATOR,
+    { signal: contextController.signal },
+    recordingRunnerProvider(calls),
+  );
+
+  await interactor.snapshot({ signal: snapshotController.signal });
+
+  const signal = calls[0]?.options.signal;
+  assert.ok(signal);
+  snapshotController.abort();
+  assert.equal(signal.aborted, true);
+});
+
 test('snapshot over the injected transport keeps the shared xctest result shape', async () => {
   const interactor = createAppleInteractor(IOS_SIMULATOR, {}, recordingRunnerProvider([]));
   const result = await interactor.snapshot();
@@ -144,6 +175,8 @@ function runnerResultFor(command: RunnerCommand): Record<string, unknown> {
       };
     case 'gestureViewport':
       return { x: 0, y: 0, x2: 390, y2: 844 };
+    case 'rotate':
+      return { orientation: command.orientation };
     default:
       return {};
   }

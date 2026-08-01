@@ -7,6 +7,14 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { stringify } from 'yaml';
+import {
+  executeMaestroFlow,
+  inspectMaestroFlow,
+  type MaestroFailedAction,
+  type MaestroRuntimeCommand,
+  type MaestroRuntimePort,
+} from '@agent-device/maestro';
 import {
   buildTypedMaestroFailureReportProjection,
   buildTypedMaestroFailureResponse,
@@ -16,9 +24,7 @@ import { SessionStore } from '../../session-store.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { baseReplayRequest as baseReq } from './session-replay-runtime.fixtures.ts';
-import type { MaestroCommand } from '../../../compat/maestro/program-ir.ts';
-import type { MaestroReplayPlan } from '../../../compat/maestro/replay-plan-types.ts';
-import type { SnapshotNode } from '../../../kernel/snapshot.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 
 const mockDispatchCommand = vi.mocked(dispatchCommand);
 
@@ -27,43 +33,23 @@ beforeEach(() => {
   mockDispatchCommand.mockResolvedValue({});
 });
 
-function makeMaestroPlan(): MaestroReplayPlan {
-  return {
-    kind: 'maestroReplayPlan',
-    platform: 'ios',
-    initialStaticEnv: {},
-    steps: [],
-    total: 1,
-    digest: 'typed-maestro-test-plan',
-    compatibility: {
-      staticallyExecutedControls: 0,
-      staticallySkippedControls: 0,
-    },
-  };
-}
-
-async function buildFailureResponse(
-  command: MaestroCommand,
+async function buildFailureScenario(
+  command: MaestroRuntimeCommand,
   nodes: SnapshotNode[],
-): Promise<Extract<Awaited<ReturnType<typeof buildTypedMaestroFailureResponse>>, { ok: false }>> {
+): Promise<{
+  response: Extract<Awaited<ReturnType<typeof buildTypedMaestroFailureResponse>>, { ok: false }>;
+  sessionStore: SessionStore;
+  sessionName: string;
+}> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-suggestions-'));
   const sessionName = 'default';
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   sessionStore.set(sessionName, makeIosSession(sessionName));
   mockDispatchCommand.mockResolvedValue({ nodes, truncated: false, backend: 'xctest' });
+  const failure = await captureMaestroFailure(command, path.join(root, 'flow.yaml'));
   const response = await buildTypedMaestroFailureResponse({
     error: { code: 'COMMAND_FAILED', message: 'typed Maestro action failed' },
-    event: {
-      command,
-      source: command.source,
-      generation: 0,
-      stepIndex: 1,
-      stepTotal: 1,
-      durationMs: 12,
-      error: new Error('typed Maestro action failed'),
-      artifactPaths: [],
-    },
-    plan: makeMaestroPlan(),
+    failure,
     replayPath: path.join(root, 'flow.yaml'),
     req: baseReq({ flags: { replayBackend: 'maestro', platform: 'ios' } }),
     sessionName,
@@ -71,32 +57,28 @@ async function buildFailureResponse(
     logPath: path.join(root, 'daemon.log'),
   });
   if (response.ok) throw new Error('expected typed Maestro failure response');
-  return response;
+  return { response, sessionStore, sessionName };
 }
 
-test('typed Maestro failure projection keeps the event command and source provenance', () => {
+async function buildFailureResponse(
+  command: MaestroRuntimeCommand,
+  nodes: SnapshotNode[],
+): Promise<Extract<Awaited<ReturnType<typeof buildTypedMaestroFailureResponse>>, { ok: false }>> {
+  return (await buildFailureScenario(command, nodes)).response;
+}
+
+test('typed Maestro failure projection keeps action and source provenance', async () => {
   const command = {
     kind: 'tapOn' as const,
     source: { path: '/flows/login.yaml', line: 4 },
     target: { space: 'target' as const, selector: { id: 'save' } },
   };
   const request = baseReq({ flags: { replayBackend: 'maestro' } });
-  const projection = buildTypedMaestroFailureReportProjection(
-    {
-      command,
-      source: command.source,
-      generation: 0,
-      stepIndex: 1,
-      stepTotal: 1,
-      durationMs: 12,
-      error: new Error('tap failed'),
-      artifactPaths: [],
-    },
-    request,
-  );
+  const failure = await captureMaestroFailure(command, command.source.path);
+  const projection = buildTypedMaestroFailureReportProjection(failure, request);
 
-  expect(projection.command).toBe(command);
-  expect(projection.source).toBe(command.source);
+  expect(projection.command).toEqual({ kind: 'tapOn' });
+  expect(projection.source).toEqual({ path: command.source.path, line: 3 });
   expect(projection.progress).toEqual({ command: 'tapOn', value: 'save' });
   expect(projection.action).toEqual({
     command: 'click',
@@ -105,6 +87,41 @@ test('typed Maestro failure projection keeps the event command and source proven
   });
   expect(Object.keys(projection.action)).toEqual(['command', 'positionals', 'flags']);
 });
+
+async function captureMaestroFailure(
+  command: MaestroRuntimeCommand,
+  sourcePath: string,
+): Promise<MaestroFailedAction> {
+  const flow = inspectMaestroFlow(maestroFlowForCommand(command), sourcePath);
+  const error = new Error('typed Maestro action failed');
+  const port: MaestroRuntimePort = {
+    execute: async () => {
+      throw error;
+    },
+    observe: async () => {
+      throw error;
+    },
+  };
+  const outcome = await executeMaestroFlow(flow, port, { platform: 'ios' });
+  if (outcome.ok || !outcome.failure) throw new Error('expected typed Maestro failure');
+  return outcome.failure;
+}
+
+function maestroFlowForCommand(command: MaestroRuntimeCommand): string {
+  const authored =
+    command.kind === 'inputText'
+      ? { inputText: command.text }
+      : command.kind === 'tapOn' && command.target.space === 'target'
+        ? {
+            tapOn: {
+              ...command.target.selector,
+              ...(command.childOf ? { childOf: command.childOf } : {}),
+            },
+          }
+        : undefined;
+  if (!authored) throw new Error(`unsupported failure fixture: ${command.kind}`);
+  return `${stringify({ appId: 'com.example.app' })}---\n${stringify([authored])}`;
+}
 
 test('typed Maestro failure diagnostics render expanded selector values without extra flags', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-expanded-selector-'));
@@ -305,13 +322,48 @@ test('typed Maestro failure diagnostics never render inputText payloads', async 
   expect(response.error.message).toContain('inputText');
 });
 
+test('typed Maestro failure publishes exactly the refs exposed by its divergence', async () => {
+  const command = {
+    kind: 'tapOn' as const,
+    source: { path: '/flows/actions.yaml', line: 4 },
+    target: { space: 'target' as const, selector: { label: 'Missing' } },
+  } satisfies Extract<MaestroRuntimeCommand, { kind: 'tapOn' }>;
+  const scenario = await buildFailureScenario(command, [
+    {
+      ref: 'e1',
+      index: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 402, height: 874 },
+    },
+    {
+      ref: 'e2',
+      index: 1,
+      parentIndex: 0,
+      label: 'Available action',
+      type: 'Button',
+      rect: { x: 16, y: 40, width: 140, height: 44 },
+      hittable: true,
+    },
+  ]);
+  const divergence = scenario.response.error.details?.divergence as {
+    screen: { state: string; refs: Array<{ ref: string }> };
+  };
+  const exposedRefs = divergence.screen.refs.map(({ ref }) => ref);
+
+  expect(divergence.screen.state).toBe('available');
+  expect(exposedRefs).toEqual(['e2']);
+  expect(scenario.sessionStore.get(scenario.sessionName)?.refFrameScope).toEqual(
+    new Set(exposedRefs),
+  );
+});
+
 test('typed Maestro suggestions rank visible childOf candidates and exclude out-of-scope nodes', async () => {
   const command = {
     kind: 'tapOn' as const,
     source: { path: '/flows/actions.yaml', line: 4 },
     target: { space: 'target' as const, selector: { text: 'save.*' } },
     childOf: { id: 'actions' },
-  } satisfies Extract<MaestroCommand, { kind: 'tapOn' }>;
+  } satisfies Extract<MaestroRuntimeCommand, { kind: 'tapOn' }>;
   const response = await buildFailureResponse(command, [
     {
       ref: 'e1',
@@ -385,7 +437,7 @@ test('typed Maestro text matching an identifier reports id basis', async () => {
     kind: 'tapOn' as const,
     source: { path: '/flows/actions.yaml', line: 4 },
     target: { space: 'target' as const, selector: { text: 'accessibility-save' } },
-  } satisfies Extract<MaestroCommand, { kind: 'tapOn' }>;
+  } satisfies Extract<MaestroRuntimeCommand, { kind: 'tapOn' }>;
   const response = await buildFailureResponse(command, [
     {
       ref: 'e1',
@@ -415,7 +467,7 @@ test('typed Maestro suggestions retain total count before the five-entry cap', a
     kind: 'tapOn' as const,
     source: { path: '/flows/actions.yaml', line: 4 },
     target: { space: 'target' as const, selector: { label: 'Save' } },
-  } satisfies Extract<MaestroCommand, { kind: 'tapOn' }>;
+  } satisfies Extract<MaestroRuntimeCommand, { kind: 'tapOn' }>;
   const response = await buildFailureResponse(command, [
     {
       ref: 'e1',

@@ -31,14 +31,37 @@ vi.mock('../../../platforms/android/app-lifecycle.ts', () => ({
   inferAndroidAppName: vi.fn(() => 'App'),
 }));
 
-function makeRequest(meta?: DaemonRequest['meta']): DaemonRequest {
+vi.mock('../../../platforms/apple/core/apps.ts', () => ({
+  installIosInstallablePath: vi.fn(async () => {}),
+}));
+
+function makeRequest(
+  meta?: DaemonRequest['meta'],
+  platform: 'android' | 'ios' = 'android',
+): DaemonRequest {
   return {
     token: 't',
     session: 'default',
     command: 'install_source',
     positionals: [],
-    flags: { platform: 'android' },
+    flags: { platform },
     meta,
+  };
+}
+
+function makeIosSession(name: string): SessionState {
+  return {
+    name,
+    createdAt: Date.now(),
+    actions: [],
+    device: {
+      platform: 'apple',
+      appleOs: 'ios',
+      id: 'sim-1',
+      name: 'iPhone',
+      kind: 'simulator',
+      booted: true,
+    },
   };
 }
 
@@ -121,5 +144,58 @@ test('install_from_source returns an error when Android package identity cannot 
   if (!response.ok) {
     expect(response.error.code).toBe('COMMAND_FAILED');
     expect(response.error.message).toMatch(/identity could not be resolved/i);
+  }
+});
+
+test('install_from_source prepares and installs a local iOS simulator app source with typed identity', async () => {
+  const { resolveTargetDevice } = await import('../../../core/dispatch.ts');
+  const { installIosInstallablePath } = await import('../../../platforms/apple/core/apps.ts');
+  const sourceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-ios-source-'));
+  const appPath = path.join(sourceRoot, 'AgentDeviceTester.app');
+  fs.mkdirSync(appPath);
+  fs.writeFileSync(
+    path.join(appPath, 'Info.plist'),
+    `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key>
+  <string>com.callstack.agentdevicelab</string>
+  <key>CFBundleDisplayName</key>
+  <string>Agent Device Tester</string>
+</dict>
+</plist>
+`,
+  );
+
+  const sessionStore = makeSessionStore();
+  const session = makeIosSession('ios-source');
+  vi.mocked(resolveTargetDevice).mockResolvedValueOnce(session.device);
+  try {
+    const response = await handleInstallFromSourceCommand({
+      req: makeRequest(
+        {
+          installSource: {
+            kind: 'path',
+            path: appPath,
+          },
+        },
+        'ios',
+      ),
+      sessionName: session.name,
+      sessionStore,
+    });
+
+    expect(response).toEqual({
+      ok: true,
+      data: {
+        appName: 'Agent Device Tester',
+        bundleId: 'com.callstack.agentdevicelab',
+        launchTarget: 'com.callstack.agentdevicelab',
+        message: 'Installed: Agent Device Tester',
+      },
+    });
+    expect(installIosInstallablePath).toHaveBeenCalledWith(session.device, appPath);
+  } finally {
+    fs.rmSync(sourceRoot, { recursive: true, force: true });
   }
 });

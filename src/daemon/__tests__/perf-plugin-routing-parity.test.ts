@@ -1,7 +1,7 @@
-import type { PerfMetricsSamplerTag } from '../../contracts/perf.ts';
+import type { PerfMetricsSamplerTag } from '@agent-device/contracts/observability';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   isIosFamily,
   isMacOs,
@@ -10,7 +10,7 @@ import {
   type DeviceInfo,
   type DeviceKind,
   type DeviceTarget,
-} from '../../kernel/device.ts';
+} from '@agent-device/kernel/device';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import {
   ANDROID_EMULATOR,
@@ -23,7 +23,7 @@ import {
   TVOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
 } from '../../__tests__/test-utils/index.ts';
-import { getPlugin } from '../../contracts/platform-plugin.ts';
+import { getPlugin } from '../../core/platform-plugin-registry.ts';
 import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';
 import { buildPerfResponseData } from '../handlers/session-perf.ts';
 import { PERF_UNAVAILABLE_REASON } from '../handlers/session-startup-metrics.ts';

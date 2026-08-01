@@ -1,8 +1,10 @@
-import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
-import { isAndroidInputMethodOwnedNode } from '../../contracts/android-input-ownership.ts';
-import { hasAndroidSystemChromeProvenance } from '../../contracts/android-system-chrome.ts';
+import {
+  hasAndroidSystemChromeProvenance,
+  isAndroidInputMethodOwnedNode,
+} from '@agent-device/contracts/platform';
 import type { AndroidContentRecoveryReason } from '../../snapshot/snapshot-quality.ts';
 import { classifyAndroidAlertIdentifier } from './alert-detection.ts';
+import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
 import { androidUiNodes, type AndroidUiNodeMetadata } from './ui-hierarchy.ts';
 
 const ANDROID_WINDOW_TYPE_APPLICATION = 1;

@@ -225,9 +225,16 @@ extension RunnerTests {
       "yes",
       "continue",
       "done",
+      "open",
       "open settings"
     ].contains(normalized) || normalized.hasPrefix("confirm")
   }
+
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+  func testAlertAcceptTreatsOpenAsAffirmative() {
+    XCTAssertTrue(isAcceptButton("Open"))
+  }
+#endif
 
   private func isDismissButton(_ label: String) -> Bool {
     [

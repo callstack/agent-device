@@ -1,4 +1,4 @@
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { AndroidAdbExecutor } from './adb-executor.ts';
 import { isAmStartError, parseAndroidLaunchComponent } from './app-lifecycle.ts';
 

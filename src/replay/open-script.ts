@@ -1,4 +1,4 @@
-import type { SessionAction } from '../contracts/session-action.ts';
+import type { SessionAction } from '@agent-device/contracts/session';
 import {
   appendRuntimeHintFlags,
   formatScriptArg,

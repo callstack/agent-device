@@ -1,5 +1,5 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { ViewportCommandOptions } from '../../contracts/client-system.ts';
+import type { ViewportCommandOptions } from '@agent-device/contracts/client';
 import { readViewportDimension } from '../../core/viewport-dimension.ts';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { integerField, requiredField } from '../command-input.ts';

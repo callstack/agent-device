@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { DeviceLease } from '../contracts/device-provider.ts';
+import type { DeviceLease } from '@agent-device/contracts/device';
 
 const SHUTDOWN_REPORT_FILE = 'daemon-shutdown.json';
 

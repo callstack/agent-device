@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import { closeAndroidApp, openAndroidApp } from '../app-lifecycle.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
-import type { DeviceInfo } from '../../../kernel/device.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { withScriptedAdb } from '../../../__tests__/test-utils/mocked-binaries.ts';
 
 test('openAndroidApp rejects activity override for deep link URLs', async () => {
@@ -310,7 +310,7 @@ test('openAndroidApp ensures Android reverse before IPv6 localhost deep link lau
         '-a',
         'android.intent.action.VIEW',
         '-d',
-        'http://[::1]:8081/status',
+        "'http://[::1]:8081/status'",
       ],
     },
   ]);
@@ -522,6 +522,18 @@ test('openAndroidApp appends launchArgs to am start for deep link URL opens', as
       });
       const logged = await fs.readFile(argsLogPath, 'utf8');
       assert.match(logged, /-d\nmyapp:\/\/item\/42\n--es\nref\ncampaign/);
+    },
+  );
+});
+
+test('openAndroidApp quotes deep link URL shell characters', async () => {
+  await withScriptedAdb(
+    'agent-device-android-open-deep-link-shell-characters-',
+    androidOpenAdbScript(),
+    async ({ argsLogPath, device }) => {
+      await openAndroidApp(device, 'myapp://item/42?event=cold.start&source=smoke');
+      const logged = await fs.readFile(argsLogPath, 'utf8');
+      assert.match(logged, /-d\n'myapp:\/\/item\/42\?event=cold\.start&source=smoke'/);
     },
   );
 });

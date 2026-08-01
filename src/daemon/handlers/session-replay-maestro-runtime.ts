@@ -1,7 +1,12 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { AppError } from '../../kernel/errors.ts';
+import {
+  executeMaestroFlow,
+  inspectMaestroFlow,
+  type MaestroFlow,
+  type MaestroPlatform,
+} from '@agent-device/maestro';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   dispatchGestureViewport,
   resolveTargetDevice,
@@ -15,24 +20,15 @@ import {
   readReplayCliEnvEntries,
   readReplayShellEnvSource,
 } from '../../replay/vars.ts';
-import { createDaemonMaestroRuntimePort } from '../../compat/maestro/daemon-runtime-port.ts';
-import { executeMaestroPlan } from '../../compat/maestro/engine.ts';
-import { parseMaestroProgram } from '../../compat/maestro/program-ir-parser.ts';
-import { createMaestroProgramLoader } from '../../compat/maestro/program-loader.ts';
-import {
-  compileMaestroReplayPlan,
-  resolveMaestroReplayStartIndex,
-} from '../../compat/maestro/replay-plan.ts';
-import type { MaestroPlatform, MaestroProgram } from '../../compat/maestro/program-ir.ts';
-import type { MaestroReplayPlan } from '../../compat/maestro/replay-plan-types.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import { createDaemonMaestroRuntimePort } from '../adapters/maestro/daemon-runtime-port.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../types.ts';
 import { assertSessionSelectorMatches } from '../session-selector.ts';
 import { SessionStore } from '../session-store.ts';
 import { errorResponse } from './response.ts';
 import { buildReplayBuiltinVars } from './session-replay-vars.ts';
-import type { MaestroFailedEngineEvent } from './session-replay-maestro-failure.ts';
 import { createMaestroReplayObserver } from './session-replay-maestro-observer.ts';
+import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
 import {
   buildTypedMaestroReplayErrorResponse,
   buildTypedMaestroSuccessResponse,
@@ -47,18 +43,17 @@ type TypedMaestroReplayParams = {
   logPath: string;
   sessionStore: SessionStore;
   tracePath?: string;
+  onStep?: ReplayTestAttemptStepSink;
   invoke: DaemonInvokeFn;
 };
 
 type TypedMaestroReplayState = {
-  failedEvent?: MaestroFailedEngineEvent;
-  plan?: MaestroReplayPlan;
   snapshotStart: number;
 };
 
 type TypedMaestroReplayContext = {
   filePath: string;
-  program: MaestroProgram;
+  flow: MaestroFlow;
   device?: DeviceInfo;
   platform: Extract<MaestroPlatform, 'android' | 'ios'>;
   target: string;
@@ -66,7 +61,6 @@ type TypedMaestroReplayContext = {
   defaults: Record<string, string>;
   env: Record<string, string>;
   signal: AbortSignal | undefined;
-  loadProgram: ReturnType<typeof createMaestroProgramLoader>;
 };
 
 type MaestroReplayBinding = Pick<
@@ -100,7 +94,7 @@ export async function runTypedMaestroReplayFile(
       ...params,
       requestedPath,
       state,
-      error,
+      outcome: { ok: false, error },
     });
   }
 }
@@ -112,22 +106,8 @@ async function executeTypedMaestroReplay(
     state: TypedMaestroReplayState;
   },
 ): Promise<DaemonResponse> {
-  const { req, sessionName, sessionStore, tracePath, invoke, state } = params;
+  const { req, sessionName, sessionStore, tracePath, onStep, invoke, state } = params;
   const context = await prepareTypedMaestroReplay(params);
-  const plan = await compileMaestroReplayPlan(context.program, {
-    defaults: context.defaults,
-    env: context.env,
-    platform: context.platform,
-    target: context.target,
-    runtimeHints: context.runtimeHints,
-    loadProgram: context.loadProgram,
-    signal: context.signal,
-  });
-  state.plan = plan;
-  const startIndex = resolveMaestroReplayStartIndex(plan, {
-    from: req.flags?.replayFrom,
-    planDigest: req.flags?.replayPlanDigest,
-  });
   const port = createMaestroReplayPort({
     req,
     invoke,
@@ -140,26 +120,31 @@ async function executeTypedMaestroReplay(
     sourcePath: context.filePath,
   });
   state.snapshotStart = sessionStore.get(sessionName)?.snapshotDiagnostics?.samples.length ?? 0;
-  const result = await executeMaestroPlan(plan, port, {
+  const outcome = await executeMaestroFlow(context.flow, port, {
     defaults: context.defaults,
     env: context.env,
     platform: context.platform,
     target: context.target,
-    loadProgram: context.loadProgram,
+    runtimeHints: context.runtimeHints,
     signal: context.signal,
-    startIndex,
+    from: req.flags?.replayFrom,
+    planDigest: req.flags?.replayPlanDigest,
     observer: createMaestroReplayObserver({
       filePath: context.filePath,
       tracePath,
-      onFailure: (event) => {
-        state.failedEvent = event;
-      },
+      onStep,
     }),
   });
+  if (!outcome.ok) {
+    return await buildTypedMaestroReplayErrorResponse({
+      ...params,
+      requestedPath: params.requestedPath,
+      state,
+      outcome,
+    });
+  }
   return buildTypedMaestroSuccessResponse({
-    result,
-    plan,
-    startIndex,
+    outcome,
     startedAt: params.startedAt,
     sessionName,
     sessionStore,
@@ -172,9 +157,7 @@ async function prepareTypedMaestroReplay(
 ): Promise<TypedMaestroReplayContext> {
   const { req, requestedPath, sessionName, sessionStore } = params;
   const filePath = SessionStore.expandHome(requestedPath, req.meta?.cwd);
-  const program = parseMaestroProgram(fs.readFileSync(filePath, 'utf8'), {
-    sourcePath: filePath,
-  });
+  const flow = inspectMaestroFlow(fs.readFileSync(filePath, 'utf8'), filePath);
   const session = sessionStore.get(sessionName);
   if (session) assertSessionSelectorMatches(session, req.flags);
   const binding = await resolveMaestroReplayBinding({
@@ -182,11 +165,11 @@ async function prepareTypedMaestroReplay(
     sessionStore,
     sessionName,
     session,
-    program,
+    flow,
   });
   return {
     filePath,
-    program,
+    flow,
     ...binding,
     defaults: buildTypedMaestroDefaults({
       req,
@@ -197,7 +180,6 @@ async function prepareTypedMaestroReplay(
     }),
     env: buildTypedMaestroEnv(req),
     signal: getRequestSignal(req.meta?.requestId),
-    loadProgram: createMaestroProgramLoader(path.dirname(filePath)),
   };
 }
 
@@ -206,9 +188,9 @@ async function resolveMaestroReplayBinding(params: {
   sessionStore: SessionStore;
   sessionName: string;
   session: ReturnType<SessionStore['get']>;
-  program: MaestroProgram;
+  flow: MaestroFlow;
 }): Promise<MaestroReplayBinding> {
-  const { req, sessionStore, sessionName, session, program } = params;
+  const { req, sessionStore, sessionName, session, flow } = params;
   const requestedPlatform = req.flags?.platform;
   const device =
     session?.device ??
@@ -216,7 +198,7 @@ async function resolveMaestroReplayBinding(params: {
       ? undefined
       : await resolveTargetDevice(
           req.flags ?? {},
-          buildMaestroReplayTargetDeviceResolutionOptions(program, requestedPlatform),
+          buildMaestroReplayTargetDeviceResolutionOptions(flow.appTarget, requestedPlatform),
         ));
   const platform = resolveMaestroPlatform(req, device);
   const runtimeHints = resolveEffectiveOpenRuntimeHints({
@@ -234,7 +216,7 @@ async function resolveMaestroReplayBinding(params: {
     platform,
     target: resolveMaestroTarget(req, device),
     runtimeHints,
-    program,
+    flow,
   });
 }
 
@@ -243,13 +225,13 @@ async function completeMaestroRuntimeBinding(
     req: DaemonRequest;
     sessionStore: SessionStore;
     sessionName: string;
-    program: MaestroProgram;
+    flow: MaestroFlow;
   } & MaestroReplayBinding,
 ): Promise<MaestroReplayBinding> {
   if (params.device || !requiresDeviceRuntimeDefaults(params.runtimeHints)) return params;
   const device = await resolveTargetDevice(
     params.req.flags ?? {},
-    buildMaestroReplayTargetDeviceResolutionOptions(params.program, params.platform),
+    buildMaestroReplayTargetDeviceResolutionOptions(params.flow.appTarget, params.platform),
   );
   return {
     device,
@@ -413,13 +395,6 @@ function unresolvedIosMaestroFlags(
     flags.iosSimulatorDeviceSet = requestedFlags.iosSimulatorDeviceSet;
   }
   return flags;
-}
-
-export function isTypedMaestroReplay(req: DaemonRequest, filePath: string): boolean {
-  return (
-    req.flags?.replayBackend === 'maestro' &&
-    (path.extname(filePath) === '.yaml' || path.extname(filePath) === '.yml')
-  );
 }
 
 function resolveMaestroPlatform(

@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 vi.mock('../../../platforms/apple/core/simulator.ts', async (importOriginal) => {
   const actual =

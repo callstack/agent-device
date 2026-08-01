@@ -1,5 +1,5 @@
 import { hostname } from 'node:os';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 
 export async function listLinuxDevices(): Promise<DeviceInfo[]> {
   if (process.platform !== 'linux') {

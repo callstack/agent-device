@@ -6,7 +6,7 @@ import type {
   BackendOpenTarget,
   BackendPushInput,
 } from '../../../backend.ts';
-import type { JsonObject } from '../../../contracts/json.ts';
+import type { JsonObject } from '@agent-device/contracts/client';
 import { createLocalArtifactAdapter } from '../../../io.ts';
 import {
   createAgentDevice,

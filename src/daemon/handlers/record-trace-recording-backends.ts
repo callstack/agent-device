@@ -1,7 +1,7 @@
-import type { RecordingBackendTag } from '../../contracts/recording.ts';
+import type { RecordingBackendTag } from '@agent-device/contracts/recording';
 import fs from 'node:fs';
 import path from 'node:path';
-import { tryGetPlugin } from '../../contracts/platform-plugin.ts';
+import { tryGetPlugin } from '../../core/platform-plugin-registry.ts';
 import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import type { SessionStore } from '../session-store.ts';
@@ -12,7 +12,7 @@ import {
 } from '../../recording/output-path.ts';
 import { resolveWebProvider } from '../../platforms/web/provider.ts';
 import { IOS_RUNNER_CONTAINER_BUNDLE_IDS } from '../../platforms/apple/core/runner/runner-client.ts';
-import { isWholeScreenRecordingScope } from '../../contracts/recording-scope.ts';
+import { isWholeScreenRecordingScope } from '@agent-device/contracts/recording';
 import { errorResponse } from './response.ts';
 import { startAndroidRecording, stopAndroidRecording } from './record-trace-android.ts';
 import { recoverMissingAndroidRecording } from './record-trace-android-recovery.ts';

@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { createRequestHandler } from '../request-router.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { SessionStore } from '../session-store.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type {
   AndroidAdbExecutor,
   AndroidAdbProvider,

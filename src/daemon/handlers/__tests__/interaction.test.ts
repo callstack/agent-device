@@ -3,8 +3,8 @@ import { handleInteractionCommands } from '../interaction.ts';
 import type { SessionStore } from '../../session-store.ts';
 import type { SessionState } from '../../types.ts';
 import type { CommandFlags } from '../../../core/dispatch.ts';
-import { attachRefs, type SnapshotBackend } from '../../../kernel/snapshot.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { attachRefs, type SnapshotBackend } from '@agent-device/kernel/snapshot';
+import { AppError } from '@agent-device/kernel/errors';
 import { buildSnapshotState } from '../snapshot-capture.ts';
 import { setSessionSnapshot, STALE_SNAPSHOT_REFS_WARNING } from '../../session-snapshot.ts';
 import { activateCompleteRefFrame, expireRefFrame } from '../../ref-frame.ts';
@@ -1842,6 +1842,63 @@ test('press @ref fails when Android tap escapes to Settings', async () => {
     message: expect.stringContaining('foregrounded com.android.settings'),
   });
 });
+
+const ANDROID_PERMISSION_PROMPT_PACKAGES = [
+  'com.android.permissioncontroller',
+  'com.google.android.permissioncontroller',
+  'com.google.android.packageinstaller',
+  'com.android.packageinstaller',
+] as const;
+
+test.each(ANDROID_PERMISSION_PROMPT_PACKAGES)(
+  'press @ref succeeds with a pending-alert warning when %s foregrounds',
+  async (packageName) => {
+    const sessionStore = makeSessionStore();
+    const sessionName = 'android-permission-prompt';
+    const session = makeAndroidSession(sessionName);
+    session.snapshot = {
+      nodes: attachRefs([
+        {
+          index: 0,
+          type: 'android.widget.Button',
+          label: 'Request microphone',
+          rect: { x: 16, y: 40, width: 120, height: 48 },
+          enabled: true,
+          hittable: true,
+        },
+      ]),
+      createdAt: Date.now(),
+      backend: 'android',
+    };
+    sessionStore.set(sessionName, session);
+
+    mockDispatch.mockResolvedValue({ pressed: true });
+    mockGetAndroidAppState.mockResolvedValue({
+      package: packageName,
+      activity: 'com.android.permissioncontroller.permission.ui.GrantPermissionsActivity',
+    });
+
+    const response = await handleInteractionCommands({
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'press',
+        positionals: ['@e1'],
+        flags: {},
+      },
+      sessionName,
+      sessionStore,
+      contextFromFlags,
+    });
+
+    expect(response?.ok).toBe(true);
+    if (response?.ok) {
+      expect(response.data?.warning).toMatch(/opened an Android permission dialog/);
+      expect(response.data?.warning).toMatch(/"alert get"/);
+    }
+    expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
+  },
+);
 
 test('press @ref --verify surfaces evidence through the interactionResultExtra allowlist', async () => {
   const sessionStore = makeSessionStore();

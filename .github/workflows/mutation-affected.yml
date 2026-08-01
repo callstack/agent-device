@@ -25,7 +25,7 @@ on:
       # Kernel sources, every src test (ownership is derived, so any test may own
       # a kernel — `select` decides, not this filter), and the lane's own tooling.
       # scripts/mutation/workflow.test.ts asserts this covers the registry.
-      - 'src/kernel/errors.ts'
+      - 'packages/kernel/src/errors.ts'
       - 'src/daemon/ref-frame.ts'
       - 'src/commands/interaction/runtime/settle.ts'
       - 'src/utils/scroll-edge-state.ts'

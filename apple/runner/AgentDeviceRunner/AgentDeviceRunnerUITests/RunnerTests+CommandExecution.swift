@@ -16,6 +16,13 @@ private final class RunnerSynthesizedSwipeFailureStub: NSObject {
     "forced private synthesis failure"
   }
 }
+
+private final class RunnerSynthesizedTapFailureStub: NSObject {
+  @objc(synthesizeTapWithApplication:x:y:)
+  class func synthesizeTap(application: XCUIApplication, x: Double, y: Double) -> String? {
+    "forced private synthesis failure"
+  }
+}
 #endif
 
 extension RunnerTests {
@@ -281,6 +288,44 @@ extension RunnerTests {
     XCTAssertNil(response.data?.y)
     XCTAssertNil(response.data?.x2)
     XCTAssertNil(response.data?.y2)
+  }
+
+  func testSelectorTapFallsBackToXCTestCoordinateWhenPrivateSynthesisFails() throws {
+    let selector = NSSelectorFromString("synthesizeTapWithApplication:x:y:")
+    guard
+      let synthesizedTapMethod = class_getClassMethod(RunnerSynthesizedGesture.self, selector),
+      let failureStubMethod = class_getClassMethod(RunnerSynthesizedTapFailureStub.self, selector)
+    else {
+      XCTFail("unable to install synthesized tap failure stub")
+      return
+    }
+    let originalImplementation = method_getImplementation(synthesizedTapMethod)
+    method_setImplementation(
+      synthesizedTapMethod,
+      method_getImplementation(failureStubMethod)
+    )
+    app.launch()
+    currentApp = app
+    runnerAccessibilityHealth = .healthy
+    defer {
+      method_setImplementation(synthesizedTapMethod, originalImplementation)
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let command = try runnerCommandFixture(
+      #"{"command":"tap","commandId":"selector-tap-fallback","selectorKey":"label","selectorValue":"Agent Device Runner","synthesized":true}"#
+    )
+
+    let response = try executeOnMainPrepared(command: command, activeApp: app)
+
+    XCTAssertTrue(response.ok)
+    XCTAssertEqual(response.data?.message, "tapped")
+    XCTAssertEqual(response.data?.gestureFallback, "xctest-coordinate-tap")
+    XCTAssertEqual(response.data?.gestureFallbackMessage, "forced private synthesis failure")
+    XCTAssertEqual(
+      response.data?.gestureFallbackHint,
+      "Falling back to XCTest coordinate tap may be slower and can still need a healthy accessibility tree."
+    )
   }
 #endif
 
@@ -1529,6 +1574,49 @@ extension RunnerTests {
             x: touchPoint.x,
             y: touchPoint.y
           )
+          var fallback: GestureFallback?
+          if command.synthesized == true {
+            let policyKind = SynthesizedGesturePolicyKind.coordinateTap
+            let context = synthesizedCoordinateContext(
+              app: activeApp,
+              policy: synthesizedGesturePolicy(policyKind)
+            )
+            let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
+              synthesizedTapAt(
+                app: activeApp,
+                x: touchPoint.x,
+                y: touchPoint.y,
+                context: context
+              )
+            }
+            if case .performed = outcome {
+              logSynthesizedGesturePolicyDecision(
+                kind: policyKind,
+                context: context,
+                fallbackAttempted: false
+              )
+              if isTextEntry {
+                waitForTextEntryReadinessAfterTap(app: activeApp, element: element)
+              }
+              return gestureResponse(
+                message: match.usedNonHittableFallback
+                  ? "tapped via non-hittable coordinate fallback"
+                  : "tapped",
+                timing: timing,
+                frame: .touch(touchFrame),
+                maestroNonHittableCoordinateFallbackUsed:
+                  command.allowNonHittableCoordinateFallback == true
+                  ? match.usedNonHittableFallback
+                  : nil
+              )
+            }
+            logSynthesizedGesturePolicyDecision(
+              kind: policyKind,
+              context: context,
+              fallbackAttempted: true
+            )
+            fallback = gestureFallback(strategy: "xctest-coordinate-tap", from: outcome)
+          }
           let (timing, outcome) = performGesture(activeApp) {
             if expectedPoint != nil || match.usedNonHittableFallback {
               // Maestro compatibility: RN E2E backdoor controls can be 1x1 and
@@ -1549,6 +1637,7 @@ extension RunnerTests {
             message: match.usedNonHittableFallback ? "tapped via non-hittable coordinate fallback" : "tapped",
             timing: timing,
             frame: .touch(touchFrame),
+            fallback: fallback,
             maestroNonHittableCoordinateFallbackUsed:
               command.allowNonHittableCoordinateFallback == true
               ? match.usedNonHittableFallback
@@ -1561,7 +1650,10 @@ extension RunnerTests {
         var fallback: GestureFallback?
         if command.synthesized == true {
           let policyKind = SynthesizedGesturePolicyKind.coordinateTap
-          let context = synthesizedCoordinateContext(policy: synthesizedGesturePolicy(policyKind))
+          let context = synthesizedCoordinateContext(
+            app: activeApp,
+            policy: synthesizedGesturePolicy(policyKind)
+          )
           let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
             synthesizedTapAt(app: activeApp, x: x, y: y, context: context)
           }
@@ -1652,7 +1744,10 @@ extension RunnerTests {
         )
       }
       let scrollPolicyKind = SynthesizedGesturePolicyKind.scroll
-      guard let scrollContext = synthesizedCoordinateContext(policy: synthesizedGesturePolicy(scrollPolicyKind)) else {
+      guard let scrollContext = synthesizedCoordinateContext(
+        app: activeApp,
+        policy: synthesizedGesturePolicy(scrollPolicyKind)
+      ) else {
         return Response(
           ok: false,
           error: ErrorPayload(message: "scroll could not resolve a usable interaction frame")
@@ -1894,21 +1989,7 @@ extension RunnerTests {
       pressHomeButton()
       return Response(ok: true, data: DataPayload(message: "home"))
     case .rotate:
-      guard let orientation = command.orientation?.trimmingCharacters(in: .whitespacesAndNewlines),
-        !orientation.isEmpty
-      else {
-        return Response(ok: false, error: ErrorPayload(message: "rotate requires orientation"))
-      }
-      if rotateDevice(to: orientation) {
-        return Response(
-          ok: true,
-          data: DataPayload(message: "rotate", orientation: orientation)
-        )
-      }
-      return Response(
-        ok: false,
-        error: ErrorPayload(message: "unsupported rotate orientation: \(orientation)")
-      )
+      return executeRotateCommand(command)
     case .appSwitcher:
       performAppSwitcherGesture(app: activeApp)
       return Response(ok: true, data: DataPayload(message: "appSwitcher"))
@@ -2060,7 +2141,10 @@ extension RunnerTests {
     var fallback: GestureFallback?
     if synthesized {
       let durationMs = min(max(durationMs ?? 250, 16), 10000)
-      let context = synthesizedCoordinateContext(policy: synthesizedGesturePolicy(synthesizedPolicyKind))
+      let context = synthesizedCoordinateContext(
+        app: activeApp,
+        policy: synthesizedGesturePolicy(synthesizedPolicyKind)
+      )
       let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
         synthesizedDragAt(
           app: activeApp,
@@ -2116,7 +2200,7 @@ extension RunnerTests {
   ) -> Response? {
 #if os(iOS)
     let policy = synthesizedGesturePolicy(policyKind)
-    let context = context ?? synthesizedCoordinateContext(policy: policy)
+    let context = context ?? synthesizedCoordinateContext(app: activeApp, policy: policy)
     guard let plan = axFreeSynthesizedDragPlan(
       app: activeApp,
       x: x,

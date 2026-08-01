@@ -1,4 +1,4 @@
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import {
   backLinux,
@@ -17,10 +17,10 @@ import {
   swipeLinux,
   typeLinux,
 } from '../../platforms/linux/input-actions.ts';
-import { singlePointerPlanEndpoints } from '../../contracts/gesture-plan.ts';
+import { singlePointerPlanEndpoints } from '@agent-device/contracts/interaction';
 import { screenshotLinux } from '../../platforms/linux/screenshot.ts';
 import { snapshotLinux } from '../../platforms/linux/snapshot.ts';
-import type { Interactor } from '../../contracts/interactor-types.ts';
+import type { Interactor } from '@agent-device/contracts/interaction';
 
 export function createLinuxInteractor(): Interactor {
   return {
@@ -48,7 +48,7 @@ export function createLinuxInteractor(): Interactor {
     snapshot: async (options) => {
       const result = await withDiagnosticTimer(
         'snapshot_capture',
-        async () => await snapshotLinux(options?.surface),
+        async () => await snapshotLinux(options?.surface, options?.signal),
         { backend: 'linux-atspi' },
       );
       return {

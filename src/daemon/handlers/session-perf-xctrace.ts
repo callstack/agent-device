@@ -1,5 +1,5 @@
-import { asAppError, normalizeError } from '../../kernel/errors.ts';
-import { isApplePlatform } from '../../kernel/device.ts';
+import { asAppError, normalizeError } from '@agent-device/kernel/errors';
+import { isApplePlatform } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import {
@@ -9,7 +9,7 @@ import {
   type AppleXctracePerfMode,
   type AppleXctracePerfResult,
 } from '../../platforms/apple/core/perf-xctrace.ts';
-import { PERF_AREA_ERROR_MESSAGE } from '../../contracts/perf.ts';
+import { PERF_AREA_ERROR_MESSAGE } from '@agent-device/contracts/observability';
 import { errorResponse, type DaemonFailureResponse } from './response.ts';
 import { recordSessionAction } from './handler-utils.ts';
 

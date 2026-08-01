@@ -6,7 +6,7 @@ const { mockRunSimctl } = vi.hoisted(() => ({ mockRunSimctl: vi.fn() }));
 vi.mock('../apps-simctl.ts', () => ({ runSimctl: mockRunSimctl }));
 
 import { findIosSimulatorInstalledApp } from '../app-resolution.ts';
-import type { DeviceInfo } from '../../../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 
 const bootedSimulator: DeviceInfo = {
   platform: 'apple',

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { computeReplayPlanDigest } from '../plan-digest.ts';
-import type { SessionAction } from '../../contracts/session-action.ts';
+import type { SessionAction } from '@agent-device/contracts/session';
 
 function action(overrides: Partial<SessionAction> = {}): SessionAction {
   return {

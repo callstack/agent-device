@@ -2,7 +2,7 @@ import { constants } from 'node:fs';
 import { access } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import type { VegaTvRemoteKey } from '../../contracts/tv-remote.ts';
+import type { VegaTvRemoteKey } from '@agent-device/contracts/interaction';
 import { runCmd, whichCmd, type ExecOptions, type ExecResult } from '../../utils/exec.ts';
 import { createScopedProvider } from '../../utils/scoped-provider.ts';
 

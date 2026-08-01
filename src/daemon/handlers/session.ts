@@ -6,8 +6,8 @@ import {
   prepareIosRunner,
   type PrepareIosRunnerResult,
 } from '../../platforms/apple/core/runner/runner-client.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
-import { isApplePlatform, publicPlatformString } from '../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { publicPlatformString } from '@agent-device/kernel/device';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { contextFromFlags } from '../context.ts';
@@ -44,7 +44,7 @@ import { expireRefFrame } from '../ref-frame.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { PREPARE_REQUEST_TIMEOUT_MS } from '../../core/command-descriptor/timeout-policy.ts';
 import { Deadline } from '../../utils/retry.ts';
-import type { LeaseLifecycleProvider } from '../../contracts/device-provider.ts';
+import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
 
 const PREPARE_IOS_RUNNER_TIMING_NOTE =
   'Top-level prepare timing fields are diagnostic and may overlap; use timing.additiveParts for additive wall-clock phases.';
@@ -71,12 +71,8 @@ async function handlePrepareCommand(params: {
     flags,
     ensureReady: true,
   });
-  if (!isApplePlatform(device.platform)) {
-    return errorResponse(
-      'UNSUPPORTED_OPERATION',
-      'prepare ios-runner is only supported on Apple runner platforms',
-    );
-  }
+  const unsupported = requireCommandSupported(PUBLIC_COMMANDS.prepare, device);
+  if (unsupported) return unsupported;
 
   const startedAtMs = Date.now();
   const result = await prepareIosRunner(

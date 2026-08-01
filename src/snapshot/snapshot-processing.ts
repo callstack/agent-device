@@ -1,5 +1,5 @@
-import type { Platform, PublicPlatform } from '../kernel/device.ts';
-import type { RawSnapshotNode, SnapshotNode, SnapshotState } from '../kernel/snapshot.ts';
+import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
+import type { RawSnapshotNode, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { extractReadableText, normalizeType } from '../utils/text-surface.ts';
 
 export { normalizeType };
@@ -130,19 +130,6 @@ export function findSnapshotAncestor<T>(
     if (result !== null) return result;
   }
   return null;
-}
-
-export function isDescendantOfSnapshotNode(
-  nodes: SnapshotState['nodes'],
-  node: SnapshotNode,
-  ancestor: SnapshotNode,
-  nodeByIndex: ReadonlyMap<number, SnapshotNode>,
-): boolean {
-  return Boolean(
-    findSnapshotAncestor(nodes, node, nodeByIndex, (candidate) =>
-      candidate === ancestor || candidate.index === ancestor.index ? candidate : null,
-    ),
-  );
 }
 
 /**

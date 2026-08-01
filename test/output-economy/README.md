@@ -9,7 +9,7 @@ representative MCP tool result containing optimized text plus structured content
   ceiling it is measured against.
 - The actionability floors keep refs, generation pins, warnings, retry signals, and recovery
   guidance from being optimized away.
-- SkillGym and the help-conformance benchmark remain the non-gating small-model outcome oracle:
+- The help-conformance benchmark remains the non-gating small-model outcome oracle:
   byte reductions are not successful when the model needs an extra observation or chooses the
   wrong recovery command.
 - The routine-workflow oracle (`routine-workflow.ts`, `routine-workflow.test.ts`) is the gating

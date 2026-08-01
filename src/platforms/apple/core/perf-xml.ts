@@ -1,4 +1,4 @@
-import type { XmlNode } from './xml.ts';
+import type { XmlNode } from '@agent-device/xml';
 
 export function findFirstXmlNode(
   nodes: XmlNode[],

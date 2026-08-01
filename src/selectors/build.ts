@@ -1,5 +1,5 @@
-import type { Platform, PublicPlatform } from '../kernel/device.ts';
-import type { SnapshotNode } from '../kernel/snapshot.ts';
+import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isNodeVisible } from './node.ts';
 import { extractNodeText, normalizeType } from '../snapshot/snapshot-processing.ts';
 import { idMatchCountInTree, readNodeLocalIdentity } from '../replay/target-identity-node.ts';

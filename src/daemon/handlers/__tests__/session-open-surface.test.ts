@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { buildOpenResult, resolveRequestedOpenSurface } from '../session-open-surface.ts';
 
 test('resolveRequestedOpenSurface rejects surface flag on iOS', () => {

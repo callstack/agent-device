@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
-import type { InternalRequestOptions } from '../../contracts/client-request.ts';
+import type { InternalRequestOptions } from '@agent-device/contracts/client';
 import { findCommandMetadata } from '../command-metadata.ts';
 import { readMetadataCommandFlags } from '../command-flags.ts';
 

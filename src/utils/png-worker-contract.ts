@@ -1,4 +1,4 @@
-import type { NormalizedError } from '../kernel/errors.ts';
+import type { NormalizedError } from '@agent-device/kernel/errors';
 import type {
   ScreenshotDiffPixelsJob,
   ScreenshotDiffPixelsResult,

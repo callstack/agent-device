@@ -1,6 +1,6 @@
 import fs from 'node:fs';
-import { isMacOs, type DeviceInfo } from '../../../../kernel/device.ts';
-import { AppError, asAppError } from '../../../../kernel/errors.ts';
+import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { runAppleToolCommand } from '../tool-provider.ts';
 
 const RUNNER_PRODUCT_REPAIR_FAILURE_REASONS = new Set([

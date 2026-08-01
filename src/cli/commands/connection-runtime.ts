@@ -8,7 +8,7 @@ import {
   publicPlatformString,
   resolveDevice,
   type DeviceInfo,
-} from '../../kernel/device.ts';
+} from '@agent-device/kernel/device';
 import { shouldAgentCdpUseRemoteBridgeUrl } from './agent-cdp.ts';
 import type { MetroBridgeScope } from '../../client/client-companion-tunnel-contract.ts';
 import {
@@ -21,17 +21,17 @@ import {
   type RemoteConnectionRequestMetadata,
 } from '../../remote/remote-connection-state.ts';
 import { profileToCliFlags } from '../remote-config-flags.ts';
-import type { BatchStep } from '../../contracts/client-replay.ts';
-import { AppError } from '../../kernel/errors.ts';
-import type { LeaseBackend, SessionRuntimeHints } from '../../kernel/contracts.ts';
-import type { CliFlags } from '../../contracts/cli-flags.ts';
+import type { BatchStep } from '@agent-device/contracts/client';
+import { AppError } from '@agent-device/kernel/errors';
+import type { LeaseBackend, SessionRuntimeHints } from '@agent-device/kernel/contracts';
+import type { CliFlags } from '@agent-device/contracts/command';
 import type { AgentDeviceClient, Lease } from '../../agent-device-client.ts';
-import type { CloudProviderSessionResult } from '../../contracts/cloud-artifacts.ts';
+import type { CloudProviderSessionResult } from '@agent-device/contracts/observability';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { readMetroPrepareKind } from '../../commands/metro/prepare-kind.ts';
 import { connectionProviderRequiresRemoteDaemon } from '../connection/provider-policy.ts';
 import { readCloudDeviceFeatureProfileFields } from '../connection/profile-fields.ts';
-import { isCloudWebDriverProviderName } from '../../cloud-webdriver/providers.ts';
+import { isCloudWebDriverProviderName } from '@agent-device/provider-webdriver';
 
 const leaseDeferredCommands = new Set([
   'artifacts',

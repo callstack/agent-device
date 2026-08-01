@@ -100,7 +100,9 @@ test('merging shard reports ignores the envelope sitting beside them', () => {
     path.join(shards, 'mutation.json'),
     JSON.stringify({
       files: {
-        'src/kernel/errors.ts': { mutants: [{ status: 'Killed' }, { status: 'Survived' }] },
+        'packages/kernel/src/errors.ts': {
+          mutants: [{ status: 'Killed' }, { status: 'Survived' }],
+        },
       },
     }),
   );
@@ -177,7 +179,7 @@ test('an incomplete shard set fails instead of scoring the missing module as zer
   fs.writeFileSync(
     path.join(shards, 'mutation.json'),
     JSON.stringify({
-      files: { 'src/kernel/errors.ts': { mutants: [{ status: 'Killed' }] } },
+      files: { 'packages/kernel/src/errors.ts': { mutants: [{ status: 'Killed' }] } },
     }),
   );
   const result = runMutation([
@@ -239,7 +241,9 @@ test('--fail-envelope downgrades a passing envelope when a later step fails', ()
   fs.writeFileSync(
     path.join(shards, 'mutation.json'),
     JSON.stringify({
-      files: { 'src/kernel/errors.ts': { mutants: [{ status: 'Killed' }, { status: 'Killed' }] } },
+      files: {
+        'packages/kernel/src/errors.ts': { mutants: [{ status: 'Killed' }, { status: 'Killed' }] },
+      },
     }),
   );
   const passing = runMutation([

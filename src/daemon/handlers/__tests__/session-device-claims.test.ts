@@ -21,6 +21,10 @@ vi.mock('../../../platforms/android/ime-lifecycle.ts', () => ({
   activateAndroidTestIme: vi.fn(async () => {}),
   restoreAndroidTestIme: vi.fn(async () => ({ restored: false, reason: 'no-record' })),
 }));
+vi.mock('../../../utils/host-process.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../utils/host-process.ts')>();
+  return { ...actual, readProcessStartTime: vi.fn(() => 'test-process-start') };
+});
 
 import { dispatchCommand, resolveTargetDevice } from '../../../core/dispatch.ts';
 import { ensureDeviceReady } from '../../device-ready.ts';
@@ -34,9 +38,9 @@ import { LeaseRegistry } from '../../lease-registry.ts';
 import { SessionStore } from '../../session-store.ts';
 import { handleCloseCommand } from '../session-close.ts';
 import { handleOpenCommand } from '../session-open.ts';
-import type { DeviceInfo } from '../../../kernel/device.ts';
-import type { SessionState } from '../../types.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { makeAuthoringSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 const mockDispatch = vi.mocked(dispatchCommand);
 const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
@@ -263,15 +267,15 @@ test('#1391: a close-time script save failure still clears the advisory claim an
   // after `handleCloseCommand` deletes it from the store — `store.delete` only
   // drops the map entry, it doesn't touch the object this variable still
   // points at.
-  const session: SessionState = {
-    name: 'close-save-script-failure',
+  const session = makeAuthoringSession('close-save-script-failure', {
     device: android,
     deviceClaim: acquired.ownership,
-    createdAt: Date.now(),
-    actions: [],
-    recordSession: true,
-    saveScriptPath: targetPath,
-  };
+    scriptPublication: {
+      kind: 'authoring',
+      status: 'armed',
+      target: { kind: 'explicit', path: targetPath, force: false },
+    },
+  });
   store.set('close-save-script-failure', session);
   mockDispatch.mockResolvedValue({});
 

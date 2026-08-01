@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { readInfoPlistString } from './plist.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '../../../utils/exec.ts';
 import {
   isTrustedInstallSourceUrl,

@@ -1,4 +1,4 @@
-import { isMacOs } from '../../../kernel/device.ts';
+import { isMacOs } from '@agent-device/kernel/device';
 import { expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {

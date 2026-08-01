@@ -1,6 +1,6 @@
-import type { DeviceInfo } from '../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import type { Rect } from '../../kernel/snapshot.ts';
+import type { Rect } from '@agent-device/kernel/snapshot';
 import {
   buildFillFailureDetails,
   isSensitiveFillDiagnosticNode,
@@ -10,7 +10,7 @@ import {
 } from './fill-diagnostics.ts';
 import { sleep } from './adb.ts';
 import { getAndroidKeyboardState } from './device-input-state.ts';
-import { isAndroidInputMethodOwnedNode } from '../../contracts/android-input-ownership.ts';
+import { isAndroidInputMethodOwnedNode } from '@agent-device/contracts/platform';
 import { captureAndroidUiHierarchyXml } from './snapshot.ts';
 import { androidUiNodes, type AndroidUiNodeMetadata } from './ui-hierarchy.ts';
 

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
-import type { DeviceInfo } from '../../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { listVegaDevices } from '../devices.ts';
 import { vegaPlugin } from '../plugin.ts';
 

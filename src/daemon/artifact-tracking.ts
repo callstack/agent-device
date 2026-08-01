@@ -2,8 +2,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { AppError } from '../kernel/errors.ts';
-import type { DaemonArtifactType } from '../kernel/contracts.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { DaemonArtifactType } from '@agent-device/kernel/contracts';
 import { runCmd } from '../utils/exec.ts';
 import {
   expiredTenantOwnedEntryError,

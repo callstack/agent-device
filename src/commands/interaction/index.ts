@@ -1,8 +1,11 @@
 import type {
   ClickOptions,
   FillOptions,
+  FindOptions,
   FlingOptions,
   FocusOptions,
+  GetOptions,
+  IsOptions,
   LongPressOptions,
   PanOptions,
   PinchOptions,
@@ -13,20 +16,18 @@ import type {
   SwipeOptions,
   TransformGestureOptions,
   TypeTextOptions,
-} from '../../contracts/client-gesture.ts';
-import type { FindOptions, GetOptions, IsOptions } from '../../contracts/client-selector-read.ts';
+} from '@agent-device/contracts/client';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
+import {
+  commandSupportsSettleObservation,
+  commandSupportsVerifyEvidence,
+} from '../../core/command-descriptor/registry.ts';
 import {
   REPEATED_TOUCH_FLAGS,
   SELECTOR_SNAPSHOT_FLAGS,
   SETTLE_FLAGS,
 } from '../cli-grammar/flag-groups.ts';
 import { type FlagKey } from '../cli-grammar/flag-types.ts';
-import {
-  commandSupportsSettleObservation,
-  commandSupportsVerifyEvidence,
-} from '../../core/command-descriptor/registry.ts';
-import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import {
   commonToClientOptions,
@@ -35,6 +36,9 @@ import {
   toRepeatedOptions,
   toSelectorSnapshotOptions,
 } from '../command-input.ts';
+import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
+import { gestureCliReaders, gestureDaemonWriters } from './gesture.ts';
+import { interactionCliReaders, interactionDaemonWriters } from './interactions.ts';
 import {
   interactionCommandMetadata,
   type ClickInput,
@@ -49,8 +53,6 @@ import {
   type SwipeGestureInput,
   type TransformInput,
 } from './metadata.ts';
-import { gestureCliReaders, gestureDaemonWriters } from './gesture.ts';
-import { interactionCliReaders, interactionDaemonWriters } from './interactions.ts';
 import { interactionCliOutputFormatters } from './output.ts';
 import { selectorCliReaders, selectorDaemonWriters } from './selectors.ts';
 
@@ -107,7 +109,10 @@ const interactionCliSchemas = {
   },
   swipe: {
     helpDescription: 'Quick coordinate fling with optional repeat pattern.',
-    positionalArgs: ['x1', 'y1', 'x2', 'y2', 'durationMs?'],
+    positionalArgs: ['x1', 'y1', 'x2', 'y2'],
+    // Arity is enforced by swipePayloadFromPositionals (assertGestureArity), so
+    // an extra positional reaches that migration-hint error, not this schema's.
+    allowsExtraPositionals: true,
     allowedFlags: ['count', 'pauseMs', 'pattern'],
   },
   gesture: {

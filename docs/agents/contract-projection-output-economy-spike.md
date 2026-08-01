@@ -18,7 +18,7 @@ Selected commands:
 - `app-switcher`
 - `tv-remote`
 
-These commands already have closed neutral results in `src/contracts/navigation.ts`, typed
+These commands already have closed neutral results in `packages/contracts/src/navigation.ts`, typed
 `CommandResultMap` entries, executable definitions, Node client methods, and MCP output schemas.
 They do not overlap the broad-return client methods narrowed under #1183 (since closed).
 

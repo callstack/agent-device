@@ -2,8 +2,8 @@ import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { iosRunnerOverrides, performGestureApple } from '../../interactions.ts';
 import { runAppleRunnerCommand } from '../runner/runner-client.ts';
-import { AppError } from '../../../../kernel/errors.ts';
-import type { GesturePlan } from '../../../../contracts/gesture-plan.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { GesturePlan } from '@agent-device/contracts/interaction';
 import { requireGestureSupported } from '../../../../core/capabilities.ts';
 import {
   IOS_TEST_DEVICE,
@@ -95,6 +95,31 @@ test('iosRunnerOverrides uses synthesized iOS coordinate taps', async () => {
     command: 'tap',
     x: 110,
     y: 210,
+    synthesized: true,
+    appBundleId: 'com.example.App',
+  });
+});
+
+test('iosRunnerOverrides uses synthesized iOS coordinate taps for selectors', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValue({});
+
+  const { overrides } = iosRunnerOverrides(IOS_TEST_DEVICE, {
+    appBundleId: 'com.example.App',
+  });
+
+  await overrides.tapElementSelector!({
+    key: 'label',
+    value: 'General',
+    expectedPoint: { x: 200, y: 300 },
+  });
+
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
+    command: 'tap',
+    selectorKey: 'label',
+    selectorValue: 'General',
+    allowNonHittableCoordinateFallback: undefined,
+    x: 200,
+    y: 300,
     synthesized: true,
     appBundleId: 'com.example.App',
   });

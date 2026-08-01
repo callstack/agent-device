@@ -11,10 +11,7 @@
 //     categories, so they are never silently skipped (issue constraint);
 //   - a small explicit build-ownership layer covers Swift, Android helpers,
 //     the macOS helper, MCP metadata, and the public package surface — the
-//     only paths whose owning build the sources of truth cannot derive;
-//   - SkillGym owns skill guidance (`skills/`) and its harness
-//     (`test/skillgym/`): those changes select the SkillGym suite, and their
-//     Markdown is skill/harness input, not inert docs.
+//     only paths whose owning build the sources of truth cannot derive.
 //
 // Anything the model cannot confidently classify fails open to the full check
 // set: unknown paths, workflow/tooling, the selector's own sources, and
@@ -26,6 +23,7 @@ export type CheckId =
   | 'format'
   | 'lint'
   | 'typecheck'
+  | 'test-app-typecheck'
   | 'layering'
   | 'fallow'
   | 'mcp-metadata'
@@ -40,7 +38,6 @@ export type CheckId =
   | 'android-helpers'
   | 'macos-helper'
   | 'web-smoke'
-  | 'skillgym'
   | 'replay-compat';
 
 // The complete local check universe. A fail-open plan selects all of these;
@@ -49,6 +46,7 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'format',
   'lint',
   'typecheck',
+  'test-app-typecheck',
   'layering',
   'fallow',
   'mcp-metadata',
@@ -63,7 +61,6 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'android-helpers',
   'macos-helper',
   'web-smoke',
-  'skillgym',
   'replay-compat',
 ];
 
@@ -123,14 +120,20 @@ function isSelectorOwning(file: string): boolean {
 }
 
 function isWorkflowTooling(file: string): boolean {
-  return file.startsWith('.github/') || file.startsWith('scripts/') || ROOT_TOOLING.has(file);
+  // A workspace package manifest or tsconfig rewires module resolution for
+  // every consumer, so it fails open like root tooling does.
+  const packageTooling = /^packages\/[^/]+\/(?:package\.json|tsconfig\.json)$/.test(file);
+  return (
+    file.startsWith('.github/') ||
+    file.startsWith('scripts/') ||
+    packageTooling ||
+    ROOT_TOOLING.has(file)
+  );
 }
 
 function isDocs(file: string): boolean {
-  // skills/ and the SkillGym harness are validated by the SkillGym suite (and
-  // formatting), not treated as inert docs — even their Markdown is skill
-  // guidance or harness input, so let them flow to ownership rules instead.
-  if (file.startsWith('skills/') || file.startsWith('test/skillgym/')) return false;
+  // skills/ Markdown is agent guidance prose with no owning suite (the
+  // SkillGym harness was removed), so it classifies as docs like the rest.
   return (
     file.startsWith('docs/') ||
     file.startsWith('website/') ||
@@ -153,7 +156,6 @@ type FileFacts = {
   isTs: boolean;
   underSrc: boolean;
   underTest: boolean;
-  underSkills: boolean;
   isSrcProd: boolean;
 };
 
@@ -163,9 +165,9 @@ function reason(check: CheckId, file: string, rule: string, detail: string): Sel
   return { check, path: file, rule, detail };
 }
 
-const formatGate: OwnershipRule = ({ file, underSrc, underTest, underSkills }) =>
-  underSrc || underTest || underSkills
-    ? [reason('format', file, 'gate:format', 'oxfmt covers src/, test/, and skills/')]
+const formatGate: OwnershipRule = ({ file, underSrc, underTest }) =>
+  underSrc || underTest
+    ? [reason('format', file, 'gate:format', 'oxfmt covers src/ and test/')]
     : [];
 
 const staticTsGates: OwnershipRule = ({ file, isTs, underSrc, underTest }) =>
@@ -211,10 +213,7 @@ function isNodeIntegrationPath(file: string): boolean {
 }
 
 const vitestRelatedOwnership: OwnershipRule = ({ file, isTs, underSrc, underTest }) =>
-  isTs &&
-  (underSrc || underTest) &&
-  !isNodeIntegrationPath(file) &&
-  !file.startsWith('test/skillgym/')
+  isTs && (underSrc || underTest) && !isNodeIntegrationPath(file)
     ? [
         reason(
           'vitest-related',
@@ -225,10 +224,51 @@ const vitestRelatedOwnership: OwnershipRule = ({ file, isTs, underSrc, underTest
       ]
     : [];
 
+// Workspace package source (#1490 W0): bundled into the published artifact,
+// type-checked in the root graph, covered by Vitest's module graph, and
+// guarded by layering R11. Fallow deliberately ignores packages/** (its
+// resolver cannot follow workspace specifiers), so fallow is not selected.
+const workspacePackageOwnership: OwnershipRule = ({ file, isTs }) => {
+  if (!isTs || !/^packages\/[^/]+\/src\//.test(file)) return [];
+  const selections = [
+    reason('format', file, 'gate:format', 'oxfmt covers packages/'),
+    reason('lint', file, 'gate:lint', 'oxlint covers packages/'),
+    reason('typecheck', file, 'gate:typecheck', 'tsc includes packages/'),
+    reason('layering', file, 'package-src', 'layering R11 guards workspace package boundaries'),
+    reason(
+      'vitest-related',
+      file,
+      'vitest:related',
+      'Vitest resolves affected tests through its static module graph',
+    ),
+  ];
+  if (!isTestPath(file)) {
+    selections.push(
+      reason('build', file, 'package-src', 'package source is bundled into the published artifact'),
+    );
+  }
+  return selections;
+};
+
 const nodeIntegrationOwnership: OwnershipRule = ({ file }) =>
   isNodeIntegrationPath(file)
     ? [reason('integration-node', file, 'node-integration', 'node --test integration smoke')]
     : [];
+
+const testAppOwnership: OwnershipRule = ({ file }) => {
+  if (!file.startsWith('examples/test-app/')) return [];
+  if (!/\.(?:[cm]?[jt]sx?|json)$/.test(file)) return [];
+  return [
+    reason('format', file, 'gate:format', 'oxfmt covers the Expo test app'),
+    reason('lint', file, 'gate:lint', 'oxlint covers the Expo test app'),
+    reason(
+      'test-app-typecheck',
+      file,
+      'own:test-app',
+      'the Expo test app has an isolated TypeScript dependency graph',
+    ),
+  ];
+};
 
 // The frozen replay-compat corpus (#1417). `.ad` fixture data would otherwise
 // fail open on its extension: its only consumer is the unit-lane corpus test.
@@ -257,21 +297,6 @@ const replayCompatOwnership: OwnershipRule = ({ file }) => {
   }
   return selections;
 };
-
-// SkillGym validates skill guidance (`skills/`) and owns its harness
-// (`test/skillgym/`); the Testing Matrix in docs/agents/testing.md routes
-// skill-prompt/assertion changes here.
-const skillgymOwnership: OwnershipRule = ({ file, underSkills }) =>
-  underSkills || file.startsWith('test/skillgym/')
-    ? [
-        reason(
-          'skillgym',
-          file,
-          'own:skillgym',
-          'SkillGym suite validates skill guidance and its harness',
-        ),
-      ]
-    : [];
 
 const BUILD_OWNERSHIP: ReadonlyArray<{
   check: CheckId;
@@ -323,9 +348,10 @@ const OWNERSHIP_RULES: readonly OwnershipRule[] = [
   staticTsGates,
   srcProdGate,
   vitestRelatedOwnership,
+  workspacePackageOwnership,
   nodeIntegrationOwnership,
+  testAppOwnership,
   replayCompatOwnership,
-  skillgymOwnership,
   buildOwnership,
 ];
 
@@ -337,7 +363,6 @@ function fileFacts(file: string): FileFacts {
     isTs,
     underSrc,
     underTest: file.startsWith('test/'),
-    underSkills: file.startsWith('skills/'),
     isSrcProd: underSrc && isTs && !isTestPath(file),
   };
 }

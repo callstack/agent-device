@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { readProcessCommand, readProcessStartTime } from '../utils/host-process.ts';
-import type { LogBackend } from '../contracts/logs.ts';
+import type { LogBackend } from '@agent-device/contracts/observability';
 import type { ExecResult } from '../utils/exec.ts';
 
 export const APP_LOG_PID_FILENAME = 'app-log.pid';

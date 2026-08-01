@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { AgentDeviceBackend } from '../../../backend.ts';
-import { ref, selector } from './selector-read.ts';
+import { ref, selector } from './selector-read-utils.ts';
 import { createLocalArtifactAdapter } from '../../../io.ts';
 import {
   createAgentDevice,
   createMemorySessionStore,
   localCommandPolicy,
 } from '../../../runtime.ts';
-import type { Point } from '../../../kernel/snapshot.ts';
+import type { Point } from '@agent-device/kernel/snapshot';
 import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
 import {
   coveredByTabBarSnapshot,

@@ -7,7 +7,6 @@
   "ignorePatterns": [
     "dist/**",
     "node_modules/**",
-    "**/.skillgym-results/**",
     "**/*.md",
     "scripts/maestro-conformance/corpus/**",
     "fallow-baselines/**",

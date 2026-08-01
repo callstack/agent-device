@@ -1,6 +1,6 @@
 import http, { type IncomingMessage } from 'node:http';
 import { type Socket } from 'node:net';
-import { AppError } from '../../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { createRequestCanceledError } from '../../../../request/cancel.ts';
 import { Deadline } from '../../../../utils/retry.ts';
 import type { RunnerCommand } from './runner-contract.ts';

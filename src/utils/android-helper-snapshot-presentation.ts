@@ -1,4 +1,4 @@
-import type { SnapshotNode } from '../kernel/snapshot.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { hasRenderableArea } from './android-helper-presentation/geometry.ts';
 import { isRootNode, isScrollableNode } from './android-helper-presentation/predicates.ts';
 import {

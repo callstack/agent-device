@@ -1,8 +1,9 @@
-import { dispatchCommand, type CommandFlags } from '../../core/dispatch.ts';
-import { isMacOs, isMobilePlatform, publicPlatformString } from '../../kernel/device.ts';
-import { sleep } from '../../utils/timeouts.ts';
-import { runMacOsSnapshotAction } from '../../platforms/apple/os/macos/helper.ts';
-import { snapshotLinux } from '../../platforms/linux/snapshot.ts';
+import {
+  recordSnapshotTiming,
+  snapshotCaptureAnnotationsFrom,
+  type SnapshotCaptureAnnotations,
+} from '@agent-device/contracts/capture';
+import { isMacOs, isMobilePlatform, publicPlatformString } from '@agent-device/kernel/device';
 import {
   attachRefs,
   buildSnapshotPresentationKey,
@@ -12,11 +13,19 @@ import {
   type RawSnapshotNode,
   type SnapshotBackend,
   type SnapshotState,
-} from '../../kernel/snapshot.ts';
-import { annotateCoveredSnapshotNodes } from '../../snapshot/snapshot-occlusion.ts';
-import { normalizeSnapshotTree } from '../../snapshot/snapshot-tree.ts';
+} from '@agent-device/kernel/snapshot';
+import { dispatchCommand, type CommandFlags } from '../../core/dispatch.ts';
+import { runMacOsSnapshotAction } from '../../platforms/apple/os/macos/helper.ts';
+import { snapshotLinux } from '../../platforms/linux/snapshot.ts';
 import { isAndroidInputMethodSnapshotNode } from '../../snapshot/android-input-method-overlays.ts';
-import type { SessionState } from '../types.ts';
+import { annotateCoveredSnapshotNodes } from '../../snapshot/snapshot-occlusion.ts';
+import {
+  findNodeByLabel,
+  pruneGroupNodes,
+  resolveRefLabel,
+} from '../../snapshot/snapshot-processing.ts';
+import { normalizeSnapshotTree } from '../../snapshot/snapshot-tree.ts';
+import { sleep } from '../../utils/timeouts.ts';
 import {
   ANDROID_FRESHNESS_RETRY_DEADLINE_MS,
   ANDROID_FRESHNESS_RETRY_DELAYS_MS,
@@ -37,18 +46,9 @@ import {
   retryPendingInteractionOutcome,
 } from '../interaction-outcome-policy.ts';
 import { capturePostGestureStabilizedResult } from '../post-gesture-stabilization.ts';
-import {
-  findNodeByLabel,
-  pruneGroupNodes,
-  resolveRefLabel,
-} from '../../snapshot/snapshot-processing.ts';
-import { errorResponse, type DaemonFailureResponse } from './response.ts';
 import { presentIosInteractiveSnapshot } from '../snapshot-presentation/ios/index.ts';
-import {
-  snapshotCaptureAnnotationsFrom,
-  type SnapshotCaptureAnnotations,
-} from '../../contracts/snapshot-capture-annotations.ts';
-import { recordSnapshotTiming } from '../../contracts/snapshot-diagnostics.ts';
+import type { SessionState } from '../types.ts';
+import { errorResponse, type DaemonFailureResponse } from './response.ts';
 
 type CaptureSnapshotParams = {
   device: SessionState['device'];
@@ -59,6 +59,7 @@ type CaptureSnapshotParams = {
   logPath: string;
   snapshotScope?: string;
   androidFreshnessMode?: AndroidFreshnessMode;
+  signal?: AbortSignal;
 };
 
 type SnapshotData = {
@@ -199,7 +200,7 @@ async function waitForDelayedInteractionSurfaceChange(
 export async function captureSnapshotData(params: CaptureSnapshotParams): Promise<SnapshotData> {
   const { device, session, flags, outPath, logPath, snapshotScope } = params;
   if (device.platform === 'linux') {
-    const linuxResult = await snapshotLinux(session?.surface);
+    const linuxResult = await snapshotLinux(session?.surface, params.signal);
     return shapeDesktopSurfaceSnapshot(
       { nodes: linuxResult.nodes, truncated: linuxResult.truncated, backend: 'linux-atspi' },
       {
@@ -212,6 +213,7 @@ export async function captureSnapshotData(params: CaptureSnapshotParams): Promis
   if (isMacOs(device) && session?.surface && session.surface !== 'app') {
     const helperSnapshot = await runMacOsSnapshotAction(session.surface, {
       bundleId: session.surface === 'menubar' ? session.appBundleId : undefined,
+      signal: params.signal,
     });
     return shapeDesktopSurfaceSnapshot(helperSnapshot, {
       snapshotDepth: flags?.snapshotDepth,
@@ -227,6 +229,7 @@ export async function captureSnapshotData(params: CaptureSnapshotParams): Promis
       session?.trace?.outPath,
     ),
     snapshotIncludeRects: params.includeRects,
+    signal: params.signal,
   })) as SnapshotData;
 }
 

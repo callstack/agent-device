@@ -51,6 +51,47 @@ function runBlockEntries(run: string): string[] {
   );
 }
 
+/**
+ * `pnpm <name>` invocations in a `run:` block. Matched by shape only — the caller resolves
+ * each name against package.json's own scripts, so a word that is not a real script (`pnpm
+ * install`, `pnpm build`) drops out there rather than here.
+ */
+function pnpmScriptNames(run: string): string[] {
+  return [...run.matchAll(/(?:^|\s)pnpm\s+(?:run\s+)?([\w:.-]+)/g)].map((match) => match[1]!);
+}
+
+/**
+ * Entry paths reachable from a `run:` block, following `pnpm <name>` aliases into
+ * package.json and back into `runBlockEntries` however deep the chain goes — a script
+ * that itself runs another named script must not hide that script's entries from R8.
+ * `chain` is the set of script names already expanded on this path: an alias that names
+ * one of them is a cycle, and is dropped rather than walked again, so a cycle contributes
+ * whatever entries its non-cyclic edges found instead of recursing forever.
+ */
+function resolveRunEntries(
+  run: string,
+  packageScripts: ReadonlyMap<string, string>,
+  fileExists: (file: string) => boolean,
+  entries: Set<string>,
+  chain: ReadonlySet<string> = new Set(),
+): void {
+  for (const entry of runBlockEntries(run)) {
+    if (fileExists(entry)) entries.add(entry);
+  }
+  for (const scriptName of pnpmScriptNames(run)) {
+    if (chain.has(scriptName)) continue;
+    const resolved = packageScripts.get(scriptName);
+    if (resolved === undefined) continue;
+    resolveRunEntries(
+      resolved,
+      packageScripts,
+      fileExists,
+      entries,
+      new Set([...chain, scriptName]),
+    );
+  }
+}
+
 function stepsOf(job: unknown): Record<string, unknown>[] {
   if (job === null || typeof job !== 'object') return [];
   const steps = (job as Record<string, unknown>)['steps'];
@@ -72,10 +113,21 @@ function skipsInstall(step: Record<string, unknown>): boolean {
 /**
  * Every job across `workflows` that sets `install-deps: false`, with the entry scripts its
  * steps invoke. `fileExists` filters candidate paths down to files that are really there.
+ *
+ * `packageScripts` resolves a bare `pnpm <name>` invocation back to the command string
+ * package.json names it, so a zero-dep job may call its script by its pnpm name — R8 reads
+ * the same entry paths out of the resolved command rather than requiring the literal path
+ * inline in the workflow. A `pnpm` word that names no real script (`pnpm install`) resolves
+ * to nothing and is silently ignored, same as a shell word that merely looks like a path.
+ * Resolution recurses through chained aliases (a script that itself runs another named
+ * script), so a nested entry is never invisible to the closure just because it is one hop
+ * further away; a cycle in that chain stops re-expanding the repeated name rather than
+ * recursing forever.
  */
 export function zeroDepJobs(
   workflows: ReadonlyMap<string, string>,
   fileExists: (file: string) => boolean,
+  packageScripts: ReadonlyMap<string, string> = new Map(),
 ): ZeroDepJob[] {
   const jobs: ZeroDepJob[] = [];
   for (const [workflow, source] of workflows) {
@@ -90,9 +142,7 @@ export function zeroDepJobs(
       for (const step of steps) {
         const run = step['run'];
         if (typeof run !== 'string') continue;
-        for (const entry of runBlockEntries(run)) {
-          if (fileExists(entry)) entries.add(entry);
-        }
+        resolveRunEntries(run, packageScripts, fileExists, entries);
       }
       jobs.push({ workflow, job, entries: [...entries].sort() });
     }
@@ -170,11 +220,11 @@ function resolveRelative(
  * A relative import that resolves to nothing is left alone — that is a broken import, which
  * typecheck reports far better than this can.
  */
-export function uninstallableImports(
+function walkJobClosure(
   job: ZeroDepJob,
   readSource: (file: string) => string | null,
   fileExists: (file: string) => boolean,
-): UninstallableImport[] {
+): { visited: Set<string>; found: UninstallableImport[] } {
   const found: UninstallableImport[] = [];
   const visited = new Set<string>();
   const queue = [...job.entries];
@@ -196,6 +246,33 @@ export function uninstallableImports(
       found.push({ workflow: job.workflow, job: job.job, file, line, spec });
     }
   }
+  return { visited, found };
+}
 
-  return found.sort((left, right) => left.file.localeCompare(right.file) || left.line - right.line);
+export function uninstallableImports(
+  job: ZeroDepJob,
+  readSource: (file: string) => string | null,
+  fileExists: (file: string) => boolean,
+): UninstallableImport[] {
+  return walkJobClosure(job, readSource, fileExists).found.sort(
+    (left, right) => left.file.localeCompare(right.file) || left.line - right.line,
+  );
+}
+
+/**
+ * Every repo file reachable from a zero-dep job's entries. R11 grants its
+ * relative-into-packages exception ONLY to these files: a zero-dep closure can
+ * never coexist with specifier loads (no node_modules), which is what makes a
+ * relative package-source import safe from dual instantiation.
+ */
+export function zeroDepClosureFiles(
+  jobs: readonly ZeroDepJob[],
+  readSource: (file: string) => string | null,
+  fileExists: (file: string) => boolean,
+): Set<string> {
+  const files = new Set<string>();
+  for (const job of jobs) {
+    for (const file of walkJobClosure(job, readSource, fileExists).visited) files.add(file);
+  }
+  return files;
 }

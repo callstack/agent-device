@@ -40,7 +40,7 @@ extension RunnerTests {
       ? resolvedTouchVisualizationFrame(app: activeApp, x: firstStep.x!, y: firstStep.y!)
       : nil
 
-    let synthesizedContext = synthesizedSequenceCoordinateContext(steps: steps)
+    let synthesizedContext = synthesizedSequenceCoordinateContext(steps: steps, app: activeApp)
 
     let execution = assembleSequenceExecution(steps: steps) { _, step in
       performSequenceStep(step, activeApp: activeApp, synthesizedContext: synthesizedContext)

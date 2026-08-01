@@ -1,6 +1,4 @@
-import type { DoctorKind } from '../../contracts/doctor.ts';
-
-export type { DoctorCheck, DoctorKind, DoctorStatus } from '../../contracts/doctor.ts';
+import type { DoctorKind } from '@agent-device/contracts/observability';
 
 export type DoctorOptions = {
   targetApp?: string;

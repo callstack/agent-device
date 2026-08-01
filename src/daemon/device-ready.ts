@@ -1,4 +1,4 @@
-import { isIosFamily, type DeviceInfo } from '../kernel/device.ts';
+import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { resolveIosPhysicalDeviceControl } from '../platforms/apple/core/physical-device-control.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 import { createTtlMemo } from '../utils/ttl-memo.ts';

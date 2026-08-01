@@ -1,6 +1,6 @@
-import { isDeepLinkTarget } from '../../contracts/open-target.ts';
+import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import { ensureDeviceReady } from '../device-ready.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse, SessionRuntimeHints, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import {
@@ -15,13 +15,13 @@ import {
   resolveAndroidPackageForOpen,
   resolveSessionAppBundleIdForTarget,
 } from './session-open-target.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { errorResponse } from './response.ts';
 import {
   resolveMacOsSurfaceAppState,
   resolveRequestedOpenSurface,
 } from './session-open-surface.ts';
-import type { SessionSurface } from '../../contracts/session-surface.ts';
+import type { SessionSurface } from '@agent-device/contracts/session';
 
 type OpenCommandDetails = {
   appBundleId?: string;

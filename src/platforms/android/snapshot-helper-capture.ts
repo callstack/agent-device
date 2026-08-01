@@ -1,4 +1,4 @@
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '../../utils/exec.ts';
 import {
   parseInstrumentationRecords,
@@ -18,6 +18,10 @@ import type {
   AndroidSnapshotHelperMetadata,
   AndroidSnapshotHelperOutput,
 } from './snapshot-helper-types.ts';
+import {
+  recoverAndroidSnapshotHelperRetirement,
+  retireCanceledAndroidSnapshotHelperCapture,
+} from './snapshot-helper-retirement.ts';
 
 type AndroidSnapshotHelperChunk = {
   index: number | undefined;
@@ -47,10 +51,39 @@ export async function captureAndroidSnapshotWithHelper(
   options: AndroidSnapshotHelperCaptureOptions,
 ): Promise<AndroidSnapshotHelperOutput> {
   const resolved = resolveAndroidSnapshotHelperCaptureOptions(options);
-  const result = await options.adb(buildAndroidSnapshotHelperArgs(resolved), {
-    allowFailure: true,
-    timeoutMs: resolved.commandTimeoutMs,
+  const deviceKey = options.deviceKey ?? 'android:default';
+  await recoverAndroidSnapshotHelperRetirement({
+    deviceKey,
+    adb: options.adb,
+    signal: options.signal,
   });
+  let result: Awaited<ReturnType<AndroidSnapshotHelperCaptureOptions['adb']>>;
+  try {
+    result = await options.adb(buildAndroidSnapshotHelperArgs(resolved), {
+      allowFailure: true,
+      timeoutMs: resolved.commandTimeoutMs,
+      signal: options.signal,
+    });
+  } catch (error) {
+    if (!options.signal?.aborted) throw error;
+    await retireCanceledAndroidSnapshotHelperCapture({
+      deviceKey,
+      packageName: resolved.packageName,
+      adb: options.adb,
+      cause: error,
+    });
+    options.signal.throwIfAborted();
+    throw error;
+  }
+  if (options.signal?.aborted) {
+    await retireCanceledAndroidSnapshotHelperCapture({
+      deviceKey,
+      packageName: resolved.packageName,
+      adb: options.adb,
+      cause: options.signal.reason,
+    });
+    options.signal.throwIfAborted();
+  }
   const { output, cleanupDone } = await readAndroidSnapshotHelperOutput(options, resolved, result);
   if (resolved.outputPath && !cleanupDone) {
     await removeHelperOutputFile(options.adb, resolved.outputPath);
@@ -411,11 +444,6 @@ function readOptionalCaptureMode(
 ): AndroidSnapshotHelperMetadata['captureMode'] {
   return value === 'interactive-windows' || value === 'active-window' ? value : undefined;
 }
-
-export {
-  readInstrumentationResultNumber as readAndroidSnapshotHelperMetadataNumber,
-  readInstrumentationResultBoolean as readAndroidSnapshotHelperMetadataBoolean,
-};
 
 const readOptionalNumber = readInstrumentationResultNumber;
 const readOptionalBoolean = readInstrumentationResultBoolean;

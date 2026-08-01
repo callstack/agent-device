@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { attachRefs } from '../../kernel/snapshot.ts';
+import { attachRefs } from '@agent-device/kernel/snapshot';
 import {
   extractNodeReadText,
   findNearestHittableAncestor,

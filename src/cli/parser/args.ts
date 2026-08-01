@@ -1,4 +1,4 @@
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { mergeDefinedFlags } from '../../utils/merge-flags.ts';
 import {
   applyCommandDefaults,

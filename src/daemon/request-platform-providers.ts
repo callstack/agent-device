@@ -1,7 +1,7 @@
-import type { PlatformGatedProviderResolverKey } from '../contracts/platform-providers.ts';
+import type { PlatformGatedProviderResolverKey } from '@agent-device/contracts/platform';
 import { resolveTargetDevice } from '../core/dispatch-resolve.ts';
 import { registerBuiltinPlatformPlugins } from '../core/interactors/register-builtins.ts';
-import { tryGetPlugin } from '../contracts/platform-plugin.ts';
+import { tryGetPlugin } from '../core/platform-plugin-registry.ts';
 import type { AndroidAdbExecutor, AndroidAdbProvider } from '../platforms/android/adb-executor.ts';
 import type {
   AppleRunnerCommandExecutor,
@@ -14,7 +14,7 @@ import type {
 import type { LinuxToolProvider } from '../platforms/linux/tool-provider.ts';
 import type { VegaToolProvider } from '../platforms/vega/tool-provider.ts';
 import type { WebProvider } from '../platforms/web/provider.ts';
-import type { DeviceInfo } from '../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppLogProvider } from './app-log.ts';
 import { hasExplicitDeviceSelector } from './device-selector-intent.ts';
 import type { RecordingProvider } from './recording-provider.ts';

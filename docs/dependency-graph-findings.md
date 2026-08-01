@@ -136,6 +136,15 @@ numbers they explain.
 
 ## 0b. The biggest structural finding is not an inversion
 
+> **Current status at `e545544dfa85`:** R9 remains 102, but membership is now commands 33,
+> daemon-server 30, platforms 19, core 12, root composition 5, contracts 2, and client 1. None of
+> the native replay, replay-test, or Maestro engine files is in this component. A graph
+> counterfactual removing the concrete Apple `perf-xctrace.ts` type edge from `daemon/types.ts`
+> lowers it to 91 (and daemon membership from 30 to 21). Removing only the Android `perf.ts` edge
+> leaves both counts unchanged at 102/30; removing both produces the same 91/21 as the Apple cut
+> alone. The Apple edge is load-bearing, while removing the Android edge is ownership hygiene.
+> Engine extraction alone leaves R9 at 102.
+
 Cycle size by edge kind, measured over the whole production graph:
 
 | edges considered | largest strongly-connected component |
@@ -146,14 +155,14 @@ Cycle size by edge kind, measured over the whole production graph:
 | all kinds | 213 files |
 
 At runtime the module graph is a clean DAG. The 102-file cluster is purely type-level: you cannot
-read the types of any one of those files without transitively reaching all 102. (`main` carries 107;
-the boundary moves in this branch bring it to 102.) That is not a correctness
-problem — types are erased — but it is a comprehension one, and it is the single largest obstacle to
-reading a subsystem in isolation. It spans `commands` (33), `daemon` (21), `platforms` (13), `core`
-(12), hubs at `runtime-contract.ts` (25 in-cluster dependents), `commands/runtime-types.ts` (21),
-`backend.ts` (15), `commands/runtime-common.ts` (12).
+read the types of any one of those files without transitively reaching all 102. (`main` carried 107;
+the current boundary moves bring it to 102.) That is not a correctness problem — types are erased —
+but it is a comprehension one, and it is the single largest obstacle to reading a subsystem in
+isolation. At the current measured commit it spans `commands` (33), `daemon-server` (30),
+`platforms` (19), `core` (12), root composition (5), `contracts` (2), and `client` (1).
 
-Now ratcheted for growth by **R9** (`TYPE_CYCLE_BASELINE` in `check.ts`), so it cannot get worse
+Now ratcheted for growth by **R9** (`TYPE_CYCLE_BASELINE`, derived from the zone ceilings in
+`scripts/layering/daemon-modularity.ts`), so it cannot get worse
 while nobody is looking — a type-only import that closes a new loop fails the gate, verified by
 adding one type-only import that closes a loop and watching the gate reject it. Growth-only on
 purpose: reducing it is a real refactor, so a
@@ -236,6 +245,14 @@ daemon-internal `DaemonRequest`, so this is a real change, not a file move — e
 becomes generic over the request type, or the request shape itself moves down.
 
 ## 2. `daemon/types.ts` is a second contracts module at rank 4
+
+> **Status after #1435:** the inventory below is historical. `SessionAction`, replay-suite results,
+> `DaemonLockPolicy`, and the public daemon response/artifact/runtime-hint shapes now live below
+> daemon. Four production files outside daemon still import `daemon/types.ts`; two are
+> daemon-specific Maestro adapters scheduled to move back under daemon. `DaemonRequest` itself
+> intentionally remains server-private because it carries admitted leases, callbacks, replay
+> guards, and narrowed flags. Remove the remaining external imports through neutral caller-specific
+> contracts; do not move `DaemonRequest` wholesale.
 
 554 lines, **174 dependents, 173 of them type-only**, and 10 of its 15 exported types are imported
 from outside `daemon/`: `DaemonRequest` (8), `SessionAction` (7), `ReplaySuiteResult` (6),
@@ -434,8 +451,9 @@ calculus — or once `jsPlugins` is stable and the ratchet gap is addressable.
 
 ## Suggested order from here
 
-1. **Move the 10 outward-facing `daemon/types.ts` types into `contracts/`** (§2). Mechanical, and
-   it clears most of §1's second cluster.
+1. ~~**Move the 10 outward-facing `daemon/types.ts` types into `contracts/`** (§2).~~ Mostly
+   completed by #1435. Eliminate the four remaining external production importers with
+   caller-specific public contracts or daemon-owned adapters; keep `DaemonRequest` private.
 2. ~~**Split `client/client-types.ts`** (§1).~~ Done — 42 → 18 total inversions. The follow-up is
    the upstream moves that unblock the last 5 (§1): `ScrollInputDirection` and the
    navigation-projection types out of `commands/`, Metro result payloads out of `metro/`.

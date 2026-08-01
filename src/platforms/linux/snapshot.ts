@@ -1,6 +1,6 @@
-import type { RawSnapshotNode } from '../../kernel/snapshot.ts';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { captureAccessibilityTree, type SnapshotSurface } from './atspi-bridge.ts';
-import type { SessionSurface } from '../../contracts/session-surface.ts';
+import type { SessionSurface } from '@agent-device/contracts/session';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 
 /**
@@ -22,12 +22,15 @@ function resolveLinuxSurface(surface: SessionSurface | undefined): SnapshotSurfa
   return 'desktop';
 }
 
-export async function snapshotLinux(surface: SessionSurface | undefined): Promise<{
+export async function snapshotLinux(
+  surface: SessionSurface | undefined,
+  signal?: AbortSignal,
+): Promise<{
   nodes: RawSnapshotNode[];
   truncated?: boolean;
 }> {
   const linuxSurface = resolveLinuxSurface(surface);
-  const result = await captureAccessibilityTree(linuxSurface);
+  const result = await captureAccessibilityTree(linuxSurface, { signal });
 
   return {
     nodes: result.nodes,

@@ -4,8 +4,13 @@ import os from 'node:os';
 import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
 import { makeAndroidSession, makeSessionStore } from '../../../__tests__/test-utils/index.ts';
 import { withTargetDeviceResolutionScope } from '../../../core/dispatch-resolve.ts';
-import type { DeviceInfo } from '../../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { handleSessionCommands } from '../session.ts';
+
+function assertAndroidCapabilityHonesty(availableCommands: unknown): void {
+  expect(availableCommands).not.toContain(PUBLIC_COMMANDS.prepare);
+  expect(availableCommands).not.toContain(PUBLIC_COMMANDS.viewport);
+}
 
 test('capabilities reports supported commands for the selected session device', async () => {
   const sessionName = 'android-capabilities';
@@ -47,6 +52,7 @@ test('capabilities reports supported commands for the selected session device', 
   );
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.capabilities);
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.devices);
+  assertAndroidCapabilityHonesty(response.data?.availableCommands);
 });
 
 test('capabilities accepts a stopped Android AVD placeholder for explicit platform discovery', async () => {

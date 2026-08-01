@@ -1,4 +1,4 @@
-import type { SnapshotState } from '../../../src/kernel/snapshot.ts';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { makeSnapshotState } from '../../../src/__tests__/test-utils/index.ts';
 
 /**

@@ -1,6 +1,6 @@
-import { AppError } from '../kernel/errors.ts';
-import type { DeviceKind, DeviceTarget, PublicPlatform } from '../kernel/device.ts';
-import type { Point, Rect } from '../kernel/snapshot.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { DeviceKind, DeviceTarget, PublicPlatform } from '@agent-device/kernel/device';
+import type { Point, Rect } from '@agent-device/kernel/snapshot';
 
 function readRequired<T>(
   record: Record<string, unknown>,

@@ -3,8 +3,8 @@ import type {
   MetroPrepareResult,
   MetroReloadOptions,
   MetroReloadResult,
-} from '../../contracts/metro.ts';
-import { AppError } from '../../kernel/errors.ts';
+} from '@agent-device/contracts/remote';
+import { AppError } from '@agent-device/kernel/errors';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import {
   booleanField,

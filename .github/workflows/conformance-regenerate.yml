@@ -49,7 +49,7 @@ jobs:
       # Verifies the pinned jar SHA-256s against pinned-upstream.json, runs the
       # harness over the corpus, and rewrites fixtures/ + corpus/manifest.json.
       - name: Regenerate fixtures from pinned upstream
-        run: node scripts/maestro-conformance/regenerate.mjs
+        run: pnpm maestro:conformance:regenerate
 
       - name: Fail if regeneration changed anything
         run: |

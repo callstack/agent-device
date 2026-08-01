@@ -1,8 +1,8 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { isMacOs, type DeviceInfo } from '../../../kernel/device.ts';
+import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '../../../utils/diagnostics.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { ExecOptions } from '../../../utils/exec.ts';
 import { resizePngFile } from '../../../utils/png-resize.ts';
 import { readPngSize } from '../../../utils/png-size.ts';
@@ -14,6 +14,7 @@ import {
   IOS_SIMULATOR_SCREENSHOT_RETRY_BASE_DELAY_MS,
   IOS_SIMULATOR_SCREENSHOT_RETRY_MAX_ATTEMPTS,
   IOS_SIMULATOR_SCREENSHOT_RETRY_MAX_DELAY_MS,
+  IOS_SIMULATOR_SCREENSHOT_SCALE_TIMEOUT_MS,
   IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS,
 } from './config.ts';
 import { runAppleRunnerCommand, IOS_RUNNER_CONTAINER_BUNDLE_IDS } from './runner/runner-client.ts';
@@ -446,7 +447,7 @@ async function readIosSimulatorMainScreenScale(device: DeviceInfo): Promise<numb
     return cachedScale;
   }
   const scaleResult = await runSimctl(device, ['getenv', device.id, 'SIMULATOR_MAINSCREEN_SCALE'], {
-    timeoutMs: 5_000,
+    timeoutMs: IOS_SIMULATOR_SCREENSHOT_SCALE_TIMEOUT_MS,
   });
   const scale = Number(scaleResult.stdout.trim());
   if (!Number.isFinite(scale) || scale <= 0) {

@@ -1,7 +1,7 @@
-import type { PointerTrajectory } from '../../contracts/gesture-plan.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
-import type { Rect } from '../../kernel/snapshot.ts';
-import { AppError } from '../../kernel/errors.ts';
+import type { PointerTrajectory } from '@agent-device/contracts/interaction';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { Rect } from '@agent-device/kernel/snapshot';
+import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '../../utils/exec.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { resolveAndroidAdbProvider, type AndroidAdbExecutor } from './adb-executor.ts';
@@ -16,6 +16,7 @@ import { parseAndroidSnapshotHelperManifest } from './snapshot-helper-artifact.t
 import { ensureAndroidSnapshotHelper } from './snapshot-helper-install.ts';
 import {
   getAndroidSnapshotHelperSessionDeviceKey,
+  recoverAndroidSnapshotHelperRetirement,
   runAndroidSnapshotHelperSessionTouchCommand,
   stopAndroidSnapshotHelperSession,
 } from './snapshot-helper-session.ts';
@@ -159,6 +160,10 @@ async function prepareAndroidTouchHelper(device: DeviceInfo): Promise<PreparedAn
   const artifact =
     adbProvider.snapshotHelperArtifact ?? (await resolveAndroidTouchHelperArtifact());
   const deviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
+  await recoverAndroidSnapshotHelperRetirement({
+    deviceKey,
+    adb: adbProvider.exec,
+  });
   const install = await withDiagnosticTimer(
     'android_touch_helper_install',
     async () =>

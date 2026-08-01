@@ -202,6 +202,9 @@ describe('cli diff commands', () => {
       const payload = JSON.parse(result.stdout);
       assert.equal(payload.success, true);
       assert.equal(payload.data.match, true);
+      assert.equal(Object.hasOwn(payload.data, 'schemaVersion'), false);
+      assert.equal(Object.hasOwn(payload.data, 'ocr'), false);
+      assert.equal(Object.hasOwn(payload.data, 'nonTextDeltas'), false);
       assert.equal(payload.data.differentPixels, 0);
       assert.equal(payload.data.totalPixels, 100);
       assert.equal(payload.data.mismatchPercentage, 0);
@@ -382,10 +385,7 @@ describe('cli diff commands', () => {
       assert.match(result.stdout, /Diff image:/);
       assert.match(result.stdout, /Current overlay:/);
       assert.match(result.stdout, /diff\.current-overlay\.png \(1 refs\)/);
-      assert.match(
-        result.stdout,
-        /size=large shape=large-area density=100% avgColor=#000000->#ffffff luminance=0->255/,
-      );
+      assert.match(result.stdout, /1\. x=0 y=0 10x10, 100% of diff/);
       assert.match(result.stdout, /overlaps @e1 "Continue", 12% of region/);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });

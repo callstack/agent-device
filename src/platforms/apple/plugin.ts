@@ -1,18 +1,18 @@
 import { appleOsCapabilities } from './capabilities.ts';
-import type { PlatformPlugin } from '../../contracts/platform-plugin.ts';
+import type { PlatformPlugin } from '@agent-device/contracts/platform';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { isAudioProbeSupportedDevice } from '../../kernel/audio-probe-support.ts';
+import { isAudioProbeSupportedDevice } from '@agent-device/contracts/platform';
 import {
   shouldUseHostMacFastPath,
   type DeviceInventoryRequest,
-} from '../../contracts/device-inventory.ts';
+} from '@agent-device/contracts/device';
 import {
   isMacOs,
   isTvOsDevice,
   resolveDeviceAppleOs,
   type DeviceInfo,
-} from '../../kernel/device.ts';
-import type { RunnerContext } from '../../contracts/interactor-types.ts';
+} from '@agent-device/kernel/device';
+import type { RunnerContext } from '@agent-device/contracts/interaction';
 
 // ---------------------------------------------------------------------------
 // Apple family per-command capability closures. Originally RELOCATED VERBATIM from
@@ -120,6 +120,10 @@ const APPLE_UNSUPPORTED_HINT_BY_DEFAULT: Record<
   [PUBLIC_COMMANDS.logs]: coreDeviceOnlyPhysicalOperationHint,
   [PUBLIC_COMMANDS.perf]: coreDeviceOnlyPhysicalOperationHint,
   [PUBLIC_COMMANDS.record]: coreDeviceOnlyPhysicalOperationHint,
+  [PUBLIC_COMMANDS.viewport]: (device) =>
+    device.platform === 'apple'
+      ? 'viewport resizes web targets only (--platform web). Apple screen geometry is fixed by the selected simulator or device type — open a different simulator to test another screen size.'
+      : undefined,
   [PUBLIC_COMMANDS.tvRemote]: (device) =>
     device.platform === 'android'
       ? device.target === 'tv'

@@ -1,4 +1,4 @@
-import { isMacOs } from '../../kernel/device.ts';
+import { isMacOs } from '@agent-device/kernel/device';
 import type { DaemonResponse, SessionState } from '../types.ts';
 import { errorResponse } from './response.ts';
 

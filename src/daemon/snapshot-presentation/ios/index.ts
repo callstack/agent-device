@@ -1,4 +1,4 @@
-import type { RawSnapshotNode } from '../../../kernel/snapshot.ts';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { collectIosImplicitScrollableActions } from './actions.ts';
 import { collectIosPresentationNoiseSuppression } from './noise.ts';
 import { collectIosRowPresentation } from './rows.ts';

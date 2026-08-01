@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { isMacOs, type DeviceInfo } from '../../../../kernel/device.ts';
+import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { runCmdSync } from '../../../../utils/exec.ts';
 import { isEnvTruthy } from '../../../../utils/retry.ts';
 import { createTtlMemo } from '../../../../utils/ttl-memo.ts';

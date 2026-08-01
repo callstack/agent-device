@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { AppleImage, DsymMatch, DsymSlice } from './types.ts';
 import { normalizeUuid, unique } from './utils.ts';
 import { requireExecSuccess, runCmd } from '../../../../utils/exec.ts';
-import { AppError } from '../../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 const MAX_SEARCH_ENTRIES = 10_000;
 const MAX_DSYM_CANDIDATES = 200;

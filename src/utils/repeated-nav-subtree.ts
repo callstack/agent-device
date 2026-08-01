@@ -1,4 +1,4 @@
-import type { Rect, SnapshotNode } from '../kernel/snapshot.ts';
+import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { normalizeRepeatedNodeLabel } from '../snapshot/snapshot-label-signals.ts';
 import { displayNodeLabel } from '../snapshot/snapshot-tree.ts';
 

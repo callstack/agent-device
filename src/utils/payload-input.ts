@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 function looksLikeInlineJson(value: string): boolean {
   const trimmed = value.trim();

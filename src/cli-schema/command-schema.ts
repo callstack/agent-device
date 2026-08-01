@@ -12,7 +12,7 @@ import {
   type FlagDefinition,
   type FlagKey,
 } from '../commands/cli-grammar/flag-types.ts';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 export type { CliFlags, FlagDefinition, FlagKey };
 export type { CommandSchema };

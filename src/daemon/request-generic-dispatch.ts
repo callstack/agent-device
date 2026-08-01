@@ -23,7 +23,7 @@ import {
   recordTouchVisualizationEvent,
 } from './recording-gestures.ts';
 import { markPostGestureStabilization } from './post-gesture-stabilization.ts';
-import { normalizeError } from '../kernel/errors.ts';
+import { normalizeError } from '@agent-device/kernel/errors';
 import { expireRefFrame } from './ref-frame.ts';
 import {
   resolveRefFrameEffect,

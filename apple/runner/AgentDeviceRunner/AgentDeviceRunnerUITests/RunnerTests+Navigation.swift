@@ -118,6 +118,7 @@ extension RunnerTests {
     }
     let before = captureNavigationFallbackVisualState()
     let context = synthesizedCoordinateContext(
+      app: app,
       policy: synthesizedGesturePolicy(.coordinateTap)
     )?.withReferenceFrame(frame)
     let synthesized = performGesture(app, idleTimeout: false) {

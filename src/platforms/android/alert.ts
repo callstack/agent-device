@@ -1,14 +1,14 @@
-import type { AlertAction } from '../../contracts/alert-contract.ts';
+import type { AlertAction } from '@agent-device/contracts/interaction';
 import {
   ALERT_ACTION_RETRY_MS,
   ALERT_POLL_INTERVAL_MS,
   DEFAULT_ALERT_TIMEOUT_MS,
-} from '../../contracts/alert-contract.ts';
-import { AppError } from '../../kernel/errors.ts';
+} from '@agent-device/contracts/interaction';
+import { AppError } from '@agent-device/kernel/errors';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { successText } from '../../utils/success-text.ts';
 import { sleep } from '../../utils/timeouts.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   chooseAndroidAlertButton,
   findAndroidAlertCandidate,
@@ -126,7 +126,6 @@ async function readAndroidAlertCandidate(
     'snapshot_capture',
     async () =>
       await snapshotAndroid(device, {
-        helperWaitForIdleTimeoutMs: 0,
         includeHiddenContentHints: false,
       }),
     { backend: 'android', purpose: 'alert' },

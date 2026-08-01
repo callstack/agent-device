@@ -8,8 +8,9 @@ import {
   publicPlatformString,
   type DeviceInfo,
   type PublicPlatform,
-} from '../../../kernel/device.ts';
-import { AppError } from '../../../kernel/errors.ts';
+} from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
+import { parseXmlDocumentSync } from '@agent-device/xml';
 import {
   execFailureDetails,
   requireExecSuccess,
@@ -17,7 +18,7 @@ import {
   type ExecBackgroundResult,
   type ExecResult,
 } from '../../../utils/exec.ts';
-import { uniqueStrings } from '../../../kernel/collections.ts';
+import { uniqueStrings } from '@agent-device/kernel/collections';
 import { findAllXmlNodes } from './perf-xml.ts';
 import {
   isRetryableIosDeviceTraceRecordFailure,
@@ -28,7 +29,6 @@ import {
   resolveIosDevicePerfTarget,
 } from './perf.ts';
 import { runXcrun } from './tool-provider.ts';
-import { parseXmlDocumentSync } from './xml.ts';
 
 const IOS_DEVICE_PERF_EXPORT_TIMEOUT_MS = 15_000;
 const IOS_DEVICE_TRACE_RECORD_MAX_ATTEMPTS = 3;

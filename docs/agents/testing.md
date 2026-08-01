@@ -2,26 +2,34 @@
 
 ## Which gates a change needs
 
-Default for code changes: `pnpm check:affected --base origin/main --run`. It derives the gate set
-from repository sources of truth, so prefer it over interpreting the table below by hand. GitHub CI
-stays authoritative.
+Use three validation tiers:
+
+1. **While editing:** run a focused test or `pnpm check:quick`.
+2. **Before pushing:** run `pnpm check:affected --run`. It derives the relevant local gates from
+   repository sources of truth and reports checks that need CI or a native toolchain.
+3. **For broad refactors or an explicitly requested full local gate:** run `pnpm check`.
+
+`pnpm check` is the deterministic core aggregate, not a local reproduction of every GitHub job.
+Coverage, provider integration, history-backed compatibility, specialized toolchains, and live
+device/browser lanes remain separate. GitHub CI stays authoritative.
 
 The mapping it encodes, for when you need to run a gate directly or reason about coverage:
 
 | Change | Gate |
 | --- | --- |
 | Any TypeScript | `pnpm typecheck` or `pnpm check:quick` |
+| Expo test app (`examples/test-app/**/*.{ts,tsx,js,jsx,json}`) | Root lint and format plus `pnpm test-app:typecheck`; the affected selector runs lint/format locally and reports the CI-owned typecheck without installing the isolated Expo dependency graph |
 | Daemon handler / shared module | `pnpm check:unit` |
 | Tooling/config (`package.json`, `tsconfig*.json`, `.oxlintrc.json`, `.oxfmtrc.json`) | `pnpm check:tooling` |
 | Platform/device response — anything emitting `platform`/`appleOs` on the wire, or shaping a daemon response | `pnpm test:integration:provider` **and** `pnpm test:coverage` |
 | Cross-platform behavior | `pnpm test:integration` |
-| iOS runner / Swift | `pnpm build:xcuitest` |
+| Apple runner / Swift | Build the changed target with `pnpm build:xcuitest:<platform>`; use `pnpm build:xcuitest` only for shared iOS/macOS changes |
 | CLI help/guidance (`src/cli/parser/cli-help.ts`, `src/cli-schema/`) | `pnpm exec vitest run src/cli/parser/__tests__ src/cli-schema/command-schema-guards.test.ts scripts/__tests__` — the `scripts/__tests__` gates enforce help-topic benchmark coverage and pin the bench's quoted CLI samples to the real renderers |
 | Help benchmark cases (`scripts/help-conformance-*.mjs`) | `pnpm exec vitest run scripts/__tests__` (deterministic gates); model-backed: `pnpm bench:help-conformance` (paid LLM calls, local only) |
-| SkillGym prompts/assertions | `pnpm test:skillgym:case <case-id>` (broad: `pnpm test:skillgym`, filter with `-- --tag fixture-smoke` or `-- --tag skill-guidance`) — agentic routing + local-help-consumption proof only; command-planning knowledge checks belong in the help bench |
 | `.ad` grammar (`src/replay/script.ts`, gesture arity, replay vars) | `pnpm exec vitest run --project unit-core test/replay-compat` — the frozen replay-compat corpus asserts which released script surfaces still parse; a flipped verdict is edited in `test/replay-compat/manifest.ts`, never in the script. Adding or re-pinning a corpus entry also runs `pnpm check:replay-compat`, which re-derives each entry from its release tag in git history |
-| Anything in `src/`, `test/`, `skills/` | `pnpm format` |
-| A decision kernel or its tests (`src/kernel/errors.ts`, `src/daemon/ref-frame.ts`, `src/commands/interaction/runtime/settle.ts`, `src/utils/scroll-edge-state.ts`, `src/selectors/`) | `pnpm mutation:affected --base origin/main` (minutes; GitHub runs it per PR — see the mutation ratchet section) |
+| Anything in `src/`, `test/` | `pnpm format` (`skills/` is Markdown-only guidance: oxfmt ignores `**/*.md`, and the affected-check selector classifies it docs-only) |
+| Workspace package source (`packages/*/src/**`) | Root format/lint/typecheck plus layering (R11 package-boundaries); Vitest resolves affected tests through the module graph; package manifests/tsconfigs fail open to the full set |
+| A decision kernel or its tests (`packages/kernel/src/errors.ts`, `src/daemon/ref-frame.ts`, `src/commands/interaction/runtime/settle.ts`, `src/utils/scroll-edge-state.ts`, `src/selectors/`) | `pnpm mutation:affected --base origin/main` (minutes; GitHub runs it per PR — see the mutation ratchet section) |
 
 Two traps worth naming:
 
@@ -30,6 +38,8 @@ Two traps worth naming:
   Internal `apple` must never reach a command response — project through `publicPlatformString`.
 - Fallow CI failures reproduce with `pnpm check:fallow --base origin/main`. Do not estimate
   complexity or dead-code impact by hand.
+- `pnpm fallow:all` audits the entire repository and can report grandfathered baseline findings. Use
+  it to inspect repository-wide debt, not as the changed-code gate.
 
 Docs/skills-only and non-TS changes with no behavior impact need no tests. Test-only DI seam CI
 failures are enforced by the workflow — do not add optional `typeof` DI params to production code to
@@ -74,10 +84,12 @@ advisory**: existing GitHub CI stays authoritative and required, and this only
 narrows the *local* feedback loop.
 
 ```sh
-pnpm check:affected --base origin/main --run     # default agent loop: plan + run
-pnpm check:affected --base origin/main           # human-readable plan only
-pnpm check:affected --base origin/main --json    # machine-readable plan only
+pnpm check:affected --run     # default agent loop: plan + run
+pnpm check:affected           # human-readable plan only
+pnpm check:affected --json    # machine-readable plan only
 ```
+
+The default base is `origin/main`; pass `--base <ref>` only when comparing against another ref.
 
 The selection is derived from repository sources of truth rather than a
 hand-maintained path map:
@@ -88,8 +100,11 @@ hand-maintained path map:
   import ownership. Dynamic-import relationships remain outside Vitest's
   analysis; GitHub's authoritative full suites still cover that boundary.
 - **Non-Vitest suites** retain explicit ownership. Root
-  `test/integration/*.ts` files use the Node integration lane, SkillGym owns its
-  harness and skill guidance, and platform/build tools keep their native gates.
+  `test/integration/*.ts` files use the Node integration lane, and
+  platform/build tools keep their native gates. Test-app source selects root
+  lint and format plus its isolated typecheck; the typecheck is reported but
+  left to CI by `--run` so a root checkout never installs Expo dependencies
+  implicitly.
 - **Always-on gates** (`lint`, `typecheck`, `layering`, `fallow`, `format`) fire
   for their input categories and are never silently skipped. Platform source
   also selects the provider-integration and coverage gates required by the
@@ -99,9 +114,6 @@ hand-maintained path map:
 - A **small explicit build-ownership layer** covers the paths whose owning build
   cannot be derived: Swift runner, Android helpers, macOS helper, MCP metadata,
   and the public package surface (itself derived from `package.json` `exports`).
-- **SkillGym ownership** covers skill guidance (`skills/`) and the SkillGym
-  harness (`test/skillgym/`) — those changes select the (local-only) SkillGym
-  suite, and their Markdown is treated as skill/harness input, not inert docs.
 
 Changed-file discovery folds working-tree state into the local plan: in the
 default local mode (`--head HEAD`) it unions the committed `base..HEAD` diff with
@@ -144,7 +156,7 @@ The output tells you which gates to run and which live scenarios claim the behav
   are loaded through `import()`.
 - **live scenario owners** — the iOS simulator coverage manifest's owning scenario for each of
   those commands, when that manifest is in the tree.
-- **guarantee-matrix rows** — the ADR 0011 cells (`src/contracts/interaction-guarantees.ts`) whose
+- **guarantee-matrix rows** — the ADR 0011 cells (`packages/contracts/src/interaction-guarantees.ts`) whose
   `via` names the file, i.e. the guarantees your edit is the implementation of.
 
 Lists are bounded (`--limit`, default 10) and always disclose what they hid; `--json` is
@@ -324,6 +336,114 @@ envelope is written once, after **all** lane tests settle, and reports `fail` if
 replay self-check, or forced-contention guardrail) failed — a later-failing guardrail can never be
 published as a passing envelope. Optional knobs: `TORTURE_CLIENTS`, `TORTURE_OPS`.
 
+## Live iOS simulator coverage
+
+The iOS lane combines three evidence layers instead of treating a catalog mention as E2E proof:
+
+- pull requests run a short JSON-asserting fixture smoke against the real built CLI, daemon, XCTest
+  runner, and simulator;
+- the scheduled/manual nightly workflow adds device lifecycle, system UI, recording/trace, and
+  fixture replay scenarios without putting those slower operations on the pull-request merge gate;
+- command-contract, workflow-live, and capability-denial rows explicitly own functionality that
+  requires remote sources, unavailable host permissions, or CI setup outside the app session.
+
+`test/integration/ios-simulator-e2e/coverage-manifest.ts` is the executable ownership source. A new
+public command fails the always-running Node contract until it has one primary owner and an
+observable assertion. Live scenario claims are credited only after the scenario runs every claimed
+command and records command-specific app/device/artifact evidence. Replay and test run inside the
+same full harness, so its coverage report cannot turn green before their semantic fixture canaries
+and JUnit output pass.
+
+Command ownership guarantees at least one semantic path for every public command; it does not imply
+that every optional collector or backend mode runs nightly. The complementary
+`behavior-coverage.ts` matrix guards the cross-command mobile patterns from #320: cold deep-link
+navigation, keyboard lifecycle, background resume, modal presentation, permission denial/reset/
+acceptance, interrupted Home/app-switcher recovery, long-list rediscovery, and host-focus
+preservation. Existing focused command contracts remain the evidence for additional expensive or
+host-permission-dependent modes.
+
+CI retrieves the Release fixture through `.github/actions/setup-fixture-app` with `install: false`;
+the smoke then exercises the public `install` command. The artifact is keyed by the Expo native
+fingerprint and repacked with current JavaScript, so screen and replay changes reuse the native
+binary and do not need Metro. Both iOS workflows need `permissions.actions: read`; without it the
+action deliberately falls back to an expensive inline native build. The pull-request consumer
+polls a cold fingerprint while the producer workflow builds it, preventing two concurrent native
+builds; hits proceed immediately. The pull-request lane also pins Finder as the frontmost host app
+and, when the hosted runner can establish that canary, proves simulator automation does not steal
+macOS focus.
+
+Run the static contract and documented live skip locally:
+
+```bash
+node --test test/integration/smoke-ios-simulator-coverage.test.ts
+```
+
+Run a live tier after booting a simulator and obtaining a current Release `.app`:
+
+```bash
+pnpm build
+pnpm clean:daemon
+AGENT_DEVICE_IOS_E2E=1 \
+AGENT_DEVICE_IOS_E2E_TIER=smoke \
+AGENT_DEVICE_IOS_UDID=<simulator-udid> \
+AGENT_DEVICE_FIXTURE_APP_PATH=<fixture.app> \
+AGENT_DEVICE_FIXTURE_APP_ID=com.callstack.agentdevicelab \
+AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE='agent-device-test-app:///automation?event={event}&payload={payload}' \
+node --test test/integration/smoke-ios-simulator-coverage.test.ts test/integration/smoke-ios-simulator.test.ts
+```
+
+Use `AGENT_DEVICE_IOS_E2E_TIER=full` for the nightly subset. Step history, coverage reports,
+screenshots, recordings, traces, and failure context are written below
+`test/artifacts/ios-simulator/` and uploaded by the existing shared artifact action. The six
+Settings replays remain additive OS-chrome coverage and are not modified by this suite.
+## Contention retry policy (enumerated, timeouts only)
+
+Some test files stub a real binary and then spawn or wait on it, so under host load they fail for a
+reason that has nothing to do with the diff. The set of such files is **enumerated** in
+`scripts/lib/contention-retry.ts` (`CONTENTION_RETRY_FILES`) — never a glob, which would silently
+enroll every future file under a directory. That one constant also derives `SUBPROCESS_STUB_TESTS`,
+the serialized `subprocess-stub` Vitest project in `vitest.config.ts`, so the execution contract and
+the retry policy cannot drift apart.
+
+The CI Coverage job runs the suite through `pnpm test:coverage:ci`
+(`scripts/lib/contention-retry-run.ts`), which applies one rule:
+
+- **Timeouts only, proven by the runner.** A rerun happens only when *every* failure in the run is a
+  test the runner itself aborted, in a listed file. Eligibility comes from a mark written inside the
+  runner (`scripts/vitest-runner-timeout-setup.ts`, a setup file on every project): the runner owns
+  the controller behind `context.signal` and aborts it with the timeout error it raises, so a test
+  that merely *throws* the exact timeout message — immediately, or after blocking the event loop past
+  its budget — never carries the mark. `task.meta` is writable by test code, so the mark is not a
+  flag but the run's secret: the lane mints it per run, and the setup file takes it out of the
+  environment as it loads — before any test module is imported — so a test writing the marker itself
+  has no value to write. Error text is never consulted for eligibility;
+  `test/contention-retry-fixtures/` drives those forgeries through a real Vitest run in the gate. One
+  assertion failure — in a listed file or not — fails the job on the first run, so a real regression
+  can never be papered over.
+- **Anything a rerun cannot re-check blocks the retry.** Unhandled errors, module load/setup errors,
+  a coverage-threshold miss, or a nonzero exit no failed test explains are recorded as blockers
+  (`scripts/lib/contention-retry-blockers.ts`) and fail the job, so a green retry can never erase a
+  second, unrelated failure from the same run.
+- **Gates that fail a run without failing a test publish structurally.** A reporter-level verdict
+  (the slow-test ratchet setting `process.exitCode = 1`) is invisible in test results, so it is
+  recorded on the shared blocker channel `scripts/lib/run-blocker-bus.ts`; the retry lane's failure
+  sink drains it and refuses the rerun. **Any new gate reporter must call `recordRunBlocker`**, and
+  must be ordered before the sink in `reporters()`.
+- **One retry, of the failed files only.** Not the suite, and never twice. Two timed-out tests in one
+  file are one retry, and count as one. The rerun keeps the first run's execution modes — the same
+  `--project` selection and the same V8 instrumentation (`scripts/lib/contention-retry-args.ts`), so
+  a coverage-job failure is never accepted by a run that could not reproduce it. Its coverage lands
+  in `coverage/contention-retry/`, leaving the first run's report as the changed-line gate's evidence.
+- **Retries stay visible.** Every retried file is named in the job summary with its tracking issue
+  and review date, and the run writes the shared scheduled-lane envelope
+  (`scripts/lib/lane-envelope.ts`, #1430) with the retry count, so a permanently flaky file shows up
+  as lane health rather than as a green check.
+
+Adding a file to the list is a reviewed waiver in the ADR 0011 sense: a `reason` naming the concrete
+spawn/wait that makes it contention-flaky, a `trackingIssue` for removing that wait, and a `reviewBy`
+date. `pnpm check:contention-retry` (its own CI step, and part of `pnpm check:unit`) fails on an
+expired entry, a missing file, or a glob, so an entry is renewed or removed rather than inherited.
+
 ## Speed rules (experiment-backed, 2026-07-04)
 
 Measured on the full unit suite (340 files, 3,210 tests, 48s wall at ~7x parallelism):
@@ -341,6 +461,7 @@ Measured on the full unit suite (340 files, 3,210 tests, 48s wall at ~7x paralle
      layer and assert the right `timeoutMs` constant is passed. Exec-layer timeout semantics are
      proven once, in exec's own tests.
   3. *Fake clocks* where the code accepts an injected clock.
+
   Never add a test-only DI seam for this — the CI gate forbids it; patterns 1–2 are production
   improvements and test restructurings respectively.
 - **The slow-test ratchet** (`scripts/vitest-slow-test-reporter.ts`) enforces this: unit budget

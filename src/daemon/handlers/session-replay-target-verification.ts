@@ -1,5 +1,6 @@
-import type { ResponseLevel, DaemonError } from '../../kernel/contracts.ts';
-import type { SnapshotNode } from '../../kernel/snapshot.ts';
+import type { ResponseLevel } from '@agent-device/kernel/contracts';
+import type { DaemonError } from '@agent-device/kernel/errors';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
 import { formatDivergenceActionLabel } from '../../replay/script-utils.ts';
 import {
@@ -18,7 +19,7 @@ import {
   type ReplayDivergenceTargetBindingKind,
   type ReplayDivergenceTargetCandidate,
   type ReplayDivergenceTargetIdentity,
-} from '../../replay/divergence.ts';
+} from '@agent-device/contracts/divergence';
 import {
   readNodeStructuralDenotation,
   REPLAY_TARGET_GUARD_MISMATCH_REASON,
@@ -29,15 +30,16 @@ import { resolveTargetIdentityVerification } from '../../core/command-descriptor
 import { parseWaitPositionals } from '../../core/wait-positionals.ts';
 import type { DaemonResponse, SessionAction } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
+import type { InternalObservationEvidence } from '../internal-observation.ts';
 import { boundedLocalIdentity } from '../session-target-evidence.ts';
 import { tryParseSelectorChain } from '../../selectors/index.ts';
 import {
   buildDivergenceScreen,
-  boundReplayDivergenceForSession,
   captureDivergenceObservation,
   resolveSuggestionMatchingConfig,
   toReplayRepairHintCapture,
 } from './session-replay-divergence.ts';
+import { boundReplayDivergenceForSession } from './session-replay-divergence-publication.ts';
 import {
   computeReplayRepairHint,
   type ReplayRepairHintCapture,
@@ -100,6 +102,7 @@ type TargetBindingDivergenceContext = {
   /** ADR 0012 step 5: the full top-level plan + its digest, for `resume`. */
   planActions: SessionAction[];
   planDigest: string;
+  signal?: AbortSignal;
 };
 
 type TargetBindingDivergenceBuilt = {
@@ -112,6 +115,7 @@ type TargetBindingDivergenceBuilt = {
   causeMessage: string;
   causeHint?: string;
   screen: ReplayDivergence['screen'];
+  publicationEvidence?: InternalObservationEvidence;
   /** ADR 0012 decision 6, R3: the same capture `screen` was built from, for the `repairHint` container test. */
   repairCapture: ReplayRepairHintCapture;
 };
@@ -191,6 +195,8 @@ function buildTargetBindingDivergenceResponse(
     sessionName,
     divergence,
     responseLevel,
+    evidence: built.publicationEvidence,
+    ...(context.signal ? { signal: context.signal } : {}),
   });
   const cause: DaemonError = { code: built.causeCode, message: built.causeMessage };
   return buildReplayDivergenceFailureResponse({
@@ -204,7 +210,7 @@ function buildTargetBindingDivergenceResponse(
   });
 }
 
-export async function verifyReplayActionTarget(params: {
+type ReplayTargetDivergenceParams = {
   action: SessionAction;
   scope: ReplayVarScope;
   sourcePath: string;
@@ -218,7 +224,12 @@ export async function verifyReplayActionTarget(params: {
   responseLevel: ResponseLevel | undefined;
   planActions: SessionAction[];
   planDigest: string;
-}): Promise<ReplayTargetVerificationOutcome> {
+  signal?: AbortSignal;
+};
+
+export async function verifyReplayActionTarget(
+  params: ReplayTargetDivergenceParams,
+): Promise<ReplayTargetVerificationOutcome> {
   const {
     action,
     scope,
@@ -233,6 +244,7 @@ export async function verifyReplayActionTarget(params: {
     responseLevel,
     planActions,
     planDigest,
+    signal,
   } = params;
 
   const recorded = action.targetEvidence;
@@ -263,6 +275,7 @@ export async function verifyReplayActionTarget(params: {
     scrubVars,
     planActions,
     planDigest,
+    signal,
   };
   const buildRecordedUnverifiableResponse = async (): Promise<DaemonResponse> => {
     // Decision 3 path 1: a recorded-`unverifiable` annotation fires before
@@ -284,6 +297,7 @@ export async function verifyReplayActionTarget(params: {
       causeMessage:
         'The recorded target evidence could not verify itself when it was captured (a structural capture anomaly), so replay cannot trust it before acting.',
       screen: buildDivergenceScreen(observation, sanitize),
+      publicationEvidence: publicationEvidenceFrom(observation),
       repairCapture: toReplayRepairHintCapture(observation),
     });
   };
@@ -388,6 +402,7 @@ export async function verifyReplayActionTarget(params: {
       causeCode: classification.causeCode,
       causeMessage: classification.causeMessage,
       screen: buildDivergenceScreen(observation, sanitize),
+      publicationEvidence: observation.evidence,
       repairCapture: toReplayRepairHintCapture(observation),
     }),
   };
@@ -408,21 +423,8 @@ export function isReplayTargetGuardMismatchResponse(response: DaemonResponse): b
   return !response.ok && response.error.details?.reason === REPLAY_TARGET_GUARD_MISMATCH_REASON;
 }
 
-type PostDispatchMismatchParams = {
-  action: SessionAction;
-  scope: ReplayVarScope;
+type PostDispatchMismatchParams = ReplayTargetDivergenceParams & {
   failedResponse: DaemonResponse;
-  sourcePath: string;
-  sourceLine: number;
-  replayPath: string;
-  step: number;
-  sessionName: string;
-  sessionStore: SessionStore;
-  logPath: string;
-  artifactPaths: string[];
-  responseLevel: ResponseLevel | undefined;
-  planActions: SessionAction[];
-  planDigest: string;
 };
 
 type PostDispatchMismatchEvidence = {
@@ -480,6 +482,7 @@ async function buildPostDispatchIdentityMismatchResponse(
       scrubVars,
       planActions: params.planActions,
       planDigest: params.planDigest,
+      signal: params.signal,
     },
     {
       kind: 'identity-mismatch',
@@ -490,9 +493,16 @@ async function buildPostDispatchIdentityMismatchResponse(
       causeCode: 'IDENTITY_MISMATCH',
       causeMessage: evidence.causeMessage,
       screen: buildDivergenceScreen(observation, sanitize),
+      publicationEvidence: publicationEvidenceFrom(observation),
       repairCapture: toReplayRepairHintCapture(observation),
     },
   );
+}
+
+function publicationEvidenceFrom(
+  observation: Awaited<ReturnType<typeof captureDivergenceObservation>>,
+): InternalObservationEvidence | undefined {
+  return observation.state === 'available' ? observation.evidence : undefined;
 }
 
 export async function buildReplayTargetGuardMismatchResponse(

@@ -118,27 +118,6 @@ extension RunnerTests {
 #endif
   }
 
-  func rotateDevice(to orientationName: String) -> Bool {
-#if os(macOS) || os(tvOS) || os(visionOS)
-    return false
-#else
-    switch orientationName {
-    case "portrait":
-      XCUIDevice.shared.orientation = .portrait
-    case "portrait-upside-down":
-      XCUIDevice.shared.orientation = .portraitUpsideDown
-    case "landscape-left":
-      XCUIDevice.shared.orientation = .landscapeLeft
-    case "landscape-right":
-      XCUIDevice.shared.orientation = .landscapeRight
-    default:
-      return false
-    }
-    sleepFor(0.2)
-    return true
-#endif
-  }
-
   func findElement(app: XCUIApplication, text: String) -> XCUIElement? {
     let predicate = NSPredicate(format: "label CONTAINS[c] %@ OR identifier CONTAINS[c] %@ OR value CONTAINS[c] %@", text, text, text)
     let element = app.descendants(matching: .any).matching(predicate).firstMatch
@@ -354,168 +333,6 @@ extension RunnerTests {
       && point.x <= frame.maxX + tolerance
       && point.y >= frame.minY - tolerance
       && point.y <= frame.maxY + tolerance
-  }
-
-  func isKeyboardVisible(app: XCUIApplication) -> Bool {
-    return visibleKeyboardFrame(app: app) != nil
-  }
-
-  func dismissKeyboard(app: XCUIApplication) -> (wasVisible: Bool, dismissed: Bool, visible: Bool) {
-    let wasVisible = isKeyboardVisible(app: app)
-    guard wasVisible else {
-      return (wasVisible: false, dismissed: false, visible: false)
-    }
-
-#if os(tvOS)
-    _ = pressTvRemote(.menu)
-    sleepFor(0.2)
-    let visible = isKeyboardVisible(app: app)
-    return (wasVisible: true, dismissed: !visible, visible: visible)
-#else
-    if tapKeyboardDismissControl(app: app) {
-      sleepFor(0.2)
-      let visible = isKeyboardVisible(app: app)
-      return (wasVisible: true, dismissed: !visible, visible: visible)
-    }
-
-    return (wasVisible: true, dismissed: false, visible: isKeyboardVisible(app: app))
-#endif
-  }
-
-  func pressKeyboardReturn(app: XCUIApplication) -> (wasVisible: Bool, pressed: Bool, visible: Bool) {
-#if os(tvOS)
-    return (wasVisible: false, pressed: pressTvRemote(.select), visible: false)
-#elseif os(iOS)
-    let wasVisible = isKeyboardVisible(app: app)
-    if tapKeyboardReturnControl(app: app) {
-      sleepFor(0.2)
-      return (wasVisible: wasVisible, pressed: true, visible: isKeyboardVisible(app: app))
-    }
-
-    var typed = false
-    let exceptionMessage = RunnerObjCExceptionCatcher.catchException({
-      app.typeText(XCUIKeyboardKey.return.rawValue)
-      typed = true
-    })
-    if let exceptionMessage {
-      NSLog(
-        "AGENT_DEVICE_RUNNER_KEYBOARD_RETURN_IGNORED_EXCEPTION=%@",
-        exceptionMessage
-      )
-      if let singleTarget = singleTextEntryElement(app: app) {
-        return pressKeyboardReturn(on: singleTarget, app: app, wasVisible: wasVisible)
-      }
-      return (wasVisible: wasVisible, pressed: false, visible: isKeyboardVisible(app: app))
-    }
-    sleepFor(0.2)
-    return (wasVisible: wasVisible, pressed: typed, visible: isKeyboardVisible(app: app))
-#else
-    return (wasVisible: false, pressed: false, visible: false)
-#endif
-  }
-
-  private func pressKeyboardReturn(
-    on element: XCUIElement,
-    app: XCUIApplication,
-    wasVisible: Bool
-  ) -> (wasVisible: Bool, pressed: Bool, visible: Bool) {
-#if os(iOS)
-    let exceptionMessage = RunnerObjCExceptionCatcher.catchException({
-      element.tap()
-      element.typeText(XCUIKeyboardKey.return.rawValue)
-    })
-    if let exceptionMessage {
-      NSLog(
-        "AGENT_DEVICE_RUNNER_KEYBOARD_RETURN_TARGET_IGNORED_EXCEPTION=%@",
-        exceptionMessage
-      )
-      return (wasVisible: wasVisible, pressed: false, visible: isKeyboardVisible(app: app))
-    }
-    sleepFor(0.2)
-    return (wasVisible: wasVisible, pressed: true, visible: isKeyboardVisible(app: app))
-#else
-    return (wasVisible: wasVisible, pressed: false, visible: false)
-#endif
-  }
-
-  private func singleTextEntryElement(app: XCUIApplication) -> XCUIElement? {
-#if os(iOS)
-    let matches = safely("KEYBOARD_RETURN_TEXT_ENTRY_QUERY", []) {
-      app.descendants(matching: .any).allElementsBoundByIndex.filter { element in
-        guard element.exists else { return false }
-        switch element.elementType {
-        case .textField, .secureTextField, .searchField, .textView:
-          return true
-        default:
-          return false
-        }
-      }
-    }
-    return matches.count == 1 ? matches[0] : nil
-#else
-    return nil
-#endif
-  }
-
-  private func tapKeyboardDismissControl(app: XCUIApplication) -> Bool {
-#if os(tvOS)
-    return false
-#else
-    guard let keyboardFrame = visibleKeyboardFrame(app: app) else {
-      return false
-    }
-    for label in ["Hide keyboard", "Dismiss keyboard", "Done"] {
-      let candidates = [
-        app.keyboards.buttons[label],
-        app.keyboards.keys[label],
-        app.keyboards.toolbars.buttons[label],
-      ]
-      if let hittable = candidates.first(where: { $0.exists && $0.isHittable }) {
-        hittable.tap()
-        return true
-      }
-
-      let toolbarButtonPredicate = NSPredicate(
-        format: "label == %@ OR identifier == %@",
-        label,
-        label
-      )
-      let toolbarButtons = app.descendants(matching: .button)
-        .matching(toolbarButtonPredicate)
-        .allElementsBoundByIndex
-      if let hittable = toolbarButtons.first(where: {
-        $0.exists && $0.isHittable && isKeyboardAccessoryControl($0, keyboardFrame: keyboardFrame)
-      }) {
-        hittable.tap()
-        return true
-      }
-    }
-    return false
-#endif
-  }
-
-  private func tapKeyboardReturnControl(app: XCUIApplication) -> Bool {
-#if os(iOS)
-    for label in ["return", "Return", "Enter", "Go", "Search", "Next", "Done", "Send", "Join"] {
-      let candidates = [
-        app.keyboards.buttons[label],
-        app.keyboards.keys[label],
-      ]
-      if let hittable = candidates.first(where: { $0.exists && $0.isHittable }) {
-        hittable.tap()
-        return true
-      }
-    }
-#endif
-    return false
-  }
-
-  private func isKeyboardAccessoryControl(_ element: XCUIElement, keyboardFrame: CGRect) -> Bool {
-    let frame = element.frame
-    guard !frame.isEmpty && !keyboardFrame.isEmpty else {
-      return false
-    }
-    return frame.intersects(keyboardFrame) || abs(frame.maxY - keyboardFrame.minY) <= 80
   }
 
   private func readableText(for element: XCUIElement) -> String? {
@@ -800,7 +617,10 @@ extension RunnerTests {
       )
     }
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
-    guard let context = context ?? synthesizedCoordinateContext(policy: synthesizedGesturePolicy(.synthesizedDrag)) else {
+    guard let context = context ?? synthesizedCoordinateContext(
+      app: app,
+      policy: synthesizedGesturePolicy(.synthesizedDrag)
+    ) else {
       return .unsupported(
         message: "synthesized coordinate drag could not resolve a finite screen frame",
         hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
@@ -863,7 +683,10 @@ extension RunnerTests {
       )
     }
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
-    guard let context = context ?? synthesizedCoordinateContext(policy: synthesizedGesturePolicy(.coordinateTap)) else {
+    guard let context = context ?? synthesizedCoordinateContext(
+      app: app,
+      policy: synthesizedGesturePolicy(.coordinateTap)
+    ) else {
       return .unsupported(
         message: "synthesized coordinate tap could not resolve a finite screen frame",
         hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
@@ -1026,20 +849,6 @@ extension RunnerTests {
 #endif
   }
 
-  private func visibleKeyboardFrame(app: XCUIApplication) -> CGRect? {
-#if os(iOS)
-    return safely("KEYBOARD_FRAME") {
-      let keyboard = app.keyboards.firstMatch
-      guard keyboard.exists else { return nil }
-      let keyboardFrame = keyboard.frame
-      guard !keyboardFrame.isEmpty else { return nil }
-      return keyboardFrame
-    }
-#else
-    return nil
-#endif
-  }
-
   func axFreeSynthesizedDragPlan(
     app: XCUIApplication,
     x: Double,
@@ -1049,7 +858,10 @@ extension RunnerTests {
     context: SynthesizedCoordinateContext? = nil
   ) -> SynthesizedDragPlan? {
 #if os(iOS)
-    let context = context ?? synthesizedCoordinateContext(policy: synthesizedGesturePolicy(.synthesizedDrag))
+    let context = context ?? synthesizedCoordinateContext(
+      app: app,
+      policy: synthesizedGesturePolicy(.synthesizedDrag)
+    )
     guard x.isFinite, y.isFinite, x2.isFinite, y2.isFinite,
       let context
     else {
@@ -1089,11 +901,18 @@ extension RunnerTests {
     )
   }
 
-  func synthesizedCoordinateContext(policy: SynthesizedGesturePolicy) -> SynthesizedCoordinateContext? {
+  func synthesizedCoordinateContext(
+    app: XCUIApplication,
+    policy: SynthesizedGesturePolicy
+  ) -> SynthesizedCoordinateContext? {
 #if os(iOS)
     let health = runnerAccessibilityHealth
-    guard let referenceFrame = synthesizedScreenshotReferenceFrame(
-      screenshotSize: { XCUIScreen.main.screenshot().image.size }
+    let orientation = Int(
+      RunnerSynthesizedGesture.interfaceOrientation(forApplication: app)
+    )
+    guard let referenceFrame = orientedSynthesizedScreenshotReferenceFrame(
+      screenshotSize: XCUIScreen.main.screenshot().image.size,
+      interfaceOrientation: orientation
     ) else {
       return nil
     }
@@ -1108,15 +927,35 @@ extension RunnerTests {
 #endif
   }
 
-  func synthesizedScreenshotReferenceFrame(screenshotSize: () -> CGSize) -> CGRect? {
-    let screenshotSize = screenshotSize()
+  func orientedSynthesizedScreenshotReferenceFrame(
+    screenshotSize: CGSize,
+    interfaceOrientation: Int
+  ) -> CGRect? {
+    // Physical iOS screenshots can retain portrait dimensions after the interface rotates,
+    // while accessibility frames remain in the logical landscape coordinate space.
     guard screenshotSize.width.isFinite, screenshotSize.height.isFinite,
       screenshotSize.width > 0,
       screenshotSize.height > 0
     else {
       return nil
     }
-    return CGRect(x: 0, y: 0, width: screenshotSize.width, height: screenshotSize.height)
+    let isLandscape = interfaceOrientation == RunnerInterfaceOrientation.landscapeLeft
+      || interfaceOrientation == RunnerInterfaceOrientation.landscapeRight
+    let isPortrait = interfaceOrientation == RunnerInterfaceOrientation.portrait
+      || interfaceOrientation == RunnerInterfaceOrientation.portraitUpsideDown
+    let width: CGFloat
+    let height: CGFloat
+    if isLandscape {
+      width = max(screenshotSize.width, screenshotSize.height)
+      height = min(screenshotSize.width, screenshotSize.height)
+    } else if isPortrait {
+      width = min(screenshotSize.width, screenshotSize.height)
+      height = max(screenshotSize.width, screenshotSize.height)
+    } else {
+      width = screenshotSize.width
+      height = screenshotSize.height
+    }
+    return CGRect(x: 0, y: 0, width: width, height: height)
   }
 
   func synthesizedFrameAvoidingKeyboardWhenAllowed(
@@ -1449,16 +1288,73 @@ extension RunnerTests {
 
   func testSynthesizedScreenshotReferenceFrameUsesScreenshotSize() throws {
     let resolved = try XCTUnwrap(
-      synthesizedScreenshotReferenceFrame(screenshotSize: { CGSize(width: 430, height: 932) })
+      orientedSynthesizedScreenshotReferenceFrame(
+        screenshotSize: CGSize(width: 430, height: 932),
+        interfaceOrientation: RunnerInterfaceOrientation.portrait
+      )
     )
 
     XCTAssertEqual(resolved, CGRect(x: 0, y: 0, width: 430, height: 932))
   }
 
+  func testOrientedSynthesizedScreenshotReferenceFrameUsesLandscapeLogicalDimensions() {
+    let portraitCapture = CGSize(width: 430, height: 932)
+    let landscapeCapture = CGSize(width: 932, height: 430)
+
+    for orientation in [
+      RunnerInterfaceOrientation.landscapeLeft,
+      RunnerInterfaceOrientation.landscapeRight,
+    ] {
+      XCTAssertEqual(
+        orientedSynthesizedScreenshotReferenceFrame(
+          screenshotSize: portraitCapture,
+          interfaceOrientation: orientation
+        ),
+        CGRect(x: 0, y: 0, width: 932, height: 430)
+      )
+      XCTAssertEqual(
+        orientedSynthesizedScreenshotReferenceFrame(
+          screenshotSize: landscapeCapture,
+          interfaceOrientation: orientation
+        ),
+        CGRect(x: 0, y: 0, width: 932, height: 430)
+      )
+    }
+
+    for orientation in [
+      RunnerInterfaceOrientation.portrait,
+      RunnerInterfaceOrientation.portraitUpsideDown,
+    ] {
+      XCTAssertEqual(
+        orientedSynthesizedScreenshotReferenceFrame(
+          screenshotSize: portraitCapture,
+          interfaceOrientation: orientation
+        ),
+        CGRect(x: 0, y: 0, width: 430, height: 932)
+      )
+      XCTAssertEqual(
+        orientedSynthesizedScreenshotReferenceFrame(
+          screenshotSize: landscapeCapture,
+          interfaceOrientation: orientation
+        ),
+        CGRect(x: 0, y: 0, width: 430, height: 932)
+      )
+    }
+
+    XCTAssertEqual(
+      orientedSynthesizedScreenshotReferenceFrame(
+        screenshotSize: landscapeCapture,
+        interfaceOrientation: RunnerInterfaceOrientation.unknown
+      ),
+      CGRect(x: 0, y: 0, width: 932, height: 430)
+    )
+  }
+
   func testSynthesizedScreenshotReferenceFrameRejectsInvalidSize() {
     XCTAssertNil(
-      synthesizedScreenshotReferenceFrame(
-        screenshotSize: { CGSize(width: CGFloat.infinity, height: 932) }
+      orientedSynthesizedScreenshotReferenceFrame(
+        screenshotSize: CGSize(width: CGFloat.infinity, height: 932),
+        interfaceOrientation: RunnerInterfaceOrientation.portrait
       )
     )
   }

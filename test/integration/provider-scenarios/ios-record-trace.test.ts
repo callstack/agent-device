@@ -10,6 +10,7 @@ import {
 } from './assertions.ts';
 import { PROVIDER_SCENARIO_IOS_DEVICE, PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import {
+  createProviderIosSimulatorRecordingProcess,
   createProviderScenarioHarness,
   likelyPlayableMp4Container,
   restoreEnv,
@@ -226,17 +227,10 @@ test('Provider-backed integration iOS simulator recording flow uses semantic rec
         startIosSimulatorRecording: ({ device, outPath }) => {
           assert.equal(device.id, PROVIDER_SCENARIO_IOS_SIMULATOR.id);
           recordingStarts.push(outPath);
-          fs.writeFileSync(outPath, likelyPlayableMp4Container());
-          return {
-            child: {
-              kill: (signal) => {
-                assert.equal(signal, 'SIGINT');
-                stopped = true;
-                return true;
-              },
-            },
-            wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-          };
+          return createProviderIosSimulatorRecordingProcess(outPath, (signal) => {
+            assert.equal(signal, 'SIGINT');
+            stopped = true;
+          });
         },
       };
       const daemon = await createProviderScenarioHarness({

@@ -1,4 +1,4 @@
-import type { ReplayDivergenceSuggestionBasis } from '../../replay/divergence.ts';
+import type { ReplayDivergenceSuggestionBasis } from '@agent-device/contracts/divergence';
 
 const BASIS_RANK: Record<ReplayDivergenceSuggestionBasis, number> = {
   id: 0,

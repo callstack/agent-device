@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
-import { isIosFamily, publicPlatformString, type DeviceInfo } from '../../kernel/device.ts';
+import { isIosFamily, publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { emitRequestProgress } from '../../request/progress.ts';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import { readVersion } from '../../utils/version.ts';
@@ -29,7 +29,7 @@ import {
 } from './session-doctor-output.ts';
 import { appendToolchainChecks } from './session-doctor-toolchain.ts';
 import type { DoctorOptions } from './session-doctor-types.ts';
-import type { DoctorCheck, DoctorCommandResult } from '../../contracts/doctor.ts';
+import type { DoctorCheck, DoctorCommandResult } from '@agent-device/contracts/observability';
 import {
   hasCachedAppleRunnerArtifact,
   prewarmAppleRunnerCache,

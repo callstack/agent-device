@@ -1,4 +1,4 @@
-import type { CliFlags } from '../contracts/cli-flags.ts';
+import type { CliFlags } from '@agent-device/contracts/command';
 
 type BooleanCliFlagKey = {
   [Key in keyof CliFlags]-?: Exclude<CliFlags[Key], undefined> extends boolean ? Key : never;

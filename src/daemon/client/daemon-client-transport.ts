@@ -1,7 +1,7 @@
 import net from 'node:net';
 import http from 'node:http';
 import https from 'node:https';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { readNodeHttpResponseBody } from '../../utils/node-http.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';

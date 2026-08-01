@@ -15,6 +15,7 @@ export {
   makeAndroidSession,
   makeIosSession,
   makeMacOsSession,
+  makeAuthoringSession,
   makeSession,
 } from './session-factories.ts';
 

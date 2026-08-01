@@ -22,8 +22,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ios-runner-swift-compat:
-    name: iOS Runner Swift Compatibility
+  # Two single-`rg`-assertion jobs (formerly `ios-runner-swift-compat`,
+  # `no-test-di-seams`, added independently in b79bd8601 / 9eb060406) folded
+  # into steps here: each was checkout + one grep, paying full job
+  # scheduling/checkout overhead and its own PR status-check line for what is
+  # a single assertion. Each step keeps its own failure message. See #1462.
+  static-checks:
+    name: Static Checks
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -34,6 +39,13 @@ jobs:
         run: |
           if rg -nU --glob '*.swift' ',\s*\n\s*\)' apple/runner; then
             echo "Found trailing commas before ')' in Swift files. This syntax requires Swift 6.1+ and breaks older Xcode toolchains."
+            exit 1
+          fi
+
+      - name: Fail if test-only DI seams reappear in production code
+        run: |
+          if rg '\?\s*:\s*typeof\s+' src/ --glob '!**/__tests__/**' --glob '!*.test.ts'; then
+            echo "Found test-only DI seams (optional typeof params) in production code."
             exit 1
           fi
 
@@ -48,28 +60,14 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Compile Swift runner unit-test surface
-        uses: ./.github/actions/setup-apple-replay
+      - name: Restore and compile Swift runner unit-test surface
+        uses: ./.github/actions/setup-apple-runner-build
         with:
           derived-path: ${{ github.workspace }}/.tmp/swift-runner-unit-derived
           cache-key-prefix: swift-runner-unit
           build-command: AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS=1 pnpm build:xcuitest:macos
           xcuitest-platform: macos
-
-  no-test-di-seams:
-    name: No test-only DI seams
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Fail if test-only DI seams reappear in production code
-        run: |
-          if rg '\?\s*:\s*typeof\s+' src/ --glob '!**/__tests__/**' --glob '!*.test.ts'; then
-            echo "Found test-only DI seams (optional typeof params) in production code."
-            exit 1
-          fi
+          xcuitest-destination: platform=macOS,arch=arm64
 
   lint:
     name: Lint & Format
@@ -109,16 +107,14 @@ jobs:
         # Generalizes the former inline commands/-import grep into a structured
         # import-direction lint over the resolved graph. See scripts/layering/check.ts
         # and CONTEXT.md (Architecture: folder DAG + layering lint).
-        run: |
-          node --experimental-strip-types --test scripts/layering/model.test.ts scripts/layering/zone-policy.test.ts
-          node --experimental-strip-types scripts/layering/check.ts
+        run: pnpm check:layering
 
       - name: Check the depgraph report agrees with the gate
         # scripts/depgraph reads the same model as the gate, so its inversion count must
         # reproduce TYPE_INVERSION_BASELINE. Free two-sources check: if the tree changes
         # and only one side is updated, this fails and names the difference. Runs here
         # rather than in its own job so the two can never be green independently.
-        run: node --experimental-strip-types --test scripts/depgraph/model.test.ts
+        run: pnpm depgraph:test
 
   affected-selector:
     name: Affected-check Selector
@@ -128,16 +124,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      # The selector's entry closure reaches `@agent-device/kernel` workspace
+      # specifiers through src/utils/exec.ts and diagnostics.ts (#1490 W0), and
+      # workspace package resolution needs the pnpm link in node_modules. The
+      # R8 relative-import exception is reserved for scripts, not production
+      # src files, so this job installs dependencies instead.
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
-        with:
-          install-deps: false
 
       # The selector is fail-open and advisory (GitHub CI stays authoritative),
-      # so the gate only guards the derivation model. Invoked directly with no
-      # deps, mirroring the layering guard.
+      # so the gate only guards the derivation model.
       - name: Check affected-selector model
-        run: node --experimental-strip-types --test scripts/check-affected/model.test.ts scripts/check-affected/run.test.ts
+        run: pnpm check:affected:test
 
   maestro-conformance:
     name: Maestro Conformance Oracle
@@ -254,10 +252,26 @@ jobs:
       - name: Test changed-line coverage gate
         run: pnpm check:coverage-changed:test
 
+      # The retry list is an enumerated set of owned waivers, so an expired entry
+      # must fail before the suite runs rather than quietly keeping its retry.
+      - name: Check contention retry policy
+        run: pnpm check:contention-retry
+
+      # Wrapped in the single-retry policy (#1419): a timeout-shaped failure in
+      # an enumerated contention-flaky file reruns that file once and reports it
+      # in the job summary. Assertion failures fail here on the first run.
       - name: Run coverage
         env:
           OUTPUT_ECONOMY_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-        run: pnpm test:coverage
+        run: pnpm test:coverage:ci
+
+      - name: Upload contention-retry envelope
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: contention-retry-envelope
+          if-no-files-found: ignore
+          path: .tmp/contention-retry/lane-envelope.json
 
       # Reuses the lcov the coverage step just wrote (never runs coverage twice)
       # and fails when changed-line coverage < the threshold in

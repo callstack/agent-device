@@ -9,8 +9,8 @@ export type SessionCommandKind = 'inventory' | 'state' | 'observability' | 'publ
 
 // Declared in contracts/ so core/ can classify commands without importing the daemon;
 // re-exported here because the descriptor shape below is stated in terms of it.
-export type { RefFrameEffect } from '../contracts/ref-frame-effect.ts';
-import type { RefFrameEffect } from '../contracts/ref-frame-effect.ts';
+export type { RefFrameEffect } from '@agent-device/contracts/replay';
+import type { RefFrameEffect } from '@agent-device/contracts/replay';
 
 /**
  * Request-sensitive form of {@link RefFrameEffect}. Commands whose subactions
@@ -31,6 +31,15 @@ export type DaemonCommandDescriptor = {
   selectorValidationExempt?: boolean;
   replayScopedAction?: boolean;
   allowInvalidRecording?: boolean;
+  /**
+   * #1478: this command's REQUEST may carry `flags.saveScript` to arm session
+   * script publication. Only the released flag owners (`open`, `close`,
+   * `replay` — the commands whose CLI grammar declares `--save-script`) set
+   * this; every other command's raw request is rejected at the daemon request
+   * seam by `unsupportedSaveScriptFlagResponse`, so a recordable command such
+   * as `record` or `trace` cannot arm publication over the wire.
+   */
+  saveScriptFlagOwner?: boolean;
   lockPolicySelectorOverride?: boolean;
   androidBlockingDialogGuard?: boolean;
   preferExplicitDeviceOverExistingSession?: boolean;
@@ -82,6 +91,18 @@ export function canRunReplayScopedAction(command: string): boolean {
 
 export function shouldBlockForInvalidRecording(command: string): boolean {
   return getDaemonCommandDescriptor(command)?.allowInvalidRecording !== true;
+}
+
+/** #1478: whether `flags.saveScript` is accepted on this command's request. */
+export function ownsSaveScriptFlag(command: string): boolean {
+  return getDaemonCommandDescriptor(command)?.saveScriptFlagOwner === true;
+}
+
+/** #1478: the released `--save-script` flag owners, sorted for stable messages. */
+export function listSaveScriptFlagOwnerCommands(): string[] {
+  return DAEMON_COMMAND_DESCRIPTORS.filter((descriptor) => descriptor.saveScriptFlagOwner === true)
+    .map((descriptor) => descriptor.command)
+    .sort();
 }
 
 export function canOverrideLockPolicySelector(command: string): boolean {

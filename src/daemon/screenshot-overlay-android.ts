@@ -1,4 +1,4 @@
-import type { Rect, SnapshotNode } from '../kernel/snapshot.ts';
+import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { normalizeType } from '../snapshot/snapshot-processing.ts';
 import { hasPositiveRect, rectContains, unionRects } from './screenshot-overlay-rects.ts';
 

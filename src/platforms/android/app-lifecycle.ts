@@ -2,11 +2,11 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { resolveFileOverridePath, runCmd, whichCmd } from '../../utils/exec.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { sleep } from '../../utils/timeouts.ts';
-import type { AppsFilter } from '../../contracts/app-inventory.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
-import { isDeepLinkTarget } from '../../contracts/open-target.ts';
+import type { AppsFilter } from '@agent-device/contracts/device';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import { createAppResolutionCache, type AppResolutionCacheScope } from '../app-resolution-cache.ts';
 import { waitForAndroidBoot } from './devices.ts';
 import { runAndroidAdb } from './adb.ts';
@@ -303,9 +303,9 @@ export type OpenAndroidAppOptions = {
 // `adb shell` joins its argv with spaces and feeds the result to a device
 // shell, which re-tokenises. The other `am start` arguments (action, category,
 // component, etc.) are well-known and never contain shell-significant
-// characters, so they round-trip untouched. Launch arguments are user-supplied
-// and may contain JSON, spaces, `#`, etc.; each is single-quoted unless it
-// consists entirely of safe shell characters.
+// characters, so they round-trip untouched. URLs and launch arguments are
+// user-supplied and may contain JSON, spaces, `#`, or `&`; each is single-quoted
+// unless it consists entirely of safe shell characters.
 function quoteAndroidShellArg(arg: string): string {
   if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(arg)) return arg;
   return `'${arg.replace(/'/g, `'\\''`)}'`;
@@ -367,7 +367,7 @@ async function openAndroidDeepLink(
     '-a',
     'android.intent.action.VIEW',
     '-d',
-    target,
+    quoteAndroidShellArg(target),
     ...androidDeepLinkPackageArgs(options.appBundleId),
     ...androidLaunchArgs(options),
   ]);
@@ -398,7 +398,7 @@ async function openAndroidAppBoundDeepLink(
     '-a',
     'android.intent.action.VIEW',
     '-d',
-    deepLinkUrl,
+    quoteAndroidShellArg(deepLinkUrl),
     '-p',
     resolved,
     ...androidLaunchArgs(options),

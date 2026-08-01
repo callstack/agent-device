@@ -10,7 +10,7 @@ import {
 } from '../output.ts';
 import { formatRole, formatSnapshotLine } from '../../snapshot/snapshot-lines.ts';
 import { normalizedRect } from '../screenshot-geometry.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 function captureStderr(run: () => void): string {
   const original = process.stderr.write.bind(process.stderr);
@@ -1577,14 +1577,14 @@ test('formatScreenshotDiffText renders mismatch with pixel counts without color'
           normalizedRect: normalizedRect({ x: 10, y: 20, width: 100, height: 40 }),
           differentPixels: 350,
           shareOfDiffPercentage: 70,
-          densityPercentage: 8.75,
+          densityPercentage: 87.5,
           shape: 'horizontal-band',
-          size: 'medium',
+          size: 'small',
           location: 'top-left',
-          averageBaselineColorHex: '#141414',
-          averageCurrentColorHex: '#dcdcdc',
-          baselineLuminance: 20,
-          currentLuminance: 220,
+          averageBaselineColorHex: '#000000',
+          averageCurrentColorHex: '#ffffff',
+          baselineLuminance: 0,
+          currentLuminance: 255,
           dominantChange: 'brighter',
           currentOverlayMatches: [
             {
@@ -1596,45 +1596,6 @@ test('formatScreenshotDiffText renders mismatch with pixel counts without color'
           ],
         },
       ],
-      ocr: {
-        provider: 'tesseract',
-        baselineBlocks: 2,
-        currentBlocks: 2,
-        matches: [
-          {
-            text: 'Wi-Fi',
-            baselineRect: { x: 120, y: 320, width: 60, height: 22 },
-            currentRect: { x: 130, y: 332, width: 70, height: 22 },
-            delta: { x: 10, y: 12, width: 10, height: 0 },
-            confidence: 94,
-            possibleTextMetricMismatch: true,
-          },
-        ],
-        movementClusters: [
-          {
-            texts: ['Wi-Fi', 'Bluetooth'],
-            xRange: { min: 10, max: 12 },
-            yRange: { min: 10, max: 14 },
-          },
-        ],
-      },
-      nonTextDeltas: [
-        {
-          index: 1,
-          regionIndex: 1,
-          slot: 'leading',
-          likelyKind: 'icon',
-          rect: { x: 80, y: 318, width: 30, height: 30 },
-          nearestText: 'Wi-Fi',
-        },
-        {
-          index: 2,
-          regionIndex: 1,
-          slot: 'separator',
-          likelyKind: 'separator',
-          rect: { x: 90, y: 360, width: 120, height: 2 },
-        },
-      ],
     }),
   );
   assert.match(text, /✗ 5% pixels differ/);
@@ -1642,36 +1603,9 @@ test('formatScreenshotDiffText renders mismatch with pixel counts without color'
   assert.match(text, /Current overlay:/);
   assert.match(text, /diff\.current-overlay\.png \(1 refs\)/);
   assert.match(text, /500 different \/ 10000 total pixels/);
-  assert.match(text, /Hints:/);
-  assert.match(
-    text,
-    /text movement cluster: "Wi-Fi", "Bluetooth" dx=\+10\.\.\+12px dy=\+10\.\.\+14px/,
-  );
-  assert.match(text, /non-text controls: icon near "Wi-Fi" r1/);
-  assert.match(text, /non-text boundaries: separator r1/);
   assert.match(text, /Changed regions:/);
-  assert.match(text, /1\. top-left x=10 y=20 100x40, 70% of diff, change=brighter/);
-  assert.match(
-    text,
-    /size=medium shape=horizontal-band density=8\.75% avgColor=#141414->#dcdcdc luminance=20->220/,
-  );
+  assert.match(text, /1\. x=10 y=20 100x40, 70% of diff/);
   assert.match(text, /overlaps @e1 "Continue", 12% of region/);
-  assert.match(
-    text,
-    /OCR text deltas \(tesseract; baselineBlocks=2 currentBlocks=2; showing 1\/1; px\):/,
-  );
-  assert.match(
-    text,
-    /item \| text \| movePx \| sizeDeltaPx \| bboxBaseline \| bboxCurrent \| confidence \| issueHint/,
-  );
-  assert.match(
-    text,
-    /1 \| "Wi-Fi" \| \+10,\+12 \| \+10,0 \| x=120,y=320,w=60,h=22 \| x=130,y=332,w=70,h=22 \| 94 \| ocr-bbox-size-change/,
-  );
-  assert.match(text, /Non-text visual deltas \(showing 2\/2; px\):/);
-  assert.match(text, /item \| region \| slot \| kind \| bboxCurrent \| nearestText/);
-  assert.match(text, /1 \| r1 \| leading \| icon \| x=80,y=318,w=30,h=30 \| "Wi-Fi"/);
-  assert.match(text, /2 \| r1 \| separator \| separator \| x=90,y=360,w=120,h=2 \| -/);
   assert.equal(text.includes('\x1b['), false);
 });
 

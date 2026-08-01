@@ -32,7 +32,7 @@ import {
   type AndroidAdbProvider,
 } from '../adb-executor.ts';
 import { runCmd, runCmdBackground } from '../../../utils/exec.ts';
-import { AppError, normalizeError } from '../../../kernel/errors.ts';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 
 const mockRunCmd = vi.mocked(runCmd);
 const mockRunCmdBackground = vi.mocked(runCmdBackground);

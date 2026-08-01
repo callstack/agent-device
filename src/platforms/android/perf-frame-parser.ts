@@ -1,4 +1,4 @@
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { roundPercent } from '../perf-utils.ts';
 import { parseNumericToken } from './perf-parsing.ts';
 import {

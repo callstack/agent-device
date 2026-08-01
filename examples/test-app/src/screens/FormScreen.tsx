@@ -118,7 +118,9 @@ export function FormScreen(props: FormScreenProps) {
           keyboardType="email-address"
           label="Email"
           onChangeText={(value) => props.onChange('email', value)}
+          onSubmitEditing={() => Keyboard.dismiss()}
           placeholder="ada@example.com"
+          returnKeyType="done"
           testID="field-email"
           value={props.form.email}
         />
@@ -138,7 +140,7 @@ export function FormScreen(props: FormScreenProps) {
         title="Android IME capture"
         testID="android-ime-capture-fixture"
       >
-        {/* SkillGym fixture: static diagnostic copy, not live state. */}
+        {/* Fixture: static diagnostic copy, not live state. */}
         <TextField
           accessibilityLabel="Android IME target field"
           autoCapitalize="none"

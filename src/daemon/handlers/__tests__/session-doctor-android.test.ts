@@ -34,7 +34,7 @@ import {
   setAndroidTestImeActiveForTests,
 } from '../../../platforms/android/ime-lifecycle.ts';
 import type { AndroidAdbExecutor } from '../../../platforms/android/adb-executor.ts';
-import type { DoctorCheck } from '../../../contracts/doctor.ts';
+import type { DoctorCheck } from '@agent-device/contracts/observability';
 
 afterEach(() => {
   resetAndroidTestImeActivationCacheForTests();

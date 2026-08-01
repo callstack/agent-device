@@ -18,7 +18,7 @@ import { buildDeviceInUseBySessionError } from '../../src/daemon/handlers/sessio
 import { resolveRefStalenessWarning } from '../../src/daemon/session-snapshot.ts';
 import type { SessionState } from '../../src/daemon/types.ts';
 import { buildAppNotInstalledError } from '../../src/platforms/apple/core/app-resolution.ts';
-import { AppError, normalizeError } from '../../src/kernel/errors.ts';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { SnapshotQualityVerdict } from '../../src/snapshot/snapshot-quality.ts';
 import { renderSnapshotQualityWarnings } from '../../src/snapshot/snapshot-quality.ts';
 import { formatSnapshotText, printHumanError } from '../../src/utils/output.ts';

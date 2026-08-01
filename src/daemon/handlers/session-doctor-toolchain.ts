@@ -1,9 +1,9 @@
 import { access } from 'node:fs/promises';
 import path from 'node:path';
-import type { PlatformSelector } from '../../kernel/device.ts';
+import type { PlatformSelector } from '@agent-device/kernel/device';
 import { runCmd } from '../../utils/exec.ts';
 import { appendDoctorCheck } from './session-doctor-output.ts';
-import type { DoctorCheck } from '../../contracts/doctor.ts';
+import type { DoctorCheck } from '@agent-device/contracts/observability';
 
 const TOOLCHAIN_TIMEOUT_MS = 3_000;
 type AndroidLicenseState = 'accepted' | 'missing' | 'unknown';

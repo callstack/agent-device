@@ -9,10 +9,7 @@ import type {
   DiagnosticsNetworkCommandResult,
   DiagnosticsPerfCommandResult,
 } from './diagnostics-types.ts';
-import {
-  redactNetworkLogText as redactText,
-  redactNetworkUrl,
-} from '../../../kernel/observability-redaction.ts';
+import { redactNetworkLogText as redactText, redactNetworkUrl } from './observability-redaction.ts';
 
 const PAYLOAD_MAX_CHARS = 2048;
 const MESSAGE_MAX_CHARS = 4096;

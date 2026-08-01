@@ -1,77 +1,148 @@
 #!/bin/sh
-# Regression test for setup-fixture-app: a build-cache lookup failure must
-# degrade to an inline build, never fail the caller.
+# Regression tests for setup-fixture-app's trusted artifact selection and
+# cache-outage fallback.
 #
-# The fetch step runs under `set -euo pipefail`, so a bare `ART_ID="$(gh api …)"`
-# would exit the whole composite on any API outage — turning a cache-service
-# blip into a conformance failure, the opposite of what the action promises. This
-# extracts that step's actual shell from action.yml (so it cannot drift from a
-# copy), runs it with a `gh` that fails the lookup, and asserts it still reaches
+# The fetch step runs under `set -euo pipefail`, so an unhandled API error would
+# exit the whole composite — turning a cache-service blip into a conformance
+# failure, the opposite of what the action promises. This invokes the shared
+# fetch helper itself, points its real API client at an unavailable endpoint,
+# and asserts each platform still reaches
 # `source=build` and exits 0.
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-ACTION="$ROOT/.github/actions/setup-fixture-app/action.yml"
+ACTION_PATH="$ROOT/.github/actions/setup-fixture-app"
 WORK="$(mktemp -d)"
 export WORK
 trap 'rm -rf "$WORK"' EXIT
 
-# Extract the exact `run:` body of the fetch step, then substitute the GitHub
-# expressions the composite would have expanded.
-node -e '
-  const fs = require("fs");
-  const yaml = require("yaml");
-  const doc = yaml.parse(fs.readFileSync(process.argv[1], "utf8"));
-  const step = doc.runs.steps.find((s) => s.id === "fetch");
-  if (!step) { console.error("no fetch step in action.yml"); process.exit(2); }
-  let body = step.run
-    .replaceAll("${{ github.repository }}", "octo/repo")
-    .replaceAll("${{ github.workspace }}", process.env.WORK);
-  fs.writeFileSync(process.env.WORK + "/fetch.sh", body);
-' "$ACTION"
+pnpm test:fixture-cache
 
-# Stubs on PATH: gh fails every call (simulated outage); pnpm yields a fixed
-# fingerprint so the step has a name to look up without installing the app.
+export TEST_WAIT_SECONDS=0
+
+# pnpm yields a fixed fingerprint so the step has a name to look up without
+# installing the app. The real selector uses the deliberately unavailable API.
 mkdir -p "$WORK/bin"
-cat > "$WORK/bin/gh" <<'STUB'
-#!/bin/sh
-echo "gh: simulated API outage" >&2
-exit 1
-STUB
+REAL_NODE="$(command -v node)"
+export REAL_NODE
 cat > "$WORK/bin/pnpm" <<'STUB'
 #!/bin/sh
+printf '%s\n' "$*" >> "$WORK/fingerprint-calls"
 echo '{"hash":"deadbeefcafe"}'
 STUB
-chmod +x "$WORK/bin/gh" "$WORK/bin/pnpm"
+cat > "$WORK/bin/node" <<'STUB'
+#!/bin/sh
+printf '%s\n' "$*" >> "$WORK/node-calls"
+exec "$REAL_NODE" "$@"
+STUB
+chmod +x "$WORK/bin/pnpm" "$WORK/bin/node"
 
 GITHUB_OUTPUT="$WORK/out"
 : > "$GITHUB_OUTPUT"
 export GITHUB_OUTPUT
-
-set +e
-PATH="$WORK/bin:$PATH" bash "$WORK/fetch.sh" > "$WORK/log" 2>&1
-RC=$?
-set -e
-
-echo "--- fetch step output ---"
-sed 's/^/  /' "$WORK/log"
-echo "--- exit code: $RC ---"
+GITHUB_ACTION_PATH="$ACTION_PATH"
+GITHUB_API_URL="http://127.0.0.1:1"
+GH_TOKEN="test-token"
+export GITHUB_ACTION_PATH GITHUB_API_URL GH_TOKEN
 
 FAIL=0
-if [ "$RC" -ne 0 ]; then
-  echo "FAIL: a lookup outage exited the step (rc=$RC) instead of falling back." >&2
-  FAIL=1
-fi
-if ! grep -q '^source=build$' "$GITHUB_OUTPUT"; then
-  echo "FAIL: expected source=build after a lookup failure; got: $(cat "$GITHUB_OUTPUT")" >&2
-  FAIL=1
-fi
-if ! grep -q "building inline" "$WORK/log"; then
-  echo "FAIL: expected a warning that it is building inline." >&2
-  FAIL=1
-fi
+run_lookup_outage() {
+  PLATFORM="$1"
+  : > "$GITHUB_OUTPUT"
+  set +e
+  PATH="$WORK/bin:$PATH" bash "$ACTION_PATH/fetch-artifact.sh" \
+    "$PLATFORM" "$WORK/fixture" "$TEST_WAIT_SECONDS" octo/repo current-head "$ACTION_PATH" \
+    > "$WORK/log-outage-$PLATFORM" 2>&1
+  RC=$?
+  set -e
+
+  echo "--- $PLATFORM fetch step output ---"
+  sed 's/^/  /' "$WORK/log-outage-$PLATFORM"
+  echo "--- exit code: $RC ---"
+  if [ "$RC" -ne 0 ]; then
+    echo "FAIL: $PLATFORM lookup outage exited the step (rc=$RC) instead of falling back." >&2
+    FAIL=1
+  fi
+  if ! grep -q '^source=build$' "$GITHUB_OUTPUT"; then
+    echo "FAIL: $PLATFORM expected source=build after a lookup failure; got: $(cat "$GITHUB_OUTPUT")" >&2
+    FAIL=1
+  fi
+  if ! grep -q "building inline" "$WORK/log-outage-$PLATFORM"; then
+    echo "FAIL: $PLATFORM expected a warning that it is building inline." >&2
+    FAIL=1
+  fi
+  if ! grep -qx -- "--dir examples/test-app exec fingerprint fingerprint:generate --platform $PLATFORM" "$WORK/fingerprint-calls"; then
+    echo "FAIL: fixture consumer did not request the $PLATFORM-scoped fingerprint." >&2
+    FAIL=1
+  fi
+  if ! grep -q -- " find octo/repo fingerprint.deadbeefcafe.$PLATFORM current-head$" "$WORK/node-calls"; then
+    echo "FAIL: fixture consumer did not query the exact $PLATFORM artifact name." >&2
+    FAIL=1
+  fi
+}
+
+run_lookup_outage ios
+run_lookup_outage android
 
 if [ "$FAIL" -eq 0 ]; then
-  echo "PASS: build-cache lookup failure degrades to an inline build."
+  echo "PASS: platform-scoped build-cache lookup failures degrade to inline builds."
 fi
+
+# Exercise the composite's real wait loop without sleeping. The selector's
+# provenance and state classification are tested above; these stubs constrain
+# only its output so this test can prove each terminal state reaches fallback.
+cat > "$WORK/bin/node" <<'STUB'
+#!/bin/sh
+case "${2:-}" in
+  find)
+    exit 0
+    ;;
+  producer-state)
+    printf '%s' "$TEST_PRODUCER_STATE"
+    exit 0
+    ;;
+esac
+exit 2
+STUB
+cat > "$WORK/bin/sleep" <<'STUB'
+#!/bin/sh
+exit 0
+STUB
+chmod +x "$WORK/bin/node" "$WORK/bin/sleep"
+
+run_terminal_producer_case() {
+  TEST_PRODUCER_STATE="$1"
+  EXPECTED_LOG="$2"
+  PLATFORM="$3"
+  export TEST_PRODUCER_STATE EXPECTED_LOG PLATFORM
+  TEST_WAIT_SECONDS=1800
+  export TEST_WAIT_SECONDS
+  : > "$GITHUB_OUTPUT"
+  if ! PATH="$WORK/bin:$PATH" bash "$ACTION_PATH/fetch-artifact.sh" \
+    "$PLATFORM" "$WORK/fixture" "$TEST_WAIT_SECONDS" octo/repo current-head "$ACTION_PATH" \
+    > "$WORK/log-$TEST_PRODUCER_STATE-$PLATFORM" 2>&1; then
+    echo "FAIL: $PLATFORM $TEST_PRODUCER_STATE producer state did not fall back cleanly." >&2
+    FAIL=1
+    return
+  fi
+  if ! grep -q '^source=build$' "$GITHUB_OUTPUT"; then
+    echo "FAIL: $PLATFORM $TEST_PRODUCER_STATE producer state did not select inline build." >&2
+    FAIL=1
+  fi
+  if ! grep -q "$EXPECTED_LOG" "$WORK/log-$TEST_PRODUCER_STATE-$PLATFORM"; then
+    echo "FAIL: $PLATFORM $TEST_PRODUCER_STATE producer state did not explain its bounded exit." >&2
+    FAIL=1
+  fi
+}
+
+for PLATFORM in ios android; do
+  run_terminal_producer_case queued 'producer is queued' "$PLATFORM"
+  run_terminal_producer_case failed 'producer failed' "$PLATFORM"
+  run_terminal_producer_case absent 'No fixture producer appeared' "$PLATFORM"
+done
+
+if [ "$FAIL" -eq 0 ]; then
+  echo "PASS: queued, failed, and absent producers exit the wait path early."
+fi
+
 exit "$FAIL"

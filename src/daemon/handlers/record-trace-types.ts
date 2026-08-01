@@ -1,15 +1,14 @@
-import type { RecordingProvider } from '../recording-provider.ts';
-import type { runCmd } from '../../utils/exec.ts';
-import type { isPlayableVideo, waitForStableFile } from '../../utils/video.ts';
+import type { RecordingExportQuality, RecordingScope } from '@agent-device/contracts/recording';
 import type { runAppleRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 import type {
   overlayRecordingTouches,
   resizeRecording,
   trimRecordingStart,
 } from '../../recording/overlay.ts';
+import type { runCmd } from '../../utils/exec.ts';
+import type { isPlayableVideo, waitForStableFile } from '../../utils/video.ts';
+import type { RecordingProvider } from '../recording-provider.ts';
 import type { RecordingGestureEvent } from '../types.ts';
-import type { RecordingExportQuality } from '../../contracts/recording-export-quality.ts';
-import type { RecordingScope } from '../../contracts/recording-scope.ts';
 
 export type RecordTraceDeps = {
   runCmd: typeof runCmd;

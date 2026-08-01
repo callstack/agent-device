@@ -30,7 +30,7 @@
     "break": null
   },
   "mutate": [
-    "src/kernel/errors.ts",
+    "packages/kernel/src/errors.ts",
     "src/daemon/ref-frame.ts",
     "src/commands/interaction/runtime/settle.ts",
     "src/utils/scroll-edge-state.ts",

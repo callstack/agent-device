@@ -1,22 +1,22 @@
 # Agent Device Tester
 
-`Agent Device Tester` is a minimal Expo Router fixture app for `agent-device` and `skillgym` experiments.
+`Agent Device Tester` is a minimal Expo Router fixture app for `agent-device` experiments.
 
 It is intentionally small, but each surface is dense with durable accessibility targets so a few screens cover a large share of the workflows we care about.
 
 ## Why this app exists
 
 - It gives `agent-device` a stable React Native target that we control.
-- It makes `skillgym` prompts concrete: the agent can inspect real app files instead of answering against an imagined UI.
 - It keeps the number of screens low while still covering roughly 50 practical interaction and verification cases.
 
 ## Screens
 
 - `Home`: visible-text checks, dismissible banner, modal open/close, async loading, status badge, switch state
-- `Catalog`: search debounce, filter chips, long-list scroll, favorite toggles, cart updates, drill-in navigation
+- `Catalog`: search debounce, filter chips, direction-aware scroll canary, favorite toggles, cart updates, drill-in navigation
 - `Product detail`: back navigation, quantity stepper, multiline notes, save action
 - `Checkout form`: required-field validation, fill vs type, checkbox state, choice groups, keyboard dismiss, success summary
 - `Settings`: switch rows, accordion content, loading and error states, retry flow, destructive-confirm modal
+- `Automation lab`: long-press, alert-result, app-event, app-state, appearance, orientation, permission-recovery, and log canaries
 - `WebView accessibility`: a deterministic semantic fixture plus live websites with varied HTML for native accessibility snapshot verification
 
 Navigation uses Expo Router native bottom tabs, so the tab bar itself is also part of the test surface.
@@ -83,6 +83,14 @@ named `fingerprint.<hash>.<platform>`. Jobs that drive the app install it throug
 `.github/actions/setup-fixture-app`, which downloads that artifact and refreshes
 its JS with `@expo/repack-app` (~seconds) — so a JS-only change reuses the same
 native binary. A consuming job needs `permissions: actions: read`.
+
+The `/automation` route is intentionally JavaScript-only and can be opened from
+**Settings → Open automation lab** or with the
+`agent-device-test-app:///automation` scheme. Its stable `automation-*` ids expose durable
+outcomes for long press, native alert actions, app-event name/payload, app state, appearance,
+window orientation, and microphone permission recovery. CI repacks JavaScript-only changes into the
+cached Release app without starting Metro; native configuration changes intentionally produce one
+new fingerprinted build that all simulator consumers share.
 
 ### iOS simulator
 

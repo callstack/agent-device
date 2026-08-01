@@ -1,4 +1,4 @@
-import { isIosFamily, type DeviceInfo } from '../kernel/device.ts';
+import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 
 export function isIosSimulator(device: DeviceInfo): boolean {
   return isIosFamily(device) && device.kind === 'simulator';

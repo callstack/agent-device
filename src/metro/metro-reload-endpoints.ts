@@ -1,4 +1,4 @@
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { MetroRuntimeHints } from './metro-types.ts';
 import {
   resolveRuntimeTransportHints,

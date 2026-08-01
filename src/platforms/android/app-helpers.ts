@@ -1,4 +1,4 @@
-import { resolveAppsFilter, type AppsFilter } from '../../contracts/app-inventory.ts';
+import { resolveAppsFilter, type AppsFilter } from '@agent-device/contracts/device';
 import { androidAdbResultError, type AndroidAdbExecutor } from './adb-executor.ts';
 import {
   parseAndroidForegroundApp,

@@ -1,4 +1,4 @@
-import type { Rect } from '../../kernel/snapshot.ts';
+import type { Rect } from '@agent-device/kernel/snapshot';
 
 export type AndroidFillVerificationNode = {
   text: string | null;

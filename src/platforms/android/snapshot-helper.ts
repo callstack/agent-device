@@ -3,6 +3,8 @@ export { captureAndroidSnapshotWithHelper } from './snapshot-helper-capture.ts';
 export {
   captureAndroidSnapshotWithHelperSession,
   getAndroidSnapshotHelperSessionDeviceKey,
+  isAndroidSnapshotHelperRetirementUnconfirmedError,
+  resetAndroidSnapshotHelperSessions,
   stopAndroidSnapshotHelperSession,
   stopAndroidSnapshotHelperSessionForDevice,
 } from './snapshot-helper-session.ts';

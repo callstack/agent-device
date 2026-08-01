@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import type { DeviceInfo } from '../../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 
 vi.mock('../core/screenshot.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../core/screenshot.ts')>();

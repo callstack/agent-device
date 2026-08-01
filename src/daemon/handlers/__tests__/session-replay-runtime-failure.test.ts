@@ -12,7 +12,7 @@ import { SessionStore } from '../../session-store.ts';
 import type { DaemonResponse } from '../../types.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
-import { formatReplayDivergenceReport } from '../../../replay/divergence.ts';
+import { formatReplayDivergenceReport } from '@agent-device/contracts/divergence';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,

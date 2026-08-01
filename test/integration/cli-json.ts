@@ -28,11 +28,12 @@ export function runSourceCliJsonSync(
 export async function runBuiltCliJson(
   args: string[],
   env: NodeJS.ProcessEnv,
+  options?: { timeoutMs?: number },
 ): Promise<CliJsonResult> {
   const result = await runCmd(process.execPath, ['bin/agent-device.mjs', ...args], {
     allowFailure: true,
     env,
-    timeoutMs: CLI_TIMEOUT_MS,
+    timeoutMs: options?.timeoutMs ?? CLI_TIMEOUT_MS,
   });
   return cliJsonResult(result);
 }

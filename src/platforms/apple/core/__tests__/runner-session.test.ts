@@ -9,7 +9,7 @@ import {
   type RequestProgressEvent,
   withRequestProgressSink,
 } from '../../../../request/progress.ts';
-import { AppError } from '../../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   flushDiagnosticsToSessionFile,
   withDiagnosticsScope,

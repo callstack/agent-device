@@ -1,3 +1,26 @@
+import {
+  CLICK_BUTTONS,
+  GESTURE_KINDS,
+  readGesturePayload,
+  SCROLL_DIRECTIONS,
+  SCROLL_DURATION_MAX_MS,
+  SWIPE_PATTERNS,
+  SWIPE_PAUSE_MAX_MS,
+  SWIPE_PRESETS,
+  SWIPE_REPETITION_MAX,
+  type FlingGesturePayload,
+  type PanGesturePayload,
+  type PinchGesturePayload,
+  type RotateGesturePayload,
+  type SwipeGesturePayload,
+  type TransformGesturePayload,
+} from '@agent-device/contracts/interaction';
+import type { PostActionObservationSupportFor } from '../../core/command-descriptor/post-action-observation.ts';
+import {
+  commandSupportsSettleObservation,
+  commandSupportsVerifyEvidence,
+} from '../../core/command-descriptor/registry.ts';
+import { FIND_LOCATORS } from '../../selectors/find.ts';
 import { defineCommandMetadata } from '../command-contract.ts';
 import {
   booleanField,
@@ -20,32 +43,7 @@ import {
   type InferCommandInput,
 } from '../command-input.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
-import { CLICK_BUTTONS } from '../../contracts/click-button.ts';
-import { SCROLL_DURATION_MAX_MS } from '../../contracts/scroll-command.ts';
-import {
-  SCROLL_DIRECTIONS,
-  SWIPE_PAUSE_MAX_MS,
-  SWIPE_PATTERNS,
-  SWIPE_PRESETS,
-  SWIPE_REPETITION_MAX,
-} from '../../contracts/scroll-gesture.ts';
 import { SCROLL_INPUT_DIRECTIONS } from './runtime/gestures.ts';
-import { FIND_LOCATORS } from '../../selectors/find.ts';
-import {
-  commandSupportsSettleObservation,
-  commandSupportsVerifyEvidence,
-} from '../../core/command-descriptor/registry.ts';
-import type { PostActionObservationSupportFor } from '../../core/command-descriptor/post-action-observation.ts';
-import {
-  GESTURE_KINDS,
-  readGesturePayload,
-  type FlingGesturePayload,
-  type PanGesturePayload,
-  type PinchGesturePayload,
-  type RotateGesturePayload,
-  type SwipeGesturePayload,
-  type TransformGesturePayload,
-} from '../../contracts/gesture-input.ts';
 
 const FIND_ACTION_VALUES = [
   'click',

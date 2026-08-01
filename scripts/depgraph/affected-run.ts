@@ -22,7 +22,7 @@ import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
 import {
   INTERACTION_DISPATCH_PATHS,
   type InteractionPathId,
-} from '../../src/contracts/interaction-guarantees.ts';
+} from '@agent-device/contracts/interaction';
 import { DAEMON_COMMAND_DESCRIPTORS } from '../../src/daemon/daemon-command-registry.ts';
 import { parseArgs } from 'node:util';
 import { selectChecks, type CheckPlan } from '../check-affected/model.ts';

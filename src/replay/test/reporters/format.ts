@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { ReplaySuiteTestResult } from '../../../contracts/replay.ts';
+import type { ReplaySuiteTestResult } from '@agent-device/contracts/replay';
 
 export type PassedReplayTestResult = Extract<ReplaySuiteTestResult, { status: 'passed' }>;
 export type FailedReplayTestResult = Extract<ReplaySuiteTestResult, { status: 'failed' }>;
@@ -117,15 +117,6 @@ export function appendOptionalLine(lines: string[], line: string | undefined): v
 
 export function formatJUnitSeconds(durationMs: number): string {
   return (Math.max(0, durationMs) / 1000).toFixed(3);
-}
-
-export function xmlEscape(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;');
 }
 
 export function isDefinedString(value: string | undefined): value is string {

@@ -1,4 +1,4 @@
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 export function parseSettingState(state: string): boolean {
   const normalized = state.toLowerCase();

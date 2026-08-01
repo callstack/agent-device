@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   buildReplayVarScope,
   collectReplayShellEnv,
@@ -9,7 +9,7 @@ import {
   resolveReplayString,
 } from '../vars.ts';
 import { parseReplayScriptDetailed, readReplayScriptMetadata } from '../script.ts';
-import type { SessionAction } from '../../contracts/session-action.ts';
+import type { SessionAction } from '@agent-device/contracts/session';
 
 const LOC = { file: 'test.ad', line: 1 };
 

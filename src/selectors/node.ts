@@ -1,5 +1,5 @@
-import type { Platform, PublicPlatform } from '../kernel/device.ts';
-import type { SnapshotNode } from '../kernel/snapshot.ts';
+import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isFillableType } from '../snapshot/snapshot-processing.ts';
 
 export function isNodeVisible(node: SnapshotNode): boolean {

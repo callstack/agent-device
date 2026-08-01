@@ -1,24 +1,27 @@
 // CommandFlags and MaestroRuntimeFlags are declared in contracts/ so both sides of the process
 // boundary can be stated in terms of them; re-exported here because this is where consumers
 // already import them from.
-export type { CommandFlags } from '../contracts/command-flags.ts';
-import type { ScreenshotDispatchFlags } from '../contracts/screenshot.ts';
-import type { BackMode } from '../contracts/back-mode.ts';
-import type { ClickButton } from '../contracts/click-button.ts';
-import type { ElementSelectorKey } from '../contracts/interactor-types.ts';
-import type { SwipePattern } from '../contracts/scroll-gesture.ts';
-import type { SessionSurface } from '../contracts/session-surface.ts';
-import type { RunnerLogicalLeaseContext } from '../contracts/runner-lease-context.ts';
-import type { Point } from '../kernel/snapshot.ts';
+export type { CommandFlags } from '@agent-device/contracts/command';
+import type { ScreenshotDispatchFlags } from '@agent-device/contracts/capture';
+import type {
+  BackMode,
+  ClickButton,
+  ElementSelectorKey,
+  SwipePattern,
+} from '@agent-device/contracts/interaction';
+import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/platform';
+import type { SessionSurface } from '@agent-device/contracts/session';
+import type { Point } from '@agent-device/kernel/snapshot';
 
 export type DispatchContext = ScreenshotDispatchFlags & {
   requestId?: string;
+  signal?: AbortSignal;
   appBundleId?: string;
   activity?: string;
   launchConsole?: string;
   launchArgs?: string[];
-  // iOS simulator only: relaunch via a single `simctl launch
-  // --terminate-running-process` instead of a separate terminate + launch.
+  // iOS simulator only: terminate the current app inside the platform open,
+  // either during `simctl launch` or immediately before `simctl openurl`.
   terminateRunningApp?: boolean;
   clearAppState?: boolean;
   verbose?: boolean;

@@ -8,7 +8,7 @@
  * `README.md`.
  */
 
-import type { AppErrorCode } from '../../src/kernel/errors.ts';
+import type { AppErrorCode } from '@agent-device/kernel/errors';
 
 /**
  * Every release tag the corpus draws from. `pnpm check:replay-compat` verifies

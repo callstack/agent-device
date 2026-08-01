@@ -3,13 +3,13 @@ import type {
   InteractionTarget,
   LongPressCommandResult,
   PressCommandResult,
-} from '../../contracts/interaction.ts';
+} from '@agent-device/contracts/interaction';
 import {
   readFillTargetFromPositionals,
   type DecodedFillTarget,
 } from '../../core/interaction-positionals.ts';
 import type { DaemonResponse } from '../types.ts';
-import { REF_GRAMMAR_HINT, splitRefGenerationSuffix } from '../../kernel/snapshot.ts';
+import { REF_GRAMMAR_HINT, splitRefGenerationSuffix } from '@agent-device/kernel/snapshot';
 import { parseCoordinateTarget } from './interaction-targeting.ts';
 import { errorResponse } from './response.ts';
 

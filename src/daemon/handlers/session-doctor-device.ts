@@ -7,7 +7,7 @@ import {
   LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS,
   type DeviceInventoryGroup,
   type DeviceInventoryRequest,
-} from '../../contracts/device-inventory.ts';
+} from '@agent-device/contracts/device';
 import {
   matchesDeviceSelector,
   publicPlatformString,
@@ -15,10 +15,10 @@ import {
   type DeviceTarget,
   type PlatformSelector,
   type PublicPlatform,
-} from '../../kernel/device.ts';
-import { normalizeError } from '../../kernel/errors.ts';
+} from '@agent-device/kernel/device';
+import { normalizeError } from '@agent-device/kernel/errors';
 import type { DaemonRequest, SessionState } from '../types.ts';
-import type { DoctorCheck } from '../../contracts/doctor.ts';
+import type { DoctorCheck } from '@agent-device/contracts/observability';
 import { appendDoctorCheck } from './session-doctor-output.ts';
 
 export type DoctorDeviceInventory = {

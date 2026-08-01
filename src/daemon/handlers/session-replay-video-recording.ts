@@ -4,7 +4,6 @@ import type { SessionStore } from '../session-store.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import { handleRecordCommand } from './record-trace-recording.ts';
-import { appendReplayTestTimingEvent } from './session-test-runtime.ts';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import {
   defaultRecordingPath,
@@ -30,12 +29,13 @@ type ReplayTestVideoRecordingParams = {
   sessionStore: SessionStore;
   artifactsDir: string | undefined;
   tracePath: string | undefined;
+  appendTimingEvent: (event: Record<string, unknown>) => void;
 };
 
 export async function startReplayTestVideoRecordingIfReady(
   params: ReplayTestVideoRecordingParams,
 ): Promise<DaemonResponse | undefined> {
-  const { req, sessionName, logPath, sessionStore, artifactsDir, tracePath } = params;
+  const { req, sessionName, logPath, sessionStore, artifactsDir, appendTimingEvent } = params;
   if (req.flags?.recordVideo !== true) return undefined;
   const activeSession = sessionStore.get(sessionName);
   if (!activeSession || activeSession.recording) return undefined;
@@ -44,7 +44,7 @@ export async function startReplayTestVideoRecordingIfReady(
   const videoPath = artifactsDir
     ? path.join(artifactsDir, `recording${extension}`)
     : defaultRecordingPath(activeSession.device.platform);
-  appendVideoTimingEvent(tracePath, {
+  appendVideoTimingEvent(appendTimingEvent, {
     type: 'video_recording_start',
     session: sessionName,
     videoPath,
@@ -67,7 +67,7 @@ export async function startReplayTestVideoRecordingIfReady(
     logPath,
   });
   if (!startResponse.ok) {
-    appendVideoTimingEvent(tracePath, {
+    appendVideoTimingEvent(appendTimingEvent, {
       type: 'video_recording_start_failed',
       session: sessionName,
       videoPath,
@@ -78,7 +78,7 @@ export async function startReplayTestVideoRecordingIfReady(
 
   const prerollStartedAt = Date.now();
   await sleep(REPLAY_TEST_VIDEO_RECORDING_PREROLL_MS);
-  appendVideoTimingEvent(tracePath, {
+  appendVideoTimingEvent(appendTimingEvent, {
     type: 'video_preroll_done',
     session: sessionName,
     durationMs: Date.now() - prerollStartedAt,
@@ -97,11 +97,11 @@ export async function finalizeReplayTestVideoRecording(
     artifactPaths: Set<string>;
   },
 ): Promise<DaemonResponse | undefined> {
-  const { req, sessionName, logPath, sessionStore, tracePath, artifactPaths } = params;
+  const { req, sessionName, logPath, sessionStore, artifactPaths, appendTimingEvent } = params;
   if (req.flags?.recordVideo !== true) return undefined;
   if (!sessionStore.get(sessionName)?.recording) return undefined;
 
-  appendVideoTimingEvent(tracePath, {
+  appendVideoTimingEvent(appendTimingEvent, {
     type: 'video_tail_start',
     session: sessionName,
     requestedDurationMs: REPLAY_TEST_VIDEO_RECORDING_TAIL_MS,
@@ -123,7 +123,7 @@ export async function finalizeReplayTestVideoRecording(
     logPath,
   });
   collectReplayActionArtifactPaths(stopResponse).forEach((entry) => artifactPaths.add(entry));
-  appendVideoTimingEvent(tracePath, {
+  appendVideoTimingEvent(appendTimingEvent, {
     type: 'video_recording_stop',
     session: sessionName,
     ok: stopResponse.ok,
@@ -144,11 +144,8 @@ export async function finalizeReplayTestVideoRecording(
 }
 
 function appendVideoTimingEvent(
-  tracePath: string | undefined,
+  appendTimingEvent: ReplayTestVideoRecordingParams['appendTimingEvent'],
   event: Record<string, unknown>,
 ): void {
-  appendReplayTestTimingEvent(tracePath, {
-    ...event,
-    ts: new Date().toISOString(),
-  });
+  appendTimingEvent({ ...event, ts: new Date().toISOString() });
 }

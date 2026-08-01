@@ -1,6 +1,6 @@
-import type { DeviceInfo } from '../../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '../../../utils/diagnostics.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { requireExecSuccess, type ExecOptions } from '../../../utils/exec.ts';
 import { runSimctlForDevice } from './simctl.ts';
 import { extractAppleToolErrorMeta } from './tool-diagnostics.ts';

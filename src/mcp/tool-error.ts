@@ -1,5 +1,5 @@
-import { normalizeError, type NormalizedError } from '../kernel/errors.ts';
-import { formatReplayDivergenceReport } from '../replay/divergence.ts';
+import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
+import { formatReplayDivergenceReport } from '@agent-device/contracts/divergence';
 
 /**
  * Shared MCP error normalization + text rendering (executor and router

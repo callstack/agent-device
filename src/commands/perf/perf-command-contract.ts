@@ -1,1 +1,1 @@
-export * from '../../contracts/perf.ts';
+export * from '@agent-device/contracts/observability';

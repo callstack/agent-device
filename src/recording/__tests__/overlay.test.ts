@@ -32,7 +32,7 @@ import {
   overlayRecordingTouches,
   resizeRecording,
 } from '../overlay.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '../../utils/exec.ts';
 
 function helperScriptArgs(): string[] {

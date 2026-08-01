@@ -1,4 +1,4 @@
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { successText } from '../../../utils/success-text.ts';
 import { resizePngFileToMaxSize } from '../../../utils/png-resize.ts';
 import type { ArtifactDescriptor } from '../../../io.ts';

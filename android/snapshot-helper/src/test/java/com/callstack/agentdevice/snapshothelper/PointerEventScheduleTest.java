@@ -5,7 +5,7 @@ import java.util.List;
 public final class PointerEventScheduleTest {
   private PointerEventScheduleTest() {}
 
-  public static void main(String[] args) {
+  static void run() {
     assertSteps(
         PointerEventSchedule.create(1, new long[] {0, 16, 32}),
         "DOWN:0:1:0:true",

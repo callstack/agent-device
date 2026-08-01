@@ -1,12 +1,22 @@
 import crypto from 'node:crypto';
-import { AppError } from '../../../../kernel/errors.ts';
-import type { ClickButton } from '../../../../contracts/click-button.ts';
-import type { DeviceRotation } from '../../../../contracts/device-rotation.ts';
-import type { ScrollDirection } from '../../../../contracts/scroll-gesture.ts';
-import type { GesturePlan } from '../../../../contracts/gesture-plan.ts';
-import type { ElementSelectorKey } from '../../../../contracts/interactor-types.ts';
-import { createRequestCanceledError, isRequestCanceled } from '../../../../request/cancel.ts';
-import { bootFailureHint, classifyBootFailure } from '../../../boot-diagnostics.ts';
+import type { DeviceRotation } from '@agent-device/contracts/device';
+import type {
+  ClickButton,
+  ElementSelectorKey,
+  GesturePlan,
+  ScrollDirection,
+} from '@agent-device/contracts/interaction';
+import { AppError } from '@agent-device/kernel/errors';
+import {
+  createRequestCanceledError,
+  getRequestSignal,
+  isRequestCanceled,
+} from '../../../../request/cancel.ts';
+import {
+  bootFailureHint,
+  classifyBootFailure,
+  type BootFailureReason,
+} from '../../../boot-diagnostics.ts';
 import type { RunnerSession } from './runner-session-types.ts';
 
 const RUNNER_CACHE_RECOVERY_HINT =
@@ -109,6 +119,16 @@ export type RunnerSequenceStep = {
   synthesized?: boolean;
 };
 
+export function resolveRunnerRequestSignal(options: {
+  requestId?: string;
+  signal?: AbortSignal;
+}): AbortSignal | undefined {
+  const registeredSignal = getRequestSignal(options.requestId);
+  if (!options.signal) return registeredSignal;
+  if (!registeredSignal || registeredSignal === options.signal) return options.signal;
+  return AbortSignal.any([registeredSignal, options.signal]);
+}
+
 export function isRetryableRunnerError(err: unknown): boolean {
   if (!(err instanceof AppError)) return false;
   if (err.code !== 'COMMAND_FAILED') return false;
@@ -123,7 +143,26 @@ export function isRetryableRunnerError(err: unknown): boolean {
   return false;
 }
 
+/**
+ * True when usbmuxd answered and the device is simply not attached by cable.
+ * A CoreDevice-backed device falls back to its network tunnel; an XCTest-backed
+ * device has no second route, so this verdict is terminal rather than retryable.
+ *
+ * Lives here rather than beside the usbmux transport because the retry policy
+ * below needs it, and that transport already depends on this module.
+ */
+export function isUsbmuxDeviceUnattachedError(error: unknown): boolean {
+  if (!(error instanceof AppError) || error.code !== 'DEVICE_NOT_FOUND') return false;
+  return (
+    (error.details as { usbmuxDeviceAttached?: unknown } | undefined)?.usbmuxDeviceAttached ===
+    false
+  );
+}
+
 export function shouldRetryRunnerConnectError(error: unknown): boolean {
+  // Retrying cannot attach a cable, and the typed verdict carries the recovery
+  // hint that a generic connect failure would replace.
+  if (isUsbmuxDeviceUnattachedError(error)) return false;
   if (!(error instanceof AppError)) return true;
   if (error.code !== 'COMMAND_FAILED') return true;
   const message = String(error.message ?? '').toLowerCase();
@@ -135,12 +174,18 @@ export function resolveRunnerEarlyExitHint(
   message: string,
   stdout: string,
   stderr: string,
+  reason?: BootFailureReason,
 ): string {
   const haystack = `${message}\n${stdout}\n${stderr}`.toLowerCase();
   if (haystack.includes('device is busy') && haystack.includes('connecting')) {
     return 'Target iOS device is still connecting. Keep it unlocked, wait for device trust/connection to settle, then retry.';
   }
-  return `${bootFailureHint('IOS_RUNNER_CONNECT_TIMEOUT')} ${RUNNER_CACHE_RECOVERY_HINT}`;
+  const classified = reason ?? 'IOS_RUNNER_CONNECT_TIMEOUT';
+  // Clearing cached build products cannot put a device into a provisioning
+  // profile, so that recovery advice is withheld where it would only add noise
+  // to an already actionable instruction.
+  if (classified === 'IOS_RUNNER_DEVICE_NOT_PROVISIONED') return bootFailureHint(classified);
+  return `${bootFailureHint(classified)} ${RUNNER_CACHE_RECOVERY_HINT}`;
 }
 
 export function buildRunnerConnectError(params: {
@@ -191,7 +236,7 @@ export async function buildRunnerEarlyExitError(params: {
       stderr: result.stderr,
     },
     reason,
-    hint: resolveRunnerEarlyExitHint(message, result.stdout, result.stderr),
+    hint: resolveRunnerEarlyExitHint(message, result.stdout, result.stderr, reason),
   });
 }
 

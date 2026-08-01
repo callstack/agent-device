@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { AppError, normalizeError } from '../../kernel/errors.ts';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { runCmdDetachedMonitored, type ExecDetachedExit } from '../../utils/exec.ts';
 import { findProjectRoot, readVersion } from '../../utils/version.ts';

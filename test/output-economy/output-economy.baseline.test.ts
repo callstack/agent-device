@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { defaultHintForCode, retriableForErrorCode } from '../../src/kernel/errors.ts';
+import { defaultHintForCode, retriableForErrorCode } from '@agent-device/kernel/errors';
 import { runCmdSync } from '../../src/utils/exec.ts';
 import {
   findEconomyBudgetIncreases,

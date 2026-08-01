@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import type { RawSnapshotNode } from '../../../kernel/snapshot.ts';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { presentIosInteractiveSnapshot } from './index.ts';
 
 test('projects iOS WebKit heading and text wrappers to semantic roles', () => {

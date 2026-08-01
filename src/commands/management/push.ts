@@ -1,17 +1,10 @@
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { AppPushOptions, AppTriggerEventOptions } from '../../contracts/client-app.ts';
-import type { JsonObject } from '../../contracts/json.ts';
+import type {
+  AppPushOptions,
+  AppTriggerEventOptions,
+  JsonObject,
+} from '@agent-device/contracts/client';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
-import {
-  jsonSchemaField,
-  looseObjectField,
-  looseObjectSchema,
-  type CommandField,
-  requiredField,
-  stringField,
-  stringSchema,
-} from '../command-input.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
+import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import {
   commonInputFromFlags,
   direct,
@@ -19,6 +12,16 @@ import {
   requiredString,
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
+import { defineExecutableCommand } from '../command-contract.ts';
+import {
+  jsonSchemaField,
+  looseObjectField,
+  looseObjectSchema,
+  requiredField,
+  stringField,
+  stringSchema,
+  type CommandField,
+} from '../command-input.ts';
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 

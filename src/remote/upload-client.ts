@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { buildDaemonHttpAuthHeaders } from '../daemon/http-contract.ts';
 import { prepareUploadArtifact, type PreparedUploadArtifact } from './upload-client-artifact.ts';
 import { isRetryableUploadStreamError, streamFileToHttpRequest } from './upload-stream.ts';

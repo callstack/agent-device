@@ -41,9 +41,9 @@ test('the shared diagnostics artifact includes hidden files only from its declar
     'hidden daemon, session, and runner diagnostics must be included',
   ).toBe(true);
   expect(paths(upload!)).toEqual([
-    '${{ inputs.agent-home-dir }}/daemon.log',
+    '${{ inputs.agent-state-dir }}/daemon.log',
     '~/.agent-device/logs/**',
-    '${{ inputs.agent-home-dir }}/sessions/**',
+    '${{ inputs.agent-state-dir }}/sessions/**',
     '${{ inputs.runner-derived-path }}/.agent-device-runner-cache.json',
     '${{ inputs.runner-derived-path }}/Logs/**',
     'test/artifacts/**',
@@ -52,7 +52,7 @@ test('the shared diagnostics artifact includes hidden files only from its declar
   expect(
     paths(upload!).every((entry) =>
       [
-        '${{ inputs.agent-home-dir }}/',
+        '${{ inputs.agent-state-dir }}/',
         '${{ inputs.runner-derived-path }}/',
         '~/.agent-device/logs/',
         'test/',

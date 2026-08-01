@@ -1,4 +1,13 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import {
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { PRODUCT_CATEGORIES, type LabProduct, type ProductCategory } from '../data';
 import {
@@ -27,15 +36,42 @@ export interface CatalogScreenProps {
 export function CatalogScreen(props: CatalogScreenProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const lastScrollOffset = useRef(0);
+  const [scrollState, setScrollState] = useState<'top' | 'bottom' | 'down' | 'up'>('top');
+
+  function updateScrollState(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const offset = contentOffset.y;
+    const previous = lastScrollOffset.current;
+    lastScrollOffset.current = offset;
+    if (offset <= 4) {
+      setScrollState('top');
+    } else if (offset + layoutMeasurement.height >= contentSize.height - 4) {
+      setScrollState('bottom');
+    } else if (offset > previous + 4) {
+      setScrollState('down');
+    } else if (offset < previous - 4) {
+      setScrollState('up');
+    }
+  }
 
   return (
-    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      bounces={false}
+      contentContainerStyle={styles.content}
+      onScroll={updateScrollState}
+      scrollEventThrottle={16}
+      showsVerticalScrollIndicator={false}
+    >
       <ScreenTitle
         badge={`${props.products.length} results`}
         subtitle="Search, filter, scroll, favorite, and drill into detail without extra dependencies."
         title="Catalog"
         testID="catalog-title"
       />
+      <Text style={styles.scrollState} testID="catalog-scroll-state">
+        Catalog scroll: {scrollState}
+      </Text>
 
       <SectionCard subtitle="Search updates after a short debounce." title="Search">
         <TextField
@@ -137,6 +173,11 @@ function createStyles(colors: AppColors) {
       color: colors.text,
       fontSize: 18,
       fontWeight: '700',
+    },
+    scrollState: {
+      color: colors.textSoft,
+      fontSize: 13,
+      fontWeight: '600',
     },
     favoritePill: {
       backgroundColor: 'transparent',

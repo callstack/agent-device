@@ -215,7 +215,9 @@ test('diagnostic get/is reads mid-repair are excluded from the healed script by 
   });
   expect(leg2.ok).toBe(true);
   expect(session.actions.map((a) => a.command)).toEqual(['open', 'press', 'click']);
-  expect(session.saveScriptComplete).toBe(true);
+  expect(session.scriptPublication?.kind === 'repair' && session.scriptPublication.status).toBe(
+    'complete',
+  );
 
   // --- Finalize: `close --save-script` commits the healed `.ad`. ---
   const closeResponse = await handleCloseCommand({
@@ -391,11 +393,11 @@ test('empty-segment guard: a --from resume refuses with an actionable --record h
 
 test('non-repair authoring recording is unchanged: a read in a fresh `open --save-script` session still records with no flag needed', async () => {
   const ctx = setup('agent-device-repair-record-exclusion-authoring-');
-  // An ordinary, non-repair recording session: no `saveScriptBoundary` (never
+  // An ordinary, non-repair recording session: no repair variant (never
   // armed by a repair `replay --save-script`).
   const session = ctx.sessionStore.get(ctx.sessionName)!;
   session.recordSession = true;
-  expect(session.saveScriptBoundary).toBeUndefined();
+  expect(session.scriptPublication).toBeUndefined();
 
   ctx.sessionStore.recordAction(session, {
     command: 'get',

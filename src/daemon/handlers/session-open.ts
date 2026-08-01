@@ -1,7 +1,10 @@
 import path from 'node:path';
 import { dispatchCommand, resolveTargetDevice } from '../../core/dispatch.ts';
-import { isDeepLinkTarget } from '../../contracts/open-target.ts';
-import type { SessionSurface } from '../../contracts/session-surface.ts';
+import {
+  abortAuthoringOnSecondOpen,
+  armAuthoringOnOpen,
+} from '../session-script-publication-capability.ts';
+import type { SessionSurface } from '@agent-device/contracts/session';
 import { contextFromFlags } from '../context.ts';
 import { createRequestCanceledError, isRequestCanceled } from '../../request/cancel.ts';
 import {
@@ -14,7 +17,7 @@ import {
   createAppleRunnerCacheColdBootPrewarmForOpen,
 } from '../apple-runner-options.ts';
 import { applyRuntimeHintsToApp } from '../runtime-hints.ts';
-import { isApplePlatform, isIosFamily, type DeviceInfo } from '../../kernel/device.ts';
+import { isApplePlatform, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse, SessionRuntimeHints, SessionState } from '../types.ts';
 import {
   resolveSessionRequestLogPath,
@@ -38,6 +41,10 @@ import { withKeyedLock } from '../../utils/keyed-lock.ts';
 import { emitDiagnostic, getDiagnosticsMeta } from '../../utils/diagnostics.ts';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import { inferAndroidPackageAfterOpen } from './session-open-target.ts';
+import {
+  buildSessionOpenLaunchPlan,
+  dispatchSessionOpenFollowUpLaunchUrl,
+} from './session-open-launch-url.ts';
 import { buildOpenTargetDeviceResolutionOptions } from '../open-device-selection.ts';
 import {
   invalidOpenArgs,
@@ -91,13 +98,14 @@ function applyOrdinaryScriptRecordingOpenOutcome(params: {
 }): void {
   const { session, existingSession, saveScriptRequested, responseData } = params;
   if (!existingSession && saveScriptRequested) {
-    session.scriptRecordingState = 'armed';
-    session.recordSession = true;
+    // The recorded `open` action's flag ingress applies the explicit path/force right after
+    // this arm (`applyRecordedSaveScriptFlags`), exactly as the field writers used to split it.
+    armAuthoringOnOpen(session, {});
     return;
   }
-  if (existingSession?.scriptRecordingState !== 'armed') return;
-  session.scriptRecordingState = 'aborted';
-  session.recordSession = false;
+  const existingState = existingSession?.scriptPublication;
+  if (existingState?.kind !== 'authoring' || existingState.status !== 'armed') return;
+  abortAuthoringOnSecondOpen(session);
   const warnings = Array.isArray(responseData.warnings)
     ? responseData.warnings.filter((warning): warning is string => typeof warning === 'string')
     : [];
@@ -125,39 +133,6 @@ async function relaunchCloseApp(params: {
   }
   await dispatchCommand(device, 'close', [closeTarget], outFlag, context);
   await settleIosSimulator(device, IOS_SIMULATOR_POST_CLOSE_SETTLE_MS);
-}
-
-async function maybeApplySessionLaunchUrl(params: {
-  runtime: SessionRuntimeHints | undefined;
-  device: DeviceInfo;
-  req: DaemonRequest;
-  logPath: string;
-  appBundleId?: string;
-  traceLogPath?: string;
-  openPositionals: string[];
-}): Promise<void> {
-  const { runtime, device, req, logPath, appBundleId, traceLogPath, openPositionals } = params;
-  const launchUrl = runtime?.launchUrl;
-  if (!launchUrl) return;
-  if (openPositionals.length === 0) return;
-  if (openPositionals.length > 1) return;
-  const openTarget = openPositionals[0]?.trim();
-  if (!openTarget || isDeepLinkTarget(openTarget)) return;
-  await dispatchCommand(device, 'open', [launchUrl], req.flags?.out, {
-    ...contextForRuntimeLaunchUrl(logPath, req.flags, appBundleId, traceLogPath),
-  });
-}
-
-function contextForRuntimeLaunchUrl(
-  logPath: string,
-  flags: DaemonRequest['flags'],
-  appBundleId?: string,
-  traceLogPath?: string,
-): ReturnType<typeof contextFromFlags> {
-  const context = contextFromFlags(logPath, flags, appBundleId, traceLogPath);
-  delete context.launchConsole;
-  delete context.launchArgs;
-  return context;
 }
 
 // Default-on for emulators, opt-in via --test-ime on real devices; --no-test-ime forces off.
@@ -257,6 +232,7 @@ async function completeOpenCommand(params: {
   let sessionAppBundleId = appBundleId;
   const openCommandStartedAtMs = Date.now();
   const timing: OpenTiming = {};
+  const usesLocalIosSimulatorLifecycle = isIosSimulator(device) && !isActiveProviderDevice(device);
 
   const shouldPrewarmIosRunner =
     isIosFamily(device) &&
@@ -296,25 +272,20 @@ async function completeOpenCommand(params: {
   // touches the runner there (both ride simctl), so the xcodebuild ramp
   // overlaps the app relaunch instead of following it. Real devices tear the
   // runner down in relaunchCloseApp, so their prewarm stays post-open.
-  if (shouldPrewarmIosRunner && isIosSimulator(device) && !shouldPrewarmRunnerBeforeOpen) {
+  if (shouldPrewarmIosRunner && usesLocalIosSimulatorLifecycle && !shouldPrewarmRunnerBeforeOpen) {
     schedulePrewarm();
   }
 
-  // Local iOS simulators relaunch with one `simctl launch --terminate-running-process`
-  // instead of terminate + settle + launch (~1s per relaunch). Provider simulators
-  // must dispatch an explicit close because their interactors own app termination.
-  // Runtime hints written below are user-defaults reads at that launch, so ordering holds.
-  // Only the single app-launch form collapses: `open <app> <url>` dispatches
-  // through the URL path, where a deep-link open never launches the app and
-  // so cannot carry the terminate; those keep the close-first ordering, as
-  // does --clear-app-state, which must never mutate a running app's container.
+  const launchPlan = buildSessionOpenLaunchPlan({
+    openPositionals,
+    runtime,
+    flags: req.flags,
+    foldRuntimeLaunchUrl: usesLocalIosSimulatorLifecycle,
+  });
+  // Local simulators terminate inside the Apple open path. Provider simulators
+  // keep explicit close/open dispatches, and clear-state must mutate a stopped app.
   const collapseSimulatorRelaunch =
-    shouldRelaunch &&
-    Boolean(openTarget) &&
-    openPositionals.length === 1 &&
-    isIosSimulator(device) &&
-    !isActiveProviderDevice(device) &&
-    req.flags?.clearAppState !== true;
+    shouldRelaunch && usesLocalIosSimulatorLifecycle && req.flags?.clearAppState !== true;
   if (
     shouldRunRelaunchPreClose({
       shouldRelaunch,
@@ -379,22 +350,23 @@ async function completeOpenCommand(params: {
   // its visible surface. Expire that session's frame before the first
   // close/launch dispatch; a fresh first open has no prior frame to expire.
   if (openDispatchSession) expireRefFrame(openDispatchSession);
-  await dispatchCommand(device, 'open', openPositionals, req.flags?.out, {
+  await dispatchCommand(device, 'open', launchPlan.openPositionals, req.flags?.out, {
     ...contextFromFlags(logPath, req.flags, sessionAppBundleId),
     ...(collapseSimulatorRelaunch ? { terminateRunningApp: true } : {}),
   });
   timing.openDispatchDurationMs = Math.max(0, Date.now() - openStartedAtMs);
   await maybeActivateAndroidTestImeForOpen(device, req, sessionStore.resolveDaemonStateDir());
   const launchUrlStartedAtMs = Date.now();
-  await maybeApplySessionLaunchUrl({
-    runtime,
-    device,
-    req,
-    logPath,
-    appBundleId: sessionAppBundleId,
-    traceLogPath,
-    openPositionals,
-  });
+  if (launchPlan.followUpLaunchUrl) {
+    await dispatchSessionOpenFollowUpLaunchUrl({
+      launchUrl: launchPlan.followUpLaunchUrl,
+      device,
+      req,
+      logPath,
+      appBundleId: sessionAppBundleId,
+      traceLogPath,
+    });
+  }
   timing.launchUrlDurationMs = Math.max(0, Date.now() - launchUrlStartedAtMs);
   if (shouldPrewarmIosRunner && !runnerPrewarmScheduled) {
     schedulePrewarm();
@@ -404,11 +376,7 @@ async function completeOpenCommand(params: {
   } else if (runnerPrewarm && !runnerPrewarmAwaited) {
     timing.runnerPrewarmWaited = false;
   }
-  if (
-    !isActiveProviderDevice(device) &&
-    isIosSimulator(device) &&
-    (shouldRelaunch || runnerTargetPredatesOpen)
-  ) {
+  if (usesLocalIosSimulatorLifecycle && (shouldRelaunch || runnerTargetPredatesOpen)) {
     await notifyIosRunnerAppRelaunched(device, runnerPrewarmOptions);
   }
   sessionAppBundleId = await inferAndroidPackageAfterOpen(device, openTarget, sessionAppBundleId);
@@ -629,9 +597,10 @@ async function openNewSessionWithAdvisoryClaim(params: {
       await rollbackNewSessionClaim(localClaim.ownership, effects);
       return details.response;
     }
-    // Preparation above is validation-only. `completeOpenCommand` can prewarm a runner,
-    // relaunch-close an app, or write runtime hints before its main open dispatch, so a
-    // failure from that point cannot prove the device is unchanged.
+    // Preparation can boot the device or warm caches, but it cannot establish session
+    // ownership. `completeOpenCommand` can relaunch-close an app or write runtime hints
+    // before its main open dispatch, so a failure from that point cannot prove ownership
+    // was not established.
     effects.mayHaveStarted = true;
     const response = await completeOpenCommand({
       req,
@@ -717,6 +686,7 @@ export async function handleOpenCommand(params: {
     }
 
     const device = await refreshSessionDeviceIfNeeded(session.device);
+    await req.internal?.retainDeviceExecutionLock?.(device.id);
     const details = await prepareOpenCommandDetails({
       req,
       sessionName,
@@ -777,6 +747,7 @@ export async function handleOpenCommand(params: {
     req.flags ?? {},
     buildOpenTargetDeviceResolutionOptions(openTarget),
   );
+  await req.internal?.retainDeviceExecutionLock?.(device.id);
   const surfaceResult = resolveOpenSurfaceResponse(device, req.flags?.surface, openTarget);
   if (typeof surfaceResult !== 'string') {
     return surfaceResult;

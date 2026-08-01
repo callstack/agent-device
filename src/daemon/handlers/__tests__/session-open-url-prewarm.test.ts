@@ -1,7 +1,7 @@
 import { test, expect, vi } from 'vitest';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   mockDispatch,
   mockResolveTargetDevice,
@@ -741,9 +741,7 @@ test('prepare ios-runner rejects non-Apple runner devices', async () => {
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
     expect(response.error.code).toBe('UNSUPPORTED_OPERATION');
-    expect(response.error.message).toBe(
-      'prepare ios-runner is only supported on Apple runner platforms',
-    );
+    expect(response.error.message).toBe('prepare is not supported on this device');
   }
   expect(mockPrepareIosRunner).not.toHaveBeenCalled();
 });

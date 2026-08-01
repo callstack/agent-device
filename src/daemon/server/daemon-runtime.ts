@@ -1,15 +1,11 @@
 import crypto from 'node:crypto';
-import { asAppError, AppError } from '../../kernel/errors.ts';
+import { asAppError, AppError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../session-store.ts';
 import { cleanupStaleAppLogProcesses } from '../app-log-process.ts';
 import { resolveDaemonPaths, resolveDaemonServerMode } from '../config.ts';
 import { createDaemonHttpServer } from './http-server.ts';
 import { trackDownloadableArtifact } from '../artifact-tracking.ts';
-import { listCloudWebDriverArtifactsFromEnv } from '../../cloud-webdriver/provider-registry.ts';
-import {
-  composeCloudArtifactProviders,
-  createProviderDeviceRuntimeRequestProviders,
-} from '../../provider-device-runtime.ts';
+import { createProviderDeviceRuntimeRequestProviders } from '../../provider-device-runtime.ts';
 import {
   createDefaultProviderDeviceRuntimes,
   DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS,
@@ -24,13 +20,14 @@ import { closeDaemonServers } from './server-shutdown.ts';
 import type { DaemonInvokeFn, SessionState } from '../types.ts';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';
 import { finalizeDaemonSessionLease } from './daemon-session-lease-finalizer.ts';
-import { clearAdvisoryDeviceClaim } from '../device-claims.ts';
+import { clearAdvisoryDeviceClaim, pruneDeadDeviceClaims } from '../device-claims.ts';
 import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   withDiagnosticsScope,
 } from '../../utils/diagnostics.ts';
 import { isEnvTruthy } from '../../utils/retry.ts';
+import { resetAndroidSnapshotHelperSessions } from '../../platforms/android/snapshot-helper.ts';
 import {
   acquireDaemonLock,
   parseIntegerEnv,
@@ -184,10 +181,7 @@ export async function startDaemonRuntime(
       void expiredProviderLeaseReleaser.release(lease);
     },
   });
-  const cloudArtifactProvider = composeCloudArtifactProviders(
-    providerRuntimeProviders.cloudArtifactProvider,
-    { listCloudArtifacts: (query) => listCloudWebDriverArtifactsFromEnv(query, env) },
-  );
+  const cloudArtifactProvider = providerRuntimeProviders.cloudArtifactProvider;
 
   const dispatchRequest = createRequestHandler({
     logPath,
@@ -348,6 +342,9 @@ export async function startDaemonRuntime(
     socketPort = opened.socketPort;
     httpPort = opened.httpPort;
     publishDaemonInfo(socketPort, httpPort);
+    // After publication: publishDaemonInfo truncates daemon.log, so anything
+    // written before it is lost — including the prune's own diagnostic.
+    await pruneDeviceClaimsForDaemonStartup(logPath);
     // Arms the initial idle-reap timer: a daemon that starts and never
     // receives a request must still be able to reap itself.
     idleReap.noteActivity();
@@ -386,6 +383,15 @@ export async function startDaemonRuntime(
     } catch {}
     expiredProviderLeaseReleaser.beginShutdown();
     await teardownDaemonSessions();
+    try {
+      await resetAndroidSnapshotHelperSessions();
+    } catch (error) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'daemon_shutdown_android_snapshot_helper_cleanup_failed',
+        data: { error: error instanceof Error ? error.message : String(error) },
+      });
+    }
     const providerReleaseDrain = await expiredProviderLeaseReleaser.drain(
       DAEMON_PROVIDER_RELEASE_DRAIN_TIMEOUT_MS,
     );
@@ -443,6 +449,30 @@ export async function startDaemonRuntime(
     socketPort,
     token,
   };
+}
+
+async function pruneDeviceClaimsForDaemonStartup(logPath: string): Promise<void> {
+  // Startup runs outside any diagnostics scope, where emitDiagnostic is a no-op,
+  // so the prune has to open one of its own for its events to be recorded.
+  await withDiagnosticsScope(
+    { command: 'daemon', session: 'daemon', logPath, debug: true },
+    async () => {
+      try {
+        const { pruned } = await pruneDeadDeviceClaims();
+        if (pruned > 0) {
+          emitDiagnostic({ phase: 'device_claim_prune', data: { pruned } });
+          flushDiagnosticsToSessionFile({ force: true });
+        }
+      } catch (error) {
+        emitDiagnostic({
+          level: 'warn',
+          phase: 'device_claim_prune_failed',
+          data: { error: error instanceof Error ? error.message : String(error) },
+        });
+        flushDiagnosticsToSessionFile({ force: true });
+      }
+    },
+  );
 }
 
 export async function cleanupWebBrowserOrphansForDaemonStartup(params: {

@@ -1,5 +1,5 @@
-import type { DeviceInfo } from '../../kernel/device.ts';
-import type { Rect } from '../../kernel/snapshot.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { Rect } from '@agent-device/kernel/snapshot';
 import { resolveAndroidTouchProvider } from './adb-executor.ts';
 import { executeAndroidTouchHelperPlan, readAndroidTouchHelperViewport } from './touch-helper.ts';
 import { validateAndroidGestureViewport } from './gesture-viewport.ts';

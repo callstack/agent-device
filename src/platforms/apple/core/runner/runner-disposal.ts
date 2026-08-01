@@ -1,5 +1,5 @@
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
-import { isMacOs, type DeviceInfo } from '../../../../kernel/device.ts';
+import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import {
   isProcessAlive,
   isProcessGroupAlive,

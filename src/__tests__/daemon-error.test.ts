@@ -1,8 +1,11 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { throwDaemonError } from '../kernel/daemon-error.ts';
-import { AppError, normalizeError } from '../kernel/errors.ts';
-import type { DaemonError } from '../kernel/contracts.ts';
+import {
+  AppError,
+  normalizeError,
+  throwDaemonError,
+  type DaemonError,
+} from '@agent-device/kernel/errors';
 
 // ADR 0012 migration step 2: "the Node client rejects with AppError retaining
 // details.divergence" — this is the single conversion point (every

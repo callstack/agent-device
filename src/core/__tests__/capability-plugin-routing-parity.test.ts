@@ -9,7 +9,7 @@ import {
   type DeviceKind,
   type DeviceTarget,
   type Platform,
-} from '../../kernel/device.ts';
+} from '@agent-device/kernel/device';
 import {
   ANDROID_EMULATOR,
   ANDROID_TV_DEVICE,
@@ -29,7 +29,7 @@ import {
   unsupportedHintForDevice,
   type CommandCapability,
 } from '../capabilities.ts';
-import { getPlugin } from '../../contracts/platform-plugin.ts';
+import { getPlugin } from '../platform-plugin-registry.ts';
 import { registerBuiltinPlatformPlugins } from '../interactors/register-builtins.ts';
 
 // Phase 3 step (b) parity gate. Independent oracles pin that the migration is
@@ -157,6 +157,10 @@ const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   audio: supportsHostAudioProbe,
 };
 const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
+  viewport: (device) =>
+    device.platform === 'apple'
+      ? 'viewport resizes web targets only (--platform web). Apple screen geometry is fixed by the selected simulator or device type — open a different simulator to test another screen size.'
+      : undefined,
   apps: coreDeviceOnlyPhysicalOperationHint,
   install: coreDeviceOnlyPhysicalOperationHint,
   reinstall: coreDeviceOnlyPhysicalOperationHint,

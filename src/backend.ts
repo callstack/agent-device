@@ -1,26 +1,35 @@
-import type { AlertAction, AlertInfo } from './contracts/alert-contract.ts';
-import type { AppsFilter } from './contracts/app-inventory.ts';
-import type { JsonObject } from './contracts/json.ts';
+import type {
+  SnapshotCaptureAnnotations,
+  SnapshotDiagnosticsSummary,
+} from '@agent-device/contracts/capture';
+import type { JsonObject } from '@agent-device/contracts/client';
+import type { AppsFilter, DeviceRotation } from '@agent-device/contracts/device';
+import type {
+  AlertAction,
+  AlertInfo,
+  BackMode,
+  ClickButton,
+  GesturePlan,
+  ScrollDirection,
+  TvRemoteButton,
+} from '@agent-device/contracts/interaction';
+import type { RecordingExportQuality } from '@agent-device/contracts/recording';
+import type { SessionSurface } from '@agent-device/contracts/session';
+import type { NetworkIncludeMode } from '@agent-device/kernel/contracts';
+import type {
+  DeviceTarget,
+  Platform,
+  PlatformSelector,
+  PublicPlatform,
+} from '@agent-device/kernel/device';
 import type {
   Point,
   Rect,
   SnapshotNode,
   SnapshotOptions,
   SnapshotState,
-} from './kernel/snapshot.ts';
-import type { NetworkIncludeMode } from './kernel/contracts.ts';
-import type { DeviceTarget, Platform, PlatformSelector, PublicPlatform } from './kernel/device.ts';
-import type { BackMode } from './contracts/back-mode.ts';
+} from '@agent-device/kernel/snapshot';
 import type { RepeatedInput } from './commands/command-input.ts';
-import type { ClickButton } from './contracts/click-button.ts';
-import type { DeviceRotation } from './contracts/device-rotation.ts';
-import type { ScrollDirection } from './contracts/scroll-gesture.ts';
-import type { SessionSurface } from './contracts/session-surface.ts';
-import type { TvRemoteButton } from './contracts/tv-remote.ts';
-import type { GesturePlan } from './contracts/gesture-plan-types.ts';
-import type { RecordingExportQuality } from './contracts/recording-export-quality.ts';
-import type { SnapshotDiagnosticsSummary } from './contracts/snapshot-diagnostics.ts';
-import type { SnapshotCaptureAnnotations } from './contracts/snapshot-capture-annotations.ts';
 import type { ScreenshotResultData } from './utils/screenshot-result.ts';
 
 // The backend's public leaf platform (approach b): backends distinguish iOS from

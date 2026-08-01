@@ -14,6 +14,10 @@ export const IOS_SIMULATOR_TERMINATE_TIMEOUT_MS = 15_000;
 
 export const IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS = 20_000;
 
+// CoreSimulator can briefly stall while it services the scale lookup immediately
+// after a keyboard transition. Keep this bounded below the full capture budget.
+export const IOS_SIMULATOR_SCREENSHOT_SCALE_TIMEOUT_MS = 15_000;
+
 export const IOS_RUNNER_SCREENSHOT_COPY_TIMEOUT_MS = 20_000;
 
 export const IOS_SIMULATOR_SCREENSHOT_RETRY_MAX_ATTEMPTS = 5;

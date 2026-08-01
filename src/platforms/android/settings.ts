@@ -1,5 +1,5 @@
-import { AppError } from '../../kernel/errors.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { requireLocationCoordinates } from '../../utils/location-coordinates.ts';
 import {
   summarizeCommandAttemptFailures,
@@ -9,7 +9,7 @@ import {
   parsePermissionAction,
   parsePermissionTarget,
   type SettingOptions,
-} from '../permission-utils.ts';
+} from '@agent-device/contracts/settings';
 import { parseAppearanceAction } from '../appearance.ts';
 import { parseSettingState } from '../setting-state.ts';
 import { runAndroidAdb } from './adb.ts';

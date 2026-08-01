@@ -1,4 +1,4 @@
-import { AppError, toAppErrorCode } from '../../../../kernel/errors.ts';
+import { AppError, toAppErrorCode } from '@agent-device/kernel/errors';
 import {
   runCmdBackground,
   type ExecResult,
@@ -6,11 +6,11 @@ import {
 } from '../../../../utils/exec.ts';
 import { withKeyedLock } from '../../../../utils/keyed-lock.ts';
 import { Deadline } from '../../../../utils/retry.ts';
-import { isIosFamily, isApplePlatform, type DeviceInfo } from '../../../../kernel/device.ts';
-import type { RunnerLogicalLeaseContext } from '../../../../contracts/runner-lease-context.ts';
+import { isIosFamily, isApplePlatform, type DeviceInfo } from '@agent-device/kernel/device';
+import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/platform';
 import type { AppleRunnerLifecycleOptions } from './runner-provider.ts';
 import { emitRequestProgress } from '../../../../request/progress.ts';
-import { createRequestCanceledError, getRequestSignal } from '../../../../request/cancel.ts';
+import { createRequestCanceledError } from '../../../../request/cancel.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../../../utils/diagnostics.ts';
 import { buildSimctlArgsForDevice } from '../simctl.ts';
 import { runAppleToolCommand, runXcrun } from '../tool-provider.ts';
@@ -32,7 +32,11 @@ import {
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
 } from './runner-xctestrun.ts';
-import { withRunnerCommandId, type RunnerCommand } from './runner-contract.ts';
+import {
+  resolveRunnerRequestSignal,
+  withRunnerCommandId,
+  type RunnerCommand,
+} from './runner-contract.ts';
 import {
   canSkipRunnerReadinessPreflightAfterHealthyMutation,
   isReadOnlyRunnerCommand,
@@ -131,7 +135,7 @@ async function startRunnerSessionWithLease(
   // xctestrun build and runner launch (killProcessTree via exec) instead of
   // orphaning them. Request-scoped: only this request's device startup reacts,
   // and a signal-less internal caller (shutdown) simply gets undefined.
-  const signal = getRequestSignal(options.requestId);
+  const signal = resolveRunnerRequestSignal(options);
   const logicalLeaseContext = normalizeRunnerLogicalLeaseContext(
     options.runnerLeaseContext,
     device.id,

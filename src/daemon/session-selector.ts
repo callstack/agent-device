@@ -1,11 +1,11 @@
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { CommandFlags } from '../core/dispatch.ts';
 import type { SessionState } from './types.ts';
 import {
   isIosFamily,
   isSerialAddressablePlatform,
   matchesPlatformSelector,
-} from '../kernel/device.ts';
+} from '@agent-device/kernel/device';
 import { parseSerialAllowlist } from '../utils/device-isolation.ts';
 import { buildSessionRecoveryHint, describeSessionDevice } from './session-recovery-hints.ts';
 

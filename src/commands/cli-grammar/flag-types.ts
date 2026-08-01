@@ -1,6 +1,6 @@
-import type { CliFlags } from '../../contracts/cli-flags.ts';
+import type { CliFlags } from '@agent-device/contracts/command';
 
-export type { CliFlags } from '../../contracts/cli-flags.ts';
+export type { CliFlags } from '@agent-device/contracts/command';
 
 export type FlagKey = keyof CliFlags;
 type FlagType = 'boolean' | 'int' | 'enum' | 'string' | 'booleanOrString';

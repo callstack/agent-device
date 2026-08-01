@@ -1,4 +1,4 @@
-import type { CliFlags } from '../../contracts/cli-flags.ts';
+import type { CliFlags } from '@agent-device/contracts/command';
 import type { CommandName } from '../command-metadata.ts';
 import { listCommandFamilyCliReaders } from '../family/registry.ts';
 

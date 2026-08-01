@@ -1,4 +1,4 @@
-import type { DeviceInfo } from '../../../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { resolveIosPhysicalDeviceControl } from '../physical-device-control.ts';
 
 const RUNNER_DEVICE_TUNNEL_IP_CACHE_TTL_MS = 30_000;
@@ -22,9 +22,28 @@ export type RunnerCommandRoute =
 
 const deviceTunnelIpCache = new Map<string, DeviceTunnelIpCacheEntry>();
 
+/**
+ * Physical iOS devices are reached through usbmux whenever they are attached by
+ * cable (#1403): usbmuxd answers in milliseconds and the connection stays
+ * usable across idle gaps, where the CoreDevice tunnel route re-probes
+ * `devicectl` — seconds per command once its short-lived cache expires.
+ *
+ * A CoreDevice-backed device that usbmuxd does not list is Wi-Fi-only (modern
+ * CoreDevice Wi-Fi runs over `remoted`, which usbmuxd never sees), so it falls
+ * back to the tunnel route. The tunnel lookup and its cache therefore only run
+ * for devices that genuinely need them, and cabled devices never pay for them.
+ */
 export function createRunnerCommandRouteResolver(device: DeviceInfo, port: number) {
   let requestTunnelIp: string | null | undefined;
+  let usbmuxUnattached = false;
   return {
+    /**
+     * Records that usbmux cannot reach this device, so the remaining resolves
+     * in this request go straight to the CoreDevice tunnel route.
+     */
+    markUsbmuxUnattached: (): void => {
+      usbmuxUnattached = true;
+    },
     resolveRoute: async (
       timeoutBudgetMs?: number,
       forceRefresh = false,
@@ -33,14 +52,8 @@ export function createRunnerCommandRouteResolver(device: DeviceInfo, port: numbe
         return buildNetworkRoute(device, port, null, false);
       }
       const control = resolveIosPhysicalDeviceControl(device);
-      if (control.backend === 'xctest') {
-        const transport = await control.resolveRunnerTransport(device, timeoutBudgetMs);
-        return {
-          kind: transport.kind,
-          endpoints: [`usbmux://${device.id}:${port}/command`],
-          cachedTunnelIp: false,
-        };
-      }
+      if (control.backend === 'xctest') return buildUsbmuxRoute(device, port);
+      if (!usbmuxUnattached) return buildUsbmuxRoute(device, port);
       if (!forceRefresh) {
         const cached = readDeviceTunnelIpCache(device.id);
         if (cached) return buildNetworkRoute(device, port, cached, true);
@@ -50,11 +63,7 @@ export function createRunnerCommandRouteResolver(device: DeviceInfo, port: numbe
       }
       const transport = await control.resolveRunnerTransport(device, timeoutBudgetMs);
       if (transport.kind === 'usbmux') {
-        return {
-          kind: 'usbmux',
-          endpoints: [`usbmux://${device.id}:${port}/command`],
-          cachedTunnelIp: false,
-        };
+        return buildUsbmuxRoute(device, port);
       }
       const tunnelIp = transport.tunnelIp;
       requestTunnelIp = tunnelIp;
@@ -73,6 +82,14 @@ export function invalidateDeviceTunnelIpCache(deviceId: string): void {
  */
 export function clearDeviceTunnelIpCache(): void {
   deviceTunnelIpCache.clear();
+}
+
+function buildUsbmuxRoute(device: DeviceInfo, port: number): RunnerCommandRoute {
+  return {
+    kind: 'usbmux',
+    endpoints: [`usbmux://${device.id}:${port}/command`],
+    cachedTunnelIp: false,
+  };
 }
 
 function buildNetworkRoute(

@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { dispatchCommand } from '../dispatch.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   ANDROID_EMULATOR,
   IOS_DEVICE,
@@ -94,7 +94,7 @@ test('trigger-app-event opens deep link with encoded event payload', async () =>
 
     const args = (await fs.readFile(argsLogPath, 'utf8')).trim().split('\n').filter(Boolean);
     assert.equal(args.includes('-d'), true);
-    assert.equal(args.includes(expectedUrl), true);
+    assert.equal(args.includes(`'${expectedUrl}'`), true);
   } finally {
     process.env.PATH = previousPath;
     if (previousArgsFile === undefined) delete process.env.AGENT_DEVICE_TEST_ARGS_FILE;

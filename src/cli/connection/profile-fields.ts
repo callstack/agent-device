@@ -1,8 +1,8 @@
 import type {
   CloudProviderProfileFields,
   RemoteConfigMetroOptions,
-} from '../../contracts/remote-config-fields.ts';
-import type { CliFlags } from '../../contracts/cli-flags.ts';
+} from '@agent-device/contracts/remote';
+import type { CliFlags } from '@agent-device/contracts/command';
 
 /**
  * Hosted-provider device-feature fields (orientation, geolocation, locale, network shape, app

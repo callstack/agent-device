@@ -1,7 +1,4 @@
-import type {
-  InteractionGuarantee,
-  InteractionPathId,
-} from '../../../src/contracts/interaction-guarantees.ts';
+import type { InteractionGuarantee, InteractionPathId } from '@agent-device/contracts/interaction';
 
 /**
  * ADR 0011 Layer 3: the machine-readable claim of which interaction guarantee
@@ -9,7 +6,7 @@ import type {
  * sibling `<path>.coverage.ts` exporting one of these manifests (kept out of
  * the test file so the coverage gate can import it without re-registering the
  * scenarios), and `index.ts` aggregates them statically for the gate test in
- * `src/contracts/__tests__/interaction-contract-coverage.test.ts`.
+ * `src/__tests__/contracts/interaction-contract-coverage.test.ts`.
  *
  * Scenario strings double as the vitest test titles — the test files derive
  * their titles from the manifest (via `scenarioName`/`scenarioNames`), so a

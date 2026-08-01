@@ -1,5 +1,5 @@
-import { AppError, toAppErrorCode } from '../../../../kernel/errors.ts';
-import type { DeviceInfo } from '../../../../kernel/device.ts';
+import { AppError, toAppErrorCode } from '@agent-device/kernel/errors';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
 import type { RunnerCommand } from './runner-contract.ts';
 import { isReadOnlyRunnerCommand } from './runner-command-traits.ts';

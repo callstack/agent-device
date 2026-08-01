@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { GestureSemanticInput } from '../../contracts/gesture-plan-types.ts';
+import type { GestureSemanticInput } from '@agent-device/contracts/interaction';
 import {
   normalizePublicGesture,
   normalizePublicSwipeMotion,
-} from '../../contracts/gesture-normalization.ts';
+} from '@agent-device/contracts/interaction';
 import { requireGestureSupported } from '../capabilities.ts';
-import { AppError } from '../../kernel/errors.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 
 const oneFingerPan: GestureSemanticInput = {
   intent: 'pan',

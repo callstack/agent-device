@@ -32,7 +32,14 @@ function planStepReq(command: string, flags: DaemonRequest['flags'] = {}): Daemo
 
 test('a repair-armed session excludes get/is/find by default but keeps recording wait', () => {
   const store = makeStore();
-  const session = makeIosSession('default', { saveScriptBoundary: 0 });
+  const session = makeIosSession('default', {
+    scriptPublication: {
+      kind: 'repair',
+      status: 'armed',
+      target: { kind: 'default', force: false },
+      boundary: 0,
+    },
+  });
   store.set('default', session);
 
   recordIfSession(store, 'default', req('get'), {});
@@ -50,7 +57,14 @@ test('a repair-armed session excludes get/is/find by default but keeps recording
 // with --record to keep them.
 test('a repair-armed session still records get/is/find dispatched as replay plan steps (authored provenance)', () => {
   const store = makeStore();
-  const session = makeIosSession('default', { saveScriptBoundary: 0 });
+  const session = makeIosSession('default', {
+    scriptPublication: {
+      kind: 'repair',
+      status: 'armed',
+      target: { kind: 'default', force: false },
+      boundary: 0,
+    },
+  });
   store.set('default', session);
 
   recordIfSession(store, 'default', planStepReq('get'), {});
@@ -62,7 +76,14 @@ test('a repair-armed session still records get/is/find dispatched as replay plan
 
 test('--record forces get/is/find through even while repair-armed', () => {
   const store = makeStore();
-  const session = makeIosSession('default', { saveScriptBoundary: 0 });
+  const session = makeIosSession('default', {
+    scriptPublication: {
+      kind: 'repair',
+      status: 'armed',
+      target: { kind: 'default', force: false },
+      boundary: 0,
+    },
+  });
   store.set('default', session);
 
   recordIfSession(store, 'default', req('get', { record: true }), {});
@@ -75,7 +96,7 @@ test('--record forces get/is/find through even while repair-armed', () => {
 test('outside a repair-armed session, get/is/find/wait all record normally', () => {
   const store = makeStore();
   const session = makeIosSession('default');
-  expect(session.saveScriptBoundary).toBeUndefined();
+  expect(session.scriptPublication).toBeUndefined();
   store.set('default', session);
 
   recordIfSession(store, 'default', req('get'), {});

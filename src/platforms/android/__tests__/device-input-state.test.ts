@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { AndroidAdbExecutor } from '../adb-executor.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

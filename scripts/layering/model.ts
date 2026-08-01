@@ -14,6 +14,13 @@ export type ResolvedImportEdge = ImportEdge & {
   toZone: string;
 };
 
+export type LayeringViolation = {
+  rule: string;
+  file: string;
+  line: number;
+  message: string;
+};
+
 export type BackEdgeMap = Record<string, string[]>;
 
 // The ranked target spine. Back-edge detection is defined ONLY between two ranked
@@ -24,19 +31,18 @@ export type BackEdgeMap = Record<string, string[]>;
 // ranked here or listed as unranked — `unclassifiedZones` and `model.test.ts` guard
 // that no zone is silently unclassified.
 const TARGET_DAG_RANK = new Map([
-  ['kernel', 0],
-  ['cloud-webdriver', 1],
   ['contracts', 1],
+  ['maestro', 1],
   ['platforms', 1],
   ['recording', 1],
   ['replay', 1],
+  ['replay-test', 1],
   ['request', 1],
   ['screenshot-diff', 1],
   ['selectors', 1],
   ['snapshot', 1],
   ['utils', 1],
   ['core', 2],
-  ['providers', 2],
   ['cli-schema', 3],
   ['commands', 3],
   ['mcp', 3],
@@ -61,18 +67,24 @@ export function zoneRank(zone: string): number | null {
   return TARGET_DAG_RANK.get(zone) ?? null;
 }
 
-// The one zone deliberately left OUT of the ranked spine. It is NOT unenforced: every file
-// in it is still subject to the global production value-import cycle rejection (R4) and the
-// R1-R3 move rules. It opts out of spine back-edge ranking because `(root)` holds the
-// entrypoints and the composition roots that wire the command surface into the daemon —
-// and R2 forbids `daemon/` from importing `commands/`, so those files must sit outside the
-// spine by construction, composing it from above.
+// Zones deliberately left OUT of the src folder spine. They are NOT unenforced:
+// every file remains under the global value-cycle rule (R4). `(root)` composes
+// the spine from above; extracted package zones are held by R11 package exports
+// and the no-root-back-import rule instead of their former src folder rank.
 //
 // The satellite zones used to be listed here too, on the grounds that ranking them would
 // invent an order the architecture had not committed to. Once `utils` joined the spine and
 // `(root)` was emptied of shared contracts, every one of them turned out to have a
 // consistent rank already — so the order was there, just unasserted.
-export const UNRANKED_ZONES: ReadonlySet<string> = new Set(['(root)']);
+// `kernel`, `provider-webdriver`, `provider-limrun`, and `xml` are not src/ zones: R11 owns their
+// physical seams, and their zone names only appear in workspace-aware graphs.
+export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
+  '(root)',
+  'kernel',
+  'provider-webdriver',
+  'provider-limrun',
+  'xml',
+]);
 
 export type ZoneClassification = 'ranked' | 'unranked' | 'unclassified';
 
@@ -149,6 +161,8 @@ export function parseImports(source: string): ImportEdge[] {
 }
 
 export function topFolder(file: string): string {
+  const packageMatch = /^packages\/([^/]+)\//.exec(file);
+  if (packageMatch) return packageMatch[1]!;
   const match = /^src\/([^/]+)\//.exec(file);
   return match ? match[1]! : '(root)';
 }
@@ -176,7 +190,27 @@ function resolveTargetFile(
   fromFile: string,
   spec: string,
   sourceFiles: ReadonlySet<string>,
+  workspaceExportTargets?: ReadonlyMap<string, string>,
 ): string | null {
+  if (spec.startsWith('@agent-device/')) {
+    // Workspace specifier (#1490 W0). Real runs pass the exports-derived map
+    // (workspaceSpecifierTargets), which is authoritative — it handles '.'
+    // facade exports and any source layout. The positional fallback exists
+    // only for map-less fixtures (the P0-pinned depgraph contract) and cannot
+    // resolve a bare facade specifier by construction.
+    if (workspaceExportTargets) {
+      const target = workspaceExportTargets.get(spec);
+      return target !== undefined && sourceFiles.has(target) ? target : null;
+    }
+    const [name, ...subParts] = spec.slice('@agent-device/'.length).split('/');
+    const sub = subParts.join('/');
+    if (!name || !sub) return null;
+    return (
+      [`packages/${name}/src/${sub}.ts`, `src/${name}/${sub}.ts`].find((candidate) =>
+        sourceFiles.has(candidate),
+      ) ?? null
+    );
+  }
   if (!spec.startsWith('.')) return null;
   const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(fromFile), spec));
   if (!resolved.startsWith('src/')) return null;
@@ -189,12 +223,15 @@ function resolveTargetFile(
   return candidates.find((candidate) => sourceFiles.has(candidate)) ?? null;
 }
 
-export function resolveImportEdges(sources: ReadonlyMap<string, string>): ResolvedImportEdge[] {
+export function resolveImportEdges(
+  sources: ReadonlyMap<string, string>,
+  workspaceExportTargets?: ReadonlyMap<string, string>,
+): ResolvedImportEdge[] {
   const sourceFiles = new Set(sources.keys());
   const edges: ResolvedImportEdge[] = [];
   for (const [file, source] of sources) {
     for (const edge of parseImports(source)) {
-      const target = resolveTargetFile(file, edge.spec, sourceFiles);
+      const target = resolveTargetFile(file, edge.spec, sourceFiles, workspaceExportTargets);
       if (!target) continue;
       edges.push({
         ...edge,
@@ -344,8 +381,6 @@ export function collectBackEdges(edges: readonly ResolvedImportEdge[]): BackEdge
  * self-contained slice. Dynamic edges are excluded deliberately: a dynamic import is a lazy seam,
  * and a loop through one is not a comprehension barrier in the same way.
  *
- * Returned as a single number because that is all R9 ratchets.
- *
  * Floor semantics, which are specified rather than incidental: only files that participate in at
  * least one non-dynamic edge are considered, so an acyclic graph reports 1 (every such file is its
  * own trivial component) and a graph whose only edges are dynamic reports 0 (no file enters the
@@ -357,7 +392,7 @@ export function largestTypeCycleSize(edges: readonly ResolvedImportEdge[]): numb
 }
 
 /** Members of the largest value+type strongly-connected component, sorted. */
-function largestTypeCycleMembers(edges: readonly ResolvedImportEdge[]): string[] {
+export function largestTypeCycleMembers(edges: readonly ResolvedImportEdge[]): string[] {
   const successors = new Map<string, string[]>();
   for (const edge of edges) {
     if (edge.dynamic) continue;

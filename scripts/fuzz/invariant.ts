@@ -8,7 +8,7 @@
 //   3. the case terminates — enforced by the harness watchdog, not by this module, because
 //      synchronous parsers cannot be interrupted from inside their own tick.
 
-import { AppError, normalizeError } from '../../src/kernel/errors.ts';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { FuzzTarget, FuzzTargetName } from './target-types.ts';
 
 export type FuzzFailureKind = 'untyped-throw' | 'empty-hint' | 'hang';

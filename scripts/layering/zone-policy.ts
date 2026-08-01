@@ -43,29 +43,14 @@ export type ZonePolicy = {
 /**
  * The policy table. Order is presentation only — every policy is evaluated against every edge.
  *
- * R1 is two entries rather than one with a special case, because "kernel may import contracts
- * type-only" and "kernel may import nothing else at all" are genuinely two statements. Writing
- * them separately is what makes the single open door visible.
+ * R1 kernel-sink retired 2026-07-30 (#1490 W0): the kernel moved to
+ * packages/kernel, where package resolution and R11 package-boundaries enforce
+ * the sink property physically — a package cannot import root src at all.
  */
 export const ZONE_POLICIES: readonly ZonePolicy[] = [
   {
-    rule: 'R1 kernel-sink',
-    from: ['kernel'],
-    to: ['contracts'],
-    tolerates: ['type-only'],
-    hint: 'The only allowed kernel out-edge is a type-only re-export from contracts/.',
-  },
-  {
-    rule: 'R1 kernel-sink',
-    from: ['kernel'],
-    exceptTo: ['contracts'],
-    hint:
-      'kernel is the sink of the import DAG: everything may depend on it and it may depend on ' +
-      'nothing. The only allowed kernel out-edge is a type-only re-export from contracts/.',
-  },
-  {
     rule: 'R2 commands-floor',
-    from: ['kernel', 'platforms', 'core', 'daemon'],
+    from: ['platforms', 'core', 'daemon'],
     to: ['commands'],
     hint:
       'commands/ is the command surface, above these zones. Depend on shared kernel/contracts ' +

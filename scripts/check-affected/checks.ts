@@ -44,6 +44,15 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
     localRunnable: true,
   },
   {
+    id: 'test-app-typecheck',
+    label: 'Expo test app typecheck',
+    kind: { type: 'script', script: 'test-app:typecheck' },
+    ciJobs: ['Resolve native fingerprint'],
+    // The test app intentionally owns a separate Expo dependency graph. Do
+    // not make every root-checkout validation install it implicitly.
+    localRunnable: false,
+  },
+  {
     id: 'layering',
     label: 'Import-direction layering guard',
     kind: { type: 'script', script: 'check:layering' },
@@ -140,17 +149,6 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
     kind: { type: 'script', script: 'test:smoke:web' },
     ciJobs: ['Web Platform Smoke'],
     localRunnable: false,
-  },
-  {
-    id: 'skillgym',
-    label: 'SkillGym command-planning suite',
-    kind: { type: 'script', script: 'test:skillgym' },
-    // No GitHub workflow runs SkillGym; per the Testing Matrix in
-    // docs/agents/testing.md it is a local-only gate (`pnpm test:skillgym`).
-    // Keep it locally runnable rather than claiming a CI job that does not
-    // exist and silently skipping it.
-    ciJobs: [],
-    localRunnable: true,
   },
   {
     id: 'replay-compat',

@@ -1,9 +1,9 @@
-import { isMacOs } from '../../kernel/device.ts';
+import { isMacOs } from '@agent-device/kernel/device';
 import {
   getUnsupportedMacOsSettingMessage,
   isMacOsSettingSupported,
   SETTINGS_INVALID_ARGS_MESSAGE,
-} from '../../contracts/settings-contract.ts';
+} from '@agent-device/contracts/settings';
 import { dispatchCommand } from '../../core/dispatch.ts';
 import { contextFromFlags } from '../context.ts';
 import { SessionStore } from '../session-store.ts';

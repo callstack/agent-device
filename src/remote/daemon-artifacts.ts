@@ -3,7 +3,7 @@ import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonArtifact, DaemonRequest, DaemonResponse } from '../daemon/types.ts';
 import {
   buildDaemonHttpAuthHeaders,

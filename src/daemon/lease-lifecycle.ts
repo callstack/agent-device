@@ -2,7 +2,7 @@ import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { leaseScopeToReleaseRequest } from '../core/lease-scope.ts';
 import { clearAdvisoryDeviceClaim } from './device-claims.ts';
 import type { LeaseRegistry } from './lease-registry.ts';
-import type { DeviceLease, LeaseLifecycleProvider } from '../contracts/device-provider.ts';
+import type { DeviceLease, LeaseLifecycleProvider } from '@agent-device/contracts/device';
 import { buildSessionLeaseFromRequest, type SessionLease } from './lease-context.ts';
 import {
   assertRequestLeaseAdmission,

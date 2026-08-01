@@ -1,6 +1,6 @@
 import type { AgentDeviceBackend } from './backend.ts';
 import type { ArtifactAdapter } from './io.ts';
-import type { SnapshotState } from './kernel/snapshot.ts';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
 
 export type CommandPolicy = {
   allowLocalInputPaths: boolean;

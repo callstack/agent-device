@@ -7,7 +7,7 @@ import {
   appendSnapshotActionScriptArgs,
 } from './script-utils.ts';
 import { formatTargetAnnotationCommentLine } from './target-identity.ts';
-import type { SessionAction } from '../contracts/session-action.ts';
+import type { SessionAction } from '@agent-device/contracts/session';
 
 export function formatPortableActionLine(
   action: SessionAction,

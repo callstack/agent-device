@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs, { promises as fsPromises } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import type { AndroidAdbExecutor } from '../adb-executor.ts';
 import { parseAndroidFramePerfSample } from '../perf-frame-parser.ts';
 import {
@@ -408,6 +408,7 @@ test('stopAndroidSimpleperfProfile pulls the profile artifact and reports compac
 });
 
 test('stopAndroidSimpleperfProfile fails before pull when remote artifact never stabilizes', async () => {
+  vi.useFakeTimers();
   const tmpDir = await fsPromises.mkdtemp(
     path.join(os.tmpdir(), 'agent-device-simpleperf-missing-test-'),
   );
@@ -434,14 +435,18 @@ test('stopAndroidSimpleperfProfile fails before pull when remote artifact never 
     throw new Error(`Unexpected adb call: ${args.join(' ')}`);
   };
 
-  await assert.rejects(
-    stopAndroidSimpleperfProfile(ANDROID_EMULATOR, session, session.outPath, { adb }),
-    /artifact is not ready/,
-  );
-  assert.equal(
-    calls.some((args) => args[0] === 'pull'),
-    false,
-  );
+  try {
+    const stop = stopAndroidSimpleperfProfile(ANDROID_EMULATOR, session, session.outPath, { adb });
+    const rejection = assert.rejects(stop, /artifact is not ready/);
+    await vi.advanceTimersByTimeAsync(6_000);
+    await rejection;
+    assert.equal(
+      calls.some((args) => args[0] === 'pull'),
+      false,
+    );
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('cleanupAndroidNativePerfSession stops profiler and removes remote artifact without pulling', async () => {

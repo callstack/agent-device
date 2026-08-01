@@ -1,6 +1,6 @@
-import { ALERT_ACTIONS, type AlertAction } from '../../contracts/alert-contract.ts';
+import { ALERT_ACTIONS, type AlertAction } from '@agent-device/contracts/interaction';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { AlertCommandOptions } from '../../contracts/client-system.ts';
+import type { AlertCommandOptions } from '@agent-device/contracts/client';
 import { compactRecord, enumField, integerField } from '../command-input.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import {
@@ -13,7 +13,7 @@ import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { messageOutput } from '../output-common.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 const ALERT_COMMAND_NAME = 'alert';
 

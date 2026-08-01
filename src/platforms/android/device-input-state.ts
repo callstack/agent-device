@@ -1,6 +1,6 @@
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
-import { AppError } from '../../kernel/errors.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { isClipboardShellUnsupported, sleep } from './adb.ts';
 import {
   androidAdbResultError,
@@ -13,7 +13,7 @@ import {
   isFallbackAndroidInputMethodResource,
   readAndroidActiveInputMethodPackage,
   type AndroidInputOwner,
-} from '../../contracts/android-input-ownership.ts';
+} from '@agent-device/contracts/platform';
 
 const ANDROID_INPUT_TYPE_CLASS_MASK = 0x0000000f;
 const ANDROID_INPUT_TYPE_CLASS_TEXT = 0x00000001;

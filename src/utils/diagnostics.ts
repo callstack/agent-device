@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { redactDiagnosticData } from '../kernel/redaction.ts';
+import { redactDiagnosticData } from '@agent-device/kernel/redaction';
 
 type DiagnosticLevel = 'info' | 'warn' | 'error' | 'debug';
 
@@ -133,17 +133,17 @@ export function emitDiagnostic(event: {
   };
   scope.events.push(payload);
   scope.phaseCounts.set(event.phase, (scope.phaseCounts.get(event.phase) ?? 0) + 1);
-  if (!scope.debug) return;
+  if (!scope.debug && !scope.traceLogPath) return;
   const fileLine = `${JSON.stringify(payload)}\n`;
   try {
-    if (scope.logPath) {
+    if (scope.debug && scope.logPath) {
       appendDiagnosticLine(scope.logPath, fileLine);
       scope.liveWrittenEventCount = scope.events.length;
     }
     if (scope.traceLogPath) {
       appendDiagnosticLine(scope.traceLogPath, fileLine);
     }
-    if (!scope.logPath && !scope.traceLogPath) {
+    if (scope.debug && !scope.logPath && !scope.traceLogPath) {
       process.stderr.write(`[agent-device][diag] ${fileLine}`);
     }
   } catch {

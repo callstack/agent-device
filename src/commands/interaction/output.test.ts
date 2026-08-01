@@ -81,6 +81,23 @@ describe('press CLI output', () => {
     );
   });
 
+  test('prints the response warning after the tap line', () => {
+    const output = formatPress({
+      message: 'Tapped (278, 817)',
+      x: 278,
+      y: 817,
+      warning:
+        'press id="request-mic" opened an Android permission dialog (com.google.android.permissioncontroller) over com.example.app. Use "alert get" to inspect it, then "alert accept" or "alert dismiss" to respond.',
+    });
+
+    expect(output.text).toBe(
+      [
+        'Tapped (278, 817)',
+        'Warning: press id="request-mic" opened an Android permission dialog (com.google.android.permissioncontroller) over com.example.app. Use "alert get" to inspect it, then "alert accept" or "alert dismiss" to respond.',
+      ].join('\n'),
+    );
+  });
+
   test('appends the unchanged interactive tail after a removals-only diff', () => {
     const output = formatPress({
       message: 'Tapped @e4 (100, 200)',

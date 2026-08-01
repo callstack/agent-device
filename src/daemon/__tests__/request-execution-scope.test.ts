@@ -2,7 +2,11 @@ import { afterAll, test, expect } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../utils/diagnostics.ts';
+import {
+  emitDiagnostic,
+  flushDiagnosticsToSessionFile,
+  withDiagnosticsScope,
+} from '../../utils/diagnostics.ts';
 import {
   makeAndroidSession,
   makeIosSession,
@@ -235,6 +239,90 @@ test('leased session heartbeat is serialized with the request execution lock', a
   await firstRun;
   await expect(secondRun).resolves.toBe('second');
   expect(leaseRegistry.listActiveLeases()[0]?.heartbeatAt).toBe(3_000);
+});
+
+test('a later external command cannot interleave with replay observation finalization', async () => {
+  const sessionStore = makeSessionStore('agent-device-request-scope-');
+  sessionStore.set('default', makeIosSession('default'));
+  const leaseRegistry = new LeaseRegistry();
+  const replay = await createRequestExecutionScope({
+    req: makeRequest({ command: 'replay' }),
+    sessionStore,
+    leaseRegistry,
+  });
+  const laterSnapshot = await createRequestExecutionScope({
+    req: makeRequest({ command: 'snapshot' }),
+    sessionStore,
+    leaseRegistry,
+  });
+
+  let finishReplay: () => void = () => {};
+  let replayEntered: () => void = () => {};
+  const replayEnteredPromise = new Promise<void>((resolve) => {
+    replayEntered = resolve;
+  });
+  const replayRun = replay.runLocked(
+    async () =>
+      await new Promise<void>((resolve) => {
+        finishReplay = resolve;
+        replayEntered();
+      }),
+  );
+  await replayEnteredPromise;
+
+  let laterCommandEntered = false;
+  const laterRun = laterSnapshot.runLocked(async () => {
+    laterCommandEntered = true;
+  });
+  await Promise.resolve();
+  expect(laterCommandEntered).toBe(false);
+
+  finishReplay();
+  await replayRun;
+  await laterRun;
+  expect(laterCommandEntered).toBe(true);
+});
+
+test('a fresh replay keeps its session lock after a nested open binds the device', async () => {
+  const sessionStore = makeSessionStore('agent-device-request-scope-');
+  const leaseRegistry = new LeaseRegistry();
+  const replay = await createRequestExecutionScope({
+    req: makeRequest({ command: 'replay' }),
+    sessionStore,
+    leaseRegistry,
+  });
+
+  let finishReplay: () => void = () => {};
+  let sessionOpened: () => void = () => {};
+  const sessionOpenedPromise = new Promise<void>((resolve) => {
+    sessionOpened = resolve;
+  });
+  const replayRun = replay.runLocked(
+    async () =>
+      await new Promise<void>((resolve) => {
+        sessionStore.set('default', makeIosSession('default'));
+        finishReplay = resolve;
+        sessionOpened();
+      }),
+  );
+  await sessionOpenedPromise;
+
+  const laterSnapshot = await createRequestExecutionScope({
+    req: makeRequest({ command: 'snapshot' }),
+    sessionStore,
+    leaseRegistry,
+  });
+  let laterCommandEntered = false;
+  const laterRun = laterSnapshot.runLocked(async () => {
+    laterCommandEntered = true;
+  });
+  await Promise.resolve();
+  expect(laterCommandEntered).toBe(false);
+
+  finishReplay();
+  await replayRun;
+  await laterRun;
+  expect(laterCommandEntered).toBe(true);
 });
 
 test('leased session rejects mismatched lease id before dispatch', async () => {
@@ -568,6 +656,34 @@ test('prepareLockedRequestScope passes the session runner log path into handler 
     expect(result.scope.logPath).toBe(scope.runnerLogPath);
     expect(result.scope.contextFromFlags(undefined).logPath).toBe(scope.runnerLogPath);
   }
+});
+
+test('prepareLockedRequestScope streams ordinary diagnostics into the active trace', async () => {
+  const sessionStore = makeSessionStore('agent-device-request-scope-');
+  const tracePath = path.join(TEST_ROOT, 'active-session.trace');
+  sessionStore.set(
+    'default',
+    makeIosSession('default', {
+      trace: { outPath: tracePath, startedAt: Date.now() },
+    }),
+  );
+  const scope = await createRequestExecutionScope({
+    req: makeRequest({ command: 'snapshot' }),
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+  });
+
+  await withDiagnosticsScope({ command: 'snapshot', logPath: LOG_PATH }, async () => {
+    const result = prepareLockedRequestScope({
+      scope,
+      sessionStore,
+      trackDownloadableArtifact: () => 'artifact-id',
+    });
+    expect(result.type).toBe('scope');
+    emitDiagnostic({ phase: 'trace_regression_canary' });
+  });
+
+  expect(fs.readFileSync(tracePath, 'utf8')).toContain('"phase":"trace_regression_canary"');
 });
 
 test('runLocked rejects a canceled request before executing work', async () => {

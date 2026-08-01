@@ -1,19 +1,19 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { isIosFamily, isMacOs, type DeviceInfo } from '../../../kernel/device.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../../../utils/diagnostics.ts';
 import { execFailureDetails } from '../../../utils/exec.ts';
 import {
   LAUNCH_CONSOLE_DIRECT_APP_ONLY_MESSAGE,
   LAUNCH_CONSOLE_IOS_SIMULATOR_ONLY_MESSAGE,
-} from '../../../contracts/launch-console.ts';
+} from '@agent-device/contracts/observability';
 import { Deadline, retryWithPolicy } from '../../../utils/retry.ts';
 import {
   isDeepLinkTarget,
   isWebUrl,
   resolveIosDeviceDeepLinkBundleId,
-} from '../../../contracts/open-target.ts';
+} from '@agent-device/contracts/command';
 import { IOS_APP_LAUNCH_TIMEOUT_MS, IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from './config.ts';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 import { runAppleRunnerCommand } from './runner/runner-client.ts';
@@ -71,11 +71,17 @@ export async function openIosApp(
       throw new AppError('INVALID_ARGS', 'open <app> <url> requires a valid URL target');
     }
     if (device.kind === 'simulator') {
-      if (launchArgs || isWebUrl(explicitUrl)) {
+      const shouldLaunchAppBeforeUrl = Boolean(launchArgs) || isWebUrl(explicitUrl);
+      if (options?.terminateRunningApp || shouldLaunchAppBeforeUrl) {
         const bundleId = options?.appBundleId ?? (await resolveIosApp(device, app));
-        await launchIosSimulatorApp(device, bundleId, {
-          ...(launchArgs ? { launchArgs } : {}),
-        });
+        if (shouldLaunchAppBeforeUrl) {
+          await launchIosSimulatorApp(device, bundleId, {
+            ...(launchArgs ? { launchArgs } : {}),
+            ...(options?.terminateRunningApp ? { terminateRunningApp: true } : {}),
+          });
+        } else {
+          await terminateIosSimulatorApp(device, bundleId);
+        }
       }
       await openIosSimulatorUrl(device, explicitUrl, undefined);
       return;
@@ -170,21 +176,7 @@ export async function closeIosApp(
   }
   const bundleId = await resolveIosApp(device, app);
   if (device.kind === 'simulator') {
-    await ensureBootedSimulator(device);
-    const terminateArgs = simctlArgs(device, ['terminate', device.id, bundleId]);
-    const result = await runXcrun(terminateArgs, {
-      allowFailure: true,
-      timeoutMs: IOS_SIMULATOR_TERMINATE_TIMEOUT_MS,
-    });
-    if (result.exitCode !== 0) {
-      const stderr = result.stderr.toLowerCase();
-      if (stderr.includes('found nothing to terminate')) return;
-      throw new AppError(
-        'COMMAND_FAILED',
-        `xcrun exited with code ${result.exitCode}`,
-        execFailureDetails(result, { cmd: 'xcrun', args: terminateArgs }),
-      );
-    }
+    await terminateIosSimulatorApp(device, bundleId);
     return;
   }
 
@@ -192,6 +184,23 @@ export async function closeIosApp(
     runnerOptions,
     runRunnerCommand: runAppleRunnerCommand,
   });
+}
+
+async function terminateIosSimulatorApp(device: DeviceInfo, bundleId: string): Promise<void> {
+  await ensureBootedSimulator(device);
+  const terminateArgs = simctlArgs(device, ['terminate', device.id, bundleId]);
+  const result = await runXcrun(terminateArgs, {
+    allowFailure: true,
+    timeoutMs: IOS_SIMULATOR_TERMINATE_TIMEOUT_MS,
+  });
+  if (result.exitCode === 0) return;
+  const stderr = result.stderr.toLowerCase();
+  if (stderr.includes('found nothing to terminate')) return;
+  throw new AppError(
+    'COMMAND_FAILED',
+    `xcrun exited with code ${result.exitCode}`,
+    execFailureDetails(result, { cmd: 'xcrun', args: terminateArgs }),
+  );
 }
 
 async function launchIosSimulatorApp(

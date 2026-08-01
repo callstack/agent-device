@@ -1,12 +1,12 @@
 import path from 'node:path';
 import { replayTestStepLines } from './trace.ts';
-import type { ReplaySuiteTestResult } from '../../contracts/replay.ts';
+import type { ReplaySuiteTestResult } from '@agent-device/contracts/replay';
 import type {
   ReplayTestReporterProgressEvent,
   ReplayTestResult,
   ReplayTestStep,
 } from './reporters/types.ts';
-import { formatCliStatusMarker } from '../../contracts/cli-status-markers.ts';
+import { formatCliStatusMarker } from '../../utils/status-markers.ts';
 import { formatDurationSeconds } from '../../utils/duration-format.ts';
 import { colorize, supportsColor } from '../../utils/output.ts';
 

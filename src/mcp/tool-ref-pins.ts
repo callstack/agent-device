@@ -1,4 +1,4 @@
-import type { SnapshotNode } from '../kernel/snapshot.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { CommandName } from '../commands/command-metadata.ts';
 import type { CommandExecutionResult } from '../commands/command-surface.ts';
 import { asOptionalRecord } from '../utils/parsing.ts';

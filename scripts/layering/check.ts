@@ -1,15 +1,17 @@
 // Import-direction lint — enforces the folder DAG established by the Phase-5
 // folder moves (see CONTEXT.md, "Architecture: folder DAG + layering lint").
 //
-// Ranked target spine, as rank groups lowest (kernel sink) to highest. `A ◄ B` means B may not
+// Ranked target spine, as rank groups lowest to highest. `A ◄ B` means B may not
 // be outranked by A (the back-edge order the gate rejects), NOT that every displayed import exists:
-//   kernel ◄ { contracts, request, selectors, platforms } ◄ core ◄ { commands, cli-schema }
+//   { contracts, request, selectors, platforms } ◄ core ◄ { commands, cli-schema }
 //         ◄ { client, daemon-server } ◄ daemon-client ◄ cli
-// (authoritative ranks: `TARGET_DAG_RANK` in model.ts)
+// (authoritative ranks: `TARGET_DAG_RANK` in model.ts. The former rank-0 kernel
+// zone lives in packages/kernel since #1490 W0; R11 owns its boundary.)
 //
 // This gate enforces five things, across four scopes:
-//   - GLOBALLY, across every production source file: the R1-R3 move rules and
-//     rejection of all production static value-import cycles (R4).
+//   - GLOBALLY, across every production source file: the R2-R3 move rules and
+//     rejection of all production static value-import cycles (R4). R1 kernel-sink
+//     retired with the kernel's move to packages/kernel (#1490 W0).
 //   - Over the RANKED SPINE only: rejection of every spine back-edge (R5), i.e.
 //     an import whose source zone outranks its target zone, plus a ratchet on the
 //     same inversion measured over TYPE-ONLY edges (R6).
@@ -21,10 +23,14 @@
 //   - Over the TYPE GRAPH: the largest type-level import cycle may not grow (R9). R4
 //     keeps the value graph acyclic, so these cycles are free at runtime but bound
 //     what can be read in isolation. Growth-only, deliberately loose.
-// Only `(root)` is unranked (see `UNRANKED_ZONES` in model.ts): it holds the
-// entrypoints and the composition roots that wire the command surface into the
-// daemon, which R2 forbids the daemon from importing, so they sit outside the
-// spine by construction. Every other zone is ranked.
+//   - Across the DAEMON MODULARITY MIGRATION: R7 ownership pressure and external
+//     daemon/types.ts importers only shrink, R9 zone membership cannot grow or absorb
+//     engine files, and planned logical modules start with zero forbidden/internal imports (R10).
+//   - Over the WORKSPACE PACKAGES: no root back-imports, no relative tunnelling past
+//     an exports map, and every workspace specifier declared + exports-named (R11).
+// Only `(root)` is unranked among src/ zones (see `UNRANKED_ZONES` in model.ts):
+// it holds entrypoints and composition roots. Extracted workspace package zones
+// are classified separately and held behind R11 instead of the src folder spine.
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -34,27 +40,32 @@ import {
   fieldClassificationDrift,
   findSessionStateWrites,
   sessionStateFields,
+  sessionStateFieldCount,
   SESSION_STATE_FIELD_OWNERS,
   STORE_OWNED_SESSION_STATE_FIELDS,
 } from './session-state.ts';
-import { uninstallableImports, zeroDepJobs } from './zero-dep-jobs.ts';
+import { uninstallableImports, zeroDepClosureFiles, zeroDepJobs } from './zero-dep-jobs.ts';
 import {
   backEdgePair,
   findValueImportCycles,
-  largestTypeCycleSize,
+  largestTypeCycleMembers,
   resolveImportEdges,
   topFolder,
   typeInversionPair,
+  type LayeringViolation,
   type ResolvedImportEdge,
 } from './model.ts';
+import {
+  checkDaemonModularityRatchets,
+  daemonModularitySummary,
+  TYPE_CYCLE_BASELINE,
+} from './daemon-modularity.ts';
+import {
+  checkPackageBoundaries,
+  packageBoundariesSummary,
+  workspaceSpecifierTargets,
+} from './package-boundaries.ts';
 import { policyLead, policyViolation, ZONE_POLICIES } from './zone-policy.ts';
-
-type Violation = {
-  rule: string;
-  file: string;
-  line: number;
-  message: string;
-};
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
@@ -64,10 +75,17 @@ export function listSourceFiles(): string[] {
   // `src/**/*.ts` only matches nested files; root-level `src/*.ts` (e.g.
   // src/cli.ts, src/command-catalog.ts) needs its own pathspec or it silently
   // drops out of cycle/back-edge analysis.
-  const out = execFileSync('git', ['ls-files', 'src/*.ts', 'src/**/*.ts'], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-  });
+  // Workspace package sources are production files too (#1490 W0): R4 cycle
+  // rejection and the zone staleness guard must see them, and workspace
+  // specifiers resolve across the seam in resolveTargetFile.
+  const out = execFileSync(
+    'git',
+    ['ls-files', 'src/*.ts', 'src/**/*.ts', 'packages/*/src/*.ts', 'packages/*/src/**/*.ts'],
+    {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    },
+  );
   return out.split('\n').filter(Boolean).filter(isProductionSourceFile);
 }
 
@@ -91,8 +109,8 @@ function isProductionSourceFile(file: string): boolean {
 
 // R1-R3 are declared as a policy table in zone-policy.ts. This walks it; the boundaries
 // themselves are data, so adding one is a table entry rather than a fourth predicate.
-function checkLayeringRules(edges: readonly ResolvedImportEdge[]): Violation[] {
-  const violations: Violation[] = [];
+function checkLayeringRules(edges: readonly ResolvedImportEdge[]): LayeringViolation[] {
+  const violations: LayeringViolation[] = [];
   for (const edge of edges) {
     const fromZone = topFolder(edge.file);
     const toZone = topFolder(edge.target);
@@ -112,7 +130,7 @@ function checkLayeringRules(edges: readonly ResolvedImportEdge[]): Violation[] {
   return violations;
 }
 
-function checkCycles(edges: readonly ResolvedImportEdge[]): Violation[] {
+function checkCycles(edges: readonly ResolvedImportEdge[]): LayeringViolation[] {
   return findValueImportCycles(edges).map((cycle) => ({
     rule: 'R4 value-import-cycle',
     file: cycle[0]!,
@@ -121,7 +139,7 @@ function checkCycles(edges: readonly ResolvedImportEdge[]): Violation[] {
   }));
 }
 
-function checkBackEdges(edges: readonly ResolvedImportEdge[]): Violation[] {
+function checkBackEdges(edges: readonly ResolvedImportEdge[]): LayeringViolation[] {
   const seen = new Set<string>();
   return edges.flatMap((edge) => {
     const pair = backEdgePair(edge);
@@ -181,7 +199,7 @@ export const TYPE_INVERSION_BASELINE: Readonly<Record<string, number>> = {
   'mcp -> client': 1,
 };
 
-function checkTypeInversions(edges: readonly ResolvedImportEdge[]): Violation[] {
+function checkTypeInversions(edges: readonly ResolvedImportEdge[]): LayeringViolation[] {
   const seen = new Set<string>();
   const countsByPair = new Map<string, number>();
   const firstEdgeByPair = new Map<string, ResolvedImportEdge>();
@@ -195,7 +213,7 @@ function checkTypeInversions(edges: readonly ResolvedImportEdge[]): Violation[] 
     if (!firstEdgeByPair.has(pair)) firstEdgeByPair.set(pair, edge);
   }
 
-  const violations: Violation[] = [];
+  const violations: LayeringViolation[] = [];
   for (const [pair, count] of [...countsByPair].sort(([left], [right]) =>
     left.localeCompare(right),
   )) {
@@ -241,45 +259,7 @@ function checkTypeInversions(edges: readonly ResolvedImportEdge[]): Violation[] 
   return violations;
 }
 
-// R9: the largest type-level import cycle, ratcheted for GROWTH ONLY.
-//
-// R4 keeps the value graph acyclic, so every cycle counted here is created by type-only imports.
-// That is free at runtime and invisible to R5/R6, but it bounds what can be read in isolation:
-// inside a strongly-connected component of 102 files, no file has a self-contained slice — reading
-// any one of them means reaching every other one's declarations. It is the largest single obstacle
-// to understanding a subsystem on its own, and nothing else in this gate measures it.
-//
-// Deliberately loose. Unlike R6 this does NOT fail when the number drops, because the number is
-// large and reducing it is a real refactor rather than a file move — a hard equality would turn
-// every unrelated improvement into a baseline edit. It fails only on growth, and reports the slack
-// when the tree has improved so the baseline can be lowered when someone is in here anyway.
-//
-// Hubs at the time of writing, by in-component dependents: runtime-contract.ts (25),
-// commands/runtime-types.ts (21), backend.ts (15), commands/runtime-common.ts (12). A pass at this
-// starts there. See docs/dependency-graph-findings.md.
-// Set to what THIS branch achieves, not to what main carries: main is at 107, and the boundary
-// moves here bring it to 102. Measured on the rebased tree — an earlier 87 was taken against an
-// older main and was stale rather than violated, which is exactly the kind of drift a ratchet
-// measured at merge time prevents.
-const TYPE_CYCLE_BASELINE = 102;
-
-function checkTypeCycleGrowth(actual: number): Violation[] {
-  if (actual <= TYPE_CYCLE_BASELINE) return [];
-  return [
-    {
-      rule: 'R9 type-cycle-growth',
-      file: 'scripts/layering/check.ts',
-      line: 1,
-      message:
-        `the largest type-level import cycle grew to ${actual} files (baseline ` +
-        `${TYPE_CYCLE_BASELINE}). A type-only import that closes a loop makes every file in the ` +
-        `loop unreadable in isolation. Declare the shared type below both modules, or if the growth ` +
-        `is genuinely warranted, raise TYPE_CYCLE_BASELINE in the same commit and say why.`,
-    },
-  ];
-}
-
-function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Violation[] {
+function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): LayeringViolation[] {
   const types = sources.get('src/daemon/types.ts');
   if (!types) {
     return [
@@ -294,7 +274,7 @@ function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Viola
 
   const fields = sessionStateFields(types);
   const writes = findSessionStateWrites(sources, fields);
-  const violations: Violation[] = [];
+  const violations: LayeringViolation[] = [];
   const seenOwners = new Map<string, Set<string>>();
 
   // Parity first: the rule is only exhaustive if every declared field is classified. A field
@@ -389,7 +369,7 @@ function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Viola
 // R8: a CI job that runs with `install-deps: false` has no `node_modules`, so every script it
 // reaches must import only Node builtins and other repo files. Locally the opposite is true —
 // `node_modules` is always present — which is why this needs a gate rather than a convention.
-function checkZeroDepJobs(): Violation[] {
+function repoZeroDepJobs() {
   const workflows = readSources(
     execFileSync('git', ['ls-files', '.github/workflows/*.yml'], {
       cwd: repoRoot,
@@ -398,9 +378,16 @@ function checkZeroDepJobs(): Violation[] {
       .split('\n')
       .filter(Boolean),
   );
+  const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as {
+    scripts?: Record<string, string>;
+  };
+  const packageScripts = new Map(Object.entries(packageJson.scripts ?? {}));
+  return zeroDepJobs(workflows, fileExists, packageScripts);
+}
 
-  const violations: Violation[] = [];
-  for (const job of zeroDepJobs(workflows, fileExists)) {
+function checkZeroDepJobs(): LayeringViolation[] {
+  const violations: LayeringViolation[] = [];
+  for (const job of repoZeroDepJobs()) {
     // Fail closed: a zero-dep job whose commands the entry scan cannot recognize would
     // otherwise be silently exempt from the rule it is the whole reason for.
     if (job.entries.length === 0) {
@@ -430,38 +417,36 @@ function checkZeroDepJobs(): Violation[] {
   return violations;
 }
 
-function sessionStateFieldCount(): number {
-  return Object.keys(SESSION_STATE_FIELD_OWNERS).length + STORE_OWNED_SESSION_STATE_FIELDS.size;
-}
-
-/** R9 is growth-only, so a shrunk tree is reported rather than failed — see checkTypeCycleGrowth. */
+/** R9 is growth-only, so a shrunk tree is reported rather than failed by the ratchet. */
 function typeCycleNote(actual: number): string {
-  if (actual >= TYPE_CYCLE_BASELINE) return `the largest type-level cycle is ${actual} files (R9)`;
+  if (actual >= TYPE_CYCLE_BASELINE) {
+    return `the largest type-level cycle is ${actual} files (R9)`;
+  }
   return (
     `the largest type-level cycle is down to ${actual} files, under the R9 baseline of ` +
-    `${TYPE_CYCLE_BASELINE} — lower TYPE_CYCLE_BASELINE when convenient`
+    `${TYPE_CYCLE_BASELINE} — lower the daemon modularity zone ceilings when convenient`
   );
 }
 
 function report(
   files: readonly string[],
-  violations: readonly Violation[],
+  violations: readonly LayeringViolation[],
   typeCycle: number,
 ): number {
   if (violations.length === 0) {
     process.stdout.write(
-      `Layering guard: OK — ${files.length} source files satisfy R1-R3 and contain no ` +
+      `Layering guard: OK — ${files.length} source files satisfy R2-R3 and contain no ` +
         `value-import cycles (both checked globally); the ranked target spine contains no ` +
-        `back-edges (only the composition root is unranked), and its type-only ` +
+        `back-edges (only the composition root is unranked among src zones), and its type-only ` +
         `inversions match the R6 ratchet (${Object.values(TYPE_INVERSION_BASELINE).reduce((sum, count) => sum + count, 0)} remaining); ` +
         `all ${sessionStateFieldCount()} SessionState fields are classified and every write is ` +
         `inside its declared owner (R7); every zero-dep CI job resolves without ` +
-        `node_modules (R8); and ${typeCycleNote(typeCycle)}.\n`,
+        `node_modules (R8); ${typeCycleNote(typeCycle)}; ${daemonModularitySummary()}; and ${packageBoundariesSummary(repoRoot)}.\n`,
     );
     return 0;
   }
 
-  const byRule = new Map<string, Violation[]>();
+  const byRule = new Map<string, LayeringViolation[]>();
   for (const violation of violations) {
     const group = byRule.get(violation.rule) ?? [];
     group.push(violation);
@@ -485,17 +470,22 @@ function report(
 export function main(): number {
   const sourceFiles = listSourceFiles();
   const sources = readSources(sourceFiles);
-  const edges = resolveImportEdges(sources);
+  const edges = resolveImportEdges(sources, workspaceSpecifierTargets(repoRoot));
   // Computed once and threaded: the rule and the success line must report the same number.
-  const typeCycle = largestTypeCycleSize(edges);
+  const typeCycleMembers = largestTypeCycleMembers(edges);
+  const typeCycle = typeCycleMembers.length;
   const violations = [
     ...checkLayeringRules(edges),
     ...checkCycles(edges),
     ...checkBackEdges(edges),
     ...checkTypeInversions(edges),
     ...checkSessionStateOwnership(sources),
-    ...checkTypeCycleGrowth(typeCycle),
+    ...checkDaemonModularityRatchets(edges, typeCycleMembers),
     ...checkZeroDepJobs(),
+    ...checkPackageBoundaries(
+      repoRoot,
+      zeroDepClosureFiles(repoZeroDepJobs(), readSourceOrNull, fileExists),
+    ),
   ];
   return report(sourceFiles, violations, typeCycle);
 }

@@ -1,8 +1,8 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { DeviceInventoryRequest } from '../../contracts/device-inventory.ts';
-import type { Interactor, RunnerContext } from '../../contracts/interactor-types.ts';
-import type { PlatformPlugin } from '../../contracts/platform-plugin.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
+import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
+import type { PlatformPlugin } from '@agent-device/contracts/platform';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 
 const VEGA_VVD_ONLY_COMMANDS = [
   PUBLIC_COMMANDS.open,

@@ -3,11 +3,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import { LimrunRuntime } from '../providers/limrun/runtime.ts';
+import { LimrunRuntime } from '../sdk/limrun.ts';
 import { createExpiredProviderLeaseReleaser } from '../daemon/provider-lease-expiry.ts';
 import type { SimulatorLease } from '../daemon/lease-registry.ts';
-import type { DeviceInfo } from '../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { runCmd } from '../utils/exec.ts';
+import { readVersion } from '../utils/version.ts';
 
 type LimrunInstancePage = {
   getPaginatedItems: () => Array<{ metadata: { id: string } }>;
@@ -28,6 +29,10 @@ const limrunMockState = vi.hoisted(() => {
     iosLaunchApp: vi.fn(async () => undefined),
     iosOpenUrl: vi.fn(async () => undefined),
     iosSetOrientation: vi.fn(async () => undefined),
+    iosListApps: vi.fn(async () => [
+      { bundleId: 'com.apple.Preferences', name: 'Settings', installType: 'System' },
+      { bundleId: 'com.example.ios', name: 'Example', installType: 'User' },
+    ]),
     androidOpenUrl: vi.fn(async () => undefined),
     androidDisconnect: vi.fn(),
     androidSendAsset: vi.fn(async () => undefined),
@@ -90,6 +95,13 @@ vi.mock('@limrun/api/ios-client', () => ({
     launchApp: limrunMockState.iosLaunchApp,
     openUrl: limrunMockState.iosOpenUrl,
     setOrientation: limrunMockState.iosSetOrientation,
+    listApps: limrunMockState.iosListApps,
+    deviceInfo: {
+      udid: 'ios-device',
+      screenWidth: 402,
+      screenHeight: 874,
+      model: 'iPhone',
+    },
   })),
 }));
 
@@ -118,7 +130,6 @@ afterEach(() => {
 test('Limrun runtime identifies direct CLI usage to the Limrun API', async () => {
   const runtime = new LimrunRuntime({
     apiKey: 'lim_test_key',
-    version: '9.9.9-test',
   });
 
   const lease: SimulatorLease = {
@@ -135,11 +146,16 @@ test('Limrun runtime identifies direct CLI usage to the Limrun API', async () =>
   try {
     const allocateLease = runtime.leaseLifecycle.allocate;
     if (!allocateLease) throw new Error('Limrun runtime must provide lease allocation');
-    await allocateLease(lease);
+    const allocation = await allocateLease(lease);
+    const device = allocation?.device as DeviceInfo | undefined;
+    if (!device) throw new Error('Limrun runtime must expose its allocated device');
+    const deviceSession = runtime.getDeviceSession(device);
+    assert.equal(deviceSession?.platform, 'ios');
+    assert.equal(deviceSession ? 'client' in deviceSession : true, false);
 
     assert.deepEqual(limrunMockState.constructorOptions[0]?.defaultHeaders, {
       'x-agent-device-client': 'agent-device-cli',
-      'x-agent-device-version': '9.9.9-test',
+      'x-agent-device-version': readVersion(),
     });
     const iosCreateCalls = limrunMockState.iosCreate.mock.calls as unknown as Array<
       [{ metadata?: { labels?: Record<string, string> } }]
@@ -157,7 +173,7 @@ test('Limrun runtime identifies direct CLI usage to the Limrun API', async () =>
 });
 
 test('Limrun iOS uses shared deep-link classification', async () => {
-  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key', version: '9.9.9-test' });
+  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key' });
 
   try {
     const device = await allocateLimrunDevice(runtime, {
@@ -179,7 +195,7 @@ test('Limrun iOS uses shared deep-link classification', async () => {
 });
 
 test('Limrun reclaims a labeled iOS instance without an in-memory session', async () => {
-  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key', version: '9.9.9-test' });
+  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key' });
   const lease: SimulatorLease = {
     leaseId: 'lease-recovered-ios',
     tenantId: 'team-a',
@@ -220,7 +236,7 @@ test('Limrun recovers a failed expired lease release after a daemon restart', as
     heartbeatAt: 1,
     expiresAt: 60_001,
   };
-  const firstRuntime = new LimrunRuntime({ apiKey: 'lim_test_key', version: '9.9.9-test' });
+  const firstRuntime = new LimrunRuntime({ apiKey: 'lim_test_key' });
   const firstReleaser = createExpiredProviderLeaseReleaser({
     recoverExpiredLease: firstRuntime.recoverExpiredLease,
     recoverableProviderIds: ['limrun'],
@@ -239,7 +255,7 @@ test('Limrun recovers a failed expired lease release after a daemon restart', as
     assert.deepEqual(limrunMockState.iosDelete.mock.calls[0], ['ios-instance-1']);
     firstReleaser.shutdown();
 
-    recoveredRuntime = new LimrunRuntime({ apiKey: 'lim_test_key', version: '9.9.9-test' });
+    recoveredRuntime = new LimrunRuntime({ apiKey: 'lim_test_key' });
     recoveredReleaser = createExpiredProviderLeaseReleaser({
       recoverExpiredLease: recoveredRuntime.recoverExpiredLease,
       recoverableProviderIds: ['limrun'],
@@ -266,7 +282,6 @@ test('Limrun recovers a failed expired lease release after a daemon restart', as
 test('Limrun Android reverses localhost URL ports through the persistent ADB tunnel', async () => {
   const runtime = new LimrunRuntime({
     apiKey: 'lim_test_key',
-    version: '9.9.9-test',
   });
 
   try {
@@ -358,7 +373,6 @@ function assertAndroidTunnelLifecycle(openUrl: string): void {
 test('Limrun Android installs direct local artifacts through Limrun assets', async () => {
   const runtime = new LimrunRuntime({
     apiKey: 'lim_test_key',
-    version: '9.9.9-test',
   });
   const lease: SimulatorLease = {
     leaseId: 'lease-android',
@@ -410,7 +424,7 @@ test('Limrun Android installs direct local artifacts through Limrun assets', asy
 });
 
 test('Limrun Android shares an in-flight ADB tunnel across concurrent port reverse requests', async () => {
-  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key', version: '9.9.9-test' });
+  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key' });
 
   try {
     await allocateLimrunDevice(runtime, androidLease());
@@ -441,7 +455,6 @@ test('Limrun iOS installs direct local artifacts through Limrun assets', async (
   fs.writeFileSync(ipaPath, 'demo');
   const runtime = new LimrunRuntime({
     apiKey: 'lim_test_key',
-    version: '9.9.9-test',
   });
   const lease: SimulatorLease = {
     leaseId: 'lease-ios',
@@ -505,7 +518,7 @@ test('Limrun iOS reads the bundle display name before uploading an app bundle', 
       '</dict></plist>',
     ].join(''),
   );
-  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key', version: '9.9.9-test' });
+  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key' });
 
   try {
     const device = await allocateLimrunDevice(runtime, {
@@ -529,7 +542,6 @@ test('Limrun iOS reads the bundle display name before uploading an app bundle', 
 test('Limrun iOS maps supported orientation and rejects unsupported upside-down orientation', async () => {
   const runtime = new LimrunRuntime({
     apiKey: 'lim_test_key',
-    version: '9.9.9-test',
   });
 
   try {
@@ -556,7 +568,6 @@ test('Limrun iOS maps supported orientation and rejects unsupported upside-down 
 test('Limrun Android configures an explicit port reverse', async () => {
   const runtime = new LimrunRuntime({
     apiKey: 'lim_test_key',
-    version: '9.9.9-test',
   });
   const lease: SimulatorLease = {
     leaseId: 'lease-android',
@@ -601,7 +612,7 @@ test('Limrun Android configures an explicit port reverse', async () => {
 });
 
 test('Limrun Android preserves canonical ADB failure classification', async () => {
-  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key', version: '9.9.9-test' });
+  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key' });
 
   try {
     await allocateLimrunDevice(runtime, androidLease());
@@ -638,7 +649,6 @@ test('Limrun deletes iOS instance when post-create validation fails', async () =
   } as never);
   const runtime = new LimrunRuntime({
     apiKey: 'lim_test_key',
-    version: '9.9.9-test',
   });
   const lease: SimulatorLease = {
     leaseId: 'lease-ios',
@@ -671,7 +681,6 @@ test('Limrun deletes Android instance when post-create validation fails', async 
   } as never);
   const runtime = new LimrunRuntime({
     apiKey: 'lim_test_key',
-    version: '9.9.9-test',
   });
   const lease: SimulatorLease = {
     leaseId: 'lease-android',
@@ -697,7 +706,6 @@ test('Limrun deletes Android instance when post-create validation fails', async 
 test('Limrun keeps session tracked when release fails so release can be retried', async () => {
   const runtime = new LimrunRuntime({
     apiKey: 'lim_test_key',
-    version: '9.9.9-test',
   });
   const lease: SimulatorLease = {
     leaseId: 'lease-android',

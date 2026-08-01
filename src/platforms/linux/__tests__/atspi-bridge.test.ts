@@ -8,7 +8,7 @@ vi.mock('../../../utils/exec.ts', async (importOriginal) => {
 
 import { captureAccessibilityTree } from '../atspi-bridge.ts';
 import { runCmd, whichCmd } from '../../../utils/exec.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 const mockRunCmd = vi.mocked(runCmd);
 const mockWhichCmd = vi.mocked(whichCmd);
@@ -107,6 +107,19 @@ test('passes surface and limit args to Python script', async () => {
   assert.ok(callArgs.includes('8'));
   assert.ok(callArgs.includes('--max-apps'));
   assert.ok(callArgs.includes('10'));
+});
+
+test('passes capture cancellation to the AT-SPI process', async () => {
+  mockRunCmd.mockResolvedValue({
+    exitCode: 0,
+    stdout: makePythonResult([]),
+    stderr: '',
+  });
+  const controller = new AbortController();
+
+  await captureAccessibilityTree('desktop', { signal: controller.signal });
+
+  assert.equal(mockRunCmd.mock.calls[0]?.[2]?.signal, controller.signal);
 });
 
 test('throws TOOL_MISSING when python3 is not found', async () => {

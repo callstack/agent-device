@@ -1,4 +1,4 @@
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { booleanField, enumField, stringField } from '../command-input.ts';
 import { defineExecutableCommand } from '../command-contract.ts';

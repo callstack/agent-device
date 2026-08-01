@@ -14,7 +14,7 @@
   observes the artifact/state the feature claims to handle. If live verification is blocked, state
   the blocker and the exact command/device needed, and downgrade the PR to residual risk rather than
   calling it ready.
-- Command-surface changes preserve CLI, Node.js, daemon, MCP, help, docs, and SkillGym coverage
+- Command-surface changes preserve CLI, Node.js, daemon, MCP, help, and docs coverage
   where that surface is affected, without duplicating command contracts across layers.
 - Runtime output stays agent-friendly: compact defaults, top offenders first for diagnostics/perf,
   bounded arrays in JSON, artifact paths for large raw data, progressive lookup for deeper detail.

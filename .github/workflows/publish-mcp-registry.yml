@@ -54,6 +54,10 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
         shell: bash
 
+      # This job provisions pnpm via plain actions/setup-node, not the repo's
+      # ./.github/actions/setup-node-pnpm — so pnpm itself is never installed here,
+      # and `pnpm check:mcp-metadata` would fail before publishing. Keep the direct
+      # node invocation; it duplicates check:mcp-metadata's command deliberately.
       - name: Check MCP metadata sync
         run: node scripts/sync-mcp-metadata.mjs --check
 

@@ -1,6 +1,6 @@
 import { dispatchCommand, type CommandFlags } from '../core/dispatch.ts';
-import { isMobilePlatform } from '../kernel/device.ts';
-import type { SnapshotNode, SnapshotState } from '../kernel/snapshot.ts';
+import { isMobilePlatform } from '@agent-device/kernel/device';
+import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { contextFromFlags } from './context.ts';
 import type { SessionState } from './types.ts';

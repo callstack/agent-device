@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import type { RawSnapshotNode, SnapshotNode } from '../../../kernel/snapshot.ts';
+import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { computeTargetEvidence } from '../../session-target-evidence.ts';
 import type { TargetAnnotationV1 } from '../../../replay/target-identity.ts';
 

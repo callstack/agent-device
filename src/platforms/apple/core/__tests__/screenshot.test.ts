@@ -57,7 +57,7 @@ import { ensureBootedSimulator, openIosSimulatorApp } from '../simulator.ts';
 import { prepareSimulatorStatusBarForScreenshot } from '../screenshot-status-bar.ts';
 import { runAppleRunnerCommand } from '../runner/runner-client.ts';
 import { withDiagnosticsScope } from '../../../../utils/diagnostics.ts';
-import { AppError } from '../../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '../../../../utils/exec.ts';
 import { retryWithPolicy } from '../../../../utils/retry.ts';
 import { IOS_TEST_SIMULATOR, MACOS_TEST_DEVICE } from './apple-core-stub-helpers.ts';

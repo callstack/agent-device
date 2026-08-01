@@ -1,4 +1,4 @@
-import { parseSessionSurface, type SessionSurface } from '../../contracts/session-surface.ts';
+import { parseSessionSurface, type SessionSurface } from '@agent-device/contracts/session';
 import { resolveFrontmostMacOsApp } from '../../platforms/apple/os/macos/helper.ts';
 import {
   isIosFamily,
@@ -6,9 +6,9 @@ import {
   isSerialAddressablePlatform,
   publicPlatformString,
   type DeviceInfo,
-} from '../../kernel/device.ts';
+} from '@agent-device/kernel/device';
 import type { SessionRuntimeHints, SessionState } from '../types.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { successText } from '../../utils/success-text.ts';
 import type { StartupPerfSample } from './session-startup-metrics.ts';
 

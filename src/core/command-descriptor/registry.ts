@@ -1,8 +1,8 @@
 import type { CommandCapability } from '../capabilities.ts';
 // The typed-flags request from contracts/, not the daemon's server-side refinement: these
 // descriptors read `command`, `positionals` and `flags` and never touch `internal`.
-import type { DispatchedCommand } from '../../contracts/dispatched-command.ts';
-import type { RefFrameEffect } from '../../contracts/ref-frame-effect.ts';
+import type { DispatchedCommand } from '@agent-device/contracts/command';
+import type { RefFrameEffect } from '@agent-device/contracts/replay';
 import { isReadOnlyFindAction, parseFindArgs } from '../../selectors/find.ts';
 import { resolveWaitBudgetMs } from '../wait-positionals.ts';
 import {
@@ -552,6 +552,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       refFrameEffect: 'delegated',
       sessionKind: 'replay',
       skipSessionlessProviderDevice: isShardedTestRequest,
+      saveScriptFlagOwner: true,
     },
     // Replay durations are script-dependent; --timeout bounds the envelope.
     timeoutPolicy: { ...DEFAULT_TIMEOUT_POLICY, budget: { source: 'flag' } },
@@ -703,6 +704,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       route: 'session',
       refFrameEffect: 'may-invalidate',
       allowSessionlessDefaultDevice: allowAnyDeviceSessionless,
+      saveScriptFlagOwner: true,
     },
     dispatch: {},
     capability: VEGA_APP_RUNTIME_CAPABILITY,
@@ -715,6 +717,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
     catalog: { group: 'public' },
     recordsSessionAction: false,
     daemon: { route: 'session', refFrameEffect: 'preserve' },
+    // `ios-runner` has no Android implementation; admission must agree with
+    // the handler rather than advertising a command that always rejects later.
+    capability: { apple: APPLE_SIM_AND_DEVICE, android: {}, linux: LINUX_NONE },
     // Runner warm-up builds are the longest fixed envelope; --timeout overrides.
     timeoutPolicy: {
       budget: { source: 'flag' },
@@ -739,7 +744,12 @@ export const RAW_COMMAND_DESCRIPTORS = [
     catalog: { group: 'public' },
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
-    daemon: { route: 'session', refFrameEffect: 'may-invalidate', allowInvalidRecording: true },
+    daemon: {
+      route: 'session',
+      refFrameEffect: 'may-invalidate',
+      allowInvalidRecording: true,
+      saveScriptFlagOwner: true,
+    },
     dispatch: {},
     capability: VEGA_APP_RUNTIME_CAPABILITY,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
@@ -1134,7 +1144,13 @@ export const RAW_COMMAND_DESCRIPTORS = [
     recordingEffect: 'mutates-app',
     daemon: { route: 'generic', refFrameEffect: 'may-invalidate' },
     dispatch: {},
-    capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
+    // Viewport resizing is a web-surface contract (`WEB_SETTING_COMMANDS` in
+    // src/core/capabilities.ts adds the only admitting bucket). No device platform
+    // has a durable viewport set/read/reset lifecycle: Apple screen geometry is
+    // fixed by the selected simulator/device type and neither simctl nor XCTest can
+    // resize it, and Android has no backend either. Deny both instead of admitting a
+    // command dispatch can only reject (#1407).
+    capability: { apple: {}, android: {}, linux: LINUX_NONE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
   },

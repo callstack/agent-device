@@ -5,47 +5,25 @@ import {
   type FindAction,
   type FindLocator,
 } from '../../../selectors/find.ts';
-import type { SnapshotNode } from '../../../kernel/snapshot.ts';
-import { findNodeByRef, normalizeRef } from '../../../kernel/snapshot.ts';
-import {
-  isSparseSnapshotQualityVerdict,
-  isUnreadableCaptureContentError,
-  type SnapshotQualityVerdict,
-} from '../../../snapshot/snapshot-quality.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import { isSparseSnapshotQualityVerdict } from '../../../snapshot/snapshot-quality.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
-import { AppError } from '../../../kernel/errors.ts';
-import { parseSelectorChain, type SelectorChain } from '../../../selectors/parse.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import { parseSelectorChain } from '../../../selectors/parse.ts';
 import {
   findSelectorChainMatch,
   formatSelectorFailure,
-  listSelectorChainMatches,
   resolveSelectorChain,
   selectorFailureHint,
 } from '../../../selectors/index.ts';
-import type { SelectorChainMatchList } from '../../../selectors/resolve.ts';
-import {
-  readNodeLocalIdentity,
-  WAIT_LANDMARK_MISMATCH_REASON,
-  type WaitLandmarkMismatchEvidence,
-} from '../../../replay/target-identity-node.ts';
-import {
-  buildAncestryChain,
-  buildIndexMap,
-  filterIdentitySet,
-} from '../../../replay/target-evidence-tree.ts';
-import {
-  annotationLocalIdentity,
-  type TargetAnnotationV1,
-} from '../../../replay/target-identity.ts';
 import { buildSelectorChainForNode } from '../../../selectors/build.ts';
 import { checkIsPredicate, evaluateIsPredicate } from '../../../selectors/predicates.ts';
-import { checkWaitText, IS_TEXT_VALUE_REQUIRED_MESSAGE } from '../../../selectors/arguments.ts';
+import { IS_TEXT_VALUE_REQUIRED_MESSAGE } from '../../../selectors/arguments.ts';
 import type {
   ElementTarget,
-  RefTarget,
   ResolvedTarget,
   SelectorTarget,
-} from '../../../contracts/interaction.ts';
+} from '@agent-device/contracts/interaction';
 import type { RuntimeCommand } from '../../runtime-types.ts';
 import { assertExpectedResolvedTarget, type ExpectedResolvedTarget } from './resolution.ts';
 import {
@@ -56,18 +34,34 @@ import {
   requireSnapshotSession,
   resolveRefNode,
 } from './selector-read-shared.ts';
-import { findNodeByLabel, resolveRefLabel, shouldScopeFind } from './selector-read-utils.ts';
+import { findSnapshotScope, sparseSelectorSnapshotError } from './selector-read-utils.ts';
+import { deriveSelectorCapturePolicy } from './selector-capture-policy.ts';
+import {
+  createWaitPolling,
+  type WaitPollDeadline,
+  waitCaptureStalledError,
+  waitDeadlineExceededError,
+} from './wait-polling.ts';
+import {
+  createSelectorWaitCommands,
+  type WaitCommandOptions,
+  type WaitCommandResult,
+  type WaitForTextCommandOptions,
+} from './selector-wait.ts';
 import {
   DEFAULT_STABLE_QUIET_MS,
   runStableCaptureLoop,
   TINY_STABLE_TREE_HINT,
   TINY_STABLE_TREE_NODE_COUNT,
 } from './stable-capture.ts';
-import { now, sleep, toBackendContext } from '../../runtime-common.ts';
-import { deriveSelectorCapturePolicy } from './selector-capture-policy.ts';
 
 export type { SelectorSnapshotOptions } from './selector-read-shared.ts';
-export type { ElementTarget, RefTarget, ResolvedTarget, SelectorTarget };
+export type {
+  WaitCommandOptions,
+  WaitCommandResult,
+  WaitForTextCommandOptions,
+} from './selector-wait.ts';
+export type { ElementTarget, ResolvedTarget, SelectorTarget };
 
 export type FindReadCommandOptions = CommandContext & {
   locator?: FindLocator;
@@ -139,78 +133,29 @@ export type IsCommandResult = {
   preActionNodes?: SnapshotNode[];
 };
 
-export type WaitCommandOptions = CommandContext &
-  SelectorSnapshotOptions & {
-    target:
-      | { kind: 'sleep'; durationMs: number }
-      | { kind: 'text'; text: string; timeoutMs?: number | null }
-      | { kind: 'ref'; ref: string; timeoutMs?: number | null }
-      | {
-          kind: 'selector';
-          selector: string;
-          timeoutMs?: number | null;
-          /**
-           * ADR 0012 / #1349, replay-only: the recorded landmark identity this
-           * wait must observe before reporting success. Polling is unchanged —
-           * the loop keeps waiting while no selector match carries this
-           * identity, and a timeout with rejected candidates throws the
-           * `WAIT_LANDMARK_MISMATCH_REASON` refusal instead of success.
-           */
-          recordedLandmark?: TargetAnnotationV1;
-        }
-      | { kind: 'stable'; quietMs?: number | null; timeoutMs?: number | null };
-  };
-
-export type WaitCommandResult =
-  | { kind: 'sleep'; waitedMs: number }
-  | { kind: 'text'; waitedMs: number; text: string }
-  | {
-      kind: 'selector';
-      waitedMs: number;
-      selector: string;
-      /** ADR 0012 decision 3: the satisfying match and the tree it came from, for record-time evidence. */
-      node?: SnapshotNode;
-      preActionNodes?: SnapshotNode[];
-    }
-  | {
-      kind: 'stable';
-      waitedMs: number;
-      captures: number;
-      nodeCount: number;
-      hint?: string;
-    };
-
-export type WaitForTextCommandOptions = CommandContext &
-  SelectorSnapshotOptions & {
-    text: string;
-    timeoutMs?: number | null;
-  };
-
 export type IsSelectorCommandOptions = CommandContext &
   SelectorSnapshotOptions & {
     target: SelectorTarget;
   };
 
-/**
- * @internal Target helper used by tests/examples; runtime callers compose `ElementTarget` directly.
- */
-export function selector(expression: string): SelectorTarget {
-  return { kind: 'selector', selector: expression };
-}
+const selectorWaitCommands = createSelectorWaitCommands<AgentDeviceRuntime>({
+  captureSnapshot: captureSelectorSnapshot,
+  requireSnapshot: requireSnapshotSession,
+  stable: {
+    defaultQuietMs: DEFAULT_STABLE_QUIET_MS,
+    tinyTreeHint: TINY_STABLE_TREE_HINT,
+    tinyTreeNodeCount: TINY_STABLE_TREE_NODE_COUNT,
+    capture: runStableCaptureLoop,
+  },
+});
 
-/**
- * @internal Target helper used by tests/examples; runtime callers compose `ElementTarget` directly.
- */
-export function ref(refInput: string, options: { fallbackLabel?: string } = {}): RefTarget {
-  return {
-    kind: 'ref',
-    ref: refInput,
-    ...(options.fallbackLabel ? { fallbackLabel: options.fallbackLabel } : {}),
-  };
-}
+export const waitCommand: RuntimeCommand<WaitCommandOptions, WaitCommandResult> =
+  selectorWaitCommands.waitCommand;
 
-const DEFAULT_TIMEOUT_MS = 10_000;
-const POLL_INTERVAL_MS = 300;
+export const waitForTextCommand: RuntimeCommand<
+  WaitForTextCommandOptions,
+  Extract<WaitCommandResult, { kind: 'text' }>
+> = selectorWaitCommands.waitForTextCommand;
 
 export const findCommand: RuntimeCommand<FindReadCommandOptions, FindReadCommandResult> = async (
   runtime,
@@ -442,74 +387,40 @@ export const isHiddenCommand: RuntimeCommand<IsSelectorCommandOptions, IsCommand
     selector: options.target.selector,
   });
 
-export const waitCommand: RuntimeCommand<WaitCommandOptions, WaitCommandResult> = async (
-  runtime,
-  options,
-): Promise<WaitCommandResult> => {
-  if (options.target.kind === 'sleep') {
-    await sleep(runtime, options.target.durationMs);
-    return { kind: 'sleep', waitedMs: options.target.durationMs };
-  }
-  if (options.target.kind === 'ref') {
-    const capture = await requireSnapshotSession(runtime, options.session);
-    const ref = normalizeRef(options.target.ref);
-    if (!ref) throw new AppError('INVALID_ARGS', `Invalid ref: ${options.target.ref}`);
-    const node = findNodeByRef(capture.snapshot.nodes, ref);
-    const text = node ? resolveRefLabel(node, capture.snapshot.nodes) : undefined;
-    if (!text) {
-      throw new AppError('COMMAND_FAILED', `Ref ${options.target.ref} not found or has no label`);
-    }
-    return await waitForText(runtime, options, text, options.target.timeoutMs);
-  }
-  if (options.target.kind === 'selector') {
-    return await waitForSelector(
-      runtime,
-      options,
-      options.target.selector,
-      options.target.timeoutMs,
-      options.target.recordedLandmark,
-    );
-  }
-  if (options.target.kind === 'stable') {
-    return await waitForStable(runtime, options, options.target.quietMs, options.target.timeoutMs);
-  }
-  const waitText = checkWaitText(options.target.text);
-  if (!waitText.ok) throw new AppError(waitText.code, waitText.message);
-  return await waitForText(runtime, options, options.target.text, options.target.timeoutMs);
-};
-
-export const waitForTextCommand: RuntimeCommand<
-  WaitForTextCommandOptions,
-  Extract<WaitCommandResult, { kind: 'text' }>
-> = async (runtime, options): Promise<Extract<WaitCommandResult, { kind: 'text' }>> => {
-  const result = await waitCommand(runtime, {
-    ...options,
-    target: { kind: 'text', text: options.text, timeoutMs: options.timeoutMs },
-  });
-  if (result.kind !== 'text') {
-    throw new AppError('COMMAND_FAILED', 'waitForText returned non-text result');
-  }
-  return result;
-};
-
 async function waitForFindMatch(
   runtime: AgentDeviceRuntime,
   options: FindReadCommandOptions,
   locator: FindLocator,
 ): Promise<FindReadCommandResult> {
-  const timeout = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const start = now(runtime);
-  while (now(runtime) - start < timeout) {
+  const polling = createWaitPolling(runtime, options, options.timeoutMs);
+  let deadline: WaitPollDeadline | undefined;
+  while (polling.hasTimeRemaining()) {
     // A presence check never consumes scroll hints, so every poll skips deriving them —
     // otherwise a single pathological `dumpsys activity top` call can eat the whole wait
     // budget from inside this loop (#1270).
-    const { match } = await findFirstLocatorMatch(runtime, options, locator, {
-      includeHiddenContentHints: false,
-    });
-    if (match) return { kind: 'found', found: true, waitedMs: now(runtime) - start };
-    await sleep(runtime, POLL_INTERVAL_MS);
+    const poll = await polling.capture(
+      async (signal) =>
+        await findFirstLocatorMatch(runtime, { ...options, signal }, locator, {
+          includeHiddenContentHints: false,
+        }),
+    );
+    if (poll.timedOut) {
+      deadline = poll.deadline;
+      break;
+    }
+    if (poll.value?.match) {
+      return { kind: 'found', found: true, waitedMs: polling.waitedMs() };
+    }
+    await polling.sleepUntilNextPoll();
   }
-  throw new AppError('COMMAND_FAILED', 'find wait timed out');
+  if (deadline === 'capture-stalled') {
+    throw waitCaptureStalledError('find wait timed out', polling.timeoutMs);
+  }
+  if (deadline === 'capture-truncated') {
+    throw waitDeadlineExceededError('find wait timed out', polling.timeoutMs, true);
+  }
+  polling.rethrowIfNeverReadable();
+  throw waitDeadlineExceededError('find wait timed out', polling.timeoutMs, false);
 }
 
 async function findFirstLocatorMatch(
@@ -521,7 +432,7 @@ async function findFirstLocatorMatch(
   const selectorChain = parseFindSelectorExpression(locator, options.query);
   const capture = await captureSelectorSnapshot(runtime, options, {
     updateSession: true,
-    scope: findSnapshotScope(runtime, locator, options.query, selectorChain),
+    scope: findSnapshotScope(runtime.backend.platform, locator, options.query, selectorChain),
     includeHiddenContentHints: captureOverrides?.includeHiddenContentHints,
     ...deriveSelectorCapturePolicy({ selectorChain }),
   });
@@ -540,231 +451,6 @@ async function findFirstLocatorMatch(
     requireRect: false,
   }).matches[0];
   return { capture, match };
-}
-
-function findSnapshotScope(
-  runtime: AgentDeviceRuntime,
-  locator: FindLocator,
-  query: string,
-  selectorChain: SelectorChain | null,
-): string | undefined {
-  if (selectorChain) return undefined;
-  if (runtime.backend.platform === 'web') return undefined;
-  return shouldScopeFind(locator) ? query : undefined;
-}
-
-function sparseSelectorSnapshotError(verdict: SnapshotQualityVerdict): AppError {
-  return new AppError('COMMAND_FAILED', 'find could not read the current accessibility tree', {
-    reason: verdict.reason,
-    hint: 'The snapshot quality verdict is sparse. Use screenshot as visual truth, navigate with coordinates if needed, then retry find after reaching a readable screen.',
-  });
-}
-
-async function waitForSelector(
-  runtime: AgentDeviceRuntime,
-  options: WaitCommandOptions,
-  selectorExpression: string,
-  timeoutMs: number | null | undefined,
-  recordedLandmark: TargetAnnotationV1 | undefined,
-): Promise<WaitCommandResult> {
-  const timeout = timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const start = now(runtime);
-  const chain = parseSelectorChain(selectorExpression);
-  const capturePolicy = deriveSelectorCapturePolicy({ selectorChain: chain });
-  // ADR 0012 / #1349: the LAST poll whose capture matched the recorded
-  // selector without any match carrying the recorded landmark identity. A
-  // transient same-selector impostor (the previous screen mid-transition)
-  // must not abort a wait whose job is to wait through it, so the loop keeps
-  // polling; only the deadline turns this into the fail-closed refusal.
-  let landmarkMismatch: WaitLandmarkMismatchEvidence | undefined;
-  const unreadable = createUnreadablePollTracker();
-  while (now(runtime) - start < timeout) {
-    // Presence-only poll: skip scroll-hint derivation (#1270), same as waitForFindMatch.
-    const capture = await unreadable.attempt(() =>
-      captureSelectorSnapshot(runtime, options, {
-        updateSession: true,
-        includeHiddenContentHints: false,
-        ...capturePolicy,
-      }),
-    );
-    if (capture) {
-      const nodes = capture.snapshot.nodes;
-      const matchList = listSelectorChainMatches(nodes, chain, {
-        platform: runtime.backend.platform,
-      });
-      if (matchList) {
-        const landmark = resolveLandmarkMatch(nodes, matchList, recordedLandmark);
-        if (landmark.kind === 'satisfied') {
-          return {
-            kind: 'selector',
-            selector: matchList.selector.raw,
-            waitedMs: now(runtime) - start,
-            node: landmark.node,
-            preActionNodes: nodes,
-          };
-        }
-        landmarkMismatch = landmark.evidence;
-      }
-    }
-    await sleep(runtime, POLL_INTERVAL_MS);
-  }
-  if (landmarkMismatch) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `wait matched selector ${selectorExpression} but no candidate carried the recorded landmark identity`,
-      { reason: WAIT_LANDMARK_MISMATCH_REASON, ...landmarkMismatch },
-    );
-  }
-  unreadable.rethrowIfNeverReadable();
-  throw new AppError('COMMAND_FAILED', `wait timed out for selector: ${selectorExpression}`);
-}
-
-/**
- * A wait poll rides out a capture that judged the current screen unreadable
- * (`isUnreadableCaptureContentError` — the mid-transition state a wait exists
- * to wait through; iOS surfaces the same state as a sparse verdict with no
- * matches). Any other capture failure still throws immediately, and a wait
- * whose screen NEVER became readable rethrows the last content verdict at the
- * deadline so persistent breakage keeps its capture diagnosis instead of a
- * generic timeout.
- */
-function createUnreadablePollTracker(): {
-  attempt: <T>(capture: () => Promise<T>) => Promise<T | undefined>;
-  rethrowIfNeverReadable: () => void;
-} {
-  let sawReadableCapture = false;
-  let lastUnreadableError: unknown;
-  return {
-    attempt: async <T>(capture: () => Promise<T>): Promise<T | undefined> => {
-      try {
-        const result = await capture();
-        sawReadableCapture = true;
-        return result;
-      } catch (error) {
-        if (!isUnreadableCaptureContentError(error)) throw error;
-        lastUnreadableError = error;
-        return undefined;
-      }
-    },
-    rethrowIfNeverReadable: () => {
-      if (!sawReadableCapture && lastUnreadableError !== undefined) throw lastUnreadableError;
-    },
-  };
-}
-
-type LandmarkMatchOutcome =
-  | { kind: 'satisfied'; node: SnapshotNode }
-  | { kind: 'identity-mismatch'; evidence: WaitLandmarkMismatchEvidence };
-
-/**
- * #1349 landmark check: the wait is satisfied when SOME selector match
- * carries the recorded identity (local identity + leaf-anchored ancestry
- * prefix). Positional disambiguation signals are deliberately not consulted —
- * a destination guard proves the landmark exists on the ready screen, not
- * that it kept its list position.
- */
-function resolveLandmarkMatch(
-  nodes: SnapshotNode[],
-  matchList: SelectorChainMatchList,
-  recorded: TargetAnnotationV1 | undefined,
-): LandmarkMatchOutcome {
-  const firstMatch = matchList.matchedNodes[0]!;
-  if (!recorded) return { kind: 'satisfied', node: firstMatch };
-  const byIndex = buildIndexMap(nodes);
-  const identitySet = filterIdentitySet(
-    matchList.matchedNodes,
-    byIndex,
-    annotationLocalIdentity(recorded),
-    recorded.ancestry,
-  );
-  const member = identitySet[0];
-  if (member) return { kind: 'satisfied', node: member };
-  return {
-    kind: 'identity-mismatch',
-    evidence: {
-      matchCount: matchList.matchedNodes.length,
-      observed: readNodeLocalIdentity(firstMatch),
-      observedAncestry: buildAncestryChain(
-        firstMatch,
-        byIndex,
-        Math.max(recorded.ancestry.length, 1),
-      ).chain,
-    },
-  };
-}
-
-async function waitForText(
-  runtime: AgentDeviceRuntime,
-  options: WaitCommandOptions,
-  text: string,
-  timeoutMs: number | null | undefined,
-): Promise<WaitCommandResult> {
-  const timeout = timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const start = now(runtime);
-  const unreadable = createUnreadablePollTracker();
-  while (now(runtime) - start < timeout) {
-    const found = await unreadable.attempt(async () =>
-      runtime.backend.findText
-        ? (await runtime.backend.findText(toBackendContext(runtime, options), text)).found
-        : await snapshotContainsText(runtime, options, text),
-    );
-    if (found) return { kind: 'text', text, waitedMs: now(runtime) - start };
-    await sleep(runtime, POLL_INTERVAL_MS);
-  }
-  unreadable.rethrowIfNeverReadable();
-  throw new AppError('COMMAND_FAILED', `wait timed out for text: ${text}`);
-}
-
-async function snapshotContainsText(
-  runtime: AgentDeviceRuntime,
-  options: WaitCommandOptions,
-  text: string,
-): Promise<boolean> {
-  // Presence-only poll: skip scroll-hint derivation (#1270), same as waitForFindMatch.
-  const capture = await captureSelectorSnapshot(runtime, options, {
-    updateSession: true,
-    includeHiddenContentHints: false,
-  });
-  return Boolean(findNodeByLabel(capture.snapshot.nodes, text));
-}
-
-// The quiet-window loop itself lives in stable-capture.ts and is shared with
-// the interaction `--settle` flag (#1101); this wrapper maps the loop outcome
-// to wait's throwing semantics.
-async function waitForStable(
-  runtime: AgentDeviceRuntime,
-  options: WaitCommandOptions,
-  quietMs: number | null | undefined,
-  timeoutMs: number | null | undefined,
-): Promise<Extract<WaitCommandResult, { kind: 'stable' }>> {
-  const timeout = timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const quiet = quietMs ?? DEFAULT_STABLE_QUIET_MS;
-  const outcome = await runStableCaptureLoop(runtime, options, {
-    quietMs: quiet,
-    timeoutMs: timeout,
-  });
-  if (!outcome.settled) {
-    throw new AppError('COMMAND_FAILED', 'wait timed out waiting for a stable UI', {
-      reason: 'wait_stable_timeout',
-      ...(outcome.stalled ? { captureStalled: true } : {}),
-      quietMs: quiet,
-      timeoutMs: timeout,
-      captures: outcome.captures,
-      nodeCount: outcome.nodeCount,
-      ...(outcome.stalled
-        ? {
-            hint: 'A snapshot capture stalled past the wait timeout, so no settle verdict is available. The UI may still be readable: retry, or use screenshot to inspect the surface.',
-          }
-        : {}),
-    });
-  }
-  return {
-    kind: 'stable',
-    waitedMs: outcome.waitedMs,
-    captures: outcome.captures,
-    nodeCount: outcome.nodeCount,
-    ...(outcome.nodeCount < TINY_STABLE_TREE_NODE_COUNT ? { hint: TINY_STABLE_TREE_HINT } : {}),
-  };
 }
 
 async function resolveSelectorNode(

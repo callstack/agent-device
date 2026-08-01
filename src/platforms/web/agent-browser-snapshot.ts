@@ -1,4 +1,4 @@
-import type { RawSnapshotNode, Rect } from '../../kernel/snapshot.ts';
+import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import {
   isJsonObject,
   readBooleanProperty,

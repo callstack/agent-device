@@ -1,13 +1,17 @@
 import { parseRawArgs, usage, usageForCommand } from './cli/parser/args.ts';
 import { suggestCommandFor } from './cli/parser/command-suggestions.ts';
-import { asAppError, AppError, normalizeError } from './kernel/errors.ts';
-import { throwDaemonError } from './kernel/daemon-error.ts';
+import {
+  asAppError,
+  AppError,
+  normalizeError,
+  throwDaemonError,
+} from '@agent-device/kernel/errors';
 import { printHumanError, printJson } from './utils/output.ts';
 import { readVersion } from './utils/version.ts';
 import { pathToFileURL } from 'node:url';
 import { sendToDaemon } from './daemon/client/daemon-client.ts';
 import fs from 'node:fs';
-import type { BatchStep } from './contracts/client-replay.ts';
+import type { BatchStep } from '@agent-device/contracts/client';
 import type { ReplayTestReporterRuntime } from './replay/test/reporting.ts';
 import {
   createAgentDeviceClient,
@@ -37,8 +41,8 @@ import {
 } from './remote/remote-connection-state.ts';
 import { resolveRemoteAuthForCli } from './cli/auth-session.ts';
 import type { FlagKey } from './commands/cli-grammar/flag-types.ts';
-import type { CliFlags } from './contracts/cli-flags.ts';
-import type { SessionRuntimeHints } from './kernel/contracts.ts';
+import type { CliFlags } from '@agent-device/contracts/command';
+import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import { INTERNAL_COMMANDS, isKnownCliCommandName } from './command-catalog.ts';
 
 type CliDeps = {

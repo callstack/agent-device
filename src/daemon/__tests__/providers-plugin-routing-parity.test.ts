@@ -1,4 +1,4 @@
-import type { PlatformGatedProviderResolverKey } from '../../contracts/platform-providers.ts';
+import type { PlatformGatedProviderResolverKey } from '@agent-device/contracts/platform';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
@@ -8,7 +8,7 @@ import {
   type DeviceInfo,
   type DeviceKind,
   type DeviceTarget,
-} from '../../kernel/device.ts';
+} from '@agent-device/kernel/device';
 import {
   ANDROID_EMULATOR,
   ANDROID_TV_DEVICE,
@@ -22,7 +22,7 @@ import {
   VISIONOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
 } from '../../__tests__/test-utils/index.ts';
-import { getPlugin, tryGetPlugin } from '../../contracts/platform-plugin.ts';
+import { getPlugin, tryGetPlugin } from '../../core/platform-plugin-registry.ts';
 import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';
 import {
   withRequestPlatformProviderScope,

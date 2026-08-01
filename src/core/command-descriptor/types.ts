@@ -2,7 +2,7 @@ import type { CommandCapability } from '../capabilities.ts';
 import type { DaemonCommandDescriptor } from '../../daemon/daemon-command-registry.ts';
 // The typed-flags request from contracts/, not the daemon's server-side refinement: these
 // descriptors read `command`, `positionals` and `flags` and never touch `internal`.
-import type { DispatchedCommand } from '../../contracts/dispatched-command.ts';
+import type { DispatchedCommand } from '@agent-device/contracts/command';
 import type { PostActionObservationSupport } from './post-action-observation.ts';
 
 export type ResponseDataFieldTransform = {

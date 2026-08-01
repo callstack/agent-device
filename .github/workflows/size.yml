@@ -71,7 +71,7 @@ jobs:
           git checkout --detach "${{ github.event.pull_request.head.sha }}"
           pnpm install --frozen-lockfile
           pnpm build
-          node scripts/size-report.mjs \
+          pnpm size \
             --compare /tmp/agent-device-size-base.json \
             --startup-runs 7 \
             --json .tmp/size-report.json \
@@ -84,4 +84,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: node scripts/size-report.mjs --post-comment .tmp/size-report.md
+        run: pnpm size --post-comment .tmp/size-report.md

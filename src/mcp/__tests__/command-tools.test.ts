@@ -4,7 +4,7 @@ import type { AgentDeviceClient } from '../../client/client-types.ts';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
 import { resolveCommandRecordsSessionAction } from '../../core/command-descriptor/registry.ts';
 import { COMMAND_OUTPUT_SCHEMAS } from '../command-output-schemas.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { NAVIGATION_COMMAND_PROJECTIONS } from '../../commands/system/navigation-projection.ts';
 import { validateAgainstSchema } from './output-schema-validator.ts';
 
@@ -410,6 +410,31 @@ test('MCP prepare outputSchema stays complete for the typed non-exposed command'
   const prepareSchema = COMMAND_OUTPUT_SCHEMAS.prepare;
   assert.ok(prepareSchema.required?.includes('runner'));
   assert.ok(prepareSchema.required?.includes('timing'));
+});
+
+test('MCP stopped trace schema advertises its downloadable trace artifact', () => {
+  const stoppedTrace = {
+    trace: 'stopped',
+    outPath: '/daemon/fixture.adtrace',
+    artifacts: [
+      {
+        field: 'outPath',
+        artifactType: 'trace-log',
+        path: '/daemon/fixture.adtrace',
+        localPath: '/client/fixture.adtrace',
+        fileName: 'fixture.adtrace',
+      },
+    ],
+  };
+
+  assert.deepEqual(validateAgainstSchema(stoppedTrace, COMMAND_OUTPUT_SCHEMAS.trace), []);
+  assert.notDeepEqual(
+    validateAgainstSchema(
+      { trace: 'stopped', outPath: stoppedTrace.outPath },
+      COMMAND_OUTPUT_SCHEMAS.trace,
+    ),
+    [],
+  );
 });
 
 test('MCP untyped object tools stay byte-identical: no outputSchema key', () => {

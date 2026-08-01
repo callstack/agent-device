@@ -1,5 +1,5 @@
-import { test, expect } from 'vitest';
-import * as fs from 'node:fs';
+import { test, expect, vi } from 'vitest';
+import fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { clearRequestCanceled, markRequestCanceled } from '../../../request/cancel.ts';
@@ -112,35 +112,67 @@ test('test filters replay scripts by context platform and skips untyped files', 
     expect(response.data?.skipped).toBe(1);
     const tests = response.data?.tests as Array<Record<string, unknown>> | undefined;
     expect(tests?.length).toBe(2);
-    expect(tests?.[0]?.status).toBe('passed');
-    expect(tests?.[1]?.status).toBe('skipped');
-    expect(tests?.[1]?.reason).toBe('skipped-by-filter');
+    const android = tests?.find((entry) => String(entry.file).endsWith('01-android.ad'));
+    const untyped = tests?.find((entry) => String(entry.file).endsWith('03-untyped.ad'));
+    expect(android?.status).toBe('passed');
+    expect(untyped?.status).toBe('skipped');
+    expect(untyped?.reason).toBe('skipped-by-filter');
   }
 });
 
 test('test binds each replay script to its declared platform metadata', async () => {
   const sessionStore = makeSessionStore();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-platforms-'));
-  fs.writeFileSync(path.join(root, '01-android.ad'), 'context platform=android\nopen "Demo"\n');
-  fs.writeFileSync(path.join(root, '02-ios.ad'), 'context platform=ios\nopen "Settings"\n');
+  const scripts = ['01-android.ad', '02-ios.ad'];
+  fs.writeFileSync(path.join(root, scripts[0]!), 'context platform=android\nopen "Demo"\n');
+  fs.writeFileSync(path.join(root, scripts[1]!), 'context platform=ios\nopen "Settings"\n');
+
+  // Directory expansion deliberately PRESERVES filesystem order to match Maestro — only glob
+  // expansion sorts, and `preserves Maestro directory filesystem order` pins that. So this test
+  // cannot assume two freshly written files enumerate in creation order; on filesystems where
+  // they do not, the platform-to-script binding it asserts appears reversed. Pinning the
+  // enumeration keeps the subject (each script binds to ITS declared platform, and session
+  // numbering follows discovery order) without depending on the host filesystem.
+  // Only this suite's own directory is intercepted, and the spy is restored in a `finally`.
+  // A mock that asserted on its argument, or that leaked past a throw, would fire from inside
+  // `fs` for whatever else shares the worker — which surfaces as a worker crash with no failed
+  // test rather than a readable assertion.
+  const realOpendirSync = fs.opendirSync;
+  const opendirSync = vi.spyOn(fs, 'opendirSync').mockImplementation(((directory, ...rest) => {
+    if (directory !== root) return realOpendirSync(directory, ...(rest as []));
+    let index = 0;
+    return {
+      readSync: () => {
+        const name = scripts[index++];
+        if (!name) return null;
+        return { name, isDirectory: () => false, isFile: () => true } as fs.Dirent;
+      },
+      closeSync: () => {},
+    } as fs.Dir;
+  }) as typeof fs.opendirSync);
 
   const invoked: DaemonRequest[] = [];
-  const response = await handleSessionCommands({
-    req: {
-      token: 't',
-      session: 'default',
-      command: 'test',
-      positionals: [root],
-      meta: { cwd: root, requestId: 'suite-platforms' },
-    },
-    sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: {} };
-    },
-  });
+  let response;
+  try {
+    response = await handleSessionCommands({
+      req: {
+        token: 't',
+        session: 'default',
+        command: 'test',
+        positionals: [root],
+        meta: { cwd: root, requestId: 'suite-platforms' },
+      },
+      sessionName: 'default',
+      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      sessionStore,
+      invoke: async (req) => {
+        invoked.push(req);
+        return { ok: true, data: {} };
+      },
+    });
+  } finally {
+    opendirSync.mockRestore();
+  }
 
   expect(response?.ok).toBeTruthy();
   expect(invoked.map((req) => req.flags?.platform)).toEqual(['android', 'ios']);

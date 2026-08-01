@@ -31,8 +31,8 @@
  * against constructed `SnapshotNode` trees.
  */
 
-import type { Platform, PublicPlatform } from '../../kernel/device.ts';
-import { findNodeByRef, normalizeRef, type SnapshotNode } from '../../kernel/snapshot.ts';
+import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
+import { findNodeByRef, normalizeRef, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import { findNodeByLabel } from '../../snapshot/snapshot-processing.ts';
 import { matchesSelector } from '../../selectors/match.ts';
 import {
@@ -58,7 +58,7 @@ import {
   type LocalIdentity,
   type TargetAnnotationV1,
 } from '../../replay/target-identity.ts';
-import type { ReplayDivergenceTargetBindingKind } from '../../replay/divergence.ts';
+import type { ReplayDivergenceTargetBindingKind } from '@agent-device/contracts/divergence';
 
 // ---------------------------------------------------------------------------
 // Pure classification core — no capture, no session, no wire shaping.

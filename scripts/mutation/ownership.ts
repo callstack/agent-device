@@ -21,6 +21,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { workspaceSpecifierTargets } from '../layering/package-boundaries.ts';
 import { walkFiles } from '../lib/walk-files.ts';
 import {
   affectedModules,
@@ -37,18 +38,41 @@ export function isTestFile(filePath: string): boolean {
   return normalized.startsWith('src/') && normalized.endsWith('.test.ts');
 }
 
-/** Repository-relative modules a file imports, following relative specifiers only. */
+/**
+ * Workspace package specifiers resolved through the shared exports-map reader
+ * (scripts/layering/package-boundaries.ts) — never hand-listed. Without this
+ * the graph walk stops at every `@agent-device/*` edge and a kernel living in
+ * `packages/` silently loses all of its owned tests.
+ */
+let cachedExportTargets: { repoRoot: string; targets: Map<string, string> } | undefined;
+
+function exportTargetsFor(repoRoot: string): Map<string, string> {
+  if (cachedExportTargets?.repoRoot !== repoRoot) {
+    cachedExportTargets = { repoRoot, targets: workspaceSpecifierTargets(repoRoot) };
+  }
+  return cachedExportTargets.targets;
+}
+
+/**
+ * Repository-relative modules a file imports: relative specifiers plus
+ * workspace package specifiers resolved through their `exports` maps.
+ */
 function importsOf(file: string, repoRoot: string, cache: Map<string, string[]>): string[] {
   const cached = cache.get(file);
   if (cached) return cached;
   const absolute = path.join(repoRoot, file);
   const text = fs.existsSync(absolute) ? fs.readFileSync(absolute, 'utf8') : '';
-  const specifiers = [...text.matchAll(/(?:from|import)\s*\(?\s*'(?<spec>\.[^']+)'/g)].map(
+  const specifiers = [...text.matchAll(/(?:from|import)\s*\(?\s*'(?<spec>[.@][^']+)'/g)].map(
     (match) => match.groups!.spec,
   );
+  const exportTargets = exportTargetsFor(repoRoot);
   const resolved = [
     ...new Set(
       specifiers.flatMap((specifier) => {
+        if (specifier.startsWith('@')) {
+          const target = exportTargets.get(specifier);
+          return target && fs.existsSync(path.join(repoRoot, target)) ? [target] : [];
+        }
         const base = path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier));
         return [base, `${base}.ts`, `${base}/index.ts`].filter((candidate) =>
           fs.existsSync(path.join(repoRoot, candidate)),

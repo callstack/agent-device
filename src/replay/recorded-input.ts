@@ -1,4 +1,4 @@
-import { AppError } from '../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { REPLAY_VAR_KEY_RE } from './vars.ts';
 
 const RECORDED_INPUT_PLACEHOLDER_RE = /^\$\{([A-Z_][A-Z0-9_]*)\}$/;

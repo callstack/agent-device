@@ -3,14 +3,14 @@ import {
   dispatchGesturePlan,
   dispatchGestureViewport,
 } from '../../core/dispatch.ts';
-import { publicPlatformString } from '../../kernel/device.ts';
+import { publicPlatformString } from '@agent-device/kernel/device';
 import type {
   AgentDeviceBackend,
   BackendActionResult,
   BackendSnapshotResult,
 } from '../../backend.ts';
 import { createAgentDevice } from '../../runtime.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { SessionState } from '../types.ts';
 import { setSessionSnapshot } from '../session-snapshot.ts';
 import { expireRefFrame } from '../ref-frame.ts';
@@ -21,7 +21,8 @@ import { createDaemonRuntimeSessionStore } from '../runtime-session.ts';
 import { resolveWebProvider, type WebProvider } from '../../platforms/web/provider.ts';
 import { stripAtPrefix } from './interaction-touch-targets.ts';
 import { NO_ACTIVE_SESSION_MESSAGE } from './response.ts';
-import type { Rect } from '../../kernel/snapshot.ts';
+import type { Rect } from '@agent-device/kernel/snapshot';
+import { getRequestSignal } from '../../request/cancel.ts';
 
 type InteractionRuntimeParams = InteractionHandlerParams & {
   captureSnapshotForSession: CaptureSnapshotForSession;
@@ -50,6 +51,7 @@ export function createInteractionRuntime(params: InteractionRuntimeParams) {
         params.sessionStore.set(params.sessionName, session);
       },
     }),
+    signal: getRequestSignal(params.req.meta?.requestId),
   });
 }
 
@@ -60,7 +62,7 @@ function createInteractionBackend(
   const webProvider = resolveNativeWebInteractionProvider(session);
   return {
     platform: publicPlatformString(session.device),
-    captureSnapshot: async (_context, options): Promise<BackendSnapshotResult> => ({
+    captureSnapshot: async (context, options): Promise<BackendSnapshotResult> => ({
       snapshot: await params.captureSnapshotForSession(
         session,
         req.flags,
@@ -69,6 +71,7 @@ function createInteractionBackend(
         {
           interactiveOnly: options?.interactiveOnly === true,
           includeRects: options?.includeRects === true,
+          signal: context.signal,
         },
       ),
     }),

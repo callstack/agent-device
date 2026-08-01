@@ -1,6 +1,6 @@
-import { isIosFamily } from '../kernel/device.ts';
+import { isIosFamily } from '@agent-device/kernel/device';
 import type { RecordingGestureEvent, SessionState } from './types.ts';
-import type { SnapshotState } from '../kernel/snapshot.ts';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import {
   resolveGestureDurationMs,
   resolveGestureOffsetMs,
@@ -11,7 +11,7 @@ import {
   buildScrollGesturePlan,
   type ScrollDirection,
   type SwipePattern,
-} from '../contracts/scroll-gesture.ts';
+} from '@agent-device/contracts/interaction';
 import {
   getSnapshotReferenceFrame,
   type TouchReferenceFrame as ReferenceFrame,

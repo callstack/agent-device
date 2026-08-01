@@ -276,7 +276,32 @@ const client = createAgentDeviceClient({
 });
 ```
 
-The JavaScript client does not publish provider SDK subpaths. Use the normal typed client methods; provider implementation details stay internal. Limrun uses the same client shape with `leaseProvider: 'limrun'`, `platform: 'android'` or `platform: 'ios'`, and `LIMRUN_API_KEY` in the daemon environment.
+Use the normal typed client methods when agent-device owns the daemon. Limrun uses the same client
+shape with `leaseProvider: 'limrun'`, `platform: 'android'` or `platform: 'ios'`, and
+`LIMRUN_API_KEY` in the daemon environment.
+
+The first-party agent-device-cloud bridge hosts the provider runtime itself and can reuse
+agent-device's Limrun implementation:
+
+```ts
+import { LimrunRuntime } from 'agent-device/limrun';
+
+const apiKey = process.env.LIMRUN_API_KEY;
+if (!apiKey) throw new Error('LIMRUN_API_KEY is required');
+
+const runtime = new LimrunRuntime({
+  apiKey,
+  region: process.env.LIMRUN_REGION,
+});
+```
+
+After allocating a lease, embedding bridges can call `runtime.getDeviceSession(device)` to access
+the allocated device's reusable semantic capabilities. The facade includes app inventory,
+foreground state where the provider exposes it, key input, bounded log reads, recording, remote
+asset installation, and the existing interactor. Android additionally exposes agent-device's
+`AndroidAdbProvider` abstraction for helpers and reversible port forwarding. iOS exposes a typed
+`simctl` execution handle for bridge-owned runner lifecycle and launch policy. Raw Limrun clients
+remain private to the provider runtime.
 
 ## MCP Experience
 

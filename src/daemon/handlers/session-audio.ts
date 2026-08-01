@@ -1,5 +1,5 @@
 import { isCommandSupportedOnDevice } from '../../core/capabilities.ts';
-import { normalizeError } from '../../kernel/errors.ts';
+import { normalizeError } from '@agent-device/kernel/errors';
 import {
   resolveHostAudioProbeBackend,
   type HostAudioProbeBackend,

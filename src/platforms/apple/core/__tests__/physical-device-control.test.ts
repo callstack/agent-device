@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { IOS_DEVICE as SHARED_IOS_DEVICE } from '../../../../__tests__/test-utils/index.ts';
-import type { DeviceInfo } from '../../../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createAppleInteractor } from '../../interactor.ts';
 import { installIosApp } from '../app-install.ts';
 import { closeIosApp, openIosApp } from '../app-launch.ts';

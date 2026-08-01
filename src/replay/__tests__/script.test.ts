@@ -2,7 +2,7 @@ import fc from 'fast-check';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { PROPERTY_RUNS, replayScriptArb } from '../../__tests__/test-utils/index.ts';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   parseReplayScriptDetailed,
   readReplayScriptMetadata,
@@ -10,7 +10,7 @@ import {
 } from '../script.ts';
 import { formatPortableActionLine, formatTargetAnnotationLines } from '../script-formatting.ts';
 import type { TargetAnnotationV1 } from '../target-identity.ts';
-import type { SessionAction } from '../../contracts/session-action.ts';
+import type { SessionAction } from '@agent-device/contracts/session';
 
 // `writeReplayScript` (the `--update` heal-and-rewrite serializer) was
 // deleted in ADR 0012 migration step 6 (`--update` retirement left it with

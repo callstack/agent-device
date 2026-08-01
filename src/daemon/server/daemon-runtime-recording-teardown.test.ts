@@ -98,7 +98,12 @@ test('daemon shutdown lets a slow recorder run its full stop escalation instead 
 
     // The recorder was escalated all the way to SIGKILL before shutdown moved on.
     expect(kill?.mock.calls.map((call) => call[0])).toEqual(['SIGINT', 'SIGTERM', 'SIGKILL']);
-    expect(processKill.mock.calls.map((call) => call[1])).toEqual(['SIGINT', 'SIGTERM', 'SIGKILL']);
+    expect(processKill.mock.calls.map((call) => call[1])).toEqual([
+      'SIGINT',
+      'SIGTERM',
+      'SIGKILL',
+      0,
+    ]);
     // The extended budget covered the escalation: teardown completed (surfacing
     // the recorder-stop failure) rather than being abandoned by the timeout.
     expect(stderrChunks.join('')).toMatch(/Daemon session teardown error .*recording/);

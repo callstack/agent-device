@@ -36,9 +36,8 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Setup Apple replay
-        id: apple-replay
-        uses: ./.github/actions/setup-apple-replay
+      - name: Restore and build macOS XCTest runner
+        uses: ./.github/actions/setup-apple-runner-build
         with:
           derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
           cache-key-prefix: macos-runner-prebuilt
@@ -50,12 +49,12 @@ jobs:
         run: pnpm build:macos-helper
 
       - name: Run macOS integration test
-        run: node --experimental-strip-types src/bin.ts test test/integration/replays/macos --retries 2 --report-junit test/artifacts/replays-macos.junit.xml
+        run: pnpm test:replay:macos --retries 2 --report-junit test/artifacts/replays-macos.junit.xml
 
       - name: Upload macOS artifacts
         if: always()
         uses: ./.github/actions/upload-agent-device-artifacts
         with:
           artifact-name: macos-artifacts
-          agent-home-dir: ${{ env.AGENT_DEVICE_STATE_DIR }}
+          agent-state-dir: ${{ env.AGENT_DEVICE_STATE_DIR }}
           runner-derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}

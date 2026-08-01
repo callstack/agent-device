@@ -1,13 +1,13 @@
 import type { AgentDeviceBackend, BackendSnapshotResult } from '../../../../../backend.ts';
 import { createLocalArtifactAdapter } from '../../../../../io.ts';
-import type { SnapshotState } from '../../../../../kernel/snapshot.ts';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import {
   createAgentDevice,
   createMemorySessionStore,
   localCommandPolicy,
   type CommandSessionStore,
 } from '../../../../../runtime.ts';
-import { ref } from '../../selector-read.ts';
+import { ref } from '../../selector-read-utils.ts';
 import { makeSnapshotState } from '../../../../../__tests__/test-utils/index.ts';
 
 export function selectorSnapshot(): SnapshotState {

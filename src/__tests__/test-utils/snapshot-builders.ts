@@ -1,4 +1,8 @@
-import { attachRefs, type RawSnapshotNode, type SnapshotState } from '../../kernel/snapshot.ts';
+import {
+  attachRefs,
+  type RawSnapshotNode,
+  type SnapshotState,
+} from '@agent-device/kernel/snapshot';
 
 export function buildNodes(raw: RawSnapshotNode[]) {
   return attachRefs(raw);

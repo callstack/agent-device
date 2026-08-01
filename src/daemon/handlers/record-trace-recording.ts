@@ -1,14 +1,16 @@
+import {
+  DEFAULT_RECORDING_EXPORT_QUALITY,
+  RECORDING_EXPORT_QUALITIES,
+  RECORDING_SCOPE_VALUES,
+  type RecordingCommandResult,
+  type RecordingScope,
+  isWholeScreenRecordingScope,
+  recordingQualityInputToExportQuality,
+} from '@agent-device/contracts/recording';
+import { AppError, toAppErrorCode } from '@agent-device/kernel/errors';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError, toAppErrorCode } from '../../kernel/errors.ts';
-import { sleep } from '../../utils/timeouts.ts';
 import { resolveTargetDevice } from '../../core/dispatch.ts';
-import { ensureDeviceReady } from '../device-ready.ts';
-import { SessionStore } from '../session-store.ts';
-import type { DaemonArtifact, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
-import { runCmd } from '../../utils/exec.ts';
-import { isPlayableVideo, waitForStableFile } from '../../utils/video.ts';
-import { deriveRecordingTelemetryPath } from '../recording-telemetry.ts';
 import { runAppleRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 import { runXcrun } from '../../platforms/apple/core/tool-provider.ts';
 import {
@@ -16,18 +18,15 @@ import {
   resizeRecording,
   trimRecordingStart,
 } from '../../recording/overlay.ts';
-import {
-  DEFAULT_RECORDING_EXPORT_QUALITY,
-  RECORDING_EXPORT_QUALITIES,
-  recordingQualityInputToExportQuality,
-} from '../../contracts/recording-export-quality.ts';
-import {
-  RECORDING_SCOPE_VALUES,
-  type RecordingScope,
-  isWholeScreenRecordingScope,
-} from '../../contracts/recording-scope.ts';
+import { runCmd } from '../../utils/exec.ts';
+import { sleep } from '../../utils/timeouts.ts';
+import { isPlayableVideo, waitForStableFile } from '../../utils/video.ts';
+import { ensureDeviceReady } from '../device-ready.ts';
 import { resolveRecordingProvider } from '../recording-provider.ts';
-import { errorResponse, requireCommandSupported } from './response.ts';
+import { deriveRecordingTelemetryPath } from '../recording-telemetry.ts';
+import { hasExplicitSessionFlag, resolveImplicitSessionScope } from '../session-routing.ts';
+import { SessionStore } from '../session-store.ts';
+import type { DaemonArtifact, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { recordSessionAction } from './handler-utils.ts';
 import { deriveAndroidChunkOutPath } from './record-trace-android-chunks.ts';
 import {
@@ -35,8 +34,7 @@ import {
   stopActiveRecording,
 } from './record-trace-recording-backends.ts';
 import type { RecordTraceDeps, RecordingBase } from './record-trace-types.ts';
-import type { RecordingCommandResult } from '../../contracts/recording.ts';
-import { hasExplicitSessionFlag, resolveImplicitSessionScope } from '../session-routing.ts';
+import { errorResponse, requireCommandSupported } from './response.ts';
 
 const IOS_DEVICE_RECORD_MIN_FPS = 1;
 const IOS_DEVICE_RECORD_MAX_FPS = 120;
@@ -511,20 +509,25 @@ function deriveClientTelemetryPath(
   return deriveRecordingTelemetryPath(recording.clientOutPath);
 }
 
+/**
+ * #1478 (P4-pre): a record-only session is created by `record` itself and never
+ * by `open`, so the only way it could ever have carried `recordSession` was a
+ * raw `record --save-script` request — the arming path now rejected at the
+ * daemon request seam (`unsupportedSaveScriptFlagResponse`). With that closed,
+ * the immediate `writeSessionLog` this used to run at `record stop` could only
+ * ever be a no-op, so it is gone: releasing a record-only session is backend
+ * cleanup plus store removal.
+ */
 async function releaseRecordOnlySession(
   sessionStore: SessionStore,
   sessionName: string,
   session: SessionState,
-  options: { writeLog?: boolean } = {},
 ): Promise<void> {
   if (!session.recordOnlySession) {
     return;
   }
   const backend = resolveRecordingBackendForDevice(session.device);
   await backend.cleanupRecordOnlySession?.(session);
-  if (options.writeLog) {
-    sessionStore.writeSessionLog(session);
-  }
   sessionStore.delete(sessionName);
 }
 
@@ -658,7 +661,7 @@ export async function handleRecordCommand(params: {
     ...requestedRecordingEventDetails,
     showTouches: response.data?.showTouches,
   });
-  await releaseRecordOnlySession(sessionStore, sessionName, activeSession, { writeLog: true });
+  await releaseRecordOnlySession(sessionStore, sessionName, activeSession);
   return response;
 }
 

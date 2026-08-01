@@ -1,6 +1,11 @@
-import { isIosFamily, isMacOs, publicPlatformString, type DeviceInfo } from '../kernel/device.ts';
-import { AppError } from '../kernel/errors.ts';
-import type { JsonObject } from '../contracts/json.ts';
+import {
+  isIosFamily,
+  isMacOs,
+  publicPlatformString,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
+import type { JsonObject } from '@agent-device/contracts/client';
 
 type AppEventDevice = Pick<DeviceInfo, 'platform' | 'appleOs'>;
 

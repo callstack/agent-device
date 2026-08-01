@@ -4,7 +4,7 @@ import {
   isPerfSubject,
   PERF_KIND_ERROR_MESSAGE,
   PERF_SUBJECT_ERROR_MESSAGE,
-} from '../../contracts/perf.ts';
+} from '@agent-device/contracts/observability';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import {
   startAndroidPerfettoTrace,
@@ -15,7 +15,7 @@ import {
   type AndroidNativePerfKind,
   type AndroidNativePerfSession,
 } from '../../platforms/android/perf.ts';
-import { AppError, normalizeError } from '../../kernel/errors.ts';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { errorResponse, type DaemonFailureResponse } from './response.ts';

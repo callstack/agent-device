@@ -7,13 +7,13 @@ import { handleSnapshotCommands } from '../snapshot.ts';
 import { withSessionlessRunnerCleanup } from '../snapshot-session.ts';
 import { captureSnapshot } from '../snapshot-capture.ts';
 import { SessionStore } from '../../session-store.ts';
-import type { SessionState } from '../../types.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import type { DaemonResponse, SessionState } from '../../types.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { buildSnapshotSignatures } from '../../android-snapshot-freshness.ts';
 import { buildInteractionSurfaceSignature } from '../../interaction-outcome-policy.ts';
-import { buildSnapshotPresentationKey } from '../../../kernel/snapshot.ts';
+import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
 import { snapshotCliOutput } from '../../../commands/capture/output.ts';
-import type { CaptureSnapshotResult } from '../../../contracts/client-capture.ts';
+import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -484,6 +484,20 @@ function makeVersionedRefsScenario(sessionName: string) {
   return sessionStore;
 }
 
+function expectInternalObservationResult(params: {
+  response: DaemonResponse | null | undefined;
+  session: SessionState | undefined;
+  publishedGeneration: number | undefined;
+  publishedTree: SessionState['snapshot'];
+}): void {
+  expect(params.response?.ok).toBe(true);
+  expect(params.response?.ok ? params.response.data?.refsGeneration : undefined).toBeUndefined();
+  expect(params.session?.snapshotGeneration).toBe((params.publishedGeneration as number) + 1);
+  expect(params.session?.snapshot).not.toBe(params.publishedTree);
+  expect(params.session?.refFrameGeneration).toBe(params.publishedGeneration);
+  expect(params.session?.refFrameTree).toBe(params.publishedTree);
+}
+
 test('snapshot responses carry refsGeneration and advance it per capture (#1076 versioned refs)', async () => {
   const sessionName = 'android-refs-generation';
   const sessionStore = makeVersionedRefsScenario(sessionName);
@@ -515,6 +529,43 @@ test('diff advances the generation without issuing refsGeneration (#1076 version
   const diffData = await runVersionedRefsCommand({ sessionStore, sessionName, command: 'diff' });
   expect(diffData?.refsGeneration).toBeUndefined();
   expect(sessionStore.get(sessionName)?.snapshotGeneration).toBe(seed + 1);
+});
+
+test('daemon-private snapshot observation advances capture state without publishing ref authority', async () => {
+  const sessionName = 'android-internal-observation';
+  const sessionStore = makeVersionedRefsScenario(sessionName);
+
+  await runVersionedRefsCommand({ sessionStore, sessionName, command: 'snapshot' });
+  const published = sessionStore.get(sessionName);
+  const publishedGeneration = published?.refFrameGeneration;
+  const publishedTree = published?.refFrameTree;
+
+  mockDispatch.mockResolvedValue({
+    nodes: [{ index: 0, depth: 0, type: 'android.widget.Button', label: 'Internal' }],
+    truncated: false,
+    backend: 'android',
+  });
+
+  const response = await handleSnapshotCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'snapshot',
+      positionals: [],
+      flags: {},
+      internal: { observationOnly: true },
+    },
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expectInternalObservationResult({
+    response,
+    session: sessionStore.get(sessionName),
+    publishedGeneration,
+    publishedTree,
+  });
 });
 
 test('snapshot surfaces filtered-to-zero Android guidance for interactive snapshots', async () => {
@@ -1479,7 +1530,8 @@ test('wait text on Android uses freshness-aware capture instead of one-shot snap
       token: 't',
       session: sessionName,
       command: 'wait',
-      positionals: ['Create document', '50'],
+      // The wait budget includes Android's 250 ms freshness retry delay.
+      positionals: ['Create document', '500'],
       flags: {},
     },
     sessionName,
@@ -1926,6 +1978,58 @@ test('wait text on iOS without app bundle id uses snapshot path', async () => {
 
   expect(response?.ok).toBe(true);
   expect(mockRunnerCommand).not.toHaveBeenCalled();
+  expect(mockDispatch).toHaveBeenCalledWith(
+    expect.anything(),
+    'snapshot',
+    [],
+    undefined,
+    expect.anything(),
+  );
+});
+
+test('wait text falls back to the canonical snapshot after an Apple runner miss', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-wait-runner-miss';
+  sessionStore.set(sessionName, {
+    ...makeSession(sessionName, iosSimulatorDevice),
+    appBundleId: 'com.example.app',
+  });
+
+  mockRunnerCommand.mockResolvedValue({ found: false });
+  mockDispatch.mockResolvedValue({
+    nodes: [
+      {
+        index: 0,
+        depth: 0,
+        type: 'Window',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+      },
+      {
+        index: 1,
+        depth: 1,
+        parentIndex: 0,
+        type: 'StaticText',
+        label: 'Agent Device Tester',
+        rect: { x: 20, y: 80, width: 240, height: 40 },
+      },
+    ],
+  });
+
+  const response = await handleSnapshotCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'wait',
+      positionals: ['Agent Device Tester', '5000'],
+      flags: {},
+    },
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(mockRunnerCommand).toHaveBeenCalledTimes(1);
   expect(mockDispatch).toHaveBeenCalledWith(
     expect.anything(),
     'snapshot',

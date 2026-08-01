@@ -1,5 +1,5 @@
-import { AppError } from '../../../kernel/errors.ts';
-import type { DeviceInfo } from '../../../kernel/device.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { buildSimctlArgsForDevice } from './simctl.ts';
 import { runAppleToolCommand, runXcrun } from './tool-provider.ts';
 

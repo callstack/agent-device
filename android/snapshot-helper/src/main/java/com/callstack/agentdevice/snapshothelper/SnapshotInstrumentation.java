@@ -1,15 +1,9 @@
 package com.callstack.agentdevice.snapshothelper;
 
-import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.Instrumentation;
 import android.app.UiAutomation;
-import android.graphics.Rect;
-import android.os.Build;
 import android.os.Bundle;
 import android.util.Base64;
-import android.view.accessibility.AccessibilityNodeInfo;
-import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
-import android.view.accessibility.AccessibilityWindowInfo;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -21,7 +15,6 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeoutException;
 
@@ -33,6 +26,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
   private static final long DEFAULT_WAIT_FOR_IDLE_TIMEOUT_MS = 500;
   private static final long DEFAULT_WAIT_FOR_IDLE_QUIET_MS = 100;
   private static final long DEFAULT_TIMEOUT_MS = 8_000;
+  private static final long ROOT_CAPTURE_STABILIZATION_TIMEOUT_MS = 500;
   private static final int DEFAULT_MAX_DEPTH = 128;
   private static final int DEFAULT_MAX_NODES = 5_000;
   private Bundle arguments;
@@ -82,7 +76,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
         return;
       }
       long startedAtMs = System.currentTimeMillis();
-      CaptureResult capture =
+      AccessibilityTreeCapture.Result capture =
           captureXml(waitForIdleQuietMs, waitForIdleTimeoutMs, timeoutMs, maxDepth, maxNodes);
       writeOutputFile(outputPath, capture.xml);
       if (emitChunks) {
@@ -118,7 +112,8 @@ public final class SnapshotInstrumentation extends Instrumentation {
     result.putString("maxNodes", Integer.toString(maxNodes));
   }
 
-  private static void putCaptureMetadata(Bundle result, CaptureResult capture, long elapsedMs) {
+  private static void putCaptureMetadata(
+      Bundle result, AccessibilityTreeCapture.Result capture, long elapsedMs) {
     result.putString("rootPresent", Boolean.toString(capture.rootPresent));
     result.putString("captureMode", capture.captureMode);
     result.putString("windowCount", Integer.toString(capture.windowCount));
@@ -140,6 +135,9 @@ public final class SnapshotInstrumentation extends Instrumentation {
   private UiAutomation getConnectedUiAutomationUnchecked() {
     try {
       return getConnectedUiAutomation(GESTURE_UI_AUTOMATION_CONNECT_TIMEOUT_MS);
+    } catch (InterruptedException error) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("Interrupted while connecting Android UiAutomation", error);
     } catch (TimeoutException error) {
       throw new IllegalStateException(error.getMessage(), error);
     }
@@ -228,7 +226,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
     result.putString("requestId", requestId);
     try {
       long startedAtMs = System.currentTimeMillis();
-      CaptureResult capture =
+      AccessibilityTreeCapture.Result capture =
           captureXml(waitForIdleQuietMs, waitForIdleTimeoutMs, timeoutMs, maxDepth, maxNodes);
       result.putString("ok", "true");
       putCaptureMetadata(result, capture, System.currentTimeMillis() - startedAtMs);
@@ -321,15 +319,17 @@ public final class SnapshotInstrumentation extends Instrumentation {
   }
 
   @SuppressWarnings("deprecation")
-  private CaptureResult captureXml(
+  private AccessibilityTreeCapture.Result captureXml(
       long waitForIdleQuietMs,
       long waitForIdleTimeoutMs,
       long timeoutMs,
       int maxDepth,
       int maxNodes)
-      throws TimeoutException {
+      throws TimeoutException,
+          InterruptedException,
+          AccessibilityCaptureStabilizer.IncompleteCaptureException {
     UiAutomation automation = getConnectedUiAutomation(timeoutMs);
-    enableInteractiveWindowRetrieval(automation);
+    AccessibilityTreeCapture.enableInteractiveWindowRetrieval(automation);
     if (waitForIdleTimeoutMs > 0) {
       try {
         // Best-effort settle: wait for the accessibility stream to become idle, but require only
@@ -341,161 +341,29 @@ public final class SnapshotInstrumentation extends Instrumentation {
         // Busy or animated apps can still expose a usable root; capture whatever is available.
       }
     }
-    clearAccessibilityCache(automation);
-
-    CaptureStats stats = new CaptureStats();
-    StringBuilder xml = new StringBuilder();
-    xml.append("<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>");
-    xml.append("<hierarchy rotation=\"0\">");
-    int windowCount = appendInteractiveWindowRoots(xml, automation, maxDepth, maxNodes, stats);
-    String captureMode = "interactive-windows";
-    if (windowCount == 0) {
-      AccessibilityNodeInfo root = automation.getRootInActiveWindow();
-      try {
-        if (root != null) {
-          appendNode(xml, root, 0, 0, maxDepth, maxNodes, stats, null);
-          windowCount = 1;
-        }
-        captureMode = "active-window";
-      } finally {
-        if (root != null) {
-          root.recycle();
-        }
-      }
-    }
-    xml.append("</hierarchy>");
-    return new CaptureResult(
-        xml.toString(), windowCount > 0, captureMode, windowCount, stats.nodeCount, stats.truncated);
+    return AccessibilityTreeCapture.capture(
+        automation, maxDepth, maxNodes, ROOT_CAPTURE_STABILIZATION_TIMEOUT_MS);
   }
 
-  private static void clearAccessibilityCache(UiAutomation automation) {
-    // Navigation 3 and any in-place content swap that keeps the same window/Activity render every
-    // destination inside one AndroidComposeView. A persistent helper session reuses a single
-    // UiAutomation connection across captures, and its per-connection accessibility node cache is
-    // not always invalidated by such a swap, so getWindows()/getRootInActiveWindow() can keep
-    // returning the previous screen. Drop the cache before each traversal so every capture re-reads
-    // the live tree, the way a fresh `uiautomator dump` (new connection, empty cache) does.
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-      try {
-        automation.clearCache();
-        return;
-      } catch (RuntimeException ignored) {
-        // Fall back to the setServiceInfo() flush below if the platform rejects the public API.
-      }
-    }
-    clearAccessibilityCacheViaServiceInfo(automation);
+  private UiAutomation getConnectedUiAutomation(long timeoutMs)
+      throws InterruptedException, TimeoutException {
+    return BoundedUiAutomationConnection.await(this::tryGetConnectedUiAutomation, timeoutMs);
   }
 
-  private static void clearAccessibilityCacheViaServiceInfo(UiAutomation automation) {
-    // Platforms before API 34 lack UiAutomation.clearCache(). Re-applying the current service info
-    // is the supported public-API way to drop the cache there: UiAutomation.setServiceInfo() calls
-    // AccessibilityInteractionClient.clearCache() before forwarding the config (verified in AOSP
-    // from API 24 through 33). Reflecting the internal clearCache() directly is not an option — it
-    // is a blocklisted non-SDK member, so hidden-API enforcement makes it unreachable from the
-    // helper process. Best-effort: if the flush fails the capture proceeds with the current tree.
-    try {
-      automation.setServiceInfo(automation.getServiceInfo());
-    } catch (RuntimeException ignored) {
-      // No reliable cache reset on this platform; leave capture behavior unchanged.
-    }
-  }
-
-  private UiAutomation getConnectedUiAutomation(long timeoutMs) throws TimeoutException {
-    long deadlineMs = System.currentTimeMillis() + Math.max(1, timeoutMs);
+  private UiAutomation tryGetConnectedUiAutomation() {
     UiAutomation automation = getUiAutomation();
-    RuntimeException lastError = null;
-    while (System.currentTimeMillis() <= deadlineMs) {
-      try {
-        automation.getServiceInfo();
-        return automation;
-      } catch (IllegalStateException error) {
-        if (!isUiAutomationConnectingError(error) && !isUiAutomationNotConnectedError(error)) {
-          throw error;
-        }
-        lastError = error;
-      }
-      sleep(50);
+    if (automation == null) {
+      return null;
     }
-    TimeoutException timeout =
-        new TimeoutException("Timed out waiting for Android UiAutomation to connect");
-    if (lastError != null) {
-      timeout.initCause(lastError);
-    }
-    throw timeout;
-  }
-
-  private static void enableInteractiveWindowRetrieval(UiAutomation automation) {
-    AccessibilityServiceInfo serviceInfo;
     try {
-      serviceInfo = automation.getServiceInfo();
-    } catch (RuntimeException error) {
-      return;
-    }
-    if (serviceInfo == null) {
-      return;
-    }
-    if ((serviceInfo.flags & AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS) != 0) {
-      return;
-    }
-    serviceInfo.flags |= AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
-    try {
-      automation.setServiceInfo(serviceInfo);
-    } catch (RuntimeException ignored) {
-      // Fall back to active-window capture if the platform rejects dynamic service flags.
-    }
-  }
-
-  @SuppressWarnings("deprecation")
-  private static int appendInteractiveWindowRoots(
-      StringBuilder xml,
-      UiAutomation automation,
-      int maxDepth,
-      int maxNodes,
-      CaptureStats stats) {
-    List<AccessibilityWindowInfo> windows;
-    try {
-      windows = automation.getWindows();
-    } catch (RuntimeException error) {
-      return 0;
-    }
-    int windowCount = 0;
-    for (int index = 0; index < windows.size(); index += 1) {
-      if (stats.nodeCount >= maxNodes) {
-        stats.truncated = true;
-        break;
+      automation.getServiceInfo();
+      return automation;
+    } catch (IllegalStateException error) {
+      if (isUiAutomationConnectingError(error) || isUiAutomationNotConnectedError(error)) {
+        return null;
       }
-      AccessibilityWindowInfo window = windows.get(index);
-      AccessibilityNodeInfo root = null;
-      try {
-        root = window.getRoot();
-        if (root == null) {
-          continue;
-        }
-        StringBuilder windowXml = new StringBuilder();
-        CaptureStats windowStats = stats.copy();
-        appendNode(
-            windowXml,
-            root,
-            windowCount,
-            0,
-            maxDepth,
-            maxNodes,
-            windowStats,
-            readWindowMetadata(window, windowCount));
-        xml.append(windowXml);
-        stats.copyFrom(windowStats);
-        windowCount += 1;
-      } catch (RuntimeException ignored) {
-        // Accessibility windows can disappear while traversing; keep the rest of the snapshot.
-      } finally {
-        if (root != null) {
-          root.recycle();
-        }
-        // UiAutomation.getWindows() transfers recyclable AccessibilityWindowInfo instances.
-        window.recycle();
-      }
+      throw error;
     }
-    return windowCount;
   }
 
   private void emitChunks(String payload) {
@@ -513,191 +381,6 @@ public final class SnapshotInstrumentation extends Instrumentation {
       status.putString(
           "payloadBase64", Base64.encodeToString(bytes, start, end - start, Base64.NO_WRAP));
       sendStatus(1, status);
-    }
-  }
-
-  @SuppressWarnings("deprecation")
-  private static void appendNode(
-      StringBuilder xml,
-      AccessibilityNodeInfo node,
-      int nodeIndex,
-      int depth,
-      int maxDepth,
-      int maxNodes,
-      CaptureStats stats,
-      WindowMetadata windowMetadata) {
-    if (stats.nodeCount >= maxNodes) {
-      stats.truncated = true;
-      return;
-    }
-    stats.nodeCount += 1;
-    Rect bounds = new Rect();
-    node.getBoundsInScreen(bounds);
-    xml.append("<node");
-    // Emit only fields consumed by the host parser. Extra boolean attrs made every node larger
-    // without affecting current snapshot semantics; add fields back here when TS starts reading
-    // them.
-    appendAttribute(xml, "index", Integer.toString(nodeIndex));
-    if (windowMetadata != null) {
-      appendWindowMetadata(xml, windowMetadata);
-    }
-    appendNonEmptyAttribute(xml, "text", node.getText());
-    appendNonEmptyAttribute(xml, "resource-id", node.getViewIdResourceName());
-    appendAttribute(xml, "class", node.getClassName());
-    appendNonEmptyAttribute(xml, "package", node.getPackageName());
-    appendNonEmptyAttribute(xml, "content-desc", node.getContentDescription());
-    appendAttribute(xml, "visible-to-user", Boolean.toString(node.isVisibleToUser()));
-    appendDrawingOrderAttribute(xml, node);
-    appendTrueAttribute(xml, "clickable", node.isClickable());
-    appendAttribute(xml, "enabled", Boolean.toString(node.isEnabled()));
-    appendTrueAttribute(xml, "focusable", node.isFocusable());
-    appendTrueAttribute(xml, "focused", node.isFocused());
-    boolean scrollable = node.isScrollable();
-    if (scrollable) {
-      appendAttribute(xml, "scrollable", "true");
-      appendAttribute(
-          xml,
-          "can-scroll-forward",
-          Boolean.toString(
-              hasAccessibilityAction(node, AccessibilityAction.ACTION_SCROLL_FORWARD)));
-      appendAttribute(
-          xml,
-          "can-scroll-backward",
-          Boolean.toString(
-              hasAccessibilityAction(node, AccessibilityAction.ACTION_SCROLL_BACKWARD)));
-    }
-    appendTrueAttribute(xml, "password", node.isPassword());
-    appendAttribute(
-        xml,
-        "bounds",
-        String.format(
-            Locale.ROOT,
-            "[%d,%d][%d,%d]",
-            bounds.left,
-            bounds.top,
-            bounds.right,
-            bounds.bottom));
-
-    int childCount = depth >= maxDepth ? 0 : node.getChildCount();
-    if (depth >= maxDepth && node.getChildCount() > 0) {
-      stats.truncated = true;
-    }
-    if (childCount <= 0) {
-      xml.append(" />");
-      return;
-    }
-
-    xml.append(">");
-    for (int index = 0; index < childCount; index += 1) {
-      if (stats.nodeCount >= maxNodes) {
-        stats.truncated = true;
-        break;
-      }
-      AccessibilityNodeInfo child = node.getChild(index);
-      if (child == null) {
-        continue;
-      }
-      try {
-        appendNode(xml, child, index, depth + 1, maxDepth, maxNodes, stats, null);
-      } finally {
-        child.recycle();
-      }
-    }
-    xml.append("</node>");
-  }
-
-  private static void appendNonEmptyAttribute(StringBuilder xml, String name, CharSequence value) {
-    if (value == null || value.length() == 0) {
-      return;
-    }
-    appendAttribute(xml, name, value);
-  }
-
-  private static void appendTrueAttribute(StringBuilder xml, String name, boolean value) {
-    if (value) {
-      appendAttribute(xml, name, "true");
-    }
-  }
-
-  private static void appendDrawingOrderAttribute(StringBuilder xml, AccessibilityNodeInfo node) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-      appendAttribute(xml, "drawing-order", Integer.toString(node.getDrawingOrder()));
-    }
-  }
-
-  private static void appendWindowMetadata(StringBuilder xml, WindowMetadata metadata) {
-    appendAttribute(xml, "window-index", Integer.toString(metadata.index));
-    appendAttribute(xml, "window-type", Integer.toString(metadata.type));
-    appendAttribute(xml, "window-layer", Integer.toString(metadata.layer));
-    appendAttribute(xml, "window-active", Boolean.toString(metadata.active));
-    appendAttribute(xml, "window-focused", Boolean.toString(metadata.focused));
-    appendAttribute(
-        xml,
-        "window-bounds",
-        String.format(
-            Locale.ROOT,
-            "[%d,%d][%d,%d]",
-            metadata.bounds.left,
-            metadata.bounds.top,
-            metadata.bounds.right,
-            metadata.bounds.bottom));
-  }
-
-  @SuppressWarnings("deprecation")
-  private static WindowMetadata readWindowMetadata(AccessibilityWindowInfo window, int index) {
-    Rect bounds = new Rect();
-    window.getBoundsInScreen(bounds);
-    return new WindowMetadata(
-        index, window.getType(), window.getLayer(), window.isActive(), window.isFocused(), bounds);
-  }
-
-  private static void appendAttribute(StringBuilder xml, String name, CharSequence value) {
-    String stringValue = value == null ? "" : value.toString();
-    xml.append(' ');
-    xml.append(name);
-    xml.append("=\"");
-    appendEscaped(xml, stringValue);
-    xml.append('"');
-  }
-
-  private static boolean hasAccessibilityAction(
-      AccessibilityNodeInfo node, AccessibilityAction action) {
-    List<AccessibilityAction> actions = node.getActionList();
-    return actions != null && actions.contains(action);
-  }
-
-  private static void appendEscaped(StringBuilder xml, String value) {
-    for (int index = 0; index < value.length(); index += 1) {
-      char character = value.charAt(index);
-      switch (character) {
-        case '&':
-          xml.append("&amp;");
-          break;
-        case '<':
-          xml.append("&lt;");
-          break;
-        case '>':
-          xml.append("&gt;");
-          break;
-        case '"':
-          xml.append("&quot;");
-          break;
-        case '\'':
-          xml.append("&apos;");
-          break;
-        case '\n':
-          xml.append("&#10;");
-          break;
-        case '\r':
-          xml.append("&#13;");
-          break;
-        case '\t':
-          xml.append("&#9;");
-          break;
-        default:
-          xml.append(character);
-          break;
-      }
     }
   }
 
@@ -740,64 +423,5 @@ public final class SnapshotInstrumentation extends Instrumentation {
       return fallback;
     }
     return Boolean.parseBoolean(raw.trim());
-  }
-
-  private static final class CaptureStats {
-    int nodeCount;
-    boolean truncated;
-
-    CaptureStats copy() {
-      CaptureStats next = new CaptureStats();
-      next.nodeCount = nodeCount;
-      next.truncated = truncated;
-      return next;
-    }
-
-    void copyFrom(CaptureStats next) {
-      nodeCount = next.nodeCount;
-      truncated = next.truncated;
-    }
-  }
-
-  private static final class CaptureResult {
-    final String xml;
-    final boolean rootPresent;
-    final String captureMode;
-    final int windowCount;
-    final int nodeCount;
-    final boolean truncated;
-
-    CaptureResult(
-        String xml,
-        boolean rootPresent,
-        String captureMode,
-        int windowCount,
-        int nodeCount,
-        boolean truncated) {
-      this.xml = xml;
-      this.rootPresent = rootPresent;
-      this.captureMode = captureMode;
-      this.windowCount = windowCount;
-      this.nodeCount = nodeCount;
-      this.truncated = truncated;
-    }
-  }
-
-  private static final class WindowMetadata {
-    final int index;
-    final int type;
-    final int layer;
-    final boolean active;
-    final boolean focused;
-    final Rect bounds;
-
-    WindowMetadata(int index, int type, int layer, boolean active, boolean focused, Rect bounds) {
-      this.index = index;
-      this.type = type;
-      this.layer = layer;
-      this.active = active;
-      this.focused = focused;
-      this.bounds = bounds;
-    }
   }
 }

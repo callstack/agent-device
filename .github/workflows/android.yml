@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -36,25 +37,22 @@ jobs:
       - name: Setup Android replay host
         id: android-replay-host
         uses: ./.github/actions/setup-android-replay-host
+        with:
+          package-helpers: 'true'
 
-      - name: Install Android SDK packages
-        run: |
-          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          if [ ! -x "$SDKMANAGER" ]; then
-            SDKMANAGER="$SDK_ROOT/cmdline-tools/bin/sdkmanager"
-          fi
-          if [ ! -x "$SDKMANAGER" ]; then
-            echo "sdkmanager not found under $SDK_ROOT" >&2
-            exit 1
-          fi
-          yes | "$SDKMANAGER" --licenses >/dev/null
-          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+      - name: Restore fixture APK
+        id: fixture-app
+        uses: ./.github/actions/setup-fixture-app
+        with:
+          platform: android
+          install: 'false'
+          wait-for-artifact-seconds: '600'
 
-      - name: Package npm-bundled Android helpers
-        run: |
-          pnpm package:android-snapshot-helper:npm
-          pnpm package:android-ime-helper:npm
+      - name: Report fixture cache source
+        run: echo "Android fixture APK source=${{ steps.fixture-app.outputs.source }}"
+
+      - name: Run Android emulator catalog coverage contract
+        run: node --test test/integration/smoke-android-emulator-coverage.test.ts
 
       - name: Run Android smoke checks
         uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
@@ -65,13 +63,17 @@ jobs:
           target: google_apis_playstore
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
           script: |
-            set -e
+            set -eu
+            ANDROID_SERIAL="$(adb devices | awk 'NR > 1 && $2 == "device" { print $1; exit }')"
+            test -n "$ANDROID_SERIAL"
+            pnpm build
+            pnpm clean:daemon
+            AGENT_DEVICE_ANDROID_E2E=1 AGENT_DEVICE_ANDROID_E2E_TIER=smoke AGENT_DEVICE_ANDROID_SERIAL="$ANDROID_SERIAL" AGENT_DEVICE_FIXTURE_APP_PATH="${{ steps.fixture-app.outputs.apk-path }}" AGENT_DEVICE_FIXTURE_APP_ID="${{ steps.fixture-app.outputs.app-id }}" node --test test/integration/smoke-android-emulator.test.ts
             node --experimental-strip-types src/bin.ts test test/integration/replays/android/01-settings.ad --retries 2 --report-junit test/artifacts/replays-android-smoke.junit.xml
-            sh ./test/scripts/android-snapshot-helper-release-smoke.sh
 
       - name: Upload Android artifacts
         if: always()
         uses: ./.github/actions/upload-agent-device-artifacts
         with:
           artifact-name: android-artifacts
-          agent-home-dir: ${{ steps.android-replay-host.outputs.agent-home-dir }}
+          agent-state-dir: ${{ steps.android-replay-host.outputs.agent-state-dir }}

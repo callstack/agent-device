@@ -1,37 +1,40 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import type {
+  GestureExecutionProfile,
+  GestureReferenceFrame,
+  ScrollDirection,
+} from '@agent-device/contracts/interaction';
+import type { LogBackend } from '@agent-device/contracts/observability';
+import type { RecordingExportQuality, RecordingScope } from '@agent-device/contracts/recording';
+import type { SessionAction, SessionSurface } from '@agent-device/contracts/session';
+import type {
+  LeaseBackend,
   DaemonArtifact as PublicDaemonArtifact,
-  DaemonRequest as WireRequest,
+  DaemonInstallSource as PublicDaemonInstallSource,
   DaemonRequestMeta as PublicDaemonRequestMeta,
   DaemonResponse as PublicDaemonResponse,
   DaemonResponseData as PublicDaemonResponseData,
-  DaemonInstallSource as PublicDaemonInstallSource,
-  LeaseBackend,
   SessionRuntimeHints as PublicSessionRuntimeHints,
-} from '../kernel/contracts.ts';
-import type { CommandFlags } from '../contracts/command-flags.ts';
-import type { GestureReferenceFrame, ScrollDirection } from '../contracts/scroll-gesture.ts';
-import type { LogBackend } from '../contracts/logs.ts';
-import type { SessionSurface } from '../contracts/session-surface.ts';
-import type { RecordingExportQuality } from '../contracts/recording-export-quality.ts';
-import type { RecordingScope } from '../contracts/recording-scope.ts';
-import type { DeviceInfo, Platform, PlatformSelector } from '../kernel/device.ts';
+  DaemonRequest as WireRequest,
+} from '@agent-device/kernel/contracts';
+import type { DeviceInfo, Platform, PlatformSelector } from '@agent-device/kernel/device';
+import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
 import type { ExecBackgroundResult, ExecResult } from '../utils/exec.ts';
-import type { Rect, SnapshotState } from '../kernel/snapshot.ts';
-import type { GestureExecutionProfile } from '../contracts/gesture-plan-types.ts';
 // Type-only import; erased at runtime. ref-frame.ts imports SessionState from
 // here, so this back-edge must stay type-only to avoid a runtime cycle.
-import type { RefFrameScope, RefFrameState } from './ref-frame.ts';
-import type { TargetAnnotationV1 } from '../replay/target-identity.ts';
-import type { ReplayTargetGuardDenotation } from '../replay/target-identity-node.ts';
-import type { AppLogFailure, AppLogState } from './app-log-process.ts';
-import type { DeviceLease } from '../contracts/device-provider.ts';
+import type { SnapshotDiagnosticsState } from '@agent-device/contracts/capture';
+import type { DeviceLease } from '@agent-device/contracts/device';
+import type { AudioProbeSource } from '@agent-device/contracts/platform';
 import type { AndroidNativePerfSession } from '../platforms/android/perf.ts';
+import type { SessionScriptPublicationState } from './session-script-publication-state.ts';
 import type {
   AppleXctracePerfCapture,
   AppleXctracePerfMode,
 } from '../platforms/apple/core/perf-xctrace.ts';
-import type { AudioProbeSource } from '../contracts/audio-probe-result.ts';
-import type { SnapshotDiagnosticsState } from '../contracts/snapshot-diagnostics.ts';
+import type { ReplayTargetGuardDenotation } from '../replay/target-identity-node.ts';
+import type { TargetAnnotationV1 } from '../replay/target-identity.ts';
+import type { AppLogFailure, AppLogState } from './app-log-process.ts';
+import type { RefFrameScope, RefFrameState } from './ref-frame.ts';
 export type DaemonInstallSource = PublicDaemonInstallSource;
 export type SessionRuntimeHints = PublicSessionRuntimeHints;
 export type DaemonArtifact = PublicDaemonArtifact;
@@ -50,7 +53,18 @@ export type DaemonOpenLifecycle = {
 
 type DaemonRequestInternal = {
   openLifecycle?: DaemonOpenLifecycle;
+  /**
+   * Request-owned capability used when a fresh replay discovers its device
+   * only inside the first open. The router retains that device's execution
+   * lock before dispatch and releases it after the outer replay finalizes.
+   */
+  retainDeviceExecutionLock?: (deviceId: string) => Promise<void>;
   admittedLease?: DeviceLease;
+  /**
+   * Daemon-composed hierarchy capture used as operational evidence only.
+   * It must not issue or replace client ref authority.
+   */
+  observationOnly?: true;
   /**
    * Implicit caller scope resolved before a nested dispatch replaces the
    * public session name with its effective scoped key.
@@ -354,74 +368,15 @@ export type SessionState = {
   /** Session was created by record start and should be released when recording stops. */
   recordOnlySession?: boolean;
   recordSession?: boolean;
-  /** ADR 0016 ordinary open-to-destination authoring lifecycle. Repair state is separate. */
-  scriptRecordingState?: 'armed' | 'aborted' | 'published';
-  saveScriptPath?: string;
   /**
-   * #1258: `--force`/`--overwrite` captured at the moment `--save-script` was
-   * armed (`open --save-script --force`, `close --save-script --force`, or
-   * `replay --save-script --force`'s first arm) — persisted here, like
-   * `saveScriptPath`, so a LATER write that does not repeat the flag (a bare
-   * `close` finishing a session opened with `open --save-script --force`, a
-   * `--from` continuation leg, or an unattended auto-commit teardown with no
-   * live request at all) still honors the overwrite the caller opted into up
-   * front. The effective decision at any write site is `req.flags?.force ||
-   * session.saveScriptForce`.
-   *
-   * Force is PER-TARGET, not a session-wide standing grant: it stays set while
-   * the target is unchanged, but re-arming a DIFFERENT `--save-script=<other>`
-   * without a live `--force` CLEARS it (`applySaveScriptRetarget`), so a later
-   * retarget can never silently overwrite a file the caller never opted into.
-   * A live `--force` on the retarget re-grants it for the new target.
+   * The tagged script-publication aggregate (#1478 P4a): ordinary authoring (ADR 0016), the
+   * ADR 0012 decision 6 repair transaction, and the shared output target with its per-target
+   * force authorization, in one state machine. `undefined` means `NO_SCRIPT_PUBLICATION` —
+   * mutate only through the daemon-private `ReplaySessionTransaction`/`SessionScriptPublication`
+   * projections; ordinary readers use the read helpers in
+   * `session-script-publication-state.ts`.
    */
-  saveScriptForce?: boolean;
-  /**
-   * ADR 0012 decision 6, R6: `session.actions.length` at the `replay
-   * --save-script` invocation that armed this session — the repair-run
-   * boundary. The healed `.ad` serializes only `session.actions` from this
-   * index onward, so a reused session's earlier, unrelated actions never
-   * leak into the healed script.
-   */
-  saveScriptBoundary?: number;
-  /**
-   * ADR 0012 decision 6: set when `saveScriptPath` was DEFAULTED to the
-   * `<original-stem>.healed.ad` sibling (no explicit `--save-script=<out>`).
-   * Bookkeeping only — it does not gate the writer's refuse-on-exist
-   * decision, which is uniform regardless of this flag (see
-   * `publishHealedScriptAtomically`): a second repair against the same
-   * original is refused at the default healed sibling exactly like an
-   * explicit `--save-script=<path>` or an ordinary recording's target would
-   * be, never destroying an unreviewed prior `.healed.ad` diff.
-   */
-  saveScriptDefaultedHealedPath?: boolean;
-  /**
-   * ADR 0012 decision 6, R7 + commit semantics (C2): the repair TRANSACTION
-   * completion flag. `true` iff the last repair-armed replay run reached its
-   * final EXECUTABLE step with no outstanding divergence (the terminal source
-   * `close` is excluded — C4). Commit is gated on this, NOT merely on a
-   * `close`: `SessionScriptWriter.write` publishes a repair-armed session's
-   * healed `.ad` only when complete, so a `close`/`close --save-script`
-   * issued after a divergence but before the plan finishes discards a prefix
-   * instead of committing it. States: ARMED (`saveScriptBoundary` set,
-   * complete unset) -> COMPLETE (this true) -> COMMITTED (`saveScriptCommitted`).
-   */
-  saveScriptComplete?: boolean;
-  /**
-   * ADR 0012 decision 6 (C2): set by the writer after a repair-armed session's
-   * healed `.ad` is atomically published. Makes re-publish idempotent (a second
-   * `writeSessionLog` no-ops) and lets teardown distinguish a COMMITTED session
-   * (nothing to tombstone) from an aborted/reaped one.
-   */
-  saveScriptCommitted?: boolean;
-  /** Target identity of a successful repair close awaiting script commit. */
-  repairPlatformCloseReceipt?: string;
-  /**
-   * ADR 0012 decision 6, R7 (C5a): the original replay input path of an armed
-   * repair, stashed so an idle-reap tombstone can hand the agent an actionable
-   * `replay <path> --save-script` re-run command instead of a bare
-   * SESSION_NOT_FOUND.
-   */
-  repairSourcePath?: string;
+  scriptPublication?: SessionScriptPublicationState;
   /**
    * ADR 0012 decision 6, R2/R3, extended per #1262: set whenever a
    * `record-and-heal` divergence's `resume` reports `allowed: true` — its
@@ -503,5 +458,4 @@ export type SessionState = {
 
 // The recorded-action SHAPE lives in contracts/ so replay/ and compat/ can read a script
 // without depending on the server; re-exported here for the daemon's own consumers.
-export type { SessionAction } from '../contracts/session-action.ts';
-import type { SessionAction } from '../contracts/session-action.ts';
+export type { SessionAction } from '@agent-device/contracts/session';

@@ -1,9 +1,11 @@
-import { CLOUD_WEBDRIVER_PROVIDERS } from '../../cloud-webdriver/providers.ts';
-import type { CloudWebDriverKnownProviderName } from '../../cloud-webdriver/providers.ts';
+import {
+  CLOUD_WEBDRIVER_PROVIDERS,
+  type CloudWebDriverKnownProviderName,
+} from '@agent-device/provider-webdriver';
 import type { RemoteConfigProfile } from '../../remote/remote-config-schema.ts';
-import { AppError } from '../../kernel/errors.ts';
-import type { PlatformSelector } from '../../kernel/device.ts';
-import type { CliFlags } from '../../contracts/cli-flags.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { PlatformSelector } from '@agent-device/kernel/device';
+import type { CliFlags } from '@agent-device/contracts/command';
 import type { EnvMap } from '../../utils/env-map.ts';
 import { readCloudDeviceFeatureProfileFields, readMetroProfileFields } from './profile-fields.ts';
 import { persistAndResolveGeneratedProfile } from './generated-config.ts';

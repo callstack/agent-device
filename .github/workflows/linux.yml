@@ -104,7 +104,7 @@ jobs:
       - name: Run Linux replay smoke test
         run: |
           pnpm clean:daemon
-          node --experimental-strip-types src/bin.ts test test/integration/replays/linux \
+          pnpm test:replay:linux \
             --retries 2 \
             --report-junit test/artifacts/replays-linux.junit.xml
 

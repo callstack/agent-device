@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { readApplePlistJson } from '../tool-provider.ts';
-import { parseXmlDocumentSync, visitXmlPlistEntries, type XmlNode } from '../xml.ts';
+import { parseXmlDocumentSync, type XmlNode } from '@agent-device/xml';
+import { visitXmlPlistEntries } from '../plist-xml.ts';
 import { isRecord } from '../../../../utils/parsing.ts';
 
 const XCTESTRUN_PRODUCT_REFERENCE_KEYS = new Set([

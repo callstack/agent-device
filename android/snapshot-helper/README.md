@@ -44,7 +44,9 @@ Devices or providers that block test-package installs must allow this package be
 can run.
 
 `waitForIdleTimeoutMs` defaults to `500`, which is a maximum wait, not a fixed sleep. Direct helper
-invocations can pass `0` when immediate capture during ongoing animation is preferred.
+invocations can pass `0` when immediate capture during ongoing animation is preferred. Root
+acquisition has a separate 500 ms stabilization bound that is used only when no root is available or
+an active/focused window is temporarily missing its root; complete captures pay no additional wait.
 
 ## One-Shot Modes
 

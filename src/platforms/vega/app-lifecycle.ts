@@ -1,4 +1,4 @@
-import type { DeviceInfo } from '../../kernel/device.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { requireExecSuccess, type ExecOptions } from '../../utils/exec.ts';
 import { resolveVegaToolProvider } from './tool-provider.ts';
 

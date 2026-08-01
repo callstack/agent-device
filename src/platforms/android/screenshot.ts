@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
-import { AppError } from '../../kernel/errors.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { runAndroidAdb, sleep } from './adb.ts';
 
 // PNG file signature: 0x89 P N G \r \n 0x1A \n

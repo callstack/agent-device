@@ -1,4 +1,4 @@
-import type { Point, SnapshotNode } from '../../../kernel/snapshot.ts';
+import type { Point, SnapshotNode } from '@agent-device/kernel/snapshot';
 import type {
   AgentDeviceRuntime,
   CommandContext,
@@ -15,7 +15,7 @@ import type {
   SettleObservation,
   SettleParams,
   SettleTailEntry,
-} from '../../../contracts/interaction.ts';
+} from '@agent-device/contracts/interaction';
 import type { CapturedSnapshot } from './selector-read-shared.ts';
 import {
   DEFAULT_STABLE_QUIET_MS,

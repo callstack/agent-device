@@ -6,13 +6,13 @@ import type {
 } from '../../../backend.ts';
 import type { ArtifactDescriptor, FileOutputRef } from '../../../io.ts';
 import type { CommandContext } from '../../../runtime-contract.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { successText } from '../../../utils/success-text.ts';
 import { requireIntInRange } from '../../../utils/validation.ts';
 import {
   recordingQualityInputToExportQuality,
   type RecordingExportQuality,
-} from '../../../contracts/recording-export-quality.ts';
+} from '@agent-device/contracts/recording';
 import type {
   BackendResultEnvelope,
   BackendResultVariant,

@@ -1,4 +1,4 @@
-import type { SnapshotNode } from '../../../kernel/snapshot.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { summarizeAxEvidence } from '../../../utils/ax-digest.ts';
 import type {
@@ -6,7 +6,7 @@ import type {
   ResolvedInteractionTarget,
   SettleObservation,
   SettleParams,
-} from '../../../contracts/interaction.ts';
+} from '@agent-device/contracts/interaction';
 import { captureInteractionSnapshot } from './resolution.ts';
 import { settleAfterInteraction, settleEvidence } from './settle.ts';
 

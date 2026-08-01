@@ -72,7 +72,7 @@ task touches:
   center coordinate when a frame is available. This keeps target selection semantic while avoiding
   `XCUIElement.tap()` post-action element re-resolution after normal navigation. tvOS remains
   focus/remote-driven.
-- Guarantee cell: one (dispatch path, guarantee) entry in `src/contracts/interaction-guarantees.ts`,
+- Guarantee cell: one (dispatch path, guarantee) entry in `packages/contracts/src/interaction-guarantees.ts`,
   classified as runtime/runner/delegated/inapplicable/waived. Completeness is a compile error;
   honesty is gate-tested.
 - Owned waiver: a `gap:`-prefixed waived cell carrying a `trackingIssue` URL. Waivers are diffable
@@ -91,7 +91,13 @@ task touches:
   (`active`/`expired`), and an issuance scope (`all` for a complete snapshot, or the bounded set of
   ref bodies a partial publication emitted). Owned solely by `src/daemon/ref-frame.ts`. A complete
   snapshot activates an `all` frame; `find`/settled diff/replay divergence activate a bounded partial
-  frame that supersedes the prior one; internal read captures never activate or reindex it.
+  frame that supersedes the prior one; internal read captures never activate or reindex it. Replay
+  captures return opaque, one-shot lineage evidence, and daemon response composition activates refs
+  synchronously only after the exact inline or successfully written overflow projection is known.
+  Every finalization attempt consumes its evidence. The outer replay retains its stable session lock
+  plus the device lock when known through finalization, so external commands cannot interleave;
+  nested replay actions reuse that scope and invalidate lineage through capture, ref-frame,
+  side-effect, or session-lifetime changes.
 - Frame expiry seam (ADR 0014): every mutating leaf calls `expireRefFrame` synchronously, immediately
   before the device op that may change element identity (after all pre-action guards), so a
   post-dispatch failure still leaves the frame expired — there is no success-only rollback. Ref
@@ -221,7 +227,7 @@ task touches:
 
 ADR 0011 (interaction guarantee contract) is the interaction-semantics counterpart of ADR 0008's
 registry thesis: the dispatch-path × guarantee matrix is declared once in
-`src/contracts/interaction-guarantees.ts`, completeness is type-enforced, honesty and coverage are
+`packages/contracts/src/interaction-guarantees.ts`, completeness is type-enforced, honesty and coverage are
 gate-enforced, and cross-language rules are pinned by golden parity tables. New dispatch paths and
 guarantees are whole-matrix decisions, not local edits.
 
@@ -246,7 +252,7 @@ The perfect-shape refactor is complete and merged. Its end-state:
 - Apple platform model. Internally `Platform` is `apple` (plus `android`/`vega`/`linux`/`web`) with an
   `appleOs` discriminant (`ios | ipados | tvos | watchos | visionos | macos`); the shared Apple engine
   lives under `src/platforms/apple/core/` with per-OS leaves under `src/platforms/apple/os/<os>/`.
-  The public wire stays non-breaking: `PUBLIC_PLATFORMS` (`src/kernel/device.ts`) still emits
+  The public wire stays non-breaking: `PUBLIC_PLATFORMS` (`packages/kernel/src/device.ts`) still emits
   `ios`/`macos` leaf output. See [ADR 0009](docs/adr/0009-apple-platform-consolidation.md).
 - Vega platform model. Initial Vega OS support is deliberately **VVD-only**: discovery returns
   `VirtualDevice`, and platform capability admission rejects physical Fire TV devices until durable
@@ -264,11 +270,12 @@ The perfect-shape refactor is complete and merged. Its end-state:
   it ranks an explicit target spine — as rank groups, lowest (kernel sink) to highest, where `A ◄ B`
   means B may not be outranked by A (the back-edge order the gate rejects), NOT that every displayed
   import exists:
-  `kernel ◄ { contracts, request, selectors, platforms, utils, replay, recording, snapshot, screenshot-diff, cloud-webdriver } ◄ { core, providers } ◄ { commands, cli-schema, mcp } ◄ { client, daemon-server, compat, remote, metro, sdk } ◄ daemon-client ◄ cli` —
-  and rejects every back-edge within it. Only `(root)` is unranked (`UNRANKED_ZONES` in
-  `scripts/layering/model.ts`): it holds the entrypoints and the composition roots that wire the
-  command surface into the daemon, and R2 forbids `daemon/` from importing `commands/`, so those
-  files sit outside the spine by construction. The satellite zones used to be unranked too, on the
+  `{ contracts, request, selectors, platforms, utils, replay, recording, snapshot, screenshot-diff } ◄ core ◄ { commands, cli-schema, mcp } ◄ { client, daemon-server, compat, remote, metro, sdk } ◄ daemon-client ◄ cli` (the former rank-0 kernel zone lives in `packages/kernel` since #1490 W0, the former `cloud-webdriver` leaf lives behind the single `@agent-device/provider-webdriver` facade since W1b, Limrun lives behind the single `@agent-device/provider-limrun` facade since W1d, and the dependency-free XML codec lives behind the single `@agent-device/xml` facade; R11 package-boundaries owns these physical seams) —
+  and rejects every back-edge within it. Only `(root)` is unranked among `src/` zones
+  (`UNRANKED_ZONES` in `scripts/layering/model.ts`): it holds the entrypoints and the composition
+  roots that wire the command surface into the daemon, and R2 forbids `daemon/` from importing
+  `commands/`, so those files sit outside the spine by construction. Extracted workspace packages
+  are classified separately and enforced by R11. The satellite zones used to be unranked too, on the
   grounds that ranking them would invent an order the architecture had not committed to; once
   `utils` joined the spine and `(root)` was emptied of shared contracts, every one of them turned
   out to have a consistent rank already. `model.test.ts` guards that no new zone escapes this
@@ -305,12 +312,25 @@ The perfect-shape refactor is complete and merged. Its end-state:
   theirs.
 - Type-cycle growth (R9). R4 keeps the VALUE import graph acyclic, so every remaining cycle is
   created by type-only imports — free at runtime, invisible to R5/R6, and the largest single
-  obstacle to reading a subsystem in isolation: inside a strongly-connected component of 102 files,
-  no file has a self-contained slice. `TYPE_CYCLE_BASELINE` in `check.ts` ratchets it for **growth
-  only**, deliberately unlike R6: reducing it is a real refactor rather than a file move, so a hard
-  equality would turn every unrelated improvement into a baseline edit. A shrunk tree is reported in
-  the success line instead of failing. Hubs by in-component dependents: `runtime-contract.ts` (25),
+  obstacle to reading a subsystem in isolation: inside a strongly-connected component of 76 files,
+  no file has a self-contained slice. `TYPE_CYCLE_BASELINE`, derived from the zone ceilings in
+  `scripts/layering/daemon-modularity.ts`, ratchets it for **growth only**, deliberately unlike R6: reducing it
+  is a real refactor rather than a file move, so a hard equality would turn every unrelated
+  improvement into a baseline edit. A shrunk tree is reported in the success line instead of
+  failing. Hubs by in-component dependents: `runtime-contract.ts` (25),
   `commands/runtime-types.ts` (21), `backend.ts` (15), `commands/runtime-common.ts` (12).
+- Daemon modularity migration (R10). The same tooling-only declaration records R7 at 30
+  writer-owned fields / 42 owner-file claims, R9's 76 members by zone (`commands` 33,
+  `daemon-server` 20, `core` 10, `platforms` 7, root 5, `client` 1), and the four
+  production importers of `daemon/types.ts` from outside daemon. R7 counts and external importers may
+  only shrink; no zone may grow inside R9, and replay/Maestro/replay-test engine files remain outside
+  it. This per-zone migration ratchet is intentionally stricter than R9's ordinary total-growth
+  rule: during the extraction, even moving cycle membership into a zone at its ceiling must be
+  justified by lowering another ceiling or changing the migration baseline explicitly. Zero-count
+  policies begin enforcing when `src/ad-replay/` or `src/maestro/` first exists and
+  already protect `src/replay/test/`: engines cannot import daemon/platform/provider implementations,
+  and no logical module may deep-import another module's `internal/` tree. These are migration
+  ratchets, not permission to scaffold façades before a real seam has two adapters.
 - Zero-dep CI jobs (R8). Some jobs run scripts straight from a checkout with `install-deps: false`,
   so they have no `node_modules`. Nothing local can feel that constraint — every dev machine has
   `node_modules` sitting right there — so a script grows a package import, passes locally, and fails
@@ -417,7 +437,7 @@ Evidence: [ADR 0002](docs/adr/0002-persistent-platform-helper-sessions.md),
 [`find.test.ts`](src/daemon/handlers/__tests__/find.test.ts),
 [`snapshot-handler.test.ts`](src/daemon/handlers/__tests__/snapshot-handler.test.ts),
 [`snapshot-scoped-refs.test.ts`](src/daemon/handlers/__tests__/snapshot-scoped-refs.test.ts),
-[`runtime-targets-typed.test.ts`](src/compat/maestro/__tests__/runtime-targets-typed.test.ts), and
+[`runtime-targets-typed.test.ts`](packages/maestro/src/internal/__tests__/runtime-targets-typed.test.ts), and
 [`android-test-suite.test.ts`](test/integration/provider-scenarios/android-test-suite.test.ts).
 
 ## Testing Principles

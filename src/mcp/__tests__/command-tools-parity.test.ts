@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { createAgentDeviceClient } from '../../agent-device-client.ts';
-import type { AgentDeviceDaemonTransport } from '../../contracts/client-connection.ts';
+import type { AgentDeviceDaemonTransport } from '@agent-device/contracts/client';
 import type { AgentDeviceClient } from '../../client/client-types.ts';
 import type { CommandExecutionResult } from '../../commands/command-surface.ts';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';

@@ -13,38 +13,53 @@ const {
   mockListAndroidDevices: vi.fn(),
 }));
 
-vi.mock('../../platforms/apple/core/devices.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/apple/core/devices.ts')>();
+// Keep these as full mocks: the real device listers invoke host subprocesses,
+// which would turn this resolver unit suite into environment-dependent integration coverage.
+vi.mock('../../platforms/apple/core/devices.ts', () => {
   return {
-    ...actual,
     findBootableIosSimulator: mockFindBootableIosSimulator,
     listAppleDevices: mockListAppleDevices,
   };
 });
 
-vi.mock('../../platforms/android/devices.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/android/devices.ts')>();
+vi.mock('../../platforms/android/devices.ts', () => {
   return {
-    ...actual,
     listAndroidDevices: mockListAndroidDevices,
   };
 });
 
-vi.mock('../../platforms/apple/core/apps.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/apple/core/apps.ts')>();
+vi.mock('../../platforms/apple/core/apps.ts', () => {
   return {
-    ...actual,
     findIosSimulatorInstalledApp: mockFindIosSimulatorInstalledApp,
   };
 });
+vi.mock('../../platforms/apple/os/macos/devices.ts', () => ({
+  listMacosDevices: vi.fn(async () => [
+    {
+      platform: 'apple',
+      id: 'host-macos-local',
+      name: 'Test Mac',
+      kind: 'device',
+      target: 'desktop',
+      appleOs: 'macos',
+      booted: true,
+    },
+  ]),
+}));
+vi.mock('../../platforms/vega/devices.ts', () => ({
+  listVegaDevices: vi.fn(async () => []),
+}));
+vi.mock('../../platforms/linux/devices.ts', () => ({
+  listLinuxDevices: vi.fn(async () => []),
+}));
 
 import {
   resolveTargetDevice,
   withDeviceInventoryProvider,
   withResolveTargetDeviceCacheScope,
 } from '../dispatch-resolve.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
-import { AppError } from '../../kernel/errors.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 
 const physical: DeviceInfo = {
   platform: 'apple',

@@ -9,7 +9,7 @@ import type {
   FindCommandResponseData,
   LongPressCommandResponseData,
   PressCommandResponseData,
-} from '../contracts/interaction.ts';
+} from '@agent-device/contracts/interaction';
 import {
   createAgentDeviceClient,
   type AgentDeviceClient,
@@ -27,8 +27,12 @@ import {
 } from '../agent-device-client.ts';
 import { runCommand } from '../commands/command-surface.ts';
 import type { CommandResult } from '../core/command-descriptor/command-result.ts';
-import type { DaemonRequest, DaemonResponse, DaemonResponseData } from '../kernel/contracts.ts';
-import { AppError } from '../kernel/errors.ts';
+import type {
+  DaemonRequest,
+  DaemonResponse,
+  DaemonResponseData,
+} from '@agent-device/kernel/contracts';
+import { AppError } from '@agent-device/kernel/errors';
 
 // Isolated so open/close metro-session-hint file writes never touch the real state dir.
 const TEST_STATE_DIR = mkdtempSync(path.join(os.tmpdir(), 'agent-device-client-test-'));

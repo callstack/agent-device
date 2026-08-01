@@ -813,7 +813,7 @@ test('test command writes JUnit report with failure metadata', async () => {
               file: '/tmp/03-skip.ad',
               status: 'skipped',
               durationMs: 0,
-              message: 'not runnable',
+              message: `not runnable & <later> "now" 'soon'`,
               reason: 'skipped-by-filter',
             },
           ],
@@ -843,7 +843,10 @@ test('test command writes JUnit report with failure metadata', async () => {
       /details: \{&quot;command&quot;:&quot;open&quot;,&quot;reason&quot;:&quot;selector_not_found&quot;\}/,
     );
     assert.match(xml, /flaky: true/);
-    assert.match(xml, /<skipped message="not runnable" \/>/);
+    assert.match(
+      xml,
+      /<skipped message="not runnable &amp; &lt;later&gt; &quot;now&quot; &apos;soon&apos;" \/>/,
+    );
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
   }

@@ -1,4 +1,4 @@
-import { isApplePlatform, type DeviceInfo } from '../kernel/device.ts';
+import { isApplePlatform, type DeviceInfo } from '@agent-device/kernel/device';
 import { sleep } from '../utils/timeouts.ts';
 export { requireIntInRange } from '../utils/validation.ts';
 

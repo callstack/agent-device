@@ -19,12 +19,13 @@ import {
   likelyPlayableMp4Container,
   withProviderScenarioTempDir,
 } from './harness.ts';
+import { ANDROID_RECORDING_CONTRACT_EVIDENCE } from './android-recording.coverage.ts';
 
 type ProviderScenarioDaemon = Awaited<ReturnType<typeof createProviderScenarioHarness>>;
 type ProviderScenarioRpcResult = Awaited<ReturnType<ProviderScenarioDaemon['callCommand']>>;
 type PullCall = { remotePath: string; localPath: string };
 
-test('Provider-backed integration Android recording flow uses scripted ADB provider pull capability', async () => {
+test(ANDROID_RECORDING_CONTRACT_EVIDENCE.testName, async () => {
   await withProviderScenarioTempDir(
     'agent-device-provider-scenario-android-record-',
     runAndroidRecordingFlowScenario,

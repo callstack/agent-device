@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { InteractionGuarantee } from '../../../src/contracts/interaction-guarantees.ts';
-import type { SnapshotState } from '../../../src/kernel/snapshot.ts';
-import { ref } from '../../../src/commands/interaction/runtime/selector-read.ts';
+import type { InteractionGuarantee } from '@agent-device/contracts/interaction';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import { ref } from '../../../src/commands/interaction/runtime/selector-read-utils.ts';
 import { scenarioName } from './coverage-manifest.ts';
 import { buildInteractionResponseData } from '../../../src/daemon/handlers/interaction-touch-response.ts';
 import { NATIVE_REF_COVERAGE } from './native-ref.coverage.ts';

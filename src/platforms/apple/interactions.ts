@@ -1,32 +1,32 @@
-import { isIosFamily, isMacOs, isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
-import { assertScrollGestureInput, type ScrollDirection } from '../../contracts/scroll-gesture.ts';
 import {
+  assertScrollGestureInput,
   normalizeScrollDurationMs,
   SCROLL_DURATION_MAX_MS,
-} from '../../contracts/scroll-command.ts';
-import { AppError } from '../../kernel/errors.ts';
-import { singlePointerPlanEndpoints, type GesturePlan } from '../../contracts/gesture-plan.ts';
-import { assertAppleMultiTouchSupported } from '../../contracts/apple-multitouch-support.ts';
+  singlePointerPlanEndpoints,
+  type BackMode,
+  type GesturePlan,
+  type Interactor,
+  type RunnerCallOptions,
+  type RunnerContext,
+  type ScrollDirection,
+} from '@agent-device/contracts/interaction';
+import { assertAppleMultiTouchSupported } from '@agent-device/contracts/platform';
+import { isIosFamily, isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { runAppleRunnerCommand } from './core/runner/runner-client.ts';
+import type { RunnerCommand } from './core/runner/runner-contract.ts';
 import {
   buildRunnerSequenceCommand,
   parseRunnerSequenceResult,
 } from './core/runner/runner-sequence.ts';
-import type { RunnerCommand } from './core/runner/runner-contract.ts';
-import { appleRemotePressCommand } from './os/tvos/remote.ts';
-import { runMacosDesktopScroll } from './os/macos/desktop-scroll.ts';
 import {
   normalizeAppleScrollResult,
   normalizeAppleScrollResultWithResolvedFrame,
   scrollRunnerFields,
   type AppleScrollOptions,
 } from './core/scroll.ts';
-import type {
-  BackMode,
-  Interactor,
-  RunnerCallOptions,
-  RunnerContext,
-} from '../../contracts/interactor-types.ts';
+import { runMacosDesktopScroll } from './os/macos/desktop-scroll.ts';
+import { appleRemotePressCommand } from './os/tvos/remote.ts';
 
 export type AppleBackRunnerCommand = 'backInApp' | 'backSystem';
 type RunAppleRunnerCommand = typeof runAppleRunnerCommand;
@@ -60,6 +60,7 @@ export function iosRunnerOverrides(
   runnerOpts: RunnerOpts;
 } {
   const runnerOpts = {
+    signal: ctx.signal,
     verbose: ctx.verbose,
     logPath: ctx.logPath,
     traceLogPath: ctx.traceLogPath,
@@ -86,6 +87,7 @@ export function iosRunnerOverrides(
             ...(selector.expectedPoint
               ? { x: selector.expectedPoint.x, y: selector.expectedPoint.y }
               : {}),
+            ...(shouldUseSynthesizedIosGesture(device) ? { synthesized: true } : {}),
             appBundleId: ctx.appBundleId,
           },
           runnerOpts,

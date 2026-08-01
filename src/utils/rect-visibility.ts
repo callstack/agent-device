@@ -1,4 +1,4 @@
-import { centerOfRect, type RawSnapshotNode, type Rect } from '../kernel/snapshot.ts';
+import { centerOfRect, type RawSnapshotNode, type Rect } from '@agent-device/kernel/snapshot';
 
 export function resolveViewportRect(nodes: RawSnapshotNode[], targetRect: Rect): Rect | null {
   const targetCenter = centerOfRect(targetRect);

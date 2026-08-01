@@ -7,8 +7,8 @@ import {
 import { snapshotAndroid } from '../platforms/android/snapshot.ts';
 import { runAndroidAdb } from '../platforms/android/adb.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
-import { AppError } from '../kernel/errors.ts';
-import { centerOfRect, attachRefs, type SnapshotNode } from '../kernel/snapshot.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import { centerOfRect, attachRefs, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import { sleep } from '../utils/timeouts.ts';
 import { pruneGroupNodes } from '../snapshot/snapshot-processing.ts';
 import { expireRefFrame } from './ref-frame.ts';

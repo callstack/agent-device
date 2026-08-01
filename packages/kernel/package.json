@@ -1,0 +1,41 @@
+{
+  "name": "@agent-device/kernel",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Foundational vocabulary for agent-device: errors, device identity, snapshot model, shared contracts. Internal workspace package bundled into the published agent-device artifact.",
+  "exports": {
+    "./errors": {
+      "types": "./src/errors.ts",
+      "default": "./src/errors.ts"
+    },
+    "./device": {
+      "types": "./src/device.ts",
+      "default": "./src/device.ts"
+    },
+    "./snapshot": {
+      "types": "./src/snapshot.ts",
+      "default": "./src/snapshot.ts"
+    },
+    "./contracts": {
+      "types": "./src/contracts.ts",
+      "default": "./src/contracts.ts"
+    },
+    "./collections": {
+      "types": "./src/collections.ts",
+      "default": "./src/collections.ts"
+    },
+    "./rect": {
+      "types": "./src/rect.ts",
+      "default": "./src/rect.ts"
+    },
+    "./redaction": {
+      "types": "./src/redaction.ts",
+      "default": "./src/redaction.ts"
+    },
+    "./bounds": {
+      "types": "./src/bounds.ts",
+      "default": "./src/bounds.ts"
+    }
+  }
+}

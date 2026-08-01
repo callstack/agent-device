@@ -1,0 +1,6 @@
+{
+  "workflow": ".github/workflows/android.yml",
+  "job": "smoke-android",
+  "step": "Run Android smoke checks",
+  "invocation": "node --experimental-strip-types src/bin.ts test test/integration/replays/android/01-settings.ad --retries 2 --report-junit test/artifacts/replays-android-smoke.junit.xml"
+}
