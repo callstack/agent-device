@@ -1,10 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  discoverReplayTestEntries,
-  buildReplayTestInvocationId,
-} from '../session-test-discovery.ts';
+import { discoverReplayTestEntries } from '../session-test-discovery.ts';
 import { trimEdgeDashes } from '../session-test-artifacts.ts';
 import type { ReplayTestManifest, ReplayTestSource } from '../session-test-types.ts';
 
