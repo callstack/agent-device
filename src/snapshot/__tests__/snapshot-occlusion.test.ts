@@ -113,3 +113,64 @@ test('annotateCoveredSnapshotNodes leaves an uncovered touch target unchanged', 
   assert.equal(result[0]?.interactionBlocked, undefined);
   assert.equal(result[0]?.hittable, true);
 });
+
+test('cover decisions read only the immutable input: the input array and its nodes are never mutated', () => {
+  const target: RawSnapshotNode = {
+    index: 0,
+    type: 'button',
+    role: 'button',
+    hittable: true,
+    label: 'Pay',
+    rect: { x: 10, y: 10, width: 100, height: 40 },
+  };
+  const overlay: RawSnapshotNode = {
+    index: 1,
+    type: 'dialog',
+    role: 'dialog',
+    rect: { x: 0, y: 0, width: 400, height: 400 },
+  };
+  const nodes = [target, overlay];
+  const before = JSON.stringify(nodes);
+
+  const annotated = annotateCoveredSnapshotNodes(nodes);
+
+  assert.equal(JSON.stringify(nodes), before);
+  assert.notEqual(annotated, nodes);
+  assert.equal(annotated[0]?.interactionBlocked, 'covered');
+  assert.equal(nodes[0]?.interactionBlocked, undefined);
+});
+
+test('a covered target still counts as covered by a live overlay above the chain', () => {
+  // T sits under sheet A; dialog B covers A, which disqualifies A as a cover
+  // for T (visibleCoverRect refuses covered candidates). T is still covered —
+  // by B directly — and every one of those decisions reads the same immutable
+  // input, so the outcome cannot depend on evaluation or annotation order.
+  // A itself carries no label and is not hittable, so it is not a touch
+  // candidate and is never annotated.
+  const t: RawSnapshotNode = {
+    index: 0,
+    type: 'button',
+    role: 'button',
+    hittable: true,
+    label: 'Pay',
+    rect: { x: 10, y: 10, width: 100, height: 40 },
+  };
+  const a: RawSnapshotNode = {
+    index: 1,
+    type: 'sheet',
+    role: 'sheet',
+    rect: { x: 0, y: 0, width: 200, height: 200 },
+  };
+  const b: RawSnapshotNode = {
+    index: 2,
+    type: 'dialog',
+    role: 'dialog',
+    rect: { x: 0, y: 0, width: 400, height: 400 },
+  };
+
+  const annotated = annotateCoveredSnapshotNodes([t, a, b]);
+
+  assert.equal(annotated[0]?.interactionBlocked, 'covered');
+  assert.equal(annotated[1]?.interactionBlocked, undefined);
+  assert.equal(annotated[2]?.interactionBlocked, undefined);
+});

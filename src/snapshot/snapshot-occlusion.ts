@@ -31,24 +31,26 @@ const SEMANTIC_TOUCH_KIND_FRAGMENTS = [
   'cell',
 ];
 
+/**
+ * The read side of one occlusion pass. Everything here is IMMUTABLE for the
+ * pass's lifetime: `nodes`/`byIndex` are the caller's input, never the
+ * annotated output, so every cover decision — including the caller-supplied
+ * `isAdditionalOverlayNode` predicate and ancestor classification — evaluates
+ * against the same state no matter when it runs. That immutability is what
+ * makes `coverCache` sound: each position's "is it covered by something
+ * later" question has exactly one answer per pass, so caching it is safe.
+ * Without the cache, `findCoveringNode` -> `visibleCoverRect` ->
+ * `findCoveringNode` recurses once per (position, later-position) pair
+ * without bound, which is O(2^overlayPositions.length): a snapshot with ~40
+ * mutually-overlapping overlay-like nodes (every key of an open Android IME
+ * keyboard, each classified via `isAdditionalOverlayNode`) pins the event
+ * loop for minutes. Annotations are applied in a separate output pass and
+ * never feed back into decisions.
+ */
 type OcclusionScan = {
-  nodes: RawSnapshotNode[];
+  nodes: readonly RawSnapshotNode[];
   byIndex: Map<number, RawSnapshotNode>;
   overlayPositions: number[];
-  /**
-   * Memoizes `findCoveringNode` by the position it was asked about. Every
-   * overlay-position's "is IT covered by something later" question has
-   * exactly one answer for the lifetime of one `annotateCoveredSnapshotNodes`
-   * call (the scan is immutable input, never mutated mid-pass), so caching it
-   * is safe. Without this, `findCoveringNode` -> `visibleCoverRect` ->
-   * `findCoveringNode` recurses once per (position, later-position) pair
-   * without bound, which is O(2^overlayPositions.length): a snapshot with
-   * ~40 mutually-overlapping overlay-like nodes (e.g. every individual key of
-   * an open Android IME keyboard, each classified overlay-like via
-   * `isAdditionalOverlayNode`) pins the event loop for minutes (#1478 P5
-   * codec-extraction regression report — root-caused as pre-existing here,
-   * exposed by the .ad test/replay path's fill-to-fill snapshot timing).
-   */
   coverCache: Map<number, RawSnapshotNode | null>;
 };
 
@@ -62,33 +64,33 @@ export function annotateCoveredSnapshotNodes(
 ): RawSnapshotNode[] {
   if (nodes.length < 2) return nodes;
 
-  const annotated = [...nodes];
-  const byIndex = new Map(annotated.map((node) => [node.index, node]));
+  const byIndex = new Map(nodes.map((node) => [node.index, node]));
   const scan: OcclusionScan = {
-    nodes: annotated,
+    nodes,
     byIndex,
-    overlayPositions: annotated.flatMap((node, position) =>
+    overlayPositions: nodes.flatMap((node, position) =>
       isOverlayLikeNode(node, byIndex, options) ? [position] : [],
     ),
     coverCache: new Map(),
   };
-  let changed = false;
-  for (const [position, node] of annotated.entries()) {
+  const coveredPositions: number[] = [];
+  for (const [position, node] of nodes.entries()) {
     if (!isCandidateTouchNode(node)) continue;
-    const cover = findCoveringNode(scan, position, node, options);
-    if (!cover) continue;
-    changed = true;
-    const coveredNode = {
+    if (findCoveringNode(scan, position, node, options)) coveredPositions.push(position);
+  }
+  if (coveredPositions.length === 0) return nodes;
+
+  const annotated = [...nodes];
+  for (const position of coveredPositions) {
+    const node = nodes[position]!;
+    annotated[position] = {
       ...node,
       hittable: false,
       interactionBlocked: 'covered' as const,
       presentationHints: mergeCoveredHint(node.presentationHints),
     };
-    annotated[position] = coveredNode;
-    scan.byIndex.set(coveredNode.index, coveredNode);
   }
-
-  return changed ? annotated : nodes;
+  return annotated;
 }
 
 export function isSnapshotNodeInteractionBlocked(
