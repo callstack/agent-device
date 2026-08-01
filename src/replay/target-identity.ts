@@ -13,7 +13,7 @@ import { AppError } from '@agent-device/kernel/errors';
 const TARGET_ANNOTATION_TAG = 'agent-device:target-v1';
 // Captures the rest of the line verbatim: a line claiming the tag with a
 // garbage payload is a malformed v1 annotation, never an ordinary comment.
-const TARGET_ANNOTATION_LINE_RE = /^#\s*agent-device:target-v(\d+)(?:\s+(.*))?$/;
+const TARGET_ANNOTATION_LINE_RE = /^#\s*agent-device:target-v(\d+)(?:\s+(\S.*))?$/;
 
 export const TARGET_ANNOTATION_MAX_FIELD_BYTES = 256;
 export const TARGET_ANNOTATION_MAX_PAYLOAD_BYTES = 4096;

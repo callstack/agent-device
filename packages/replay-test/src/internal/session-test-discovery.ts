@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { trimEdgeDashes } from './session-test-artifacts.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { isApplePlatform, type PlatformSelector } from '@agent-device/kernel/device';
 import type {
@@ -89,20 +90,14 @@ export function buildReplayTestSessionName(
   attemptIndex = 0,
 ): string {
   const baseName = path.basename(filePath, path.extname(filePath));
-  const slug = baseName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  const slug = trimEdgeDashes(baseName.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
   const testNumber = caseIndex + 1;
   return `${sessionName}:test:${suiteInvocationId}:${testNumber}${slug ? `-${slug}` : ''}:attempt-${attemptIndex + 1}`;
 }
 
 export function buildReplayTestInvocationId(requestId?: string): string {
   const raw = requestId?.trim() || `${process.pid}-${Date.now().toString(36)}`;
-  const normalized = raw
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  const normalized = trimEdgeDashes(raw.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
   return normalized || 'suite';
 }
 

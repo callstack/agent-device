@@ -23,11 +23,12 @@ export function buildReplayTestArtifactSlug(filePath: string, cwd?: string): str
       ? path.basename(filePath)
       : relativePath;
   return (
-    value
-      .toLowerCase()
-      .replace(/[\\/]+/g, '__')
-      .replace(/[^a-z0-9._-]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'test'
+    trimEdgeDashes(
+      value
+        .toLowerCase()
+        .replace(/[\\/]+/g, '__')
+        .replace(/[^a-z0-9._-]+/g, '-'),
+    ) || 'test'
   );
 }
 
@@ -134,4 +135,17 @@ function isExistingFile(filePath: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Linear-time edge trim. The regex form (`/^-+|-+$/g`) backtracks
+ * polynomially on long dash runs (CodeQL js/polynomial-redos #27/#28), and
+ * these slugs are built from caller-supplied file paths.
+ */
+export function trimEdgeDashes(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && value[start] === '-') start += 1;
+  while (end > start && value[end - 1] === '-') end -= 1;
+  return value.slice(start, end);
 }

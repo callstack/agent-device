@@ -1,7 +1,10 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
-import { discoverReplayTestEntries } from '../session-test-discovery.ts';
+import {
+  discoverReplayTestEntries,
+  buildReplayTestInvocationId,
+} from '../session-test-discovery.ts';
 import type { ReplayTestManifest, ReplayTestSource } from '../session-test-types.ts';
 
 // Scheduler-owned discovery policy (#1478 P3b): which sources a --platform filter runs, which
@@ -74,4 +77,12 @@ test('a suite that matched nothing after filtering is rejected', () => {
       }),
     (error: unknown) => error instanceof AppError && /No replay tests matched/.test(error.message),
   );
+});
+
+test('slug building stays linear on adversarial dash runs (CodeQL js/polynomial-redos)', () => {
+  const adversarial = `${'-'.repeat(50_000)}x${'-'.repeat(50_000)}`;
+  const startedAt = performance.now();
+  const slugged = buildReplayTestInvocationId(adversarial);
+  assert.ok(performance.now() - startedAt < 1000);
+  assert.ok(slugged.startsWith('x'));
 });
