@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { resolveDaemonPaths } from '../../../src/daemon/config.ts';
+import type { CliJsonResult } from '../cli-json.ts';
 import {
   createLiveDeviceContext,
   createLiveDeviceHarness,
@@ -92,7 +93,7 @@ export async function cleanupSession(context: LiveContext): Promise<void> {
         const result = await runStep(context, `cleanup: ${step} (attempt ${attempt})`, args, {
           allowFailure: attempt < 3,
         });
-        if (result.status === 0) break;
+        if (result.status === 0 || sessionAlreadyClean(result)) break;
         await new Promise((resolve) => setTimeout(resolve, 500));
       } catch (error) {
         failures.push(error);
@@ -104,4 +105,13 @@ export async function cleanupSession(context: LiveContext): Promise<void> {
   const errorPath = path.join(context.artifactDir, 'cleanup-error.txt');
   fs.writeFileSync(errorPath, failures.map(String).join('\n\n'));
   throw new AggregateError(failures, `iOS E2E cleanup failed; details: ${errorPath}`);
+}
+
+// A dead or appless session has nothing left to reset: the simulator reboot in
+// full:device-lifecycle kills the session in some environments but not others.
+function sessionAlreadyClean(result: CliJsonResult): boolean {
+  return (
+    result.json?.error?.code === 'SESSION_NOT_FOUND' ||
+    String(result.json?.error?.message ?? '').includes('requires an active app in session')
+  );
 }

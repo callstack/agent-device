@@ -74,7 +74,9 @@ async function executeLiveScenarios(context: LiveContext): Promise<void> {
 async function finalizeLiveRun(context: LiveContext): Promise<unknown> {
   let cleanupError: unknown;
   try {
-    context.sessionOpen = context.sessionOpen || (await sessionExists(context));
+    // full:device-lifecycle reboots the simulator and the session lease does not
+    // survive that in every environment, so re-check instead of trusting sessionOpen.
+    context.sessionOpen = await sessionExists(context);
   } catch (error) {
     cleanupError = error;
   }
