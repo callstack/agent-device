@@ -2,11 +2,13 @@
  * #1478 P5 stage B: the `ReplaySelectorPort` contract (issue comment
  * 5156017698's amendment), run against BOTH adapters — the production
  * adapter (`../replay-selector-port.ts`, delegating to `src/selectors`) and
- * the package's deterministic in-memory adapter
- * (`@agent-device/ad-replay/testing`). This suite lives in root, not in
- * `packages/ad-replay`, because only root can import the production adapter
- * (R11 package-boundaries: a workspace package may never reach back into
- * root `src/`).
+ * the deterministic in-memory adapter
+ * (`../../__tests__/test-utils/in-memory-replay-selector-port.ts`, relocated
+ * there in P5 stage D). This suite lives in root, not in `packages/ad-replay`,
+ * because only root can import the production adapter (R11 package-boundaries:
+ * a workspace package may never reach back into root `src/`) — the same
+ * reason the in-memory adapter itself had to move to root once this was its
+ * only consumer.
  *
  * Every scenario below is expressed in the in-memory adapter's documented
  * mini expression grammar (`key="value"` terms, ` || ` alternatives, keys
@@ -21,12 +23,12 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'vitest';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { ReplaySelectorPort } from '@agent-device/ad-replay';
-import { createInMemoryReplaySelectorPort } from '@agent-device/ad-replay/testing';
+import { createInMemoryReplaySelectorPort } from '../../__tests__/test-utils/in-memory-replay-selector-port.ts';
 import { createDaemonReplaySelectorPort } from '../replay-selector-port.ts';
 
 const ADAPTERS: readonly (readonly [string, () => ReplaySelectorPort])[] = [
   ['production (src/selectors)', createDaemonReplaySelectorPort],
-  ['in-memory (packages/ad-replay testing)', createInMemoryReplaySelectorPort],
+  ['in-memory (test-utils)', createInMemoryReplaySelectorPort],
 ];
 
 const saveNode: SnapshotNode = {

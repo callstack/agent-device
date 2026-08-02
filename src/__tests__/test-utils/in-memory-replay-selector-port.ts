@@ -7,18 +7,30 @@ import type {
   ReplaySelectorExpressionOutcome,
   ReplaySelectorGrammar,
   ReplaySelectorPort,
-} from '../selector-port.ts';
+} from '@agent-device/ad-replay';
 
 /**
  * #1478 P5 stage B: a deterministic, dependency-free `ReplaySelectorPort`
  * adapter for `packages/ad-replay`'s own contract suite
- * (`selector-port-contract.test.ts`). It honors the SAME contract as the
- * production adapter (`src/daemon/replay-selector-port.ts`) — result shapes,
- * tagged reasons, and the same-alternative winner+domain invariant — over a
- * tiny in-memory matcher instead of the real `src/selectors` grammar and
- * resolution engine. Deliberately NOT reproduced: quoting edge cases beyond
- * `key="value"`, every selector key, and the #1269 shared-id demotion — the
- * contract is about shapes and invariants, not grammar richness.
+ * (`replay-selector-port-contract.test.ts`). It honors the SAME contract as
+ * the production adapter (`src/daemon/replay-selector-port.ts`) — result
+ * shapes, tagged reasons, and the same-alternative winner+domain invariant —
+ * over a tiny in-memory matcher instead of the real `src/selectors` grammar
+ * and resolution engine. Deliberately NOT reproduced: quoting edge cases
+ * beyond `key="value"`, every selector key, and the #1269 shared-id demotion
+ * — the contract is about shapes and invariants, not grammar richness.
+ *
+ * #1478 P5 stage D: relocated here from
+ * `packages/ad-replay/src/internal/testing/in-memory-selector-port.ts`. It
+ * only ever needed the exported `ReplaySelectorPort` port type and kernel
+ * snapshot types — never a package-internal module — so once its only
+ * consumer (`src/daemon/__tests__/replay-selector-port-contract.test.ts`)
+ * turned out to be a root test (R11: only root may import the production
+ * adapter, since a workspace package may never reach back into root `src/`),
+ * keeping the adapter itself inside `packages/ad-replay` bought nothing: it
+ * moved alongside its only caller, following the same
+ * `src/__tests__/test-utils/` convention as `store-factory.ts` and
+ * `session-factories.ts`.
  *
  * Mini expression grammar: `key="value"` terms (space-separated, ANDed),
  * alternatives joined by ` || ` (first-match-wins, same as the real chain).

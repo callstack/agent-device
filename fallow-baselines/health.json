@@ -18,6 +18,14 @@
         "count": 1
       }
     },
+    "src/__tests__/test-utils/in-memory-replay-selector-port.ts": {
+      "complexity_moderate": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
     "src/cli-schema/cli-config.ts": {
       "crap_moderate": {
         "count": 1

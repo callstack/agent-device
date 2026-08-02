@@ -228,6 +228,19 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/contracts',
     '@agent-device/kernel',
   ]);
+  const adReplayPackage = packages.find((pkg) => pkg.name === '@agent-device/ad-replay');
+  assert.ok(adReplayPackage, 'ad-replay package must exist');
+  // Locks the "exports only `.`" boundary: the stage-A wide façade and the
+  // `./testing` subpath (the in-memory selector-port adapter, relocated to
+  // `src/__tests__/test-utils/`) are both gone as of P5 stage D — a future
+  // `./testing` (or any other) subpath widens this key list and fails the
+  // assertion.
+  assert.deepEqual([...adReplayPackage.exportTargets.keys()], ['@agent-device/ad-replay']);
+  assert.deepEqual([...adReplayPackage.workspaceDependencies].sort(), [
+    '@agent-device/ad-script',
+    '@agent-device/contracts',
+    '@agent-device/kernel',
+  ]);
   const providerWebDriverPackage = packages.find(
     (pkg) => pkg.name === '@agent-device/provider-webdriver',
   );
@@ -284,6 +297,10 @@ test('the real tree parses, declares, and passes R11', () => {
     'root must declare the ad-script workspace dependency',
   );
   assert.ok(
+    rootWorkspaceDependencyNames(repoRoot).has('@agent-device/ad-replay'),
+    'root must declare the ad-replay workspace dependency',
+  );
+  assert.ok(
     rootWorkspaceDependencyNames(repoRoot).has('@agent-device/provider-webdriver'),
     'root must declare the provider-webdriver workspace dependency',
   );
@@ -320,6 +337,9 @@ test('Node resolution enforces the exports map at runtime', () => {
     '@agent-device/ad-script/codec',
     '@agent-device/ad-script/internal/script.ts',
     '@agent-device/ad-script/src/index.ts',
+    '@agent-device/ad-replay/testing',
+    '@agent-device/ad-replay/internal/target-verification.ts',
+    '@agent-device/ad-replay/src/index.ts',
   ]) {
     assert.throws(
       () => import.meta.resolve(deep),
@@ -347,4 +367,6 @@ test('Node resolution enforces the exports map at runtime', () => {
   assert.ok(xmlResolved.endsWith('packages/xml/src/index.ts'), xmlResolved);
   const adScriptResolved = import.meta.resolve('@agent-device/ad-script');
   assert.ok(adScriptResolved.endsWith('packages/ad-script/src/index.ts'), adScriptResolved);
+  const adReplayResolved = import.meta.resolve('@agent-device/ad-replay');
+  assert.ok(adReplayResolved.endsWith('packages/ad-replay/src/index.ts'), adReplayResolved);
 });
