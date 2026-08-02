@@ -20,6 +20,7 @@ import {
   toReplayRepairHintCapture,
   type DivergenceFieldSanitizer,
 } from './session-replay-divergence.ts';
+import { createDaemonReplaySelectorPort } from '../replay-selector-port.ts';
 import { boundReplayDivergenceForSession } from './session-replay-divergence-publication.ts';
 import { computeReplayRepairHint } from './session-replay-repair-hint.ts';
 import {
@@ -163,6 +164,14 @@ function collectTypedMaestroSuggestions(params: {
   nodes: SnapshotNode[];
   sanitize: DivergenceFieldSanitizer;
 }) {
+  // #1478 P5 stage C: a locally-constructed port instance is fine here — the
+  // adapter is stateless (no session/request state captured), so this is
+  // functionally identical to the SAME single instance the native `.ad`
+  // replay path threads from `session-replay-runtime.ts`, just without
+  // rippling that threading through the separate typed-Maestro call chain
+  // (`session-replay-maestro-runtime.ts` / `-response.ts`), which never
+  // touches `src/selectors` on its own.
+  const port = createDaemonReplaySelectorPort();
   const snapshot = { createdAt: Date.now(), nodes: params.nodes };
   return rankAndDedupeReplaySuggestions(
     adaptMaestroFailureSnapshot(params.failure, snapshot).map(({ node, basis }) => ({
@@ -178,6 +187,7 @@ function collectTypedMaestroSuggestions(params: {
       action: params.action,
       basis,
       sanitize: params.sanitize,
+      port,
     }),
   );
 }

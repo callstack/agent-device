@@ -9,13 +9,8 @@ import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { captureSnapshot } from './snapshot-capture.ts';
-import {
-  buildSelectorChainForNode,
-  resolveSelectorChain,
-  tryParseSelectorChain,
-  type Selector,
-} from '../../selectors/index.ts';
 import { collectReplaySelectorCandidates } from './session-replay-heal.ts';
+import { resolveReplaySuggestionCandidate } from '../replay-selector-port.ts';
 import { collectSettleChromeRefs } from '../../core/snapshot-chrome.ts';
 import { buildAndPersistReplayDivergenceResume } from './session-replay-resume.ts';
 import { formatDivergenceActionLabel, isTouchTargetCommand } from '@agent-device/ad-script';
@@ -30,7 +25,11 @@ import {
   type InternalObservationEvidence,
 } from '../internal-observation.ts';
 import { boundReplayDivergenceForSession } from './session-replay-divergence-publication.ts';
-import { rankAndDedupeReplaySuggestions, type ReplayReportAction } from '@agent-device/ad-replay';
+import {
+  rankAndDedupeReplaySuggestions,
+  type ReplayReportAction,
+  type ReplaySelectorPort,
+} from '@agent-device/ad-replay';
 import type { SessionAction, SessionState } from '../types.ts';
 import {
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
@@ -72,6 +71,7 @@ export async function buildReplayFailureDivergence(params: {
   /** SHA-256 digest of the canonical plan `planActions` came from (`computeReplayPlanDigest`). */
   planDigest: string;
   signal?: AbortSignal;
+  port: ReplaySelectorPort;
 }): Promise<ReplayDivergence> {
   const {
     error,
@@ -89,6 +89,7 @@ export async function buildReplayFailureDivergence(params: {
     planActions,
     planDigest,
     signal,
+    port,
   } = params;
   const sanitize = createReplayDivergenceSanitizer(scrubVars);
 
@@ -114,6 +115,7 @@ export async function buildReplayFailureDivergence(params: {
           session,
           nodes: observation.nodes,
           sanitize,
+          port,
         })
       : [];
 
@@ -514,16 +516,6 @@ function buildReplayDivergenceScreenRefs(
   return { refs, truncated };
 }
 
-function classifySuggestionBasis(selector: Selector): ReplayDivergenceSuggestionBasis {
-  const keys = new Set(selector.terms.map((term) => term.key));
-  if (keys.has('id')) return 'id';
-  const hasRole = keys.has('role');
-  const hasLabelLike = keys.has('label') || keys.has('text');
-  if (hasRole && hasLabelLike) return 'role-label';
-  if (hasLabelLike || keys.has('value')) return 'label';
-  return 'other';
-}
-
 /**
  * Decision 1's candidate machinery reused READ-ONLY over the shared capture.
  * Ranking: identity-component strength (id > role+label > label > other),
@@ -535,13 +527,14 @@ function collectReplayDivergenceSuggestions(params: {
   session: SessionState;
   nodes: SnapshotNode[];
   sanitize: DivergenceFieldSanitizer;
+  port: ReplaySelectorPort;
 }): ReplayDivergenceSuggestion[] {
-  const { action, session, nodes, sanitize } = params;
+  const { action, session, nodes, sanitize, port } = params;
   if (!isSuggestionEligibleCommand(action.command)) return [];
-  const candidates = collectReplaySelectorCandidates(action);
+  const candidates = collectReplaySelectorCandidates(action, port);
   if (candidates.length === 0) return [];
   const matching = resolveSuggestionMatchingConfig(action);
-  return rankSuggestionCandidates({ candidates, nodes, session, action, matching, sanitize });
+  return rankSuggestionCandidates({ candidates, nodes, session, action, matching, sanitize, port });
 }
 
 function isSuggestionEligibleCommand(command: string): boolean {
@@ -576,8 +569,9 @@ function rankSuggestionCandidates(params: {
   action: ReplayReportAction;
   matching: SuggestionMatchingConfig;
   sanitize: DivergenceFieldSanitizer;
+  port: ReplaySelectorPort;
 }): ReplayDivergenceSuggestion[] {
-  const { candidates, nodes, session, action, matching, sanitize } = params;
+  const { candidates, nodes, session, action, matching, sanitize, port } = params;
   // Dedupe by node (its unique tree index), keeping the STRONGEST match basis
   // per the ADR: a node reachable through several recorded selector terms
   // appears once, tagged with its strongest basis — not whichever candidate
@@ -591,6 +585,7 @@ function rankSuggestionCandidates(params: {
       action,
       matching,
       sanitize,
+      port,
     });
     if (!entry) continue;
     entries.push(entry);
@@ -605,29 +600,27 @@ function resolveSuggestionCandidate(params: {
   action: ReplayReportAction;
   matching: SuggestionMatchingConfig;
   sanitize: DivergenceFieldSanitizer;
+  port: ReplaySelectorPort;
 }): RankedSuggestion | undefined {
-  const { candidate, nodes, session, action, matching, sanitize } = params;
-  const chain = tryParseSelectorChain(candidate);
-  if (!chain) return undefined;
-  const resolved = resolveSelectorChain(nodes, chain, {
+  const { candidate, nodes, session, action, matching, sanitize, port } = params;
+  const match = resolveReplaySuggestionCandidate(candidate, nodes, {
     platform: session.device.platform,
     requireRect: matching.requiresRect,
-    requireUnique: true,
-    disambiguateAmbiguous: matching.allowDisambiguation,
+    allowDisambiguation: matching.allowDisambiguation,
   });
-  if (!resolved) return undefined;
-  const basis = classifySuggestionBasis(resolved.selector);
+  if (!match) return undefined;
   return {
     suggestion: buildReplayDivergenceSuggestionForNode({
-      node: resolved.node,
+      node: match.node,
       nodes,
       session,
       action,
-      basis,
+      basis: match.basis,
       sanitize,
+      port,
     }),
-    basis,
-    nodeIndex: resolved.node.index,
+    basis: match.basis,
+    nodeIndex: match.node.index,
   };
 }
 
@@ -639,9 +632,10 @@ export function buildReplayDivergenceSuggestionForNode(params: {
   action: ReplayReportAction;
   basis: ReplayDivergenceSuggestionBasis;
   sanitize: DivergenceFieldSanitizer;
+  port: ReplaySelectorPort;
 }): ReplayDivergenceSuggestion {
-  const { node, nodes, session, action, basis, sanitize } = params;
-  const selectorChain = buildSelectorChainForNode(node, session.device.platform, {
+  const { node, nodes, session, action, basis, sanitize, port } = params;
+  const selectorChain = port.buildSelectorCandidates(node, session.device.platform, {
     action:
       action.command === 'fill' ? 'fill' : isTouchTargetCommand(action.command) ? 'click' : 'get',
     nodes,

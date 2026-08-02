@@ -34,12 +34,6 @@
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import { findNodeByRef, normalizeRef, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import { findNodeByLabel } from '../../snapshot/snapshot-processing.ts';
-import { matchesSelector } from '../../selectors/match.ts';
-import {
-  listSelectorChainMatches,
-  resolveSelectorChain,
-  tryParseSelectorChain,
-} from '../../selectors/index.ts';
 import {
   buildAncestryChain,
   buildIndexMap,
@@ -56,6 +50,7 @@ import {
   annotationLocalIdentity,
   classifyTargetBindingMatch,
   type LocalIdentity,
+  type ReplaySelectorPort,
 } from '@agent-device/ad-replay';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import type { ReplayDivergenceTargetBindingKind } from '@agent-device/contracts/divergence';
@@ -98,8 +93,10 @@ export function classifyReplayTarget(params: {
   refLabel: string | undefined;
   requireRect: boolean;
   allowDisambiguation: boolean;
+  port: ReplaySelectorPort;
 }): ReplayTargetClassification {
-  const { recorded, token, nodes, platform, refLabel, requireRect, allowDisambiguation } = params;
+  const { recorded, token, nodes, platform, refLabel, requireRect, allowDisambiguation, port } =
+    params;
 
   const matching = resolveTargetMatches({
     token,
@@ -108,6 +105,7 @@ export function classifyReplayTarget(params: {
     refLabel,
     requireRect,
     allowDisambiguation,
+    port,
   });
 
   const byIndex = buildIndexMap(nodes);
@@ -184,11 +182,12 @@ function resolveTargetMatches(params: {
   refLabel: string | undefined;
   requireRect: boolean;
   allowDisambiguation: boolean;
+  port: ReplaySelectorPort;
 }): TargetMatchResolution {
-  const { token, nodes, platform, refLabel, requireRect, allowDisambiguation } = params;
+  const { token, nodes, platform, refLabel, requireRect, allowDisambiguation, port } = params;
   return token.startsWith('@')
     ? resolveRefTargetMatches(nodes, token, refLabel, requireRect)
-    : resolveSelectorTargetMatches(nodes, token, platform, requireRect, allowDisambiguation);
+    : resolveSelectorTargetMatches(nodes, token, platform, requireRect, allowDisambiguation, port);
 }
 
 function resolveRefTargetMatches(
@@ -208,37 +207,30 @@ function resolveRefTargetMatches(
     : { matchedNodes: [], winnerRef: '' };
 }
 
+/**
+ * `port.resolveRecordedTarget` composes parse/resolve/list-matches/match
+ * exactly as this function used to (its production adapter,
+ * `src/daemon/replay-selector-port.ts`, is that composition lifted verbatim —
+ * #1478 P5 stage B), protecting the SAME "matched-node domain comes from the
+ * winning chain alternative" invariant this module relied on directly before.
+ */
 function resolveSelectorTargetMatches(
   nodes: SnapshotNode[],
   token: string,
   platform: Platform | PublicPlatform,
   requireRect: boolean,
   allowDisambiguation: boolean,
+  port: ReplaySelectorPort,
 ): TargetMatchResolution {
-  const chain = tryParseSelectorChain(token);
-  if (!chain) return { matchedNodes: [], winnerRef: '' };
-  const resolved = resolveSelectorChain(nodes, chain, {
+  const resolution = port.resolveRecordedTarget(token, nodes, {
     platform,
     requireRect,
-    requireUnique: true,
-    disambiguateAmbiguous: allowDisambiguation,
+    allowDisambiguation,
   });
-  if (!resolved) {
-    // No alternative produced a dispatch winner (for example, ambiguity with
-    // disambiguation disabled). Keep the established diagnostic domain so
-    // classification can report that ambiguity, but do not invent a winner.
-    const matchList = listSelectorChainMatches(nodes, chain, { platform, requireRect });
-    return { matchedNodes: matchList?.matchedNodes ?? [], winnerRef: '' };
+  if (resolution.kind === 'resolved') {
+    return { matchedNodes: [...resolution.matchedNodes], winnerRef: resolution.winner.ref };
   }
-  // `resolved.selector` is the selected chain alternative. The verification
-  // domain must use that same alternative, not the first one with any match:
-  // an earlier ambiguous/tied alternative can be skipped in favor of a later
-  // resolvable alternative.
-  const matchedNodes = nodes.filter((node) => {
-    if (requireRect && !node.rect) return false;
-    return matchesSelector(node, resolved.selector, platform);
-  });
-  return { matchedNodes, winnerRef: resolved.node.ref };
+  return { matchedNodes: [...resolution.matchedNodes], winnerRef: '' };
 }
 
 type MappedVerificationFailure = Omit<ReplayTargetDivergent, 'verified'>;

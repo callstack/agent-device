@@ -9,6 +9,7 @@ import {
   collectReplayScrubbableVarValues,
   resolveReplayAction,
   type LocalIdentity,
+  type ReplaySelectorPort,
   type ReplayVarScope,
 } from '@agent-device/ad-replay';
 import {
@@ -31,7 +32,6 @@ import type { SessionStore } from '../session-store.ts';
 import type { ReplayResumeStamper } from '../session-replay-coordinator.ts';
 import type { InternalObservationEvidence } from '../internal-observation.ts';
 import { boundedLocalIdentity } from '../session-target-evidence.ts';
-import { tryParseSelectorChain } from '../../selectors/index.ts';
 import {
   buildDivergenceScreen,
   captureDivergenceObservation,
@@ -228,6 +228,7 @@ type ReplayTargetDivergenceParams = {
   planActions: SessionAction[];
   planDigest: string;
   signal?: AbortSignal;
+  port: ReplaySelectorPort;
 };
 
 export async function verifyReplayActionTarget(
@@ -249,6 +250,7 @@ export async function verifyReplayActionTarget(
     planActions,
     planDigest,
     signal,
+    port,
   } = params;
 
   const recorded = action.targetEvidence;
@@ -323,13 +325,22 @@ export async function verifyReplayActionTarget(
     return { verified: true, deferredLandmark: recorded };
   }
 
-  const token = extractReplayTargetToken(resolvedAction);
+  const token = extractReplayTargetToken(resolvedAction, port);
   if (token === undefined) return { verified: true };
-  if (!token.startsWith('@') && !tryParseSelectorChain(token)) {
+  if (!token.startsWith('@')) {
     // A malformed recorded selector is not this module's concern — the real
     // dispatch will parse (and fail) it the same way an unannotated action
-    // would.
-    return { verified: true };
+    // would. `resolveRecordedTarget`'s early parse gate is the exact same
+    // `tryParseSelectorChain` check this used to run directly (empty `nodes`
+    // is safe: a parse failure short-circuits before any resolution work).
+    const parseCheck = port.resolveRecordedTarget(token, [], {
+      platform: session.device.platform,
+      requireRect: false,
+      allowDisambiguation: false,
+    });
+    if (parseCheck.kind === 'unresolved' && parseCheck.reason === 'parse-invalid') {
+      return { verified: true };
+    }
   }
 
   if (recorded.verification === 'unverifiable') {
@@ -376,6 +387,7 @@ export async function verifyReplayActionTarget(
     refLabel: readRefLabel(action),
     requireRect: config.requiresRect,
     allowDisambiguation: config.allowDisambiguation,
+    port,
   });
 
   if (classification.verified) {

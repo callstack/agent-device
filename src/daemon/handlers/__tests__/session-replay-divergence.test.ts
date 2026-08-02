@@ -39,8 +39,10 @@ import {
   buildReplayFailureDivergence,
   captureDivergenceObservation,
 } from '../session-replay-divergence.ts';
+import { createDaemonReplaySelectorPort } from '../../replay-selector-port.ts';
 
 const mockDispatchCommand = vi.mocked(dispatchCommand);
+const port = createDaemonReplaySelectorPort();
 
 beforeEach(() => {
   mockDispatchCommand.mockReset();
@@ -90,6 +92,7 @@ test('buildReplayFailureDivergence dedupes suggestions using the strongest basis
     responseLevel: 'default',
     planActions: [action],
     planDigest: 'test-plan-digest',
+    port,
   });
 
   expect(divergence.suggestionCount).toBe(1);
@@ -190,6 +193,7 @@ test('buildReplayFailureDivergence excludes keyboard chrome from screen.refs and
     responseLevel: 'default',
     planActions: [action],
     planDigest: 'test-plan-digest',
+    port,
   });
 
   expect(divergence.screen.state).toBe('available');
@@ -301,6 +305,7 @@ test('buildReplayFailureDivergence drops unlabeled non-interactive structural no
     responseLevel: 'default',
     planActions: [action],
     planDigest: 'test-plan-digest',
+    port,
   });
 
   expect(divergence.screen.state).toBe('available');
@@ -416,6 +421,7 @@ test('buildReplayFailureDivergence keeps an app inputAccessoryView control in sc
     responseLevel: 'default',
     planActions: [action],
     planDigest: 'test-plan-digest',
+    port,
   });
 
   expect(divergence.screen.state).toBe('available');
@@ -474,6 +480,7 @@ test('buildReplayFailureDivergence excludes Android status-bar/IME chrome from s
     responseLevel: 'default',
     planActions: [action],
     planDigest: 'test-plan-digest',
+    port,
   });
 
   expect(divergence.screen.state).toBe('available');
@@ -562,6 +569,7 @@ test('buildReplayFailureDivergence: a system-overlay window survives into screen
     responseLevel: 'default',
     planActions: [action],
     planDigest: 'test-plan-digest',
+    port,
   });
 
   expect(divergence.screen.state).toBe('available');
@@ -657,6 +665,7 @@ test('buildReplayFailureDivergence: a fully-captured overlay dismiss-target enum
     responseLevel: 'default',
     planActions: [action],
     planDigest: 'test-plan-digest',
+    port,
   });
 
   expect(divergence.screen.state).toBe('available');
@@ -756,6 +765,7 @@ test('buildReplayFailureDivergence: when a system overlay mass-covers the app, t
     responseLevel: 'default',
     planActions: [action],
     planDigest: 'test-plan-digest',
+    port,
   });
 
   expect(divergence.screen.state).toBe('available');
@@ -834,6 +844,7 @@ test('buildReplayFailureDivergence: a mass-covered app with no actionable overla
     responseLevel: 'default',
     planActions: [action],
     planDigest: 'test-plan-digest',
+    port,
   });
 
   expect(divergence.screen.state).toBe('available');
@@ -888,6 +899,7 @@ test('buildReplayFailureDivergence: the partial ref frame authorizes exactly the
     responseLevel: 'default',
     planActions: [action],
     planDigest: 'test-plan-digest',
+    port,
   });
 
   const screen = divergence.screen as Extract<typeof divergence.screen, { state: 'available' }>;
@@ -993,6 +1005,7 @@ test('buildReplayFailureDivergence: routes through the freshness-retry wrapper a
     responseLevel: 'default',
     planActions: [action],
     planDigest: 'test-plan-digest',
+    port,
   });
 
   // The freshness wrapper retried past the stale dump (2 on-device captures).
@@ -1060,6 +1073,7 @@ test('buildReplayFailureDivergence: divergence capture drops the action snapshot
     responseLevel: 'default',
     planActions: [action],
     planDigest: 'test-plan-digest',
+    port,
   });
 
   expect(mockDispatchCommand).toHaveBeenCalled();
@@ -1127,6 +1141,7 @@ test.each([
     responseLevel: 'default',
     planActions: [action],
     planDigest: 'test-plan-digest',
+    port,
   });
 
   expect(divergence.screen.state).toBe('available');

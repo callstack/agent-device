@@ -13,7 +13,10 @@ import { expandSessionPath } from '../session-paths.ts';
 import { buildReplayScriptPlatformFlags } from '../replay-device-selection.ts';
 import { errorResponse, noActiveSessionError } from './response.ts';
 import { invokeReplayAction } from './session-replay-action-runtime.ts';
-import { tryParseSelectorChain } from '../../selectors/index.ts';
+import {
+  createDaemonReplaySelectorPort,
+  readReplaySelectorDisplayValue,
+} from '../replay-selector-port.ts';
 import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import {
   buildReplayVarScope,
@@ -22,6 +25,7 @@ import {
   parseReplayCliEnvEntries,
   readReplayCliEnvEntries,
   readReplayShellEnvSource,
+  type ReplaySelectorPort,
   type ReplayVarScope,
 } from '@agent-device/ad-replay';
 import {
@@ -89,6 +93,8 @@ type ReplayStepContext = {
   signal: AbortSignal | undefined;
   /** #1478 P4b: the one locked gateway to this request's repair transaction. */
   coordinator: ReplayCoordinator;
+  /** #1478 P5 stage C: the one selector-port instance this request threads through the divergence-report chain. */
+  port: ReplaySelectorPort;
 };
 
 /**
@@ -124,6 +130,7 @@ async function resolveReplayStepResponse(
     planActions: ctx.actions,
     planDigest: ctx.planDigest,
     signal: ctx.signal,
+    port: ctx.port,
   });
   if (!verification.verified) return verification.response;
   const guard = verification.guard;
@@ -195,6 +202,7 @@ async function convertIdentityRefusalResponse(params: {
     planActions: ctx.actions,
     planDigest: ctx.planDigest,
     signal: ctx.signal,
+    port: ctx.port,
   };
   if (params.guard && isReplayTargetGuardMismatchResponse(response)) {
     return await buildReplayTargetGuardMismatchResponse({ ...mismatchParams, guard: params.guard });
@@ -232,6 +240,10 @@ export async function runReplayScriptFile(params: {
   // #1478 P4b: the one locked coordinator this request reaches the repair
   // transaction and resume watermark through.
   const coordinator = createReplayCoordinator({ sessionStore, sessionName });
+  // #1478 P5 stage C: the one selector-port instance this request threads
+  // through the divergence-report chain (verification, classification,
+  // suggestion building) — never a second-constructed adapter.
+  const port = createDaemonReplaySelectorPort();
   try {
     resolved = SessionStore.expandHome(filePath, req.meta?.cwd);
     if (isMaestroYamlPath(resolved) && req.flags?.replayBackend !== 'maestro') {
@@ -299,6 +311,7 @@ export async function runReplayScriptFile(params: {
       invoke,
       signal: getRequestSignal(req.meta?.requestId),
       coordinator,
+      port,
     };
     const failure = await executeReplayActions({
       req,
@@ -427,6 +440,7 @@ async function buildReplayActionFailure(
       logPath: params.logPath,
       planActions: params.actions,
       planDigest: params.planDigest,
+      port: params.stepContext.port,
     }),
   );
 }
@@ -502,27 +516,10 @@ function replayActionStep(
 
 function replayActionStepValue(action: SessionAction): Pick<ReplayTestAttemptStep, 'value'> {
   const positionals = action.positionals ?? [];
-  const selectorValue = readSelectorDisplayValue(positionals[0]);
+  const selectorValue = readReplaySelectorDisplayValue(positionals[0]);
   if (selectorValue) return { value: selectorValue };
   if (positionals.length === 0) return {};
   return { value: positionals.join(' ') };
-}
-
-function readSelectorDisplayValue(selector: string | undefined): string | undefined {
-  if (!selector) return undefined;
-  const parsed = tryParseSelectorChain(selector);
-  if (!parsed) return undefined;
-  const values = parsed.selectors.flatMap((entry) =>
-    entry.terms.flatMap((term) =>
-      (term.key === 'label' || term.key === 'text' || term.key === 'id') &&
-      typeof term.value === 'string'
-        ? [term.value]
-        : [],
-    ),
-  );
-  if (values.length === 0) return undefined;
-  const first = values[0];
-  return first && values.every((value) => value === first) ? first : undefined;
 }
 
 type PreparedReplayPlan = {

@@ -7,6 +7,7 @@ import type {
   ReplaySelectorGrammar,
   ReplaySelectorPort,
 } from '@agent-device/ad-replay';
+import type { ReplayDivergenceSuggestionBasis } from '@agent-device/contracts/divergence';
 import { matchesSelector } from '../selectors/match.ts';
 import {
   buildSelectorChainForNode,
@@ -15,6 +16,7 @@ import {
   splitIsSelectorArgs,
   splitSelectorFromArgs,
   tryParseSelectorChain,
+  type Selector,
 } from '../selectors/index.ts';
 
 /**
@@ -120,4 +122,78 @@ function buildSelectorCandidates(
   options: ReplaySelectorCandidateOptions = {},
 ): readonly string[] {
   return buildSelectorChainForNode(node, platform, options);
+}
+
+// ---------------------------------------------------------------------------
+// #1478 P5 stage C: daemon-only siblings to `ReplaySelectorPort`. Both need
+// the private `Selector` AST of a resolved chain alternative — term keys for
+// `resolveReplaySuggestionCandidate`'s basis classification, term values for
+// `readReplaySelectorDisplayValue`'s progress-step label — which the port
+// deliberately never exposes (the amendment's Selector/SelectorChain/
+// SelectorTerm rejection). Neither is part of the swappable 3-operation
+// contract (packages/ad-replay's in-memory adapter has no need for them), so
+// they stay here as plain functions the daemon handlers import directly,
+// rather than being threaded through a `ReplaySelectorPort` instance.
+// ---------------------------------------------------------------------------
+
+export type ReplaySuggestionCandidateMatch = Readonly<{
+  readonly node: SnapshotNode;
+  readonly basis: ReplayDivergenceSuggestionBasis;
+}>;
+
+/**
+ * Resolves ONE divergence-suggestion candidate string against the current
+ * tree and classifies which selector fields (id / role+label / label / other)
+ * the WINNING chain alternative used — lifted verbatim from
+ * `session-replay-divergence.ts`'s old `resolveSuggestionCandidate` +
+ * `classifySuggestionBasis` composition.
+ */
+export function resolveReplaySuggestionCandidate(
+  candidate: string,
+  nodes: SnapshotNode[],
+  policy: ReplayRecordedTargetPolicy,
+): ReplaySuggestionCandidateMatch | undefined {
+  const chain = tryParseSelectorChain(candidate);
+  if (!chain) return undefined;
+  const resolved = resolveSelectorChain(nodes, chain, {
+    platform: policy.platform,
+    requireRect: policy.requireRect,
+    requireUnique: true,
+    disambiguateAmbiguous: policy.allowDisambiguation,
+  });
+  if (!resolved) return undefined;
+  return { node: resolved.node, basis: classifySuggestionBasis(resolved.selector) };
+}
+
+function classifySuggestionBasis(selector: Selector): ReplayDivergenceSuggestionBasis {
+  const keys = new Set(selector.terms.map((term) => term.key));
+  if (keys.has('id')) return 'id';
+  const hasRole = keys.has('role');
+  const hasLabelLike = keys.has('label') || keys.has('text');
+  if (hasRole && hasLabelLike) return 'role-label';
+  if (hasLabelLike || keys.has('value')) return 'label';
+  return 'other';
+}
+
+/**
+ * A replay-test progress step's display `value`: the recorded selector's
+ * label/text/id term value when every alternative agrees on ONE value, else
+ * `undefined` — lifted verbatim from `session-replay-runtime.ts`'s old
+ * `readSelectorDisplayValue`.
+ */
+export function readReplaySelectorDisplayValue(selector: string | undefined): string | undefined {
+  if (!selector) return undefined;
+  const parsed = tryParseSelectorChain(selector);
+  if (!parsed) return undefined;
+  const values = parsed.selectors.flatMap((entry) =>
+    entry.terms.flatMap((term) =>
+      (term.key === 'label' || term.key === 'text' || term.key === 'id') &&
+      typeof term.value === 'string'
+        ? [term.value]
+        : [],
+    ),
+  );
+  if (values.length === 0) return undefined;
+  const first = values[0];
+  return first && values.every((value) => value === first) ? first : undefined;
 }

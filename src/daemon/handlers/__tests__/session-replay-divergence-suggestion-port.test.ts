@@ -14,11 +14,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { buildReplayDivergenceSuggestionForNode } from '../session-replay-divergence.ts';
+import { createDaemonReplaySelectorPort } from '../../replay-selector-port.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { toSnapshotNodes } from './session-replay-target-classification-fixtures.ts';
 import type { ReplayReportAction } from '@agent-device/ad-replay';
 
 const identitySanitize = (value: string): string => value;
+const port = createDaemonReplaySelectorPort();
 
 test('P5 port cell 8: a node with id, role+label, label, and value all present suggests them in build.ts priority order', () => {
   const nodes = toSnapshotNodes([
@@ -42,6 +44,7 @@ test('P5 port cell 8: a node with id, role+label, label, and value all present s
     action,
     basis: 'id',
     sanitize: identitySanitize,
+    port,
   });
 
   assert.equal(
@@ -78,6 +81,7 @@ test('P5 port cell 8: a non-unique id (demoted per #1269) is never suggested, ev
     action,
     basis: 'role-label',
     sanitize: identitySanitize,
+    port,
   });
 
   assert.equal(

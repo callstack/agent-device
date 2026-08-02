@@ -1,6 +1,5 @@
-import { splitIsSelectorArgs, splitSelectorFromArgs } from '../../selectors/index.ts';
 import { uniqueStrings } from '@agent-device/kernel/collections';
-import type { ReplayReportAction } from '@agent-device/ad-replay';
+import type { ReplayReportAction, ReplaySelectorPort } from '@agent-device/ad-replay';
 import { isTouchTargetCommand } from '@agent-device/ad-script';
 
 /**
@@ -13,7 +12,10 @@ import { isTouchTargetCommand } from '@agent-device/ad-script';
  * (`session-replay-divergence.ts`'s `collectReplayDivergenceSuggestions`).
  */
 
-function parseSelectorWaitPositionals(positionals: string[]): {
+function parseSelectorWaitPositionals(
+  positionals: string[],
+  port: ReplaySelectorPort,
+): {
   selectorExpression: string | null;
   selectorTimeout: string | null;
 } {
@@ -23,18 +25,21 @@ function parseSelectorWaitPositionals(positionals: string[]): {
     maybeTimeout !== undefined && /^\d+$/.test(maybeTimeout) ? maybeTimeout : null;
   const hasTimeout = selectorTimeout !== null;
   const selectorTokens = hasTimeout ? positionals.slice(0, -1) : positionals.slice();
-  const split = splitSelectorFromArgs(selectorTokens);
-  if (!split || split.rest.length > 0) {
+  const outcome = port.readSelectorExpression('wait', selectorTokens);
+  if (outcome.kind !== 'expression' || outcome.rest.length > 0) {
     return { selectorExpression: null, selectorTimeout: null };
   }
   return {
-    selectorExpression: split.selectorExpression,
+    selectorExpression: outcome.expression,
     selectorTimeout,
   };
 }
 
 // fallow-ignore-next-line complexity
-export function collectReplaySelectorCandidates(action: ReplayReportAction): string[] {
+export function collectReplaySelectorCandidates(
+  action: ReplayReportAction,
+  port: ReplaySelectorPort,
+): string[] {
   const result: string[] = [];
   const explicitChain =
     Array.isArray(action.result?.selectorChain) &&
@@ -63,13 +68,13 @@ export function collectReplaySelectorCandidates(action: ReplayReportAction): str
     }
   }
   if (action.command === 'is') {
-    const { split } = splitIsSelectorArgs([...action.positionals]);
-    if (split) {
-      result.push(split.selectorExpression);
+    const outcome = port.readSelectorExpression('is', [...action.positionals]);
+    if (outcome.kind === 'expression') {
+      result.push(outcome.expression);
     }
   }
   if (action.command === 'wait') {
-    const { selectorExpression } = parseSelectorWaitPositionals([...action.positionals]);
+    const { selectorExpression } = parseSelectorWaitPositionals([...action.positionals], port);
     if (selectorExpression) {
       result.push(selectorExpression);
     }

@@ -19,6 +19,9 @@ import {
 } from '../../../commands/interaction/runtime/selector-read-utils.ts';
 import { createInteractionDevice } from '../../../commands/interaction/runtime/__tests__/test-utils/index.ts';
 import { classifyReplayTarget } from '../session-replay-target-classification.ts';
+import { createDaemonReplaySelectorPort } from '../../replay-selector-port.ts';
+
+const port = createDaemonReplaySelectorPort();
 
 /** The verified-member guard denotation the replay loop mints (identity + structural position). */
 function guardFor(node: SnapshotNode, nodes: SnapshotNode[]): ReplayTargetGuardDenotation {
@@ -103,6 +106,7 @@ test('split resolver: verification verifies the covered deeper node while dispat
     refLabel: undefined,
     requireRect: true,
     allowDisambiguation: true,
+    port,
   });
   // Verification's unfiltered domain: both buttons match; the identity set
   // isolates A; the unfiltered disambiguation winner is also A (deepest) —
@@ -274,6 +278,7 @@ test('same-identity duplicates: verification denotes the covered member A among 
     refLabel: undefined,
     requireRect: true,
     allowDisambiguation: true,
+    port,
   });
   // matchCount 2 (both match); path 6 sibling ordinal isolates A, which is
   // also the unfiltered disambiguation winner → verified on A.

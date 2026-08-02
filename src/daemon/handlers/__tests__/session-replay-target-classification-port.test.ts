@@ -27,9 +27,11 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { classifyReplayTarget } from '../session-replay-target-classification.ts';
+import { createDaemonReplaySelectorPort } from '../../replay-selector-port.ts';
 import { toSnapshotNodes } from './session-replay-target-classification-fixtures.ts';
 
 const PLATFORM = 'ios' as const;
+const port = createDaemonReplaySelectorPort();
 
 // Three "Decoy" buttons: the first two exactly tie (same depth/area), the
 // third is uniquely deepest and smallest, so the deepest-then-smallest
@@ -95,6 +97,7 @@ test("P5 port cell 5: allowDisambiguation off skips a RESOLVABLE (not just tied)
     // must skip the first alternative even though it is resolvable in
     // principle (see the next test, same fixture, flag flipped).
     allowDisambiguation: false,
+    port,
   });
 
   assert.equal(result.verified, true);
@@ -122,6 +125,7 @@ test('P5 port cell 5: the SAME fixture with allowDisambiguation on resolves thro
     refLabel: undefined,
     requireRect: true,
     allowDisambiguation: true,
+    port,
   });
 
   assert.equal(result.verified, true);
