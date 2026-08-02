@@ -1131,3 +1131,109 @@ test('targeted close skips platform dispatch and preserves the error when the re
   expect(mockStopIosRunnerSession.mock.calls.length).toBeGreaterThan(1);
   expect(sessionStore.get(sessionName)).toBeUndefined();
 });
+
+// Live evidence (2026-08-02): a plain `open` followed by `close --save-script` used to fold the
+// never-armed session into the authoring lifecycle and publish anyway, producing a script with
+// selector fallback chains but no recording-time `target-v1` evidence. These two tests prove the
+// daemon-seam fix: the rejection fires before ANY teardown work (no dispatch mock needed — a
+// no-target close on Android never reaches `dispatchCommand`), the session survives so the agent
+// can retry, and no script file is written.
+test('close --save-script on a never-armed session is rejected before teardown, with no script written', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-unarmed-close-save-script-session';
+  const scriptPath = path.join(os.tmpdir(), `agent-device-unarmed-close-${Date.now()}.ad`);
+  sessionStore.set(
+    sessionName,
+    makeSession(sessionName, {
+      platform: 'android',
+      id: 'emulator-5554',
+      name: 'Pixel_9_API_35',
+      kind: 'emulator',
+      booted: true,
+    }),
+  );
+
+  await expect(
+    handleSessionCommands({
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'close',
+        positionals: [],
+        flags: { saveScript: scriptPath },
+      },
+      sessionName,
+      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      sessionStore,
+      invoke: noopInvoke,
+    }),
+  ).rejects.toMatchObject({
+    code: 'INVALID_ARGS',
+    message: expect.stringMatching(/not armed/),
+    details: expect.objectContaining({
+      hint: expect.stringMatching(/open <app> --save-script/),
+    }),
+  });
+
+  // The rejection does not tear down the session — it stays retryable/recoverable.
+  expect(sessionStore.get(sessionName)).toBeDefined();
+  expect(fs.existsSync(scriptPath)).toBe(false);
+
+  // A plain close (no --save-script) still closes the same session cleanly afterward.
+  const plainClose = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: [],
+      flags: {},
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+  expect(plainClose?.ok).toBe(true);
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+});
+
+test('close --save-script on a session with an active .ad repair transaction is unaffected by the unarmed-authoring guard', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-repair-close-save-script-session';
+  const session = {
+    ...makeSession(sessionName, {
+      platform: 'android',
+      id: 'emulator-5554',
+      name: 'Pixel_9_API_35',
+      kind: 'emulator',
+      booted: true,
+    }),
+    recordSession: true,
+    scriptPublication: {
+      kind: 'repair' as const,
+      status: 'complete' as const,
+      target: { kind: 'default' as const, force: false },
+      boundary: 0,
+    },
+  };
+  sessionStore.set(sessionName, session);
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: [],
+      flags: { saveScript: true },
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  // Repair transactions are a disjoint lifecycle (ADR 0012) with their own arming and close-time
+  // commit protocol; the new unarmed-authoring guard must not intercept them.
+  expect(response?.ok).toBe(true);
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+});

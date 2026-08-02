@@ -248,7 +248,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     names: ['--save-script'],
     type: 'booleanOrString',
     usageLabel: '--save-script [path]',
-    usageDescription: 'Save session script (.ad) on close; optional custom output path',
+    usageDescription:
+      'Arm evidence capture on open, publish the armed recording on close; close --save-script alone (without an armed open) is rejected — start with open --save-script, or use session save-script mid-session. Optional custom output path.',
   },
   {
     key: 'networkInclude',

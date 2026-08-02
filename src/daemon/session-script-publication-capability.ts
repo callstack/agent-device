@@ -61,11 +61,14 @@ export function abortAuthoringOnSecondOpen(session: SessionState): void {
  * other command's raw flag closed at the router). Arms recording and applies target/force to
  * whichever lifecycle the session is in:
  *
- * - `none` -> ordinary authoring armed. This is how a never-armed `close --save-script`
- *   publishes the whole log: the close request arms at record time and publishes moments later
- *   in the same request, folding the former "third mode" into the authoring lifecycle. The
- *   session is deleted by every close path that gets this far, so the transient armed state is
- *   unobservable to `session save-script` eligibility.
+ * - `none` -> ordinary authoring armed. This branch is UNREACHABLE for `close`: live evidence
+ *   (2026-08-02) showed it used to let a never-armed `close --save-script` fold into the
+ *   authoring lifecycle and publish moments later in the same request — a script with selector
+ *   fallback chains but no recording-time `target-v1` evidence, and no signal to the caller.
+ *   `session-close.ts`'s `assertTerminalRecordingCloseAllowed` now rejects an unarmed
+ *   `close --save-script` before any action recording runs, so this arm only fires for a
+ *   future non-close caller of the shared ingress; it is kept as that caller's safety net, not
+ *   as a documented close-time behavior.
  * - `authoring` -> retarget under the #1258 per-target force rule (`resolveScriptTarget`).
  * - `repair` -> retarget the repair target the same way (a replayed step may carry the flag).
  */

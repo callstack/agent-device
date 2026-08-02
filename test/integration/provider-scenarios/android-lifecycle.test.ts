@@ -1325,7 +1325,22 @@ async function runAndroidCaptureInteractionAndReplayWorkflow(
   assert.equal(beforeCloseOpen.appBundleId, 'com.example.demo');
   const logsBeforeClose = await client.observability.logs({ action: 'start', ...selection });
   assert.equal(logsBeforeClose.started, true);
+
+  // close --save-script now requires the session to have been armed at open (recording-time
+  // target-v1 evidence cannot be reconstructed retroactively for a session that never recorded
+  // it). End this long-lived unarmed session plainly, then arm a fresh one before exercising
+  // close --save-script + shutdown below.
+  const plainCloseBeforeArm = await daemon.callCommand('close');
+  assert.equal(plainCloseBeforeArm.statusCode, 200, JSON.stringify(plainCloseBeforeArm.json));
+  assert.equal(daemon.session(), undefined);
+
   const savedReplayPath = path.join(tempRoot, 'saved-session.ad');
+  const armedOpen = await client.apps.open({
+    app: 'com.example.demo',
+    saveScript: savedReplayPath,
+    ...selection,
+  });
+  assert.equal(armedOpen.appBundleId, 'com.example.demo');
   const close = await daemon.callCommand('close', [], {
     saveScript: savedReplayPath,
     shutdown: true,

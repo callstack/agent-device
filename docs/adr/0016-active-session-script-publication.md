@@ -96,6 +96,20 @@ work, so the caller can retry with plain `close`. Plain `close` tears down ABORT
 writing; closing an unpublished ARMED recording retains the existing close-time publication behavior. A
 fresh session is the only re-arming boundary.
 
+> **Amendment (2026-08-02, shipped).** A session that was never armed — no recorded
+> `open --save-script` at all — has no fourth pre-ARMED state name here, but it previously fell
+> through the same close-time write path as an ARMED recording: `close --save-script` on it folded
+> the request into the authoring lifecycle at record time and published anyway. Live evidence
+> showed this produces a script whose actions carry selector fallback chains but no recording-time
+> `target-v1` evidence, with no signal to the caller that evidence capture never ran — degraded
+> replay verification is worse than a loud refusal. `close --save-script` on a never-armed session
+> is now rejected before any teardown or filesystem work, the same way ABORTED/PUBLISHED are,
+> naming `open --save-script` as the recovery; a plain `close` still tears the session down
+> without writing. This is distinct from
+> [#1533](https://github.com/callstack/agent-device/issues/1533), which is about an
+> already-ARMED-then-ABORTED session whose flag ingress re-enables `recordSession` and lets a
+> *bare* `close` (no `--save-script` on the close itself) publish; that case is unresolved here.
+
 This lifecycle is distinct from ADR 0012's repair transaction. `session save-script` rejects a session
 with `saveScriptBoundary` set and directs the caller to finish or abort the repair through its existing
 `replay --from` and teardown commit protocol. Active-session publication never marks a repair COMPLETE,
@@ -264,6 +278,9 @@ executing that script, not the artifact being saved.
 - In ABORTED/PUBLISHED, `close --save-script[=<other>]` is rejected before platform close and plain
   `close` tears down without writing; closing an unpublished ARMED recording preserves current
   close-time publication behavior.
+- On a never-armed session (2026-08-02 amendment), `close --save-script` is likewise rejected before
+  platform close or filesystem work, naming `open --save-script` as the recovery; plain `close` still
+  tears down without writing, and the session is not deleted by the rejected request.
 - Descriptor completeness tests classify every recordable request's mutation effect, including
   request-sensitive read-only/mutating subcommands, and destination-guard ordering consumes only that
   trait.

@@ -194,6 +194,68 @@ test('a second successful open aborts publication and terminal save flags fail b
   });
 }, 20_000);
 
+// Live evidence (2026-08-02): a plain `open` (no arming) followed by `close --save-script` used to
+// silently publish anyway — the close request armed authoring at record time and published moments
+// later in the same request, producing a script with selector fallback chains but NO recording-time
+// `target-v1` evidence and no signal to the caller that the evidence was missing. The daemon now
+// rejects this before any teardown or filesystem work, and the session stays open so a plain close
+// still completes cleanly (it just does not publish).
+test('an unarmed session refuses close --save-script and closes cleanly on plain close', async () => {
+  await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-unarmed-close-provider-'));
+    const scriptPath = path.join(root, 'unarmed.ad');
+    try {
+      const opened = await world.daemon.callCommand('open', ['settings'], { ...world.selection });
+      assertRpcOk(opened);
+      assert.equal(authoringPublicationStatus(world), undefined);
+
+      const flaggedClose = await world.daemon.callCommand('close', [], { saveScript: scriptPath });
+      assertRpcError(flaggedClose, 'INVALID_ARGS', /not armed/);
+      assert.ok(world.daemon.session(), 'flagged close must not tear down the unarmed session');
+      assert.equal(fs.existsSync(scriptPath), false);
+
+      const plainClose = await world.daemon.callCommand('close');
+      assertRpcOk(plainClose);
+      assert.equal(world.daemon.session(), undefined);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+}, 20_000);
+
+// The counterpart to the unarmed refusal above: an `open --save-script`-armed session must still
+// publish through the ordinary close-time route (not just through `session save-script`), and the
+// published script must carry the same recording-time `target-v1` evidence.
+test('an armed session still publishes target-v1 evidence through close --save-script', async () => {
+  await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-armed-close-provider-'));
+    const scriptPath = path.join(root, 'armed-close.ad');
+    const client = world.daemon.client();
+    try {
+      await client.apps.open({
+        app: 'settings',
+        saveScript: scriptPath,
+        ...world.selection,
+      });
+      assert.equal(authoringPublicationStatus(world), 'armed');
+
+      const snapshot = await client.capture.snapshot({ interactiveOnly: true, ...world.selection });
+      const search = snapshot.nodes.find((node) => node.label === 'Search');
+      assert.ok(search?.ref, JSON.stringify(snapshot.nodes));
+      await client.interactions.click({ ref: `@${search.ref}`, ...world.selection });
+
+      const close = await world.daemon.callCommand('close', [], { saveScript: scriptPath });
+      assertRpcOk(close);
+      assert.equal(fs.existsSync(scriptPath), true);
+      const script = fs.readFileSync(scriptPath, 'utf8');
+      assert.match(script, /agent-device:target-v1/);
+      assert.equal(world.daemon.session(), undefined);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+}, 20_000);
+
 test('parameterized fill publishes only ${VAR} and replay resolves it immediately before fill', async () => {
   const secret = 'OpaqueProviderValue1348';
   let injectedText: string | undefined;

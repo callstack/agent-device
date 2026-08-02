@@ -285,11 +285,29 @@ async function stopOrRetainAppleRunnerAfterClose(
   scheduleIosRunnerIdleStop(session.device.id);
 }
 
+// Live evidence (2026-08-02): a plain `open` followed by `close --save-script` used to fold into
+// the authoring lifecycle at close time (`applyRecordedSaveScriptFlags`'s `none -> authoring`
+// branch) and publish anyway. That silently produces a script whose actions carry selector
+// fallback chains but no `target-v1` recording-time evidence — degraded replay verification with
+// no signal to the caller. Recording-time evidence can only be captured from action zero
+// (`armAuthoringOnOpen`), so an unarmed session has nothing to retroactively arm; the only
+// correct response is refusal, before any teardown or publication work runs. This intentionally
+// does not resolve #1533 (aborted-mid-recording close --save-script); that is a distinct,
+// already-armed case with its own resolution.
 function assertTerminalRecordingCloseAllowed(req: DaemonRequest, session: SessionState): void {
   if (!req.flags?.saveScript) return;
   if (isAuthoringArmedSession(session)) return;
   const state = session.scriptPublication;
-  if (state?.kind !== 'authoring') return;
+  if (state?.kind === 'repair') return;
+  if (state === undefined || state.kind === 'none') {
+    throw new AppError(
+      'INVALID_ARGS',
+      'close --save-script cannot publish this session: recording was not armed before this journey began, so there is no recording-time target evidence to publish.',
+      {
+        hint: 'Retry with plain close (it tears down without writing). To capture a publishable recording, start a fresh session with open <app> --save-script[=<path>].',
+      },
+    );
+  }
   throw new AppError(
     'INVALID_ARGS',
     `close --save-script cannot ${state.status === 'published' ? 're-publish' : 'publish'} this terminal recording. Retry with plain close; it will tear down the session without writing.`,
