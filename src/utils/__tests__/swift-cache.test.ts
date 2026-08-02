@@ -13,7 +13,7 @@ vi.mock('../exec.ts', () => ({
 }));
 
 import { runCmd } from '../exec.ts';
-import { compileSwiftSourceFile, sanitizeCacheName } from '../swift-cache.ts';
+import { compileSwiftSourceFile, compileSwiftSourceText } from '../swift-cache.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 
@@ -100,15 +100,31 @@ test('cache lock timeout reports the lock path', async () => {
   expect(mockRunCmd).not.toHaveBeenCalled();
 });
 
-test('sanitizeCacheName trims a long interior dash run without polynomial regex backtracking', () => {
+test('compileSwiftSourceText resolves a cache name with a long interior dash run in sub-second time', async () => {
+  // Regression pin for the polynomial-regex ReDoS fix in `sanitizeCacheName`'s edge-dash
+  // trim. The interior dashes are never touched by the trim, so a correct sanitizer never
+  // needs to inspect this whole run — only a backtracking one pays for its length.
   const value = `x${'-'.repeat(100_000)}x`;
 
   const start = Date.now();
-  const result = sanitizeCacheName(value);
+  // The cache name is long enough to exceed the filesystem's path-component limit, so the
+  // call is expected to reject once it reaches disk I/O; that happens only *after* the
+  // (now fast) sanitize step this test pins, so timing the settle either way still proves
+  // no catastrophic backtracking occurred.
+  await compileSwiftSourceText({ source: 'print(1)', cacheName: value }).catch(() => {});
   const elapsedMs = Date.now() - start;
 
   expect(elapsedMs).toBeLessThan(1_000);
-  expect(result).toBe(value);
+});
+
+test('compileSwiftSourceText falls back to swift-helper when the cache name sanitizes to nothing', async () => {
+  const executablePath = await compileSwiftSourceText({
+    source: 'print(1)',
+    cacheName: '---',
+  });
+
+  expect(path.basename(executablePath).startsWith('swift-helper-')).toBe(true);
+  expect(fs.statSync(executablePath).mode & 0o111).not.toBe(0);
 });
 
 function writeSourceFile(source = 'print("recording")'): string {

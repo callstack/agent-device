@@ -168,7 +168,7 @@ function isExecutableFile(filePath: string): boolean {
   }
 }
 
-export function sanitizeCacheName(value: string): string {
+function sanitizeCacheName(value: string): string {
   return trimEdgeDashes(value.replaceAll(/[^A-Za-z0-9._-]/g, '-')) || 'swift-helper';
 }
 
