@@ -7,10 +7,10 @@ export type ReplayCommandResult = {
   session: string;
   /**
    * True iff `session` still exists in the daemon's session store when the
-   * response is built — i.e. the replayed script had no terminal `close`
-   * (ADR 0016's consumption contract). The client uses this, not script
-   * parsing, to decide whether an owned one-shot daemon must stay alive so
-   * the caller can keep addressing this session.
+   * response is built. This remains true when replay suppresses an authored
+   * terminal `close` for an explicit live-session handoff. The client uses
+   * this, not script parsing, to decide whether an owned one-shot daemon must
+   * stay alive so the caller can keep addressing this session.
    */
   sessionActive: boolean;
   artifactPaths: string[];

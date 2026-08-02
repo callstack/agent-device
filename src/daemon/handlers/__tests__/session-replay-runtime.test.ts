@@ -74,7 +74,60 @@ test('a close-less replay reports sessionActive: true (real producer, session st
   expect(response.ok).toBe(true);
   if (!response.ok) return;
   expect(sessionStore.get(sessionName)).toBeDefined();
-  expect((response.data as { sessionActive: boolean }).sessionActive).toBe(true);
+  expect(response.data).toMatchObject({ sessionActive: true, replayed: 2 });
+});
+
+test('--keep-session suppresses a close that is terminal among executable actions', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-keep-marker-tail-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const filePath = writeReplayFile(root, ['open "Demo"', 'close', 'replay "./nested-flow.ad"']);
+  const commands: string[] = [];
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { replayKeepSession: true } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      commands.push(req.command);
+      if (req.command === 'close') sessionStore.delete(sessionName);
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(response.ok).toBe(true);
+  expect(commands).toEqual(['open']);
+  if (!response.ok) return;
+  expect(response.data).toMatchObject({ sessionActive: true, replayed: 1 });
+});
+
+test('--keep-session fails explicitly when the completed replay has no live session', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-keep-postcondition-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const filePath = writeReplayFile(root, ['open "Demo"', 'click "Log out"']);
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { replayKeepSession: true } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      if (req.command === 'click') sessionStore.delete(sessionName);
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      code: 'COMMAND_FAILED',
+      message: expect.stringContaining('--keep-session could not preserve session'),
+    },
+  });
 });
 
 test('a replay whose terminal close removes the session reports sessionActive: false', async () => {
@@ -128,7 +181,7 @@ test('--keep-session suppresses only the authored terminal close and reports the
   expect(response.ok).toBe(true);
   if (!response.ok) return;
   expect(sessionStore.get(sessionName)).toBeDefined();
-  expect((response.data as { sessionActive: boolean }).sessionActive).toBe(true);
+  expect(response.data).toMatchObject({ sessionActive: true, replayed: 2 });
 });
 
 test('--keep-session preserves an interior close instead of broad command filtering', async () => {
@@ -225,7 +278,7 @@ test('Maestro YAML uses the typed engine while .ad remains generic', async () =>
   const yamlResponse = await runReplayScriptFile({
     req: baseReq({
       positionals: [yamlPath],
-      flags: { replayBackend: 'maestro', platform: 'ios' },
+      flags: { replayBackend: 'maestro', platform: 'ios', replayKeepSession: false },
     }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),

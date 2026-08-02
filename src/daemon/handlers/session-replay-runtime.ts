@@ -220,6 +220,7 @@ export async function runReplayScriptFile(params: {
   }
 
   const startedAt = Date.now();
+  const keepSession = req.flags?.replayKeepSession === true;
   let resolved = '';
   const artifactPaths = new Set<string>();
   // #1478 P4b: the one locked coordinator this request reaches the repair
@@ -231,7 +232,7 @@ export async function runReplayScriptFile(params: {
       return errorResponse('INVALID_ARGS', maestroBackendRequiredMessage('replay', filePath));
     }
     if (resolveReplayFormat(resolved, req.flags?.replayBackend) === 'maestro') {
-      if (req.flags?.replayKeepSession === true) {
+      if (keepSession) {
         return errorResponse(
           'INVALID_ARGS',
           '--keep-session is supported only for native .ad replay; Maestro YAML owns its lifecycle.',
@@ -252,6 +253,7 @@ export async function runReplayScriptFile(params: {
       tracePath,
       resolved,
       coordinator,
+      keepSession,
     });
     if (!planPreparation.ok) return planPreparation.response;
     const {
@@ -264,6 +266,7 @@ export async function runReplayScriptFile(params: {
       scope,
       actionTracePath,
       snapshotDiagnosticSamples,
+      suppressedTerminalCloseIndex,
     } = planPreparation.value;
     const sessionPreparation = prepareReplaySession({
       req,
@@ -308,6 +311,7 @@ export async function runReplayScriptFile(params: {
       snapshotDiagnosticSamples,
       onStep,
       armSaveScript: sessionPreparation.armSaveScript,
+      suppressedTerminalCloseIndex,
     });
     if (failure) return failure;
     return completeReplayRun({
@@ -320,6 +324,8 @@ export async function runReplayScriptFile(params: {
       snapshotDiagnosticSamples,
       armSaveScript: sessionPreparation.armSaveScript,
       coordinator,
+      keepSession,
+      suppressedTerminalCloseIndex,
     });
   } catch (err) {
     const appErr = asAppError(err);
@@ -348,6 +354,7 @@ type ReplayActionExecution = {
   snapshotDiagnosticSamples: SnapshotTimingSample[];
   onStep: ReplayTestAttemptStepSink | undefined;
   armSaveScript: () => void;
+  suppressedTerminalCloseIndex: number | undefined;
 };
 
 async function executeReplayActions(
@@ -363,6 +370,7 @@ async function executeReplayActions(
     snapshotDiagnosticSamples,
     onStep,
     armSaveScript,
+    suppressedTerminalCloseIndex,
   } = params;
   for (let index = entryIndex; index < actions.length; index += 1) {
     const action = actions[index];
@@ -370,17 +378,7 @@ async function executeReplayActions(
     // Arm before checking terminal close so `[open, close]` records the
     // session created by `open` before treating `close` as lifecycle.
     armSaveScript();
-    if (
-      shouldSkipTerminalClose({
-        action,
-        index,
-        totalActions: actions.length,
-        keepSession: params.req.flags?.replayKeepSession === true,
-        coordinator: stepContext.coordinator,
-      })
-    ) {
-      continue;
-    }
+    if (index === suppressedTerminalCloseIndex) continue;
     onStep?.(replayActionStep(index, actions.length, action));
     const sampleStart = readSessionSnapshotSampleCount(sessionStore, sessionName);
     const response = await resolveReplayStepResponse(stepContext, action, index, [
@@ -441,6 +439,8 @@ function completeReplayRun(params: {
   snapshotDiagnosticSamples: SnapshotTimingSample[];
   armSaveScript: () => void;
   coordinator: ReplayCoordinator;
+  keepSession: boolean;
+  suppressedTerminalCloseIndex: number | undefined;
 }): DaemonResponse {
   const {
     startedAt,
@@ -452,11 +452,24 @@ function completeReplayRun(params: {
     snapshotDiagnosticSamples,
     armSaveScript,
     coordinator,
+    keepSession,
+    suppressedTerminalCloseIndex,
   } = params;
   armSaveScript();
   coordinator.markCompleteIfArmed();
   const completedSession = sessionStore.get(sessionName);
-  const replayedCount = actions.length - entryIndex;
+  if (keepSession && !completedSession) {
+    return errorResponse(
+      'COMMAND_FAILED',
+      `Replay completed but --keep-session could not preserve session "${sessionName}". Run the script again after checking which action closed the session.`,
+      artifactPaths.size > 0 ? { artifactPaths: [...artifactPaths] } : undefined,
+    );
+  }
+  const replayedCount = countExecutedReplayActions({
+    actions,
+    entryIndex,
+    suppressedTerminalCloseIndex,
+  });
   const snapshotDiagnosticsSummary = summarizeSnapshotTimingSamples(snapshotDiagnosticSamples);
   return {
     ok: true,
@@ -521,6 +534,7 @@ type PreparedReplayPlan = {
   scope: ReplayVarScope;
   actionTracePath: string | undefined;
   snapshotDiagnosticSamples: SnapshotTimingSample[];
+  suppressedTerminalCloseIndex: number | undefined;
 };
 
 type ParsedReplayInput = ReturnType<typeof parseReplayInput>;
@@ -532,8 +546,9 @@ function prepareReplayPlan(params: {
   tracePath: string | undefined;
   resolved: string;
   coordinator: ReplayCoordinator;
+  keepSession: boolean;
 }): { ok: true; value: PreparedReplayPlan } | { ok: false; response: DaemonResponse } {
-  const { req, sessionName, sessionStore, tracePath, resolved, coordinator } = params;
+  const { req, sessionName, sessionStore, tracePath, resolved, coordinator, keepSession } = params;
   const parsedResult = parseReplayScript(resolved, req);
   if (!parsedResult.ok) return parsedResult;
   const parsed = parsedResult.value;
@@ -571,6 +586,12 @@ function prepareReplayPlan(params: {
       scope: buildPreparedReplayScope({ req, replayReq, sessionName, resolved, metadata }),
       actionTracePath: tracePath ?? preEntrySession?.trace?.outPath,
       snapshotDiagnosticSamples: [],
+      suppressedTerminalCloseIndex: resolveSuppressedTerminalCloseIndex({
+        actions,
+        keepSession,
+        saveScript: req.flags?.saveScript,
+        repairActive: coordinator.view()?.repairBoundary !== undefined,
+      }),
     },
   };
 }
@@ -794,24 +815,37 @@ function preflightSaveScriptTarget(params: {
 }
 
 /**
- * The one native replay lifecycle seam for an authored terminal `close`.
- * `--keep-session` suppresses it so callers can take over the live session;
- * ADR 0012 repair suppresses it so the agent can finalize through
- * `close --save-script`. Interior closes retain authored semantics. Repair is
- * checked against session state (not only this leg's flags), preserving R2
- * across separate `--from` continuations.
+ * Resolves the one native replay lifecycle seam once per plan. Terminal means
+ * the last executable action, because nested `replay` markers are plan
+ * metadata and never dispatch. The suppressed close is therefore neither
+ * divergence-checked nor included in the successful `replayed` count.
  */
-function shouldSkipTerminalClose(params: {
-  action: SessionAction;
-  index: number;
-  totalActions: number;
+function resolveSuppressedTerminalCloseIndex(params: {
+  actions: SessionAction[];
   keepSession: boolean;
-  coordinator: ReplayCoordinator;
-}): boolean {
-  const { action, index, totalActions, keepSession, coordinator } = params;
-  if (action.command !== 'close') return false;
-  if (index !== totalActions - 1) return false;
-  return keepSession || coordinator.view()?.repairBoundary !== undefined;
+  saveScript: boolean | string | undefined;
+  repairActive: boolean;
+}): number | undefined {
+  if (!params.keepSession && !params.saveScript && !params.repairActive) return undefined;
+  for (let index = params.actions.length - 1; index >= 0; index -= 1) {
+    const action = params.actions[index];
+    if (!isExecutableReplayAction(action)) continue;
+    return action.command === 'close' ? index : undefined;
+  }
+  return undefined;
+}
+
+function countExecutedReplayActions(params: {
+  actions: SessionAction[];
+  entryIndex: number;
+  suppressedTerminalCloseIndex: number | undefined;
+}): number {
+  let count = 0;
+  for (let index = params.entryIndex; index < params.actions.length; index += 1) {
+    if (index === params.suppressedTerminalCloseIndex) continue;
+    if (isExecutableReplayAction(params.actions[index])) count += 1;
+  }
+  return count;
 }
 
 /**
