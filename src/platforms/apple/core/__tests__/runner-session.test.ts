@@ -24,6 +24,7 @@ const {
   mockIsProcessAlive,
   mockIsProcessGroupAlive,
   mockPrepareXctestrunWithEnv,
+  mockReadProcessStartTime,
   mockResolveExpectedRunnerCacheMetadata,
   mockResolveRunnerDerivedPath,
   mockRunAppleToolCommand,
@@ -40,6 +41,12 @@ const {
   mockIsProcessAlive: vi.fn(),
   mockIsProcessGroupAlive: vi.fn(),
   mockPrepareXctestrunWithEnv: vi.fn(),
+  // Non-empty default: RUNNER_OWNER_START_TIME below is computed at module
+  // load (before beforeEach), and readProcessStartTime's real implementation
+  // shells out to `ps` with a 1s timeout that can miss under CPU contention,
+  // flipping a live owner to 'owner-process-dead'. Deterministic value, no
+  // shell-out; identity is still enforced by pid in beforeEach below.
+  mockReadProcessStartTime: vi.fn((_pid: number) => 'fixed-test-owner-start-time' as string | null),
   mockResolveExpectedRunnerCacheMetadata: vi.fn(),
   mockResolveRunnerDerivedPath: vi.fn(),
   mockRunAppleToolCommand: vi.fn(),
@@ -68,6 +75,7 @@ vi.mock('../../../../utils/host-process.ts', async () => {
     ...actual,
     isProcessAlive: mockIsProcessAlive,
     isProcessGroupAlive: mockIsProcessGroupAlive,
+    readProcessStartTime: mockReadProcessStartTime,
   };
 });
 
@@ -156,6 +164,12 @@ beforeEach(async () => {
   mockRunAppleToolCommand.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   mockIsProcessAlive.mockReturnValue(true);
   mockIsProcessGroupAlive.mockReturnValue(false);
+  // Our pid reads back its fixed start time; any other pid reads as
+  // not-found, same as a real `ps` miss. Dead-lease tests use fabricated
+  // pids already rejected by mockIsProcessAlive before this is consulted.
+  mockReadProcessStartTime.mockImplementation((pid: number) =>
+    pid === process.pid ? RUNNER_OWNER_START_TIME : null,
+  );
   mockWaitForRunner.mockResolvedValue(runnerResponse({ uptimeMs: 1 }));
 });
 

@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import net from 'node:net';
@@ -35,6 +35,36 @@ import {
 } from '../host-process.ts';
 import { stopProcessForTakeover } from '../../daemon/daemon-process.ts';
 import { findProjectRoot, readVersion } from '../version.ts';
+
+// readProcessStartTime/readProcessCommand shell out to `ps` with a 1s
+// timeout (see host-process.ts). isAgentDeviceDaemonProcess re-reads both for
+// every liveness check, so a spawned-daemon fixture that is proven live once
+// (a real read, right after the process starts) can still be misclassified
+// as dead later if a *subsequent* `ps` call happens to miss its deadline
+// under full-suite CPU contention. mockReadProcessStartTime/mockReadProcessCommand
+// default to `undefined`, which falls through to the real implementation for
+// every pid in every test in this file; only the one test below that needs a
+// stable answer for its spawned pid configures an override, and clears it
+// afterward.
+const { mockReadProcessStartTime, mockReadProcessCommand } = vi.hoisted(() => ({
+  mockReadProcessStartTime: vi.fn<(pid: number) => string | null | undefined>(),
+  mockReadProcessCommand: vi.fn<(pid: number) => string | null | undefined>(),
+}));
+
+vi.mock('../host-process.ts', async () => {
+  const actual = await vi.importActual<typeof import('../host-process.ts')>('../host-process.ts');
+  return {
+    ...actual,
+    readProcessStartTime: (pid: number) => {
+      const overridden = mockReadProcessStartTime(pid);
+      return overridden !== undefined ? overridden : actual.readProcessStartTime(pid);
+    },
+    readProcessCommand: (pid: number) => {
+      const overridden = mockReadProcessCommand(pid);
+      return overridden !== undefined ? overridden : actual.readProcessCommand(pid);
+    },
+  };
+});
 
 type MockHttpResponse = EventEmitter & {
   headers?: Record<string, string>;
@@ -413,11 +443,25 @@ test('cleanupFailedDaemonStartupMetadata retains live startup daemon on timeout'
 
   try {
     await new Promise((resolve) => setTimeout(resolve, 50));
+    // Read the spawned daemon's real identity once (ground truth: it is
+    // genuinely alive, with this real start time and command line), then
+    // pin readProcessStartTime/readProcessCommand to keep returning these
+    // same proven-real values for this pid. isAgentDeviceDaemonProcess reads
+    // both again internally on every call inside cleanupFailedDaemonStartupMetadata;
+    // without pinning, a second real `ps` call could miss its 1s timeout
+    // under load and misclassify this genuinely-live daemon as dead.
     const processStartTime = readProcessStartTime(pid) ?? undefined;
-    if (readProcessCommand(pid) === null || processStartTime === undefined) {
+    const command = readProcessCommand(pid);
+    if (command === null || processStartTime === undefined) {
       t.skip('process command/start inspection is unavailable in this environment');
       return;
     }
+    mockReadProcessStartTime.mockImplementation((queriedPid: number) =>
+      queriedPid === pid ? processStartTime : undefined,
+    );
+    mockReadProcessCommand.mockImplementation((queriedPid: number) =>
+      queriedPid === pid ? command : undefined,
+    );
 
     const paths = resolveDaemonPaths(stateDir);
     fs.mkdirSync(paths.baseDir, { recursive: true });
@@ -450,6 +494,8 @@ test('cleanupFailedDaemonStartupMetadata retains live startup daemon on timeout'
     assert.equal(fs.existsSync(paths.infoPath), true);
     assert.equal(fs.existsSync(paths.lockPath), true);
   } finally {
+    mockReadProcessStartTime.mockReset();
+    mockReadProcessCommand.mockReset();
     if (isProcessAlive(pid)) {
       process.kill(pid, 'SIGKILL');
       await waitForProcessExit(pid, 1_500);
