@@ -39,3 +39,21 @@ export type {
 export type { ReplayReportAction } from './internal/session-replay-report-action.ts';
 
 export { rankAndDedupeReplaySuggestions } from './internal/session-replay-suggestion-ranking.ts';
+
+// #1478 P5 stage B: the port TYPE only — root's production adapter
+// (`src/daemon/replay-selector-port.ts`) implements it against
+// `ReplaySelectorPort`'s three operations. The type is what rides in via
+// `runAdReplay`'s runtime parameter once the daemon threads it (stage C); no
+// selector AST type is ever exported here.
+export type {
+  ReplaySelectorPort,
+  ReplaySelectorGrammar,
+  ReplaySelectorExpressionOutcome,
+  ReplayRecordedTargetPolicy,
+  ReplayRecordedTargetDisambiguation,
+  ReplayRecordedTargetResolved,
+  ReplayRecordedTargetUnresolved,
+  ReplayRecordedTargetResolution,
+  ReplaySelectorCandidateAction,
+  ReplaySelectorCandidateOptions,
+} from './internal/selector-port.ts';

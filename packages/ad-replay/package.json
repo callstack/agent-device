@@ -14,6 +14,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./testing": {
+      "types": "./src/internal/testing/in-memory-selector-port.ts",
+      "default": "./src/internal/testing/in-memory-selector-port.ts"
     }
   }
 }
