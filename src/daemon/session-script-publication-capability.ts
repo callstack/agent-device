@@ -20,8 +20,19 @@ import { expandSessionPath } from './session-paths.ts';
  * construction of the aggregate. Engines can reach neither.
  */
 
-function publicationState(session: SessionState) {
-  return session.scriptPublication ?? NO_SCRIPT_PUBLICATION;
+function publicationState(session: SessionState | undefined) {
+  return session?.scriptPublication ?? NO_SCRIPT_PUBLICATION;
+}
+
+/**
+ * An ordinary authoring session still open to recording: the ADR 0016 lifecycle before it aborts
+ * or publishes. The authoring counterpart of `isRepairArmedSession`, and the one shape the
+ * handlers ask about — a second `open` aborts it, `close --save-script` may still publish it, and
+ * active publication is eligible only from it.
+ */
+export function isAuthoringArmedSession(session: SessionState | undefined): boolean {
+  const state = publicationState(session);
+  return state.kind === 'authoring' && state.status === 'armed';
 }
 
 /** ADR 0016: `open <app> --save-script[=<path>]` on a fresh session arms ordinary authoring. */

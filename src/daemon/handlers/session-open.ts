@@ -3,6 +3,7 @@ import { dispatchCommand, resolveTargetDevice } from '../../core/dispatch.ts';
 import {
   abortAuthoringOnSecondOpen,
   armAuthoringOnOpen,
+  isAuthoringArmedSession,
 } from '../session-script-publication-capability.ts';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import { contextFromFlags } from '../context.ts';
@@ -103,8 +104,7 @@ function applyOrdinaryScriptRecordingOpenOutcome(params: {
     armAuthoringOnOpen(session, {});
     return;
   }
-  const existingState = existingSession?.scriptPublication;
-  if (existingState?.kind !== 'authoring' || existingState.status !== 'armed') return;
+  if (!isAuthoringArmedSession(existingSession)) return;
   abortAuthoringOnSecondOpen(session);
   const warnings = Array.isArray(responseData.warnings)
     ? responseData.warnings.filter((warning): warning is string => typeof warning === 'string')

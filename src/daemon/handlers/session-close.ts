@@ -32,6 +32,7 @@ import {
   isRepairArmedSession,
   recordRepairPlatformClose,
 } from '../session-replay-transaction.ts';
+import { isAuthoringArmedSession } from '../session-script-publication-capability.ts';
 import {
   reportSessionCleanupFailures,
   restoreSessionAndroidIme,
@@ -286,8 +287,9 @@ async function stopOrRetainAppleRunnerAfterClose(
 
 function assertTerminalRecordingCloseAllowed(req: DaemonRequest, session: SessionState): void {
   if (!req.flags?.saveScript) return;
+  if (isAuthoringArmedSession(session)) return;
   const state = session.scriptPublication;
-  if (state?.kind !== 'authoring' || state.status === 'armed') return;
+  if (state?.kind !== 'authoring') return;
   throw new AppError(
     'INVALID_ARGS',
     `close --save-script cannot ${state.status === 'published' ? 're-publish' : 'publish'} this terminal recording. Retry with plain close; it will tear down the session without writing.`,

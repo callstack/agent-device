@@ -3,6 +3,7 @@ import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { successText } from '../../utils/success-text.ts';
 import {
   effectiveWriteForce,
+  isAuthoringArmedSession,
   markActivePublicationDone,
   retargetActivePublication,
 } from '../session-script-publication-capability.ts';
@@ -72,9 +73,8 @@ type PublicationIneligibility = 'repair' | 'aborted' | 'published' | 'not-armed'
 function publicationIneligibility(session: SessionState): PublicationIneligibility | undefined {
   if (isRepairArmedSession(session)) return 'repair';
   const state = session.scriptPublication;
-  if (state?.kind !== 'authoring') return 'not-armed';
-  if (state.status === 'armed') return session.recordSession ? undefined : 'not-armed';
-  return state.status;
+  if (state?.kind === 'authoring' && state.status !== 'armed') return state.status;
+  return isAuthoringArmedSession(session) && session.recordSession ? undefined : 'not-armed';
 }
 
 const PUBLICATION_INELIGIBILITY_ERRORS: Record<PublicationIneligibility, () => AppError> = {
