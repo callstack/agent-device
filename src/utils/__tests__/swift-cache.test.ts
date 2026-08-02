@@ -13,7 +13,7 @@ vi.mock('../exec.ts', () => ({
 }));
 
 import { runCmd } from '../exec.ts';
-import { compileSwiftSourceFile } from '../swift-cache.ts';
+import { compileSwiftSourceFile, sanitizeCacheName } from '../swift-cache.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 
@@ -98,6 +98,17 @@ test('cache lock timeout reports the lock path', async () => {
   });
 
   expect(mockRunCmd).not.toHaveBeenCalled();
+});
+
+test('sanitizeCacheName trims a long interior dash run without polynomial regex backtracking', () => {
+  const value = `x${'-'.repeat(100_000)}x`;
+
+  const start = Date.now();
+  const result = sanitizeCacheName(value);
+  const elapsedMs = Date.now() - start;
+
+  expect(elapsedMs).toBeLessThan(1_000);
+  expect(result).toBe(value);
 });
 
 function writeSourceFile(source = 'print("recording")'): string {

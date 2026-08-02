@@ -168,8 +168,21 @@ function isExecutableFile(filePath: string): boolean {
   }
 }
 
-function sanitizeCacheName(value: string): string {
-  return value.replaceAll(/[^A-Za-z0-9._-]/g, '-').replaceAll(/^-+|-+$/g, '') || 'swift-helper';
+export function sanitizeCacheName(value: string): string {
+  return trimEdgeDashes(value.replaceAll(/[^A-Za-z0-9._-]/g, '-')) || 'swift-helper';
+}
+
+/**
+ * Linear-time edge trim. The regex form (`/^-+|-+$/g`) backtracks
+ * polynomially on long dash runs (CodeQL js/polynomial-redos), and cache
+ * names are derived from caller-supplied strings.
+ */
+function trimEdgeDashes(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && value[start] === '-') start += 1;
+  while (end > start && value[end - 1] === '-') end -= 1;
+  return value.slice(start, end);
 }
 
 function hashParts(parts: Array<string | number | Buffer>): string {
