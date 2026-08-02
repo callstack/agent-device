@@ -279,6 +279,54 @@ function toDaemonEvidence(evidence: EngineTargetBindingEvidence): TargetBindingF
   };
 }
 
+/** The engine's pre-action identity guard, read off `AdReplayStepRuntime` itself (see `EngineTargetBindingEvidence` above for why `Parameters<...>` rather than a named façade export). */
+type ReplayDispatchGuard = Parameters<AdReplayStepRuntime['dispatchStep']>[3];
+
+/** `dispatchStep`'s result shape, read off `AdReplayStepRuntime` itself for the same reason. */
+type ReplayDispatchOutcome = Awaited<ReturnType<AdReplayStepRuntime['dispatchStep']>>;
+
+/** Threads a pre-action identity guard into the request's `internal` block the interaction layer reads for its own resolution — a no-op when no guard applies. */
+function applyReplayDispatchGuard(
+  replayReq: DaemonRequest,
+  guard: ReplayDispatchGuard,
+): DaemonRequest {
+  const guardInternal =
+    guard?.kind === 'target'
+      ? { replayTargetGuard: guard.guard.expected }
+      : guard?.kind === 'landmark'
+        ? { replayLandmarkGuard: guard.landmark }
+        : undefined;
+  return guardInternal
+    ? { ...replayReq, internal: { ...replayReq.internal, ...guardInternal } }
+    : replayReq;
+}
+
+/** Classifies a failed dispatch response into an ordinary failure or one of the two post-resolution identity-refusal markers (`guard-mismatch`/`landmark-mismatch`) `dispatchStep` detects. */
+function classifyReplayDispatchFailure(
+  response: Extract<DaemonResponse, { ok: false }>,
+  guard: ReplayDispatchGuard,
+  entries: readonly string[],
+): ReplayDispatchOutcome {
+  const plainFailure = toAdReplayStepFailure(response, entries);
+  if (guard?.kind === 'target' && isReplayTargetGuardMismatchResponse(response)) {
+    return {
+      status: 'guard-mismatch',
+      details: response.error.details,
+      plainFailure,
+      artifactPaths: entries,
+    };
+  }
+  if (guard?.kind === 'landmark' && isWaitLandmarkMismatchResponse(response)) {
+    return {
+      status: 'landmark-mismatch',
+      details: response.error.details,
+      plainFailure,
+      artifactPaths: entries,
+    };
+  }
+  return { status: 'failed', failure: plainFailure };
+}
+
 /**
  * #1478 P5 stage C2b (narrowed further by the #1555 review's neutral-outcomes
  * pass, then again by the R3 pass that moved verify-then-dispatch into the
@@ -416,17 +464,8 @@ function createAdReplayStepRuntime(params: {
     // ever reached the target-binding wire builders (`build*Failure` below).
     async dispatchStep(action, index, _stepArtifactPaths, guard) {
       const sourceLine = ctx.actionLines[index] ?? 1;
-      const guardInternal =
-        guard?.kind === 'target'
-          ? { replayTargetGuard: guard.guard.expected }
-          : guard?.kind === 'landmark'
-            ? { replayLandmarkGuard: guard.landmark }
-            : undefined;
-      const guardedReq = guardInternal
-        ? { ...ctx.replayReq, internal: { ...ctx.replayReq.internal, ...guardInternal } }
-        : ctx.replayReq;
       const response = await invokeReplayAction({
-        req: guardedReq,
+        req: applyReplayDispatchGuard(ctx.replayReq, guard),
         sessionName: ctx.sessionName,
         action,
         scope: ctx.scope,
@@ -441,24 +480,7 @@ function createAdReplayStepRuntime(params: {
       const entries = collectReplayActionArtifactPaths(response);
       entries.forEach((entry) => artifactPaths.add(entry));
       if (response.ok) return { status: 'ok', artifactPaths: entries };
-      const plainFailure = toAdReplayStepFailure(response, entries);
-      if (guard?.kind === 'target' && isReplayTargetGuardMismatchResponse(response)) {
-        return {
-          status: 'guard-mismatch',
-          details: response.error.details,
-          plainFailure,
-          artifactPaths: entries,
-        };
-      }
-      if (guard?.kind === 'landmark' && isWaitLandmarkMismatchResponse(response)) {
-        return {
-          status: 'landmark-mismatch',
-          details: response.error.details,
-          plainFailure,
-          artifactPaths: entries,
-        };
-      }
-      return { status: 'failed', failure: plainFailure };
+      return classifyReplayDispatchFailure(response, guard, entries);
     },
 
     async buildRecordedUnverifiableFailure(action, index, stepArtifactPaths) {
@@ -679,48 +701,19 @@ function prepareReplayPlan(params: {
   keepSession: boolean;
 }): { ok: true; value: PreparedReplayPlan } | { ok: false; response: DaemonResponse } {
   const { req, sessionName, sessionStore, tracePath, resolved, coordinator } = params;
-  // #1555 P1: the authoritative rejection for an unrecognized --replay-backend
-  // value. Extraction moved `.ad` inspection to `inspectAdReplay`, which never
-  // receives flags — restoring the check here (the one caller of
-  // `inspectAdReplay` that reaches this point with a non-Maestro request)
-  // matches `src/compat/replay-input.ts`'s `parseReplayInput` exactly, byte
-  // for byte, before any plan/session work begins. `replayBackend: 'maestro'`
-  // still passes here because `runReplayScriptFile` has already routed a real
-  // Maestro-format request to `runTypedMaestroReplayFile` above; only a
-  // stray/unknown value reaches this branch.
-  if (req.flags?.replayBackend && req.flags.replayBackend !== 'maestro') {
-    return {
-      ok: false,
-      response: errorResponse(
-        'INVALID_ARGS',
-        `Unsupported replay backend "${req.flags.replayBackend}".`,
-      ),
-    };
-  }
-  // #1555 P1 (digest/resume behind runAdReplay): `digestFlags` is the raw
-  // request-level platform/target override — `inspectAdReplay` applies the
-  // SAME precedence (flag, then a script-declared platform, then the
-  // `context` header) internally that this call site used to apply itself
-  // via `readEffectiveReplayPlanDigestMetadata(replayReq.flags)`.
-  const manifest = inspectAdReplay(resolved, {
-    platform: req.flags?.platform,
-    target: req.flags?.target,
-  });
+  const backendRejection = validateReplayBackendFlag(req);
+  if (backendRejection) return { ok: false, response: backendRejection };
+
+  const { manifest, replayReq } = inspectReplayPlanManifest(req, resolved);
   const { metadata, actions, actionLines, actionSourcePaths, planDigest } = manifest;
-  const replayReq = applyReplayMetadata(
-    { ...req, flags: buildReplayScriptPlatformFlags(req.flags, actions) },
-    metadata,
-  );
   const preEntrySession = sessionStore.get(sessionName);
-  const entryIndex = manifest.resolveEntryIndex({
-    from: req.flags?.replayFrom,
-    digest: req.flags?.replayPlanDigest,
-    pendingRecordAndHeal: coordinator.view()?.pendingRecordAndHeal,
-    sessionActionsLength: preEntrySession?.actions.length ?? 0,
+  const entryIndexResult = resolveReplayPlanEntryIndex({
+    req,
+    coordinator,
+    manifest,
+    preEntrySession,
   });
-  if (!entryIndex.ok) {
-    return { ok: false, response: errorResponse('INVALID_ARGS', entryIndex.message) };
-  }
+  if (!entryIndexResult.ok) return { ok: false, response: entryIndexResult.response };
 
   return {
     ok: true,
@@ -731,11 +724,73 @@ function prepareReplayPlan(params: {
       actionSourcePaths,
       planDigest,
       preEntrySession,
-      entryIndex: entryIndex.value,
+      entryIndex: entryIndexResult.value,
       scope: buildPreparedReplayScope({ req, replayReq, sessionName, resolved, metadata }),
       actionTracePath: tracePath ?? preEntrySession?.trace?.outPath,
     },
   };
+}
+
+/**
+ * #1555 P1: the authoritative rejection for an unrecognized --replay-backend
+ * value. Extraction moved `.ad` inspection to `inspectAdReplay`, which never
+ * receives flags — restoring the check here (the one caller of
+ * `inspectAdReplay` that reaches this point with a non-Maestro request)
+ * matches `src/compat/replay-input.ts`'s `parseReplayInput` exactly, byte for
+ * byte, before any plan/session work begins. `replayBackend: 'maestro'` still
+ * passes here because `runReplayScriptFile` has already routed a real
+ * Maestro-format request to `runTypedMaestroReplayFile` above; only a
+ * stray/unknown value reaches this branch.
+ */
+function validateReplayBackendFlag(req: DaemonRequest): DaemonResponse | undefined {
+  if (req.flags?.replayBackend && req.flags.replayBackend !== 'maestro') {
+    return errorResponse(
+      'INVALID_ARGS',
+      `Unsupported replay backend "${req.flags.replayBackend}".`,
+    );
+  }
+  return undefined;
+}
+
+/**
+ * #1555 P1 (digest/resume behind runAdReplay): `digestFlags` is the raw
+ * request-level platform/target override — `inspectAdReplay` applies the
+ * SAME precedence (flag, then a script-declared platform, then the `context`
+ * header) internally that this call site used to apply itself via
+ * `readEffectiveReplayPlanDigestMetadata(replayReq.flags)`.
+ */
+function inspectReplayPlanManifest(
+  req: DaemonRequest,
+  resolved: string,
+): { manifest: AdReplayManifest; replayReq: DaemonRequest } {
+  const manifest = inspectAdReplay(resolved, {
+    platform: req.flags?.platform,
+    target: req.flags?.target,
+  });
+  const replayReq = applyReplayMetadata(
+    { ...req, flags: buildReplayScriptPlatformFlags(req.flags, manifest.actions) },
+    manifest.metadata,
+  );
+  return { manifest, replayReq };
+}
+
+function resolveReplayPlanEntryIndex(params: {
+  req: DaemonRequest;
+  coordinator: ReplayCoordinator;
+  manifest: AdReplayManifest;
+  preEntrySession: SessionState | undefined;
+}): { ok: true; value: number } | { ok: false; response: DaemonResponse } {
+  const { req, coordinator, manifest, preEntrySession } = params;
+  const entryIndex = manifest.resolveEntryIndex({
+    from: req.flags?.replayFrom,
+    digest: req.flags?.replayPlanDigest,
+    pendingRecordAndHeal: coordinator.view()?.pendingRecordAndHeal,
+    sessionActionsLength: preEntrySession?.actions.length ?? 0,
+  });
+  if (!entryIndex.ok) {
+    return { ok: false, response: errorResponse('INVALID_ARGS', entryIndex.message) };
+  }
+  return { ok: true, value: entryIndex.value };
 }
 
 function applyReplayMetadata(
