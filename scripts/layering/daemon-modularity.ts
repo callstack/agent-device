@@ -52,7 +52,7 @@ type LogicalModulePolicy = {
 export const LOGICAL_MODULE_POLICIES: readonly LogicalModulePolicy[] = [
   {
     name: 'ad-replay',
-    roots: ['src/ad-replay/'],
+    roots: ['packages/ad-replay/src/'],
     forbiddenTargetRoots: [
       'src/daemon/',
       'src/platforms/',
@@ -64,7 +64,12 @@ export const LOGICAL_MODULE_POLICIES: readonly LogicalModulePolicy[] = [
   {
     name: 'maestro',
     roots: ['packages/maestro/src/'],
-    forbiddenTargetRoots: ['src/daemon/', 'src/platforms/', 'src/providers/', 'src/ad-replay/'],
+    forbiddenTargetRoots: [
+      'src/daemon/',
+      'src/platforms/',
+      'src/providers/',
+      'packages/ad-replay/',
+    ],
   },
   {
     // Replay-test schedules and reports; it must stay format-neutral. `src/request/` is
@@ -81,13 +86,13 @@ export const LOGICAL_MODULE_POLICIES: readonly LogicalModulePolicy[] = [
       'src/replay/',
       'src/compat/',
       'packages/maestro/',
-      'src/ad-replay/',
+      'packages/ad-replay/',
     ],
   },
 ];
 
 const ENGINE_FILE_PREFIXES = [
-  'src/ad-replay/',
+  'packages/ad-replay/src/',
   'packages/maestro/src/',
   'src/replay/',
   'src/daemon/handlers/session-replay',

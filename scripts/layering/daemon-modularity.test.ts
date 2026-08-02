@@ -170,7 +170,7 @@ test('R9 records zone ceilings and keeps engine files outside the largest compon
   );
   const violations = checkDaemonModularityRatchets(baselineEdges(), [
     ...commandMembers,
-    'src/ad-replay/internal/engine.ts',
+    'packages/ad-replay/src/internal/engine.ts',
   ]);
 
   assert.equal(violations.length, 3);

@@ -145,7 +145,7 @@
     "check:unit": "pnpm check:contention-retry && pnpm test:unit && pnpm test:smoke",
     "check": "pnpm check:tooling && pnpm check:fallow && pnpm check:unit",
     "prepack": "pnpm check:mcp-metadata && pnpm package:npm",
-    "typecheck": "tsc -b packages/xml packages/kernel packages/contracts packages/ad-script packages/maestro packages/replay-test packages/provider-webdriver packages/provider-limrun && tsc -p tsconfig.json && tsc -p examples/sdk/tsconfig.json",
+    "typecheck": "tsc -b packages/xml packages/kernel packages/contracts packages/ad-script packages/ad-replay packages/maestro packages/replay-test packages/provider-webdriver packages/provider-limrun && tsc -p tsconfig.json && tsc -p examples/sdk/tsconfig.json",
     "test-app:install": "pnpm install --dir examples/test-app",
     "test-app:start": "pnpm --dir examples/test-app start",
     "test-app:ios": "pnpm --dir examples/test-app ios",
@@ -245,6 +245,7 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
+    "@agent-device/ad-replay": "workspace:*",
     "@agent-device/ad-script": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/kernel": "workspace:*",
