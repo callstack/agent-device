@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
-import type { TargetAnnotationV1 } from '@agent-device/ad-script';
+import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import {
   computeReplayRepairHint,
   type ReplayRepairHintCapture,

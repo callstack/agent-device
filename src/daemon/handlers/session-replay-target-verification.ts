@@ -2,7 +2,8 @@ import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
-import { formatDivergenceActionLabel, type TargetAnnotationV1 } from '@agent-device/ad-script';
+import { formatDivergenceActionLabel } from '@agent-device/ad-script';
+import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import {
   collectReplayScrubbableVarValues,
   resolveReplayAction,

@@ -32,7 +32,7 @@ import type {
   AppleXctracePerfMode,
 } from '../platforms/apple/core/perf-xctrace.ts';
 import type { ReplayTargetGuardDenotation } from '../replay/target-identity-node.ts';
-import type { TargetAnnotationV1 } from '@agent-device/ad-script';
+import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import type { AppLogFailure, AppLogState } from './app-log-process.ts';
 import type { RefFrameScope, RefFrameState } from './ref-frame.ts';
 export type DaemonInstallSource = PublicDaemonInstallSource;

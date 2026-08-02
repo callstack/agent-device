@@ -33,7 +33,7 @@ import {
   toDaemonWaitData,
 } from './selector-recording.ts';
 import type { RecordedTargetCapture } from './session-target-evidence.ts';
-import type { TargetAnnotationV1 } from '@agent-device/ad-script';
+import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { maybeWaitTimeoutSurfaceResponse } from './wait-current-surface.ts';
 import { withSystemSurfaceDisclosure } from './handlers/system-surface-disclosure.ts';
 import {

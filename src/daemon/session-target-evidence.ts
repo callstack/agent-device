@@ -37,11 +37,13 @@ import {
   utf8ByteLength,
   TARGET_ANNOTATION_MAX_ANCESTRY,
   TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
-  type TargetAncestryEntry,
-  type TargetAnnotationV1,
-  type TargetScrollRegion,
-  type TargetVerification,
 } from '@agent-device/ad-script';
+import type {
+  TargetAncestryEntry,
+  TargetAnnotationV1,
+  TargetScrollRegion,
+  TargetVerification,
+} from '@agent-device/contracts/replay';
 
 /** ADR 0012 decision 3: the resolved winner and the tree it was resolved from. */
 export type RecordedTargetCapture = {

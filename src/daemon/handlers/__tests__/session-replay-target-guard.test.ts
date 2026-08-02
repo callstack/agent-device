@@ -6,7 +6,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
-import type { TargetAnnotationV1 } from '@agent-device/ad-script';
+import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import {
   readNodeLocalIdentity,
   readNodeStructuralDenotation,

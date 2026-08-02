@@ -10,7 +10,7 @@ import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../types.
 import { SessionStore } from '../../session-store.ts';
 import { isInteractiveObservation } from '../../session-action-recorder.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
-import type { TargetAnnotationV1 } from '@agent-device/ad-script';
+import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 
 export function freshEvidence(id: string, label: string): TargetAnnotationV1 {
   return {

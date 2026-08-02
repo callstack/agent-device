@@ -7,7 +7,8 @@ import { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
 import { buildRequestFinishedEvent } from '../session-event-log.ts';
 import { HEAL_COMPLETE_SENTINEL } from '../session-script-writer.ts';
-import { parseReplayScriptDetailed, type TargetAnnotationV1 } from '@agent-device/ad-script';
+import { parseReplayScriptDetailed } from '@agent-device/ad-script';
+import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { repairPublication } from '../../__tests__/test-utils/session-factories.ts';
 
 type RecordActionEntry = Parameters<SessionStore['recordAction']>[1];

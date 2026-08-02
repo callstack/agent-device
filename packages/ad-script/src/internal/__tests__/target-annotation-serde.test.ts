@@ -11,9 +11,9 @@ import {
   TARGET_ANNOTATION_MAX_ANCESTRY,
   TARGET_ANNOTATION_MAX_FIELD_BYTES,
   TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
-  type TargetAnnotationV1,
   TARGET_ANNOTATION_LINE_RE,
 } from '../target-annotation-serde.ts';
+import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 
 function baseEvidence(overrides: Partial<TargetAnnotationV1> = {}): TargetAnnotationV1 {
   return {

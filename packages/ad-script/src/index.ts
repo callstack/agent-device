@@ -12,7 +12,9 @@
  * canonical field order, normalization, size caps, payload parsing). The
  * companion classification core (`classifyTargetBindingMatch`, local-identity
  * + ancestry-prefix matching) is NOT part of this codec — it stays in
- * `src/replay/target-identity.ts`, which imports the types below.
+ * `src/replay/target-identity.ts`. The annotation SHAPE is not exported here
+ * either: it lives in `@agent-device/contracts/replay`, which every consumer
+ * (this package included) imports directly.
  */
 
 export {
@@ -48,10 +50,4 @@ export {
   TARGET_ANNOTATION_MAX_ANCESTRY,
   TARGET_ANNOTATION_MAX_FIELD_BYTES,
   TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
-} from './internal/target-annotation-serde.ts';
-export type {
-  TargetAncestryEntry,
-  TargetAnnotationV1,
-  TargetScrollRegion,
-  TargetVerification,
 } from './internal/target-annotation-serde.ts';

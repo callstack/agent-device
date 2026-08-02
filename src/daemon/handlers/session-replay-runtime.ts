@@ -12,7 +12,6 @@ import { SessionStore } from '../session-store.ts';
 import { expandSessionPath } from '../session-paths.ts';
 import { buildReplayScriptPlatformFlags } from '../replay-device-selection.ts';
 import { computeReplayPlanDigest } from '../../replay/plan-digest.ts';
-import type { TargetAnnotationV1 } from '@agent-device/ad-script';
 import { errorResponse, noActiveSessionError } from './response.ts';
 import { invokeReplayAction } from './session-replay-action-runtime.ts';
 import { tryParseSelectorChain } from '../../selectors/index.ts';
@@ -29,7 +28,7 @@ import {
   summarizeSnapshotTimingSamples,
   type SnapshotTimingSample,
 } from '@agent-device/contracts/capture';
-import type { ReplayCommandResult } from '@agent-device/contracts/replay';
+import type { ReplayCommandResult, TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import {
   isMaestroYamlPath,
   maestroBackendRequiredMessage,

@@ -7,7 +7,7 @@ import {
   REPLAY_METADATA_PLATFORMS,
 } from '../script.ts';
 import { formatPortableActionLine, formatTargetAnnotationLines } from '../script-formatting.ts';
-import type { TargetAnnotationV1 } from '../target-annotation-serde.ts';
+import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import type { SessionAction } from '@agent-device/contracts/session';
 
 // `writeReplayScript` (the `--update` heal-and-rewrite serializer) was

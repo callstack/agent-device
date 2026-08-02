@@ -1,4 +1,4 @@
-import type { TargetAnnotationV1 } from '@agent-device/ad-script';
+import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { tryParseSelectorChain } from '../selectors/parse.ts';
 
 const VALUE_BEARING_SELECTOR_KEYS = new Set(['text', 'label', 'value']);

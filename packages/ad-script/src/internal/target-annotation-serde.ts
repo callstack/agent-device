@@ -8,8 +8,9 @@
  *
  * The record/replay-shared CLASSIFICATION core (`classifyTargetBindingMatch`,
  * local-identity + ancestry-prefix matching) is not part of this codec — it
- * stays in `src/replay/target-identity.ts`, which imports the types below
- * from this package (#1478 P5 scoping dossier, "the codec seam").
+ * stays in `src/replay/target-identity.ts`, which imports the shared shape
+ * types from `@agent-device/contracts/replay` (#1478 P5 scoping dossier,
+ * "the codec seam").
  */
 
 import { AppError } from '@agent-device/kernel/errors';
@@ -36,14 +37,7 @@ export const TARGET_ANNOTATION_MAX_PAYLOAD_BYTES = 4096;
 export const TARGET_ANNOTATION_MAX_ANCESTRY = 8;
 
 // The annotation SHAPE lives in contracts/ so the recorded-action type can be stated without
-// depending on this zone; re-exported here for existing consumers.
-export type {
-  TargetAncestryEntry,
-  TargetAnnotationV1,
-  TargetRect,
-  TargetScrollRegion,
-  TargetVerification,
-} from '@agent-device/contracts/replay';
+// depending on this zone; every consumer imports it from there directly.
 import type {
   TargetAncestryEntry,
   TargetAnnotationV1,

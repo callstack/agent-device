@@ -11,7 +11,7 @@
  * this module imports the shared types from there rather than declaring them.
  */
 
-import type { TargetAncestryEntry, TargetAnnotationV1 } from '@agent-device/ad-script';
+import type { TargetAncestryEntry, TargetAnnotationV1 } from '@agent-device/contracts/replay';
 
 // ---------------------------------------------------------------------------
 // Local identity + ancestry-prefix matching (decision 3 "Local identity" /
