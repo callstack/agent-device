@@ -61,6 +61,33 @@ test('provider route publishes and replays an open-to-destination script with a 
   });
 }, 20_000);
 
+test('provider route can suppress an authored terminal close for a live replay handoff', async () => {
+  await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-keep-session-provider-'));
+    const scriptPath = path.join(root, 'settings-with-close.ad');
+    fs.writeFileSync(scriptPath, ['open "settings"', 'close', ''].join('\n'));
+    const client = world.daemon.client();
+    try {
+      const replay = await client.replay.run({
+        path: scriptPath,
+        keepSession: true,
+        ...world.selection,
+      });
+      assert.equal(replay.session, 'default');
+      assert.equal(replay.sessionActive, true);
+      assert.ok(world.daemon.session(), 'keepSession must preserve the replay-opened session');
+
+      const takeoverSnapshot = await client.capture.snapshot({ interactiveOnly: true });
+      assert.ok(takeoverSnapshot.nodes.some((node) => node.label === 'Search'));
+
+      await client.sessions.close();
+      assert.equal(world.daemon.session(), undefined);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+}, 20_000);
+
 // #1349 / ADR 0016 reshuffled-screen false-pass regression: the destination
 // guard must prove recorded landmark IDENTITY, not selector existence. The
 // replay lands on a reshuffled screen that still contains a node labeled
