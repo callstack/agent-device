@@ -6,11 +6,15 @@
  * canonical field order, normalization, size caps, and payload
  * parsing/validation.
  *
- * The record/replay-shared CLASSIFICATION core (`classifyTargetBindingMatch`,
- * local-identity + ancestry-prefix matching) is not part of this codec — it
- * stays in `src/replay/target-identity.ts`, which imports the shared shape
- * types from `@agent-device/contracts/replay` (#1478 P5 scoping dossier,
- * "the codec seam").
+ * The local-identity + ancestry-prefix matching primitives and their
+ * diagnostic diffs live alongside this in the sibling
+ * `target-annotation-identity.ts` — shared `.ad` recording vocabulary, not
+ * engine policy. The record/replay-shared CLASSIFICATION core
+ * (`classifyTargetBindingMatch`) IS engine policy and is not part of this
+ * codec — it stays in `@agent-device/ad-replay`'s `target-identity.ts`,
+ * which imports the shared shape types from `@agent-device/contracts/replay`
+ * (#1478 P5 scoping dossier, "the codec seam"; identity vocabulary
+ * relocated by the P5 review pass).
  */
 
 import { AppError } from '@agent-device/kernel/errors';

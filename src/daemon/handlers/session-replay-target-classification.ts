@@ -46,13 +46,12 @@ import {
   scrollRegionKeysEqual,
   orderByViewportPosition,
 } from '../session-target-evidence.ts';
+import { classifyTargetBindingMatch, type ReplaySelectorPort } from '@agent-device/ad-replay';
 import {
   annotationLocalIdentity,
-  classifyTargetBindingMatch,
   firstAncestryMismatch,
   identityFieldMismatches,
-  type ReplaySelectorPort,
-} from '@agent-device/ad-replay';
+} from '@agent-device/ad-script';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import type { ReplayDivergenceTargetBindingKind } from '@agent-device/contracts/divergence';
 

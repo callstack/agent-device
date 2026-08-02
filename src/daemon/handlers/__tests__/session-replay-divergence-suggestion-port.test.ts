@@ -17,7 +17,7 @@ import { buildReplayDivergenceSuggestionForNode } from '../session-replay-diverg
 import { createDaemonReplaySelectorPort } from '../../replay-selector-port.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { toSnapshotNodes } from './session-replay-target-classification-fixtures.ts';
-import type { ReplayReportAction } from '@agent-device/ad-replay';
+import type { ReplayReportAction } from '../session-replay-report-action.ts';
 
 const identitySanitize = (value: string): string => value;
 const port = createDaemonReplaySelectorPort();

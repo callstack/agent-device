@@ -1,8 +1,10 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { SessionAction } from '@agent-device/contracts/session';
-// The env/var key shape is `.ad` script grammar (env directive parsing lives
-// in the codec package).
-import { REPLAY_VAR_KEY_RE } from '@agent-device/ad-script';
+// The ${VAR} scope/env/resolution semantics are `.ad` script-language
+// semantics, same as `env KEY=VALUE` directive parsing (#1478 P5 review,
+// "genuinely shared recording vocabulary" relocated to its owner) — the key
+// shape comes from the sibling script grammar module.
+import { REPLAY_VAR_KEY_RE } from './script.ts';
 
 export type ReplayVarScope = {
   values: Readonly<Record<string, string>>;

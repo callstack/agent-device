@@ -10,7 +10,7 @@ import {
   buildIndexMap,
   filterIdentitySet,
 } from '../../../replay/target-evidence-tree.ts';
-import { annotationLocalIdentity } from '@agent-device/ad-replay';
+import { annotationLocalIdentity } from '@agent-device/ad-script';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import type { PublicPlatform } from '@agent-device/kernel/device';
 import { checkWaitText } from '../../../selectors/arguments.ts';

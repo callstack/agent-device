@@ -17,10 +17,10 @@ import { parseTargetAnnotationCommentLine } from './target-annotation-serde.ts';
 /**
  * The `.ad` script env/var key shape: uppercase letters, digits, and
  * underscores, leading with a letter or underscore. Canonical here because
- * `env KEY=VALUE` directive parsing is script grammar; `src/replay/vars.ts`
- * (runtime `${VAR}` resolution, outside this package) and
- * `src/replay/recorded-input.ts` import it from this package rather than
- * duplicating the rule.
+ * `env KEY=VALUE` directive parsing is script grammar; the sibling
+ * `vars.ts` (runtime `${VAR}` resolution) imports it directly, and
+ * `src/replay/recorded-input.ts` imports it from this package's façade
+ * rather than duplicating the rule.
  */
 export const REPLAY_VAR_KEY_RE = /^[A-Z_][A-Z0-9_]*$/;
 

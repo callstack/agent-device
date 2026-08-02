@@ -15,7 +15,7 @@ import {
   matchesAncestryPrefix,
   matchesLocalIdentity,
   type LocalIdentity,
-} from '@agent-device/ad-replay';
+} from '@agent-device/ad-script';
 import type { TargetAncestryEntry } from '@agent-device/contracts/replay';
 
 export function buildIndexMap(nodes: readonly SnapshotNode[]): Map<number, SnapshotNode> {

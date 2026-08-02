@@ -1,6 +1,7 @@
 import { uniqueStrings } from '@agent-device/kernel/collections';
-import type { ReplayReportAction, ReplaySelectorPort } from '@agent-device/ad-replay';
+import type { ReplaySelectorPort } from '@agent-device/ad-replay';
 import { isTouchTargetCommand } from '@agent-device/ad-script';
+import type { ReplayReportAction } from './session-replay-report-action.ts';
 
 /**
  * ADR 0012 decision 1 / migration step 6: `--update` retired as an actor —

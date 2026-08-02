@@ -27,7 +27,7 @@ import {
   firstAncestryMismatch,
   identityFieldMismatches,
   type LocalIdentity,
-} from './target-identity.ts';
+} from '@agent-device/ad-script';
 import type { ReplaySelectorPort } from './selector-port.ts';
 
 // ---------------------------------------------------------------------------

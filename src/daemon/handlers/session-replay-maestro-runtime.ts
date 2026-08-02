@@ -19,7 +19,7 @@ import {
   parseReplayCliEnvEntries,
   readReplayCliEnvEntries,
   readReplayShellEnvSource,
-} from '@agent-device/ad-replay';
+} from '@agent-device/ad-script';
 import { createDaemonMaestroRuntimePort } from '../adapters/maestro/daemon-runtime-port.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../types.ts';

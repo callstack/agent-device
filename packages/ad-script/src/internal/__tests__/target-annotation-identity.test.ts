@@ -1,12 +1,14 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { matchesAncestryPrefix, matchesLocalIdentity } from '../target-identity.ts';
+import { matchesAncestryPrefix, matchesLocalIdentity } from '../target-annotation-identity.ts';
 
 // The `# agent-device:target-v1` SERDE (serialize/parse, normalization,
-// bounds) moved to `@agent-device/ad-script` — see
+// bounds) lives alongside this in `target-annotation-serde.ts` — see
 // `packages/ad-script/src/internal/__tests__/target-annotation-serde.test.ts`.
-// This file keeps only the record/replay-shared CLASSIFICATION core that
-// stays in `src/replay/target-identity.ts` (#1478 P5 scoping dossier).
+// This file covers the local-identity + ancestry-prefix matching primitives.
+// The record/replay-shared CLASSIFICATION core built on top of them
+// (`classifyTargetBindingMatch`) is engine-owned policy and stays in
+// `@agent-device/ad-replay`'s `target-identity.ts` (#1478 P5 review).
 
 // ---------------------------------------------------------------------------
 // Leaf-anchored ancestry prefix matching: root-side truncation + inserted

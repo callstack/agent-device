@@ -2,20 +2,22 @@ import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
-import { formatDivergenceActionLabel } from '@agent-device/ad-script';
-import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import {
   annotationLocalIdentity,
   collectReplayScrubbableVarValues,
+  formatDivergenceActionLabel,
+  resolveReplayAction,
+  type LocalIdentity,
+  type ReplayVarScope,
+} from '@agent-device/ad-script';
+import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
+import {
   deriveReplayTargetGuardMismatchEvidence,
   deriveWaitLandmarkMismatchEvidence,
   planPostResolutionTargetVerification,
   planPreDispatchTargetVerification,
-  resolveReplayAction,
-  type LocalIdentity,
   type ReplayPostDispatchMismatchEvidence,
   type ReplaySelectorPort,
-  type ReplayVarScope,
 } from '@agent-device/ad-replay';
 import {
   createReplayDivergenceSanitizer,

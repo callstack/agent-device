@@ -18,20 +18,22 @@ import {
 } from '../replay-selector-port.ts';
 import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import {
-  buildReplayVarScope,
-  collectReplayShellEnv,
   computeReplayPlanDigest,
   formatReplaySuccessMessage,
   inspectAdReplay,
-  parseReplayCliEnvEntries,
-  readReplayCliEnvEntries,
-  readReplayShellEnvSource,
   runAdReplay,
   type AdReplayManifest,
   type AdReplayStepRuntime,
   type ReplaySelectorPort,
-  type ReplayVarScope,
 } from '@agent-device/ad-replay';
+import {
+  buildReplayVarScope,
+  collectReplayShellEnv,
+  parseReplayCliEnvEntries,
+  readReplayCliEnvEntries,
+  readReplayShellEnvSource,
+  type ReplayVarScope,
+} from '@agent-device/ad-script';
 import {
   summarizeSnapshotTimingSamples,
   type SnapshotTimingSample,

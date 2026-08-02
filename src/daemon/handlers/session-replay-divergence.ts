@@ -25,11 +25,9 @@ import {
   type InternalObservationEvidence,
 } from '../internal-observation.ts';
 import { boundReplayDivergenceForSession } from './session-replay-divergence-publication.ts';
-import {
-  rankAndDedupeReplaySuggestions,
-  type ReplayReportAction,
-  type ReplaySelectorPort,
-} from '@agent-device/ad-replay';
+import type { ReplaySelectorPort } from '@agent-device/ad-replay';
+import type { ReplayReportAction } from './session-replay-report-action.ts';
+import { rankAndDedupeReplaySuggestions } from './session-replay-suggestion-ranking.ts';
 import type { SessionAction, SessionState } from '../types.ts';
 import {
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,

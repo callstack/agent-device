@@ -17,9 +17,9 @@ import {
   normalizeLabelField,
   normalizeRoleField,
   truncateToUtf8Bytes,
+  type LocalIdentity,
   TARGET_ANNOTATION_MAX_FIELD_BYTES,
 } from '@agent-device/ad-script';
-import type { LocalIdentity } from '@agent-device/ad-replay';
 
 type IdentityTreeNode = Pick<RawSnapshotNode, 'type' | 'identifier' | 'label'>;
 
