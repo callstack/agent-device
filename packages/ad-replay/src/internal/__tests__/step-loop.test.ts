@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { runAdReplay, type AdReplayStepRuntime } from '../step-loop.ts';
 import type { SessionAction } from '@agent-device/contracts/session';
+import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import type { ReplaySelectorPort } from '../selector-port.ts';
 
 /**
@@ -120,4 +121,98 @@ test('a close-less plan suppresses nothing and arms every executable step, inclu
   // the session `open` created before treating `close` as lifecycle — the
   // suppressed `close` is still armed, just never dispatched.
   assert.equal(armCount(), 2);
+});
+
+/**
+ * #1555 P5 stage R3 invariant: `buildPostDispatchTargetBindingFailure`'s
+ * `artifactPaths` argument is the run's accumulated PRE-step snapshot — the
+ * same value `verifyAndDispatchStep`/`dispatchWithGuard` were called with —
+ * never the artifacts the just-failed dispatch itself produced. A dispatch
+ * that races a post-resolution refusal (guard-mismatch/landmark-mismatch)
+ * may have taken its own screenshot as part of resolving (or failing to
+ * resolve) the action; that capture belongs to the failed attempt, not to
+ * the divergence report, which describes the screen BEFORE the action ran.
+ */
+test("a post-dispatch target-binding mismatch reports the pre-step artifact snapshot, not the failed dispatch's own", async () => {
+  const recorded: TargetAnnotationV1 = {
+    role: 'button',
+    ancestry: [],
+    sibling: 0,
+    viewportOrder: 0,
+    verification: 'verified',
+  };
+  const openAction = action('open');
+  const waitAction: SessionAction = {
+    ...action('wait'),
+    targetEvidence: recorded,
+  };
+
+  let receivedArtifactPaths: readonly string[] | undefined;
+  const runtime: AdReplayStepRuntime = {
+    port: {} as ReplaySelectorPort,
+    // Only `waitAction` carries `targetEvidence`, so this is only ever
+    // called for it — routed to the #1349 deferred-landmark path, which
+    // dispatches with a guard WITHOUT any capture/classify round trip.
+    beginTargetVerification: () => ({ kind: 'post-resolution', isSelectorWait: true }),
+    captureObservation: async () => {
+      throw new Error(
+        'captureObservation: not used — deferred-landmark skips straight to dispatch',
+      );
+    },
+    classifyTarget: () => {
+      throw new Error('classifyTarget: not used — deferred-landmark skips straight to dispatch');
+    },
+    async dispatchStep(dispatchedAction, _index, artifactPaths, _guard) {
+      if (dispatchedAction.command === 'open') {
+        return { status: 'ok', artifactPaths: ['open-snapshot.png'] };
+      }
+      // The wait's own dispatch attempt produced a DIFFERENT artifact set
+      // than the pre-step snapshot it was called with (`artifactPaths`,
+      // asserted below never to leak into the divergence report).
+      assert.deepEqual(artifactPaths, ['open-snapshot.png']);
+      return {
+        status: 'landmark-mismatch',
+        details: {},
+        plainFailure: { kind: 'REPLAY_DIVERGENCE', message: 'mismatch', artifactPaths: [] },
+        artifactPaths: ['open-snapshot.png', 'post-dispatch-only.png'],
+      };
+    },
+    buildRecordedUnverifiableFailure: async () => {
+      throw new Error('buildRecordedUnverifiableFailure: not used by this fixture');
+    },
+    buildTargetBindingFailure: async () => {
+      throw new Error(
+        'buildTargetBindingFailure: not used by this fixture (this is a POST-dispatch mismatch)',
+      );
+    },
+    async buildPostDispatchTargetBindingFailure(
+      _dispatchedAction,
+      _index,
+      _evidence,
+      artifactPaths,
+    ) {
+      receivedArtifactPaths = artifactPaths;
+      return { kind: 'REPLAY_DIVERGENCE', message: 'mismatch', artifactPaths: [] };
+    },
+    handleActionFailure: async ({ artifactPaths }) => ({
+      kind: 'REPLAY_DIVERGENCE',
+      message: 'mismatch',
+      artifactPaths: [...artifactPaths],
+    }),
+    armStep: () => {},
+    isRepairArmed: () => false,
+    describeStepValue: () => undefined,
+    diagnosticsMarker: () => 0,
+    diagnosticsSince: () => [],
+  };
+
+  const outcome = await runAdReplay(
+    { actions: [openAction, waitAction], entryIndex: 0, keepSession: false },
+    runtime,
+  );
+
+  assert.equal(outcome.status, 'failed');
+  // The divergence reports the snapshot taken BEFORE the wait's dispatch —
+  // `open`'s own artifact, nothing the failed dispatch itself produced.
+  assert.deepEqual(receivedArtifactPaths, ['open-snapshot.png']);
 });

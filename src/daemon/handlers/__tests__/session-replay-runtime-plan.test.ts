@@ -10,6 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { runReplayScriptFile } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
+import { createReplayCoordinator } from '../../session-replay-coordinator.ts';
 import { dispatchCommand, resolveTargetDevice } from '../../../core/dispatch.ts';
 import {
   makeAndroidSession,
@@ -143,6 +144,66 @@ test('resume rejects an out-of-range --from before any action', async () => {
   if (response.ok) return;
   expect(response.error.code).toBe('INVALID_ARGS');
   expect(response.error.message).toMatch(/out of range/);
+});
+
+/**
+ * R2: `prepareReplayPlan`'s `--from`/`--plan-digest` validation
+ * (`resolveReplayPlanEntryIndex`, now in `session-replay-runtime-plan.ts`)
+ * must run — and reject — before `prepareReplaySession`
+ * (`session-replay-runtime-session.ts`) performs any coordinator-mutating
+ * write. Were the order reversed, a rejected `--from` would still clear the
+ * corrective-resume watermark and demote the armed repair transaction before
+ * the request failed, silently corrupting the very repair state `--from`
+ * exists to protect.
+ */
+test("a rejected --from/--plan-digest resume never reaches prepareReplaySession's coordinator-mutating writes", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-resume-no-mutate-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const filePath = writeReplayFile(root, ['open "Demo"', 'click "Continue"', 'click "Save"']);
+
+  // Arm a repair transaction and stamp a corrective-resume watermark
+  // directly, so BOTH of `prepareReplaySession`'s coordinator-mutating
+  // writes — `consumeReplayResumeState`'s watermark-clear (the `--from 2`
+  // below matches `expectedFrom`, so it WOULD clear) and
+  // `prepareSaveScriptSession`'s `demoteForRerunIfArmed` — have something
+  // real to mutate if this rejected request ever reaches them.
+  const coordinator = createReplayCoordinator({ sessionStore, sessionName });
+  coordinator.armStep({ saveScript: true, force: undefined, sourcePath: filePath, firstArm: true });
+  const armedSession = sessionStore.get(sessionName)!;
+  // `actionsCountAtDivergence: 999` keeps `describeUnperformedRecordAndHeal`
+  // from firing first (it needs `sessionActionsLength` to equal this), so
+  // the rejection below is provably the plan-digest check, not a different one.
+  armedSession.pendingRecordAndHeal = { expectedFrom: 2, actionsCountAtDivergence: 999 };
+  sessionStore.set(sessionName, armedSession);
+
+  const beforeView = coordinator.view();
+  const beforeActionsLength = sessionStore.get(sessionName)!.actions.length;
+
+  const response = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [filePath],
+      flags: { replayFrom: 2, replayPlanDigest: 'not-the-real-digest' },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => {
+      throw new Error('must not execute a resume the plan-digest preflight rejected');
+    },
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('INVALID_ARGS');
+  expect(response.error.message).toMatch(/plan digest/);
+
+  // The armed repair boundary and the corrective watermark are
+  // byte-for-byte unchanged, and no session action was recorded — proof the
+  // rejection happened before `prepareReplaySession` ran at all.
+  expect(coordinator.view()).toEqual(beforeView);
+  expect(sessionStore.get(sessionName)!.actions.length).toBe(beforeActionsLength);
 });
 
 test('resume rejects a stale --plan-digest after the script changed', async () => {
