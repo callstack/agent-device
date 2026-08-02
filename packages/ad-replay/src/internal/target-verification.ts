@@ -7,13 +7,22 @@
  * should be verified — never itself touching a snapshot capture, a session,
  * or a wire response.
  *
+ * #1555 review R3 ("target verification must happen INSIDE the engine"): the
+ * four functions below are called ONLY from `./step-loop.ts`'s
+ * `verifyAndDispatchStep` — the engine's own step loop, never the daemon —
+ * and are NOT re-exported by the package façade (`../index.ts`). The daemon
+ * (`session-replay-target-verification.ts`) now implements only the narrow
+ * `AdReplayStepRuntime` capabilities `verifyAndDispatchStep` drives (routing,
+ * capture, classification, dispatch, wire-building); it never imports this
+ * module.
+ *
  * Two pure decisions live here:
  *
  *  - `planPostResolutionTargetVerification` / `planPreDispatchTargetVerification`:
- *    should `verifyReplayActionTarget` even attempt verification, and with
- *    what token — mirrors the two branches of that function's original
- *    pre-capture gating exactly (#1349's deferred-landmark `wait` case, and
- *    the ordinary pre-dispatch token/parse gate).
+ *    should the step loop even attempt verification, and with what token —
+ *    mirrors the two branches of the pre-#1555-R3 daemon orchestrator's
+ *    original pre-capture gating exactly (#1349's deferred-landmark `wait`
+ *    case, and the ordinary pre-dispatch token/parse gate).
  *  - `deriveReplayTargetGuardMismatchEvidence` / `deriveWaitLandmarkMismatchEvidence`:
  *    given the recorded evidence and a post-dispatch refusal's raw (already
  *    neutral, `unknown`-typed) details bag, compute the observed identity and

@@ -3,36 +3,24 @@
  * suggestion-ranking/vars/identity-vocabulary further narrowed by the P5
  * review pass; plan-digest/resume and `classifyTargetBindingMatch` further
  * narrowed by the #1555 review pass, "complete the binding façade instead of
- * documenting deviations"). `scripts/layering/package-boundaries.test.ts`
- * asserts this file's exact export list — see "the real tree parses,
- * declares, and passes R11" — so a stray export fails that gate, not just a
- * comment mismatch.
+ * documenting deviations"; the target-verification policy functions further
+ * narrowed by the #1555 review's R3 pass, "target verification must happen
+ * INSIDE the engine"). `scripts/layering/package-boundaries.test.ts` asserts
+ * this file's exact export list — see "the real tree parses, declares, and
+ * passes R11" — so a stray export fails that gate, not just a comment
+ * mismatch.
  *
  * The binding design (issue comment 5156017698) is `inspectAdReplay` +
- * `runAdReplay` and nothing else. As of the #1555 review pass, parsing,
- * variable substitution, planning, digest/resume, and classification are ALL
- * on-design: `inspectAdReplay`'s manifest carries the digest and the
- * `--from`/`--plan-digest` resume math internally, and
- * `classifyTargetBindingMatch` moved to its real owner,
- * `@agent-device/ad-script` (both daemon consumers — record-time self-check
- * and replay-time classification — never went through this façade at all).
- *
- * ONE deviation remains, reported rather than papered over per the review's
- * own instruction ("if a genuine remainder must stay callable from the
- * daemon, STOP and report rather than re-exporting"): the four
- * target-verification policy functions below, and the `ReplaySelectorPort`
- * type family they (and other daemon handlers) need to name. Their sole
- * caller, `session-replay-target-verification.ts`, is the daemon's
- * verify-then-dispatch orchestrator — it interleaves these PURE decisions
- * with daemon-only async work (snapshot capture, `SessionStore` reads,
- * coordinator/resume stamping, wire-response sanitization/shaping) that must
- * stay outside the engine by design. Moving the CALL SITES for these four
- * functions to live only "behind runAdReplay" would require restructuring
- * that whole orchestration into new fine-grained `AdReplayStepRuntime`
- * capabilities (e.g. a capture capability, a wire-shaping capability) so the
- * engine's own code could drive it end to end — a materially larger,
- * higher-risk change than the neutral-outcomes and plan/digest/resume work
- * in this same pass, and out of scope here; see the #1555 R2 handoff notes.
+ * `runAdReplay` and nothing else — as of R3, with NO reported deviation: the
+ * four target-verification policy functions (`planPostResolutionTargetVerification`,
+ * `planPreDispatchTargetVerification`, `deriveReplayTargetGuardMismatchEvidence`,
+ * `deriveWaitLandmarkMismatchEvidence`) are called only from
+ * `./internal/step-loop.ts`'s `verifyAndDispatchStep` — the step loop's own
+ * verify-then-dispatch orchestration, which drives the daemon-owned pieces
+ * (capture, classification, dispatch, wire-building) through narrow
+ * `AdReplayStepRuntime` capabilities instead of the daemon calling the policy
+ * functions directly. See `./internal/target-verification.ts` and
+ * `./internal/step-loop.ts` for the split.
  */
 
 // ---------------------------------------------------------------------------
@@ -66,18 +54,12 @@ export type {
 // ---------------------------------------------------------------------------
 // target-verification.ts — #1478 P5 stage C2a target-verification ENGINE
 // policy (pre-capture verification gating, post-dispatch mismatch-evidence
-// derivation), split out of `session-replay-target-verification.ts`.
-// façade-deviation: that same daemon wire-builder is the direct caller of
-// all four functions below — see `./internal/target-verification.ts` for the
-// daemon/engine ownership split.
+// derivation). As of the #1555 review's R3 pass, its four functions are
+// called ONLY from `./internal/step-loop.ts` (`verifyAndDispatchStep`) — the
+// engine's own step loop, never the daemon — so nothing from this module is
+// re-exported here anymore. See `./internal/target-verification.ts`'s header
+// for the full daemon/engine ownership split.
 // ---------------------------------------------------------------------------
-export {
-  deriveReplayTargetGuardMismatchEvidence,
-  deriveWaitLandmarkMismatchEvidence,
-  planPostResolutionTargetVerification,
-  planPreDispatchTargetVerification,
-} from './internal/target-verification.ts';
-export type { ReplayPostDispatchMismatchEvidence } from './internal/target-verification.ts';
 
 // ---------------------------------------------------------------------------
 // selector-port.ts — the `ReplaySelectorPort` port TYPE only (#1478 P5 stage
@@ -93,8 +75,9 @@ export type { ReplayPostDispatchMismatchEvidence } from './internal/target-verif
 // directly (`session-replay-target-token.ts`, `session-replay-heal.ts`,
 // `session-replay-target-classification.ts`, `session-replay-runtime-failure.ts`,
 // `session-replay-runtime.ts`, `session-replay-target-verification.ts`) —
-// the port rides in as `runAdReplay`'s runtime threads it, but the type
-// itself is named at every one of those call sites.
+// the port rides in as `runAdReplay`'s runtime threads it (as of R3, also as
+// `AdReplayStepRuntime.port` itself, for the engine's own pre-dispatch plan),
+// but the type is named at every one of those call sites too.
 // ---------------------------------------------------------------------------
 export type {
   ReplayRecordedTargetDisambiguation,

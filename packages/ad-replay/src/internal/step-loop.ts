@@ -1,5 +1,17 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { SnapshotTimingSample } from '@agent-device/contracts/capture';
+import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
+import type { ReplayDivergenceTargetBindingKind } from '@agent-device/contracts/divergence';
+import type { LocalIdentity } from '@agent-device/ad-script';
+import type { ReplaySelectorPort } from './selector-port.ts';
+import {
+  deriveReplayTargetGuardMismatchEvidence,
+  deriveWaitLandmarkMismatchEvidence,
+  planPostResolutionTargetVerification,
+  planPreDispatchTargetVerification,
+} from './target-verification.ts';
 
 /**
  * #1478 P5 stage C2b: the `.ad` step-loop ENGINE policy, split out of
@@ -13,16 +25,30 @@ import type { SnapshotTimingSample } from '@agent-device/contracts/capture';
  * #1555 review P1 ("do not smuggle daemon wire failures through a generic"):
  * `AdReplayStepRuntime` no longer carries a `TResponse` type parameter. The
  * loop never sees a `DaemonResponse`/wire object at all, not even opaquely —
- * `executeStep`/`handleActionFailure` return the NEUTRAL tagged types below
- * (`AdReplayStepOutcome`, `AdReplayStepFailure`), built only from plain
- * values (a `kind` string, a `message` string, artifact paths). The daemon
- * adapter (`createAdReplayStepRuntime`, `session-replay-runtime.ts`) is the
- * only place a real `DaemonResponse` is constructed or read; it keeps its
- * OWN wire response in a local variable ("the side-map") as it builds each
+ * the capabilities below return the NEUTRAL tagged types in this file (built
+ * only from plain values — a `kind`/`reason` string, a `message` string,
+ * snapshot nodes, artifact paths). The daemon adapter
+ * (`createAdReplayStepRuntime`, `session-replay-runtime.ts`) is the only
+ * place a real `DaemonResponse` is constructed or read; it keeps its OWN
+ * wire response in a local variable ("the side-map") as it builds each
  * neutral outcome, and `runReplayScriptFile` reads that variable back after
  * `runAdReplay` reports which step failed, so the final response returned to
  * the client is byte-identical to before this split — it was never
  * round-tripped through the engine's return value at all.
+ *
+ * #1555 review P1 remainder ("target verification must happen INSIDE the
+ * engine"): `verifyAndDispatchStep` below is the verify-then-dispatch
+ * orchestrator that used to live daemon-side
+ * (`session-replay-target-verification.ts`'s `verifyReplayActionTarget` /
+ * `convertIdentityRefusalResponse`) calling OUT to this package's four
+ * target-verification policy functions. The call sites for those four
+ * functions now live here — engine-private, never re-exported by the façade
+ * — and the daemon side shrinks to the narrow capabilities this function
+ * drives: routing (`beginTargetVerification`), capture
+ * (`captureObservation`), classification (`classifyTarget`), dispatch
+ * (`dispatchStep`), and wire-building the resulting divergence
+ * (`buildRecordedUnverifiableFailure`, `buildTargetBindingFailure`,
+ * `buildPostDispatchTargetBindingFailure`).
  */
 
 /** Neutral per-step failure: no `DaemonResponse`, no wire shape — just what the engine needs to report. */
@@ -54,6 +80,109 @@ export type AdReplayProgressStep = Readonly<{
 
 export type AdReplayProgressSink = (step: AdReplayProgressStep) => void;
 
+// ---------------------------------------------------------------------------
+// Target-verification neutral types: the plain-value shapes that cross the
+// engine/daemon boundary for the verify-then-dispatch flow. `SnapshotNode`,
+// `LocalIdentity`, and `TargetAnnotationV1` are already shared/neutral types
+// (kernel + ad-script + contracts) — never a `DaemonResponse` or a
+// daemon-request-shaped value.
+// ---------------------------------------------------------------------------
+
+/** The verified member's structural position within its capture (document order + sibling). */
+export type AdReplayTargetStructuralDenotation = Readonly<{
+  documentOrder: number;
+  sibling: number;
+}>;
+
+/**
+ * The verified member's identity + structural denotation, threaded to
+ * dispatch as its own pre-action guard (so dispatch's independent resolution
+ * — occlusion/visibility guards this engine does not replicate — must land
+ * on the SAME element or refuse).
+ */
+export type AdReplayVerifiedTargetGuard = Readonly<{
+  expected: Readonly<{
+    identity: LocalIdentity;
+    structural: AdReplayTargetStructuralDenotation;
+  }>;
+  matchCount: number;
+}>;
+
+/** `captureObservation`'s neutral result: nodes for classification, or why a capture was not available. */
+export type AdReplayObservation = Readonly<
+  | { readonly state: 'available'; readonly nodes: readonly SnapshotNode[] }
+  | { readonly state: 'unavailable'; readonly reason: string; readonly hint?: string }
+>;
+
+/**
+ * `beginTargetVerification`'s per-command routing, only ever called when
+ * `action.targetEvidence` is present: no active session (skip entirely), the
+ * post-resolution (`wait`) phase (needs only whether this is a selector
+ * wait), or the ordinary pre-dispatch gate (needs the resolved-target token
+ * and the session's platform).
+ */
+export type AdReplayVerificationEntry = Readonly<
+  | { readonly kind: 'inactive' }
+  | { readonly kind: 'post-resolution'; readonly isSelectorWait: boolean }
+  | {
+      readonly kind: 'pre-dispatch';
+      readonly token: string | undefined;
+      readonly platform: Platform | PublicPlatform;
+    }
+>;
+
+/** `classifyTarget`'s result: a verified guard, or the divergence evidence a target-binding failure reports. */
+export type AdReplayTargetClassification = Readonly<
+  | { readonly verified: true; readonly guard: AdReplayVerifiedTargetGuard }
+  | Readonly<{
+      readonly verified: false;
+      readonly kind: ReplayDivergenceTargetBindingKind;
+      readonly matchCount: number | undefined;
+      readonly observed: LocalIdentity | undefined;
+      readonly candidateNodes: readonly SnapshotNode[];
+      readonly mismatches: readonly string[];
+      readonly causeCode: string;
+      readonly causeMessage: string;
+    }>
+>;
+
+/** The evidence bag `buildTargetBindingFailure`/`buildPostDispatchTargetBindingFailure` wrap into a wire divergence. */
+export type AdReplayTargetBindingEvidence = Readonly<{
+  kind: ReplayDivergenceTargetBindingKind;
+  matchCount: number | undefined;
+  observed: LocalIdentity | undefined;
+  candidateNodes: readonly SnapshotNode[];
+  mismatches: readonly string[];
+  causeCode: string;
+  causeMessage: string;
+  causeHint?: string;
+}>;
+
+/** The pre-action guard `dispatchStep` threads to the interaction layer's own resolution. */
+export type AdReplayDispatchGuard = Readonly<
+  | { readonly kind: 'target'; readonly guard: AdReplayVerifiedTargetGuard }
+  | { readonly kind: 'landmark'; readonly landmark: TargetAnnotationV1 }
+>;
+
+/**
+ * `dispatchStep`'s result: ok, an ordinary failure, or one of the two
+ * post-resolution identity-refusal markers. The mismatch variants still
+ * carry a `plainFailure` — the ordinary neutral failure the dispatch itself
+ * produced — so the orchestrator can fall back to it unconverted on the
+ * "marker fired without recorded evidence" invariant-violation path, exactly
+ * like the daemon code this replaces.
+ */
+export type AdReplayDispatchOutcome = Readonly<
+  | { readonly status: 'ok'; readonly artifactPaths: readonly string[] }
+  | { readonly status: 'failed'; readonly failure: AdReplayStepFailure }
+  | {
+      readonly status: 'guard-mismatch' | 'landmark-mismatch';
+      readonly details: Record<string, unknown> | undefined;
+      readonly plainFailure: AdReplayStepFailure;
+      readonly artifactPaths: readonly string[];
+    }
+>;
+
 /**
  * The injected capability bag `runAdReplay` threads the step loop through —
  * narrow execute/capture/observe/stamp daemon capabilities, modeled on what
@@ -65,16 +194,91 @@ export type AdReplayProgressSink = (step: AdReplayProgressStep) => void;
  */
 export type AdReplayStepRuntime = Readonly<{
   /**
-   * Verifies the recorded target (if any) then dispatches the action.
-   * Capture, the single `invoke` dispatch site, and the post-resolution
-   * guard/landmark-mismatch conversion are all daemon authority; only the
-   * neutral pass/fail projection crosses back into the engine.
+   * The selector-port instance this request threads through classification
+   * and — as of this pass — the engine's own pre-dispatch verification plan
+   * (its recorded-selector parse-check). An engine-owned value (the façade
+   * names `ReplaySelectorPort`), never a daemon/wire shape.
    */
-  executeStep(
+  port: ReplaySelectorPort;
+  /**
+   * Routes one step's recorded target evidence to its verification phase —
+   * daemon authority (command-descriptor registry lookup, session read,
+   * wait-form parse, token extraction). Only ever called when
+   * `action.targetEvidence` is present.
+   */
+  beginTargetVerification(action: SessionAction, index: number): AdReplayVerificationEntry;
+  /**
+   * Captures a fresh snapshot for classification or for a divergence's
+   * `screen` — daemon authority (`SessionStore`, the capture pipeline, the
+   * #1385 launch-race retry).
+   */
+  captureObservation(
+    action: SessionAction,
+    index: number,
+    options: { retryLaunchRace: boolean },
+  ): Promise<AdReplayObservation>;
+  /**
+   * Resolves the recorded target against `nodes` using the SAME
+   * lookup/matching a real dispatch would — daemon authority (tree helpers,
+   * the selector port).
+   */
+  classifyTarget(params: {
+    action: SessionAction;
+    index: number;
+    token: string;
+    nodes: readonly SnapshotNode[];
+  }): AdReplayTargetClassification;
+  /**
+   * Dispatches the action, optionally carrying a pre-action identity guard,
+   * and detects the guard-mismatch / wait-landmark-mismatch post-resolution
+   * refusal markers on failure — daemon authority (the single `invoke`
+   * dispatch site).
+   */
+  dispatchStep(
     action: SessionAction,
     index: number,
     artifactPaths: readonly string[],
-  ): Promise<AdReplayStepOutcome>;
+    guard: AdReplayDispatchGuard | undefined,
+  ): Promise<AdReplayDispatchOutcome>;
+  /**
+   * Builds the "recorded target evidence itself unverifiable" divergence —
+   * its own fresh capture — daemon authority (capture, `SessionStore`,
+   * resume stamping, wire shaping). `artifactPaths` is the pre-step
+   * snapshot (mirrors `dispatchStep`'s own, never artifacts a just-failed
+   * dispatch produced — verification never reaches dispatch on this path).
+   */
+  buildRecordedUnverifiableFailure(
+    action: SessionAction,
+    index: number,
+    artifactPaths: readonly string[],
+  ): Promise<AdReplayStepFailure>;
+  /**
+   * Builds a target-binding divergence from `evidence`, reusing the LAST
+   * `captureObservation` result for its `screen` (the pre-dispatch capture
+   * and classification/capture-failure evidence share one capture) —
+   * daemon authority. `artifactPaths` is the pre-step snapshot, as above.
+   */
+  buildTargetBindingFailure(
+    action: SessionAction,
+    index: number,
+    evidence: AdReplayTargetBindingEvidence,
+    artifactPaths: readonly string[],
+  ): Promise<AdReplayStepFailure>;
+  /**
+   * Builds a target-binding divergence from `evidence` after a FRESH
+   * post-dispatch capture (the screen may have changed since dispatch) —
+   * daemon authority. `artifactPaths` is the PRE-STEP snapshot passed to
+   * `dispatchStep`, not the just-failed dispatch's own artifacts — mirrors
+   * the pre-#1555-R3 daemon orchestrator exactly (a target-binding
+   * divergence's wire `artifactPaths` never included the triggering
+   * dispatch's own).
+   */
+  buildPostDispatchTargetBindingFailure(
+    action: SessionAction,
+    index: number,
+    evidence: AdReplayTargetBindingEvidence,
+    artifactPaths: readonly string[],
+  ): Promise<AdReplayStepFailure>;
   /**
    * Wraps a failed step with replay failure diagnostics and repair-held
    * marking — daemon authority (capture, `SessionStore`, the P4b
@@ -124,9 +328,9 @@ export type AdReplayRunOutcome =
  * ADR 0012 step 4's step loop: for every executable action from
  * `request.entryIndex` on, arm the save-script transaction, skip a
  * repair-armed plan's terminal `close` (lifecycle, not a script step), report
- * progress, dispatch through `runtime.executeStep`, and stop at the first
- * failure. Moved verbatim from `executeReplayActions`'s composition order —
- * only the daemon capabilities it calls through were narrowed into
+ * progress, verify-then-dispatch through `verifyAndDispatchStep`, and stop at
+ * the first failure. Moved verbatim from `executeReplayActions`'s composition
+ * order — only the daemon capabilities it calls through were narrowed into
  * `runtime`.
  */
 export async function runAdReplay(
@@ -153,7 +357,7 @@ export async function runAdReplay(
       runtime.onStep(buildAdReplayProgressStep(index, actions.length, action, value));
     }
     const sampleStart = runtime.diagnosticsMarker();
-    const stepOutcome = await runtime.executeStep(action, index, [...artifactPaths]);
+    const stepOutcome = await verifyAndDispatchStep(runtime, action, index, [...artifactPaths]);
     snapshotDiagnosticSamples.push(...runtime.diagnosticsSince(sampleStart));
     if (stepOutcome.status === 'ok') {
       stepOutcome.artifactPaths.forEach((entry) => artifactPaths.add(entry));
@@ -173,6 +377,196 @@ export async function runAdReplay(
     replayed: actions.length - entryIndex,
     artifactPaths: [...artifactPaths],
     snapshotDiagnosticSamples,
+  };
+}
+
+/**
+ * The verify-then-dispatch orchestrator: ADR 0012 step 4 verify + dispatch +
+ * guard, ENGINE-side as of the #1555 review pass. Mirrors
+ * `verifyReplayActionTarget`'s exact branch order (moved verbatim from
+ * `session-replay-target-verification.ts`) — only the async daemon-owned
+ * pieces (registry/session/wait-form routing, capture, classification,
+ * dispatch, wire-building) were narrowed into `runtime` capabilities; the
+ * plan/derive DECISIONS (`planPostResolutionTargetVerification`,
+ * `planPreDispatchTargetVerification`, `deriveReplayTargetGuardMismatchEvidence`,
+ * `deriveWaitLandmarkMismatchEvidence`) are called from here, never from the
+ * daemon.
+ */
+async function verifyAndDispatchStep(
+  runtime: AdReplayStepRuntime,
+  action: SessionAction,
+  index: number,
+  artifactPaths: readonly string[],
+): Promise<AdReplayStepOutcome> {
+  const recorded = action.targetEvidence;
+  if (!recorded) return dispatchNoGuard(runtime, action, index, artifactPaths);
+
+  const entry = runtime.beginTargetVerification(action, index);
+  if (entry.kind === 'inactive') return dispatchNoGuard(runtime, action, index, artifactPaths);
+
+  // #1349 post-resolution phase (`wait`): NEVER the generic pre-dispatch
+  // resolution below — an absent landmark is a wait's expected starting
+  // condition, so refusing on the current screen would break polling. Only
+  // a recorded-`unverifiable` annotation refuses up front; a verifiable
+  // landmark is deferred into the wait's own loop.
+  if (entry.kind === 'post-resolution') {
+    const plan = planPostResolutionTargetVerification({
+      recorded,
+      isSelectorWait: entry.isSelectorWait,
+    });
+    switch (plan.kind) {
+      case 'skip':
+        return dispatchNoGuard(runtime, action, index, artifactPaths);
+      case 'recorded-unverifiable':
+        return {
+          status: 'failed',
+          failure: await runtime.buildRecordedUnverifiableFailure(action, index, artifactPaths),
+        };
+      case 'deferred-landmark':
+        return dispatchWithGuard(runtime, action, index, artifactPaths, {
+          kind: 'landmark',
+          landmark: plan.landmark,
+        });
+    }
+  }
+
+  // entry.kind === 'pre-dispatch': the ordinary gate.
+  const preDispatchPlan = planPreDispatchTargetVerification({
+    recorded,
+    token: entry.token,
+    platform: entry.platform,
+    port: runtime.port,
+  });
+  if (preDispatchPlan.kind === 'skip')
+    return dispatchNoGuard(runtime, action, index, artifactPaths);
+  if (preDispatchPlan.kind === 'recorded-unverifiable') {
+    return {
+      status: 'failed',
+      failure: await runtime.buildRecordedUnverifiableFailure(action, index, artifactPaths),
+    };
+  }
+  const token = preDispatchPlan.token;
+
+  // #1385: this is the pre-dispatch gate a step right after `open --relaunch`
+  // can race — the app may still be launching/mounting when this capture
+  // lands. Bounded retry rides out that transition (`retryLaunchRace`).
+  const observation = await runtime.captureObservation(action, index, { retryLaunchRace: true });
+  if (observation.state !== 'available') {
+    return {
+      status: 'failed',
+      failure: await runtime.buildTargetBindingFailure(
+        action,
+        index,
+        {
+          kind: 'identity-unverifiable',
+          matchCount: undefined,
+          observed: undefined,
+          candidateNodes: [],
+          mismatches: [],
+          causeCode: 'IDENTITY_UNVERIFIABLE',
+          causeMessage: `Could not capture a fresh snapshot to verify the recorded target before acting (${observation.reason}).`,
+          ...(observation.hint !== undefined ? { causeHint: observation.hint } : {}),
+        },
+        artifactPaths,
+      ),
+    };
+  }
+
+  const classification = runtime.classifyTarget({ action, index, token, nodes: observation.nodes });
+  if (classification.verified) {
+    return dispatchWithGuard(runtime, action, index, artifactPaths, {
+      kind: 'target',
+      guard: classification.guard,
+    });
+  }
+  return {
+    status: 'failed',
+    failure: await runtime.buildTargetBindingFailure(
+      action,
+      index,
+      {
+        kind: classification.kind,
+        matchCount: classification.matchCount,
+        observed: classification.observed,
+        candidateNodes: classification.candidateNodes,
+        mismatches: classification.mismatches,
+        causeCode: classification.causeCode,
+        causeMessage: classification.causeMessage,
+      },
+      artifactPaths,
+    ),
+  };
+}
+
+/** Dispatches with no pre-action guard — nothing to cross-check, so a mismatch marker can never legitimately fire. */
+async function dispatchNoGuard(
+  runtime: AdReplayStepRuntime,
+  action: SessionAction,
+  index: number,
+  artifactPaths: readonly string[],
+): Promise<AdReplayStepOutcome> {
+  const outcome = await runtime.dispatchStep(action, index, artifactPaths, undefined);
+  switch (outcome.status) {
+    case 'ok':
+      return { status: 'ok', artifactPaths: outcome.artifactPaths };
+    case 'failed':
+      return { status: 'failed', failure: outcome.failure };
+    case 'guard-mismatch':
+    case 'landmark-mismatch':
+      // `dispatchStep` never reports a mismatch marker without a matching
+      // guard to check it against — unreachable in practice; stay total via
+      // the plain fallback failure.
+      return { status: 'failed', failure: outcome.plainFailure };
+  }
+}
+
+/**
+ * Dispatches carrying a pre-action guard and converts a matching
+ * post-resolution refusal marker into its identity-mismatch target-binding
+ * divergence, deriving the evidence via the (engine-private) derive
+ * functions this pass moved in from the daemon.
+ */
+async function dispatchWithGuard(
+  runtime: AdReplayStepRuntime,
+  action: SessionAction,
+  index: number,
+  artifactPaths: readonly string[],
+  guard: AdReplayDispatchGuard,
+): Promise<AdReplayStepOutcome> {
+  const outcome = await runtime.dispatchStep(action, index, artifactPaths, guard);
+  if (outcome.status === 'ok') return { status: 'ok', artifactPaths: outcome.artifactPaths };
+  if (outcome.status === 'failed') return { status: 'failed', failure: outcome.failure };
+
+  // The refusal markers are only ever attached to an annotated action; fall
+  // back to the plain dispatch failure if the invariant is somehow violated.
+  const recorded = action.targetEvidence;
+  if (!recorded) return { status: 'failed', failure: outcome.plainFailure };
+
+  const evidence =
+    outcome.status === 'guard-mismatch'
+      ? deriveReplayTargetGuardMismatchEvidence(
+          recorded,
+          outcome.details,
+          guard.kind === 'target' ? guard.guard.matchCount : 0,
+        )
+      : deriveWaitLandmarkMismatchEvidence(recorded, outcome.details);
+
+  return {
+    status: 'failed',
+    failure: await runtime.buildPostDispatchTargetBindingFailure(
+      action,
+      index,
+      {
+        kind: 'identity-mismatch',
+        matchCount: evidence.matchCount,
+        observed: evidence.observed,
+        candidateNodes: [],
+        mismatches: evidence.mismatches,
+        causeCode: 'IDENTITY_MISMATCH',
+        causeMessage: evidence.causeMessage,
+      },
+      artifactPaths,
+    ),
   };
 }
 

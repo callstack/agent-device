@@ -28,6 +28,7 @@ import {
 } from '@agent-device/ad-replay';
 import {
   buildReplayVarScope,
+  collectReplayScrubbableVarValues,
   collectReplayShellEnv,
   parseReplayCliEnvEntries,
   readReplayCliEnvEntries,
@@ -38,7 +39,7 @@ import {
   summarizeSnapshotTimingSamples,
   type SnapshotTimingSample,
 } from '@agent-device/contracts/capture';
-import type { ReplayCommandResult, TargetAnnotationV1 } from '@agent-device/contracts/replay';
+import type { ReplayCommandResult } from '@agent-device/contracts/replay';
 import {
   isMaestroYamlPath,
   maestroBackendRequiredMessage,
@@ -48,12 +49,19 @@ import { collectReplayActionArtifactPaths } from './session-replay-runtime-artif
 import { withReplayFailureDiagnostics } from './session-replay-runtime-failure.ts';
 import { buildReplayMetadataFlags } from './session-replay-runtime-plan.ts';
 import {
-  buildReplayTargetGuardMismatchResponse,
-  buildWaitLandmarkMismatchResponse,
+  captureDivergenceObservation,
+  type DivergenceObservation,
+} from './session-replay-divergence.ts';
+import {
+  buildPostDispatchTargetBindingFailureResponse,
+  buildRecordedUnverifiableFailureResponse,
+  buildTargetBindingFailureResponse,
+  classifyPreDispatchTarget,
   isReplayTargetGuardMismatchResponse,
   isWaitLandmarkMismatchResponse,
-  verifyReplayActionTarget,
-  type ReplayVerifiedTargetGuard,
+  resolveTargetVerificationEntry,
+  type TargetBindingDivergenceContext,
+  type TargetBindingFailureEvidence,
 } from './session-replay-target-verification.ts';
 import { buildReplayBuiltinVars } from './session-replay-vars.ts';
 import { runTypedMaestroReplayFile } from './session-replay-maestro-runtime.ts';
@@ -98,128 +106,6 @@ type ReplayStepContext = {
   /** #1478 P5 stage C: the one selector-port instance this request threads through the divergence-report chain. */
   port: ReplaySelectorPort;
 };
-
-/**
- * ADR 0012 migration step 4: verify the recorded target BEFORE sending the
- * device action. A non-verified outcome is a complete target-binding
- * REPLAY_DIVERGENCE (built from its own pre-action capture); only a verified
- * outcome dispatches, carrying the verified member's identity as a
- * post-resolution guard so dispatch's own resolution (occlusion/visibility
- * guards verification does not replicate) must land on the SAME element or
- * refuse pre-action.
- *
- * #1478 P5 stage C2b: this is the daemon's `AdReplayStepRuntime.executeStep`
- * implementation — capture, the single dispatch site, and post-resolution
- * guard/landmark conversion are all daemon authority, so the engine step loop
- * (`runAdReplay`, `@agent-device/ad-replay`) calls this as one opaque
- * capability and never sees any of it.
- */
-async function resolveReplayStepResponse(
-  ctx: ReplayStepContext,
-  action: SessionAction,
-  index: number,
-  artifactPaths: string[],
-): Promise<DaemonResponse> {
-  const sourcePath = ctx.actionSourcePaths?.[index] ?? ctx.resolved;
-  const sourceLine = ctx.actionLines[index] ?? 1;
-  const verification = await verifyReplayActionTarget({
-    action,
-    scope: ctx.scope,
-    sourcePath,
-    sourceLine,
-    replayPath: ctx.resolved,
-    step: index + 1,
-    sessionName: ctx.sessionName,
-    sessionStore: ctx.sessionStore,
-    resumeStamper: ctx.coordinator.resumeStamper,
-    logPath: ctx.logPath,
-    artifactPaths,
-    responseLevel: ctx.responseLevel,
-    planActions: ctx.actions,
-    planDigest: ctx.planDigest,
-    signal: ctx.signal,
-    port: ctx.port,
-  });
-  if (!verification.verified) return verification.response;
-  const guard = verification.guard;
-  const deferredLandmark = verification.deferredLandmark;
-  const guardInternal = guard
-    ? { replayTargetGuard: guard.expected }
-    : deferredLandmark
-      ? { replayLandmarkGuard: deferredLandmark }
-      : undefined;
-  const guardedReq = guardInternal
-    ? { ...ctx.replayReq, internal: { ...ctx.replayReq.internal, ...guardInternal } }
-    : ctx.replayReq;
-  const response = await invokeReplayAction({
-    req: guardedReq,
-    sessionName: ctx.sessionName,
-    action,
-    scope: ctx.scope,
-    filePath: ctx.resolved,
-    line: sourceLine,
-    sourcePath: ctx.actionSourcePaths?.[index],
-    step: index + 1,
-    tracePath: ctx.actionTracePath,
-    invoke: ctx.invoke,
-  });
-  return await convertIdentityRefusalResponse({
-    ctx,
-    action,
-    index,
-    artifactPaths,
-    sourcePath,
-    sourceLine,
-    response,
-    guard,
-    deferredLandmark,
-  });
-}
-
-/**
- * Converts a dispatch-time identity refusal — the post-resolution guard
- * mismatch, or wait's landmark timeout — into its identity-mismatch
- * divergence; every other response passes through unchanged.
- */
-async function convertIdentityRefusalResponse(params: {
-  ctx: ReplayStepContext;
-  action: SessionAction;
-  index: number;
-  artifactPaths: string[];
-  sourcePath: string;
-  sourceLine: number;
-  response: DaemonResponse;
-  guard: ReplayVerifiedTargetGuard | undefined;
-  deferredLandmark: TargetAnnotationV1 | undefined;
-}): Promise<DaemonResponse> {
-  const { ctx, action, index, artifactPaths, sourcePath, sourceLine, response } = params;
-  const mismatchParams = {
-    action,
-    scope: ctx.scope,
-    failedResponse: response,
-    sourcePath,
-    sourceLine,
-    replayPath: ctx.resolved,
-    step: index + 1,
-    sessionName: ctx.sessionName,
-    sessionStore: ctx.sessionStore,
-    resumeStamper: ctx.coordinator.resumeStamper,
-    logPath: ctx.logPath,
-    artifactPaths,
-    responseLevel: ctx.responseLevel,
-    planActions: ctx.actions,
-    planDigest: ctx.planDigest,
-    signal: ctx.signal,
-    port: ctx.port,
-  };
-  if (params.guard && isReplayTargetGuardMismatchResponse(response)) {
-    return await buildReplayTargetGuardMismatchResponse({ ...mismatchParams, guard: params.guard });
-  }
-  if (params.deferredLandmark && isWaitLandmarkMismatchResponse(response)) {
-    return await buildWaitLandmarkMismatchResponse(mismatchParams);
-  }
-  return response;
-}
 
 export async function runReplayScriptFile(params: {
   req: DaemonRequest;
@@ -370,21 +256,55 @@ export async function runReplayScriptFile(params: {
 }
 
 /**
+ * The engine's evidence-bag type for `buildTargetBindingFailure`/
+ * `buildPostDispatchTargetBindingFailure`, read off `AdReplayStepRuntime`
+ * itself (`Parameters<...>`) rather than a named façade export — the R3 pass
+ * deliberately did not add `AdReplayTargetBindingEvidence` to
+ * `@agent-device/ad-replay`'s export list, so this is how a daemon helper
+ * still gets a precise parameter type without widening the façade.
+ */
+type EngineTargetBindingEvidence = Parameters<AdReplayStepRuntime['buildTargetBindingFailure']>[2];
+
+/** Converts the engine's (readonly-array) evidence shape to this module's own mutable-array `TargetBindingFailureEvidence`. */
+function toDaemonEvidence(evidence: EngineTargetBindingEvidence): TargetBindingFailureEvidence {
+  return {
+    kind: evidence.kind,
+    matchCount: evidence.matchCount,
+    observed: evidence.observed,
+    candidateNodes: [...evidence.candidateNodes],
+    mismatches: [...evidence.mismatches],
+    causeCode: evidence.causeCode,
+    causeMessage: evidence.causeMessage,
+    ...(evidence.causeHint !== undefined ? { causeHint: evidence.causeHint } : {}),
+  };
+}
+
+/**
  * #1478 P5 stage C2b (narrowed further by the #1555 review's neutral-outcomes
- * pass): the daemon's `AdReplayStepRuntime` adapter — the narrow
- * execute/capture/observe/stamp capability bag `runAdReplay`'s step loop
- * threads through. Every member closes over this one request's
- * `ReplayStepContext` (or the outer accumulators it needs to keep in sync);
- * none of it is reachable from the engine except through these functions.
+ * pass, then again by the R3 pass that moved verify-then-dispatch into the
+ * engine): the daemon's `AdReplayStepRuntime` adapter — the narrow
+ * routing/capture/classify/dispatch/build-failure capability bag
+ * `runAdReplay`'s step loop threads through. Every member closes over this
+ * one request's `ReplayStepContext` (or the outer accumulators it needs to
+ * keep in sync); none of it is reachable from the engine except through these
+ * functions — the engine drives WHEN each one is called and, for the four
+ * target-verification policy decisions, WHAT it means; this adapter only
+ * knows HOW to do each daemon-owned piece.
  *
  * `lastResponse` is the side-map the neutral-outcomes design relies on: the
- * ONLY place a real `DaemonResponse` is built or held. `executeStep` and
- * `handleActionFailure` each record the wire response they just built here
- * before projecting it down to the neutral `AdReplayStepOutcome`/
- * `AdReplayStepFailure` the engine actually sees; `readLastResponse` lets
- * `runReplayScriptFile` recover the exact final response once `runAdReplay`
- * reports which step failed, so the client-visible wire output never changes
- * even though the engine itself never touches it.
+ * ONLY place a real `DaemonResponse` is built or held. Every capability that
+ * can end a step (`dispatchStep`, the three `build*Failure` capabilities, and
+ * `handleActionFailure`) records the wire response it just built here before
+ * projecting it down to the neutral `AdReplayStepOutcome`/`AdReplayStepFailure`
+ * the engine actually sees; `readLastResponse` lets `runReplayScriptFile`
+ * recover the exact final response once `runAdReplay` reports which step
+ * failed, so the client-visible wire output never changes even though the
+ * engine itself never touches it.
+ *
+ * `lastObservation` is the analogous side-map for `buildTargetBindingFailure`
+ * — it reuses the SAME capture `captureObservation` just took (for its
+ * `screen`), mirroring the pre-R3 code's single-capture-serves-both-paths
+ * invariant instead of taking a second, possibly-different snapshot.
  */
 function createAdReplayStepRuntime(params: {
   ctx: ReplayStepContext;
@@ -396,15 +316,194 @@ function createAdReplayStepRuntime(params: {
 }): { runtime: AdReplayStepRuntime; readLastResponse: () => DaemonResponse | undefined } {
   const { ctx, req, artifactPaths, onStep, armSaveScript } = params;
   let lastResponse: DaemonResponse | undefined;
+  let lastObservation: DivergenceObservation | undefined;
+
+  /** The `TargetBindingDivergenceContext` every wire-builder needs — built fresh per call from `action`/`index`/its own `artifactPaths` snapshot. */
+  const buildDivergenceContext = (
+    action: SessionAction,
+    index: number,
+    stepArtifactPaths: readonly string[],
+  ): TargetBindingDivergenceContext => ({
+    // Only ever called on a path that confirmed `action.targetEvidence` is
+    // present (the engine checks that before calling anything else).
+    recorded: action.targetEvidence!,
+    action,
+    step: index + 1,
+    sourcePath: ctx.actionSourcePaths?.[index] ?? ctx.resolved,
+    sourceLine: ctx.actionLines[index] ?? 1,
+    replayPath: ctx.resolved,
+    artifactPaths: [...stepArtifactPaths],
+    sessionName: ctx.sessionName,
+    sessionStore: ctx.sessionStore,
+    resumeStamper: ctx.coordinator.resumeStamper,
+    responseLevel: ctx.responseLevel,
+    scrubVars: collectReplayScrubbableVarValues(ctx.scope),
+    planActions: ctx.actions,
+    planDigest: ctx.planDigest,
+    signal: ctx.signal,
+  });
+
+  /** Records `response` in the side-map and projects it down to the neutral failure shape. */
+  const recordFailure = (response: DaemonResponse): AdReplayStepFailure => {
+    lastResponse = response;
+    return toAdReplayStepFailure(
+      asFailedReplayStepResponse(response),
+      collectReplayActionArtifactPaths(response),
+    );
+  };
+
   const runtime: AdReplayStepRuntime = {
-    async executeStep(action, index, stepArtifactPaths) {
-      const response = await resolveReplayStepResponse(ctx, action, index, [...stepArtifactPaths]);
+    port: ctx.port,
+
+    beginTargetVerification(action, index) {
+      return resolveTargetVerificationEntry({
+        action,
+        scope: ctx.scope,
+        sourcePath: ctx.actionSourcePaths?.[index] ?? ctx.resolved,
+        sourceLine: ctx.actionLines[index] ?? 1,
+        sessionName: ctx.sessionName,
+        sessionStore: ctx.sessionStore,
+        port: ctx.port,
+      });
+    },
+
+    async captureObservation(action, _index, options) {
+      const session = ctx.sessionStore.get(ctx.sessionName);
+      // #1385: this is the pre-dispatch gate a step right after `open
+      // --relaunch` can race — the app may still be launching/mounting when
+      // this capture lands, producing a transient `capture-failed` /
+      // `sparse-snapshot` verdict that is not a real divergence. Bounded
+      // retry (`retryLaunchRace`, engine-driven) rides out that transition
+      // instead of failing closed on the first unlucky capture.
+      const observation: DivergenceObservation = session
+        ? await captureDivergenceObservation({
+            session,
+            sessionName: ctx.sessionName,
+            sessionStore: ctx.sessionStore,
+            logPath: ctx.logPath,
+            action,
+            retryLaunchRace: options.retryLaunchRace,
+          })
+        : {
+            state: 'unavailable',
+            reason: 'no-session',
+            hint: 'The session closed before a screen could be captured to verify the recorded target.',
+          };
+      lastObservation = observation;
+      return observation.state === 'available'
+        ? { state: 'available', nodes: observation.nodes }
+        : { state: 'unavailable', reason: observation.reason, hint: observation.hint };
+    },
+
+    classifyTarget({ action, token, nodes }) {
+      const session = ctx.sessionStore.get(ctx.sessionName);
+      return classifyPreDispatchTarget({
+        // Only ever called right after a successful `captureObservation`,
+        // which itself only reaches `state: 'available'` when a session is
+        // active — `action.targetEvidence`/`session` are always defined here
+        // in practice.
+        recorded: action.targetEvidence!,
+        token,
+        action,
+        nodes: [...nodes],
+        platform: session!.device.platform,
+        port: ctx.port,
+      });
+    },
+
+    // `_stepArtifactPaths` (the pre-step snapshot) is unused here — dispatch
+    // never fed it to `invokeReplayAction`, even before this split; it only
+    // ever reached the target-binding wire builders (`build*Failure` below).
+    async dispatchStep(action, index, _stepArtifactPaths, guard) {
+      const sourceLine = ctx.actionLines[index] ?? 1;
+      const guardInternal =
+        guard?.kind === 'target'
+          ? { replayTargetGuard: guard.guard.expected }
+          : guard?.kind === 'landmark'
+            ? { replayLandmarkGuard: guard.landmark }
+            : undefined;
+      const guardedReq = guardInternal
+        ? { ...ctx.replayReq, internal: { ...ctx.replayReq.internal, ...guardInternal } }
+        : ctx.replayReq;
+      const response = await invokeReplayAction({
+        req: guardedReq,
+        sessionName: ctx.sessionName,
+        action,
+        scope: ctx.scope,
+        filePath: ctx.resolved,
+        line: sourceLine,
+        sourcePath: ctx.actionSourcePaths?.[index],
+        step: index + 1,
+        tracePath: ctx.actionTracePath,
+        invoke: ctx.invoke,
+      });
       lastResponse = response;
       const entries = collectReplayActionArtifactPaths(response);
       entries.forEach((entry) => artifactPaths.add(entry));
       if (response.ok) return { status: 'ok', artifactPaths: entries };
-      return { status: 'failed', failure: toAdReplayStepFailure(response, entries) };
+      const plainFailure = toAdReplayStepFailure(response, entries);
+      if (guard?.kind === 'target' && isReplayTargetGuardMismatchResponse(response)) {
+        return {
+          status: 'guard-mismatch',
+          details: response.error.details,
+          plainFailure,
+          artifactPaths: entries,
+        };
+      }
+      if (guard?.kind === 'landmark' && isWaitLandmarkMismatchResponse(response)) {
+        return {
+          status: 'landmark-mismatch',
+          details: response.error.details,
+          plainFailure,
+          artifactPaths: entries,
+        };
+      }
+      return { status: 'failed', failure: plainFailure };
     },
+
+    async buildRecordedUnverifiableFailure(action, index, stepArtifactPaths) {
+      const response = await buildRecordedUnverifiableFailureResponse(
+        buildDivergenceContext(action, index, stepArtifactPaths),
+        {
+          session: ctx.sessionStore.get(ctx.sessionName),
+          sessionName: ctx.sessionName,
+          sessionStore: ctx.sessionStore,
+          logPath: ctx.logPath,
+          action,
+        },
+      );
+      return recordFailure(response);
+    },
+
+    async buildTargetBindingFailure(action, index, evidence, stepArtifactPaths) {
+      const observation: DivergenceObservation = lastObservation ?? {
+        state: 'unavailable',
+        reason: 'observation-missing',
+        hint: 'No capture was recorded before this target-binding failure.',
+      };
+      const response = buildTargetBindingFailureResponse(
+        buildDivergenceContext(action, index, stepArtifactPaths),
+        toDaemonEvidence(evidence),
+        observation,
+      );
+      return recordFailure(response);
+    },
+
+    async buildPostDispatchTargetBindingFailure(action, index, evidence, stepArtifactPaths) {
+      const response = await buildPostDispatchTargetBindingFailureResponse(
+        buildDivergenceContext(action, index, stepArtifactPaths),
+        toDaemonEvidence(evidence),
+        {
+          session: ctx.sessionStore.get(ctx.sessionName),
+          sessionName: ctx.sessionName,
+          sessionStore: ctx.sessionStore,
+          logPath: ctx.logPath,
+          action,
+        },
+      );
+      return recordFailure(response);
+    },
+
     async handleActionFailure({
       action,
       index,
@@ -421,16 +520,12 @@ function createAdReplayStepRuntime(params: {
         [...failureArtifactPaths],
         [...snapshotDiagnosticSamples],
       );
-      lastResponse = finalResponse;
       // `buildReplayActionFailure` is typed `Promise<DaemonResponse>` (it
       // shares its return type with the ordinary success path elsewhere in
       // this module) but always produces a failed response on this call
       // path — it exists to WRAP a failure with diagnostics/repair-hold
       // marking, never to turn one into a success.
-      return toAdReplayStepFailure(
-        asFailedReplayStepResponse(finalResponse),
-        collectReplayActionArtifactPaths(finalResponse),
-      );
+      return recordFailure(finalResponse);
     },
     armStep: armSaveScript,
     isRepairArmed: () => ctx.coordinator.view()?.repairBoundary !== undefined,

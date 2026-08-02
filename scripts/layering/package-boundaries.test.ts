@@ -274,11 +274,14 @@ test('the real tree parses, declares, and passes R11', () => {
   // point actually NAMES. This pins the exact symbol list `packages/ad-replay/src/index.ts`
   // exports (value and type-only together): the two binding-design
   // entrypoints (`inspectAdReplay`, `runAdReplay`), the types their
-  // signatures reference, and the ONE reported façade deviation (the four
-  // target-verification policy functions plus the `ReplaySelectorPort`
-  // family) — see that file's own header comment for why the deviation
-  // remains. A stray export — intentional or not — must edit this list too,
-  // not just slip through the exports-subpath check.
+  // signatures reference, and the `ReplaySelectorPort` family (still named at
+  // every daemon call site that threads a port value). As of the #1555
+  // review's R3 pass, the four target-verification policy functions and
+  // `ReplayPostDispatchMismatchEvidence` are GONE from this list — they moved
+  // engine-private (`./internal/step-loop.ts`'s `verifyAndDispatchStep`), so
+  // there is no longer a reported façade deviation. A stray export —
+  // intentional or not — must edit this list too, not just slip through the
+  // exports-subpath check.
   assert.deepEqual(
     readNamedExports(
       fs.readFileSync(path.join(repoRoot, 'packages/ad-replay/src/index.ts'), 'utf8'),
@@ -290,7 +293,6 @@ test('the real tree parses, declares, and passes R11', () => {
       'AdReplayStepFailure',
       'AdReplayStepOutcome',
       'AdReplayStepRuntime',
-      'ReplayPostDispatchMismatchEvidence',
       'ReplayRecordedTargetDisambiguation',
       'ReplayRecordedTargetPolicy',
       'ReplayRecordedTargetResolution',
@@ -298,12 +300,8 @@ test('the real tree parses, declares, and passes R11', () => {
       'ReplaySelectorExpressionOutcome',
       'ReplaySelectorGrammar',
       'ReplaySelectorPort',
-      'deriveReplayTargetGuardMismatchEvidence',
-      'deriveWaitLandmarkMismatchEvidence',
       'formatReplaySuccessMessage',
       'inspectAdReplay',
-      'planPostResolutionTargetVerification',
-      'planPreDispatchTargetVerification',
       'runAdReplay',
     ],
   );
