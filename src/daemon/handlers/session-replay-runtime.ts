@@ -18,11 +18,11 @@ import {
 } from '../replay-selector-port.ts';
 import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import {
-  computeReplayPlanDigest,
   formatReplaySuccessMessage,
   inspectAdReplay,
   runAdReplay,
   type AdReplayManifest,
+  type AdReplayStepFailure,
   type AdReplayStepRuntime,
   type ReplaySelectorPort,
 } from '@agent-device/ad-replay';
@@ -46,11 +46,7 @@ import {
 } from '../../replay/format.ts';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import { withReplayFailureDiagnostics } from './session-replay-runtime-failure.ts';
-import {
-  buildReplayMetadataFlags,
-  readEffectiveReplayPlanDigestMetadata,
-  resolveReplayEntryIndex,
-} from './session-replay-runtime-plan.ts';
+import { buildReplayMetadataFlags } from './session-replay-runtime-plan.ts';
 import {
   buildReplayTargetGuardMismatchResponse,
   buildWaitLandmarkMismatchResponse,
@@ -326,7 +322,7 @@ export async function runReplayScriptFile(params: {
       coordinator,
       port,
     };
-    const runtime = createAdReplayStepRuntime({
+    const { runtime, readLastResponse } = createAdReplayStepRuntime({
       ctx: stepContext,
       req,
       artifactPaths,
@@ -335,7 +331,22 @@ export async function runReplayScriptFile(params: {
       suppressedTerminalCloseIndex,
     });
     const outcome = await runAdReplay({ actions, entryIndex }, runtime);
-    if (!outcome.ok) return outcome.response;
+    if (outcome.status === 'failed') {
+      // #1555 P1 (neutral outcomes): `runAdReplay` never holds or returns a
+      // `DaemonResponse` — it only reports WHICH step failed. The real wire
+      // response was built (and wrapped with diagnostics/repair-hold marking)
+      // by this adapter's own `executeStep`/`handleActionFailure`, which
+      // stashed it in `readLastResponse`'s closure as it went; reading it
+      // back here is what makes the final response byte-identical to the
+      // pre-split code that threaded it straight through the engine's return
+      // value. The fallback below is unreachable in practice (`executeStep`
+      // always records a response before any failure can be reported) and
+      // exists only so this stays total.
+      return (
+        readLastResponse() ??
+        errorResponse('COMMAND_FAILED', 'replay step failed with no recorded response')
+      );
+    }
     return completeReplayRun({
       startedAt,
       sessionName,
@@ -359,11 +370,21 @@ export async function runReplayScriptFile(params: {
 }
 
 /**
- * #1478 P5 stage C2b: the daemon's `AdReplayStepRuntime` adapter — the
- * narrow execute/capture/observe/stamp capability bag `runAdReplay`'s step
- * loop threads through. Every member closes over this one request's
+ * #1478 P5 stage C2b (narrowed further by the #1555 review's neutral-outcomes
+ * pass): the daemon's `AdReplayStepRuntime` adapter — the narrow
+ * execute/capture/observe/stamp capability bag `runAdReplay`'s step loop
+ * threads through. Every member closes over this one request's
  * `ReplayStepContext` (or the outer accumulators it needs to keep in sync);
  * none of it is reachable from the engine except through these functions.
+ *
+ * `lastResponse` is the side-map the neutral-outcomes design relies on: the
+ * ONLY place a real `DaemonResponse` is built or held. `executeStep` and
+ * `handleActionFailure` each record the wire response they just built here
+ * before projecting it down to the neutral `AdReplayStepOutcome`/
+ * `AdReplayStepFailure` the engine actually sees; `readLastResponse` lets
+ * `runReplayScriptFile` recover the exact final response once `runAdReplay`
+ * reports which step failed, so the client-visible wire output never changes
+ * even though the engine itself never touches it.
  */
 function createAdReplayStepRuntime(params: {
   ctx: ReplayStepContext;
@@ -372,33 +393,44 @@ function createAdReplayStepRuntime(params: {
   artifactPaths: Set<string>;
   onStep: ReplayTestAttemptStepSink | undefined;
   armSaveScript: () => void;
-}): AdReplayStepRuntime<DaemonResponse> {
+}): { runtime: AdReplayStepRuntime; readLastResponse: () => DaemonResponse | undefined } {
   const { ctx, req, artifactPaths, onStep, armSaveScript } = params;
-  return {
+  let lastResponse: DaemonResponse | undefined;
+  const runtime: AdReplayStepRuntime = {
     async executeStep(action, index, stepArtifactPaths) {
-      return await resolveReplayStepResponse(ctx, action, index, [...stepArtifactPaths]);
+      const response = await resolveReplayStepResponse(ctx, action, index, [...stepArtifactPaths]);
+      lastResponse = response;
+      const entries = collectReplayActionArtifactPaths(response);
+      entries.forEach((entry) => artifactPaths.add(entry));
+      if (response.ok) return { status: 'ok', artifactPaths: entries };
+      return { status: 'failed', failure: toAdReplayStepFailure(response, entries) };
     },
     async handleActionFailure({
       action,
       index,
-      response,
       artifactPaths: failureArtifactPaths,
       snapshotDiagnosticSamples,
     }) {
-      return await buildReplayActionFailure(
+      const failedResponse = asFailedReplayStepResponse(lastResponse);
+      const finalResponse = await buildReplayActionFailure(
         ctx,
         req,
         action,
         index,
-        response as Extract<DaemonResponse, { ok: false }>,
+        failedResponse,
         [...failureArtifactPaths],
         [...snapshotDiagnosticSamples],
       );
-    },
-    collectArtifactPaths(response) {
-      const entries = collectReplayActionArtifactPaths(response);
-      entries.forEach((entry) => artifactPaths.add(entry));
-      return entries;
+      lastResponse = finalResponse;
+      // `buildReplayActionFailure` is typed `Promise<DaemonResponse>` (it
+      // shares its return type with the ordinary success path elsewhere in
+      // this module) but always produces a failed response on this call
+      // path — it exists to WRAP a failure with diagnostics/repair-hold
+      // marking, never to turn one into a success.
+      return toAdReplayStepFailure(
+        asFailedReplayStepResponse(finalResponse),
+        collectReplayActionArtifactPaths(finalResponse),
+      );
     },
     armStep: armSaveScript,
     isRepairArmed: () => ctx.coordinator.view()?.repairBoundary !== undefined,
@@ -408,6 +440,33 @@ function createAdReplayStepRuntime(params: {
     diagnosticsSince: (marker) =>
       readSessionSnapshotSamplesSince(ctx.sessionStore, ctx.sessionName, marker),
   };
+  return { runtime, readLastResponse: () => lastResponse };
+}
+
+/**
+ * `runAdReplay` only ever calls `handleActionFailure` right after
+ * `executeStep` reported `status: 'failed'`, and `executeStep` always sets
+ * `lastResponse` to that same failed response before returning — so this
+ * narrowing cannot actually fail in practice. The `COMMAND_FAILED` fallback
+ * exists only so `buildReplayActionFailure` (which needs a real failed
+ * response to wrap) stays total if that invariant is ever violated.
+ */
+function asFailedReplayStepResponse(
+  response: DaemonResponse | undefined,
+): Extract<DaemonResponse, { ok: false }> {
+  if (response && !response.ok) return response;
+  return errorResponse(
+    'COMMAND_FAILED',
+    'replay step reported failure with no recorded response',
+  ) as Extract<DaemonResponse, { ok: false }>;
+}
+
+/** Projects a wire response down to the neutral shape the engine's outcome carries. */
+function toAdReplayStepFailure(
+  response: Extract<DaemonResponse, { ok: false }>,
+  artifactPaths: readonly string[],
+): AdReplayStepFailure {
+  return { kind: response.error.code, message: response.error.message, artifactPaths };
 }
 
 async function buildReplayActionFailure(
@@ -543,27 +602,30 @@ function prepareReplayPlan(params: {
       ),
     };
   }
-  const manifest = inspectAdReplay(resolved);
-  const { metadata, actions, actionLines, actionSourcePaths } = manifest;
+  // #1555 P1 (digest/resume behind runAdReplay): `digestFlags` is the raw
+  // request-level platform/target override — `inspectAdReplay` applies the
+  // SAME precedence (flag, then a script-declared platform, then the
+  // `context` header) internally that this call site used to apply itself
+  // via `readEffectiveReplayPlanDigestMetadata(replayReq.flags)`.
+  const manifest = inspectAdReplay(resolved, {
+    platform: req.flags?.platform,
+    target: req.flags?.target,
+  });
+  const { metadata, actions, actionLines, actionSourcePaths, planDigest } = manifest;
   const replayReq = applyReplayMetadata(
     { ...req, flags: buildReplayScriptPlatformFlags(req.flags, actions) },
     metadata,
   );
-  const planDigest = computeReplayPlanDigest({
-    actions,
-    actionLines,
-    actionSourcePaths,
-    metadata: readEffectiveReplayPlanDigestMetadata(replayReq.flags),
-  });
   const preEntrySession = sessionStore.get(sessionName);
-  const entryIndex = resolveReplayEntryIndex(
-    req.flags,
-    actions.length,
-    planDigest,
-    coordinator.view()?.pendingRecordAndHeal,
-    preEntrySession?.actions.length ?? 0,
-  );
-  if (!entryIndex.ok) return entryIndex;
+  const entryIndex = manifest.resolveEntryIndex({
+    from: req.flags?.replayFrom,
+    digest: req.flags?.replayPlanDigest,
+    pendingRecordAndHeal: coordinator.view()?.pendingRecordAndHeal,
+    sessionActionsLength: preEntrySession?.actions.length ?? 0,
+  });
+  if (!entryIndex.ok) {
+    return { ok: false, response: errorResponse('INVALID_ARGS', entryIndex.message) };
+  }
 
   return {
     ok: true,

@@ -18,9 +18,7 @@ import type { DaemonRequest, SessionState } from '../types.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { parseReplayInput } from '../../compat/replay-input.ts';
-import { computeReplayPlanDigest } from '@agent-device/ad-replay';
-import { readEffectiveReplayPlanDigestMetadata } from '../handlers/session-replay-runtime-plan.ts';
+import { inspectAdReplay } from '@agent-device/ad-replay';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 
@@ -137,13 +135,7 @@ test('a replay --from continuation on a reaped repair session gets REPAIR_SESSIO
   // Compute the plan digest exactly as runReplayScriptFile does (a real agent
   // takes it from the divergence report's resume.planDigest).
   const flags = { platform: 'ios' as const };
-  const parsed = parseReplayInput(fs.readFileSync(scriptPath, 'utf8'), flags);
-  const digest = computeReplayPlanDigest({
-    actions: parsed.actions,
-    actionLines: parsed.actionLines,
-    actionSourcePaths: parsed.actionSourcePaths,
-    metadata: readEffectiveReplayPlanDigestMetadata(flags),
-  });
+  const digest = inspectAdReplay(scriptPath, { platform: flags.platform }).planDigest;
 
   // The repair session was reaped, leaving a tombstone; no live session exists.
   sessionStore.writeRepairTombstone(tombstonedSession('repair-from'));

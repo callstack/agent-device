@@ -10,14 +10,33 @@ import type { SnapshotTimingSample } from '@agent-device/contracts/capture';
  * `AdReplayStepRuntime` capabilities below — this module only decides which
  * action to run next, when to skip one, and when to stop.
  *
- * `TResponse` is the daemon's own response type, injected generically: the
- * loop only ever reads its `ok` discriminant (never `DaemonError`,
- * `SessionStore`, or a wire shape) and returns it unopened — the daemon
- * adapter is the only side that ever constructs or interprets one.
+ * #1555 review P1 ("do not smuggle daemon wire failures through a generic"):
+ * `AdReplayStepRuntime` no longer carries a `TResponse` type parameter. The
+ * loop never sees a `DaemonResponse`/wire object at all, not even opaquely —
+ * `executeStep`/`handleActionFailure` return the NEUTRAL tagged types below
+ * (`AdReplayStepOutcome`, `AdReplayStepFailure`), built only from plain
+ * values (a `kind` string, a `message` string, artifact paths). The daemon
+ * adapter (`createAdReplayStepRuntime`, `session-replay-runtime.ts`) is the
+ * only place a real `DaemonResponse` is constructed or read; it keeps its
+ * OWN wire response in a local variable ("the side-map") as it builds each
+ * neutral outcome, and `runReplayScriptFile` reads that variable back after
+ * `runAdReplay` reports which step failed, so the final response returned to
+ * the client is byte-identical to before this split — it was never
+ * round-tripped through the engine's return value at all.
  */
 
-/** The one field the step loop reads off a daemon response: pass/fail. */
-export type AdReplayResponse = Readonly<{ readonly ok: boolean }>;
+/** Neutral per-step failure: no `DaemonResponse`, no wire shape — just what the engine needs to report. */
+export type AdReplayStepFailure = Readonly<{
+  /** The daemon's own error/divergence discriminant (e.g. a `DaemonError.code`), carried opaquely. */
+  readonly kind: string;
+  readonly message: string;
+  readonly artifactPaths: readonly string[];
+}>;
+
+/** `executeStep`'s per-dispatch result: pass, or a neutral failure (never a wire response). */
+export type AdReplayStepOutcome =
+  | Readonly<{ readonly status: 'ok'; readonly artifactPaths: readonly string[] }>
+  | Readonly<{ readonly status: 'failed'; readonly failure: AdReplayStepFailure }>;
 
 /**
  * A single progress step, structurally mirroring
@@ -41,33 +60,32 @@ export type AdReplayProgressSink = (step: AdReplayProgressStep) => void;
  * the loop actually consumes (`MaestroRuntimeOperations`,
  * `packages/maestro/src/internal/runtime-port-types.ts`, is the precedent).
  * Never `DaemonRequest`, `DaemonError`, `SessionStore`, or a reporter/event
- * stream.
+ * stream — and, as of the #1555 review pass, never a `DaemonResponse`
+ * either.
  */
-export type AdReplayStepRuntime<TResponse extends AdReplayResponse> = Readonly<{
+export type AdReplayStepRuntime = Readonly<{
   /**
    * Verifies the recorded target (if any) then dispatches the action.
    * Capture, the single `invoke` dispatch site, and the post-resolution
-   * guard/landmark-mismatch conversion are all daemon authority.
+   * guard/landmark-mismatch conversion are all daemon authority; only the
+   * neutral pass/fail projection crosses back into the engine.
    */
   executeStep(
     action: SessionAction,
     index: number,
     artifactPaths: readonly string[],
-  ): Promise<TResponse>;
+  ): Promise<AdReplayStepOutcome>;
   /**
-   * Wraps a failed step's response with replay failure diagnostics and
-   * repair-held marking — daemon authority (capture, `SessionStore`, the P4b
-   * coordinator).
+   * Wraps a failed step with replay failure diagnostics and repair-held
+   * marking — daemon authority (capture, `SessionStore`, the P4b
+   * coordinator) — and returns the neutral failure the run outcome reports.
    */
   handleActionFailure(params: {
     action: SessionAction;
     index: number;
-    response: TResponse;
     artifactPaths: readonly string[];
     snapshotDiagnosticSamples: readonly SnapshotTimingSample[];
-  }): Promise<TResponse>;
-  /** Reads the artifact paths a response surfaced — wire-shape authority. */
-  collectArtifactPaths(response: TResponse): readonly string[];
+  }): Promise<AdReplayStepFailure>;
   /** Arms the save-script transaction for this step; a no-op absent `--save-script`. Repair authority. */
   armStep(): void;
   /** Whether the request's session currently carries an armed repair boundary. Repair authority. */
@@ -88,14 +106,19 @@ export type AdReplayRunRequest = Readonly<{
   readonly entryIndex: number;
 }>;
 
-export type AdReplayRunOutcome<TResponse extends AdReplayResponse> =
+/** Neutral run-level outcome: `runAdReplay` never returns or holds a `DaemonResponse`. */
+export type AdReplayRunOutcome =
   | Readonly<{
-      readonly ok: true;
+      readonly status: 'completed';
       readonly replayed: number;
       readonly artifactPaths: readonly string[];
       readonly snapshotDiagnosticSamples: readonly SnapshotTimingSample[];
     }>
-  | Readonly<{ readonly ok: false; readonly response: TResponse }>;
+  | Readonly<{
+      readonly status: 'failed';
+      readonly stepIndex: number;
+      readonly failure: AdReplayStepFailure;
+    }>;
 
 /**
  * ADR 0012 step 4's step loop: for every executable action from
@@ -106,10 +129,10 @@ export type AdReplayRunOutcome<TResponse extends AdReplayResponse> =
  * only the daemon capabilities it calls through were narrowed into
  * `runtime`.
  */
-export async function runAdReplay<TResponse extends AdReplayResponse>(
+export async function runAdReplay(
   request: AdReplayRunRequest,
-  runtime: AdReplayStepRuntime<TResponse>,
-): Promise<AdReplayRunOutcome<TResponse>> {
+  runtime: AdReplayStepRuntime,
+): Promise<AdReplayRunOutcome> {
   const { actions, entryIndex } = request;
   const artifactPaths = new Set<string>();
   const snapshotDiagnosticSamples: SnapshotTimingSample[] = [];
@@ -130,21 +153,23 @@ export async function runAdReplay<TResponse extends AdReplayResponse>(
       runtime.onStep(buildAdReplayProgressStep(index, actions.length, action, value));
     }
     const sampleStart = runtime.diagnosticsMarker();
-    const response = await runtime.executeStep(action, index, [...artifactPaths]);
+    const stepOutcome = await runtime.executeStep(action, index, [...artifactPaths]);
     snapshotDiagnosticSamples.push(...runtime.diagnosticsSince(sampleStart));
-    runtime.collectArtifactPaths(response).forEach((entry) => artifactPaths.add(entry));
-    if (response.ok) continue;
+    if (stepOutcome.status === 'ok') {
+      stepOutcome.artifactPaths.forEach((entry) => artifactPaths.add(entry));
+      continue;
+    }
+    stepOutcome.failure.artifactPaths.forEach((entry) => artifactPaths.add(entry));
     const failure = await runtime.handleActionFailure({
       action,
       index,
-      response,
       artifactPaths: [...artifactPaths],
       snapshotDiagnosticSamples,
     });
-    return { ok: false, response: failure };
+    return { status: 'failed', stepIndex: index, failure };
   }
   return {
-    ok: true,
+    status: 'completed',
     replayed: actions.length - entryIndex,
     artifactPaths: [...artifactPaths],
     snapshotDiagnosticSamples,
