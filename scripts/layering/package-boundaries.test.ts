@@ -3,12 +3,14 @@
 // so a rule that stopped matching would look exactly like a rule being obeyed.
 
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import {
   checkPackageBoundaries,
   checkPackageInternalSites,
   checkRootSites,
+  readNamedExports,
   readWorkspacePackages,
   rootExternalDependencyRanges,
   rootWorkspaceDependencyNames,
@@ -68,6 +70,31 @@ test('specifier sites carry 1-based lines for static and dynamic imports', () =>
     sites.map(({ specifier, line }) => `${line}:${specifier}`),
     ['1:./b.ts', '3:../c.ts'],
   );
+});
+
+test('readNamedExports collects re-export and direct-declaration forms, resolving aliases', () => {
+  const source = [
+    "export { a, b } from './x.ts';",
+    "export type { C, D } from './y.ts';",
+    "export { e as f } from './z.ts';",
+    "export type { g as h } from './z.ts';",
+    'export function i() {}',
+    'export const j = 1;',
+    'export type K = string;',
+    'export interface L {}',
+    "export {\n  m,\n  n,\n} from './multi.ts';",
+  ].join('\n');
+  assert.deepEqual(
+    readNamedExports(source),
+    ['D', 'C', 'K', 'L', 'a', 'b', 'f', 'h', 'i', 'j', 'm', 'n'].sort(),
+  );
+});
+
+test('readNamedExports never reports the original name behind an `as` alias', () => {
+  const source = "export { internalOnly as publicName } from './x.ts';";
+  const names = readNamedExports(source);
+  assert.deepEqual(names, ['publicName']);
+  assert.ok(!names.includes('internalOnly'));
 });
 
 test('double-quoted and re-export routes into packages are not invisible to R11', () => {
@@ -241,6 +268,45 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/contracts',
     '@agent-device/kernel',
   ]);
+  // #1555 review P1 ("add the reviewer-required exact exported-symbol
+  // gate"): the exports-subpath assertion above only proves the package
+  // exposes one `.` entry point — it says nothing about what that entry
+  // point actually NAMES. This pins the exact symbol list `packages/ad-replay/src/index.ts`
+  // exports (value and type-only together): the two binding-design
+  // entrypoints (`inspectAdReplay`, `runAdReplay`), the types their
+  // signatures reference, and the ONE reported façade deviation (the four
+  // target-verification policy functions plus the `ReplaySelectorPort`
+  // family) — see that file's own header comment for why the deviation
+  // remains. A stray export — intentional or not — must edit this list too,
+  // not just slip through the exports-subpath check.
+  assert.deepEqual(
+    readNamedExports(
+      fs.readFileSync(path.join(repoRoot, 'packages/ad-replay/src/index.ts'), 'utf8'),
+    ),
+    [
+      'AdReplayDigestFlags',
+      'AdReplayManifest',
+      'AdReplayRunOutcome',
+      'AdReplayStepFailure',
+      'AdReplayStepOutcome',
+      'AdReplayStepRuntime',
+      'ReplayPostDispatchMismatchEvidence',
+      'ReplayRecordedTargetDisambiguation',
+      'ReplayRecordedTargetPolicy',
+      'ReplayRecordedTargetResolution',
+      'ReplaySelectorCandidateOptions',
+      'ReplaySelectorExpressionOutcome',
+      'ReplaySelectorGrammar',
+      'ReplaySelectorPort',
+      'deriveReplayTargetGuardMismatchEvidence',
+      'deriveWaitLandmarkMismatchEvidence',
+      'formatReplaySuccessMessage',
+      'inspectAdReplay',
+      'planPostResolutionTargetVerification',
+      'planPreDispatchTargetVerification',
+      'runAdReplay',
+    ],
+  );
   const providerWebDriverPackage = packages.find(
     (pkg) => pkg.name === '@agent-device/provider-webdriver',
   );

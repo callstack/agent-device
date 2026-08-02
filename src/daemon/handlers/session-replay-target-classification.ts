@@ -3,9 +3,8 @@
  * enforcement.
  *
  * For every replay/test step whose action carries `target-v1` evidence
- * (`action.targetEvidence`, parsed by `@agent-device/ad-script` /
- * `@agent-device/ad-replay`'s `target-identity.ts`), this resolves the SAME recorded
- * selector/ref the action's own dispatch would use against a fresh
+ * (`action.targetEvidence`, parsed by `@agent-device/ad-script`), this
+ * resolves the SAME recorded selector/ref the action's own dispatch would use against a fresh
  * pre-action snapshot, classifies the match via decision 3's six-path
  * algorithm (`classifyTargetBindingMatch`), and — on any non-verified
  * outcome — builds a complete `REPLAY_DIVERGENCE` response carrying the
@@ -46,9 +45,10 @@ import {
   scrollRegionKeysEqual,
   orderByViewportPosition,
 } from '../session-target-evidence.ts';
-import { classifyTargetBindingMatch, type ReplaySelectorPort } from '@agent-device/ad-replay';
+import type { ReplaySelectorPort } from '@agent-device/ad-replay';
 import {
   annotationLocalIdentity,
+  classifyTargetBindingMatch,
   firstAncestryMismatch,
   identityFieldMismatches,
 } from '@agent-device/ad-script';

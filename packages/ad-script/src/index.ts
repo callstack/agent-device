@@ -15,12 +15,17 @@
  * alongside it, the local-identity + ancestry-prefix matching primitives and
  * their diagnostic diffs (`target-annotation-identity.ts`) — both record/
  * replay-shared `.ad` vocabulary, not engine policy. The companion
- * CLASSIFICATION core (`classifyTargetBindingMatch`, decision 3's replay-time
- * verification paths 2-6) IS engine policy and is NOT part of this codec —
- * it stays in `@agent-device/ad-replay`'s `target-identity.ts`. The
- * annotation SHAPE is not exported here either: it lives in
- * `@agent-device/contracts/replay`, which every consumer (this package
- * included) imports directly.
+ * CLASSIFICATION core (`classifyTargetBindingMatch`,
+ * `target-annotation-classification.ts`, decision 3's replay-time
+ * verification paths 2-6) moved here too (#1555 review, "complete the
+ * binding façade instead of documenting deviations"): its only real
+ * consumers are the daemon's record-time self-check
+ * (`src/daemon/session-target-evidence.ts`) and replay-time classification
+ * wrapper (`src/daemon/handlers/session-replay-target-classification.ts`),
+ * neither reachable through `@agent-device/ad-replay`'s
+ * `inspectAdReplay`/`runAdReplay`. The annotation SHAPE is not exported here
+ * either: it lives in `@agent-device/contracts/replay`, which every consumer
+ * (this package included) imports directly.
  *
  * Also owns `${VAR}` scope/env/resolution (`vars.ts`): the same script-
  * language semantics as `env KEY=VALUE` directive parsing, shared by the
@@ -70,6 +75,12 @@ export {
   matchesLocalIdentity,
 } from './internal/target-annotation-identity.ts';
 export type { LocalIdentity } from './internal/target-annotation-identity.ts';
+
+export { classifyTargetBindingMatch } from './internal/target-annotation-classification.ts';
+export type {
+  TargetBindingClassification,
+  TargetBindingClassificationInput,
+} from './internal/target-annotation-classification.ts';
 
 export {
   buildReplayVarScope,

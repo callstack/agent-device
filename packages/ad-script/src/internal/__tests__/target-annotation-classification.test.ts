@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { classifyTargetBindingMatch } from '../target-identity.ts';
+import { classifyTargetBindingMatch } from '../target-annotation-classification.ts';
 
 // Decision 3's replay-time verification paths 2-6 are shared with the
 // writer's record-time self-check and stay isolated from parser coverage.

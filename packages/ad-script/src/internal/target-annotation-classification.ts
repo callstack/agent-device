@@ -4,14 +4,19 @@
  * replay-time verification paths 2-6. Inert in migration step 3: nothing
  * enforces parsed evidence at replay time until step 4.
  *
- * The comment-line SERDE half (wire type, canonical field order,
- * normalization, size caps, payload parsing/validation) moved to
- * `@agent-device/ad-script` (#1478 P5 scoping dossier, "the codec seam").
- * The local-identity + ancestry-prefix matching primitives and the bounded
- * diagnostic diffs built on them also moved there (#1478 P5 review, "keep
- * genuinely shared recording vocabulary in its proper shared owner") — this
- * module imports them from there rather than declaring them, since decision
- * 3's classification core is engine-owned policy, not script vocabulary.
+ * #1555 review P1 ("complete the binding façade instead of documenting
+ * deviations"): this used to live in `@agent-device/ad-replay`'s
+ * `target-identity.ts`, reasoning that it was engine-owned policy rather
+ * than script vocabulary. In practice its only real consumers were the
+ * daemon's RECORD-time self-check (`src/daemon/session-target-evidence.ts`)
+ * and its REPLAY-time classification wrapper
+ * (`src/daemon/handlers/session-replay-target-classification.ts`) — both
+ * daemon files, neither reachable through `inspectAdReplay`/`runAdReplay`.
+ * It interprets `TargetAnnotationV1` evidence semantics shared beyond the
+ * engine (record-time AND replay-time both need the SAME verdict by
+ * construction), so it belongs alongside the rest of that shared `.ad`
+ * target-binding vocabulary in this package rather than behind a façade
+ * only one of its two callers could reach.
  */
 
 // ---------------------------------------------------------------------------

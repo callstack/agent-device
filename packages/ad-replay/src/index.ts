@@ -1,50 +1,54 @@
 /**
  * The `ad-replay` package façade (#1478 P5 stage D — narrowed; report-action/
  * suggestion-ranking/vars/identity-vocabulary further narrowed by the P5
- * review pass, "complete the binding façade instead of documenting
- * deviations").
+ * review pass; plan-digest/resume and `classifyTargetBindingMatch` further
+ * narrowed by the #1555 review pass, "complete the binding façade instead of
+ * documenting deviations"). `scripts/layering/package-boundaries.test.ts`
+ * asserts this file's exact export list — see "the real tree parses,
+ * declares, and passes R11" — so a stray export fails that gate, not just a
+ * comment mismatch.
  *
  * The binding design (issue comment 5156017698) is `inspectAdReplay` +
- * `runAdReplay` and nothing else. Staged reality is wider than that: the
- * daemon wire-builders and handlers call several engine POLICY functions
- * directly rather than only through the two entrypoints (plan-digest,
- * target-verification). Every export below is a `façade-deviation` from the
- * binding-design ideal EXCEPT `inspectAdReplay`/`runAdReplay` themselves;
- * each deviation names its real root consumer(s) so the PR body's deviation
- * table is generated straight from this file. No selector AST, no engine IR,
- * no prepared-plan type, and no internal subpath is exported — everything
- * here has a live import site outside this package (see
- * `packages/ad-replay/src/index.ts`'s sibling consumer grep in the P5 stage D
- * commit message for the full map).
+ * `runAdReplay` and nothing else. As of the #1555 review pass, parsing,
+ * variable substitution, planning, digest/resume, and classification are ALL
+ * on-design: `inspectAdReplay`'s manifest carries the digest and the
+ * `--from`/`--plan-digest` resume math internally, and
+ * `classifyTargetBindingMatch` moved to its real owner,
+ * `@agent-device/ad-script` (both daemon consumers — record-time self-check
+ * and replay-time classification — never went through this façade at all).
  *
- * `.ad` variable substitution (`vars.ts`), the local-identity + ancestry-
- * prefix matching primitives and their diagnostic diffs (formerly part of
- * `target-identity.ts`), and the divergence-report action shape/suggestion
- * ranking (formerly `session-replay-report-action.ts` /
- * `session-replay-suggestion-ranking.ts`) are NOT here: the review found
- * these were never engine-owned policy reached only through the two
- * entrypoints. Var substitution and identity matching are `.ad` script
- * vocabulary the daemon and this engine both consume, so they moved to their
- * proper shared owner, `@agent-device/ad-script`. Report-action/suggestion-
- * ranking had no consumer inside this package at all — daemon-only — so they
- * moved back to `src/daemon/handlers/`.
+ * ONE deviation remains, reported rather than papered over per the review's
+ * own instruction ("if a genuine remainder must stay callable from the
+ * daemon, STOP and report rather than re-exporting"): the four
+ * target-verification policy functions below, and the `ReplaySelectorPort`
+ * type family they (and other daemon handlers) need to name. Their sole
+ * caller, `session-replay-target-verification.ts`, is the daemon's
+ * verify-then-dispatch orchestrator — it interleaves these PURE decisions
+ * with daemon-only async work (snapshot capture, `SessionStore` reads,
+ * coordinator/resume stamping, wire-response sanitization/shaping) that must
+ * stay outside the engine by design. Moving the CALL SITES for these four
+ * functions to live only "behind runAdReplay" would require restructuring
+ * that whole orchestration into new fine-grained `AdReplayStepRuntime`
+ * capabilities (e.g. a capture capability, a wire-shaping capability) so the
+ * engine's own code could drive it end to end — a materially larger,
+ * higher-risk change than the neutral-outcomes and plan/digest/resume work
+ * in this same pass, and out of scope here; see the #1555 R2 handoff notes.
  */
 
 // ---------------------------------------------------------------------------
-// plan-digest.ts — the `--from`/`--plan-digest` resume and save-script digest.
-// façade-deviation: `session-replay-runtime-plan.ts`'s resume path and
-// `request-router-repair-expired.test.ts` compute/read the digest directly,
-// ahead of and independent from any `runAdReplay` call.
-// ---------------------------------------------------------------------------
-export { computeReplayPlanDigest } from './internal/plan-digest.ts';
-export type { ReplayPlanDigestMetadata } from './internal/plan-digest.ts';
-
-// ---------------------------------------------------------------------------
 // inspect.ts — the read-only `.ad` manifest reader. On-design: this IS one
-// of the two binding-design entrypoints.
+// of the two binding-design entrypoints. #1555 review P1 ("digest/resume
+// must also occur behind runAdReplay"): the plan-digest hash
+// (`plan-digest.ts`, `computeReplayPlanDigest`) and the `--from`/
+// `--plan-digest` resume-point math (`resume.ts`, `resolveReplayEntryIndex`)
+// are internal-only now — neither is exported here. `inspectAdReplay`'s
+// manifest carries the digest as `planDigest` and the resume math as a
+// `resolveEntryIndex` closure instead, so `session-replay-runtime.ts`'s
+// `prepareReplayPlan` and `request-router-repair-expired.test.ts` read them
+// off the manifest rather than importing the underlying functions.
 // ---------------------------------------------------------------------------
 export { inspectAdReplay } from './internal/inspect.ts';
-export type { AdReplayManifest } from './internal/inspect.ts';
+export type { AdReplayDigestFlags, AdReplayManifest } from './internal/inspect.ts';
 
 // ---------------------------------------------------------------------------
 // step-loop.ts — the `.ad` step loop. On-design: this IS the other binding-
@@ -52,23 +56,12 @@ export type { AdReplayManifest } from './internal/inspect.ts';
 // daemon adapter (`session-replay-runtime.ts`) implements to thread it.
 // ---------------------------------------------------------------------------
 export { formatReplaySuccessMessage, runAdReplay } from './internal/step-loop.ts';
-export type { AdReplayStepRuntime } from './internal/step-loop.ts';
-
-// ---------------------------------------------------------------------------
-// target-identity.ts — record/replay-shared CLASSIFICATION core (ADR 0012
-// decision 3, replay-time verification paths 2-6).
-// façade-deviation: the daemon's replay-time classification core
-// (`session-replay-target-classification.ts`) and the record-time writer
-// (`src/daemon/session-target-evidence.ts`) call `classifyTargetBindingMatch`
-// directly so both sides compute the SAME verdict by construction, ahead of
-// and independent from any `runAdReplay` call. The local-identity +
-// ancestry-prefix matching primitives this module used to also export moved
-// to `@agent-device/ad-script` — they are `.ad` script vocabulary the
-// record-time writer, this classification core, and `wait`'s landmark poll
-// (`src/commands/interaction/runtime/selector-wait.ts`) all consume
-// directly, not engine policy (#1478 P5 review).
-// ---------------------------------------------------------------------------
-export { classifyTargetBindingMatch } from './internal/target-identity.ts';
+export type {
+  AdReplayRunOutcome,
+  AdReplayStepFailure,
+  AdReplayStepOutcome,
+  AdReplayStepRuntime,
+} from './internal/step-loop.ts';
 
 // ---------------------------------------------------------------------------
 // target-verification.ts — #1478 P5 stage C2a target-verification ENGINE

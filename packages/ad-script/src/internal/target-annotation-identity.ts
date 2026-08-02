@@ -10,9 +10,10 @@
  * review, "genuinely shared recording vocabulary" relocated to its owner).
  *
  * The classification core built on top of this (`classifyTargetBindingMatch`,
- * decision 3's replay-time verification paths 2-6) is engine-owned policy,
- * not script vocabulary — it stays in `@agent-device/ad-replay`'s
- * `target-identity.ts`.
+ * decision 3's replay-time verification paths 2-6) lives alongside this file
+ * in `target-annotation-classification.ts` — both daemon-only consumers
+ * (record-time self-check and replay-time classification) reach it from
+ * here, not through `@agent-device/ad-replay`'s façade (#1555 review).
  */
 
 import type { TargetAncestryEntry, TargetAnnotationV1 } from '@agent-device/contracts/replay';

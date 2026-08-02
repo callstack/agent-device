@@ -55,6 +55,38 @@ export function specifierSites(file: string, source: string): SpecifierSite[] {
   return parseImports(source).map((edge) => ({ file, line: edge.line, specifier: edge.spec }));
 }
 
+/**
+ * Every name a façade module exports, value or type-only, sorted — the exact
+ * "named-export-list" a package-boundaries gate can pin (#1555 review P1,
+ * "add the reviewer-required exact exported-symbol gate"). Covers both
+ * re-export forms (`export { a, b } from './x.ts'`,
+ * `export type { a, b } from './x.ts'`, with or without `as` aliasing — the
+ * alias is reported, since that is the name a consumer actually imports) and
+ * direct declarations (`export function`/`const`/`class`/`type`/
+ * `interface`). A stray export — intentional or not — changes this list, so
+ * a test that pins it exactly turns "the façade grew a symbol" into a loud
+ * failure instead of a silent widening only a PR diff review would catch.
+ */
+export function readNamedExports(source: string): string[] {
+  const names = new Set<string>();
+  const braceExportRe = /export\s+(?:type\s+)?\{([\s\S]*?)\}(?:\s*from\s*['"][^'"]+['"])?/g;
+  for (const match of source.matchAll(braceExportRe)) {
+    for (const rawEntry of match[1]!.split(',')) {
+      const entry = rawEntry.trim();
+      if (!entry) continue;
+      const aliasMatch = /^(?:type\s+)?\S+\s+as\s+(\S+)$/.exec(entry);
+      const name = aliasMatch ? aliasMatch[1]! : entry.replace(/^type\s+/, '').trim();
+      if (name) names.add(name);
+    }
+  }
+  const declarationRe =
+    /export\s+(?:default\s+)?(?:async\s+function|function|const|class|type|interface)\s+([A-Za-z0-9_$]+)/g;
+  for (const match of source.matchAll(declarationRe)) {
+    names.add(match[1]!);
+  }
+  return [...names].sort();
+}
+
 export function readWorkspacePackages(repoRoot: string): WorkspacePackage[] {
   const packagesDir = path.join(repoRoot, 'packages');
   if (!fs.existsSync(packagesDir)) return [];
