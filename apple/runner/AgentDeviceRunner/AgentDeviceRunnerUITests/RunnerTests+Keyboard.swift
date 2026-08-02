@@ -2,6 +2,23 @@ import XCTest
 
 private enum KeyboardDismissObservationTiming {
   static let timeout: TimeInterval = 2
+  // #1542: dismissing the keyboard can trigger the host app's own content-offset
+  // adjustment (e.g. a ScrollView correcting the inset it grew to keep a focused
+  // field above the keyboard). That adjustment is a separate, unsynchronized
+  // animation the keyboard's own `waitForNonExistence` above knows nothing about:
+  // the keyboard AX element can vanish well before the app settles. The very next
+  // command is frequently a synthesized, AX-free drag (scroll/gesture — kept
+  // AX-free so it still works under #1105-family AX degradation), which has no
+  // XCTest quiescence wait of its own, so it can land mid-animation and net to
+  // zero. These bounds cap the settle wait this trades in.
+  // A spring-driven content-offset correction can pass through a near-zero-
+  // velocity inflection (the top of an overshoot) that two adjacent samples
+  // alone cannot distinguish from true rest. Requiring 3 consecutive matching
+  // samples demands ~2 full sample intervals of actual stillness before
+  // stopping early, so a momentary pause mid-animation cannot look settled.
+  static let settleTimeout: TimeInterval = 2.0
+  static let settleSampleInterval: TimeInterval = 0.15
+  static let settleRequiredConsecutiveMatches: Int = 3
 }
 
 extension RunnerTests {
@@ -24,12 +41,46 @@ extension RunnerTests {
 #else
     if tapKeyboardDismissControl(app: app) {
       _ = keyboard.waitForNonExistence(timeout: KeyboardDismissObservationTiming.timeout)
+      waitForScreenshotStability(
+        timeout: KeyboardDismissObservationTiming.settleTimeout,
+        sampleInterval: KeyboardDismissObservationTiming.settleSampleInterval,
+        requiredConsecutiveMatches: KeyboardDismissObservationTiming.settleRequiredConsecutiveMatches
+      )
       let visible = isKeyboardVisible(app: app)
       return (wasVisible: true, dismissed: !visible, visible: visible)
     }
 
     return (wasVisible: true, dismissed: false, visible: isKeyboardVisible(app: app))
 #endif
+  }
+
+  // AX-free on purpose (screenshot bytes, not the accessibility tree) so it holds
+  // under the same AX degradation the synthesized gesture lane is built to survive.
+  // Bounded and self-terminating: returns as soon as `requiredConsecutiveMatches`
+  // consecutive samples match, so an already-settled screen (the common case)
+  // pays close to nothing. The stopping decision itself
+  // (`runnerScreenshotStabilitySettled`) is a pure function of the samples taken
+  // so far, so it is unit-testable without a real screenshot pipeline; this loop
+  // is the thin, untestable I/O shell around it.
+  private func waitForScreenshotStability(
+    timeout: TimeInterval,
+    sampleInterval: TimeInterval,
+    requiredConsecutiveMatches: Int
+  ) {
+    let deadline = Date().addingTimeInterval(timeout)
+    var samples: [Data?] = [screenshotFingerprintForStabilityCheck()]
+    while Date() < deadline {
+      sleepFor(sampleInterval)
+      samples.append(screenshotFingerprintForStabilityCheck())
+      if runnerScreenshotStabilitySettled(samples, requiredConsecutiveMatches: requiredConsecutiveMatches) {
+        return
+      }
+    }
+  }
+
+  private func screenshotFingerprintForStabilityCheck() -> Data? {
+    guard let image = captureRunnerFrame() else { return nil }
+    return runnerPngData(for: image)
   }
 
   func pressKeyboardReturn(app: XCUIApplication) -> (wasVisible: Bool, pressed: Bool, visible: Bool) {
@@ -182,3 +233,84 @@ extension RunnerTests {
     return frame.intersects(keyboardFrame) || abs(frame.maxY - keyboardFrame.minY) <= 80
   }
 }
+
+/// True once the `requiredConsecutiveMatches` most recent samples are all present
+/// and byte-identical — i.e. the screen held still across that whole run of
+/// polls, not just the last two. A spring-driven content-offset correction can
+/// pass through a near-zero-velocity inflection that two adjacent samples alone
+/// cannot distinguish from true rest; requiring a longer run of matches demands
+/// real elapsed stillness before stopping early. `nil` entries (a screenshot
+/// capture that failed) never count toward a match, so a flaky capture cannot
+/// look like stability; the caller's bounded loop still terminates on its
+/// deadline regardless.
+func runnerScreenshotStabilitySettled(
+  _ samples: [Data?],
+  requiredConsecutiveMatches: Int
+) -> Bool {
+  guard requiredConsecutiveMatches >= 2, samples.count >= requiredConsecutiveMatches else {
+    return false
+  }
+  let window = samples.suffix(requiredConsecutiveMatches)
+  guard let first = window.first, let firstData = first else { return false }
+  return window.allSatisfy { $0 == firstData }
+}
+
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+extension RunnerTests {
+  func testRunnerScreenshotStabilitySettledNeedsEnoughSamples() {
+    XCTAssertFalse(runnerScreenshotStabilitySettled([], requiredConsecutiveMatches: 3))
+    XCTAssertFalse(runnerScreenshotStabilitySettled([Data([1])], requiredConsecutiveMatches: 3))
+    let frame = Data([1, 2, 3])
+    XCTAssertFalse(
+      runnerScreenshotStabilitySettled([frame, frame], requiredConsecutiveMatches: 3)
+    )
+  }
+
+  func testRunnerScreenshotStabilitySettledTrueWhenWindowMatches() {
+    let frame = Data([1, 2, 3])
+    XCTAssertTrue(
+      runnerScreenshotStabilitySettled([Data([9]), frame, frame, frame], requiredConsecutiveMatches: 3)
+    )
+  }
+
+  func testRunnerScreenshotStabilitySettledFalseOnMidWindowMismatch() {
+    // A momentary pause (two matching samples) followed by resumed movement
+    // must not read as settled: the 3-sample window still spans the mismatch.
+    let frame = Data([1, 2, 3])
+    let moved = Data([4, 5, 6])
+    XCTAssertFalse(
+      runnerScreenshotStabilitySettled([frame, frame, moved], requiredConsecutiveMatches: 3)
+    )
+  }
+
+  func testRunnerScreenshotStabilitySettledFalseOnFailedCapture() {
+    // A nil sample (failed screenshot) never counts as a match, even against
+    // other nils — an unverifiable run must not look "stable".
+    XCTAssertFalse(runnerScreenshotStabilitySettled([nil, nil, nil], requiredConsecutiveMatches: 3))
+    let frame = Data([1, 2, 3])
+    XCTAssertFalse(
+      runnerScreenshotStabilitySettled([frame, frame, nil], requiredConsecutiveMatches: 3)
+    )
+  }
+
+  func testRunnerScreenshotStabilitySettledOnlyLooksAtTheTrailingWindow() {
+    // An older mismatch before the trailing window must not block settlement
+    // once the required run of most-recent samples agrees.
+    let frame = Data([9])
+    XCTAssertTrue(
+      runnerScreenshotStabilitySettled(
+        [Data([1]), Data([2]), frame, frame, frame],
+        requiredConsecutiveMatches: 3
+      )
+    )
+  }
+
+  func testRunnerScreenshotStabilitySettledRejectsDegenerateRequirement() {
+    // Fewer than 2 required matches would make any single sample "settled" —
+    // guard against a misconfigured caller rather than silently no-op the wait.
+    XCTAssertFalse(
+      runnerScreenshotStabilitySettled([Data([1])], requiredConsecutiveMatches: 1)
+    )
+  }
+}
+#endif
