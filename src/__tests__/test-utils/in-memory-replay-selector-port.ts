@@ -17,8 +17,10 @@ import type {
  * shapes, tagged reasons, and the same-alternative winner+domain invariant —
  * over a tiny in-memory matcher instead of the real `src/selectors` grammar
  * and resolution engine. Deliberately NOT reproduced: quoting edge cases
- * beyond `key="value"`, every selector key, and the #1269 shared-id demotion
- * — the contract is about shapes and invariants, not grammar richness.
+ * beyond `key="value"`, every selector key, and `options.action`'s
+ * `editable=true` modifier — the contract is about shapes and invariants,
+ * not grammar richness. The #1269 shared-id demotion IS reproduced (see
+ * `buildSelectorCandidates`'s doc below).
  *
  * #1478 P5 stage D: relocated here from
  * `packages/ad-replay/src/internal/testing/in-memory-selector-port.ts`. It
@@ -36,6 +38,17 @@ import type {
  * alternatives joined by ` || ` (first-match-wins, same as the real chain).
  * Supported keys: `id`, `label`, `role`, `value`, `text` (text matches either
  * label or value, a stand-in for the real `extractNodeText` fallback).
+ *
+ * `buildSelectorCandidates`'s `ReplaySelectorCandidateOptions` coverage:
+ * `options.nodes` IS honored, for the #1269 shared-id demotion — an `id`
+ * candidate is dropped (never appended, not merely reordered) when two or
+ * more nodes in `options.nodes` carry the same `identifier`, mirroring
+ * `src/selectors/build.ts`'s `selectableId`/`idMatchCountInTree` decision
+ * (mini-grammar simplification: raw trimmed `node.identifier` equality
+ * rather than the production NFC+256-byte-cap canonical identity — the two
+ * agree for every ASCII fixture id this suite uses). `options.action`'s
+ * `editable=true` modifier is deliberately NOT reproduced, same as the other
+ * grammar-richness gaps noted above.
  */
 export function createInMemoryReplaySelectorPort(): ReplaySelectorPort {
   return {
@@ -275,12 +288,35 @@ function trimmedOrNull(value: string | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
+/**
+ * #1269 shared-id demotion, mini-grammar form: mirrors
+ * `src/selectors/build.ts`'s `selectableId` — an id that denotes more than
+ * one node in the record-time tree is DROPPED (never appended to the
+ * candidate list), not reordered or kept-but-deprioritized. The production
+ * decision keys off `idMatchCountInTree`'s canonical (NFC + 256-byte-cap)
+ * identity id; this mini form counts raw trimmed `node.identifier` equality
+ * instead, which agrees with the canonical count for every plain-ASCII
+ * fixture id this suite uses.
+ */
+function selectableId(
+  node: SnapshotNode,
+  nodes: readonly SnapshotNode[] | undefined,
+): string | null {
+  const id = trimmedOrNull(node.identifier);
+  if (!id || !nodes) return id;
+  let matchCount = 0;
+  for (const candidate of nodes) {
+    if (trimmedOrNull(candidate.identifier) === id) matchCount += 1;
+  }
+  return matchCount > 1 ? null : id;
+}
+
 function buildSelectorCandidates(
   node: SnapshotNode,
   _platform: unknown,
-  _options: ReplaySelectorCandidateOptions = {},
+  options: ReplaySelectorCandidateOptions = {},
 ): readonly string[] {
-  const id = trimmedOrNull(node.identifier);
+  const id = selectableId(node, options.nodes);
   const role = (node.type ?? '').toLowerCase();
   const label = trimmedOrNull(node.label);
   const value = trimmedOrNull(node.value);

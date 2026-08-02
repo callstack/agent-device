@@ -261,6 +261,37 @@ for (const [name, createPort] of ADAPTERS) {
     });
 
     // -------------------------------------------------------------------
+    // cell 6 shared-id (#1269 binding amendment): id demotion
+    // -------------------------------------------------------------------
+    test('cell 6 shared-id: an id that denotes more than one node in the record-time tree is dropped from the candidate list, not just reordered', () => {
+      const dup: SnapshotNode = {
+        ref: 'e1',
+        index: 0,
+        type: 'Button',
+        identifier: 'dup',
+        label: 'Save Draft',
+        rect: { x: 0, y: 0, width: 80, height: 30 },
+      };
+      const otherDup: SnapshotNode = {
+        ref: 'e2',
+        index: 1,
+        type: 'Button',
+        identifier: 'dup',
+        label: 'Cancel',
+        rect: { x: 0, y: 40, width: 80, height: 30 },
+      };
+      const candidates = port.buildSelectorCandidates(dup, 'ios', {
+        action: 'get',
+        nodes: [dup, otherDup],
+      });
+      assert.deepEqual(candidates, ['role="button" label="Save Draft"', 'label="Save Draft"']);
+      assert.ok(
+        !candidates.some((candidate) => candidate.startsWith('id=')),
+        'a non-unique id must never appear in the candidate list',
+      );
+    });
+
+    // -------------------------------------------------------------------
     // readSelectorExpression: shape parity for the two reachable outcomes
     // -------------------------------------------------------------------
     test('readSelectorExpression: an ordinary selector token round-trips, absent selector is not-applicable', () => {
