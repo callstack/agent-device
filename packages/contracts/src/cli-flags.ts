@@ -136,6 +136,8 @@ export type CliFlags = CloudProviderProfileFields &
     replayShellEnv?: Record<string, string>;
     replayFrom?: number;
     replayPlanDigest?: string;
+    /** Replay: leave the session active by suppressing an authored terminal close in native .ad. */
+    replayKeepSession?: boolean;
     failFast?: boolean;
     timeoutMs?: number;
     retries?: number;

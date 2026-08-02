@@ -31,6 +31,14 @@ export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
       'edits, or include/platform-expansion changes fail INVALID_ARGS before any action',
   },
   {
+    key: 'replayKeepSession',
+    names: ['--keep-session'],
+    type: 'boolean',
+    usageLabel: '--keep-session',
+    usageDescription:
+      'Replay: leave the session active by suppressing exactly an authored terminal close in a native .ad script; replay only, not test or Maestro YAML',
+  },
+  {
     key: 'replayMaestro',
     names: ['--maestro'],
     type: 'boolean',

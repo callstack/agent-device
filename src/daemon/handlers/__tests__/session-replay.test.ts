@@ -272,6 +272,37 @@ test('test --record-video records each replay attempt on the generated test sess
 
 // --- ADR 0012 decision 4 / migration step 5: `--from` is replay-only ---
 
+test('test rejects raw --keep-session with INVALID_ARGS before running the suite', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-keep-session-rejected-'));
+  const replayPath = path.join(root, 'flow.ad');
+  fs.writeFileSync(replayPath, 'open "Demo"\n');
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
+
+  const response = await handleSessionReplayCommands({
+    req: {
+      token: 'token',
+      session: 'default',
+      command: 'test',
+      positionals: [replayPath],
+      flags: { replayKeepSession: true },
+      meta: { cwd: root },
+    },
+    sessionName: 'default',
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    invoke,
+  });
+
+  if (!response) throw new Error('Expected response');
+  assert.equal(response.ok, false);
+  if (response.ok) return;
+  assert.equal(response.error.code, 'INVALID_ARGS');
+  assert.match(response.error.message, /--keep-session/);
+  assert.equal(invoke.mock.calls.length, 0);
+});
+
 test('test rejects --from with INVALID_ARGS before running the suite', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-from-rejected-'));
   const replayPath = path.join(root, 'flow.ad');

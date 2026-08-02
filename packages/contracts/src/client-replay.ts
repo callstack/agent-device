@@ -30,6 +30,8 @@ export type ReplayRunOptions = AgentDeviceRequestOverrides &
     resumeFrom?: number;
     /** The `resume.planDigest` from the divergence report `resumeFrom` came from. */
     resumePlanDigest?: string;
+    /** Leave the session active by suppressing an authored terminal `close` in native `.ad`. */
+    keepSession?: boolean;
     /**
      * ADR 0012 decision 6, R1/R6: arms agent-supervised re-record repair
      * from this replay attempt onward. Optional string value is the healed

@@ -56,6 +56,7 @@ export type CommandExecutionOptions = Partial<ScreenshotRequestFlags> & {
   replayShellEnv?: Record<string, string>;
   replayFrom?: number;
   replayPlanDigest?: string;
+  replayKeepSession?: boolean;
   failFast?: boolean;
   timeoutMs?: number;
   retries?: number;

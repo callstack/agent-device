@@ -231,6 +231,12 @@ export async function runReplayScriptFile(params: {
       return errorResponse('INVALID_ARGS', maestroBackendRequiredMessage('replay', filePath));
     }
     if (resolveReplayFormat(resolved, req.flags?.replayBackend) === 'maestro') {
+      if (req.flags?.replayKeepSession === true) {
+        return errorResponse(
+          'INVALID_ARGS',
+          '--keep-session is supported only for native .ad replay; Maestro YAML owns its lifecycle.',
+        );
+      }
       if (coordinator.view()?.repairBoundary !== undefined) {
         return errorResponse(
           'INVALID_ARGS',
@@ -365,10 +371,11 @@ async function executeReplayActions(
     // session created by `open` before treating `close` as lifecycle.
     armSaveScript();
     if (
-      isRepairArmedTerminalClose({
+      shouldSkipTerminalClose({
         action,
         index,
         totalActions: actions.length,
+        keepSession: params.req.flags?.replayKeepSession === true,
         coordinator: stepContext.coordinator,
       })
     ) {
@@ -787,28 +794,24 @@ function preflightSaveScriptTarget(params: {
 }
 
 /**
- * ADR 0012 decision 6 (Fix 3): the source plan's own terminal `close` is
- * lifecycle, not a script step to replay, while a repair is armed — the agent
- * finalizes the transaction with `close --save-script` instead
- * (`session-close.ts`). Replaying the recorded `close` here would dispatch it
- * as an ordinary step: it tears the session down (and, absent Fix 1/2, could
- * even publish or diverge) before the agent gets that chance. Skipped exactly
- * like the `replay` pseudo-command just above it in the loop — never
- * dispatched, never divergence-checked, and (like that skip) not counted out
- * of `replayedCount`. Checked against session state, not this invocation's
- * own flags, matching R2: a repair stays armed across separate `--from` legs
- * regardless of whether `--save-script` is repeated on each one.
+ * The one native replay lifecycle seam for an authored terminal `close`.
+ * `--keep-session` suppresses it so callers can take over the live session;
+ * ADR 0012 repair suppresses it so the agent can finalize through
+ * `close --save-script`. Interior closes retain authored semantics. Repair is
+ * checked against session state (not only this leg's flags), preserving R2
+ * across separate `--from` continuations.
  */
-function isRepairArmedTerminalClose(params: {
+function shouldSkipTerminalClose(params: {
   action: SessionAction;
   index: number;
   totalActions: number;
+  keepSession: boolean;
   coordinator: ReplayCoordinator;
 }): boolean {
-  const { action, index, totalActions, coordinator } = params;
+  const { action, index, totalActions, keepSession, coordinator } = params;
   if (action.command !== 'close') return false;
   if (index !== totalActions - 1) return false;
-  return coordinator.view()?.repairBoundary !== undefined;
+  return keepSession || coordinator.view()?.repairBoundary !== undefined;
 }
 
 /**

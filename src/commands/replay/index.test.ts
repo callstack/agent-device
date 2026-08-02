@@ -228,6 +228,26 @@ describe('replay resume (ADR 0012 decision 4 / migration step 5)', () => {
   });
 });
 
+describe('replay --keep-session', () => {
+  test('projects the CLI flag through structured replay input and the daemon request', () => {
+    const input = replayCliReader(['./checkout.ad'], flags({ replayKeepSession: true }));
+    expect(input).toMatchObject({ path: './checkout.ad', keepSession: true });
+    expect(replayDaemonWriter(input)).toMatchObject({
+      command: 'replay',
+      positionals: ['./checkout.ad'],
+      options: { replayKeepSession: true },
+    });
+    expect(replayCommandMetadata.inputSchema.properties).toHaveProperty('keepSession');
+  });
+
+  test('test exposes and forwards no keep-session option', () => {
+    const input = testCliReader(['./suite.ad'], flags({ replayKeepSession: true } as never));
+    expect(input).not.toHaveProperty('keepSession');
+    expect(testCommandMetadata.inputSchema.properties).not.toHaveProperty('keepSession');
+    expect(testDaemonWriter(input).options).not.toHaveProperty('replayKeepSession');
+  });
+});
+
 describe('replay --save-script arming (ADR 0012 decision 6, R1/R6)', () => {
   test('reads --save-script as a boolean flag', () => {
     expect(replayCliReader(['./checkout.ad'], flags({ saveScript: true }))).toMatchObject({

@@ -182,6 +182,7 @@ function summarizeProviderScenarioFlagCoverage(files) {
     ['replayEnv', 'replay/test variable injection', ['env']],
     ['replayFrom', 'replay resume skips completed steps (ADR 0012)', ['resumeFrom']],
     ['replayPlanDigest', 'replay resume plan-digest preflight binding', ['resumePlanDigest']],
+    ['replayKeepSession', 'native replay terminal-close suppression', ['keepSession']],
     ['failFast', 'test suite stops after first failure'],
     ['timeoutMs', 'wait/test timeout flags'],
     ['retries', 'test suite retry budget flows through request path'],

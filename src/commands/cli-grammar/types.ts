@@ -37,6 +37,7 @@ export type CommandInput = Omit<InternalRequestOptions, 'batchSteps' | 'target'>
     from?: PointInput;
     include?: CliFlags['networkInclude'];
     kind?: string;
+    keepSession?: boolean;
     locator?: string;
     mode?: 'in-app' | 'system' | 'full' | 'limited';
     button?: ClickButton;

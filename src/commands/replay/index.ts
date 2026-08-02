@@ -49,6 +49,9 @@ export const replayCommandMetadata = defineFieldCommandMetadata(
     // neither field — it must stay a full, deterministic suite run.
     resumeFrom: integerField(),
     resumePlanDigest: stringField(),
+    keepSession: booleanField(
+      'Leave the session active by suppressing exactly an authored terminal close in native .ad.',
+    ),
     // ADR 0012 decision 6, R1/R6: arms agent-supervised re-record repair
     // from the first replay attempt; optional string value is the healed
     // script's output path.
@@ -93,7 +96,7 @@ export const testCommandDefinition = defineExecutableCommand(testCommandMetadata
 const replayCliSchema = {
   usageOverride: 'replay <path> | replay export <file.ad> [--out <path>]',
   helpDescription:
-    'Replay a recorded session. For Maestro YAML compatibility flows, use replay <flow.yaml> --maestro and keep the target binding such as --platform ios on the replay command. A script with no terminal close leaves its session (and daemon) running until you close it or it idle-reaps — no different from a session opened interactively.',
+    'Replay a recorded session. For Maestro YAML compatibility flows, use replay <flow.yaml> --maestro and keep the target binding such as --platform ios on the replay command. A script with no terminal close leaves its session (and daemon) running until you close it or it idle-reaps — no different from a session opened interactively. For native .ad scripts, --keep-session suppresses exactly an authored terminal close so you can continue interactively.',
   summary: replayCommandDescription,
   positionalArgs: ['path'],
   allowsExtraPositionals: true,
@@ -103,6 +106,7 @@ const replayCliSchema = {
     ...METRO_RELOAD_FLAGS,
     'replayFrom',
     'replayPlanDigest',
+    'replayKeepSession',
     'timeoutMs',
     'out',
     'saveScript',
@@ -144,6 +148,7 @@ export const replayCliReader: CliReader = (positionals, flags) => ({
   bundleUrl: flags.bundleUrl,
   resumeFrom: flags.replayFrom,
   resumePlanDigest: flags.replayPlanDigest,
+  keepSession: flags.replayKeepSession,
   saveScript: flags.saveScript,
   force: flags.force,
 });
@@ -175,6 +180,7 @@ export const replayDaemonWriter: DaemonWriter = (input) =>
     replayShellEnv: collectReplayClientShellEnv(process.env),
     replayFrom: input.resumeFrom,
     replayPlanDigest: input.resumePlanDigest,
+    replayKeepSession: input.keepSession,
     saveScript: input.saveScript,
   });
 

@@ -47,6 +47,17 @@ agent-device replay ~/.agent-device/sessions/e2e-2026-02-09T12-00-00-000Z.ad --s
 ```
 
 - Replay reads `.ad` scripts.
+- A script without a terminal `close` already leaves its session active. For an existing script that
+  does end in `close`, pass `--keep-session` to suppress only that final action and continue with
+  interactive commands in the same session:
+
+  ```bash
+  agent-device replay ./checkout.ad --session e2e-run --keep-session
+  agent-device snapshot -i --session e2e-run
+  ```
+
+  Interior `close` actions still run. The flag is intentionally unavailable to `test` because suite
+  attempts own cleanup, and it is rejected for Maestro YAML because that runtime owns its lifecycle.
 
 ## Run Maestro compatibility flows
 
@@ -72,6 +83,7 @@ Boundaries:
 - Failure diagnostics: resolved targets and `runFlow` paths are rendered, while `inputText` payloads remain hidden; do not place secrets in diagnostic identifiers.
 - Trust: `runScript` executes trusted scripts, may make `http.post` network requests, and is not a security sandbox; output keys cannot contain a dot.
 - Errors and tracking: unsupported commands and fields fail with source context when available; open a focused issue only when implementation work is planned.
+- Session takeover: `--keep-session` is a native `.ad` replay option and is rejected for Maestro YAML.
 
 See [ADR 0015](https://github.com/callstack/agent-device/blob/main/docs/adr/0015-direct-maestro-engine.md) for architecture, performance tradeoffs, and deliberate deviations. If a missing feature matters for your suite, [open a focused issue](https://github.com/callstack/agent-device/issues/new) with a small flow snippet.
 

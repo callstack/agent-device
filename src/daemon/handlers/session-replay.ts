@@ -136,6 +136,12 @@ export async function handleSessionReplayCommands(params: {
   }
 
   if (req.command === 'test') {
+    if (req.flags?.replayKeepSession !== undefined) {
+      return errorResponse(
+        'INVALID_ARGS',
+        'test does not support --keep-session; suite attempts own their cleanup. Run one native .ad script directly with replay --keep-session.',
+      );
+    }
     // ADR 0012 decision 4 / migration step 5: `--from` is replay-only. `test`
     // shares replay execution (below, via a nested `command: 'replay'`
     // request per matched file) but must remain a full, deterministic suite
