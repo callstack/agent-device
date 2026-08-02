@@ -1,0 +1,19 @@
+{
+  "name": "@agent-device/ad-replay",
+  "version": "0.0.0",
+  "private": true,
+  "sideEffects": false,
+  "type": "module",
+  "description": "Private replay target-identity, variable substitution, plan-digest, and report primitives for agent-device.",
+  "dependencies": {
+    "@agent-device/ad-script": "workspace:*",
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/kernel": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  }
+}

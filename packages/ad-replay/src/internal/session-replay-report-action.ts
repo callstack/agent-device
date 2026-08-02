@@ -1,4 +1,4 @@
-import type { SessionAction } from '../types.ts';
+import type { SessionAction } from '@agent-device/contracts/session';
 
 export type ReplayReportAction = {
   readonly command: string;

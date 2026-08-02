@@ -1,6 +1,6 @@
 import { splitIsSelectorArgs, splitSelectorFromArgs } from '../../selectors/index.ts';
 import { uniqueStrings } from '@agent-device/kernel/collections';
-import type { ReplayReportAction } from './session-replay-report-action.ts';
+import type { ReplayReportAction } from '@agent-device/ad-replay';
 import { isTouchTargetCommand } from '@agent-device/ad-script';
 
 /**

@@ -3,8 +3,8 @@
  * enforcement.
  *
  * For every replay/test step whose action carries `target-v1` evidence
- * (`action.targetEvidence`, parsed by `src/replay/script.ts` /
- * `src/replay/target-identity.ts`), this resolves the SAME recorded
+ * (`action.targetEvidence`, parsed by `@agent-device/ad-script` /
+ * `@agent-device/ad-replay`'s `target-identity.ts`), this resolves the SAME recorded
  * selector/ref the action's own dispatch would use against a fresh
  * pre-action snapshot, classifies the match via decision 3's six-path
  * algorithm (`classifyTargetBindingMatch`), and — on any non-verified
@@ -56,7 +56,7 @@ import {
   annotationLocalIdentity,
   classifyTargetBindingMatch,
   type LocalIdentity,
-} from '../../replay/target-identity.ts';
+} from '@agent-device/ad-replay';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import type { ReplayDivergenceTargetBindingKind } from '@agent-device/contracts/divergence';
 

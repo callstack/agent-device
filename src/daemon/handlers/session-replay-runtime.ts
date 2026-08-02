@@ -11,7 +11,6 @@ import type {
 import { SessionStore } from '../session-store.ts';
 import { expandSessionPath } from '../session-paths.ts';
 import { buildReplayScriptPlatformFlags } from '../replay-device-selection.ts';
-import { computeReplayPlanDigest } from '../../replay/plan-digest.ts';
 import { errorResponse, noActiveSessionError } from './response.ts';
 import { invokeReplayAction } from './session-replay-action-runtime.ts';
 import { tryParseSelectorChain } from '../../selectors/index.ts';
@@ -19,11 +18,12 @@ import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import {
   buildReplayVarScope,
   collectReplayShellEnv,
+  computeReplayPlanDigest,
   parseReplayCliEnvEntries,
   readReplayCliEnvEntries,
   readReplayShellEnvSource,
   type ReplayVarScope,
-} from '../../replay/vars.ts';
+} from '@agent-device/ad-replay';
 import {
   summarizeSnapshotTimingSamples,
   type SnapshotTimingSample,

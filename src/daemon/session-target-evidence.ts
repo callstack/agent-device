@@ -5,7 +5,8 @@
  * `computeTargetEvidence` runs decision 3's "Record-time write" steps 1-5
  * against the tree the resolver already captured; it never captures, and
  * callers gate it on `session.recordSession`. Tree-agnostic spec pieces live
- * in `src/replay/target-identity.ts`, shared with the parser.
+ * in `@agent-device/ad-replay` (`packages/ad-replay/src/internal/target-identity.ts`),
+ * shared with the parser.
  *
  * The structural helpers below (identity/ancestry/sibling/scroll-region/
  * viewport-order) are exported so migration step 4's replay-time enforcement
@@ -31,7 +32,7 @@ import {
   classifyTargetBindingMatch,
   matchesLocalIdentity,
   type LocalIdentity,
-} from '../replay/target-identity.ts';
+} from '@agent-device/ad-replay';
 import {
   serializeTargetAnnotationV1,
   utf8ByteLength,

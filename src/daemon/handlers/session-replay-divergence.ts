@@ -18,7 +18,6 @@ import {
 import { collectReplaySelectorCandidates } from './session-replay-heal.ts';
 import { collectSettleChromeRefs } from '../../core/snapshot-chrome.ts';
 import { buildAndPersistReplayDivergenceResume } from './session-replay-resume.ts';
-import { rankAndDedupeReplaySuggestions } from './session-replay-suggestion-ranking.ts';
 import { formatDivergenceActionLabel, isTouchTargetCommand } from '@agent-device/ad-script';
 import {
   computeReplayRepairHint,
@@ -31,7 +30,7 @@ import {
   type InternalObservationEvidence,
 } from '../internal-observation.ts';
 import { boundReplayDivergenceForSession } from './session-replay-divergence-publication.ts';
-import type { ReplayReportAction } from './session-replay-report-action.ts';
+import { rankAndDedupeReplaySuggestions, type ReplayReportAction } from '@agent-device/ad-replay';
 import type { SessionAction, SessionState } from '../types.ts';
 import {
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,

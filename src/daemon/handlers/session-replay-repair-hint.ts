@@ -23,7 +23,7 @@
 
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { ReplayDivergenceKind, ReplayRepairHint } from '@agent-device/contracts/divergence';
-import { matchesAncestryPrefix } from '../../replay/target-identity.ts';
+import { matchesAncestryPrefix } from '@agent-device/ad-replay';
 import type { TargetAnnotationV1, TargetScrollRegion } from '@agent-device/contracts/replay';
 import { buildAncestryChain, buildIndexMap } from '../../replay/target-evidence-tree.ts';
 import { computeScrollRegionKey, scrollRegionKeysEqual } from '../session-target-evidence.ts';

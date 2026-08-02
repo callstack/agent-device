@@ -1,4 +1,4 @@
-import { collectReplayScrubbableVarValues, type ReplayVarScope } from '../../replay/vars.ts';
+import { collectReplayScrubbableVarValues, type ReplayVarScope } from '@agent-device/ad-replay';
 import {
   summarizeSnapshotTimingSamples,
   type SnapshotDiagnosticsSummary,

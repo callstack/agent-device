@@ -19,7 +19,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { parseReplayInput } from '../../compat/replay-input.ts';
-import { computeReplayPlanDigest } from '../../replay/plan-digest.ts';
+import { computeReplayPlanDigest } from '@agent-device/ad-replay';
 import { readEffectiveReplayPlanDigestMetadata } from '../handlers/session-replay-runtime-plan.ts';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());

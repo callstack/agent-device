@@ -1,5 +1,5 @@
 import type { CommandFlags } from '../../core/dispatch.ts';
-import type { ReplayPlanDigestMetadata } from '../../replay/plan-digest.ts';
+import type { ReplayPlanDigestMetadata } from '@agent-device/ad-replay';
 import type { ReplayScriptMetadata } from '@agent-device/ad-script';
 import type { DaemonResponse } from '../types.ts';
 import { errorResponse } from './response.ts';

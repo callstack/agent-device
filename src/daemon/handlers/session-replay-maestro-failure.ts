@@ -12,7 +12,7 @@ import { formatScriptArg } from '@agent-device/ad-script';
 import { getRequestSignal } from '../../request/cancel.ts';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
-import type { ReplayReportAction } from './session-replay-report-action.ts';
+import { rankAndDedupeReplaySuggestions, type ReplayReportAction } from '@agent-device/ad-replay';
 import {
   buildReplayDivergenceSuggestionForNode,
   buildDivergenceScreen,
@@ -22,7 +22,6 @@ import {
 } from './session-replay-divergence.ts';
 import { boundReplayDivergenceForSession } from './session-replay-divergence-publication.ts';
 import { computeReplayRepairHint } from './session-replay-repair-hint.ts';
-import { rankAndDedupeReplaySuggestions } from './session-replay-suggestion-ranking.ts';
 import {
   buildReplayDivergenceFailureResponseFromDescriptor,
   hoistReplayFailureCauseDiagnosticMeta,

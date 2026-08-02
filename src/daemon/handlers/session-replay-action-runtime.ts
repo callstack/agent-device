@@ -1,5 +1,5 @@
 import type { CommandFlags } from '../../core/dispatch.ts';
-import { resolveReplayAction, type ReplayVarScope } from '../../replay/vars.ts';
+import { resolveReplayAction, type ReplayVarScope } from '@agent-device/ad-replay';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionAction } from '../types.ts';
 import { mergeParentFlags } from '../../core/batch.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';

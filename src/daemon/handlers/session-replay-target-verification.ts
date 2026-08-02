@@ -5,11 +5,12 @@ import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
 import { formatDivergenceActionLabel } from '@agent-device/ad-script';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import {
+  annotationLocalIdentity,
   collectReplayScrubbableVarValues,
   resolveReplayAction,
+  type LocalIdentity,
   type ReplayVarScope,
-} from '../../replay/vars.ts';
-import { annotationLocalIdentity, type LocalIdentity } from '../../replay/target-identity.ts';
+} from '@agent-device/ad-replay';
 import {
   createReplayDivergenceSanitizer,
   type ReplayDivergence,

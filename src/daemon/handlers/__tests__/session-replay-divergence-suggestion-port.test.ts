@@ -16,7 +16,7 @@ import { test } from 'vitest';
 import { buildReplayDivergenceSuggestionForNode } from '../session-replay-divergence.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { toSnapshotNodes } from './session-replay-target-classification-fixtures.ts';
-import type { ReplayReportAction } from '../session-replay-report-action.ts';
+import type { ReplayReportAction } from '@agent-device/ad-replay';
 
 const identitySanitize = (value: string): string => value;
 
