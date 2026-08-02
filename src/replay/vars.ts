@@ -1,8 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { SessionAction } from '@agent-device/contracts/session';
 // The env/var key shape is `.ad` script grammar (env directive parsing lives
-// in the codec package); re-exported here rather than duplicated (#1478 P5).
-export { REPLAY_VAR_KEY_RE } from '@agent-device/ad-script';
+// in the codec package).
 import { REPLAY_VAR_KEY_RE } from '@agent-device/ad-script';
 
 export type ReplayVarScope = {
