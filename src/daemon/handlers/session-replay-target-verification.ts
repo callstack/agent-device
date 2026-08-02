@@ -7,8 +7,13 @@ import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import {
   annotationLocalIdentity,
   collectReplayScrubbableVarValues,
+  deriveReplayTargetGuardMismatchEvidence,
+  deriveWaitLandmarkMismatchEvidence,
+  planPostResolutionTargetVerification,
+  planPreDispatchTargetVerification,
   resolveReplayAction,
   type LocalIdentity,
+  type ReplayPostDispatchMismatchEvidence,
   type ReplaySelectorPort,
   type ReplayVarScope,
 } from '@agent-device/ad-replay';
@@ -45,11 +50,7 @@ import {
 } from './session-replay-repair-hint.ts';
 import { buildReplayDivergenceFailureResponse } from './session-replay-runtime-failure-response.ts';
 import { buildAndPersistReplayDivergenceResume } from './session-replay-resume.ts';
-import {
-  classifyReplayTarget,
-  firstAncestryMismatch,
-  identityFieldMismatches,
-} from './session-replay-target-classification.ts';
+import { classifyReplayTarget } from './session-replay-target-classification.ts';
 import { extractReplayTargetToken, readRefLabel } from './session-replay-target-token.ts';
 
 // ---------------------------------------------------------------------------
@@ -316,36 +317,36 @@ export async function verifyReplayActionTarget(
   // front; a verifiable landmark is deferred into the wait's own loop.
   if (resolveTargetIdentityVerification(action.command) === 'post-resolution') {
     const parsed = parseWaitPositionals(resolvedAction.positionals ?? []);
-    // Only a selector wait names a landmark; an annotation on any other wait
-    // form is inert, like an old reader.
-    if (parsed?.kind !== 'selector') return { verified: true };
-    if (recorded.verification === 'unverifiable') {
-      return { verified: false, response: await buildRecordedUnverifiableResponse() };
-    }
-    return { verified: true, deferredLandmark: recorded };
-  }
-
-  const token = extractReplayTargetToken(resolvedAction, port);
-  if (token === undefined) return { verified: true };
-  if (!token.startsWith('@')) {
-    // A malformed recorded selector is not this module's concern — the real
-    // dispatch will parse (and fail) it the same way an unannotated action
-    // would. `resolveRecordedTarget`'s early parse gate is the exact same
-    // `tryParseSelectorChain` check this used to run directly (empty `nodes`
-    // is safe: a parse failure short-circuits before any resolution work).
-    const parseCheck = port.resolveRecordedTarget(token, [], {
-      platform: session.device.platform,
-      requireRect: false,
-      allowDisambiguation: false,
+    const plan = planPostResolutionTargetVerification({
+      recorded,
+      isSelectorWait: parsed?.kind === 'selector',
     });
-    if (parseCheck.kind === 'unresolved' && parseCheck.reason === 'parse-invalid') {
-      return { verified: true };
+    switch (plan.kind) {
+      case 'skip':
+        return { verified: true };
+      case 'recorded-unverifiable':
+        return { verified: false, response: await buildRecordedUnverifiableResponse() };
+      case 'deferred-landmark':
+        return { verified: true, deferredLandmark: plan.landmark };
     }
   }
 
-  if (recorded.verification === 'unverifiable') {
+  // A malformed recorded selector is not this module's concern — the real
+  // dispatch will parse (and fail) it the same way an unannotated action
+  // would. `resolveRecordedTarget`'s early parse gate is the exact same
+  // `tryParseSelectorChain` check this used to run directly (empty `nodes`
+  // is safe: a parse failure short-circuits before any resolution work).
+  const preDispatchPlan = planPreDispatchTargetVerification({
+    recorded,
+    token: extractReplayTargetToken(resolvedAction, port),
+    platform: session.device.platform,
+    port,
+  });
+  if (preDispatchPlan.kind === 'skip') return { verified: true };
+  if (preDispatchPlan.kind === 'recorded-unverifiable') {
     return { verified: false, response: await buildRecordedUnverifiableResponse() };
   }
+  const token = preDispatchPlan.token;
 
   // #1385: this is the pre-dispatch gate a step right after `open --relaunch`
   // can race — the app may still be launching/mounting when this capture
@@ -444,13 +445,6 @@ type PostDispatchMismatchParams = ReplayTargetDivergenceParams & {
   failedResponse: DaemonResponse;
 };
 
-type PostDispatchMismatchEvidence = {
-  matchCount: number | undefined;
-  observed: LocalIdentity | undefined;
-  mismatches: string[];
-  causeMessage: string;
-};
-
 /**
  * The shared post-dispatch identity-mismatch shaping: both refusal markers —
  * the guard mismatch and wait's landmark refusal — arrive as a failed dispatch
@@ -462,7 +456,7 @@ async function buildPostDispatchIdentityMismatchResponse(
   deriveEvidence: (
     recorded: TargetAnnotationV1,
     details: Record<string, unknown> | undefined,
-  ) => PostDispatchMismatchEvidence,
+  ) => ReplayPostDispatchMismatchEvidence,
 ): Promise<DaemonResponse> {
   const { action, scope, failedResponse, sessionName, sessionStore, logPath } = params;
   // The refusal markers are only ever attached to an annotated action; fall
@@ -526,26 +520,9 @@ function publicationEvidenceFrom(
 export async function buildReplayTargetGuardMismatchResponse(
   params: PostDispatchMismatchParams & { guard: ReplayVerifiedTargetGuard },
 ): Promise<DaemonResponse> {
-  return await buildPostDispatchIdentityMismatchResponse(params, (recorded, details) => {
-    const observed = readGuardMismatchObservedIdentity(details?.observed);
-    // The guard fires even when local identity is identical (a same-identity
-    // duplicate resolved by structural position) — surface the structural
-    // difference so `mismatches` is never empty on a real divergence.
-    const structuralMismatch = describeStructuralMismatch(
-      details?.expectedStructural,
-      details?.observedStructural,
-    );
-    return {
-      matchCount: params.guard.matchCount,
-      observed,
-      mismatches: [
-        ...(observed ? identityFieldMismatches(recorded, observed) : []),
-        ...(structuralMismatch ? [structuralMismatch] : []),
-      ],
-      causeMessage:
-        'Dispatch resolution (with occlusion/visibility guards) resolved a different element than pre-action verification isolated; the action was not sent.',
-    };
-  });
+  return await buildPostDispatchIdentityMismatchResponse(params, (recorded, details) =>
+    deriveReplayTargetGuardMismatchEvidence(recorded, details, params.guard.matchCount),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -565,69 +542,10 @@ export function isWaitLandmarkMismatchResponse(response: DaemonResponse): boolea
 export async function buildWaitLandmarkMismatchResponse(
   params: PostDispatchMismatchParams,
 ): Promise<DaemonResponse> {
-  return await buildPostDispatchIdentityMismatchResponse(params, (recorded, details) => {
-    const observed = readGuardMismatchObservedIdentity(details?.observed);
-    const observedAncestry = readAncestryEntries(details?.observedAncestry);
-    return {
-      matchCount: typeof details?.matchCount === 'number' ? details.matchCount : undefined,
-      observed,
-      mismatches: observed
-        ? [
-            ...identityFieldMismatches(recorded, observed),
-            ...firstAncestryMismatch(recorded.ancestry, observedAncestry),
-          ]
-        : [],
-      causeMessage:
-        'Candidates matched the recorded wait selector during polling, but none carried the recorded landmark identity before the timeout; the wait did not report success.',
-    };
-  });
-}
-
-/** The wait refusal's `observedAncestry` entries, defensively re-read off error details. */
-function readAncestryEntries(value: unknown): { role: string; label?: string }[] {
-  if (!Array.isArray(value)) return [];
-  const entries: { role: string; label?: string }[] = [];
-  for (const entry of value) {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
-    const record = entry as Record<string, unknown>;
-    if (typeof record.role !== 'string') return [];
-    entries.push({
-      role: record.role,
-      ...(typeof record.label === 'string' ? { label: record.label } : {}),
-    });
-  }
-  return entries;
-}
-
-function readGuardMismatchObservedIdentity(value: unknown): LocalIdentity | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  const record = value as Record<string, unknown>;
-  if (typeof record.role !== 'string') return undefined;
-  return {
-    ...(typeof record.id === 'string' ? { id: record.id } : {}),
-    role: record.role,
-    ...(typeof record.label === 'string' ? { label: record.label } : {}),
-  };
-}
-
-/** A `position:` mismatch line from the guard's structural denotations, when both are present and differ. */
-function describeStructuralMismatch(expected: unknown, observed: unknown): string | undefined {
-  const e = readStructuralDenotation(expected);
-  const o = readStructuralDenotation(observed);
-  if (!e || !o) return undefined;
-  if (e.documentOrder === o.documentOrder && e.sibling === o.sibling) return undefined;
-  return `position: recorded=doc${e.documentOrder}/sibling${e.sibling} observed=doc${o.documentOrder}/sibling${o.sibling}`;
-}
-
-function readStructuralDenotation(
-  value: unknown,
-): { documentOrder: number; sibling: number } | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  const record = value as Record<string, unknown>;
-  if (typeof record.documentOrder !== 'number' || typeof record.sibling !== 'number') {
-    return undefined;
-  }
-  return { documentOrder: record.documentOrder, sibling: record.sibling };
+  return await buildPostDispatchIdentityMismatchResponse(
+    params,
+    deriveWaitLandmarkMismatchEvidence,
+  );
 }
 
 function sanitizeIdentity(

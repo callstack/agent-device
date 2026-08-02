@@ -49,7 +49,8 @@ import {
 import {
   annotationLocalIdentity,
   classifyTargetBindingMatch,
-  type LocalIdentity,
+  firstAncestryMismatch,
+  identityFieldMismatches,
   type ReplaySelectorPort,
 } from '@agent-device/ad-replay';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
@@ -323,51 +324,4 @@ function computeIdentityMismatches(
     ...identityFieldMismatches(recorded, observed),
     ...firstAncestryMismatch(recorded.ancestry, observedAncestry),
   ].slice(0, 5);
-}
-
-export function identityFieldMismatches(
-  recorded: TargetAnnotationV1,
-  observed: LocalIdentity,
-): string[] {
-  const mismatches: string[] = [];
-  if (recorded.id !== observed.id) {
-    mismatches.push(`id: recorded=${recorded.id ?? '(none)'} observed=${observed.id ?? '(none)'}`);
-  }
-  if (recorded.role !== observed.role) {
-    mismatches.push(`role: recorded=${recorded.role} observed=${observed.role}`);
-  }
-  if (recorded.label !== observed.label) {
-    mismatches.push(
-      `label: recorded=${recorded.label ?? '(none)'} observed=${observed.label ?? '(none)'}`,
-    );
-  }
-  return mismatches;
-}
-
-function describeAncestryEntry(entry: { role: string; label?: string } | undefined): string {
-  return entry ? `${entry.role}${entry.label ? `/${entry.label}` : ''}` : '(missing)';
-}
-
-function ancestryEntryMismatches(
-  expected: { role: string; label?: string },
-  actual: { role: string; label?: string } | undefined,
-): boolean {
-  if (!actual) return true;
-  if (actual.role !== expected.role) return true;
-  return expected.label !== undefined && actual.label !== expected.label;
-}
-
-/** Leaf-anchored prefix: the first divergence explains everything after it. */
-export function firstAncestryMismatch(
-  recordedAncestry: readonly { role: string; label?: string }[],
-  observedAncestry: readonly { role: string; label?: string }[],
-): string[] {
-  for (const [index, expected] of recordedAncestry.entries()) {
-    const actual = observedAncestry[index];
-    if (!ancestryEntryMismatches(expected, actual)) continue;
-    return [
-      `ancestry[${index}]: recorded=${describeAncestryEntry(expected)} observed=${describeAncestryEntry(actual)}`,
-    ];
-  }
-  return [];
 }

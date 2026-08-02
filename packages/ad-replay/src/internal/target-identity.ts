@@ -150,3 +150,58 @@ export function classifyTargetBindingMatch(
   }
   return { path: 6, outcome: 'unverifiable', reason: 'no-signal-isolation' };
 }
+
+// ---------------------------------------------------------------------------
+// Diagnostic diffs (decision 3): bounded, best-effort mismatch descriptions
+// shared by the record-time classification core and replay-time verification
+// (#1478 P5 stage C2a) — moved here verbatim from
+// `src/daemon/handlers/session-replay-target-classification.ts` so both
+// callers depend on one definition instead of two copies.
+// ---------------------------------------------------------------------------
+
+export function identityFieldMismatches(
+  recorded: TargetAnnotationV1,
+  observed: LocalIdentity,
+): string[] {
+  const mismatches: string[] = [];
+  if (recorded.id !== observed.id) {
+    mismatches.push(`id: recorded=${recorded.id ?? '(none)'} observed=${observed.id ?? '(none)'}`);
+  }
+  if (recorded.role !== observed.role) {
+    mismatches.push(`role: recorded=${recorded.role} observed=${observed.role}`);
+  }
+  if (recorded.label !== observed.label) {
+    mismatches.push(
+      `label: recorded=${recorded.label ?? '(none)'} observed=${observed.label ?? '(none)'}`,
+    );
+  }
+  return mismatches;
+}
+
+function describeAncestryEntry(entry: TargetAncestryEntry | undefined): string {
+  return entry ? `${entry.role}${entry.label ? `/${entry.label}` : ''}` : '(missing)';
+}
+
+function ancestryEntryMismatches(
+  expected: TargetAncestryEntry,
+  actual: TargetAncestryEntry | undefined,
+): boolean {
+  if (!actual) return true;
+  if (actual.role !== expected.role) return true;
+  return expected.label !== undefined && actual.label !== expected.label;
+}
+
+/** Leaf-anchored prefix: the first divergence explains everything after it. */
+export function firstAncestryMismatch(
+  recordedAncestry: readonly TargetAncestryEntry[],
+  observedAncestry: readonly TargetAncestryEntry[],
+): string[] {
+  for (const [index, expected] of recordedAncestry.entries()) {
+    const actual = observedAncestry[index];
+    if (!ancestryEntryMismatches(expected, actual)) continue;
+    return [
+      `ancestry[${index}]: recorded=${describeAncestryEntry(expected)} observed=${describeAncestryEntry(actual)}`,
+    ];
+  }
+  return [];
+}

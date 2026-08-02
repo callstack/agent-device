@@ -27,6 +27,8 @@ export type { ReplayPlanDigestMetadata } from './internal/plan-digest.ts';
 export {
   annotationLocalIdentity,
   classifyTargetBindingMatch,
+  firstAncestryMismatch,
+  identityFieldMismatches,
   matchesAncestryPrefix,
   matchesLocalIdentity,
 } from './internal/target-identity.ts';
@@ -35,6 +37,25 @@ export type {
   TargetBindingClassification,
   TargetBindingClassificationInput,
 } from './internal/target-identity.ts';
+
+// #1478 P5 stage C2a: the target-verification ENGINE policy split out of
+// `session-replay-target-verification.ts` — pre-capture verification gating
+// and post-dispatch mismatch-evidence derivation. See
+// `./internal/target-verification.ts` for the daemon/engine ownership split.
+export {
+  deriveReplayTargetGuardMismatchEvidence,
+  deriveWaitLandmarkMismatchEvidence,
+  describeStructuralMismatch,
+  planPostResolutionTargetVerification,
+  planPreDispatchTargetVerification,
+  readAncestryEntries,
+  readGuardMismatchObservedIdentity,
+} from './internal/target-verification.ts';
+export type {
+  ReplayPostDispatchMismatchEvidence,
+  ReplayPostResolutionVerificationPlan,
+  ReplayPreDispatchVerificationPlan,
+} from './internal/target-verification.ts';
 
 export type { ReplayReportAction } from './internal/session-replay-report-action.ts';
 
