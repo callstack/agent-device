@@ -102,6 +102,88 @@ test('test does not retry infrastructure startup failures and stops the suite', 
   expect(tests[0]?.attempts).toBe(1);
 });
 
+test('test --fail-fast stops the suite after the first failure and leaves the rest notRun', async () => {
+  const sessionStore = makeSessionStore();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-fail-fast-'));
+  const firstPath = path.join(root, '01-first.ad');
+  const secondPath = path.join(root, '02-second.ad');
+  const thirdPath = path.join(root, '03-third.ad');
+  fs.writeFileSync(firstPath, 'context platform=ios\nopen "Demo"\n');
+  fs.writeFileSync(secondPath, 'context platform=ios\nopen "Demo"\n');
+  fs.writeFileSync(thirdPath, 'context platform=ios\nopen "Demo"\n');
+
+  const invoked: DaemonRequest[] = [];
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'test',
+      // Explicit files (not a directory) so discovery preserves input order — directory scans
+      // use native DFS order, which is not guaranteed to be lexicographic.
+      positionals: [firstPath, secondPath, thirdPath],
+      meta: { cwd: root, requestId: 'suite-fail-fast' },
+      flags: { failFast: true },
+    },
+    sessionName: 'default',
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      invoked.push(req);
+      return {
+        ok: false,
+        error: { code: 'COMMAND_FAILED', message: 'assertion failed' },
+      };
+    },
+  });
+
+  const data = expectOkData(response);
+  expect(invoked.length).toBe(1);
+  expect(data.total).toBe(3);
+  expect(data.executed).toBe(1);
+  expect(data.failed).toBe(1);
+  expect(data.notRun).toBe(2);
+  const tests = data.tests as Array<Record<string, unknown>>;
+  expect(tests).toHaveLength(1);
+  expect(tests[0]?.file).toBe(firstPath);
+});
+
+test('test surfaces a suite-level failure when a source fails to parse', async () => {
+  const sessionStore = makeSessionStore();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-bad-source-'));
+  // Malformed env directive (missing "="): readReplayScriptMetadata throws during source
+  // discovery, before any entry is runnable. The suite-level try/catch in session-test.ts must
+  // convert that throw into a failed outcome rather than letting it escape the handler.
+  fs.writeFileSync(
+    path.join(root, '01-malformed.ad'),
+    'env BROKEN\ncontext platform=ios\nopen "Demo"\n',
+  );
+
+  const invoked: DaemonRequest[] = [];
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'test',
+      positionals: [root],
+      meta: { cwd: root, requestId: 'suite-bad-source' },
+      flags: {},
+    },
+    sessionName: 'default',
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      invoked.push(req);
+      return { ok: true, data: { replayed: 1, healed: 0 } };
+    },
+  });
+
+  expect(invoked.length).toBe(0);
+  expect(response?.ok).toBe(false);
+  if (response?.ok !== false) throw new Error('Expected failed daemon response.');
+  expect(response.error.code).toBe('INVALID_ARGS');
+  expect(response.error.message).toMatch(/Invalid env directive on line 1/);
+});
+
 test('test discovers Maestro YAML suites when replay backend is set', async () => {
   const sessionStore = makeSessionStore();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-maestro-'));
@@ -242,6 +324,43 @@ test('test emits progress when attempts retry and pass', async () => {
     attempt: 2,
     maxAttempts: 2,
   });
+});
+
+test('test stops retrying after maxAttempts when every attempt fails', async () => {
+  const sessionStore = makeSessionStore();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-retry-exhaust-'));
+  fs.writeFileSync(path.join(root, '01-always-fails.ad'), 'context platform=ios\nopen "Demo"\n');
+
+  let attemptCount = 0;
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'test',
+      positionals: [root],
+      meta: { cwd: root, requestId: 'suite-retry-exhaust' },
+      flags: { retries: 2 },
+    },
+    sessionName: 'default',
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: async () => {
+      attemptCount += 1;
+      return {
+        ok: false,
+        error: { code: 'COMMAND_FAILED', message: `attempt ${attemptCount} failed` },
+      };
+    },
+  });
+
+  const data = expectOkData(response);
+  // maxAttempts = retries + 1 = 3. The loop bound is attemptIndex <= retries, so a fix-off-by-one
+  // in that bound would run either 2 or 4 attempts instead of exactly 3.
+  expect(attemptCount).toBe(3);
+  expect(data.failed).toBe(1);
+  const tests = data.tests as Array<Record<string, unknown>>;
+  expect(tests[0]?.attempts).toBe(3);
+  expect(tests[0]?.status).toBe('failed');
 });
 
 test('test emits skip progress without synthetic duration', async () => {
