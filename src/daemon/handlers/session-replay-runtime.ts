@@ -64,6 +64,12 @@ import {
   healedScriptSiblingPath,
   type ReplayCoordinator,
 } from '../session-replay-coordinator.ts';
+import {
+  countExecutedReplayActions,
+  isExecutableReplayAction,
+  requireLiveSessionForKeepSession,
+  resolveSuppressedTerminalCloseIndex,
+} from './session-replay-terminal-lifecycle.ts';
 
 /** Per-run invariants for a single replay step (ADR 0012 step 4 verify + dispatch + guard). */
 type ReplayStepContext = {
@@ -394,10 +400,6 @@ async function executeReplayActions(
   return undefined;
 }
 
-function isExecutableReplayAction(action: SessionAction | undefined): action is SessionAction {
-  return Boolean(action && action.command !== 'replay');
-}
-
 async function buildReplayActionFailure(
   params: ReplayActionExecution,
   action: SessionAction,
@@ -458,13 +460,13 @@ function completeReplayRun(params: {
   armSaveScript();
   coordinator.markCompleteIfArmed();
   const completedSession = sessionStore.get(sessionName);
-  if (keepSession && !completedSession) {
-    return errorResponse(
-      'COMMAND_FAILED',
-      `Replay completed but --keep-session could not preserve session "${sessionName}". Run the script again after checking which action closed the session.`,
-      artifactPaths.size > 0 ? { artifactPaths: [...artifactPaths] } : undefined,
-    );
-  }
+  const keepSessionFailure = requireLiveSessionForKeepSession({
+    keepSession,
+    sessionName,
+    completedSession,
+    artifactPaths,
+  });
+  if (keepSessionFailure) return keepSessionFailure;
   const replayedCount = countExecutedReplayActions({
     actions,
     entryIndex,
@@ -812,40 +814,6 @@ function preflightSaveScriptTarget(params: {
     'COMMAND_FAILED',
     `A file already exists at ${targetPath}; remove it, pass replay --save-script=<other-path>, or pass --force/--overwrite to replace it.`,
   );
-}
-
-/**
- * Resolves the one native replay lifecycle seam once per plan. Terminal means
- * the last executable action, because nested `replay` markers are plan
- * metadata and never dispatch. The suppressed close is therefore neither
- * divergence-checked nor included in the successful `replayed` count.
- */
-function resolveSuppressedTerminalCloseIndex(params: {
-  actions: SessionAction[];
-  keepSession: boolean;
-  saveScript: boolean | string | undefined;
-  repairActive: boolean;
-}): number | undefined {
-  if (!params.keepSession && !params.saveScript && !params.repairActive) return undefined;
-  for (let index = params.actions.length - 1; index >= 0; index -= 1) {
-    const action = params.actions[index];
-    if (!isExecutableReplayAction(action)) continue;
-    return action.command === 'close' ? index : undefined;
-  }
-  return undefined;
-}
-
-function countExecutedReplayActions(params: {
-  actions: SessionAction[];
-  entryIndex: number;
-  suppressedTerminalCloseIndex: number | undefined;
-}): number {
-  let count = 0;
-  for (let index = params.entryIndex; index < params.actions.length; index += 1) {
-    if (index === params.suppressedTerminalCloseIndex) continue;
-    if (isExecutableReplayAction(params.actions[index])) count += 1;
-  }
-  return count;
 }
 
 /**
