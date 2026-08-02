@@ -10,13 +10,18 @@
  * protect this exact invariant, since `matchCount`/the identity-set domain
  * feed decision-3 classification (`classifyTargetBindingMatch`) directly.
  *
- * The fixture is deliberately hostile to the naive implementation: the first
- * alternative is genuinely ambiguous (three-way tie, so resolution SKIPS it
- * rather than picking a heuristic winner), and the second is unique. A domain
- * computed from `listSelectorChainMatches` (which mirrors "first alternative
- * with ANY match", independent of whether resolution could use it) would
- * report matchCount 3 from the skipped first alternative instead of 1 from
- * the alternative resolution actually used.
+ * `session-replay-target-classification.test.ts` already has a same-invariant
+ * regression ("uses the later chain alternative that resolution selected
+ * after an earlier tie"), but its first alternative is an EXACT tie —
+ * unresolvable regardless of `allowDisambiguation` (`summary.disambiguated`
+ * is null either way), so it only exercises the `!summary.disambiguated`
+ * branch of `resolveSelectorChain`'s skip condition. The two tests below
+ * instead hold ONE fixture fixed (a first alternative that IS resolvable —
+ * proven by the second test succeeding through it) and flip only
+ * `allowDisambiguation`, isolating the OTHER branch,
+ * `!options.disambiguateAmbiguous`: with it off, classification must still
+ * use the second alternative's OWN domain (1), never leak the first
+ * alternative's larger, unused domain (3) — and with it on, the reverse.
  */
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
@@ -77,7 +82,7 @@ function saveRecorded(overrides: Partial<TargetAnnotationV1> = {}): TargetAnnota
   };
 }
 
-test('P5 port cell 5: matchCount/domain come from the resolved alternative, not the first alternative with any match', () => {
+test("P5 port cell 5: allowDisambiguation off skips a RESOLVABLE (not just tied) first alternative, using the second alternative's own domain", () => {
   const nodes = decoyAndSaveTree();
   const result = classifyReplayTarget({
     recorded: saveRecorded(),
@@ -86,8 +91,9 @@ test('P5 port cell 5: matchCount/domain come from the resolved alternative, not 
     platform: PLATFORM,
     refLabel: undefined,
     requireRect: true,
-    // Disambiguation disabled: the first alternative's 3-way tie has no
-    // heuristic winner, so resolution must skip it for the unique second one.
+    // Off: `resolveSelectorChain`'s `!options.disambiguateAmbiguous` clause
+    // must skip the first alternative even though it is resolvable in
+    // principle (see the next test, same fixture, flag flipped).
     allowDisambiguation: false,
   });
 
@@ -99,12 +105,14 @@ test('P5 port cell 5: matchCount/domain come from the resolved alternative, not 
   assert.equal(result.matchCount, 1);
 });
 
-test('P5 port cell 5: with disambiguation enabled, a resolvable first alternative supplies its OWN full domain, not the second alternative it never tries', () => {
-  // Contrast case: the third "Decoy" is uniquely deepest, so disambiguation
-  // resolves the first alternative directly (resolution never reaches
-  // "id=save" at all). Classification's domain must be the first
-  // alternative's own 3-way match count, not 1 (what the second alternative
-  // would have produced).
+test('P5 port cell 5: the SAME fixture with allowDisambiguation on resolves through the first alternative and uses ITS domain instead', () => {
+  // Proof that the first alternative in the test above was genuinely
+  // resolvable (not an exact tie like the pre-existing
+  // session-replay-target-classification.test.ts regression): the uniquely
+  // deepest third "Decoy" lets disambiguation pick a winner directly, so
+  // resolution never reaches "id=save" at all. Classification's domain must
+  // be the first alternative's own 3-way match count, not 1 (what the second,
+  // untried alternative would have produced).
   const nodes = decoyAndSaveTree();
   const result = classifyReplayTarget({
     recorded: { ...saveRecorded(), role: 'button', label: 'Decoy', sibling: 2 },
