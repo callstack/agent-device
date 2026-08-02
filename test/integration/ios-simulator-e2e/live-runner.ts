@@ -72,25 +72,40 @@ async function executeLiveScenarios(context: LiveContext): Promise<void> {
 }
 
 async function finalizeLiveRun(context: LiveContext): Promise<unknown> {
+  let cleanupError = await finalizeSessionCleanup(context, sessionExists, cleanupSession);
+  try {
+    writeCoverageReport(context);
+  } catch (error) {
+    cleanupError = combineErrors(cleanupError, error, 'cleanup and coverage reporting failed');
+  }
+  return cleanupError;
+}
+
+/**
+ * Decides whether session-scoped cleanup runs: full:device-lifecycle reboots the
+ * simulator and the session lease does not survive that in every environment, so this
+ * re-checks session existence (the daemon's session list is authoritative at finalize
+ * time) instead of trusting `sessionOpen` accumulated during the run, and only invokes
+ * cleanup when a session remains. Exported so the decision is unit-testable without
+ * spawning the CLI (see test/integration/ios-simulator-e2e-cleanup.test.ts).
+ */
+export async function finalizeSessionCleanup(
+  context: LiveContext,
+  runSessionExists: (context: LiveContext) => Promise<boolean>,
+  runCleanupSession: (context: LiveContext) => Promise<void>,
+): Promise<unknown> {
   let cleanupError: unknown;
   try {
-    // full:device-lifecycle reboots the simulator and the session lease does not
-    // survive that in every environment, so re-check instead of trusting sessionOpen.
-    context.sessionOpen = await sessionExists(context);
+    context.sessionOpen = await runSessionExists(context);
   } catch (error) {
     cleanupError = error;
   }
   if (context.sessionOpen) {
     try {
-      await cleanupSession(context);
+      await runCleanupSession(context);
     } catch (error) {
       cleanupError = combineErrors(cleanupError, error, 'session inspection and cleanup failed');
     }
-  }
-  try {
-    writeCoverageReport(context);
-  } catch (error) {
-    cleanupError = combineErrors(cleanupError, error, 'cleanup and coverage reporting failed');
   }
   return cleanupError;
 }

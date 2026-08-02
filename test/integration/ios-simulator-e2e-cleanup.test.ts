@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { CliJsonResult } from './cli-json.ts';
+import type { LiveContext } from './ios-simulator-e2e/live-harness.ts';
 import { retryCleanupStep } from './ios-simulator-e2e/live-harness.ts';
+import { finalizeSessionCleanup } from './ios-simulator-e2e/live-runner.ts';
 
 // Deterministic regression for the retry/guard policy behind #1548: a full-tier iOS
 // e2e run's cleanup must tolerate a dead session and the known appless mic-permission
@@ -101,4 +103,58 @@ test('a different INVALID_ARGS message on the mic-permission step still fails af
   );
   assert.ok(failure instanceof Error, `expected a propagated failure, got ${String(failure)}`);
   assert.equal(attempts, 3, 'should exhaust all three attempts');
+});
+
+// Deterministic regression for finalizeSessionCleanup: the other half of #1548, which
+// decides whether cleanup runs at all. A minimal LiveContext fixture; only sessionOpen
+// is read by the decision, the rest exists to satisfy the type.
+function fixtureContext(sessionOpen: boolean): LiveContext {
+  return {
+    appId: 'com.example.fixture',
+    appPath: '/fixture.app',
+    artifactDir: '/tmp/fixture-artifacts',
+    behaviorEvidence: {},
+    commandEvidence: {},
+    completedScenarios: [],
+    currentScenario: 'full:device-lifecycle',
+    env: {},
+    session: 'fixture-session',
+    sessionOpen,
+    stateDir: '/tmp/fixture-state',
+    startedAtMs: Date.now(),
+    stepHistory: [],
+    tier: 'full',
+    timings: [],
+    udid: 'fixture-udid',
+  };
+}
+
+test('sessionOpen=true, final sessionExists=false: cleanup is never invoked', async () => {
+  let cleanupCalls = 0;
+  const context = fixtureContext(true);
+  const cleanupError = await finalizeSessionCleanup(
+    context,
+    async () => false,
+    async () => {
+      cleanupCalls += 1;
+    },
+  );
+  assert.equal(cleanupCalls, 0, 'cleanupSession must not run once the session is confirmed gone');
+  assert.equal(context.sessionOpen, false, 'sessionOpen should reflect the re-check, not the flag');
+  assert.equal(cleanupError, undefined);
+});
+
+test('sessionOpen=true, final sessionExists=true: cleanup is invoked (the live path)', async () => {
+  let cleanupCalls = 0;
+  const context = fixtureContext(true);
+  const cleanupError = await finalizeSessionCleanup(
+    context,
+    async () => true,
+    async () => {
+      cleanupCalls += 1;
+    },
+  );
+  assert.equal(cleanupCalls, 1, 'cleanupSession must run while the session is still live');
+  assert.equal(context.sessionOpen, true);
+  assert.equal(cleanupError, undefined);
 });
