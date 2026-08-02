@@ -76,30 +76,27 @@ export function verifyNestedReplayCommand(
   harness.verifyNestedCommand(context, command, executedVia, evidence);
 }
 
+// Shared between the step list and the guard below so the two can't drift apart.
+const MICROPHONE_PERMISSION_RESET_STEP = 'reset microphone permission';
+
 export async function cleanupSession(context: LiveContext): Promise<void> {
   const failures: unknown[] = [];
   const cleanupSteps: Array<[string, string[]]> = [];
   if (context.tier === 'full') {
     cleanupSteps.push(
-      ['reset microphone permission', ['settings', 'permission', 'reset', 'microphone']],
+      [MICROPHONE_PERMISSION_RESET_STEP, ['settings', 'permission', 'reset', 'microphone']],
       ['restore light appearance', ['settings', 'appearance', 'light']],
       ['restore portrait orientation', ['orientation', 'portrait']],
     );
   }
   cleanupSteps.push(['close fixture session', ['close']]);
   for (const [step, args] of cleanupSteps) {
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
-      try {
-        const result = await runStep(context, `cleanup: ${step} (attempt ${attempt})`, args, {
-          allowFailure: attempt < 3,
-        });
-        if (result.status === 0 || sessionAlreadyClean(result)) break;
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      } catch (error) {
-        failures.push(error);
-        break;
-      }
-    }
+    const failure = await retryCleanupStep(step, (attempt) =>
+      runStep(context, `cleanup: ${step} (attempt ${attempt})`, args, {
+        allowFailure: attempt < 3,
+      }),
+    );
+    if (failure !== undefined) failures.push(failure);
   }
   if (failures.length === 0) return;
   const errorPath = path.join(context.artifactDir, 'cleanup-error.txt');
@@ -107,11 +104,38 @@ export async function cleanupSession(context: LiveContext): Promise<void> {
   throw new AggregateError(failures, `iOS E2E cleanup failed; details: ${errorPath}`);
 }
 
-// A dead or appless session has nothing left to reset: the simulator reboot in
-// full:device-lifecycle kills the session in some environments but not others.
-function sessionAlreadyClean(result: CliJsonResult): boolean {
+/**
+ * Runs one cleanup step's 3-attempt retry policy: success or an already-clean session
+ * stops immediately, anything else waits and retries. `runAttempt` mirrors the real
+ * `runStep(..., { allowFailure: attempt < 3 })` contract, including that the final
+ * attempt throws instead of returning a failed result. Exported so the retry/guard
+ * behavior is unit-testable without spawning the CLI (see
+ * `test/integration/ios-simulator-e2e-cleanup.test.ts`).
+ */
+export async function retryCleanupStep(
+  step: string,
+  runAttempt: (attempt: number) => Promise<CliJsonResult>,
+): Promise<unknown> {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const result = await runAttempt(attempt);
+      if (result.status === 0 || sessionAlreadyClean(step, result)) return undefined;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    } catch (error) {
+      return error;
+    }
+  }
+  return undefined;
+}
+
+// SESSION_NOT_FOUND: nothing left to reset, any step. INVALID_ARGS: only the
+// mic-permission reset needs an app bundle and app-settings.ts has no reason code for
+// it, so we match its exact message — scoped to this step so it can't hide another failure.
+function sessionAlreadyClean(step: string, result: CliJsonResult): boolean {
+  if (result.json?.error?.code === 'SESSION_NOT_FOUND') return true;
   return (
-    result.json?.error?.code === 'SESSION_NOT_FOUND' ||
-    String(result.json?.error?.message ?? '').includes('requires an active app in session')
+    step === MICROPHONE_PERMISSION_RESET_STEP &&
+    result.json?.error?.code === 'INVALID_ARGS' &&
+    result.json?.error?.message === 'permission setting requires an active app in session'
   );
 }
