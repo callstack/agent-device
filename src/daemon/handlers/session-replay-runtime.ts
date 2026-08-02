@@ -523,6 +523,24 @@ function prepareReplayPlan(params: {
   keepSession: boolean;
 }): { ok: true; value: PreparedReplayPlan } | { ok: false; response: DaemonResponse } {
   const { req, sessionName, sessionStore, tracePath, resolved, coordinator } = params;
+  // #1555 P1: the authoritative rejection for an unrecognized --replay-backend
+  // value. Extraction moved `.ad` inspection to `inspectAdReplay`, which never
+  // receives flags — restoring the check here (the one caller of
+  // `inspectAdReplay` that reaches this point with a non-Maestro request)
+  // matches `src/compat/replay-input.ts`'s `parseReplayInput` exactly, byte
+  // for byte, before any plan/session work begins. `replayBackend: 'maestro'`
+  // still passes here because `runReplayScriptFile` has already routed a real
+  // Maestro-format request to `runTypedMaestroReplayFile` above; only a
+  // stray/unknown value reaches this branch.
+  if (req.flags?.replayBackend && req.flags.replayBackend !== 'maestro') {
+    return {
+      ok: false,
+      response: errorResponse(
+        'INVALID_ARGS',
+        `Unsupported replay backend "${req.flags.replayBackend}".`,
+      ),
+    };
+  }
   const manifest = inspectAdReplay(resolved);
   const { metadata, actions, actionLines, actionSourcePaths } = manifest;
   const replayReq = applyReplayMetadata(

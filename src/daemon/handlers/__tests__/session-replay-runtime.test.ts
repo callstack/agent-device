@@ -432,6 +432,69 @@ test('replay rejects legacy JSON payload files', async () => {
   expect(response.error.message).toMatch(/\.ad script files/);
 });
 
+// #1555 P1: the P5 extraction moved `.ad` inspection to `inspectAdReplay`
+// (`packages/ad-replay/src/internal/inspect.ts`), which never receives
+// `req.flags` — so the `parseReplayInput` check that used to reject an
+// unrecognized `--replay-backend` value (`src/compat/replay-input.ts`) no
+// longer ran on this path. `buildReplayTargetDeviceResolution`
+// (`src/daemon/replay-device-selection.ts`) still calls `parseReplayInput`
+// for advisory device-lock binding, but its `catch` deliberately swallows
+// any thrown error ("Parsing and validation stay in the replay handler."),
+// so a raw `.ad` replay with `replayBackend: 'unknown'` executed instead of
+// being rejected. `prepareReplayPlan` now restores the identical check
+// before `inspectAdReplay` runs.
+test('replay rejects an unknown --replay-backend value before any step dispatch (#1555 P1)', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-unknown-backend-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
+  const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { replayBackend: 'unknown' } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('INVALID_ARGS');
+  // Byte-identical to `parseReplayInput`'s message on main
+  // (`src/compat/replay-input.ts`), so the CLI/client-facing text is unchanged.
+  expect(response.error.message).toBe('Unsupported replay backend "unknown".');
+  expect(invoke).not.toHaveBeenCalled();
+});
+
+// Sibling to the rejection test above: `replayBackend: 'maestro'` is the one
+// non-empty value main's `parseReplayInput` accepted, and it stays valid even
+// against a plain `.ad` file (the format resolver only routes to the Maestro
+// engine for a `.yaml`/`.yml` source — see `resolveReplayFormat`). Pins that
+// the restored check does not overreject the accepted value.
+test('replay still dispatches a plain .ad script with replayBackend: "maestro"', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-ad-maestro-backend-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
+  const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { replayBackend: 'maestro' } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+
+  expect(response.ok).toBe(true);
+  if (!response.ok) return;
+  expect((response.data as { replayed: number }).replayed).toBe(2);
+  expect(invoke).toHaveBeenCalledTimes(2);
+});
+
 test('replay rejects malformed .ad lines with unclosed quotes', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-invalid-ad-'));
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
