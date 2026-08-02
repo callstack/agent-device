@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import { parseReplayInput } from '../../compat/replay-input.ts';
 import { asAppError } from '@agent-device/kernel/errors';
 import type {
   DaemonInvokeFn,
@@ -22,9 +21,14 @@ import {
   buildReplayVarScope,
   collectReplayShellEnv,
   computeReplayPlanDigest,
+  formatReplaySuccessMessage,
+  inspectAdReplay,
   parseReplayCliEnvEntries,
   readReplayCliEnvEntries,
   readReplayShellEnvSource,
+  runAdReplay,
+  type AdReplayManifest,
+  type AdReplayStepRuntime,
   type ReplaySelectorPort,
   type ReplayVarScope,
 } from '@agent-device/ad-replay';
@@ -55,7 +59,7 @@ import {
 } from './session-replay-target-verification.ts';
 import { buildReplayBuiltinVars } from './session-replay-vars.ts';
 import { runTypedMaestroReplayFile } from './session-replay-maestro-runtime.ts';
-import type { ReplayTestAttemptStep, ReplayTestAttemptStepSink } from '@agent-device/replay-test';
+import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
 import { getRequestSignal } from '../../request/cancel.ts';
 import {
   NO_SCRIPT_PUBLICATION,
@@ -105,6 +109,12 @@ type ReplayStepContext = {
  * post-resolution guard so dispatch's own resolution (occlusion/visibility
  * guards verification does not replicate) must land on the SAME element or
  * refuse pre-action.
+ *
+ * #1478 P5 stage C2b: this is the daemon's `AdReplayStepRuntime.executeStep`
+ * implementation — capture, the single dispatch site, and post-resolution
+ * guard/landmark conversion are all daemon authority, so the engine step loop
+ * (`runAdReplay`, `@agent-device/ad-replay`) calls this as one opaque
+ * capability and never sees any of it.
  */
 async function resolveReplayStepResponse(
   ctx: ReplayStepContext,
@@ -236,6 +246,9 @@ export async function runReplayScriptFile(params: {
   const startedAt = Date.now();
   const keepSession = req.flags?.replayKeepSession === true;
   let resolved = '';
+  // Mirrors whatever the engine step loop's own `collectArtifactPaths`
+  // capability accumulates (see `createAdReplayStepRuntime`), so a mid-loop
+  // exception still reports the artifacts collected up to that point.
   const artifactPaths = new Set<string>();
   // #1478 P4b: the one locked coordinator this request reaches the repair
   // transaction and resume watermark through.
@@ -283,8 +296,6 @@ export async function runReplayScriptFile(params: {
       entryIndex,
       scope,
       actionTracePath,
-      snapshotDiagnosticSamples,
-      suppressedTerminalCloseIndex,
     } = planPreparation.value;
     const sessionPreparation = prepareReplaySession({
       req,
@@ -313,34 +324,23 @@ export async function runReplayScriptFile(params: {
       coordinator,
       port,
     };
-    const failure = await executeReplayActions({
+    const runtime = createAdReplayStepRuntime({
+      ctx: stepContext,
       req,
-      sessionName,
-      sessionStore,
-      logPath,
-      resolved,
-      actions,
-      actionLines,
-      actionSourcePaths,
-      planDigest,
-      entryIndex,
-      scope,
-      stepContext,
       artifactPaths,
-      snapshotDiagnosticSamples,
       onStep,
       armSaveScript: sessionPreparation.armSaveScript,
       suppressedTerminalCloseIndex,
     });
-    if (failure) return failure;
+    const outcome = await runAdReplay({ actions, entryIndex }, runtime);
+    if (!outcome.ok) return outcome.response;
     return completeReplayRun({
       startedAt,
       sessionName,
       sessionStore,
-      actions,
-      entryIndex,
-      artifactPaths,
-      snapshotDiagnosticSamples,
+      replayed: outcome.replayed,
+      artifactPaths: outcome.artifactPaths,
+      snapshotDiagnosticSamples: outcome.snapshotDiagnosticSamples,
       armSaveScript: sessionPreparation.armSaveScript,
       coordinator,
       keepSession,
@@ -356,103 +356,116 @@ export async function runReplayScriptFile(params: {
   }
 }
 
-type ReplayActionExecution = {
+/**
+ * #1478 P5 stage C2b: the daemon's `AdReplayStepRuntime` adapter — the
+ * narrow execute/capture/observe/stamp capability bag `runAdReplay`'s step
+ * loop threads through. Every member closes over this one request's
+ * `ReplayStepContext` (or the outer accumulators it needs to keep in sync);
+ * none of it is reachable from the engine except through these functions.
+ */
+function createAdReplayStepRuntime(params: {
+  ctx: ReplayStepContext;
   req: DaemonRequest;
-  sessionName: string;
-  sessionStore: SessionStore;
-  logPath: string;
-  resolved: string;
-  actions: SessionAction[];
-  actionLines: number[];
-  actionSourcePaths: (string | undefined)[] | undefined;
-  planDigest: string;
-  entryIndex: number;
-  scope: ReplayVarScope;
-  stepContext: ReplayStepContext;
+  /** The outer exception-reporting mirror (see `runReplayScriptFile`'s catch block). */
   artifactPaths: Set<string>;
-  snapshotDiagnosticSamples: SnapshotTimingSample[];
   onStep: ReplayTestAttemptStepSink | undefined;
   armSaveScript: () => void;
-  suppressedTerminalCloseIndex: number | undefined;
-};
-
-async function executeReplayActions(
-  params: ReplayActionExecution,
-): Promise<DaemonResponse | undefined> {
-  const {
-    sessionName,
-    sessionStore,
-    actions,
-    entryIndex,
-    stepContext,
-    artifactPaths,
-    snapshotDiagnosticSamples,
+}): AdReplayStepRuntime<DaemonResponse> {
+  const { ctx, req, artifactPaths, onStep, armSaveScript } = params;
+  return {
+    async executeStep(action, index, stepArtifactPaths) {
+      return await resolveReplayStepResponse(ctx, action, index, [...stepArtifactPaths]);
+    },
+    async handleActionFailure({
+      action,
+      index,
+      response,
+      artifactPaths: failureArtifactPaths,
+      snapshotDiagnosticSamples,
+    }) {
+      return await buildReplayActionFailure(
+        ctx,
+        req,
+        action,
+        index,
+        response as Extract<DaemonResponse, { ok: false }>,
+        [...failureArtifactPaths],
+        [...snapshotDiagnosticSamples],
+      );
+    },
+    collectArtifactPaths(response) {
+      const entries = collectReplayActionArtifactPaths(response);
+      entries.forEach((entry) => artifactPaths.add(entry));
+      return entries;
+    },
+    armStep: armSaveScript,
+    isRepairArmed: () => ctx.coordinator.view()?.repairBoundary !== undefined,
+    describeStepValue: (action) => describeReplayStepValue(action),
     onStep,
-    armSaveScript,
-    suppressedTerminalCloseIndex,
-  } = params;
-  for (let index = entryIndex; index < actions.length; index += 1) {
-    const action = actions[index];
-    if (!isExecutableReplayAction(action)) continue;
-    // Arm before checking terminal close so `[open, close]` records the
-    // session created by `open` before treating `close` as lifecycle.
-    armSaveScript();
-    if (index === suppressedTerminalCloseIndex) continue;
-    onStep?.(replayActionStep(index, actions.length, action));
-    const sampleStart = readSessionSnapshotSampleCount(sessionStore, sessionName);
-    const response = await resolveReplayStepResponse(stepContext, action, index, [
-      ...artifactPaths,
-    ]);
-    snapshotDiagnosticSamples.push(
-      ...readSessionSnapshotSamplesSince(sessionStore, sessionName, sampleStart),
-    );
-    collectReplayActionArtifactPaths(response).forEach((entry) => artifactPaths.add(entry));
-    if (response.ok) continue;
-    return await buildReplayActionFailure(params, action, index, response);
-  }
-  return undefined;
+    diagnosticsMarker: () => readSessionSnapshotSampleCount(ctx.sessionStore, ctx.sessionName),
+    diagnosticsSince: (marker) =>
+      readSessionSnapshotSamplesSince(ctx.sessionStore, ctx.sessionName, marker),
+  };
 }
 
 async function buildReplayActionFailure(
-  params: ReplayActionExecution,
+  ctx: ReplayStepContext,
+  req: DaemonRequest,
   action: SessionAction,
   index: number,
   response: Extract<DaemonResponse, { ok: false }>,
+  artifactPaths: string[],
+  snapshotDiagnosticSamples: SnapshotTimingSample[],
 ): Promise<DaemonResponse> {
   const heldResponse = (failure: DaemonResponse): DaemonResponse =>
-    params.stepContext.coordinator.markSessionHeldIfArmed(failure);
+    ctx.coordinator.markSessionHeldIfArmed(failure);
   if (isCompleteTargetBindingDivergenceResponse(response)) return heldResponse(response);
   return heldResponse(
     await withReplayFailureDiagnostics({
       response,
       action,
       index,
-      replayPath: params.resolved,
-      sourcePath: params.actionSourcePaths?.[index] ?? params.resolved,
-      sourceLine: params.actionLines[index] ?? 1,
-      artifactPaths: [...params.artifactPaths],
-      snapshotDiagnosticSamples: params.snapshotDiagnosticSamples,
-      scope: params.scope,
-      req: params.req,
-      sessionName: params.sessionName,
-      sessionStore: params.sessionStore,
-      resumeStamper: params.stepContext.coordinator.resumeStamper,
-      logPath: params.logPath,
-      planActions: params.actions,
-      planDigest: params.planDigest,
-      port: params.stepContext.port,
+      replayPath: ctx.resolved,
+      sourcePath: ctx.actionSourcePaths?.[index] ?? ctx.resolved,
+      sourceLine: ctx.actionLines[index] ?? 1,
+      artifactPaths,
+      snapshotDiagnosticSamples,
+      scope: ctx.scope,
+      req,
+      sessionName: ctx.sessionName,
+      sessionStore: ctx.sessionStore,
+      resumeStamper: ctx.coordinator.resumeStamper,
+      logPath: ctx.logPath,
+      planActions: ctx.actions,
+      planDigest: ctx.planDigest,
+      port: ctx.port,
     }),
   );
+}
+
+/**
+ * A replay-test progress step's display value: the recorded selector's
+ * label/text/id term value when every alternative agrees on ONE value, else
+ * `undefined`. Needs `readReplaySelectorDisplayValue`'s private selector AST
+ * (`replay-selector-port.ts` deliberately keeps it daemon-only — see that
+ * file's own comment), so this stays daemon-side and is handed to the engine
+ * loop as the narrow `describeStepValue` capability.
+ */
+function describeReplayStepValue(action: SessionAction): string | undefined {
+  const positionals = action.positionals ?? [];
+  const selectorValue = readReplaySelectorDisplayValue(positionals[0]);
+  if (selectorValue) return selectorValue;
+  if (positionals.length === 0) return undefined;
+  return positionals.join(' ');
 }
 
 function completeReplayRun(params: {
   startedAt: number;
   sessionName: string;
   sessionStore: SessionStore;
-  actions: SessionAction[];
-  entryIndex: number;
-  artifactPaths: Set<string>;
-  snapshotDiagnosticSamples: SnapshotTimingSample[];
+  replayed: number;
+  artifactPaths: readonly string[];
+  snapshotDiagnosticSamples: readonly SnapshotTimingSample[];
   armSaveScript: () => void;
   coordinator: ReplayCoordinator;
   keepSession: boolean;
@@ -462,8 +475,7 @@ function completeReplayRun(params: {
     startedAt,
     sessionName,
     sessionStore,
-    actions,
-    entryIndex,
+    replayed,
     artifactPaths,
     snapshotDiagnosticSamples,
     armSaveScript,
@@ -474,52 +486,19 @@ function completeReplayRun(params: {
   armSaveScript();
   coordinator.markCompleteIfArmed();
   const completedSession = sessionStore.get(sessionName);
-  const keepSessionFailure = requireLiveSessionForKeepSession({
-    keepSession,
-    sessionName,
-    completedSession,
-    artifactPaths,
-  });
-  if (keepSessionFailure) return keepSessionFailure;
-  const replayedCount = countExecutedReplayActions({
-    actions,
-    entryIndex,
-    suppressedTerminalCloseIndex,
-  });
-  const snapshotDiagnosticsSummary = summarizeSnapshotTimingSamples(snapshotDiagnosticSamples);
+  const snapshotDiagnosticsSummary = summarizeSnapshotTimingSamples([...snapshotDiagnosticSamples]);
   return {
     ok: true,
     data: {
-      replayed: replayedCount,
+      replayed,
       healed: 0,
       session: sessionName,
       sessionActive: completedSession !== undefined,
       artifactPaths: [...artifactPaths],
       ...(snapshotDiagnosticsSummary ? { snapshotDiagnostics: snapshotDiagnosticsSummary } : {}),
-      message: formatReplaySuccessMessage(replayedCount, Date.now() - startedAt),
+      message: formatReplaySuccessMessage(replayed, Date.now() - startedAt),
     } satisfies ReplayCommandResult,
   };
-}
-
-function replayActionStep(
-  actionIndex: number,
-  actionTotal: number,
-  action: SessionAction,
-): ReplayTestAttemptStep {
-  return {
-    index: actionIndex + 1,
-    total: actionTotal,
-    command: action.command,
-    ...replayActionStepValue(action),
-  };
-}
-
-function replayActionStepValue(action: SessionAction): Pick<ReplayTestAttemptStep, 'value'> {
-  const positionals = action.positionals ?? [];
-  const selectorValue = readReplaySelectorDisplayValue(positionals[0]);
-  if (selectorValue) return { value: selectorValue };
-  if (positionals.length === 0) return {};
-  return { value: positionals.join(' ') };
 }
 
 type PreparedReplayPlan = {
@@ -532,11 +511,7 @@ type PreparedReplayPlan = {
   entryIndex: number;
   scope: ReplayVarScope;
   actionTracePath: string | undefined;
-  snapshotDiagnosticSamples: SnapshotTimingSample[];
-  suppressedTerminalCloseIndex: number | undefined;
 };
-
-type ParsedReplayInput = ReturnType<typeof parseReplayInput>;
 
 function prepareReplayPlan(params: {
   req: DaemonRequest;
@@ -547,11 +522,9 @@ function prepareReplayPlan(params: {
   coordinator: ReplayCoordinator;
   keepSession: boolean;
 }): { ok: true; value: PreparedReplayPlan } | { ok: false; response: DaemonResponse } {
-  const { req, sessionName, sessionStore, tracePath, resolved, coordinator, keepSession } = params;
-  const parsedResult = parseReplayScript(resolved, req);
-  if (!parsedResult.ok) return parsedResult;
-  const parsed = parsedResult.value;
-  const { metadata, actions, actionLines, actionSourcePaths } = parsed;
+  const { req, sessionName, sessionStore, tracePath, resolved, coordinator } = params;
+  const manifest = inspectAdReplay(resolved);
+  const { metadata, actions, actionLines, actionSourcePaths } = manifest;
   const replayReq = applyReplayMetadata(
     { ...req, flags: buildReplayScriptPlatformFlags(req.flags, actions) },
     metadata,
@@ -584,38 +557,13 @@ function prepareReplayPlan(params: {
       entryIndex: entryIndex.value,
       scope: buildPreparedReplayScope({ req, replayReq, sessionName, resolved, metadata }),
       actionTracePath: tracePath ?? preEntrySession?.trace?.outPath,
-      snapshotDiagnosticSamples: [],
-      suppressedTerminalCloseIndex: resolveSuppressedTerminalCloseIndex({
-        actions,
-        keepSession,
-        saveScript: req.flags?.saveScript,
-        repairActive: coordinator.view()?.repairBoundary !== undefined,
-      }),
     },
-  };
-}
-
-function parseReplayScript(
-  resolved: string,
-  req: DaemonRequest,
-): { ok: true; value: ParsedReplayInput } | { ok: false; response: DaemonResponse } {
-  const script = fs.readFileSync(resolved, 'utf8');
-  const firstNonWhitespace = script.trimStart()[0];
-  if (firstNonWhitespace !== '{' && firstNonWhitespace !== '[') {
-    return { ok: true, value: parseReplayInput(script, req.flags) };
-  }
-  return {
-    ok: false,
-    response: errorResponse(
-      'INVALID_ARGS',
-      'replay accepts .ad script files. JSON replay payloads are no longer supported.',
-    ),
   };
 }
 
 function applyReplayMetadata(
   req: DaemonRequest,
-  metadata: ParsedReplayInput['metadata'],
+  metadata: AdReplayManifest['metadata'],
 ): DaemonRequest {
   if (!metadata.platform && !metadata.target) return req;
   return { ...req, flags: buildReplayMetadataFlags(req.flags, metadata) };
@@ -626,7 +574,7 @@ function buildPreparedReplayScope(params: {
   replayReq: DaemonRequest;
   sessionName: string;
   resolved: string;
-  metadata: ParsedReplayInput['metadata'];
+  metadata: AdReplayManifest['metadata'];
 }): ReplayVarScope {
   const { req, replayReq, sessionName, resolved, metadata } = params;
   return buildReplayVarScope({
@@ -814,10 +762,16 @@ function preflightSaveScriptTarget(params: {
 }
 
 /**
- * ADR 0012 decision 6, R1/R6: returns a per-step armer that sets
- * `recordSession` and stamps the repair-run boundary watermark ONCE, through
- * the request's `ReplayCoordinator` (#1478 P4b). Absent `--save-script` it is
- * a no-op, so replay is byte-identical to today.
+ * ADR 0012 decision 6 (Fix 3): the source plan's own terminal `close` is
+ * lifecycle, not a script step to replay, while a repair is armed — the agent
+ * finalizes the transaction with `close --save-script` instead
+ * (`session-close.ts`). Replaying the recorded `close` here would dispatch it
+ * as an ordinary step: it tears the session down (and, absent Fix 1/2, could
+ * even publish or diverge) before the agent gets that chance. The pure
+ * decision (`isRepairArmedTerminalCloseAction`) now lives in
+ * `@agent-device/ad-replay`'s step loop; this daemon-only preflight — the
+ * arm-time EEXIST check above — is unrelated repair authority that stays
+ * here.
  */
 function createReplaySaveScriptArmer(params: {
   saveScript: boolean | string | undefined;
@@ -834,15 +788,14 @@ function createReplaySaveScriptArmer(params: {
   };
 }
 
-function formatReplaySuccessMessage(replayed: number, wallClockMs: number): string {
-  const seconds = (wallClockMs / 1000).toFixed(1);
-  const noun = replayed === 1 ? 'step' : 'steps';
-  return `Replayed ${replayed} ${noun} in ${seconds}s`;
-}
-
 // ADR 0012 step 4: a target-binding divergence is already a complete, final
 // REPLAY_DIVERGENCE built from its own pre-action capture — distinguished from
-// an action-failure divergence by its non-`action-failure` kind.
+// an action-failure divergence by its non-`action-failure` kind. Pinned
+// daemon-side: it re-inspects the already-projected `DaemonResponse` wire
+// shape to decide whether the wire-level diagnostics-augmentation step
+// applies, which is daemon/wire authority, not engine divergence-kind
+// classification (that already happened engine-side, in
+// `classifyReplayTarget`/`target-identity.ts`).
 function isCompleteTargetBindingDivergenceResponse(response: DaemonResponse): boolean {
   if (response.ok || response.error.code !== 'REPLAY_DIVERGENCE') return false;
   const divergence = response.error.details?.divergence;

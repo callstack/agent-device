@@ -24,6 +24,19 @@ export type { ReplayVarScope, ReplayVarSources } from './internal/vars.ts';
 export { computeReplayPlanDigest } from './internal/plan-digest.ts';
 export type { ReplayPlanDigestMetadata } from './internal/plan-digest.ts';
 
+export { inspectAdReplay } from './internal/inspect.ts';
+export type { AdReplayManifest } from './internal/inspect.ts';
+
+export { formatReplaySuccessMessage, runAdReplay } from './internal/step-loop.ts';
+export type {
+  AdReplayProgressSink,
+  AdReplayProgressStep,
+  AdReplayResponse,
+  AdReplayRunOutcome,
+  AdReplayRunRequest,
+  AdReplayStepRuntime,
+} from './internal/step-loop.ts';
+
 export {
   annotationLocalIdentity,
   classifyTargetBindingMatch,
