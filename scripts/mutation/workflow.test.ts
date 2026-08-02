@@ -72,12 +72,17 @@ test('every kernel path a PR can touch selects the affected mutation job', () =>
       assert.ok(selected, `no path filter selects ${owned} (module ${module.id})`);
     }
   }
-  // Ownership is derived, so any test in src/ can own a kernel; the filter must
-  // let all of them through and leave the decision to the `select` job. A
-  // narrower filter is exactly the omission the derivation exists to prevent.
+  // Ownership is derived, so any test in src/ or a workspace package's src/
+  // can own a kernel; the filter must let all of them through and leave the
+  // decision to the `select` job. A narrower filter is exactly the omission
+  // the derivation exists to prevent.
   assert.ok(
     paths.includes('src/**/*.test.ts'),
     'the PR lane must trigger on every src test, since test ownership is derived',
+  );
+  assert.ok(
+    paths.includes('packages/*/src/**/*.test.ts'),
+    'the PR lane must trigger on every packages/*/src test too — target-annotation-serde is owned by one',
   );
   assert.match(workflow('mutation-affected.yml'), /mutation:affected --list-affected/);
   // The lane's own sources fail open into it too: a ratchet or baseline edit must

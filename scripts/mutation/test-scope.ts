@@ -16,9 +16,10 @@
 //     the in-process CLI-capture tests (`process.chdir` throws in a worker
 //     thread) and the `node:worker_threads` PNG pipeline tests (a worker inside
 //     a worker raises uncaught MessagePort errors that kill the runner);
-//   - anything outside `src/`: the unit suite also hosts the help-conformance
-//     gates from `scripts/__tests__`, which assert over the repo's own registries
-//     rather than over any decision kernel and own their CI job.
+//   - anything outside `src/` or a workspace package's `src/`: the unit suite
+//     also hosts the help-conformance gates from `scripts/__tests__`, which
+//     assert over the repo's own registries rather than any decision kernel
+//     and own their CI job.
 //
 // Nothing here weakens the ratchet: a mutant only an excluded test could kill
 // shows up as a survivor — visible work, never a silent pass.
@@ -26,19 +27,33 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { runCmdSync } from '../../src/utils/exec.ts';
+import { readWorkspacePackages } from '../layering/package-boundaries.ts';
 import { walkFiles } from '../lib/walk-files.ts';
-import { normalizePath } from './modules.ts';
+import { isKernelTestFile, normalizePath } from './modules.ts';
 
 /** Env var carrying the resolved scope file to `vitest.mutation.config.ts`. */
 export const TEST_SCOPE_ENV = 'AGENT_DEVICE_MUTATION_TEST_FILES';
 const CLI_CAPTURE_HARNESS = 'src/__tests__/cli-capture.ts';
 
+/**
+ * Every directory the mutation lane can find a test file under: root `src/`
+ * plus each workspace package's `src/` (`unit-core`'s own `include` list in
+ * `vitest.config.ts`). A kernel living in `packages/*` — `kernel-errors`
+ * reaches its tests only indirectly, but `target-annotation-serde` is tested
+ * directly from inside its package — must not lose its owning tests to a
+ * root-only walk.
+ */
+function testFileRoots(repoRoot: string): string[] {
+  return [
+    path.join(repoRoot, 'src'),
+    ...readWorkspacePackages(repoRoot).map((pkg) => path.join(repoRoot, pkg.dir, 'src')),
+  ];
+}
+
 /** Source modules that own a `node:worker_threads` worker. */
 function workerThreadModules(repoRoot: string): string[] {
-  return walkFiles(
-    path.join(repoRoot, 'src'),
-    (file) => file.endsWith('.ts') && !file.endsWith('.test.ts'),
-  )
+  return testFileRoots(repoRoot)
+    .flatMap((root) => walkFiles(root, (file) => file.endsWith('.ts') && !file.endsWith('.test.ts')))
     .filter((file) => fs.readFileSync(file, 'utf8').includes('node:worker_threads'))
     .map((file) => path.basename(file, '.ts'));
 }
@@ -51,7 +66,8 @@ function workerThreadModules(repoRoot: string): string[] {
 export function threadHostileTestFiles(repoRoot: string): string[] {
   const modules = [path.basename(CLI_CAPTURE_HARNESS, '.ts'), ...workerThreadModules(repoRoot)];
   const importsHostileModule = new RegExp(`from '[^']*/(${modules.join('|')})(\\.ts)?'`);
-  return walkFiles(path.join(repoRoot, 'src'), (file) => file.endsWith('.test.ts'))
+  return testFileRoots(repoRoot)
+    .flatMap((root) => walkFiles(root, (file) => file.endsWith('.test.ts')))
     .filter((file) => importsHostileModule.test(fs.readFileSync(file, 'utf8')))
     .map((file) => normalizePath(path.relative(repoRoot, file)))
     .sort();
@@ -116,7 +132,7 @@ export function relatedTestFiles(
     ...new Set(
       (report.testResults ?? [])
         .map((result) => normalizePath(path.relative(repoRoot, result.name)))
-        .filter((file) => file.startsWith('src/') && !excludedSet.has(file)),
+        .filter((file) => isKernelTestFile(file) && !excludedSet.has(file)),
     ),
   ].sort();
 }

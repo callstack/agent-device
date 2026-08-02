@@ -52,6 +52,8 @@ jobs:
           - { name: selectors-2, module: selectors, shard: 2/4 }
           - { name: selectors-3, module: selectors, shard: 3/4 }
           - { name: selectors-4, module: selectors, shard: 4/4 }
+          - { name: target-annotation-serde, module: target-annotation-serde }
+          - { name: snapshot-occlusion, module: snapshot-occlusion }
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -109,7 +111,7 @@ jobs:
       # runner exports it, so the summary and the artifact carry the same numbers.
       - name: Ratchet the merged sweep and propose the next baseline
         run: |
-          pnpm mutation:check --report-dir .tmp/mutation/shards --expect-shards 8 --update
+          pnpm mutation:check --report-dir .tmp/mutation/shards --expect-shards 10 --update
           cp mutation-baselines/decision-kernels.json .tmp/mutation/proposed-baseline.json
           git checkout -- mutation-baselines/decision-kernels.json
 

@@ -48,6 +48,24 @@
       "strykerVersion": "9.6.1",
       "configHash": "sha256:806d9f2e657f",
       "updatedAt": "2026-07-27T14:29:40.750Z"
+    },
+    "target-annotation-serde": {
+      "score": 94.03,
+      "killed": 315,
+      "survived": 20,
+      "total": 335,
+      "strykerVersion": "9.6.1",
+      "configHash": "sha256:8b633048f754",
+      "updatedAt": "2026-08-02T07:28:56.278Z"
+    },
+    "snapshot-occlusion": {
+      "score": 89.74,
+      "killed": 175,
+      "survived": 20,
+      "total": 195,
+      "strykerVersion": "9.6.1",
+      "configHash": "sha256:8b633048f754",
+      "updatedAt": "2026-08-02T07:28:56.278Z"
     }
   }
 }

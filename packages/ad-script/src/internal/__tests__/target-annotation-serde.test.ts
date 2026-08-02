@@ -103,6 +103,17 @@ test('a line that merely mentions the tag in prose is an ordinary comment', () =
   assert.deepEqual(parseTargetAnnotationCommentLine('# just a comment'), { kind: 'none' });
 });
 
+test('a line that is not a comment at all is not a target annotation', () => {
+  assert.deepEqual(parseTargetAnnotationCommentLine('const x = 1;'), { kind: 'none' });
+});
+
+test('leading and trailing whitespace around the annotation line does not break parsing', () => {
+  const result = parseTargetAnnotationCommentLine(
+    '   # agent-device:target-v1 {"role":"button","verification":"verified"}   ',
+  );
+  assert.equal(result.kind, 'v1');
+});
+
 // ---------------------------------------------------------------------------
 // Normalization: NFC, label trim/collapse, normalized-role source
 // ---------------------------------------------------------------------------
@@ -115,6 +126,25 @@ test('normalizeLabelField NFC-normalizes, trims, and collapses internal whitespa
 
 test('normalizeLabelField treats a whitespace-only label as absent', () => {
   assert.equal(normalizeLabelField('   '), undefined);
+});
+
+test('an empty-string id is treated as absent, like a whitespace-only label', () => {
+  const parsed = parseTargetAnnotationV1Payload(
+    JSON.stringify({ id: '', role: 'button', verification: 'verified' }),
+  );
+  assert.equal(parsed.id, undefined);
+});
+
+test('scrollRegion.label serializes and round trips like every other label field', () => {
+  const evidence = baseEvidence({
+    id: undefined,
+    label: undefined,
+    scrollRegion: { role: 'scrollview', id: 'editor-scroll', label: 'Body' },
+  });
+  const json = serializeTargetAnnotationV1(evidence);
+  assert.ok(json.includes('"scrollRegion":{"role":"scrollview","id":"editor-scroll","label":"Body"}'));
+  const parsed = parseTargetAnnotationV1Payload(json);
+  assert.equal(parsed.scrollRegion?.label, 'Body');
 });
 
 test('embedded quotes and backslashes in labels round trip losslessly', () => {
@@ -200,6 +230,38 @@ test('parser rejects more than 8 ancestry entries', () => {
   );
 });
 
+test('parser accepts a payload landing exactly on the 4 KiB cap boundary', () => {
+  // A fixed filler length below the field cap on every other string field,
+  // plus one tunable ancestry-entry role (also within its own 256-byte field
+  // cap) sized by exact arithmetic — every character is ASCII, so 1 char is 1
+  // UTF-8 byte, and the tunable field's required length is computable
+  // directly rather than searched for.
+  const FILLER = 'x'.repeat(180);
+  const build = (padLength: number) => {
+    const ancestry = Array.from({ length: TARGET_ANNOTATION_MAX_ANCESTRY }, (_unused, index) => ({
+      role: index === 0 ? 'x'.repeat(padLength) : FILLER,
+      label: index === 0 ? undefined : FILLER,
+    }));
+    return JSON.stringify({
+      id: FILLER,
+      role: FILLER,
+      label: FILLER,
+      ancestry,
+      scrollRegion: { role: FILLER, id: FILLER, label: FILLER },
+      verification: 'verified',
+    });
+  };
+  const base = Buffer.byteLength(build(0), 'utf8');
+  const padLength = TARGET_ANNOTATION_MAX_PAYLOAD_BYTES - base;
+  assert.ok(
+    padLength >= 0 && padLength <= TARGET_ANNOTATION_MAX_FIELD_BYTES,
+    `fixture no longer straddles the cap (base ${base}, needs pad ${padLength})`,
+  );
+  const json = build(padLength);
+  assert.equal(Buffer.byteLength(json, 'utf8'), TARGET_ANNOTATION_MAX_PAYLOAD_BYTES);
+  assert.doesNotThrow(() => parseTargetAnnotationV1Payload(json));
+});
+
 test('truncateToUtf8Bytes never splits a surrogate pair', () => {
   const emoji = '\u{1F600}'; // 4 UTF-8 bytes, a surrogate pair in UTF-16
   const truncated = truncateToUtf8Bytes(`ab${emoji}`, 3);
@@ -208,6 +270,27 @@ test('truncateToUtf8Bytes never splits a surrogate pair', () => {
   // surrogate pair must be dropped together, never split.
   assert.equal(truncated, 'ab');
   assert.equal(/[\ud800-\udbff]$/.test(truncated), false);
+});
+
+test('truncateToUtf8Bytes drops a lone high surrogate at either end of its range', () => {
+  // Codepoint 0x10000 encodes to the lowest high surrogate (0xD800); 0x10FFFF
+  // (the last valid Unicode codepoint) encodes to the highest (0xDBFF). Both
+  // bound cases must trigger the drop, not just a value in the middle of the
+  // range.
+  for (const codepoint of [0x10000, 0x10ffff]) {
+    const astral = String.fromCodePoint(codepoint);
+    const truncated = truncateToUtf8Bytes(`a${astral}`, 4);
+    assert.equal(truncated, 'a', `codepoint 0x${codepoint.toString(16)} left a lone surrogate`);
+  }
+});
+
+test('truncateToUtf8Bytes keeps a fully-paired surrogate that lands exactly on the byte budget', () => {
+  // The budget lands the cut right after a complete surrogate pair (trimming
+  // only the unrelated trailing "cd"), so nothing here is a split — the
+  // dangling-high-surrogate guard must NOT also fire on the pair's low half.
+  const astral = String.fromCodePoint(0x10000);
+  const truncated = truncateToUtf8Bytes(`ab${astral}cd`, 6);
+  assert.equal(truncated, `ab${astral}`);
 });
 
 // ---------------------------------------------------------------------------
@@ -219,33 +302,190 @@ test('parser rejects non-JSON payloads', () => {
 });
 
 test('parser rejects a JSON array or scalar payload', () => {
-  assertInvalidArgs(() => parseTargetAnnotationV1Payload('[]'));
-  assertInvalidArgs(() => parseTargetAnnotationV1Payload('"button"'));
+  assertInvalidArgs(() => parseTargetAnnotationV1Payload('[]'), /must be a JSON object/);
+  assertInvalidArgs(() => parseTargetAnnotationV1Payload('"button"'), /must be a JSON object/);
+});
+
+// `typeof null === 'object'` in JS, so a bare `null` payload passes the
+// typeof check above and needs its own explicit rejection — the array/scalar
+// test above cannot exercise this branch.
+test('parser rejects a null payload', () => {
+  assertInvalidArgs(() => parseTargetAnnotationV1Payload('null'), /must be a JSON object/);
 });
 
 test('parser rejects a wrong-typed known field', () => {
-  assertInvalidArgs(() =>
-    parseTargetAnnotationV1Payload(JSON.stringify({ role: 42, verification: 'verified' })),
+  assertInvalidArgs(
+    () => parseTargetAnnotationV1Payload(JSON.stringify({ role: 42, verification: 'verified' })),
+    /"role" must be a string/,
+  );
+});
+
+test('parser rejects wrong-typed optional id and label fields, naming each in the message', () => {
+  assertInvalidArgs(
+    () =>
+      parseTargetAnnotationV1Payload(
+        JSON.stringify({ id: 42, role: 'button', verification: 'verified' }),
+      ),
+    /"id" must be a string/,
+  );
+  assertInvalidArgs(
+    () =>
+      parseTargetAnnotationV1Payload(
+        JSON.stringify({ role: 'button', label: 42, verification: 'verified' }),
+      ),
+    /"label" must be a string/,
+  );
+});
+
+test('parser rejects ancestry that is not an array', () => {
+  assertInvalidArgs(
+    () =>
+      parseTargetAnnotationV1Payload(
+        JSON.stringify({ role: 'button', ancestry: 'toolbar', verification: 'verified' }),
+      ),
+    /"ancestry" must be an array/,
+  );
+});
+
+test('parser rejects an ancestry entry that is not an object', () => {
+  assertInvalidArgs(
+    () =>
+      parseTargetAnnotationV1Payload(
+        JSON.stringify({ role: 'button', ancestry: ['toolbar'], verification: 'verified' }),
+      ),
+    /"ancestry\[0\]" must be an object/,
+  );
+  assertInvalidArgs(
+    () =>
+      parseTargetAnnotationV1Payload(
+        JSON.stringify({ role: 'button', ancestry: [null], verification: 'verified' }),
+      ),
+    /"ancestry\[0\]" must be an object/,
+  );
+});
+
+test('parser rejects a scrollRegion or rect that is not an object', () => {
+  assertInvalidArgs(
+    () =>
+      parseTargetAnnotationV1Payload(
+        JSON.stringify({ role: 'button', scrollRegion: 'list', verification: 'verified' }),
+      ),
+    /"scrollRegion" must be an object/,
+  );
+  assertInvalidArgs(
+    () =>
+      parseTargetAnnotationV1Payload(
+        JSON.stringify({ role: 'button', rect: 'somewhere', verification: 'verified' }),
+      ),
+    /"rect" must be an object/,
+  );
+});
+
+// `typeof null === 'object'`, so a null scrollRegion/rect needs its own
+// explicit rejection — same trap as the top-level null-payload case above.
+// Getting this wrong crashes on `null.role`/`null.x` (a raw TypeError)
+// instead of a graceful AppError, unlike the string-typed case above.
+test('parser rejects a null scrollRegion or rect with AppError, not a native crash on null property access', () => {
+  assertInvalidArgs(
+    () =>
+      parseTargetAnnotationV1Payload(
+        JSON.stringify({ role: 'button', scrollRegion: null, verification: 'verified' }),
+      ),
+    /"scrollRegion" must be an object/,
+  );
+  assertInvalidArgs(
+    () =>
+      parseTargetAnnotationV1Payload(
+        JSON.stringify({ role: 'button', rect: null, verification: 'verified' }),
+      ),
+    /"rect" must be an object/,
   );
 });
 
 test('parser rejects an invalid verification value', () => {
-  assertInvalidArgs(() =>
-    parseTargetAnnotationV1Payload(JSON.stringify({ role: 'button', verification: 'maybe' })),
+  assertInvalidArgs(
+    () => parseTargetAnnotationV1Payload(JSON.stringify({ role: 'button', verification: 'maybe' })),
+    /"verification" must be "verified" or "unverifiable"/,
   );
 });
 
-test('parser rejects a negative or non-integer sibling/viewportOrder', () => {
-  assertInvalidArgs(() =>
-    parseTargetAnnotationV1Payload(
-      JSON.stringify({ role: 'button', sibling: -1, verification: 'verified' }),
-    ),
+test('parser rejects a negative or non-integer sibling/viewportOrder, naming each in the message', () => {
+  assertInvalidArgs(
+    () =>
+      parseTargetAnnotationV1Payload(
+        JSON.stringify({ role: 'button', sibling: -1, verification: 'verified' }),
+      ),
+    /"sibling" must be a non-negative integer/,
   );
-  assertInvalidArgs(() =>
-    parseTargetAnnotationV1Payload(
-      JSON.stringify({ role: 'button', viewportOrder: 1.5, verification: 'verified' }),
-    ),
+  assertInvalidArgs(
+    () =>
+      parseTargetAnnotationV1Payload(
+        JSON.stringify({ role: 'button', viewportOrder: 1.5, verification: 'verified' }),
+      ),
+    /"viewportOrder" must be a non-negative integer/,
   );
+});
+
+test('parser rejects a wrong-typed scrollRegion.id and scrollRegion.label, naming each in the message', () => {
+  assertInvalidArgs(
+    () =>
+      parseTargetAnnotationV1Payload(
+        JSON.stringify({
+          role: 'button',
+          scrollRegion: { role: 'list', id: 42 },
+          verification: 'verified',
+        }),
+      ),
+    /"id" must be a string/,
+  );
+  assertInvalidArgs(
+    () =>
+      parseTargetAnnotationV1Payload(
+        JSON.stringify({
+          role: 'button',
+          scrollRegion: { role: 'list', label: 42 },
+          verification: 'verified',
+        }),
+      ),
+    /"scrollRegion\.label" must be a string/,
+  );
+});
+
+test('parser rejects a wrong-typed ancestry entry label, naming it in the message', () => {
+  assertInvalidArgs(
+    () =>
+      parseTargetAnnotationV1Payload(
+        JSON.stringify({
+          role: 'button',
+          ancestry: [{ role: 'toolbar', label: 42 }],
+          verification: 'verified',
+        }),
+      ),
+    /"ancestry\[0\]\.label" must be a string/,
+  );
+});
+
+test('parser rejects a wrong-typed rect field, naming each in the message', () => {
+  for (const field of ['x', 'y', 'width', 'height']) {
+    assertInvalidArgs(
+      () =>
+        parseTargetAnnotationV1Payload(
+          JSON.stringify({
+            role: 'button',
+            rect: { x: 1, y: 2, width: 3, height: 4, [field]: 'nope' },
+            verification: 'verified',
+          }),
+        ),
+      new RegExp(`"rect\\.${field}" must be a finite number`),
+    );
+  }
+});
+
+test('a whitespace-only label collapses to absent through the full parse, not just the normalizer', () => {
+  const parsed = parseTargetAnnotationV1Payload(
+    JSON.stringify({ role: 'button', label: '   ', verification: 'verified' }),
+  );
+  assert.equal(parsed.label, undefined);
 });
 
 // ---------------------------------------------------------------------------

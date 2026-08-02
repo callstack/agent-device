@@ -16,7 +16,9 @@ export type ModuleId =
   | 'daemon-ref-frame'
   | 'interaction-settle'
   | 'scroll-edge-state'
-  | 'selectors';
+  | 'selectors'
+  | 'target-annotation-serde'
+  | 'snapshot-occlusion';
 
 export type KernelModule = {
   readonly id: ModuleId;
@@ -72,6 +74,18 @@ export const KERNEL_MODULES: readonly KernelModule[] = [
     // minutes in one job — past the acceptance budget and its own timeout.
     shards: 4,
   },
+  {
+    id: 'target-annotation-serde',
+    label: 'Target-annotation comment-line codec (ADR 0012 decision 3)',
+    mutate: ['packages/ad-script/src/internal/target-annotation-serde.ts'],
+    owns: ['packages/ad-script/src/internal/target-annotation-serde.ts'],
+  },
+  {
+    id: 'snapshot-occlusion',
+    label: 'Snapshot occlusion (covered/not-covered) decisions',
+    mutate: ['src/snapshot/snapshot-occlusion.ts'],
+    owns: ['src/snapshot/snapshot-occlusion.ts'],
+  },
 ];
 
 export const ALL_MODULE_IDS: readonly ModuleId[] = KERNEL_MODULES.map((module) => module.id);
@@ -123,6 +137,19 @@ export function shardMatrix(ids: readonly ModuleId[] = ALL_MODULE_IDS): ShardSpe
 
 export function normalizePath(filePath: string): string {
   return filePath.replaceAll('\\', '/').replace(/^\.\//, '');
+}
+
+/**
+ * Where the mutation lane can ever find a kernel's owning test: root `src/` or
+ * a workspace package's `src/` — the same two roots `unit-core`'s `include`
+ * (`vitest.config.ts`) draws tests from. A kernel whose test lives outside
+ * both (e.g. `scripts/__tests__`) is unreachable by construction, not silently
+ * dropped.
+ */
+const KERNEL_TEST_FILE_RE = /^(?:src\/|packages\/[^/]+\/src\/).*\.test\.ts$/;
+
+export function isKernelTestFile(filePath: string): boolean {
+  return KERNEL_TEST_FILE_RE.test(normalizePath(filePath));
 }
 
 /**

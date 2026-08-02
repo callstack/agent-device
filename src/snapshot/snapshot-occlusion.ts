@@ -58,6 +58,11 @@ export type SnapshotOcclusionOptions = {
   isAdditionalOverlayNode?: (node: RawSnapshotNode) => boolean;
 };
 
+// Mutation-lane note: the `nodes.length < 2` early return below is provably
+// redundant — with 0 or 1 nodes, `coveredPositions` can never be non-empty,
+// so the *other* early return a few lines down (`coveredPositions.length ===
+// 0`) already returns `nodes` unchanged by the same reference. This one is a
+// pure allocation-avoiding fast path, not a distinct behavior.
 export function annotateCoveredSnapshotNodes(
   nodes: RawSnapshotNode[],
   options: SnapshotOcclusionOptions = {},
@@ -68,6 +73,11 @@ export function annotateCoveredSnapshotNodes(
   const scan: OcclusionScan = {
     nodes,
     byIndex,
+    // Mutation-lane note: replacing the `[]` (non-overlay) branch with a
+    // non-empty placeholder would only add extra, non-numeric entries to
+    // this array; every consumer treats it as a plain array of positions to
+    // compare/index with, so a stray non-numeric entry is inert (fails the
+    // comparison, indexes to `undefined`) rather than observable.
     overlayPositions: nodes.flatMap((node, position) =>
       isOverlayLikeNode(node, byIndex, options) ? [position] : [],
     ),
@@ -99,6 +109,19 @@ export function isSnapshotNodeInteractionBlocked(
   return node.interactionBlocked !== undefined;
 }
 
+// Mutation-lane note: several guards across this call chain are provably
+// redundant, not undertested:
+//   - `findCoveringNode`'s `!targetRect` — every caller (the outer loop below
+//     and `visibleCoverRect`'s recursive call) only ever passes a node whose
+//     rect was already confirmed positive (via `isCandidateTouchNode` or the
+//     `candidateRect` check just before the recursive call).
+//   - `canCoverPoint`'s and `visibleCoverRect`'s `!candidate` — `position`
+//     always comes from `scan.overlayPositions`, itself built by mapping
+//     over `scan.nodes`, so it is always a valid index into that same array.
+//   - `visibleCoverRect`'s `!isOverlayLikeNode(candidate, ...)` — a position
+//     only lands in `overlayPositions` because this exact predicate, over
+//     the exact same pristine (node, byIndex, options), already returned
+//     true when the array was built.
 function findCoveringNode(
   scan: OcclusionScan,
   targetPosition: number,
@@ -119,6 +142,12 @@ function findCoveringNode(
   if (!targetRect) return finishFindCoveringNode(scan, targetPosition, null);
   const center = centerOfRect(targetRect);
 
+  // Mutation-lane note: relaxing `<=` to `<` here would only change behavior
+  // if `position === targetPosition` were reachable — a node covering
+  // itself. That case is already excluded one line below regardless: a
+  // self-candidate has `candidateRect === targetRect` (same node, same
+  // object), so `areRectsApproximatelyEqual` in `visibleCoverRect` always
+  // excludes it.
   for (const position of scan.overlayPositions) {
     if (position <= targetPosition) continue;
     const candidate = scan.nodes[position];
@@ -169,6 +198,9 @@ function visibleCoverRect(
   return candidateRect;
 }
 
+// Mutation-lane note: the `!positiveRect` guard below is provably redundant
+// — a rect-less "candidate" still flows into `findCoveringNode`, whose own
+// `!targetRect` check (see the note above it) rejects it the same way.
 function isCandidateTouchNode(node: RawSnapshotNode): boolean {
   if (!positiveRect(node.rect)) return false;
   if (node.hittable === true) return true;
@@ -176,6 +208,11 @@ function isCandidateTouchNode(node: RawSnapshotNode): boolean {
   return Boolean(node.label?.trim() || node.value?.trim() || node.identifier?.trim());
 }
 
+// Mutation-lane note: this function's own `!positiveRect` guard is likewise
+// redundant — a rect-less node that slipped into `overlayPositions` would
+// still be excluded downstream by `visibleCoverRect`'s `!candidateRect`
+// check, which re-derives the same `positiveRect` over the same pristine
+// node.
 function isOverlayLikeNode(
   node: RawSnapshotNode,
   byIndex: Map<number, RawSnapshotNode>,
@@ -200,6 +237,12 @@ function isAdditionalOverlayRootNode(
   return !hasRenderableAdditionalOverlayAncestor(node, byIndex, options);
 }
 
+// Mutation-lane note: `typeof x.parentIndex === 'number' ? byIndex.get(...) :
+// undefined` is provably redundant here (and in the structurally identical
+// walk in `isSnapshotAncestor` below) — `Map.get` on a key that was never
+// set (including `undefined`) already returns `undefined`, the exact value
+// the ternary's else-branch produces, so skipping the typeof check changes
+// nothing observable.
 function hasRenderableAdditionalOverlayAncestor(
   node: RawSnapshotNode,
   byIndex: Map<number, RawSnapshotNode>,
@@ -216,6 +259,11 @@ function hasRenderableAdditionalOverlayAncestor(
   return false;
 }
 
+// Mutation-lane note: the `?.` here is provably redundant — this only runs
+// once `isAdditionalOverlayRootNode` already confirmed
+// `options.isAdditionalOverlayNode` is a real function (its own, unguarded
+// `!== true` check would otherwise have returned early), and `options` is
+// never replaced mid-walk.
 function isRenderableAdditionalOverlayNode(
   node: RawSnapshotNode,
   options: SnapshotOcclusionOptions,
@@ -239,6 +287,12 @@ function nodeKindIncludesAny(
   return fragments.some((fragment) => normalized.includes(fragment));
 }
 
+// Mutation-lane note: the `?? ''` fallback's exact replacement text is not
+// observable through this module's public API — every caller only checks
+// substring membership against a fixed, known fragment list, and no
+// plausible filler text coincides with any of them, so no test can
+// distinguish `''` from another non-matching filler here without reaching
+// into this private function directly.
 function normalizeNodeKind(node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>): string {
   return [node.type, node.role, node.subrole].map((value) => normalizeType(value ?? '')).join(' ');
 }

@@ -221,3 +221,413 @@ test('cover decisions ignore annotations even through a mutation-sensitive predi
   assert.equal(annotated.find((n) => n.index === 10)?.interactionBlocked, 'covered');
   assert.equal(annotated.find((n) => n.index === 11)?.interactionBlocked, 'covered');
 });
+
+test('an empty or single-node snapshot is returned unchanged, by reference', () => {
+  const empty: RawSnapshotNode[] = [];
+  assert.equal(annotateCoveredSnapshotNodes(empty), empty);
+
+  const solo: RawSnapshotNode[] = [
+    {
+      index: 0,
+      type: 'button',
+      role: 'button',
+      hittable: true,
+      label: 'Save',
+      rect: { x: 0, y: 0, width: 50, height: 20 },
+    },
+  ];
+  assert.equal(annotateCoveredSnapshotNodes(solo), solo);
+});
+
+test('when nothing is covered, the exact input array is returned (no defensive copy)', () => {
+  // Two nodes (not one) so this actually reaches the "nothing in
+  // coveredPositions" early return, rather than the separate nodes.length < 2
+  // early return above it.
+  const nodes: RawSnapshotNode[] = [
+    {
+      index: 0,
+      type: 'button',
+      role: 'button',
+      hittable: true,
+      label: 'Save',
+      rect: { x: 0, y: 0, width: 50, height: 20 },
+    },
+    {
+      index: 1,
+      type: 'button',
+      role: 'button',
+      hittable: true,
+      label: 'Cancel',
+      rect: { x: 500, y: 500, width: 50, height: 20 },
+    },
+  ];
+  assert.equal(annotateCoveredSnapshotNodes(nodes), nodes);
+});
+
+test('a node cannot be marked covered by its own descendant', () => {
+  // Child C renders on top of (and geometrically covers) its own parent P — an
+  // ordinary "content overlaps container" shape, not real occluding chrome. The
+  // parent/child relation must disqualify C as a cover for P regardless of
+  // z-order or rect overlap.
+  const parent: RawSnapshotNode = {
+    index: 0,
+    type: 'container',
+    role: 'group',
+    label: 'Card',
+    hittable: true,
+    rect: { x: 10, y: 10, width: 100, height: 100 },
+  };
+  const child: RawSnapshotNode = {
+    index: 1,
+    parentIndex: 0,
+    type: 'dialog',
+    role: 'dialog',
+    rect: { x: 0, y: 0, width: 200, height: 200 },
+  };
+
+  const annotated = annotateCoveredSnapshotNodes([parent, child]);
+
+  assert.equal(annotated[0]?.interactionBlocked, undefined);
+});
+
+test('a node cannot be marked covered by its own ancestor either, even when the ancestor is listed later', () => {
+  // The relatedness check is symmetric: it must also catch the reverse
+  // direction (candidate is target's ancestor), which the parent/descendant
+  // case above cannot exercise on its own since only later-listed nodes are
+  // ever considered as covers. Two levels deep (target -> intermediate ->
+  // grandparent) so the walk must climb past the first parent, not just check
+  // it directly.
+  const target: RawSnapshotNode = {
+    index: 0,
+    parentIndex: 1,
+    type: 'button',
+    role: 'button',
+    hittable: true,
+    label: 'Pay',
+    rect: { x: 10, y: 10, width: 80, height: 40 },
+  };
+  const intermediate: RawSnapshotNode = {
+    index: 1,
+    parentIndex: 2,
+    type: 'group',
+    role: 'group',
+    rect: { x: 0, y: 0, width: 300, height: 300 },
+  };
+  const grandparent: RawSnapshotNode = {
+    index: 2,
+    type: 'dialog',
+    role: 'dialog',
+    rect: { x: 0, y: 0, width: 400, height: 400 },
+  };
+
+  const annotated = annotateCoveredSnapshotNodes([target, intermediate, grandparent]);
+
+  assert.equal(annotated[0]?.interactionBlocked, undefined);
+});
+
+test('a later, non-overlay-classified node never covers a target, however it overlaps geometrically', () => {
+  // B is a plain button, not floating UI chrome (no OVERLAY_KIND_FRAGMENTS
+  // match, no isAdditionalOverlayNode match) — only genuine overlay-classified
+  // nodes may ever act as covers. B's rect is deliberately NOT
+  // approximately-equal to A's (a much bigger box that still contains A's
+  // center point) so the separate rect-equality guard cannot also explain an
+  // "uncovered" result — this test isolates the overlay-classification check.
+  const a: RawSnapshotNode = {
+    index: 0,
+    type: 'button',
+    role: 'button',
+    hittable: true,
+    label: 'Under',
+    rect: { x: 10, y: 10, width: 80, height: 40 },
+  };
+  const b: RawSnapshotNode = {
+    index: 1,
+    type: 'button',
+    role: 'button',
+    hittable: true,
+    label: 'Over',
+    rect: { x: 0, y: 0, width: 400, height: 400 },
+  };
+
+  const annotated = annotateCoveredSnapshotNodes([a, b]);
+
+  assert.equal(annotated[0]?.interactionBlocked, undefined);
+});
+
+test('an overlay candidate with a rect approximately equal to the target is never treated as covering it', () => {
+  // Same rect, both otherwise legitimate: D is genuinely overlay-classified
+  // and unrelated to T, so only the rect-equality guard can explain this
+  // staying uncovered — isolates that check from the overlay-classification
+  // check above.
+  const target: RawSnapshotNode = {
+    index: 0,
+    type: 'button',
+    role: 'button',
+    hittable: true,
+    label: 'Save',
+    rect: { x: 10, y: 10, width: 80, height: 40 },
+  };
+  const sameRectDialog: RawSnapshotNode = {
+    index: 1,
+    type: 'dialog',
+    role: 'dialog',
+    rect: { x: 10, y: 10, width: 80, height: 40 },
+  };
+
+  const annotated = annotateCoveredSnapshotNodes([target, sameRectDialog]);
+
+  assert.equal(annotated[0]?.interactionBlocked, undefined);
+});
+
+test('a node classified through the caller predicate is excluded as its own overlay root when a renderable ancestor is two levels up', () => {
+  // Root R and leaf L both match the caller predicate; L's immediate parent M
+  // does not. Without correctly walking past M to find R, L would wrongly
+  // count as an independent overlay root alongside R — this test isolates
+  // hasRenderableAdditionalOverlayAncestor's multi-level climb specifically
+  // (the single-level case is already covered by the existing
+  // "ignore annotations... ancestor walk" test above).
+  const target: RawSnapshotNode = {
+    index: 0,
+    type: 'button',
+    role: 'button',
+    hittable: true,
+    label: 'Save',
+    rect: { x: 500, y: 500, width: 80, height: 40 },
+  };
+  const root: RawSnapshotNode = {
+    index: 1,
+    identifier: 'overlay-root',
+    type: 'group',
+    role: 'group',
+    rect: { x: 0, y: 0, width: 20, height: 20 },
+  };
+  const middle: RawSnapshotNode = {
+    index: 2,
+    parentIndex: 1,
+    type: 'group',
+    role: 'group',
+    rect: { x: 0, y: 0, width: 20, height: 20 },
+  };
+  const leaf: RawSnapshotNode = {
+    index: 3,
+    parentIndex: 2,
+    identifier: 'overlay-root',
+    type: 'group',
+    role: 'group',
+    // Only the leaf's rect covers the target — if the leaf were wrongly kept
+    // as an independent overlay root (ancestor climb stopped one level too
+    // early at M), the target would be covered; if correctly excluded in
+    // favor of the root-most classification, it stays uncovered.
+    rect: { x: 480, y: 480, width: 200, height: 200 },
+  };
+
+  const annotated = annotateCoveredSnapshotNodes([target, root, middle, leaf], {
+    isAdditionalOverlayNode: (node) => node.identifier === 'overlay-root',
+  });
+
+  assert.equal(annotated[0]?.interactionBlocked, undefined);
+});
+
+test('an overlay-kind node with no positive-area rect never covers anything, even a target dead center on its degenerate line', () => {
+  // The target's center sits exactly on x=50, the zero-width dialog's only
+  // x-coordinate — a generic "does the rect overlap" check could accidentally
+  // treat this degenerate rect as containing that single point. Positioning
+  // the target precisely there (rather than somewhere the rect trivially
+  // misses) is what makes this test isolate the width>0 requirement, not
+  // just "an empty rect happens not to overlap".
+  const target: RawSnapshotNode = {
+    index: 0,
+    type: 'button',
+    role: 'button',
+    hittable: true,
+    label: 'Save',
+    rect: { x: 30, y: 10, width: 40, height: 20 }, // center = (50, 20)
+  };
+  const zeroWidthDialog: RawSnapshotNode = {
+    index: 1,
+    type: 'dialog',
+    role: 'dialog',
+    rect: { x: 50, y: 0, width: 0, height: 200 },
+  };
+
+  const annotated = annotateCoveredSnapshotNodes([target, zeroWidthDialog]);
+
+  assert.equal(annotated[0]?.interactionBlocked, undefined);
+});
+
+test('an overlay-kind node with zero height never covers anything, even a target dead center on its degenerate line', () => {
+  const target: RawSnapshotNode = {
+    index: 0,
+    type: 'button',
+    role: 'button',
+    hittable: true,
+    label: 'Save',
+    rect: { x: 10, y: 30, width: 40, height: 20 }, // center = (30, 40)
+  };
+  const zeroHeightDialog: RawSnapshotNode = {
+    index: 1,
+    type: 'dialog',
+    role: 'dialog',
+    rect: { x: 0, y: 40, width: 200, height: 0 },
+  };
+
+  const annotated = annotateCoveredSnapshotNodes([target, zeroHeightDialog]);
+
+  assert.equal(annotated[0]?.interactionBlocked, undefined);
+});
+
+test('a node classified as viewport root never covers, even if its kind text otherwise matches overlay fragments', () => {
+  // type "application" + role "dialog" would match the 'dialog' overlay
+  // fragment, but a window/application-level node is excluded outright — it
+  // is the screen itself, never floating chrome on top of it.
+  const target: RawSnapshotNode = {
+    index: 0,
+    type: 'button',
+    role: 'button',
+    hittable: true,
+    label: 'Save',
+    rect: { x: 10, y: 10, width: 80, height: 40 },
+  };
+  const applicationRoot: RawSnapshotNode = {
+    index: 1,
+    type: 'application',
+    role: 'dialog',
+    rect: { x: 0, y: 0, width: 400, height: 800 },
+  };
+
+  const annotated = annotateCoveredSnapshotNodes([target, applicationRoot]);
+
+  assert.equal(annotated[0]?.interactionBlocked, undefined);
+});
+
+test('the kind fields join with a separator, so adjacent fragments never accidentally concatenate into a match', () => {
+  // type "tab" + role "bar" must read as "tab bar" (no match for the
+  // 'tabbar' overlay fragment) — never "tabbar" via an unseparated join,
+  // which would misclassify this as floating chrome it is not.
+  const target: RawSnapshotNode = {
+    index: 0,
+    type: 'button',
+    role: 'button',
+    hittable: true,
+    label: 'Save',
+    rect: { x: 10, y: 10, width: 80, height: 40 },
+  };
+  const coincidental: RawSnapshotNode = {
+    index: 1,
+    type: 'tab',
+    role: 'bar',
+    rect: { x: 0, y: 0, width: 400, height: 800 },
+  };
+
+  const annotated = annotateCoveredSnapshotNodes([target, coincidental]);
+
+  assert.equal(annotated[0]?.interactionBlocked, undefined);
+});
+
+test('a plain rect with no hittable/label/value/identifier is not a touch candidate and is never annotated', () => {
+  const inert: RawSnapshotNode = {
+    index: 0,
+    type: 'group',
+    role: 'group',
+    rect: { x: 10, y: 10, width: 80, height: 40 },
+  };
+  const dialog: RawSnapshotNode = {
+    index: 1,
+    type: 'dialog',
+    role: 'dialog',
+    rect: { x: 0, y: 0, width: 400, height: 800 },
+  };
+
+  const annotated = annotateCoveredSnapshotNodes([inert, dialog]);
+
+  assert.equal(annotated[0]?.interactionBlocked, undefined);
+  assert.equal(annotated[0]?.hittable, undefined);
+});
+
+test('a node qualifies as a touch candidate through value or identifier alone, without a label', () => {
+  const byValue: RawSnapshotNode = {
+    index: 0,
+    type: 'textfield',
+    role: 'textfield',
+    value: 'user@example.com',
+    rect: { x: 10, y: 10, width: 80, height: 40 },
+  };
+  const byIdentifier: RawSnapshotNode = {
+    index: 1,
+    type: 'group',
+    role: 'group',
+    identifier: 'save-button',
+    rect: { x: 10, y: 60, width: 80, height: 40 },
+  };
+  const dialog: RawSnapshotNode = {
+    index: 2,
+    type: 'dialog',
+    role: 'dialog',
+    rect: { x: 0, y: 0, width: 400, height: 800 },
+  };
+
+  const annotated = annotateCoveredSnapshotNodes([byValue, byIdentifier, dialog]);
+
+  assert.equal(annotated[0]?.interactionBlocked, 'covered');
+  assert.equal(annotated[1]?.interactionBlocked, 'covered');
+});
+
+test('a whitespace-only label, value, or identifier does not qualify a node as a touch candidate', () => {
+  // Each field must be independently trimmed before the emptiness check, not
+  // just present-and-truthy — a lone whitespace string is truthy in JS but
+  // carries no real content.
+  const whitespaceLabel: RawSnapshotNode = {
+    index: 0,
+    type: 'group',
+    role: 'group',
+    label: '   ',
+    rect: { x: 0, y: 0, width: 40, height: 40 },
+  };
+  const whitespaceValue: RawSnapshotNode = {
+    index: 1,
+    type: 'group',
+    role: 'group',
+    value: '   ',
+    rect: { x: 50, y: 0, width: 40, height: 40 },
+  };
+  const whitespaceIdentifier: RawSnapshotNode = {
+    index: 2,
+    type: 'group',
+    role: 'group',
+    identifier: '   ',
+    rect: { x: 100, y: 0, width: 40, height: 40 },
+  };
+  const dialog: RawSnapshotNode = {
+    index: 3,
+    type: 'dialog',
+    role: 'dialog',
+    rect: { x: 0, y: 0, width: 400, height: 800 },
+  };
+
+  const annotated = annotateCoveredSnapshotNodes(
+    [whitespaceLabel, whitespaceValue, whitespaceIdentifier, dialog],
+  );
+
+  assert.equal(annotated[0]?.interactionBlocked, undefined);
+  assert.equal(annotated[1]?.interactionBlocked, undefined);
+  assert.equal(annotated[2]?.interactionBlocked, undefined);
+});
+
+test('a node qualifies as a touch candidate through a semantic role alone, without hittable/label/value/identifier', () => {
+  const semantic: RawSnapshotNode = {
+    index: 0,
+    type: 'checkbox',
+    role: 'checkbox',
+    rect: { x: 10, y: 10, width: 30, height: 30 },
+  };
+  const dialog: RawSnapshotNode = {
+    index: 1,
+    type: 'dialog',
+    role: 'dialog',
+    rect: { x: 0, y: 0, width: 400, height: 800 },
+  };
+
+  const annotated = annotateCoveredSnapshotNodes([semantic, dialog]);
+
+  assert.equal(annotated[0]?.interactionBlocked, 'covered');
+});

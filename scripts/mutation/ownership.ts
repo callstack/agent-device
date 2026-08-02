@@ -21,10 +21,11 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { workspaceSpecifierTargets } from '../layering/package-boundaries.ts';
+import { readWorkspacePackages, workspaceSpecifierTargets } from '../layering/package-boundaries.ts';
 import { walkFiles } from '../lib/walk-files.ts';
 import {
   affectedModules,
+  isKernelTestFile,
   KERNEL_MODULES,
   normalizePath,
   type ModuleId,
@@ -34,8 +35,7 @@ import { expandMutateFiles } from './test-scope.ts';
 
 /** Test files the mutation lane can attribute to a kernel at all. */
 export function isTestFile(filePath: string): boolean {
-  const normalized = normalizePath(filePath);
-  return normalized.startsWith('src/') && normalized.endsWith('.test.ts');
+  return isKernelTestFile(filePath);
 }
 
 /**
@@ -147,13 +147,24 @@ export function derivedAffectedModules(
   return KERNEL_MODULES.filter((module) => ids.has(module.id)).map((module) => module.id);
 }
 
-/** Every test file in the repository, per module that owns it — one graph walk. */
+/**
+ * Every test file in the repository, per module that owns it — one graph walk
+ * over root `src/` plus every workspace package's `src/`, so a kernel tested
+ * only from inside its own package (`target-annotation-serde`) is not
+ * silently unownable.
+ */
 export function ownedTestFiles(repoRoot: string): Map<ModuleId, string[]> {
   const deriver = ownershipDeriver(repoRoot);
   const owned = new Map<ModuleId, string[]>(KERNEL_MODULES.map((module) => [module.id, []]));
-  for (const file of walkFiles(path.join(repoRoot, 'src'), (file) => file.endsWith('.test.ts'))) {
-    const relative = normalizePath(path.relative(repoRoot, file));
-    for (const id of deriver.ownersOf(relative)) owned.get(id)!.push(relative);
+  const testRoots = [
+    path.join(repoRoot, 'src'),
+    ...readWorkspacePackages(repoRoot).map((pkg) => path.join(repoRoot, pkg.dir, 'src')),
+  ];
+  for (const root of testRoots) {
+    for (const file of walkFiles(root, (file) => file.endsWith('.test.ts'))) {
+      const relative = normalizePath(path.relative(repoRoot, file));
+      for (const id of deriver.ownersOf(relative)) owned.get(id)!.push(relative);
+    }
   }
   for (const files of owned.values()) files.sort();
   return owned;

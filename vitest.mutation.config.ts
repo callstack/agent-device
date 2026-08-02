@@ -37,7 +37,7 @@ export default defineConfig({
     alias: workspaceAliases,
   },
   test: {
-    include: scope ?? ['src/**/*.test.ts'],
+    include: scope ?? ['src/**/*.test.ts', 'packages/*/src/**/*.test.ts'],
     exclude: [...SUBPROCESS_STUB_TESTS, ...threadHostileTestFiles(repoRoot), '**/node_modules/**'],
     setupFiles: ['src/__tests__/hermetic-env-setup.ts', 'src/__tests__/process-memo-setup.ts'],
   },

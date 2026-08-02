@@ -36,6 +36,8 @@
     "src/utils/scroll-edge-state.ts",
     "src/selectors/**/*.ts",
     "!src/selectors/**/*.test.ts",
-    "!src/selectors/__tests__/**"
+    "!src/selectors/__tests__/**",
+    "packages/ad-script/src/internal/target-annotation-serde.ts",
+    "src/snapshot/snapshot-occlusion.ts"
   ]
 }

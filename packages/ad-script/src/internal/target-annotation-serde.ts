@@ -77,6 +77,10 @@ export function normalizeLabelField(value: string | undefined): string | undefin
   return collapsed.length > 0 ? collapsed : undefined;
 }
 
+// Mutation-lane note: the `'utf8'` argument is provably redundant —
+// `Buffer.byteLength` falls back to utf8 for any unrecognized encoding
+// string (including `''`), so this call is byte-identical to the no-encoding
+// default.
 export function utf8ByteLength(value: string): number {
   return Buffer.byteLength(value, 'utf8');
 }
@@ -87,6 +91,12 @@ export function utf8ByteLength(value: string): number {
  * surrogate pair is never split. The parser never calls this — it REJECTS
  * oversized fields instead (see `parseTargetAnnotationV1Payload`).
  */
+// Mutation-lane note: the `<= maxBytes` early return and the loop's `end > 0`
+// guard are both provably redundant, not undertested — `value.slice(0, 0)`
+// is always `''` (byte length 0), so the loop's own shrink-until-it-fits
+// condition converges to the identical `end` with or without either guard,
+// for every caller (`maxBytes` here is always a non-negative constant).
+// They stay for clarity/defense-in-depth, not correctness.
 export function truncateToUtf8Bytes(value: string, maxBytes: number): string {
   if (utf8ByteLength(value) <= maxBytes) return value;
   let end = value.length;
@@ -105,6 +115,11 @@ export function truncateToUtf8Bytes(value: string, maxBytes: number): string {
 // key order from the example payload).
 // ---------------------------------------------------------------------------
 
+// Mutation-lane note: each `if (x !== undefined) obj.x = x` guard below is
+// provably redundant on its "always assign" side — `JSON.stringify` omits any
+// key whose value is `undefined`, so `obj.x = undefined` and never assigning
+// `obj.x` at all serialize identically. The guard's "never assign" side is
+// still real (it controls whether a *present* value gets omitted).
 function buildCanonicalTargetAnnotationObject(
   evidence: TargetAnnotationV1,
 ): Record<string, unknown> {
@@ -161,6 +176,12 @@ export type TargetAnnotationLineParseResult =
  * `target-vN` comment is an ordinary comment to a v1 reader." Any other `#`
  * line (including one that merely mentions the tag inside prose) is `none`.
  */
+// Mutation-lane note: the `!trimmed.startsWith('#')` early return is provably
+// redundant — `TARGET_ANNOTATION_LINE_RE` itself is anchored on a leading
+// `#`, so any non-`#` line fails the regex too and reaches the same
+// `{ kind: 'none' }` via the next check. Likewise `.trim()` on the captured
+// payload is redundant: `JSON.parse` already tolerates surrounding
+// whitespace, so trimming first never changes the parse outcome.
 export function parseTargetAnnotationCommentLine(rawLine: string): TargetAnnotationLineParseResult {
   const trimmed = rawLine.trim();
   if (!trimmed.startsWith('#')) return { kind: 'none' };
@@ -288,6 +309,10 @@ function parseAncestryEntry(entry: unknown, index: number): TargetAncestryEntry 
   return { role, ...(label !== undefined ? { label } : {}) };
 }
 
+// Mutation-lane note: `typeof value !== 'number'` is provably redundant here
+// — `Number.isSafeInteger` (like `Number.isFinite` below) never throws and
+// returns `false` for any non-number input, so whenever the typeof clause is
+// true the isSafeInteger clause is independently true too.
 function parseNonNegativeIntField(value: unknown, field: string, fallback: number): number {
   if (value === undefined) return fallback;
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
@@ -325,6 +350,12 @@ function parseRectField(value: unknown): TargetRect | undefined {
   return { x, y, width, height };
 }
 
+// Mutation-lane note: `typeof value !== 'number'` is provably redundant —
+// `Number.isFinite` never throws/coerces and returns `false` for any
+// non-number input, so the typeof clause never fires without the isFinite
+// clause also firing. It cannot be observed differently either: this is only
+// ever called with a `JSON.parse`-produced value, and JSON has no NaN/
+// Infinity token, so a real (non-finite) number can never reach here.
 function parseFiniteNumberField(value: unknown, field: string): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw new AppError('INVALID_ARGS', `target-v1 "${field}" must be a finite number.`);
