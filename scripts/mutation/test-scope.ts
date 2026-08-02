@@ -53,7 +53,9 @@ function testFileRoots(repoRoot: string): string[] {
 /** Source modules that own a `node:worker_threads` worker. */
 function workerThreadModules(repoRoot: string): string[] {
   return testFileRoots(repoRoot)
-    .flatMap((root) => walkFiles(root, (file) => file.endsWith('.ts') && !file.endsWith('.test.ts')))
+    .flatMap((root) =>
+      walkFiles(root, (file) => file.endsWith('.ts') && !file.endsWith('.test.ts')),
+    )
     .filter((file) => fs.readFileSync(file, 'utf8').includes('node:worker_threads'))
     .map((file) => path.basename(file, '.ts'));
 }

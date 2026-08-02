@@ -142,7 +142,9 @@ test('scrollRegion.label serializes and round trips like every other label field
     scrollRegion: { role: 'scrollview', id: 'editor-scroll', label: 'Body' },
   });
   const json = serializeTargetAnnotationV1(evidence);
-  assert.ok(json.includes('"scrollRegion":{"role":"scrollview","id":"editor-scroll","label":"Body"}'));
+  assert.ok(
+    json.includes('"scrollRegion":{"role":"scrollview","id":"editor-scroll","label":"Body"}'),
+  );
   const parsed = parseTargetAnnotationV1Payload(json);
   assert.equal(parsed.scrollRegion?.label, 'Body');
 });

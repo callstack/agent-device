@@ -604,9 +604,12 @@ test('a whitespace-only label, value, or identifier does not qualify a node as a
     rect: { x: 0, y: 0, width: 400, height: 800 },
   };
 
-  const annotated = annotateCoveredSnapshotNodes(
-    [whitespaceLabel, whitespaceValue, whitespaceIdentifier, dialog],
-  );
+  const annotated = annotateCoveredSnapshotNodes([
+    whitespaceLabel,
+    whitespaceValue,
+    whitespaceIdentifier,
+    dialog,
+  ]);
 
   assert.equal(annotated[0]?.interactionBlocked, undefined);
   assert.equal(annotated[1]?.interactionBlocked, undefined);

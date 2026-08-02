@@ -21,7 +21,10 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { readWorkspacePackages, workspaceSpecifierTargets } from '../layering/package-boundaries.ts';
+import {
+  readWorkspacePackages,
+  workspaceSpecifierTargets,
+} from '../layering/package-boundaries.ts';
 import { walkFiles } from '../lib/walk-files.ts';
 import {
   affectedModules,
