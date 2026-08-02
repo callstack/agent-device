@@ -49,6 +49,21 @@ import {
  * (`dispatchStep`), and wire-building the resulting divergence
  * (`buildRecordedUnverifiableFailure`, `buildTargetBindingFailure`,
  * `buildPostDispatchTargetBindingFailure`).
+ *
+ * #1554 fold-in (rebase onto main's `replay --keep-session`): main grew this
+ * exact terminal-close-suppression decision independently, daemon-side, as
+ * `session-replay-terminal-lifecycle.ts`'s `resolveSuppressedTerminalCloseIndex`
+ * / `countExecutedReplayActions`, generalizing the repair-only physical-last-
+ * index check this module already had (`isRepairArmedTerminalCloseAction`) to
+ * "terminal among EXECUTABLE actions" and adding `--keep-session` as a second
+ * reason to suppress. Per the same "pure policy belongs in the engine"
+ * boundary this whole module exists to enforce, that generalized resolution
+ * — `resolveSuppressedTerminalCloseIndex` below — now lives here instead,
+ * unified with (replacing) the old repair-only predicate, and `runAdReplay`
+ * folds the resulting `replayed` count in directly rather than a separate
+ * daemon-side post-hoc counter. `requireLiveSessionForKeepSession` — the
+ * `--keep-session` postcondition that inspects `SessionStore` — stays daemon
+ * authority and never moved here.
  */
 
 /** Neutral per-step failure: no `DaemonResponse`, no wire shape — just what the engine needs to report. */
@@ -308,6 +323,15 @@ export type AdReplayRunRequest = Readonly<{
   readonly actions: readonly SessionAction[];
   /** 0-based loop entry index — already resolved from `--from`/`--plan-digest` daemon-side. */
   readonly entryIndex: number;
+  /**
+   * #1554: `replay --keep-session` — suppress exactly the plan's terminal
+   * close among executable actions (see `resolveSuppressedTerminalCloseIndex`)
+   * so the session survives completion instead of tearing down. Unifies with
+   * the pre-existing repair-armed terminal-close suppression: both modes
+   * share the SAME structural "terminal among executable actions" resolution
+   * below, one OR'd into the single suppression check `runAdReplay` makes.
+   */
+  readonly keepSession: boolean;
 }>;
 
 /** Neutral run-level outcome: `runAdReplay` never returns or holds a `DaemonResponse`. */
@@ -327,28 +351,44 @@ export type AdReplayRunOutcome =
 /**
  * ADR 0012 step 4's step loop: for every executable action from
  * `request.entryIndex` on, arm the save-script transaction, skip a
- * repair-armed plan's terminal `close` (lifecycle, not a script step), report
- * progress, verify-then-dispatch through `verifyAndDispatchStep`, and stop at
- * the first failure. Moved verbatim from `executeReplayActions`'s composition
- * order — only the daemon capabilities it calls through were narrowed into
- * `runtime`.
+ * repair-armed or `--keep-session` plan's terminal `close` (lifecycle, not a
+ * script step), report progress, verify-then-dispatch through
+ * `verifyAndDispatchStep`, and stop at the first failure. Moved verbatim from
+ * `executeReplayActions`'s composition order — only the daemon capabilities
+ * it calls through were narrowed into `runtime`.
+ *
+ * #1554 fold-in: `terminalCloseIndex` is resolved ONCE, structurally, from
+ * `actions` alone (independent of which mode wants it suppressed) via
+ * `resolveSuppressedTerminalCloseIndex`. Whether it actually gets suppressed
+ * THIS run is decided per-step, at the point the loop reaches it: `keepSession`
+ * is a static per-run flag, but repair-armed is checked through
+ * `runtime.isRepairArmed()` right after `runtime.armStep()` — deliberately
+ * dynamic, because a bare `--save-script` first arms the transaction on this
+ * very call (`armStep()` mutates the session), so re-reading it here (rather
+ * than snapshotting it before the loop) is what lets a first-arm run and a
+ * continuing `--from` leg share one check. The suppressed index is excluded
+ * from `replayed` exactly like a skipped `replay` pseudo-action — never
+ * dispatched, never divergence-checked, never counted.
  */
 export async function runAdReplay(
   request: AdReplayRunRequest,
   runtime: AdReplayStepRuntime,
 ): Promise<AdReplayRunOutcome> {
-  const { actions, entryIndex } = request;
+  const { actions, entryIndex, keepSession } = request;
   const artifactPaths = new Set<string>();
   const snapshotDiagnosticSamples: SnapshotTimingSample[] = [];
+  const terminalCloseIndex = resolveSuppressedTerminalCloseIndex(actions);
+  let replayed = 0;
   for (let index = entryIndex; index < actions.length; index += 1) {
     const action = actions[index];
     if (!isExecutableReplayAction(action)) continue;
     // Arm before checking terminal close so `[open, close]` records the
     // session created by `open` before treating `close` as lifecycle.
     runtime.armStep();
-    if (isRepairArmedTerminalCloseAction(action, index, actions.length, runtime.isRepairArmed())) {
+    if (index === terminalCloseIndex && (keepSession || runtime.isRepairArmed())) {
       continue;
     }
+    replayed += 1;
     // `onStep?.(x)` short-circuits evaluating `x` when `onStep` is absent
     // (the ordinary `replay` command has no sink) — an explicit guard
     // preserves that: `describeStepValue` must not run needlessly.
@@ -374,7 +414,7 @@ export async function runAdReplay(
   }
   return {
     status: 'completed',
-    replayed: actions.length - entryIndex,
+    replayed,
     artifactPaths: [...artifactPaths],
     snapshotDiagnosticSamples,
   };
@@ -582,27 +622,33 @@ export function isExecutableReplayAction(
 }
 
 /**
- * ADR 0012 decision 6 (Fix 3): the source plan's own terminal `close` is
- * lifecycle, not a script step to replay, while a repair is armed — the agent
- * finalizes the transaction with `close --save-script` instead. Replaying the
- * recorded `close` here would dispatch it as an ordinary step: it tears the
- * session down (and, absent Fix 1/2, could even publish or diverge) before
- * the agent gets that chance. Skipped exactly like the `replay` pseudo-command
- * just above it in the loop — never dispatched, never divergence-checked,
- * and (like that skip) not counted out of `replayed`. `repairArmed` reflects
- * session state, not this invocation's own flags, matching R2: a repair stays
- * armed across separate `--from` legs regardless of whether `--save-script`
- * is repeated on each one.
+ * ADR 0012 decision 6 (Fix 3) + #1554: resolves the ONE native replay
+ * lifecycle seam a plan can have — its terminal `close` AMONG EXECUTABLE
+ * actions, because a trailing `replay "./nested.ad"` line is plan metadata
+ * (`isExecutableReplayAction` already skips it) and never dispatches, so the
+ * true terminal step can sit before the array's physical last index. Callers
+ * (`runAdReplay`) still decide WHETHER this seam is actually suppressed this
+ * run — repair-armed or `--keep-session` — this function only says WHERE it
+ * is, structurally, independent of either mode.
+ *
+ * Both suppression reasons share this one resolution because they are the
+ * same decision family: replaying the recorded `close` here would dispatch it
+ * as an ordinary step — tearing the session down (and, for repair, absent Fix
+ * 1/2, even publishing or diverging) before the agent/caller gets the chance
+ * `close --save-script` (repair) or continued interactive use (`--keep-session`)
+ * depends on. The suppressed close is therefore neither divergence-checked
+ * nor included in the successful `replayed` count, exactly like the `replay`
+ * pseudo-command just above it in the loop.
  */
-export function isRepairArmedTerminalCloseAction(
-  action: SessionAction,
-  index: number,
-  totalActions: number,
-  repairArmed: boolean,
-): boolean {
-  if (action.command !== 'close') return false;
-  if (index !== totalActions - 1) return false;
-  return repairArmed;
+export function resolveSuppressedTerminalCloseIndex(
+  actions: readonly SessionAction[],
+): number | undefined {
+  for (let index = actions.length - 1; index >= 0; index -= 1) {
+    const action = actions[index];
+    if (!isExecutableReplayAction(action)) continue;
+    return action.command === 'close' ? index : undefined;
+  }
+  return undefined;
 }
 
 function buildAdReplayProgressStep(

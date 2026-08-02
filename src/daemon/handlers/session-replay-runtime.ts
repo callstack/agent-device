@@ -78,12 +78,6 @@ import {
   healedScriptSiblingPath,
   type ReplayCoordinator,
 } from '../session-replay-coordinator.ts';
-import {
-  countExecutedReplayActions,
-  isExecutableReplayAction,
-  requireLiveSessionForKeepSession,
-  resolveSuppressedTerminalCloseIndex,
-} from './session-replay-terminal-lifecycle.ts';
 
 /** Per-run invariants for a single replay step (ADR 0012 step 4 verify + dispatch + guard). */
 type ReplayStepContext = {
@@ -146,21 +140,14 @@ export async function runReplayScriptFile(params: {
     if (isMaestroYamlPath(resolved) && req.flags?.replayBackend !== 'maestro') {
       return errorResponse('INVALID_ARGS', maestroBackendRequiredMessage('replay', filePath));
     }
-    if (resolveReplayFormat(resolved, req.flags?.replayBackend) === 'maestro') {
-      if (keepSession) {
-        return errorResponse(
-          'INVALID_ARGS',
-          '--keep-session is supported only for native .ad replay; Maestro YAML owns its lifecycle.',
-        );
-      }
-      if (coordinator.view()?.repairBoundary !== undefined) {
-        return errorResponse(
-          'INVALID_ARGS',
-          'This session has an active .ad --save-script repair run; finish it with replay --from or close before running Maestro YAML.',
-        );
-      }
-      return await runTypedMaestroReplayFile(params);
-    }
+    const maestroResponse = await routeMaestroReplay({
+      resolved,
+      req,
+      keepSession,
+      coordinator,
+      maestroParams: params,
+    });
+    if (maestroResponse) return maestroResponse;
     const planPreparation = prepareReplayPlan({
       req,
       sessionName,
@@ -168,7 +155,6 @@ export async function runReplayScriptFile(params: {
       tracePath,
       resolved,
       coordinator,
-      keepSession,
     });
     if (!planPreparation.ok) return planPreparation.response;
     const {
@@ -214,9 +200,8 @@ export async function runReplayScriptFile(params: {
       artifactPaths,
       onStep,
       armSaveScript: sessionPreparation.armSaveScript,
-      suppressedTerminalCloseIndex,
     });
-    const outcome = await runAdReplay({ actions, entryIndex }, runtime);
+    const outcome = await runAdReplay({ actions, entryIndex, keepSession }, runtime);
     if (outcome.status === 'failed') {
       // #1555 P1 (neutral outcomes): `runAdReplay` never holds or returns a
       // `DaemonResponse` — it only reports WHICH step failed. The real wire
@@ -243,7 +228,6 @@ export async function runReplayScriptFile(params: {
       armSaveScript: sessionPreparation.armSaveScript,
       coordinator,
       keepSession,
-      suppressedTerminalCloseIndex,
     });
   } catch (err) {
     const appErr = asAppError(err);
@@ -253,6 +237,38 @@ export async function runReplayScriptFile(params: {
       artifactPaths.size > 0 ? { artifactPaths: [...artifactPaths] } : undefined,
     );
   }
+}
+
+/**
+ * Routes a Maestro-format request to the typed Maestro engine, rejecting
+ * `--keep-session` (native-`.ad`-only lifecycle) and an active `.ad`
+ * `--save-script` repair boundary first. Returns `undefined` for a non-Maestro
+ * request so `runReplayScriptFile` continues down the native `.ad` path —
+ * extracted from `runReplayScriptFile` itself (fallow complexity) rather than
+ * split further, since every branch here is this one routing decision.
+ */
+async function routeMaestroReplay(params: {
+  resolved: string;
+  req: DaemonRequest;
+  keepSession: boolean;
+  coordinator: ReplayCoordinator;
+  maestroParams: Parameters<typeof runReplayScriptFile>[0];
+}): Promise<DaemonResponse | undefined> {
+  const { resolved, req, keepSession, coordinator, maestroParams } = params;
+  if (resolveReplayFormat(resolved, req.flags?.replayBackend) !== 'maestro') return undefined;
+  if (keepSession) {
+    return errorResponse(
+      'INVALID_ARGS',
+      '--keep-session is supported only for native .ad replay; Maestro YAML owns its lifecycle.',
+    );
+  }
+  if (coordinator.view()?.repairBoundary !== undefined) {
+    return errorResponse(
+      'INVALID_ARGS',
+      'This session has an active .ad --save-script repair run; finish it with replay --from or close before running Maestro YAML.',
+    );
+  }
+  return await runTypedMaestroReplayFile(maestroParams);
 }
 
 /**
@@ -647,7 +663,6 @@ function completeReplayRun(params: {
   armSaveScript: () => void;
   coordinator: ReplayCoordinator;
   keepSession: boolean;
-  suppressedTerminalCloseIndex: number | undefined;
 }): DaemonResponse {
   const {
     startedAt,
@@ -659,11 +674,17 @@ function completeReplayRun(params: {
     armSaveScript,
     coordinator,
     keepSession,
-    suppressedTerminalCloseIndex,
   } = params;
   armSaveScript();
   coordinator.markCompleteIfArmed();
   const completedSession = sessionStore.get(sessionName);
+  const keepSessionFailure = requireLiveSessionForKeepSession({
+    keepSession,
+    sessionName,
+    completedSession,
+    artifactPaths,
+  });
+  if (keepSessionFailure) return keepSessionFailure;
   const snapshotDiagnosticsSummary = summarizeSnapshotTimingSamples([...snapshotDiagnosticSamples]);
   return {
     ok: true,
@@ -677,6 +698,31 @@ function completeReplayRun(params: {
       message: formatReplaySuccessMessage(replayed, Date.now() - startedAt),
     } satisfies ReplayCommandResult,
   };
+}
+
+/**
+ * `--keep-session`'s postcondition (#1554): a suppressed terminal close only
+ * ever promises a live session, so a session that is gone by completion
+ * anyway (some other action closed or otherwise removed it) must fail loudly
+ * rather than silently report `sessionActive: false` as if `--keep-session`
+ * had never been requested. Stays daemon-side, unlike the terminal-close
+ * suppression itself (`resolveSuppressedTerminalCloseIndex`,
+ * `@agent-device/ad-replay`'s step loop): it inspects `SessionState`, which
+ * the engine never sees.
+ */
+function requireLiveSessionForKeepSession(params: {
+  keepSession: boolean;
+  sessionName: string;
+  completedSession: SessionState | undefined;
+  artifactPaths: readonly string[];
+}): DaemonResponse | undefined {
+  const { keepSession, sessionName, completedSession, artifactPaths } = params;
+  if (!keepSession || completedSession) return undefined;
+  return errorResponse(
+    'COMMAND_FAILED',
+    `Replay completed but --keep-session could not preserve session "${sessionName}". Run the script again after checking which action closed the session.`,
+    artifactPaths.length > 0 ? { artifactPaths: [...artifactPaths] } : undefined,
+  );
 }
 
 type PreparedReplayPlan = {
@@ -698,7 +744,6 @@ function prepareReplayPlan(params: {
   tracePath: string | undefined;
   resolved: string;
   coordinator: ReplayCoordinator;
-  keepSession: boolean;
 }): { ok: true; value: PreparedReplayPlan } | { ok: false; response: DaemonResponse } {
   const { req, sessionName, sessionStore, tracePath, resolved, coordinator } = params;
   const backendRejection = validateReplayBackendFlag(req);
@@ -1000,10 +1045,10 @@ function preflightSaveScriptTarget(params: {
  * (`session-close.ts`). Replaying the recorded `close` here would dispatch it
  * as an ordinary step: it tears the session down (and, absent Fix 1/2, could
  * even publish or diverge) before the agent gets that chance. The pure
- * decision (`isRepairArmedTerminalCloseAction`) now lives in
- * `@agent-device/ad-replay`'s step loop; this daemon-only preflight — the
- * arm-time EEXIST check above — is unrelated repair authority that stays
- * here.
+ * decision (`resolveSuppressedTerminalCloseIndex`, unified with #1554's
+ * `--keep-session` suppression) now lives in `@agent-device/ad-replay`'s step
+ * loop; this daemon-only preflight — the arm-time EEXIST check above — is
+ * unrelated repair authority that stays here.
  */
 function createReplaySaveScriptArmer(params: {
   saveScript: boolean | string | undefined;
