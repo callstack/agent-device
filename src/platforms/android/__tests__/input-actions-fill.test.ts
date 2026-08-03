@@ -354,8 +354,14 @@ test('verifyAndroidFilledTextInHierarchy redacts masked password values on wrong
   );
 });
 
-test('readAndroidTextAtPointInHierarchy prefers focused edit text over point fallback', () => {
-  assert.equal(readAndroidTextAtPointInHierarchy(focusedEditHierarchy(), 10, 10), 'focused value');
+test('readAndroidTextAtPointInHierarchy reads the EditText under the requested point', () => {
+  const hierarchy = `<?xml version="1.0" encoding="UTF-8"?><hierarchy>
+<node package="com.example" class="android.widget.EditText" text="Ada Lovelace" resource-id="com.example:id/field-name" focused="false" bounds="[0,0][200,100]"/>
+<node package="com.example" class="android.widget.EditText" text="fallback@example.com" resource-id="com.example:id/field-email" focused="true" bounds="[0,200][200,300]"/>
+</hierarchy>`;
+
+  assert.equal(readAndroidTextAtPointInHierarchy(hierarchy, 100, 50), 'Ada Lovelace');
+  assert.equal(readAndroidTextAtPointInHierarchy(hierarchy, 100, 250), 'fallback@example.com');
 });
 
 const IME_RESOURCE_ID = 'com.google.android.inputmethod.latin:id/0_resource_name_obfuscated';
@@ -465,13 +471,6 @@ function passwordHierarchy(mask: string): string {
 
 function androidInputXml(options: { text: string }): string {
   return `<?xml version="1.0" encoding="UTF-8"?><hierarchy><node package="com.example" class="android.widget.EditText" text="${options.text}" focused="true" bounds="[0,0][200,100]"/></hierarchy>`;
-}
-
-function focusedEditHierarchy(): string {
-  return `<?xml version="1.0" encoding="UTF-8"?><hierarchy>
-<node package="com.example" class="android.widget.TextView" text="point fallback" focused="false" bounds="[0,0][200,100]"/>
-<node package="com.example" class="android.widget.EditText" text="focused value" focused="true" bounds="[300,300][500,400]"/>
-</hierarchy>`;
 }
 
 function appPackageWithInputMethodSubstringHierarchy(): string {

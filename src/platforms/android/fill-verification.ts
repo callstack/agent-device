@@ -111,7 +111,9 @@ export function readAndroidTextAtPointInHierarchy(
   x: number,
   y: number,
 ): string | null {
-  return inspectAndroidTextAtPointInHierarchy(xml, x, y).actualInput?.text ?? null;
+  // Reads are point-targeted: a focused sibling may be a different app field or an IME
+  // composing surface, so it must not override the node that contains the requested point.
+  return inspectAndroidTextAtPointInHierarchy(xml, x, y).targetInput?.text ?? null;
 }
 
 export function androidFillFailureMessage(verification: AndroidFillVerification | null): string {

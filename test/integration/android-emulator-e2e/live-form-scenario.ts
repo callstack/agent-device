@@ -7,7 +7,6 @@ import type { CliJsonResult } from '../cli-json.ts';
 import {
   assertElementText,
   assertFilesDiffer,
-  assertJsonContains,
   assertWaitText,
   capturePng,
   requireAndroidResourceId,
@@ -36,16 +35,22 @@ export async function assertFormInput(context: LiveContext): Promise<void> {
     'id="field-name"',
     'Ada Łovelace',
   ]);
+  await runStep(context, 'fill email field', ['fill', 'id="field-email"', 'ada@example']);
   const name = await runStep(context, 'read filled full name', ['get', 'text', 'id="field-name"']);
-  assertJsonContains(name, 'Ada Łovelace', 'Unicode name should be observable in Android UI');
+  assert.equal(name.json?.data?.text, 'Ada Łovelace', JSON.stringify(name.json));
+  const emailText = await runStep(context, 'read filled email', [
+    'get',
+    'text',
+    'id="field-email"',
+  ]);
+  assert.equal(emailText.json?.data?.text, 'ada@example', JSON.stringify(emailText.json));
   verifyCommand(context, C.fill, 'Unicode replacement text is read back from Android UI');
   verifyBehavior(
     context,
     'test-ime-unicode-input',
-    `active ${ANDROID_TEST_IME_PACKAGE} committed and read back Ada Łovelace`,
+    `active ${ANDROID_TEST_IME_PACKAGE} committed and both filled values were read from their own Android fields`,
   );
 
-  await runStep(context, 'fill email field', ['fill', 'id="field-email"', 'ada@example']);
   const snapshot = await runStep(context, 'locate email Android resource-id', ['snapshot', '-i']);
   const email = requireAndroidResourceId(snapshot, 'field-email');
   await runStep(context, 'focus email by snapshot-derived point', [
