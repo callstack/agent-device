@@ -3,7 +3,10 @@ import type { WaitParsed } from '../core/wait-positionals.ts';
 import { AppError, asAppError, normalizeError } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { runAppleRunnerCommand } from '../platforms/apple/core/runner/runner-client.ts';
-import { buildAppleRunnerRequestOptions } from './apple-runner-options.ts';
+import {
+  buildAppleRunnerRequestOptions,
+  type AppleRunnerRequestOptions,
+} from './apple-runner-options.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { errorResponse, requireCommandSupported } from './handlers/response.ts';
 import { markSessionPartialRefsIssued, resolveRefStalenessWarning } from './session-snapshot.ts';
@@ -47,7 +50,7 @@ import {
   type SelectorRuntimeParams,
 } from './selector-runtime-backend.ts';
 
-type DirectIosSelectorQueryResult = {
+export type DirectIosSelectorQueryResult = {
   found: boolean;
   text?: string;
   node?: SnapshotNode;
@@ -466,10 +469,18 @@ async function resolveDirectIosSelectorQuery(
   return { session, selector, result };
 }
 
-async function queryDirectIosSelector(
-  params: SelectorRuntimeParams,
+/**
+ * The single querySelector client for the local XCTest runner: a live,
+ * tree-independent read (and its found/text/node shape) for exactly one
+ * selector. Decoupled from `SelectorRuntimeParams` on purpose — the offscreen
+ * refusal double-check (`src/daemon/offscreen-target-probe.ts`) reuses this
+ * SAME function from a plain daemon session, not a selector-runtime request,
+ * so it must not depend on that request bag.
+ */
+export async function queryDirectIosSelector(
   session: SessionState,
-  selector: DirectIosSelectorTarget,
+  selector: Pick<DirectIosSelectorTarget, 'key' | 'value'>,
+  requestOptions: AppleRunnerRequestOptions,
 ): Promise<DirectIosSelectorQueryResult> {
   const data = await runAppleRunnerCommand(
     session.device,
@@ -479,11 +490,7 @@ async function queryDirectIosSelector(
       selectorValue: selector.value,
       appBundleId: session.appBundleId,
     },
-    buildAppleRunnerRequestOptions({
-      req: params.req,
-      logPath: params.logPath,
-      traceLogPath: session.trace?.outPath,
-    }),
+    requestOptions,
   );
   const found = data.found === true;
   const node = readDirectIosSelectorNode(data);
@@ -500,7 +507,15 @@ async function queryDirectIosSelectorOrFallback(
   selector: DirectIosSelectorTarget,
 ): Promise<DirectIosSelectorFallbackResult> {
   try {
-    return await queryDirectIosSelector(params, session, selector);
+    return await queryDirectIosSelector(
+      session,
+      selector,
+      buildAppleRunnerRequestOptions({
+        req: params.req,
+        logPath: params.logPath,
+        traceLogPath: session.trace?.outPath,
+      }),
+    );
   } catch (error) {
     if (isDirectIosSelectorFallbackError(error, { allowElementNotFound: true })) return null;
     return { kind: 'error', response: { ok: false, error: normalizeError(error) } };

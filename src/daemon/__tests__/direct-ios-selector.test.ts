@@ -1,36 +1,24 @@
-import { beforeEach, test, vi } from 'vitest';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import type { SessionState } from '../types.ts';
-
-const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
-  mockRunAppleRunnerCommand: vi.fn(),
-}));
-
-vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../platforms/apple/core/runner/runner-client.ts')>();
-  return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
-});
-
 import {
   deriveDirectIosNodeSelector,
   isDirectIosSelectorFallbackError,
-  isIosDirectElementReadEligible,
-  readDirectIosElementProbe,
+  isLocalIosRunnerSession,
 } from '../direct-ios-selector.ts';
 
-beforeEach(() => {
-  mockRunAppleRunnerCommand.mockReset();
-});
-
-function makeSession(platform: 'ios' | 'android' = 'ios'): SessionState {
+function makeSession(
+  platform: 'ios' | 'android' = 'ios',
+  overrides: Partial<SessionState> = {},
+): SessionState {
   return {
     name: platform,
     device: platform === 'android' ? ANDROID_EMULATOR : IOS_SIMULATOR,
     createdAt: Date.now(),
     actions: [],
+    ...overrides,
   };
 }
 
@@ -97,13 +85,48 @@ test('transport-level COMMAND_FAILED errors fall back, semantic ones do not', ()
   );
 });
 
-test('#1542 isIosDirectElementReadEligible: iOS local sessions are eligible, Android is not', () => {
-  assert.equal(isIosDirectElementReadEligible(makeSession('ios')), true);
-  assert.equal(isIosDirectElementReadEligible(makeSession('android')), false);
-  assert.equal(isIosDirectElementReadEligible(undefined), false);
+// #1542: isLocalIosRunnerSession is the ONE shared eligibility predicate for
+// both the direct-selector tap fast path and the offscreen refusal
+// double-check probe. Its two callers differ in exactly one parameter.
+
+test('isLocalIosRunnerSession: iOS local sessions are eligible, Android and undefined are not', () => {
+  assert.equal(
+    isLocalIosRunnerSession(makeSession('ios'), { skipPendingPostGestureStabilization: true }),
+    true,
+  );
+  assert.equal(
+    isLocalIosRunnerSession(makeSession('android'), {
+      skipPendingPostGestureStabilization: true,
+    }),
+    false,
+  );
+  assert.equal(
+    isLocalIosRunnerSession(undefined, { skipPendingPostGestureStabilization: true }),
+    false,
+  );
 });
 
-test('#1542 deriveDirectIosNodeSelector: prefers id, falls back to label, null when neither is usable', () => {
+test('isLocalIosRunnerSession: skipPendingPostGestureStabilization:true excludes a pending session (the tap fast path)', () => {
+  const pending = makeSession('ios', {
+    postGestureStabilization: { action: 'scroll', markedAt: Date.now() },
+  });
+  assert.equal(
+    isLocalIosRunnerSession(pending, { skipPendingPostGestureStabilization: true }),
+    false,
+  );
+});
+
+test('isLocalIosRunnerSession: skipPendingPostGestureStabilization:false keeps a pending session eligible (the offscreen double-check)', () => {
+  const pending = makeSession('ios', {
+    postGestureStabilization: { action: 'scroll', markedAt: Date.now() },
+  });
+  assert.equal(
+    isLocalIosRunnerSession(pending, { skipPendingPostGestureStabilization: false }),
+    true,
+  );
+});
+
+test('deriveDirectIosNodeSelector: prefers id, falls back to label, null when neither is usable', () => {
   assert.deepEqual(
     deriveDirectIosNodeSelector({ identifier: 'shipping-pickup', label: 'Pickup' }),
     {
@@ -117,58 +140,4 @@ test('#1542 deriveDirectIosNodeSelector: prefers id, falls back to label, null w
   });
   assert.equal(deriveDirectIosNodeSelector({ identifier: '   ', label: '  ' }), null);
   assert.equal(deriveDirectIosNodeSelector({}), null);
-});
-
-test('#1542 readDirectIosElementProbe: returns the fresh rect + live hittable on a clean querySelector hit', async () => {
-  mockRunAppleRunnerCommand.mockResolvedValue({
-    found: true,
-    nodes: [{ index: 0, rect: { x: 34, y: 136, width: 74, height: 37 }, hittable: true }],
-  });
-
-  const probe = await readDirectIosElementProbe(
-    makeSession('ios'),
-    { identifier: 'shipping-pickup' },
-    {},
-  );
-
-  assert.deepEqual(probe, { rect: { x: 34, y: 136, width: 74, height: 37 }, hittable: true });
-  assert.equal(mockRunAppleRunnerCommand.mock.calls[0]?.[1].command, 'querySelector');
-  assert.equal(mockRunAppleRunnerCommand.mock.calls[0]?.[1].selectorKey, 'id');
-  assert.equal(mockRunAppleRunnerCommand.mock.calls[0]?.[1].selectorValue, 'shipping-pickup');
-});
-
-test('#1542 readDirectIosElementProbe: hittable defaults to false when the runner omits it', async () => {
-  mockRunAppleRunnerCommand.mockResolvedValue({
-    found: true,
-    nodes: [{ index: 0, rect: { x: 34, y: 900, width: 74, height: 37 } }],
-  });
-
-  const probe = await readDirectIosElementProbe(makeSession('ios'), { label: 'Pickup' }, {});
-
-  assert.deepEqual(probe, { rect: { x: 34, y: 900, width: 74, height: 37 }, hittable: false });
-});
-
-test('#1542 readDirectIosElementProbe: fails closed (null) when the node has no id/label', async () => {
-  const probe = await readDirectIosElementProbe(makeSession('ios'), {}, {});
-
-  assert.equal(probe, null);
-  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
-});
-
-test('#1542 readDirectIosElementProbe: fails closed (null) when the runner reports not found', async () => {
-  mockRunAppleRunnerCommand.mockResolvedValue({ found: false, nodes: [] });
-
-  const probe = await readDirectIosElementProbe(makeSession('ios'), { label: 'Pickup' }, {});
-
-  assert.equal(probe, null);
-});
-
-test('#1542 readDirectIosElementProbe: fails closed (null) on an ambiguous match / any runner error', async () => {
-  mockRunAppleRunnerCommand.mockRejectedValue(
-    new AppError('AMBIGUOUS_MATCH', 'selector matched multiple elements'),
-  );
-
-  const probe = await readDirectIosElementProbe(makeSession('ios'), { label: 'Pickup' }, {});
-
-  assert.equal(probe, null);
 });

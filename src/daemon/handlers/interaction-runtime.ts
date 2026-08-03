@@ -24,10 +24,8 @@ import { NO_ACTIVE_SESSION_MESSAGE } from './response.ts';
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { getRequestSignal } from '../../request/cancel.ts';
 import { buildAppleRunnerRequestOptions } from '../apple-runner-options.ts';
-import {
-  isIosDirectElementReadEligible,
-  readDirectIosElementProbe,
-} from '../direct-ios-selector.ts';
+import { isLocalIosRunnerSession } from '../direct-ios-selector.ts';
+import { confirmIosOffscreenTargetVisible } from '../offscreen-target-probe.ts';
 
 type InteractionRuntimeParams = InteractionHandlerParams & {
   captureSnapshotForSession: CaptureSnapshotForSession;
@@ -88,19 +86,24 @@ function createInteractionBackend(
       )),
     // #1542: iOS-only escape hatch for the off-screen refusal double-check.
     // Local (non-provider) iOS sessions get a direct, AX-tree-independent
-    // probe; every other platform/session omits this field, so the guard's
-    // decision stays exactly what it is today (fail closed).
-    verifyOffscreenClickTarget: isIosDirectElementReadEligible(session)
-      ? async (_context, node: Pick<SnapshotNode, 'identifier' | 'label'>) =>
-          await readDirectIosElementProbe(
+    // probe (deliberately NOT skipped while postGestureStabilization is
+    // pending — see isLocalIosRunnerSession); every other platform/session
+    // omits this field, so the guard's decision stays exactly what it is
+    // today (fail closed).
+    confirmOffscreenTargetVisible: isLocalIosRunnerSession(session, {
+      skipPendingPostGestureStabilization: false,
+    })
+      ? async (_context, node: Pick<SnapshotNode, 'identifier' | 'label'>, rootViewport) =>
+          await confirmIosOffscreenTargetVisible({
             session,
             node,
-            buildAppleRunnerRequestOptions({
+            rootViewport,
+            requestOptions: buildAppleRunnerRequestOptions({
               req,
               logPath: params.logPath,
               traceLogPath: session.trace?.outPath,
             }),
-          )
+          })
       : undefined,
     tap: async (_context, point): Promise<BackendActionResult> => {
       // ADR 0014 side-effect seam: the point is resolved; expire the ref frame
