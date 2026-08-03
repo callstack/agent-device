@@ -100,7 +100,13 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testDispatchRecoverySkipsBookkeepingWhileXCTestChannelOccupied \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrain \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrainForSnapshotRaw \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotTraversalIdentityPreservesSameOriginNodesWithDifferentBounds
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotTraversalIdentityPreservesSameOriginNodesWithDifferentBounds \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledNeedsEnoughSamples \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledTrueWhenWindowMatches \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledFalseOnMidWindowMismatch \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledFalseOnFailedCapture \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledOnlyLooksAtTheTrailingWindow \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledRejectsDegenerateRequirement
 
       - name: Preflight iOS runner through public CLI
         run: |
