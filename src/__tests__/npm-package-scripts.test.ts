@@ -80,6 +80,21 @@ test('the npm package build covers every package-owned build output, then verifi
   ]);
 });
 
+// Behavior of the closure audit is pinned by fixtures in
+// scripts/__tests__/package-closure-audit.test.ts, which can fail a malformed package the way no
+// test of the real gate can. That leaves the wiring: the audit and both runtime probes have to stay
+// wired into the gate, or the fixtures would keep passing while the tarball went unchecked.
+test('the package gate runs the closure audit and both runtime probes', () => {
+  const gate = fs.readFileSync(path.join(repoRoot, 'scripts', 'check-package.ts'), 'utf8');
+  for (const call of [
+    'auditDependencyClosure(installedRoot, manifest)',
+    'importEveryExport(manifest)',
+    'smokeTestBin(installedRoot, manifest)',
+  ]) {
+    assert.ok(gate.includes(call), `scripts/check-package.ts must still call ${call}`);
+  }
+});
+
 // The gate reads the packed tarball, so `prepack` is the last point where a broken package can still
 // be stopped. Publishing runs it; nothing else guarantees the tarball is ever verified.
 test('publishing cannot skip the package gate', () => {

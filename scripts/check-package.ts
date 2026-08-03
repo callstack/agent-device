@@ -14,19 +14,20 @@
  *
  * Step 3 is the static half and step 4 the runtime half of the same question: nothing the package
  * imports may depend on workspace linking. Keep both — a specifier reachable only through a lazy
- * dynamic import stays invisible to step 4, and a `require` computed at runtime stays invisible to
- * step 3.
+ * dynamic import stays invisible to step 4, and a specifier computed at runtime stays invisible to
+ * step 3. Step 3 lives in scripts/lib/shipped-imports.ts, where fixture tests can prove it rejects
+ * a malformed package; everything here needs a real pack and can only exercise the healthy path.
  */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import { builtinModules } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
-import { parseSync } from 'oxc-parser';
-import { walkFiles } from './lib/walk-files.ts';
+import {
+  auditDependencyClosure,
+  type PackedManifest as PackedDependencies,
+} from './lib/shipped-imports.ts';
 
-type PackedManifest = {
-  dependencies?: Record<string, string>;
+type PackedManifest = PackedDependencies & {
   exports: Record<string, unknown>;
   bin: Record<string, string>;
 };
@@ -36,7 +37,6 @@ const repoRoot = path.resolve(import.meta.dirname, '..');
 // `/private/var`; resolving up front keeps the paths this script prints equal to the ones npm uses.
 const workDir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'agent-device-package-'));
 const consumerDir = path.join(workDir, 'consumer');
-const builtins = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
 
 /** Stdout is captured for the callers that parse it; stderr passes through so failures are readable. */
 function run(command: string, args: string[], cwd: string): string {
@@ -102,79 +102,6 @@ function installIntoCleanConsumer(tarball: string): string {
   return path.join(consumerDir, 'node_modules', 'agent-device');
 }
 
-function packageNameOf(specifier: string): string {
-  const segments = specifier.split('/');
-  return specifier.startsWith('@') ? segments.slice(0, 2).join('/') : segments[0]!;
-}
-
-function moduleSpecifiers(file: string, source: string): string[] {
-  const record = parseSync(file, source).module;
-  return [
-    ...record.staticImports.map((entry) => entry.moduleRequest.value),
-    ...record.staticExports.flatMap((entry) =>
-      entry.entries.flatMap((exported) =>
-        exported.moduleRequest?.value ? [exported.moduleRequest.value] : [],
-      ),
-    ),
-    ...record.dynamicImports.flatMap((entry) => {
-      const raw = source.slice(entry.moduleRequest.start, entry.moduleRequest.end);
-      const literal = /^(['"])([^'"]*)\1$/.exec(raw);
-      return literal?.[2] ? [literal[2]] : [];
-    }),
-  ];
-}
-
-function isExternalPackage(specifier: string): boolean {
-  return !specifier.startsWith('.') && !specifier.startsWith('/') && !builtins.has(specifier);
-}
-
-/** Maps each package the shipped files import to the files importing it. */
-function shippedImports(installedRoot: string): Map<string, string[]> {
-  const importedBy = new Map<string, string[]>();
-  for (const file of walkFiles(installedRoot, (file) => /\.(?:m?js|d\.ts)$/.test(file))) {
-    const relative = path.relative(installedRoot, file);
-    const specifiers = moduleSpecifiers(file, fs.readFileSync(file, 'utf8'));
-    for (const specifier of specifiers.filter(isExternalPackage)) {
-      const name = packageNameOf(specifier);
-      importedBy.set(name, [...(importedBy.get(name) ?? []), `${specifier} in ${relative}`]);
-    }
-  }
-  return importedBy;
-}
-
-function mismatch(heading: string, entries: readonly string[], fix: string): string[] {
-  return entries.length === 0 ? [] : [heading, ...entries.map((entry) => `  - ${entry}`), fix];
-}
-
-/**
- * Both directions matter. An import the manifest does not declare breaks the install; a declared
- * dependency nothing imports is an install every user pays for and no code reaches — how `pngjs`
- * stayed in `dependencies` after `tsdown.config.ts` started inlining it.
- */
-function auditDependencyClosure(installedRoot: string, manifest: PackedManifest): void {
-  const declared = new Set(Object.keys(manifest.dependencies ?? {}));
-  const importedBy = shippedImports(installedRoot);
-  const problems = [
-    ...mismatch(
-      'Imported but not declared in "dependencies" (a published install cannot resolve these):',
-      [...importedBy].filter(([name]) => !declared.has(name)).flatMap(([, sites]) => sites),
-      'Declare the package, or add it to `deps.alwaysBundle` in tsdown.config.ts.',
-    ),
-    ...mismatch(
-      'Declared in "dependencies" but never imported (every user installs these for nothing):',
-      [...declared].filter((name) => !importedBy.has(name)),
-      'Remove the dependency, or stop bundling it in tsdown.config.ts.',
-    ),
-  ];
-
-  if (problems.length > 0) {
-    throw new Error(
-      `The published dependency closure does not match what the package imports.\n${problems.join('\n')}`,
-    );
-  }
-  step(`Verified the dependency closure: ${[...importedBy.keys()].sort().join(', ')}.`);
-}
-
 /** Imports every documented entry point in one process so a failure names the subpath that broke. */
 function importEveryExport(manifest: PackedManifest): void {
   const specifiers = Object.keys(manifest.exports).map((subpath) =>
@@ -235,7 +162,8 @@ try {
   const manifest = JSON.parse(
     fs.readFileSync(path.join(installedRoot, 'package.json'), 'utf8'),
   ) as PackedManifest;
-  auditDependencyClosure(installedRoot, manifest);
+  const importedBy = auditDependencyClosure(installedRoot, manifest);
+  step(`Verified the dependency closure: ${[...importedBy.keys()].sort().join(', ')}.`);
   importEveryExport(manifest);
   smokeTestBin(installedRoot, manifest);
 } catch (error) {

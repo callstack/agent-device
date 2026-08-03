@@ -58,6 +58,10 @@ export default defineConfig({
             'scripts/__tests__/help-conformance-error-recovery-coverage.test.ts',
             'scripts/__tests__/help-conformance-sample-outputs.test.ts',
             'scripts/__tests__/help-conformance-topic-coverage.test.ts',
+            // The publishing gate's closure audit against fixture packages: parse-only, and the
+            // only place the gate's failure direction is exercised at all (the gate itself needs a
+            // real `npm pack`, so CI can only watch a healthy package pass).
+            'scripts/__tests__/package-closure-audit.test.ts',
             // Parses CI configuration only, so this action guard needs no device or subprocess lane.
             'test/ci/upload-agent-device-artifacts.test.ts',
             // The frozen replay-compat corpus (#1417): parse-only, no device or
