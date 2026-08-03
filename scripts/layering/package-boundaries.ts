@@ -111,6 +111,66 @@ export function readNamedExports(source: string): string[] {
   return [...names].sort();
 }
 
+/**
+ * Every name a façade subpath exports, sorted — `readNamedExports` widened
+ * from one source string to the re-export CHAIN behind it, so a barrel
+ * façade is pinnable too.
+ *
+ * `readNamedExports` throws on bare `export * from './x.ts'` because, given
+ * only a source string, the set it contributes is genuinely unknowable. Given
+ * the FILE, it is not: the specifier names a sibling module the gate can read
+ * and enumerate in turn. That is the whole difference here — every
+ * `@agent-device/contracts` façade (`src/facades/*.ts`) is exactly such a
+ * barrel, 13 of the 14 subpaths being nothing but bare re-export lines, so
+ * without chain resolution the package with the largest and fastest-growing
+ * public surface in the workspace is the one package that cannot be pinned.
+ *
+ * Resolution is deliberately narrow — a RELATIVE specifier only, and the
+ * repo's explicit-`.ts`-extension convention means the specifier is already
+ * the path. A bare star across a PACKAGE specifier still throws: enumerating
+ * it means resolving `node_modules` and re-entering another package's
+ * `exports` map, and a façade that re-exports a whole other package wholesale
+ * is precisely the unbounded widening this gate exists to refuse. Cycles are
+ * visit-guarded (a barrel pair that re-exported each other would otherwise
+ * recurse forever), and `export default` still throws through the chain — a
+ * default reached via a barrel is no more enumerable than a direct one.
+ */
+export function readFacadeExports(entryFile: string): string[] {
+  const names = new Set<string>();
+  const visited = new Set<string>();
+  const walk = (file: string): void => {
+    const resolved = path.resolve(file);
+    if (visited.has(resolved)) return;
+    visited.add(resolved);
+    const parsed = parseSync(resolved, fs.readFileSync(resolved, 'utf8'));
+    for (const staticExport of parsed.module.staticExports) {
+      for (const entry of staticExport.entries) {
+        if (entry.exportName.kind === 'Default') {
+          throw new Error(
+            `readFacadeExports cannot enumerate 'export default …' as a named symbol (${resolved})` +
+              ' — a facade a caller pins to an exact named-export list must not carry one.',
+          );
+        }
+        if (entry.exportName.kind === 'None') {
+          const specifier = entry.moduleRequest?.value;
+          if (!specifier || !specifier.startsWith('.')) {
+            throw new Error(
+              `readFacadeExports cannot enumerate 'export * from ${specifier ?? '…'}' ` +
+                `(${resolved}) — only a relative re-export names a module this gate can read ` +
+                'and enumerate in turn. Name the re-exported symbols explicitly instead.',
+            );
+          }
+          walk(path.resolve(path.dirname(resolved), specifier));
+          continue;
+        }
+        if (entry.exportName.name) names.add(entry.exportName.name);
+      }
+    }
+  };
+  walk(entryFile);
+  return [...names].sort();
+}
+
 export function readWorkspacePackages(repoRoot: string): WorkspacePackage[] {
   const packagesDir = path.join(repoRoot, 'packages');
   if (!fs.existsSync(packagesDir)) return [];
