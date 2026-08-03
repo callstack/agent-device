@@ -194,7 +194,27 @@ test('runtime wait with a recorded landmark keeps the plain timeout when the sel
     (thrown: unknown) => {
       assert.ok(thrown instanceof AppError);
       assert.match(thrown.message, /wait timed out for selector/);
-      assert.equal(thrown.details?.reason, undefined);
+      assert.equal(thrown.details?.reason, 'wait_target_absent');
+      assert.equal((thrown.details?.readableCaptures as number) > 0, true);
+      assert.equal(typeof thrown.details?.waitedMs, 'number');
+      return true;
+    },
+  );
+});
+
+test('runtime wait with no capture evidence never reports target absence', async () => {
+  const device = landmarkWaitDevice([landmarkScreen('Detail Screen')]);
+
+  await assert.rejects(
+    device.selectors.wait({
+      session: 'default',
+      target: { kind: 'selector', selector: 'label="Screen X"', timeoutMs: 0 },
+    }),
+    (thrown: unknown) => {
+      assert.ok(thrown instanceof AppError);
+      assert.equal(thrown.details?.reason, 'wait_capture_stalled');
+      assert.equal(thrown.details?.retriable, true);
+      assert.equal(thrown.details?.readableCaptures, 0);
       return true;
     },
   );

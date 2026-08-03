@@ -1,3 +1,4 @@
+import { WAIT_REASONS } from '@agent-device/contracts/interaction';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { captureSnapshot } from './handlers/snapshot-capture.ts';
@@ -23,7 +24,7 @@ export async function maybeWaitTimeoutSurfaceResponse(
   params: WaitCurrentSurfaceParams,
   response: DaemonResponse,
 ): Promise<DaemonResponse> {
-  if (response.ok || !isWaitTimeoutMessage(response.error.message)) return response;
+  if (response.ok || !canInspectWaitSurface(response.error.details?.reason)) return response;
   // A wait whose final capture consumed the remaining budget must not fire another capture for
   // decoration. A genuinely stalled capture would repeat the hang; an ordinary deadline truncation
   // would still push the response further past the user-supplied timeout.
@@ -45,8 +46,8 @@ export async function maybeWaitTimeoutSurfaceResponse(
   );
 }
 
-function isWaitTimeoutMessage(message: string): boolean {
-  return /^wait timed out (?:for (?:selector|text): |waiting for a stable UI)/i.test(message);
+function canInspectWaitSurface(reason: unknown): boolean {
+  return reason === WAIT_REASONS.targetAbsent || reason === WAIT_REASONS.stableTimeout;
 }
 
 async function inspectCurrentSurface(

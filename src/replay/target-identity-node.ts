@@ -11,6 +11,7 @@
  */
 
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import { WAIT_REASONS } from '@agent-device/contracts/interaction';
 import { normalizeType } from '../snapshot/snapshot-processing.ts';
 import {
   normalizeIdentifierField,
@@ -171,7 +172,7 @@ export const REPLAY_TARGET_GUARD_MISMATCH_REASON = 'replay_target_guard_mismatch
  * success. Lives here (replay zone) for the same layering reason as the
  * guard-mismatch marker above.
  */
-export const WAIT_LANDMARK_MISMATCH_REASON = 'wait_landmark_identity_mismatch';
+export const WAIT_LANDMARK_MISMATCH_REASON = WAIT_REASONS.landmarkIdentityMismatch;
 
 /**
  * The compact evidence `wait` retains from its LAST poll whose capture

@@ -1,4 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
+import { WAIT_REASONS } from '@agent-device/contracts/interaction';
 import { isUnreadableCaptureContentError } from '../../../snapshot/snapshot-quality.ts';
 import { runWithinWaitDeadline } from './wait-deadline.ts';
 
@@ -6,6 +7,12 @@ export const DEFAULT_WAIT_TIMEOUT_MS = 10_000;
 const WAIT_POLL_INTERVAL_MS = 300;
 
 export type WaitPollDeadline = 'capture-stalled' | 'capture-truncated';
+
+export type WaitFailureEvidence = {
+  timeoutMs: number;
+  readableCaptures: number;
+  waitedMs: number;
+};
 
 type WaitPollingRuntime = {
   clock?: {
@@ -21,6 +28,13 @@ type WaitPollingOptions = {
 
 type UnreadablePollTracker = {
   attempt: <T>(capture: () => Promise<T>) => Promise<T | undefined>;
+  recordReadableCapture: () => void;
+  readableCaptures: () => number;
+  rethrowIfNeverReadable: () => void;
+};
+
+type WaitFailurePolling = {
+  failureEvidence: () => WaitFailureEvidence;
   rethrowIfNeverReadable: () => void;
 };
 
@@ -32,30 +46,45 @@ export function createWaitPolling(
   const timeoutMs = requestedTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
   const startedAtMs = now(runtime);
   const unreadable = createUnreadablePollTracker();
-  let capturesStarted = 0;
   const remainingMs = () => Math.max(0, timeoutMs - (now(runtime) - startedAtMs));
 
   return {
     capture: async <T>(capture: (signal: AbortSignal) => Promise<T>) => {
-      const receivedWholeWaitBudget = capturesStarted === 0;
-      capturesStarted += 1;
+      let captureWasReadable = false;
       const result = await runWithinWaitDeadline(
         runtime,
         options,
         remainingMs(),
-        async (signal) => await unreadable.attempt(() => capture(signal)),
+        async (signal) =>
+          await unreadable.attempt(async () => {
+            const value = await capture(signal);
+            captureWasReadable = true;
+            return value;
+          }),
       );
-      if (!result.timedOut) return result;
+      if (!result.timedOut) {
+        if (captureWasReadable) unreadable.recordReadableCapture();
+        return result;
+      }
+      // A capture that only becomes readable after its deadline is not evidence for this wait.
+      // Count only captures that completed before runWithinWaitDeadline returned a timeout.
       return {
         timedOut: true as const,
-        // Only the first capture receives the wait's entire budget. A later poll is canceled by
-        // the enclosing deadline, so classifying it as a backend stall would overstate the evidence.
-        deadline: receivedWholeWaitBudget
-          ? ('capture-stalled' as const)
-          : ('capture-truncated' as const),
+        // A poll is a backend stall when no completed capture established a readable observation;
+        // the poll index is not evidence. This remains true after one or more unreadable content
+        // verdicts followed by a capture that consumes the remaining budget.
+        deadline:
+          unreadable.readableCaptures() === 0
+            ? ('capture-stalled' as const)
+            : ('capture-truncated' as const),
       };
     },
     hasTimeRemaining: () => remainingMs() > 0,
+    failureEvidence: (): WaitFailureEvidence => ({
+      timeoutMs,
+      readableCaptures: unreadable.readableCaptures(),
+      waitedMs: now(runtime) - startedAtMs,
+    }),
     rethrowIfNeverReadable: unreadable.rethrowIfNeverReadable,
     sleepUntilNextPoll: async () =>
       await sleepWithinWait(runtime, options, Math.min(WAIT_POLL_INTERVAL_MS, remainingMs())),
@@ -64,50 +93,67 @@ export function createWaitPolling(
   };
 }
 
-export function waitCaptureStalledError(message: string, timeoutMs: number): AppError {
+function waitCaptureStalledError(message: string, evidence: WaitFailureEvidence): AppError {
   return new AppError('COMMAND_FAILED', message, {
-    reason: 'wait_capture_stalled',
+    reason: WAIT_REASONS.captureStalled,
     captureStalled: true,
-    timeoutMs,
-    hint: 'A snapshot capture stalled past the wait timeout. Retry, or use screenshot to inspect the current surface.',
+    ...evidence,
+    retriable: true,
+    hint: 'No readable snapshot capture completed before the wait timeout. Retry, or use screenshot to inspect the current surface.',
   });
 }
 
-export function waitDeadlineExceededError(
+function waitDeadlineExceededError(message: string, evidence: WaitFailureEvidence): AppError {
+  return new AppError('COMMAND_FAILED', message, {
+    reason: WAIT_REASONS.deadlineExceeded,
+    captureTruncated: true,
+    ...evidence,
+  });
+}
+
+function waitTargetAbsentError(message: string, evidence: WaitFailureEvidence): AppError {
+  return new AppError('COMMAND_FAILED', message, {
+    reason: WAIT_REASONS.targetAbsent,
+    ...evidence,
+  });
+}
+
+export function waitTimeoutError(
   message: string,
-  timeoutMs: number,
-  captureTruncated: boolean,
+  polling: WaitFailurePolling,
+  deadline: WaitPollDeadline | undefined,
 ): AppError {
-  return new AppError(
-    'COMMAND_FAILED',
-    message,
-    captureTruncated
-      ? {
-          reason: 'wait_deadline_exceeded',
-          captureTruncated: true,
-          timeoutMs,
-        }
-      : undefined,
-  );
+  const evidence = polling.failureEvidence();
+  if (deadline === 'capture-stalled') return waitCaptureStalledError(message, evidence);
+  if (deadline === 'capture-truncated') return waitDeadlineExceededError(message, evidence);
+
+  polling.rethrowIfNeverReadable();
+  return evidence.readableCaptures === 0
+    ? waitCaptureStalledError(message, evidence)
+    : waitTargetAbsentError(message, evidence);
 }
 
 function createUnreadablePollTracker(): UnreadablePollTracker {
-  let sawReadableCapture = false;
+  let readableCaptureCount = 0;
   let lastUnreadableError: unknown;
   return {
     attempt: async <T>(capture: () => Promise<T>): Promise<T | undefined> => {
       try {
-        const result = await capture();
-        sawReadableCapture = true;
-        return result;
+        return await capture();
       } catch (error) {
         if (!isUnreadableCaptureContentError(error)) throw error;
         lastUnreadableError = error;
         return undefined;
       }
     },
+    recordReadableCapture: () => {
+      readableCaptureCount += 1;
+    },
+    readableCaptures: () => readableCaptureCount,
     rethrowIfNeverReadable: () => {
-      if (!sawReadableCapture && lastUnreadableError !== undefined) throw lastUnreadableError;
+      if (readableCaptureCount === 0 && lastUnreadableError !== undefined) {
+        throw lastUnreadableError;
+      }
     },
   };
 }

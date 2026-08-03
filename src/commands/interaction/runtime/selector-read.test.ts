@@ -581,7 +581,7 @@ test('runtime wait rethrows the capture verdict when the screen never became rea
   );
 });
 
-test('runtime wait keeps the plain timeout when readable polls simply never matched', async () => {
+test('runtime wait classifies readable no-match polls as target absent', async () => {
   const empty = () => makeSnapshotState([{ index: 0, depth: 0, type: 'Other', label: 'Loading' }]);
   const device = waitDeviceWithCaptures([
     empty,
@@ -595,11 +595,18 @@ test('runtime wait keeps the plain timeout when readable polls simply never matc
       session: 'default',
       target: { kind: 'selector', selector: 'label="Screen X"', timeoutMs: 1000 },
     }),
-    /wait timed out for selector/,
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.message, 'wait timed out for selector: label="Screen X"');
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'wait_target_absent');
+      assert.equal((details?.readableCaptures as number) > 0, true);
+      return true;
+    },
   );
 });
 
-test('runtime wait reports a deadline-truncated final capture over an earlier unreadable verdict', async () => {
+test('runtime wait reports a stalled final capture after earlier unreadable verdicts', async () => {
   let captureCount = 0;
   const initial = makeSnapshotState([{ index: 0, depth: 0, type: 'Other', label: 'Initial' }]);
   const sessions = createMemorySessionStore([{ name: 'default', snapshot: initial }]);
@@ -642,10 +649,11 @@ test('runtime wait reports a deadline-truncated final capture over an earlier un
     (error: unknown) => {
       assert.ok(error instanceof Error);
       assert.equal(error.message, 'wait timed out for selector: label="Screen X"');
-      assert.equal(
-        (error as { details?: Record<string, unknown> }).details?.reason,
-        'wait_deadline_exceeded',
-      );
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'wait_capture_stalled');
+      assert.equal(details?.retriable, true);
+      assert.equal(details?.readableCaptures, 0);
+      assert.equal(typeof details?.waitedMs, 'number');
       return true;
     },
   );
