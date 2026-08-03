@@ -102,13 +102,45 @@ export function decidePostGestureStabilityVerdict(params: {
   return elapsedMs < distrustCapMs ? 'distrust' : 'accept-stale';
 }
 
+type CapturedSurface<T> = { value: T; signature: InteractionSurfaceSignature };
+
+async function captureInteractionSurface<T>(
+  capture: () => Promise<T>,
+  readSnapshot: (result: T) => SnapshotState,
+  initial?: T,
+): Promise<CapturedSurface<T>> {
+  const value = initial ?? (await capture());
+  return { value, signature: buildInteractionSurfaceSignature(readSnapshot(value).nodes) };
+}
+
+function emitPostGestureSettleDiagnostic(
+  verdict: 'trust' | 'accept-stale',
+  action: string,
+  attempts: number,
+  durationMs: number,
+): void {
+  if (verdict === 'accept-stale') {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'post_gesture_snapshot_stale_accept',
+      data: { action, attempts, durationMs, matchedPreGestureBaseline: true },
+    });
+    return;
+  }
+  emitDiagnostic({
+    level: attempts > 2 ? 'info' : 'debug',
+    phase: 'post_gesture_snapshot_stabilized',
+    data: { action, attempts, durationMs },
+  });
+}
+
 export async function capturePostGestureStabilizedResult<T>(params: {
   session: SessionState | undefined;
   capture: () => Promise<T>;
   readSnapshot: (result: T) => SnapshotState;
   initial?: T;
 }): Promise<T> {
-  const { session, capture } = params;
+  const { session, capture, readSnapshot } = params;
   const pending = session?.postGestureStabilization;
   if (!session || !supportsPostGestureStabilization(session.device) || !pending) {
     return params.initial ?? (await capture());
@@ -117,8 +149,7 @@ export async function capturePostGestureStabilizedResult<T>(params: {
   const needsBaselineDistrust = requiresPostGestureBaselineDistrust(session.device);
   const startedAt = Date.now();
   let attempts = 1;
-  let previous = params.initial ?? (await capture());
-  let previousSignature = buildInteractionSurfaceSignature(params.readSnapshot(previous).nodes);
+  let previous = await captureInteractionSurface(capture, readSnapshot, params.initial);
   // Extended past STABILIZATION_DEADLINE_MS only when the distrust verdict
   // fires below; the ordinary (non-distrust) timeout path is unaffected.
   let effectiveDeadlineMs = STABILIZATION_DEADLINE_MS;
@@ -126,41 +157,26 @@ export async function capturePostGestureStabilizedResult<T>(params: {
   while (attempts < STABILIZATION_MIN_ATTEMPTS || Date.now() - startedAt < effectiveDeadlineMs) {
     await sleep(STABILIZATION_INTERVAL_MS);
     attempts += 1;
-    const current = await capture();
-    const currentSignature = buildInteractionSurfaceSignature(params.readSnapshot(current).nodes);
-    if (areInteractionSurfaceSignaturesStable(previousSignature, currentSignature)) {
+    const current = await captureInteractionSurface(capture, readSnapshot);
+    if (areInteractionSurfaceSignaturesStable(previous.signature, current.signature)) {
       const elapsedMs = Date.now() - startedAt;
       const verdict = decidePostGestureStabilityVerdict({
         needsBaselineDistrust,
         baselineSignature: pending.baselineSignature,
-        quietSignature: currentSignature,
+        quietSignature: current.signature,
         elapsedMs,
         distrustCapMs: STABILIZATION_DISTRUST_DEADLINE_MS,
       });
       if (verdict === 'distrust') {
         effectiveDeadlineMs = STABILIZATION_DISTRUST_DEADLINE_MS;
         previous = current;
-        previousSignature = currentSignature;
         continue;
       }
       clearPostGestureStabilization(session);
-      emitDiagnostic({
-        level: verdict === 'accept-stale' ? 'warn' : attempts > 2 ? 'info' : 'debug',
-        phase:
-          verdict === 'accept-stale'
-            ? 'post_gesture_snapshot_stale_accept'
-            : 'post_gesture_snapshot_stabilized',
-        data: {
-          action: pending.action,
-          attempts,
-          durationMs: elapsedMs,
-          ...(verdict === 'accept-stale' ? { matchedPreGestureBaseline: true } : {}),
-        },
-      });
-      return current;
+      emitPostGestureSettleDiagnostic(verdict, pending.action, attempts, elapsedMs);
+      return current.value;
     }
     previous = current;
-    previousSignature = currentSignature;
   }
 
   clearPostGestureStabilization(session);
@@ -173,7 +189,7 @@ export async function capturePostGestureStabilizedResult<T>(params: {
       durationMs: Date.now() - startedAt,
     },
   });
-  return previous;
+  return previous.value;
 }
 
 function isPostGestureStabilizingAction(
