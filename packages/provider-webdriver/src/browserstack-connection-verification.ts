@@ -76,9 +76,12 @@ async function verifyBrowserStackApp(
     );
     const matched = readBrowserStackApps(apps).find((entry) => entry.reference === app);
     if (!matched) {
-      throw new AppError('INVALID_ARGS', `BrowserStack app "${app}" was not found.`, {
-        hint: 'Upload the app again or pass a current bs:// app reference.',
-      });
+      return {
+        status: 'configured',
+        reference: app,
+        message:
+          'App reference was not found in the 100 most recent uploads; BrowserStack validates it when creating the session.',
+      };
     }
     return { status: 'verified', ...matched };
   }
@@ -164,6 +167,8 @@ function readBrowserStackDevices(
 function readBrowserStackApps(
   value: unknown,
 ): Array<{ name?: string; reference: string; version?: string }> {
+  const record = asRecord(value);
+  if (record && Object.keys(record).length === 0) return [];
   if (!Array.isArray(value)) {
     throw new AppError('COMMAND_FAILED', 'BrowserStack app verification response was not a list.');
   }

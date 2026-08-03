@@ -4,8 +4,8 @@ import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
 
 const DAEMON_BASE_URL = 'https://agent-device.test/agent-device';
-const DEVICES_URL = 'https://browserstack.test/devices';
-const APPS_URL = 'https://browserstack.test/apps';
+const DEVICES_URL = 'https://api-cloud.browserstack.com/app-automate/devices.json';
+const APPS_URL = 'https://api-cloud.browserstack.com/app-automate/recent_apps?limit=100';
 const rpcLogPath = process.env.AGENT_DEVICE_TEST_RPC_LOG_PATH;
 
 if (rpcLogPath) installFixture(rpcLogPath);
@@ -64,7 +64,7 @@ function route(method, url, respond) {
 
 // The built daemon client intentionally uses node:https for streaming RPC.
 // Adapt that API to the same fetch fixture so this packaging test exercises
-// the shipped HTTP route without opening a loopback listener.
+// the shipped daemon client without opening a loopback listener.
 function createFetchBackedHttpsRequest(fixtureFetch) {
   return (options, callback) => {
     const request = new EventEmitter();

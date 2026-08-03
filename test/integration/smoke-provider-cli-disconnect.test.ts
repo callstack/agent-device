@@ -47,8 +47,6 @@ function createProviderEnv(fixture: ProviderDaemonFixture): NodeJS.ProcessEnv {
     ...process.env,
     BROWSERSTACK_USERNAME: 'browser-user',
     BROWSERSTACK_ACCESS_KEY: 'browser-key',
-    BROWSERSTACK_DEVICES_ENDPOINT: 'https://browserstack.test/devices',
-    BROWSERSTACK_APPS_ENDPOINT: 'https://browserstack.test/apps',
     AGENT_DEVICE_TEST_RPC_LOG_PATH: fixture.rpcLogPath,
     NODE_OPTIONS: [process.env.NODE_OPTIONS, `--import=${fetchFixtureUrl}`]
       .filter(Boolean)

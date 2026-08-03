@@ -80,6 +80,44 @@ test('BrowserStack classifies rejected credentials without exposing them', async
   });
 });
 
+test('BrowserStack defers a bs app reference outside the recent upload window', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input) =>
+      String(input).includes('devices')
+        ? jsonResponse([{ os: 'android', os_version: '14', device: 'Google Pixel 8' }])
+        : jsonResponse([]),
+    ),
+  );
+
+  const result = await createProvider().verifyConnection(browserStackOptions);
+
+  assert.deepEqual(result.app, {
+    status: 'configured',
+    reference: 'bs://app-id',
+    message:
+      'App reference was not found in the 100 most recent uploads; BrowserStack validates it when creating the session.',
+  });
+  assert.match(
+    result.verificationMessage,
+    /app availability is checked when the session is created/,
+  );
+});
+
+test('BrowserStack accepts an empty-object recent apps response', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input) =>
+      String(input).includes('devices')
+        ? jsonResponse([{ os: 'android', os_version: '14', device: 'Google Pixel 8' }])
+        : jsonResponse({}),
+    ),
+  );
+
+  const result = await createProvider().verifyConnection(browserStackOptions);
+  assert.equal(result.app.status, 'configured');
+});
+
 test('AWS Device Farm verifies resources without creating a remote access session', async () => {
   const concurrency = { active: 0, max: 0 };
   const runHostCommand = createAwsRunner(awsResources, concurrency);

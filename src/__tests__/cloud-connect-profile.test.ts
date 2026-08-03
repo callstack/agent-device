@@ -391,6 +391,51 @@ test('connect browserstack generates local provider profile without credentials'
   }
 });
 
+test('connect --remote-config verifies a direct provider profile before saving state', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-provider-config-'));
+  const stateDir = path.join(tempRoot, '.state');
+  const remoteConfig = path.join(tempRoot, 'browserstack.remote.json');
+  fs.writeFileSync(
+    remoteConfig,
+    JSON.stringify({
+      tenant: 'browserstack',
+      runId: 'browserstack-config',
+      sessionIsolation: 'tenant',
+      leaseProvider: 'browserstack',
+      leaseBackend: 'android-instance',
+      platform: 'android',
+      target: 'mobile',
+      device: 'Google Pixel 8',
+      providerOsVersion: '14.0',
+      providerApp: 'bs://app-id',
+    }),
+  );
+  vi.stubEnv('BROWSERSTACK_USERNAME', 'browser-user');
+  vi.stubEnv('BROWSERSTACK_ACCESS_KEY', 'browser-key');
+
+  try {
+    await connectWithGeneratedProviderProfile({
+      stateDir,
+      positionals: [],
+      flags: { remoteConfig },
+    });
+
+    assert.equal(mockedVerifyWebDriverConnection.mock.calls.length, 1);
+    assert.deepEqual(mockedVerifyWebDriverConnection.mock.calls[0]?.[0], {
+      provider: 'browserstack',
+      username: 'browser-user',
+      accessKey: 'browser-key',
+      platform: 'android',
+      deviceName: 'Google Pixel 8',
+      osVersion: '14.0',
+      app: 'bs://app-id',
+    });
+    assert.equal(readRequiredActiveState(stateDir).remoteConfigPath, remoteConfig);
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('connect browserstack persists a local app artifact as an absolute path', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-browserstack-app-'));
   const stateDir = path.join(tempRoot, '.state');
@@ -509,6 +554,7 @@ test('connect JSON exposes verification, device, app, live-session, and next-ste
     'agent-device connect aws-device-farm --platform ios --aws-project-arn project-arn --aws-device-arn device-arn --aws-app-arn <arn> --force',
     'agent-device open <bundle-id> --relaunch',
   ]);
+  assert.deepEqual(output.leasePreparation.nextSteps, output.nextSteps);
   assert.deepEqual(output.notes, [
     'After close, run agent-device artifacts --json for provider video and logs.',
   ]);

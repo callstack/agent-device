@@ -151,8 +151,6 @@ async function verifyBrowserStack(
         'BrowserStack profile missed OS version.',
       ),
       app: requiredResolvedValue(flags.providerApp, 'BrowserStack profile missed app.'),
-      devicesEndpoint: env.BROWSERSTACK_DEVICES_ENDPOINT,
-      appsEndpoint: env.BROWSERSTACK_APPS_ENDPOINT,
     }),
   );
 }

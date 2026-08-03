@@ -26,13 +26,14 @@ export type LeasePreparationNotice = {
 
 export function buildLeasePreparationNotice(
   state: RemoteConnectionState,
+  facts?: ConnectVerificationFacts,
 ): LeasePreparationNotice | undefined {
   if (state.leaseId) return undefined;
   const leaseKind = connectionProviderLeaseKind(state.leaseProvider);
   if (leaseKind === 'proxy') {
     return {
       status: 'deferred',
-      nextSteps: buildConnectWorkflow(state).nextSteps,
+      nextSteps: buildConnectWorkflow(state, facts).nextSteps,
       message:
         'No live device session has been created. Run devices to inspect inventory without allocating, then open when ready.',
     };
@@ -40,7 +41,7 @@ export function buildLeasePreparationNotice(
   if (leaseKind === 'direct-device-provider') {
     return {
       status: 'deferred',
-      nextSteps: buildConnectWorkflow(state).nextSteps,
+      nextSteps: buildConnectWorkflow(state, facts).nextSteps,
       message:
         'No live device session has been created. The first device command shown below will allocate one.',
     };
@@ -70,7 +71,8 @@ export function presentConnectReadiness(
   return {
     ...facts,
     preparationMessage:
-      buildLeasePreparationNotice(state)?.message ?? 'No live device session has been created.',
+      buildLeasePreparationNotice(state, facts)?.message ??
+      'No live device session has been created.',
     ...buildConnectWorkflow(state, facts),
   };
 }
@@ -114,7 +116,7 @@ export function serializeConnectionState(options: {
   readiness?: ConnectReadiness;
 }): Record<string, unknown> {
   const { state, runtimePreparation, readiness } = options;
-  const leasePreparation = buildLeasePreparationNotice(state);
+  const leasePreparation = buildLeasePreparationNotice(state, readiness);
   const nextSteps = readiness?.nextSteps ?? leasePreparation?.nextSteps ?? [];
   return {
     connected: true,
