@@ -125,6 +125,26 @@ export function readNamedExports(source: string): string[] {
  * without chain resolution the package with the largest and fastest-growing
  * public surface in the workspace is the one package that cannot be pinned.
  *
+ * The walk models what `export *` ACTUALLY re-exports, which is narrower than
+ * "every name in the child" in two ways a naive union gets wrong (#1574
+ * review P1):
+ *
+ * 1. **`default` is excluded.** Per `GetExportedNames`, a star export skips
+ *    the child's default entirely. A private `export default` in a leaf is
+ *    not reachable through the barrel and does not widen the façade, so it is
+ *    passed over rather than rejected. A default on the ENTRY file is still a
+ *    real default export of the façade itself, and still throws.
+ * 2. **A name from two different star sources is ambiguous, not exported.**
+ *    `ResolveExport` returns `ambiguous` when star resolution finds two
+ *    distinct bindings for one name, and importing it is then a `SyntaxError`
+ *    — the name is not part of the surface at all. Unioning would silently
+ *    pin a symbol no consumer can import, so ambiguity throws instead, naming
+ *    both origins. A diamond (two barrels reaching the SAME declaration) is
+ *    not ambiguous and resolves normally, which is why origins are tracked by
+ *    declaring module rather than by path taken. An explicit export in a
+ *    module shadows any star-provided name of the same name, exactly as the
+ *    spec's own precedence does.
+ *
  * Resolution is deliberately narrow — a RELATIVE specifier only, and the
  * repo's explicit-`.ts`-extension convention means the specifier is already
  * the path. A bare star across a PACKAGE specifier still throws: enumerating
@@ -132,27 +152,44 @@ export function readNamedExports(source: string): string[] {
  * `exports` map, and a façade that re-exports a whole other package wholesale
  * is precisely the unbounded widening this gate exists to refuse. Cycles are
  * visit-guarded (a barrel pair that re-exported each other would otherwise
- * recurse forever), and `export default` still throws through the chain — a
- * default reached via a barrel is no more enumerable than a direct one.
+ * recurse forever).
  */
 export function readFacadeExports(entryFile: string): string[] {
-  const names = new Set<string>();
-  const visited = new Set<string>();
-  const walk = (file: string): void => {
+  // `${declaringFile}#${name}` — binding identity, so the same declaration
+  // reached by two different barrel paths is one origin, not two.
+  const cache = new Map<string, Map<string, string>>();
+  const walking = new Set<string>();
+
+  const exportedNames = (file: string): Map<string, string> => {
     const resolved = path.resolve(file);
-    if (visited.has(resolved)) return;
-    visited.add(resolved);
+    const cached = cache.get(resolved);
+    if (cached) return cached;
+    // A cycle contributes nothing further; whatever it exports is reached by
+    // the path that entered it first.
+    if (walking.has(resolved)) return new Map();
+    walking.add(resolved);
+
     const parsed = parseSync(resolved, fs.readFileSync(resolved, 'utf8'));
+    const explicit = new Map<string, string>();
+    const starOrigins = new Map<string, Map<string, string>>();
+
     for (const staticExport of parsed.module.staticExports) {
       for (const entry of staticExport.entries) {
+        const specifier = entry.moduleRequest?.value;
+
         if (entry.exportName.kind === 'Default') {
-          throw new Error(
-            `readFacadeExports cannot enumerate 'export default …' as a named symbol (${resolved})` +
-              ' — a facade a caller pins to an exact named-export list must not carry one.',
-          );
+          // Only the façade's own default is a default export of the façade.
+          if (resolved === path.resolve(entryFile)) {
+            throw new Error(
+              `readFacadeExports cannot enumerate 'export default …' as a named symbol ` +
+                `(${resolved}) — a facade a caller pins to an exact named-export list must not ` +
+                'carry one.',
+            );
+          }
+          continue;
         }
+
         if (entry.exportName.kind === 'None') {
-          const specifier = entry.moduleRequest?.value;
           if (!specifier || !specifier.startsWith('.')) {
             throw new Error(
               `readFacadeExports cannot enumerate 'export * from ${specifier ?? '…'}' ` +
@@ -160,15 +197,52 @@ export function readFacadeExports(entryFile: string): string[] {
                 'and enumerate in turn. Name the re-exported symbols explicitly instead.',
             );
           }
-          walk(path.resolve(path.dirname(resolved), specifier));
+          const childPath = path.resolve(path.dirname(resolved), specifier);
+          for (const [name, origin] of exportedNames(childPath)) {
+            let origins = starOrigins.get(name);
+            if (!origins) starOrigins.set(name, (origins = new Map()));
+            origins.set(origin, specifier);
+          }
           continue;
         }
-        if (entry.exportName.name) names.add(entry.exportName.name);
+
+        const name = entry.exportName.name;
+        if (!name) continue;
+        // A re-export's binding belongs to the module it came from, so two
+        // façades re-exporting one shared symbol agree on its identity.
+        explicit.set(
+          name,
+          specifier
+            ? `${
+                specifier.startsWith('.')
+                  ? path.resolve(path.dirname(resolved), specifier)
+                  : specifier
+              }#${entry.importName?.name ?? name}`
+            : `${resolved}#${name}`,
+        );
       }
     }
+
+    const names = new Map(explicit);
+    for (const [name, origins] of starOrigins) {
+      if (explicit.has(name)) continue; // explicit export shadows the star
+      if (origins.size > 1) {
+        throw new Error(
+          `readFacadeExports found '${name}' re-exported by ${origins.size} different ` +
+            `'export *' sources in ${resolved} (${[...origins.values()].sort().join(', ')}). ` +
+            'ESM resolves that to `ambiguous`, so the name is not importable at all and must ' +
+            'not be pinned as part of the surface. Re-export it explicitly from one source.',
+        );
+      }
+      names.set(name, [...origins.keys()][0]!);
+    }
+
+    walking.delete(resolved);
+    cache.set(resolved, names);
+    return names;
   };
-  walk(entryFile);
-  return [...names].sort();
+
+  return [...exportedNames(entryFile).keys()].sort();
 }
 
 export function readWorkspacePackages(repoRoot: string): WorkspacePackage[] {
