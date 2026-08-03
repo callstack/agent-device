@@ -24,10 +24,24 @@
  *    original pre-capture gating exactly (#1349's deferred-landmark `wait`
  *    case, and the ordinary pre-dispatch token/parse gate).
  *  - `deriveReplayTargetGuardMismatchEvidence` / `deriveWaitLandmarkMismatchEvidence`:
- *    given the recorded evidence and a post-dispatch refusal's raw (already
- *    neutral, `unknown`-typed) details bag, compute the observed identity and
- *    mismatch lines a target-binding divergence reports — the daemon then
- *    wraps the result into a `DaemonResponse`.
+ *    given the recorded evidence and a post-dispatch refusal's TYPED evidence
+ *    (`AdReplayGuardMismatchEvidence`/`AdReplayLandmarkMismatchEvidence`),
+ *    compute the observed identity and mismatch lines a target-binding
+ *    divergence reports — the daemon then wraps the result into a
+ *    `DaemonResponse`.
+ *
+ * #1555 review P1 (second pass, "translate wire failures before the engine
+ * boundary"): the two derive functions used to take the wire response's raw
+ * `details: Record<string, unknown> | undefined` bag directly — a daemon
+ * wire shape crossing into the engine despite carrying no `DaemonResponse`
+ * itself. The daemon adapter (`session-replay-runtime-engine-adapter.ts`)
+ * now narrows that bag into the typed `AdReplayGuardMismatchEvidence`/
+ * `AdReplayLandmarkMismatchEvidence` shapes below BEFORE constructing the
+ * `AdReplayDispatchOutcome` the engine sees — the `unknown`-parsing readers
+ * that used to live here (`readGuardMismatchObservedIdentity`,
+ * `readAncestryEntries`, an anonymous structural-denotation reader) moved
+ * there with it, since reading an untyped wire bag is wire-projection work,
+ * not engine policy. This module now only reads already-typed values.
  */
 
 import type { TargetAncestryEntry, TargetAnnotationV1 } from '@agent-device/contracts/replay';
@@ -38,6 +52,37 @@ import {
   type LocalIdentity,
 } from '@agent-device/ad-script';
 import type { ReplaySelectorPort } from './selector-port.ts';
+
+/**
+ * The verified/observed member's structural position within its capture
+ * (document order + sibling) — moved here (from `./step-loop.ts`, which
+ * still uses it for `AdReplayVerifiedTargetGuard`) so both this module's
+ * typed evidence shapes and the step loop can reference ONE definition
+ * without a cycle: this module has no dependency on `./step-loop.ts`, but
+ * `./step-loop.ts` already depends on this one.
+ */
+export type AdReplayTargetStructuralDenotation = Readonly<{
+  documentOrder: number;
+  sibling: number;
+}>;
+
+/**
+ * The guard-mismatch refusal's typed evidence, already narrowed by the
+ * daemon adapter from the wire response's `details` bag — the engine never
+ * sees the untyped bag itself.
+ */
+export type AdReplayGuardMismatchEvidence = Readonly<{
+  observed: LocalIdentity | undefined;
+  expectedStructural: AdReplayTargetStructuralDenotation | undefined;
+  observedStructural: AdReplayTargetStructuralDenotation | undefined;
+}>;
+
+/** The wait-landmark-mismatch refusal's typed evidence — same translate-before-crossing rule. */
+export type AdReplayLandmarkMismatchEvidence = Readonly<{
+  matchCount: number | undefined;
+  observed: LocalIdentity | undefined;
+  observedAncestry: readonly TargetAncestryEntry[];
+}>;
 
 // ---------------------------------------------------------------------------
 // Pre-capture verification gating (`verifyReplayActionTarget`'s two branches).
@@ -102,10 +147,11 @@ export function planPreDispatchTargetVerification(params: {
 
 // ---------------------------------------------------------------------------
 // Post-dispatch identity-mismatch evidence (the guard mismatch and the wait
-// landmark mismatch): both refusal markers arrive as a failed dispatch
-// response whose `details` carry the observed evidence; this derives the
-// SAME bounded identity-mismatch shape around their marker-specific evidence
-// the daemon used to compute inline.
+// landmark mismatch): both refusal markers arrive as a failed dispatch whose
+// TYPED evidence (`AdReplayGuardMismatchEvidence`/`AdReplayLandmarkMismatchEvidence`,
+// already narrowed by the daemon adapter from the wire response) carries the
+// observed evidence; this derives the SAME bounded identity-mismatch shape
+// around it the daemon used to compute inline.
 // ---------------------------------------------------------------------------
 
 export type ReplayPostDispatchMismatchEvidence = {
@@ -115,75 +161,34 @@ export type ReplayPostDispatchMismatchEvidence = {
   causeMessage: string;
 };
 
-export function readGuardMismatchObservedIdentity(value: unknown): LocalIdentity | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  const record = value as Record<string, unknown>;
-  if (typeof record.role !== 'string') return undefined;
-  return {
-    ...(typeof record.id === 'string' ? { id: record.id } : {}),
-    role: record.role,
-    ...(typeof record.label === 'string' ? { label: record.label } : {}),
-  };
-}
-
-/** The wait refusal's `observedAncestry` entries, defensively re-read off error details. */
-export function readAncestryEntries(value: unknown): TargetAncestryEntry[] {
-  if (!Array.isArray(value)) return [];
-  const entries: TargetAncestryEntry[] = [];
-  for (const entry of value) {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
-    const record = entry as Record<string, unknown>;
-    if (typeof record.role !== 'string') return [];
-    entries.push({
-      role: record.role,
-      ...(typeof record.label === 'string' ? { label: record.label } : {}),
-    });
-  }
-  return entries;
-}
-
-function readStructuralDenotation(
-  value: unknown,
-): { documentOrder: number; sibling: number } | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  const record = value as Record<string, unknown>;
-  if (typeof record.documentOrder !== 'number' || typeof record.sibling !== 'number') {
-    return undefined;
-  }
-  return { documentOrder: record.documentOrder, sibling: record.sibling };
-}
-
 /** A `position:` mismatch line from the guard's structural denotations, when both are present and differ. */
 export function describeStructuralMismatch(
-  expected: unknown,
-  observed: unknown,
+  expected: AdReplayTargetStructuralDenotation | undefined,
+  observed: AdReplayTargetStructuralDenotation | undefined,
 ): string | undefined {
-  const e = readStructuralDenotation(expected);
-  const o = readStructuralDenotation(observed);
-  if (!e || !o) return undefined;
-  if (e.documentOrder === o.documentOrder && e.sibling === o.sibling) return undefined;
-  return `position: recorded=doc${e.documentOrder}/sibling${e.sibling} observed=doc${o.documentOrder}/sibling${o.sibling}`;
+  if (!expected || !observed) return undefined;
+  if (expected.documentOrder === observed.documentOrder && expected.sibling === observed.sibling) {
+    return undefined;
+  }
+  return `position: recorded=doc${expected.documentOrder}/sibling${expected.sibling} observed=doc${observed.documentOrder}/sibling${observed.sibling}`;
 }
 
 /**
  * Dispatch resolution (with occlusion/visibility guards) resolved a
  * different element than pre-action verification isolated. `matchCount` is
  * the caller's already-known verified-member match count (verification's
- * own recorded-selector match count) — never re-derived from `details`.
+ * own recorded-selector match count) — never re-derived from `evidence`.
  */
 export function deriveReplayTargetGuardMismatchEvidence(
   recorded: TargetAnnotationV1,
-  details: Record<string, unknown> | undefined,
+  evidence: AdReplayGuardMismatchEvidence,
   matchCount: number,
 ): ReplayPostDispatchMismatchEvidence {
-  const observed = readGuardMismatchObservedIdentity(details?.observed);
+  const { observed, expectedStructural, observedStructural } = evidence;
   // The guard fires even when local identity is identical (a same-identity
   // duplicate resolved by structural position) — surface the structural
   // difference so `mismatches` is never empty on a real divergence.
-  const structuralMismatch = describeStructuralMismatch(
-    details?.expectedStructural,
-    details?.observedStructural,
-  );
+  const structuralMismatch = describeStructuralMismatch(expectedStructural, observedStructural);
   return {
     matchCount,
     observed,
@@ -202,12 +207,11 @@ export function deriveReplayTargetGuardMismatchEvidence(
  */
 export function deriveWaitLandmarkMismatchEvidence(
   recorded: TargetAnnotationV1,
-  details: Record<string, unknown> | undefined,
+  evidence: AdReplayLandmarkMismatchEvidence,
 ): ReplayPostDispatchMismatchEvidence {
-  const observed = readGuardMismatchObservedIdentity(details?.observed);
-  const observedAncestry = readAncestryEntries(details?.observedAncestry);
+  const { matchCount, observed, observedAncestry } = evidence;
   return {
-    matchCount: typeof details?.matchCount === 'number' ? details.matchCount : undefined,
+    matchCount,
     observed,
     mismatches: observed
       ? [

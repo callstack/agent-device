@@ -11,6 +11,9 @@ import {
   deriveWaitLandmarkMismatchEvidence,
   planPostResolutionTargetVerification,
   planPreDispatchTargetVerification,
+  type AdReplayGuardMismatchEvidence,
+  type AdReplayLandmarkMismatchEvidence,
+  type AdReplayTargetStructuralDenotation,
 } from './target-verification.ts';
 
 /**
@@ -103,12 +106,6 @@ export type AdReplayProgressSink = (step: AdReplayProgressStep) => void;
 // daemon-request-shaped value.
 // ---------------------------------------------------------------------------
 
-/** The verified member's structural position within its capture (document order + sibling). */
-export type AdReplayTargetStructuralDenotation = Readonly<{
-  documentOrder: number;
-  sibling: number;
-}>;
-
 /**
  * The verified member's identity + structural denotation, threaded to
  * dispatch as its own pre-action guard (so dispatch's independent resolution
@@ -186,13 +183,27 @@ export type AdReplayDispatchGuard = Readonly<
  * produced — so the orchestrator can fall back to it unconverted on the
  * "marker fired without recorded evidence" invariant-violation path, exactly
  * like the daemon code this replaces.
+ *
+ * #1555 review P1 (second pass, "translate wire failures before the engine
+ * boundary"): each mismatch variant carries its OWN typed `evidence` —
+ * `AdReplayGuardMismatchEvidence`/`AdReplayLandmarkMismatchEvidence` — never
+ * a generic `details: Record<string, unknown>` wire-response bag. The daemon
+ * adapter narrows the wire response into one of these two shapes before
+ * returning it here, so this outcome never carries an untyped value across
+ * the engine boundary.
  */
 export type AdReplayDispatchOutcome = Readonly<
   | { readonly status: 'ok'; readonly artifactPaths: readonly string[] }
   | { readonly status: 'failed'; readonly failure: AdReplayStepFailure }
   | {
-      readonly status: 'guard-mismatch' | 'landmark-mismatch';
-      readonly details: Record<string, unknown> | undefined;
+      readonly status: 'guard-mismatch';
+      readonly evidence: AdReplayGuardMismatchEvidence;
+      readonly plainFailure: AdReplayStepFailure;
+      readonly artifactPaths: readonly string[];
+    }
+  | {
+      readonly status: 'landmark-mismatch';
+      readonly evidence: AdReplayLandmarkMismatchEvidence;
       readonly plainFailure: AdReplayStepFailure;
       readonly artifactPaths: readonly string[];
     }
@@ -586,10 +597,10 @@ async function dispatchWithGuard(
     outcome.status === 'guard-mismatch'
       ? deriveReplayTargetGuardMismatchEvidence(
           recorded,
-          outcome.details,
+          outcome.evidence,
           guard.kind === 'target' ? guard.guard.matchCount : 0,
         )
-      : deriveWaitLandmarkMismatchEvidence(recorded, outcome.details);
+      : deriveWaitLandmarkMismatchEvidence(recorded, outcome.evidence);
 
   return {
     status: 'failed',

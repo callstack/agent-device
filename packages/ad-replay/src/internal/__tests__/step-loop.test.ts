@@ -172,7 +172,7 @@ test("a post-dispatch target-binding mismatch reports the pre-step artifact snap
       assert.deepEqual(artifactPaths, ['open-snapshot.png']);
       return {
         status: 'landmark-mismatch',
-        details: {},
+        evidence: { matchCount: undefined, observed: undefined, observedAncestry: [] },
         plainFailure: { kind: 'REPLAY_DIVERGENCE', message: 'mismatch', artifactPaths: [] },
         artifactPaths: ['open-snapshot.png', 'post-dispatch-only.png'],
       };

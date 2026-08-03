@@ -9,8 +9,13 @@ import type {
   AdReplayStepRuntime,
   ReplaySelectorPort,
 } from '../ad-replay-facade-types.ts';
-import { collectReplayScrubbableVarValues, type ReplayVarScope } from '@agent-device/ad-script';
+import {
+  collectReplayScrubbableVarValues,
+  type LocalIdentity,
+  type ReplayVarScope,
+} from '@agent-device/ad-script';
 import type { SnapshotTimingSample } from '@agent-device/contracts/capture';
+import type { TargetAncestryEntry } from '@agent-device/contracts/replay';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import { withReplayFailureDiagnostics } from './session-replay-runtime-failure.ts';
 import {
@@ -90,6 +95,21 @@ type ReplayDispatchGuard = Parameters<AdReplayStepRuntime['dispatchStep']>[3];
 /** `dispatchStep`'s result shape, read off `AdReplayStepRuntime` itself for the same reason. */
 type ReplayDispatchOutcome = Awaited<ReturnType<AdReplayStepRuntime['dispatchStep']>>;
 
+/**
+ * The two post-resolution refusal markers' typed evidence shapes, read off
+ * `ReplayDispatchOutcome` itself — the SAME `Parameters<...>`/`Extract<...>`
+ * idiom as `ReplayDispatchGuard`/`EngineTargetBindingEvidence` above, rather
+ * than a named façade export.
+ */
+type ReplayGuardMismatchEvidence = Extract<
+  ReplayDispatchOutcome,
+  { status: 'guard-mismatch' }
+>['evidence'];
+type ReplayLandmarkMismatchEvidence = Extract<
+  ReplayDispatchOutcome,
+  { status: 'landmark-mismatch' }
+>['evidence'];
+
 /** Threads a pre-action identity guard into the request's `internal` block the interaction layer reads for its own resolution — a no-op when no guard applies. */
 function applyReplayDispatchGuard(
   replayReq: DaemonRequest,
@@ -106,6 +126,78 @@ function applyReplayDispatchGuard(
     : replayReq;
 }
 
+/**
+ * #1555 review P1 (second pass, "translate wire failures before the engine
+ * boundary"): the wire response's `details: Record<string, unknown> | undefined`
+ * bag is read HERE, at the adapter — the one place a real `DaemonResponse`
+ * exists — and narrowed into the engine's typed evidence shapes before
+ * `classifyReplayDispatchFailure` returns. `deriveReplayTargetGuardMismatchEvidence`/
+ * `deriveWaitLandmarkMismatchEvidence` (`@agent-device/ad-replay`'s engine-
+ * private `target-verification.ts`) consume only these typed values now —
+ * the `unknown`-parsing readers that used to live in the package (reading
+ * `details.observed`/`details.expectedStructural`/`details.observedStructural`/
+ * `details.observedAncestry`/`details.matchCount` defensively) moved here
+ * with the wire-reading responsibility they always were.
+ */
+function readGuardMismatchObservedIdentity(value: unknown): LocalIdentity | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  if (typeof record.role !== 'string') return undefined;
+  return {
+    ...(typeof record.id === 'string' ? { id: record.id } : {}),
+    role: record.role,
+    ...(typeof record.label === 'string' ? { label: record.label } : {}),
+  };
+}
+
+/** The wait refusal's `observedAncestry` entries, defensively re-read off error details. */
+function readAncestryEntries(value: unknown): TargetAncestryEntry[] {
+  if (!Array.isArray(value)) return [];
+  const entries: TargetAncestryEntry[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
+    const record = entry as Record<string, unknown>;
+    if (typeof record.role !== 'string') return [];
+    entries.push({
+      role: record.role,
+      ...(typeof record.label === 'string' ? { label: record.label } : {}),
+    });
+  }
+  return entries;
+}
+
+/** A structural denotation (`{documentOrder, sibling}`), defensively re-read off error details. */
+function readTargetStructuralDenotation(
+  value: unknown,
+): { documentOrder: number; sibling: number } | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  if (typeof record.documentOrder !== 'number' || typeof record.sibling !== 'number') {
+    return undefined;
+  }
+  return { documentOrder: record.documentOrder, sibling: record.sibling };
+}
+
+function readGuardMismatchEvidence(
+  details: Record<string, unknown> | undefined,
+): ReplayGuardMismatchEvidence {
+  return {
+    observed: readGuardMismatchObservedIdentity(details?.observed),
+    expectedStructural: readTargetStructuralDenotation(details?.expectedStructural),
+    observedStructural: readTargetStructuralDenotation(details?.observedStructural),
+  };
+}
+
+function readLandmarkMismatchEvidence(
+  details: Record<string, unknown> | undefined,
+): ReplayLandmarkMismatchEvidence {
+  return {
+    matchCount: typeof details?.matchCount === 'number' ? details.matchCount : undefined,
+    observed: readGuardMismatchObservedIdentity(details?.observed),
+    observedAncestry: readAncestryEntries(details?.observedAncestry),
+  };
+}
+
 /** Classifies a failed dispatch response into an ordinary failure or one of the two post-resolution identity-refusal markers (`guard-mismatch`/`landmark-mismatch`) `dispatchStep` detects. */
 function classifyReplayDispatchFailure(
   response: Extract<DaemonResponse, { ok: false }>,
@@ -116,7 +208,7 @@ function classifyReplayDispatchFailure(
   if (guard?.kind === 'target' && isReplayTargetGuardMismatchResponse(response)) {
     return {
       status: 'guard-mismatch',
-      details: response.error.details,
+      evidence: readGuardMismatchEvidence(response.error.details),
       plainFailure,
       artifactPaths: entries,
     };
@@ -124,7 +216,7 @@ function classifyReplayDispatchFailure(
   if (guard?.kind === 'landmark' && isWaitLandmarkMismatchResponse(response)) {
     return {
       status: 'landmark-mismatch',
-      details: response.error.details,
+      evidence: readLandmarkMismatchEvidence(response.error.details),
       plainFailure,
       artifactPaths: entries,
     };
