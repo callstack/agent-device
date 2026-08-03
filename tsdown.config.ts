@@ -76,6 +76,20 @@ export default defineConfig({
   deps: {
     alwaysBundle: [/^@agent-device\//, 'pngjs'],
   },
+  inputOptions: {
+    // A build with missing workspace links resolves nothing under `alwaysBundle` and emits the
+    // specifiers as externals instead. That is how 0.20.4 shipped an unresolvable
+    // `@agent-device/ad-script` import: rolldown warned, exited 0, and `prepack` packed the result.
+    // An unresolved import in a bundle that is supposed to inline its workspace is never a warning.
+    onLog(level, log, handler) {
+      if (log.code === 'UNRESOLVED_IMPORT') {
+        throw new Error(
+          `${log.message}\nRun \`pnpm install\` to restore workspace links: unresolved imports would ship as unresolvable externals.`,
+        );
+      }
+      handler(level, log);
+    },
+  },
   format: 'esm',
   platform: 'node',
   target: 'es2022',

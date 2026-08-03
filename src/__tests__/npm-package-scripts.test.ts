@@ -16,6 +16,10 @@ const packageSmokeWorkflow = fs.readFileSync(
   path.join(repoRoot, '.github', 'workflows', 'package-smoke.yml'),
   'utf8',
 );
+const packagedCliWorkflow = fs.readFileSync(
+  path.join(repoRoot, '.github', 'workflows', 'ci.yml'),
+  'utf8',
+);
 
 function script(name: string): string {
   const value = packageJson.scripts[name];
@@ -55,10 +59,11 @@ test('Fallow exposes one changed-code gate and an explicit full-tree audit', () 
   assert.equal(script('fallow:all'), 'fallow --summary');
 });
 
-test('the npm package build covers every package-owned build output', () => {
+// `check:package` verifies the tarball, so it has to observe every build output the package ships —
+// it runs last, after the Apple and Android payloads exist, not next to the JS build.
+test('the npm package build covers every package-owned build output, then verifies the result', () => {
   assert.deepEqual(script('package:npm').split(' && '), [
     'pnpm build',
-    'pnpm check:bundle-dependencies',
     'pnpm build:xcuitest:ios',
     'pnpm build:xcuitest:macos',
     'pnpm build:xcuitest:tvos',
@@ -66,10 +71,19 @@ test('the npm package build covers every package-owned build output', () => {
     'pnpm build:macos-helper:clean',
     'pnpm package:apple-runner:npm',
     'pnpm build:android',
+    'pnpm check:package',
   ]);
 
   assert.deepEqual(script('build:android').split(' && '), [
     'pnpm package:android-snapshot-helper:npm',
     'pnpm package:android-ime-helper:npm',
   ]);
+});
+
+// The gate reads the packed tarball, so `prepack` is the last point where a broken package can still
+// be stopped. Publishing runs it; nothing else guarantees the tarball is ever verified.
+test('publishing cannot skip the package gate', () => {
+  assert.match(script('package:npm'), /pnpm check:package$/);
+  assert.match(script('check:tooling'), /pnpm check:package$/);
+  assert.match(packagedCliWorkflow, /run: pnpm check:package/);
 });

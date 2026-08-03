@@ -96,6 +96,7 @@ const ALL_SCRIPTS: Record<string, string> = {
   'check:fallow': 'x',
   'check:mcp-metadata': 'x',
   build: 'x',
+  'check:package': 'x',
   'check:unit': 'x',
   'check:coverage-changed': 'x',
   'test:integration:provider': 'x',

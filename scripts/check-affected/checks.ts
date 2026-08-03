@@ -81,6 +81,14 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
     localRunnable: true,
   },
   {
+    id: 'package',
+    label: 'Published package (publint, attw, clean-install resolution)',
+    kind: { type: 'script', script: 'check:package' },
+    ciJobs: ['Packaged CLI Node 22.12', 'Build npm package'],
+    // Needs a `pnpm build` output and the npm registry, both of which local runs already have.
+    localRunnable: true,
+  },
+  {
     id: 'vitest-related',
     label: 'Tests related by Vitest module graph',
     kind: { type: 'vitest-related' },

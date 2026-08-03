@@ -170,29 +170,22 @@ jobs:
       - name: Setup build toolchain
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Build and pack CLI
+      - name: Build CLI
         run: |
           pnpm build
           pnpm check:bundle-owner-files
-          mkdir -p .tmp/node-compat
-          npm pack --ignore-scripts --pack-destination .tmp/node-compat
 
+      # The build runs on the default toolchain Node and the package is verified on the minimum
+      # supported Node, so this job covers what a user on `engines.node` floor actually installs.
       - name: Setup Node.js 22.12
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
         with:
           node-version: '22.12'
 
-      - name: Install and run global CLI on Node.js 22.12
-        run: |
-          set -euo pipefail
-          prefix="$RUNNER_TEMP/agent-device-node-22-12"
-          tarball="$(find "$GITHUB_WORKSPACE/.tmp/node-compat" -name 'agent-device-*.tgz' -print -quit)"
-          test -n "$tarball"
-          npm install --global --prefix "$prefix" --ignore-scripts "$tarball"
-          "$prefix/bin/agent-device" --version
-          "$prefix/bin/agent-device" help
-          "$prefix/bin/agent-device" devices --json
-          "$prefix/bin/agent-device" doctor --remote --json
+      # Packs, lints the tarball with publint/attw, installs it outside the workspace, and imports
+      # every published entry point before running the CLI. See scripts/check-package.ts.
+      - name: Verify the published package on Node.js 22.12
+        run: pnpm check:package
 
   fallow:
     name: Fallow Code Quality

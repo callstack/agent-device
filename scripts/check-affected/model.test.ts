@@ -88,9 +88,13 @@ test('MCP metadata change selects the mcp-metadata check', () => {
   assert.deepEqual(ids(['server.json']), ['mcp-metadata']);
 });
 
-test('public package surface change selects the build via exports', () => {
+test('public package surface change selects the build and the published-package gate via exports', () => {
   const result = ids(['src/index.ts']);
   assert.ok(result.includes('build'));
+  // A public entry is the one surface a consumer resolves by name, so building it is not enough:
+  // check:package proves it still imports from an install with no workspace links.
+  assert.ok(result.includes('package'));
+  assert.ok(!ids(['src/selectors/index.ts']).includes('package'));
 });
 
 test('docs-only change selects no checks and records the docs paths', () => {
@@ -205,6 +209,7 @@ test('every catalog command resolves against package scripts', () => {
     'check:fallow': 'x',
     'check:mcp-metadata': 'x',
     build: 'x',
+    'check:package': 'x',
     'check:unit': 'x',
     'check:coverage-changed': 'x',
     'test:coverage': 'x',

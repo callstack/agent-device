@@ -28,6 +28,7 @@ export type CheckId =
   | 'fallow'
   | 'mcp-metadata'
   | 'build'
+  | 'package'
   | 'vitest-related'
   | 'unit'
   | 'coverage'
@@ -51,6 +52,7 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'fallow',
   'mcp-metadata',
   'build',
+  'package',
   'vitest-related',
   'unit',
   'coverage',
@@ -338,6 +340,12 @@ const buildOwnership: OwnershipRule = ({ file }, input) => {
   if ((input.packageEntryFiles ?? []).includes(file)) {
     selections.push(
       reason('build', file, 'own:public-surface', 'public package entry affects declarations'),
+      reason(
+        'package',
+        file,
+        'own:public-surface',
+        'a public entry must still resolve from a clean install',
+      ),
     );
   }
   return selections;
