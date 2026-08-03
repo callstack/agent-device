@@ -73,6 +73,20 @@ export type { ReplayStepContext } from './session-replay-runtime-step-support.ts
  * — it reuses the SAME capture `captureObservation` just took (for its
  * `screen`), mirroring the pre-R3 code's single-capture-serves-both-paths
  * invariant instead of taking a second, possibly-different snapshot.
+ *
+ * #1555 structural-quality review ("fix lastObservation to be genuinely
+ * per-step"): both this closure and `armStep` live for the whole RUN (one
+ * `createAdReplayStepRuntime` call covers every step), so an un-reset
+ * `lastObservation` would silently carry a PREVIOUS step's capture into a
+ * step that somehow reached `buildTargetBindingFailure` without its own
+ * `captureObservation` call first — the `?? { reason: 'observation-missing'
+ * }` fallback below exists to name that condition, but could never actually
+ * fire for it; it would instead attach a stale, wrong-step screen. `armStep`
+ * runs exactly once per step, before any of this step's capabilities do —
+ * clearing `lastObservation` there makes the fallback message correct for
+ * ANY future call ordering, not just the current one where every
+ * `buildTargetBindingFailure` call site happens to be preceded by this same
+ * step's own `captureObservation`.
  */
 export function createAdReplayStepRuntime(params: {
   ctx: ReplayStepContext;
@@ -282,7 +296,13 @@ export function createAdReplayStepRuntime(params: {
       // marking, never to turn one into a success.
       return recordFailure(finalResponse);
     },
-    armStep: armSaveScript,
+    armStep: () => {
+      // Runs exactly once per step, before any of this step's other
+      // capabilities — the natural per-step boundary to clear the previous
+      // step's capture (see this factory's own header).
+      lastObservation = undefined;
+      armSaveScript();
+    },
     isRepairArmed: () => ctx.coordinator.view()?.repairBoundary !== undefined,
     describeStepValue: (action) => describeReplayStepValue(action),
     onStep,
