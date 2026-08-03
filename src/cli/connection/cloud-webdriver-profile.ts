@@ -8,6 +8,7 @@ import type { RemoteConfigProfile } from '../../remote/remote-config-schema.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { PlatformSelector } from '@agent-device/kernel/device';
 import type { CliFlags } from '@agent-device/contracts/command';
+import fs from 'node:fs';
 import path from 'node:path';
 import type { EnvMap } from '../../utils/env-map.ts';
 import { readCloudDeviceFeatureProfileFields, readMetroProfileFields } from './profile-fields.ts';
@@ -120,7 +121,14 @@ function browserStackProfileFields(options: {
 }
 
 function normalizeBrowserStackAppReference(app: string, cwd: string): string {
-  return app.startsWith('bs://') || /^https?:\/\//i.test(app) ? app : path.resolve(cwd, app);
+  if (app.startsWith('bs://') || /^https?:\/\//i.test(app)) return app;
+  const resolvedPath = path.resolve(cwd, app);
+  try {
+    if (fs.statSync(resolvedPath).isFile()) return resolvedPath;
+  } catch {
+    // Report one stable profile error below.
+  }
+  throw new AppError('INVALID_ARGS', `BrowserStack app file not found: ${resolvedPath}`);
 }
 
 function awsDeviceFarmProfileFields(options: {

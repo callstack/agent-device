@@ -16,18 +16,16 @@ import {
   type RemoteConnectionRequestMetadata,
 } from '../../remote/remote-connection-state.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveCloudConnectProfile } from '../connection/cloud-profile.ts';
 import {
   connectProviderNamesForError,
   connectionProviderRequiresRemoteDaemon,
-  isCloudWebDriverConnectProvider,
   isConnectProviderName,
   type ConnectProvider,
 } from '../connection/provider-policy.ts';
-import { resolveCloudWebDriverConnectProfile } from '../connection/cloud-webdriver-profile.ts';
-import { resolveLimrunConnectProfile } from '../connection/limrun-profile.ts';
-import { resolveProxyConnectProfile } from '../connection/proxy-profile.ts';
-import { verifyDirectProviderConnection } from '../connection/direct-provider-verification.ts';
+import {
+  inspectConnectProvider,
+  resolveConnectProviderProfile,
+} from '../connection/connect-provider-adapters.ts';
 import {
   hasDeferredMetroConfig,
   releaseRemoteConnectionLease,
@@ -51,7 +49,7 @@ export const connectCommand: ClientCommandHandler = async ({ positionals, flags,
   const stateDir = resolveDaemonPaths(flags.stateDir).baseDir;
   const provider = readConnectProvider(positionals);
   assertConnectProviderUsage(provider, flags);
-  const resolved = await resolveConnectProfile({ provider, flags, stateDir });
+  const resolved = await resolveConnectProviderProfile({ provider, flags, stateDir });
   const connectFlags = resolved.flags;
   const connectionMetadata = readRemoteConfigConnectionMetadata(resolved.remoteConfigPath);
   const scope = readRequiredConnectScope(connectFlags, connectionMetadata);
@@ -69,12 +67,10 @@ export const connectCommand: ClientCommandHandler = async ({ positionals, flags,
     connection: connectionMetadata,
     daemon: context.daemon,
   });
-  const verificationProvider = resolveVerificationProvider(provider, connectionMetadata);
-  const verification = await verifyDirectProviderConnection({
-    provider: verificationProvider,
+  const readiness = await inspectConnectProvider({
+    provider: resolved.provider,
     flags: connectFlags,
     env: process.env,
-    cwd: process.cwd(),
   });
   const state = buildConnectedState({
     flags: connectFlags,
@@ -89,51 +85,11 @@ export const connectCommand: ClientCommandHandler = async ({ positionals, flags,
 
   writeCommandOutput(
     connectFlags,
-    serializeConnectionState({ state, runtimePreparation, verification }),
-    () => renderConnectSuccess({ state, runtimePreparation, verification }),
+    serializeConnectionState({ state, runtimePreparation, readiness }),
+    () => renderConnectSuccess({ state, runtimePreparation, readiness }),
   );
   return true;
 };
-
-async function resolveConnectProfile(options: {
-  provider?: ConnectProvider;
-  flags: CliFlags;
-  stateDir: string;
-}): Promise<{ flags: CliFlags; remoteConfigPath: string }> {
-  const { provider, flags, stateDir } = options;
-  if (flags.remoteConfig) return resolveRemoteConnectFlags(flags);
-  if (isCloudWebDriverConnectProvider(provider)) {
-    return resolveCloudWebDriverConnectProfile({
-      provider,
-      flags,
-      stateDir,
-      cwd: process.cwd(),
-      env: process.env,
-    });
-  }
-  if (provider === 'proxy' || (!provider && shouldUseProxyConnectShortcut(flags))) {
-    return resolveProxyConnectProfile({
-      flags,
-      stateDir,
-      cwd: process.cwd(),
-      env: process.env,
-    });
-  }
-  if (provider === 'limrun') {
-    return resolveLimrunConnectProfile({
-      flags,
-      stateDir,
-      cwd: process.cwd(),
-      env: process.env,
-    });
-  }
-  return await resolveCloudConnectProfile({
-    flags,
-    stateDir,
-    cwd: process.cwd(),
-    env: process.env,
-  });
-}
 
 function assertConnectProviderUsage(provider: ConnectProvider | undefined, flags: CliFlags): void {
   if (!provider || !flags.remoteConfig) return;
@@ -289,24 +245,6 @@ async function cleanupForcedPreviousConnection(
   await releasePreviousLease(client, previous);
 }
 
-function resolveRemoteConnectFlags(flags: CliFlags): {
-  flags: CliFlags;
-  remoteConfigPath: string;
-} {
-  if (!flags.remoteConfig) {
-    throw new AppError('INVALID_ARGS', 'connect requires --remote-config <path>.');
-  }
-  const remoteConfig = resolveRemoteConfigProfile({
-    configPath: flags.remoteConfig,
-    cwd: process.cwd(),
-    env: process.env,
-  });
-  return {
-    flags,
-    remoteConfigPath: remoteConfig.resolvedPath,
-  };
-}
-
 function readRemoteConfigConnectionMetadata(
   remoteConfigPath: string,
 ): RemoteConnectionRequestMetadata | undefined {
@@ -454,22 +392,6 @@ function readConnectProvider(positionals: string[]): ConnectProvider | undefined
   );
 }
 
-function shouldUseProxyConnectShortcut(flags: CliFlags): boolean {
-  if (!flags.daemonBaseUrl || flags.tenant || flags.runId || flags.leaseId || flags.leaseBackend) {
-    return false;
-  }
-  return isAgentDeviceProxyBaseUrl(flags.daemonBaseUrl);
-}
-
-function isAgentDeviceProxyBaseUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.pathname.replace(/\/+$/, '').endsWith('/agent-device');
-  } catch {
-    return false;
-  }
-}
-
 function readRequestedConnectionState(flags: CliFlags): {
   session: string;
   stateDir: string;
@@ -598,14 +520,4 @@ function remoteConfigHasMetroSettings(remoteConfigPath: string): boolean {
   } catch {
     return false;
   }
-}
-
-function resolveVerificationProvider(
-  provider: ConnectProvider | undefined,
-  connection: RemoteConnectionRequestMetadata | undefined,
-): ConnectProvider | undefined {
-  if (provider) return provider;
-  return connection?.leaseProvider && isConnectProviderName(connection.leaseProvider)
-    ? connection.leaseProvider
-    : undefined;
 }

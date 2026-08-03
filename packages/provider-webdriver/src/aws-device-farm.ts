@@ -307,10 +307,19 @@ async function runAwsJson(
   args: string[],
 ): Promise<unknown> {
   const result = await runHostCommand(command, args);
-  return JSON.parse(result.stdout) as unknown;
+  try {
+    return JSON.parse(result.stdout) as unknown;
+  } catch (error) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'AWS Device Farm returned invalid JSON.',
+      undefined,
+      error,
+    );
+  }
 }
 
-function createAwsDeviceFarmCommandRunner(
+export function createAwsDeviceFarmCommandRunner(
   options: AwsCliDeviceFarmClientOptions,
 ): (subcommand: string, args: string[]) => Promise<unknown> {
   const regionArgs = options.region ? ['--region', options.region] : [];

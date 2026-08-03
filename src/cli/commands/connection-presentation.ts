@@ -1,5 +1,5 @@
 import { fingerprint, type RemoteConnectionState } from '../../remote/remote-connection-state.ts';
-import type { DirectProviderConnectionVerification } from '../connection/direct-provider-verification.ts';
+import type { ConnectReadiness } from '../connection/connect-provider-adapters.ts';
 import { connectionProviderLeaseKind } from '../connection/provider-policy.ts';
 
 export type RuntimePreparationNotice = {
@@ -55,51 +55,18 @@ export function buildLeasePreparationNotice(
 
 function buildConnectNextSteps(
   state: RemoteConnectionState,
-  verification?: DirectProviderConnectionVerification,
+  readiness?: ConnectReadiness,
 ): string[] {
-  if (!verification) return buildLeasePreparationNotice(state)?.nextSteps ?? [];
-  if (verification.provider === 'limrun') return limrunNextSteps(verification);
-  if (verification.provider === 'aws-device-farm') return awsNextSteps(verification);
-  return [openNextStep(verification.device.platform)];
-}
-
-function limrunNextSteps(
-  verification: Extract<DirectProviderConnectionVerification, { provider: 'limrun' }>,
-): string[] {
-  const appId = appIdPlaceholder(verification.device.platform);
-  return [
-    `agent-device install ${appId} <app-path-or-url>`,
-    `agent-device open ${appId} --relaunch`,
-  ];
-}
-
-function awsNextSteps(
-  verification: Extract<DirectProviderConnectionVerification, { provider: 'aws-device-farm' }>,
-): string[] {
-  if (verification.app.status !== 'missing') {
-    return [openNextStep(verification.device.platform)];
-  }
-  return [
-    `agent-device connect aws-device-farm --platform ${verification.device.platform} --aws-project-arn ${verification.project.reference} --aws-device-arn ${verification.device.reference} --aws-app-arn <arn> --force`,
-    openNextStep(verification.device.platform),
-  ];
-}
-
-function openNextStep(platform: 'android' | 'ios' | undefined): string {
-  return `agent-device open ${appIdPlaceholder(platform)} --relaunch`;
-}
-
-function appIdPlaceholder(platform: 'android' | 'ios' | undefined): string {
-  return platform === 'ios' ? '<bundle-id>' : '<package-id>';
+  return readiness?.nextSteps ?? buildLeasePreparationNotice(state)?.nextSteps ?? [];
 }
 
 export function renderConnectSuccess(options: {
   state: RemoteConnectionState;
-  verification?: DirectProviderConnectionVerification;
+  readiness?: ConnectReadiness;
   runtimePreparation?: RuntimePreparationNotice;
 }): string {
-  const { state, verification, runtimePreparation } = options;
-  if (!verification) {
+  const { state, readiness, runtimePreparation } = options;
+  if (!readiness) {
     const leasePreparation = buildLeasePreparationNotice(state);
     return [
       `Configured remote session "${state.session}" tenant "${state.tenant}" run "${state.runId}"${state.leaseId ? ` lease ${state.leaseId}` : ''}.`,
@@ -110,27 +77,18 @@ export function renderConnectSuccess(options: {
       .join('\n');
   }
   const lines = [
-    `Connected successfully with ${verification.service}.`,
-    `Verified: ${verification.verificationMessage}`,
+    `${readiness.status === 'verified' ? 'Connected' : 'Configured'} successfully with ${readiness.service}.`,
+    `${readiness.status === 'verified' ? 'Verified' : 'Status'}: ${readiness.message}`,
   ];
-  if ('project' in verification && verification.project) {
-    lines.push(
-      `Project: ${verification.project.name ?? verification.project.reference} — verified`,
-    );
+  if (readiness.project) {
+    lines.push(`Project: ${readiness.project.name ?? readiness.project.reference} — verified`);
   }
-  lines.push(renderDevice(verification.device));
-  lines.push(renderApp(verification));
+  if (readiness.device) lines.push(renderDevice(readiness.device));
+  if (readiness.app) lines.push(renderApp(readiness.app));
   lines.push('No live device session has been created.');
   lines.push('Next:');
-  lines.push(...buildConnectNextSteps(state, verification).map((step) => `  ${step}`));
-  if (verification.app.status !== 'missing') {
-    lines.push(
-      'Use the installed package or bundle identifier in open, not the app artifact name.',
-    );
-  }
-  if (verification.provider !== 'limrun') {
-    lines.push('After close, run agent-device artifacts --json for provider video and logs.');
-  }
+  lines.push(...buildConnectNextSteps(state, readiness).map((step) => `  ${step}`));
+  lines.push(...(readiness.notes ?? []));
   if (runtimePreparation) lines.push(runtimePreparation.message);
   return lines.join('\n');
 }
@@ -138,11 +96,11 @@ export function renderConnectSuccess(options: {
 export function serializeConnectionState(options: {
   state: RemoteConnectionState;
   runtimePreparation?: RuntimePreparationNotice;
-  verification?: DirectProviderConnectionVerification;
+  readiness?: ConnectReadiness;
 }): Record<string, unknown> {
-  const { state, runtimePreparation, verification } = options;
+  const { state, runtimePreparation, readiness } = options;
   const leasePreparation = buildLeasePreparationNotice(state);
-  const nextSteps = buildConnectNextSteps(state, verification);
+  const nextSteps = buildConnectNextSteps(state, readiness);
   return {
     connected: true,
     session: state.session,
@@ -161,18 +119,16 @@ export function serializeConnectionState(options: {
       status: state.leaseId ? 'created' : 'not-created',
       ...(state.leaseId ? { leaseId: state.leaseId } : {}),
     },
-    ...(verification
+    ...(readiness
       ? {
           verification: {
-            status: 'verified',
-            service: verification.service,
-            message: verification.verificationMessage,
-            ...('project' in verification && verification.project
-              ? { project: verification.project }
-              : {}),
+            status: readiness.status,
+            service: readiness.service,
+            message: readiness.message,
+            ...(readiness.project ? { project: readiness.project } : {}),
           },
-          device: verification.device,
-          app: verification.app,
+          ...(readiness.device ? { device: readiness.device } : {}),
+          ...(readiness.app ? { app: readiness.app } : {}),
           nextSteps,
         }
       : {}),
@@ -202,7 +158,7 @@ function defaultDirectProviderNextSteps(state: RemoteConnectionState): string[] 
   ];
 }
 
-function renderDevice(device: DirectProviderConnectionVerification['device']): string {
+function renderDevice(device: NonNullable<ConnectReadiness['device']>): string {
   const osVersion = 'osVersion' in device ? device.osVersion : undefined;
   const os = [device.platform, osVersion].filter(Boolean).join(' ');
   const detail = os ? ` (${os})` : '';
@@ -211,12 +167,9 @@ function renderDevice(device: DirectProviderConnectionVerification['device']): s
     : `Device: ${device.name ?? device.reference ?? 'Configured device'}${detail} — verified`;
 }
 
-function renderApp(verification: DirectProviderConnectionVerification): string {
-  const app = verification.app;
+function renderApp(app: NonNullable<ConnectReadiness['app']>): string {
   if (app.status === 'missing') {
-    const state =
-      verification.provider === 'aws-device-farm' ? 'not attached' : 'not installed yet';
-    return `App: ${state} — ${app.message ?? 'Install or attach an app before open.'}`;
+    return `App: ${app.name ?? 'not available'} — ${app.message ?? 'Install or attach an app before open.'}`;
   }
   const label = app.name ?? app.reference ?? 'configured app';
   const suffix = app.status === 'verified' ? 'verified' : (app.message ?? 'configured');

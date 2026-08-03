@@ -14,18 +14,21 @@ import {
 import type { AgentDeviceClient } from '../agent-device-client.ts';
 import { resolveCloudWebDriverConnectProfile } from '../cli/connection/cloud-webdriver-profile.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  verifyDirectProviderConnection,
-  type DirectProviderConnectionVerification,
-} from '../cli/connection/direct-provider-verification.ts';
+import { verifyLimrunConnection } from '@agent-device/provider-limrun';
+import { providerWebDriver } from '../provider-webdriver.ts';
 
 vi.mock('../cli/auth-session.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../cli/auth-session.ts')>()),
   resolveCloudAccessForConnect: vi.fn(),
 }));
 
-vi.mock('../cli/connection/direct-provider-verification.ts', () => ({
-  verifyDirectProviderConnection: vi.fn(),
+vi.mock('@agent-device/provider-limrun', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/provider-limrun')>()),
+  verifyLimrunConnection: vi.fn(),
+}));
+
+vi.mock('../provider-webdriver.ts', () => ({
+  providerWebDriver: { verifyConnection: vi.fn() },
 }));
 
 afterEach(() => {
@@ -34,11 +37,56 @@ afterEach(() => {
 });
 
 const mockedResolveCloudAccessForConnect = vi.mocked(resolveCloudAccessForConnect);
-const mockedVerifyDirectProviderConnection = vi.mocked(verifyDirectProviderConnection);
+const mockedVerifyLimrunConnection = vi.mocked(verifyLimrunConnection);
+const mockedVerifyWebDriverConnection = vi.mocked(providerWebDriver.verifyConnection);
 
 beforeEach(() => {
-  mockedVerifyDirectProviderConnection.mockImplementation(async ({ provider, flags }) =>
-    fakeVerification(provider, flags),
+  mockedVerifyLimrunConnection.mockResolvedValue({
+    provider: 'limrun',
+    service: 'Limrun',
+    verificationMessage: 'Credentials and Android instance access verified.',
+    device: {
+      status: 'deferred',
+      name: 'Provider-selected Android emulator',
+      platform: 'android',
+    },
+    app: {
+      status: 'missing',
+      message: 'A new Limrun instance does not have your app yet.',
+    },
+  });
+  mockedVerifyWebDriverConnection.mockImplementation(async (options) =>
+    options.provider === 'browserstack'
+      ? {
+          provider: 'browserstack',
+          service: 'BrowserStack',
+          verificationMessage: 'Credentials, device, and uploaded app verified.',
+          device: {
+            status: 'verified',
+            name: options.deviceName,
+            platform: options.platform,
+            osVersion: options.osVersion,
+          },
+          app: { status: 'verified', reference: options.app },
+        }
+      : {
+          provider: 'aws-device-farm',
+          service: 'AWS Device Farm',
+          verificationMessage: 'Credentials, project, and device verified.',
+          project: { name: 'Agent Device', reference: options.projectArn },
+          device: {
+            status: 'verified',
+            name: 'iPhone 15',
+            reference: options.deviceArn,
+            platform: options.platform,
+            osVersion: '17',
+          },
+          app: {
+            status: 'missing',
+            message:
+              'No app upload is attached; AWS Device Farm does not support install after allocation.',
+          },
+        },
   );
 });
 
@@ -467,7 +515,7 @@ test('connect does not activate provider state when verification fails', async (
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-verify-fail-'));
   const stateDir = path.join(tempRoot, '.state');
   vi.stubEnv('LIMRUN_API_KEY', 'lim_bad_key');
-  mockedVerifyDirectProviderConnection.mockRejectedValueOnce(
+  mockedVerifyLimrunConnection.mockRejectedValueOnce(
     new AppError('UNAUTHORIZED', 'Limrun rejected connection verification.'),
   );
 
@@ -666,61 +714,4 @@ function readRequiredActiveState(stateDir: string): RemoteConnectionState {
   const state = readActiveConnectionState({ stateDir });
   assert.ok(state);
   return state;
-}
-
-function fakeVerification(
-  provider: string | undefined,
-  flags: Parameters<typeof connectCommand>[0]['flags'],
-): DirectProviderConnectionVerification | undefined {
-  if (provider === 'limrun') {
-    return {
-      provider,
-      service: 'Limrun',
-      verificationMessage: 'Credentials and Android instance access verified.',
-      device: {
-        status: 'deferred',
-        name: 'Provider-selected Android emulator',
-        platform: 'android',
-      },
-      app: {
-        status: 'missing',
-        message: 'A new Limrun instance does not have your app yet.',
-      },
-    };
-  }
-  if (provider === 'aws-device-farm') {
-    return {
-      provider,
-      service: 'AWS Device Farm',
-      verificationMessage: 'Credentials, project, and device verified.',
-      project: { name: 'Agent Device', reference: flags.awsProjectArn ?? 'project-arn' },
-      device: {
-        status: 'verified',
-        name: 'iPhone 15',
-        reference: flags.awsDeviceArn ?? 'device-arn',
-        platform: 'ios',
-        osVersion: '17',
-      },
-      app: {
-        status: 'missing',
-        message:
-          'No app upload is attached; AWS Device Farm does not support install after allocation.',
-      },
-    };
-  }
-  if (provider === 'browserstack') {
-    return {
-      provider,
-      service: 'BrowserStack',
-      verificationMessage: 'Credentials, device, and uploaded app verified.',
-      device: {
-        status: 'verified',
-        name: flags.device ?? 'Google Pixel 8',
-        platform: 'android',
-        osVersion: flags.providerOsVersion,
-      },
-      app: { status: 'verified', reference: flags.providerApp },
-    };
-  }
-  return undefined;
 }

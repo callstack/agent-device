@@ -336,7 +336,7 @@ test('connect proxy notice distinguishes safe inventory from lease allocation', 
 
   assert.match(stdout, /No live device session has been created/);
   assert.match(stdout, /Run devices to inspect inventory without allocating/);
-  assert.match(stdout, /open when ready/);
+  assert.match(stdout, /agent-device open <package-id> --relaunch/);
   assert.doesNotMatch(stdout, /snapshot/);
   assert.doesNotMatch(stdout, /install-from-source/);
   fs.rmSync(tempRoot, { recursive: true, force: true });
