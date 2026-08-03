@@ -632,7 +632,13 @@ test('throwIfOffscreenInteractionTarget: an on-screen node passes through unchan
   const device = createInteractionDevice(makeSnapshotState([]));
   const nodes = makeSnapshotState([
     { index: 0, depth: 0, type: 'Application', rect: { x: 0, y: 0, width: 400, height: 800 } },
-    { index: 1, depth: 1, parentIndex: 0, type: 'Button', rect: { x: 20, y: 20, width: 40, height: 40 } },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      rect: { x: 20, y: 20, width: 40, height: 40 },
+    },
   ]).nodes;
 
   const result = await throwIfOffscreenInteractionTarget(
@@ -652,7 +658,13 @@ test('throwIfOffscreenInteractionTarget: off-screen + backend confirms -> return
   });
   const nodes = makeSnapshotState([
     { index: 0, depth: 0, type: 'Application', rect: { x: 0, y: 0, width: 400, height: 800 } },
-    { index: 1, depth: 1, parentIndex: 0, type: 'Button', rect: { x: 20, y: 2000, width: 40, height: 40 } },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      rect: { x: 20, y: 2000, width: 40, height: 40 },
+    },
   ]).nodes;
 
   const result = await throwIfOffscreenInteractionTarget(
@@ -671,7 +683,13 @@ test('throwIfOffscreenInteractionTarget: off-screen + no rescue -> throws with t
   const device = createInteractionDevice(makeSnapshotState([]));
   const nodes = makeSnapshotState([
     { index: 0, depth: 0, type: 'Application', rect: { x: 0, y: 0, width: 400, height: 800 } },
-    { index: 1, depth: 1, parentIndex: 0, type: 'Button', rect: { x: 20, y: 2000, width: 40, height: 40 } },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      rect: { x: 20, y: 2000, width: 40, height: 40 },
+    },
   ]).nodes;
 
   await assert.rejects(
