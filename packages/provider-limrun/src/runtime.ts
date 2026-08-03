@@ -34,6 +34,7 @@ import {
 } from './ios.ts';
 import { createLimrunDeviceSession, type LimrunDeviceSession } from './device-session.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
+import { buildLimrunClientOptions, LIMRUN_CLIENT_HEADER } from './client-options.ts';
 
 type LimrunInstance = {
   metadata: { id: string };
@@ -50,8 +51,6 @@ export type LimrunRuntimeOptions = {
   apiKey: string;
   region?: string;
 };
-
-const LIMRUN_CLIENT_HEADER = 'agent-device-cli';
 
 export type LimrunRuntime = ProviderDeviceRuntime & {
   recoverExpiredLease: ProviderExpiredLeaseRecovery;
@@ -99,13 +98,12 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   constructor(options: LimrunRuntimeOptions, dependencies: LimrunRuntimeDependencies) {
     this.options = options;
     this.dependencies = dependencies;
-    this.limrun = new Limrun({
-      apiKey: options.apiKey,
-      defaultHeaders: {
-        'x-agent-device-client': LIMRUN_CLIENT_HEADER,
-        'x-agent-device-version': dependencies.clientVersion,
-      },
-    });
+    this.limrun = new Limrun(
+      buildLimrunClientOptions({
+        apiKey: options.apiKey,
+        clientVersion: dependencies.clientVersion,
+      }),
+    );
   }
 
   ownsDevice(device: DeviceInfo): boolean {

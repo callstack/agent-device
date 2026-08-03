@@ -54,10 +54,10 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     usageOverride:
       'connect [cloud|proxy|limrun|browserstack|aws-device-farm] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]',
     helpDescription:
-      'Connect to a remote daemon, authenticate when needed, and save remote session state. AGENT_DEVICE_CLOUD_BASE_URL is the bridge/control-plane API origin; use AGENT_DEVICE_DAEMON_AUTH_TOKEN=adc_live_... for CI/service-token automation.',
+      'Configure remote access without allocating a device. Direct providers validate credentials/resources before saving state and print the exact device/app preparation needed before open. AGENT_DEVICE_CLOUD_BASE_URL is the bridge/control-plane API origin; use AGENT_DEVICE_DAEMON_AUTH_TOKEN=adc_live_... for CI/service-token automation.',
     listUsageOverride: 'connect',
     summary:
-      'Attach CLI commands to a saved remote daemon/cloud lease; inspect for remote runs, tenants, or service-token CI',
+      'Configure remote/provider state without allocating a live device; direct providers verify access',
     positionalArgs: ['provider?'],
     allowedFlags: [
       'remoteConfig',

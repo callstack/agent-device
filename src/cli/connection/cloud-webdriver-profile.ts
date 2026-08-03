@@ -1,5 +1,6 @@
 import {
   CLOUD_WEBDRIVER_PROVIDERS,
+  readAwsDeviceFarmRegionFromArn,
   rejectBrowserStackOnlyDeviceFeatures,
   type CloudWebDriverKnownProviderName,
 } from '@agent-device/provider-webdriver';
@@ -7,6 +8,7 @@ import type { RemoteConfigProfile } from '../../remote/remote-config-schema.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { PlatformSelector } from '@agent-device/kernel/device';
 import type { CliFlags } from '@agent-device/contracts/command';
+import path from 'node:path';
 import type { EnvMap } from '../../utils/env-map.ts';
 import { readCloudDeviceFeatureProfileFields, readMetroProfileFields } from './profile-fields.ts';
 import { persistAndResolveGeneratedProfile } from './generated-config.ts';
@@ -49,7 +51,11 @@ export function resolveCloudWebDriverConnectProfile(options: {
   });
 }
 
-type ConnectProfileBuilder = (options: { flags: CliFlags; env?: EnvMap }) => RemoteConfigProfile;
+type ConnectProfileBuilder = (options: {
+  flags: CliFlags;
+  env?: EnvMap;
+  cwd: string;
+}) => RemoteConfigProfile;
 
 const CLOUD_WEBDRIVER_CONNECT_PROFILE_BUILDERS: readonly {
   provider: CloudWebDriverKnownProviderName;
@@ -78,6 +84,7 @@ function requireConnectProfileBuilder(
 function browserStackProfileFields(options: {
   flags: CliFlags;
   env?: EnvMap;
+  cwd: string;
 }): RemoteConfigProfile {
   requireEnv(options.env, 'BROWSERSTACK_USERNAME', 'connect browserstack');
   requireEnv(options.env, 'BROWSERSTACK_ACCESS_KEY', 'connect browserstack');
@@ -93,9 +100,12 @@ function browserStackProfileFields(options: {
     options.flags.providerOsVersion,
     'connect browserstack requires --provider-os-version <version>.',
   );
-  const providerApp = requireFlag(
-    options.flags.providerApp,
-    'connect browserstack requires --provider-app <bs://app-id-or-local-path>.',
+  const providerApp = normalizeBrowserStackAppReference(
+    requireFlag(
+      options.flags.providerApp,
+      'connect browserstack requires --provider-app <bs://app-id-or-local-path>.',
+    ),
+    options.cwd,
   );
   return {
     platform,
@@ -109,6 +119,10 @@ function browserStackProfileFields(options: {
   };
 }
 
+function normalizeBrowserStackAppReference(app: string, cwd: string): string {
+  return app.startsWith('bs://') || /^https?:\/\//i.test(app) ? app : path.resolve(cwd, app);
+}
+
 function awsDeviceFarmProfileFields(options: {
   flags: CliFlags;
   env?: EnvMap;
@@ -119,15 +133,16 @@ function awsDeviceFarmProfileFields(options: {
     flags.platform,
     'connect aws-device-farm requires --platform ios|android.',
   );
+  const awsProjectArn = requireAwsProfileValue(
+    flags.awsProjectArn,
+    env,
+    ['AGENT_DEVICE_AWS_DEVICE_FARM_PROJECT_ARN', 'AWS_DEVICE_FARM_PROJECT_ARN'],
+    'connect aws-device-farm requires --aws-project-arn <arn> or AWS_DEVICE_FARM_PROJECT_ARN.',
+  );
   return {
     platform,
     device: flags.device,
-    awsProjectArn: requireAwsProfileValue(
-      flags.awsProjectArn,
-      env,
-      ['AGENT_DEVICE_AWS_DEVICE_FARM_PROJECT_ARN', 'AWS_DEVICE_FARM_PROJECT_ARN'],
-      'connect aws-device-farm requires --aws-project-arn <arn> or AWS_DEVICE_FARM_PROJECT_ARN.',
-    ),
+    awsProjectArn,
     awsDeviceArn: requireAwsProfileValue(
       flags.awsDeviceArn,
       env,
@@ -138,7 +153,9 @@ function awsDeviceFarmProfileFields(options: {
       'AGENT_DEVICE_AWS_DEVICE_FARM_APP_ARN',
       'AWS_DEVICE_FARM_APP_ARN',
     ]),
-    awsRegion: readAwsProfileValue(flags.awsRegion, env, ['AWS_REGION', 'AWS_DEFAULT_REGION']),
+    awsRegion:
+      readAwsProfileValue(flags.awsRegion, env, ['AWS_REGION', 'AWS_DEFAULT_REGION']) ??
+      readAwsDeviceFarmRegionFromArn(awsProjectArn),
     awsInteractionMode: flags.awsInteractionMode,
     providerSessionName: flags.providerSessionName,
   };

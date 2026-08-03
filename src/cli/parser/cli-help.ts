@@ -882,15 +882,22 @@ Rules:
     body: `agent-device help remote
 
 Remote connection providers use the same lifecycle:
-  connect -> open -> commands -> close -> disconnect
+  connect -> install/open -> commands -> close -> disconnect
 
 Providers:
   Cloud: agent-device connect or agent-device connect cloud discovers the agent-device cloud profile.
   Remote config: agent-device connect --remote-config ./remote-config.json uses a local profile.
   Direct proxy: agent-device connect proxy --daemon-base-url <proxy-agent-device-url> stores the shared proxy profile and client identity.
-  BrowserStack: agent-device connect browserstack stores a local provider profile and creates the App Automate session on first open.
-  AWS Device Farm: agent-device connect aws-device-farm stores a local provider profile and creates the remote access session on first open.
-  Limrun: agent-device connect limrun stores a local provider profile and creates a direct iOS or Android instance on first open.
+  BrowserStack: agent-device connect browserstack verifies credentials, the exact device, and a bs:// app reference, then stores a local provider profile. It does not create an App Automate session.
+  AWS Device Farm: agent-device connect aws-device-farm verifies credentials and the exact project, device, and optional app upload, then stores a local provider profile. It does not create a remote access session.
+  Limrun: agent-device connect limrun verifies access to the selected iOS or Android instance service, then stores a local provider profile. It does not create an instance.
+
+After direct-provider connect:
+  Read the printed Device, App, and Next sections. They are also available as verification/device/app/liveSession/nextSteps in --json output.
+  BrowserStack and AWS Device Farm create the hosted session on open. open needs the installed package or bundle identifier, not the app artifact name or ARN.
+  A new Limrun instance has no user app. Run install <package-or-bundle-id> <app-path-or-url> first; install allocates the instance, then open launches the installed id.
+  AWS Device Farm cannot install after allocation. If connect reports no attached app, reconnect with --aws-app-arn <arn> --force before open.
+  Do not run devices or apps as a pre-open catalog probe for direct providers; those commands can allocate the deferred provider session and only inspect that live device.
 
 Device cloud interfaces:
   CLI is the canonical bootstrap path: connect limrun/browserstack/aws-device-farm, then use normal open/snapshot/click/close/artifacts/disconnect commands.
@@ -963,10 +970,11 @@ Rules:
   Use agent-device proxy for direct tunnel access to a Mac you control. Expose the printed proxy URL through cloudflared/ngrok, then run agent-device connect proxy with the tunnel URL and printed token before normal commands.
   Use Limrun, BrowserStack, and AWS Device Farm through local provider profiles; they do not accept a remote agent-device daemon URL.
   Device cloud credentials must be available before the command starts. Limrun uses LIMRUN_API_KEY. BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY. AWS Device Farm uses the AWS CLI credential chain, including CI-provided AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN, AWS profiles, or web identity role variables.
+  Direct-provider connect performs read-only provider calls and saves active connection state only after verification succeeds. It never creates a device, instance, App Automate session, or AWS remote access session.
   Prefer short-lived AWS role credentials in CI. Generated connection profiles store app/device selectors and ARNs, not Limrun API keys, BrowserStack access keys, or AWS credentials.
   Limrun Android supports direct ADB port reverse for local Metro. Limrun iOS requires a public Metro/React DevTools URL because it cannot reach local host ports directly.
   After closing a device cloud session, run agent-device artifacts --json to retrieve provider video/log/dashboard URLs when the provider has made them available.
-  connect proxy stores the connection profile and client identity. Device leases are acquired on open and expire after five minutes without commands.
+  connect proxy stores the connection profile and client identity. Proxy device leases are acquired on open and expire after five minutes without commands; devices may inspect proxy inventory without allocating.
   Multiple agents can share one proxy when each uses connect proxy, open, commands, close, and disconnect.
   disconnect releases local connection state; close releases the active session and device lease.
   A busy direct-proxy device error means another agent owns the device until it closes or its inactivity lease expires.

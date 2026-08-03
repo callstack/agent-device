@@ -25,6 +25,7 @@ import {
   rejectBrowserStackOnlyDeviceFeatures,
 } from './browserstack-device-features.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS, type CloudWebDriverKnownProviderName } from './providers.ts';
+import { readAwsDeviceFarmRegionFromArn } from './connection-verification.ts';
 import {
   buildCloudWebDriverBaseCapabilities,
   createCloudWebDriverRuntime,
@@ -180,7 +181,7 @@ export function createCloudWebDriverProviderDefinitions(
               region:
                 env.AWS_REGION ??
                 env.AWS_DEFAULT_REGION ??
-                readAwsRegionFromDeviceFarmArn(providerSessionId ?? ''),
+                readAwsDeviceFarmRegionFromArn(providerSessionId ?? ''),
             });
             return await listAwsDeviceFarmCloudArtifacts(provider, providerSessionId, client);
           },
@@ -231,7 +232,7 @@ export function createCloudWebDriverProviderDefinitions(
           region:
             env.AWS_REGION ??
             env.AWS_DEFAULT_REGION ??
-            readAwsRegionFromDeviceFarmArn(providerSessionId),
+            readAwsDeviceFarmRegionFromArn(providerSessionId),
         });
         return await listAwsDeviceFarmCloudArtifacts(
           CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
@@ -334,10 +335,6 @@ function readAwsInteractionMode(
   const value = readFlag(req, 'awsInteractionMode');
   if (value === 'INTERACTIVE' || value === 'NO_VIDEO' || value === 'VIDEO_ONLY') return value;
   return undefined;
-}
-
-function readAwsRegionFromDeviceFarmArn(arn: string): string | undefined {
-  return /^arn:[^:]+:devicefarm:([^:]+):/.exec(arn)?.[1];
 }
 
 function dasherize(value: string): string {

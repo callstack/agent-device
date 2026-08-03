@@ -7,7 +7,6 @@ import { resolveDaemonPaths } from '../../daemon/config.ts';
 import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
 import {
   buildRemoteConnectionDaemonState,
-  fingerprint,
   hashRemoteConfigFile,
   readActiveConnectionState,
   readRemoteConnectionState,
@@ -20,7 +19,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import { resolveCloudConnectProfile } from '../connection/cloud-profile.ts';
 import {
   connectProviderNamesForError,
-  connectionProviderLeaseKind,
   connectionProviderRequiresRemoteDaemon,
   isCloudWebDriverConnectProvider,
   isConnectProviderName,
@@ -29,6 +27,7 @@ import {
 import { resolveCloudWebDriverConnectProfile } from '../connection/cloud-webdriver-profile.ts';
 import { resolveLimrunConnectProfile } from '../connection/limrun-profile.ts';
 import { resolveProxyConnectProfile } from '../connection/proxy-profile.ts';
+import { verifyDirectProviderConnection } from '../connection/direct-provider-verification.ts';
 import {
   hasDeferredMetroConfig,
   releaseRemoteConnectionLease,
@@ -41,6 +40,12 @@ import { writeCommandOutput } from './shared.ts';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { ClientCommandHandler } from './router-types.ts';
+import {
+  buildLeasePreparationNotice,
+  renderConnectSuccess,
+  serializeConnectionState,
+  type RuntimePreparationNotice,
+} from './connection-presentation.ts';
 
 export const connectCommand: ClientCommandHandler = async ({ positionals, flags, client }) => {
   const stateDir = resolveDaemonPaths(flags.stateDir).baseDir;
@@ -64,6 +69,13 @@ export const connectCommand: ClientCommandHandler = async ({ positionals, flags,
     connection: connectionMetadata,
     daemon: context.daemon,
   });
+  const verificationProvider = resolveVerificationProvider(provider, connectionMetadata);
+  const verification = await verifyDirectProviderConnection({
+    provider: verificationProvider,
+    flags: connectFlags,
+    env: process.env,
+    cwd: process.cwd(),
+  });
   const state = buildConnectedState({
     flags: connectFlags,
     scope,
@@ -73,19 +85,12 @@ export const connectCommand: ClientCommandHandler = async ({ positionals, flags,
   });
   writeRemoteConnectionState({ stateDir, state });
   await cleanupForcedPreviousConnection(client, stateDir, connectFlags, context.previous);
-  const leasePreparation = buildLeasePreparationNotice(state);
   const runtimePreparation = buildRuntimePreparationNotice(connectFlags, state);
 
-  writeCommandOutput(connectFlags, serializeConnectionState(state, runtimePreparation), () =>
-    [
-      `Connected remote session "${context.session}" tenant "${scope.tenant}" run "${scope.runId}" ${
-        state.leaseId ? `lease ${state.leaseId}` : 'lease pending'
-      }`,
-      leasePreparation?.message,
-      runtimePreparation?.message,
-    ]
-      .filter((line): line is string => Boolean(line))
-      .join('\n'),
+  writeCommandOutput(
+    connectFlags,
+    serializeConnectionState({ state, runtimePreparation, verification }),
+    () => renderConnectSuccess({ state, runtimePreparation, verification }),
   );
   return true;
 };
@@ -327,12 +332,14 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client })
   const connectedSession = state.session;
 
   let providerData: CloudProviderSessionResult | undefined;
-  try {
-    providerData = (
-      await client.sessions.close({ session: connectedSession, shutdown: flags.shutdown })
-    ).provider;
-  } catch {
-    // Disconnect is idempotent; the session may already be closed.
+  if (state.leaseId || state.runtime || state.metro) {
+    try {
+      providerData = (
+        await client.sessions.close({ session: connectedSession, shutdown: flags.shutdown })
+      ).provider;
+    } catch {
+      // Disconnect is idempotent; the session may already be closed.
+    }
   }
   await stopMetroCleanup(state.metro);
   await stopReactDevtoolsCleanup({ stateDir, state });
@@ -371,9 +378,9 @@ export const connectionCommand: ClientCommandHandler = async ({ positionals, fla
   }
   const leasePreparation = buildLeasePreparationNotice(state);
   const runtimePreparation = buildRuntimePreparationNoticeFromState(state);
-  writeCommandOutput(flags, serializeConnectionState(state, runtimePreparation), () =>
+  writeCommandOutput(flags, serializeConnectionState({ state, runtimePreparation }), () =>
     [
-      `Connected remote session "${state.session}".`,
+      `Configured remote session "${state.session}".`,
       `tenant=${state.tenant} runId=${state.runId} leaseId=${state.leaseId ?? 'pending'} backend=${state.leaseBackend ?? 'pending'}`,
       `remoteConfig=${state.remoteConfigPath}`,
       state.runtime ? 'metro=prepared' : 'metro=not-prepared',
@@ -545,18 +552,6 @@ function buildDaemonState(flags: CliFlags): RemoteConnectionState['daemon'] {
   return buildRemoteConnectionDaemonState(flags);
 }
 
-type RuntimePreparationNotice = {
-  status: 'deferred';
-  message: string;
-  nextStep: string;
-};
-
-type LeasePreparationNotice = {
-  status: 'deferred';
-  message: string;
-  nextSteps: string[];
-};
-
 function buildRuntimePreparationNotice(
   flags: CliFlags,
   state: RemoteConnectionState,
@@ -573,53 +568,6 @@ function buildRuntimePreparationNoticeFromState(
 ): RuntimePreparationNotice | undefined {
   if (state.runtime || !remoteConfigHasMetroSettings(state.remoteConfigPath)) return undefined;
   return buildDeferredRuntimeNotice(state.remoteConfigPath);
-}
-
-function buildLeasePreparationNotice(
-  state: RemoteConnectionState,
-): LeasePreparationNotice | undefined {
-  if (state.leaseId) return undefined;
-  const leaseKind = connectionProviderLeaseKind(state.leaseProvider);
-  if (leaseKind === 'proxy') {
-    return {
-      status: 'deferred',
-      nextSteps: ['agent-device open <app-id> --relaunch', 'agent-device devices'],
-      message:
-        'Proxy lease allocation is pending; run open when ready to allocate or refresh the device lease. Devices can inspect inventory but do not allocate a proxy lease.',
-    };
-  }
-  if (leaseKind === 'direct-device-provider') {
-    const nextSteps = [
-      'agent-device open <app-id> --relaunch',
-      'agent-device snapshot -i',
-      'agent-device artifacts --json',
-      'agent-device close',
-    ];
-    return {
-      status: 'deferred',
-      nextSteps,
-      message:
-        `Hosted ${state.leaseProvider} lease allocation is pending; run open when ready to create the provider session. ` +
-        `After close, run "agent-device artifacts --json" to fetch provider video/log links when available.`,
-    };
-  }
-  const needsPlatform =
-    state.platform === undefined && state.leaseBackend === undefined
-      ? ' Add --platform ios|android if the profile does not set a platform.'
-      : '';
-  const nextSteps = [
-    'agent-device install-from-source <artifact-url> --platform ios|android',
-    'agent-device open <app-id> --relaunch',
-    'agent-device snapshot -i',
-    'agent-device devices',
-  ];
-  return {
-    status: 'deferred',
-    nextSteps,
-    message:
-      'Lease allocation is pending; run install-from-source, open, snapshot, or devices when ready to allocate or refresh the lease.' +
-      needsPlatform,
-  };
 }
 
 function buildDeferredRuntimeNotice(remoteConfigPath: string): RuntimePreparationNotice {
@@ -652,31 +600,12 @@ function remoteConfigHasMetroSettings(remoteConfigPath: string): boolean {
   }
 }
 
-function serializeConnectionState(
-  state: RemoteConnectionState,
-  runtimePreparation?: RuntimePreparationNotice,
-): Record<string, unknown> {
-  const leasePreparation = buildLeasePreparationNotice(state);
-  return {
-    connected: true,
-    session: state.session,
-    tenant: state.tenant,
-    runId: state.runId,
-    leaseAllocated: Boolean(state.leaseId),
-    leaseId: state.leaseId,
-    leaseBackend: state.leaseBackend,
-    leaseProvider: state.leaseProvider,
-    platform: state.platform,
-    target: state.target,
-    remoteConfig: state.remoteConfigPath,
-    remoteConfigHash: state.remoteConfigHash,
-    daemonBaseUrlFingerprint: fingerprint(state.daemon?.baseUrl),
-    metro: state.metro
-      ? { prepared: true, projectRoot: state.metro.projectRoot }
-      : { prepared: false },
-    ...(leasePreparation ? { leasePreparation } : {}),
-    ...(runtimePreparation ? { runtimePreparation } : {}),
-    connectedAt: state.connectedAt,
-    updatedAt: state.updatedAt,
-  };
+function resolveVerificationProvider(
+  provider: ConnectProvider | undefined,
+  connection: RemoteConnectionRequestMetadata | undefined,
+): ConnectProvider | undefined {
+  if (provider) return provider;
+  return connection?.leaseProvider && isConnectProviderName(connection.leaseProvider)
+    ? connection.leaseProvider
+    : undefined;
 }

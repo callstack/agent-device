@@ -13,7 +13,9 @@ agent-device connect aws-device-farm ...
 agent-device connect limrun ...
 ```
 
-These providers are not remote `agent-device` daemons. `connect` writes a local generated profile, then the first lease-allocating command such as `open` creates the provider session. BrowserStack and AWS Device Farm use hosted WebDriver sessions; Limrun uses its direct iOS/Android provider runtime.
+These providers are not remote `agent-device` daemons. `connect` makes read-only provider calls to verify credentials and the configured resources, then saves active connection state. It does not allocate a device. BrowserStack and AWS Device Farm create hosted WebDriver sessions on `open`; Limrun allocates its direct iOS/Android instance on the first device command, which can be `install` or `open`.
+
+Successful human output names the verified or deferred device, explains the app state, and prints copy-pasteable next commands. `--json` exposes the same information in `verification`, `device`, `app`, `liveSession`, and `nextSteps`. Do not use `devices` or `apps` as a preflight catalog for these direct providers: they inspect a live leased device and can therefore allocate the deferred session.
 
 ## Interface Summary
 
@@ -41,8 +43,8 @@ Agents can connect autonomously when all required credentials and selectors are 
 The CLI experience is:
 
 1. Export provider credentials.
-2. Run `agent-device connect <provider>` with provider selectors.
-3. Run normal `agent-device` commands.
+2. Run `agent-device connect <provider>` with provider selectors. Connection state is activated only after the provider verifies access.
+3. Follow the printed `Next` commands to install or open the app.
 4. Run `agent-device close` to stop the hosted session.
 5. Run `agent-device artifacts --json` to retrieve provider-hosted video/log/dashboard URLs.
 6. Run `agent-device disconnect` to clear local connection state.
@@ -71,7 +73,8 @@ Full Android flow:
 export LIMRUN_API_KEY=...
 
 agent-device connect limrun --platform android
-agent-device open com.example.app
+agent-device install com.example.app ./app.apk
+agent-device open com.example.app --relaunch
 agent-device snapshot -i
 agent-device click 'label="Continue"'
 agent-device close
@@ -79,6 +82,8 @@ agent-device disconnect
 ```
 
 Limrun Android uses the direct ADB tunnel, so the normal Android helper-backed snapshots, installs, and port reverse flow are available. This makes a local Metro server reachable through the normal Android reverse setup.
+
+A newly allocated Limrun instance does not contain your app. `connect` therefore recommends `install <package-or-bundle-id> <app-path-or-url>` before `open`. The install command allocates the instance when needed; it is not necessary to run `devices` first.
 
 Limrun iOS uses the direct Limrun iOS client. It supports normal app lifecycle, snapshots, screenshots, taps, text input, scrolling, and app install, but it cannot reverse a remote device port to a local host port. For iOS Metro or React DevTools, use a publicly reachable HTTPS endpoint or a bridge URL rather than a local-only address. Limrun does not currently expose provider artifacts through `agent-device artifacts`.
 
@@ -102,6 +107,8 @@ agent-device connect browserstack \
 ```
 
 `--provider-app` accepts a BrowserStack app reference such as `bs://...`, an HTTP(S) app URL, or an existing local app path. Local paths are uploaded to BrowserStack when the hosted session is allocated.
+
+At connect time, BrowserStack credentials and the exact device/OS pair are verified. A `bs://` reference is checked against recent uploaded apps; a local artifact is checked on disk and persisted as an absolute path; a public URL remains configured but is validated by BrowserStack when the session is created. `open` still requires the app's installed package or bundle identifier, not its upload name.
 
 Optional labels:
 
@@ -202,6 +209,8 @@ export AWS_DEVICE_FARM_APP_ARN=...
 ```
 
 `AGENT_DEVICE_AWS_DEVICE_FARM_PROJECT_ARN`, `AGENT_DEVICE_AWS_DEVICE_FARM_DEVICE_ARN`, and `AGENT_DEVICE_AWS_DEVICE_FARM_APP_ARN` are accepted as agent-device-specific aliases.
+
+`connect` runs read-only `get-project`, `get-device`, and, when supplied, `get-upload` calls. It rejects a device or app for the wrong platform and an app upload that is not ready. If no app ARN is supplied, the output says so explicitly. AWS Device Farm does not support installing an app after the remote access session is allocated; reconnect with `--aws-app-arn <arn> --force` before `open` when the app is required.
 
 Full flow:
 
@@ -342,7 +351,7 @@ BrowserStack can return session video, Appium logs, device logs, dashboard URL, 
 
 ## Troubleshooting
 
-- If BrowserStack connect fails before opening a session, check `BROWSERSTACK_USERNAME`, `BROWSERSTACK_ACCESS_KEY`, `--provider-app`, `--provider-os-version`, and `--device`.
-- If AWS allocation fails, first run `aws sts get-caller-identity` in the same CI step to confirm the AWS CLI credential chain is active, then verify the Device Farm ARNs and region.
-- If Limrun allocation fails, check `LIMRUN_API_KEY`, `--platform ios|android`, and the optional `LIMRUN_REGION`. Keep the key available in the environment used to start the local daemon.
+- If BrowserStack connect fails, its error distinguishes rejected credentials, an unavailable device/OS pair, a missing `bs://` upload, and a missing local artifact.
+- If AWS connect fails, use its reported `aws devicefarm get-*` error to check the credential chain, ARN, region, resource platform, or upload readiness. Allocation has not happened yet.
+- If Limrun connect fails, check `LIMRUN_API_KEY` and the optional `LIMRUN_REGION`. A successful connect verifies the selected instance service without creating an instance.
 - If artifact lookup is pending immediately after `close`, retry `agent-device artifacts --json`. Some providers finalize video/log URLs asynchronously after the hosted session stops.
