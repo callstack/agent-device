@@ -293,25 +293,50 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/kernel',
   ]);
   // #1555 review P1 ("add the reviewer-required exact exported-symbol
-  // gate"; second pass, "enforce the accepted two-entrypoint facade"): the
-  // exports-subpath assertion above only proves the package exposes one `.`
-  // entry point — it says nothing about what that entry point actually
+  // gate"; second pass, "enforce the accepted two-entrypoint facade"; the
+  // structural-quality review, "typed façade replaces the zero-type rule"):
+  // the exports-subpath assertion above only proves the package exposes one
+  // `.` entry point — it says nothing about what that entry point actually
   // NAMES. This pins the exact symbol list `packages/ad-replay/src/index.ts`
-  // exports to the binding design's two entrypoints, `inspectAdReplay` and
-  // `runAdReplay`, and NOTHING else — no type export, no third value.
-  // `formatReplaySuccessMessage` (presentation) and every type the two
-  // entrypoints' signatures reference (`AdReplayManifest`,
-  // `AdReplayStepRuntime`, the `ReplaySelectorPort` family, …) are gone from
-  // this list on purpose: root consumers derive them structurally instead
-  // (`src/daemon/ad-replay-facade-types.ts`). A stray export — intentional
-  // or not, including a form `readNamedExports` cannot enumerate a name for
-  // (`export *`, `export default` — see the rejection tests below) — must
-  // edit this list too, not just slip through the exports-subpath check.
+  // exports: the binding design's two VALUE entrypoints, `inspectAdReplay`
+  // and `runAdReplay` (never a third value), plus the neutral vocabulary
+  // their signatures are built from, named explicitly instead of every root
+  // consumer hand-deriving `Parameters<...>`/`ReturnType<...>` off them (the
+  // shim `src/daemon/ad-replay-facade-types.ts` used to centralize — since
+  // deleted). `formatReplaySuccessMessage` (presentation, not engine policy)
+  // stays out on purpose — it sits daemon-side beside its one caller. A
+  // stray export — intentional or not, including a form `readNamedExports`
+  // cannot enumerate a name for (`export *`, `export default` — see the
+  // rejection tests below) — must edit this list too, not just slip through
+  // the exports-subpath check.
   assert.deepEqual(
     readNamedExports(
       fs.readFileSync(path.join(repoRoot, 'packages/ad-replay/src/index.ts'), 'utf8'),
     ),
-    ['inspectAdReplay', 'runAdReplay'],
+    [
+      'AdReplayDispatchGuard',
+      'AdReplayDispatchOutcome',
+      'AdReplayGuardMismatchEvidence',
+      'AdReplayLandmarkMismatchEvidence',
+      'AdReplayManifest',
+      'AdReplayScrubValue',
+      'AdReplayStepFailure',
+      'AdReplayStepRuntime',
+      'AdReplayTargetBindingEvidence',
+      'AdReplayTargetClassification',
+      'AdReplayVarSources',
+      'AdReplayVerificationEntry',
+      'AdReplayVerifiedTargetGuard',
+      'ReplayRecordedTargetDisambiguation',
+      'ReplayRecordedTargetPolicy',
+      'ReplayRecordedTargetResolution',
+      'ReplaySelectorCandidateOptions',
+      'ReplaySelectorExpressionOutcome',
+      'ReplaySelectorGrammar',
+      'ReplaySelectorPort',
+      'inspectAdReplay',
+      'runAdReplay',
+    ],
   );
   const providerWebDriverPackage = packages.find(
     (pkg) => pkg.name === '@agent-device/provider-webdriver',

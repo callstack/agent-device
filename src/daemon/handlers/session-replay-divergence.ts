@@ -25,7 +25,7 @@ import {
   type InternalObservationEvidence,
 } from '../internal-observation.ts';
 import { boundReplayDivergenceForSession } from './session-replay-divergence-publication.ts';
-import type { ReplaySelectorPort } from '../ad-replay-facade-types.ts';
+import type { ReplaySelectorPort } from '@agent-device/ad-replay';
 import type { ReplayReportAction } from './session-replay-report-action.ts';
 import { rankAndDedupeReplaySuggestions } from './session-replay-suggestion-ranking.ts';
 import type { SessionAction, SessionState } from '../types.ts';

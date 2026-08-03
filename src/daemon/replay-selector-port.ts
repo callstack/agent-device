@@ -6,7 +6,7 @@ import type {
   ReplaySelectorExpressionOutcome,
   ReplaySelectorGrammar,
   ReplaySelectorPort,
-} from './ad-replay-facade-types.ts';
+} from '@agent-device/ad-replay';
 import type { ReplayDivergenceSuggestionBasis } from '@agent-device/contracts/divergence';
 import { matchesSelector } from '../selectors/match.ts';
 import {

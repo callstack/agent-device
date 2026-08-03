@@ -7,7 +7,7 @@ import type {
   ReplaySelectorExpressionOutcome,
   ReplaySelectorGrammar,
   ReplaySelectorPort,
-} from '../../daemon/ad-replay-facade-types.ts';
+} from '@agent-device/ad-replay';
 
 /**
  * #1478 P5 stage B: a deterministic, dependency-free `ReplaySelectorPort`
@@ -33,12 +33,10 @@ import type {
  * alongside its only caller, following the same `src/__tests__/test-utils/`
  * convention as `store-factory.ts` and `session-factories.ts`.
  *
- * #1555 review P1 (second pass, "enforce the accepted two-entrypoint
- * facade"): the package façade no longer exports any type at all — the port
- * family above is derived off `runAdReplay` in
- * `src/daemon/ad-replay-facade-types.ts` (the one root module that does
- * this), which this file imports from instead of `@agent-device/ad-replay`
- * directly.
+ * #1555 structural-quality review ("typed façade replaces the zero-type
+ * rule"): the `ReplaySelectorPort` family above is exported by name from
+ * `@agent-device/ad-replay` directly — no intermediate root-derivation
+ * module.
  *
  * Mini expression grammar: `key="value"` terms (space-separated, ANDed),
  * alternatives joined by ` || ` (first-match-wins, same as the real chain).

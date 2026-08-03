@@ -45,7 +45,7 @@ import {
   scrollRegionKeysEqual,
   orderByViewportPosition,
 } from '../session-target-evidence.ts';
-import type { ReplaySelectorPort } from '../ad-replay-facade-types.ts';
+import type { ReplaySelectorPort } from '@agent-device/ad-replay';
 import {
   annotationLocalIdentity,
   classifyTargetBindingMatch,

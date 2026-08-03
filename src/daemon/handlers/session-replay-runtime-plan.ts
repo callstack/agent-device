@@ -10,8 +10,11 @@ import type { SessionStore } from '../session-store.ts';
 import type { ReplayCoordinator } from '../session-replay-coordinator.ts';
 import { errorResponse } from './response.ts';
 import { buildReplayScriptPlatformFlags } from '../replay-device-selection.ts';
-import { inspectAdReplay } from '@agent-device/ad-replay';
-import type { AdReplayManifest, AdReplayVarSources } from '../ad-replay-facade-types.ts';
+import {
+  inspectAdReplay,
+  type AdReplayManifest,
+  type AdReplayVarSources,
+} from '@agent-device/ad-replay';
 import {
   collectReplayShellEnv,
   parseReplayCliEnvEntries,

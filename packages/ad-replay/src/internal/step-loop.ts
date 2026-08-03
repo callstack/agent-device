@@ -103,7 +103,7 @@ import {
  * (`@agent-device/ad-script` does not export its own `ReplayVarSources` type
  * by name) rather than duplicating the shape.
  */
-type AdReplayVarSources = Parameters<typeof buildReplayVarScope>[0];
+export type AdReplayVarSources = Parameters<typeof buildReplayVarScope>[0];
 
 /**
  * A `${VAR}` value eligible for divergence-report redaction — the engine's

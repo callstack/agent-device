@@ -5,10 +5,14 @@ import { invokeReplayAction } from './session-replay-action-runtime.ts';
 import { readReplaySelectorDisplayValue } from '../replay-selector-port.ts';
 import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import type {
+  AdReplayDispatchGuard,
+  AdReplayDispatchOutcome,
+  AdReplayGuardMismatchEvidence,
+  AdReplayLandmarkMismatchEvidence,
   AdReplayStepFailure,
   AdReplayStepRuntime,
   ReplaySelectorPort,
-} from '../ad-replay-facade-types.ts';
+} from '@agent-device/ad-replay';
 import type { LocalIdentity } from '@agent-device/ad-script';
 import type { SnapshotTimingSample } from '@agent-device/contracts/capture';
 import type { TargetAncestryEntry } from '@agent-device/contracts/replay';
@@ -27,7 +31,6 @@ import {
   isWaitLandmarkMismatchResponse,
   resolveTargetVerificationEntry,
   type TargetBindingDivergenceContext,
-  type TargetBindingFailureEvidence,
 } from './session-replay-target-verification.ts';
 import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
 import type { ReplayCoordinator } from '../session-replay-coordinator.ts';
@@ -67,54 +70,24 @@ export type ReplayStepContext = {
 };
 
 /**
- * The engine's evidence-bag type for `buildTargetBindingFailure`/
- * `buildPostDispatchTargetBindingFailure`, read off `AdReplayStepRuntime`
- * itself (`Parameters<...>`) rather than a named façade export — the R3 pass
- * deliberately did not add `AdReplayTargetBindingEvidence` to
- * `@agent-device/ad-replay`'s export list, so this is how a daemon helper
- * still gets a precise parameter type without widening the façade.
+ * #1555 structural-quality review ("typed façade replaces the zero-type
+ * rule"): this module used to read the engine's evidence/guard/outcome
+ * shapes off `AdReplayStepRuntime` by hand (`Parameters<...>`/
+ * `ReturnType<...>`/`Extract<...>`) because the façade exported no types at
+ * all — including a `toDaemonEvidence` copy translator between the engine's
+ * readonly-array evidence and this module's own mutable-array twin
+ * (`TargetBindingFailureEvidence`, since deleted from
+ * `session-replay-target-verification.ts`). `@agent-device/ad-replay` now
+ * exports `AdReplayDispatchGuard`/`AdReplayDispatchOutcome`/
+ * `AdReplayTargetBindingEvidence`/`AdReplayGuardMismatchEvidence`/
+ * `AdReplayLandmarkMismatchEvidence` directly, so every call site below uses
+ * the engine's own value with no copy.
  */
-type EngineTargetBindingEvidence = Parameters<AdReplayStepRuntime['buildTargetBindingFailure']>[2];
-
-/** Converts the engine's (readonly-array) evidence shape to this module's own mutable-array `TargetBindingFailureEvidence`. */
-function toDaemonEvidence(evidence: EngineTargetBindingEvidence): TargetBindingFailureEvidence {
-  return {
-    kind: evidence.kind,
-    matchCount: evidence.matchCount,
-    observed: evidence.observed,
-    candidateNodes: [...evidence.candidateNodes],
-    mismatches: [...evidence.mismatches],
-    causeCode: evidence.causeCode,
-    causeMessage: evidence.causeMessage,
-    ...(evidence.causeHint !== undefined ? { causeHint: evidence.causeHint } : {}),
-  };
-}
-
-/** The engine's pre-action identity guard, read off `AdReplayStepRuntime` itself (see `EngineTargetBindingEvidence` above for why `Parameters<...>` rather than a named façade export). */
-type ReplayDispatchGuard = Parameters<AdReplayStepRuntime['dispatchStep']>[4];
-
-/** `dispatchStep`'s result shape, read off `AdReplayStepRuntime` itself for the same reason. */
-type ReplayDispatchOutcome = Awaited<ReturnType<AdReplayStepRuntime['dispatchStep']>>;
-
-/**
- * The two post-resolution refusal markers' typed evidence shapes, read off
- * `ReplayDispatchOutcome` itself — the SAME `Parameters<...>`/`Extract<...>`
- * idiom as `ReplayDispatchGuard`/`EngineTargetBindingEvidence` above, rather
- * than a named façade export.
- */
-type ReplayGuardMismatchEvidence = Extract<
-  ReplayDispatchOutcome,
-  { status: 'guard-mismatch' }
->['evidence'];
-type ReplayLandmarkMismatchEvidence = Extract<
-  ReplayDispatchOutcome,
-  { status: 'landmark-mismatch' }
->['evidence'];
 
 /** Threads a pre-action identity guard into the request's `internal` block the interaction layer reads for its own resolution — a no-op when no guard applies. */
 function applyReplayDispatchGuard(
   replayReq: DaemonRequest,
-  guard: ReplayDispatchGuard,
+  guard: AdReplayDispatchGuard | undefined,
 ): DaemonRequest {
   const guardInternal =
     guard?.kind === 'target'
@@ -181,7 +154,7 @@ function readTargetStructuralDenotation(
 
 function readGuardMismatchEvidence(
   details: Record<string, unknown> | undefined,
-): ReplayGuardMismatchEvidence {
+): AdReplayGuardMismatchEvidence {
   return {
     observed: readGuardMismatchObservedIdentity(details?.observed),
     expectedStructural: readTargetStructuralDenotation(details?.expectedStructural),
@@ -191,7 +164,7 @@ function readGuardMismatchEvidence(
 
 function readLandmarkMismatchEvidence(
   details: Record<string, unknown> | undefined,
-): ReplayLandmarkMismatchEvidence {
+): AdReplayLandmarkMismatchEvidence {
   return {
     matchCount: typeof details?.matchCount === 'number' ? details.matchCount : undefined,
     observed: readGuardMismatchObservedIdentity(details?.observed),
@@ -202,9 +175,9 @@ function readLandmarkMismatchEvidence(
 /** Classifies a failed dispatch response into an ordinary failure or one of the two post-resolution identity-refusal markers (`guard-mismatch`/`landmark-mismatch`) `dispatchStep` detects. */
 function classifyReplayDispatchFailure(
   response: Extract<DaemonResponse, { ok: false }>,
-  guard: ReplayDispatchGuard,
+  guard: AdReplayDispatchGuard | undefined,
   entries: readonly string[],
-): ReplayDispatchOutcome {
+): AdReplayDispatchOutcome {
   const plainFailure = toAdReplayStepFailure(response, entries);
   if (guard?.kind === 'target' && isReplayTargetGuardMismatchResponse(response)) {
     return {
@@ -408,7 +381,7 @@ export function createAdReplayStepRuntime(params: {
       };
       const response = buildTargetBindingFailureResponse(
         buildDivergenceContext(action, index, stepArtifactPaths, [...scrubVars]),
-        toDaemonEvidence(evidence),
+        evidence,
         observation,
       );
       return recordFailure(response);
@@ -423,7 +396,7 @@ export function createAdReplayStepRuntime(params: {
     ) {
       const response = await buildPostDispatchTargetBindingFailureResponse(
         buildDivergenceContext(action, index, stepArtifactPaths, [...scrubVars]),
-        toDaemonEvidence(evidence),
+        evidence,
         {
           session: ctx.sessionStore.get(ctx.sessionName),
           sessionName: ctx.sessionName,

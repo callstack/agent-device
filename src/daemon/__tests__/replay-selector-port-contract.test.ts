@@ -22,7 +22,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'vitest';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import type { ReplaySelectorPort } from '../ad-replay-facade-types.ts';
+import type { ReplaySelectorPort } from '@agent-device/ad-replay';
 import { createInMemoryReplaySelectorPort } from '../../__tests__/test-utils/in-memory-replay-selector-port.ts';
 import { createDaemonReplaySelectorPort } from '../replay-selector-port.ts';
 

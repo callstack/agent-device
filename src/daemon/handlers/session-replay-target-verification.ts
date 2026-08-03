@@ -10,7 +10,12 @@ import {
   type LocalIdentity,
 } from '@agent-device/ad-script';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
-import type { ReplaySelectorPort } from '../ad-replay-facade-types.ts';
+import type {
+  AdReplayTargetBindingEvidence,
+  AdReplayTargetClassification,
+  AdReplayVerificationEntry,
+  ReplaySelectorPort,
+} from '@agent-device/ad-replay';
 import {
   createReplayDivergenceSanitizer,
   type ReplayDivergence,
@@ -22,7 +27,6 @@ import {
   readNodeStructuralDenotation,
   REPLAY_TARGET_GUARD_MISMATCH_REASON,
   WAIT_LANDMARK_MISMATCH_REASON,
-  type ReplayTargetGuardDenotation,
 } from '../../replay/target-identity-node.ts';
 import { resolveTargetIdentityVerification } from '../../core/command-descriptor/registry.ts';
 import { parseWaitPositionals } from '../../core/wait-positionals.ts';
@@ -53,11 +57,16 @@ import { extractReplayTargetToken, readRefLabel } from './session-replay-target-
 // verify-then-dispatch DECISION flow (the four `@agent-device/ad-replay`
 // policy functions, `planPostResolutionTargetVerification` /
 // `planPreDispatchTargetVerification` / `deriveReplayTargetGuardMismatchEvidence`
-// / `deriveWaitLandmarkMismatchEvidence`) now lives entirely inside the
-// engine's step loop (`packages/ad-replay/src/internal/step-loop.ts`,
-// `verifyAndDispatchStep`). This module never imports those functions or the
-// package's `@agent-device/ad-replay` decision types — it implements only the
-// narrow `AdReplayStepRuntime` capabilities the engine loop drives:
+// / `deriveWaitLandmarkMismatchEvidence`) lives entirely inside the engine's
+// step loop (`packages/ad-replay/src/internal/verify-dispatch.ts`,
+// `verifyAndDispatchStep`) — this module never imports those four DECISION
+// functions. It does import the package's neutral VOCABULARY types
+// (`AdReplayVerificationEntry`/`AdReplayTargetClassification`/
+// `AdReplayTargetBindingEvidence`, #1555 structural-quality review, "typed
+// façade replaces the zero-type rule") so the values it builds/routes are the
+// engine's own shapes, not a hand-shadowed daemon twin. This module
+// implements only the narrow `AdReplayStepRuntime` capabilities the engine
+// loop drives:
 //
 //  - `resolveTargetVerificationEntry` — routing (registry lookup, session
 //    read, wait-form parse, token extraction) for `beginTargetVerification`.
@@ -78,18 +87,18 @@ import { extractReplayTargetToken, readRefLabel } from './session-replay-target-
 // ---------------------------------------------------------------------------
 
 /**
- * Post-resolution guard payload for a verified action: dispatch re-resolves
- * with its own occlusion/visibility guards, and its winner must carry
- * `expected` (the verified member's identity) or the interaction layer
- * refuses pre-action (`assertExpectedResolvedTarget`, resolution.ts).
- * `matchCount` is verification's recorded-selector match count, carried so
- * the resulting identity-mismatch divergence satisfies decision 3's
- * matchCount presence rule.
+ * #1555 structural-quality review ("unify on the engine's types"): this
+ * module used to declare its own `ReplayVerifiedTargetGuard` — structurally
+ * identical to (but a separate nominal declaration from)
+ * `@agent-device/ad-replay`'s `AdReplayVerifiedTargetGuard` — so it now
+ * imports the engine's type directly instead of maintaining a shadow copy
+ * that could silently drift. `ReplayTargetGuardDenotation`
+ * (`target-identity-node.ts`) stays the concrete producer type for
+ * `expected`; it is structurally assignable to `AdReplayVerifiedTargetGuard['expected']`
+ * (both `{ identity: LocalIdentity; structural: { documentOrder: number;
+ * sibling: number } }`) without a name-level dependency between the two
+ * files.
  */
-export type ReplayVerifiedTargetGuard = {
-  expected: ReplayTargetGuardDenotation;
-  matchCount: number;
-};
 
 export type TargetBindingDivergenceContext = {
   recorded: TargetAnnotationV1;
@@ -115,8 +124,8 @@ type TargetBindingDivergenceBuilt = {
   kind: ReplayDivergenceTargetBindingKind;
   matchCount: number | undefined;
   observed: LocalIdentity | undefined;
-  candidateNodes: SnapshotNode[];
-  mismatches: string[];
+  candidateNodes: readonly SnapshotNode[];
+  mismatches: readonly string[];
   causeCode: string;
   causeMessage: string;
   causeHint?: string;
@@ -216,22 +225,23 @@ function buildTargetBindingDivergenceResponse(
   });
 }
 
-/** The evidence bag every target-binding failure builder wraps into a wire divergence. */
-export type TargetBindingFailureEvidence = {
-  kind: ReplayDivergenceTargetBindingKind;
-  matchCount: number | undefined;
-  observed: LocalIdentity | undefined;
-  candidateNodes: SnapshotNode[];
-  mismatches: string[];
-  causeCode: string;
-  causeMessage: string;
-  causeHint?: string;
-};
+/**
+ * #1555 structural-quality review ("make the engine evidence types
+ * readonly-compatible with daemon consumers so no copy translator is
+ * needed"): this module used to declare its own `TargetBindingFailureEvidence`
+ * — structurally identical to `@agent-device/ad-replay`'s
+ * `AdReplayTargetBindingEvidence` except for mutable vs. readonly array
+ * fields — so a `toDaemonEvidence` translator in
+ * `session-replay-runtime-engine-adapter.ts` had to copy every call. Every
+ * builder below now accepts the engine's own (readonly) evidence type
+ * directly; `TargetBindingDivergenceBuilt` above is readonly-compatible too,
+ * so the adapter passes the engine's value straight through.
+ */
 
 /** Assembles a target-binding divergence from already-computed `evidence` and a capture `observation`. */
 export function buildTargetBindingFailureResponse(
   context: TargetBindingDivergenceContext,
-  evidence: TargetBindingFailureEvidence,
+  evidence: AdReplayTargetBindingEvidence,
   observation: DivergenceObservation,
 ): DaemonResponse {
   const sanitize = createReplayDivergenceSanitizer(context.scrubVars);
@@ -308,7 +318,7 @@ export async function buildRecordedUnverifiableFailureResponse(
  */
 export async function buildPostDispatchTargetBindingFailureResponse(
   context: TargetBindingDivergenceContext,
-  evidence: TargetBindingFailureEvidence,
+  evidence: AdReplayTargetBindingEvidence,
   params: {
     session: SessionState | undefined;
     sessionName: string;
@@ -335,12 +345,12 @@ function publicationEvidenceFrom(
 // step's recorded target evidence enters. Mirrors the pre-#1555-R3 daemon
 // orchestrator's own routing exactly — only called when
 // `action.targetEvidence` is present (the engine checks that itself).
+//
+// #1555 structural-quality review ("unify on the engine's types"): returns
+// `@agent-device/ad-replay`'s own `AdReplayVerificationEntry` directly — this
+// module used to declare a separate, structurally-identical
+// `TargetVerificationEntry`.
 // ---------------------------------------------------------------------------
-
-export type TargetVerificationEntry =
-  | { kind: 'inactive' }
-  | { kind: 'post-resolution'; isSelectorWait: boolean }
-  | { kind: 'pre-dispatch'; token: string | undefined; platform: Platform | PublicPlatform };
 
 /**
  * #1349 post-resolution phase (`wait`): NEVER the generic pre-dispatch
@@ -366,7 +376,7 @@ export function resolveTargetVerificationEntry(params: {
   sessionName: string;
   sessionStore: SessionStore;
   port: ReplaySelectorPort;
-}): TargetVerificationEntry {
+}): AdReplayVerificationEntry {
   const { action, resolvedAction, sessionName, sessionStore, port } = params;
   const session = sessionStore.get(sessionName);
   if (!session) return { kind: 'inactive' };
@@ -388,20 +398,13 @@ export function resolveTargetVerificationEntry(params: {
 // ---------------------------------------------------------------------------
 // `classifyTarget`: resolves the recorded target against an already-captured
 // tree using the SAME lookup/matching a real dispatch would.
+//
+// #1555 structural-quality review ("unify on the engine's types"): returns
+// `@agent-device/ad-replay`'s own `AdReplayTargetClassification` directly —
+// this module used to declare a separate, structurally-identical
+// `TargetClassificationOutcome` (with its own `ReplayVerifiedTargetGuard`
+// for the verified branch).
 // ---------------------------------------------------------------------------
-
-export type TargetClassificationOutcome =
-  | { verified: true; guard: ReplayVerifiedTargetGuard }
-  | {
-      verified: false;
-      kind: ReplayDivergenceTargetBindingKind;
-      matchCount: number | undefined;
-      observed: LocalIdentity | undefined;
-      candidateNodes: SnapshotNode[];
-      mismatches: string[];
-      causeCode: string;
-      causeMessage: string;
-    };
 
 export function classifyPreDispatchTarget(params: {
   recorded: TargetAnnotationV1;
@@ -410,7 +413,7 @@ export function classifyPreDispatchTarget(params: {
   nodes: SnapshotNode[];
   platform: Platform | PublicPlatform;
   port: ReplaySelectorPort;
-}): TargetClassificationOutcome {
+}): AdReplayTargetClassification {
   const { recorded, token, action, nodes, platform, port } = params;
   const config = resolveSuggestionMatchingConfig(action);
   const classification = classifyReplayTarget({
