@@ -243,3 +243,65 @@ test('readFacadeExports keeps rejecting two genuinely distinct bindings behind a
     },
   );
 });
+
+// #1574 review, third round. `export { default } from './x.ts'` is reported
+// by oxc as kind `Name` with the name `default` — the same fact as
+// `export default …` wearing a different parse shape. It has to stay in a
+// module's map so a later `export { default as x }` can resolve its binding,
+// while never being reachable through a star. These three pin that split.
+test('a star export does not re-export a name called `default`', () => {
+  // Per GetExportedNames a star skips `default` — oxc names the star's own
+  // import `AllButDefault`. Counterfactual: the ordinary sibling name in the
+  // same module still comes through, so this is `default` being filtered and
+  // not the whole module being dropped.
+  withProbeModules(
+    {
+      '.dstar-leaf-probe.ts': 'export default function hidden() {}\nexport const kept = 1;\n',
+      '.dstar-mid-probe.ts':
+        "export { default } from './.dstar-leaf-probe.ts';\n" +
+        "export { kept } from './.dstar-leaf-probe.ts';\n",
+      '.dstar-facade-probe.ts': "export * from './.dstar-mid-probe.ts';\n",
+    },
+    (dir) => {
+      assert.deepEqual(readFacadeExports(path.join(dir, '.dstar-facade-probe.ts')), ['kept']);
+    },
+  );
+});
+
+test('a façade re-exporting a default under the name `default` is rejected', () => {
+  // The entry carries a default export either way; only the parse shape
+  // differs from the `export default …` case above.
+  withProbeModules(
+    {
+      '.dentry-leaf-probe.ts': 'export default function leak() {}\n',
+      '.dentry-facade-probe.ts': "export { default } from './.dentry-leaf-probe.ts';\n",
+    },
+    (dir) => {
+      assert.throws(
+        () => readFacadeExports(path.join(dir, '.dentry-facade-probe.ts')),
+        /must not carry one/,
+      );
+    },
+  );
+});
+
+test('two paths to one default binding resolve to a single name, not ambiguity', () => {
+  // `leaf` declares a default; `a` re-exports it; `b` names a's default `x`
+  // while `c` names leaf's default `x`; a façade stars both. ESM resolves ONE
+  // `leaf#default` binding, so `x` is exported rather than ambiguous — the
+  // intermediate `export { default } from` link has to carry identity through
+  // for the two paths to agree.
+  withProbeModules(
+    {
+      '.dchain-leaf-probe.ts': 'export default function shared() {}\n',
+      '.dchain-a-probe.ts': "export { default } from './.dchain-leaf-probe.ts';\n",
+      '.dchain-b-probe.ts': "export { default as x } from './.dchain-a-probe.ts';\n",
+      '.dchain-c-probe.ts': "export { default as x } from './.dchain-leaf-probe.ts';\n",
+      '.dchain-facade-probe.ts':
+        "export * from './.dchain-b-probe.ts';\nexport * from './.dchain-c-probe.ts';\n",
+    },
+    (dir) => {
+      assert.deepEqual(readFacadeExports(path.join(dir, '.dchain-facade-probe.ts')), ['x']);
+    },
+  );
+});

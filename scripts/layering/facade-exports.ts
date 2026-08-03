@@ -180,6 +180,17 @@ export function readFacadeExports(entryFile: string): string[] {
           }
           const childPath = path.resolve(path.dirname(resolved), specifier);
           for (const [name, origin] of exportedNames(childPath)) {
+            // `default` is filtered HERE, at the star, not at the source
+            // (#1574 review, third round). A child's `export { default } from
+            // './leaf.ts'` is a NAMED export whose name happens to be
+            // `default` — oxc reports it as kind `Name`, and it must stay in
+            // the child's map so a chain like `export { default as x } from
+            // './that-child.ts'` can resolve its binding. But a star must not
+            // re-export it: `GetExportedNames` skips `default`, and oxc names
+            // the star's own import `AllButDefault`. Filtering at the source
+            // would break identity resolution; filtering here is the spec's
+            // own split.
+            if (name === 'default') continue;
             let origins = starOrigins.get(name);
             if (!origins) starOrigins.set(name, (origins = new Map()));
             origins.set(origin, specifier);
@@ -215,5 +226,17 @@ export function readFacadeExports(entryFile: string): string[] {
     return names;
   };
 
-  return [...exportedNames(entryFile).keys()].sort();
+  const names = exportedNames(entryFile);
+  // The entry's own default, in EITHER form. `export default …` throws above
+  // as it is parsed; `export { default } from './x.ts'` reaches here instead,
+  // because oxc reports it as a named export called `default` — a different
+  // parse shape for the same fact, that the façade carries a default export.
+  if (names.has('default')) {
+    throw new Error(
+      `readFacadeExports cannot enumerate a default export as a named symbol ` +
+        `(${path.resolve(entryFile)}) — a facade a caller pins to an exact named-export list ` +
+        'must not carry one, whether declared or re-exported under the name `default`.',
+    );
+  }
+  return [...names.keys()].sort();
 }
