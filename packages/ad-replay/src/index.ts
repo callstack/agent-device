@@ -100,7 +100,7 @@ export type {
   AdReplayVarSources,
   AdReplayVerificationEntry,
   AdReplayVerifiedTargetGuard,
-} from './internal/step-loop.ts';
+} from './internal/runtime-port-types.ts';
 
 export type {
   AdReplayGuardMismatchEvidence,
