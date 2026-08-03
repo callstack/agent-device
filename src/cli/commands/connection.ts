@@ -23,8 +23,8 @@ import {
   type ConnectProvider,
 } from '../connection/provider-policy.ts';
 import {
-  inspectConnectProvider,
   resolveConnectProviderProfile,
+  verifyConnectProvider,
 } from '../connection/connect-provider-adapters.ts';
 import {
   hasDeferredMetroConfig,
@@ -40,6 +40,7 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import type { ClientCommandHandler } from './router-types.ts';
 import {
   buildLeasePreparationNotice,
+  presentConnectReadiness,
   renderConnectSuccess,
   serializeConnectionState,
   type RuntimePreparationNotice,
@@ -67,7 +68,7 @@ export const connectCommand: ClientCommandHandler = async ({ positionals, flags,
     connection: connectionMetadata,
     daemon: context.daemon,
   });
-  const readiness = await inspectConnectProvider({
+  const verification = await verifyConnectProvider({
     provider: resolved.provider,
     flags: connectFlags,
     env: process.env,
@@ -82,6 +83,7 @@ export const connectCommand: ClientCommandHandler = async ({ positionals, flags,
   writeRemoteConnectionState({ stateDir, state });
   await cleanupForcedPreviousConnection(client, stateDir, connectFlags, context.previous);
   const runtimePreparation = buildRuntimePreparationNotice(connectFlags, state);
+  const readiness = presentConnectReadiness(state, verification);
 
   writeCommandOutput(
     connectFlags,

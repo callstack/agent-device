@@ -103,3 +103,21 @@ export const APP_NOT_INSTALLED_SAMPLE = {
   output: `Error (APP_NOT_INSTALLED): No app found matching "Shoply"
 Hint: Run apps to discover the exact installed package or bundle id, or install the app before open.`,
 };
+
+// Successful BrowserStack connect output from renderConnectSuccess. The
+// provider resources are already verified, but allocation remains deferred;
+// the next command must use the installed package id instead of probing a
+// not-yet-created device with devices/apps.
+export const BROWSERSTACK_CONNECT_SAMPLE = {
+  command:
+    'agent-device connect browserstack --platform android --device "Google Pixel 8" --provider-os-version 14.0 --provider-app bs://app-id',
+  output: `Connected successfully with BrowserStack.
+Verified: Credentials, device, and uploaded app verified.
+Device: Google Pixel 8 (android 14.0) — verified
+App: sample.apk — verified
+No live device session has been created. The first device command shown below will allocate one.
+Next:
+  agent-device open <package-id> --relaunch
+Use the installed package or bundle identifier in open, not the app artifact name.
+After close, run agent-device artifacts --json for provider video and logs.`,
+};

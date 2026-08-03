@@ -1,11 +1,11 @@
 import Limrun from '@limrun/api';
 import { AppError } from '@agent-device/kernel/errors';
 import { buildLimrunClientOptions } from './client-options.ts';
+import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
 
-export type LimrunConnectionVerification = {
+export type LimrunConnectionVerification = ProviderConnectionVerification & {
   provider: 'limrun';
   service: 'Limrun';
-  verificationMessage: string;
   device: {
     status: 'deferred';
     name: string;
@@ -17,12 +17,16 @@ export type LimrunConnectionVerification = {
   };
 };
 
-export async function verifyLimrunConnection(options: {
+export type LimrunConnectionVerificationOptions = {
   apiKey: string;
   clientVersion: string;
   platform: 'android' | 'ios';
   region?: string;
-}): Promise<LimrunConnectionVerification> {
+};
+
+export async function verifyLimrunConnection(
+  options: LimrunConnectionVerificationOptions,
+): Promise<LimrunConnectionVerification> {
   const client = new Limrun({
     ...buildLimrunClientOptions(options),
     timeout: 15_000,

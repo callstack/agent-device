@@ -5,11 +5,13 @@ import { basicAuthHeader } from './webdriver-utils.ts';
 import type {
   CloudWebDriverConnectionVerification,
   CloudWebDriverConnectionVerificationOptions,
-  VerifiedProviderResource,
 } from './connection-verification.ts';
+import type { ProviderConnectionResource } from '@agent-device/contracts/remote';
 
-const DEVICES_ENDPOINT = 'https://api-cloud.browserstack.com/app-automate/devices.json';
-const APPS_ENDPOINT = 'https://api-cloud.browserstack.com/app-automate/recent_apps?limit=100';
+const BROWSERSTACK_DEVICES_ENDPOINT =
+  'https://api-cloud.browserstack.com/app-automate/devices.json';
+const BROWSERSTACK_APPS_ENDPOINT =
+  'https://api-cloud.browserstack.com/app-automate/recent_apps?limit=100';
 
 type BrowserStackOptions = Extract<
   CloudWebDriverConnectionVerificationOptions,
@@ -21,7 +23,11 @@ export async function verifyBrowserStackConnection(
   clientVersion: string,
 ): Promise<CloudWebDriverConnectionVerification> {
   const auth = { username: options.username, accessKey: options.accessKey };
-  const devices = await fetchBrowserStackJson(DEVICES_ENDPOINT, auth, clientVersion);
+  const devices = await fetchBrowserStackJson(
+    options.devicesEndpoint ?? BROWSERSTACK_DEVICES_ENDPOINT,
+    auth,
+    clientVersion,
+  );
   const matchedDevice = readBrowserStackDevices(devices).find(
     (device) =>
       device.device === options.deviceName &&
@@ -38,7 +44,7 @@ export async function verifyBrowserStackConnection(
     );
   }
 
-  const app = await verifyBrowserStackApp(options.app, auth, clientVersion);
+  const app = await verifyBrowserStackApp(options, auth, clientVersion);
   return {
     provider: 'browserstack',
     service: 'BrowserStack',
@@ -57,12 +63,17 @@ export async function verifyBrowserStackConnection(
 }
 
 async function verifyBrowserStackApp(
-  app: string,
+  options: BrowserStackOptions,
   auth: { username: string; accessKey: string },
   clientVersion: string,
-): Promise<VerifiedProviderResource> {
+): Promise<ProviderConnectionResource> {
+  const { app } = options;
   if (app.startsWith('bs://')) {
-    const apps = await fetchBrowserStackJson(APPS_ENDPOINT, auth, clientVersion);
+    const apps = await fetchBrowserStackJson(
+      options.appsEndpoint ?? BROWSERSTACK_APPS_ENDPOINT,
+      auth,
+      clientVersion,
+    );
     const matched = readBrowserStackApps(apps).find((entry) => entry.reference === app);
     if (!matched) {
       throw new AppError('INVALID_ARGS', `BrowserStack app "${app}" was not found.`, {
@@ -87,7 +98,7 @@ async function verifyBrowserStackApp(
 }
 
 async function fetchBrowserStackJson(
-  endpoint: string,
+  endpoint: string | URL,
   auth: { username: string; accessKey: string },
   clientVersion: string,
 ): Promise<unknown> {

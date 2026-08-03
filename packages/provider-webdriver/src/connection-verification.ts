@@ -1,36 +1,21 @@
 import type { ProviderWebDriverDependencies } from './dependencies.ts';
+import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
 import { verifyAwsDeviceFarmConnection } from './aws-device-farm-connection-verification.ts';
 import { verifyBrowserStackConnection } from './browserstack-connection-verification.ts';
 
 export { readAwsDeviceFarmRegionFromArn } from './aws-device-farm-connection-verification.ts';
 
-export type VerifiedProviderResource = {
-  status: 'verified' | 'configured' | 'deferred' | 'missing';
-  name?: string;
-  reference?: string;
-  platform?: 'android' | 'ios';
-  osVersion?: string;
-  version?: string;
-  availability?: string;
-  message?: string;
-};
-
 export type CloudWebDriverConnectionVerification =
-  | {
+  | (ProviderConnectionVerification & {
       provider: 'browserstack';
       service: 'BrowserStack';
-      verificationMessage: string;
-      device: VerifiedProviderResource;
-      app: VerifiedProviderResource;
-    }
-  | {
+      project?: never;
+    })
+  | (ProviderConnectionVerification & {
       provider: 'aws-device-farm';
       service: 'AWS Device Farm';
-      verificationMessage: string;
       project: { name?: string; reference: string };
-      device: VerifiedProviderResource;
-      app: VerifiedProviderResource;
-    };
+    });
 
 export type CloudWebDriverConnectionVerificationOptions =
   | {
@@ -41,6 +26,8 @@ export type CloudWebDriverConnectionVerificationOptions =
       deviceName: string;
       osVersion: string;
       app: string;
+      devicesEndpoint?: string | URL;
+      appsEndpoint?: string | URL;
     }
   | {
       provider: 'aws-device-farm';

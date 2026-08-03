@@ -1,6 +1,7 @@
 import {
   AMBIGUOUS_MATCH_SAMPLE,
   APP_NOT_INSTALLED_SAMPLE,
+  BROWSERSTACK_CONNECT_SAMPLE,
   DEVICE_IN_USE_SAMPLE,
   NOT_SETTLED_SAMPLE,
   SETTLE_DIFF_SAMPLE,
@@ -467,6 +468,32 @@ Use the output already shown to determine whether the feed-search UI is present,
         pattern: /(?:^|\n)agent-device\s+(?:install|install-from-source)\b/i,
       },
       { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },
+    ],
+  },
+  {
+    id: 'sample-output-browserstack-connect-opens-known-package',
+    docs: ['--help:first30', 'remote'],
+    task: quiz(
+      BROWSERSTACK_CONNECT_SAMPLE,
+      'The uploaded app has package id com.example.demo. What command should run next?',
+    ),
+    expectations: ['validPlanCommands', 'fullPrefix'],
+    matchers: [
+      {
+        id: 'opensKnownPackage',
+        pattern: /(?:^|\n)agent-device\s+open\s+com\.example\.demo\b[^\n]*--relaunch\b/i,
+      },
+    ],
+    forbidden: [
+      {
+        id: 'noPreallocationCatalogProbe',
+        pattern: /(?:^|\n)agent-device\s+(?:devices|apps)\b/i,
+      },
+      {
+        id: 'noArtifactAsAppId',
+        pattern: /(?:^|\n)agent-device\s+open\s+(?:sample\.apk|bs:\/\/app-id)\b/i,
+      },
+      { id: 'noRedundantInstall', pattern: /(?:^|\n)agent-device\s+install\b/i },
     ],
   },
 ];

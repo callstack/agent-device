@@ -454,7 +454,8 @@ test('usageForCommand resolves remote help topic', async () => {
   assert.match(help, /It does not create an App Automate session/);
   assert.match(help, /It does not create a remote access session/);
   assert.match(help, /It does not create an instance/);
-  assert.match(help, /Read the printed Device, App, and Next sections/);
+  assert.match(help, /Read the printed Device, App, Next, and workflow-note lines/);
+  assert.match(help, /verification\/device\/app\/liveSession\/nextSteps\/notes/);
   assert.match(help, /Do not run devices or apps as a pre-open catalog probe/);
   assert.match(help, /AWS Device Farm cannot install after allocation/);
   assert.match(help, /agent-device open com\.example\.app --remote-config \.\/remote-config\.json/);

@@ -17,12 +17,6 @@ function isDirectDeviceConnectProvider(
   return provider === 'limrun' || isCloudWebDriverProviderName(provider);
 }
 
-export function isCloudWebDriverConnectProvider(
-  provider: string | undefined,
-): provider is CloudWebDriverKnownProviderName {
-  return isCloudWebDriverProviderName(provider);
-}
-
 export function connectProviderNamesForError(): string {
   return [
     'cloud',

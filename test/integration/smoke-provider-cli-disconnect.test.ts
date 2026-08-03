@@ -3,35 +3,17 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import http from 'node:http';
-import { DAEMON_RPC_PROTOCOL_VERSION } from '../../src/daemon/http-health.ts';
-import {
-  closeLoopbackServer,
-  listenOnLoopback,
-  skipWhenLoopbackUnavailable,
-} from '../../src/__tests__/test-utils/loopback.ts';
+import { pathToFileURL } from 'node:url';
 import { formatResultDebug, runBuiltCliJson } from './cli-json.ts';
-
-async function readJsonBody(req: http.IncomingMessage): Promise<any> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  const body = Buffer.concat(chunks).toString('utf8');
-  return body ? JSON.parse(body) : {};
-}
+import './support/provider-disconnect-fetch.mjs';
 
 test('built CLI provider flow closes active generated session before disconnect cleanup', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t, 'provider disconnect smoke coverage')) {
-    return;
-  }
-
-  const fixture = await createProviderDaemonFixture(t);
-  const env = createProviderEnv();
+  const fixture = createProviderDaemonFixture(t);
+  const env = createProviderEnv(fixture);
   const activeSession = await connectBrowserStackProvider(fixture, env);
   await openProviderApp(fixture, env);
   await disconnectProviderSession(fixture, env, activeSession);
-  assertProviderDisconnectRpc(fixture.rpcRequests, activeSession);
+  assertProviderDisconnectRpc(readRpcRequests(fixture), activeSession);
   await assertNoActiveConnection(fixture, env);
 });
 
@@ -39,74 +21,48 @@ type ProviderDaemonFixture = {
   root: string;
   stateDir: string;
   daemonBaseUrl: string;
-  rpcRequests: any[];
+  rpcLogPath: string;
 };
 
-async function createProviderDaemonFixture(t: TestContext): Promise<ProviderDaemonFixture> {
+function createProviderDaemonFixture(t: TestContext): ProviderDaemonFixture {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-provider-disconnect-smoke-'));
   const stateDir = path.join(root, 'state');
-  const rpcRequests: any[] = [];
-  let hostPort = 0;
-  const hostServer = http.createServer(async (req, res) => {
-    if (req.method === 'GET' && req.url === '/agent-device/health') {
-      res.writeHead(200, {
-        'content-type': 'application/json',
-        connection: 'close',
-      });
-      res.end(
-        JSON.stringify({
-          ok: true,
-          service: 'agent-device-daemon',
-          version: '0.0.0-test',
-          rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION,
-        }),
-      );
-      return;
-    }
-
-    if (req.method === 'POST' && req.url === '/agent-device/rpc') {
-      const body = await readJsonBody(req);
-      rpcRequests.push(body);
-      const data = responseDataForRpc(body);
-      res.writeHead(200, {
-        'content-type': 'application/json',
-        connection: 'close',
-      });
-      res.end(
-        JSON.stringify({
-          jsonrpc: '2.0',
-          id: body?.id ?? 'provider-disconnect-smoke',
-          result: {
-            ok: true,
-            data,
-          },
-        }),
-      );
-      return;
-    }
-
-    res.writeHead(404);
-    res.end();
-  });
-  hostPort = await listenOnLoopback(hostServer);
-  t.after(async () => {
-    await closeLoopbackServer(hostServer);
+  const rpcLogPath = path.join(root, 'rpc.ndjson');
+  t.after(() => {
     fs.rmSync(root, { recursive: true, force: true });
   });
   return {
     root,
     stateDir,
-    daemonBaseUrl: `http://127.0.0.1:${hostPort}/agent-device`,
-    rpcRequests,
+    daemonBaseUrl: 'https://agent-device.test/agent-device',
+    rpcLogPath,
   };
 }
 
-function createProviderEnv(): NodeJS.ProcessEnv {
+function createProviderEnv(fixture: ProviderDaemonFixture): NodeJS.ProcessEnv {
+  const fetchFixtureUrl = pathToFileURL(
+    path.join(import.meta.dirname, 'support/provider-disconnect-fetch.mjs'),
+  ).href;
   return {
     ...process.env,
     BROWSERSTACK_USERNAME: 'browser-user',
     BROWSERSTACK_ACCESS_KEY: 'browser-key',
+    BROWSERSTACK_DEVICES_ENDPOINT: 'https://browserstack.test/devices',
+    BROWSERSTACK_APPS_ENDPOINT: 'https://browserstack.test/apps',
+    AGENT_DEVICE_TEST_RPC_LOG_PATH: fixture.rpcLogPath,
+    NODE_OPTIONS: [process.env.NODE_OPTIONS, `--import=${fetchFixtureUrl}`]
+      .filter(Boolean)
+      .join(' '),
   };
+}
+
+function readRpcRequests(fixture: ProviderDaemonFixture): any[] {
+  return fs
+    .readFileSync(fixture.rpcLogPath, 'utf8')
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
 }
 
 async function connectBrowserStackProvider(
@@ -126,6 +82,8 @@ async function connectBrowserStackProvider(
     'bs://app-id',
     '--daemon-base-url',
     fixture.daemonBaseUrl,
+    '--daemon-auth-token',
+    'test-daemon-token',
     '--state-dir',
     fixture.stateDir,
     '--json',
@@ -200,51 +158,4 @@ async function assertNoActiveConnection(
     formatResultDebug('status', statusArgs, statusResult),
   );
   assert.equal(statusResult.json?.data?.connected, false);
-}
-
-function responseDataForRpc(body: any): Record<string, unknown> {
-  const params = body?.params ?? {};
-  if (body?.method === 'agent_device.lease.allocate') {
-    return {
-      lease: {
-        leaseId: 'lease-bs-1',
-        tenantId: params.tenantId,
-        runId: params.runId,
-        backend: params.backend,
-        leaseProvider: params.leaseProvider,
-        clientId: params.clientId,
-        deviceKey: params.deviceKey,
-      },
-    };
-  }
-  if (body?.method === 'agent_device.lease.release') {
-    return {
-      released: true,
-      provider: {
-        provider: 'browserstack',
-        providerSessionId: 'bs-session-1',
-      },
-    };
-  }
-  if (params.command === 'open') {
-    return {
-      session: params.session,
-      appName: 'Demo',
-      appBundleId: 'com.example.demo',
-      platform: 'android',
-      target: 'mobile',
-      device: 'Pixel',
-      id: 'browserstack-pixel',
-      serial: 'browserstack-pixel',
-    };
-  }
-  if (params.command === 'close') {
-    return {
-      provider: {
-        provider: 'browserstack',
-        providerSessionId: 'bs-session-1',
-      },
-    };
-  }
-  return {};
 }

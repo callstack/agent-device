@@ -15,7 +15,6 @@ const WAIVED_TOPICS: Record<string, string> = {
   'physical-device': 'Needs device-specific setup guidance; no portable planning task defined yet.',
   'react-devtools':
     'Profiling-window guidance; add cases when render-diagnosis planning regresses.',
-  remote: 'Remote/cloud lease setup; niche until remote workflows are benchmarked end to end.',
 };
 
 const FIRST_SCREEN_DOC = '--help:first30';

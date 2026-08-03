@@ -4,8 +4,8 @@ import type { RunHostCommand } from './dependencies.ts';
 import type {
   CloudWebDriverConnectionVerification,
   CloudWebDriverConnectionVerificationOptions,
-  VerifiedProviderResource,
 } from './connection-verification.ts';
+import type { ProviderConnectionResource } from '@agent-device/contracts/remote';
 
 type AwsOptions = Extract<
   CloudWebDriverConnectionVerificationOptions,
@@ -24,14 +24,13 @@ export async function verifyAwsDeviceFarmConnection(
     runHostCommand,
     region: options.region,
   });
-  const project = readAwsResource(
-    await runAwsJson('get-project', ['--arn', options.projectArn]),
-    'project',
-  );
-  const device = readAwsResource(
-    await runAwsJson('get-device', ['--arn', options.deviceArn]),
-    'device',
-  );
+  const [projectResponse, deviceResponse, uploadResponse] = await Promise.all([
+    runAwsJson('get-project', ['--arn', options.projectArn]),
+    runAwsJson('get-device', ['--arn', options.deviceArn]),
+    options.appArn ? runAwsJson('get-upload', ['--arn', options.appArn]) : undefined,
+  ]);
+  const project = readAwsResource(projectResponse, 'project');
+  const device = readAwsResource(deviceResponse, 'device');
   const devicePlatform = readAwsPlatform(device.platform);
   if (devicePlatform !== options.platform) {
     throw new AppError(
@@ -41,10 +40,7 @@ export async function verifyAwsDeviceFarmConnection(
   }
 
   const app = options.appArn
-    ? verifyAwsUpload(
-        readAwsResource(await runAwsJson('get-upload', ['--arn', options.appArn]), 'upload'),
-        options,
-      )
+    ? verifyAwsUpload(readAwsResource(uploadResponse, 'upload'), options)
     : {
         status: 'missing' as const,
         message:
@@ -72,7 +68,7 @@ export async function verifyAwsDeviceFarmConnection(
 function verifyAwsUpload(
   upload: Record<string, unknown>,
   options: AwsOptions,
-): VerifiedProviderResource {
+): ProviderConnectionResource {
   const status = readString(upload.status);
   if (status !== 'SUCCEEDED') {
     throw new AppError(

@@ -32,7 +32,6 @@ export type {
 export type {
   CloudWebDriverConnectionVerification,
   CloudWebDriverConnectionVerificationOptions,
-  VerifiedProviderResource,
 } from './connection-verification.ts';
 
 export type ProviderWebDriver = {

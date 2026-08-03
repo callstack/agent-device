@@ -509,6 +509,41 @@ test('connect JSON exposes verification, device, app, live-session, and next-ste
     'agent-device connect aws-device-farm --platform ios --aws-project-arn project-arn --aws-device-arn device-arn --aws-app-arn <arn> --force',
     'agent-device open <bundle-id> --relaunch',
   ]);
+  assert.deepEqual(output.notes, [
+    'After close, run agent-device artifacts --json for provider video and logs.',
+  ]);
+});
+
+test('connect JSON preserves BrowserStack workflow notes from human output', async () => {
+  const result = await runCliCapture(
+    [
+      'connect',
+      'browserstack',
+      '--platform',
+      'android',
+      '--device',
+      'Google Pixel 8',
+      '--provider-os-version',
+      '14.0',
+      '--provider-app',
+      'bs://app-id',
+      '--json',
+    ],
+    {
+      env: {
+        BROWSERSTACK_USERNAME: 'browser-user',
+        BROWSERSTACK_ACCESS_KEY: 'browser-key',
+      },
+      stateDirPrefix: 'agent-device-connect-browserstack-json-',
+    },
+  );
+
+  assert.equal(result.code, null);
+  const output = (JSON.parse(result.stdout) as { data: Record<string, any> }).data;
+  assert.deepEqual(output.notes, [
+    'Use the installed package or bundle identifier in open, not the app artifact name.',
+    'After close, run agent-device artifacts --json for provider video and logs.',
+  ]);
 });
 
 test('connect does not activate provider state when verification fails', async () => {

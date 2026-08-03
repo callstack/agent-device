@@ -3,6 +3,7 @@ export { createLimrunRuntime, type LimrunRuntime, type LimrunRuntimeOptions } fr
 export {
   verifyLimrunConnection,
   type LimrunConnectionVerification,
+  type LimrunConnectionVerificationOptions,
 } from './connection-verification.ts';
 
 export type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';

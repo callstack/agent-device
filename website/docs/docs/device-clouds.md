@@ -15,7 +15,7 @@ agent-device connect limrun ...
 
 These providers are not remote `agent-device` daemons. `connect` makes read-only provider calls to verify credentials and the configured resources, then saves active connection state. It does not allocate a device. BrowserStack and AWS Device Farm create hosted WebDriver sessions on `open`; Limrun allocates its direct iOS/Android instance on the first device command, which can be `install` or `open`.
 
-Successful human output names the verified or deferred device, explains the app state, and prints copy-pasteable next commands. `--json` exposes the same information in `verification`, `device`, `app`, `liveSession`, and `nextSteps`. Do not use `devices` or `apps` as a preflight catalog for these direct providers: they inspect a live leased device and can therefore allocate the deferred session.
+Successful human output names the verified or deferred device, explains the app state, and prints copy-pasteable next commands and workflow notes. `--json` exposes the same information in `verification`, `device`, `app`, `liveSession`, `nextSteps`, and `notes`. Do not use `devices` or `apps` as a preflight catalog for these direct providers: they inspect a live leased device and can therefore allocate the deferred session.
 
 ## Interface Summary
 

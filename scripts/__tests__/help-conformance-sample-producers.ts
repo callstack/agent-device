@@ -2,6 +2,7 @@ import type { CapturedSample } from '../help-conformance-sample-outputs.mjs';
 import {
   AMBIGUOUS_MATCH_SAMPLE,
   APP_NOT_INSTALLED_SAMPLE,
+  BROWSERSTACK_CONNECT_SAMPLE,
   DEVICE_IN_USE_SAMPLE,
   NOT_SETTLED_SAMPLE,
   PRIVATE_AX_RECOVERY_SAMPLE,
@@ -18,6 +19,12 @@ import { buildDeviceInUseBySessionError } from '../../src/daemon/handlers/sessio
 import { resolveRefStalenessWarning } from '../../src/daemon/session-snapshot.ts';
 import type { SessionState } from '../../src/daemon/types.ts';
 import { buildAppNotInstalledError } from '../../src/platforms/apple/core/app-resolution.ts';
+import {
+  presentConnectReadiness,
+  renderConnectSuccess,
+} from '../../src/cli/commands/connection-presentation.ts';
+import type { ConnectVerificationFacts } from '../../src/cli/connection/connect-provider-adapters.ts';
+import type { RemoteConnectionState } from '../../src/remote/remote-connection-state.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { SnapshotQualityVerdict } from '../../src/snapshot/snapshot-quality.ts';
 import { renderSnapshotQualityWarnings } from '../../src/snapshot/snapshot-quality.ts';
@@ -251,5 +258,45 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
     producer: 'the real app-resolution producer and the default hint',
     sample: APP_NOT_INSTALLED_SAMPLE,
     render: () => renderHumanError(buildAppNotInstalledError('Shoply')),
+  },
+  {
+    name: 'BROWSERSTACK_CONNECT_SAMPLE',
+    producer: 'the connect success renderer with verified BrowserStack readiness',
+    sample: BROWSERSTACK_CONNECT_SAMPLE,
+    render: () => {
+      const state = {
+        version: 1,
+        session: 'adc-browserstack',
+        tenant: 'direct-browserstack',
+        runId: 'run-browserstack',
+        leaseProvider: 'browserstack',
+        platform: 'android',
+        remoteConfigPath: '/tmp/browserstack.json',
+        remoteConfigHash: 'fixture',
+        connectedAt: '2026-08-03T00:00:00.000Z',
+        updatedAt: '2026-08-03T00:00:00.000Z',
+      } satisfies RemoteConnectionState;
+      const facts = {
+        service: 'BrowserStack',
+        status: 'verified',
+        message: 'Credentials, device, and uploaded app verified.',
+        device: {
+          status: 'verified',
+          name: 'Google Pixel 8',
+          platform: 'android',
+          osVersion: '14.0',
+        },
+        app: {
+          status: 'verified',
+          name: 'sample.apk',
+          reference: 'bs://app-id',
+          version: '1.2.3',
+        },
+      } satisfies ConnectVerificationFacts;
+      return renderConnectSuccess({
+        state,
+        readiness: presentConnectReadiness(state, facts),
+      });
+    },
   },
 ];

@@ -34,7 +34,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 test('BrowserStack verifies the selected resources without creating a session', async () => {
   const fetchMock = vi.fn<typeof fetch>(async (input) =>
-    String(input).includes('devices.json')
+    String(input).includes('devices')
       ? jsonResponse([
           { os: 'android', os_version: '14.0', device: 'Google Pixel 8', realMobile: true },
         ])
@@ -42,7 +42,11 @@ test('BrowserStack verifies the selected resources without creating a session', 
   );
   vi.stubGlobal('fetch', fetchMock);
 
-  const result = await createProvider().verifyConnection(browserStackOptions);
+  const result = await createProvider().verifyConnection({
+    ...browserStackOptions,
+    devicesEndpoint: 'https://browserstack.test/devices',
+    appsEndpoint: 'https://browserstack.test/apps',
+  });
 
   assert.equal(result.provider, 'browserstack');
   assert.deepEqual(result.device, {
@@ -59,10 +63,7 @@ test('BrowserStack verifies the selected resources without creating a session', 
   });
   assert.deepEqual(
     fetchMock.mock.calls.map(([input]) => String(input)),
-    [
-      'https://api-cloud.browserstack.com/app-automate/devices.json',
-      'https://api-cloud.browserstack.com/app-automate/recent_apps?limit=100',
-    ],
+    ['https://browserstack.test/devices', 'https://browserstack.test/apps'],
   );
 });
 
@@ -80,7 +81,8 @@ test('BrowserStack classifies rejected credentials without exposing them', async
 });
 
 test('AWS Device Farm verifies resources without creating a remote access session', async () => {
-  const runHostCommand = createAwsRunner(awsResources);
+  const concurrency = { active: 0, max: 0 };
+  const runHostCommand = createAwsRunner(awsResources, concurrency);
   const result = await createProvider(runHostCommand).verifyConnection({
     provider: 'aws-device-farm',
     platform: 'android',
@@ -103,6 +105,7 @@ test('AWS Device Farm verifies resources without creating a remote access sessio
     runHostCommand.mock.calls.some(([, args]) => args.includes('create-remote-access-session')),
     false,
   );
+  assert.equal(concurrency.max, 3);
 });
 
 test('AWS Device Farm reports an unattached app without pretending it is installed', async () => {
@@ -147,11 +150,23 @@ function createProvider(runHostCommand: RunHostCommand = vi.fn()) {
   return createProviderWebDriver({ clientVersion: '1.2.3', runHostCommand });
 }
 
-function createAwsRunner(resources: Partial<typeof awsResources>) {
+function createAwsRunner(
+  resources: Partial<typeof awsResources>,
+  concurrency?: { active: number; max: number },
+) {
   return vi.fn<RunHostCommand>(async (_command, args) => {
-    const resource = resources[String(args[1]).replace('get-', '') as keyof typeof awsResources];
-    if (!resource) throw new Error(`Unexpected AWS command: ${args[1]}`);
-    return { stdout: JSON.stringify({ [String(args[1]).replace('get-', '')]: resource }) };
+    if (concurrency) {
+      concurrency.active += 1;
+      concurrency.max = Math.max(concurrency.max, concurrency.active);
+    }
+    await Promise.resolve();
+    try {
+      const resource = resources[String(args[1]).replace('get-', '') as keyof typeof awsResources];
+      if (!resource) throw new Error(`Unexpected AWS command: ${args[1]}`);
+      return { stdout: JSON.stringify({ [String(args[1]).replace('get-', '')]: resource }) };
+    } finally {
+      if (concurrency) concurrency.active -= 1;
+    }
   });
 }
 

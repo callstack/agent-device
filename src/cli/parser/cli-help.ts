@@ -893,7 +893,7 @@ Providers:
   Limrun: agent-device connect limrun verifies access to the selected iOS or Android instance service, then stores a local provider profile. It does not create an instance.
 
 After direct-provider connect:
-  Read the printed Device, App, and Next sections. They are also available as verification/device/app/liveSession/nextSteps in --json output.
+  Read the printed Device, App, Next, and workflow-note lines. They are also available as verification/device/app/liveSession/nextSteps/notes in --json output.
   BrowserStack and AWS Device Farm create the hosted session on open. open needs the installed package or bundle identifier, not the app artifact name or ARN.
   A new Limrun instance has no user app. Run install <package-or-bundle-id> <app-path-or-url> first; install allocates the instance, then open launches the installed id.
   AWS Device Farm cannot install after allocation. If connect reports no attached app, reconnect with --aws-app-arn <arn> --force before open.
