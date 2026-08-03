@@ -1,5 +1,36 @@
 import { test, expect, vi } from 'vitest';
 
+/**
+ * #1555 structural-quality review ("topology fix... its subject now lives
+ * in the engine's step-loop/terminal logic — either move it into the
+ * package tests if it tests engine policy through the façade, or rename to
+ * match the daemon file it actually exercises"): renamed from
+ * `session-replay-terminal-lifecycle.test.ts`, a name inherited from a
+ * production module (`session-replay-terminal-lifecycle.ts`) the #1554
+ * fold-in already deleted (`step-loop.ts`'s own header documents the
+ * deletion — its terminal-close-suppression decision unified into the
+ * engine's `resolveSuppressedTerminalCloseIndex`).
+ *
+ * These six cases stayed daemon-side rather than moving into the package's
+ * `step-loop.test.ts` because they are NOT a test of engine policy through
+ * the façade in isolation — every one drives the full
+ * `runReplayScriptFile` round trip against a REAL `SessionStore`, and two of
+ * the six (`--keep-session fails explicitly when the completed replay has
+ * no live session`, `--keep-session rejects Maestro YAML before engine
+ * dispatch`) exercise daemon-ONLY authority
+ * (`requireLiveSessionForKeepSession`'s postcondition, `routeMaestroReplay`'s
+ * routing) that never reaches the engine's step loop at all. The engine's
+ * OWN terminal-close-suppression decision has its own cheaper, direct
+ * coverage in `packages/ad-replay/src/internal/__tests__/step-loop.test.ts`
+ * (see that file's header). This file's real subject is
+ * `session-replay-runtime.ts`'s `runReplayScriptFile` — specifically its
+ * `--keep-session` behavior — so it is named and grouped alongside that
+ * file's other `session-replay-runtime-*.test.ts` siblings
+ * (`-plan.test.ts`, `-maestro.test.ts`, `-failure.test.ts`, …) rather than
+ * kept in its own differently-named file or folded into the already-629-line
+ * `session-replay-runtime.test.ts`.
+ */
+
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
   return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };

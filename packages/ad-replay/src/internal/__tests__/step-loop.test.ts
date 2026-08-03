@@ -15,7 +15,9 @@ import type { ReplaySelectorPort } from '../selector-port.ts';
  * `session-replay-runtime.ts` (`runReplayScriptFile`) does. The equivalent
  * daemon-level assertions (full `SessionStore`/`runReplayScriptFile` round
  * trip, including the `--keep-session` live-session postcondition) live in
- * `src/daemon/handlers/__tests__/session-replay-terminal-lifecycle.test.ts`;
+ * `src/daemon/handlers/__tests__/session-replay-runtime-keep-session.test.ts`
+ * (renamed from `session-replay-terminal-lifecycle.test.ts` by the #1555
+ * structural-quality review — see that file's own header for the rationale);
  * this file covers the SAME suppression decision at the cheaper,
  * package-internal level, plus the repair-armed unification that file does
  * not exercise directly.
