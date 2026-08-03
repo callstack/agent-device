@@ -187,6 +187,39 @@ export function areInteractionSurfaceSignaturesStable(
   return true;
 }
 
+/**
+ * Subset-tolerant variant of {@link areInteractionSurfaceSignaturesStable} for
+ * comparing a signature against a baseline captured by a DIFFERENT query (used
+ * by post-gesture baseline distrust, #1542 defect 2). The pre-gesture baseline
+ * and the post-gesture quiet capture routinely come from different snapshot
+ * scopes (e.g. a broad text-search capture vs. an interactive-only selector
+ * capture), so their signatures can differ in length/membership even when the
+ * element that matters never moved — whole-array equality would report
+ * "changed" purely from scope drift and never catch the real staleness.
+ *
+ * Matches when every semantic key present in BOTH signatures still has the
+ * same rect (within tolerance), and at least one key is shared — an empty
+ * intersection is ambiguous (no comparable evidence), not a match.
+ */
+export function interactionSurfaceMatchesBaseline(
+  baseline: InteractionSurfaceSignature,
+  current: InteractionSurfaceSignature,
+): boolean {
+  if (baseline.length === 0 || current.length === 0) return false;
+  const baselineByKey = new Map(baseline.map((entry) => [entry.key, entry]));
+  let comparedCount = 0;
+  for (const entry of current) {
+    const baselineEntry = baselineByKey.get(entry.key);
+    if (!baselineEntry) continue;
+    comparedCount += 1;
+    if (Math.abs(baselineEntry.x - entry.x) > RECT_TOLERANCE_PX) return false;
+    if (Math.abs(baselineEntry.y - entry.y) > RECT_TOLERANCE_PX) return false;
+    if (Math.abs(baselineEntry.width - entry.width) > RECT_TOLERANCE_PX) return false;
+    if (Math.abs(baselineEntry.height - entry.height) > RECT_TOLERANCE_PX) return false;
+  }
+  return comparedCount > 0;
+}
+
 function supportsInteractionOutcomePolicy(session: SessionState): boolean {
   return isMobilePlatform(session.device);
 }
