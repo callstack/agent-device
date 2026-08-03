@@ -186,17 +186,11 @@ export async function runChecks(
     );
   }
   for (const spec of runnable) {
-    if (
-      coverageSelected &&
-      (spec.id === 'vitest-related' || spec.id === 'unit' || spec.id === 'provider-integration')
-    ) {
+    if (isCoveredByAffectedCoverage(spec, coverageSelected)) {
       process.stdout.write(`\n[dedupe] ${spec.id} — covered by affected LCOV or GitHub CI\n`);
       continue;
     }
-    const commands =
-      spec.id === 'coverage'
-        ? resolveAffectedCoverageCommands(pkg.scripts, args.base, options.changedFiles ?? [])
-        : [resolveCommand(spec, pkg.scripts, args.base, options.changedFiles)];
+    const commands = resolveCheckCommands(spec, pkg, args, options.changedFiles ?? []);
     for (const command of commands) {
       process.stdout.write(`\n[run] ${spec.id}: ${command.join(' ')}\n`);
       const exitCode = await execute(command, cwd);
@@ -208,6 +202,24 @@ export async function runChecks(
   }
   process.stdout.write('\ncheck:affected: all runnable checks passed.\n');
   return 0;
+}
+
+function isCoveredByAffectedCoverage(spec: CheckSpec, coverageSelected: boolean): boolean {
+  return (
+    coverageSelected &&
+    (spec.id === 'vitest-related' || spec.id === 'unit' || spec.id === 'provider-integration')
+  );
+}
+
+function resolveCheckCommands(
+  spec: CheckSpec,
+  pkg: PackageJson,
+  args: Args,
+  changedFiles: readonly string[],
+): string[][] {
+  return spec.id === 'coverage'
+    ? resolveAffectedCoverageCommands(pkg.scripts, args.base, changedFiles)
+    : [resolveCommand(spec, pkg.scripts, args.base, changedFiles)];
 }
 
 function resolveAffectedCoverageCommands(
