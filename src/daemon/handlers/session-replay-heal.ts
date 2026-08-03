@@ -1,5 +1,5 @@
 import { uniqueStrings } from '@agent-device/kernel/collections';
-import type { ReplaySelectorPort } from '@agent-device/ad-replay';
+import type { ReplaySelectorPort } from '../ad-replay-facade-types.ts';
 import { isTouchTargetCommand } from '@agent-device/ad-script';
 import type { ReplayReportAction } from './session-replay-report-action.ts';
 

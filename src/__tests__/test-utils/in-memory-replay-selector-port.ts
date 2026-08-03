@@ -7,7 +7,7 @@ import type {
   ReplaySelectorExpressionOutcome,
   ReplaySelectorGrammar,
   ReplaySelectorPort,
-} from '@agent-device/ad-replay';
+} from '../../daemon/ad-replay-facade-types.ts';
 
 /**
  * #1478 P5 stage B: a deterministic, dependency-free `ReplaySelectorPort`
@@ -24,15 +24,21 @@ import type {
  *
  * #1478 P5 stage D: relocated here from
  * `packages/ad-replay/src/internal/testing/in-memory-selector-port.ts`. It
- * only ever needed the exported `ReplaySelectorPort` port type and kernel
- * snapshot types — never a package-internal module — so once its only
- * consumer (`src/daemon/__tests__/replay-selector-port-contract.test.ts`)
- * turned out to be a root test (R11: only root may import the production
- * adapter, since a workspace package may never reach back into root `src/`),
- * keeping the adapter itself inside `packages/ad-replay` bought nothing: it
- * moved alongside its only caller, following the same
- * `src/__tests__/test-utils/` convention as `store-factory.ts` and
- * `session-factories.ts`.
+ * only ever needed the `ReplaySelectorPort` port type and kernel snapshot
+ * types — never a package-internal module — so once its only consumer
+ * (`src/daemon/__tests__/replay-selector-port-contract.test.ts`) turned out
+ * to be a root test (R11: only root may import the production adapter, since
+ * a workspace package may never reach back into root `src/`), keeping the
+ * adapter itself inside `packages/ad-replay` bought nothing: it moved
+ * alongside its only caller, following the same `src/__tests__/test-utils/`
+ * convention as `store-factory.ts` and `session-factories.ts`.
+ *
+ * #1555 review P1 (second pass, "enforce the accepted two-entrypoint
+ * facade"): the package façade no longer exports any type at all — the port
+ * family above is derived off `runAdReplay` in
+ * `src/daemon/ad-replay-facade-types.ts` (the one root module that does
+ * this), which this file imports from instead of `@agent-device/ad-replay`
+ * directly.
  *
  * Mini expression grammar: `key="value"` terms (space-separated, ANDed),
  * alternatives joined by ` || ` (first-match-wins, same as the real chain).

@@ -664,9 +664,3 @@ function buildAdReplayProgressStep(
     ...(value !== undefined ? { value } : {}),
   };
 }
-
-export function formatReplaySuccessMessage(replayed: number, wallClockMs: number): string {
-  const seconds = (wallClockMs / 1000).toFixed(1);
-  const noun = replayed === 1 ? 'step' : 'steps';
-  return `Replayed ${replayed} ${noun} in ${seconds}s`;
-}

@@ -97,6 +97,30 @@ test('readNamedExports never reports the original name behind an `as` alias', ()
   assert.ok(!names.includes('internalOnly'));
 });
 
+test('readNamedExports resolves `export * as ns` to its one real bound name', () => {
+  // Unlike bare `export *`, this binds exactly one importable name (`ns`) —
+  // enumerable, not a widening blind spot.
+  const source = "export * as ns from './x.ts';";
+  assert.deepEqual(readNamedExports(source), ['ns']);
+});
+
+// #1555 review P1 (second pass, "the gate also ignores export-star
+// declarations, so it can miss future widening"): a facade pinned to an
+// exact named-export list must not silently accept a form that widens its
+// real surface with no enumerable name at all. These two forms throw instead
+// of contributing nothing to the list — plant-verified (temporarily reverted
+// to a no-op, confirmed both tests failed, restored) rather than merely
+// asserted.
+test('readNamedExports rejects a bare `export *` re-export', () => {
+  const source = "export { runAdReplay } from './step-loop.ts';\nexport * from './leak.ts';\n";
+  assert.throws(() => readNamedExports(source), /export \* from/);
+});
+
+test('readNamedExports rejects a default export', () => {
+  assert.throws(() => readNamedExports('export default function leak() {}'), /export default/);
+  assert.throws(() => readNamedExports('export default 42;'), /export default/);
+});
+
 test('double-quoted and re-export routes into packages are not invisible to R11', () => {
   // The scanner is the layering parser, so quote style and statement form
   // cannot carve out a bypass: a double-quoted import, a re-export, and a
@@ -269,41 +293,25 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/kernel',
   ]);
   // #1555 review P1 ("add the reviewer-required exact exported-symbol
-  // gate"): the exports-subpath assertion above only proves the package
-  // exposes one `.` entry point — it says nothing about what that entry
-  // point actually NAMES. This pins the exact symbol list `packages/ad-replay/src/index.ts`
-  // exports (value and type-only together): the two binding-design
-  // entrypoints (`inspectAdReplay`, `runAdReplay`), the types their
-  // signatures reference, and the `ReplaySelectorPort` family (still named at
-  // every daemon call site that threads a port value). As of the #1555
-  // review's R3 pass, the four target-verification policy functions and
-  // `ReplayPostDispatchMismatchEvidence` are GONE from this list — they moved
-  // engine-private (`./internal/step-loop.ts`'s `verifyAndDispatchStep`), so
-  // there is no longer a reported façade deviation. A stray export —
-  // intentional or not — must edit this list too, not just slip through the
-  // exports-subpath check.
+  // gate"; second pass, "enforce the accepted two-entrypoint facade"): the
+  // exports-subpath assertion above only proves the package exposes one `.`
+  // entry point — it says nothing about what that entry point actually
+  // NAMES. This pins the exact symbol list `packages/ad-replay/src/index.ts`
+  // exports to the binding design's two entrypoints, `inspectAdReplay` and
+  // `runAdReplay`, and NOTHING else — no type export, no third value.
+  // `formatReplaySuccessMessage` (presentation) and every type the two
+  // entrypoints' signatures reference (`AdReplayManifest`,
+  // `AdReplayStepRuntime`, the `ReplaySelectorPort` family, …) are gone from
+  // this list on purpose: root consumers derive them structurally instead
+  // (`src/daemon/ad-replay-facade-types.ts`). A stray export — intentional
+  // or not, including a form `readNamedExports` cannot enumerate a name for
+  // (`export *`, `export default` — see the rejection tests below) — must
+  // edit this list too, not just slip through the exports-subpath check.
   assert.deepEqual(
     readNamedExports(
       fs.readFileSync(path.join(repoRoot, 'packages/ad-replay/src/index.ts'), 'utf8'),
     ),
-    [
-      'AdReplayDigestFlags',
-      'AdReplayManifest',
-      'AdReplayRunOutcome',
-      'AdReplayStepFailure',
-      'AdReplayStepOutcome',
-      'AdReplayStepRuntime',
-      'ReplayRecordedTargetDisambiguation',
-      'ReplayRecordedTargetPolicy',
-      'ReplayRecordedTargetResolution',
-      'ReplaySelectorCandidateOptions',
-      'ReplaySelectorExpressionOutcome',
-      'ReplaySelectorGrammar',
-      'ReplaySelectorPort',
-      'formatReplaySuccessMessage',
-      'inspectAdReplay',
-      'runAdReplay',
-    ],
+    ['inspectAdReplay', 'runAdReplay'],
   );
   const providerWebDriverPackage = packages.find(
     (pkg) => pkg.name === '@agent-device/provider-webdriver',

@@ -12,7 +12,7 @@ import {
   type ReplayVarScope,
 } from '@agent-device/ad-script';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
-import type { ReplaySelectorPort } from '@agent-device/ad-replay';
+import type { ReplaySelectorPort } from '../ad-replay-facade-types.ts';
 import {
   createReplayDivergenceSanitizer,
   type ReplayDivergence,

@@ -1,4 +1,4 @@
-import type { ReplaySelectorPort } from '@agent-device/ad-replay';
+import type { ReplaySelectorPort } from '../ad-replay-facade-types.ts';
 import { collectReplayScrubbableVarValues, type ReplayVarScope } from '@agent-device/ad-script';
 import {
   summarizeSnapshotTimingSamples,

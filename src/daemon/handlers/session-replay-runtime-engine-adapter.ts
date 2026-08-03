@@ -8,7 +8,7 @@ import type {
   AdReplayStepFailure,
   AdReplayStepRuntime,
   ReplaySelectorPort,
-} from '@agent-device/ad-replay';
+} from '../ad-replay-facade-types.ts';
 import { collectReplayScrubbableVarValues, type ReplayVarScope } from '@agent-device/ad-script';
 import type { SnapshotTimingSample } from '@agent-device/contracts/capture';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';

@@ -3,7 +3,7 @@ import type { DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { errorResponse } from './response.ts';
 import { createDaemonReplaySelectorPort } from '../replay-selector-port.ts';
-import { formatReplaySuccessMessage, runAdReplay } from '@agent-device/ad-replay';
+import { runAdReplay } from '@agent-device/ad-replay';
 import type { SnapshotTimingSample } from '@agent-device/contracts/capture';
 import { summarizeSnapshotTimingSamples } from '@agent-device/contracts/capture';
 import type { ReplayCommandResult } from '@agent-device/contracts/replay';
@@ -226,6 +226,19 @@ function completeReplayRun(params: {
  * `@agent-device/ad-replay`'s step loop): it inspects `SessionState`, which
  * the engine never sees.
  */
+/**
+ * #1555 review P1 (second pass, "keep success formatting daemon-side"):
+ * moved verbatim from `@agent-device/ad-replay`'s `step-loop.ts` — pure
+ * presentation of the run's own `replayed` count/wall-clock duration, not
+ * engine policy, so it sits beside its one caller (`completeReplayRun`
+ * above) instead of behind the façade.
+ */
+function formatReplaySuccessMessage(replayed: number, wallClockMs: number): string {
+  const seconds = (wallClockMs / 1000).toFixed(1);
+  const noun = replayed === 1 ? 'step' : 'steps';
+  return `Replayed ${replayed} ${noun} in ${seconds}s`;
+}
+
 function requireLiveSessionForKeepSession(params: {
   keepSession: boolean;
   sessionName: string;

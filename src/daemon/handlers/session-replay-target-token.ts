@@ -1,5 +1,5 @@
 import { isTouchTargetCommand } from '@agent-device/ad-script';
-import type { ReplaySelectorPort } from '@agent-device/ad-replay';
+import type { ReplaySelectorPort } from '../ad-replay-facade-types.ts';
 import type { SessionAction } from '../types.ts';
 
 /** Returns the resolved-target token carried by an eligible replay action. */
