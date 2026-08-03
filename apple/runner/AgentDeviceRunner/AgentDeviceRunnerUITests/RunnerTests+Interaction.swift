@@ -15,6 +15,7 @@ private enum RunnerInterfaceOrientation {
 extension RunnerTests {
   enum PlannedGestureExecution: Equatable {
     case fastSwipe
+    case continuousPan
     case sampled
   }
 
@@ -1095,9 +1096,82 @@ extension RunnerTests {
   }
 
   func plannedGestureExecution(for plan: RunnerGesturePlan) -> PlannedGestureExecution {
-    plan.topology == "single" && plan.executionProfile == "endpoint-hold"
-      ? .fastSwipe
-      : .sampled
+    if plan.topology == "single" && plan.executionProfile == "endpoint-hold" {
+      return .fastSwipe
+    }
+    if plan.topology == "single" && plan.executionProfile == "timed-pan" {
+      return .continuousPan
+    }
+    return .sampled
+  }
+
+  func continuousPlannedGesture(
+    app: XCUIApplication,
+    plan: RunnerGesturePlan
+  ) -> RunnerInteractionOutcome {
+#if os(iOS)
+    // On current iOS simulators, a dense single-pointer path assembled through the planned
+    // dictionary bridge can report success without delivering the pan updates. The native
+    // continuous profile preserves the planned endpoints and duration while keeping the
+    // proven continuous XCTest path. Multi-touch plans still use the exact sampled bridge below.
+    guard let pointer = plan.pointers.first,
+      let first = pointer.samples.first,
+      let last = pointer.samples.last
+    else {
+      return .unsupported(
+        message: "planned timed pan has no usable pointer endpoints",
+        hint: "Retry with a valid single-pointer gesture plan."
+      )
+    }
+    let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
+    let frame = CGRect(
+      x: plan.viewport.x,
+      y: plan.viewport.y,
+      width: plan.viewport.width,
+      height: plan.viewport.height
+    )
+    let start = nativeSynthesizedPoint(
+      orientedX: first.point.x,
+      orientedY: first.point.y,
+      in: frame,
+      interfaceOrientation: orientation
+    )
+    let end = nativeSynthesizedPoint(
+      orientedX: last.point.x,
+      orientedY: last.point.y,
+      in: frame,
+      interfaceOrientation: orientation
+    )
+    if let message = RunnerSynthesizedGesture.synthesizeContinuousDrag(
+      withApplication: app,
+      x: Double(start.x),
+      y: Double(start.y),
+      x2: Double(end.x),
+      y2: Double(end.y),
+      durationMs: plan.durationMs
+    ) {
+      return .unsupported(
+        message: message,
+        hint: "This gesture uses private XCTest event-synthesis APIs; rebuild the runner with a supported Xcode if this persists."
+      )
+    }
+    return .performed
+#elseif os(tvOS)
+    return .unsupported(
+      message: "timed pan gestures are not supported on tvOS",
+      hint: "tvOS has no touch input; use remote-driven navigation."
+    )
+#elseif os(visionOS)
+    return .unsupported(
+      message: "timed pan gestures are not supported on visionOS",
+      hint: "The current XCTest synthesizer supports iOS and iPadOS touch simulators only."
+    )
+#else
+    return .unsupported(
+      message: "timed pan gestures are not supported on macOS",
+      hint: "Run the gesture on an iOS simulator, where XCTest touch synthesis is available."
+    )
+#endif
   }
 
   func sampledPlannedGesture(
@@ -1396,7 +1470,7 @@ extension RunnerTests {
     XCTAssertEqual(plannedGestureExecution(for: plan), .fastSwipe)
   }
 
-  func testSinglePointerTimedPanUsesSampledExecution() throws {
+  func testSinglePointerTimedPanUsesContinuousExecution() throws {
     let plan = try JSONDecoder().decode(
       RunnerGesturePlan.self,
       from: Data(
@@ -1404,7 +1478,7 @@ extension RunnerTests {
       )
     )
 
-    XCTAssertEqual(plannedGestureExecution(for: plan), .sampled)
+    XCTAssertEqual(plannedGestureExecution(for: plan), .continuousPan)
   }
 
   func testSinglePointerEndpointHoldUsesFastSwipeExecution() throws {

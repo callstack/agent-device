@@ -176,6 +176,17 @@ extension RunnerTests {
     )
   }
 
+  private func plannedGestureResponse(
+    plan: RunnerGesturePlan,
+    timing: (gestureStartUptimeMs: Double, gestureEndUptimeMs: Double),
+    outcome: RunnerInteractionOutcome
+  ) -> Response {
+    if let response = unsupportedResponse(for: outcome) {
+      return response
+    }
+    return gestureResponse(message: plan.intent, timing: timing)
+  }
+
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
   func testGestureResponseIncludesSynthesizedTapFallbackDiagnostics() {
     let response = gestureResponse(
@@ -2056,7 +2067,8 @@ extension RunnerTests {
           error: ErrorPayload(code: "INVALID_ARGS", message: validationError)
         )
       }
-      if plannedGestureExecution(for: plan) == .fastSwipe {
+      switch plannedGestureExecution(for: plan) {
+      case .fastSwipe:
         // Validation above guarantees a non-empty, single-pointer path for this execution kind.
         let first = plan.pointers[0].samples.first!.point
         let last = plan.pointers[0].samples.last!.point
@@ -2074,14 +2086,17 @@ extension RunnerTests {
             synthesizedProfile: .fastSwipe
           )
         )
+      case .continuousPan:
+        let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
+          continuousPlannedGesture(app: activeApp, plan: plan)
+        }
+        return plannedGestureResponse(plan: plan, timing: timing, outcome: outcome)
+      case .sampled:
+        let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
+          sampledPlannedGesture(app: activeApp, plan: plan)
+        }
+        return plannedGestureResponse(plan: plan, timing: timing, outcome: outcome)
       }
-      let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
-        sampledPlannedGesture(app: activeApp, plan: plan)
-      }
-      if let response = unsupportedResponse(for: outcome) {
-        return response
-      }
-      return gestureResponse(message: plan.intent, timing: timing)
     case .gestureViewport:
       let frame = resolvedTouchReferenceFrame(app: activeApp, appFrame: activeApp.frame)
       guard !frame.isNull, !frame.isInfinite, !frame.isEmpty else {
