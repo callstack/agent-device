@@ -25,6 +25,27 @@ function action(command: string, overrides: Partial<SessionAction> = {}): Sessio
 }
 
 /**
+ * `runAdReplay`'s request, filled in with neutral `${VAR}`-plumbing fields —
+ * every action in this file is untargeted and carries no `${VAR}` — so each
+ * test only has to state what it actually varies (`actions`/`entryIndex`/
+ * `keepSession`).
+ */
+function runRequest(
+  actions: SessionAction[],
+  overrides: { entryIndex?: number; keepSession: boolean },
+) {
+  return {
+    actions,
+    entryIndex: overrides.entryIndex ?? 0,
+    keepSession: overrides.keepSession,
+    actionLines: actions.map(() => 1),
+    actionSourcePaths: undefined,
+    resolvedPath: 'fixture.ad',
+    varSources: {},
+  };
+}
+
+/**
  * A minimal `AdReplayStepRuntime` fixture: every action in these tests is
  * untargeted (no `targetEvidence`), so `verifyAndDispatchStep` always takes
  * the `dispatchNoGuard` path straight to `dispatchStep` — the
@@ -47,7 +68,7 @@ function createFakeRuntime(params: { isRepairArmed?: () => boolean } = {}): {
     classifyTarget: () => {
       throw new Error('classifyTarget: not used by this fixture (no targetEvidence)');
     },
-    async dispatchStep(dispatchedAction, _index, artifactPaths) {
+    async dispatchStep(dispatchedAction, _resolvedAction, _index, artifactPaths) {
       dispatched.push(dispatchedAction.command);
       return { status: 'ok', artifactPaths };
     },
@@ -80,7 +101,7 @@ test('--keep-session suppresses a close that is terminal among executable action
   // at index 1, not the array's physical last index.
   const actions = [action('open'), action('close'), action('replay')];
   const { runtime, dispatched } = createFakeRuntime();
-  const outcome = await runAdReplay({ actions, entryIndex: 0, keepSession: true }, runtime);
+  const outcome = await runAdReplay(runRequest(actions, { keepSession: true }), runtime);
   assert.deepEqual(dispatched, ['open']);
   assert.equal(outcome.status, 'completed');
   if (outcome.status === 'completed') assert.equal(outcome.replayed, 1);
@@ -89,7 +110,7 @@ test('--keep-session suppresses a close that is terminal among executable action
 test('repair-armed suppresses the same terminal-among-executable close (unified decision)', async () => {
   const actions = [action('open'), action('close'), action('replay')];
   const { runtime, dispatched } = createFakeRuntime({ isRepairArmed: () => true });
-  const outcome = await runAdReplay({ actions, entryIndex: 0, keepSession: false }, runtime);
+  const outcome = await runAdReplay(runRequest(actions, { keepSession: false }), runtime);
   assert.deepEqual(dispatched, ['open']);
   assert.equal(outcome.status, 'completed');
   if (outcome.status === 'completed') assert.equal(outcome.replayed, 1);
@@ -98,7 +119,7 @@ test('repair-armed suppresses the same terminal-among-executable close (unified 
 test('an interior close is preserved instead of broad command filtering', async () => {
   const actions = [action('open'), action('close'), action('open')];
   const { runtime, dispatched } = createFakeRuntime();
-  const outcome = await runAdReplay({ actions, entryIndex: 0, keepSession: true }, runtime);
+  const outcome = await runAdReplay(runRequest(actions, { keepSession: true }), runtime);
   assert.deepEqual(dispatched, ['open', 'close', 'open']);
   assert.equal(outcome.status, 'completed');
   if (outcome.status === 'completed') assert.equal(outcome.replayed, 3);
@@ -107,7 +128,7 @@ test('an interior close is preserved instead of broad command filtering', async 
 test('a terminal close dispatches normally when neither keepSession nor repair is armed', async () => {
   const actions = [action('open'), action('close')];
   const { runtime, dispatched } = createFakeRuntime();
-  const outcome = await runAdReplay({ actions, entryIndex: 0, keepSession: false }, runtime);
+  const outcome = await runAdReplay(runRequest(actions, { keepSession: false }), runtime);
   assert.deepEqual(dispatched, ['open', 'close']);
   assert.equal(outcome.status, 'completed');
   if (outcome.status === 'completed') assert.equal(outcome.replayed, 2);
@@ -116,7 +137,7 @@ test('a terminal close dispatches normally when neither keepSession nor repair i
 test('a close-less plan suppresses nothing and arms every executable step, including the suppressed one', async () => {
   const actions = [action('open'), action('close'), action('replay')];
   const { runtime, armCount } = createFakeRuntime();
-  await runAdReplay({ actions, entryIndex: 0, keepSession: true }, runtime);
+  await runAdReplay(runRequest(actions, { keepSession: true }), runtime);
   // `armStep` runs before the terminal-close check so `[open, close]` records
   // the session `open` created before treating `close` as lifecycle — the
   // suppressed `close` is still armed, just never dispatched.
@@ -162,7 +183,7 @@ test("a post-dispatch target-binding mismatch reports the pre-step artifact snap
     classifyTarget: () => {
       throw new Error('classifyTarget: not used — deferred-landmark skips straight to dispatch');
     },
-    async dispatchStep(dispatchedAction, _index, artifactPaths, _guard) {
+    async dispatchStep(dispatchedAction, _resolvedAction, _index, artifactPaths, _guard) {
       if (dispatchedAction.command === 'open') {
         return { status: 'ok', artifactPaths: ['open-snapshot.png'] };
       }
@@ -190,6 +211,7 @@ test("a post-dispatch target-binding mismatch reports the pre-step artifact snap
       _index,
       _evidence,
       artifactPaths,
+      _scrubVars,
     ) {
       receivedArtifactPaths = artifactPaths;
       return { kind: 'REPLAY_DIVERGENCE', message: 'mismatch', artifactPaths: [] };
@@ -207,7 +229,7 @@ test("a post-dispatch target-binding mismatch reports the pre-step artifact snap
   };
 
   const outcome = await runAdReplay(
-    { actions: [openAction, waitAction], entryIndex: 0, keepSession: false },
+    runRequest([openAction, waitAction], { keepSession: false }),
     runtime,
   );
 

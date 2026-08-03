@@ -4,7 +4,13 @@ import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import type { ReplayDivergenceTargetBindingKind } from '@agent-device/contracts/divergence';
-import type { LocalIdentity } from '@agent-device/ad-script';
+import {
+  buildReplayVarScope,
+  collectReplayScrubbableVarValues,
+  resolveReplayAction,
+  type LocalIdentity,
+  type ReplayVarScope,
+} from '@agent-device/ad-script';
 import type { ReplaySelectorPort } from './selector-port.ts';
 import {
   deriveReplayTargetGuardMismatchEvidence,
@@ -67,7 +73,46 @@ import {
  * daemon-side post-hoc counter. `requireLiveSessionForKeepSession` — the
  * `--keep-session` postcondition that inspects `SessionStore` — stays daemon
  * authority and never moved here.
+ *
+ * #1555 review P1 (second pass, "move variable semantics/planning behind the
+ * replay entrypoint"): `runAdReplay` builds the `${VAR}` scope, via
+ * `@agent-device/ad-script`'s `buildReplayVarScope`, from the request's
+ * `varSources` — plain data (builtins/file/shell/cli env) the daemon reads
+ * from the request/process — and resolves each action EXACTLY ONCE per step
+ * (`resolveReplayAction`), before `verifyAndDispatchStep` does anything else
+ * with it. The RESOLVED action is what reaches `dispatchStep` and
+ * `beginTargetVerification`; every other capability still receives the
+ * ORIGINAL recorded `action` (a target-binding divergence reports the
+ * recorded selector, never an expanded `${VAR}`). This replaces two
+ * independent daemon-side interpolation call sites — dispatch's own
+ * (`session-replay-action-runtime.ts`'s `invokeReplayAction`) and target
+ * verification's separate one (`session-replay-target-verification.ts`'s
+ * `resolveTargetVerificationEntry`) — with this one engine-owned resolution.
+ * The engine's own live scope is also the one source for the `${VAR}` values
+ * a divergence report may redact (`collectReplayScrubbableVarValues`),
+ * threaded to each build-failure/`handleActionFailure` capability as an
+ * explicit `scrubVars` argument rather than recomputed daemon-side from a
+ * second scope object — the daemon no longer holds a `ReplayVarScope` value
+ * at all.
  */
+
+/**
+ * `${VAR}` scope inputs — plain data (builtins/file/shell/cli env) the
+ * daemon reads from the request/process and passes in; `runAdReplay` builds
+ * the scope from this. Derived structurally off `buildReplayVarScope`
+ * (`@agent-device/ad-script` does not export its own `ReplayVarSources` type
+ * by name) rather than duplicating the shape.
+ */
+type AdReplayVarSources = Parameters<typeof buildReplayVarScope>[0];
+
+/**
+ * A `${VAR}` value eligible for divergence-report redaction — the engine's
+ * own scrub list (`collectReplayScrubbableVarValues` over its live scope),
+ * threaded to the daemon's build-failure/`handleActionFailure` capabilities
+ * as an explicit argument rather than recomputed daemon-side from a second
+ * scope object.
+ */
+export type AdReplayScrubValue = Readonly<{ name: string; value: string }>;
 
 /** Neutral per-step failure: no `DaemonResponse`, no wire shape — just what the engine needs to report. */
 export type AdReplayStepFailure = Readonly<{
@@ -230,9 +275,17 @@ export type AdReplayStepRuntime = Readonly<{
    * Routes one step's recorded target evidence to its verification phase —
    * daemon authority (command-descriptor registry lookup, session read,
    * wait-form parse, token extraction). Only ever called when
-   * `action.targetEvidence` is present.
+   * `action.targetEvidence` is present. `resolvedAction` is `action` with
+   * every `${VAR}` already resolved (the engine's own, single resolution for
+   * this step) — used only to extract the resolved target token/wait form;
+   * `action` (the recorded original) is what routing decisions and any wire
+   * report still key on.
    */
-  beginTargetVerification(action: SessionAction, index: number): AdReplayVerificationEntry;
+  beginTargetVerification(
+    action: SessionAction,
+    resolvedAction: SessionAction,
+    index: number,
+  ): AdReplayVerificationEntry;
   /**
    * Captures a fresh snapshot for classification or for a divergence's
    * `screen` — daemon authority (`SessionStore`, the capture pipeline, the
@@ -258,10 +311,14 @@ export type AdReplayStepRuntime = Readonly<{
    * Dispatches the action, optionally carrying a pre-action identity guard,
    * and detects the guard-mismatch / wait-landmark-mismatch post-resolution
    * refusal markers on failure — daemon authority (the single `invoke`
-   * dispatch site).
+   * dispatch site). `resolvedAction` (see `beginTargetVerification`) is what
+   * actually gets sent; `action` is threaded alongside it only for
+   * daemon-owned, non-interpolation decisions (e.g. a recorded-input
+   * variable heuristic read off the ORIGINAL fill text).
    */
   dispatchStep(
     action: SessionAction,
+    resolvedAction: SessionAction,
     index: number,
     artifactPaths: readonly string[],
     guard: AdReplayDispatchGuard | undefined,
@@ -272,23 +329,28 @@ export type AdReplayStepRuntime = Readonly<{
    * resume stamping, wire shaping). `artifactPaths` is the pre-step
    * snapshot (mirrors `dispatchStep`'s own, never artifacts a just-failed
    * dispatch produced — verification never reaches dispatch on this path).
+   * `scrubVars` is the engine's own live `${VAR}` scrub list, as of this
+   * point in the run.
    */
   buildRecordedUnverifiableFailure(
     action: SessionAction,
     index: number,
     artifactPaths: readonly string[],
+    scrubVars: readonly AdReplayScrubValue[],
   ): Promise<AdReplayStepFailure>;
   /**
    * Builds a target-binding divergence from `evidence`, reusing the LAST
    * `captureObservation` result for its `screen` (the pre-dispatch capture
    * and classification/capture-failure evidence share one capture) —
-   * daemon authority. `artifactPaths` is the pre-step snapshot, as above.
+   * daemon authority. `artifactPaths` is the pre-step snapshot, as above;
+   * `scrubVars` as above.
    */
   buildTargetBindingFailure(
     action: SessionAction,
     index: number,
     evidence: AdReplayTargetBindingEvidence,
     artifactPaths: readonly string[],
+    scrubVars: readonly AdReplayScrubValue[],
   ): Promise<AdReplayStepFailure>;
   /**
    * Builds a target-binding divergence from `evidence` after a FRESH
@@ -297,24 +359,27 @@ export type AdReplayStepRuntime = Readonly<{
    * `dispatchStep`, not the just-failed dispatch's own artifacts — mirrors
    * the pre-#1555-R3 daemon orchestrator exactly (a target-binding
    * divergence's wire `artifactPaths` never included the triggering
-   * dispatch's own).
+   * dispatch's own); `scrubVars` as above.
    */
   buildPostDispatchTargetBindingFailure(
     action: SessionAction,
     index: number,
     evidence: AdReplayTargetBindingEvidence,
     artifactPaths: readonly string[],
+    scrubVars: readonly AdReplayScrubValue[],
   ): Promise<AdReplayStepFailure>;
   /**
    * Wraps a failed step with replay failure diagnostics and repair-held
    * marking — daemon authority (capture, `SessionStore`, the P4b
    * coordinator) — and returns the neutral failure the run outcome reports.
+   * `scrubVars` as above.
    */
   handleActionFailure(params: {
     action: SessionAction;
     index: number;
     artifactPaths: readonly string[];
     snapshotDiagnosticSamples: readonly SnapshotTimingSample[];
+    scrubVars: readonly AdReplayScrubValue[];
   }): Promise<AdReplayStepFailure>;
   /** Arms the save-script transaction for this step; a no-op absent `--save-script`. Repair authority. */
   armStep(): void;
@@ -343,6 +408,26 @@ export type AdReplayRunRequest = Readonly<{
    * below, one OR'd into the single suppression check `runAdReplay` makes.
    */
   readonly keepSession: boolean;
+  /**
+   * Per-action source line, parallel to `actions` — `inspectAdReplay`'s own
+   * manifest field, threaded back in here since `runAdReplay` is a separate
+   * call from the manifest inspection that produced it. Used only for
+   * `${VAR}` interpolation-error location diagnostics (`resolveReplayAction`'s
+   * `loc`).
+   */
+  readonly actionLines: readonly number[];
+  /** Per-action resolved source path when it differs from `resolvedPath` (a `runFlow` include's own file), parallel to `actions`. */
+  readonly actionSourcePaths: readonly (string | undefined)[] | undefined;
+  /** The resolved `.ad` file path — the interpolation-location fallback when an action's own `actionSourcePaths` entry is absent. */
+  readonly resolvedPath: string;
+  /**
+   * `${VAR}` scope inputs — plain data the daemon reads from the request/
+   * process (builtins, file/shell/cli env). `runAdReplay` builds the scope
+   * from this and performs every `${VAR}` resolution itself (#1555 review
+   * P1, "move variable semantics/planning behind the replay entrypoint") —
+   * the daemon never resolves an action or builds a scope of its own.
+   */
+  readonly varSources: AdReplayVarSources;
 }>;
 
 /** Neutral run-level outcome: `runAdReplay` never returns or holds a `DaemonResponse`. */
@@ -386,6 +471,10 @@ export async function runAdReplay(
   runtime: AdReplayStepRuntime,
 ): Promise<AdReplayRunOutcome> {
   const { actions, entryIndex, keepSession } = request;
+  // The one `${VAR}` scope this run builds — see the module header. Mutated
+  // in place as each step resolves (tracks which builtins actually expanded,
+  // for `collectReplayScrubbableVarValues`), never rebuilt mid-run.
+  const scope = buildReplayVarScope(request.varSources);
   const artifactPaths = new Set<string>();
   const snapshotDiagnosticSamples: SnapshotTimingSample[] = [];
   const terminalCloseIndex = resolveSuppressedTerminalCloseIndex(actions);
@@ -407,8 +496,14 @@ export async function runAdReplay(
       const value = runtime.describeStepValue(action);
       runtime.onStep(buildAdReplayProgressStep(index, actions.length, action, value));
     }
+    // The engine's one resolution of this step's action — see the module
+    // header. Every capability below that needs an interpolated value
+    // receives THIS value; every other capability still receives `action`.
+    const resolvedAction = resolveReplayAction(action, scope, resolveActionLoc(request, index));
     const sampleStart = runtime.diagnosticsMarker();
-    const stepOutcome = await verifyAndDispatchStep(runtime, action, index, [...artifactPaths]);
+    const stepOutcome = await verifyAndDispatchStep(runtime, scope, action, resolvedAction, index, [
+      ...artifactPaths,
+    ]);
     snapshotDiagnosticSamples.push(...runtime.diagnosticsSince(sampleStart));
     if (stepOutcome.status === 'ok') {
       stepOutcome.artifactPaths.forEach((entry) => artifactPaths.add(entry));
@@ -420,6 +515,7 @@ export async function runAdReplay(
       index,
       artifactPaths: [...artifactPaths],
       snapshotDiagnosticSamples,
+      scrubVars: collectReplayScrubbableVarValues(scope),
     });
     return { status: 'failed', stepIndex: index, failure };
   }
@@ -428,6 +524,17 @@ export async function runAdReplay(
     replayed,
     artifactPaths: [...artifactPaths],
     snapshotDiagnosticSamples,
+  };
+}
+
+/** `resolveReplayAction`'s `loc` for one step — `actionSourcePaths[index]` when the step came from a `runFlow` include, else the top-level plan's own resolved path. */
+function resolveActionLoc(
+  request: AdReplayRunRequest,
+  index: number,
+): { file: string; line: number } {
+  return {
+    file: request.actionSourcePaths?.[index] ?? request.resolvedPath,
+    line: request.actionLines[index] ?? 1,
   };
 }
 
@@ -445,15 +552,19 @@ export async function runAdReplay(
  */
 async function verifyAndDispatchStep(
   runtime: AdReplayStepRuntime,
+  scope: ReplayVarScope,
   action: SessionAction,
+  resolvedAction: SessionAction,
   index: number,
   artifactPaths: readonly string[],
 ): Promise<AdReplayStepOutcome> {
   const recorded = action.targetEvidence;
-  if (!recorded) return dispatchNoGuard(runtime, action, index, artifactPaths);
+  if (!recorded) return dispatchNoGuard(runtime, action, resolvedAction, index, artifactPaths);
 
-  const entry = runtime.beginTargetVerification(action, index);
-  if (entry.kind === 'inactive') return dispatchNoGuard(runtime, action, index, artifactPaths);
+  const entry = runtime.beginTargetVerification(action, resolvedAction, index);
+  if (entry.kind === 'inactive') {
+    return dispatchNoGuard(runtime, action, resolvedAction, index, artifactPaths);
+  }
 
   // #1349 post-resolution phase (`wait`): NEVER the generic pre-dispatch
   // resolution below — an absent landmark is a wait's expected starting
@@ -467,14 +578,19 @@ async function verifyAndDispatchStep(
     });
     switch (plan.kind) {
       case 'skip':
-        return dispatchNoGuard(runtime, action, index, artifactPaths);
+        return dispatchNoGuard(runtime, action, resolvedAction, index, artifactPaths);
       case 'recorded-unverifiable':
         return {
           status: 'failed',
-          failure: await runtime.buildRecordedUnverifiableFailure(action, index, artifactPaths),
+          failure: await runtime.buildRecordedUnverifiableFailure(
+            action,
+            index,
+            artifactPaths,
+            collectReplayScrubbableVarValues(scope),
+          ),
         };
       case 'deferred-landmark':
-        return dispatchWithGuard(runtime, action, index, artifactPaths, {
+        return dispatchWithGuard(runtime, scope, action, resolvedAction, index, artifactPaths, {
           kind: 'landmark',
           landmark: plan.landmark,
         });
@@ -488,12 +604,18 @@ async function verifyAndDispatchStep(
     platform: entry.platform,
     port: runtime.port,
   });
-  if (preDispatchPlan.kind === 'skip')
-    return dispatchNoGuard(runtime, action, index, artifactPaths);
+  if (preDispatchPlan.kind === 'skip') {
+    return dispatchNoGuard(runtime, action, resolvedAction, index, artifactPaths);
+  }
   if (preDispatchPlan.kind === 'recorded-unverifiable') {
     return {
       status: 'failed',
-      failure: await runtime.buildRecordedUnverifiableFailure(action, index, artifactPaths),
+      failure: await runtime.buildRecordedUnverifiableFailure(
+        action,
+        index,
+        artifactPaths,
+        collectReplayScrubbableVarValues(scope),
+      ),
     };
   }
   const token = preDispatchPlan.token;
@@ -519,13 +641,14 @@ async function verifyAndDispatchStep(
           ...(observation.hint !== undefined ? { causeHint: observation.hint } : {}),
         },
         artifactPaths,
+        collectReplayScrubbableVarValues(scope),
       ),
     };
   }
 
   const classification = runtime.classifyTarget({ action, index, token, nodes: observation.nodes });
   if (classification.verified) {
-    return dispatchWithGuard(runtime, action, index, artifactPaths, {
+    return dispatchWithGuard(runtime, scope, action, resolvedAction, index, artifactPaths, {
       kind: 'target',
       guard: classification.guard,
     });
@@ -545,6 +668,7 @@ async function verifyAndDispatchStep(
         causeMessage: classification.causeMessage,
       },
       artifactPaths,
+      collectReplayScrubbableVarValues(scope),
     ),
   };
 }
@@ -553,10 +677,17 @@ async function verifyAndDispatchStep(
 async function dispatchNoGuard(
   runtime: AdReplayStepRuntime,
   action: SessionAction,
+  resolvedAction: SessionAction,
   index: number,
   artifactPaths: readonly string[],
 ): Promise<AdReplayStepOutcome> {
-  const outcome = await runtime.dispatchStep(action, index, artifactPaths, undefined);
+  const outcome = await runtime.dispatchStep(
+    action,
+    resolvedAction,
+    index,
+    artifactPaths,
+    undefined,
+  );
   switch (outcome.status) {
     case 'ok':
       return { status: 'ok', artifactPaths: outcome.artifactPaths };
@@ -579,12 +710,14 @@ async function dispatchNoGuard(
  */
 async function dispatchWithGuard(
   runtime: AdReplayStepRuntime,
+  scope: ReplayVarScope,
   action: SessionAction,
+  resolvedAction: SessionAction,
   index: number,
   artifactPaths: readonly string[],
   guard: AdReplayDispatchGuard,
 ): Promise<AdReplayStepOutcome> {
-  const outcome = await runtime.dispatchStep(action, index, artifactPaths, guard);
+  const outcome = await runtime.dispatchStep(action, resolvedAction, index, artifactPaths, guard);
   if (outcome.status === 'ok') return { status: 'ok', artifactPaths: outcome.artifactPaths };
   if (outcome.status === 'failed') return { status: 'failed', failure: outcome.failure };
 
@@ -617,6 +750,7 @@ async function dispatchWithGuard(
         causeMessage: evidence.causeMessage,
       },
       artifactPaths,
+      collectReplayScrubbableVarValues(scope),
     ),
   };
 }

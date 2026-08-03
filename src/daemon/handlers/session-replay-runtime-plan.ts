@@ -11,15 +11,13 @@ import type { ReplayCoordinator } from '../session-replay-coordinator.ts';
 import { errorResponse } from './response.ts';
 import { buildReplayScriptPlatformFlags } from '../replay-device-selection.ts';
 import { inspectAdReplay } from '@agent-device/ad-replay';
-import type { AdReplayManifest } from '../ad-replay-facade-types.ts';
+import type { AdReplayManifest, AdReplayVarSources } from '../ad-replay-facade-types.ts';
 import {
-  buildReplayVarScope,
   collectReplayShellEnv,
   parseReplayCliEnvEntries,
   readReplayCliEnvEntries,
   readReplayShellEnvSource,
   type ReplayScriptMetadata,
-  type ReplayVarScope,
 } from '@agent-device/ad-script';
 import { resolveReplayFormat } from '../../replay/format.ts';
 import { buildReplayBuiltinVars } from './session-replay-vars.ts';
@@ -96,7 +94,13 @@ export type PreparedReplayPlan = {
   planDigest: string;
   preEntrySession: SessionState | undefined;
   entryIndex: number;
-  scope: ReplayVarScope;
+  /**
+   * `${VAR}` scope INPUTS — plain data, never a built `ReplayVarScope`
+   * (#1555 review P1, "move variable semantics/planning behind the replay
+   * entrypoint"): `runAdReplay` builds the scope and performs every
+   * interpolation itself now.
+   */
+  varSources: AdReplayVarSources;
   actionTracePath: string | undefined;
 };
 
@@ -133,7 +137,13 @@ export function prepareReplayPlan(params: {
       planDigest,
       preEntrySession,
       entryIndex: entryIndexResult.value,
-      scope: buildPreparedReplayScope({ req, replayReq, sessionName, resolved, metadata }),
+      varSources: buildPreparedReplayVarSources({
+        req,
+        replayReq,
+        sessionName,
+        resolved,
+        metadata,
+      }),
       actionTracePath: tracePath ?? preEntrySession?.trace?.outPath,
     },
   };
@@ -209,15 +219,23 @@ function applyReplayMetadata(
   return { ...req, flags: buildReplayMetadataFlags(req.flags, metadata) };
 }
 
-function buildPreparedReplayScope(params: {
+/**
+ * The `${VAR}` scope's raw INPUTS — builtins (this request's session/
+ * platform/target/device/artifacts-dir), the script's own `env` header, the
+ * shell's `AD_VAR_*` entries, and `-e KEY=VALUE` CLI entries — read here,
+ * once, from the request/process. `runAdReplay` is the one place these are
+ * merged into an actual scope and used to resolve an action (#1555 review
+ * P1); this function stops at collecting the plain data.
+ */
+function buildPreparedReplayVarSources(params: {
   req: DaemonRequest;
   replayReq: DaemonRequest;
   sessionName: string;
   resolved: string;
   metadata: AdReplayManifest['metadata'];
-}): ReplayVarScope {
+}): AdReplayVarSources {
   const { req, replayReq, sessionName, resolved, metadata } = params;
-  return buildReplayVarScope({
+  return {
     builtins: buildReplayBuiltinVars({
       req: replayReq,
       sessionName,
@@ -227,7 +245,7 @@ function buildPreparedReplayScope(params: {
     fileEnv: metadata.env,
     shellEnv: collectReplayShellEnv(readReplayShellEnvSource(req.flags?.replayShellEnv)),
     cliEnv: parseReplayCliEnvEntries(readReplayCliEnvEntries(req.flags?.replayEnv)),
-  });
+  };
 }
 
 /**

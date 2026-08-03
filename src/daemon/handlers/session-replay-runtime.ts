@@ -94,7 +94,7 @@ export async function runReplayScriptFile(params: ReplayScriptFileParams): Promi
       actionSourcePaths,
       planDigest,
       entryIndex,
-      scope,
+      varSources,
       actionTracePath,
     } = planPreparation.value;
     const sessionPreparation = prepareReplaySession({
@@ -107,7 +107,6 @@ export async function runReplayScriptFile(params: ReplayScriptFileParams): Promi
     });
     if (!sessionPreparation.ok) return sessionPreparation.response;
     const stepContext: ReplayStepContext = {
-      scope,
       replayReq,
       sessionName,
       sessionStore,
@@ -131,7 +130,18 @@ export async function runReplayScriptFile(params: ReplayScriptFileParams): Promi
       onStep,
       armSaveScript: sessionPreparation.armSaveScript,
     });
-    const outcome = await runAdReplay({ actions, entryIndex, keepSession }, runtime);
+    const outcome = await runAdReplay(
+      {
+        actions,
+        entryIndex,
+        keepSession,
+        actionLines,
+        actionSourcePaths,
+        resolvedPath: resolved,
+        varSources,
+      },
+      runtime,
+    );
     if (outcome.status === 'failed') {
       // #1555 P1 (neutral outcomes): `runAdReplay` never holds or returns a
       // `DaemonResponse` — it only reports WHICH step failed. The real wire

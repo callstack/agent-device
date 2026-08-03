@@ -9,11 +9,7 @@ import type {
   AdReplayStepRuntime,
   ReplaySelectorPort,
 } from '../ad-replay-facade-types.ts';
-import {
-  collectReplayScrubbableVarValues,
-  type LocalIdentity,
-  type ReplayVarScope,
-} from '@agent-device/ad-script';
+import type { LocalIdentity } from '@agent-device/ad-script';
 import type { SnapshotTimingSample } from '@agent-device/contracts/capture';
 import type { TargetAncestryEntry } from '@agent-device/contracts/replay';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
@@ -43,9 +39,14 @@ import type { ReplayCoordinator } from '../session-replay-coordinator.ts';
  * orchestration this adapter plugs into.
  */
 
-/** Per-run invariants for a single replay step (ADR 0012 step 4 verify + dispatch + guard). */
+/**
+ * Per-run invariants for a single replay step (ADR 0012 step 4 verify +
+ * dispatch + guard). No `${VAR}` scope here (#1555 review P1, "move variable
+ * semantics/planning behind the replay entrypoint") — the engine
+ * (`runAdReplay`) builds and owns it; this adapter never resolves an action
+ * or reads a scope value itself.
+ */
 export type ReplayStepContext = {
-  scope: ReplayVarScope;
   replayReq: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
@@ -90,7 +91,7 @@ function toDaemonEvidence(evidence: EngineTargetBindingEvidence): TargetBindingF
 }
 
 /** The engine's pre-action identity guard, read off `AdReplayStepRuntime` itself (see `EngineTargetBindingEvidence` above for why `Parameters<...>` rather than a named façade export). */
-type ReplayDispatchGuard = Parameters<AdReplayStepRuntime['dispatchStep']>[3];
+type ReplayDispatchGuard = Parameters<AdReplayStepRuntime['dispatchStep']>[4];
 
 /** `dispatchStep`'s result shape, read off `AdReplayStepRuntime` itself for the same reason. */
 type ReplayDispatchOutcome = Awaited<ReturnType<AdReplayStepRuntime['dispatchStep']>>;
@@ -263,11 +264,18 @@ export function createAdReplayStepRuntime(params: {
   let lastResponse: DaemonResponse | undefined;
   let lastObservation: DivergenceObservation | undefined;
 
-  /** The `TargetBindingDivergenceContext` every wire-builder needs — built fresh per call from `action`/`index`/its own `artifactPaths` snapshot. */
+  /**
+   * The `TargetBindingDivergenceContext` every wire-builder needs — built
+   * fresh per call from `action`/`index`/its own `artifactPaths` snapshot.
+   * `scrubVars` is the engine's own live `${VAR}` scrub list as of this
+   * point in the run, threaded in by the caller rather than recomputed here
+   * from a scope this adapter no longer holds.
+   */
   const buildDivergenceContext = (
     action: SessionAction,
     index: number,
     stepArtifactPaths: readonly string[],
+    scrubVars: TargetBindingDivergenceContext['scrubVars'],
   ): TargetBindingDivergenceContext => ({
     // Only ever called on a path that confirmed `action.targetEvidence` is
     // present (the engine checks that before calling anything else).
@@ -282,7 +290,7 @@ export function createAdReplayStepRuntime(params: {
     sessionStore: ctx.sessionStore,
     resumeStamper: ctx.coordinator.resumeStamper,
     responseLevel: ctx.responseLevel,
-    scrubVars: collectReplayScrubbableVarValues(ctx.scope),
+    scrubVars,
     planActions: ctx.actions,
     planDigest: ctx.planDigest,
     signal: ctx.signal,
@@ -300,12 +308,10 @@ export function createAdReplayStepRuntime(params: {
   const runtime: AdReplayStepRuntime = {
     port: ctx.port,
 
-    beginTargetVerification(action, index) {
+    beginTargetVerification(action, resolvedAction, _index) {
       return resolveTargetVerificationEntry({
         action,
-        scope: ctx.scope,
-        sourcePath: ctx.actionSourcePaths?.[index] ?? ctx.resolved,
-        sourceLine: ctx.actionLines[index] ?? 1,
+        resolvedAction,
         sessionName: ctx.sessionName,
         sessionStore: ctx.sessionStore,
         port: ctx.port,
@@ -359,13 +365,13 @@ export function createAdReplayStepRuntime(params: {
     // `_stepArtifactPaths` (the pre-step snapshot) is unused here — dispatch
     // never fed it to `invokeReplayAction`, even before this split; it only
     // ever reached the target-binding wire builders (`build*Failure` below).
-    async dispatchStep(action, index, _stepArtifactPaths, guard) {
+    async dispatchStep(action, resolvedAction, index, _stepArtifactPaths, guard) {
       const sourceLine = ctx.actionLines[index] ?? 1;
       const response = await invokeReplayAction({
         req: applyReplayDispatchGuard(ctx.replayReq, guard),
         sessionName: ctx.sessionName,
         action,
-        scope: ctx.scope,
+        resolved: resolvedAction,
         filePath: ctx.resolved,
         line: sourceLine,
         sourcePath: ctx.actionSourcePaths?.[index],
@@ -380,9 +386,9 @@ export function createAdReplayStepRuntime(params: {
       return classifyReplayDispatchFailure(response, guard, entries);
     },
 
-    async buildRecordedUnverifiableFailure(action, index, stepArtifactPaths) {
+    async buildRecordedUnverifiableFailure(action, index, stepArtifactPaths, scrubVars) {
       const response = await buildRecordedUnverifiableFailureResponse(
-        buildDivergenceContext(action, index, stepArtifactPaths),
+        buildDivergenceContext(action, index, stepArtifactPaths, [...scrubVars]),
         {
           session: ctx.sessionStore.get(ctx.sessionName),
           sessionName: ctx.sessionName,
@@ -394,23 +400,29 @@ export function createAdReplayStepRuntime(params: {
       return recordFailure(response);
     },
 
-    async buildTargetBindingFailure(action, index, evidence, stepArtifactPaths) {
+    async buildTargetBindingFailure(action, index, evidence, stepArtifactPaths, scrubVars) {
       const observation: DivergenceObservation = lastObservation ?? {
         state: 'unavailable',
         reason: 'observation-missing',
         hint: 'No capture was recorded before this target-binding failure.',
       };
       const response = buildTargetBindingFailureResponse(
-        buildDivergenceContext(action, index, stepArtifactPaths),
+        buildDivergenceContext(action, index, stepArtifactPaths, [...scrubVars]),
         toDaemonEvidence(evidence),
         observation,
       );
       return recordFailure(response);
     },
 
-    async buildPostDispatchTargetBindingFailure(action, index, evidence, stepArtifactPaths) {
+    async buildPostDispatchTargetBindingFailure(
+      action,
+      index,
+      evidence,
+      stepArtifactPaths,
+      scrubVars,
+    ) {
       const response = await buildPostDispatchTargetBindingFailureResponse(
-        buildDivergenceContext(action, index, stepArtifactPaths),
+        buildDivergenceContext(action, index, stepArtifactPaths, [...scrubVars]),
         toDaemonEvidence(evidence),
         {
           session: ctx.sessionStore.get(ctx.sessionName),
@@ -428,6 +440,7 @@ export function createAdReplayStepRuntime(params: {
       index,
       artifactPaths: failureArtifactPaths,
       snapshotDiagnosticSamples,
+      scrubVars,
     }) {
       const failedResponse = asFailedReplayStepResponse(lastResponse);
       const finalResponse = await buildReplayActionFailure(
@@ -438,6 +451,7 @@ export function createAdReplayStepRuntime(params: {
         failedResponse,
         [...failureArtifactPaths],
         [...snapshotDiagnosticSamples],
+        [...scrubVars],
       );
       // `buildReplayActionFailure` is typed `Promise<DaemonResponse>` (it
       // shares its return type with the ordinary success path elsewhere in
@@ -491,6 +505,7 @@ async function buildReplayActionFailure(
   response: Extract<DaemonResponse, { ok: false }>,
   artifactPaths: string[],
   snapshotDiagnosticSamples: SnapshotTimingSample[],
+  scrubVars: TargetBindingDivergenceContext['scrubVars'],
 ): Promise<DaemonResponse> {
   const heldResponse = (failure: DaemonResponse): DaemonResponse =>
     ctx.coordinator.markSessionHeldIfArmed(failure);
@@ -505,7 +520,7 @@ async function buildReplayActionFailure(
       sourceLine: ctx.actionLines[index] ?? 1,
       artifactPaths,
       snapshotDiagnosticSamples,
-      scope: ctx.scope,
+      scrubVars,
       req,
       sessionName: ctx.sessionName,
       sessionStore: ctx.sessionStore,

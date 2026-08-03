@@ -7,9 +7,7 @@ import {
   annotationLocalIdentity,
   collectReplayScrubbableVarValues,
   formatDivergenceActionLabel,
-  resolveReplayAction,
   type LocalIdentity,
-  type ReplayVarScope,
 } from '@agent-device/ad-script';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import type { ReplaySelectorPort } from '../ad-replay-facade-types.ts';
@@ -71,10 +69,12 @@ import { extractReplayTargetToken, readRefLabel } from './session-replay-target-
 //  - `isReplayTargetGuardMismatchResponse` / `isWaitLandmarkMismatchResponse`
 //    — post-dispatch refusal-marker detection for `dispatchStep`.
 //
-// `session-replay-runtime.ts`'s `createAdReplayStepRuntime` is the thin
-// adapter that wires these into the `AdReplayStepRuntime` object and supplies
-// the per-request context (scope, resume stamper, artifact accumulator,
-// side-map response holder) these functions need but do not own.
+// `session-replay-runtime-engine-adapter.ts`'s `createAdReplayStepRuntime` is
+// the thin adapter that wires these into the `AdReplayStepRuntime` object and
+// supplies the per-request context (resume stamper, artifact accumulator,
+// side-map response holder) these functions need but do not own — as of the
+// #1555 review's second pass, that context no longer includes a
+// `ReplayVarScope`: the engine builds and owns the scope itself.
 // ---------------------------------------------------------------------------
 
 /**
@@ -348,24 +348,28 @@ export type TargetVerificationEntry =
  * Otherwise the ordinary pre-dispatch gate: the resolved-target token (scope
  * var-substituted, matching what the real dispatch would resolve) and the
  * session's platform.
+ *
+ * #1555 review P1 (second pass, "move variable semantics/planning behind the
+ * replay entrypoint"): `resolvedAction` arrives already interpolated — the
+ * engine's own ONE resolution of this step (`runAdReplay`), never a second,
+ * daemon-side `resolveReplayAction` call over a `scope` this module used to
+ * hold. `action` (the recorded original) is used only for the command-kind
+ * check below; `resolvedAction` is used only to extract the match
+ * token/wait-form below, never serialized onto the wire (a target-binding
+ * response is always built from the ORIGINAL `action`, like every other
+ * replay divergence, so an expanded `${VAR}` never leaks through an
+ * un-scrubbed positional).
  */
 export function resolveTargetVerificationEntry(params: {
   action: SessionAction;
-  scope: ReplayVarScope;
-  sourcePath: string;
-  sourceLine: number;
+  resolvedAction: SessionAction;
   sessionName: string;
   sessionStore: SessionStore;
   port: ReplaySelectorPort;
 }): TargetVerificationEntry {
-  const { action, scope, sourcePath, sourceLine, sessionName, sessionStore, port } = params;
+  const { action, resolvedAction, sessionName, sessionStore, port } = params;
   const session = sessionStore.get(sessionName);
   if (!session) return { kind: 'inactive' };
-  // Resolved ONLY to extract the match token below — never serialized onto
-  // the wire (a target-binding response is always built from the ORIGINAL
-  // `action`, like every other replay divergence, so an expanded `${VAR}`
-  // never leaks through an un-scrubbed positional).
-  const resolvedAction = resolveReplayAction(action, scope, { file: sourcePath, line: sourceLine });
   if (resolveTargetIdentityVerification(action.command) === 'post-resolution') {
     const parsed = parseWaitPositionals(resolvedAction.positionals ?? []);
     return { kind: 'post-resolution', isSelectorWait: parsed?.kind === 'selector' };

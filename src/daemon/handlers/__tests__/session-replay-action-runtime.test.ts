@@ -3,6 +3,7 @@ import { makeIosSession } from '../../../__tests__/test-utils/index.ts';
 import { recordActionEntry } from '../../session-action-recorder.ts';
 import type { DaemonRequest, SessionAction } from '../../types.ts';
 import { invokeReplayAction } from '../session-replay-action-runtime.ts';
+import { resolveReplayAction } from '@agent-device/ad-script';
 
 const REPLAY_REQUEST: DaemonRequest = {
   token: 'token',
@@ -22,11 +23,17 @@ test.each(['', '   '])(
       positionals: ['id="password"', '${PASSWORD}'],
       flags: {},
     };
+    // `invokeReplayAction` no longer resolves `${VAR}`s itself (#1555 review
+    // P1, "move variable semantics/planning behind the replay entrypoint") —
+    // it receives an already-resolved action, exactly as `runAdReplay` (the
+    // engine) now produces one per step.
+    const scope = { values: { PASSWORD: value } };
+    const resolved = resolveReplayAction(sourceAction, scope, { file: 'login.ad', line: 1 });
     const response = await invokeReplayAction({
       req: REPLAY_REQUEST,
       sessionName: 'default',
       action: sourceAction,
-      scope: { values: { PASSWORD: value } },
+      resolved,
       filePath: 'login.ad',
       line: 1,
       step: 1,

@@ -15,6 +15,19 @@ import { inspectAdReplay, runAdReplay } from '@agent-device/ad-replay';
 /** `inspectAdReplay`'s read-only `.ad` manifest — actions, header metadata, plan digest, and the `--from`/`--plan-digest` resume-index resolver. */
 export type AdReplayManifest = ReturnType<typeof inspectAdReplay>;
 
+/**
+ * `runAdReplay`'s request shape — actions, entry index, `--keep-session`,
+ * per-action source location, and `${VAR}` scope inputs. The engine builds
+ * the scope and resolves every action itself from this (#1555 review P1,
+ * "move variable semantics/planning behind the replay entrypoint") — the
+ * daemon only ever assembles this plain request, never a scope or a
+ * resolved action, of its own.
+ */
+export type AdReplayRunRequest = Parameters<typeof runAdReplay>[0];
+
+/** `AdReplayRunRequest`'s `${VAR}` scope inputs — plain data (builtins/file/shell/cli env) the daemon reads from the request/process. */
+export type AdReplayVarSources = AdReplayRunRequest['varSources'];
+
 /** `runAdReplay`'s injected capability bag — the daemon-implemented runtime the engine's step loop drives through. */
 export type AdReplayStepRuntime = Parameters<typeof runAdReplay>[1];
 

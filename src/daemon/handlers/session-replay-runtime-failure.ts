@@ -1,5 +1,5 @@
 import type { ReplaySelectorPort } from '../ad-replay-facade-types.ts';
-import { collectReplayScrubbableVarValues, type ReplayVarScope } from '@agent-device/ad-script';
+import type { collectReplayScrubbableVarValues } from '@agent-device/ad-script';
 import {
   summarizeSnapshotTimingSamples,
   type SnapshotDiagnosticsSummary,
@@ -24,7 +24,8 @@ export async function withReplayFailureDiagnostics(params: {
   sourceLine: number;
   artifactPaths: string[];
   snapshotDiagnosticSamples: SnapshotTimingSample[];
-  scope: ReplayVarScope;
+  /** The engine's own live `${VAR}` scrub list, as of this point in the run — never recomputed here from a second scope object. */
+  scrubVars: ReturnType<typeof collectReplayScrubbableVarValues>;
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
@@ -50,7 +51,8 @@ async function withReplayFailureContext(params: {
   sourceLine: number;
   artifactPaths?: string[];
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
-  scope: ReplayVarScope;
+  /** The engine's own live `${VAR}` scrub list, as of this point in the run — never recomputed here from a second scope object. */
+  scrubVars: ReturnType<typeof collectReplayScrubbableVarValues>;
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
@@ -70,7 +72,7 @@ async function withReplayFailureContext(params: {
     sourceLine,
     artifactPaths = [],
     snapshotDiagnostics,
-    scope,
+    scrubVars,
     req,
     sessionName,
     sessionStore,
@@ -82,7 +84,6 @@ async function withReplayFailureContext(params: {
   } = params;
   if (response.ok) return response;
   const failureSource = readReplayFailureSource(response.error.details?.replaySource);
-  const scrubVars = collectReplayScrubbableVarValues(scope);
   const cause = hoistReplayFailureCauseDiagnosticMeta(response.error);
   const divergence = await buildReplayFailureDivergence({
     error: cause,

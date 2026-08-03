@@ -1,5 +1,4 @@
 import type { CommandFlags } from '../../core/dispatch.ts';
-import { resolveReplayAction, type ReplayVarScope } from '@agent-device/ad-script';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionAction } from '../types.ts';
 import { mergeParentFlags } from '../../core/batch.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
@@ -15,11 +14,21 @@ import { resolveImplicitSessionScope } from '../session-routing.ts';
 
 type ReplayBaseRequest = Omit<DaemonRequest, 'command' | 'positionals'>;
 
+/**
+ * #1555 review P1 (second pass, "move variable semantics/planning behind the
+ * replay entrypoint"): `resolved` arrives already `${VAR}`-interpolated —
+ * the engine's own ONE resolution of this step (`runAdReplay`) — rather than
+ * this function resolving `action` itself over a `scope` it used to hold.
+ * `action` (the recorded original) is still threaded alongside it for the
+ * one daemon-owned, non-interpolation decision that reads it:
+ * `readRecordedInputVariableName`'s heuristic below, over the ORIGINAL fill
+ * text.
+ */
 export async function invokeReplayAction(params: {
   req: DaemonRequest;
   sessionName: string;
   action: SessionAction;
-  scope: ReplayVarScope;
+  resolved: SessionAction;
   filePath: string;
   line: number;
   step: number;
@@ -28,9 +37,18 @@ export async function invokeReplayAction(params: {
   tracePath?: string;
   invoke: DaemonInvokeFn;
 }): Promise<DaemonResponse> {
-  const { req, sessionName, action, scope, filePath, line, step, sourcePath, tracePath, invoke } =
-    params;
-  const resolved = resolveReplayAction(action, scope, { file: sourcePath ?? filePath, line });
+  const {
+    req,
+    sessionName,
+    action,
+    resolved,
+    filePath,
+    line,
+    step,
+    sourcePath,
+    tracePath,
+    invoke,
+  } = params;
   const startedAt = Date.now();
   appendReplayTraceEvent(tracePath, {
     type: 'replay_action_start',
@@ -54,9 +72,6 @@ export async function invokeReplayAction(params: {
       sessionName,
       resolved,
       sourceAction: action,
-      scope,
-      line,
-      step,
       invoke,
     });
   } catch (dispatchErr) {
@@ -112,9 +127,6 @@ async function invokeResolvedReplayAction(params: {
   sessionName: string;
   resolved: SessionAction;
   sourceAction: SessionAction;
-  scope: ReplayVarScope;
-  line: number;
-  step: number;
   invoke: DaemonInvokeFn;
 }): Promise<DaemonResponse> {
   const { req, sessionName, resolved, sourceAction, invoke } = params;
