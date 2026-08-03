@@ -3,8 +3,8 @@ import { test } from 'vitest';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import {
   buildInteractionSurfaceSignature,
+  classifyBaselineSurfaceEvidence,
   classifyInteractionSurfaceChange,
-  interactionSurfaceMatchesBaseline,
   markPendingInteractionOutcome,
   stripInternalInteractionFlags,
 } from '../interaction-outcome-policy.ts';
@@ -40,55 +40,65 @@ test('classifyInteractionSurfaceChange detects material layout movement', () => 
 });
 
 // ---------------------------------------------------------------------------
-// interactionSurfaceMatchesBaseline (#1542 defect 2): subset-tolerant baseline
-// comparison. Live evidence on checkout-form.ad showed the pre-gesture
-// baseline (captured by an earlier `wait`, a broad query) and the post-gesture
-// quiet signature (captured by the click's interactive-only selector
-// resolution) never line up as whole arrays even when the target element
-// never moved — this is the comparison that has to see through that scope
-// drift.
+// classifyBaselineSurfaceEvidence (#1542 defect 2, #1563 review): subset-
+// tolerant, three-valued baseline comparison. Live evidence on
+// checkout-form.ad showed the pre-gesture baseline (captured by an earlier
+// `wait`, a broad query) and the post-gesture quiet signature (captured by
+// the click's interactive-only selector resolution) never line up as whole
+// arrays even when the target element never moved — the first version of
+// this check has to see through that scope drift.
+//
+// The #1563 review then caught a SECOND failure mode in that first version
+// (a plain "any shared entry frozen" boolean): the viewport root
+// (Application/Window) is always present and its rect is invariant under any
+// gesture, so a broad baseline and a narrow post-gesture capture can share
+// ONLY the root even after a real, successful scroll — and the boolean
+// predicate called that a match. `classifyBaselineSurfaceEvidence` requires
+// at least one DISCRIMINATING shared entry (excluding the viewport root and
+// keyboard chrome) before calling it `'unchanged'`; a root-only (or
+// no-discriminating-evidence) overlap is `'ambiguous'` instead.
 // ---------------------------------------------------------------------------
 
-test('interactionSurfaceMatchesBaseline matches identical signatures', () => {
+test('classifyBaselineSurfaceEvidence reports unchanged for identical signatures', () => {
   const baseline = buildInteractionSurfaceSignature(makeSnapshot('Inbox').nodes);
   const current = buildInteractionSurfaceSignature(makeSnapshot('Inbox').nodes);
 
-  assert.equal(interactionSurfaceMatchesBaseline(baseline, current), true);
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'unchanged');
 });
 
-test('interactionSurfaceMatchesBaseline treats an empty side as no evidence', () => {
+test('classifyBaselineSurfaceEvidence is ambiguous when either side is empty', () => {
   const baseline = buildInteractionSurfaceSignature(makeSnapshot('Inbox').nodes);
 
-  assert.equal(interactionSurfaceMatchesBaseline([], baseline), false);
-  assert.equal(interactionSurfaceMatchesBaseline(baseline, []), false);
-  assert.equal(interactionSurfaceMatchesBaseline([], []), false);
+  assert.equal(classifyBaselineSurfaceEvidence([], baseline), 'ambiguous');
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, []), 'ambiguous');
+  assert.equal(classifyBaselineSurfaceEvidence([], []), 'ambiguous');
 });
 
-test('interactionSurfaceMatchesBaseline matches through a broader baseline scope when the shared element is frozen', () => {
+test('classifyBaselineSurfaceEvidence reports unchanged through a broader baseline scope when the shared discriminating element is frozen', () => {
   // The exact live shape: the baseline came from a broader capture (extra
   // "Loading" text node the interactive-only capture never sees), but the
   // shared "primary-action" button never moved.
   const baseline = buildInteractionSurfaceSignature(makeSnapshotWithExtraText('Inbox', 500).nodes);
   const current = buildInteractionSurfaceSignature(makeSnapshot('Inbox', 500).nodes);
 
-  assert.equal(interactionSurfaceMatchesBaseline(baseline, current), true);
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'unchanged');
 });
 
-test('interactionSurfaceMatchesBaseline matches through a broader current scope when the shared element is frozen', () => {
+test('classifyBaselineSurfaceEvidence reports unchanged through a broader current scope when the shared discriminating element is frozen', () => {
   const baseline = buildInteractionSurfaceSignature(makeSnapshot('Inbox', 500).nodes);
   const current = buildInteractionSurfaceSignature(makeSnapshotWithExtraText('Inbox', 500).nodes);
 
-  assert.equal(interactionSurfaceMatchesBaseline(baseline, current), true);
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'unchanged');
 });
 
-test('interactionSurfaceMatchesBaseline detects real movement even through a scope difference', () => {
+test('classifyBaselineSurfaceEvidence detects real movement even through a scope difference', () => {
   const baseline = buildInteractionSurfaceSignature(makeSnapshotWithExtraText('Inbox', 500).nodes);
   const current = buildInteractionSurfaceSignature(makeSnapshot('Inbox', 120).nodes);
 
-  assert.equal(interactionSurfaceMatchesBaseline(baseline, current), false);
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'changed');
 });
 
-test('interactionSurfaceMatchesBaseline is ambiguous (no match) when the signatures share no key', () => {
+test('classifyBaselineSurfaceEvidence is ambiguous when the signatures share no key at all', () => {
   const baseline = buildInteractionSurfaceSignature([
     {
       ref: 'e1',
@@ -110,15 +120,99 @@ test('interactionSurfaceMatchesBaseline is ambiguous (no match) when the signatu
     },
   ]);
 
-  assert.equal(interactionSurfaceMatchesBaseline(baseline, current), false);
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'ambiguous');
 });
 
-test('interactionSurfaceMatchesBaseline tolerates tiny rect drift on the shared element', () => {
+test('classifyBaselineSurfaceEvidence tolerates tiny rect drift on the shared discriminating element', () => {
   const baseline = buildInteractionSurfaceSignature(makeSnapshotWithExtraText('Inbox', 500).nodes);
   const current = buildInteractionSurfaceSignature(makeSnapshot('Inbox', 500.4).nodes);
 
-  assert.equal(interactionSurfaceMatchesBaseline(baseline, current), true);
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'unchanged');
 });
+
+// --- #1563 review regression: root-only overlap must NOT read as evidence ---
+
+test('classifyBaselineSurfaceEvidence is ambiguous (NOT unchanged) when a real scroll leaves only the application root shared — the reviewer-caught false-distrust shape', () => {
+  // baseline = {Application, Pickup@y=500}; current = {Application,
+  // OtherButton@...} — a genuine, successful scroll replaced every real
+  // element in view, so the only entry the two signatures still share is the
+  // always-present, always-identical viewport root. A boolean "any shared
+  // entry frozen" predicate calls this a baseline match (the root always
+  // "matches") and would extend the interaction to the 3.5s stale-read
+  // deadline on zero real evidence — exactly the bug this test pins.
+  const baseline = buildInteractionSurfaceSignature([
+    applicationRootNode(),
+    {
+      ref: 'e2',
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: 'shipping-pickup',
+      label: 'Pickup',
+      rect: { x: 20, y: 500, width: 200, height: 44 },
+    },
+  ]);
+  const current = buildInteractionSurfaceSignature([
+    applicationRootNode(),
+    {
+      ref: 'e2',
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: 'shipping-delivery',
+      label: 'Delivery',
+      rect: { x: 20, y: 120, width: 200, height: 44 },
+    },
+  ]);
+
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'ambiguous');
+});
+
+test('classifyBaselineSurfaceEvidence is ambiguous when the current capture is the application root alone', () => {
+  const baseline = buildInteractionSurfaceSignature(makeSnapshot('Inbox', 500).nodes);
+  const current = buildInteractionSurfaceSignature([applicationRootNode()]);
+
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'ambiguous');
+});
+
+test('classifyBaselineSurfaceEvidence excludes keyboard chrome from discriminating overlap', () => {
+  const keyboardNode = {
+    ref: 'e3',
+    index: 2,
+    parentIndex: 0,
+    type: 'Keyboard',
+    rect: { x: 0, y: 500, width: 390, height: 300 },
+  };
+  const baseline = buildInteractionSurfaceSignature([applicationRootNode(), keyboardNode]);
+  // The keyboard's own container rect never changes; only the app content
+  // does. A capture sharing just the root and the keyboard container (no
+  // real content) must not read as a baseline match.
+  const current = buildInteractionSurfaceSignature([applicationRootNode(), keyboardNode]);
+
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'ambiguous');
+});
+
+test('classifyBaselineSurfaceEvidence still reports unchanged when the root AND a real discriminating element both match (guards against over-excluding)', () => {
+  // Root-sharing alone is not disqualifying — it just cannot be the ONLY
+  // evidence. Once a real, frozen discriminating element is also shared
+  // (the ordinary "genuinely stuck" case), the verdict must still be
+  // 'unchanged', not swing to 'ambiguous' just because the root is present.
+  const snapshotNodes = makeSnapshot('Inbox', 500).nodes; // [Application, primary-action Button]
+  const baseline = buildInteractionSurfaceSignature(snapshotNodes);
+  const current = buildInteractionSurfaceSignature(snapshotNodes);
+
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'unchanged');
+});
+
+function applicationRootNode() {
+  return {
+    ref: 'e1',
+    index: 0,
+    type: 'Application',
+    label: 'App',
+    rect: { x: 0, y: 0, width: 390, height: 844 },
+  };
+}
 
 test('markPendingInteractionOutcome stores retry state only for explicit retry flags', () => {
   const session = makeSession();

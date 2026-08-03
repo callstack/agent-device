@@ -2,6 +2,7 @@ import { dispatchCommand, type CommandFlags } from '../core/dispatch.ts';
 import { isMobilePlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
+import { normalizeType } from '../utils/text-surface.ts';
 import { contextFromFlags } from './context.ts';
 import type { SessionState } from './types.ts';
 
@@ -188,36 +189,61 @@ export function areInteractionSurfaceSignaturesStable(
 }
 
 /**
- * Subset-tolerant variant of {@link areInteractionSurfaceSignaturesStable} for
- * comparing a signature against a baseline captured by a DIFFERENT query (used
- * by post-gesture baseline distrust, #1542 defect 2). The pre-gesture baseline
- * and the post-gesture quiet capture routinely come from different snapshot
- * scopes (e.g. a broad text-search capture vs. an interactive-only selector
- * capture), so their signatures can differ in length/membership even when the
- * element that matters never moved — whole-array equality would report
- * "changed" purely from scope drift and never catch the real staleness.
+ * Subset-tolerant baseline classifier for post-gesture baseline distrust
+ * (#1542 defect 2), reusing this module's existing three-valued vocabulary
+ * (`InteractionSurfaceChange`) instead of a bespoke boolean. The pre-gesture
+ * baseline and the post-gesture quiet capture routinely come from different
+ * snapshot scopes (e.g. a broad text-search capture vs. an interactive-only
+ * selector capture), so their signatures can differ in length/membership even
+ * when the element that matters never moved — whole-array equality would
+ * report "changed" purely from scope drift and never catch the real
+ * staleness.
  *
- * Matches when every semantic key present in BOTH signatures still has the
- * same rect (within tolerance), and at least one key is shared — an empty
- * intersection is ambiguous (no comparable evidence), not a match.
+ * The evidence rule: only shared entries flagged `discriminating` (i.e. NOT
+ * the viewport root or keyboard chrome — see `isNonDiscriminatingSurfaceNode`)
+ * count as evidence.
+ *
+ * - `'ambiguous'`: the shared overlap has zero discriminating entries — this
+ *   includes an empty overlap AND an overlap that is only structurally fixed
+ *   chrome (e.g. two signatures sharing nothing but the Application/Window
+ *   root after a successful scroll swapped every real element — the exact
+ *   live shape #1563's review caught: treating that as a match would extend
+ *   every such interaction to the stale-read cap on zero real evidence).
+ *   Ambiguous is NOT a match — insufficient evidence is its own first-class
+ *   outcome, the same way `classifyInteractionSurfaceChange` already treats
+ *   an empty side.
+ * - `'changed'`: at least one discriminating shared entry moved beyond
+ *   tolerance — real movement occurred.
+ * - `'unchanged'`: every discriminating shared entry (and there is at least
+ *   one) still matches — this is the actual "stale, matches baseline" signal
+ *   the distrust check exists to catch.
  */
-export function interactionSurfaceMatchesBaseline(
+export function classifyBaselineSurfaceEvidence(
   baseline: InteractionSurfaceSignature,
   current: InteractionSurfaceSignature,
-): boolean {
-  if (baseline.length === 0 || current.length === 0) return false;
+): InteractionSurfaceChange {
+  if (baseline.length === 0 || current.length === 0) return 'ambiguous';
   const baselineByKey = new Map(baseline.map((entry) => [entry.key, entry]));
-  let comparedCount = 0;
+  let discriminatingOverlap = 0;
   for (const entry of current) {
     const baselineEntry = baselineByKey.get(entry.key);
     if (!baselineEntry) continue;
-    comparedCount += 1;
-    if (Math.abs(baselineEntry.x - entry.x) > RECT_TOLERANCE_PX) return false;
-    if (Math.abs(baselineEntry.y - entry.y) > RECT_TOLERANCE_PX) return false;
-    if (Math.abs(baselineEntry.width - entry.width) > RECT_TOLERANCE_PX) return false;
-    if (Math.abs(baselineEntry.height - entry.height) > RECT_TOLERANCE_PX) return false;
+    // Shared but non-discriminating (viewport root / keyboard chrome): this
+    // pair carries no evidence either way, so it neither counts toward the
+    // overlap nor is checked for movement (its rect is invariant by
+    // definition and comparing it would be pure noise).
+    if (!entry.discriminating || !baselineEntry.discriminating) continue;
+    discriminatingOverlap += 1;
+    if (
+      Math.abs(baselineEntry.x - entry.x) > RECT_TOLERANCE_PX ||
+      Math.abs(baselineEntry.y - entry.y) > RECT_TOLERANCE_PX ||
+      Math.abs(baselineEntry.width - entry.width) > RECT_TOLERANCE_PX ||
+      Math.abs(baselineEntry.height - entry.height) > RECT_TOLERANCE_PX
+    ) {
+      return 'changed';
+    }
   }
-  return comparedCount > 0;
+  return discriminatingOverlap > 0 ? 'unchanged' : 'ambiguous';
 }
 
 function supportsInteractionOutcomePolicy(session: SessionState): boolean {
@@ -247,7 +273,51 @@ function buildInteractionSurfaceEntry(
     y: Math.round(node.rect.y),
     width: Math.round(node.rect.width),
     height: Math.round(node.rect.height),
+    discriminating: !isNonDiscriminatingSurfaceNode(node),
   };
+}
+
+/**
+ * Structurally fixed elements whose rect is invariant under a scroll/swipe by
+ * construction — sharing only these between a baseline and a later capture is
+ * NOT evidence the screen is unchanged, since they would read identically
+ * regardless of what happened. `classifyBaselineSurfaceEvidence` excludes
+ * them from the discriminating-overlap count for exactly this reason.
+ *
+ * Not a special case for "Application" alone: both checks below reuse this
+ * repo's existing kind classifications rather than inventing a new list.
+ */
+function isNonDiscriminatingSurfaceNode(node: SnapshotNode): boolean {
+  return isViewportRootKind(node) || isKeyboardChromeKind(node);
+}
+
+/**
+ * Minimal local equivalent of `isViewportRoot` in
+ * `src/snapshot/snapshot-occlusion.ts` (source of truth) — that function is
+ * module-private and keyed off the broader `RawSnapshotNode` shape used by
+ * occlusion/viewport resolution, so it is reimplemented here rather than
+ * exported solely for this caller. Same normalized-kind substring test; keep
+ * the two in lockstep if the underlying AX vocabulary changes.
+ */
+function isViewportRootKind(node: Pick<SnapshotNode, 'type' | 'role' | 'subrole'>): boolean {
+  const normalizedKind = [node.type, node.role, node.subrole]
+    .map((value) => normalizeType(value ?? ''))
+    .join(' ');
+  return normalizedKind.includes('application') || normalizedKind.includes('window');
+}
+
+/**
+ * Minimal local equivalent of the keyboard-chrome container test in
+ * `src/core/snapshot-chrome.ts` (source of truth, `collectKeyboardChrome`) —
+ * that module additionally walks ancestor/descendant `parentIndex` chains to
+ * classify a keyboard window's whole subtree, which this flat signature-entry
+ * comparison has no access to (entries carry no ref/parentIndex). Catching
+ * the `[Keyboard]` container itself via the same per-node type test is the
+ * invariant-rect anchor that matters here: the container's own frame never
+ * moves for a scroll/swipe gesture.
+ */
+function isKeyboardChromeKind(node: Pick<SnapshotNode, 'type'>): boolean {
+  return normalizeType(node.type ?? '') === 'keyboard';
 }
 
 function interactionSurfaceSemanticKey(node: SnapshotNode): string | undefined {

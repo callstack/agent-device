@@ -209,6 +209,56 @@ test('decidePostGestureStabilityVerdict accepts a baseline-matching signature on
   );
 });
 
+// --- #1563 review regression: a root-only shared overlap must trust immediately, not tax the cap ---
+
+test('decidePostGestureStabilityVerdict trusts immediately when a real scroll leaves only the application root shared (no cap tax)', () => {
+  const baseline = buildInteractionSurfaceSignature([
+    applicationRootNode(),
+    {
+      ref: 'e2',
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: 'shipping-pickup',
+      label: 'Pickup',
+      rect: { x: 20, y: 500, width: 200, height: 44 },
+    },
+  ]);
+  const quiet = buildInteractionSurfaceSignature([
+    applicationRootNode(),
+    {
+      ref: 'e2',
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: 'shipping-delivery',
+      label: 'Delivery',
+      rect: { x: 20, y: 120, width: 200, height: 44 },
+    },
+  ]);
+
+  assert.equal(
+    decidePostGestureStabilityVerdict({
+      needsBaselineDistrust: true,
+      baselineSignature: baseline,
+      quietSignature: quiet,
+      elapsedMs: 0, // first quiet match, well before any cap
+      distrustCapMs: 3_500,
+    }),
+    'trust',
+  );
+});
+
+function applicationRootNode() {
+  return {
+    ref: 'e-root',
+    index: 0,
+    type: 'Application',
+    label: 'App',
+    rect: { x: 0, y: 0, width: 390, height: 844 },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // capturePostGestureStabilizedResult: the async loop wired to the pure
 // decision above. Fake timers keep these instant despite the real 200ms poll
@@ -400,6 +450,44 @@ test('capturePostGestureStabilizedResult catches a frozen target even when the b
   assert.equal(settled, 0);
 });
 
+test('capturePostGestureStabilizedResult trusts immediately (no cap tax) when a real scroll leaves only the application root shared — #1563 review regression', async () => {
+  // The reviewer's exact false-distrust shape end to end: the baseline is
+  // Application + Pickup; every post-gesture read is Application + a
+  // DIFFERENT button (Delivery) — a genuine, successful scroll that swapped
+  // every real element. A boolean "any shared entry frozen" predicate would
+  // call the shared, always-identical Application root a baseline match and
+  // extend this to the 3.5s stale-read cap on zero real evidence.
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  session.snapshot = pickupSnapshot(500);
+  markPostGestureStabilization(session, 'scroll');
+
+  const capture = vi.fn(async () => deliverySnapshot(120)); // consistent from the first read: quiet immediately
+
+  const resultPromise = withDiagnosticsScope({}, async () => {
+    const result = await capturePostGestureStabilizedResult({
+      session,
+      capture,
+      readSnapshot: (snapshot) => snapshot,
+    });
+    return {
+      result,
+      staleAccepts: countDiagnosticEventsByPhase(['post_gesture_snapshot_stale_accept']),
+      settled: countDiagnosticEventsByPhase(['post_gesture_snapshot_stabilized']),
+    };
+  });
+
+  await vi.advanceTimersByTimeAsync(1_000);
+  const { staleAccepts, settled } = await resultPromise;
+
+  assert.equal(settled, 1);
+  assert.equal(staleAccepts, 0);
+  // Trusted at the first quiet match (initial capture + one poll = 2
+  // attempts): root-only overlap is ambiguous, not a baseline match, so it
+  // never pays the 3.5s distrust cap.
+  assert.equal(capture.mock.calls.length, 2);
+});
+
 function pickupSnapshot(y = 500) {
   return makeSnapshotState([
     { index: 0, type: 'Application', label: 'App', rect: { x: 0, y: 0, width: 390, height: 844 } },
@@ -409,6 +497,23 @@ function pickupSnapshot(y = 500) {
       type: 'Button',
       identifier: 'shipping-pickup',
       label: 'Pickup',
+      rect: { x: 20, y, width: 200, height: 44 },
+    },
+  ]);
+}
+
+// Same Application root as pickupSnapshot, but a DIFFERENT real element —
+// models a genuine, successful scroll that swapped every real element in
+// view, so the only entry shared with a pickupSnapshot baseline is the root.
+function deliverySnapshot(y = 500) {
+  return makeSnapshotState([
+    { index: 0, type: 'Application', label: 'App', rect: { x: 0, y: 0, width: 390, height: 844 } },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: 'shipping-delivery',
+      label: 'Delivery',
       rect: { x: 20, y, width: 200, height: 44 },
     },
   ]);

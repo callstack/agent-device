@@ -1137,6 +1137,7 @@ test('captureSnapshot lazily retries pending no-change touch before returning fr
         y: 120,
         width: 160,
         height: 48,
+        discriminating: true,
       },
     ],
   };
@@ -1279,6 +1280,7 @@ test('captureSnapshot retries pending tap outcome before post-gesture stabilizat
         y: 1301,
         width: 476,
         height: 110,
+        discriminating: true,
       },
     ],
   };

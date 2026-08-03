@@ -213,6 +213,13 @@ export type PostGestureStabilization = {
     y: number;
     width: number;
     height: number;
+    /**
+     * False for structurally fixed elements (the viewport root, keyboard
+     * chrome) whose rect is invariant regardless of any gesture — shared
+     * evidence limited to these never counts toward a baseline match. See
+     * `classifyBaselineSurfaceEvidence` in interaction-outcome-policy.ts.
+     */
+    discriminating: boolean;
   }>;
 };
 
@@ -229,6 +236,7 @@ export type PendingInteractionOutcome = {
     y: number;
     width: number;
     height: number;
+    discriminating: boolean;
   }>;
 };
 

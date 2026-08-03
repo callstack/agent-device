@@ -6,7 +6,7 @@ import { sleep } from '../utils/timeouts.ts';
 import {
   areInteractionSurfaceSignaturesStable,
   buildInteractionSurfaceSignature,
-  interactionSurfaceMatchesBaseline,
+  classifyBaselineSurfaceEvidence,
   type InteractionSurfaceSignature,
 } from './interaction-outcome-policy.ts';
 import type { SessionState } from './types.ts';
@@ -77,15 +77,30 @@ export type PostGestureStabilityVerdict = 'trust' | 'distrust' | 'accept-stale';
  *   is the honest read at this point, so it is accepted — but flagged, so a
  *   stale-accept is distinguishable from an ordinary settle in diagnostics.
  *
- * The baseline match uses `interactionSurfaceMatchesBaseline` (subset-
- * tolerant), not whole-array equality: the pre-gesture baseline and the
- * post-gesture quiet capture are routinely fetched by different callers with
- * different snapshot scopes (e.g. a broad text-search capture vs. an
- * interactive-only selector capture), so their signatures can differ in
- * length/membership even when the element that matters never moved. Live
- * evidence (#1542 checkout-form.ad): whole-array equality made this verdict
- * `trust` on the very first quiet match every time, because the arrays never
- * lined up — never once catching the actual staleness the check exists for.
+ * The baseline comparison is `classifyBaselineSurfaceEvidence` — a
+ * subset-tolerant, three-valued classifier reusing this codebase's existing
+ * `InteractionSurfaceChange` vocabulary (`'changed' | 'unchanged' |
+ * 'ambiguous'`), not whole-array equality and not a boolean. Two reasons,
+ * both live-verified on #1542 checkout-form.ad before shipping:
+ *
+ * 1. Scope drift: the pre-gesture baseline and the post-gesture quiet capture
+ *    are routinely fetched by different callers with different snapshot
+ *    scopes (e.g. a broad text-search capture vs. an interactive-only
+ *    selector capture), so their signatures can differ in length/membership
+ *    even when the element that matters never moved. Whole-array equality
+ *    made the verdict `trust` on the very first quiet match every time,
+ *    because the arrays never lined up — never once catching the real
+ *    staleness this check exists for.
+ * 2. Non-discriminating overlap: a shared-any-entry boolean match is fooled
+ *    the opposite way — the viewport root (Application/Window) is always
+ *    present and its rect is invariant under any gesture, so a broad
+ *    pre-gesture baseline and a narrow post-gesture capture can share ONLY
+ *    the root even after a real, successful scroll swapped every actual
+ *    element. `classifyBaselineSurfaceEvidence` excludes the root and
+ *    keyboard chrome from the overlap it counts as evidence
+ *    (`isNonDiscriminatingSurfaceNode`), so that case classifies as
+ *    `'ambiguous'` (no comparable evidence) rather than `'unchanged'` (a
+ *    match) — `'ambiguous'` falls through to `trust` below, same as `'changed'`.
  */
 export function decidePostGestureStabilityVerdict(params: {
   needsBaselineDistrust: boolean;
@@ -96,9 +111,10 @@ export function decidePostGestureStabilityVerdict(params: {
 }): PostGestureStabilityVerdict {
   const { needsBaselineDistrust, baselineSignature, quietSignature, elapsedMs, distrustCapMs } =
     params;
-  if (!needsBaselineDistrust) return 'trust';
-  if (!baselineSignature || baselineSignature.length === 0) return 'trust';
-  if (!interactionSurfaceMatchesBaseline(baselineSignature, quietSignature)) return 'trust';
+  if (!needsBaselineDistrust || !baselineSignature?.length) return 'trust';
+  if (classifyBaselineSurfaceEvidence(baselineSignature, quietSignature) !== 'unchanged') {
+    return 'trust';
+  }
   return elapsedMs < distrustCapMs ? 'distrust' : 'accept-stale';
 }
 
