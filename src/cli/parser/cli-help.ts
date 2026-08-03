@@ -1243,6 +1243,21 @@ function listHelpFlags(keys: ReadonlySet<FlagKey>): FlagDefinition[] {
   );
 }
 
+// Command-specific override for a shared flag's help text (see CommandSchema.flagDescriptionOverrides):
+// keeps the FlagDefinition registry as one shared row per flag while letting a command whose
+// semantics genuinely differ (e.g. `replay --save-script` arms a repair transaction, not the
+// open/close authoring lifecycle) show its own description without duplicating the flag entry.
+function applyFlagDescriptionOverrides(
+  definitions: FlagDefinition[],
+  overrides: Partial<Record<FlagKey, string>> | undefined,
+): FlagDefinition[] {
+  if (!overrides) return definitions;
+  return definitions.map((definition) => {
+    const override = overrides[definition.key];
+    return override === undefined ? definition : { ...definition, usageDescription: override };
+  });
+}
+
 function renderFlagSection(title: string, definitions: FlagDefinition[]): string {
   return renderAlignedSection(
     title,
@@ -1302,7 +1317,10 @@ export function buildCommandUsageText(commandName: string): string | null {
   const schema = getCommandSchema(commandName);
   if (!schema) return null;
   const usage = buildCommandUsage(commandName, schema);
-  const commandFlags = listHelpFlags(new Set<FlagKey>(schema.allowedFlags ?? []));
+  const commandFlags = applyFlagDescriptionOverrides(
+    listHelpFlags(new Set<FlagKey>(schema.allowedFlags ?? [])),
+    schema.flagDescriptionOverrides,
+  );
   const sections: string[] = [];
   if (commandFlags.length > 0) {
     sections.push(renderFlagSection('Command flags:', commandFlags));

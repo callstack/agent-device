@@ -148,7 +148,9 @@ grep -rnE "\\bgesture[[:space:]]+rotate([[:space:]]+$num){4}" --include='*.ad' .
 ```
 
 Re-recording also produces a migrated script: the recorder writes the canonical form, so a fresh
-`open` → interact → `close --save-script` run is a valid alternative to editing by hand.
+`open --save-script` → interact → `close` run is a valid alternative to editing by hand. Recording
+evidence is only captured from action zero, so arm at `open`; a bare `close --save-script` on a
+session that was not armed at `open` is rejected.
 
 ### Maestro flows
 

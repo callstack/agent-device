@@ -407,3 +407,35 @@ test('removed trigger aliases are no longer documented as commands', async () =>
   const help = await usageForCommand('trigger-screenshot-notification');
   assert.equal(help, null);
 });
+
+// #1558 follow-up: replay's --save-script arms an ADR 0012 repair transaction, not the
+// open/close authoring lifecycle (arm-on-open, publish-on-close) the shared flag describes.
+// `flagDescriptionOverrides` (CommandSchema) swaps the text for replay only; open/close keep the
+// shared FlagDefinition description unchanged.
+test('replay --save-script help describes arming a repair transaction, not open/close authoring', async () => {
+  const help = await usageForCommand('replay');
+  if (help === null) throw new Error('Expected replay help text');
+  assert.match(help, /Arm a repair transaction from this replay \(ADR 0012\)/);
+  assert.match(help, /commits when the repair-armed session tears down/);
+  assert.doesNotMatch(help, /Arm evidence capture on open, publish the armed recording on close/);
+});
+
+test('open --save-script help keeps the shared open\\/close authoring description', async () => {
+  const help = await usageForCommand('open');
+  if (help === null) throw new Error('Expected open help text');
+  assert.match(
+    help,
+    /Arm evidence capture on open, publish the armed recording on close; close --save-script alone \(without an armed open\) is rejected/,
+  );
+  assert.doesNotMatch(help, /Arm a repair transaction from this replay/);
+});
+
+test('close --save-script help keeps the shared open\\/close authoring description', async () => {
+  const help = await usageForCommand('close');
+  if (help === null) throw new Error('Expected close help text');
+  assert.match(
+    help,
+    /Arm evidence capture on open, publish the armed recording on close; close --save-script alone \(without an armed open\) is rejected/,
+  );
+  assert.doesNotMatch(help, /Arm a repair transaction from this replay/);
+});

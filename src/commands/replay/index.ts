@@ -112,6 +112,13 @@ const replayCliSchema = {
     'saveScript',
     'force',
   ],
+  // ADR 0012 decision 6: on replay, --save-script arms a repair transaction from step 1 (not the
+  // open/close authoring lifecycle the shared flag description documents) and the healed script
+  // commits on that transaction's own teardown, not on a plain close.
+  flagDescriptionOverrides: {
+    saveScript:
+      'Arm a repair transaction from this replay (ADR 0012): recording starts at step 1, and the healed script commits when the repair-armed session tears down (close, close --save-script, or idle-reap). Independent of the open/close authoring arm-on-open. Optional custom output path.',
+  },
 } as const satisfies CommandSchemaOverride;
 
 const testCliSchema = {

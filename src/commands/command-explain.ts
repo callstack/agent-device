@@ -280,22 +280,26 @@ function describeCliSurface(command: string, schema: CommandSchema): CommandExpl
   return {
     usage: buildCommandUsage(command, schema),
     positionalArgs: schema.positionalArgs ?? [],
-    commandFlags: describeFlags(schema.allowedFlags ?? []),
-    supportedFlags: describeFlags(schema.supportedFlags ?? []),
+    commandFlags: describeFlags(schema.allowedFlags ?? [], schema.flagDescriptionOverrides),
+    supportedFlags: describeFlags(schema.supportedFlags ?? [], schema.flagDescriptionOverrides),
     globalFlags: describeFlags([...GLOBAL_FLAG_KEYS]),
   };
 }
 
-function describeFlags(keys: readonly FlagKey[]): CommandFlagExplanation[] {
+function describeFlags(
+  keys: readonly FlagKey[],
+  overrides?: Partial<Record<FlagKey, string>>,
+): CommandFlagExplanation[] {
   return [...new Set(keys)].sort().map((key) => {
     const definitions = flagDefinitionsByKey.get(key) ?? [];
     const preferred = definitions.find((definition) => definition.usageLabel) ?? definitions[0];
+    const description = overrides?.[key] ?? preferred?.usageDescription;
     return {
       key,
       syntax:
         preferred?.usageLabel ??
         [...new Set(definitions.flatMap((definition) => definition.names))].join('/'),
-      ...(preferred?.usageDescription ? { description: preferred.usageDescription } : {}),
+      ...(description ? { description } : {}),
     };
   });
 }
