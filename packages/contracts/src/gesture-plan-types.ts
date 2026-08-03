@@ -8,6 +8,15 @@ export const GESTURE_DURATION_MAX_MS = 10_000;
 
 export type GestureIntent = 'fling' | 'pan' | 'pinch' | 'rotate' | 'transform';
 
+export type DragGestureInput = {
+  intent: 'drag';
+  source: string;
+  destination: string;
+  sourceHoldMs?: number;
+  moveMs?: number;
+  destinationHoldMs?: number;
+};
+
 /** Selects one-pointer release timing without changing semantic gesture intent. */
 export type GestureExecutionProfile = 'endpoint-hold' | 'timed-pan';
 
@@ -38,6 +47,8 @@ export type GestureSemanticInput =
       degrees: number;
       durationMs?: number;
     };
+
+export type GestureCommandInput = GestureSemanticInput | DragGestureInput;
 
 export type PointerTrajectorySample = { offsetMs: number; point: Point };
 

@@ -327,6 +327,10 @@ function buildOptimizedActions(
  * than swallowing it like an ordinary fs failure).
  */
 function assertNoUnresolvedRefFallback(action: SessionAction): void {
+  if (action.command === 'gesture' && action.positionals?.[0] === 'drag') {
+    assertNoUnresolvedDragEndpoint(action.positionals);
+    return;
+  }
   if (!isSelectorTargetingCommand(action.command)) return;
   const refPositional =
     action.command === 'get' ? action.positionals?.[1] : action.positionals?.[0];
@@ -334,6 +338,15 @@ function assertNoUnresolvedRefFallback(action: SessionAction): void {
   throw new AppError(
     'COMMAND_FAILED',
     `Cannot write recorded step "${action.command} ${refPositional}" to a script: it never resolved to a selector, so the ref would not resolve in a fresh replay session.`,
+  );
+}
+
+function assertNoUnresolvedDragEndpoint(positionals: readonly string[]): void {
+  const refPositional = positionals.slice(1, 3).find((value) => value.startsWith('@'));
+  if (!refPositional) return;
+  throw new AppError(
+    'COMMAND_FAILED',
+    `Cannot write recorded drag endpoint "${refPositional}" to a script: it never resolved to a selector, so the ref would not resolve in a fresh replay session.`,
   );
 }
 

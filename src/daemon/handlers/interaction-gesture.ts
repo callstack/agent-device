@@ -3,18 +3,22 @@ import {
   assertNoRemovedSwipeInput,
   GESTURE_FLING_DURATION_MS,
   gesturePayloadToPositionals,
-  normalizePublicGesture,
+  normalizeGestureCommandInput,
   normalizePublicSwipeMotion,
   readGesturePayload,
   SWIPE_PAUSE_MAX_MS,
   SWIPE_REPETITION_MAX,
   SWIPE_SERIES_MAX_SCHEDULED_DURATION_MS,
   type GesturePayload,
-  type GestureSemanticInput,
+  type GestureCommandInput,
   type SwipePayload,
 } from '@agent-device/contracts/interaction';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import type { Point } from '@agent-device/kernel/snapshot';
+import {
+  REF_GRAMMAR_HINT,
+  splitRefGenerationSuffix,
+  type Point,
+} from '@agent-device/kernel/snapshot';
 import { requireGestureSupported } from '../../core/capabilities.ts';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import { sleep } from '../../utils/timeouts.ts';
@@ -25,6 +29,8 @@ import { finalizeTouchInteraction } from './interaction-common.ts';
 import { createInteractionRuntime } from './interaction-runtime.ts';
 import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
 import { noActiveSessionError } from './response.ts';
+import { assertRefMutationAdmitted } from './interaction-ref-policy.ts';
+import type { RecordedTargetCapture } from '../session-target-evidence.ts';
 
 type GestureHandlerParams = InteractionHandlerParams & {
   captureSnapshotForSession: CaptureSnapshotForSession;
@@ -38,32 +44,64 @@ type GestureInteractionOutcome = {
   flags: InteractionHandlerParams['req']['flags'];
   responseData: Record<string, unknown>;
   recordingResultExtra?: Record<string, unknown>;
+  recordedTarget?: RecordedTargetCapture;
 };
 
 export async function dispatchGestureViaRuntime(
   params: GestureHandlerParams,
 ): Promise<DaemonResponse> {
-  return await dispatchGestureInteraction(params, 'gesture', async (session) => {
-    const input = readGesturePayload(params.req.input);
-    const normalized = normalizePublicGesture(input);
-    if (normalized.gesture.intent === 'pan' && params.req.internal?.gestureExecutionProfile) {
-      normalized.gesture.executionProfile = params.req.internal.gestureExecutionProfile;
-    }
-    requireGestureSupported(normalized.gesture, session.device);
-    const result = await createGestureRuntime(params).interactions.gesture({
-      session: params.sessionName,
-      requestId: params.req.meta?.requestId,
-      gesture: normalized.gesture,
-    });
-    return {
-      positionals: gesturePayloadToPositionals(input),
-      flags: gestureReplayFlags(input, params.req.flags),
-      responseData: gestureResponseData(result, {
-        executionProfile: resolveExecutionProfile(normalized.gesture),
-      }),
-      ...(input.kind === 'pinch' ? { recordingResultExtra: { scale: input.scale } } : {}),
-    };
+  return await dispatchGestureInteraction(params, 'gesture', async (session) =>
+    runGestureInteraction(params, session),
+  );
+}
+
+async function runGestureInteraction(
+  params: GestureHandlerParams,
+  session: SessionState,
+): Promise<GestureInteractionOutcome> {
+  const input = readGesturePayload(params.req.input);
+  const gesture = prepareGestureCommandInput(input, session);
+  if (gesture.intent === 'pan' && params.req.internal?.gestureExecutionProfile) {
+    gesture.executionProfile = params.req.internal.gestureExecutionProfile;
+  }
+  requireGestureSupported(gesture, session.device);
+  const result = await createGestureRuntime(params).interactions.gesture({
+    session: params.sessionName,
+    requestId: params.req.meta?.requestId,
+    gesture,
+    expectedResolvedTarget: params.req.internal?.replayTargetGuard,
   });
+  return buildGestureOutcome(input, gesture, result, params.req.flags);
+}
+
+function buildGestureOutcome(
+  input: GesturePayload,
+  gesture: GestureCommandInput,
+  result: GestureRuntimeResult,
+  flags: InteractionHandlerParams['req']['flags'],
+): GestureInteractionOutcome {
+  const recording = result.recording;
+  const sourceTarget = recording?.sourceTarget;
+  return {
+    positionals: dragRecordingPositionals(input, recording),
+    flags: gestureReplayFlags(input, flags),
+    responseData: gestureResponseData(result, {
+      executionProfile: resolveExecutionProfile(gesture),
+    }),
+    ...(input.kind === 'pinch'
+      ? { recordingResultExtra: { scale: input.scale } }
+      : sourceTarget
+        ? { recordingResultExtra: { selectorChain: sourceTarget.selectorChain } }
+        : {}),
+    ...(sourceTarget
+      ? {
+          recordedTarget: {
+            node: sourceTarget.node,
+            preActionNodes: sourceTarget.preActionNodes,
+          },
+        }
+      : {}),
+  };
 }
 
 export async function dispatchSwipeViaRuntime(
@@ -145,6 +183,7 @@ async function dispatchGestureInteraction(
       flags: outcome.flags,
       result: { ...responseData, ...(outcome.recordingResultExtra ?? {}) },
       responseData,
+      recordedTarget: outcome.recordedTarget,
       actionStartedAt,
       actionFinishedAt: Date.now(),
     });
@@ -153,10 +192,51 @@ async function dispatchGestureInteraction(
   }
 }
 
-function resolveExecutionProfile(gesture: GestureSemanticInput): string | undefined {
+function resolveExecutionProfile(gesture: GestureCommandInput): string | undefined {
   if (gesture.intent === 'fling') return 'endpoint-hold';
   if (gesture.intent === 'pan') return gesture.executionProfile ?? 'timed-pan';
+  if (gesture.intent === 'drag') return 'hold-drag';
   return undefined;
+}
+
+function prepareGestureCommandInput(
+  input: GesturePayload,
+  session: SessionState,
+): GestureCommandInput {
+  const normalized = normalizeGestureCommandInput(input);
+  if (normalized.intent !== 'drag') return normalized;
+  return {
+    ...normalized,
+    source: prepareDragTarget(normalized.source, session).target,
+    destination: prepareDragTarget(normalized.destination, session).target,
+  };
+}
+
+function prepareDragTarget(target: string, session: SessionState) {
+  if (!target.startsWith('@')) return { target };
+  const split = splitRefGenerationSuffix(target);
+  if (!split) {
+    throw new AppError('INVALID_ARGS', `Invalid ref "${target}" — malformed generation suffix.`, {
+      hint: REF_GRAMMAR_HINT,
+    });
+  }
+  assertRefMutationAdmitted({
+    session,
+    ref: split.base,
+    mintedGeneration: split.generation,
+  });
+  return { target: split.base };
+}
+
+function dragRecordingPositionals(
+  input: GesturePayload,
+  recording: GestureRuntimeResult['recording'],
+): string[] {
+  const positionals = gesturePayloadToPositionals(input);
+  if (input.kind !== 'drag' || !recording) return positionals;
+  if (recording.sourceSelector) positionals[1] = recording.sourceSelector;
+  if (recording.destinationSelector) positionals[2] = recording.destinationSelector;
+  return positionals;
 }
 
 function gestureResponseData(
@@ -171,6 +251,7 @@ function gestureResponseData(
     pointerCount: result.pointerCount,
     from: result.from,
     to: result.to,
+    ...(result.targets ? { targets: result.targets } : {}),
     ...(result.backendResult ?? {}),
     ...extra,
     ...(executionProfile

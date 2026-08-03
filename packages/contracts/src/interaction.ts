@@ -50,7 +50,7 @@ export type ResolutionDiagnosticEntry = {
 
 /**
  * ADR 0012 decision 2: pre-action disclosure of how the acting path resolved
- * its target, on every press/click/fill/longpress response. Never ref-issuing.
+ * its target, including each endpoint of a target-authored drag. Never ref-issuing.
  * `direct-ios`/`not-observed` = the XCTest fast path has no daemon tree to
  * report from; `ref`/`label-fallback` = a stale `@ref` recovered via
  * first-match label lookup, never exact ref provenance; `alternatives` holds

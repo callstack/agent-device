@@ -1,7 +1,7 @@
 import type { Point } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import { readGesturePayload, type GESTURE_KINDS, type GesturePayload } from './gesture-input.ts';
-import type { GestureSemanticInput } from './gesture-plan-types.ts';
+import type { GestureCommandInput, GestureSemanticInput } from './gesture-plan-types.ts';
 
 export type NormalizedPublicGesture = {
   gesture: GestureSemanticInput;
@@ -80,6 +80,11 @@ const PUBLIC_GESTURE_SYNTAX: Record<GestureSyntaxKey, PublicGestureSyntax> = {
   'gesture transform': {
     max: 7,
     usage: 'gesture transform accepts at most 7 arguments: x y dx dy scale degrees [durationMs]',
+  },
+  'gesture drag': {
+    max: 5,
+    usage:
+      'gesture drag accepts at most 5 arguments: source destination [sourceHoldMs] [moveMs] [destinationHoldMs]',
   },
 };
 
@@ -256,6 +261,17 @@ export function gesturePayloadFromPositionals(
         durationMs: optionalPositionNumber(args[6]),
       });
     }
+    case 'drag': {
+      assertGestureArity('gesture drag', args);
+      return readGesturePayload({
+        kind,
+        source: args[0],
+        destination: args[1],
+        sourceHoldMs: optionalPositionNumber(args[2]),
+        moveMs: optionalPositionNumber(args[3]),
+        destinationHoldMs: optionalPositionNumber(args[4]),
+      });
+    }
     default:
       return readGesturePayload({ kind });
   }
@@ -293,6 +309,15 @@ export function gesturePayloadToPositionals(input: GesturePayload): string[] {
         input.scale,
         input.degrees,
         input.durationMs,
+      ]);
+    case 'drag':
+      return compact([
+        input.kind,
+        input.source,
+        input.destination,
+        input.sourceHoldMs,
+        input.moveMs,
+        input.destinationHoldMs,
       ]);
   }
 }
@@ -355,7 +380,25 @@ export function normalizePublicGesture(input: GesturePayload): NormalizedPublicG
           durationMs: input.durationMs,
         },
       };
+    case 'drag':
+      throw new AppError(
+        'INVALID_ARGS',
+        'gesture drag targets must be resolved before coordinate normalization',
+      );
   }
+}
+
+/** Converts every public gesture payload into the runtime's semantic command shape. */
+export function normalizeGestureCommandInput(input: GesturePayload): GestureCommandInput {
+  if (input.kind !== 'drag') return normalizePublicGesture(input).gesture;
+  return {
+    intent: 'drag',
+    source: input.source,
+    destination: input.destination,
+    sourceHoldMs: input.sourceHoldMs,
+    moveMs: input.moveMs,
+    destinationHoldMs: input.destinationHoldMs,
+  };
 }
 
 export function normalizePublicSwipeMotion(input: {

@@ -4,6 +4,7 @@ import { ref, selector } from './selector-read-utils.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   createInteractionDevice,
+  dragTargetSnapshot,
   runtimeScrollSnapshot,
   selectorSnapshot,
 } from './__tests__/test-utils/index.ts';
@@ -35,6 +36,81 @@ test('runtime focus and longPress share selector/ref target resolution', async (
     { command: 'focus', point: { x: 60, y: 40 } },
     { command: 'longPress', point: { x: 60, y: 40 }, durationMs: 750 },
   ]);
+});
+
+test('runtime drag resolves generic selector endpoints before one continuous pointer plan', async () => {
+  let capturedPlan:
+    | Parameters<NonNullable<import('../../../backend.ts').AgentDeviceBackend['performGesture']>>[1]
+    | undefined;
+  const snapshot = dragTargetSnapshot();
+  const device = createInteractionDevice(snapshot, {
+    resolveGestureViewport: async () => ({ x: 0, y: 0, width: 400, height: 800 }),
+    performGesture: async (_context, plan) => {
+      capturedPlan = plan;
+    },
+  });
+
+  const result = await device.interactions.gesture({
+    gesture: {
+      intent: 'drag',
+      source: 'id="drag-source"',
+      destination: '@e3',
+      sourceHoldMs: 700,
+      moveMs: 600,
+      destinationHoldMs: 200,
+    },
+  });
+
+  assert.equal(result.kind, 'drag');
+  assert.equal(result.durationMs, 1_500);
+  assert.deepEqual(result.from, { x: 80, y: 130 });
+  assert.deepEqual(result.to, { x: 290, y: 440 });
+  assert.equal(capturedPlan?.topology, 'single');
+  assert.deepEqual(capturedPlan?.pointers[0]?.samples[1], {
+    offsetMs: 700,
+    point: { x: 80, y: 130 },
+  });
+  assert.deepEqual(capturedPlan?.pointers[0]?.samples.at(-1), {
+    offsetMs: 1_500,
+    point: { x: 290, y: 440 },
+  });
+  assert.equal(result.recording?.sourceSelector?.split(' || ')[0], 'id="drag-source"');
+  assert.equal(result.recording?.destinationSelector?.split(' || ')[0], 'id="drop-target"');
+  assert.deepEqual(result.targets?.source.resolution, {
+    source: 'runtime',
+    phase: 'pre-action',
+    kind: 'unique',
+  });
+  assert.deepEqual(result.targets?.destination.resolution, {
+    source: 'ref',
+    phase: 'pre-action',
+    kind: 'exact',
+  });
+  assert.equal(result.targets?.source.selectorChain?.[0], 'id="drag-source"');
+  assert.equal(result.targets?.destination.selectorChain?.[0], 'id="drop-target"');
+});
+
+test('runtime drag resolves both endpoints before dispatching any device gesture', async () => {
+  let dispatchCount = 0;
+  const device = createInteractionDevice(dragTargetSnapshot(), {
+    resolveGestureViewport: async () => ({ x: 0, y: 0, width: 400, height: 800 }),
+    performGesture: async () => {
+      dispatchCount += 1;
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      device.interactions.gesture({
+        gesture: {
+          intent: 'drag',
+          source: 'id="drag-source"',
+          destination: 'id="missing-target"',
+        },
+      }),
+    (error: unknown) => error instanceof AppError && error.code === 'COMMAND_FAILED',
+  );
+  assert.equal(dispatchCount, 0);
 });
 
 test('runtime longPress with settle drops the non-hittable hint when the diff proves a change', async () => {

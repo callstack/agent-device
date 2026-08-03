@@ -138,21 +138,32 @@ export function supportedPlatformsForCommand(command: string): string[] {
   return supported;
 }
 
-export function requireGestureSupported(input: GestureSemanticInput, device: DeviceInfo): void {
+export function requireGestureSupported(
+  input: GestureSemanticInput | { intent: 'drag' },
+  device: DeviceInfo,
+): void {
+  const capabilityInput: GestureSemanticInput =
+    input.intent === 'drag'
+      ? { intent: 'pan', origin: { x: 0, y: 0 }, delta: { x: 0, y: 0 } }
+      : input;
   if (device.platform === 'web' || device.appleOs === 'watchos') {
-    throw unsupportedGesture(input, gesturePlatformMessage(input, device));
+    throw unsupportedGesture(capabilityInput, gesturePlatformMessage(capabilityInput, device));
   }
-  if (isMultiTouchGesture(input)) {
-    requireMultiTouchGestureSupported(input, device);
+  if (isMultiTouchGesture(capabilityInput)) {
+    requireMultiTouchGestureSupported(capabilityInput, device);
     return;
   }
   if (device.appleOs === 'visionos') {
-    throw unsupportedGesture(input, gesturePlatformMessage(input, device));
+    throw unsupportedGesture(capabilityInput, gesturePlatformMessage(capabilityInput, device));
   }
   // Linux can preserve public coordinate/preset swipe through its drag primitive, but cannot
   // honor the speed semantics authored by `gesture fling`.
-  if (input.intent === 'fling' && 'direction' in input && device.platform === 'linux') {
-    throw unsupportedGesture(input, 'gesture fling is not supported on Linux');
+  if (
+    capabilityInput.intent === 'fling' &&
+    'direction' in capabilityInput &&
+    device.platform === 'linux'
+  ) {
+    throw unsupportedGesture(capabilityInput, 'gesture fling is not supported on Linux');
   }
 }
 

@@ -15,6 +15,7 @@ import type {
   CaptureScreenshotResult,
   CaptureSnapshotOptions,
   CaptureSnapshotResult,
+  DragOptions,
   FlingOptions,
   InternalRequestOptions,
   Lease,
@@ -403,6 +404,7 @@ export function createAgentDeviceClient(
       longPress: async (options) => await executeCommand('longpress', options),
       swipe: async (options) => await executeCommand('swipe', options),
       pan: async (options) => await executeCommand('gesture', panGestureInput(options)),
+      drag: async (options) => await executeCommand('gesture', dragGestureInput(options)),
       fling: async (options) => await executeCommand('gesture', flingGestureInput(options)),
       swipeGesture: async (options) =>
         await executeCommand('gesture', swipePresetGestureInput(options)),
@@ -453,6 +455,10 @@ export function createAgentDeviceClient(
 function panGestureInput(options: PanOptions): InternalRequestOptions & Record<string, unknown> {
   const { x, y, dx, dy, ...common } = options;
   return { ...common, kind: 'pan', origin: { x, y }, delta: { x: dx, y: dy } };
+}
+
+function dragGestureInput(options: DragOptions): InternalRequestOptions & Record<string, unknown> {
+  return { ...options, kind: 'drag' };
 }
 
 function flingGestureInput(

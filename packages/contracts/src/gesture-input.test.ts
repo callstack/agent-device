@@ -47,3 +47,37 @@ test('rotate does not accept velocity', () => {
     code: 'INVALID_ARGS',
   });
 });
+
+test('drag requires two non-empty targets and validates each timing phase', () => {
+  for (const input of [
+    { kind: 'drag', source: '', destination: 'id="drop-target"' },
+    { kind: 'drag', source: 'id="drag-source"', destination: '   ' },
+    { kind: 'drag', source: 'id="drag-source"', destination: 'id="drop-target"', sourceHoldMs: 0 },
+    { kind: 'drag', source: 'id="drag-source"', destination: 'id="drop-target"', moveMs: 15 },
+    {
+      kind: 'drag',
+      source: 'id="drag-source"',
+      destination: 'id="drop-target"',
+      destinationHoldMs: -1,
+    },
+  ]) {
+    assert.throws(() => readGesturePayload(input), { code: 'INVALID_ARGS' });
+  }
+
+  assert.deepEqual(
+    readGesturePayload({
+      kind: 'drag',
+      source: 'id="drag-source"',
+      destination: '@e2~s42',
+      destinationHoldMs: 0,
+    }),
+    {
+      kind: 'drag',
+      source: 'id="drag-source"',
+      destination: '@e2~s42',
+      sourceHoldMs: undefined,
+      moveMs: undefined,
+      destinationHoldMs: 0,
+    },
+  );
+});

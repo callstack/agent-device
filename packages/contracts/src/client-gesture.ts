@@ -81,6 +81,14 @@ export type PanOptions = DeviceCommandBaseOptions & {
   durationMs?: number;
 };
 
+export type DragOptions = DeviceCommandBaseOptions & {
+  source: string;
+  destination: string;
+  sourceHoldMs?: number;
+  moveMs?: number;
+  destinationHoldMs?: number;
+};
+
 export type FlingOptions = DeviceCommandBaseOptions & {
   direction: ScrollDirection;
   x: number;

@@ -27,6 +27,22 @@ test('extractReplayTargetToken: get takes positional 1 (after the text/attrs sub
   );
 });
 
+test('extractReplayTargetToken: gesture drag binds replay evidence to its source endpoint', () => {
+  assert.equal(
+    extractReplayTargetToken(
+      action({
+        command: 'gesture',
+        positionals: ['drag', 'id="drag-source"', 'id="drop-target"', '700', '600'],
+      }),
+    ),
+    'id="drag-source"',
+  );
+  assert.equal(
+    extractReplayTargetToken(action({ command: 'gesture', positionals: ['pan', '10', '20'] })),
+    undefined,
+  );
+});
+
 test('extractReplayTargetToken: a two-numeric-positional point target is not eligible', () => {
   assert.equal(
     extractReplayTargetToken(action({ command: 'click', positionals: ['100', '200'] })),

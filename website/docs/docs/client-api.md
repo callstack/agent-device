@@ -284,7 +284,7 @@ The complete domain-client method map is:
 - `client.leases.allocate()`, `heartbeat()`, `release()`
 - `client.metro.prepare()`, `reload()`
 - `client.capture.snapshot()`, `screenshot()`, `diff()`
-- `client.interactions.click()`, `press()`, `longPress()`, `swipe()`, `pan()`, `fling()`, `swipeGesture()`, `focus()`, `type()`, `fill()`, `scroll()`, `pinch()`, `rotateGesture()`, `transformGesture()`, `get()`, `is()`, `find()`
+- `client.interactions.click()`, `press()`, `longPress()`, `swipe()`, `pan()`, `drag()`, `fling()`, `swipeGesture()`, `focus()`, `type()`, `fill()`, `scroll()`, `pinch()`, `rotateGesture()`, `transformGesture()`, `get()`, `is()`, `find()`
 - `client.replay.run()` and `client.replay.test()`
 - `client.batch.run()`
 - `client.observability.perf()`, `logs()`, `events()`, `network()`, and `audio()`

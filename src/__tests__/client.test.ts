@@ -773,6 +773,37 @@ test('interactions.pan projects one- and two-finger requests through typed gestu
   );
 });
 
+test('interactions.drag projects generic endpoints and timing phases through structured input', async () => {
+  const setup = createTransport(async () => ({ ok: true, data: { message: 'Dragged' } }));
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  await client.interactions.drag({
+    source: 'id="drag-source"',
+    destination: '@e2~s42',
+    sourceHoldMs: 700,
+    moveMs: 600,
+    destinationHoldMs: 200,
+  });
+
+  assert.deepEqual(
+    setup.calls.map(({ command, positionals, input }) => ({ command, positionals, input })),
+    [
+      {
+        command: 'gesture',
+        positionals: [],
+        input: {
+          kind: 'drag',
+          source: 'id="drag-source"',
+          destination: '@e2~s42',
+          sourceHoldMs: 700,
+          moveMs: 600,
+          destinationHoldMs: 200,
+        },
+      },
+    ],
+  );
+});
+
 // fallow-ignore-next-line complexity
 test('replay.run serializes client-collected AD_VAR shell env into daemon request', async () => {
   const previousAppId = process.env.AD_VAR_APP_ID;

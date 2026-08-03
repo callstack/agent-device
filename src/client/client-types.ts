@@ -85,6 +85,7 @@ import type {
   DeviceCommandBaseOptions,
   DeviceShutdownOptions,
   DoctorCommandOptions,
+  DragOptions,
   EventsOptions,
   FillOptions,
   FindOptions,
@@ -272,6 +273,7 @@ export type AgentDeviceClient = {
     longPress: (options: LongPressOptions) => Promise<CommandResult<'longpress'>>;
     swipe: (options: SwipeOptions) => Promise<CommandRequestResult>;
     pan: (options: PanOptions) => Promise<CommandRequestResult>;
+    drag: (options: DragOptions) => Promise<CommandRequestResult>;
     fling: (options: FlingOptions) => Promise<CommandRequestResult>;
     swipeGesture: (options: SwipeGestureOptions) => Promise<CommandRequestResult>;
     focus: (options: FocusOptions) => Promise<CommandRequestResult>;

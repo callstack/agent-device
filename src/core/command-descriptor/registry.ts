@@ -1037,6 +1037,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     catalog: { group: 'public' },
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
+    targetIdentityVerification: 'pre-dispatch',
     daemon: {
       route: 'interaction',
       refFrameEffect: 'may-invalidate',

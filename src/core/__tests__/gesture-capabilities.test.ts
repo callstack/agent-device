@@ -57,6 +57,20 @@ test('Android phones and emulators support single- and multi-touch gesture plans
   }
 });
 
+test('target-authored drag follows the one-pointer pan capability policy', () => {
+  assert.doesNotThrow(() =>
+    requireGestureSupported({ intent: 'drag' }, device({ kind: 'emulator' })),
+  );
+  assert.throws(
+    () =>
+      requireGestureSupported(
+        { intent: 'drag' },
+        device({ platform: 'web', kind: 'device', target: 'desktop' }),
+      ),
+    { code: 'UNSUPPORTED_OPERATION' },
+  );
+});
+
 test('iOS and iPadOS simulators support multi-touch while physical devices do not', () => {
   for (const appleOs of ['ios', 'ipados'] as const) {
     const simulator = device({ platform: 'apple', appleOs, kind: 'simulator' });

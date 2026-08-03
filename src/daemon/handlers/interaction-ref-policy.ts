@@ -4,6 +4,7 @@ import {
   refFrameScope,
   type RefFrameRejectReason,
 } from '../ref-frame.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonResponse, SessionState } from '../types.ts';
 import { errorResponse } from './response.ts';
 
@@ -32,16 +33,34 @@ export function refMutationAdmissionResponse(params: {
    */
   staleRefsWarning: string | undefined;
 }): DaemonResponse | null {
+  try {
+    assertRefMutationAdmitted(params);
+    return null;
+  } catch (error) {
+    if (error instanceof AppError) {
+      return errorResponse(error.code, error.message, error.details);
+    }
+    throw error;
+  }
+}
+
+/** Shared throwing form for handlers that compose more than one ref target. */
+export function assertRefMutationAdmitted(params: {
+  session: SessionState;
+  ref: string;
+  mintedGeneration: number | undefined;
+  staleRefsWarning?: string;
+}): void {
   const refBody = params.ref.startsWith('@') ? params.ref.slice(1) : params.ref;
   const admission = admitRefMutation({
     session: params.session,
     refBody,
     mintedGeneration: params.mintedGeneration,
   });
-  if (admission.admitted) return null;
+  if (admission.admitted) return;
 
   const scope = refFrameScope(params.session);
-  return errorResponse('COMMAND_FAILED', rejectionMessage(admission.reason, params.ref), {
+  throw new AppError('COMMAND_FAILED', rejectionMessage(admission.reason, params.ref), {
     reason: admission.reason,
     ref: params.ref,
     currentGeneration: refFrameEpoch(params.session),

@@ -129,6 +129,25 @@ test('a recorded ref that never resolved to a selectorChain throws instead of em
   expect(fs.existsSync(path.join(root, 'sessions'))).toBe(false);
 });
 
+test('a recorded drag refuses either unresolved ref endpoint', () => {
+  for (const positionals of [
+    ['drag', '@e2', 'id="drop-target"'],
+    ['drag', 'id="drag-source"', '@e3'],
+  ]) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-drag-ref-'));
+    const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+    const session = makeRepairCompleteSession('default', {
+      actions: [action({ command: 'gesture', positionals })],
+    });
+
+    const result = writer.write(session);
+    expect(result.written).toBe(false);
+    expect(result.written === false && result.error?.message).toMatch(
+      /recorded drag endpoint.*never resolved to a selector/,
+    );
+  }
+});
+
 test('a bare-@ref fill action also fails loud, not just click-like commands', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-bare-ref-fill-');
   const writer = new SessionScriptWriter(path.join(root, 'sessions'));

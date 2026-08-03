@@ -24,6 +24,37 @@ export function selectorSnapshot(): SnapshotState {
   ]);
 }
 
+export function dragTargetSnapshot(): SnapshotState {
+  return makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'View',
+      identifier: 'drag-source',
+      label: 'Drag source',
+      rect: { x: 20, y: 100, width: 120, height: 60 },
+      hittable: true,
+    },
+    {
+      index: 2,
+      depth: 1,
+      parentIndex: 0,
+      type: 'View',
+      identifier: 'drop-target',
+      label: 'Drop target',
+      rect: { x: 220, y: 400, width: 140, height: 80 },
+      hittable: true,
+    },
+  ]);
+}
+
 // Closed-drawer shape shared by the native-ref preflight tests: the only
 // interactive node (@e2) sits fully left of the Application viewport.
 export function offscreenDrawerSnapshot(): SnapshotState {

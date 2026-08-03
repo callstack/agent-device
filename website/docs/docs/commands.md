@@ -372,6 +372,8 @@ agent-device swipe 540 1500 540 500 --count 8 --pause-ms 30 --pattern ping-pong
 agent-device gesture pan 200 420 0 -80 500
 agent-device gesture pan 200 420 80 -40 700 --pointer-count 2
 agent-device gesture fling right 200 420 180
+agent-device gesture drag 'id="drag-source"' 'id="drop-target"'
+agent-device gesture drag @e4~s12 'label="Archive"' 700 600 200
 agent-device longpress 300 500 800
 agent-device scroll down 0.5
 agent-device scroll down --pixels 320
@@ -396,6 +398,7 @@ Neither `swipe` nor `gesture fling` takes a duration, and `gesture rotate` takes
 Repeated coordinate swipes accept at most 200 repetitions and 10000ms pauses, and their combined
 gesture/pause schedule must fit within 60000ms.
 `gesture pan` accepts `x y dx dy [durationMs]` for deliberate drags. It uses one pointer by default. Add `--pointer-count 2` for a parallel two-finger pan with constant contact span and angle; this shares the bounded two-contact synthesizer used by transform while retaining pan intent. Android preserves the requested travel duration; iOS uses XCTest drag primitives for one-pointer pan and private XCTest synthesis for two-pointer pan.
+`gesture drag` accepts `source destination [sourceHoldMs] [moveMs] [destinationHoldMs]`, where each endpoint is a selector or a snapshot ref. It resolves both endpoints before dispatch and keeps one pointer down continuously through activation, movement, and the optional destination hold. Defaults are 800ms, 500ms, and 0ms; the combined gesture is capped at 10000ms. Recordings convert refs to selector chains so saved `.ad` scripts remain portable.
 `gesture fling` accepts `up|down|left|right x y [distance]` for fast directional throws.
 `gesture rotate` accepts `degrees [x] [y]`; the degree sign controls direction. Pacing is derived from the requested rotation.
 `gesture transform` accepts `x y dx dy scale degrees [durationMs]` for one combined two-finger pan/zoom/rotate gesture on Android and iOS simulators. Pinch, rotate, two-finger pan, and transform use the same viewport-aware pointer planning; impossible paths fail before injection instead of clamping or distorting the requested motion.

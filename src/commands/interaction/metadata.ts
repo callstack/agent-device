@@ -9,6 +9,7 @@ import {
   SWIPE_PRESETS,
   SWIPE_REPETITION_MAX,
   type FlingGesturePayload,
+  type DragGesturePayload,
   type PanGesturePayload,
   type PinchGesturePayload,
   type RotateGesturePayload,
@@ -220,6 +221,14 @@ const gestureFields = {
   degrees: numberField('Rotation in degrees.'),
   durationMs: integerField('Pan/transform duration.', { min: 16, max: 10_000 }),
   pointerCount: integerField('Pan touch pointer count (1 or 2).', { min: 1, max: 2 }),
+  source: stringField('Drag source @ref or selector.'),
+  destination: stringField('Drag destination @ref or selector.'),
+  sourceHoldMs: integerField('Drag activation hold duration.', { min: 1, max: 10_000 }),
+  moveMs: integerField('Drag movement duration.', { min: 16, max: 10_000 }),
+  destinationHoldMs: integerField('Hold before releasing at the destination.', {
+    min: 0,
+    max: 10_000,
+  }),
 };
 
 export type ClickInput = InferCommandInput<typeof clickFields>;
@@ -234,6 +243,7 @@ export type SwipeGestureInput = CommonCommandInput & SwipeGesturePayload;
 export type PinchInput = CommonCommandInput & PinchGesturePayload;
 export type RotateInput = CommonCommandInput & RotateGesturePayload;
 export type TransformInput = CommonCommandInput & TransformGesturePayload;
+export type DragInput = CommonCommandInput & DragGesturePayload;
 
 export type GestureInput =
   | PanInput
@@ -241,7 +251,8 @@ export type GestureInput =
   | SwipeGestureInput
   | PinchInput
   | RotateInput
-  | TransformInput;
+  | TransformInput
+  | DragInput;
 
 export const interactionCommandMetadata = [
   defineCommandMetadata({

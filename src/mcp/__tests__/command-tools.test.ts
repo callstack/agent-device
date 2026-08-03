@@ -182,6 +182,42 @@ test('MCP gesture metadata exposes pan/transform duration', () => {
   });
 });
 
+test('MCP gesture tool exposes generic drag endpoints and bounded timing phases', () => {
+  const gesture = listCommandTools().find((tool) => tool.name === 'gesture');
+  assert.ok(gesture);
+  assert.deepEqual(gesture.inputSchema.properties?.kind, {
+    type: 'string',
+    description: 'Gesture variant.',
+    enum: ['pan', 'fling', 'swipe', 'pinch', 'rotate', 'transform', 'drag'],
+  });
+  assert.deepEqual(gesture.inputSchema.properties?.source, {
+    type: 'string',
+    description: 'Drag source @ref or selector.',
+  });
+  assert.deepEqual(gesture.inputSchema.properties?.destination, {
+    type: 'string',
+    description: 'Drag destination @ref or selector.',
+  });
+  assert.deepEqual(gesture.inputSchema.properties?.sourceHoldMs, {
+    type: 'integer',
+    description: 'Drag activation hold duration.',
+    minimum: 1,
+    maximum: 10_000,
+  });
+  assert.deepEqual(gesture.inputSchema.properties?.moveMs, {
+    type: 'integer',
+    description: 'Drag movement duration.',
+    minimum: 16,
+    maximum: 10_000,
+  });
+  assert.deepEqual(gesture.inputSchema.properties?.destinationHoldMs, {
+    type: 'integer',
+    description: 'Hold before releasing at the destination.',
+    minimum: 0,
+    maximum: 10_000,
+  });
+});
+
 test('MCP swipe tool exposes bounded repetition inputs', () => {
   const swipe = listCommandTools().find((tool) => tool.name === 'swipe');
   assert.ok(swipe);

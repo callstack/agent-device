@@ -1,5 +1,6 @@
 import type {
   ClickOptions,
+  DragOptions,
   FillOptions,
   FindOptions,
   FlingOptions,
@@ -42,6 +43,7 @@ import { interactionCliReaders, interactionDaemonWriters } from './interactions.
 import {
   interactionCommandMetadata,
   type ClickInput,
+  type DragInput,
   type FillInput,
   type FlingInput,
   type GetInput,
@@ -116,12 +118,12 @@ const interactionCliSchemas = {
     allowedFlags: ['count', 'pauseMs', 'pattern'],
   },
   gesture: {
-    usageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform> ...',
-    listUsageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform> ...',
+    usageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform|drag> ...',
+    listUsageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform|drag> ...',
     helpDescription:
-      'Run touch gestures: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge>, pinch <scale> [x] [y], rotate <degrees> [x] [y], or transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs]. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values.',
-    summary: 'Run pan, fling, swipe, pinch, rotate, or transform gestures',
-    positionalArgs: ['pan|fling|swipe|pinch|rotate|transform', 'args?'],
+      'Run touch gestures: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge>, pinch <scale> [x] [y], rotate <degrees> [x] [y], transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs], or drag <source-selector> <destination-selector> [sourceHoldMs] [moveMs] [destinationHoldMs]. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values.',
+    summary: 'Run pan, fling, swipe, pinch, rotate, transform, or hold-drag gestures',
+    positionalArgs: ['pan|fling|swipe|pinch|rotate|transform|drag', 'args?'],
     allowsExtraPositionals: true,
     allowedFlags: ['pointerCount'],
   },
@@ -222,6 +224,8 @@ const gestureCommandDefinition = defineExecutableCommand(
         return await client.interactions.rotateGesture(toRotateOptions(input));
       case 'transform':
         return await client.interactions.transformGesture(toTransformOptions(input));
+      case 'drag':
+        return await client.interactions.drag(toDragOptions(input));
     }
   },
 );
@@ -452,6 +456,17 @@ function toPanOptions(input: PanInput): PanOptions {
     dy: input.delta.y,
     pointerCount: input.pointerCount,
     durationMs: input.durationMs,
+  };
+}
+
+function toDragOptions(input: DragInput): DragOptions {
+  return {
+    ...commonToClientOptions(input),
+    source: input.source,
+    destination: input.destination,
+    sourceHoldMs: input.sourceHoldMs,
+    moveMs: input.moveMs,
+    destinationHoldMs: input.destinationHoldMs,
   };
 }
 

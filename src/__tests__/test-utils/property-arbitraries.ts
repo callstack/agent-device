@@ -1,5 +1,5 @@
 import {
-  GESTURE_KINDS,
+  COORDINATE_GESTURE_KINDS,
   SCROLL_DIRECTIONS,
   SWIPE_PRESETS,
   type GesturePayload,
@@ -113,7 +113,7 @@ function pointInViewportArb(viewport: Rect): fc.Arbitrary<Point> {
  */
 function gesturePayloadArbByKind(
   viewport: Rect,
-): Record<(typeof GESTURE_KINDS)[number], fc.Arbitrary<GesturePayload>> {
+): Record<(typeof COORDINATE_GESTURE_KINDS)[number], fc.Arbitrary<GesturePayload>> {
   const origin = pointInViewportArb(viewport);
   const delta = fc.record({
     x: fc.integer({ min: -viewport.width, max: viewport.width }),
@@ -166,7 +166,7 @@ export const gestureInViewportArb: fc.Arbitrary<{ viewport: Rect; gesture: Gestu
     const byKind = gesturePayloadArbByKind(viewport);
     return fc.record({
       viewport: fc.constant(viewport),
-      gesture: fc.oneof(...GESTURE_KINDS.map((kind) => byKind[kind])),
+      gesture: fc.oneof(...COORDINATE_GESTURE_KINDS.map((kind) => byKind[kind])),
     });
   });
 

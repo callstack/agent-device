@@ -13,7 +13,24 @@ import {
   type GesturePointerCount,
 } from './gesture-plan-types.ts';
 
-export const GESTURE_KINDS = ['pan', 'fling', 'swipe', 'pinch', 'rotate', 'transform'] as const;
+export const COORDINATE_GESTURE_KINDS = [
+  'pan',
+  'fling',
+  'swipe',
+  'pinch',
+  'rotate',
+  'transform',
+] as const;
+export const GESTURE_KINDS = [...COORDINATE_GESTURE_KINDS, 'drag'] as const;
+
+export type DragGesturePayload = {
+  kind: 'drag';
+  source: string;
+  destination: string;
+  sourceHoldMs?: number;
+  moveMs?: number;
+  destinationHoldMs?: number;
+};
 
 export type PanGesturePayload = {
   kind: 'pan';
@@ -62,7 +79,10 @@ export type GesturePayload =
   | SwipeGesturePayload
   | PinchGesturePayload
   | RotateGesturePayload
-  | TransformGesturePayload;
+  | TransformGesturePayload
+  | DragGesturePayload;
+
+export type CoordinateGesturePayload = Exclude<GesturePayload, DragGesturePayload>;
 
 export function readGesturePayload(input: unknown): GesturePayload {
   const record = readRecord(input);
@@ -76,6 +96,19 @@ export function readGesturePayload(input: unknown): GesturePayload {
         | GesturePointerCount
         | undefined,
       durationMs: readOptionalGestureDuration(record),
+    };
+  }
+  if (kind === 'drag') {
+    return {
+      kind,
+      source: readNonEmptyString(record, 'source'),
+      destination: readNonEmptyString(record, 'destination'),
+      sourceHoldMs: readOptionalInteger(record, 'sourceHoldMs', { min: 1, max: 10_000 }),
+      moveMs: readOptionalInteger(record, 'moveMs', { min: 16, max: 10_000 }),
+      destinationHoldMs: readOptionalInteger(record, 'destinationHoldMs', {
+        min: 0,
+        max: 10_000,
+      }),
     };
   }
   if (record.pointerCount !== undefined) {
@@ -169,6 +202,14 @@ function readNumber(record: Record<string, unknown>, key: string): number {
   const value = record[key];
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw new AppError('INVALID_ARGS', `Expected ${key} to be a finite number.`);
+  }
+  return value;
+}
+
+function readNonEmptyString(record: Record<string, unknown>, key: string): string {
+  const value = record[key];
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new AppError('INVALID_ARGS', `Expected ${key} to be a non-empty string.`);
   }
   return value;
 }
