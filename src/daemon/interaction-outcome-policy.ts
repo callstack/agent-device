@@ -1,6 +1,7 @@
 import { dispatchCommand, type CommandFlags } from '../core/dispatch.ts';
 import { isMobilePlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import { collectKeyboardChromeRefs } from '../core/snapshot-chrome.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { normalizeType } from '../utils/text-surface.ts';
 import { contextFromFlags } from './context.ts';
@@ -153,9 +154,13 @@ export function buildInteractionSurfaceSignature(
 ): InteractionSurfaceSignature {
   const occurrenceCounts = new Map<string, number>();
   const entries: InteractionSurfaceSignature = [];
+  // Computed once per signature build (needs the whole tree for the
+  // ancestor/descendant walk `collectKeyboardChrome` does — see
+  // `isNonDiscriminatingSurfaceNode`), not per node.
+  const keyboardChromeRefs = collectKeyboardChromeRefs(nodes);
 
   for (const node of nodes) {
-    const entry = buildInteractionSurfaceEntry(node, occurrenceCounts);
+    const entry = buildInteractionSurfaceEntry(node, occurrenceCounts, keyboardChromeRefs);
     if (entry) entries.push(entry);
   }
 
@@ -200,8 +205,8 @@ export function areInteractionSurfaceSignaturesStable(
  * staleness.
  *
  * The evidence rule: only shared entries flagged `discriminating` (i.e. NOT
- * the viewport root or keyboard chrome — see `isNonDiscriminatingSurfaceNode`)
- * count as evidence.
+ * the viewport root or keyboard-window chrome — see
+ * `isNonDiscriminatingSurfaceNode`) count as evidence.
  *
  * - `'ambiguous'`: the shared overlap has zero discriminating entries — this
  *   includes an empty overlap AND an overlap that is only structurally fixed
@@ -259,6 +264,7 @@ function retryCommandForTap(command: string): string | undefined {
 function buildInteractionSurfaceEntry(
   node: SnapshotNode,
   occurrenceCounts: Map<string, number>,
+  keyboardChromeRefs: ReadonlySet<string>,
 ): InteractionSurfaceSignature[number] | undefined {
   if (!node.rect) return undefined;
   if (!isFiniteRect(node.rect)) return undefined;
@@ -273,7 +279,7 @@ function buildInteractionSurfaceEntry(
     y: Math.round(node.rect.y),
     width: Math.round(node.rect.width),
     height: Math.round(node.rect.height),
-    discriminating: !isNonDiscriminatingSurfaceNode(node),
+    discriminating: !isNonDiscriminatingSurfaceNode(node, keyboardChromeRefs),
   };
 }
 
@@ -284,11 +290,15 @@ function buildInteractionSurfaceEntry(
  * regardless of what happened. `classifyBaselineSurfaceEvidence` excludes
  * them from the discriminating-overlap count for exactly this reason.
  *
- * Not a special case for "Application" alone: both checks below reuse this
- * repo's existing kind classifications rather than inventing a new list.
+ * Not a special case for "Application" alone, and not a container-only
+ * special case for the keyboard either: both checks below reuse this repo's
+ * existing kind classifications rather than inventing a narrower one.
  */
-function isNonDiscriminatingSurfaceNode(node: SnapshotNode): boolean {
-  return isViewportRootKind(node) || isKeyboardChromeKind(node);
+function isNonDiscriminatingSurfaceNode(
+  node: SnapshotNode,
+  keyboardChromeRefs: ReadonlySet<string>,
+): boolean {
+  return isViewportRootKind(node) || (node.ref !== undefined && keyboardChromeRefs.has(node.ref));
 }
 
 /**
@@ -304,20 +314,6 @@ function isViewportRootKind(node: Pick<SnapshotNode, 'type' | 'role' | 'subrole'
     .map((value) => normalizeType(value ?? ''))
     .join(' ');
   return normalizedKind.includes('application') || normalizedKind.includes('window');
-}
-
-/**
- * Minimal local equivalent of the keyboard-chrome container test in
- * `src/core/snapshot-chrome.ts` (source of truth, `collectKeyboardChrome`) —
- * that module additionally walks ancestor/descendant `parentIndex` chains to
- * classify a keyboard window's whole subtree, which this flat signature-entry
- * comparison has no access to (entries carry no ref/parentIndex). Catching
- * the `[Keyboard]` container itself via the same per-node type test is the
- * invariant-rect anchor that matters here: the container's own frame never
- * moves for a scroll/swipe gesture.
- */
-function isKeyboardChromeKind(node: Pick<SnapshotNode, 'type'>): boolean {
-  return normalizeType(node.type ?? '') === 'keyboard';
 }
 
 function interactionSurfaceSemanticKey(node: SnapshotNode): string | undefined {

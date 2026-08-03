@@ -175,7 +175,7 @@ test('classifyBaselineSurfaceEvidence is ambiguous when the current capture is t
   assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'ambiguous');
 });
 
-test('classifyBaselineSurfaceEvidence excludes keyboard chrome from discriminating overlap', () => {
+test('classifyBaselineSurfaceEvidence excludes the keyboard container from discriminating overlap', () => {
   const keyboardNode = {
     ref: 'e3',
     index: 2,
@@ -191,6 +191,91 @@ test('classifyBaselineSurfaceEvidence excludes keyboard chrome from discriminati
 
   assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'ambiguous');
 });
+
+// #1563 review, finding 2: a container-only exclusion still misses keyboard
+// DESCENDANTS (individual keys) and SIBLINGS (assistant buttons like "Next
+// keyboard"/"Dictate", which live outside the container per
+// src/core/snapshot-chrome.ts's collectKeyboardChrome doc comment — a
+// container-descendant walk alone provably misses them, hence the whole-
+// window classification that module reuses here via collectKeyboardChromeRefs).
+test('classifyBaselineSurfaceEvidence excludes keyboard DESCENDANTS and window SIBLINGS, not just the container, from discriminating overlap', () => {
+  const shared = keyboardWindowNodes(); // window + [Keyboard] container + a key + a sibling "Next keyboard" button
+  const baseline = buildInteractionSurfaceSignature([
+    applicationRootNode(),
+    {
+      ref: 'e-pickup',
+      index: 20,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: 'shipping-pickup',
+      label: 'Pickup',
+      rect: { x: 20, y: 500, width: 200, height: 44 },
+    },
+    ...shared,
+  ]);
+  // Real content changed (Pickup -> Delivery, a genuine successful scroll);
+  // the keyboard subtree is identical — a keyboard does not move when app
+  // content scrolls.
+  const current = buildInteractionSurfaceSignature([
+    applicationRootNode(),
+    {
+      ref: 'e-delivery',
+      index: 20,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: 'shipping-delivery',
+      label: 'Delivery',
+      rect: { x: 20, y: 120, width: 200, height: 44 },
+    },
+    ...shared,
+  ]);
+
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'ambiguous');
+});
+
+/**
+ * A keyboard-window subtree: a `[Keyboard]` container plus a SIBLING "Next
+ * keyboard" assistant button under the same window — matches the shape in
+ * `src/daemon/__tests__/post-gesture-stabilization-fixtures.ts`'s
+ * `keyboardWindowNodes` (kept local here rather than imported: this file's
+ * fixtures are raw node literals consumed directly by
+ * `buildInteractionSurfaceSignature`, not `SnapshotState`-wrapped like that
+ * module's).
+ */
+function keyboardWindowNodes() {
+  return [
+    {
+      ref: 'e-kb-window',
+      index: 10,
+      parentIndex: 0,
+      type: 'Window',
+      rect: { x: 0, y: 400, width: 390, height: 444 },
+    },
+    {
+      ref: 'e-kb-container',
+      index: 11,
+      parentIndex: 10,
+      type: 'Keyboard',
+      rect: { x: 0, y: 500, width: 390, height: 300 },
+    },
+    {
+      ref: 'e-kb-key-a',
+      index: 12,
+      parentIndex: 11, // descendant of the container
+      type: 'Key',
+      label: 'A',
+      rect: { x: 10, y: 520, width: 30, height: 40 },
+    },
+    {
+      ref: 'e-kb-next',
+      index: 13,
+      parentIndex: 10, // sibling of the container, NOT a descendant
+      type: 'Button',
+      label: 'Next keyboard',
+      rect: { x: 340, y: 520, width: 40, height: 40 },
+    },
+  ];
+}
 
 test('classifyBaselineSurfaceEvidence still reports unchanged when the root AND a real discriminating element both match (guards against over-excluding)', () => {
   // Root-sharing alone is not disqualifying — it just cannot be the ONLY

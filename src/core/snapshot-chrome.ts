@@ -326,6 +326,26 @@ export function collectSettleChromeRefs(
 }
 
 /**
+ * Refs of iOS keyboard-window chrome ONLY — no Android union, so callers with
+ * no `appBundleId` in scope can still reuse the real subtree/window-aware
+ * classification (`collectKeyboardChrome`) instead of a narrower per-node type
+ * check. Container-descendant walk alone provably misses the "Next keyboard"
+ * / "Dictate" assistant buttons (siblings of the `[Keyboard]` container, not
+ * descendants — see `collectKeyboardChrome`'s doc comment), so a caller that
+ * only excludes nodes whose OWN type is `keyboard` still leaks every key and
+ * assistant control as "discriminating" evidence.
+ *
+ * Used by `src/daemon/interaction-outcome-policy.ts`'s post-gesture
+ * baseline-distrust discriminating-overlap classification (#1542 defect 2,
+ * #1563 review): that comparison operates on flat signature entries with no
+ * ref-selection budget of its own, so it needs the ref set directly rather
+ * than a node-filtering helper like `withoutSettleChrome`.
+ */
+export function collectKeyboardChromeRefs(nodes: SnapshotNode[]): ReadonlySet<string> {
+  return collectKeyboardChrome(nodes).refs;
+}
+
+/**
  * Windows eligible for whole-window chrome classification: nearest `[window]`
  * ancestor of each `[Keyboard]` container, minus windows hosting editable
  * text outside the container subtree (the inputAccessoryView guard above).

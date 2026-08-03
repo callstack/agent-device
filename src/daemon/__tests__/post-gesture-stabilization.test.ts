@@ -1,15 +1,23 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
-import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import { makeSnapshotState } from '../../__tests__/test-utils/index.ts';
 import { countDiagnosticEventsByPhase, withDiagnosticsScope } from '../../utils/diagnostics.ts';
 import { buildInteractionSurfaceSignature } from '../interaction-outcome-policy.ts';
 import {
   capturePostGestureStabilizedResult,
-  decidePostGestureStabilityVerdict,
   markPostGestureStabilization,
 } from '../post-gesture-stabilization.ts';
-import type { SessionState } from '../types.ts';
+import {
+  deliverySnapshot,
+  keyboardWindowNodes,
+  makeSession,
+  pickupSnapshot,
+  pickupSnapshotWithExtraText,
+} from './post-gesture-stabilization-fixtures.ts';
+
+// Pure verdict/classifier coverage (decidePostGestureStabilityVerdict) lives
+// in the sibling post-gesture-stabilization-verdict.test.ts — split per
+// #1563 review to stay under the repo's 500-line test-file tripwire.
 
 afterEach(() => {
   vi.useRealTimers();
@@ -54,17 +62,6 @@ test('markPostGestureStabilization ignores non-swipe gesture sessions', () => {
 
   assert.equal(session.postGestureStabilization, undefined);
 });
-
-// ---------------------------------------------------------------------------
-// #1542 defect 2: baseline-comparison distrust.
-//
-// After an AX-free synthesized gesture, XCTest's AX tree isn't proactively
-// resynced by the synthesized touch, so it can serve a stale-but-internally-
-// consistent read: two consecutive polls agree with each other while still
-// exactly matching the PRE-gesture tree. `decidePostGestureStabilityVerdict`
-// is the pure decision that catches this; the tests below are its exhaustive
-// truth table.
-// ---------------------------------------------------------------------------
 
 test('markPostGestureStabilization captures the pre-gesture baseline signature on iOS', () => {
   const session = makeSession('ios');
@@ -113,156 +110,11 @@ test('markPostGestureStabilization tolerates a missing pre-gesture snapshot on i
   assert.deepEqual(session.postGestureStabilization?.baselineSignature, []);
 });
 
-test('decidePostGestureStabilityVerdict trusts immediately when the platform does not need baseline distrust', () => {
-  const signature = buildInteractionSurfaceSignature(pickupSnapshot().nodes);
-
-  assert.equal(
-    decidePostGestureStabilityVerdict({
-      needsBaselineDistrust: false,
-      baselineSignature: signature,
-      quietSignature: signature,
-      elapsedMs: 0,
-      distrustCapMs: 3_500,
-    }),
-    'trust',
-  );
-});
-
-test('decidePostGestureStabilityVerdict trusts when there is no usable baseline', () => {
-  const signature = buildInteractionSurfaceSignature(pickupSnapshot().nodes);
-
-  assert.equal(
-    decidePostGestureStabilityVerdict({
-      needsBaselineDistrust: true,
-      baselineSignature: undefined,
-      quietSignature: signature,
-      elapsedMs: 0,
-      distrustCapMs: 3_500,
-    }),
-    'trust',
-  );
-  assert.equal(
-    decidePostGestureStabilityVerdict({
-      needsBaselineDistrust: true,
-      baselineSignature: [],
-      quietSignature: signature,
-      elapsedMs: 0,
-      distrustCapMs: 3_500,
-    }),
-    'trust',
-  );
-});
-
-test('decidePostGestureStabilityVerdict trusts a quiet signature that differs from the baseline', () => {
-  const baseline = buildInteractionSurfaceSignature(pickupSnapshot(500).nodes);
-  const moved = buildInteractionSurfaceSignature(pickupSnapshot(120).nodes);
-
-  assert.equal(
-    decidePostGestureStabilityVerdict({
-      needsBaselineDistrust: true,
-      baselineSignature: baseline,
-      quietSignature: moved,
-      elapsedMs: 0,
-      distrustCapMs: 3_500,
-    }),
-    'trust',
-  );
-});
-
-test('decidePostGestureStabilityVerdict distrusts a quiet signature matching the baseline before the cap', () => {
-  const signature = buildInteractionSurfaceSignature(pickupSnapshot().nodes);
-
-  assert.equal(
-    decidePostGestureStabilityVerdict({
-      needsBaselineDistrust: true,
-      baselineSignature: signature,
-      quietSignature: signature,
-      elapsedMs: 3_499,
-      distrustCapMs: 3_500,
-    }),
-    'distrust',
-  );
-});
-
-test('decidePostGestureStabilityVerdict accepts a baseline-matching signature once the cap expires', () => {
-  const signature = buildInteractionSurfaceSignature(pickupSnapshot().nodes);
-
-  assert.equal(
-    decidePostGestureStabilityVerdict({
-      needsBaselineDistrust: true,
-      baselineSignature: signature,
-      quietSignature: signature,
-      elapsedMs: 3_500,
-      distrustCapMs: 3_500,
-    }),
-    'accept-stale',
-  );
-  assert.equal(
-    decidePostGestureStabilityVerdict({
-      needsBaselineDistrust: true,
-      baselineSignature: signature,
-      quietSignature: signature,
-      elapsedMs: 9_000,
-      distrustCapMs: 3_500,
-    }),
-    'accept-stale',
-  );
-});
-
-// --- #1563 review regression: a root-only shared overlap must trust immediately, not tax the cap ---
-
-test('decidePostGestureStabilityVerdict trusts immediately when a real scroll leaves only the application root shared (no cap tax)', () => {
-  const baseline = buildInteractionSurfaceSignature([
-    applicationRootNode(),
-    {
-      ref: 'e2',
-      index: 1,
-      parentIndex: 0,
-      type: 'Button',
-      identifier: 'shipping-pickup',
-      label: 'Pickup',
-      rect: { x: 20, y: 500, width: 200, height: 44 },
-    },
-  ]);
-  const quiet = buildInteractionSurfaceSignature([
-    applicationRootNode(),
-    {
-      ref: 'e2',
-      index: 1,
-      parentIndex: 0,
-      type: 'Button',
-      identifier: 'shipping-delivery',
-      label: 'Delivery',
-      rect: { x: 20, y: 120, width: 200, height: 44 },
-    },
-  ]);
-
-  assert.equal(
-    decidePostGestureStabilityVerdict({
-      needsBaselineDistrust: true,
-      baselineSignature: baseline,
-      quietSignature: quiet,
-      elapsedMs: 0, // first quiet match, well before any cap
-      distrustCapMs: 3_500,
-    }),
-    'trust',
-  );
-});
-
-function applicationRootNode() {
-  return {
-    ref: 'e-root',
-    index: 0,
-    type: 'Application',
-    label: 'App',
-    rect: { x: 0, y: 0, width: 390, height: 844 },
-  };
-}
-
 // ---------------------------------------------------------------------------
 // capturePostGestureStabilizedResult: the async loop wired to the pure
-// decision above. Fake timers keep these instant despite the real 200ms poll
-// interval and (for the distrust path) the 3.5s cap.
+// decision in post-gesture-stabilization-verdict.test.ts. Fake timers keep
+// these instant despite the real 200ms poll interval and (for the distrust
+// path) the 3.5s cap.
 // ---------------------------------------------------------------------------
 
 test('capturePostGestureStabilizedResult keeps polling past the normal deadline when the AX tree is stuck at the pre-gesture baseline (iOS)', async () => {
@@ -450,6 +302,8 @@ test('capturePostGestureStabilizedResult catches a frozen target even when the b
   assert.equal(settled, 0);
 });
 
+// --- #1563 review, finding 1: a root-only shared overlap must trust immediately, not tax the cap ---
+
 test('capturePostGestureStabilizedResult trusts immediately (no cap tax) when a real scroll leaves only the application root shared — #1563 review regression', async () => {
   // The reviewer's exact false-distrust shape end to end: the baseline is
   // Application + Pickup; every post-gesture read is Application + a
@@ -488,63 +342,40 @@ test('capturePostGestureStabilizedResult trusts immediately (no cap tax) when a 
   assert.equal(capture.mock.calls.length, 2);
 });
 
-function pickupSnapshot(y = 500) {
-  return makeSnapshotState([
-    { index: 0, type: 'Application', label: 'App', rect: { x: 0, y: 0, width: 390, height: 844 } },
-    {
-      index: 1,
-      parentIndex: 0,
-      type: 'Button',
-      identifier: 'shipping-pickup',
-      label: 'Pickup',
-      rect: { x: 20, y, width: 200, height: 44 },
-    },
-  ]);
-}
+// --- #1563 review, finding 2: keyboard DESCENDANTS (not just the container) must not read as evidence ---
 
-// Same Application root as pickupSnapshot, but a DIFFERENT real element —
-// models a genuine, successful scroll that swapped every real element in
-// view, so the only entry shared with a pickupSnapshot baseline is the root.
-function deliverySnapshot(y = 500) {
-  return makeSnapshotState([
-    { index: 0, type: 'Application', label: 'App', rect: { x: 0, y: 0, width: 390, height: 844 } },
-    {
-      index: 1,
-      parentIndex: 0,
-      type: 'Button',
-      identifier: 'shipping-delivery',
-      label: 'Delivery',
-      rect: { x: 20, y, width: 200, height: 44 },
-    },
-  ]);
-}
+test('capturePostGestureStabilizedResult trusts immediately (no cap tax) when the overlap is only keyboard descendants, not the container', async () => {
+  // Same end-to-end shape as the root-only regression above, but the shared
+  // non-evidence is a keyboard's descendants (a key, the "Next keyboard"
+  // assistant button — siblings of the [Keyboard] container, not inside it)
+  // instead of the viewport root. A container-only exclusion still counts
+  // these as real, frozen evidence and extends to the 3.5s cap.
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  session.snapshot = makeSnapshotState([...pickupSnapshot(500).nodes, ...keyboardWindowNodes()]);
+  markPostGestureStabilization(session, 'scroll');
 
-// Broader-scope variant: adds a non-interactive text node an interactive-only
-// capture would never return, modeling the real pre-gesture-baseline vs
-// post-gesture-selector-capture scope mismatch.
-function pickupSnapshotWithExtraText(y = 500) {
-  const base = pickupSnapshot(y);
-  return {
-    ...base,
-    nodes: [
-      ...base.nodes,
-      {
-        ref: 'e3',
-        index: 2,
-        parentIndex: 0,
-        type: 'Text',
-        label: 'Delivery choices',
-        rect: { x: 20, y: 300, width: 200, height: 20 },
-      },
-    ],
-  };
-}
+  const capture = vi.fn(async () =>
+    makeSnapshotState([...deliverySnapshot(120).nodes, ...keyboardWindowNodes()]),
+  );
 
-function makeSession(platform: 'ios' | 'android' = 'ios'): SessionState {
-  return {
-    name: platform,
-    device: platform === 'android' ? ANDROID_EMULATOR : IOS_SIMULATOR,
-    createdAt: Date.now(),
-    actions: [],
-  };
-}
+  const resultPromise = withDiagnosticsScope({}, async () => {
+    const result = await capturePostGestureStabilizedResult({
+      session,
+      capture,
+      readSnapshot: (snapshot) => snapshot,
+    });
+    return {
+      result,
+      staleAccepts: countDiagnosticEventsByPhase(['post_gesture_snapshot_stale_accept']),
+      settled: countDiagnosticEventsByPhase(['post_gesture_snapshot_stabilized']),
+    };
+  });
+
+  await vi.advanceTimersByTimeAsync(1_000);
+  const { staleAccepts, settled } = await resultPromise;
+
+  assert.equal(settled, 1);
+  assert.equal(staleAccepts, 0);
+  assert.equal(capture.mock.calls.length, 2);
+});
