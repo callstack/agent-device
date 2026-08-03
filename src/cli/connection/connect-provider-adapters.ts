@@ -1,8 +1,5 @@
 import type { CliFlags } from '@agent-device/contracts/command';
-import type {
-  ProviderConnectionResource,
-  ProviderConnectionVerification,
-} from '@agent-device/contracts/remote';
+import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
 import { verifyLimrunConnection } from '@agent-device/provider-limrun';
 import { AppError } from '@agent-device/kernel/errors';
 import { providerWebDriver } from '../../provider-webdriver.ts';
@@ -19,14 +16,17 @@ import { isConnectProviderName, type ConnectProvider } from './provider-policy.t
 type ConnectProfile = { flags: CliFlags; remoteConfigPath: string };
 type ResolvedConnectProfile = ConnectProfile & { provider?: ConnectProvider };
 
-export type ConnectVerificationFacts = {
+export type ConfiguredConnectionVerification = {
   service: string;
   status: 'verified' | 'configured';
-  message: string;
-  project?: { name?: string; reference: string };
-  device?: ProviderConnectionResource;
-  app?: ProviderConnectionResource;
+  verificationMessage: string;
+  provider?: never;
+  project?: never;
+  device?: never;
+  app?: never;
 };
+
+export type ConnectVerification = ProviderConnectionVerification | ConfiguredConnectionVerification;
 
 type AdapterContext = {
   flags: CliFlags;
@@ -37,7 +37,7 @@ type AdapterContext = {
 
 type ConnectProviderAdapter = {
   resolve(context: AdapterContext): Promise<ConnectProfile> | ConnectProfile;
-  verify(context: Pick<AdapterContext, 'flags' | 'env'>): Promise<ConnectVerificationFacts>;
+  verify(context: Pick<AdapterContext, 'flags' | 'env'>): Promise<ConnectVerification>;
 };
 
 const CONNECT_PROVIDER_ADAPTERS = {
@@ -46,7 +46,7 @@ const CONNECT_PROVIDER_ADAPTERS = {
     verify: async () => ({
       service: 'the configured cloud service',
       status: 'verified',
-      message: 'Credentials and connection profile verified.',
+      verificationMessage: 'Credentials and connection profile verified.',
     }),
   },
   proxy: {
@@ -54,7 +54,8 @@ const CONNECT_PROVIDER_ADAPTERS = {
     verify: async () => ({
       service: 'Agent Device Proxy',
       status: 'configured',
-      message: 'Proxy configuration saved. Access is checked by the first remote command.',
+      verificationMessage:
+        'Proxy configuration saved. Access is checked by the first remote command.',
     }),
   },
   browserstack: {
@@ -114,13 +115,14 @@ export async function verifyConnectProvider(options: {
   provider?: ConnectProvider;
   flags: CliFlags;
   env?: EnvMap;
-}): Promise<ConnectVerificationFacts> {
+}): Promise<ConnectVerification> {
   const env = options.env ?? process.env;
   if (!options.provider) {
     return {
       service: 'remote provider',
       status: 'configured',
-      message: 'Remote connection profile loaded. Access is checked by the first remote command.',
+      verificationMessage:
+        'Remote connection profile loaded. Access is checked by the first remote command.',
     };
   }
   return await CONNECT_PROVIDER_ADAPTERS[options.provider].verify({
@@ -131,77 +133,60 @@ export async function verifyConnectProvider(options: {
 
 async function verifyBrowserStack(
   context: Pick<AdapterContext, 'flags' | 'env'>,
-): Promise<ConnectVerificationFacts> {
+): Promise<ConnectVerification> {
   const { flags, env } = context;
-  return verifiedFacts(
-    await providerWebDriver.verifyConnection({
-      provider: 'browserstack',
-      username: requiredResolvedValue(
-        env.BROWSERSTACK_USERNAME,
-        'BrowserStack profile missed BROWSERSTACK_USERNAME.',
-      ),
-      accessKey: requiredResolvedValue(
-        env.BROWSERSTACK_ACCESS_KEY,
-        'BrowserStack profile missed BROWSERSTACK_ACCESS_KEY.',
-      ),
-      platform: requiredResolvedPlatform(flags.platform, 'BrowserStack'),
-      deviceName: requiredResolvedValue(flags.device, 'BrowserStack profile missed device.'),
-      osVersion: requiredResolvedValue(
-        flags.providerOsVersion,
-        'BrowserStack profile missed OS version.',
-      ),
-      app: requiredResolvedValue(flags.providerApp, 'BrowserStack profile missed app.'),
-    }),
-  );
+  return await providerWebDriver.verifyConnection({
+    provider: 'browserstack',
+    username: requiredResolvedValue(
+      env.BROWSERSTACK_USERNAME,
+      'BrowserStack profile missed BROWSERSTACK_USERNAME.',
+    ),
+    accessKey: requiredResolvedValue(
+      env.BROWSERSTACK_ACCESS_KEY,
+      'BrowserStack profile missed BROWSERSTACK_ACCESS_KEY.',
+    ),
+    platform: requiredResolvedPlatform(flags.platform, 'BrowserStack'),
+    deviceName: requiredResolvedValue(flags.device, 'BrowserStack profile missed device.'),
+    osVersion: requiredResolvedValue(
+      flags.providerOsVersion,
+      'BrowserStack profile missed OS version.',
+    ),
+    app: requiredResolvedValue(flags.providerApp, 'BrowserStack profile missed app.'),
+  });
 }
 
 async function verifyAwsDeviceFarm(
   context: Pick<AdapterContext, 'flags' | 'env'>,
-): Promise<ConnectVerificationFacts> {
+): Promise<ConnectVerification> {
   const { flags } = context;
-  return verifiedFacts(
-    await providerWebDriver.verifyConnection({
-      provider: 'aws-device-farm',
-      platform: requiredResolvedPlatform(flags.platform, 'AWS Device Farm'),
-      projectArn: requiredResolvedValue(
-        flags.awsProjectArn,
-        'AWS Device Farm profile missed project ARN.',
-      ),
-      deviceArn: requiredResolvedValue(
-        flags.awsDeviceArn,
-        'AWS Device Farm profile missed device ARN.',
-      ),
-      appArn: flags.awsAppArn,
-      region: flags.awsRegion,
-    }),
-  );
+  return await providerWebDriver.verifyConnection({
+    provider: 'aws-device-farm',
+    platform: requiredResolvedPlatform(flags.platform, 'AWS Device Farm'),
+    projectArn: requiredResolvedValue(
+      flags.awsProjectArn,
+      'AWS Device Farm profile missed project ARN.',
+    ),
+    deviceArn: requiredResolvedValue(
+      flags.awsDeviceArn,
+      'AWS Device Farm profile missed device ARN.',
+    ),
+    appArn: flags.awsAppArn,
+    region: flags.awsRegion,
+  });
 }
 
 async function verifyLimrun(
   context: Pick<AdapterContext, 'flags' | 'env'>,
-): Promise<ConnectVerificationFacts> {
-  return verifiedFacts(
-    await verifyLimrunConnection({
-      apiKey: requiredResolvedValue(
-        context.env.LIMRUN_API_KEY,
-        'Limrun profile missed LIMRUN_API_KEY.',
-      ),
-      clientVersion: readVersion(),
-      platform: requiredResolvedPlatform(context.flags.platform, 'Limrun'),
-      region: context.env.LIMRUN_REGION?.trim() || undefined,
-    }),
-  );
-}
-
-function verifiedFacts(verification: ProviderConnectionVerification): ConnectVerificationFacts {
-  return {
-    service: verification.service,
-    status: 'verified',
-    message: verification.verificationMessage,
-    ...(verification.project ? { project: verification.project } : {}),
-    device: verification.device,
-    app: verification.app,
-  };
+): Promise<ConnectVerification> {
+  return await verifyLimrunConnection({
+    apiKey: requiredResolvedValue(
+      context.env.LIMRUN_API_KEY,
+      'Limrun profile missed LIMRUN_API_KEY.',
+    ),
+    clientVersion: readVersion(),
+    platform: requiredResolvedPlatform(context.flags.platform, 'Limrun'),
+    region: context.env.LIMRUN_REGION?.trim() || undefined,
+  });
 }
 
 function shouldUseProxyConnectShortcut(flags: CliFlags): boolean {

@@ -1,12 +1,8 @@
 import { fingerprint, type RemoteConnectionState } from '../../remote/remote-connection-state.ts';
-import type { ConnectVerificationFacts } from '../connection/connect-provider-adapters.ts';
-import {
-  connectionProviderLeaseKind,
-  isConnectProviderName,
-  type ConnectProvider,
-} from '../connection/provider-policy.ts';
+import type { ConnectVerification } from '../connection/connect-provider-adapters.ts';
+import { connectionProviderLeaseKind } from '../connection/provider-policy.ts';
 
-export type ConnectReadiness = ConnectVerificationFacts & {
+export type ConnectReadiness = ConnectVerification & {
   preparationMessage: string;
   nextSteps: string[];
   notes?: string[];
@@ -26,14 +22,14 @@ export type LeasePreparationNotice = {
 
 export function buildLeasePreparationNotice(
   state: RemoteConnectionState,
-  facts?: ConnectVerificationFacts,
+  verification?: ConnectVerification,
 ): LeasePreparationNotice | undefined {
   if (state.leaseId) return undefined;
   const leaseKind = connectionProviderLeaseKind(state.leaseProvider);
   if (leaseKind === 'proxy') {
     return {
       status: 'deferred',
-      nextSteps: buildConnectWorkflow(state, facts).nextSteps,
+      nextSteps: buildConnectWorkflow(state, verification).nextSteps,
       message:
         'No live device session has been created. Run devices to inspect inventory without allocating, then open when ready.',
     };
@@ -41,7 +37,7 @@ export function buildLeasePreparationNotice(
   if (leaseKind === 'direct-device-provider') {
     return {
       status: 'deferred',
-      nextSteps: buildConnectWorkflow(state, facts).nextSteps,
+      nextSteps: buildConnectWorkflow(state, verification).nextSteps,
       message:
         'No live device session has been created. The first device command shown below will allocate one.',
     };
@@ -66,14 +62,14 @@ export function buildLeasePreparationNotice(
 
 export function presentConnectReadiness(
   state: RemoteConnectionState,
-  facts: ConnectVerificationFacts,
+  verification: ConnectVerification,
 ): ConnectReadiness {
   return {
-    ...facts,
+    ...verification,
     preparationMessage:
-      buildLeasePreparationNotice(state, facts)?.message ??
+      buildLeasePreparationNotice(state, verification)?.message ??
       'No live device session has been created.',
-    ...buildConnectWorkflow(state, facts),
+    ...buildConnectWorkflow(state, verification),
   };
 }
 
@@ -93,9 +89,10 @@ export function renderConnectSuccess(options: {
       .filter((line): line is string => Boolean(line))
       .join('\n');
   }
+  const status = connectionVerificationStatus(readiness);
   const lines = [
-    `${readiness.status === 'verified' ? 'Connected' : 'Configured'} successfully with ${readiness.service}.`,
-    `${readiness.status === 'verified' ? 'Verified' : 'Status'}: ${readiness.message}`,
+    `${status === 'verified' ? 'Connected' : 'Configured'} successfully with ${readiness.service}.`,
+    `${status === 'verified' ? 'Verified' : 'Status'}: ${readiness.verificationMessage}`,
   ];
   if (readiness.project) {
     lines.push(`Project: ${readiness.project.name ?? readiness.project.reference} — verified`);
@@ -139,9 +136,9 @@ export function serializeConnectionState(options: {
     ...(readiness
       ? {
           verification: {
-            status: readiness.status,
+            status: connectionVerificationStatus(readiness),
             service: readiness.service,
-            message: readiness.message,
+            message: readiness.verificationMessage,
             ...(readiness.project ? { project: readiness.project } : {}),
           },
           ...(readiness.device ? { device: readiness.device } : {}),
@@ -183,60 +180,49 @@ function renderApp(
 
 function buildConnectWorkflow(
   state: RemoteConnectionState,
-  facts?: ConnectVerificationFacts,
+  verification?: ConnectVerification,
 ): Pick<ConnectReadiness, 'nextSteps' | 'notes'> {
-  const provider = state.leaseProvider;
-  return provider && isConnectProviderName(provider)
-    ? CONNECT_WORKFLOW_POLICIES[provider](state, facts)
-    : openWorkflow(state);
-}
-
-type ConnectWorkflowPolicy = (
-  state: RemoteConnectionState,
-  facts?: ConnectVerificationFacts,
-) => Pick<ConnectReadiness, 'nextSteps' | 'notes'>;
-
-const CONNECT_WORKFLOW_POLICIES = {
-  cloud: openWorkflow,
-  proxy: (state) => ({
-    nextSteps: [
-      'agent-device devices',
-      `agent-device open ${appIdPlaceholder(state.platform)} --relaunch`,
-    ],
-  }),
-  limrun: (state) => {
-    const appId = appIdPlaceholder(state.platform);
+  const leaseKind = connectionProviderLeaseKind(state.leaseProvider);
+  if (leaseKind === 'proxy') {
     return {
       nextSteps: [
-        `agent-device install ${appId} <app-path-or-url>`,
-        `agent-device open ${appId} --relaunch`,
+        'agent-device devices',
+        `agent-device open ${appIdPlaceholder(state.platform)} --relaunch`,
       ],
     };
-  },
-  browserstack: (state, facts) => ({
-    nextSteps: facts ? openWorkflow(state).nextSteps : defaultDirectProviderLifecycle(),
-    notes: providerArtifactNotes(true),
-  }),
-  'aws-device-farm': awsDeviceFarmWorkflow,
-} satisfies Record<ConnectProvider, ConnectWorkflowPolicy>;
-
-function awsDeviceFarmWorkflow(
-  state: RemoteConnectionState,
-  facts?: ConnectVerificationFacts,
-): ReturnType<ConnectWorkflowPolicy> {
-  const appMissing = facts?.app?.status === 'missing';
+  }
+  if (!verification && leaseKind === 'direct-device-provider') {
+    return { nextSteps: defaultDirectProviderLifecycle() };
+  }
+  const appMissing = verification?.app?.status === 'missing';
   return {
-    nextSteps: facts
-      ? [...awsReconnectStep(facts, appMissing), ...openWorkflow(state).nextSteps]
-      : defaultDirectProviderLifecycle(),
-    notes: providerArtifactNotes(!appMissing),
+    nextSteps: requiresInstall(verification)
+      ? installThenOpenWorkflow(state)
+      : [...missingAttachedAppRecovery(verification), ...openWorkflow(state).nextSteps],
+    ...(supportsProviderArtifacts(verification)
+      ? { notes: providerArtifactNotes(!appMissing) }
+      : {}),
   };
 }
 
-function awsReconnectStep(facts: ConnectVerificationFacts, appMissing: boolean): string[] {
-  if (!appMissing || !facts.project?.reference || !facts.device?.reference) return [];
+function requiresInstall(verification?: ConnectVerification): boolean {
+  return verification?.app?.status === 'missing' && verification.device?.status === 'deferred';
+}
+
+function supportsProviderArtifacts(verification?: ConnectVerification): boolean {
+  return verification?.provider === 'browserstack' || verification?.provider === 'aws-device-farm';
+}
+
+function missingAttachedAppRecovery(verification?: ConnectVerification): string[] {
+  if (
+    verification?.app?.status !== 'missing' ||
+    !verification.project?.reference ||
+    !verification.device?.reference
+  ) {
+    return [];
+  }
   return [
-    `agent-device connect aws-device-farm --platform ${facts.device.platform} --aws-project-arn ${facts.project.reference} --aws-device-arn ${facts.device.reference} --aws-app-arn <arn> --force`,
+    `agent-device connect aws-device-farm --platform ${verification.device.platform} --aws-project-arn ${verification.project.reference} --aws-device-arn ${verification.device.reference} --aws-app-arn <arn> --force`,
   ];
 }
 
@@ -249,10 +235,24 @@ function providerArtifactNotes(includeAppIdNote: boolean): string[] {
   ];
 }
 
-function openWorkflow(state: RemoteConnectionState): ReturnType<ConnectWorkflowPolicy> {
+function openWorkflow(state: RemoteConnectionState): Pick<ConnectReadiness, 'nextSteps'> {
   return {
     nextSteps: [`agent-device open ${appIdPlaceholder(state.platform)} --relaunch`],
   };
+}
+
+function installThenOpenWorkflow(state: RemoteConnectionState): string[] {
+  const appId = appIdPlaceholder(state.platform);
+  return [
+    `agent-device install ${appId} <app-path-or-url>`,
+    `agent-device open ${appId} --relaunch`,
+  ];
+}
+
+function connectionVerificationStatus(
+  verification: ConnectVerification,
+): 'verified' | 'configured' {
+  return 'status' in verification ? verification.status : 'verified';
 }
 
 function defaultDirectProviderLifecycle(): string[] {

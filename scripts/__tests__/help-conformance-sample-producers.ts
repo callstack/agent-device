@@ -23,7 +23,7 @@ import {
   presentConnectReadiness,
   renderConnectSuccess,
 } from '../../src/cli/commands/connection-presentation.ts';
-import type { ConnectVerificationFacts } from '../../src/cli/connection/connect-provider-adapters.ts';
+import type { ConnectVerification } from '../../src/cli/connection/connect-provider-adapters.ts';
 import type { RemoteConnectionState } from '../../src/remote/remote-connection-state.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { SnapshotQualityVerdict } from '../../src/snapshot/snapshot-quality.ts';
@@ -277,9 +277,9 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
         updatedAt: '2026-08-03T00:00:00.000Z',
       } satisfies RemoteConnectionState;
       const facts = {
+        provider: 'browserstack',
         service: 'BrowserStack',
-        status: 'verified',
-        message: 'Credentials, device, and uploaded app verified.',
+        verificationMessage: 'Credentials, device, and uploaded app verified.',
         device: {
           status: 'verified',
           name: 'Google Pixel 8',
@@ -292,7 +292,7 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
           reference: 'bs://app-id',
           version: '1.2.3',
         },
-      } satisfies ConnectVerificationFacts;
+      } satisfies ConnectVerification;
       return renderConnectSuccess({
         state,
         readiness: presentConnectReadiness(state, facts),
