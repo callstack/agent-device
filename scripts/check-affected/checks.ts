@@ -96,8 +96,8 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   },
   {
     id: 'coverage',
-    label: 'Coverage + provider integration suite',
-    kind: { type: 'script', script: 'test:coverage' },
+    label: 'Affected LCOV + changed-line coverage',
+    kind: { type: 'script', script: 'check:coverage-changed' },
     ciJobs: ['Coverage'],
     localRunnable: true,
   },

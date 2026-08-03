@@ -97,7 +97,7 @@ const ALL_SCRIPTS: Record<string, string> = {
   'check:mcp-metadata': 'x',
   build: 'x',
   'check:unit': 'x',
-  'test:coverage': 'x',
+  'check:coverage-changed': 'x',
   'test:integration:provider': 'x',
   'test:integration:node': 'x',
   'test:integration:progress:check': 'x',
@@ -166,4 +166,37 @@ test('runChecks skips GitHub-authoritative checks and passes when locals succeed
       `${skipped} is GitHub-authoritative and must not run locally`,
     );
   }
+});
+
+test('runChecks combines related tests with lightweight changed-line coverage', async () => {
+  const executed: string[][] = [];
+  const execute: CommandExecutor = async (command) => {
+    executed.push(command);
+    return 0;
+  };
+  const plan = selectChecks({ changedFiles: ['unknown/path.xyz'], packageEntryFiles: [] });
+
+  const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, { execute, cwd: '.' });
+
+  assert.equal(code, 0);
+  const related = executed.filter((command) => command.includes('related'));
+  assert.equal(related.length, 1);
+  assert.ok(related[0]?.includes('--coverage'));
+  assert.ok(related[0]?.includes('--coverage.reporter=lcov'));
+  assert.equal(
+    executed.some((command) => command.includes('test:coverage')),
+    false,
+  );
+  assert.equal(
+    executed.some((command) => command.includes('check:unit')),
+    false,
+  );
+  assert.equal(
+    executed.some((command) => command.includes('test:integration:provider')),
+    false,
+  );
+  assert.equal(
+    executed.some((command) => command.includes('check:coverage-changed')),
+    true,
+  );
 });

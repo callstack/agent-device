@@ -179,22 +179,61 @@ export async function runChecks(
   const execute = options.execute ?? streamingExecutor;
   const runnable = plan.checks.map(getCheckSpec).filter((spec: CheckSpec) => spec.localRunnable);
   const skipped = plan.checks.map(getCheckSpec).filter((spec: CheckSpec) => !spec.localRunnable);
+  const coverageSelected = plan.checks.includes('coverage');
   for (const spec of skipped) {
     process.stdout.write(
       `\n[skip] ${spec.id} — GitHub-authoritative (jobs: ${spec.ciJobs.join(', ')})\n`,
     );
   }
   for (const spec of runnable) {
-    const command = resolveCommand(spec, pkg.scripts, args.base, options.changedFiles);
-    process.stdout.write(`\n[run] ${spec.id}: ${command.join(' ')}\n`);
-    const exitCode = await execute(command, cwd);
-    if (exitCode !== 0) {
-      process.stderr.write(`\ncheck:affected: ${spec.id} failed.\n`);
-      return 1;
+    if (
+      coverageSelected &&
+      (spec.id === 'vitest-related' || spec.id === 'unit' || spec.id === 'provider-integration')
+    ) {
+      process.stdout.write(`\n[dedupe] ${spec.id} — covered by affected LCOV or GitHub CI\n`);
+      continue;
+    }
+    const commands =
+      spec.id === 'coverage'
+        ? resolveAffectedCoverageCommands(pkg.scripts, args.base, options.changedFiles ?? [])
+        : [resolveCommand(spec, pkg.scripts, args.base, options.changedFiles)];
+    for (const command of commands) {
+      process.stdout.write(`\n[run] ${spec.id}: ${command.join(' ')}\n`);
+      const exitCode = await execute(command, cwd);
+      if (exitCode !== 0) {
+        process.stderr.write(`\ncheck:affected: ${spec.id} failed.\n`);
+        return 1;
+      }
     }
   }
   process.stdout.write('\ncheck:affected: all runnable checks passed.\n');
   return 0;
+}
+
+function resolveAffectedCoverageCommands(
+  scripts: Readonly<Record<string, string>>,
+  base: string,
+  changedFiles: readonly string[],
+): string[][] {
+  if (!('check:coverage-changed' in scripts)) {
+    throw new Error('Required package.json script "check:coverage-changed" does not exist.');
+  }
+  return [
+    [
+      'pnpm',
+      'exec',
+      'vitest',
+      'related',
+      '--run',
+      '--passWithNoTests',
+      '--coverage',
+      '--coverage.reporter=lcov',
+      '--coverage.thresholds.statements=0',
+      '--coverage.thresholds.lines=0',
+      ...changedFiles,
+    ],
+    ['pnpm', 'run', 'check:coverage-changed', '--base', base],
+  ];
 }
 
 async function main(argv = process.argv.slice(2)): Promise<number> {

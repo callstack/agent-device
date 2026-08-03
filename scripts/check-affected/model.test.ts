@@ -206,6 +206,7 @@ test('every catalog command resolves against package scripts', () => {
     'check:mcp-metadata': 'x',
     build: 'x',
     'check:unit': 'x',
+    'check:coverage-changed': 'x',
     'test:coverage': 'x',
     'test:integration:provider': 'x',
     'test:integration:node': 'x',
@@ -235,15 +236,15 @@ test('a missing package script makes command resolution throw', () => {
   assert.throws(() => resolveCommand(spec, {}, 'origin/main'), /does not exist/);
 });
 
-test('unit and coverage checks preserve the Testing Matrix aggregates', () => {
-  const scripts = { 'check:unit': 'x', 'test:coverage': 'x' };
+test('unit and coverage checks preserve their package-script owners', () => {
+  const scripts = { 'check:unit': 'x', 'check:coverage-changed': 'x' };
   const unit = CHECK_CATALOG.find((entry) => entry.id === 'unit')!;
   const coverage = CHECK_CATALOG.find((entry) => entry.id === 'coverage')!;
   assert.deepEqual(resolveCommand(unit, scripts, 'origin/main'), ['pnpm', 'run', 'check:unit']);
   assert.deepEqual(resolveCommand(coverage, scripts, 'origin/main'), [
     'pnpm',
     'run',
-    'test:coverage',
+    'check:coverage-changed',
   ]);
 });
 
