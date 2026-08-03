@@ -80,4 +80,32 @@ test('drag requires two non-empty targets and validates each timing phase', () =
       destinationHoldMs: 0,
     },
   );
+
+  assert.deepEqual(
+    readGesturePayload({
+      kind: 'drag',
+      source: '  id="drag-source"  ',
+      destination: '  id="drop-target" ',
+    }),
+    {
+      kind: 'drag',
+      source: 'id="drag-source"',
+      destination: 'id="drop-target"',
+      sourceHoldMs: undefined,
+      moveMs: undefined,
+      destinationHoldMs: undefined,
+    },
+  );
+  assert.throws(
+    () =>
+      readGesturePayload({
+        kind: 'drag',
+        source: 'id="drag-source"',
+        destination: 'id="drop-target"',
+        sourceHoldMs: 4_000,
+        moveMs: 4_000,
+        destinationHoldMs: 4_000,
+      }),
+    { code: 'INVALID_ARGS', message: 'gesture drag total duration must be at most 10000' },
+  );
 });

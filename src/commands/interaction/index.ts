@@ -121,8 +121,8 @@ const interactionCliSchemas = {
     usageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform|drag> ...',
     listUsageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform|drag> ...',
     helpDescription:
-      'Run touch gestures: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge>, pinch <scale> [x] [y], rotate <degrees> [x] [y], transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs], or drag <source-selector> <destination-selector> [sourceHoldMs] [moveMs] [destinationHoldMs]. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values.',
-    summary: 'Run pan, fling, swipe, pinch, rotate, transform, or hold-drag gestures',
+      'Run touch gestures: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge>, pinch <scale> [x] [y], rotate <degrees> [x] [y], transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs], or drag <source-selector|pinned-ref> <destination-selector|pinned-ref> [sourceHoldMs] [moveMs] [destinationHoldMs]. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values.',
+    summary: 'Run pan, fling, swipe, pinch, rotate, transform, or drag gestures',
     positionalArgs: ['pan|fling|swipe|pinch|rotate|transform|drag', 'args?'],
     allowsExtraPositionals: true,
     allowedFlags: ['pointerCount'],

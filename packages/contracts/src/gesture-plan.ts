@@ -6,7 +6,13 @@ import {
   gestureDirectionDelta,
   type SwipePreset,
 } from './scroll-gesture.ts';
-import { GESTURE_DURATION_MAX_MS, GESTURE_DURATION_MIN_MS } from './gesture-plan-types.ts';
+import {
+  DEFAULT_DRAG_DESTINATION_HOLD_MS,
+  DEFAULT_DRAG_MOVE_MS,
+  DEFAULT_DRAG_SOURCE_HOLD_MS,
+  GESTURE_DURATION_MAX_MS,
+  GESTURE_DURATION_MIN_MS,
+} from './gesture-plan-types.ts';
 import type {
   GesturePlan,
   GestureExecutionProfile,
@@ -31,9 +37,6 @@ const GESTURE_VIEWPORT_INSET_PX = 1;
 const DEFAULT_PAN_DURATION_MS = 500;
 export const GESTURE_FLING_DURATION_MS = 100;
 const DEFAULT_MULTI_TOUCH_DURATION_MS = 300;
-export const DEFAULT_DRAG_SOURCE_HOLD_MS = 800;
-export const DEFAULT_DRAG_MOVE_MS = 500;
-export const DEFAULT_DRAG_DESTINATION_HOLD_MS = 0;
 const MAX_ROTATION_DEGREES_PER_SAMPLE = 3;
 const MAX_ROTATION_DEFAULT_DURATION_MS = 2_400;
 
@@ -149,12 +152,8 @@ export function buildDragGesturePlan(
     destinationHoldMs?: number;
   },
   viewport: Rect,
-  platform?: PublicPlatform,
 ): SinglePointerGesturePlan {
   const frame = normalizeViewport(viewport);
-  const profile = gesturePlatformProfile(platform);
-  const start = finitePoint(input.from, 'gesture drag source');
-  const end = finitePoint(input.to, 'gesture drag destination');
   const sourceHoldMs = normalizePositiveDuration(
     input.sourceHoldMs,
     DEFAULT_DRAG_SOURCE_HOLD_MS,
@@ -173,25 +172,33 @@ export function buildDragGesturePlan(
       `gesture drag total duration must be at most ${GESTURE_DURATION_MAX_MS}`,
     );
   }
-  const samples = [
-    { offsetMs: 0, point: start },
-    { offsetMs: sourceHoldMs, point: start },
-    ...sampleOffsets(moveMs, profile)
-      .slice(1)
-      .map((moveOffsetMs) => ({
-        offsetMs: sourceHoldMs + moveOffsetMs,
-        point: interpolatePoint(start, end, moveOffsetMs / moveMs),
-      })),
-    ...(destinationHoldMs > 0 ? [{ offsetMs: durationMs, point: end }] : []),
+  const move = buildSinglePointerPlan('pan', input.from, input.to, moveMs, frame, 'timed-pan');
+  return withContactHolds(move, sourceHoldMs, destinationHoldMs);
+}
+
+function withContactHolds(
+  plan: SinglePointerGesturePlan,
+  sourceHoldMs: number,
+  destinationHoldMs: number,
+): SinglePointerGesturePlan {
+  const pointer = plan.pointers[0];
+  const [moveStart, moveEnd] = pointer.samples;
+  const durationMs = sourceHoldMs + plan.durationMs + destinationHoldMs;
+  const samples: SinglePointerTrajectory['samples'] = [
+    { offsetMs: 0, point: moveStart.point },
+    { ...moveStart, offsetMs: moveStart.offsetMs + sourceHoldMs },
+    { ...moveEnd, offsetMs: moveEnd.offsetMs + sourceHoldMs },
+    ...(destinationHoldMs > 0 ? [{ offsetMs: durationMs, point: moveEnd.point }] : []),
   ];
-  assertSamplesInViewport(samples, frame, { intent: 'drag', pointerId: 0 });
   return {
-    topology: 'single',
-    intent: 'pan',
-    executionProfile: 'timed-pan',
+    ...plan,
     durationMs,
-    viewport: frame,
-    pointers: [{ pointerId: 0, samples }],
+    pointers: [
+      {
+        ...pointer,
+        samples,
+      },
+    ],
   };
 }
 

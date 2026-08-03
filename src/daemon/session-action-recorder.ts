@@ -4,7 +4,7 @@ import { emitDiagnostic } from '../utils/diagnostics.ts';
 import type { DaemonRequest, SessionAction, SessionRuntimeHints, SessionState } from './types.ts';
 import { applyRecordedSaveScriptFlags } from './session-script-publication-capability.ts';
 import { repairSessionBoundary } from './session-replay-transaction.ts';
-import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
+import type { MultiTargetAnnotationV1, TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { inferFillText } from './action-utils.ts';
 import {
   recordedInputPlaceholder,
@@ -22,6 +22,7 @@ export type RecordActionEntry = {
   runtime?: SessionRuntimeHints;
   result?: Record<string, unknown>;
   targetEvidence?: TargetAnnotationV1;
+  targetEvidences?: MultiTargetAnnotationV1;
   /**
    * #1271 stage 2 (ADR 0012 amendment): an observation-only command
    * (`snapshot`/`get`/`is`/read-only `find`) dispatched OUT OF BAND — typed by
@@ -54,6 +55,7 @@ export function recordActionEntry(
     flags: sanitizeFlags(recordedEntry.flags),
     result: recordedEntry.result,
     ...(recordedEntry.targetEvidence ? { targetEvidence: recordedEntry.targetEvidence } : {}),
+    ...(recordedEntry.targetEvidences ? { targetEvidences: recordedEntry.targetEvidences } : {}),
   };
   session.actions.push(action);
   emitDiagnostic({

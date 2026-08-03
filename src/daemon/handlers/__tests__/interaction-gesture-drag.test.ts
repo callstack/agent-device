@@ -96,7 +96,7 @@ async function runDrag(sessionStore: ReturnType<typeof makeSessionStore>, sessio
   });
 }
 
-test('recorded ref drag dispatches once and stores portable generic selectors with source evidence', async () => {
+test('recorded ref drag dispatches once and stores portable selectors with both endpoint identities', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'recorded-drag';
   const session = makeDragSession(sessionName);
@@ -137,10 +137,10 @@ test('recorded ref drag dispatches once and stores portable generic selectors wi
   expect(recorded?.result).toMatchObject({
     selectorChain: expect.arrayContaining(['id="drag-source"']),
   });
-  expect(recorded?.targetEvidence).toMatchObject({
-    id: 'drag-source',
-    label: 'Drag source',
-    verification: 'verified',
+  expect(recorded?.targetEvidence).toBeUndefined();
+  expect(recorded?.targetEvidences).toMatchObject({
+    source: { id: 'drag-source', label: 'Drag source', verification: 'verified' },
+    destination: { id: 'drop-target', label: 'Drop target', verification: 'verified' },
   });
 });
 

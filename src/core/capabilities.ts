@@ -4,7 +4,10 @@ import { tryGetPlugin } from './platform-plugin-registry.ts';
 import { registerBuiltinPlatformPlugins } from './interactors/register-builtins.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import type { GestureSemanticInput } from '@agent-device/contracts/interaction';
+import type {
+  GestureCommandInput,
+  GestureSemanticInput,
+} from '@agent-device/contracts/interaction';
 import { assertAppleMultiTouchSupported } from '@agent-device/contracts/platform';
 
 // Populate the PlatformPlugin registry once at module load (idempotent; registers
@@ -138,32 +141,21 @@ export function supportedPlatformsForCommand(command: string): string[] {
   return supported;
 }
 
-export function requireGestureSupported(
-  input: GestureSemanticInput | { intent: 'drag' },
-  device: DeviceInfo,
-): void {
-  const capabilityInput: GestureSemanticInput =
-    input.intent === 'drag'
-      ? { intent: 'pan', origin: { x: 0, y: 0 }, delta: { x: 0, y: 0 } }
-      : input;
+export function requireGestureSupported(input: GestureCommandInput, device: DeviceInfo): void {
   if (device.platform === 'web' || device.appleOs === 'watchos') {
-    throw unsupportedGesture(capabilityInput, gesturePlatformMessage(capabilityInput, device));
+    throw unsupportedGesture(input, gesturePlatformMessage(input, device));
   }
-  if (isMultiTouchGesture(capabilityInput)) {
-    requireMultiTouchGestureSupported(capabilityInput, device);
+  if (input.intent !== 'drag' && isMultiTouchGesture(input)) {
+    requireMultiTouchGestureSupported(input, device);
     return;
   }
   if (device.appleOs === 'visionos') {
-    throw unsupportedGesture(capabilityInput, gesturePlatformMessage(capabilityInput, device));
+    throw unsupportedGesture(input, gesturePlatformMessage(input, device));
   }
   // Linux can preserve public coordinate/preset swipe through its drag primitive, but cannot
   // honor the speed semantics authored by `gesture fling`.
-  if (
-    capabilityInput.intent === 'fling' &&
-    'direction' in capabilityInput &&
-    device.platform === 'linux'
-  ) {
-    throw unsupportedGesture(capabilityInput, 'gesture fling is not supported on Linux');
+  if (input.intent === 'fling' && 'direction' in input && device.platform === 'linux') {
+    throw unsupportedGesture(input, 'gesture fling is not supported on Linux');
   }
 }
 
@@ -187,11 +179,11 @@ function requireMultiTouchGestureSupported(input: GestureSemanticInput, device: 
   assertAppleMultiTouchSupported(device, input.intent);
 }
 
-function gesturePlatformMessage(input: GestureSemanticInput, device: DeviceInfo): string {
+function gesturePlatformMessage(input: GestureCommandInput, device: DeviceInfo): string {
   return `gesture ${input.intent} is not supported on ${device.appleOs ?? device.platform}`;
 }
 
-function unsupportedGesture(input: GestureSemanticInput, message: string, hint?: string): AppError {
+function unsupportedGesture(input: GestureCommandInput, message: string, hint?: string): AppError {
   return new AppError('UNSUPPORTED_OPERATION', message, {
     gesture: input.intent,
     ...(hint ? { hint } : {}),

@@ -14,6 +14,7 @@ import {
 } from '../interaction-outcome-policy.ts';
 import { markPostGestureStabilization } from '../post-gesture-stabilization.ts';
 import { computeTargetEvidence, type RecordedTargetCapture } from '../session-target-evidence.ts';
+import type { MultiTargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { inferFillText } from '../action-utils.ts';
 import { recordedInputPlaceholder } from '../../replay/recorded-input.ts';
 import { parameterizeRecordedFillPayload } from '../parameterized-recorded-fill.ts';
@@ -44,6 +45,7 @@ export function finalizeTouchInteraction(params: {
   responseData: Record<string, unknown>;
   /** ADR 0012 decision 3: record-time input for the `target-v1` annotation. */
   recordedTarget?: RecordedTargetCapture;
+  recordedTargets?: { source: RecordedTargetCapture; destination: RecordedTargetCapture };
   actionStartedAt: number;
   actionFinishedAt: number;
   androidFreshnessBaseline?: SnapshotState | undefined;
@@ -59,6 +61,7 @@ export function finalizeTouchInteraction(params: {
     result,
     responseData,
     recordedTarget,
+    recordedTargets,
     actionStartedAt,
     actionFinishedAt,
     androidFreshnessBaseline,
@@ -73,12 +76,17 @@ export function finalizeTouchInteraction(params: {
   });
   const targetEvidence =
     session.recordSession && recordedTarget ? computeTargetEvidence(recordedTarget) : undefined;
+  const targetEvidences =
+    session.recordSession && recordedTargets
+      ? computeMultiTargetEvidence(recordedTargets)
+      : undefined;
   sessionStore.recordAction(session, {
     command,
     positionals,
     flags: actionFlags ?? {},
     result: parameterizedResult,
     ...(targetEvidence ? { targetEvidence } : {}),
+    ...(targetEvidences ? { targetEvidences } : {}),
   });
   markPendingInteractionOutcome({
     session,
@@ -105,6 +113,15 @@ export function finalizeTouchInteraction(params: {
     actionFinishedAt,
   );
   return { ok: true, data: parameterizedResponseData };
+}
+
+function computeMultiTargetEvidence(recordedTargets: {
+  source: RecordedTargetCapture;
+  destination: RecordedTargetCapture;
+}): MultiTargetAnnotationV1 | undefined {
+  const source = computeTargetEvidence(recordedTargets.source);
+  const destination = computeTargetEvidence(recordedTargets.destination);
+  return source && destination ? { source, destination } : undefined;
 }
 
 function parameterizeFillPayloads(params: {

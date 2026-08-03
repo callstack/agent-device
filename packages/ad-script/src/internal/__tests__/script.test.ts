@@ -495,6 +495,18 @@ test('a target-v1 annotation immediately preceding an action line attaches to th
   assert.deepEqual(actions[0]?.targetEvidence, SAVE_EVIDENCE);
 });
 
+test('a targets-v1 annotation binds both drag endpoints to one action', () => {
+  const source = { ...SAVE_EVIDENCE, id: 'source', label: 'Source' };
+  const destination = { ...SAVE_EVIDENCE, id: 'destination', label: 'Destination' };
+  const script = [
+    `# agent-device:targets-v1 ${JSON.stringify({ source, destination })}`,
+    'gesture drag id="source" id="destination" 800 500 0',
+  ].join('\n');
+  const action = parseReplayScriptDetailed(script).actions[0];
+  assert.deepEqual(action?.targetEvidences, { source, destination });
+  assert.equal(action?.targetEvidence, undefined);
+});
+
 test('a target-v1 annotation followed by a blank line before the action is rejected as INVALID_ARGS', () => {
   const script = [SAVE_EVIDENCE_LINE, '', 'click @e12 "Save"'].join('\n');
   assert.throws(

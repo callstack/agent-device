@@ -2,16 +2,21 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  formatMultiTargetAnnotationCommentLine,
   formatTargetAnnotationCommentLine,
   normalizeLabelField,
+  parseMultiTargetAnnotationCommentLine,
+  parseMultiTargetAnnotationV1Payload,
   parseTargetAnnotationCommentLine,
   parseTargetAnnotationV1Payload,
+  serializeMultiTargetAnnotationV1,
   serializeTargetAnnotationV1,
   truncateToUtf8Bytes,
   TARGET_ANNOTATION_MAX_ANCESTRY,
   TARGET_ANNOTATION_MAX_FIELD_BYTES,
   TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
   TARGET_ANNOTATION_LINE_RE,
+  MULTI_TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
 } from '../target-annotation-serde.ts';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 
@@ -64,6 +69,36 @@ test('parse(serialize(evidence)) round trips to a semantically equal object', ()
   const evidence = baseEvidence({ rect: { x: 1, y: 2, width: 3, height: 4 } });
   const parsedBack = parseTargetAnnotationV1Payload(serializeTargetAnnotationV1(evidence));
   assert.deepEqual(parsedBack, evidence);
+});
+
+test('targets-v1 canonically round-trips source and destination evidence', () => {
+  const evidence = {
+    source: baseEvidence({ id: 'source', label: 'Source' }),
+    destination: baseEvidence({ id: 'destination', label: 'Destination' }),
+  };
+  const serialized = serializeMultiTargetAnnotationV1(evidence);
+  assert.deepEqual(parseMultiTargetAnnotationV1Payload(serialized), evidence);
+  const parsed = parseMultiTargetAnnotationCommentLine(
+    formatMultiTargetAnnotationCommentLine(evidence),
+  );
+  assert.deepEqual(parsed, { kind: 'v1', evidence });
+});
+
+test('targets-v1 rejects a payload missing either endpoint', () => {
+  assertInvalidArgs(
+    () => parseMultiTargetAnnotationV1Payload('{"source":{"role":"view"}}'),
+    /requires source and destination/,
+  );
+});
+
+test('targets-v1 rejects a wrapper above its bounded two-target payload cap', () => {
+  assertInvalidArgs(
+    () =>
+      parseMultiTargetAnnotationV1Payload(
+        JSON.stringify({ padding: 'x'.repeat(MULTI_TARGET_ANNOTATION_MAX_PAYLOAD_BYTES) }),
+      ),
+    /exceeds the .*byte payload cap/,
+  );
 });
 
 test('parseTargetAnnotationCommentLine accepts known fields in any JSON key order', () => {

@@ -9,6 +9,7 @@ import {
   SWIPE_PAUSE_MAX_MS,
   SWIPE_REPETITION_MAX,
   SWIPE_SERIES_MAX_SCHEDULED_DURATION_MS,
+  type GestureExecutionProfile,
   type GesturePayload,
   type GestureCommandInput,
   type SwipePayload,
@@ -31,6 +32,7 @@ import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
 import { noActiveSessionError } from './response.ts';
 import { assertRefMutationAdmitted } from './interaction-ref-policy.ts';
 import type { RecordedTargetCapture } from '../session-target-evidence.ts';
+import { gestureResponseData } from './interaction-gesture-response.ts';
 
 type GestureHandlerParams = InteractionHandlerParams & {
   captureSnapshotForSession: CaptureSnapshotForSession;
@@ -44,7 +46,7 @@ type GestureInteractionOutcome = {
   flags: InteractionHandlerParams['req']['flags'];
   responseData: Record<string, unknown>;
   recordingResultExtra?: Record<string, unknown>;
-  recordedTarget?: RecordedTargetCapture;
+  recordedTargets?: { source: RecordedTargetCapture; destination: RecordedTargetCapture };
 };
 
 export async function dispatchGestureViaRuntime(
@@ -65,13 +67,29 @@ async function runGestureInteraction(
     gesture.executionProfile = params.req.internal.gestureExecutionProfile;
   }
   requireGestureSupported(gesture, session.device);
-  const result = await createGestureRuntime(params).interactions.gesture({
-    session: params.sessionName,
-    requestId: params.req.meta?.requestId,
-    gesture,
-    expectedResolvedTarget: params.req.internal?.replayTargetGuard,
-  });
+  const runtime = createGestureRuntime(params);
+  const context = { session: params.sessionName, requestId: params.req.meta?.requestId };
+  const result = await runPreparedGesture(runtime, context, gesture, params.req.internal);
   return buildGestureOutcome(input, gesture, result, params.req.flags);
+}
+
+async function runPreparedGesture(
+  runtime: GestureRuntime,
+  context: { session: string; requestId: string | undefined },
+  gesture: GestureCommandInput,
+  internal: InteractionHandlerParams['req']['internal'],
+): Promise<GestureRuntimeResult> {
+  if (gesture.intent !== 'drag') {
+    return await runtime.interactions.gesture({ ...context, gesture });
+  }
+  const expectedResolvedTargets =
+    internal?.replayTargetGuards ??
+    (internal?.replayTargetGuard ? { source: internal.replayTargetGuard } : undefined);
+  return await runtime.interactions.gesture({
+    ...context,
+    gesture,
+    ...(expectedResolvedTargets ? { expectedResolvedTargets } : {}),
+  });
 }
 
 function buildGestureOutcome(
@@ -80,8 +98,9 @@ function buildGestureOutcome(
   result: GestureRuntimeResult,
   flags: InteractionHandlerParams['req']['flags'],
 ): GestureInteractionOutcome {
-  const recording = result.recording;
+  const recording = result.kind === 'drag' ? result.recording : undefined;
   const sourceTarget = recording?.sourceTarget;
+  const destinationTarget = recording?.destinationTarget;
   return {
     positionals: dragRecordingPositionals(input, recording),
     flags: gestureReplayFlags(input, flags),
@@ -93,11 +112,14 @@ function buildGestureOutcome(
       : sourceTarget
         ? { recordingResultExtra: { selectorChain: sourceTarget.selectorChain } }
         : {}),
-    ...(sourceTarget
+    ...(sourceTarget && destinationTarget
       ? {
-          recordedTarget: {
-            node: sourceTarget.node,
-            preActionNodes: sourceTarget.preActionNodes,
+          recordedTargets: {
+            source: { node: sourceTarget.node, preActionNodes: sourceTarget.preActionNodes },
+            destination: {
+              node: destinationTarget.node,
+              preActionNodes: destinationTarget.preActionNodes,
+            },
           },
         }
       : {}),
@@ -183,7 +205,7 @@ async function dispatchGestureInteraction(
       flags: outcome.flags,
       result: { ...responseData, ...(outcome.recordingResultExtra ?? {}) },
       responseData,
-      recordedTarget: outcome.recordedTarget,
+      recordedTargets: outcome.recordedTargets,
       actionStartedAt,
       actionFinishedAt: Date.now(),
     });
@@ -192,10 +214,12 @@ async function dispatchGestureInteraction(
   }
 }
 
-function resolveExecutionProfile(gesture: GestureCommandInput): string | undefined {
+function resolveExecutionProfile(
+  gesture: GestureCommandInput,
+): GestureExecutionProfile | undefined {
   if (gesture.intent === 'fling') return 'endpoint-hold';
   if (gesture.intent === 'pan') return gesture.executionProfile ?? 'timed-pan';
-  if (gesture.intent === 'drag') return 'hold-drag';
+  if (gesture.intent === 'drag') return 'timed-pan';
   return undefined;
 }
 
@@ -207,13 +231,13 @@ function prepareGestureCommandInput(
   if (normalized.intent !== 'drag') return normalized;
   return {
     ...normalized,
-    source: prepareDragTarget(normalized.source, session).target,
-    destination: prepareDragTarget(normalized.destination, session).target,
+    source: prepareDragTarget(normalized.source, session),
+    destination: prepareDragTarget(normalized.destination, session),
   };
 }
 
-function prepareDragTarget(target: string, session: SessionState) {
-  if (!target.startsWith('@')) return { target };
+function prepareDragTarget(target: string, session: SessionState): string {
+  if (!target.startsWith('@')) return target;
   const split = splitRefGenerationSuffix(target);
   if (!split) {
     throw new AppError('INVALID_ARGS', `Invalid ref "${target}" — malformed generation suffix.`, {
@@ -225,45 +249,19 @@ function prepareDragTarget(target: string, session: SessionState) {
     ref: split.base,
     mintedGeneration: split.generation,
   });
-  return { target: split.base };
+  return split.base;
 }
 
 function dragRecordingPositionals(
   input: GesturePayload,
-  recording: GestureRuntimeResult['recording'],
+  recording: Extract<GestureRuntimeResult, { kind: 'drag' }>['recording'],
 ): string[] {
-  const positionals = gesturePayloadToPositionals(input);
-  if (input.kind !== 'drag' || !recording) return positionals;
-  if (recording.sourceSelector) positionals[1] = recording.sourceSelector;
-  if (recording.destinationSelector) positionals[2] = recording.destinationSelector;
-  return positionals;
-}
-
-function gestureResponseData(
-  result: GestureRuntimeResult,
-  extra: Record<string, unknown> = {},
-): Record<string, unknown> {
-  const executionProfile =
-    typeof extra.executionProfile === 'string' ? extra.executionProfile : undefined;
-  return {
-    kind: result.kind,
-    durationMs: result.durationMs,
-    pointerCount: result.pointerCount,
-    from: result.from,
-    to: result.to,
-    ...(result.targets ? { targets: result.targets } : {}),
-    ...(result.backendResult ?? {}),
-    ...extra,
-    ...(executionProfile
-      ? {
-          timing: {
-            executionProfile,
-            gestureDurationMs: result.durationMs,
-          },
-        }
-      : {}),
-    message: result.message,
-  };
+  if (input.kind !== 'drag' || !recording) return gesturePayloadToPositionals(input);
+  return gesturePayloadToPositionals({
+    ...input,
+    source: recording.sourceSelector ?? input.source,
+    destination: recording.destinationSelector ?? input.destination,
+  });
 }
 
 function readSwipeInput(input: unknown): SwipePayload {

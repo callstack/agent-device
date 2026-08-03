@@ -89,6 +89,11 @@ type DaemonRequestInternal = {
    * different same-identity duplicate.
    */
   replayTargetGuard?: ReplayTargetGuardDenotation;
+  /** Dual-endpoint counterpart of replayTargetGuard for target-authored drag. */
+  replayTargetGuards?: {
+    source: ReplayTargetGuardDenotation;
+    destination: ReplayTargetGuardDenotation;
+  };
   /**
    * ADR 0012 / #1349 deferred (post-resolution) identity verification: the
    * recorded `target-v1` landmark of an annotated selector `wait`, set ONLY

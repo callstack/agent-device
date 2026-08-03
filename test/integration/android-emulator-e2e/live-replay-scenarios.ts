@@ -76,13 +76,15 @@ export async function assertFixtureReplays(context: LiveContext): Promise<void> 
 
   const checkoutReplay = path.resolve('examples/test-app/replays/checkout-form-android.ad');
   const gestureReplay = path.resolve('examples/test-app/replays/gesture-lab-android.ad');
+  const dragReplay = path.resolve('examples/test-app/replays/drag-android.ad');
   const { commandsByScript } = await runLiveReplayTestSuite({
     context,
     runStep,
     step: 'run Android fixture suite without retries',
-    scripts: [checkoutReplay, gestureReplay],
+    scripts: [checkoutReplay, gestureReplay, dragReplay],
   });
   assertReplayCommands(gestureReplay, commandsByScript.get(gestureReplay) ?? [], [C.gesture]);
+  assertReplayCommands(dragReplay, commandsByScript.get(dragReplay) ?? [], [C.gesture]);
   verifyCommand(context, C.test, 'retry-free Android fixture suite emits non-empty JUnit evidence');
   verifyNestedReplayCommand(
     context,

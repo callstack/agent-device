@@ -56,6 +56,46 @@ const SAVE_ANNOTATION =
 const UNVERIFIABLE_ANNOTATION =
   '# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"unverifiable"}';
 
+const DRAG_ANNOTATION = `# agent-device:targets-v1 ${JSON.stringify({
+  source: {
+    id: 'source',
+    role: 'view',
+    label: 'Source',
+    ancestry: [],
+    sibling: 0,
+    viewportOrder: 0,
+    verification: 'verified',
+  },
+  destination: {
+    id: 'destination',
+    role: 'view',
+    label: 'Drop',
+    ancestry: [],
+    sibling: 1,
+    viewportOrder: 0,
+    verification: 'verified',
+  },
+})}`;
+
+const DRAG_NODES = [
+  {
+    index: 0,
+    depth: 0,
+    type: 'View',
+    identifier: 'source',
+    label: 'Source',
+    rect: { x: 10, y: 10, width: 40, height: 20 },
+  },
+  {
+    index: 1,
+    depth: 0,
+    type: 'View',
+    identifier: 'destination',
+    label: 'Drop',
+    rect: { x: 100, y: 100, width: 40, height: 20 },
+  },
+];
+
 function setupSession(root: string): { sessionStore: SessionStore; sessionName: string } {
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
@@ -122,6 +162,108 @@ test('a verified target proceeds to dispatch the action', async () => {
   expect(response.ok).toBe(true);
   expect(invoked.map((req) => req.command)).toEqual(['click']);
   expect(invoked[0]?.positionals).toEqual(['id="save"']);
+});
+
+test('a verified drag guards both source and destination before dispatch', async () => {
+  const root = mkdtempForTestSync('agent-device-replay-drag-guards-');
+  const { sessionStore, sessionName } = setupSession(root);
+  const filePath = writeReplayFile(root, [
+    DRAG_ANNOTATION,
+    'gesture drag id="source" id="destination" 800 500 0',
+  ]);
+  mockDispatchCommand.mockResolvedValue({ nodes: DRAG_NODES, backend: 'xctest' });
+
+  const invoked: DaemonRequest[] = [];
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      invoked.push(req);
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(response.ok).toBe(true);
+  expect(invoked).toHaveLength(1);
+  expect(invoked[0]?.internal?.replayTargetGuards).toMatchObject({
+    source: { identity: { id: 'source', label: 'Source' } },
+    destination: { identity: { id: 'destination', label: 'Drop' } },
+  });
+});
+
+test('a shifted drag destination diverges before pointer-down even when the source still matches', async () => {
+  const root = mkdtempForTestSync('agent-device-replay-drag-destination-');
+  const { sessionStore, sessionName } = setupSession(root);
+  const filePath = writeReplayFile(root, [
+    DRAG_ANNOTATION,
+    'gesture drag id="source" label="Drop" 800 500 0',
+  ]);
+  mockDispatchCommand.mockResolvedValue({
+    nodes: [DRAG_NODES[0]!, { ...DRAG_NODES[1]!, identifier: 'different-destination' }],
+    backend: 'xctest',
+  });
+
+  const invoked: DaemonRequest[] = [];
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      invoked.push(req);
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(invoked).toHaveLength(0);
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  const divergence = response.error.details?.divergence as Record<string, unknown>;
+  expect(divergence.kind).toBe('identity-mismatch');
+  expect(divergence.targetBinding).toMatchObject({
+    recorded: { id: 'destination', role: 'view', label: 'Drop' },
+    observed: { id: 'different-destination', role: 'view', label: 'Drop' },
+  });
+});
+
+test('a destination guard refusal reports destination evidence after both preflight checks pass', async () => {
+  const root = mkdtempForTestSync('agent-device-replay-drag-guard-refusal-');
+  const { sessionStore, sessionName } = setupSession(root);
+  const filePath = writeReplayFile(root, [
+    DRAG_ANNOTATION,
+    'gesture drag id="source" id="destination" 800 500 0',
+  ]);
+  mockDispatchCommand.mockResolvedValue({ nodes: DRAG_NODES, backend: 'xctest' });
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => ({
+      ok: false,
+      error: {
+        code: 'COMMAND_FAILED',
+        message: 'drag destination resolved to a different element',
+        details: {
+          reason: 'replay_target_guard_mismatch',
+          targetRole: 'destination',
+          observed: { id: 'decoy', role: 'view', label: 'Drop' },
+          expected: { id: 'destination', role: 'view', label: 'Drop' },
+        },
+      },
+    }),
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  const divergence = response.error.details?.divergence as Record<string, unknown>;
+  expect(divergence.targetBinding).toMatchObject({
+    recorded: { id: 'destination', role: 'view', label: 'Drop' },
+    observed: { id: 'decoy', role: 'view', label: 'Drop' },
+  });
 });
 
 test('a selector-miss divergence blocks dispatch and never sends the action', async () => {

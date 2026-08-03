@@ -1,6 +1,6 @@
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from './command-flags.ts';
-import type { TargetAnnotationV1 } from './target-annotation.ts';
+import type { MultiTargetAnnotationV1, TargetAnnotationV1 } from './target-annotation.ts';
 
 // One recorded action in a session's script.
 //
@@ -33,4 +33,6 @@ export type SessionAction = {
    * Inert until migration step 4 adds enforcement.
    */
   targetEvidence?: TargetAnnotationV1;
+  /** `targets-v1` evidence for dual-endpoint interactions such as drag. */
+  targetEvidences?: MultiTargetAnnotationV1;
 };

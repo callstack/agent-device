@@ -384,8 +384,9 @@ export function resolveTargetVerificationEntry(params: {
   resolvedAction: SessionAction;
   sessionName: string;
   sessionStore: SessionStore;
+  targetRole?: 'source' | 'destination';
 }): AdReplayVerificationEntry {
-  const { action, resolvedAction, sessionName, sessionStore } = params;
+  const { action, resolvedAction, sessionName, sessionStore, targetRole } = params;
   const session = sessionStore.get(sessionName);
   if (!session) return { kind: 'inactive' };
   if (resolveTargetIdentityVerification(action.command) === 'post-resolution') {
@@ -398,7 +399,7 @@ export function resolveTargetVerificationEntry(params: {
     // dispatch will parse (and fail) it the same way an unannotated action
     // would; `extractReplayTargetToken` returning a token here is not proof
     // it parses (the engine's pre-dispatch plan runs that check itself).
-    token: extractReplayTargetToken(resolvedAction),
+    token: extractReplayTargetToken(resolvedAction, targetRole),
     platform: session.device.platform,
   };
 }

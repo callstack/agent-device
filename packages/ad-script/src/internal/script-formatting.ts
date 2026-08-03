@@ -6,7 +6,10 @@ import {
   appendScreenshotActionScriptArgs,
   appendSnapshotActionScriptArgs,
 } from './script-utils.ts';
-import { formatTargetAnnotationCommentLine } from './target-annotation-serde.ts';
+import {
+  formatMultiTargetAnnotationCommentLine,
+  formatTargetAnnotationCommentLine,
+} from './target-annotation-serde.ts';
 import type { SessionAction } from '@agent-device/contracts/session';
 
 export function formatPortableActionLine(
@@ -38,5 +41,8 @@ export function formatPortableActionLine(
  * target evidence. Shared by both script writers for one canonical form.
  */
 export function formatTargetAnnotationLines(action: SessionAction): string[] {
+  if (action.targetEvidences) {
+    return [formatMultiTargetAnnotationCommentLine(action.targetEvidences)];
+  }
   return action.targetEvidence ? [formatTargetAnnotationCommentLine(action.targetEvidence)] : [];
 }

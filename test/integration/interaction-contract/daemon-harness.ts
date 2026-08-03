@@ -115,6 +115,26 @@ export function runnerLongPressEntry(
   };
 }
 
+export function runnerGestureViewportEntry(): ProviderScenarioProviderEntry {
+  return {
+    command: 'ios.runner.gestureViewport',
+    deviceId: CONTRACT_DEVICE_ID,
+    platform: 'apple',
+    result: { x: 0, y: 0, x2: 400, y2: 800 },
+  };
+}
+
+export function runnerGestureEntry(
+  result: Record<string, unknown> = {},
+): ProviderScenarioProviderEntry {
+  return {
+    command: 'ios.runner.gesture',
+    deviceId: CONTRACT_DEVICE_ID,
+    platform: 'apple',
+    result,
+  };
+}
+
 export function runnerTapErrorEntry(error: Error): ProviderScenarioProviderEntry {
   return {
     command: 'ios.runner.tap',

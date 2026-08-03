@@ -12,7 +12,10 @@ import {
   parseReplayRuntimeFlags,
   stripRecordedRefGeneration,
 } from './script-utils.ts';
-import { parseTargetAnnotationCommentLine } from './target-annotation-serde.ts';
+import {
+  parseMultiTargetAnnotationCommentLine,
+  parseTargetAnnotationCommentLine,
+} from './target-annotation-serde.ts';
 
 /**
  * The `.ad` script env/var key shape: uppercase letters, digits, and
@@ -55,7 +58,9 @@ export type ParsedReplayScript = {
   actionSourcePaths?: (string | undefined)[];
 };
 
-type PendingTargetAnnotation = { evidence: SessionAction['targetEvidence']; line: number };
+type PendingTargetAnnotation =
+  | { kind: 'single'; evidence: NonNullable<SessionAction['targetEvidence']>; line: number }
+  | { kind: 'multiple'; evidence: NonNullable<SessionAction['targetEvidences']>; line: number };
 
 // fallow-ignore-next-line complexity
 export function parseReplayScriptDetailed(script: string): ParsedReplayScript {
@@ -70,9 +75,10 @@ export function parseReplayScriptDetailed(script: string): ParsedReplayScript {
     index: number,
     why: string,
   ): never => {
+    const tag = annotation.kind === 'multiple' ? 'targets-v1' : 'target-v1';
     throw new AppError(
       'INVALID_ARGS',
-      `target-v1 annotation on line ${annotation.line} must be immediately followed by its action line (line ${index + 1} ${why}).`,
+      `${tag} annotation on line ${annotation.line} must be immediately followed by its action line (line ${index + 1} ${why}).`,
     );
   };
 
@@ -83,10 +89,16 @@ export function parseReplayScriptDetailed(script: string): ParsedReplayScript {
       continue;
     }
     if (trimmed.startsWith('#')) {
+      const multiAnnotation = parseMultiTargetAnnotationCommentLine(trimmed);
+      if (multiAnnotation.kind === 'v1') {
+        if (pending) rejectUnbound(pending, index, 'is another target annotation');
+        pending = { kind: 'multiple', evidence: multiAnnotation.evidence, line: index + 1 };
+        continue;
+      }
       const annotation = parseTargetAnnotationCommentLine(trimmed);
       if (annotation.kind === 'v1') {
-        if (pending) rejectUnbound(pending, index, 'is another target-v1 annotation');
-        pending = { evidence: annotation.evidence, line: index + 1 };
+        if (pending) rejectUnbound(pending, index, 'is another target annotation');
+        pending = { kind: 'single', evidence: annotation.evidence, line: index + 1 };
         continue;
       }
       // An ordinary or future-target-vN comment still counts as an
@@ -116,7 +128,8 @@ export function parseReplayScriptDetailed(script: string): ParsedReplayScript {
     );
     if (gestureArityError) throw new AppError('INVALID_ARGS', gestureArityError);
     if (pending) {
-      parsed.targetEvidence = pending.evidence;
+      if (pending.kind === 'single') parsed.targetEvidence = pending.evidence;
+      else parsed.targetEvidences = pending.evidence;
       pending = undefined;
     }
     actions.push(parsed);
@@ -124,9 +137,10 @@ export function parseReplayScriptDetailed(script: string): ParsedReplayScript {
     sawAction = true;
   }
   if (pending) {
+    const tag = pending.kind === 'multiple' ? 'targets-v1' : 'target-v1';
     throw new AppError(
       'INVALID_ARGS',
-      `target-v1 annotation on line ${pending.line} must be immediately followed by its action line (end of script reached).`,
+      `${tag} annotation on line ${pending.line} must be immediately followed by its action line (end of script reached).`,
     );
   }
   return { actions, actionLines };

@@ -5,7 +5,7 @@ import { buildDragGesturePlan } from './gesture-plan.ts';
 
 const DRAG_PROPERTY_RUNS = 100;
 
-test('hold drag keeps one pointer down through source hold, movement, and destination hold', () => {
+test('drag keeps one pointer down through source hold, movement, and destination hold', () => {
   const plan = buildDragGesturePlan(
     {
       from: { x: 20, y: 30 },
@@ -15,7 +15,6 @@ test('hold drag keeps one pointer down through source hold, movement, and destin
       destinationHoldMs: 250,
     },
     { x: 0, y: 0, width: 400, height: 800 },
-    'ios',
   );
 
   assert.equal(plan.topology, 'single');
@@ -32,7 +31,7 @@ test('hold drag keeps one pointer down through source hold, movement, and destin
   });
 });
 
-test('hold drag rejects a combined duration above the backend ceiling', () => {
+test('drag rejects a combined duration above the backend ceiling', () => {
   assert.throws(
     () =>
       buildDragGesturePlan(

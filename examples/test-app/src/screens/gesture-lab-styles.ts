@@ -44,5 +44,25 @@ export function createGestureLabStyles(colors: AppColors) {
       fontWeight: '600',
       lineHeight: 18,
     },
+    dragRow: {
+      flexDirection: 'row',
+      gap: 20,
+      justifyContent: 'space-between',
+    },
+    dragEndpoint: {
+      alignItems: 'center',
+      backgroundColor: colors.cardStrong,
+      borderColor: colors.line,
+      borderRadius: 8,
+      borderWidth: 1,
+      flex: 1,
+      height: 56,
+      justifyContent: 'center',
+    },
+    dragEndpointLabel: {
+      color: colors.text,
+      fontSize: 13,
+      fontWeight: '700',
+    },
   });
 }

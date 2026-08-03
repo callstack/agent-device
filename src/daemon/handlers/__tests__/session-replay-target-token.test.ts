@@ -38,6 +38,16 @@ test('extractReplayTargetToken: gesture drag binds replay evidence to its source
     'id="drag-source"',
   );
   assert.equal(
+    extractReplayTargetToken(
+      action({
+        command: 'gesture',
+        positionals: ['drag', 'id="drag-source"', 'id="drop-target"', '700', '600'],
+      }),
+      'destination',
+    ),
+    'id="drop-target"',
+  );
+  assert.equal(
     extractReplayTargetToken(action({ command: 'gesture', positionals: ['pan', '10', '20'] })),
     undefined,
   );

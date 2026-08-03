@@ -132,6 +132,15 @@ the corresponding provider contract cases in the same change.
 
 ### 3. Versioned `.ad` target-binding evidence
 
+> **Amendment (#1567): dual-endpoint target evidence.** An action that resolves two elements records
+> one `# agent-device:targets-v1 {"source":{...},"destination":{...}}` annotation instead of a
+> single `target-v1`. Each nested value is a complete `TargetAnnotationV1` under the same identity,
+> normalization, field-size, and verification rules. The wrapper is capped at 8,320 bytes. Replay
+> verifies both selectors and carries two post-resolution guards before dispatch; either endpoint's
+> selector miss, identity mismatch, unverifiable evidence, or dispatch-time guard mismatch refuses
+> the entire action before pointer-down. Unknown future `targets-vN` annotations remain ordinary
+> comments to an older reader, matching the single-target versioning rule.
+
 Recording writes evidence for every action that resolves an element target. The plain-text format is a
 versioned comment immediately before the action it annotates:
 

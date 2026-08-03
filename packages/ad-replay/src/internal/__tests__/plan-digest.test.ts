@@ -118,6 +118,32 @@ test('computeReplayPlanDigest changes when target evidence consumed before actio
   }
 });
 
+test('computeReplayPlanDigest binds both entries of multi-target evidence', () => {
+  const evidence = {
+    role: 'view',
+    ancestry: [],
+    sibling: 0,
+    viewportOrder: 0,
+    verification: 'verified' as const,
+  };
+  const targetEvidences = {
+    source: { ...evidence, id: 'source' },
+    destination: { ...evidence, id: 'destination' },
+  };
+  const original = digestFor([action({ targetEvidences })]);
+  assert.notEqual(
+    original,
+    digestFor([
+      action({
+        targetEvidences: {
+          ...targetEvidences,
+          destination: { ...targetEvidences.destination, id: 'different-destination' },
+        },
+      }),
+    ]),
+  );
+});
+
 test('computeReplayPlanDigest never changes based on unsubstituted ${VAR} text (variable VALUES never affect the digest)', () => {
   // The digest is computed over the still-unsubstituted action text; --env
   // values are resolved later, at invocation time, so two runs with

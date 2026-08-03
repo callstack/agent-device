@@ -1,15 +1,19 @@
 import type {
+  DragGestureInput,
   LongPressCommandResult,
+  ResolutionDisclosure,
   ScrollDirection,
   ScrollInputDirection,
 } from '@agent-device/contracts/interaction';
 import {
   assertExclusiveScrollDistanceInputs,
+  buildDragGesturePlan,
   honoredScrollDurationMs,
   normalizeScrollDurationMs,
+  singlePointerPlanEndpoints,
 } from '@agent-device/contracts/interaction';
 import { AppError } from '@agent-device/kernel/errors';
-import type { Point } from '@agent-device/kernel/snapshot';
+import type { Point, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import {
   captureScrollEdgeState,
@@ -35,11 +39,63 @@ import {
 } from './post-action-observation.ts';
 import {
   assertSupportedInteractionSurface,
+  captureInteractionSnapshot,
   resolveInteractionTarget,
   type ExpectedResolvedTarget,
   type InteractionTarget,
   type ResolvedInteractionTarget,
 } from './resolution.ts';
+import { resolveVisibleSnapshotViewport } from './viewport.ts';
+
+type DragRecordingTarget = {
+  selectorChain: string[];
+  node: SnapshotNode;
+  preActionNodes: SnapshotNode[];
+};
+
+type DragTargetDisclosure = {
+  selectorChain?: string[];
+  resolution: ResolutionDisclosure;
+};
+
+export type DragCommandOptions = CommandContext & {
+  gesture: DragGestureInput;
+  expectedResolvedTargets?: {
+    source?: ExpectedResolvedTarget;
+    destination?: ExpectedResolvedTarget;
+  };
+};
+
+export type DragCommandResult = BackendResultEnvelope & {
+  kind: 'drag';
+  durationMs: number;
+  pointerCount: 1;
+  from: Point;
+  to: Point;
+  recording?: {
+    sourceSelector?: string;
+    destinationSelector?: string;
+    sourceTarget?: DragRecordingTarget;
+    destinationTarget?: DragRecordingTarget;
+  };
+  targets: {
+    source: DragTargetDisclosure;
+    destination: DragTargetDisclosure;
+  };
+};
+
+/** Resolves the coordinate frame shared by coordinate- and target-authored gestures. */
+export async function resolveGestureViewport(
+  runtime: AgentDeviceRuntime,
+  options: CommandContext,
+): Promise<Rect> {
+  const backendViewport = await runtime.backend.resolveGestureViewport?.(
+    toBackendContext(runtime, options),
+  );
+  if (backendViewport) return backendViewport;
+  const capture = await captureInteractionSnapshot(runtime, options, false);
+  return resolveVisibleSnapshotViewport(capture.snapshot.nodes, 'gesture');
+}
 
 export type FocusCommandOptions = CommandContext & {
   target: InteractionTarget;
@@ -160,6 +216,122 @@ export const longPressCommand: RuntimeCommand<
     observation,
   );
 };
+
+export const dragCommand: RuntimeCommand<DragCommandOptions, DragCommandResult> = async (
+  runtime,
+  options,
+) => {
+  if (!runtime.backend.performGesture) {
+    throw new AppError('UNSUPPORTED_OPERATION', 'gesture is not supported by this backend');
+  }
+  await assertSupportedInteractionSurface(runtime, options, 'drag');
+  const viewport = await resolveGestureViewport(runtime, options);
+  const source = await resolveDragTarget(runtime, options, 'source');
+  const destination = await resolveDragTarget(runtime, options, 'destination');
+  const plan = buildDragGesturePlan(
+    {
+      from: requireResolvedPoint(source),
+      to: requireResolvedPoint(destination),
+      sourceHoldMs: options.gesture.sourceHoldMs,
+      moveMs: options.gesture.moveMs,
+      destinationHoldMs: options.gesture.destinationHoldMs,
+    },
+    viewport,
+  );
+  const backendResult = await runtime.backend.performGesture(
+    toBackendContext(runtime, options),
+    plan,
+  );
+  const formattedBackendResult = toBackendResult(backendResult);
+  const { start: from, end: to } = singlePointerPlanEndpoints(plan);
+  return {
+    kind: 'drag',
+    durationMs: plan.durationMs,
+    pointerCount: 1,
+    from,
+    to,
+    targets: {
+      source: dragTargetDisclosure(source),
+      destination: dragTargetDisclosure(destination),
+    },
+    recording: dragRecordingDetails(source, destination),
+    ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
+    ...successText(`Dragged ${options.gesture.source} to ${options.gesture.destination}`),
+  };
+};
+
+async function resolveDragTarget(
+  runtime: AgentDeviceRuntime,
+  options: DragCommandOptions,
+  endpoint: 'source' | 'destination',
+): Promise<ResolvedInteractionTarget> {
+  const token = options.gesture[endpoint];
+  return await resolveInteractionTarget(
+    runtime,
+    {
+      ...options,
+      target: token.startsWith('@')
+        ? { kind: 'ref', ref: token }
+        : { kind: 'selector', selector: token },
+    },
+    {
+      action: 'drag',
+      requireInteractive: false,
+      promoteToHittableAncestor: false,
+      expectedResolvedTarget: options.expectedResolvedTargets?.[endpoint],
+      replayTargetRole: endpoint,
+    },
+  );
+}
+
+function dragTargetDisclosure(target: ResolvedInteractionTarget): DragTargetDisclosure {
+  if (target.kind === 'point' || !target.resolution) {
+    throw new AppError('COMMAND_FAILED', 'gesture drag target resolution was not disclosed');
+  }
+  const selectorChain = 'selectorChain' in target ? target.selectorChain : undefined;
+  return {
+    ...(selectorChain?.length ? { selectorChain } : {}),
+    resolution: target.resolution,
+  };
+}
+
+function dragRecordingDetails(
+  source: ResolvedInteractionTarget,
+  destination: ResolvedInteractionTarget,
+): NonNullable<DragCommandResult['recording']> {
+  const sourceSelector = selectorExpression(source);
+  const destinationSelector = selectorExpression(destination);
+  const sourceTarget = recordedDragTarget(source);
+  const destinationTarget = recordedDragTarget(destination);
+  return {
+    ...(sourceSelector ? { sourceSelector } : {}),
+    ...(destinationSelector ? { destinationSelector } : {}),
+    ...(sourceTarget ? { sourceTarget } : {}),
+    ...(destinationTarget ? { destinationTarget } : {}),
+  };
+}
+
+function selectorExpression(target: ResolvedInteractionTarget): string | undefined {
+  return 'selectorChain' in target && target.selectorChain?.length
+    ? target.selectorChain.join(' || ')
+    : undefined;
+}
+
+function recordedDragTarget(target: ResolvedInteractionTarget): DragRecordingTarget | undefined {
+  if (
+    !('selectorChain' in target) ||
+    !target.selectorChain?.length ||
+    !target.node ||
+    !target.preActionNodes
+  ) {
+    return undefined;
+  }
+  return {
+    selectorChain: target.selectorChain,
+    node: target.node,
+    preActionNodes: target.preActionNodes,
+  };
+}
 
 export const scrollCommand: RuntimeCommand<ScrollCommandOptions, ScrollCommandResult> = async (
   runtime,

@@ -1,11 +1,18 @@
 import { isTouchTargetCommand } from '@agent-device/ad-script';
+import { dragGesturePayloadFromPositionals } from '@agent-device/contracts/interaction';
 import { readSelectorExpression } from '@agent-device/selectors';
 import type { SessionAction } from '../types.ts';
 
 /** Returns the resolved-target token carried by an eligible replay action. */
-export function extractReplayTargetToken(action: SessionAction): string | undefined {
+export function extractReplayTargetToken(
+  action: SessionAction,
+  targetRole?: 'source' | 'destination',
+): string | undefined {
   const positionals = action.positionals ?? [];
-  if (action.command === 'gesture' && positionals[0] === 'drag') return positionals[1];
+  if (action.command === 'gesture') {
+    const drag = dragGesturePayloadFromPositionals(positionals);
+    return drag ? drag[targetRole ?? 'source'] : undefined;
+  }
   if (action.command === 'get') return positionals[1];
   // #1349: `is <predicate> <selector> [expected]` — the selector expression is
   // the target token (an `is exists` step is never annotated, so this only

@@ -59,7 +59,7 @@ test('gesture recording codec round-trips fling with distance', () => {
   assert.deepEqual(gesturePayloadFromPositionals(gesturePayloadToPositionals(payload)), payload);
 });
 
-test('gesture recording codec round-trips selector-authored hold drag timings', () => {
+test('gesture recording codec round-trips selector-authored drag timings', () => {
   const payload = {
     kind: 'drag' as const,
     source: 'id="drag-source"',
@@ -69,6 +69,25 @@ test('gesture recording codec round-trips selector-authored hold drag timings', 
     destinationHoldMs: 250,
   };
   assert.deepEqual(gesturePayloadFromPositionals(gesturePayloadToPositionals(payload)), payload);
+});
+
+test('drag recording materializes all timing slots for every sparse option combination', () => {
+  for (let mask = 0; mask < 8; mask += 1) {
+    const payload = {
+      kind: 'drag' as const,
+      source: 'id="source"',
+      destination: 'id="destination"',
+      ...(mask & 1 ? { sourceHoldMs: 900 } : {}),
+      ...(mask & 2 ? { moveMs: 700 } : {}),
+      ...(mask & 4 ? { destinationHoldMs: 200 } : {}),
+    };
+    assert.deepEqual(gesturePayloadFromPositionals(gesturePayloadToPositionals(payload)), {
+      ...payload,
+      sourceHoldMs: payload.sourceHoldMs ?? 800,
+      moveMs: payload.moveMs ?? 500,
+      destinationHoldMs: payload.destinationHoldMs ?? 0,
+    });
+  }
 });
 
 test('drag payloads normalize to one target-authored runtime command', () => {

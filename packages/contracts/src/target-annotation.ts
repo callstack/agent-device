@@ -47,3 +47,9 @@ export type TargetAnnotationV1 = {
   rect?: TargetRect;
   verification: TargetVerification;
 };
+
+/** Versioned evidence for an action that resolves both ends of one interaction. */
+export type MultiTargetAnnotationV1 = {
+  source: TargetAnnotationV1;
+  destination: TargetAnnotationV1;
+};

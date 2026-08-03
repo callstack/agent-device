@@ -64,6 +64,7 @@ export function GestureLab() {
   const [canaryReady, setCanaryReady] = useState(false);
   const [transform, setTransform] = useState<TransformState>(initialTransform);
   const [counts, setCounts] = useState<GestureCounts>(initialCounts);
+  const [dragCompleted, setDragCompleted] = useState(false);
   const transformRef = useRef<TransformState>(initialTransform);
   const gestureStartRef = useRef<TransformState>(initialTransform);
   const androidTouchStartRef = useRef<AndroidTouchStart | undefined>(undefined);
@@ -191,6 +192,15 @@ export function GestureLab() {
     .minDistance(4)
     .runOnJS(true)
     .onStart(handleTwoPointerPan);
+  const holdDragGesture = Gesture.Pan()
+    .activateAfterLongPress(500)
+    .minDistance(10)
+    .runOnJS(true)
+    .onEnd((event, completed) => {
+      if (completed && Math.hypot(event.translationX, event.translationY) > 60) {
+        setDragCompleted(true);
+      }
+    });
   const legacyFlingRefs = [
     legacyFlingLeftRef,
     legacyFlingRightRef,
@@ -337,6 +347,30 @@ export function GestureLab() {
           {changeStatusLabel}
         </Text>
       </View>
+
+      <View style={styles.dragRow} testID="drag-gesture-fixture">
+        <GestureDetector gesture={holdDragGesture}>
+          <View
+            accessible
+            accessibilityLabel="Drag source"
+            style={styles.dragEndpoint}
+            testID="drag-source"
+          >
+            <Text style={styles.dragEndpointLabel}>Source</Text>
+          </View>
+        </GestureDetector>
+        <View
+          accessible
+          accessibilityLabel="Drag destination"
+          style={styles.dragEndpoint}
+          testID="drag-destination"
+        >
+          <Text style={styles.dragEndpointLabel}>Destination</Text>
+        </View>
+      </View>
+      <Text style={styles.metric} testID="drag-gesture-status">
+        drag completed {dragCompleted ? 'yes' : 'no'}
+      </Text>
     </SectionCard>
   );
 }

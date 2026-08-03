@@ -113,6 +113,42 @@ test('runtime drag resolves both endpoints before dispatching any device gesture
   assert.equal(dispatchCount, 0);
 });
 
+test('runtime drag identifies a destination post-resolution guard mismatch before dispatch', async () => {
+  let dispatchCount = 0;
+  const device = createInteractionDevice(dragTargetSnapshot(), {
+    resolveGestureViewport: async () => ({ x: 0, y: 0, width: 400, height: 800 }),
+    performGesture: async () => {
+      dispatchCount += 1;
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      device.interactions.gesture({
+        gesture: {
+          intent: 'drag',
+          source: 'id="drag-source"',
+          destination: 'id="drop-target"',
+        },
+        expectedResolvedTargets: {
+          source: {
+            identity: { id: 'drag-source', role: 'view', label: 'Drag source' },
+            structural: { documentOrder: 1, sibling: 0 },
+          },
+          destination: {
+            identity: { id: 'different-target', role: 'view', label: 'Drop target' },
+            structural: { documentOrder: 2, sibling: 1 },
+          },
+        },
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'replay_target_guard_mismatch' &&
+      error.details?.targetRole === 'destination',
+  );
+  assert.equal(dispatchCount, 0);
+});
+
 test('runtime longPress with settle drops the non-hittable hint when the diff proves a change', async () => {
   let captureCount = 0;
   const nonHittableSnapshot = selectorSnapshot();

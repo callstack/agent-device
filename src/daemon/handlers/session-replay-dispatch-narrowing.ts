@@ -46,9 +46,16 @@ export function applyReplayDispatchGuard(
   const guardInternal =
     guard?.kind === 'target'
       ? { replayTargetGuard: guard.guard.expected }
-      : guard?.kind === 'landmark'
-        ? { replayLandmarkGuard: guard.landmark }
-        : undefined;
+      : guard?.kind === 'targets'
+        ? {
+            replayTargetGuards: {
+              source: guard.guards.source.expected,
+              destination: guard.guards.destination.expected,
+            },
+          }
+        : guard?.kind === 'landmark'
+          ? { replayLandmarkGuard: guard.landmark }
+          : undefined;
   return guardInternal
     ? { ...replayReq, internal: { ...replayReq.internal, ...guardInternal } }
     : replayReq;
@@ -97,6 +104,9 @@ function readGuardMismatchEvidence(
   details: Record<string, unknown> | undefined,
 ): AdReplayGuardMismatchEvidence {
   return {
+    ...(details?.targetRole === 'source' || details?.targetRole === 'destination'
+      ? { targetRole: details.targetRole }
+      : {}),
     observed: readGuardMismatchObservedIdentity(details?.observed),
     expectedStructural: readTargetStructuralDenotation(details?.expectedStructural),
     observedStructural: readTargetStructuralDenotation(details?.observedStructural),
@@ -128,7 +138,10 @@ export function classifyReplayDispatchFailure(
   entries: readonly string[],
 ): AdReplayDispatchOutcome {
   const plainFailure = toAdReplayStepFailure(response, entries);
-  if (guard?.kind === 'target' && isReplayTargetGuardMismatchResponse(response)) {
+  if (
+    (guard?.kind === 'target' || guard?.kind === 'targets') &&
+    isReplayTargetGuardMismatchResponse(response)
+  ) {
     return {
       status: 'guard-mismatch',
       evidence: readGuardMismatchEvidence(response.error.details),

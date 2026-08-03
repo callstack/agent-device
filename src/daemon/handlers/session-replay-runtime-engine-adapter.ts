@@ -147,12 +147,13 @@ export function createAdReplayStepRuntime(params: {
   };
 
   const runtime: AdReplayStepRuntime = {
-    beginTargetVerification(action, resolvedAction, _index) {
+    beginTargetVerification(action, resolvedAction, _index, targetRole) {
       return resolveTargetVerificationEntry({
         action,
         resolvedAction,
         sessionName: ctx.sessionName,
         sessionStore: ctx.sessionStore,
+        targetRole,
       });
     },
 

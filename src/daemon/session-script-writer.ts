@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { publicPlatformString } from '@agent-device/kernel/device';
+import { dragGesturePayloadFromPositionals } from '@agent-device/contracts/interaction';
 import { inferFillText } from './action-utils.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -327,8 +328,12 @@ function buildOptimizedActions(
  * than swallowing it like an ordinary fs failure).
  */
 function assertNoUnresolvedRefFallback(action: SessionAction): void {
-  if (action.command === 'gesture' && action.positionals?.[0] === 'drag') {
-    assertNoUnresolvedDragEndpoint(action.positionals);
+  const drag =
+    action.command === 'gesture'
+      ? dragGesturePayloadFromPositionals(action.positionals ?? [])
+      : undefined;
+  if (drag) {
+    assertNoUnresolvedDragEndpoint(drag);
     return;
   }
   if (!isSelectorTargetingCommand(action.command)) return;
@@ -341,8 +346,8 @@ function assertNoUnresolvedRefFallback(action: SessionAction): void {
   );
 }
 
-function assertNoUnresolvedDragEndpoint(positionals: readonly string[]): void {
-  const refPositional = positionals.slice(1, 3).find((value) => value.startsWith('@'));
+function assertNoUnresolvedDragEndpoint(drag: { source: string; destination: string }): void {
+  const refPositional = [drag.source, drag.destination].find((value) => value.startsWith('@'));
   if (!refPositional) return;
   throw new AppError(
     'COMMAND_FAILED',

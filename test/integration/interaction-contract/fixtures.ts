@@ -225,6 +225,48 @@ export function viewportOnlySnapshot(): SnapshotState {
   ]);
 }
 
+/** Dual-endpoint drag tree with an off-screen destination twin for ranking coverage. */
+export function dragEndpointsSnapshot(): SnapshotState {
+  return makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'View',
+      identifier: 'source',
+      label: 'Source',
+      rect: { x: 20, y: 100, width: 100, height: 60 },
+      hittable: true,
+    },
+    {
+      index: 2,
+      depth: 1,
+      parentIndex: 0,
+      type: 'View',
+      identifier: 'destination',
+      label: 'Drop',
+      rect: { x: 240, y: 500, width: 120, height: 80 },
+      hittable: true,
+    },
+    {
+      index: 3,
+      depth: 2,
+      parentIndex: 0,
+      type: 'View',
+      label: 'Drop',
+      rect: { x: -200, y: 500, width: 120, height: 80 },
+      hittable: false,
+    },
+  ]);
+}
+
 /**
  * Runner-side node payloads (the shape `ios.runner.snapshot` returns) for the
  * provider-transcript scenarios.

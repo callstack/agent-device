@@ -8,7 +8,16 @@ import {
 } from '../../../src/runtime.ts';
 
 type ContractBackendOverrides = Partial<
-  Pick<AgentDeviceBackend, 'captureSnapshot' | 'tap' | 'tapTarget' | 'fill' | 'fillTarget'>
+  Pick<
+    AgentDeviceBackend,
+    | 'captureSnapshot'
+    | 'tap'
+    | 'tapTarget'
+    | 'fill'
+    | 'fillTarget'
+    | 'performGesture'
+    | 'resolveGestureViewport'
+  >
 > & {
   platform?: AgentDeviceBackend['platform'];
 };
@@ -34,6 +43,8 @@ export function createContractDevice(
       fill: async (...args) => await overrides.fill?.(...args),
       fillTarget: overrides.fillTarget,
       typeText: async () => {},
+      performGesture: overrides.performGesture,
+      resolveGestureViewport: overrides.resolveGestureViewport,
     } satisfies AgentDeviceBackend,
     artifacts: createLocalArtifactAdapter(),
     sessions: createMemorySessionStore([{ name: 'default', snapshot }]),

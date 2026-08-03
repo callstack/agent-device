@@ -37,6 +37,12 @@ test('usage includes concise top-level commands', async () => {
   assert.match(usageText, /trace start <path> \| trace stop <path>/);
 });
 
+test('gesture help documents selectors and pinned refs for both drag endpoints', async () => {
+  const help = await usageForCommand('gesture');
+  assert.ok(help);
+  assert.match(help, /drag <source-selector\|pinned-ref> <destination-selector\|pinned-ref>/);
+});
+
 test('usage includes only global flags in the top-level global flags section', async () => {
   const usageText = await usage();
   const flagsSection = usageText.slice(

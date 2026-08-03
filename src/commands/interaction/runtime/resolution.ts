@@ -84,6 +84,7 @@ export function assertExpectedResolvedTarget(
   nodes: SnapshotState['nodes'],
   expected: ExpectedResolvedTarget | undefined,
   action: string,
+  targetRole?: 'source' | 'destination',
 ): void {
   if (!expected) return;
   const observedIdentity = readNodeLocalIdentity(node);
@@ -103,6 +104,7 @@ export function assertExpectedResolvedTarget(
       observedStructural,
       expected: expected.identity,
       expectedStructural: expected.structural,
+      ...(targetRole ? { targetRole } : {}),
     },
   );
 }
@@ -117,6 +119,7 @@ export type InteractionAction =
   | 'swipe'
   | 'pinch'
   | 'pan'
+  | 'drag'
   | 'fling'
   | 'rotate'
   | 'transform';
@@ -140,6 +143,8 @@ type ResolveInteractionTargetParams = {
   captureEvidenceBaseline?: boolean;
   /** ADR 0012 step 4 post-resolution guard; see `ExpectedResolvedTarget`. */
   expectedResolvedTarget?: ExpectedResolvedTarget;
+  /** Identifies one endpoint when a multi-target replay guard refuses. */
+  replayTargetRole?: 'source' | 'destination';
 };
 
 export async function resolveInteractionTarget(
@@ -226,12 +231,7 @@ async function resolveRefInteractionTarget(
 ): Promise<ResolvedInteractionTarget> {
   const capture = await resolveSnapshotForRef(runtime, options, target);
   const resolved = capture.resolved;
-  assertExpectedResolvedTarget(
-    resolved.node,
-    capture.snapshot.nodes,
-    params.expectedResolvedTarget,
-    params.action,
-  );
+  assertReplayTargetResolution(resolved.node, capture.snapshot.nodes, params);
   const node = params.promoteToHittableAncestor
     ? resolveActionableNodeOrThrow(capture.snapshot.nodes, resolved.node, {
         action: params.action,
@@ -315,12 +315,7 @@ async function resolveSelectorInteractionTarget(
       { hint: selectorFailureHint(resolved?.diagnostics ?? []) },
     );
   }
-  assertExpectedResolvedTarget(
-    resolved.node,
-    capture.snapshot.nodes,
-    params.expectedResolvedTarget,
-    params.action,
-  );
+  assertReplayTargetResolution(resolved.node, capture.snapshot.nodes, params);
   const node = params.promoteToHittableAncestor
     ? resolveActionableNodeOrThrow(capture.snapshot.nodes, resolved.node, {
         action: params.action,
@@ -353,6 +348,20 @@ async function resolveSelectorInteractionTarget(
       buildSelectorResolutionDisclosure(resolved, capture.snapshot.nodes),
     ),
   };
+}
+
+function assertReplayTargetResolution(
+  node: SnapshotNode,
+  nodes: SnapshotState['nodes'],
+  params: ResolveInteractionTargetParams,
+): void {
+  assertExpectedResolvedTarget(
+    node,
+    nodes,
+    params.expectedResolvedTarget,
+    params.action,
+    params.replayTargetRole,
+  );
 }
 
 // ADR 0012 decision 2 bounds: diagnostic strings and losing alternatives.

@@ -150,6 +150,13 @@ export type AdReplayTargetBindingEvidence = Readonly<{
 /** The pre-action guard `dispatchStep` threads to the interaction layer's own resolution. */
 export type AdReplayDispatchGuard = Readonly<
   | { readonly kind: 'target'; readonly guard: AdReplayVerifiedTargetGuard }
+  | {
+      readonly kind: 'targets';
+      readonly guards: Readonly<{
+        source: AdReplayVerifiedTargetGuard;
+        destination: AdReplayVerifiedTargetGuard;
+      }>;
+    }
   | { readonly kind: 'landmark'; readonly landmark: TargetAnnotationV1 }
 >;
 
@@ -210,6 +217,7 @@ export type AdReplayStepRuntime = Readonly<{
     action: SessionAction,
     resolvedAction: SessionAction,
     index: number,
+    targetRole?: 'source' | 'destination',
   ): AdReplayVerificationEntry;
   /**
    * Captures a fresh snapshot for classification or for a divergence's

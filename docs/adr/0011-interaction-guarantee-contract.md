@@ -15,6 +15,7 @@ trade-offs independently:
 | --- | --- | --- |
 | `runtime-selector` | daemon tree capture → `resolveSelectorChain` → guards → coordinate tap | full semantics |
 | `runtime-ref` | session snapshot → ref lookup → guards → coordinate tap | full semantics |
+| `target-drag` | independently resolve source + destination → guards → one pointer plan | dual-endpoint drag semantics |
 | `direct-ios-selector` | selector sent to the XCTest runner, which queries and taps natively | saves a full snapshot round trip |
 | `native-ref` | `backend.tapTarget`/`fillTarget` for `click @ref` / `fill @ref` | saves resolution round trips |
 | `coordinate` | raw x/y tap | escape hatch; semantics intentionally minimal |
@@ -265,6 +266,10 @@ dimensions as their only frame source; cheaper frame sources such as
 `app.frame`, windows, accessibility frames, or native screen bounds are
 intentionally excluded because they can diverge from full-screen screenshot
 coordinates on affected simulators.
+
+Target-authored `gesture drag` is classified as the `target-drag` path above because it resolves two
+elements and therefore inherits the element guarantees and ADR 0012 identity requirements for both.
+Coordinate-authored drag remains outside this matrix.
 
 Two-contact pan/pinch/rotate/transform planning is now owned by the typed
 gesture-plan contract in [ADR 0013](0013-unified-gesture-plans.md). It remains a

@@ -6,4 +6,5 @@ export type ReplayReportAction = {
   readonly flags: SessionAction['flags'];
   readonly result?: SessionAction['result'];
   readonly targetEvidence?: SessionAction['targetEvidence'];
+  readonly targetEvidences?: SessionAction['targetEvidences'];
 };

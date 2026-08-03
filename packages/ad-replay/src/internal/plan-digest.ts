@@ -59,6 +59,7 @@ function canonicalizeAction(
     flags: action.flags ?? {},
     runtime: action.runtime ?? null,
     targetEvidence: action.targetEvidence ?? null,
+    targetEvidences: action.targetEvidences ?? null,
     source: { path: sourcePath, line },
   };
 }

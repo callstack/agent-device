@@ -8,6 +8,9 @@ import {
   type SwipePreset,
 } from './scroll-gesture.ts';
 import {
+  DEFAULT_DRAG_DESTINATION_HOLD_MS,
+  DEFAULT_DRAG_MOVE_MS,
+  DEFAULT_DRAG_SOURCE_HOLD_MS,
   GESTURE_DURATION_MAX_MS,
   GESTURE_DURATION_MIN_MS,
   type GesturePointerCount,
@@ -99,16 +102,31 @@ export function readGesturePayload(input: unknown): GesturePayload {
     };
   }
   if (kind === 'drag') {
+    const sourceHoldMs = readOptionalInteger(record, 'sourceHoldMs', { min: 1, max: 10_000 });
+    const moveMs = readOptionalInteger(record, 'moveMs', { min: 16, max: 10_000 });
+    const destinationHoldMs = readOptionalInteger(record, 'destinationHoldMs', {
+      // Releasing immediately at the destination is valid; activating a drag
+      // at the source requires a positive hold.
+      min: 0,
+      max: 10_000,
+    });
+    const totalDurationMs =
+      (sourceHoldMs ?? DEFAULT_DRAG_SOURCE_HOLD_MS) +
+      (moveMs ?? DEFAULT_DRAG_MOVE_MS) +
+      (destinationHoldMs ?? DEFAULT_DRAG_DESTINATION_HOLD_MS);
+    if (totalDurationMs > GESTURE_DURATION_MAX_MS) {
+      throw new AppError(
+        'INVALID_ARGS',
+        `gesture drag total duration must be at most ${GESTURE_DURATION_MAX_MS}`,
+      );
+    }
     return {
       kind,
       source: readNonEmptyString(record, 'source'),
       destination: readNonEmptyString(record, 'destination'),
-      sourceHoldMs: readOptionalInteger(record, 'sourceHoldMs', { min: 1, max: 10_000 }),
-      moveMs: readOptionalInteger(record, 'moveMs', { min: 16, max: 10_000 }),
-      destinationHoldMs: readOptionalInteger(record, 'destinationHoldMs', {
-        min: 0,
-        max: 10_000,
-      }),
+      sourceHoldMs,
+      moveMs,
+      destinationHoldMs,
     };
   }
   if (record.pointerCount !== undefined) {
@@ -211,7 +229,7 @@ function readNonEmptyString(record: Record<string, unknown>, key: string): strin
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw new AppError('INVALID_ARGS', `Expected ${key} to be a non-empty string.`);
   }
-  return value;
+  return value.trim();
 }
 
 function readEnum<const Values extends readonly string[]>(

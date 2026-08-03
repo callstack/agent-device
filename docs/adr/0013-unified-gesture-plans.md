@@ -139,9 +139,12 @@ snapshot ref at each endpoint, resolves both endpoints before device injection, 
 points to one uninterrupted single-pointer plan. The plan holds at the source, moves over the authored
 duration, optionally holds at the destination, and releases. Both endpoint-resolution disclosures and
 portable selector chains are returned to the caller. Recordings replace session-local refs at both
-endpoints with those selector chains; the source additionally carries the action's `target-v1` identity
-evidence because it is the element whose mutation is initiated. Ref admission happens for both endpoints
-before either is dispatched, and the usual mutation boundary expires the frame after the gesture.
+endpoints with those selector chains and attach one `targets-v1` annotation containing independent source
+and destination identity evidence. Replay verifies both identities before pointer-down and guards both
+independent endpoint resolutions against the verified elements. Ref admission happens for both endpoints
+before either is dispatched, and the usual mutation boundary expires the frame after the gesture. Because
+this contract includes the source hold, timed movement, and destination hold phases, target-authored drag
+is admitted only on Android touch devices and iOS/iPadOS, whose adapters preserve the full plan.
 
 ADR 0011's coordinate path remains unchanged: coordinate-authored gestures do not resolve selectors or
 refs and therefore cannot claim element-targeting guarantees. Target-authored drag explicitly runs the

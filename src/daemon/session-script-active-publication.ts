@@ -2,6 +2,7 @@ import { resolveCommandRecordingEffect } from '../core/command-descriptor/regist
 import { parseWaitPositionals } from '../core/wait-positionals.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { isTouchTargetCommand } from '@agent-device/ad-script';
+import { dragGesturePayloadFromPositionals } from '@agent-device/contracts/interaction';
 import { isValidSelectorExpression } from '@agent-device/selectors';
 import type { SessionAction } from './types.ts';
 
@@ -55,6 +56,10 @@ export function validateActivePublicationActions(actions: SessionAction[]): void
 
 export function assertActivePublicationPortability(actions: SessionAction[]): void {
   for (const action of actions) {
+    if (isRecordedDrag(action)) {
+      assertPortableDragBindings(action);
+      continue;
+    }
     const targetToken = readTargetBindingToken(action);
     const ref = targetToken ?? (action.command === 'wait' ? action.positionals[0] : undefined);
     if (ref?.startsWith('@')) {
@@ -88,6 +93,41 @@ export function assertActivePublicationPortability(actions: SessionAction[]): vo
       },
     );
   }
+}
+
+function isRecordedDrag(action: SessionAction): boolean {
+  return readRecordedDrag(action) !== undefined;
+}
+
+function assertPortableDragBindings(action: SessionAction): void {
+  const drag = readRecordedDrag(action);
+  if (!drag) return;
+  const endpoints = [drag.source, drag.destination];
+  for (const endpoint of endpoints) {
+    if (endpoint?.startsWith('@')) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `Cannot publish recorded drag endpoint "${endpoint}": the session-local ref was not converted to a portable selector.`,
+        { retriable: false },
+      );
+    }
+    if (!endpoint || !isValidSelectorExpression(endpoint)) continue;
+    if (action.targetEvidences) continue;
+    throw new AppError(
+      'COMMAND_FAILED',
+      `Cannot publish recorded drag endpoint "${endpoint}": recording-time target identity evidence is missing.`,
+      {
+        retriable: false,
+        hint: 'Close this session and record the journey again so targets-v1 evidence is captured for both drag endpoints.',
+      },
+    );
+  }
+}
+
+function readRecordedDrag(action: SessionAction) {
+  return action.command === 'gesture'
+    ? dragGesturePayloadFromPositionals(action.positionals)
+    : undefined;
 }
 
 export function toActivePublicationFailure(

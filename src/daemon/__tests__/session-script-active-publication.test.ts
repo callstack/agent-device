@@ -136,6 +136,29 @@ describe('ADR 0016 active publication contract', () => {
     ).not.toThrow();
   });
 
+  test('requires portable selectors and targets-v1 evidence for both drag endpoints', () => {
+    const drag = action('gesture', ['drag', 'id="source"', 'id="destination"', '800', '500', '0']);
+    expect(() => assertActivePublicationPortability([drag])).toThrow(
+      /recording-time target identity evidence is missing/,
+    );
+    expect(() =>
+      assertActivePublicationPortability([
+        {
+          ...drag,
+          targetEvidences: {
+            source: { ...TARGET_EVIDENCE, id: 'source' },
+            destination: { ...TARGET_EVIDENCE, id: 'destination' },
+          },
+        },
+      ]),
+    ).not.toThrow();
+    expect(() =>
+      assertActivePublicationPortability([
+        { ...drag, positionals: ['drag', '@e2', 'id="destination"'] },
+      ]),
+    ).toThrow(/session-local ref/);
+  });
+
   test('refuses mutating find actions until they record target identity evidence', () => {
     expect(() =>
       assertActivePublicationPortability([action('find', ['text', 'Continue', 'click'])]),

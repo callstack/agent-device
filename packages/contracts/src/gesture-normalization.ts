@@ -2,6 +2,11 @@ import type { Point } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import { readGesturePayload, type GESTURE_KINDS, type GesturePayload } from './gesture-input.ts';
 import type { GestureCommandInput, GestureSemanticInput } from './gesture-plan-types.ts';
+import {
+  DEFAULT_DRAG_DESTINATION_HOLD_MS,
+  DEFAULT_DRAG_MOVE_MS,
+  DEFAULT_DRAG_SOURCE_HOLD_MS,
+} from './gesture-plan-types.ts';
 
 export type NormalizedPublicGesture = {
   gesture: GestureSemanticInput;
@@ -200,7 +205,7 @@ function readOriginDelta(args: readonly string[]): { origin: Point; delta: Point
 /** The explicit parser for the public CLI and `.ad` gesture syntax. */
 // fallow-ignore-next-line complexity
 export function gesturePayloadFromPositionals(
-  positionals: string[],
+  positionals: readonly string[],
   pointerCount?: number,
 ): GesturePayload {
   const kind = positionals[0];
@@ -277,6 +282,15 @@ export function gesturePayloadFromPositionals(
   }
 }
 
+/** Reads the selector-authored drag grammar without exposing its positional layout. */
+export function dragGesturePayloadFromPositionals(
+  positionals: readonly string[],
+): Extract<GesturePayload, { kind: 'drag' }> | undefined {
+  if (positionals[0] !== 'drag') return undefined;
+  const payload = gesturePayloadFromPositionals(positionals);
+  return payload.kind === 'drag' ? payload : undefined;
+}
+
 /** Serializes structured gesture input for `.ad` recordings. */
 export function gesturePayloadToPositionals(input: GesturePayload): string[] {
   switch (input.kind) {
@@ -311,14 +325,16 @@ export function gesturePayloadToPositionals(input: GesturePayload): string[] {
         input.durationMs,
       ]);
     case 'drag':
-      return compact([
+      // Materialize the independent timing slots. Omitting an interior value
+      // would shift every following positional and silently change replay.
+      return [
         input.kind,
         input.source,
         input.destination,
-        input.sourceHoldMs,
-        input.moveMs,
-        input.destinationHoldMs,
-      ]);
+        String(input.sourceHoldMs ?? DEFAULT_DRAG_SOURCE_HOLD_MS),
+        String(input.moveMs ?? DEFAULT_DRAG_MOVE_MS),
+        String(input.destinationHoldMs ?? DEFAULT_DRAG_DESTINATION_HOLD_MS),
+      ];
   }
 }
 

@@ -20,6 +20,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 
 const TARGET_ANNOTATION_TAG = 'agent-device:target-v1';
+const MULTI_TARGET_ANNOTATION_TAG = 'agent-device:targets-v1';
 // Captures the rest of the line verbatim: a line claiming the tag with a
 // garbage payload is a malformed v1 annotation, never an ordinary comment.
 //
@@ -35,15 +36,19 @@ const TARGET_ANNOTATION_TAG = 'agent-device:target-v1';
 // would reject (all-whitespace) can never reach this regex in practice.
 /** Internal-test visibility only: the pattern itself is the ReDoS regression surface. */
 export const TARGET_ANNOTATION_LINE_RE = /^#\s*agent-device:target-v(\d+)(?:\s+(\S.*))?$/;
+export const MULTI_TARGET_ANNOTATION_LINE_RE = /^#\s*agent-device:targets-v(\d+)(?:\s+(\S.*))?$/;
 
 export const TARGET_ANNOTATION_MAX_FIELD_BYTES = 256;
 export const TARGET_ANNOTATION_MAX_PAYLOAD_BYTES = 4096;
+export const MULTI_TARGET_ANNOTATION_MAX_PAYLOAD_BYTES =
+  TARGET_ANNOTATION_MAX_PAYLOAD_BYTES * 2 + 128;
 export const TARGET_ANNOTATION_MAX_ANCESTRY = 8;
 
 // The annotation SHAPE lives in contracts/ so the recorded-action type can be stated without
 // depending on this zone; every consumer imports it from there directly.
 import type {
   TargetAncestryEntry,
+  MultiTargetAnnotationV1,
   TargetAnnotationV1,
   TargetRect,
   TargetScrollRegion,
@@ -165,6 +170,17 @@ export function formatTargetAnnotationCommentLine(evidence: TargetAnnotationV1):
   return `# ${TARGET_ANNOTATION_TAG} ${serializeTargetAnnotationV1(evidence)}`;
 }
 
+export function serializeMultiTargetAnnotationV1(evidence: MultiTargetAnnotationV1): string {
+  return JSON.stringify({
+    source: buildCanonicalTargetAnnotationObject(evidence.source),
+    destination: buildCanonicalTargetAnnotationObject(evidence.destination),
+  });
+}
+
+export function formatMultiTargetAnnotationCommentLine(evidence: MultiTargetAnnotationV1): string {
+  return `# ${MULTI_TARGET_ANNOTATION_TAG} ${serializeMultiTargetAnnotationV1(evidence)}`;
+}
+
 // ---------------------------------------------------------------------------
 // Parsing (decision 3's parser bullet + "Replay-time verification" intro).
 // ---------------------------------------------------------------------------
@@ -173,6 +189,50 @@ export type TargetAnnotationLineParseResult =
   | { kind: 'none' }
   | { kind: 'future-version' }
   | { kind: 'v1'; evidence: TargetAnnotationV1 };
+
+export type MultiTargetAnnotationLineParseResult =
+  | { kind: 'none' }
+  | { kind: 'future-version' }
+  | { kind: 'v1'; evidence: MultiTargetAnnotationV1 };
+
+export function parseMultiTargetAnnotationCommentLine(
+  rawLine: string,
+): MultiTargetAnnotationLineParseResult {
+  const trimmed = rawLine.trim();
+  const match = MULTI_TARGET_ANNOTATION_LINE_RE.exec(trimmed);
+  if (!match) return { kind: 'none' };
+  if (Number(match[1]) !== 1) return { kind: 'future-version' };
+  return { kind: 'v1', evidence: parseMultiTargetAnnotationV1Payload((match[2] ?? '').trim()) };
+}
+
+export function parseMultiTargetAnnotationV1Payload(jsonText: string): MultiTargetAnnotationV1 {
+  if (utf8ByteLength(jsonText) > MULTI_TARGET_ANNOTATION_MAX_PAYLOAD_BYTES) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `targets-v1 annotation exceeds the ${MULTI_TARGET_ANNOTATION_MAX_PAYLOAD_BYTES}-byte payload cap.`,
+    );
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch {
+    throw new AppError('INVALID_ARGS', 'targets-v1 annotation is not valid JSON.');
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new AppError('INVALID_ARGS', 'targets-v1 annotation must be a JSON object.');
+  }
+  const record = parsed as Record<string, unknown>;
+  if (record.source === undefined || record.destination === undefined) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'targets-v1 annotation requires source and destination evidence.',
+    );
+  }
+  return {
+    source: parseTargetAnnotationV1Payload(JSON.stringify(record.source)),
+    destination: parseTargetAnnotationV1Payload(JSON.stringify(record.destination)),
+  };
+}
 
 /**
  * Recognizes a `# agent-device:target-vN {...}` comment line. `N !== 1` is an

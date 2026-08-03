@@ -71,6 +71,7 @@ export type AdReplayTargetStructuralDenotation = Readonly<{
  * sees the untyped bag itself.
  */
 export type AdReplayGuardMismatchEvidence = Readonly<{
+  targetRole?: 'source' | 'destination';
   observed: LocalIdentity | undefined;
   expectedStructural: AdReplayTargetStructuralDenotation | undefined;
   observedStructural: AdReplayTargetStructuralDenotation | undefined;

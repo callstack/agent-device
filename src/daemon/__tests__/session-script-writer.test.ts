@@ -134,7 +134,7 @@ test('a recorded drag refuses either unresolved ref endpoint', () => {
     ['drag', '@e2', 'id="drop-target"'],
     ['drag', 'id="drag-source"', '@e3'],
   ]) {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-drag-ref-'));
+    const root = mkdtempForTestSync('agent-device-script-writer-drag-ref-');
     const writer = new SessionScriptWriter(path.join(root, 'sessions'));
     const session = makeRepairCompleteSession('default', {
       actions: [action({ command: 'gesture', positionals })],
@@ -146,6 +146,37 @@ test('a recorded drag refuses either unresolved ref endpoint', () => {
       /recorded drag endpoint.*never resolved to a selector/,
     );
   }
+});
+
+test('a recorded drag writes and parses one targets-v1 annotation for both endpoints', () => {
+  const root = mkdtempForTestSync('agent-device-script-writer-drag-evidence-');
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const evidence = {
+    role: 'view',
+    ancestry: [],
+    sibling: 0,
+    viewportOrder: 0,
+    verification: 'verified' as const,
+  };
+  const session = makeRepairCompleteSession('default', {
+    actions: [
+      action({
+        command: 'gesture',
+        positionals: ['drag', 'id="source"', 'id="destination"', '800', '500', '0'],
+        targetEvidences: {
+          source: { ...evidence, id: 'source' },
+          destination: { ...evidence, id: 'destination' },
+        },
+      }),
+    ],
+  });
+
+  const { script, parsed } = writeAndParse(writer, session);
+  expect(script.match(/agent-device:targets-v1/g)).toHaveLength(1);
+  expect(parsed.actions[0]?.targetEvidences).toEqual({
+    source: { ...evidence, id: 'source' },
+    destination: { ...evidence, id: 'destination' },
+  });
 });
 
 test('a bare-@ref fill action also fails loud, not just click-like commands', () => {

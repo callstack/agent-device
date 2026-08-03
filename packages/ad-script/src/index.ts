@@ -67,8 +67,11 @@ export {
 
 export {
   parseTargetAnnotationV1Payload,
+  parseMultiTargetAnnotationV1Payload,
+  serializeMultiTargetAnnotationV1,
   serializeTargetAnnotationV1,
   utf8ByteLength,
+  MULTI_TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
   TARGET_ANNOTATION_MAX_ANCESTRY,
   TARGET_ANNOTATION_MAX_FIELD_BYTES,
   TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,

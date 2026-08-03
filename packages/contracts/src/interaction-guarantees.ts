@@ -72,6 +72,7 @@ export type InteractionGuarantee = (typeof INTERACTION_GUARANTEES)[number];
 export const INTERACTION_PATH_IDS = [
   'runtime-selector',
   'runtime-ref',
+  'target-drag',
   'direct-ios-selector',
   'native-ref',
   'coordinate',
@@ -221,6 +222,55 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       resolutionDisclosure: {
         kind: 'runtime',
         via: 'src/commands/interaction/runtime/resolution.ts#tryResolveRefNode',
+      },
+    },
+  },
+  'target-drag': {
+    description:
+      'Target-authored gesture drag resolves source and destination independently through the runtime tree, verifies both identities on replay, then dispatches one uninterrupted pointer plan.',
+    commands: ['gesture'],
+    guarantees: {
+      disambiguation: {
+        kind: 'runtime',
+        via: 'packages/selectors/src/internal/resolve.ts#resolveSelectorChain',
+      },
+      occlusion: {
+        kind: 'runtime',
+        via: 'src/snapshot/snapshot-occlusion.ts#isSnapshotNodeInteractionBlocked',
+      },
+      offscreen: {
+        kind: 'runtime',
+        via: 'src/snapshot/mobile-snapshot-semantics.ts#isNodeVisibleOnScreen',
+      },
+      nonHittable: {
+        kind: 'inapplicable',
+        reason:
+          'Drag endpoints name contact coordinates and intentionally need not be independently tappable controls; covered and off-screen endpoints are still refused.',
+      },
+      responseConstruction: {
+        kind: 'runtime',
+        via: 'src/daemon/handlers/interaction-gesture-response.ts#gestureResponseData',
+      },
+      responseIdentity: {
+        kind: 'runtime',
+        via: 'src/commands/interaction/runtime/gestures.ts#dragCommand',
+      },
+      verifyEvidence: {
+        kind: 'inapplicable',
+        reason: 'Target-authored drag has replay identity evidence but does not expose --verify.',
+      },
+      settleObservation: {
+        kind: 'inapplicable',
+        reason:
+          'Target-authored drag does not expose --settle; callers can wait on the destination state.',
+      },
+      errorTaxonomy: {
+        kind: 'runtime',
+        via: 'packages/selectors/src/internal/resolve.ts#formatSelectorFailure',
+      },
+      resolutionDisclosure: {
+        kind: 'runtime',
+        via: 'src/commands/interaction/runtime/gestures.ts#dragCommand',
       },
     },
   },

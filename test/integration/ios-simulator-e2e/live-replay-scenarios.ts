@@ -53,16 +53,18 @@ export async function assertFixtureReplays(context: LiveContext): Promise<void> 
     'test/integration/replays/ios/fixture/02-checkout-release.ad',
   );
   const gestureReplay = path.resolve('examples/test-app/replays/gesture-lab.ad');
+  const dragReplay = path.resolve('examples/test-app/replays/drag.ad');
   const { commandsByScript } = await runLiveReplayTestSuite({
     context,
     runStep,
     step: 'run fixture suite through public test command',
-    scripts: [checkoutReplay, gestureReplay],
+    scripts: [checkoutReplay, gestureReplay, dragReplay],
     retries: 2,
   });
   for (const [replayPath, expectedCommands] of [
     [checkoutReplay, [C.swipe]],
     [gestureReplay, [C.gesture]],
+    [dragReplay, [C.gesture]],
   ] as const) {
     assertReplayCommands(replayPath, commandsByScript.get(replayPath) ?? [], expectedCommands);
   }
@@ -72,5 +74,5 @@ export async function assertFixtureReplays(context: LiveContext): Promise<void> 
     C.test,
     'gesture fixture counters prove pan/fling/pinch/rotate/transform',
   );
-  verifyCommand(context, C.test, 'two fixture scripts pass as a suite and emit non-empty JUnit');
+  verifyCommand(context, C.test, 'fixture scripts pass as a suite and emit non-empty JUnit');
 }
