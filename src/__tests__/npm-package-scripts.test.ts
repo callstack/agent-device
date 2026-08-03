@@ -31,6 +31,7 @@ test('prepack builds the complete package without stopping the development daemo
   for (const input of [
     'pnpm-workspace.yaml',
     'packages/**',
+    'scripts/check-bundle-*.ts',
     'scripts/patch-xcuitest-runner-icon.ts',
     'scripts/sync-mcp-metadata.mjs',
     'scripts/write-xcuitest-cache-metadata.mjs',
@@ -58,6 +59,7 @@ test('Fallow exposes one changed-code gate and an explicit full-tree audit', () 
 test('the npm package build covers every package-owned build output', () => {
   assert.deepEqual(script('package:npm').split(' && '), [
     'pnpm build',
+    'pnpm check:bundle',
     'pnpm build:xcuitest:ios',
     'pnpm build:xcuitest:macos',
     'pnpm build:xcuitest:tvos',
@@ -65,6 +67,10 @@ test('the npm package build covers every package-owned build output', () => {
     'pnpm build:macos-helper:clean',
     'pnpm package:apple-runner:npm',
     'pnpm build:android',
+  ]);
+  assert.deepEqual(script('check:bundle').split(' && '), [
+    'pnpm check:bundle-owner-files',
+    'pnpm check:bundle-private-imports',
   ]);
 
   assert.deepEqual(script('build:android').split(' && '), [
