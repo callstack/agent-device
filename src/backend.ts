@@ -433,30 +433,35 @@ export type AgentDeviceBackend = {
   findText?(context: BackendCommandContext, text: string): Promise<BackendFindTextResult>;
   /**
    * #1542 off-screen refusal double-check: called ONLY at the moment the
-   * off-screen interaction guard is about to REFUSE a click/tap/gesture
-   * target, to re-read ONE element directly — bypassing whatever bulk
-   * accessibility tree the guard's verdict came from — so a stale or
-   * corrupted ancestor rect in that tree (observed on iOS: a keyboard-
-   * dismiss content-offset correction leaves a ScrollView's AX frame
-   * squeezed to a stale value while the target's own rect is already
-   * correct) cannot produce a false refusal. A SINGLE query for the target
-   * element only — no separate ancestor read: `hittable` on a fresh,
-   * single-element query is already computed against the element's current
-   * clip/window state, so it captures ancestor-clipping correctness without
-   * this layer re-deriving an ancestor's rect (live validation found scroll
-   * ancestors are often ambiguous to re-select by label alone).
+   * shared off-screen interaction guard is about to REFUSE a click/tap/
+   * gesture-target resolution, to re-confirm the target directly — bypassing
+   * whatever bulk accessibility tree the guard's verdict came from (observed
+   * on iOS: a keyboard-dismiss content-offset correction can leave a
+   * ScrollView's bulk AX frame squeezed to a stale value, or the whole bulk
+   * tree pinned at pre-gesture values, while the target is genuinely fine).
    *
-   * Returns `null` when the element cannot be unambiguously re-resolved (no
-   * stable id/label, not found, ambiguous match, or any transport failure).
-   * The guard MUST fail closed (refuse) on `null` — this is a rescue path
-   * only, never a way to relax a genuine refusal. Backends that do not
-   * support a direct, tree-independent read simply omit this method, which
-   * leaves today's refuse-on-off-screen behavior byte-for-byte unchanged.
+   * Conceptually a boolean ("is this actually visible?"), but returns the
+   * confirmed LIVE rect rather than a bare `true`/`false`: a rescue must tap
+   * at the live coordinate, never the stale bulk-tree one the guard was
+   * about to refuse — a caller that used the original rect after a rescue
+   * would silently tap the wrong place when the bulk tree is stale, not just
+   * stale-looking. `rootViewport` is the guard's own already-resolved root
+   * viewport (Application/Window frame), passed in so an implementation can
+   * validate the live rect's tap point against it without recomputing it.
+   *
+   * Returns `null` when the target cannot be positively confirmed on-screen
+   * (no stable id/label, not found, ambiguous match, not hittable, outside
+   * `rootViewport`, or any transport failure) — the guard MUST fail closed
+   * (refuse) on `null`. This is a rescue path only, never a way to relax a
+   * genuine refusal. Backends that do not support a direct, tree-independent
+   * read simply omit this method, which leaves today's refuse-on-off-screen
+   * behavior byte-for-byte unchanged.
    */
-  verifyOffscreenClickTarget?(
+  confirmOffscreenTargetVisible?(
     context: BackendCommandContext,
     node: Pick<SnapshotNode, 'identifier' | 'label'>,
-  ): Promise<{ rect: Rect; hittable: boolean } | null>;
+    rootViewport: Rect | null,
+  ): Promise<Rect | null>;
   tap?(
     context: BackendCommandContext,
     point: Point,

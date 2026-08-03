@@ -25,11 +25,8 @@ import {
 } from '../../../snapshot/snapshot-processing.ts';
 import {
   classifyOffscreenScrollDirection,
-  decideOffscreenRefusalDoubleCheck,
   isNodeVisibleOnScreen,
-  isTapPointInsideViewport,
   resolveEffectiveViewportRect,
-  type OffscreenRefusalDoubleCheckReading,
   type OffscreenScrollDirection,
 } from '../../../snapshot/mobile-snapshot-semantics.ts';
 import { containsPoint, resolveViewportRect } from '../../../utils/rect-visibility.ts';
@@ -241,7 +238,8 @@ async function resolveRefInteractionTarget(
       })
     : resolved.node;
   assertInteractionNotBlocked(node, `Ref ${target.ref}`, params.action);
-  await assertVisibleRefTarget(
+  // #1542: point/response read from the returned (possibly rescue-patched) node.
+  const visibleNode = await assertVisibleRefTarget(
     runtime,
     options,
     node,
@@ -249,14 +247,14 @@ async function resolveRefInteractionTarget(
     target.ref,
     params.action,
   );
-  const point = resolveNodeCenter(node, `Ref ${target.ref} not found or has invalid bounds`);
+  const point = resolveNodeCenter(visibleNode, `Ref ${target.ref} not found or has invalid bounds`);
   return {
     kind: 'ref',
     point,
     target: { kind: 'ref', ref: `@${resolved.ref}` },
     ...describeResolvedInteractionNode(
       runtime,
-      node,
+      visibleNode,
       capture.snapshot.nodes,
       params.action,
       resolved.resolution,
@@ -321,7 +319,8 @@ async function resolveSelectorInteractionTarget(
       })
     : resolved.node;
   assertInteractionNotBlocked(node, `Selector ${resolved.selector.raw}`, params.action);
-  await assertVisibleSelectorTarget(
+  // #1542: see the ref-target twin above.
+  const visibleNode = await assertVisibleSelectorTarget(
     runtime,
     options,
     node,
@@ -330,7 +329,7 @@ async function resolveSelectorInteractionTarget(
     params.action,
   );
   const point = resolveNodeCenter(
-    node,
+    visibleNode,
     `Selector ${resolved.selector.raw} resolved to invalid bounds`,
   );
   return {
@@ -339,7 +338,7 @@ async function resolveSelectorInteractionTarget(
     target: { kind: 'selector', selector: resolved.selector.raw },
     ...describeResolvedInteractionNode(
       runtime,
-      node,
+      visibleNode,
       capture.snapshot.nodes,
       params.action,
       buildSelectorResolutionDisclosure(resolved, capture.snapshot.nodes),
@@ -714,8 +713,8 @@ async function assertVisibleSelectorTarget(
   nodes: SnapshotState['nodes'],
   selector: string,
   action: InteractionAction,
-): Promise<void> {
-  await throwIfOffscreenInteractionTarget(runtime, options, node, nodes, {
+): Promise<SnapshotNode> {
+  return await throwIfOffscreenInteractionTarget(runtime, options, node, nodes, {
     message: `Selector ${selector} resolved to an off-screen element and is not safe to ${action}`,
     details: { reason: 'offscreen_selector', selector },
     // A selector re-resolves against a fresh snapshot on every attempt, so the
@@ -736,8 +735,8 @@ async function assertVisibleRefTarget(
   nodes: SnapshotState['nodes'],
   refInput: string,
   action: InteractionAction,
-): Promise<void> {
-  await throwIfOffscreenInteractionTarget(runtime, options, node, nodes, {
+): Promise<SnapshotNode> {
+  return await throwIfOffscreenInteractionTarget(runtime, options, node, nodes, {
     message: `Ref ${refInput} is off-screen and not safe to ${action}`,
     details: { reason: 'offscreen_ref', ref: normalizeRef(refInput) },
     // The scroll that reveals the target expires the ref frame (#1366, ADR
@@ -772,10 +771,9 @@ function scrollRevealClause(direction: OffscreenScrollDirection | null): string 
  * stored snapshot, an unresolvable/invalid ref, or a node without a usable
  * rect all make the preflight a no-op and the fast path proceeds exactly as
  * before. Promotion to a hittable ancestor stays a runtime-path behavior —
- * the preflight never changes which element the backend acts on. The one
- * exception is the REFUSAL path: `assertVisibleRefTarget` may now spend one
- * extra iOS runner round trip on a would-be off-screen refusal (#1542's
- * double-check) before erroring — cost that only exists on the path that was
+ * the preflight never changes which element the backend acts on. Exception:
+ * a would-be off-screen refusal may spend one extra iOS runner round trip
+ * (#1542's double-check) before erroring — cost only on the path that was
  * about to fail anyway.
  */
 export async function preflightNativeRefInteraction(
@@ -797,12 +795,21 @@ export async function preflightNativeRefInteraction(
   });
   if (!resolved) return {};
   assertInteractionNotBlocked(resolved.node, `Ref ${target.ref}`, action);
-  await assertVisibleRefTarget(runtime, options, resolved.node, nodes, target.ref, action);
+  // #1542: dispatches by REF, not coordinate, so no point to re-derive — but
+  // evidence/annotation below still describes the returned (visible) node.
+  const visibleNode = await assertVisibleRefTarget(
+    runtime,
+    options,
+    resolved.node,
+    nodes,
+    target.ref,
+    action,
+  );
   return {
-    ...describeNonHittableTarget(resolved.node, action),
+    ...describeNonHittableTarget(visibleNode, action),
     // ADR 0012 decision 3: the guard lookup above doubles as the record-time
     // evidence source for the fast path, at zero extra capture cost.
-    node: resolved.node,
+    node: visibleNode,
     preActionNodes: nodes,
   };
 }
@@ -810,7 +817,23 @@ export async function preflightNativeRefInteraction(
 // isNodeVisibleOnScreen (not the effective-viewport form): items inside an
 // off-screen scrollable container (closed drawer) must also count as
 // off-screen, not just items scrolled out of an on-screen container.
-async function throwIfOffscreenInteractionTarget(
+//
+// #1542: once the bulk tree says off-screen, the guard gives iOS one chance
+// to rescue a FALSE refusal via the optional backend.confirmOffscreenTargetVisible
+// hook — a stale/corrupted bulk tree can say off-screen while the app is
+// visually fine (zero cost on the accept path; runs only here). A confirmed
+// rescue returns the node PATCHED WITH THE LIVE RECT: the caller must act on
+// that returned node, never the original, because in the frozen-bulk-tree
+// manifestation the original rect can be stale even when the rescue verdict
+// is correct — tapping it would silently land at the wrong coordinate. The
+// hook fails closed (null) on anything short of a positive confirmation, so
+// a genuine refusal, or any backend without the hook, is unchanged.
+//
+// Exported (not just for callers here) for ADR 0011 registry honesty:
+// interaction-guarantees.ts's `offscreen` cells point their `via` at this
+// function, not at isNodeVisibleOnScreen alone, since this is the actual
+// end-to-end enforcement point.
+export async function throwIfOffscreenInteractionTarget(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
   node: SnapshotNode,
@@ -820,25 +843,16 @@ async function throwIfOffscreenInteractionTarget(
     details: Record<string, unknown>;
     hint: (direction: OffscreenScrollDirection | null) => string;
   },
-): Promise<void> {
+): Promise<SnapshotNode> {
   const viewport = node.rect ? resolveEffectiveViewportRect(node, nodes) : null;
-  if (!node.rect || !viewport || isNodeVisibleOnScreen(node, nodes)) return;
-  // #1542: the bulk tree says off-screen. Before refusing, give iOS one
-  // chance to rescue a FALSE refusal with a direct, AX-tree-independent read
-  // of the same element (and its scroll ancestor, if any) — a corrupted or
-  // stale ancestor rect in the bulk tree can say off-screen while the app is
-  // visually fine. Only ever runs on this about-to-fail path (zero hot-path
-  // cost), and can only rescue: any non-rescue outcome (both agree off-screen,
-  // or the direct read could not confirm) falls straight through to the same
-  // refusal as before.
-  if (
-    decideOffscreenRefusalDoubleCheck({
-      bulk: 'off-screen',
-      direct: await readOffscreenRefusalDoubleCheckReading(runtime, options, node, nodes),
-    }) === 'proceed'
-  ) {
-    return;
-  }
+  if (!node.rect || !viewport || isNodeVisibleOnScreen(node, nodes)) return node;
+  const rootViewport = resolveViewportRect(nodes, node.rect);
+  const liveRect = await runtime.backend.confirmOffscreenTargetVisible?.(
+    toBackendContext(runtime, options),
+    node,
+    rootViewport,
+  );
+  if (liveRect) return { ...node, rect: liveRect };
   // The direction that scrolls this off-screen target into view. Named in the
   // hint (and surfaced as a machine-readable detail) so the recovery is a single
   // deterministic move instead of a guess (#1366). Derived from the same
@@ -852,40 +866,4 @@ async function throwIfOffscreenInteractionTarget(
     ...(scrollDirection ? { scrollDirection } : {}),
     hint: failure.hint(scrollDirection),
   });
-}
-
-/**
- * #1542: the I/O shell around `decideOffscreenRefusalDoubleCheck`. A SINGLE
- * fresh, tree-independent probe of the target element — no separate ancestor
- * read. `hittable` on that probe is XCTest's own live hit-test, recomputed
- * from scratch against the element's CURRENT clip/window state, so it
- * already reflects ancestor clipping correctly without this layer
- * re-deriving a scroll ancestor's rect (live validation against the
- * checkout-form.ad corpus found the natural ancestor selector — its
- * accessibility label — is often ambiguous: a ScrollView and a sibling
- * wrapper node can share the same label, which would make an ancestor-rect
- * re-read fail closed on AMBIGUOUS_MATCH even in the rescuable case). The
- * fresh rect is additionally checked against the ROOT viewport the bulk tree
- * already gave us — that boundary held up as reliable in the live evidence
- * (only the scroll-container ancestor's frame was corrupted, never
- * Application/Window) — so a stale root viewport can't manufacture a rescue
- * either. Any failure to unambiguously re-resolve the element yields
- * 'unavailable', which `decideOffscreenRefusalDoubleCheck` fails closed on.
- */
-async function readOffscreenRefusalDoubleCheckReading(
-  runtime: AgentDeviceRuntime,
-  options: CommandContext,
-  node: SnapshotNode,
-  nodes: SnapshotState['nodes'],
-): Promise<OffscreenRefusalDoubleCheckReading> {
-  const verifyOffscreenClickTarget = runtime.backend.verifyOffscreenClickTarget;
-  if (!verifyOffscreenClickTarget) return { status: 'unavailable' };
-  const context = toBackendContext(runtime, options);
-  const probe = await verifyOffscreenClickTarget(context, node);
-  if (!probe) return { status: 'unavailable' };
-  const rootViewport = resolveViewportRect(nodes, probe.rect);
-  return {
-    status: 'read',
-    onScreen: probe.hittable && isTapPointInsideViewport(probe.rect, rootViewport),
-  };
 }

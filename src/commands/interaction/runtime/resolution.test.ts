@@ -3,7 +3,7 @@ import { test } from 'vitest';
 import type { BackendSnapshotOptions } from '../../../backend.ts';
 import { ref, selector } from './selector-read-utils.ts';
 import { resolveActionableTouchResolution } from '../../../core/interaction-targeting.ts';
-import { tryResolveRefNode } from './resolution.ts';
+import { throwIfOffscreenInteractionTarget, tryResolveRefNode } from './resolution.ts';
 import { parseSelectorChain, resolveSelectorChain } from '../../../selectors/index.ts';
 import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
 import type { Point } from '@agent-device/kernel/snapshot';
@@ -613,4 +613,76 @@ test('tryResolveRefNode discloses exact for a resolved ref and label-fallback fo
   });
 
   assert.equal(tryResolveRefNode(nodes, '@e9', { fallbackLabel: '' }), null);
+});
+
+// #1542: throwIfOffscreenInteractionTarget is exported for ADR 0011 registry
+// honesty (interaction-guarantees.ts's `offscreen` cells point their `via`
+// here); this direct-import test is its real consumer, mirroring
+// tryResolveRefNode above. End-to-end rescue/refuse coverage through the
+// public click/press surface lives in offscreen-double-check.test.ts.
+function fakeOffscreenFailure() {
+  return {
+    message: 'off-screen',
+    details: { reason: 'test' },
+    hint: () => 'scroll toward it',
+  };
+}
+
+test('throwIfOffscreenInteractionTarget: an on-screen node passes through unchanged', async () => {
+  const device = createInteractionDevice(makeSnapshotState([]));
+  const nodes = makeSnapshotState([
+    { index: 0, depth: 0, type: 'Application', rect: { x: 0, y: 0, width: 400, height: 800 } },
+    { index: 1, depth: 1, parentIndex: 0, type: 'Button', rect: { x: 20, y: 20, width: 40, height: 40 } },
+  ]).nodes;
+
+  const result = await throwIfOffscreenInteractionTarget(
+    device,
+    { session: 'default' },
+    nodes[1]!,
+    nodes,
+    fakeOffscreenFailure(),
+  );
+
+  assert.equal(result, nodes[1]);
+});
+
+test('throwIfOffscreenInteractionTarget: off-screen + backend confirms -> returns the node patched with the LIVE rect', async () => {
+  const device = createInteractionDevice(makeSnapshotState([]), {
+    confirmOffscreenTargetVisible: async () => ({ x: 30, y: 30, width: 40, height: 40 }),
+  });
+  const nodes = makeSnapshotState([
+    { index: 0, depth: 0, type: 'Application', rect: { x: 0, y: 0, width: 400, height: 800 } },
+    { index: 1, depth: 1, parentIndex: 0, type: 'Button', rect: { x: 20, y: 2000, width: 40, height: 40 } },
+  ]).nodes;
+
+  const result = await throwIfOffscreenInteractionTarget(
+    device,
+    { session: 'default' },
+    nodes[1]!,
+    nodes,
+    fakeOffscreenFailure(),
+  );
+
+  assert.deepEqual(result.rect, { x: 30, y: 30, width: 40, height: 40 });
+  assert.equal(result.index, nodes[1]!.index);
+});
+
+test('throwIfOffscreenInteractionTarget: off-screen + no rescue -> throws with the supplied failure shape', async () => {
+  const device = createInteractionDevice(makeSnapshotState([]));
+  const nodes = makeSnapshotState([
+    { index: 0, depth: 0, type: 'Application', rect: { x: 0, y: 0, width: 400, height: 800 } },
+    { index: 1, depth: 1, parentIndex: 0, type: 'Button', rect: { x: 20, y: 2000, width: 40, height: 40 } },
+  ]).nodes;
+
+  await assert.rejects(
+    () =>
+      throwIfOffscreenInteractionTarget(
+        device,
+        { session: 'default' },
+        nodes[1]!,
+        nodes,
+        fakeOffscreenFailure(),
+      ),
+    /off-screen/,
+  );
 });

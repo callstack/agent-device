@@ -138,6 +138,27 @@ export function isTapPointInsideViewport(rect: Rect, viewport: Rect | null): boo
   return containsPoint(viewport, rect.x + rect.width / 2, rect.y + rect.height / 2);
 }
 
+/**
+ * #1542: the pure geometry boundary the off-screen refusal double-check's
+ * direct probe (`src/daemon/offscreen-target-probe.ts`) reduces its decision
+ * to, once it has a fresh, tree-independent read of one element. A probe
+ * confirms the element genuinely on-screen only when BOTH hold: XCTest's own
+ * live hit-test says `hittable`, AND the tap point sits inside the root
+ * viewport (`isTapPointInsideViewport`, above). Either signal alone is
+ * insufficient — `hittable` with no viewport check could confirm an element
+ * that is technically tappable but whose reported rect drifted outside the
+ * app window; a viewport check with no `hittable` check could confirm an
+ * element occluded or clipped in a way geometry alone can't see. Kept pure
+ * (and separate from the network read) so it is unit-testable without a
+ * runner mock.
+ */
+export function isConfirmedOnScreenProbe(
+  probe: { rect: Rect; hittable: boolean },
+  rootViewport: Rect | null,
+): boolean {
+  return probe.hittable && isTapPointInsideViewport(probe.rect, rootViewport);
+}
+
 export function resolveEffectiveViewportRect(
   node: Pick<SnapshotNode, 'rect' | 'index' | 'parentIndex' | 'type' | 'role' | 'subrole'>,
   nodes: SnapshotNode[],
@@ -474,31 +495,6 @@ function findNearestScrollableAncestorRect(
     findNearestScrollableAncestorMatching(node, byIndex, (current) => Boolean(current.rect))
       ?.rect ?? null
   );
-}
-
-// #1542: the off-screen interaction guard's direct-read double-check. Only
-// invoked at the guard's refusal site (zero cost on the accept path). `bulk`
-// is the guard's own verdict (always 'off-screen' at the call site — kept
-// explicit so the decision reads as a two-signal reconciliation, not a
-// direct-only check); `direct` is what a fresh, AX-tree-bypassing read of the
-// SAME element found (see `readOffscreenRefusalDoubleCheckReading` in
-// resolution.ts for why a single target-only probe is sufficient — its
-// `hittable` already reflects any clipping ancestor). A missing/ambiguous/
-// failed direct read is 'unavailable' and MUST fail closed: this double-check
-// can only RESCUE a false refusal, never manufacture a new one, and never
-// suppress a genuine one when it cannot positively confirm on-screen.
-export type OffscreenRefusalDoubleCheckSignal = 'on-screen' | 'off-screen';
-export type OffscreenRefusalDoubleCheckReading =
-  | { status: 'read'; onScreen: boolean }
-  | { status: 'unavailable' };
-
-export function decideOffscreenRefusalDoubleCheck(params: {
-  bulk: OffscreenRefusalDoubleCheckSignal;
-  direct: OffscreenRefusalDoubleCheckReading;
-}): 'proceed' | 'refuse' {
-  if (params.bulk === 'on-screen') return 'proceed';
-  if (params.direct.status === 'read' && params.direct.onScreen) return 'proceed';
-  return 'refuse';
 }
 
 function findNearestScrollableAncestorMatching(
