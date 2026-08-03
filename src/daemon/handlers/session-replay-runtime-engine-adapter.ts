@@ -210,7 +210,7 @@ export function createAdReplayStepRuntime(params: {
 
     async buildRecordedUnverifiableFailure(action, index, stepArtifactPaths, scrubVars) {
       const response = await buildRecordedUnverifiableFailureResponse(
-        buildDivergenceContext(action, index, stepArtifactPaths, [...scrubVars]),
+        buildDivergenceContext(action, index, stepArtifactPaths, scrubVars),
         {
           session: ctx.sessionStore.get(ctx.sessionName),
           sessionName: ctx.sessionName,
@@ -229,7 +229,7 @@ export function createAdReplayStepRuntime(params: {
         hint: 'No capture was recorded before this target-binding failure.',
       };
       const response = buildTargetBindingFailureResponse(
-        buildDivergenceContext(action, index, stepArtifactPaths, [...scrubVars]),
+        buildDivergenceContext(action, index, stepArtifactPaths, scrubVars),
         evidence,
         observation,
       );
@@ -244,7 +244,7 @@ export function createAdReplayStepRuntime(params: {
       scrubVars,
     ) {
       const response = await buildPostDispatchTargetBindingFailureResponse(
-        buildDivergenceContext(action, index, stepArtifactPaths, [...scrubVars]),
+        buildDivergenceContext(action, index, stepArtifactPaths, scrubVars),
         evidence,
         {
           session: ctx.sessionStore.get(ctx.sessionName),
@@ -273,7 +273,7 @@ export function createAdReplayStepRuntime(params: {
         failedResponse,
         [...failureArtifactPaths],
         [...snapshotDiagnosticSamples],
-        [...scrubVars],
+        scrubVars,
       );
       // `buildReplayActionFailure` is typed `Promise<DaemonResponse>` (it
       // shares its return type with the ordinary success path elsewhere in

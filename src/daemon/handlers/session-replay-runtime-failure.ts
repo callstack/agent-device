@@ -1,5 +1,4 @@
-import type { ReplaySelectorPort } from '@agent-device/ad-replay';
-import type { collectReplayScrubbableVarValues } from '@agent-device/ad-script';
+import type { AdReplayScrubValue, ReplaySelectorPort } from '@agent-device/ad-replay';
 import {
   summarizeSnapshotTimingSamples,
   type SnapshotDiagnosticsSummary,
@@ -25,7 +24,7 @@ export async function withReplayFailureDiagnostics(params: {
   artifactPaths: string[];
   snapshotDiagnosticSamples: SnapshotTimingSample[];
   /** The engine's own live `${VAR}` scrub list, as of this point in the run — never recomputed here from a second scope object. */
-  scrubVars: ReturnType<typeof collectReplayScrubbableVarValues>;
+  scrubVars: readonly AdReplayScrubValue[];
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
@@ -52,7 +51,7 @@ async function withReplayFailureContext(params: {
   artifactPaths?: string[];
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
   /** The engine's own live `${VAR}` scrub list, as of this point in the run — never recomputed here from a second scope object. */
-  scrubVars: ReturnType<typeof collectReplayScrubbableVarValues>;
+  scrubVars: readonly AdReplayScrubValue[];
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;

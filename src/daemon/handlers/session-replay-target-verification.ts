@@ -5,12 +5,12 @@ import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
 import {
   annotationLocalIdentity,
-  collectReplayScrubbableVarValues,
   formatDivergenceActionLabel,
   type LocalIdentity,
 } from '@agent-device/ad-script';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import type {
+  AdReplayScrubValue,
   AdReplayTargetBindingEvidence,
   AdReplayTargetClassification,
   AdReplayVerificationEntry,
@@ -113,7 +113,15 @@ export type TargetBindingDivergenceContext = {
   /** #1478 P4b: the request's bound resume-stamping capability — never a second-constructed coordinator. */
   resumeStamper: ReplayResumeStamper;
   responseLevel: ResponseLevel | undefined;
-  scrubVars: ReturnType<typeof collectReplayScrubbableVarValues>;
+  /**
+   * #1555 structural-quality review ("scrub values — one name"): the
+   * engine's own `AdReplayScrubValue` shape — never a second, separately-
+   * named `ReturnType<typeof collectReplayScrubbableVarValues>` derivation
+   * for the identical concept. Readonly-compatible with the engine's
+   * `readonly AdReplayScrubValue[]` capability parameters, so no daemon call
+   * site needs a `[...scrubVars]` copy to satisfy this field.
+   */
+  scrubVars: readonly AdReplayScrubValue[];
   /** ADR 0012 step 5: the full top-level plan + its digest, for `resume`. */
   planActions: SessionAction[];
   planDigest: string;

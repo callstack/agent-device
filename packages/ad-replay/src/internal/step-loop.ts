@@ -93,9 +93,12 @@ import type {
  * dispatched, never divergence-checked, never counted.
  *
  * `scrubVars` (the `${VAR}` values a divergence report may redact) is
- * computed ONCE here, from the run's one live scope, and threaded down to
- * `verifyAndDispatchStep`/`handleActionFailure` as an explicit argument —
- * never recomputed per call inside the verify/dispatch chain.
+ * computed ONCE PER STEP — right after `resolveReplayAction` (the one call
+ * that can grow the scope's expanded-builtins set THIS step) — and threaded
+ * down to `verifyAndDispatchStep`/`handleActionFailure` as an explicit
+ * argument, never recomputed per call inside the verify/dispatch chain
+ * (`collectReplayScrubbableVarValues` is otherwise pure over `scope`, so
+ * every one of those call sites would recompute the identical value).
  */
 export async function runAdReplay(
   request: AdReplayRunRequest,
@@ -131,10 +134,19 @@ export async function runAdReplay(
     // header. Every capability below that needs an interpolated value
     // receives THIS value; every other capability still receives `action`.
     const resolvedAction = resolveReplayAction(action, scope, resolveActionLoc(request, index));
+    // This step's one scrub-value computation — see the module header.
+    // `resolvedAction` above is the only thing that can have just grown
+    // `scope`'s expanded-builtins set, so this is computed right after it.
+    const scrubVars = collectReplayScrubbableVarValues(scope);
     const sampleStart = runtime.diagnosticsMarker();
-    const stepOutcome = await verifyAndDispatchStep(runtime, scope, action, resolvedAction, index, [
-      ...artifactPaths,
-    ]);
+    const stepOutcome = await verifyAndDispatchStep(
+      runtime,
+      scrubVars,
+      action,
+      resolvedAction,
+      index,
+      [...artifactPaths],
+    );
     snapshotDiagnosticSamples.push(...runtime.diagnosticsSince(sampleStart));
     if (stepOutcome.status === 'ok') {
       stepOutcome.artifactPaths.forEach((entry) => artifactPaths.add(entry));
@@ -146,7 +158,7 @@ export async function runAdReplay(
       index,
       artifactPaths: [...artifactPaths],
       snapshotDiagnosticSamples,
-      scrubVars: collectReplayScrubbableVarValues(scope),
+      scrubVars,
     });
     return { status: 'failed', stepIndex: index, failure };
   }

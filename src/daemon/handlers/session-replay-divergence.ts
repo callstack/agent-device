@@ -63,7 +63,7 @@ export async function buildReplayFailureDivergence(params: {
   logPath: string;
   responseLevel: ResponseLevel | undefined;
   /** Replay-scope values scrubbed from every divergence string (ADR 0012: expanded variables are never serialized). */
-  scrubVars?: ReplayVarScrubEntry[];
+  scrubVars?: readonly ReplayVarScrubEntry[];
   /** ADR 0012 migration step 5: the full top-level plan, used to compute `resume.allowed`. */
   planActions: SessionAction[];
   /** SHA-256 digest of the canonical plan `planActions` came from (`computeReplayPlanDigest`). */

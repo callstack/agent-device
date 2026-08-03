@@ -1,5 +1,4 @@
 import type { SessionAction } from '@agent-device/contracts/session';
-import { collectReplayScrubbableVarValues, type ReplayVarScope } from '@agent-device/ad-script';
 import {
   deriveReplayTargetGuardMismatchEvidence,
   deriveWaitLandmarkMismatchEvidence,
@@ -8,6 +7,7 @@ import {
 } from './target-verification.ts';
 import type {
   AdReplayDispatchGuard,
+  AdReplayScrubValue,
   AdReplayStepOutcome,
   AdReplayStepRuntime,
 } from './runtime-port-types.ts';
@@ -27,23 +27,22 @@ import type {
  * (`buildRecordedUnverifiableFailure`, `buildTargetBindingFailure`,
  * `buildPostDispatchTargetBindingFailure`). `./step-loop.ts`'s `runAdReplay`
  * is this module's one caller.
- */
-
-/**
- * The verify-then-dispatch orchestrator: ADR 0012 step 4 verify + dispatch +
- * guard, ENGINE-side as of the #1555 review pass. Mirrors
- * `verifyReplayActionTarget`'s exact branch order (moved verbatim from
- * `session-replay-target-verification.ts`) — only the async daemon-owned
- * pieces (registry/session/wait-form routing, capture, classification,
- * dispatch, wire-building) were narrowed into `runtime` capabilities; the
- * plan/derive DECISIONS (`planPostResolutionTargetVerification`,
- * `planPreDispatchTargetVerification`, `deriveReplayTargetGuardMismatchEvidence`,
- * `deriveWaitLandmarkMismatchEvidence`) are called from here, never from the
- * daemon.
+ *
+ * #1555 structural-quality review ("scrub values — one name, compute
+ * collectReplayScrubbableVarValues(scope) once, thread the value, delete
+ * per-call recomputation"): this module used to take the run's live
+ * `ReplayVarScope` and call `collectReplayScrubbableVarValues(scope)` fresh
+ * at each of five separate return points within one step — always the SAME
+ * result, since nothing in this module's own flow mutates the scope
+ * (`resolveReplayAction`, the run's one scope-expanding call, already ran
+ * before `./step-loop.ts` calls in here). `runAdReplay` now computes
+ * `scrubVars` ONCE per step, right after resolving the step's action, and
+ * threads it down as a plain value — this module never imports
+ * `ReplayVarScope` or `collectReplayScrubbableVarValues` at all.
  */
 export async function verifyAndDispatchStep(
   runtime: AdReplayStepRuntime,
-  scope: ReplayVarScope,
+  scrubVars: readonly AdReplayScrubValue[],
   action: SessionAction,
   resolvedAction: SessionAction,
   index: number,
@@ -77,11 +76,11 @@ export async function verifyAndDispatchStep(
             action,
             index,
             artifactPaths,
-            collectReplayScrubbableVarValues(scope),
+            scrubVars,
           ),
         };
       case 'deferred-landmark':
-        return dispatchWithGuard(runtime, scope, action, resolvedAction, index, artifactPaths, {
+        return dispatchWithGuard(runtime, scrubVars, action, resolvedAction, index, artifactPaths, {
           kind: 'landmark',
           landmark: plan.landmark,
         });
@@ -104,7 +103,7 @@ export async function verifyAndDispatchStep(
         action,
         index,
         artifactPaths,
-        collectReplayScrubbableVarValues(scope),
+        scrubVars,
       ),
     };
   }
@@ -131,14 +130,14 @@ export async function verifyAndDispatchStep(
           ...(observation.hint !== undefined ? { causeHint: observation.hint } : {}),
         },
         artifactPaths,
-        collectReplayScrubbableVarValues(scope),
+        scrubVars,
       ),
     };
   }
 
   const classification = runtime.classifyTarget({ action, index, token, nodes: observation.nodes });
   if (classification.verified) {
-    return dispatchWithGuard(runtime, scope, action, resolvedAction, index, artifactPaths, {
+    return dispatchWithGuard(runtime, scrubVars, action, resolvedAction, index, artifactPaths, {
       kind: 'target',
       guard: classification.guard,
     });
@@ -158,7 +157,7 @@ export async function verifyAndDispatchStep(
         causeMessage: classification.causeMessage,
       },
       artifactPaths,
-      collectReplayScrubbableVarValues(scope),
+      scrubVars,
     ),
   };
 }
@@ -200,7 +199,7 @@ async function dispatchNoGuard(
  */
 async function dispatchWithGuard(
   runtime: AdReplayStepRuntime,
-  scope: ReplayVarScope,
+  scrubVars: readonly AdReplayScrubValue[],
   action: SessionAction,
   resolvedAction: SessionAction,
   index: number,
@@ -240,7 +239,7 @@ async function dispatchWithGuard(
         causeMessage: evidence.causeMessage,
       },
       artifactPaths,
-      collectReplayScrubbableVarValues(scope),
+      scrubVars,
     ),
   };
 }

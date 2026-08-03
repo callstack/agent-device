@@ -25,7 +25,7 @@ export function buildReplayDivergenceFailureResponse(params: {
   artifactPaths: string[];
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
   divergence: unknown;
-  scrubVars: ReplayVarScrubEntry[];
+  scrubVars: readonly ReplayVarScrubEntry[];
 }): DaemonResponse {
   const {
     error,
@@ -61,7 +61,7 @@ export function buildReplayDivergenceFailureResponseFromDescriptor(params: {
   artifactPaths: string[];
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
   divergence: unknown;
-  scrubVars: ReplayVarScrubEntry[];
+  scrubVars: readonly ReplayVarScrubEntry[];
 }): DaemonResponse {
   const {
     error,
