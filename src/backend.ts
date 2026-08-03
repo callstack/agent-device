@@ -431,6 +431,32 @@ export type AgentDeviceBackend = {
   ): Promise<BackendScreenshotResult | void>;
   readText?(context: BackendCommandContext, node: SnapshotNode): Promise<BackendReadTextResult>;
   findText?(context: BackendCommandContext, text: string): Promise<BackendFindTextResult>;
+  /**
+   * #1542 off-screen refusal double-check: called ONLY at the moment the
+   * off-screen interaction guard is about to REFUSE a click/tap/gesture
+   * target, to re-read ONE element directly — bypassing whatever bulk
+   * accessibility tree the guard's verdict came from — so a stale or
+   * corrupted ancestor rect in that tree (observed on iOS: a keyboard-
+   * dismiss content-offset correction leaves a ScrollView's AX frame
+   * squeezed to a stale value while the target's own rect is already
+   * correct) cannot produce a false refusal. A SINGLE query for the target
+   * element only — no separate ancestor read: `hittable` on a fresh,
+   * single-element query is already computed against the element's current
+   * clip/window state, so it captures ancestor-clipping correctness without
+   * this layer re-deriving an ancestor's rect (live validation found scroll
+   * ancestors are often ambiguous to re-select by label alone).
+   *
+   * Returns `null` when the element cannot be unambiguously re-resolved (no
+   * stable id/label, not found, ambiguous match, or any transport failure).
+   * The guard MUST fail closed (refuse) on `null` — this is a rescue path
+   * only, never a way to relax a genuine refusal. Backends that do not
+   * support a direct, tree-independent read simply omit this method, which
+   * leaves today's refuse-on-off-screen behavior byte-for-byte unchanged.
+   */
+  verifyOffscreenClickTarget?(
+    context: BackendCommandContext,
+    node: Pick<SnapshotNode, 'identifier' | 'label'>,
+  ): Promise<{ rect: Rect; hittable: boolean } | null>;
   tap?(
     context: BackendCommandContext,
     point: Point,

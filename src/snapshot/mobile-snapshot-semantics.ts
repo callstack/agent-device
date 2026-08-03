@@ -476,6 +476,31 @@ function findNearestScrollableAncestorRect(
   );
 }
 
+// #1542: the off-screen interaction guard's direct-read double-check. Only
+// invoked at the guard's refusal site (zero cost on the accept path). `bulk`
+// is the guard's own verdict (always 'off-screen' at the call site — kept
+// explicit so the decision reads as a two-signal reconciliation, not a
+// direct-only check); `direct` is what a fresh, AX-tree-bypassing read of the
+// SAME element found (see `readOffscreenRefusalDoubleCheckReading` in
+// resolution.ts for why a single target-only probe is sufficient — its
+// `hittable` already reflects any clipping ancestor). A missing/ambiguous/
+// failed direct read is 'unavailable' and MUST fail closed: this double-check
+// can only RESCUE a false refusal, never manufacture a new one, and never
+// suppress a genuine one when it cannot positively confirm on-screen.
+export type OffscreenRefusalDoubleCheckSignal = 'on-screen' | 'off-screen';
+export type OffscreenRefusalDoubleCheckReading =
+  | { status: 'read'; onScreen: boolean }
+  | { status: 'unavailable' };
+
+export function decideOffscreenRefusalDoubleCheck(params: {
+  bulk: OffscreenRefusalDoubleCheckSignal;
+  direct: OffscreenRefusalDoubleCheckReading;
+}): 'proceed' | 'refuse' {
+  if (params.bulk === 'on-screen') return 'proceed';
+  if (params.direct.status === 'read' && params.direct.onScreen) return 'proceed';
+  return 'refuse';
+}
+
 function findNearestScrollableAncestorMatching(
   node: Pick<SnapshotNode, 'index' | 'parentIndex' | 'type' | 'role' | 'subrole'>,
   byIndex: Map<number, SnapshotNode>,

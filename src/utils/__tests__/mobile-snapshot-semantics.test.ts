@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {
   buildMobileSnapshotPresentation,
   classifyOffscreenScrollDirection,
+  decideOffscreenRefusalDoubleCheck,
   isNodeVisibleInEffectiveViewport,
+  type OffscreenRefusalDoubleCheckReading,
 } from '../../snapshot/mobile-snapshot-semantics.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 
@@ -561,4 +563,54 @@ test('mobile presentation does not let contradictory scroll indicator add hidden
   const container = presentation.nodes.find((node) => node.index === 1);
   assert.equal(container?.hiddenContentAbove, true);
   assert.equal(container?.hiddenContentBelow, undefined);
+});
+
+// #1542: decideOffscreenRefusalDoubleCheck is the pure decision the off-screen
+// guard's direct-read double-check reduces to. Each branch below is proved
+// with a counterfactual per docs/agents/testing.md — see the comment on each
+// test for the one-line mutation that turns it red.
+
+test('offscreen double-check: bulk off-screen + a fresh direct read confirms on-screen -> rescued (proceed)', () => {
+  // Counterfactual ("always trust bulk"): hardcode the function to `return
+  // 'refuse'` whenever bulk is 'off-screen', ignoring `direct` entirely. This
+  // test goes red — it is the one that pins the RESCUE behavior.
+  const reading: OffscreenRefusalDoubleCheckReading = { status: 'read', onScreen: true };
+  assert.equal(
+    decideOffscreenRefusalDoubleCheck({ bulk: 'off-screen', direct: reading }),
+    'proceed',
+  );
+});
+
+test('offscreen double-check: bulk and a fresh direct read AGREE off-screen -> still refuses (guard not weakened)', () => {
+  const reading: OffscreenRefusalDoubleCheckReading = { status: 'read', onScreen: false };
+  assert.equal(
+    decideOffscreenRefusalDoubleCheck({ bulk: 'off-screen', direct: reading }),
+    'refuse',
+  );
+});
+
+test('offscreen double-check: the direct read is unavailable -> fails closed and refuses exactly as today', () => {
+  // Counterfactual ("always trust direct"): change the function to trust
+  // `direct` unconditionally, e.g. `return direct.status === 'off-screen' ?
+  // 'refuse' : 'proceed'` — treating "no positive off-screen evidence" as
+  // license to proceed instead of falling back to the bulk guard's refusal.
+  // This test goes red — it is the one that pins the FAIL-CLOSED / genuine-
+  // refusal behavior: a double-check that could not confirm on-screen must
+  // never manufacture a rescue.
+  const reading: OffscreenRefusalDoubleCheckReading = { status: 'unavailable' };
+  assert.equal(
+    decideOffscreenRefusalDoubleCheck({ bulk: 'off-screen', direct: reading }),
+    'refuse',
+  );
+});
+
+test('offscreen double-check: bulk already says on-screen -> proceeds without consulting direct', () => {
+  // The guard only ever calls this with bulk: 'off-screen' (it is the
+  // refusal-site decision), but the on-screen short circuit is part of the
+  // contract so the function reads correctly in isolation.
+  const reading: OffscreenRefusalDoubleCheckReading = { status: 'unavailable' };
+  assert.equal(
+    decideOffscreenRefusalDoubleCheck({ bulk: 'on-screen', direct: reading }),
+    'proceed',
+  );
 });

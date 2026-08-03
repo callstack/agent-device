@@ -2662,6 +2662,178 @@ test('press @ref fails fast when the target is off-screen', async () => {
   }
 });
 
+// #1542: the checkout-form.ad live repro shape — a ScrollView ancestor whose
+// bulk-tree AX frame is corrupted (keyboard-dismiss content-offset residue
+// squeezes it down to a sliver) while the target button's OWN rect is
+// already correct. The bulk guard's effective-viewport check rejects because
+// the button doesn't overlap the corrupted ancestor rect, exactly like the
+// live adjudication evidence.
+function keyboardSqueezedAncestorSnapshot() {
+  return attachRefs([
+    { index: 0, depth: 0, type: 'Application', rect: { x: 0, y: 0, width: 402, height: 874 } },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'ScrollView',
+      label: 'Checkout form',
+      rect: { x: 18, y: 381, width: 366, height: 109 }, // corrupted: keyboard-squeezed
+    },
+    {
+      index: 2,
+      depth: 2,
+      parentIndex: 1,
+      type: 'XCUIElementTypeButton',
+      label: 'Pickup',
+      identifier: 'shipping-pickup',
+      rect: { x: 126, y: 136, width: 75, height: 38 }, // the button's own rect is already correct
+      hittable: true,
+    },
+  ]);
+}
+
+test('press @ref is RESCUED when a direct read confirms the bulk ancestor rect was stale (#1542)', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'press-offscreen-ref-rescued';
+  const session = makeSession(sessionName);
+  session.snapshot = {
+    nodes: keyboardSqueezedAncestorSnapshot(),
+    createdAt: Date.now(),
+    backend: 'xctest',
+  };
+  sessionStore.set(sessionName, session);
+
+  // The direct XCTest read (bypassing the bulk tree) queries the TARGET only
+  // and reports it as genuinely on-screen and hittable — the corrupted
+  // ancestor rect never enters into a live, single-element query.
+  mockRunAppleRunnerCommand.mockImplementation(
+    async (_device, command: Record<string, unknown>) => {
+      if (command.command !== 'querySelector') return {};
+      if (command.selectorKey === 'id' && command.selectorValue === 'shipping-pickup') {
+        return {
+          found: true,
+          nodes: [{ index: 0, rect: { x: 126, y: 136, width: 75, height: 38 }, hittable: true }],
+        };
+      }
+      return { found: false, nodes: [] };
+    },
+  );
+
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'press',
+      positionals: ['@e3'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+
+  expect(response).toBeTruthy();
+  expect(response?.ok).toBe(true);
+});
+
+test('press @ref still refuses when the direct read AGREES the target is off-screen (#1542 must not weaken the guard)', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'press-offscreen-ref-still-refused';
+  const session = makeSession(sessionName);
+  session.snapshot = {
+    nodes: keyboardSqueezedAncestorSnapshot(),
+    createdAt: Date.now(),
+    backend: 'xctest',
+  };
+  sessionStore.set(sessionName, session);
+
+  // This time the direct read AGREES with the bulk guard: the live,
+  // single-element XCTest query reports the button as genuinely not
+  // hittable (it really is off-screen/covered), so the rescue must not fire.
+  mockRunAppleRunnerCommand.mockImplementation(
+    async (_device, command: Record<string, unknown>) => {
+      if (command.command !== 'querySelector') return {};
+      if (command.selectorKey === 'id' && command.selectorValue === 'shipping-pickup') {
+        return {
+          found: true,
+          nodes: [{ index: 0, rect: { x: 126, y: 136, width: 75, height: 38 }, hittable: false }],
+        };
+      }
+      return { found: false, nodes: [] };
+    },
+  );
+
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'press',
+      positionals: ['@e3'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+
+  expect(response).toBeTruthy();
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) {
+    expect(response.error.message).toMatch(/off-screen/i);
+    expect(response.error.details?.reason).toBe('offscreen_ref');
+  }
+});
+
+test('press @ref off-screen refusal is unchanged on Android — the double-check never fires cross-platform (#1542)', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-press-offscreen-ref';
+  const session = makeBaseAndroidSession(sessionName, { appBundleId: 'com.example.demo' });
+  session.snapshot = {
+    nodes: attachRefs([
+      {
+        index: 0,
+        depth: 0,
+        type: 'Window',
+        rect: { x: 0, y: 0, width: 1080, height: 2280 },
+      },
+      {
+        index: 1,
+        depth: 1,
+        parentIndex: 0,
+        type: 'android.widget.Button',
+        label: 'Far item',
+        rect: { x: 20, y: 3200, width: 200, height: 80 },
+        hittable: true,
+      },
+    ]),
+    createdAt: Date.now(),
+    backend: 'android',
+  };
+  sessionStore.set(sessionName, session);
+
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'press',
+      positionals: ['@e2'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+
+  expect(response).toBeTruthy();
+  expect(response?.ok).toBe(false);
+  // The daemon backend never attaches verifyOffscreenClickTargetRect for a
+  // non-iOS session, so the runner primitive it would use is never touched.
+  expect(mockRunAppleRunnerCommand).not.toHaveBeenCalled();
+  if (response && !response.ok) {
+    expect(response.error.details?.reason).toBe('offscreen_ref');
+  }
+});
+
 test('press @ref with a trailing label recovers within the authorized frame (no positional recapture)', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'default';
