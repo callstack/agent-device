@@ -50,12 +50,13 @@ export type ReplayStepContext = {
 };
 
 /**
- * `runAdReplay` only ever calls `handleActionFailure` right after
- * `executeStep` reported `status: 'failed'`, and `executeStep` always sets
- * `lastResponse` to that same failed response before returning — so this
- * narrowing cannot actually fail in practice. The `COMMAND_FAILED` fallback
- * exists only so `buildReplayActionFailure` (which needs a real failed
- * response to wrap) stays total if that invariant is ever violated.
+ * `runAdReplay` only ever calls `handleActionFailure` right after a step's
+ * dispatch/build-failure capability reported `status: 'failed'`, and every
+ * one of those capabilities records its response in the adapter's
+ * `lastResponse` side-map before returning — so this narrowing cannot
+ * actually fail in practice. The `COMMAND_FAILED` fallback exists only so
+ * `buildReplayActionFailure` (which needs a real failed response to wrap)
+ * stays total if that invariant is ever violated.
  */
 export function asFailedReplayStepResponse(
   response: DaemonResponse | undefined,
@@ -124,9 +125,9 @@ export function describeReplayStepValue(action: SessionAction): string | undefin
 // an action-failure divergence by its non-`action-failure` kind. Pinned
 // daemon-side: it re-inspects the already-projected `DaemonResponse` wire
 // shape to decide whether the wire-level diagnostics-augmentation step
-// applies, which is daemon/wire authority, not engine divergence-kind
-// classification (that already happened engine-side, in
-// `classifyReplayTarget`/`target-identity.ts`).
+// applies, which is daemon/wire authority, not target-binding classification
+// itself (that already happened, in `session-replay-target-classification.ts`'s
+// `classifyReplayTarget`, called from `classifyPreDispatchTarget`).
 function isCompleteTargetBindingDivergenceResponse(response: DaemonResponse): boolean {
   if (response.ok || response.error.code !== 'REPLAY_DIVERGENCE') return false;
   const divergence = response.error.details?.divergence;

@@ -13,11 +13,14 @@
  *    delegates to `src/selectors` and composes parse/resolve/list-matches/
  *    match exactly as `session-replay-target-classification.ts` does today;
  *  - a deterministic in-memory adapter
- *    (`./testing/in-memory-selector-port.ts`) for the package's own contract
- *    suite.
+ *    (`src/__tests__/test-utils/in-memory-replay-selector-port.ts` — root,
+ *    not package-internal: R11 forbids a workspace package from reaching
+ *    back into root `src/`, so once this adapter's only consumer turned out
+ *    to be a root test, it moved alongside its caller) for the package's own
+ *    contract suite (`src/daemon/__tests__/replay-selector-port-contract.test.ts`).
  *
- * Stage B builds the port and both adapters only. Handlers keep their direct
- * `src/selectors` imports until stage C migrates them onto this port.
+ * Stage B built the port and both adapters. Handlers now reach it through
+ * `@agent-device/ad-replay`'s exported `ReplaySelectorPort` type.
  */
 
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';

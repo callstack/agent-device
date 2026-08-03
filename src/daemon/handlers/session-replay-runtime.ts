@@ -54,9 +54,10 @@ export async function runReplayScriptFile(params: ReplayScriptFileParams): Promi
   const startedAt = Date.now();
   const keepSession = req.flags?.replayKeepSession === true;
   let resolved = '';
-  // Mirrors whatever the engine step loop's own `collectArtifactPaths`
-  // capability accumulates (see `createAdReplayStepRuntime`), so a mid-loop
-  // exception still reports the artifacts collected up to that point.
+  // The one accumulator `createAdReplayStepRuntime`'s adapter mutates as it
+  // dispatches/builds each step's failure (via `collectReplayActionArtifactPaths`),
+  // so a mid-loop exception still reports the artifacts collected up to that
+  // point.
   const artifactPaths = new Set<string>();
   // #1478 P4b: the one locked coordinator this request reaches the repair
   // transaction and resume watermark through.
@@ -146,13 +147,13 @@ export async function runReplayScriptFile(params: ReplayScriptFileParams): Promi
       // #1555 P1 (neutral outcomes): `runAdReplay` never holds or returns a
       // `DaemonResponse` — it only reports WHICH step failed. The real wire
       // response was built (and wrapped with diagnostics/repair-hold marking)
-      // by this adapter's own `executeStep`/`handleActionFailure`, which
+      // by this adapter's own dispatch/build-failure capabilities, which
       // stashed it in `readLastResponse`'s closure as it went; reading it
       // back here is what makes the final response byte-identical to the
       // pre-split code that threaded it straight through the engine's return
-      // value. The fallback below is unreachable in practice (`executeStep`
-      // always records a response before any failure can be reported) and
-      // exists only so this stays total.
+      // value. The fallback below is unreachable in practice (a response is
+      // always recorded before any failure can be reported) and exists only
+      // so this stays total.
       return (
         readLastResponse() ??
         errorResponse('COMMAND_FAILED', 'replay step failed with no recorded response')
