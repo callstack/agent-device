@@ -601,7 +601,6 @@ async function verifyAndDispatchStep(
   const preDispatchPlan = planPreDispatchTargetVerification({
     recorded,
     token: entry.token,
-    platform: entry.platform,
     port: runtime.port,
   });
   if (preDispatchPlan.kind === 'skip') {

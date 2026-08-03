@@ -45,7 +45,6 @@
  */
 
 import type { TargetAncestryEntry, TargetAnnotationV1 } from '@agent-device/contracts/replay';
-import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import {
   firstAncestryMismatch,
   identityFieldMismatches,
@@ -118,26 +117,42 @@ export type ReplayPreDispatchVerificationPlan =
 /**
  * The ordinary pre-dispatch gate: no recorded token means nothing to verify;
  * a malformed recorded selector is not this module's concern (the real
- * dispatch parses, and fails, it the same way an unannotated action would —
- * `resolveRecordedTarget`'s own parse gate over empty `nodes` is the same
- * `tryParseSelectorChain` check this used to run directly); only past both
- * of those does a recorded-`unverifiable` annotation refuse pre-action.
+ * dispatch parses, and fails, it the same way an unannotated action would);
+ * only past that does a recorded-`unverifiable` annotation refuse pre-action.
+ *
+ * #1555 structural-quality review ("fix the engine's parse gate to honor its
+ * own port contract"): the parse check used to call `resolveRecordedTarget`
+ * over an EMPTY tree purely to read its `parse-invalid` reason — a resolve
+ * call standing in for a parse call, and the one call site in this package
+ * that never used `readSelectorExpression` (operation 1 of the port's own
+ * three-operation contract) despite existing to answer exactly this
+ * question. `readSelectorExpression('ordinary', [token])` is the real parse
+ * check now.
+ *
+ * The outcome mapping is NOT `'invalid' -> skip` on the production adapter:
+ * `readSelectorExpression`'s `'ordinary'`/`'wait'` grammars
+ * (`splitSelectorFromArgs`) only ever record a prefix boundary once it has
+ * already parsed, so a single already-whole token that fails to parse can
+ * only come back `'not-applicable'` (no selector-shaped boundary was ever
+ * found) — production's `'invalid'` case is structurally unreachable from
+ * this call site (see `selector-port-contract.test.ts`'s "ordinary bare
+ * token: production vs. in-memory 'invalid' reachability" cell, which pins
+ * this precisely and documents where the two adapters legitimately diverge).
+ * Both non-`'expression'` outcomes are treated identically here — the
+ * historical behavior this replaces made no distinction either (a single
+ * `parse-invalid` reason covered both "not selector-shaped at all" and
+ * "selector-shaped but malformed").
  */
 export function planPreDispatchTargetVerification(params: {
   recorded: TargetAnnotationV1;
   token: string | undefined;
-  platform: Platform | PublicPlatform;
   port: ReplaySelectorPort;
 }): ReplayPreDispatchVerificationPlan {
-  const { recorded, token, platform, port } = params;
+  const { recorded, token, port } = params;
   if (token === undefined) return { kind: 'skip' };
   if (!token.startsWith('@')) {
-    const parseCheck = port.resolveRecordedTarget(token, [], {
-      platform,
-      requireRect: false,
-      allowDisambiguation: false,
-    });
-    if (parseCheck.kind === 'unresolved' && parseCheck.reason === 'parse-invalid') {
+    const parseCheck = port.readSelectorExpression('ordinary', [token]);
+    if (parseCheck.kind !== 'expression') {
       return { kind: 'skip' };
     }
   }

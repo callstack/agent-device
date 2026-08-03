@@ -307,5 +307,47 @@ for (const [name, createPort] of ADAPTERS) {
       const isExpression = port.readSelectorExpression('is', ['visible', 'label=Save']);
       assert.deepEqual(isExpression, { kind: 'expression', expression: 'label=Save', rest: [] });
     });
+
+    // -------------------------------------------------------------------
+    // readSelectorExpression: 'ordinary' bare-token 'invalid' reachability
+    // -------------------------------------------------------------------
+    // #1555 structural-quality review ("verify both adapters' readSelectorExpression
+    // handle a bare token identically"): `packages/ad-replay/src/internal/target-verification.ts`'s
+    // `planPreDispatchTargetVerification` now calls
+    // `port.readSelectorExpression('ordinary', [token])` as its parse gate
+    // (replacing an empty-tree `resolveRecordedTarget` call). The two
+    // adapters do NOT agree on the exact discriminant for a token that LOOKS
+    // selector-shaped (contains a recognized `key=`) but fails to parse:
+    //
+    //  - production's 'ordinary' grammar (`splitSelectorFromArgs`) only ever
+    //    records a candidate boundary once `tryParseSelectorChain` has
+    //    already succeeded on it — a single already-whole token that never
+    //    parses at any prefix length contributes NO boundary at all, so the
+    //    call falls through to 'not-applicable'. 'invalid' is structurally
+    //    unreachable from a single-token 'ordinary' call.
+    //  - the in-memory mini-grammar checks "looks selector-shaped" and
+    //    "parses" as two separate steps and reports 'invalid' the moment the
+    //    first shaped candidate fails the second, which a single malformed
+    //    token ('id=' — a recognized key with no value) reaches directly.
+    //
+    // This is a real, load-bearing simplification of the mini adapter (its
+    // own module comment already discloses several grammar-richness gaps),
+    // not a bug: `planPreDispatchTargetVerification` treats every
+    // non-'expression' outcome identically (skip pre-dispatch verification),
+    // so the two adapters still agree on the ONE thing that call site
+    // observes. This cell pins the exact (diverging) discriminant per
+    // adapter so a future change to either grammar cannot silently widen the
+    // gap without failing here first.
+    test("readSelectorExpression: 'ordinary' bare token that looks selector-shaped but fails to parse", () => {
+      const outcome = port.readSelectorExpression('ordinary', ['id=']);
+      if (name.startsWith('production')) {
+        assert.deepEqual(outcome, { kind: 'not-applicable' });
+      } else {
+        assert.deepEqual(outcome, { kind: 'invalid' });
+      }
+      // Both discriminants are still members of the "not a parseable
+      // expression" set the one real call site treats identically.
+      assert.notEqual(outcome.kind, 'expression');
+    });
   });
 }
