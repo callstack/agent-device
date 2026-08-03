@@ -4,7 +4,7 @@
   "private": true,
   "sideEffects": false,
   "type": "module",
-  "description": "Private replay target-identity, variable substitution, plan-digest, and report primitives for agent-device.",
+  "description": "Private native .ad replay engine for agent-device: manifest inspection (inspectAdReplay) and the step-loop execution engine (runAdReplay), plus the neutral AdReplayStepRuntime vocabulary the daemon adapter implements.",
   "dependencies": {
     "@agent-device/ad-script": "workspace:*",
     "@agent-device/contracts": "workspace:*",
