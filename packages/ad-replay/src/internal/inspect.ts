@@ -4,6 +4,7 @@ import type { SessionAction } from '@agent-device/contracts/session';
 import {
   parseReplayScriptDetailed,
   readReplayScriptMetadata,
+  resolveDeclaredScriptPlatform,
   type ReplayScriptMetadata,
 } from '@agent-device/ad-script';
 import { computeReplayPlanDigest } from './plan-digest.ts';
@@ -85,7 +86,7 @@ export function inspectAdReplay(
     actionSourcePaths: parsed.actionSourcePaths,
     metadata: {
       platform:
-        digestFlags?.platform ?? declaredScriptPlatform(parsed.actions) ?? metadata.platform,
+        digestFlags?.platform ?? resolveDeclaredScriptPlatform(parsed.actions) ?? metadata.platform,
       target: digestFlags?.target ?? metadata.target,
     },
   });
@@ -98,28 +99,4 @@ export function inspectAdReplay(
     planDigest,
     resolveEntryIndex: (params) => resolveReplayEntryIndex(params, actionCount, planDigest),
   };
-}
-
-/**
- * Mirrors the platform half of the daemon's `readScriptReplaySelection`
- * (`src/daemon/replay-device-selection.ts`) — deliberately duplicated rather
- * than imported: that daemon-owned function also resolves an app-target
- * device-selection result the digest never needs, and a root `src/` file
- * cannot become a façade dependency (R11). Both copies must keep computing
- * the SAME effective platform for the SAME script; `plan-digest.test.ts`
- * covers this one directly, and `session-replay-runtime-plan.test.ts`'s
- * "native replay applies an authored Android platform" case exercises the
- * daemon's copy against the same `runtime set --platform` shape.
- */
-function declaredScriptPlatform(actions: readonly SessionAction[]): string | undefined {
-  let platform: string | undefined;
-  for (const action of actions) {
-    if (action.command === 'runtime' && typeof action.flags.platform === 'string') {
-      platform = action.flags.platform;
-      continue;
-    }
-    if (action.command !== 'open') continue;
-    return action.runtime?.platform ?? platform;
-  }
-  return platform;
 }

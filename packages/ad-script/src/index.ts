@@ -30,6 +30,15 @@
  * Also owns `${VAR}` scope/env/resolution (`vars.ts`): the same script-
  * language semantics as `env KEY=VALUE` directive parsing, shared by the
  * daemon's replay runtime and the Maestro replay path.
+ *
+ * Also owns `resolveDeclaredScriptPlatform` (`open-script.ts`, #1555
+ * structural-quality review): the platform a script declares before its
+ * first real `open` (`runtime` actions, then the `open` action's own
+ * attached hint) — `.ad` script semantics, not engine or daemon policy, and
+ * needed independently by both `@agent-device/ad-replay`'s plan-digest
+ * precedence and the daemon's device-selection platform resolution
+ * (`src/daemon/replay-device-selection.ts`), which is exactly the "shared by
+ * record/replay AND the daemon" shape this package exists to own.
  */
 
 export {
@@ -38,6 +47,8 @@ export {
   REPLAY_VAR_KEY_RE,
 } from './internal/script.ts';
 export type { ParsedReplayScript, ReplayScriptMetadata } from './internal/script.ts';
+
+export { resolveDeclaredScriptPlatform } from './internal/open-script.ts';
 
 export {
   appendScriptSeriesFlags,
