@@ -19,7 +19,6 @@ export type ReplayVarSources = {
   cliEnv?: Record<string, string>;
 };
 
-const INTERPOLATION_RE = /(\\\$\{)|\$\{([A-Za-z_][A-Za-z0-9_.]*)(?::-((?:[^}\\]|\\.)*))?\}/g;
 const SHELL_PREFIX = 'AD_VAR_';
 const RESERVED_NAMESPACE_PREFIX = 'AD_';
 
@@ -114,36 +113,109 @@ export function readReplayShellEnvSource(raw: unknown): NodeJS.ProcessEnv {
   return process.env;
 }
 
+// `${NAME}` / `${NAME:-fallback}` / `\${` interpolation, as a single-pass
+// scanner rather than a regex: the regex form's fallback group rescans to the
+// end of the string for every `${NAME:-` prefix of an unclosed input, which is
+// quadratic on adversarial lines (CodeQL js/polynomial-redos). An unclosed
+// fallback aborts the whole scan instead — escape pairs align identically from
+// every later candidate start, so no later candidate can close either, and the
+// regex's per-candidate passthrough collapses to one literal tail.
+type ParsedInterpolation = { key: string; fallback: string | undefined; end: number };
+
+function isInterpolationNameStart(ch: string): boolean {
+  return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || ch === '_';
+}
+
+function isInterpolationNameChar(ch: string): boolean {
+  return isInterpolationNameStart(ch) || (ch >= '0' && ch <= '9') || ch === '.';
+}
+
+function isLineTerminator(ch: string): boolean {
+  return ch === '\n' || ch === '\r' || ch === '\u2028' || ch === '\u2029';
+}
+
+// A failed fallback scan reports how far it got (`abortEnd`) so the caller can
+// emit that span verbatim and resume after it instead of re-parsing from the
+// next candidate: escape pairs align identically from every candidate start
+// inside the span, so none of them can terminate where this scan could not —
+// re-scanning them would only repeat the same failure (and turn adversarial
+// inputs quadratic, the CodeQL finding this scanner exists to prevent).
+type FailedInterpolation = { abortEnd: number };
+
+function parseInterpolation(
+  raw: string,
+  start: number,
+): ParsedInterpolation | FailedInterpolation | null {
+  let i = start + 2;
+  if (i >= raw.length || !isInterpolationNameStart(raw[i]!)) return null;
+  i += 1;
+  while (i < raw.length && isInterpolationNameChar(raw[i]!)) i += 1;
+  const key = raw.slice(start + 2, i);
+  if (raw[i] === '}') return { key, fallback: undefined, end: i + 1 };
+  if (raw[i] !== ':' || raw[i + 1] !== '-') return null;
+  i += 2;
+  let fallback = '';
+  while (i < raw.length) {
+    const ch = raw[i]!;
+    if (ch === '}') return { key, fallback, end: i + 1 };
+    if (ch === '\\') {
+      const next = raw[i + 1];
+      if (next === undefined) return { abortEnd: raw.length };
+      if (isLineTerminator(next)) return { abortEnd: i + 2 };
+      fallback += next;
+      i += 2;
+      continue;
+    }
+    fallback += ch;
+    i += 1;
+  }
+  return { abortEnd: raw.length };
+}
+
 export function resolveReplayString(
   raw: string,
   scope: ReplayVarScope,
   loc: { file: string; line: number },
 ): string {
-  return raw.replace(
-    INTERPOLATION_RE,
-    (
-      match,
-      escapedLiteral: string | undefined,
-      key: string | undefined,
-      fallback: string | undefined,
-    ) => {
-      if (escapedLiteral) return '${';
-      if (!key) return match;
-      if (Object.prototype.hasOwnProperty.call(scope.values, key)) {
-        if (isReservedNamespaceKey(key)) {
-          (scope.expandedBuiltinNames ??= new Set()).add(key);
+  let out = '';
+  let i = 0;
+  while (i < raw.length) {
+    const ch = raw[i]!;
+    if (ch === '\\' && raw.startsWith('${', i + 1)) {
+      out += '${';
+      i += 3;
+      continue;
+    }
+    if (ch === '$' && raw[i + 1] === '{') {
+      const parsed = parseInterpolation(raw, i);
+      if (parsed !== null && 'abortEnd' in parsed) {
+        out += raw.slice(i, parsed.abortEnd);
+        i = parsed.abortEnd;
+        continue;
+      }
+      if (parsed !== null) {
+        const { key, fallback } = parsed;
+        if (Object.prototype.hasOwnProperty.call(scope.values, key)) {
+          if (isReservedNamespaceKey(key)) {
+            (scope.expandedBuiltinNames ??= new Set()).add(key);
+          }
+          out += String(scope.values[key]);
+        } else if (fallback !== undefined) {
+          out += fallback;
+        } else {
+          throw new AppError(
+            'INVALID_ARGS',
+            `Unresolved variable \${${key}} at ${loc.file}:${loc.line}.`,
+          );
         }
-        return String(scope.values[key]);
+        i = parsed.end;
+        continue;
       }
-      if (fallback !== undefined) {
-        return fallback.replace(/\\(.)/g, '$1');
-      }
-      throw new AppError(
-        'INVALID_ARGS',
-        `Unresolved variable \${${key}} at ${loc.file}:${loc.line}.`,
-      );
-    },
-  );
+    }
+    out += ch;
+    i += 1;
+  }
+  return out;
 }
 
 export function resolveReplayAction(
