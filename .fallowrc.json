@@ -50,7 +50,11 @@
     "yaml",
     // @agent-device/provider-limrun owns the source import, while the published
     // root build externalizes @limrun/api and retains runtime imports in packed chunks.
-    "@limrun/api"
+    "@limrun/api",
+    // Packaging linters with no importable API surface here: scripts/check-package.ts runs their
+    // `node_modules/.bin` shims as subprocesses, which dependency analysis cannot follow to an import.
+    "publint",
+    "@arethetypeswrong/cli"
   ],
   "ignoreExports": [
     {

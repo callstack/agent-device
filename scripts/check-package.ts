@@ -48,9 +48,18 @@ function run(command: string, args: string[], cwd: string): string {
   });
 }
 
-function localBin(name: string): string {
-  return path.join(repoRoot, 'node_modules', '.bin', name);
-}
+/**
+ * The two established packaging linters, run against the tarball rather than the working tree.
+ * Invoked through their `node_modules/.bin` shims and not `pnpm exec`, because this gate also runs on
+ * the minimum supported Node, which the repo's pinned pnpm refuses to start on.
+ */
+const TARBALL_LINTERS = [
+  { dependency: 'publint', bin: 'publint', args: ['--strict'] },
+  // The `esm-only` profile is the honest one for this package (`type: module`,
+  // `engines.node >= 22.12`): it keeps every ESM and bundler resolution failing, and drops the
+  // CJS-consumer and pre-`exports` node10 rules that no supported consumer can hit.
+  { dependency: '@arethetypeswrong/cli', bin: 'attw', args: ['--profile', 'esm-only'] },
+] as const;
 
 function step(message: string): void {
   process.stdout.write(`${message}\n`);
@@ -68,11 +77,14 @@ function packTarball(): string {
 }
 
 function lintTarball(tarball: string): void {
-  run(localBin('publint'), ['--strict', tarball], repoRoot);
-  // This package is ESM-only (`type: module`, `engines.node >= 22.12`), so the `esm-only` profile is
-  // the honest one: it keeps every ESM and bundler resolution failing, and drops the CJS-consumer and
-  // pre-`exports` node10 rules that no supported consumer can hit.
-  run(localBin('attw'), ['--profile', 'esm-only', tarball], repoRoot);
+  for (const linter of TARBALL_LINTERS) {
+    run(
+      path.join(repoRoot, 'node_modules', '.bin', linter.bin),
+      [...linter.args, tarball],
+      repoRoot,
+    );
+  }
+  step(`Linted the tarball with ${TARBALL_LINTERS.map((linter) => linter.bin).join(' and ')}.`);
 }
 
 /**
@@ -112,6 +124,28 @@ function moduleSpecifiers(file: string, source: string): string[] {
   ];
 }
 
+function isExternalPackage(specifier: string): boolean {
+  return !specifier.startsWith('.') && !specifier.startsWith('/') && !builtins.has(specifier);
+}
+
+/** Maps each package the shipped files import to the files importing it. */
+function shippedImports(installedRoot: string): Map<string, string[]> {
+  const importedBy = new Map<string, string[]>();
+  for (const file of walkFiles(installedRoot, (file) => /\.(?:m?js|d\.ts)$/.test(file))) {
+    const relative = path.relative(installedRoot, file);
+    const specifiers = moduleSpecifiers(file, fs.readFileSync(file, 'utf8'));
+    for (const specifier of specifiers.filter(isExternalPackage)) {
+      const name = packageNameOf(specifier);
+      importedBy.set(name, [...(importedBy.get(name) ?? []), `${specifier} in ${relative}`]);
+    }
+  }
+  return importedBy;
+}
+
+function mismatch(heading: string, entries: readonly string[], fix: string): string[] {
+  return entries.length === 0 ? [] : [heading, ...entries.map((entry) => `  - ${entry}`), fix];
+}
+
 /**
  * Both directions matter. An import the manifest does not declare breaks the install; a declared
  * dependency nothing imports is an install every user pays for and no code reaches — how `pngjs`
@@ -119,40 +153,23 @@ function moduleSpecifiers(file: string, source: string): string[] {
  */
 function auditDependencyClosure(installedRoot: string, manifest: PackedManifest): void {
   const declared = new Set(Object.keys(manifest.dependencies ?? {}));
-  const importedBy = new Map<string, string[]>();
-  const undeclared: string[] = [];
+  const importedBy = shippedImports(installedRoot);
+  const problems = [
+    ...mismatch(
+      'Imported but not declared in "dependencies" (a published install cannot resolve these):',
+      [...importedBy].filter(([name]) => !declared.has(name)).flatMap(([, sites]) => sites),
+      'Declare the package, or add it to `deps.alwaysBundle` in tsdown.config.ts.',
+    ),
+    ...mismatch(
+      'Declared in "dependencies" but never imported (every user installs these for nothing):',
+      [...declared].filter((name) => !importedBy.has(name)),
+      'Remove the dependency, or stop bundling it in tsdown.config.ts.',
+    ),
+  ];
 
-  for (const file of walkFiles(installedRoot, (file) => /\.(?:m?js|d\.ts)$/.test(file))) {
-    const relative = path.relative(installedRoot, file);
-    for (const specifier of moduleSpecifiers(file, fs.readFileSync(file, 'utf8'))) {
-      if (specifier.startsWith('.') || specifier.startsWith('/') || builtins.has(specifier))
-        continue;
-      const name = packageNameOf(specifier);
-      if (!declared.has(name)) undeclared.push(`${specifier} in ${relative}`);
-      importedBy.set(name, [...(importedBy.get(name) ?? []), relative]);
-    }
-  }
-
-  const unused = [...declared].filter((name) => !importedBy.has(name));
-  if (undeclared.length > 0 || unused.length > 0) {
+  if (problems.length > 0) {
     throw new Error(
-      [
-        'The published dependency closure does not match what the package imports.',
-        ...(undeclared.length > 0
-          ? [
-              'Imported but not declared in "dependencies" (a published install cannot resolve these):',
-              ...undeclared.map((entry) => `  - ${entry}`),
-              'Declare the package, or add it to `deps.alwaysBundle` in tsdown.config.ts.',
-            ]
-          : []),
-        ...(unused.length > 0
-          ? [
-              'Declared in "dependencies" but never imported (every user installs these for nothing):',
-              ...unused.map((name) => `  - ${name}`),
-              'Remove the dependency, or stop bundling it in tsdown.config.ts.',
-            ]
-          : []),
-      ].join('\n'),
+      `The published dependency closure does not match what the package imports.\n${problems.join('\n')}`,
     );
   }
   step(`Verified the dependency closure: ${[...importedBy.keys()].sort().join(', ')}.`);

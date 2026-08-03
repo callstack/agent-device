@@ -184,8 +184,12 @@ jobs:
 
       # Packs, lints the tarball with publint/attw, installs it outside the workspace, and imports
       # every published entry point before running the CLI. See scripts/check-package.ts.
+      #
+      # Runs the script directly rather than through `pnpm check:package`: the repo's pinned pnpm
+      # requires Node >= 22.13 and refuses to start on the 22.12 floor this job exists to cover. The
+      # gate itself only needs `node` and `npm`, so it is the package.json script minus the launcher.
       - name: Verify the published package on Node.js 22.12
-        run: pnpm check:package
+        run: node --experimental-strip-types scripts/check-package.ts
 
   fallow:
     name: Fallow Code Quality
