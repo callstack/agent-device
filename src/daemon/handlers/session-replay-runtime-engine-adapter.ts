@@ -1,6 +1,17 @@
-import type { DaemonRequest, DaemonResponse, SessionAction } from '../types.ts';
+import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionAction } from '../types.ts';
+import type { SessionStore } from '../session-store.ts';
+import { errorResponse } from './response.ts';
+import { readReplaySelectorDisplayValue } from '../replay-selector-port.ts';
+import type { ResponseLevel } from '@agent-device/kernel/contracts';
+import type { SnapshotTimingSample } from '@agent-device/contracts/capture';
+import { withReplayFailureDiagnostics } from './session-replay-runtime-failure.ts';
+import type { ReplayCoordinator } from '../session-replay-coordinator.ts';
 import { invokeReplayAction } from './session-replay-action-runtime.ts';
-import type { AdReplayStepFailure, AdReplayStepRuntime } from '@agent-device/ad-replay';
+import type {
+  AdReplayStepFailure,
+  AdReplayStepRuntime,
+  ReplaySelectorPort,
+} from '@agent-device/ad-replay';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import {
   applyReplayDispatchGuard,
@@ -19,14 +30,6 @@ import {
   resolveTargetVerificationEntry,
   type TargetBindingDivergenceContext,
 } from './session-replay-target-verification.ts';
-import {
-  asFailedReplayStepResponse,
-  buildReplayActionFailure,
-  describeReplayStepValue,
-  readSessionSnapshotSampleCount,
-  readSessionSnapshotSamplesSince,
-  type ReplayStepContext,
-} from './session-replay-runtime-step-support.ts';
 import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
 
 /**
@@ -35,17 +38,16 @@ import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
  * `createAdReplayStepRuntime`. See that file's `runReplayScriptFile` for the request-level
  * orchestration this adapter plugs into.
  *
- * #1555 structural-quality review ("shrink the runtime adapter toward the
- * plan's <300 LOC metric"): the wire-narrowing concern (guard threading,
- * `details` bag -> typed evidence, dispatch-failure classification) moved to
- * `session-replay-dispatch-narrowing.ts`; `ReplayStepContext` and the
- * failure-wrapping/diagnostics support helpers moved to
- * `session-replay-runtime-step-support.ts` (re-exporting `ReplayStepContext`
- * by name so this file's own importers see no path change). This file is
- * left with exactly the `createAdReplayStepRuntime` factory and the small
- * closures only it needs.
+ * The wire-narrowing concern (guard threading, `details` bag -> typed
+ * evidence, dispatch-failure classification) lives in
+ * `session-replay-dispatch-narrowing.ts` — a real seam with one nameable job.
+ * Everything else the factory's capabilities delegate to (the step context
+ * shape, failure wrapping, progress display, diagnostics sampling) lives
+ * below in this file: a briefly-extracted `-step-support` module was folded
+ * back after review judged it a size-target fragment, not a concern boundary
+ * — this adapter's honest size is ~430 lines, renegotiated from the plan's
+ * <300 metric on #1478.
  */
-export type { ReplayStepContext } from './session-replay-runtime-step-support.ts';
 
 /**
  * #1478 P5 stage C2b (narrowed further by the #1555 review's neutral-outcomes
@@ -311,4 +313,132 @@ export function createAdReplayStepRuntime(params: {
       readSessionSnapshotSamplesSince(ctx.sessionStore, ctx.sessionName, marker),
   };
   return { runtime, readLastResponse: () => lastResponse };
+}
+
+/**
+ * Per-run invariants for a single replay step (ADR 0012 step 4 verify +
+ * dispatch + guard). No `${VAR}` scope here (#1555 review P1, "move variable
+ * semantics/planning behind the replay entrypoint") — the engine
+ * (`runAdReplay`) builds and owns it; the adapter never resolves an action
+ * or reads a scope value itself.
+ */
+export type ReplayStepContext = {
+  replayReq: DaemonRequest;
+  sessionName: string;
+  sessionStore: SessionStore;
+  logPath: string;
+  resolved: string;
+  actions: SessionAction[];
+  actionLines: number[];
+  actionSourcePaths: (string | undefined)[] | undefined;
+  planDigest: string;
+  actionTracePath: string | undefined;
+  responseLevel: ResponseLevel | undefined;
+  invoke: DaemonInvokeFn;
+  signal: AbortSignal | undefined;
+  /** #1478 P4b: the one locked gateway to this request's repair transaction. */
+  coordinator: ReplayCoordinator;
+  /** #1478 P5 stage C: the one selector-port instance this request threads through the divergence-report chain. */
+  port: ReplaySelectorPort;
+};
+
+/**
+ * `runAdReplay` only ever calls `handleActionFailure` right after a step's
+ * dispatch/build-failure capability reported `status: 'failed'`, and every
+ * one of those capabilities records its response in the adapter's
+ * `lastResponse` side-map before returning — so this narrowing cannot
+ * actually fail in practice. The `COMMAND_FAILED` fallback exists only so
+ * `buildReplayActionFailure` (which needs a real failed response to wrap)
+ * stays total if that invariant is ever violated.
+ */
+function asFailedReplayStepResponse(
+  response: DaemonResponse | undefined,
+): Extract<DaemonResponse, { ok: false }> {
+  if (response && !response.ok) return response;
+  return errorResponse(
+    'COMMAND_FAILED',
+    'replay step reported failure with no recorded response',
+  ) as Extract<DaemonResponse, { ok: false }>;
+}
+
+async function buildReplayActionFailure(
+  ctx: ReplayStepContext,
+  req: DaemonRequest,
+  action: SessionAction,
+  index: number,
+  response: Extract<DaemonResponse, { ok: false }>,
+  artifactPaths: string[],
+  snapshotDiagnosticSamples: SnapshotTimingSample[],
+  scrubVars: TargetBindingDivergenceContext['scrubVars'],
+): Promise<DaemonResponse> {
+  const heldResponse = (failure: DaemonResponse): DaemonResponse =>
+    ctx.coordinator.markSessionHeldIfArmed(failure);
+  if (isCompleteTargetBindingDivergenceResponse(response)) return heldResponse(response);
+  return heldResponse(
+    await withReplayFailureDiagnostics({
+      response,
+      action,
+      index,
+      replayPath: ctx.resolved,
+      sourcePath: ctx.actionSourcePaths?.[index] ?? ctx.resolved,
+      sourceLine: ctx.actionLines[index] ?? 1,
+      artifactPaths,
+      snapshotDiagnosticSamples,
+      scrubVars,
+      req,
+      sessionName: ctx.sessionName,
+      sessionStore: ctx.sessionStore,
+      resumeStamper: ctx.coordinator.resumeStamper,
+      logPath: ctx.logPath,
+      planActions: ctx.actions,
+      planDigest: ctx.planDigest,
+      port: ctx.port,
+    }),
+  );
+}
+
+/**
+ * A replay-test progress step's display value: the recorded selector's
+ * label/text/id term value when every alternative agrees on ONE value, else
+ * `undefined`. Needs `readReplaySelectorDisplayValue`'s private selector AST
+ * (`replay-selector-port.ts` deliberately keeps it daemon-only — see that
+ * file's own comment), so this stays daemon-side and is handed to the engine
+ * loop as the narrow `describeStepValue` capability.
+ */
+function describeReplayStepValue(action: SessionAction): string | undefined {
+  const positionals = action.positionals ?? [];
+  const selectorValue = readReplaySelectorDisplayValue(positionals[0]);
+  if (selectorValue) return selectorValue;
+  if (positionals.length === 0) return undefined;
+  return positionals.join(' ');
+}
+
+// ADR 0012 step 4: a target-binding divergence is already a complete, final
+// REPLAY_DIVERGENCE built from its own pre-action capture — distinguished from
+// an action-failure divergence by its non-`action-failure` kind. Pinned
+// daemon-side: it re-inspects the already-projected `DaemonResponse` wire
+// shape to decide whether the wire-level diagnostics-augmentation step
+// applies, which is daemon/wire authority, not target-binding classification
+// itself (that already happened, in `session-replay-target-classification.ts`'s
+// `classifyReplayTarget`, called from `classifyPreDispatchTarget`).
+function isCompleteTargetBindingDivergenceResponse(response: DaemonResponse): boolean {
+  if (response.ok || response.error.code !== 'REPLAY_DIVERGENCE') return false;
+  const divergence = response.error.details?.divergence;
+  const kind =
+    divergence && typeof divergence === 'object'
+      ? (divergence as Record<string, unknown>).kind
+      : undefined;
+  return typeof kind === 'string' && kind !== 'action-failure';
+}
+
+function readSessionSnapshotSampleCount(sessionStore: SessionStore, sessionName: string): number {
+  return sessionStore.get(sessionName)?.snapshotDiagnostics?.samples.length ?? 0;
+}
+
+function readSessionSnapshotSamplesSince(
+  sessionStore: SessionStore,
+  sessionName: string,
+  start: number,
+): SnapshotTimingSample[] {
+  return sessionStore.get(sessionName)?.snapshotDiagnostics?.samples.slice(start) ?? [];
 }
