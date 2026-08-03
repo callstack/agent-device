@@ -147,9 +147,18 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
     kind: 'runtime',
     via: 'src/snapshot/snapshot-occlusion.ts#isSnapshotNodeInteractionBlocked',
   },
+  // #1542: the base decision is isNodeVisibleOnScreen (bulk accessibility
+  // tree), but throwIfOffscreenInteractionTarget is the actual end-to-end
+  // enforcement point — on iOS (local, non-provider sessions only) a would-be
+  // refusal is re-checked against a live, tree-independent read via the
+  // optional AgentDeviceBackend.confirmOffscreenTargetVisible hook before
+  // erroring, and a confirmed rescue re-targets the action at the LIVE rect,
+  // not the bulk one. Every other platform, and any backend that omits the
+  // hook, refuses on isNodeVisibleOnScreen's verdict unchanged — this is a
+  // rescue-only override, never a way to relax a genuine refusal.
   offscreen: {
     kind: 'runtime',
-    via: 'src/snapshot/mobile-snapshot-semantics.ts#isNodeVisibleOnScreen',
+    via: 'src/commands/interaction/runtime/resolution.ts#throwIfOffscreenInteractionTarget',
   },
   nonHittable: {
     kind: 'runtime',
@@ -291,9 +300,16 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'src/snapshot/snapshot-occlusion.ts#isSnapshotNodeInteractionBlocked',
       },
+      // Same enforcement point as the runtime-tree paths (#1542): the
+      // preflight guard IS throwIfOffscreenInteractionTarget, which can
+      // rescue via the optional iOS confirmOffscreenTargetVisible hook — see
+      // the comment on RUNTIME_TREE_SHARED_GUARANTEES.offscreen above. This
+      // path is web-only in production (no mobile backend implements
+      // tapTarget/fillTarget), so the rescue hook never fires here in
+      // practice, but the code path is identical.
       offscreen: {
         kind: 'runtime',
-        via: 'src/snapshot/mobile-snapshot-semantics.ts#isNodeVisibleOnScreen',
+        via: 'src/commands/interaction/runtime/resolution.ts#throwIfOffscreenInteractionTarget',
       },
       // Annotation only (targetHittable/hint on the result): promotion to a
       // hittable ancestor stays a runtime-path behavior — the preflight never
