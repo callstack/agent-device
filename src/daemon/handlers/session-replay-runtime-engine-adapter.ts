@@ -93,7 +93,14 @@ import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
 export function createAdReplayStepRuntime(params: {
   ctx: ReplayStepContext;
   req: DaemonRequest;
-  /** The outer exception-reporting mirror (see `runReplayScriptFile`'s catch block). */
+  /**
+   * The run's ONE artifact ledger, owned by `runReplayScriptFile`. `dispatchStep`
+   * is its only writer, and returns its contents for the engine to thread as a
+   * plain value — the engine keeps no accumulator of its own (#1478 P5
+   * follow-up; see `@agent-device/ad-replay`'s `step-loop.ts` header). Also what
+   * `runReplayScriptFile`'s catch block reports, so a mid-loop throw still names
+   * the artifacts collected up to that point.
+   */
   artifactPaths: Set<string>;
   onStep: ReplayTestAttemptStepSink | undefined;
   armSaveScript: () => void;
@@ -218,10 +225,14 @@ export function createAdReplayStepRuntime(params: {
         invoke: ctx.invoke,
       });
       lastResponse = response;
-      const entries = collectReplayActionArtifactPaths(response);
-      entries.forEach((entry) => artifactPaths.add(entry));
-      if (response.ok) return { status: 'ok', artifactPaths: entries };
-      return classifyReplayDispatchFailure(response, guard, entries);
+      // The run's one artifact ledger: this step's entries are written into
+      // it here, and its CONTENTS (not just this step's entries) are what the
+      // engine gets back to thread as its own `artifactPaths` value — see
+      // `createAdReplayStepRuntime`'s `artifactPaths` parameter.
+      collectReplayActionArtifactPaths(response).forEach((entry) => artifactPaths.add(entry));
+      const ledger = [...artifactPaths];
+      if (response.ok) return { status: 'ok', artifactPaths: ledger };
+      return classifyReplayDispatchFailure(response, guard, ledger);
     },
 
     async buildRecordedUnverifiableFailure(action, index, stepArtifactPaths, scrubVars) {

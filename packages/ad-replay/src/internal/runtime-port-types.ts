@@ -50,7 +50,12 @@ export type AdReplayStepFailure = Readonly<{
   readonly artifactPaths: readonly string[];
 }>;
 
-/** `verify-dispatch.ts`'s per-dispatch result: pass, or a neutral failure (never a wire response). */
+/**
+ * `verify-dispatch.ts`'s per-dispatch result: pass, or a neutral failure
+ * (never a wire response). An `ok` outcome's `artifactPaths` is the run's
+ * whole artifact ledger as of this step, threaded straight through from
+ * `dispatchStep` — see `AdReplayStepRuntime.dispatchStep`.
+ */
 export type AdReplayStepOutcome =
   | Readonly<{ readonly status: 'ok'; readonly artifactPaths: readonly string[] }>
   | Readonly<{ readonly status: 'failed'; readonly failure: AdReplayStepFailure }>;
@@ -243,6 +248,12 @@ export type AdReplayStepRuntime = Readonly<{
    * actually gets sent; `action` is threaded alongside it only for
    * daemon-owned, non-interpolation decisions (e.g. a recorded-input
    * variable heuristic read off the ORIGINAL fill text).
+   *
+   * Sole writer of the run's artifact ledger, and the reason the engine keeps
+   * no accumulator of its own: the incoming `artifactPaths` is the PRE-step
+   * ledger, and every returned `artifactPaths` is the ledger AFTER this
+   * step's entries were recorded — cumulative for the run, not just this
+   * step's (#1478 P5 follow-up; see `./step-loop.ts`'s header).
    */
   dispatchStep(
     action: SessionAction,

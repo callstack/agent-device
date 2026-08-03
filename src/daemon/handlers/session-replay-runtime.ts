@@ -54,10 +54,11 @@ export async function runReplayScriptFile(params: ReplayScriptFileParams): Promi
   const startedAt = Date.now();
   const keepSession = req.flags?.replayKeepSession === true;
   let resolved = '';
-  // The one accumulator `createAdReplayStepRuntime`'s adapter mutates as it
-  // dispatches/builds each step's failure (via `collectReplayActionArtifactPaths`),
-  // so a mid-loop exception still reports the artifacts collected up to that
-  // point.
+  // The run's ONE artifact ledger (#1478 P5 follow-up): `createAdReplayStepRuntime`'s
+  // `dispatchStep` is its only writer and hands its contents back to the engine,
+  // which threads them as a plain value rather than accumulating a second set of
+  // its own. Read below by the catch block, so a mid-loop exception still reports
+  // the artifacts collected up to that point.
   const artifactPaths = new Set<string>();
   // #1478 P4b: the one locked coordinator this request reaches the repair
   // transaction and resume watermark through.

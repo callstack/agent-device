@@ -68,6 +68,26 @@ import type {
  * computed ONCE per run and threaded to each build-failure/`handleActionFailure`
  * capability as an explicit `scrubVars` argument rather than recomputed per
  * call site — the daemon never holds a `ReplayVarScope` value at all.
+ *
+ * #1478 P5 follow-up (one daemon-owned artifact ledger): artifact-path
+ * accumulation used to be DOUBLE-WRITTEN — `dispatchStep` added each step's
+ * entries to the daemon's own `Set` (`runReplayScriptFile`'s, read by its
+ * catch block so a mid-loop throw still reports what was collected) AND
+ * returned them for this loop to add to a second `Set` of its own. Two
+ * mutable collections, kept in sync by hand, with no single owner. The
+ * daemon's `Set` is now the run's ONE ledger: `dispatchStep` writes it and
+ * returns its contents, and `artifactPaths` below is just the latest such
+ * return value — re-bound, never mutated. `AdReplayRunOutcome.artifactPaths`
+ * stays a façade field (it is wire-relevant: the daemon's success response
+ * reports it), but it is now a projection of what the capability handed back
+ * rather than an independently accumulated set.
+ *
+ * The ledger deliberately does NOT carry a divergence build's own artifacts
+ * (`buildTargetBindingFailure` and friends produce a fresh capture): those
+ * reach `handleActionFailure` through `mergeArtifactPaths` as a derived
+ * value. Writing them into the ledger instead would change what the daemon's
+ * catch block reports when `handleActionFailure` itself throws — the one
+ * observable difference between the two old sets, preserved exactly.
  */
 
 /**
@@ -109,7 +129,10 @@ export async function runAdReplay(
   // in place as each step resolves (tracks which builtins actually expanded,
   // for `collectReplayScrubbableVarValues`), never rebuilt mid-run.
   const scope = buildReplayVarScope(request.varSources);
-  const artifactPaths = new Set<string>();
+  // The run's artifact ledger AS THIS ENGINE SEES IT: a plain value re-bound
+  // to whatever `dispatchStep` last returned, never a collection this module
+  // mutates — see the module header's ledger note.
+  let artifactPaths: readonly string[] = [];
   const snapshotDiagnosticSamples: SnapshotTimingSample[] = [];
   const terminalCloseIndex = resolveSuppressedTerminalCloseIndex(actions);
   let replayed = 0;
@@ -145,18 +168,17 @@ export async function runAdReplay(
       action,
       resolvedAction,
       index,
-      [...artifactPaths],
+      artifactPaths,
     );
     snapshotDiagnosticSamples.push(...runtime.diagnosticsSince(sampleStart));
     if (stepOutcome.status === 'ok') {
-      stepOutcome.artifactPaths.forEach((entry) => artifactPaths.add(entry));
+      artifactPaths = stepOutcome.artifactPaths;
       continue;
     }
-    stepOutcome.failure.artifactPaths.forEach((entry) => artifactPaths.add(entry));
     const failure = await runtime.handleActionFailure({
       action,
       index,
-      artifactPaths: [...artifactPaths],
+      artifactPaths: mergeArtifactPaths(artifactPaths, stepOutcome.failure.artifactPaths),
       snapshotDiagnosticSamples,
       scrubVars,
     });
@@ -168,6 +190,22 @@ export async function runAdReplay(
     artifactPaths: [...artifactPaths],
     snapshotDiagnosticSamples,
   };
+}
+
+/**
+ * The one place this engine combines artifact paths: a failing step's OWN
+ * artifacts (a divergence build's fresh capture, which the daemon ledger does
+ * not carry — see the module header) unioned onto the ledger, for
+ * `handleActionFailure` alone. Deliberately a derived value, not a write: the
+ * ledger stays the daemon's, and a failing step always ends the run, so
+ * nothing downstream ever observes this union.
+ */
+function mergeArtifactPaths(
+  ledger: readonly string[],
+  failureArtifactPaths: readonly string[],
+): readonly string[] {
+  if (failureArtifactPaths.length === 0) return ledger;
+  return [...new Set([...ledger, ...failureArtifactPaths])];
 }
 
 /** `resolveReplayAction`'s `loc` for one step — `actionSourcePaths[index]` when the step came from a `runFlow` include, else the top-level plan's own resolved path. */
