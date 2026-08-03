@@ -121,6 +121,30 @@ test('connect without remote config generates one from cloud connection profile'
   }
 });
 
+test('cloud connect uses neutral public service wording in human and JSON output', async () => {
+  const profile = {
+    remoteConfigProfile: {
+      daemonBaseUrl: 'https://bridge.example.com/agent-device',
+      tenant: 'acme',
+      runId: 'demo-run-001',
+      leaseProvider: 'cloud',
+    },
+  };
+
+  mockCloudConnectionProfile(profile);
+  const human = await runCliCapture(['connect'], {
+    stateDirPrefix: 'agent-device-connect-cloud-wording-human-',
+  });
+  assert.match(human.stdout, /^Connected successfully with the configured cloud service\./);
+
+  mockCloudConnectionProfile(profile);
+  const json = await runCliCapture(['connect', '--json'], {
+    stateDirPrefix: 'agent-device-connect-cloud-wording-json-',
+  });
+  const data = (JSON.parse(json.stdout) as { data: { verification: { service: string } } }).data;
+  assert.equal(data.verification.service, 'the configured cloud service');
+});
+
 test('connect limrun generates a local daemon remote profile', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-limrun-'));
   const stateDir = path.join(tempRoot, '.state');

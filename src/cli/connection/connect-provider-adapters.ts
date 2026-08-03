@@ -44,7 +44,7 @@ const CONNECT_PROVIDER_ADAPTERS = {
   cloud: {
     resolve: resolveCloudConnectProfile,
     verify: async () => ({
-      service: 'Agent Device Cloud',
+      service: 'the configured cloud service',
       status: 'verified',
       message: 'Credentials and connection profile verified.',
     }),
