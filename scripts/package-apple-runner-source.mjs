@@ -16,6 +16,16 @@ const LEGACY_OUTPUT_DIRS = [
 ];
 const SKIPPED_DIR_NAMES = new Set(['.build', '.swiftpm', 'xcuserdata']);
 const SKIPPED_ROOT_FILES = new Set(['README.md', 'RUNNER_PROTOCOL.md']);
+// XCTest discovers instance methods named test*; anything matching this that survives stripping
+// would ship to (and compile on) every user's machine. Only the runner's command-loop entrypoint
+// is a legitimate test method in the packaged source.
+const SHIPPED_TEST_METHOD_ALLOWLIST = new Map([
+  [
+    path.join('AgentDeviceRunner', 'AgentDeviceRunnerUITests', 'RunnerTests.swift'),
+    new Set(['testCommand']),
+  ],
+]);
+const TEST_METHOD_PATTERN = /^\s*(?:@\w+(?:\([^)]*\))?\s+)*(?:\w+\s+)*func\s+(test\w*)\s*\(/;
 
 function packageAppleRunnerSource(options = {}) {
   const root = path.resolve(options.root ?? process.cwd());
@@ -106,11 +116,11 @@ function copyDirectoryEntry(entry, sourceDir, outputDir, relativeDir, summary) {
     return;
   }
   if (entry.isFile()) {
-    copyFile(sourcePath, outputPath, summary);
+    copyFile(sourcePath, outputPath, relativePath, summary);
   }
 }
 
-function copyFile(sourcePath, outputPath, summary) {
+function copyFile(sourcePath, outputPath, relativePath, summary) {
   if (path.extname(sourcePath) !== '.swift') {
     fs.copyFileSync(sourcePath, outputPath);
     summary.copiedFiles += 1;
@@ -119,11 +129,26 @@ function copyFile(sourcePath, outputPath, summary) {
 
   const source = fs.readFileSync(sourcePath, 'utf8');
   const stripped = stripRunnerUnitTestBlocks(source, sourcePath);
+  assertNoShippedTestMethods(stripped.contents, relativePath);
   fs.writeFileSync(outputPath, stripped.contents);
   summary.copiedFiles += 1;
   if (stripped.strippedBlocks > 0) {
     summary.strippedFiles += 1;
     summary.strippedBlocks += stripped.strippedBlocks;
+  }
+}
+
+function assertNoShippedTestMethods(strippedContents, relativePath) {
+  const allowedMethods = SHIPPED_TEST_METHOD_ALLOWLIST.get(relativePath) ?? new Set();
+  const shippedMethods = strippedContents
+    .split('\n')
+    .map((line) => TEST_METHOD_PATTERN.exec(line)?.[1])
+    .filter((method) => method !== undefined && !allowedMethods.has(method));
+  if (shippedMethods.length > 0) {
+    throw new Error(
+      `Unit test ${shippedMethods[0]}() in ${relativePath} would ship in the npm package; ` +
+        `wrap it in #if ${UNIT_TEST_CONDITION}.`,
+    );
   }
 }
 

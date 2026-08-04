@@ -16,39 +16,7 @@ const runnerSnapshotSwiftPath = path.join(
 test('package apple runner source strips unit-test blocks without mutating checkout source', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-runner-package-'));
   onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
-
-  writeFixtureFile(root, 'apple/runner/README.md', 'developer docs\n');
-  writeFixtureFile(root, 'apple/runner/.build/cache.txt', 'cache\n');
-  writeFixtureFile(
-    root,
-    'apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/project.pbxproj',
-    '',
-  );
-  writeFixtureFile(
-    root,
-    'apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/xcuserdata/user.xcuserstate',
-    'state\n',
-  );
-  writeFixtureFile(
-    root,
-    'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift',
-    [
-      'extension RunnerTests {',
-      '  func runtimeHelper() {}',
-      '#if AGENT_DEVICE_RUNNER_UNIT_TESTS',
-      '  func unitOnlyHelper() {',
-      '    #if os(iOS)',
-      '    print("nested platform guard should disappear with the unit-test block")',
-      '    #endif',
-      '  }',
-      '#endif',
-      '  #if os(macOS)',
-      '  func macOnlyRuntimeHelper() {}',
-      '  #endif',
-      '}',
-      '',
-    ].join('\n'),
-  );
+  writeStripFixtureTree(root);
 
   await runCmd(process.execPath, [packageScript, '--root', root, '--quiet']);
 
@@ -84,6 +52,65 @@ test('package apple runner source strips unit-test blocks without mutating check
     ),
     false,
   );
+});
+
+test('package apple runner source rejects unit tests that would ship un-stripped', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-runner-package-testgate-'));
+  onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  writeFixtureFile(
+    root,
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift',
+    [
+      'extension RunnerTests {',
+      '#if AGENT_DEVICE_RUNNER_UNIT_TESTS',
+      '  func testWrappedIsFine() {}',
+      '#endif',
+      '  func testLeaksIntoPackage() {}',
+      '}',
+      '',
+    ].join('\n'),
+  );
+
+  const result = await runCmd(process.execPath, [packageScript, '--root', root, '--quiet'], {
+    allowFailure: true,
+  });
+
+  assert.notEqual(result.exitCode, 0);
+  assert.match(result.stderr, /testLeaksIntoPackage/);
+  assert.match(result.stderr, /AGENT_DEVICE_RUNNER_UNIT_TESTS/);
+});
+
+test('package apple runner source allows only the runner entrypoint test method', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-runner-package-entry-'));
+  onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  writeFixtureFile(
+    root,
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests.swift',
+    ['final class RunnerTests: XCTestCase {', '  func testCommand() throws {}', '}', ''].join('\n'),
+  );
+
+  const allowed = await runCmd(process.execPath, [packageScript, '--root', root, '--quiet']);
+  assert.equal(allowed.exitCode, 0);
+
+  writeFixtureFile(
+    root,
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests.swift',
+    [
+      'final class RunnerTests: XCTestCase {',
+      '  func testCommand() throws {}',
+      '  func testExtraEntrypoint() {}',
+      '}',
+      '',
+    ].join('\n'),
+  );
+
+  const rejected = await runCmd(process.execPath, [packageScript, '--root', root, '--quiet'], {
+    allowFailure: true,
+  });
+  assert.notEqual(rejected.exitCode, 0);
+  assert.match(rejected.stderr, /testExtraEntrypoint/);
 });
 
 test('package apple runner source removes legacy dist/apple-runner output before shipping', async () => {
@@ -124,6 +151,41 @@ test('apple runner tree snapshot capture stays on the main queue', () => {
   assert.match(boundedCapture, /runMainThreadWork/);
   assert.match(boundedCapture, /captureSnapshotRoot\(element\)/);
 });
+
+function writeStripFixtureTree(root: string): void {
+  writeFixtureFile(root, 'apple/runner/README.md', 'developer docs\n');
+  writeFixtureFile(root, 'apple/runner/.build/cache.txt', 'cache\n');
+  writeFixtureFile(
+    root,
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/project.pbxproj',
+    '',
+  );
+  writeFixtureFile(
+    root,
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/xcuserdata/user.xcuserstate',
+    'state\n',
+  );
+  writeFixtureFile(
+    root,
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift',
+    [
+      'extension RunnerTests {',
+      '  func runtimeHelper() {}',
+      '#if AGENT_DEVICE_RUNNER_UNIT_TESTS',
+      '  func unitOnlyHelper() {',
+      '    #if os(iOS)',
+      '    print("nested platform guard should disappear with the unit-test block")',
+      '    #endif',
+      '  }',
+      '#endif',
+      '  #if os(macOS)',
+      '  func macOnlyRuntimeHelper() {}',
+      '  #endif',
+      '}',
+      '',
+    ].join('\n'),
+  );
+}
 
 function writeFixtureFile(root: string, relativePath: string, contents: string): void {
   const filePath = path.join(root, relativePath);

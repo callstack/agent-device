@@ -58,6 +58,7 @@ extension RunnerTests {
   }
 #endif
 
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
   func testCachedTargetRefreshRequiresChangedPositiveProcessIdentity() {
     XCTAssertFalse(
       Self.shouldRefreshCachedTarget(
@@ -125,4 +126,5 @@ extension RunnerTests {
     XCTAssertFalse(snapshotXCTestPenaltyWarmupExemptionPending)
     XCTAssertTrue(needsFirstInteractionDelay)
   }
+#endif
 }

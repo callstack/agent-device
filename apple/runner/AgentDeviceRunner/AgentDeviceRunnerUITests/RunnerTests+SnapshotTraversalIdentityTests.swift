@@ -1,6 +1,7 @@
 import XCTest
 
 extension RunnerTests {
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
   func testSnapshotTraversalIdentityPreservesSameOriginNodesWithDifferentBounds() {
     let wrapper = Self.snapshotTraversalIdentity(
       elementType: .other,
@@ -21,4 +22,5 @@ extension RunnerTests {
     XCTAssertEqual(wrapper, leaf)
     #endif
   }
+#endif
 }
