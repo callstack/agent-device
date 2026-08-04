@@ -158,18 +158,63 @@ test('capturePostGestureStabilizedResult keeps polling past the normal deadline 
   assert.ok(captureCount > 8, `expected sustained polling, saw ${captureCount} captures`);
 });
 
-test('a replaced list under fixed chrome accepts stale but never claims no-effect (#1601 P1)', async () => {
-  // The reviewer's counterexample: a SUCCESSFUL scroll swapped every list
-  // cell while the tab-bar chrome (discriminating, shared, unmoved) kept the
-  // subset-tolerant classifier at 'unchanged'. The loop may still accept the
-  // stale read — but the agent-facing no-effect claim must be vetoed by the
-  // unmatched discriminating cells on both sides.
+test('a replaced list under fixed chrome now settles outright, and still claims no no-effect (#1601 P1, #1569)', async () => {
+  // The reviewer's counterexample: a SUCCESSFUL scroll swapped every list cell
+  // while the tab-bar chrome (discriminating, shared, unmoved) kept the
+  // classifier at 'unchanged'. #1601 could only veto the agent-facing claim and
+  // had to let the loop accept the stale read — `staleAccepts` was 1 here.
+  //
+  // #1569 removed the premise: the classifier compares identified content by
+  // set membership, so cells leaving AND arriving is 'changed'. The loop now
+  // trusts the capture instead of polling to the cap, which is what made every
+  // checkout-form scroll pay the full distrust budget on live hardware. The
+  // no-effect claim stays absent — now because there is no accept-stale to
+  // corroborate at all, which is the stronger reason.
   vi.useFakeTimers();
   const session = makeSession('ios');
   session.snapshot = chromeWithListSnapshot(['row-1', 'row-2']);
   markPostGestureStabilization(session, 'scroll');
 
   const capture = vi.fn(async () => chromeWithListSnapshot(['row-3', 'row-4']));
+
+  const resultPromise = withDiagnosticsScope({}, async () => {
+    const result = await capturePostGestureStabilizedResult({
+      session,
+      capture,
+      readSnapshot: (snapshot) => snapshot,
+    });
+    return {
+      result,
+      staleAccepts: countDiagnosticEventsByPhase(['post_gesture_snapshot_stale_accept']),
+    };
+  });
+
+  await vi.advanceTimersByTimeAsync(10_000);
+  const { result, staleAccepts } = await resultPromise;
+
+  assert.equal(staleAccepts, 0);
+  assert.equal(result.gestureNoEffect, undefined);
+});
+
+test('scope drift accepts stale but is vetoed from claiming no-effect (#1601 P1 gate)', async () => {
+  // #1601's full-surface gate stays load-bearing, and #1569 makes it more so.
+  // The classifier treats a one-sided difference as scope drift rather than
+  // movement, so a narrower quiet capture of an unmoved screen still reaches
+  // accept-stale — and the agent-facing claim must not follow it there, because
+  // the missing rows are unexamined, not proven absent.
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  session.snapshot = chromeWithListSnapshot(['row-1', 'row-2']);
+  markPostGestureStabilization(session, 'scroll');
+
+  // Same screen, but the quiet captures see only the chrome — the shape a
+  // broad baseline followed by an interactive-only capture produces.
+  const narrowed = makeSnapshotState(
+    chromeWithListSnapshot(['row-1', 'row-2']).nodes.filter(
+      (node) => node.type !== 'Cell',
+    ) as never,
+  );
+  const capture = vi.fn(async () => narrowed);
 
   const resultPromise = withDiagnosticsScope({}, async () => {
     const result = await capturePostGestureStabilizedResult({
@@ -430,4 +475,85 @@ test('capturePostGestureStabilizedResult trusts immediately (no cap tax) when th
   assert.equal(settled, 1);
   assert.equal(staleAccepts, 0);
   assert.equal(capture.mock.calls.length, 2);
+});
+
+// --- #1569: a backend swap mid-poll is not comparable evidence ---
+
+test('capturePostGestureStabilizedResult re-baselines instead of concluding when the backend changes (iOS)', async () => {
+  // The capture plan can fall back, or the XCTest-channel penalty can pre-empt
+  // it, at any point during the poll. The backends do not agree on which nodes
+  // exist — on one live checkout screen private AX returned 139 nodes including
+  // 43 scrolled off-viewport where the tree backend returned 48 — so a quiet
+  // capture from a different backend says nothing about the gesture. It must
+  // become the new baseline, never a verdict.
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  session.snapshot = makeSnapshotState(pickupSnapshot(500).nodes, {
+    snapshotQuality: { state: 'healthy', backend: 'tree' },
+  });
+  markPostGestureStabilization(session, 'scroll');
+
+  // Every capture shows the pre-gesture surface, but on the OTHER backend.
+  const capture = vi.fn(async () =>
+    makeSnapshotState(pickupSnapshot(500).nodes, {
+      snapshotQuality: { state: 'healthy', backend: 'private-ax' },
+    }),
+  );
+
+  const resultPromise = withDiagnosticsScope({}, async () => {
+    await capturePostGestureStabilizedResult({
+      session,
+      capture,
+      readSnapshot: (snapshot) => snapshot,
+    });
+    return {
+      rebased: countDiagnosticEventsByPhase(['post_gesture_snapshot_baseline_rebased']),
+      staleAccepts: countDiagnosticEventsByPhase(['post_gesture_snapshot_stale_accept']),
+      settled: countDiagnosticEventsByPhase(['post_gesture_snapshot_stabilized']),
+    };
+  });
+
+  await vi.advanceTimersByTimeAsync(6_000);
+  const { rebased, staleAccepts, settled } = await resultPromise;
+
+  // Rebased once onto private-ax, then compared same-backend and settled. A
+  // cross-backend comparison would have produced a verdict from incomparable
+  // node sets instead.
+  assert.equal(rebased, 1);
+  assert.equal(staleAccepts + settled, 1);
+});
+
+test('capturePostGestureStabilizedResult still distrusts a same-backend baseline match (iOS)', async () => {
+  // The guard above must not become a blanket escape hatch: when the backend is
+  // stable, an unchanged surface is still the stale-read signal #1542 added.
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  session.snapshot = makeSnapshotState(pickupSnapshot(500).nodes, {
+    snapshotQuality: { state: 'healthy', backend: 'tree' },
+  });
+  markPostGestureStabilization(session, 'scroll');
+
+  const capture = vi.fn(async () =>
+    makeSnapshotState(pickupSnapshot(500).nodes, {
+      snapshotQuality: { state: 'healthy', backend: 'tree' },
+    }),
+  );
+
+  const resultPromise = withDiagnosticsScope({}, async () => {
+    await capturePostGestureStabilizedResult({
+      session,
+      capture,
+      readSnapshot: (snapshot) => snapshot,
+    });
+    return {
+      rebased: countDiagnosticEventsByPhase(['post_gesture_snapshot_baseline_rebased']),
+      staleAccepts: countDiagnosticEventsByPhase(['post_gesture_snapshot_stale_accept']),
+    };
+  });
+
+  await vi.advanceTimersByTimeAsync(6_000);
+  const { rebased, staleAccepts } = await resultPromise;
+
+  assert.equal(rebased, 0);
+  assert.equal(staleAccepts, 1);
 });

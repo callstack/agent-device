@@ -196,6 +196,42 @@ export type AndroidSnapshotFreshness = {
   routeComparable: boolean;
 };
 
+/**
+ * One node's contribution to an interaction-surface signature. Two comparisons
+ * read this, and they need different things from it, which is why both `key`
+ * and `identity` exist:
+ *
+ * - `key` answers "is this the same node in the same state", including volatile
+ *   viewport-derived state and an occurrence index. Back-to-back captures use
+ *   it to decide the surface went quiet.
+ * - `identity` answers "is this the same element at all", and is present only
+ *   for nodes that carry one (an identifier, label or value). Comparisons
+ *   across a gesture use it, because a gesture is exactly what changes the
+ *   volatile state `key` folds in.
+ */
+export type InteractionSurfaceEntry = {
+  key: string;
+  /**
+   * Identity-only key: what the element IS, never where it currently sits or
+   * whether it is presently hittable. Undefined for anonymous layout nodes,
+   * which carry no identity and can therefore only be matched by ordinal
+   * position — an aliasing trap, so they are excluded from cross-gesture
+   * comparison entirely.
+   */
+  identity?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /**
+   * False for structurally fixed elements (the viewport root, keyboard
+   * chrome) whose rect is invariant regardless of any gesture — shared
+   * evidence limited to these is not evidence at all. See
+   * `classifyBaselineSurfaceEvidence` in interaction-outcome-policy.ts.
+   */
+  discriminating: boolean;
+};
+
 export type PostGestureStabilization = {
   action: string;
   /** The gesture's own positionals (e.g. scroll direction) — wording input for
@@ -212,20 +248,15 @@ export type PostGestureStabilization = {
    * not proof the screen settled. Android's persistent helper clears its a11y
    * cache before every capture (#1254/#1259) and needs no baseline check.
    */
-  baselineSignature?: Array<{
-    key: string;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    /**
-     * False for structurally fixed elements (the viewport root, keyboard
-     * chrome) whose rect is invariant regardless of any gesture — shared
-     * evidence limited to these never counts toward a baseline match. See
-     * `classifyBaselineSurfaceEvidence` in interaction-outcome-policy.ts.
-     */
-    discriminating: boolean;
-  }>;
+  baselineSignature?: InteractionSurfaceEntry[];
+  /**
+   * Snapshot backend that produced `baselineSignature`. Backends do not return
+   * comparable views of one screen — on the same iOS screen private AX returns
+   * the scrolled-away content the tree backend prunes — so a quiet capture from
+   * a different backend can only be re-baselined against, never concluded from
+   * (#1569).
+   */
+  baselineBackend?: string;
 };
 
 export type PendingInteractionOutcome = {
@@ -235,14 +266,7 @@ export type PendingInteractionOutcome = {
   flags?: CommandFlags;
   markedAt: number;
   attemptsRemaining: number;
-  preSignature: Array<{
-    key: string;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    discriminating: boolean;
-  }>;
+  preSignature: InteractionSurfaceEntry[];
 };
 
 type SessionRecordingBase = {

@@ -49,7 +49,12 @@ export function markPostGestureStabilization(
     // pre-capture — the same "last known pre-action snapshot" idiom
     // `markPendingInteractionOutcome` already relies on).
     ...(requiresPostGestureBaselineDistrust(session.device)
-      ? { baselineSignature: buildInteractionSurfaceSignature(session.snapshot?.nodes ?? []) }
+      ? {
+          baselineSignature: buildInteractionSurfaceSignature(session.snapshot?.nodes ?? []),
+          // Recorded so the loop can tell a comparable quiet capture from one
+          // served by a different backend, which is not comparable at all.
+          baselineBackend: session.snapshot?.snapshotQuality?.backend,
+        }
       : {}),
   };
 }
@@ -120,7 +125,11 @@ export function decidePostGestureStabilityVerdict(params: {
   return elapsedMs < distrustCapMs ? 'distrust' : 'accept-stale';
 }
 
-type CapturedSurface<T> = { value: T; signature: InteractionSurfaceSignature };
+type CapturedSurface<T> = {
+  value: T;
+  signature: InteractionSurfaceSignature;
+  backend: string | undefined;
+};
 
 async function captureInteractionSurface<T>(
   capture: () => Promise<T>,
@@ -128,7 +137,12 @@ async function captureInteractionSurface<T>(
   initial?: T,
 ): Promise<CapturedSurface<T>> {
   const value = initial ?? (await capture());
-  return { value, signature: buildInteractionSurfaceSignature(readSnapshot(value).nodes) };
+  const snapshot = readSnapshot(value);
+  return {
+    value,
+    signature: buildInteractionSurfaceSignature(snapshot.nodes),
+    backend: snapshot.snapshotQuality?.backend,
+  };
 }
 
 function emitPostGestureSettleDiagnostic(
@@ -183,6 +197,8 @@ export async function capturePostGestureStabilizedResult<T>(params: {
   const startedAt = Date.now();
   let attempts = 1;
   let previous = await captureInteractionSurface(capture, readSnapshot, params.initial);
+  let baselineSignature = pending.baselineSignature;
+  let baselineBackend = pending.baselineBackend;
   // Extended past STABILIZATION_DEADLINE_MS only when the distrust verdict
   // fires below; the ordinary (non-distrust) timeout path is unaffected.
   let effectiveDeadlineMs = STABILIZATION_DEADLINE_MS;
@@ -193,9 +209,25 @@ export async function capturePostGestureStabilizedResult<T>(params: {
     const current = await captureInteractionSurface(capture, readSnapshot);
     if (areInteractionSurfaceSignaturesStable(previous.signature, current.signature)) {
       const elapsedMs = Date.now() - startedAt;
+      // A capture plan may fall back or be pre-empted by the XCTest-channel
+      // penalty at any time, so the backend can change mid-poll. Backends do
+      // not agree on which nodes exist, so this pair says nothing about the
+      // gesture: adopt it as the baseline and keep going rather than concluding
+      // from it (#1569).
+      if (baselineSignature && baselineBackend !== current.backend) {
+        emitDiagnostic({
+          level: 'debug',
+          phase: 'post_gesture_snapshot_baseline_rebased',
+          data: { action: pending.action, from: baselineBackend, to: current.backend, attempts },
+        });
+        baselineSignature = current.signature;
+        baselineBackend = current.backend;
+        previous = current;
+        continue;
+      }
       const verdict = decidePostGestureStabilityVerdict({
         needsBaselineDistrust,
-        baselineSignature: pending.baselineSignature,
+        baselineSignature,
         quietSignature: current.signature,
         elapsedMs,
         distrustCapMs: STABILIZATION_DISTRUST_DEADLINE_MS,

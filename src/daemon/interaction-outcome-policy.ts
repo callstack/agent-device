@@ -194,61 +194,96 @@ export function areInteractionSurfaceSignaturesStable(
 }
 
 /**
- * Subset-tolerant baseline classifier for post-gesture baseline distrust
- * (#1542 defect 2), reusing this module's existing three-valued vocabulary
- * (`InteractionSurfaceChange`) instead of a bespoke boolean. The pre-gesture
- * baseline and the post-gesture quiet capture routinely come from different
- * snapshot scopes (e.g. a broad text-search capture vs. an interactive-only
- * selector capture), so their signatures can differ in length/membership even
- * when the element that matters never moved — whole-array equality would
- * report "changed" purely from scope drift and never catch the real
- * staleness.
+ * Baseline classifier for post-gesture baseline distrust (#1542 defect 2),
+ * reusing this module's three-valued `InteractionSurfaceChange` vocabulary.
  *
- * The evidence rule: only shared entries flagged `discriminating` (i.e. NOT
- * the viewport root or keyboard-window chrome — see
- * `isNonDiscriminatingSurfaceNode`) count as evidence.
+ * The rule is set membership, not rect deltas on the intersection, and #1569
+ * is why. A scroll does not slide shared elements to new positions — it
+ * REPLACES the content. Measured on the checkout form, a `scroll down 0.6`
+ * that moved the whole form left exactly five identifiers in common with its
+ * baseline, and all five were tab-bar icons that by construction never move.
+ * Judging such a pair by "did anything in the intersection shift" asks the
+ * only elements guaranteed to sit still whether anything moved, so the honest
+ * signal is that the content set itself differs.
  *
- * - `'ambiguous'`: the shared overlap has zero discriminating entries — this
- *   includes an empty overlap AND an overlap that is only structurally fixed
- *   chrome (e.g. two signatures sharing nothing but the Application/Window
- *   root after a successful scroll swapped every real element — the exact
- *   live shape #1563's review caught: treating that as a match would extend
- *   every such interaction to the stale-read cap on zero real evidence).
- *   Ambiguous is NOT a match — insufficient evidence is its own first-class
- *   outcome, the same way `classifyInteractionSurfaceChange` already treats
- *   an empty side.
- * - `'changed'`: at least one discriminating shared entry moved beyond
- *   tolerance — real movement occurred.
- * - `'unchanged'`: every discriminating shared entry (and there is at least
- *   one) still matches — this is the actual "stale, matches baseline" signal
- *   the distrust check exists to catch.
+ * Only entries that carry an `identity` participate. Anonymous layout nodes
+ * can be matched solely by ordinal position among other anonymous nodes, and
+ * the two captures rarely contain the same number of them — on that same real
+ * pair the previous implementation's entire "movement" evidence was six such
+ * aliased entries reporting deltas of -920, +37 and -7 px for a ~500px scroll.
+ * Structural chrome (viewport root, keyboard) is excluded for the older reason
+ * that its rect is invariant under any gesture.
+ *
+ * Set difference alone would mistake scope drift for movement: the baseline and
+ * the quiet capture are routinely fetched by different callers with different
+ * snapshot scopes (a broad text search vs. an interactive-only capture), and
+ * the narrower one is then a strict SUBSET of the broader. Replacement is what
+ * separates the two — a scroll leaves each side holding content the other
+ * lacks, while scope drift only ever removes from one side.
+ *
+ * - `'changed'`: each side holds identified content the other does not (the
+ *   surface was replaced), or a surviving element moved beyond tolerance.
+ * - `'unchanged'`: everything both sides can see agrees, in the same places —
+ *   the real "still showing the pre-gesture screen" signal distrust exists to
+ *   catch. A one-sided difference lands here: it is scope, not movement.
+ * - `'ambiguous'`: a side carries no identified content, or the two share none,
+ *   so there is nothing comparable. Never treated as a match.
+ *
+ * Both signatures must come from the same snapshot backend; the caller owns
+ * that invariant (see `post-gesture-stabilization.ts`). Backends disagree about
+ * which nodes exist, so a cross-backend pair differs for reasons that have
+ * nothing to do with the gesture.
  */
 export function classifyBaselineSurfaceEvidence(
   baseline: InteractionSurfaceSignature,
   current: InteractionSurfaceSignature,
 ): InteractionSurfaceChange {
-  if (baseline.length === 0 || current.length === 0) return 'ambiguous';
-  const baselineByKey = new Map(baseline.map((entry) => [entry.key, entry]));
-  let discriminatingOverlap = 0;
-  for (const entry of current) {
-    const baselineEntry = baselineByKey.get(entry.key);
-    if (!baselineEntry) continue;
-    // Shared but non-discriminating (viewport root / keyboard chrome): this
-    // pair carries no evidence either way, so it neither counts toward the
-    // overlap nor is checked for movement (its rect is invariant by
-    // definition and comparing it would be pure noise).
-    if (!entry.discriminating || !baselineEntry.discriminating) continue;
-    discriminatingOverlap += 1;
+  const before = identifiedContent(baseline);
+  const after = identifiedContent(current);
+  if (before.size === 0 || after.size === 0) return 'ambiguous';
+
+  let shared = 0;
+  let droppedFromBaseline = false;
+  for (const [identity, seen] of before) {
+    const now = after.get(identity);
+    if (!now) {
+      droppedFromBaseline = true;
+      continue;
+    }
+    shared += 1;
     if (
-      Math.abs(baselineEntry.x - entry.x) > RECT_TOLERANCE_PX ||
-      Math.abs(baselineEntry.y - entry.y) > RECT_TOLERANCE_PX ||
-      Math.abs(baselineEntry.width - entry.width) > RECT_TOLERANCE_PX ||
-      Math.abs(baselineEntry.height - entry.height) > RECT_TOLERANCE_PX
+      Math.abs(seen.entry.x - now.entry.x) > RECT_TOLERANCE_PX ||
+      Math.abs(seen.entry.y - now.entry.y) > RECT_TOLERANCE_PX ||
+      Math.abs(seen.entry.width - now.entry.width) > RECT_TOLERANCE_PX ||
+      Math.abs(seen.entry.height - now.entry.height) > RECT_TOLERANCE_PX
     ) {
       return 'changed';
     }
   }
-  return discriminatingOverlap > 0 ? 'unchanged' : 'ambiguous';
+  if (shared === 0) return 'ambiguous';
+  const addedSinceBaseline = after.size > shared;
+  // Content left AND arrived: the surface was replaced, which is exactly what a
+  // scroll that moved does. Only one of the two is a narrower or broader
+  // capture of the same screen.
+  if (droppedFromBaseline && addedSinceBaseline) return 'changed';
+  return 'unchanged';
+}
+
+/**
+ * Identity-keyed view of a signature: the entries that can be compared across a
+ * gesture at all. Repeated identities (list rows sharing a label) collapse onto
+ * their first occurrence, which is the one whose rect is compared — a
+ * later duplicate carries no identity the first does not.
+ */
+function identifiedContent(
+  signature: InteractionSurfaceSignature,
+): Map<string, { entry: InteractionSurfaceSignature[number] }> {
+  const content = new Map<string, { entry: InteractionSurfaceSignature[number] }>();
+  for (const entry of signature) {
+    if (!entry.identity || !entry.discriminating) continue;
+    if (!content.has(entry.identity)) content.set(entry.identity, { entry });
+  }
+  return content;
 }
 
 /**
@@ -311,14 +346,33 @@ function buildInteractionSurfaceEntry(
   if (!semanticKey) return undefined;
   const occurrence = occurrenceCounts.get(semanticKey) ?? 0;
   occurrenceCounts.set(semanticKey, occurrence + 1);
+  const identity = interactionSurfaceIdentity(node);
   return {
     key: `${semanticKey}|#${occurrence}`,
+    ...(identity ? { identity } : {}),
     x: Math.round(node.rect.x),
     y: Math.round(node.rect.y),
     width: Math.round(node.rect.width),
     height: Math.round(node.rect.height),
     discriminating: !isNonDiscriminatingSurfaceNode(node, keyboardChromeRefs),
   };
+}
+
+/**
+ * What the element IS — never where it sits, and never volatile state a gesture
+ * is expected to change. `interactionSurfaceSemanticKey` deliberately folds in
+ * `hittable`/`enabled`/`selected` and an occurrence index, which is right for
+ * "did these two back-to-back captures agree" and wrong for "is this the same
+ * element as before the gesture": scrolling flips `hittable` the moment a
+ * node's centre leaves the viewport, so keying on it evicts precisely the
+ * elements whose movement would have been the evidence (#1569).
+ */
+function interactionSurfaceIdentity(node: SnapshotNode): string | undefined {
+  const identity = [node.identifier, node.label, node.value]
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .join('|');
+  if (!identity.replaceAll('|', '')) return undefined;
+  return `${identity}|${node.type ?? ''}`;
 }
 
 /**
