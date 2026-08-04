@@ -45,6 +45,25 @@ test('readSnapshotQualityVerdict keeps the verdict but drops an unknown reasonCo
   assert.equal(verdict?.reasonCode, undefined);
 });
 
+test('penalty-deferred recovered captures suppress the fallback warning but keep depth copy', () => {
+  // Every capture of a hostile screen re-stamps recovered/deferred; the capture that armed the
+  // penalty already carried the full warning, so repeating it each capture is context noise.
+  const warnings = renderSnapshotQualityWarnings(
+    {
+      state: 'recovered',
+      backend: 'private-ax',
+      reason: 'XCTest-backed snapshot tiers were deferred after recent slow accessibility work',
+      reasonCode: 'deferred',
+      effectiveDepth: 56,
+    },
+    [],
+  );
+
+  assert.deepEqual(warnings, [
+    'Some deeper accessibility nodes were omitted; this tree is capped at depth 56. Re-run with --depth 56 --scope <container> only if you need deeper content.',
+  ]);
+});
+
 test('renderSnapshotQualityWarnings keeps recovered snapshot copy concise', () => {
   const warnings = renderSnapshotQualityWarnings(
     {

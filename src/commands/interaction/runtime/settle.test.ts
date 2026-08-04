@@ -207,6 +207,44 @@ test('private-ax recovery resets the settle budget once', async () => {
   assert.equal(captures, 4);
 });
 
+test('penalty-deferred private-ax captures do not reset the settle budget', async () => {
+  // Same shape as the reset test above, but the verdict says the circuit breaker PRE-selected
+  // private AX ('deferred'): the capture paid no grind, so the loop keeps its original budget
+  // and times out instead of being extended.
+  const before = buttonSnapshot();
+  const deferredAfter = welcomeSnapshot();
+  deferredAfter.snapshotQuality = {
+    state: 'recovered',
+    backend: 'private-ax',
+    reasonCode: 'deferred',
+    reason: 'XCTest-backed snapshot tiers were deferred after recent slow accessibility work',
+  };
+  let captures = 0;
+  const clock = createFakeClock();
+  const device = createSettleDevice({
+    stored: before,
+    clock,
+    captureSnapshot: () => {
+      captures += 1;
+      if (captures === 1) return { snapshot: before };
+      if (captures === 2) {
+        clock.advance(900);
+      }
+      return { snapshot: deferredAfter };
+    },
+  });
+
+  const result = await device.interactions.press(selector('label=Continue'), {
+    session: 'default',
+    settle: { quietMs: 500, timeoutMs: 1_000 },
+  });
+
+  const settle = result.settle;
+  assert.ok(settle);
+  assert.equal(settle.settled, false);
+  assert.equal(settle.hint, NEVER_SETTLED_HINT);
+});
+
 test('a broken settle capture never fails the action', async () => {
   const before = buttonSnapshot();
   let captures = 0;

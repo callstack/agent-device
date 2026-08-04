@@ -20,6 +20,7 @@ const SNAPSHOT_QUALITY_REASON_CODES = new Set<NonNullable<SnapshotQualityVerdict
   'budget',
   'no-nodes',
   'capture-failed',
+  'deferred',
 ]);
 
 export function readSnapshotQualityVerdict(value: unknown): SnapshotQualityVerdict | undefined {
@@ -80,6 +81,9 @@ export function renderSnapshotQualityWarnings(
 
 function stateWarning(verdict: SnapshotQualityVerdict): string[] {
   if (verdict.state === 'recovered') {
+    // Penalty-deferred captures repeat on every capture of a hostile screen; the capture that
+    // ARMED the penalty already carried the full warning, so repeating it is pure noise.
+    if (verdict.reasonCode === 'deferred') return [];
     return [
       `Detected an overly complex or slow accessibility tree. Fell back to the ${verdict.backend} snapshot backend. It is OK to continue; use --json to inspect snapshotQuality.reason if you need recovery details.`,
     ];

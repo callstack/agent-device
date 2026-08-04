@@ -144,6 +144,30 @@ extension RunnerTests {
     return pending
   }
 
+  /// The pre-seeded first-failure a penalized plan stamps into its verdict. The deferred case
+  /// uses the dedicated 'deferred' code: the breaker pre-selected the backend, nothing new
+  /// degraded on this capture, and the daemon keys warning suppression and the settle budget
+  /// reset off exactly that distinction. The bounded probe keeps 'budget': its short XCTest
+  /// slice genuinely constrains what this capture could read.
+  static func xcTestChannelStateFirstFailure(
+    _ state: SnapshotXCTestChannelPlanState
+  ) -> (reason: String, code: String)? {
+    switch state {
+    case .normal:
+      return nil
+    case .deferredToIndependentBackend:
+      return (
+        "XCTest-backed snapshot tiers were deferred after recent slow accessibility work on this screen",
+        "deferred"
+      )
+    case .boundedXCTestProbe:
+      return (
+        "XCTest-backed snapshot tiers are running with a short recovery probe after recent slow accessibility work on this screen",
+        "budget"
+      )
+    }
+  }
+
   /// Pure plan-reorder rule: a penalized XCTest accessibility channel uses independent backends
   /// when the platform has one, otherwise it keeps XCTest work on a short probe. The raw
   /// diagnostic plan keeps tree-first errors, and unknown plans are left untouched.
@@ -208,20 +232,13 @@ extension RunnerTests {
       availableBackends: Set(SnapshotBackendKind.allCases.filter(\.isAvailableOnCurrentPlatform))
     )
     let effectivePlan = effective.plan
+    firstFailure = Self.xcTestChannelStateFirstFailure(effective.xCTestChannelState)
     switch effective.xCTestChannelState {
     case .normal:
       break
     case .deferredToIndependentBackend:
-      firstFailure = (
-        "XCTest-backed snapshot tiers were deferred after recent slow accessibility work on this screen",
-        "budget"
-      )
       NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_XCTEST_CHANNEL_DEFERRED bundle=%@", currentBundleId ?? "")
     case .boundedXCTestProbe:
-      firstFailure = (
-        "XCTest-backed snapshot tiers are running with a short recovery probe after recent slow accessibility work on this screen",
-        "budget"
-      )
       NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_XCTEST_CHANNEL_PROBE_BOUNDED bundle=%@", currentBundleId ?? "")
     }
 
@@ -519,7 +536,7 @@ extension RunnerTests {
     guard quality.state != "healthy" || quality.collapsedLeafIndexes != nil else { return nil }
     var parts: [String] = []
     if quality.state == "recovered" {
-      let meaning = quality.reasonCode == "budget"
+      let meaning = quality.reasonCode == "budget" || quality.reasonCode == "deferred"
         ? " The primary capture ran out of its time budget (busy app or simulator); the recovered tree is authoritative for this screen."
         : " This usually means the app publishes an unhealthy accessibility tree — fixing the app's accessibility is the real cure. Treat screenshot as visual truth when this warning appears."
       parts.append(
@@ -643,6 +660,12 @@ extension RunnerTests {
       Self.resolveSnapshotPlanTerminal(terminal: .throwOnAXFailure, interactiveOnly: true),
       .throwAxFailure
     )
+  }
+
+  func testXCTestChannelStateFirstFailureStampsDeferredCodeOnlyForDeferral() {
+    XCTAssertNil(Self.xcTestChannelStateFirstFailure(.normal))
+    XCTAssertEqual(Self.xcTestChannelStateFirstFailure(.deferredToIndependentBackend)?.code, "deferred")
+    XCTAssertEqual(Self.xcTestChannelStateFirstFailure(.boundedXCTestProbe)?.code, "budget")
   }
 
   func testEffectiveSnapshotCapturePlanDefersXCTestBackedTiersOnlyWhenPenalizedRegularPlan() {

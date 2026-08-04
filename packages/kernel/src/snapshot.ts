@@ -10,7 +10,9 @@ export type SnapshotQualityVerdict = {
   state: 'healthy' | 'recovered' | 'sparse';
   backend: 'tree' | 'queries' | 'private-ax';
   reason?: string;
-  reasonCode?: 'ax-rejected' | 'sparse-tree' | 'budget' | 'no-nodes' | 'capture-failed';
+  // 'deferred' = the penalty circuit breaker pre-selected a non-XCTest backend; nothing new
+  // degraded on THIS capture (no repeated warning, no settle budget reset).
+  reasonCode?: 'ax-rejected' | 'sparse-tree' | 'budget' | 'no-nodes' | 'capture-failed' | 'deferred';
   effectiveDepth?: number;
   collapsedLeafIndexes?: number[];
 };

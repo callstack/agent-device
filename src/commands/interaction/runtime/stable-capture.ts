@@ -135,7 +135,13 @@ export async function runStableCaptureLoop(
 }
 
 function isPrivateAxRecovery(verdict: SnapshotQualityVerdict | undefined): boolean {
-  return verdict?.state === 'recovered' && verdict.backend === 'private-ax';
+  // 'deferred' = the penalty circuit breaker routed straight to private AX; the capture paid no
+  // grind, so there is nothing to give the settle budget back for.
+  return (
+    verdict?.state === 'recovered' &&
+    verdict.backend === 'private-ax' &&
+    verdict.reasonCode !== 'deferred'
+  );
 }
 
 /**
