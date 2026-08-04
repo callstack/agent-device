@@ -39,6 +39,13 @@ export function printHumanError(
   if (normalized.hint) {
     process.stderr.write(`Hint: ${normalized.hint}\n`);
   }
+  // #1597: printed unconditionally (not gated behind --debug), same as the
+  // divergence report below — an agent must see the candidate refs without a
+  // follow-up round trip.
+  const ambiguousMatchLines = formatAmbiguousMatchCandidateLines(normalized.details);
+  if (ambiguousMatchLines.length > 0) {
+    process.stderr.write(`${ambiguousMatchLines.join('\n')}\n`);
+  }
   if (normalized.diagnosticId) {
     process.stderr.write(`Diagnostic ID: ${normalized.diagnosticId}\n`);
   }
@@ -54,6 +61,27 @@ export function printHumanError(
   if (options.showDetails && normalized.details) {
     process.stderr.write(`${JSON.stringify(normalized.details, null, 2)}\n`);
   }
+}
+
+// #1597: shared by printHumanError (CLI) and formatToolErrorText (MCP,
+// src/mcp/tool-error.ts) so an AMBIGUOUS_MATCH's candidate refs render
+// identically on every text surface, never only in --json/--debug. Reads
+// `details.candidates` (pre-rendered snapshot-lines, capped at
+// AMBIGUOUS_MATCH_CANDIDATE_LIMIT by buildAmbiguousMatchError,
+// src/daemon/handlers/find.ts) and `details.matches` (the true total) to
+// compute the "+N more" marker for whatever the cap omitted.
+export function formatAmbiguousMatchCandidateLines(
+  details: Record<string, unknown> | undefined,
+): string[] {
+  const candidates = details?.candidates;
+  if (!Array.isArray(candidates) || candidates.length === 0) return [];
+  const totalMatches = typeof details?.matches === 'number' ? details.matches : candidates.length;
+  const remaining = totalMatches - candidates.length;
+  return [
+    'Candidates:',
+    ...candidates.map((candidate) => `  ${String(candidate)}`),
+    ...(remaining > 0 ? [`  +${remaining} more`] : []),
+  ];
 }
 
 type SnapshotDiffLine = {

@@ -37,6 +37,7 @@ export const FACADE_SYMBOLS: readonly (readonly [string, readonly string[]])[] =
       'SelectorProjection',
       'SelectorResolution',
       'SimpleSelectorTarget',
+      'UNSUPPORTED_FIND_ACTION_HINT',
       'buildSelectorCandidates',
       'buildSelectorChainForNode',
       'checkElementTargetArgs',

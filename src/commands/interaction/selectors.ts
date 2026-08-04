@@ -2,7 +2,11 @@ import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { FindOptions, IsOptions } from '@agent-device/contracts/client';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
-import { checkIsPredicate, normalizeIsPositionals } from '@agent-device/selectors';
+import {
+  checkIsPredicate,
+  normalizeIsPositionals,
+  UNSUPPORTED_FIND_ACTION_HINT,
+} from '@agent-device/selectors';
 import {
   direct,
   optionalCliNumber,
@@ -102,7 +106,9 @@ function readFindOptionsFromPositionals(positionals: string[], flags: CliFlags):
   if (action === 'click' || action === 'focus' || action === 'exists') {
     return { ...base, locator, query: readRequiredQuery(query), action };
   }
-  throw new AppError('INVALID_ARGS', `Unsupported find action: ${action}`);
+  throw new AppError('INVALID_ARGS', `Unsupported find action: ${action}`, {
+    hint: UNSUPPORTED_FIND_ACTION_HINT,
+  });
 }
 
 function readIsOptionsFromPositionals(positionals: string[], flags: CliFlags): IsOptions {

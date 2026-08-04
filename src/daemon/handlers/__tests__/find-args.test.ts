@@ -3,6 +3,7 @@ import {
   isReadOnlyFindAction,
   parseFindArgs,
   parseFindSelectorExpression,
+  UNSUPPORTED_FIND_ACTION_HINT,
 } from '@agent-device/selectors';
 
 test('parseFindArgs defaults to click with any locator', () => {
@@ -40,6 +41,33 @@ test('parseFindArgs throws on unsupported action', () => {
       message: expect.stringContaining('Unsupported find action: swipe'),
     }),
   );
+});
+
+// #1597: a bare "Unsupported find action" left the agent no path forward
+// besides guessing — the hint must name every action find actually supports
+// and show the two-command recovery shape (resolve the ref via find, then
+// dispatch the gesture, e.g. press, as its own command).
+test('parseFindArgs attaches the supported-actions hint with the two-step recovery shape on an unsupported action', () => {
+  try {
+    parseFindArgs(['text', 'Follow', 'press']);
+    expect.unreachable('parseFindArgs should have thrown for an unsupported action');
+  } catch (error) {
+    expect(error).toMatchObject({
+      code: 'INVALID_ARGS',
+      message: 'Unsupported find action: press',
+      details: { hint: UNSUPPORTED_FIND_ACTION_HINT },
+    });
+  }
+  expect(UNSUPPORTED_FIND_ACTION_HINT).toContain('click (default)');
+  expect(UNSUPPORTED_FIND_ACTION_HINT).toContain('focus');
+  expect(UNSUPPORTED_FIND_ACTION_HINT).toContain('fill');
+  expect(UNSUPPORTED_FIND_ACTION_HINT).toContain('type');
+  expect(UNSUPPORTED_FIND_ACTION_HINT).toContain('exists');
+  expect(UNSUPPORTED_FIND_ACTION_HINT).toContain('wait');
+  expect(UNSUPPORTED_FIND_ACTION_HINT).toContain('get text');
+  expect(UNSUPPORTED_FIND_ACTION_HINT).toContain('get attrs');
+  expect(UNSUPPORTED_FIND_ACTION_HINT).toMatch(/find "<text>" to list matches/);
+  expect(UNSUPPORTED_FIND_ACTION_HINT).toMatch(/press @eNN/);
 });
 
 test('parseFindArgs with bare locator yields empty query', () => {

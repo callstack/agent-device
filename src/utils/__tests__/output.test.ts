@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
 import {
+  formatAmbiguousMatchCandidateLines,
   formatScreenshotDiffText,
   formatSnapshotDiffText,
   formatSnapshotText,
@@ -1729,6 +1730,60 @@ test('printHumanError renders a compact divergence report unconditionally (not g
   assert.match(output, /\[id\] "Save" id="save"/);
   assert.match(output, /Repair hint: record-and-heal/);
   // Not gated behind --debug: showDetails defaults to false/undefined here.
+});
+
+// --- #1597: AMBIGUOUS_MATCH candidates print unconditionally, capped at 5 ---
+
+test('printHumanError lists AMBIGUOUS_MATCH candidates unconditionally, not gated behind --debug', () => {
+  const err = new AppError(
+    'AMBIGUOUS_MATCH',
+    'find matched 3 elements for text "Follow". Use a more specific locator or selector.',
+    {
+      locator: 'text',
+      query: 'Follow',
+      matches: 3,
+      candidates: ['@e2 [button] "Follow"', '@e5 [button] "Follow"', '@e9 [button] "Follow"'],
+    },
+  );
+
+  // This is the exact old-message shape the bug reported: the human render
+  // used to stop at "Error (...): ...\nHint: ...", so an agent reading it had
+  // no @ref to act on. Asserting the candidate lines appear proves this red
+  // against that shape (it would fail before formatAmbiguousMatchCandidateLines
+  // was wired into printHumanError).
+  const output = captureStderr(() => printHumanError(err));
+
+  assert.match(output, /^Error \(AMBIGUOUS_MATCH\): find matched 3 elements/);
+  assert.match(
+    output,
+    /Candidates:\n {2}@e2 \[button\] "Follow"\n {2}@e5 \[button\] "Follow"\n {2}@e9 \[button\] "Follow"/,
+  );
+  // 3 candidates for 3 matches: nothing was capped, so no "+N more" marker.
+  assert.equal(/\+\d+ more/.test(output), false);
+  // Not gated behind --debug: showDetails defaults to false/undefined here.
+});
+
+test('printHumanError appends a "+N more" marker when candidates were capped', () => {
+  const err = new AppError('AMBIGUOUS_MATCH', 'find matched 7 elements for text "Row". ...', {
+    matches: 7,
+    candidates: [
+      '@e2 [button] "Row"',
+      '@e3 [button] "Row"',
+      '@e4 [button] "Row"',
+      '@e5 [button] "Row"',
+      '@e6 [button] "Row"',
+    ],
+  });
+
+  const output = captureStderr(() => printHumanError(err));
+
+  assert.match(output, /@e6 \[button\] "Row"\n {2}\+2 more/);
+});
+
+test('formatAmbiguousMatchCandidateLines returns nothing when details carry no candidates', () => {
+  assert.deepEqual(formatAmbiguousMatchCandidateLines(undefined), []);
+  assert.deepEqual(formatAmbiguousMatchCandidateLines({ matches: 3 }), []);
+  assert.deepEqual(formatAmbiguousMatchCandidateLines({ candidates: [] }), []);
 });
 
 test('printHumanError shows an unavailable screen reason and omitted suggestions hint', () => {

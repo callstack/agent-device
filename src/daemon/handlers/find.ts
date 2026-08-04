@@ -12,12 +12,12 @@ import { expireRefFrame } from '../ref-frame.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { contextFromFlags } from '../context.ts';
-import { extractNodeText } from '@agent-device/contracts/snapshot';
 import {
   resolveActionableTouchNode,
   resolveActionableTouchResolution,
 } from '../../core/interaction-targeting.ts';
 import { isSnapshotNodeInteractionBlocked } from '../../snapshot/snapshot-occlusion.ts';
+import { formatSnapshotLine } from '../../snapshot/snapshot-lines.ts';
 import { readCommandMessage, successText } from '../../utils/success-text.ts';
 import { errorResponse, noActiveSessionError } from './response.ts';
 import { withSystemSurfaceDisclosure } from './system-surface-disclosure.ts';
@@ -540,6 +540,15 @@ function publicFindFlags(flags: DaemonRequest['flags']): Record<string, unknown>
   return { ...(stripInternalInteractionFlags(flags) ?? {}) };
 }
 
+// #1597: an agent reading an ambiguous-match error must be able to act on the
+// right @ref immediately, without a follow-up snapshot round trip. Candidate
+// lines reuse the exact snapshot-line renderer (`formatSnapshotLine`) so a
+// candidate reads identically to its row in `snapshot -i` output: ref, role,
+// label/identifier. Capped at AMBIGUOUS_MATCH_CANDIDATE_LIMIT to bound the
+// error payload — `matches` (the true total) is what a "+N more" marker is
+// computed from at render time (src/utils/output.ts, src/mcp/tool-error.ts).
+export const AMBIGUOUS_MATCH_CANDIDATE_LIMIT = 5;
+
 // Exported as the single AMBIGUOUS_MATCH producer so the help-benchmark
 // sample parity test renders the exact error this handler returns; a message
 // change here fails that gate instead of drifting past it.
@@ -548,11 +557,9 @@ export function buildAmbiguousMatchError(
   locator: FindLocator,
   query: string,
 ): DaemonResponse {
-  const candidates = matches.slice(0, 8).map((candidate) => {
-    const label =
-      extractNodeText(candidate) || candidate.label || candidate.identifier || candidate.type || '';
-    return `@${candidate.ref}${label ? `(${label})` : ''}`;
-  });
+  const candidates = matches
+    .slice(0, AMBIGUOUS_MATCH_CANDIDATE_LIMIT)
+    .map((candidate) => formatSnapshotLine(candidate, 0, false));
   return errorResponse(
     'AMBIGUOUS_MATCH',
     `find matched ${matches.length} elements for ${locator} "${query}". Use a more specific locator or selector.`,

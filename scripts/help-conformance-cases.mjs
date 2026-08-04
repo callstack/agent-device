@@ -428,7 +428,7 @@ Use the output already shown to determine whether the feed-search UI is present,
     recovery: { code: 'AMBIGUOUS_MATCH', sample: AMBIGUOUS_MATCH_SAMPLE },
     task: quiz(
       AMBIGUOUS_MATCH_SAMPLE,
-      'The intent is to follow the @callstack.com account row. The candidate refs were not shown. What command should run next?',
+      'The intent is to follow the @callstack.com account row. The candidate refs shown (@e2, @e5, @e9) all carry the identical "Follow" label, so this output alone cannot tell them apart. What command should run next?',
     ),
     expectations: ['validPlanCommands', 'fullPrefix'],
     matchers: [
@@ -439,12 +439,13 @@ Use the output already shown to determine whether the feed-search UI is present,
       },
     ],
     forbidden: [
-      // The candidates live in error details the human output never printed,
-      // so a ref-targeting command here would be a guess.
+      // #1597: candidates now print (ref, role, label), but all 3 here share
+      // the exact same "Follow" label — picking any single @eN from this
+      // output alone would still be an unverified guess, not a resolved match.
       { id: 'noGuessedRef', pattern: /(?:^|\n)agent-device\s+(?:press|click)\s+@e\d/i },
       {
         id: 'noVerbatimRetry',
-        pattern: /(?:^|\n)agent-device\s+find\s+text\s+"?follow"?\s+press\b/i,
+        pattern: /(?:^|\n)agent-device\s+find\s+text\s+"?follow"?\s*(?:\n|$)/i,
       },
       { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },
     ],

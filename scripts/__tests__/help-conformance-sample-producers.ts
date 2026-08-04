@@ -244,9 +244,9 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
     sample: AMBIGUOUS_MATCH_SAMPLE,
     render: () => {
       const matches = [
-        { ref: 'e2', label: 'Follow' },
-        { ref: 'e5', label: 'Follow' },
-        { ref: 'e9', label: 'Follow' },
+        { ref: 'e2', type: 'Button', label: 'Follow' },
+        { ref: 'e5', type: 'Button', label: 'Follow' },
+        { ref: 'e9', type: 'Button', label: 'Follow' },
       ] as Parameters<typeof buildAmbiguousMatchError>[0];
       const response = buildAmbiguousMatchError(matches, 'text', 'Follow');
       assertErrorResponse(response, 'an ambiguous find');

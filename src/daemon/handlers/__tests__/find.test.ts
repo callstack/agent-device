@@ -508,6 +508,95 @@ test('handleFindCommands click prefers semantic controls over matching container
   expect(invokeCalls[0]!.positionals?.[0]).toBe('@e5');
 });
 
+// #1597: an ambiguous find must let the agent act on the right @ref straight
+// from the error, so the response carries snapshot-line-rendered candidates
+// (ref, role, label) instead of a bare "matched N elements" message. Capped
+// at AMBIGUOUS_MATCH_CANDIDATE_LIMIT (5); the true total keeps riding
+// `matches` so a "+N more" marker can be computed at render time.
+test('handleFindCommands ambiguous match lists snapshot-line candidates capped at 5', async () => {
+  const followButton = (ref: string, index: number, x: number) => ({
+    index,
+    ref,
+    type: 'Button',
+    label: 'Follow',
+    hittable: true,
+    rect: { x, y: 100, width: 80, height: 40 },
+    parentIndex: 0,
+  });
+
+  const { response } = await runFindClickScenario({
+    positionals: ['Follow', 'click'],
+    nodes: [
+      { index: 0, ref: 'e1', type: 'Application', rect: { x: 0, y: 0, width: 800, height: 1200 } },
+      followButton('e2', 1, 0),
+      followButton('e3', 2, 90),
+      followButton('e4', 3, 180),
+      followButton('e5', 4, 270),
+      followButton('e6', 5, 360),
+      followButton('e7', 6, 450),
+    ],
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('AMBIGUOUS_MATCH');
+  // The old bare message ("find matched 6 elements ... Use a more specific
+  // locator or selector.") gave the agent nothing to act on directly — this
+  // proves the fix red against that shape: `candidates` must exist, be
+  // snapshot-line rendered, and be capped below the true match count.
+  expect(response.error.details?.matches).toBe(6);
+  const candidates = response.error.details?.candidates;
+  expect(Array.isArray(candidates)).toBe(true);
+  expect(candidates).toHaveLength(5);
+  expect(candidates).toEqual([
+    '@e2 [button] "Follow"',
+    '@e3 [button] "Follow"',
+    '@e4 [button] "Follow"',
+    '@e5 [button] "Follow"',
+    '@e6 [button] "Follow"',
+  ]);
+});
+
+test('handleFindCommands ambiguous match with few candidates lists them all uncapped', async () => {
+  const { response } = await runFindClickScenario({
+    positionals: ['Follow', 'click'],
+    nodes: [
+      { index: 0, ref: 'e1', type: 'Application', rect: { x: 0, y: 0, width: 800, height: 1200 } },
+      {
+        index: 1,
+        ref: 'e2',
+        type: 'Button',
+        label: 'Follow',
+        hittable: true,
+        rect: { x: 0, y: 100, width: 80, height: 40 },
+        parentIndex: 0,
+      },
+      {
+        index: 2,
+        ref: 'e3',
+        type: 'Button',
+        // No label — exact-matches "Follow" via its identifier instead, so
+        // this candidate exercises the label/identifier fallback.
+        identifier: 'FOLLOW',
+        hittable: true,
+        rect: { x: 90, y: 100, width: 80, height: 40 },
+        parentIndex: 0,
+      },
+    ],
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('AMBIGUOUS_MATCH');
+  expect(response.error.details?.matches).toBe(2);
+  // No label on e3, so the candidate line falls back to its identifier —
+  // "label/identifier" per #1597, same as any other snapshot line.
+  expect(response.error.details?.candidates).toEqual([
+    '@e2 [button] "Follow"',
+    '@e3 [button] "FOLLOW"',
+  ]);
+});
+
 test('handleFindCommands focus uses the promoted actionable node center', async () => {
   const { response } = await runFindClickScenario({
     positionals: ['Account', 'focus'],

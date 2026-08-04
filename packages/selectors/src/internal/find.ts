@@ -135,6 +135,18 @@ export type ParsedFindArgs = {
 /** Shared by `checkFindArgs` and `findCommand`, which validates already-parsed options. */
 export const FIND_VALUE_REQUIRED_MESSAGE = 'find requires a value';
 
+/**
+ * Shared by both `Unsupported find action` throw sites (this file's raw-token
+ * parser and `src/commands/interaction/selectors.ts`'s typed CLI reader) so
+ * the recovery guidance cannot drift between them. `find` has no press/
+ * longpress/swipe action of its own — the fix is to resolve the ref through
+ * `find`, then dispatch the gesture as its own top-level command.
+ */
+export const UNSUPPORTED_FIND_ACTION_HINT =
+  'find actions: click (default), focus, fill, type, exists, wait, get text, get attrs — ' +
+  'there is no press/longpress/swipe find action. Run find "<text>" to list matches, then ' +
+  'act on the resolved @ref directly, e.g. press @eNN.';
+
 export type FindArgumentCheck =
   | { ok: true; parsed: ParsedFindArgs }
   | { ok: false; code: 'INVALID_ARGS'; message: string };
@@ -206,7 +218,9 @@ export function parseFindArgs(args: string[]): ParsedFindArgs {
     const value = actionTokens.slice(1).join(' ');
     return { locator, query, action: 'type', value };
   }
-  throw new AppError('INVALID_ARGS', `Unsupported find action: ${actionTokens[0]}`);
+  throw new AppError('INVALID_ARGS', `Unsupported find action: ${actionTokens[0]}`, {
+    hint: UNSUPPORTED_FIND_ACTION_HINT,
+  });
 }
 
 export function parseFindSelectorExpression(locator: FindLocator, query: string): string | null {

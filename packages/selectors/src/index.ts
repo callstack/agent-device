@@ -46,6 +46,7 @@ import {
   parseFindSelectorExpression,
   FIND_LOCATORS,
   FIND_VALUE_REQUIRED_MESSAGE,
+  UNSUPPORTED_FIND_ACTION_HINT,
 } from './internal/find.ts';
 import {
   buildSelectorCandidates,
@@ -108,6 +109,7 @@ export {
   SELECTOR_EXPRESSION_REQUIRED_MESSAGE,
   SELECTOR_KEY_NAMES,
   STALE_REF_HINT,
+  UNSUPPORTED_FIND_ACTION_HINT,
 };
 
 /** A single native runner selector suitable for direct iOS lookup. */
