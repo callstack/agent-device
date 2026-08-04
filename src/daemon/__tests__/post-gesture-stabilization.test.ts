@@ -5,6 +5,7 @@ import { countDiagnosticEventsByPhase, withDiagnosticsScope } from '../../utils/
 import { buildInteractionSurfaceSignature } from '../interaction-outcome-policy.ts';
 import {
   capturePostGestureStabilizedResult,
+  formatGestureNoEffectWarning,
   markPostGestureStabilization,
 } from '../post-gesture-stabilization.ts';
 import {
@@ -143,14 +144,30 @@ test('capturePostGestureStabilizedResult keeps polling past the normal deadline 
   });
 
   await vi.advanceTimersByTimeAsync(10_000);
-  const { staleAccepts, settled } = await resultPromise;
+  const { result, staleAccepts, settled } = await resultPromise;
 
   assert.equal(staleAccepts, 1);
   assert.equal(settled, 0);
   assert.equal(session.postGestureStabilization, undefined);
+  // #1600: a stale-accept is the daemon PROVING the gesture moved nothing —
+  // that verdict must reach the caller, not only the diagnostics stream.
+  assert.equal(result.gestureNoEffect?.action, 'scroll');
   // Proves it kept polling well past the OLD 1.5s accept point (2 attempts,
   // ~200ms) instead of trusting the first quiet match.
   assert.ok(captureCount > 8, `expected sustained polling, saw ${captureCount} captures`);
+});
+
+test('formatGestureNoEffectWarning names the gesture and the raw-drag escape hatch', () => {
+  const scrollWarning = formatGestureNoEffectWarning('scroll', ['down', '1']);
+  assert.match(scrollWarning, /scroll down produced no visible change/);
+  assert.match(scrollWarning, /swipe x1 y1 x2 y2/);
+  assert.match(scrollWarning, /already at its edge/);
+
+  const gestureWarning = formatGestureNoEffectWarning('gesture', ['swipe', 'left']);
+  assert.match(gestureWarning, /gesture swipe left produced no visible change/);
+
+  const bareWarning = formatGestureNoEffectWarning('swipe', []);
+  assert.match(bareWarning, /swipe produced no visible change/);
 });
 
 test('capturePostGestureStabilizedResult trusts a quiet signature once content genuinely differs from the baseline (iOS)', async () => {
@@ -175,10 +192,12 @@ test('capturePostGestureStabilizedResult trusts a quiet signature once content g
   });
 
   await vi.advanceTimersByTimeAsync(1_000);
-  const { staleAccepts, settled } = await resultPromise;
+  const { result, staleAccepts, settled } = await resultPromise;
 
   assert.equal(settled, 1);
   assert.equal(staleAccepts, 0);
+  // A genuine settle carries no no-effect claim.
+  assert.equal(result.gestureNoEffect, undefined);
   // Accepted at the first quiet match (initial capture + one poll = 2
   // attempts): no distrust cost for a genuine settle.
   assert.equal(capture.mock.calls.length, 2);

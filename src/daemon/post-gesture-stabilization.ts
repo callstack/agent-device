@@ -41,6 +41,7 @@ export function markPostGestureStabilization(
   if (!isPostGestureStabilizingAction(action, positionals, flags)) return;
   session.postGestureStabilization = {
     action,
+    positionals,
     markedAt: Date.now(),
     // No extra capture: `session.snapshot` is still whatever was captured
     // before this gesture dispatched (this call happens post-dispatch,
@@ -150,16 +151,27 @@ function emitPostGestureSettleDiagnostic(
   });
 }
 
+export type PostGestureStabilizedResult<T> = {
+  value: T;
+  /**
+   * Present when the loop accepted a stale read: the quiet capture PROVABLY
+   * still equals the pre-gesture baseline after the distrust cap (#1600).
+   * Callers surface this to the agent — a diagnostics-only verdict let one
+   * benchmark run burn 40 calls re-issuing scrolls the daemon knew did nothing.
+   */
+  gestureNoEffect?: { action: string; positionals: string[] };
+};
+
 export async function capturePostGestureStabilizedResult<T>(params: {
   session: SessionState | undefined;
   capture: () => Promise<T>;
   readSnapshot: (result: T) => SnapshotState;
   initial?: T;
-}): Promise<T> {
+}): Promise<PostGestureStabilizedResult<T>> {
   const { session, capture, readSnapshot } = params;
   const pending = session?.postGestureStabilization;
   if (!session || !supportsPostGestureStabilization(session.device) || !pending) {
-    return params.initial ?? (await capture());
+    return { value: params.initial ?? (await capture()) };
   }
 
   const needsBaselineDistrust = requiresPostGestureBaselineDistrust(session.device);
@@ -190,7 +202,17 @@ export async function capturePostGestureStabilizedResult<T>(params: {
       }
       clearPostGestureStabilization(session);
       emitPostGestureSettleDiagnostic(verdict, pending.action, attempts, elapsedMs);
-      return current.value;
+      return {
+        value: current.value,
+        ...(verdict === 'accept-stale'
+          ? {
+              gestureNoEffect: {
+                action: pending.action,
+                positionals: pending.positionals ?? [],
+              },
+            }
+          : {}),
+      };
     }
     previous = current;
   }
@@ -205,7 +227,25 @@ export async function capturePostGestureStabilizedResult<T>(params: {
       durationMs: Date.now() - startedAt,
     },
   });
-  return previous.value;
+  return { value: previous.value };
+}
+
+/**
+ * The agent-facing wording for a proven no-effect gesture. Names the exact
+ * gesture, admits the honest ambiguity (at-edge is a legitimate no-op the
+ * platform cannot distinguish), and hands over the one escape hatch that
+ * moved a stuck list when synthesized scrolls did not (#1600, element-18:
+ * raw `swipe` worked where scroll/fling/pan all silently no-opped).
+ */
+export function formatGestureNoEffectWarning(action: string, positionals: string[]): string {
+  const gesture = [action, ...positionals.filter((value) => !/^[\d.-]+$/.test(value))]
+    .join(' ')
+    .trim();
+  return (
+    `${gesture} produced no visible change: the tree still matches its pre-gesture state. ` +
+    'Either the container is already at its edge, or it ignores synthesized scrolls — ' +
+    'a raw drag moves such lists: swipe x1 y1 x2 y2 (start inside the list).'
+  );
 }
 
 function isPostGestureStabilizingAction(

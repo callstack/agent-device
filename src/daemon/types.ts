@@ -198,6 +198,9 @@ export type AndroidSnapshotFreshness = {
 
 export type PostGestureStabilization = {
   action: string;
+  /** The gesture's own positionals (e.g. scroll direction) — wording input for
+   * the #1600 no-effect warning; never re-dispatched. */
+  positionals?: string[];
   markedAt: number;
   /**
    * Pre-gesture interaction-surface signature, captured from the session's

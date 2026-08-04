@@ -45,7 +45,10 @@ import {
   getActivePendingInteractionOutcome,
   retryPendingInteractionOutcome,
 } from '../interaction-outcome-policy.ts';
-import { capturePostGestureStabilizedResult } from '../post-gesture-stabilization.ts';
+import {
+  capturePostGestureStabilizedResult,
+  formatGestureNoEffectWarning,
+} from '../post-gesture-stabilization.ts';
 import { presentIosInteractiveSnapshot } from '../snapshot-presentation/ios/index.ts';
 import type { SessionState } from '../types.ts';
 import { errorResponse, type DaemonFailureResponse } from './response.ts';
@@ -153,12 +156,13 @@ async function captureInteractionOutcomeAwareSnapshot(
   }
 
   clearPendingInteractionOutcome(session);
-  latest = await capturePostGestureStabilizedResult({
+  const stabilized = await capturePostGestureStabilizedResult({
     session,
     initial: latest,
     capture: async () => await capturePostActionSnapshotAttempt(params),
     readSnapshot: (attempt) => attempt.snapshot,
   });
+  latest = stabilized.value;
   if (outcome.change !== 'ambiguous' && latest.annotations.freshness?.staleAfterRetries !== true) {
     clearAndroidSnapshotFreshness(session);
   }
@@ -175,7 +179,7 @@ async function captureInteractionOutcomeAwareSnapshot(
 
   return {
     snapshot: latest.snapshot,
-    ...latest.annotations,
+    ...withGestureNoEffectWarning(latest.annotations, stabilized.gestureNoEffect),
   };
 }
 
@@ -288,14 +292,35 @@ async function captureAndroidFreshnessAwareAttempt(
 async function capturePostGestureAwareSnapshot(
   params: CaptureSnapshotParams & { session: SessionState },
 ): Promise<CaptureSnapshotResult> {
-  const latest = await capturePostGestureStabilizedResult({
+  const stabilized = await capturePostGestureStabilizedResult({
     session: params.session,
     capture: async () => await capturePostActionSnapshotAttempt(params),
     readSnapshot: (attempt) => attempt.snapshot,
   });
+  const latest = stabilized.value;
   return {
     snapshot: latest.snapshot,
-    ...latest.annotations,
+    ...withGestureNoEffectWarning(latest.annotations, stabilized.gestureNoEffect),
+  };
+}
+
+/**
+ * #1600: a proven no-effect gesture must reach the agent inside the very
+ * response it reads next, not only the diagnostics stream. Warnings ride the
+ * existing annotations channel so every renderer that already prints capture
+ * warnings picks this up with no new plumbing.
+ */
+function withGestureNoEffectWarning(
+  annotations: SnapshotCaptureAnnotations,
+  gestureNoEffect: { action: string; positionals: string[] } | undefined,
+): SnapshotCaptureAnnotations {
+  if (!gestureNoEffect) return annotations;
+  return {
+    ...annotations,
+    warnings: [
+      ...(annotations.warnings ?? []),
+      formatGestureNoEffectWarning(gestureNoEffect.action, gestureNoEffect.positionals),
+    ],
   };
 }
 
