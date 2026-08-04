@@ -138,6 +138,9 @@ jobs:
             BOOT_FINISHED_AT="$(date +%s)"
             pnpm build
             pnpm clean:daemon
+            adb -s "$ANDROID_SERIAL" install -r "${{ steps.fixture-app.outputs.apk-path }}"
+            node --experimental-strip-types src/bin.ts replay examples/test-app/replays/drag-android.ad --platform android --serial "$ANDROID_SERIAL" --session nightly-android-target-drag --json
+            pnpm clean:daemon
             FULL_STARTED_AT="$(date +%s)"
             AGENT_DEVICE_ANDROID_E2E=1 AGENT_DEVICE_ANDROID_E2E_TIER=full AGENT_DEVICE_ANDROID_SERIAL="$ANDROID_SERIAL" AGENT_DEVICE_FIXTURE_APP_PATH="${{ steps.fixture-app.outputs.apk-path }}" AGENT_DEVICE_FIXTURE_APP_ID="${{ steps.fixture-app.outputs.app-id }}" node --test test/integration/smoke-android-emulator.test.ts
             FULL_FINISHED_AT="$(date +%s)"
@@ -209,6 +212,13 @@ jobs:
       - name: Report fixture cache source
         run: |
           echo "Fixture app source: ${{ steps.fixture-app.outputs.source }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Prove selector drag reaches its destination on iOS
+        run: |
+          xcrun simctl install "${{ steps.ios-simulator.outputs.simulator-udid }}" "${{ steps.fixture-app.outputs.app-path }}"
+          pnpm clean:daemon
+          node --experimental-strip-types src/bin.ts replay examples/test-app/replays/drag.ad --platform ios --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --session nightly-ios-target-drag --json
+          pnpm clean:daemon
 
       - name: Run full fixture-backed iOS simulator E2E
         env:

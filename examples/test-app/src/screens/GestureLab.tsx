@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Image, Platform, Text, View, type GestureResponderEvent } from 'react-native';
+import { Image, Platform, Pressable, Text, View, type GestureResponderEvent } from 'react-native';
 import {
   Directions,
   FlingGestureHandler,
@@ -292,6 +292,32 @@ export function GestureLab() {
       title="Gesture lab"
       testID="gesture-lab-card"
     >
+      <View style={styles.dragRow} testID="drag-gesture-fixture">
+        <GestureDetector gesture={holdDragGesture}>
+          <Pressable
+            accessibilityLabel="Drag source"
+            accessibilityRole="button"
+            onPress={() => undefined}
+            style={styles.dragEndpoint}
+            testID="drag-source"
+          >
+            <Text style={styles.dragEndpointLabel}>Source</Text>
+          </Pressable>
+        </GestureDetector>
+        <Pressable
+          accessibilityLabel="Drag destination"
+          accessibilityRole="button"
+          onPress={() => undefined}
+          style={styles.dragEndpoint}
+          testID="drag-destination"
+        >
+          <Text style={styles.dragEndpointLabel}>Destination</Text>
+        </Pressable>
+      </View>
+      <Text style={styles.metric} testID="drag-gesture-status">
+        drag completed {dragCompleted ? 'yes' : 'no'}
+      </Text>
+
       <View
         accessibilityLabel="Gesture test image"
         onTouchEnd={
@@ -347,30 +373,6 @@ export function GestureLab() {
           {changeStatusLabel}
         </Text>
       </View>
-
-      <View style={styles.dragRow} testID="drag-gesture-fixture">
-        <GestureDetector gesture={holdDragGesture}>
-          <View
-            accessible
-            accessibilityLabel="Drag source"
-            style={styles.dragEndpoint}
-            testID="drag-source"
-          >
-            <Text style={styles.dragEndpointLabel}>Source</Text>
-          </View>
-        </GestureDetector>
-        <View
-          accessible
-          accessibilityLabel="Drag destination"
-          style={styles.dragEndpoint}
-          testID="drag-destination"
-        >
-          <Text style={styles.dragEndpointLabel}>Destination</Text>
-        </View>
-      </View>
-      <Text style={styles.metric} testID="drag-gesture-status">
-        drag completed {dragCompleted ? 'yes' : 'no'}
-      </Text>
     </SectionCard>
   );
 }
