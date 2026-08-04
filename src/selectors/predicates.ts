@@ -6,12 +6,12 @@ import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import {
   buildSnapshotNodeMap,
   extractNodeText,
+  findSnapshotAncestor,
   isNodeVisibleInEffectiveViewport,
   normalizeType,
 } from '@agent-device/contracts/snapshot';
 import { isNodeEditable, isNodeVisible } from './node.ts';
 import { tryParseSelectorChain } from './parse.ts';
-import { findSnapshotAncestor } from '../snapshot/snapshot-processing.ts';
 
 export type IsPredicate =
   | 'visible'

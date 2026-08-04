@@ -606,6 +606,7 @@ export const FACADE_SYMBOLS: readonly (readonly [string, readonly string[]])[] =
       'buildSnapshotNodeMap',
       'extractNodeText',
       'findNearestScrollableAncestor',
+      'findSnapshotAncestor',
       'isFillableType',
       'isNodeVisibleInEffectiveViewport',
       'isNodeVisibleOnScreen',

@@ -5,6 +5,7 @@ import {
   buildSnapshotNodeMap,
   extractNodeText,
   findNearestScrollableAncestor,
+  findSnapshotAncestor,
   isFillableType,
   isNodeVisibleInEffectiveViewport,
   isNodeVisibleOnScreen,
@@ -35,6 +36,36 @@ test('snapshot text semantics normalize roles, identify fillable controls, and e
     }),
     'Enter name',
   );
+});
+
+test('findSnapshotAncestor walks non-contiguous parent indexes until resolver returns a value', () => {
+  const nodes: SnapshotNode[] = [
+    { ref: 'e10', index: 10, type: 'Window' },
+    { ref: 'e30', index: 30, parentIndex: 20, type: 'Text' },
+    { ref: 'e20', index: 20, parentIndex: 10, type: 'Cell' },
+  ];
+  const visited: number[] = [];
+
+  const ancestor = findSnapshotAncestor(nodes, nodes[1]!, buildSnapshotNodeMap(nodes), (n) => {
+    visited.push(n.index);
+    return n.type === 'Window' ? n : null;
+  });
+
+  assert.deepEqual(visited, [20, 10]);
+  assert.equal(ancestor?.index, 10);
+});
+
+test('findSnapshotAncestor terminates on a parent-linkage cycle without resolving', () => {
+  const nodes: SnapshotNode[] = [
+    { ref: 'e1', index: 1, parentIndex: 2, type: 'Text' },
+    { ref: 'e2', index: 2, parentIndex: 1, type: 'Cell' },
+  ];
+
+  const ancestor = findSnapshotAncestor(nodes, nodes[0]!, buildSnapshotNodeMap(nodes), (n) =>
+    n.type === 'Window' ? n : null,
+  );
+
+  assert.equal(ancestor, null);
 });
 
 test('snapshot tree and scroll semantics identify nodes through their stable indexes', () => {

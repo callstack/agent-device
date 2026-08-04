@@ -1,5 +1,5 @@
 export { isScrollableNodeLike, isScrollableType } from '../snapshot-scroll.ts';
-export { buildSnapshotNodeMap } from '../snapshot-tree.ts';
+export { buildSnapshotNodeMap, findSnapshotAncestor } from '../snapshot-tree.ts';
 export {
   findNearestScrollableAncestor,
   isNodeVisibleInEffectiveViewport,

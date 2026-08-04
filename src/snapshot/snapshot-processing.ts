@@ -1,5 +1,9 @@
-import type { RawSnapshotNode, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
-import { buildSnapshotNodeMap, normalizeType } from '@agent-device/contracts/snapshot';
+import type { RawSnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import {
+  buildSnapshotNodeMap,
+  findSnapshotAncestor,
+  normalizeType,
+} from '@agent-device/contracts/snapshot';
 import { extractReadableText } from '../utils/text-surface.ts';
 
 export function findNodeByLabel(nodes: SnapshotState['nodes'], label: string) {
@@ -85,29 +89,6 @@ export function findNearestHittableAncestor(
 ): SnapshotState['nodes'][number] | null {
   if (node.hittable) return node;
   return findNearestAncestor(nodes, node, (parent) => parent.hittable === true);
-}
-
-/**
- * Walks from the given node through its parent chain and returns the first
- * non-null value produced by `resolve`. Returning null from `resolve` skips
- * that ancestor and continues walking toward the root.
- */
-export function findSnapshotAncestor<T>(
-  nodes: SnapshotState['nodes'],
-  node: SnapshotNode,
-  nodeByIndex: ReadonlyMap<number, SnapshotNode>,
-  resolve: (ancestor: SnapshotNode) => T | null,
-): T | null {
-  let current: SnapshotNode | undefined = node;
-  const visited = new Set<number>();
-  while (typeof current.parentIndex === 'number' && !visited.has(current.index)) {
-    visited.add(current.index);
-    current = nodeByIndex.get(current.parentIndex) ?? nodes[current.parentIndex];
-    if (!current) return null;
-    const result = resolve(current);
-    if (result !== null) return result;
-  }
-  return null;
 }
 
 /**
