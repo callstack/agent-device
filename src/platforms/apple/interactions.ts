@@ -153,7 +153,9 @@ export function iosRunnerOverrides(
             text,
             delayMs,
             textEntryMode: 'replace',
-            ...(options?.resolvedTextInputTarget ? { resolvedTextInputTarget: true } : {}),
+            ...(options?.allowNonHittableCoordinateFallback
+              ? { allowNonHittableCoordinateFallback: true }
+              : {}),
             appBundleId: ctx.appBundleId,
           },
           runnerOpts,

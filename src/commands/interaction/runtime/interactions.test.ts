@@ -541,12 +541,11 @@ test('runtime fill with verify reports evidence and detects a changed post-actio
   assert.equal(result.evidence?.nodeCount, 1);
 });
 
-test('runtime fill resolves refs and forwards typed text-input evidence to the backend primitive', async () => {
+test('runtime fill resolves refs and forwards delay to the backend primitive', async () => {
   const calls: Array<{
     point: Point;
     text: string;
     delayMs?: number;
-    resolvedTextInputTarget?: boolean;
   }> = [];
   const device = createInteractionDevice(fillableSnapshot(), {
     captureSnapshot: async () => {
@@ -557,7 +556,6 @@ test('runtime fill resolves refs and forwards typed text-input evidence to the b
         point,
         text,
         delayMs: options?.delayMs,
-        resolvedTextInputTarget: options?.resolvedTextInputTarget,
       });
     },
   });
@@ -572,7 +570,6 @@ test('runtime fill resolves refs and forwards typed text-input evidence to the b
       point: { x: 50, y: 30 },
       text: 'hello',
       delayMs: 25,
-      resolvedTextInputTarget: true,
     },
   ]);
   assert.equal(result.kind, 'ref');
@@ -581,19 +578,15 @@ test('runtime fill resolves refs and forwards typed text-input evidence to the b
   assert.equal(result.warning, undefined);
 });
 
-test('runtime fill does not mark a non-text target as resolved text-input evidence', async () => {
-  const evidence: Array<boolean | undefined> = [];
+test('runtime fill warns when the resolved target is not a text input', async () => {
   const device = createInteractionDevice(selectorSnapshot(), {
-    fill: async (_context, _point, _text, options) => {
-      evidence.push(options?.resolvedTextInputTarget);
-    },
+    fill: async () => {},
   });
 
   const result = await device.interactions.fill(selector('label=Continue'), 'hello', {
     session: 'default',
   });
 
-  assert.deepEqual(evidence, [undefined]);
   assert.match(result.warning ?? '', /attempting fill anyway/);
 });
 

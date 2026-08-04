@@ -322,3 +322,20 @@ export const RUNNER_NON_HITTABLE_NODES = [
     rect: { x: 20, y: 300, width: 360, height: 60 },
   },
 ] as const;
+
+export const RUNNER_NON_HITTABLE_TEXT_INPUT_NODES = [
+  {
+    index: 0,
+    type: 'Application',
+    label: 'Example',
+    rect: { x: 0, y: 0, width: 400, height: 800 },
+  },
+  {
+    index: 1,
+    parentIndex: 0,
+    type: 'TextField',
+    label: 'Pin',
+    hittable: false,
+    rect: { x: 20, y: 40, width: 160, height: 40 },
+  },
+] as const;

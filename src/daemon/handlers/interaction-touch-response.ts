@@ -30,6 +30,8 @@ export type InteractionResponseSource =
       kind: 'runtime';
       result: InteractionRuntimeResult;
       publicData?: Record<string, unknown>;
+      /** Runtime-resolved Maestro fill used the runner's non-hittable coordinate path. */
+      maestroFallbackUsed?: boolean;
     }
   | {
       // Direct iOS selector dispatch: no runtime result exists, only the raw
@@ -112,9 +114,10 @@ export function buildInteractionResponseData(params: {
 
   const { result } = source;
   const resultExtra = interactionResultExtra(result);
+  const { resolution: _resolution, ...resultExtraWithoutResolution } = resultExtra;
   const commonExtra = {
     targetKind: result.kind,
-    ...resultExtra,
+    ...(source.maestroFallbackUsed ? resultExtraWithoutResolution : resultExtra),
     ...settleExtra(result.settle, params.settleRefsGeneration),
     ...(extra ?? {}),
   };

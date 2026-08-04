@@ -136,7 +136,7 @@ function createInteractionBackend(
           req.flags?.out,
           {
             ...params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
-            ...(options?.resolvedTextInputTarget ? { resolvedTextInputTarget: true } : {}),
+            allowNonHittableCoordinateFallback: options?.allowNonHittableCoordinateFallback,
           },
         ),
       );

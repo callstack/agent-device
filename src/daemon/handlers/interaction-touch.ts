@@ -452,7 +452,10 @@ async function dispatchDirectIosSelectorInteraction(params: {
       flags: handlerParams.req.flags,
       data,
     });
-    const fallbackDetails = directIosSelectorFallbackDetails(selector, data);
+    const fallbackDetails = maestroFallbackDetails(
+      selector.allowNonHittableCoordinateFallback === true,
+      data,
+    );
     const { result, responseData } = buildInteractionResponseData({
       source: {
         kind: 'runner-payload',
@@ -529,12 +532,12 @@ function readInteractionResponseDataTransformCommand(
   return dispatchCommand;
 }
 
-function directIosSelectorFallbackDetails(
-  selector: DirectIosSelectorTarget,
-  data: Record<string, unknown>,
+function maestroFallbackDetails(
+  allowed: boolean,
+  data: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
-  if (!selector.allowNonHittableCoordinateFallback) return {};
-  const used = data.maestroNonHittableCoordinateFallbackUsed === true;
+  if (!allowed) return {};
+  const used = data?.maestroNonHittableCoordinateFallbackUsed === true;
   return {
     maestroNonHittableCoordinateFallbackAllowed: true,
     maestroNonHittableCoordinateFallbackUsed: used,
@@ -611,6 +614,7 @@ async function dispatchFillViaRuntime(
         session: sessionName,
         requestId: req.meta?.requestId,
         delayMs: req.flags?.delayMs,
+        allowNonHittableCoordinateFallback: req.flags?.maestro?.allowNonHittableCoordinateFallback,
         verify: req.flags?.verify,
         settle: readSettleRequest(req.flags),
         expectedResolvedTarget: replayTargetGuard,
@@ -673,6 +677,10 @@ function buildFillResponsePayloads(params: {
   staleRefsWarning: string | undefined;
 }): InteractionResponsePayloads {
   const { session, result } = params;
+  const fallbackDetails = maestroFallbackDetails(
+    params.flags?.maestro?.allowNonHittableCoordinateFallback === true,
+    result.backendResult,
+  );
   const referenceFrame =
     result.kind === 'point'
       ? undefined
@@ -687,9 +695,10 @@ function buildFillResponsePayloads(params: {
         flags: params.flags,
         data: result.backendResult,
       }),
+      maestroFallbackUsed: fallbackDetails.maestroNonHittableCoordinateFallbackUsed === true,
     },
     referenceFrame,
-    extra: { text: params.text },
+    extra: { text: params.text, ...fallbackDetails },
     staleRefsWarning: params.staleRefsWarning,
     settleRefsGeneration: settleRefsGenerationIssue(session, result),
   });

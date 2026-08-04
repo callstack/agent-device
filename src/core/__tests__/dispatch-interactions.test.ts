@@ -90,7 +90,7 @@ test('handlePressCommand fuses an iOS jitter series into one sequence runner req
   assert.equal(result.message, 'Tapped (100, 200)');
 });
 
-test('handleFillCommand forwards shared-runtime text-input evidence separately from coordinates', async () => {
+test('handleFillCommand forwards validated coordinates and delay', async () => {
   const calls: unknown[][] = [];
   const interactor = {
     ...makeUnusedInteractor(),
@@ -99,14 +99,12 @@ test('handleFillCommand forwards shared-runtime text-input evidence separately f
     },
   };
 
-  await handleFillCommand(interactor, ['120', '240', 'semantic'], {
-    resolvedTextInputTarget: true,
-  });
+  await handleFillCommand(interactor, ['120', '240', 'semantic'], { delayMs: 25 });
   await handleFillCommand(interactor, ['120', '240', 'coordinate'], undefined);
 
   assert.deepEqual(calls, [
-    [120, 240, 'semantic', 0, { resolvedTextInputTarget: true }],
-    [120, 240, 'coordinate', 0, { resolvedTextInputTarget: undefined }],
+    [120, 240, 'semantic', 25],
+    [120, 240, 'coordinate', 0],
   ]);
 });
 

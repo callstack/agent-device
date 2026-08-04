@@ -204,6 +204,21 @@ test('interaction response shape: fill point uses the canonical point envelope',
   });
 });
 
+test('interaction response shape: type tolerates a zero-sized runner reference frame', async () => {
+  await withIosContractDaemon(
+    [runnerTypeEntry({ referenceWidth: 0, referenceHeight: 0 })],
+    async (daemon) => {
+      const data = assertRpcOk(await daemon.callCommand('type', ['Hello']));
+
+      // A zero-sized runner frame is unusable coordinate evidence. The daemon
+      // drops it instead of normalizing through zero or rejecting bare type.
+      assert.equal(data.referenceWidth, undefined);
+      assert.equal(data.referenceHeight, undefined);
+      assert.equal(data.text, 'Hello');
+    },
+  );
+});
+
 test('interaction response shape: longpress point uses the canonical point envelope', async () => {
   await withIosContractDaemon([runnerLongPressEntry({})], async (daemon, transcript) => {
     const data = assertRpcOk(await daemon.callCommand('longpress', ['100', '200', '700']));

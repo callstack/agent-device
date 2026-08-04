@@ -72,8 +72,6 @@ export type RunnerCommand = {
   allowNonHittableCoordinateFallback?: boolean;
   delayMs?: number;
   textEntryMode?: 'append' | 'replace';
-  /** The shared selector runtime resolved this coordinate target as a text input. */
-  resolvedTextInputTarget?: boolean;
   action?: 'get' | 'accept' | 'dismiss';
   x?: number;
   y?: number;

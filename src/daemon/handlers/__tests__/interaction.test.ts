@@ -571,7 +571,6 @@ test('fill simple iOS id selector resolves runtime text input evidence before co
   expect(mockDispatch.mock.calls[0]?.[2]).toEqual(['190', '102', 'ada@example.com']);
   const context = mockDispatch.mock.calls[0]?.[4] as Record<string, unknown>;
   expect(context.directElementSelector).toBeUndefined();
-  expect(context.resolvedTextInputTarget).toBe(true);
   expect(context.delayMs).toBe(25);
   if (response?.ok) {
     expect(response.data?.selector).toBe('id="email"');

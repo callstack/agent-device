@@ -9,7 +9,8 @@ extension RunnerTests {
     text: String,
     delaySeconds: Double,
     repairMode: TextTypingRepairMode = .none,
-    resolvedTextInputTarget: Bool = false,
+    xCTestChannelPenalized: Bool = false,
+    synthesizer: any TextEntrySynthesizing,
     commandId: String? = nil
   ) -> TextEntryResult {
     let totalStartedAt = Date()
@@ -17,45 +18,59 @@ extension RunnerTests {
       logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: 0, mode: repairMode)
       return TextEntryResult(verified: true, repaired: false, expectedText: "", observedText: "")
     }
+    var activeTarget = target
     if repairMode == .replacement,
        Self.shouldUseSynthesizedFirstResponderReplacement(
          hasResolvedElement: target.element != nil,
          hasRefreshPoint: target.refreshPoint != nil,
-         resolvedTextInputTarget: resolvedTextInputTarget
+         xCTestChannelPenalized: xCTestChannelPenalized
        ) {
 #if os(iOS)
       NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder-replacement")
       let steps = Self.synthesizedReplacementSteps(text: text, delaySeconds: delaySeconds)
+      var synthesisUnavailable = false
       for (index, step) in steps.enumerated() {
-        let message = step.replacesExistingText
-          ? RunnerSynthesizedTextEntry.replaceText(withApplication: app, text: step.text)
-          : RunnerSynthesizedTextEntry.synthesizeText(withApplication: app, text: step.text)
-        if let message {
+        let synthesis = step.replacesExistingText
+          ? synthesizer.replaceText(app: app, text: step.text)
+          : synthesizer.synthesizeText(app: app, text: step.text)
+        switch Self.synthesizedTextEntryDisposition(status: synthesis.status) {
+        case .fallback:
+          NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=verified-fallback reason=synthesis-unavailable")
+          if let point = target.refreshPoint {
+            activeTarget = focusTextInputForTextEntry(app: app, x: point.x, y: point.y)
+          }
+          synthesisUnavailable = true
+          break
+        case .raise:
           NSException(
             name: NSExceptionName.internalInconsistencyException,
-            reason: message
+            reason: synthesis.message ?? "private XCTest text synthesis failed"
           ).raise()
+        case .continueTyping:
+          break
         }
+        if synthesisUnavailable { break }
         if index + 1 < steps.count {
           sleepFor(delaySeconds)
         }
       }
-      logTextEntryPhase(
-        commandId: commandId,
-        phase: "total",
-        startedAt: totalStartedAt,
-        chars: text.count,
-        mode: repairMode
-      )
-      return TextEntryResult(
-        verified: nil,
-        repaired: false,
-        expectedText: text,
-        observedText: nil
-      )
+      if !synthesisUnavailable {
+        logTextEntryPhase(
+          commandId: commandId,
+          phase: "total",
+          startedAt: totalStartedAt,
+          chars: text.count,
+          mode: repairMode
+        )
+        return TextEntryResult(
+          verified: nil,
+          repaired: false,
+          expectedText: text,
+          observedText: nil
+        )
+      }
 #endif
     }
-    var activeTarget = target
     let initialResolveStartedAt = Date()
     let initialTarget = resolveTextEntryElement(app: app, target: activeTarget)
     activeTarget = activeTarget.withElement(initialTarget)
@@ -96,14 +111,17 @@ extension RunnerTests {
       } else {
 #if os(iOS)
         NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder")
-        if let message = RunnerSynthesizedTextEntry.synthesizeText(
-          withApplication: app,
-          text: value
-        ) {
+        let synthesis = synthesizer.synthesizeText(app: app, text: value)
+        switch Self.synthesizedTextEntryDisposition(status: synthesis.status) {
+        case .fallback:
+          app.typeText(value)
+        case .raise:
           NSException(
             name: NSExceptionName.internalInconsistencyException,
-            reason: message
+            reason: synthesis.message ?? "private XCTest text synthesis failed"
           ).raise()
+        case .continueTyping:
+          break
         }
 #else
         app.typeText(value)

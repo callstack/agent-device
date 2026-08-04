@@ -58,6 +58,8 @@ export type FillCommandOptions = CommandContext & {
   target: InteractionTarget;
   text: string;
   delayMs?: number;
+  /** Internal Maestro replay policy, forwarded only to the platform action. */
+  allowNonHittableCoordinateFallback?: boolean;
   /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
   expectedResolvedTarget?: ExpectedResolvedTarget;
 } & PostActionObservationOptions;
@@ -106,20 +108,23 @@ export const fillCommand: RuntimeCommand<FillCommandOptions, FillCommandResult> 
   }
   const point = requireResolvedPoint(resolved);
   const nodeType = 'node' in resolved ? (resolved.node?.type ?? '') : '';
-  const resolvedTextInputTarget =
-    nodeType !== '' && isFillableType(nodeType, runtime.backend.platform);
+  const isResolvedTextInput = nodeType !== '' && isFillableType(nodeType, runtime.backend.platform);
+  const useMaestroNonHittableCoordinateFallback =
+    options.allowNonHittableCoordinateFallback === true &&
+    'node' in resolved &&
+    resolved.node?.hittable === false;
   const backendResult = await runtime.backend.fill(
     toBackendContext(runtime, options),
     point,
     options.text,
     {
       delayMs: options.delayMs,
-      ...(resolvedTextInputTarget ? { resolvedTextInputTarget: true } : {}),
+      allowNonHittableCoordinateFallback: useMaestroNonHittableCoordinateFallback,
     },
   );
   const formattedBackendResult = toBackendResult(backendResult);
   const warning =
-    nodeType && !resolvedTextInputTarget
+    nodeType && !isResolvedTextInput
       ? `fill target ${formatTargetForWarning(resolved)} resolved to "${nodeType}", attempting fill anyway.`
       : undefined;
   return await applyPostActionObservation(

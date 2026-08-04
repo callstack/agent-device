@@ -22,6 +22,7 @@ export type LiveContext = LiveDeviceContext<IosSimulatorBehaviorId> & {
   appId: string;
   appPath: string;
   stateDir: string;
+  runnerLogPath?: string;
   tier: Tier;
   udid: string;
 };

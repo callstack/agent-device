@@ -4,10 +4,82 @@ import XCTest
 // pipeline, readiness polling, and field clearing. Behavior-preserving extraction from
 // RunnerTests+Interaction.swift (no logic changes) to keep that file navigable.
 extension RunnerTests {
+  enum SynthesizedTextEntryStatus {
+    case succeeded
+    case unavailable
+    case failed
+  }
+
+  struct SynthesizedTextEntryAttempt {
+    let status: SynthesizedTextEntryStatus
+    let message: String?
+  }
+
+  protocol TextEntrySynthesizing {
+    func synthesizeText(app: XCUIApplication, text: String) -> SynthesizedTextEntryAttempt
+    func replaceText(app: XCUIApplication, text: String) -> SynthesizedTextEntryAttempt
+  }
+
+  struct PrivateXCTestTextEntrySynthesizer: TextEntrySynthesizing {
+    func synthesizeText(app: XCUIApplication, text: String) -> SynthesizedTextEntryAttempt {
+#if os(iOS)
+      return Self.attempt(from: RunnerSynthesizedTextEntry.synthesizeText(withApplication: app, text: text))
+#else
+      return SynthesizedTextEntryAttempt(status: .unavailable, message: nil)
+#endif
+    }
+
+    func replaceText(app: XCUIApplication, text: String) -> SynthesizedTextEntryAttempt {
+#if os(iOS)
+      return Self.attempt(from: RunnerSynthesizedTextEntry.replaceText(withApplication: app, text: text))
+#else
+      return SynthesizedTextEntryAttempt(status: .unavailable, message: nil)
+#endif
+    }
+
+#if os(iOS)
+    private static func attempt(
+      from result: RunnerSynthesizedTextEntryResult
+    ) -> SynthesizedTextEntryAttempt {
+      let status: SynthesizedTextEntryStatus
+      switch result.status {
+      case .succeeded:
+        status = .succeeded
+      case .unavailable:
+        status = .unavailable
+      case .failed:
+        status = .failed
+      @unknown default:
+        status = .failed
+      }
+      return SynthesizedTextEntryAttempt(status: status, message: result.message)
+    }
+#endif
+  }
+
   enum TextTypingRepairMode {
     case none
     case append
     case replacement
+  }
+
+  enum SynthesizedTextEntryDisposition {
+    case continueTyping
+    case fallback
+    case raise
+  }
+
+  static func synthesizedTextEntryDisposition(
+    status: SynthesizedTextEntryStatus
+  ) -> SynthesizedTextEntryDisposition {
+    switch status {
+    case .succeeded:
+      return .continueTyping
+    case .unavailable:
+      return .fallback
+    case .failed:
+      return .raise
+    }
   }
 
   enum TextEntryTiming {
@@ -74,18 +146,25 @@ extension RunnerTests {
   static func shouldUseSynthesizedFirstResponderReplacement(
     hasResolvedElement: Bool,
     hasRefreshPoint: Bool,
-    resolvedTextInputTarget: Bool
+    xCTestChannelPenalized: Bool
   ) -> Bool {
-    !hasResolvedElement && hasRefreshPoint && resolvedTextInputTarget
+    !hasResolvedElement && hasRefreshPoint && xCTestChannelPenalized
   }
 
   static func shouldUseResolvedCoordinateTextEntryRoute(
     repairMode: TextTypingRepairMode,
     hasX: Bool,
     hasY: Bool,
-    resolvedTextInputTarget: Bool
+    xCTestChannelPenalized: Bool
   ) -> Bool {
-    repairMode == .replacement && hasX && hasY && resolvedTextInputTarget
+    repairMode == .replacement && hasX && hasY && xCTestChannelPenalized
+  }
+
+  static func shouldFallbackFromSynthesizedTextEntryFocus(
+    _ outcome: RunnerInteractionOutcome
+  ) -> Bool {
+    if case .unsupported = outcome { return true }
+    return false
   }
 
   func clearTextInput(_ element: XCUIElement) {

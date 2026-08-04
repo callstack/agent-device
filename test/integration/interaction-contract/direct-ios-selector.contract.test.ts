@@ -105,7 +105,6 @@ test('default simple-selector fill resolves through the runtime before typing', 
       assert.equal(typeRequest?.selectorKey, undefined);
       assert.equal(typeRequest?.x, 180);
       assert.equal(typeRequest?.y, 262);
-      assert.equal(typeRequest?.resolvedTextInputTarget, true);
     },
   );
 });

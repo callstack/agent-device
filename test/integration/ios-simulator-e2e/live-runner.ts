@@ -204,10 +204,8 @@ async function assertFormInput(context: LiveContext): Promise<void> {
     String(emailRect.y + emailRect.height / 2),
   ]);
   await runStep(context, 'append email suffix from coordinate focus', ['type', '.test']);
-  const runnerLog = fs.readFileSync(
-    path.join(context.stateDir, 'sessions', context.session, 'runner.log'),
-    'utf8',
-  );
+  assert.ok(context.runnerLogPath, 'cold-launch open response should retain runnerLogPath');
+  const runnerLog = fs.readFileSync(context.runnerLogPath, 'utf8');
   assert.match(
     runnerLog,
     /AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder/,

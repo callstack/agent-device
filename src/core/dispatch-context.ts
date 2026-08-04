@@ -42,8 +42,8 @@ export type DispatchContext = ScreenshotDispatchFlags & {
   count?: number;
   intervalMs?: number;
   delayMs?: number;
-  /** The shared interaction runtime resolved this coordinate as a text input. */
-  resolvedTextInputTarget?: boolean;
+  /** Maestro replay compatibility for coordinate-resolved fill targets. */
+  allowNonHittableCoordinateFallback?: boolean;
   durationMs?: number;
   holdMs?: number;
   jitterPx?: number;

@@ -40,6 +40,13 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
     '--relaunch',
   ]);
   assertJsonContains(opened, context.appId, 'open response should retain fixture identity');
+  const runnerLogPath = opened.json?.data?.runnerLogPath;
+  assert.equal(
+    typeof runnerLogPath,
+    'string',
+    `open response should expose the authoritative runner log path: ${JSON.stringify(opened.json)}`,
+  );
+  context.runnerLogPath = runnerLogPath;
   if (context.tier === 'full') {
     await runStep(context, 'normalize simulator orientation', ['orientation', 'portrait']);
     await runStep(context, 'normalize simulator appearance', ['settings', 'appearance', 'light']);

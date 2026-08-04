@@ -5,13 +5,22 @@ import { AppError } from '@agent-device/kernel/errors';
 import { assertRpcError, assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';
 import { scenarioName } from './coverage-manifest.ts';
+import { RUNNER_NON_HITTABLE_TEXT_INPUT_NODES } from './fixtures.ts';
 import { MAESTRO_FALLBACK_COVERAGE } from './maestro-fallback.coverage.ts';
-import { runnerTapEntry, runnerTapErrorEntry, withIosContractDaemon } from './daemon-harness.ts';
+import {
+  runnerSnapshotEntry,
+  runnerTapEntry,
+  runnerTapErrorEntry,
+  runnerTypeEntry,
+  withIosContractDaemon,
+} from './daemon-harness.ts';
 
 // ADR 0011 Layer 3, maestro-non-hittable-fallback path: replay-only
 // coordinate fallback for non-hittable elements, Maestro semantics. Path
 // forcing is natural: the maestro.allowNonHittableCoordinateFallback flag on
-// a simple-selector click forwards the fallback permission to the runner.
+// a simple-selector click forwards the fallback permission to the runner. The
+// fill compatibility case below intentionally proves the surviving runtime
+// route instead, so removal of direct selector fill cannot erase that coverage.
 
 const scenario = (guarantee: InteractionGuarantee): string =>
   scenarioName(MAESTRO_FALLBACK_COVERAGE, guarantee);
@@ -70,6 +79,37 @@ test('maestro-non-hittable-fallback resolutionDisclosure: allowed-but-not-taken 
       assert.equal(data.maestroNonHittableCoordinateFallbackAllowed, true);
       assert.equal(data.maestroNonHittableCoordinateFallbackUsed, false);
       assert.deepEqual(data.resolution, { source: 'direct-ios', kind: 'not-observed' });
+    },
+  );
+});
+
+test('Maestro fill of a non-hittable input resolves through the runtime path', async () => {
+  await withIosContractDaemon(
+    [
+      runnerSnapshotEntry(RUNNER_NON_HITTABLE_TEXT_INPUT_NODES),
+      runnerTypeEntry({
+        x: 100,
+        y: 60,
+        maestroNonHittableCoordinateFallbackUsed: true,
+      }),
+    ],
+    async (daemon, transcript) => {
+      const data = assertRpcOk(
+        await daemon.callCommand('fill', ['label=Pin', '1234'], MAESTRO_FLAGS),
+      );
+
+      assert.equal(transcript.calls[0]?.command, 'ios.runner.snapshot');
+      assert.equal(transcript.calls[1]?.command, 'ios.runner.type');
+      const typeRequest = transcript.calls[1]?.request as Record<string, unknown> | undefined;
+      assert.equal(typeRequest?.selectorKey, undefined);
+      assert.equal(typeRequest?.x, 100);
+      assert.equal(typeRequest?.y, 60);
+      assert.equal(typeRequest?.allowNonHittableCoordinateFallback, true);
+      assert.equal(data.resolution, undefined);
+      assert.equal(data.targetHittable, false);
+      assert.equal(data.maestroNonHittableCoordinateFallbackAllowed, true);
+      assert.equal(data.maestroNonHittableCoordinateFallbackUsed, true);
+      assert.equal(data.maestroFallbackReason, 'non-hittable-coordinate');
     },
   );
 });

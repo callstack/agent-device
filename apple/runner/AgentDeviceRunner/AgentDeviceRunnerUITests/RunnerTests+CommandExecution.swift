@@ -2465,14 +2465,23 @@ extension RunnerTests {
     let target: TextEntryTarget
     var resolvedCoordinateContext: SynthesizedCoordinateContext?
     var maestroNonHittableCoordinateFallbackUsed: Bool?
+    if command.allowNonHittableCoordinateFallback == true,
+      command.x != nil,
+      command.y != nil
+    {
+      // The shared runtime has already resolved this node as non-hittable and
+      // deliberately selected Maestro's coordinate compatibility route.
+      maestroNonHittableCoordinateFallbackUsed = true
+    }
     let focusStartedAt = Date()
 #if os(iOS)
+    let xCTestChannelPenalized = isSnapshotXCTestChannelPenalized(bundleId: currentBundleId)
     var resolvedCoordinateTarget: TextEntryTarget?
     if Self.shouldUseResolvedCoordinateTextEntryRoute(
       repairMode: textEntryMode,
       hasX: command.x != nil,
       hasY: command.y != nil,
-      resolvedTextInputTarget: command.resolvedTextInputTarget == true
+      xCTestChannelPenalized: xCTestChannelPenalized
     ), let x = command.x, let y = command.y {
       let policyKind = SynthesizedGesturePolicyKind.coordinateTap
       let context = synthesizedCoordinateContext(
@@ -2482,27 +2491,35 @@ extension RunnerTests {
       let (_, outcome) = performGesture(activeApp, idleTimeout: false) {
         synthesizedTapAt(app: activeApp, x: x, y: y, context: context)
       }
-      if let response = unsupportedResponse(for: outcome) {
-        return response
+      if Self.shouldFallbackFromSynthesizedTextEntryFocus(outcome) {
+        logSynthesizedGesturePolicyDecision(
+          kind: policyKind,
+          context: context,
+          fallbackAttempted: true
+        )
+      } else {
+        logSynthesizedGesturePolicyDecision(
+          kind: policyKind,
+          context: context,
+          fallbackAttempted: false
+        )
+        resolvedCoordinateContext = context
+        resolvedCoordinateTarget = TextEntryTarget(
+          element: nil,
+          refreshPoint: CGPoint(x: x, y: y),
+          prefersFocusedElement: false
+        )
       }
-      logSynthesizedGesturePolicyDecision(
-        kind: policyKind,
-        context: context,
-        fallbackAttempted: false
-      )
-      resolvedCoordinateContext = context
-      resolvedCoordinateTarget = TextEntryTarget(
-        element: nil,
-        refreshPoint: CGPoint(x: x, y: y),
-        prefersFocusedElement: false
-      )
     }
 #else
+    let xCTestChannelPenalized = false
     let resolvedCoordinateTarget: TextEntryTarget? = nil
 #endif
     if let resolvedCoordinateTarget {
       target = resolvedCoordinateTarget
     } else if let selectorKey = command.selectorKey, let selectorValue = command.selectorValue {
+      // Released daemons may still send selector-keyed type commands even though current
+      // daemons resolve fill selectors through the runtime tree before reaching the runner.
       let match = findElement(
         app: activeApp,
         selectorKey: selectorKey,
@@ -2537,7 +2554,7 @@ extension RunnerTests {
       let canReplaceResolvedFirstResponder = Self.shouldUseSynthesizedFirstResponderReplacement(
         hasResolvedElement: target.element != nil,
         hasRefreshPoint: target.refreshPoint != nil,
-        resolvedTextInputTarget: command.resolvedTextInputTarget == true
+        xCTestChannelPenalized: xCTestChannelPenalized
       )
 #else
       let canReplaceResolvedFirstResponder = false
@@ -2556,7 +2573,8 @@ extension RunnerTests {
       text: text,
       delaySeconds: delaySeconds,
       repairMode: textEntryMode,
-      resolvedTextInputTarget: command.resolvedTextInputTarget == true,
+      xCTestChannelPenalized: xCTestChannelPenalized,
+      synthesizer: PrivateXCTestTextEntrySynthesizer(),
       commandId: command.commandId
     )
     if textResult.verified == false {
