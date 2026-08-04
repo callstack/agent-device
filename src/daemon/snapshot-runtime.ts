@@ -18,7 +18,10 @@ import {
   withSessionlessRunnerCleanup,
 } from './handlers/snapshot-session.ts';
 import { activateCompleteRefFrame } from './ref-frame.ts';
-import { applyRecoveredWarningLatch } from './snapshot-quality-latch.ts';
+import {
+  applyRecoveredWarningLatch,
+  type CapturedSnapshotQuality,
+} from './snapshot-quality-latch.ts';
 import { createDaemonRuntimePolicy } from './runtime-policy.ts';
 import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
 import { isInteractiveObservation } from './session-action-recorder.ts';
@@ -145,6 +148,7 @@ async function dispatchSnapshotRuntimeCommand(
   if (iosAppSessionGuard) return iosAppSessionGuard;
 
   return await withSessionlessRunnerCleanup(session, device, async () => {
+    const capturedQuality: CapturedSnapshotQuality = {};
     const runtime = createSnapshotRuntime({
       req,
       sessionName,
@@ -153,6 +157,7 @@ async function dispatchSnapshotRuntimeCommand(
       session,
       device,
       snapshotScope: resolvedScope.scope,
+      capturedQuality,
     });
     let result: Awaited<ReturnType<SnapshotRuntimeCommandParams['execute']>>;
     try {
@@ -184,6 +189,7 @@ async function dispatchSnapshotRuntimeCommand(
       data: applyRecoveredWarningLatch({
         session: sessionStore.get(sessionName),
         data: result.data,
+        verdict: capturedQuality.value,
         internalObservation: req.internal?.observationOnly === true,
       }),
     };
@@ -212,6 +218,7 @@ function createSnapshotRuntime(params: {
   session: SessionState | undefined;
   device: SessionState['device'];
   snapshotScope: string | undefined;
+  capturedQuality: CapturedSnapshotQuality;
 }) {
   const { req, sessionName, logPath, sessionStore, session, device, snapshotScope } = params;
   return createAgentDevice({
@@ -221,6 +228,7 @@ function createSnapshotRuntime(params: {
       session,
       device,
       snapshotScope,
+      capturedQuality: params.capturedQuality,
     }),
     ...createDaemonRuntimePolicy('snapshot'),
     sessions: createDaemonRuntimeSessionStore({
@@ -328,6 +336,7 @@ function createDaemonSnapshotBackend(params: {
   session: SessionState | undefined;
   device: SessionState['device'];
   snapshotScope: string | undefined;
+  capturedQuality: CapturedSnapshotQuality;
 }): AgentDeviceBackend {
   const { req, logPath, session, device, snapshotScope } = params;
   return {
@@ -341,10 +350,15 @@ function createDaemonSnapshotBackend(params: {
         logPath,
         snapshotScope,
       });
+      const annotations = snapshotCaptureAnnotationsFrom(capture);
+      // Feed the latch seam the capture's own verdict: the stored session
+      // snapshot is not a substitute (an empty ref-scoped capture retains the
+      // previous snapshot, and diff never publishes the verdict).
+      params.capturedQuality.value = annotations.quality;
       const snapshotDiagnostics = summarizeSnapshotDiagnostics(session);
       return {
         snapshot: capture.snapshot,
-        ...snapshotCaptureAnnotationsFrom(capture),
+        ...annotations,
         ...(snapshotDiagnostics ? { snapshotDiagnostics } : {}),
         appName: session?.appBundleId ? (session.appName ?? session.appBundleId) : undefined,
         appBundleId: session?.appBundleId,

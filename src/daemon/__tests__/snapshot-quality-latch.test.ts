@@ -11,7 +11,7 @@ import {
   applyRecoveredWarningLatch,
   resolveRecoveredWarningLatch,
 } from '../snapshot-quality-latch.ts';
-import { dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
+import { dispatchSnapshotDiffViaRuntime, dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
 import { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
 
@@ -121,7 +121,8 @@ test('internal observation responses neither consume nor clear the latch', () =>
 
   const internal = applyRecoveredWarningLatch({
     session,
-    data: { snapshotQuality: deferredVerdict() },
+    data: {},
+    verdict: deferredVerdict(),
     internalObservation: true,
   });
   expect(internal.warnings).toBeUndefined();
@@ -130,17 +131,23 @@ test('internal observation responses neither consume nor clear the latch', () =>
   session.recoveredSnapshotWarningLatch = { appBundleId: 'com.example.app' };
   applyRecoveredWarningLatch({
     session,
-    data: { snapshotQuality: { state: 'healthy', backend: 'tree' } },
+    data: {},
+    verdict: { state: 'healthy', backend: 'tree' },
     internalObservation: true,
   });
   expect(session.recoveredSnapshotWarningLatch).toEqual({ appBundleId: 'com.example.app' });
 });
 
 test('sessionless responses pass through unchanged', () => {
-  const data = { snapshotQuality: deferredVerdict() };
-  expect(applyRecoveredWarningLatch({ session: undefined, data, internalObservation: false })).toBe(
-    data,
-  );
+  const data = {};
+  expect(
+    applyRecoveredWarningLatch({
+      session: undefined,
+      data,
+      verdict: deferredVerdict(),
+      internalObservation: false,
+    }),
+  ).toBe(data);
 });
 
 function scenario() {
@@ -152,7 +159,7 @@ function scenario() {
   return { sessionStore, sessionName, logPath: path.join(root, 'daemon.log') };
 }
 
-function seedCapture(verdict: SnapshotQualityVerdict) {
+function seedCapture(verdict: SnapshotQualityVerdict, label = 'Continue') {
   dispatchCommandMock.mockResolvedValue({
     backend: 'xctest',
     truncated: false,
@@ -162,7 +169,7 @@ function seedCapture(verdict: SnapshotQualityVerdict) {
         index: 0,
         depth: 0,
         type: 'Button',
-        label: 'Continue',
+        label,
         rect: { x: 0, y: 0, width: 100, height: 44 },
         hittable: true,
       },
@@ -234,6 +241,56 @@ test('a healthy public capture re-arms the one-shot warning', async () => {
   seedCapture(deferredVerdict());
   const rearmed = await dispatchPublicSnapshot(input);
   expect(responseWarnings(rearmed).filter((line) => line === FULL_WARNING)).toHaveLength(1);
+});
+
+test('an empty ref-scoped diff latches on the captured verdict, not the retained snapshot', async () => {
+  const input = scenario();
+  // The stored snapshot is healthy and carries the ref the diff will scope to;
+  // the fresh capture is deferred and contains no node matching that scope, so
+  // the empty scoped result deliberately retains the stored snapshot
+  // (`shouldKeepCurrentSnapshot`) — a seam reading the verdict back from the
+  // session would consult the retained healthy verdict and omit the warning.
+  const session = input.sessionStore.get(input.sessionName)!;
+  session.snapshot = {
+    createdAt: Date.now(),
+    snapshotQuality: { state: 'healthy', backend: 'tree' },
+    nodes: [
+      {
+        index: 0,
+        depth: 0,
+        type: 'Button',
+        ref: 'e1',
+        label: 'Continue',
+        rect: { x: 0, y: 0, width: 100, height: 44 },
+        hittable: true,
+      },
+    ],
+  };
+  // The deferred capture holds no node labeled 'Continue', so the '@e1' scope
+  // resolves to zero nodes and the retention path runs.
+  seedCapture(deferredVerdict(), 'Something else');
+
+  const diff = await dispatchSnapshotDiffViaRuntime({
+    req: {
+      command: 'diff',
+      positionals: [],
+      token: 't',
+      session: input.sessionName,
+      flags: { snapshotScope: '@e1' },
+    },
+    sessionName: input.sessionName,
+    logPath: input.logPath,
+    sessionStore: input.sessionStore,
+  });
+
+  // The retention actually happened: the stored snapshot (and its healthy
+  // verdict) survived the empty scoped capture.
+  const retained = input.sessionStore.get(input.sessionName)?.snapshot;
+  expect(retained?.nodes[0]?.label).toBe('Continue');
+  expect(retained?.snapshotQuality?.state).toBe('healthy');
+
+  expect(responseWarnings(diff).filter((line) => line === FULL_WARNING)).toHaveLength(1);
+  expect(storedLatch(input)).toEqual({ appBundleId: 'com.example.app' });
 });
 
 test('a genuine recovered render keeps later deferred captures quiet without doubling', async () => {

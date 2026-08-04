@@ -1,8 +1,5 @@
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
-import {
-  readSnapshotQualityVerdict,
-  recoveredSnapshotQualityWarning,
-} from '../snapshot/snapshot-quality.ts';
+import { recoveredSnapshotQualityWarning } from '../snapshot/snapshot-quality.ts';
 import type { DaemonResponseData, SessionState } from './types.ts';
 
 type RecoveredWarningLatch = NonNullable<SessionState['recoveredSnapshotWarningLatch']>;
@@ -56,6 +53,16 @@ export function resolveRecoveredWarningLatch(params: {
 }
 
 /**
+ * The verdict slot the daemon snapshot backend fills on every capture, so the
+ * latch seam sees the verdict of THE capture that produced this response.
+ * Reading it back from `session.snapshot` instead would be wrong: an empty
+ * ref-scoped capture deliberately retains the previous stored snapshot
+ * (`shouldKeepCurrentSnapshot`), so a deferred capture could consult a retained
+ * healthy verdict — clearing the latch and omitting the one-shot warning.
+ */
+export type CapturedSnapshotQuality = { value?: SnapshotQualityVerdict };
+
+/**
  * Applies the latch to a user-facing snapshot/diff response: updates the
  * session's latch state and prepends the full recovered warning when this is
  * the penalty window's first user-facing render. Internal observation captures
@@ -65,15 +72,12 @@ export function resolveRecoveredWarningLatch(params: {
 export function applyRecoveredWarningLatch(params: {
   session: SessionState | undefined;
   data: DaemonResponseData;
+  /** The just-captured verdict (`CapturedSnapshotQuality`), never a stored one. */
+  verdict: SnapshotQualityVerdict | undefined;
   internalObservation: boolean;
 }): DaemonResponseData {
-  const { session, data, internalObservation } = params;
+  const { session, data, verdict, internalObservation } = params;
   if (internalObservation || !session) return data;
-  // The snapshot command carries the capture's verdict in the response; diff
-  // publishes only warnings, so its verdict is read from the session snapshot
-  // the capture just stored.
-  const verdict =
-    readSnapshotQualityVerdict(data.snapshotQuality) ?? session.snapshot?.snapshotQuality;
   const decision = resolveRecoveredWarningLatch({
     verdict,
     appBundleId: session.appBundleId,
