@@ -358,7 +358,7 @@ function prepareReplayTestTimingTrace(params: {
   return tracePath;
 }
 
-export function appendReplayTestTimingEvent(
+function appendReplayTestTimingEvent(
   tracePath: string | undefined,
   event: Record<string, unknown>,
 ): void {

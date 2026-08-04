@@ -89,12 +89,14 @@ import { extractReplayTargetToken, readRefLabel } from './session-replay-target-
 /**
  * #1555 structural-quality review ("unify on the engine's types"): this
  * module used to declare its own `ReplayVerifiedTargetGuard` — structurally
- * identical to (but a separate nominal declaration from)
- * `@agent-device/ad-replay`'s `AdReplayVerifiedTargetGuard` — so it now
- * imports the engine's type directly instead of maintaining a shadow copy
- * that could silently drift. `ReplayTargetGuardDenotation`
+ * identical to (but a separate nominal declaration from) the guard shape
+ * `@agent-device/ad-replay` defines — so it now reaches that shape through
+ * the engine's own `AdReplayTargetClassification`/`AdReplayDispatchGuard`
+ * instead of maintaining a shadow copy that could silently drift (the guard
+ * type is a member of both, so the engine's façade need not name it
+ * separately). `ReplayTargetGuardDenotation`
  * (`@agent-device/contracts/replay`) stays the concrete producer type for
- * `expected`; it is structurally assignable to `AdReplayVerifiedTargetGuard['expected']`
+ * `expected`; it is structurally assignable to that guard's `expected`
  * (both `{ identity: LocalIdentity; structural: { documentOrder: number;
  * sibling: number } }`) without a name-level dependency between the two
  * files.

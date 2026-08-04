@@ -6,37 +6,25 @@
  * result aggregation — is private to `internal/`.
  *
  * The scheduler is format-agnostic: it imports neither engine, and a source reaches it only as
- * a `ReplayTestManifest`. Host authority arrives as narrow capabilities on
- * `ReplayTestRuntimeDependencies`; none of them hands over a daemon request, a session store,
- * mutable session state, or an engine.
+ * a `ReplayTestManifest`. Host authority arrives as narrow capabilities on the runtime-dependency
+ * half of `runReplayTestSuite`'s parameter; none of them hands over a daemon request, a session
+ * store, mutable session state, or an engine.
+ *
+ * The parameter and result types themselves are not named here. The single caller builds the
+ * bag inline and TypeScript infers both, so re-exporting the names would add surface no consumer
+ * asks for; a consumer that needs to name one earns it back through the R11 pin.
  */
 export { runReplayTestSuite } from './internal/session-test.ts';
 
 export type {
-  ReplayTestAttemptError,
   ReplayTestAttemptFailed,
   ReplayTestAttemptOutcome,
-  ReplayTestAttemptPassed,
-  ReplayTestAttemptStep,
   ReplayTestAttemptStepSink,
   ReplayTestBindAttemptCancellation,
-  ReplayTestAttemptCancellation,
-  ReplayTestCleanupSession,
   ReplayTestDiscoverSources,
-  ReplayTestEmitDiagnostic,
-  ReplayTestEmitProgress,
-  ReplayTestExecutionDependencies,
-  ReplayTestFinalizeAttempt,
-  ReplayTestIsCanceled,
   ReplayTestManifest,
-  ReplayTestPlatform,
-  ReplayTestRunReplay,
-  ReplayTestRunReplayParams,
-  ReplayTestRuntimeDependencies,
   ReplayTestSource,
-  ReplayTestSuiteOutcome,
   ReplayTestSuiteRequest,
-  ReplayTestTarget,
 } from './internal/session-test-types.ts';
 
 export type {

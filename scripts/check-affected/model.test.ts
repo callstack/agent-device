@@ -144,7 +144,7 @@ test('skills guidance change is docs-only', () => {
   assert.deepEqual(result.checks, []);
 });
 
-test('workspace package source selects static gates, layering, and the build', () => {
+test('workspace package source selects static gates, fallow, layering, and the build', () => {
   for (const file of [
     'packages/kernel/src/errors.ts',
     'packages/contracts/src/facades/device.ts',
@@ -155,6 +155,9 @@ test('workspace package source selects static gates, layering, and the build', (
       'format',
       'lint',
       'typecheck',
+      // Package source is inside fallow's scope; an extraction into packages/
+      // must not take a symbol's dead-code coverage with it.
+      'fallow',
       'layering',
       'build',
       'vitest-related',

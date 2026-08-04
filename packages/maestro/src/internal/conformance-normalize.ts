@@ -325,7 +325,7 @@ function numLike(value: unknown): number | string | undefined {
   return undefined;
 }
 
-export function dropUndefined<T extends Record<string, unknown>>(value: T): T {
+function dropUndefined<T extends Record<string, unknown>>(value: T): T {
   for (const key of Object.keys(value)) {
     if (value[key] === undefined) delete value[key];
   }

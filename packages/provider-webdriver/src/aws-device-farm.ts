@@ -247,7 +247,7 @@ export function createAwsDeviceFarmPrepareSession(
   };
 }
 
-export function selectAwsDeviceFarmWebDriverEndpoint(
+function selectAwsDeviceFarmWebDriverEndpoint(
   session: AwsDeviceFarmRemoteAccessSession,
 ): string | undefined {
   const endpointValues =

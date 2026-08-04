@@ -308,7 +308,6 @@ test('the real tree parses, declares, and passes R11', () => {
       'AdReplayTargetClassification',
       'AdReplayVarSources',
       'AdReplayVerificationEntry',
-      'AdReplayVerifiedTargetGuard',
       'ReplayRecordedTargetDisambiguation',
       'ReplayRecordedTargetPolicy',
       'ReplayRecordedTargetResolution',

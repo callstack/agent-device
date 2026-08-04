@@ -224,9 +224,7 @@ function resolveActionLoc(
  * lifecycle-skipped, never dispatched or expanded (native `.ad` has no
  * include grammar).
  */
-export function isExecutableReplayAction(
-  action: SessionAction | undefined,
-): action is SessionAction {
+function isExecutableReplayAction(action: SessionAction | undefined): action is SessionAction {
   return Boolean(action && action.command !== 'replay');
 }
 
@@ -249,7 +247,7 @@ export function isExecutableReplayAction(
  * nor included in the successful `replayed` count, exactly like the `replay`
  * pseudo-command just above it in the loop.
  */
-export function resolveSuppressedTerminalCloseIndex(
+function resolveSuppressedTerminalCloseIndex(
   actions: readonly SessionAction[],
 ): number | undefined {
   for (let index = actions.length - 1; index >= 0; index -= 1) {

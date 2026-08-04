@@ -64,7 +64,7 @@ function readJson<T>(file: string): T {
   return JSON.parse(fs.readFileSync(file, 'utf8')) as T;
 }
 
-export const FIXTURE_FILES = ['layer1-parser.json', 'layer2-semantics.json'] as const;
+const FIXTURE_FILES = ['layer1-parser.json', 'layer2-semantics.json'] as const;
 
 export function loadLayer1(): Layer1Fixture {
   return readJson(path.join(FIXTURES_DIR, 'layer1-parser.json'));
@@ -198,7 +198,7 @@ export function checkLayer2(): Layer2Result[] {
 export type CoverageResult = { command: string; covered: boolean; unverified: boolean };
 
 /** Which native agent-device command kinds each corpus flow parses to. */
-export function agentKindsByCorpus(): Set<string> {
+function agentKindsByCorpus(): Set<string> {
   const kinds = new Set<string>();
   for (const flow of loadLayer1().flows) {
     // Rejected flows contribute nothing to coverage; a crash still throws.

@@ -21,7 +21,6 @@ import type { LimrunDeviceSession } from './sdk/limrun-runtime-types.ts';
 export class LimrunRuntime implements ProviderDeviceRuntime {
   private readonly implementation: LimrunRuntimeImplementation;
   // Called through ProviderDeviceRuntime composition and the public Limrun SDK.
-  // fallow-ignore-next-line unused-class-member
   readonly provider = LIMRUN_PROVIDER;
 
   constructor(options: LimrunRuntimeOptions) {
@@ -37,13 +36,11 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
   }
 
   // Called through ProviderDeviceRuntime composition.
-  // fallow-ignore-next-line unused-class-member
   get deviceInventoryProvider(): DeviceInventoryProvider {
     return this.implementation.deviceInventoryProvider;
   }
 
   // Called through ProviderDeviceRuntime composition and the public Limrun SDK.
-  // fallow-ignore-next-line unused-class-member
   ownsDevice(device: DeviceInfo): boolean {
     return this.implementation.ownsDevice(device);
   }
@@ -66,7 +63,6 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
   }
 
   // Called through ProviderDeviceRuntime composition and the public Limrun SDK.
-  // fallow-ignore-next-line unused-class-member
   async installInstallablePath(
     device: DeviceInfo,
     installablePath: string,

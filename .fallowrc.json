@@ -34,11 +34,10 @@
     "website/rspress.config.ts"
   ],
   "ignorePatterns": [
-    "packages/**",
     "examples/test-app/**",
     "scripts/perf/**",
     "scripts/layering/**",
-    "scripts/maestro-conformance/**",
+    "scripts/maestro-conformance/corpus/**",
     "apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests.xctestplan",
     "scripts/write-xcuitest-cache-metadata.mjs",
     "scripts/help-conformance-sample-outputs.d.mts"
@@ -119,6 +118,26 @@
       "comment": "#1458: getSessionCommandKind's former production consumer (the session.ts if-chain) was replaced by SESSION_COMMAND_HANDLER_IMPLS, which encodes command-kind groupings directly via shared handler references instead of a kind lookup. The accessor and its SessionCommandKind classification remain covered by daemon-command-registry.test.ts, a test-tree file outside --production analysis.",
       "file": "src/daemon/daemon-command-registry.ts",
       "exports": ["getSessionCommandKind"]
+    },
+    {
+      "comment": "Workspace-package symbols whose only consumers are test-tree files, which --production analysis does not see. Each import is the package specifier, so the façade entry is load-bearing: parseTargetAnnotationV1Payload/TARGET_ANNOTATION_MAX_FIELD_BYTES from src/daemon/__tests__/session-target-evidence.test.ts, MAESTRO_COMPAT_* from src/cli/parser/__tests__/maestro-support-matrix.test.ts.",
+      "file": "packages/{ad-script,maestro}/src/index.ts",
+      "exports": [
+        "parseTargetAnnotationV1Payload",
+        "TARGET_ANNOTATION_MAX_FIELD_BYTES",
+        "MAESTRO_COMPAT_LIMITATIONS",
+        "MAESTRO_COMPAT_SUPPORTED_CAPABILITIES"
+      ]
+    },
+    {
+      "comment": "Deliberately kept off the @agent-device/maestro façade (index.test.ts asserts its absence) and consumed only by the conformance harness under packages/maestro/test/.",
+      "file": "packages/maestro/src/internal/program-ir-command-parser.ts",
+      "exports": ["SUPPORTED_MAESTRO_COMMAND_NAMES"]
+    },
+    {
+      "comment": "Published type surface: re-exported by src/sdk/limrun.ts to agent-device/limrun, where test/integration/limrun-public-types.test.ts pins that consumers can import it. Its only importer compiles in a temp checkout, so no static in-repo edge reaches it — the same reason src/sdk/*.ts is exempt above.",
+      "file": "packages/provider-limrun/src/index.ts",
+      "exports": ["LimrunIosCommandExecution"]
     }
   ],
   "usedClassMembers": ["name", "listActiveLeases", "delete", "values", "elapsedMs", "isExpired"],

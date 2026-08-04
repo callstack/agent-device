@@ -177,7 +177,7 @@ export type ReplayPostDispatchMismatchEvidence = {
 };
 
 /** A `position:` mismatch line from the guard's structural denotations, when both are present and differ. */
-export function describeStructuralMismatch(
+function describeStructuralMismatch(
   expected: AdReplayTargetStructuralDenotation | undefined,
   observed: AdReplayTargetStructuralDenotation | undefined,
 ): string | undefined {

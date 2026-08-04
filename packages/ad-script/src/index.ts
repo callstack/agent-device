@@ -66,12 +66,8 @@ export {
 } from './internal/script-formatting.ts';
 
 export {
-  normalizeIdentifierField,
-  normalizeLabelField,
-  normalizeRoleField,
   parseTargetAnnotationV1Payload,
   serializeTargetAnnotationV1,
-  truncateToUtf8Bytes,
   utf8ByteLength,
   TARGET_ANNOTATION_MAX_ANCESTRY,
   TARGET_ANNOTATION_MAX_FIELD_BYTES,
@@ -92,16 +88,9 @@ export {
   siblingOrdinal,
   structuralDenotationsEqual,
 } from './internal/target-annotation-identity.ts';
-export type {
-  LocalIdentity,
-  NodeStructuralDenotation,
-} from './internal/target-annotation-identity.ts';
+export type { LocalIdentity } from './internal/target-annotation-identity.ts';
 
 export { classifyTargetBindingMatch } from './internal/target-annotation-classification.ts';
-export type {
-  TargetBindingClassification,
-  TargetBindingClassificationInput,
-} from './internal/target-annotation-classification.ts';
 
 export {
   buildReplayVarScope,
@@ -112,4 +101,3 @@ export {
   readReplayShellEnvSource,
   resolveReplayAction,
 } from './internal/vars.ts';
-export type { ReplayVarScope } from './internal/vars.ts';

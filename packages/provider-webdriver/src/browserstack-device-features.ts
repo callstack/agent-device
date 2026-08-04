@@ -128,9 +128,7 @@ export function buildBrowserStackDeviceFeatureCapabilities(
  * and then silently dropped — the session runs with provider defaults and nothing says why.
  * Callers use this to reject them at the point the provider is known.
  */
-export function browserStackOnlyDeviceFeatureFlags(
-  flags: Record<string, unknown> | undefined,
-): string[] {
+function browserStackOnlyDeviceFeatureFlags(flags: Record<string, unknown> | undefined): string[] {
   return BROWSERSTACK_DEVICE_FEATURE_SPECS.filter((spec) => {
     const value = flags?.[spec.field];
     return value !== undefined && value !== false && value !== '';
