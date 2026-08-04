@@ -1,6 +1,7 @@
 import XCTest
 
 extension RunnerTests {
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
 #if os(iOS)
   final class RecordingTextEntrySynthesizer: TextEntrySynthesizing {
     var steps: [SynthesizedReplacementStep] = []
@@ -131,5 +132,6 @@ extension RunnerTests {
     XCTAssertFalse(result.repaired)
     XCTAssertEqual(result.textEntryRoute, "synthesized-first-responder-replacement")
   }
+#endif
 #endif
 }
