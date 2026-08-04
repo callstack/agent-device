@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { GestureSemanticInput } from '@agent-device/contracts/interaction';
+import type {
+  GestureCommandInput,
+  GestureSemanticInput,
+} from '@agent-device/contracts/interaction';
 import {
   normalizePublicGesture,
   normalizePublicSwipeMotion,
@@ -21,6 +24,11 @@ const fling: GestureSemanticInput = {
   direction: 'left',
   origin: { x: 100, y: 200 },
 };
+const drag: GestureCommandInput = {
+  intent: 'drag',
+  source: 'id="source"',
+  destination: 'id="destination"',
+};
 
 const device = (fields: Partial<DeviceInfo>): DeviceInfo => ({
   platform: 'android',
@@ -30,15 +38,11 @@ const device = (fields: Partial<DeviceInfo>): DeviceInfo => ({
   ...fields,
 });
 
-function assertSupported(input: GestureSemanticInput, target: DeviceInfo): void {
+function assertSupported(input: GestureCommandInput, target: DeviceInfo): void {
   assert.doesNotThrow(() => requireGestureSupported(input, target));
 }
 
-function assertUnsupported(
-  input: GestureSemanticInput,
-  target: DeviceInfo,
-  expected: RegExp,
-): void {
+function assertUnsupported(input: GestureCommandInput, target: DeviceInfo, expected: RegExp): void {
   assert.throws(
     () => requireGestureSupported(input, target),
     (error: unknown) =>
@@ -57,35 +61,35 @@ test('Android phones and emulators support single- and multi-touch gesture plans
   }
 });
 
-test('target-authored drag follows the one-pointer pan capability policy', () => {
-  assert.doesNotThrow(() =>
-    requireGestureSupported(
-      { intent: 'drag', source: 'id="source"', destination: 'id="destination"' },
-      device({ kind: 'emulator' }),
-    ),
-  );
-  assert.throws(
-    () =>
-      requireGestureSupported(
-        { intent: 'drag', source: 'id="source"', destination: 'id="destination"' },
-        device({ platform: 'web', kind: 'device', target: 'desktop' }),
-      ),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.message === 'gesture drag is not supported on web' &&
-      error.details?.gesture === 'drag',
-  );
-  for (const appleOs of ['visionos', 'watchos'] as const) {
+test('target-authored drag is admitted only where adapters preserve every authored phase', () => {
+  for (const kind of ['device', 'emulator'] as const) {
+    assertSupported(drag, device({ kind, target: 'mobile' }));
+  }
+  for (const appleOs of ['ios', 'ipados'] as const) {
+    for (const kind of ['device', 'simulator'] as const) {
+      assertSupported(drag, device({ platform: 'apple', appleOs, kind, target: 'mobile' }));
+    }
+  }
+  assertSupported(drag, device({ platform: 'apple', kind: 'simulator', target: 'mobile' }));
+
+  const inexactBackends = [
+    device({ target: 'tv' }),
+    device({ platform: 'apple', appleOs: 'tvos', kind: 'simulator', target: 'tv' }),
+    device({ platform: 'apple', appleOs: 'macos', kind: 'device', target: 'desktop' }),
+    device({ platform: 'apple', appleOs: 'visionos', kind: 'simulator' }),
+    device({ platform: 'apple', appleOs: 'watchos', kind: 'simulator' }),
+    device({ platform: 'linux', kind: 'device', target: 'desktop' }),
+    device({ platform: 'vega', kind: 'device', target: 'tv' }),
+    device({ platform: 'web', kind: 'device', target: 'desktop' }),
+  ];
+  for (const target of inexactBackends) {
     assert.throws(
-      () =>
-        requireGestureSupported(
-          { intent: 'drag', source: 'id="source"', destination: 'id="destination"' },
-          device({ platform: 'apple', appleOs, kind: 'simulator' }),
-        ),
+      () => requireGestureSupported(drag, target),
       (error: unknown) =>
         error instanceof AppError &&
-        error.message === `gesture drag is not supported on ${appleOs}` &&
-        error.details?.gesture === 'drag',
+        error.code === 'UNSUPPORTED_OPERATION' &&
+        error.details?.gesture === 'drag' &&
+        /source hold, timed movement, and destination hold/.test(String(error.details?.hint)),
     );
   }
 });

@@ -130,11 +130,9 @@ export function singlePointerPlanEndpoints(plan: SinglePointerGesturePlan): {
   start: Point;
   end: Point;
 } {
-  const [
-    {
-      samples: [start, end],
-    },
-  ] = plan.pointers;
+  const [{ samples }] = plan.pointers;
+  const start = samples[0];
+  const end = samples.at(-1)!;
   return { start: start.point, end: end.point };
 }
 

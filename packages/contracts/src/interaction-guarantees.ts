@@ -240,7 +240,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       offscreen: {
         kind: 'runtime',
-        via: 'src/snapshot/mobile-snapshot-semantics.ts#isNodeVisibleOnScreen',
+        via: 'src/commands/interaction/runtime/resolution.ts#throwIfOffscreenInteractionTarget',
       },
       nonHittable: {
         kind: 'inapplicable',

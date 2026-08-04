@@ -142,10 +142,14 @@ export function supportedPlatformsForCommand(command: string): string[] {
 }
 
 export function requireGestureSupported(input: GestureCommandInput, device: DeviceInfo): void {
+  if (input.intent === 'drag') {
+    requireTargetAuthoredDragSupported(input, device);
+    return;
+  }
   if (device.platform === 'web' || device.appleOs === 'watchos') {
     throw unsupportedGesture(input, gesturePlatformMessage(input, device));
   }
-  if (input.intent !== 'drag' && isMultiTouchGesture(input)) {
+  if (isMultiTouchGesture(input)) {
     requireMultiTouchGestureSupported(input, device);
     return;
   }
@@ -157,6 +161,24 @@ export function requireGestureSupported(input: GestureCommandInput, device: Devi
   if (input.intent === 'fling' && 'direction' in input && device.platform === 'linux') {
     throw unsupportedGesture(input, 'gesture fling is not supported on Linux');
   }
+}
+
+function requireTargetAuthoredDragSupported(
+  input: Extract<GestureCommandInput, { intent: 'drag' }>,
+  device: DeviceInfo,
+): void {
+  const supportedAndroidTouchDevice = device.platform === 'android' && device.target !== 'tv';
+  const supportedAppleTouchDevice =
+    device.platform === 'apple' &&
+    (device.appleOs === 'ios' ||
+      device.appleOs === 'ipados' ||
+      (device.appleOs === undefined && device.target !== 'desktop' && device.target !== 'tv'));
+  if (supportedAndroidTouchDevice || supportedAppleTouchDevice) return;
+  throw unsupportedGesture(
+    input,
+    gesturePlatformMessage(input, device),
+    'Target-authored drag requires an adapter that preserves source hold, timed movement, and destination hold; it is supported on Android touch devices and iOS/iPadOS.',
+  );
 }
 
 function isMultiTouchGesture(input: GestureSemanticInput): boolean {

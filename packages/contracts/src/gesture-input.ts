@@ -102,32 +102,7 @@ export function readGesturePayload(input: unknown): GesturePayload {
     };
   }
   if (kind === 'drag') {
-    const sourceHoldMs = readOptionalInteger(record, 'sourceHoldMs', { min: 1, max: 10_000 });
-    const moveMs = readOptionalInteger(record, 'moveMs', { min: 16, max: 10_000 });
-    const destinationHoldMs = readOptionalInteger(record, 'destinationHoldMs', {
-      // Releasing immediately at the destination is valid; activating a drag
-      // at the source requires a positive hold.
-      min: 0,
-      max: 10_000,
-    });
-    const totalDurationMs =
-      (sourceHoldMs ?? DEFAULT_DRAG_SOURCE_HOLD_MS) +
-      (moveMs ?? DEFAULT_DRAG_MOVE_MS) +
-      (destinationHoldMs ?? DEFAULT_DRAG_DESTINATION_HOLD_MS);
-    if (totalDurationMs > GESTURE_DURATION_MAX_MS) {
-      throw new AppError(
-        'INVALID_ARGS',
-        `gesture drag total duration must be at most ${GESTURE_DURATION_MAX_MS}`,
-      );
-    }
-    return {
-      kind,
-      source: readNonEmptyString(record, 'source'),
-      destination: readNonEmptyString(record, 'destination'),
-      sourceHoldMs,
-      moveMs,
-      destinationHoldMs,
-    };
+    return readDragGesturePayload(record);
   }
   if (record.pointerCount !== undefined) {
     throw new AppError('INVALID_ARGS', 'pointerCount is supported only for gesture pan');
@@ -185,6 +160,35 @@ export function readGesturePayload(input: unknown): GesturePayload {
     scale: readNumber(record, 'scale'),
     degrees: readNumber(record, 'degrees'),
     durationMs: readOptionalGestureDuration(record),
+  };
+}
+
+function readDragGesturePayload(record: Record<string, unknown>): DragGesturePayload {
+  const sourceHoldMs = readOptionalInteger(record, 'sourceHoldMs', { min: 1, max: 10_000 });
+  const moveMs = readOptionalInteger(record, 'moveMs', { min: 16, max: 10_000 });
+  const destinationHoldMs = readOptionalInteger(record, 'destinationHoldMs', {
+    // Releasing immediately at the destination is valid; activating a drag
+    // at the source requires a positive hold.
+    min: 0,
+    max: 10_000,
+  });
+  const totalDurationMs =
+    (sourceHoldMs ?? DEFAULT_DRAG_SOURCE_HOLD_MS) +
+    (moveMs ?? DEFAULT_DRAG_MOVE_MS) +
+    (destinationHoldMs ?? DEFAULT_DRAG_DESTINATION_HOLD_MS);
+  if (totalDurationMs > GESTURE_DURATION_MAX_MS) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `gesture drag total duration must be at most ${GESTURE_DURATION_MAX_MS}`,
+    );
+  }
+  return {
+    kind: 'drag',
+    source: readNonEmptyString(record, 'source'),
+    destination: readNonEmptyString(record, 'destination'),
+    sourceHoldMs,
+    moveMs,
+    destinationHoldMs,
   };
 }
 

@@ -7,9 +7,12 @@ import {
 } from './target-verification.ts';
 import type {
   AdReplayDispatchGuard,
+  AdReplayDispatchOutcome,
+  AdReplayObservation,
   AdReplayScrubValue,
   AdReplayStepOutcome,
   AdReplayStepRuntime,
+  AdReplayVerifiedTargetGuard,
 } from './runtime-port-types.ts';
 
 /**
@@ -48,6 +51,16 @@ export async function verifyAndDispatchStep(
   index: number,
   artifactPaths: readonly string[],
 ): Promise<AdReplayStepOutcome> {
+  if (action.targetEvidences) {
+    return verifyAndDispatchMultiTargetStep(
+      runtime,
+      scrubVars,
+      action,
+      resolvedAction,
+      index,
+      artifactPaths,
+    );
+  }
   const recorded = action.targetEvidence;
   if (!recorded) return dispatchNoGuard(runtime, action, resolvedAction, index, artifactPaths);
 
@@ -118,16 +131,7 @@ export async function verifyAndDispatchStep(
       failure: await runtime.buildTargetBindingFailure(
         action,
         index,
-        {
-          kind: 'identity-unverifiable',
-          matchCount: undefined,
-          observed: undefined,
-          candidateNodes: [],
-          mismatches: [],
-          causeCode: 'IDENTITY_UNVERIFIABLE',
-          causeMessage: `Could not capture a fresh snapshot to verify the recorded target before acting (${observation.reason}).`,
-          ...(observation.hint !== undefined ? { causeHint: observation.hint } : {}),
-        },
+        captureUnavailableEvidence(observation),
         artifactPaths,
         scrubVars,
       ),
@@ -158,6 +162,123 @@ export async function verifyAndDispatchStep(
       artifactPaths,
       scrubVars,
     ),
+  };
+}
+
+/** Verifies both bindings of a dual-target action before dispatching either endpoint. */
+async function verifyAndDispatchMultiTargetStep(
+  runtime: AdReplayStepRuntime,
+  scrubVars: readonly AdReplayScrubValue[],
+  action: SessionAction,
+  resolvedAction: SessionAction,
+  index: number,
+  artifactPaths: readonly string[],
+): Promise<AdReplayStepOutcome> {
+  const recorded = action.targetEvidences!;
+  const guards: {
+    source?: AdReplayVerifiedTargetGuard;
+    destination?: AdReplayVerifiedTargetGuard;
+  } = {};
+
+  for (const targetRole of ['source', 'destination'] as const) {
+    const endpointAction: SessionAction = {
+      ...action,
+      targetEvidence: recorded[targetRole],
+    };
+    const entry = runtime.beginTargetVerification(
+      endpointAction,
+      resolvedAction,
+      index,
+      targetRole,
+    );
+    if (entry.kind !== 'pre-dispatch') {
+      return dispatchNoGuard(runtime, action, resolvedAction, index, artifactPaths);
+    }
+    const plan = planPreDispatchTargetVerification({
+      recorded: recorded[targetRole],
+      token: entry.token,
+    });
+    if (plan.kind === 'skip') {
+      return dispatchNoGuard(runtime, action, resolvedAction, index, artifactPaths);
+    }
+    if (plan.kind === 'recorded-unverifiable') {
+      return {
+        status: 'failed',
+        failure: await runtime.buildRecordedUnverifiableFailure(
+          endpointAction,
+          index,
+          artifactPaths,
+          scrubVars,
+        ),
+      };
+    }
+
+    const observation = await runtime.captureObservation(endpointAction, index, {
+      retryLaunchRace: true,
+    });
+    if (observation.state !== 'available') {
+      return {
+        status: 'failed',
+        failure: await runtime.buildTargetBindingFailure(
+          endpointAction,
+          index,
+          captureUnavailableEvidence(observation),
+          artifactPaths,
+          scrubVars,
+        ),
+      };
+    }
+
+    const classification = runtime.classifyTarget({
+      action: endpointAction,
+      index,
+      token: plan.token,
+      nodes: observation.nodes,
+    });
+    if (!classification.verified) {
+      return {
+        status: 'failed',
+        failure: await runtime.buildTargetBindingFailure(
+          endpointAction,
+          index,
+          {
+            kind: classification.kind,
+            matchCount: classification.matchCount,
+            observed: classification.observed,
+            candidateNodes: classification.candidateNodes,
+            mismatches: classification.mismatches,
+            causeCode: classification.causeCode,
+            causeMessage: classification.causeMessage,
+          },
+          artifactPaths,
+          scrubVars,
+        ),
+      };
+    }
+    guards[targetRole] = classification.guard;
+  }
+
+  return dispatchWithGuard(runtime, scrubVars, action, resolvedAction, index, artifactPaths, {
+    kind: 'targets',
+    guards: {
+      source: guards.source!,
+      destination: guards.destination!,
+    },
+  });
+}
+
+function captureUnavailableEvidence(
+  observation: Extract<AdReplayObservation, { state: 'unavailable' }>,
+) {
+  return {
+    kind: 'identity-unverifiable' as const,
+    matchCount: undefined,
+    observed: undefined,
+    candidateNodes: [],
+    mismatches: [],
+    causeCode: 'IDENTITY_UNVERIFIABLE',
+    causeMessage: `Could not capture a fresh snapshot to verify the recorded target before acting (${observation.reason}).`,
+    ...(observation.hint !== undefined ? { causeHint: observation.hint } : {}),
   };
 }
 
@@ -211,22 +332,14 @@ async function dispatchWithGuard(
 
   // The refusal markers are only ever attached to an annotated action; fall
   // back to the plain dispatch failure if the invariant is somehow violated.
-  const recorded = action.targetEvidence;
-  if (!recorded) return { status: 'failed', failure: outcome.plainFailure };
-
-  const evidence =
-    outcome.status === 'guard-mismatch'
-      ? deriveReplayTargetGuardMismatchEvidence(
-          recorded,
-          outcome.evidence,
-          guard.kind === 'target' ? guard.guard.matchCount : 0,
-        )
-      : deriveWaitLandmarkMismatchEvidence(recorded, outcome.evidence);
+  const binding = resolvePostDispatchBinding(action, guard, outcome);
+  if (!binding) return { status: 'failed', failure: outcome.plainFailure };
+  const evidence = derivePostDispatchEvidence(binding.recorded, binding.matchCount, outcome);
 
   return {
     status: 'failed',
     failure: await runtime.buildPostDispatchTargetBindingFailure(
-      action,
+      binding.reportAction,
       index,
       {
         kind: 'identity-mismatch',
@@ -241,4 +354,39 @@ async function dispatchWithGuard(
       scrubVars,
     ),
   };
+}
+
+function resolvePostDispatchBinding(
+  action: SessionAction,
+  guard: AdReplayDispatchGuard,
+  outcome: Extract<AdReplayDispatchOutcome, { status: 'guard-mismatch' | 'landmark-mismatch' }>,
+) {
+  if (outcome.status !== 'guard-mismatch' || guard.kind !== 'targets') {
+    return action.targetEvidence
+      ? {
+          recorded: action.targetEvidence,
+          reportAction: action,
+          matchCount: guard.kind === 'target' ? guard.guard.matchCount : 0,
+        }
+      : undefined;
+  }
+  const targetRole = outcome.evidence.targetRole ?? 'source';
+  const recorded = action.targetEvidences?.[targetRole];
+  return recorded
+    ? {
+        recorded,
+        reportAction: { ...action, targetEvidence: recorded },
+        matchCount: guard.guards[targetRole].matchCount,
+      }
+    : undefined;
+}
+
+function derivePostDispatchEvidence(
+  recorded: NonNullable<SessionAction['targetEvidence']>,
+  matchCount: number,
+  outcome: Extract<AdReplayDispatchOutcome, { status: 'guard-mismatch' | 'landmark-mismatch' }>,
+) {
+  return outcome.status === 'guard-mismatch'
+    ? deriveReplayTargetGuardMismatchEvidence(recorded, outcome.evidence, matchCount)
+    : deriveWaitLandmarkMismatchEvidence(recorded, outcome.evidence);
 }
