@@ -3,7 +3,7 @@ import {
   isReadOnlyFindAction,
   parseFindArgs,
   parseFindSelectorExpression,
-} from '../../../selectors/find.ts';
+} from '@agent-device/selectors';
 
 test('parseFindArgs defaults to click with any locator', () => {
   const parsed = parseFindArgs(['Login']);
@@ -51,7 +51,7 @@ test('parseFindArgs with bare locator yields empty query', () => {
 
 test('parseFindSelectorExpression only treats bare selector-shaped queries as selectors', () => {
   const parsed = parseFindSelectorExpression('any', 'label="Continue"');
-  expect(parsed?.raw).toBe('label="Continue"');
+  expect(parsed).toBe('label="Continue"');
 
   expect(parseFindSelectorExpression('text', 'label="Continue"')).toBeNull();
   expect(parseFindSelectorExpression('any', 'a=b')).toBeNull();

@@ -5,7 +5,6 @@ import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import type { ReplayDivergenceTargetBindingKind } from '@agent-device/contracts/divergence';
 import type { buildReplayVarScope, LocalIdentity } from '@agent-device/ad-script';
-import type { ReplaySelectorPort } from './selector-port.ts';
 import type {
   AdReplayGuardMismatchEvidence,
   AdReplayLandmarkMismatchEvidence,
@@ -198,13 +197,6 @@ export type AdReplayDispatchOutcome = Readonly<
  */
 export type AdReplayStepRuntime = Readonly<{
   /**
-   * The selector-port instance this request threads through classification
-   * and — as of this pass — the engine's own pre-dispatch verification plan
-   * (its recorded-selector parse-check). An engine-owned value (the façade
-   * names `ReplaySelectorPort`), never a daemon/wire shape.
-   */
-  port: ReplaySelectorPort;
-  /**
    * Routes one step's recorded target evidence to its verification phase —
    * daemon authority (command-descriptor registry lookup, session read,
    * wait-form parse, token extraction). Only ever called when
@@ -231,8 +223,8 @@ export type AdReplayStepRuntime = Readonly<{
   ): Promise<AdReplayObservation>;
   /**
    * Resolves the recorded target against `nodes` using the SAME
-   * lookup/matching a real dispatch would — daemon authority (tree helpers,
-   * the selector port).
+   * lookup/matching a real dispatch would — daemon authority (tree helpers and
+   * the selectors package engine).
    */
   classifyTarget(params: {
     action: SessionAction;
@@ -324,7 +316,7 @@ export type AdReplayStepRuntime = Readonly<{
   armStep(): void;
   /** Whether the request's session currently carries an armed repair boundary. Repair authority. */
   isRepairArmed(): boolean;
-  /** The recorded selector's display value for progress reporting — needs the private selector AST, daemon-only. */
+  /** The recorded selector's display value for progress reporting, computed by the selectors package. */
   describeStepValue(action: SessionAction): string | undefined;
   /** Optional per-attempt progress sink. */
   onStep?: AdReplayProgressSink;

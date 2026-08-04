@@ -20,7 +20,7 @@ import {
   commandSupportsSettleObservation,
   commandSupportsVerifyEvidence,
 } from '../../core/command-descriptor/registry.ts';
-import { FIND_LOCATORS } from '../../selectors/find.ts';
+import { FIND_LOCATORS } from '@agent-device/selectors';
 import { defineCommandMetadata } from '../command-contract.ts';
 import {
   booleanField,

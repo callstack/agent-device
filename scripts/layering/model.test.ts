@@ -97,7 +97,7 @@ test('neutral ownership zones reject value imports into higher layers', () => {
       ['src/core/result.ts', 'export const result = true;'],
       ['src/request/cancel.ts', "import '../commands/cancel.ts';"],
       ['src/commands/cancel.ts', 'export const cancel = true;'],
-      ['src/selectors/parse.ts', "import '../client/client.ts';"],
+      ['packages/selectors/src/internal/parse.ts', "import '../../../../src/client/client.ts';"],
       ['src/client/client.ts', 'export const client = true;'],
       ['src/cli-schema/schema.ts', "import '../cli/parser.ts';"],
       ['src/cli/parser.ts', 'export const parser = true;'],
@@ -108,7 +108,7 @@ test('neutral ownership zones reject value imports into higher layers', () => {
     'cli-schema -> cli': ['src/cli-schema/schema.ts -> src/cli/parser.ts'],
     'contracts -> core': ['src/contracts/result.ts -> src/core/result.ts'],
     'request -> commands': ['src/request/cancel.ts -> src/commands/cancel.ts'],
-    'selectors -> client': ['src/selectors/parse.ts -> src/client/client.ts'],
+    'selectors -> client': ['packages/selectors/src/internal/parse.ts -> src/client/client.ts'],
   });
 });
 

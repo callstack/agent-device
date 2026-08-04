@@ -2,19 +2,100 @@
 //
 // fast-check rather than a bespoke PRNG, for two reasons the lane depends on: a reported
 // counterexample is the SHRUNK input (a hand-rolled mutator reports the 20k-character random one),
-// and the hazard vocabulary is the one #1437's property suite already curates — a hazard added
-// there for a round-trip property reaches the fuzzer without being retyped here.
+// and the hazard vocabulary is curated beside the fuzzer so its config hash covers every input.
 //
 // Cases stay near the grammar's edge on purpose: a well-formed base with hostile chunks spliced in
 // reaches deep parser branches that uniformly random noise never gets past the first token of.
 
 import fc from 'fast-check';
-import {
-  replayScriptArb,
-  SELECTOR_VALUE_HAZARDS,
-  selectorChainArb,
-} from '../../src/__tests__/test-utils/property-arbitraries.ts';
+import { replayScriptArb } from '../../src/__tests__/test-utils/property-arbitraries.ts';
 import type { FuzzTarget, FuzzTargetName } from './target-types.ts';
+
+const SELECTOR_VALUE_HAZARDS = [
+  '',
+  ' ',
+  '"',
+  "'",
+  "it's",
+  'say "hi"',
+  '\\',
+  '\\"',
+  'a\\\\b',
+  'a || b',
+  'key=value',
+  'line\nbreak',
+  '\tTab',
+  'Ünïcøde',
+  '😀 emoji',
+] as const;
+
+const TEXT_SELECTOR_KEYS = [
+  'id',
+  'role',
+  'text',
+  'label',
+  'value',
+  'appname',
+  'windowtitle',
+] as const;
+const BOOLEAN_SELECTOR_KEYS = [
+  'visible',
+  'hidden',
+  'editable',
+  'selected',
+  'focused',
+  'enabled',
+  'hittable',
+] as const;
+
+type FuzzSelectorTerm = { key: string; value: string | boolean };
+
+const selectorTextValueArb: fc.Arbitrary<string> = fc.oneof(
+  fc.constantFrom(...SELECTOR_VALUE_HAZARDS),
+  fc.string({ minLength: 0, maxLength: 12 }),
+  fc
+    .array(fc.constantFrom(...SELECTOR_VALUE_HAZARDS), { minLength: 2, maxLength: 3 })
+    .map((parts) => parts.join('')),
+);
+
+const selectorTermArb: fc.Arbitrary<FuzzSelectorTerm> = fc.oneof(
+  fc
+    .record({
+      key: fc.constantFrom(...TEXT_SELECTOR_KEYS),
+      value: selectorTextValueArb,
+    })
+    .map(({ key, value }) => ({ key, value })),
+  fc
+    .record({
+      key: fc.constantFrom(...BOOLEAN_SELECTOR_KEYS),
+      value: fc.boolean(),
+    })
+    .map(({ key, value }) => ({ key, value })),
+);
+
+const selectorChainArb: fc.Arbitrary<{ expression: string }> = fc
+  .record({
+    selectors: fc.array(fc.array(selectorTermArb, { minLength: 1, maxLength: 4 }), {
+      minLength: 1,
+      maxLength: 3,
+    }),
+    bareBooleans: fc.boolean(),
+  })
+  .map(({ selectors, bareBooleans }) => ({
+    expression: selectors
+      .map((terms) =>
+        terms
+          .map((term) =>
+            typeof term.value === 'boolean'
+              ? bareBooleans && term.value
+                ? term.key
+                : `${term.key}=${term.value}`
+              : `${term.key}=${JSON.stringify(term.value)}`,
+          )
+          .join(' && '),
+      )
+      .join(' || '),
+  }));
 
 /**
  * Hazards a valid-input property cannot use — they exist to be *rejected*: structural JSON/YAML

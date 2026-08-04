@@ -9,8 +9,8 @@ import {
   checkElementTargetArgs,
   checkGetFormat,
   SELECTOR_EXPRESSION_REQUIRED_MESSAGE,
-} from '../../selectors/arguments.ts';
-import { splitSelectorFromArgs } from '../../selectors/parse.ts';
+  splitSelectorFromArgs,
+} from '@agent-device/selectors';
 import { compactRecord, type SelectorSnapshotInput } from '../command-input.ts';
 import type {
   CommandInput,

@@ -7,15 +7,14 @@ import type {
   CommandContext,
   CommandSessionRecord,
 } from '../../../runtime-contract.ts';
-import { parseSelectorChain } from '../../../selectors/parse.ts';
 import {
   formatSelectorFailure,
   resolveSelectorChain,
   selectorFailureHint,
   STALE_REF_HINT,
   type SelectorResolution,
-} from '../../../selectors/index.ts';
-import { buildSelectorChainForNode } from '../../../selectors/build.ts';
+  buildSelectorChainForNode,
+} from '@agent-device/selectors';
 import { resolvePressRecordingTarget } from '../../../core/press-retarget.ts';
 import { requireSnapshotSession } from './selector-read-shared.ts';
 import { findNodeByLabel, resolveRefLabel } from '../../../snapshot/snapshot-processing.ts';
@@ -271,40 +270,48 @@ async function resolveSelectorInteractionTarget(
   target: Extract<InteractionTarget, { kind: 'selector' }>,
   params: ResolveInteractionTargetParams,
 ): Promise<ResolvedInteractionTarget> {
-  const chain = parseSelectorChain(target.selector);
+  const selectorExpression = target.selector;
   let capture = await captureInteractionSnapshot(runtime, options, params.requireInteractive);
-  let resolved = resolveSelectorChain(interactableSelectorNodes(capture.snapshot.nodes), chain, {
-    platform: runtime.backend.platform,
-    requireRect: true,
-    requireUnique: true,
-    disambiguateAmbiguous: true,
-  });
-  if ((!resolved || !resolved.node.rect) && params.requireInteractive) {
-    capture = await captureInteractionSnapshot(runtime, options, false);
-    resolved = resolveSelectorChain(interactableSelectorNodes(capture.snapshot.nodes), chain, {
+  let resolved = resolveSelectorChain(
+    interactableSelectorNodes(capture.snapshot.nodes),
+    selectorExpression,
+    {
       platform: runtime.backend.platform,
       requireRect: true,
       requireUnique: true,
       disambiguateAmbiguous: true,
-    });
+    },
+  );
+  if ((!resolved || !resolved.node.rect) && params.requireInteractive) {
+    capture = await captureInteractionSnapshot(runtime, options, false);
+    resolved = resolveSelectorChain(
+      interactableSelectorNodes(capture.snapshot.nodes),
+      selectorExpression,
+      {
+        platform: runtime.backend.platform,
+        requireRect: true,
+        requireUnique: true,
+        disambiguateAmbiguous: true,
+      },
+    );
   }
   if (!resolved || !resolved.node.rect) {
-    const covered = resolveSelectorChain(capture.snapshot.nodes, chain, {
+    const covered = resolveSelectorChain(capture.snapshot.nodes, selectorExpression, {
       platform: runtime.backend.platform,
       requireRect: true,
       requireUnique: false,
     });
     if (covered?.node && isSnapshotNodeInteractionBlocked(covered.node)) {
       throw buildCoveredInteractionError({
-        label: `Selector ${covered.selector.raw}`,
+        label: `Selector ${covered.selector}`,
         node: covered.node,
         action: params.action,
-        selector: covered.selector.raw,
+        selector: covered.selector,
       });
     }
     throw new AppError(
       'COMMAND_FAILED',
-      formatSelectorFailure(chain, resolved?.diagnostics ?? [], { unique: true }),
+      formatSelectorFailure(selectorExpression, resolved?.diagnostics ?? [], { unique: true }),
       { hint: selectorFailureHint(resolved?.diagnostics ?? []) },
     );
   }
@@ -317,27 +324,27 @@ async function resolveSelectorInteractionTarget(
   const node = params.promoteToHittableAncestor
     ? resolveActionableNodeOrThrow(capture.snapshot.nodes, resolved.node, {
         action: params.action,
-        label: `Selector ${resolved.selector.raw}`,
+        label: `Selector ${resolved.selector}`,
       })
     : resolved.node;
-  assertInteractionNotBlocked(node, `Selector ${resolved.selector.raw}`, params.action);
+  assertInteractionNotBlocked(node, `Selector ${resolved.selector}`, params.action);
   // #1542: see the ref-target twin above.
   const visibleNode = await assertVisibleSelectorTarget(
     runtime,
     options,
     node,
     capture.snapshot.nodes,
-    resolved.selector.raw,
+    resolved.selector,
     params.action,
   );
   const point = resolveNodeCenter(
     visibleNode,
-    `Selector ${resolved.selector.raw} resolved to invalid bounds`,
+    `Selector ${resolved.selector} resolved to invalid bounds`,
   );
   return {
     kind: 'selector',
     point,
-    target: { kind: 'selector', selector: resolved.selector.raw },
+    target: { kind: 'selector', selector: resolved.selector },
     ...describeResolvedInteractionNode(
       runtime,
       visibleNode,

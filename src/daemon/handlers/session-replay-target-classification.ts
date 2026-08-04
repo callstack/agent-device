@@ -45,7 +45,7 @@ import {
   scrollRegionKeysEqual,
   orderByViewportPosition,
 } from '../session-target-evidence.ts';
-import type { ReplaySelectorPort } from '@agent-device/ad-replay';
+import { resolveRecordedTarget } from '@agent-device/selectors';
 import {
   annotationLocalIdentity,
   classifyTargetBindingMatch,
@@ -93,10 +93,8 @@ export function classifyReplayTarget(params: {
   refLabel: string | undefined;
   requireRect: boolean;
   allowDisambiguation: boolean;
-  port: ReplaySelectorPort;
 }): ReplayTargetClassification {
-  const { recorded, token, nodes, platform, refLabel, requireRect, allowDisambiguation, port } =
-    params;
+  const { recorded, token, nodes, platform, refLabel, requireRect, allowDisambiguation } = params;
 
   const matching = resolveTargetMatches({
     token,
@@ -105,7 +103,6 @@ export function classifyReplayTarget(params: {
     refLabel,
     requireRect,
     allowDisambiguation,
-    port,
   });
 
   const byIndex = buildIndexMap(nodes);
@@ -182,12 +179,11 @@ function resolveTargetMatches(params: {
   refLabel: string | undefined;
   requireRect: boolean;
   allowDisambiguation: boolean;
-  port: ReplaySelectorPort;
 }): TargetMatchResolution {
-  const { token, nodes, platform, refLabel, requireRect, allowDisambiguation, port } = params;
+  const { token, nodes, platform, refLabel, requireRect, allowDisambiguation } = params;
   return token.startsWith('@')
     ? resolveRefTargetMatches(nodes, token, refLabel, requireRect)
-    : resolveSelectorTargetMatches(nodes, token, platform, requireRect, allowDisambiguation, port);
+    : resolveSelectorTargetMatches(nodes, token, platform, requireRect, allowDisambiguation);
 }
 
 function resolveRefTargetMatches(
@@ -207,22 +203,14 @@ function resolveRefTargetMatches(
     : { matchedNodes: [], winnerRef: '' };
 }
 
-/**
- * `port.resolveRecordedTarget` composes parse/resolve/list-matches/match
- * exactly as this function used to (its production adapter,
- * `src/daemon/replay-selector-port.ts`, is that composition lifted verbatim —
- * #1478 P5 stage B), protecting the SAME "matched-node domain comes from the
- * winning chain alternative" invariant this module relied on directly before.
- */
 function resolveSelectorTargetMatches(
   nodes: SnapshotNode[],
   token: string,
   platform: Platform | PublicPlatform,
   requireRect: boolean,
   allowDisambiguation: boolean,
-  port: ReplaySelectorPort,
 ): TargetMatchResolution {
-  const resolution = port.resolveRecordedTarget(token, nodes, {
+  const resolution = resolveRecordedTarget(token, nodes, {
     platform,
     requireRect,
     allowDisambiguation,

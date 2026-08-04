@@ -33,6 +33,9 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:packages/kernel
+      '@agent-device/selectors':
+        specifier: workspace:*
+        version: link:packages/selectors
       '@agent-device/maestro':
         specifier: workspace:*
         version: link:packages/maestro
@@ -114,6 +117,9 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@agent-device/selectors':
+        specifier: workspace:*
+        version: link:../selectors
 
   packages/ad-script:
     dependencies:
@@ -170,6 +176,18 @@ importers:
 
   packages/replay-test:
     dependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+
+  packages/selectors:
+    dependencies:
+      '@agent-device/ad-script':
+        specifier: workspace:*
+        version: link:../ad-script
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts

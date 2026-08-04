@@ -1,9 +1,9 @@
-export { parseFindArgs } from './selectors/find.ts';
+export { parseFindArgs } from '@agent-device/selectors';
 
 import {
   findBestMatchesByLocator as findBestMatchesByLocatorInternal,
   type FindLocator,
-} from './selectors/find.ts';
+} from '@agent-device/selectors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 
 export type FindMatchOptions = {

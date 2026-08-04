@@ -1,7 +1,6 @@
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
-import { tryParseSelectorChain } from '../selectors/parse.ts';
+import { selectorContainsValue } from '@agent-device/selectors';
 
-const VALUE_BEARING_SELECTOR_KEYS = new Set(['text', 'label', 'value']);
 const STRUCTURAL_ROOT_OUTPUT_KEYS = new Set([
   'action',
   'backend',
@@ -155,17 +154,7 @@ export function parameterizeRecordedFillTargetEvidence(
 }
 
 function selectorCandidateCarriesFillValue(candidate: string, literal: string): boolean {
-  const parsed = tryParseSelectorChain(candidate);
-  return (
-    parsed?.selectors.some((selector) =>
-      selector.terms.some(
-        (term) =>
-          VALUE_BEARING_SELECTOR_KEYS.has(term.key) &&
-          typeof term.value === 'string' &&
-          parameterizeSensitiveString(term.value, literal, '') !== term.value,
-      ),
-    ) ?? false
-  );
+  return selectorContainsValue(candidate, literal);
 }
 
 function parameterizeBackendOutput(

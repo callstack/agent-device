@@ -5,7 +5,6 @@ import { formatMaestroPoint } from './export-points.ts';
 import { DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY } from './compatibility-policy.ts';
 import type { MaestroExportCommand, MaestroExportConfig } from './export-types.ts';
 import { stringifyMaestroYamlDocuments } from './export-yaml.ts';
-import { MAESTRO_STATE_SELECTOR_KEYS, MAESTRO_TEXT_SELECTOR_KEYS } from './selector-vocabulary.ts';
 
 export type MaestroExportWarning = {
   line: number;
@@ -18,23 +17,12 @@ export type MaestroExportResult = {
   warnings: MaestroExportWarning[];
 };
 
-export type MaestroExportSelectorTerm = {
-  key: string;
-  value: string | boolean;
-};
-
-export type MaestroExportSelector = {
-  terms: MaestroExportSelectorTerm[];
-};
-
-export type MaestroExportSelectorChain = {
-  selectors: MaestroExportSelector[];
-};
+export type MaestroSelectorProjection = string | Readonly<Record<string, string | boolean>> | null;
 
 export type MaestroExportOptions = {
   actionLines?: number[];
   metadata?: { env?: Record<string, string> };
-  parseSelector(expression: string): MaestroExportSelectorChain;
+  resolveSelector(expression: string): MaestroSelectorProjection;
 };
 
 type ExportContext = {
@@ -50,7 +38,7 @@ type ConvertedAction =
 
 type ActionConverter = (
   action: SessionAction,
-  parseSelector: MaestroExportOptions['parseSelector'],
+  resolveSelector: MaestroExportOptions['resolveSelector'],
 ) => ConvertedAction;
 type SwipeGeometry = {
   start: string;
@@ -58,8 +46,6 @@ type SwipeGeometry = {
   duration: number;
 };
 
-const TEXT_SELECTOR_KEYS = new Set<string>(MAESTRO_TEXT_SELECTOR_KEYS);
-const STATE_SELECTOR_KEYS = new Set<string>(MAESTRO_STATE_SELECTOR_KEYS);
 const LONG_PRESS_DURATION_WARNING =
   'long-press duration exports as Maestro longPressOn; Maestro uses its default long-press duration';
 
@@ -76,7 +62,7 @@ export function exportReplayActionsToMaestro(
 
   for (const [index, action] of actions.entries()) {
     const line = options.actionLines?.[index] ?? index + 1;
-    const converted = convertAction(action, options.parseSelector);
+    const converted = convertAction(action, options.resolveSelector);
     switch (converted.kind) {
       case 'commands':
         commands.push(...converted.commands);
@@ -135,10 +121,10 @@ const ACTION_CONVERTERS: Record<string, ActionConverter> = {
 
 function convertAction(
   action: SessionAction,
-  parseSelector: MaestroExportOptions['parseSelector'],
+  resolveSelector: MaestroExportOptions['resolveSelector'],
 ): ConvertedAction {
   return (
-    ACTION_CONVERTERS[action.command]?.(action, parseSelector) ?? {
+    ACTION_CONVERTERS[action.command]?.(action, resolveSelector) ?? {
       kind: 'unsupported',
       message: `${action.command} has no Maestro equivalent`,
     }
@@ -181,11 +167,11 @@ function buildLaunchAppOptions(action: SessionAction): Record<string, unknown> |
 
 function convertClickAction(
   action: SessionAction,
-  parseSelector: MaestroExportOptions['parseSelector'],
+  resolveSelector: MaestroExportOptions['resolveSelector'],
 ): ConvertedAction {
   const [first, second] = action.positionals;
   if (!first) return { kind: 'unsupported', message: `${action.command} requires a target` };
-  const tapTarget = readTapTarget(first, second, parseSelector);
+  const tapTarget = readTapTarget(first, second, resolveSelector);
   if (!tapTarget) return { kind: 'unsupported', message: 'tap target is not Maestro-compatible' };
 
   const tapOptions = readRepeatedTapOptions(action);
@@ -214,11 +200,11 @@ function convertClickAction(
 
 function convertLongPressAction(
   action: SessionAction,
-  parseSelector: MaestroExportOptions['parseSelector'],
+  resolveSelector: MaestroExportOptions['resolveSelector'],
 ): ConvertedAction {
   const [first, second] = action.positionals;
   if (!first) return { kind: 'unsupported', message: 'longpress requires a target' };
-  const target = readTapTarget(first, second, parseSelector);
+  const target = readTapTarget(first, second, resolveSelector);
   if (!target)
     return { kind: 'unsupported', message: 'longpress target is not Maestro-compatible' };
   return {
@@ -258,13 +244,13 @@ function readIgnoredRepeatedTapOptionWarnings(
 
 function convertFillAction(
   action: SessionAction,
-  parseSelector: MaestroExportOptions['parseSelector'],
+  resolveSelector: MaestroExportOptions['resolveSelector'],
 ): ConvertedAction {
   const [target, text] = action.positionals;
   if (!target || text === undefined) {
     return { kind: 'unsupported', message: 'fill requires a target and text' };
   }
-  const tapTarget = readTapTarget(target, undefined, parseSelector);
+  const tapTarget = readTapTarget(target, undefined, resolveSelector);
   if (!tapTarget) return { kind: 'unsupported', message: 'fill target is not Maestro-compatible' };
   return {
     kind: 'commands',
@@ -294,7 +280,7 @@ function convertKeyboardAction(action: SessionAction): ConvertedAction {
 
 function convertWaitAction(
   action: SessionAction,
-  parseSelector: MaestroExportOptions['parseSelector'],
+  resolveSelector: MaestroExportOptions['resolveSelector'],
 ): ConvertedAction {
   const [first, second] = action.positionals;
   if (!first) return { kind: 'unsupported', message: 'wait requires a target or duration' };
@@ -323,7 +309,7 @@ function convertWaitAction(
       ],
     };
   }
-  const selector = selectorExpressionToMaestro(first, parseSelector);
+  const selector = selectorExpressionToMaestro(first, resolveSelector);
   if (!selector) return { kind: 'unsupported', message: 'wait selector is not Maestro-compatible' };
   return {
     kind: 'commands',
@@ -413,65 +399,18 @@ function readUnsupportedSwipeFlag(action: SessionAction): string | undefined {
 function readTapTarget(
   first: string,
   second: string | undefined,
-  parseSelector: MaestroExportOptions['parseSelector'],
+  resolveSelector: MaestroExportOptions['resolveSelector'],
 ): unknown | null {
   if (isNumber(first) && isNumber(second)) return { point: formatMaestroPoint(first, second) };
   if (first.startsWith('@')) return null;
-  return selectorExpressionToMaestro(first, parseSelector);
+  return selectorExpressionToMaestro(first, resolveSelector);
 }
 
 function selectorExpressionToMaestro(
   expression: string,
-  parseSelector: MaestroExportOptions['parseSelector'],
+  resolveSelector: MaestroExportOptions['resolveSelector'],
 ): unknown | null {
-  let chain: MaestroExportSelectorChain;
-  try {
-    chain = parseSelector(expression);
-  } catch {
-    return expression.includes('=') || expression.includes('||') ? null : expression;
-  }
-  const fallbackText = readFallbackTextSelector(chain.selectors);
-  if (fallbackText !== null) return fallbackText;
-  if (chain.selectors.length !== 1) return null;
-  return selectorToMaestro(chain.selectors[0]!);
-}
-
-function readFallbackTextSelector(selectors: MaestroExportSelector[]): string | null {
-  if (selectors.length <= 1) return null;
-  const values = selectors.flatMap((selector) =>
-    selector.terms.length === 1 && TEXT_SELECTOR_KEYS.has(selector.terms[0]!.key)
-      ? [selector.terms[0]!.value]
-      : [],
-  );
-  if (values.length !== selectors.length || values.length === 0) return null;
-  const first = values[0];
-  if (typeof first !== 'string') return null;
-  return values.every((value) => value === first) ? first : null;
-}
-
-function selectorToMaestro(selector: MaestroExportSelector): Record<string, unknown> | null {
-  const result: Record<string, unknown> = {};
-  for (const term of selector.terms) {
-    if (!appendSelectorTerm(result, term)) return null;
-  }
-  return Object.keys(result).length > 0 ? result : null;
-}
-
-function appendSelectorTerm(
-  result: Record<string, unknown>,
-  term: MaestroExportSelectorTerm,
-): boolean {
-  if (TEXT_SELECTOR_KEYS.has(term.key)) {
-    if (typeof term.value !== 'string' || result.id || result.text || result.label) return false;
-    result[term.key] = term.value;
-    return true;
-  }
-  if (STATE_SELECTOR_KEYS.has(term.key)) {
-    if (typeof term.value !== 'boolean') return false;
-    result[term.key] = term.value;
-    return true;
-  }
-  return false;
+  return resolveSelector(expression);
 }
 
 function readRepeatedTapOptions(

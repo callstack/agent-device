@@ -72,7 +72,7 @@ test('matchesLocalIdentity: with no recorded id, role+label must both match, abs
 // are the ONE shared uniqueness predicate behind both id-demotion sites (the
 // `target-v1` identity tuple `session-target-evidence.ts` writes at record
 // time, and the selector chain `buildSelectorChainForNode` builds — see
-// `src/selectors/build.test.ts` for that consumer's own coverage). Neither
+// `src/__tests__/selectors-build.test.ts` for that consumer's own coverage). Neither
 // consumer test exercises the pair directly; these tests pin the shared
 // predicate itself, so a re-derivation of identity demotion that drops or
 // scopes the uniqueness rule fails here first.

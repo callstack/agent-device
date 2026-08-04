@@ -28,10 +28,10 @@ test('every enumerated kernel path exists', () => {
 test('changed sources map onto the module that owns them', () => {
   assert.equal(moduleForFile('packages/kernel/src/errors.ts'), 'kernel-errors');
   assert.equal(moduleForFile('./src/daemon/ref-frame.ts'), 'daemon-ref-frame');
-  assert.equal(moduleForFile('src/selectors/parse.ts'), 'selectors');
+  assert.equal(moduleForFile('packages/selectors/src/internal/parse.ts'), 'selectors');
   // Selector tests live under the owned prefix; every other kernel's tests are
   // attributed by ownership.ts, not by this path match.
-  assert.equal(moduleForFile('src/selectors/__tests__/resolve.test.ts'), 'selectors');
+  assert.equal(moduleForFile('packages/selectors/src/internal/resolve.test.ts'), 'selectors');
   assert.equal(moduleForFile('packages/kernel/src/rect.ts'), undefined);
   assert.equal(moduleForFile('README.md'), undefined);
 });
@@ -39,8 +39,8 @@ test('changed sources map onto the module that owns them', () => {
 test('affected selection is deduplicated and registry-ordered', () => {
   assert.deepEqual(
     affectedModules([
-      'src/selectors/parse.ts',
-      'src/selectors/match.ts',
+      'packages/selectors/src/internal/parse.ts',
+      'packages/selectors/src/internal/match.ts',
       'packages/kernel/src/errors.ts',
       'docs/agents/testing.md',
     ]),

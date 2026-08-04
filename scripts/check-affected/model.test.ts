@@ -9,7 +9,7 @@ import { ALL_CHECKS, selectChecks, type CheckId, type SelectInput } from './mode
 function plan(changedFiles: string[], extra: Partial<SelectInput> = {}) {
   return selectChecks({
     changedFiles,
-    packageEntryFiles: ['src/index.ts', 'src/selectors.ts'],
+    packageEntryFiles: ['src/index.ts', 'packages/selectors/src/index.ts'],
     ...extra,
   });
 }
@@ -19,14 +19,13 @@ function ids(changedFiles: string[]): CheckId[] {
 }
 
 test('production source selects static/build gates and delegates tests to Vitest', () => {
-  const result = plan(['src/selectors/index.ts']);
+  const result = plan(['packages/selectors/src/index.ts']);
   assert.equal(result.failOpen, false);
   for (const id of [
     'format',
     'lint',
     'typecheck',
     'layering',
-    'fallow',
     'build',
     'vitest-related',
   ] as const) {
@@ -94,7 +93,7 @@ test('public package surface change selects the build and the published-package 
   // A public entry is the one surface a consumer resolves by name, so building it is not enough:
   // check:package proves it still imports from an install with no workspace links.
   assert.ok(result.includes('package'));
-  assert.ok(!ids(['src/selectors/index.ts']).includes('package'));
+  assert.ok(ids(['packages/selectors/src/index.ts']).includes('package'));
 });
 
 test('docs-only change selects no checks and records the docs paths', () => {
@@ -187,7 +186,7 @@ test('workflow/tooling and selector-owning changes fail open', () => {
 });
 
 test('a fail-open path in a mixed changeset forces the full set', () => {
-  const result = plan(['src/selectors/index.ts', 'bin/agent-device.mjs']);
+  const result = plan(['packages/selectors/src/index.ts', 'bin/agent-device.mjs']);
   assert.equal(result.failOpen, true);
   assert.deepEqual(result.checks, [...ALL_CHECKS]);
 });

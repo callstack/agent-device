@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { exportReplayActionsToMaestro, inspectMaestroFlow } from '@agent-device/maestro';
 import { parseReplayScriptDetailed, readReplayScriptMetadata } from '@agent-device/ad-script';
-import { parseSelectorChain } from '../../../selectors/index.ts';
+import { projectSelectorExpression } from '@agent-device/selectors';
 
 describe('exportReplayScriptToMaestro', () => {
   test('exports app launch, selectors, input, keyboard, assertions, and screenshots', () => {
@@ -171,7 +171,11 @@ function exportReplayScriptToMaestro(script: string) {
   return exportReplayActionsToMaestro(parsed.actions, {
     actionLines: parsed.actionLines,
     metadata: readReplayScriptMetadata(script),
-    parseSelector: parseSelectorChain,
+    resolveSelector: (expression) =>
+      projectSelectorExpression(expression, {
+        textKeys: ['id', 'text', 'label'],
+        booleanKeys: ['enabled', 'selected'],
+      }),
   });
 }
 

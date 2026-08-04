@@ -18,14 +18,6 @@
         "count": 1
       }
     },
-    "src/__tests__/test-utils/in-memory-replay-selector-port.ts": {
-      "complexity_moderate": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
     "src/cli-schema/cli-config.ts": {
       "crap_moderate": {
         "count": 1
@@ -469,17 +461,17 @@
         "count": 1
       }
     },
-    "src/selectors/build.ts": {
+    "packages/selectors/src/internal/build.ts": {
       "complexity_high": {
         "count": 1
       }
     },
-    "src/selectors/match.ts": {
+    "packages/selectors/src/internal/match.ts": {
       "crap_high": {
         "count": 1
       }
     },
-    "src/selectors/parse.ts": {
+    "packages/selectors/src/internal/parse.ts": {
       "complexity_moderate": {
         "count": 1
       },
@@ -487,7 +479,7 @@
         "count": 2
       }
     },
-    "src/selectors/predicates.ts": {
+    "packages/selectors/src/internal/predicates.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -590,7 +582,7 @@
     "src/daemon/context.ts:high impact",
     "src/daemon/handlers/session.ts:complexity",
     "src/replay/script-utils.ts:high impact",
-    "src/selectors/predicates.ts:high impact",
+    "packages/selectors/src/internal/predicates.ts:high impact",
     "src/daemon/android-snapshot-freshness.ts:high impact",
     "src/platforms/boot-diagnostics.ts:complexity",
     "src/compat/maestro/support.ts:high impact",
@@ -628,7 +620,7 @@
     "src/utils/source-value.ts:high impact",
     "src/request/cancel.ts:high impact",
     "src/commands/interaction/selectors.ts:untested risk",
-    "src/selectors/build.ts:high impact",
+    "packages/selectors/src/internal/build.ts:high impact",
     "src/kernel/redaction.ts:high impact",
     "src/utils/rect-visibility.ts:high impact",
     "packages/provider-webdriver/src/webdriver-utils.ts:high impact",

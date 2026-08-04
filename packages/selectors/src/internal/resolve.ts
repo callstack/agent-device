@@ -144,12 +144,13 @@ export function selectorFailureHint(diagnostics: SelectorDiagnostics[]): string 
 }
 
 export function formatSelectorFailure(
-  chain: SelectorChain,
+  chain: SelectorChain | string,
   diagnostics: SelectorDiagnostics[],
   options: { unique?: boolean },
 ): string {
+  const raw = typeof chain === 'string' ? chain : chain.raw;
   if (diagnostics.length === 0) {
-    return `Selector did not match: ${chain.raw}`;
+    return `Selector did not match: ${raw}`;
   }
   const summary = diagnostics.map((entry) => `${entry.selector} -> ${entry.matches}`).join(', ');
   return (options.unique ?? true)

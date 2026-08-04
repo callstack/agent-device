@@ -47,13 +47,9 @@
  * `runAdReplay` is the `.ad` step loop; `AdReplayStepRuntime` is the runtime
  * capability bag the daemon adapter
  * (`session-replay-runtime-engine-adapter.ts`) implements to thread it,
- * including the `ReplaySelectorPort` instance every daemon call site that
- * threads a port value names by the SAME type. Two adapters implement the
- * port: the production adapter (`src/daemon/replay-selector-port.ts`) and
- * the in-memory adapter for this package's own contract suite
- * (`src/__tests__/test-utils/in-memory-replay-selector-port.ts` — relocated
- * there, #1478 P5 stage D, because package-internal code may not "reach back
- * into root `src/`", R11, once its only remaining consumer was a root test).
+ * including selector resolution through the direct `@agent-device/selectors`
+ * package engine. Selector parsing and matching stay behind that package's
+ * string-only façade; no adapter value crosses this boundary.
  *
  * `./internal/target-verification.ts`'s four policy functions
  * (`planPostResolutionTargetVerification`, `planPreDispatchTargetVerification`,
@@ -105,13 +101,3 @@ export type {
   AdReplayGuardMismatchEvidence,
   AdReplayLandmarkMismatchEvidence,
 } from './internal/target-verification.ts';
-
-export type {
-  ReplayRecordedTargetDisambiguation,
-  ReplayRecordedTargetPolicy,
-  ReplayRecordedTargetResolution,
-  ReplaySelectorCandidateOptions,
-  ReplaySelectorExpressionOutcome,
-  ReplaySelectorGrammar,
-  ReplaySelectorPort,
-} from './internal/selector-port.ts';

@@ -5,7 +5,8 @@ import {
   checkFindArgs,
   parseFindSelectorExpression,
   type FindLocator,
-} from '../../selectors/find.ts';
+  resolveSelectorChain,
+} from '@agent-device/selectors';
 import { centerOfRect, type SnapshotState } from '@agent-device/kernel/snapshot';
 import { expireRefFrame } from '../ref-frame.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
@@ -28,9 +29,6 @@ import {
   isSparseSnapshotQualityVerdict,
   type SnapshotQualityVerdict,
 } from '../../snapshot/snapshot-quality.ts';
-import { resolveSelectorChain } from '../../selectors/index.ts';
-import type { SelectorChain } from '../../selectors/parse.ts';
-
 type FindContext = {
   req: DaemonRequest;
   sessionName: string;
@@ -97,7 +95,7 @@ export async function handleFindCommands(params: {
   const session = sessionStore.get(sessionName);
   if (!session) return noActiveSessionError();
   const device = session.device;
-  const selectorChain = parseFindSelectorExpression(locator, query);
+  const selectorExpression = parseFindSelectorExpression(locator, query);
   const fetchNodes = createFindNodeFetcher({
     device,
     session,
@@ -132,7 +130,7 @@ export async function handleFindCommands(params: {
     nodes,
     locator,
     query,
-    selectorChain,
+    selectorExpression,
     flags: req.flags,
     platform: device.platform,
   });
@@ -240,14 +238,14 @@ function resolveFindMatch(params: {
   nodes: SnapshotState['nodes'];
   locator: FindLocator;
   query: string;
-  selectorChain: SelectorChain | null;
+  selectorExpression: string | null;
   flags: DaemonRequest['flags'];
   platform: SessionState['device']['platform'];
 }): FindMatchResult {
-  const { nodes, locator, query, selectorChain, flags, platform } = params;
+  const { nodes, locator, query, selectorExpression, flags, platform } = params;
   const searchableNodes = nodes.filter((node) => !isRootInteractionContainer(node, nodes[0]));
-  if (selectorChain) {
-    const resolved = resolveSelectorChain(searchableNodes, selectorChain, {
+  if (selectorExpression) {
+    const resolved = resolveSelectorChain(searchableNodes, selectorExpression, {
       platform,
       requireRect: true,
       requireUnique: false,

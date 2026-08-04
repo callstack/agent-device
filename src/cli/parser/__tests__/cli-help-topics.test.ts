@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { SELECTOR_KEY_NAMES } from '../../../selectors/parse.ts';
+import { SELECTOR_KEY_NAMES } from '@agent-device/selectors';
 import { usage, usageForCommand } from '../args.ts';
 
 test('usage includes concise top-level commands', async () => {

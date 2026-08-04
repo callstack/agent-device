@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { evaluateIsPredicate } from '../../selectors/predicates.ts';
+import { evaluateIsPredicate } from '@agent-device/selectors';
 
 const viewportNode = {
   ref: 'e1',

@@ -1,5 +1,5 @@
 import { uniqueStrings } from '@agent-device/kernel/collections';
-import type { ReplaySelectorPort } from '@agent-device/ad-replay';
+import { readSelectorExpression } from '@agent-device/selectors';
 import { isTouchTargetCommand } from '@agent-device/ad-script';
 import type { ReplayReportAction } from './session-replay-report-action.ts';
 
@@ -13,10 +13,7 @@ import type { ReplayReportAction } from './session-replay-report-action.ts';
  * (`session-replay-divergence.ts`'s `collectReplayDivergenceSuggestions`).
  */
 
-function parseSelectorWaitPositionals(
-  positionals: string[],
-  port: ReplaySelectorPort,
-): {
+function parseSelectorWaitPositionals(positionals: string[]): {
   selectorExpression: string | null;
   selectorTimeout: string | null;
 } {
@@ -26,7 +23,7 @@ function parseSelectorWaitPositionals(
     maybeTimeout !== undefined && /^\d+$/.test(maybeTimeout) ? maybeTimeout : null;
   const hasTimeout = selectorTimeout !== null;
   const selectorTokens = hasTimeout ? positionals.slice(0, -1) : positionals.slice();
-  const outcome = port.readSelectorExpression('wait', selectorTokens);
+  const outcome = readSelectorExpression('wait', selectorTokens);
   if (outcome.kind !== 'expression' || outcome.rest.length > 0) {
     return { selectorExpression: null, selectorTimeout: null };
   }
@@ -37,10 +34,7 @@ function parseSelectorWaitPositionals(
 }
 
 // fallow-ignore-next-line complexity
-export function collectReplaySelectorCandidates(
-  action: ReplayReportAction,
-  port: ReplaySelectorPort,
-): string[] {
+export function collectReplaySelectorCandidates(action: ReplayReportAction): string[] {
   const result: string[] = [];
   const explicitChain =
     Array.isArray(action.result?.selectorChain) &&
@@ -69,13 +63,13 @@ export function collectReplaySelectorCandidates(
     }
   }
   if (action.command === 'is') {
-    const outcome = port.readSelectorExpression('is', [...action.positionals]);
+    const outcome = readSelectorExpression('is', [...action.positionals]);
     if (outcome.kind === 'expression') {
       result.push(outcome.expression);
     }
   }
   if (action.command === 'wait') {
-    const { selectorExpression } = parseSelectorWaitPositionals([...action.positionals], port);
+    const { selectorExpression } = parseSelectorWaitPositionals([...action.positionals]);
     if (selectorExpression) {
       result.push(selectorExpression);
     }

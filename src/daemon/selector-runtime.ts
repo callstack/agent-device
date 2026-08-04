@@ -11,16 +11,18 @@ import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { errorResponse, requireCommandSupported } from './handlers/response.ts';
 import { markSessionPartialRefsIssued, resolveRefStalenessWarning } from './session-snapshot.ts';
 import { resolveSessionDevice, withSessionlessRunnerCleanup } from './handlers/snapshot-session.ts';
-import { checkFindArgs, isReadOnlyFindAction } from '../selectors/find.ts';
 import {
   checkElementTargetArgs,
   checkGetFormat,
   checkIsArgs,
   checkWaitText,
-} from '../selectors/arguments.ts';
+  checkFindArgs,
+  evaluateIsPredicate,
+  isReadOnlyFindAction,
+  type IsPredicate,
+} from '@agent-device/selectors';
 import { refSnapshotFlagGuardResponse } from './handlers/interaction-flags.ts';
 import { parseVersionedRefPositional } from './handlers/interaction-touch-targets.ts';
-import { evaluateIsPredicate, type IsPredicate } from '../selectors/predicates.ts';
 import {
   describeAndroidEscapeSurface,
   detectAndroidEscapeSurface,

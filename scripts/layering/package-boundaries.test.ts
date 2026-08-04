@@ -264,8 +264,8 @@ test('the real tree parses, declares, and passes R11', () => {
   const adReplayPackage = packages.find((pkg) => pkg.name === '@agent-device/ad-replay');
   assert.ok(adReplayPackage, 'ad-replay package must exist');
   // Locks the "exports only `.`" boundary: the stage-A wide façade and the
-  // `./testing` subpath (the in-memory selector-port adapter, relocated to
-  // `src/__tests__/test-utils/`) are both gone as of P5 stage D — a future
+  // `./testing` subpath (the deleted in-memory selector adapter) are both gone
+  // as of the direct selectors-package cutover — a future
   // `./testing` (or any other) subpath widens this key list and fails the
   // assertion.
   assert.deepEqual([...adReplayPackage.exportTargets.keys()], ['@agent-device/ad-replay']);
@@ -273,6 +273,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/ad-script',
     '@agent-device/contracts',
     '@agent-device/kernel',
+    '@agent-device/selectors',
   ]);
   // #1555 review P1 ("add the reviewer-required exact exported-symbol
   // gate"; second pass, "enforce the accepted two-entrypoint facade"; the
@@ -308,16 +309,26 @@ test('the real tree parses, declares, and passes R11', () => {
       'AdReplayTargetClassification',
       'AdReplayVarSources',
       'AdReplayVerificationEntry',
-      'ReplayRecordedTargetDisambiguation',
-      'ReplayRecordedTargetPolicy',
-      'ReplayRecordedTargetResolution',
-      'ReplaySelectorCandidateOptions',
-      'ReplaySelectorExpressionOutcome',
-      'ReplaySelectorGrammar',
-      'ReplaySelectorPort',
       'inspectAdReplay',
       'runAdReplay',
     ],
+  );
+  const selectorsPackage = packages.find((pkg) => pkg.name === '@agent-device/selectors');
+  assert.ok(selectorsPackage, 'selectors package must exist');
+  assert.deepEqual([...selectorsPackage.exportTargets.keys()], ['@agent-device/selectors']);
+  assert.deepEqual([...selectorsPackage.workspaceDependencies].sort(), [
+    '@agent-device/ad-script',
+    '@agent-device/contracts',
+    '@agent-device/kernel',
+  ]);
+  assert.deepEqual(
+    readFacadeExports(path.join(repoRoot, 'packages/selectors/src/index.ts')).filter((name) =>
+      ['Selector', 'SelectorChain', 'SelectorTerm', 'SelectorKey', 'parseSelectorChain'].includes(
+        name,
+      ),
+    ),
+    [],
+    'selectors façade keeps AST and grammar internals private',
   );
   const providerWebDriverPackage = packages.find(
     (pkg) => pkg.name === '@agent-device/provider-webdriver',
@@ -379,6 +390,10 @@ test('the real tree parses, declares, and passes R11', () => {
     'root must declare the ad-replay workspace dependency',
   );
   assert.ok(
+    rootWorkspaceDependencyNames(repoRoot).has('@agent-device/selectors'),
+    'root must declare the selectors workspace dependency',
+  );
+  assert.ok(
     rootWorkspaceDependencyNames(repoRoot).has('@agent-device/provider-webdriver'),
     'root must declare the provider-webdriver workspace dependency',
   );
@@ -420,6 +435,8 @@ test('Node resolution enforces the exports map at runtime', () => {
     '@agent-device/ad-replay/testing',
     '@agent-device/ad-replay/internal/target-verification.ts',
     '@agent-device/ad-replay/src/index.ts',
+    '@agent-device/selectors/internal/parse.ts',
+    '@agent-device/selectors/src/index.ts',
   ]) {
     assert.throws(
       () => import.meta.resolve(deep),
@@ -454,4 +471,6 @@ test('Node resolution enforces the exports map at runtime', () => {
   assert.ok(adScriptResolved.endsWith('packages/ad-script/src/index.ts'), adScriptResolved);
   const adReplayResolved = import.meta.resolve('@agent-device/ad-replay');
   assert.ok(adReplayResolved.endsWith('packages/ad-replay/src/index.ts'), adReplayResolved);
+  const selectorsResolved = import.meta.resolve('@agent-device/selectors');
+  assert.ok(selectorsResolved.endsWith('packages/selectors/src/index.ts'), selectorsResolved);
 });

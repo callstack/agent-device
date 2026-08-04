@@ -1,17 +1,13 @@
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionAction } from '../types.ts';
 import type { SessionStore } from '../session-store.ts';
 import { errorResponse } from './response.ts';
-import { readReplaySelectorDisplayValue } from '../replay-selector-port.ts';
+import { readReplaySelectorDisplayValue } from '@agent-device/selectors';
 import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import type { SnapshotTimingSample } from '@agent-device/contracts/capture';
 import { withReplayFailureDiagnostics } from './session-replay-runtime-failure.ts';
 import type { ReplayCoordinator } from '../session-replay-coordinator.ts';
 import { invokeReplayAction } from './session-replay-action-runtime.ts';
-import type {
-  AdReplayStepFailure,
-  AdReplayStepRuntime,
-  ReplaySelectorPort,
-} from '@agent-device/ad-replay';
+import type { AdReplayStepFailure, AdReplayStepRuntime } from '@agent-device/ad-replay';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import {
   applyReplayDispatchGuard,
@@ -151,15 +147,12 @@ export function createAdReplayStepRuntime(params: {
   };
 
   const runtime: AdReplayStepRuntime = {
-    port: ctx.port,
-
     beginTargetVerification(action, resolvedAction, _index) {
       return resolveTargetVerificationEntry({
         action,
         resolvedAction,
         sessionName: ctx.sessionName,
         sessionStore: ctx.sessionStore,
-        port: ctx.port,
       });
     },
 
@@ -203,7 +196,6 @@ export function createAdReplayStepRuntime(params: {
         action,
         nodes: [...nodes],
         platform: session!.device.platform,
-        port: ctx.port,
       });
     },
 
@@ -349,8 +341,6 @@ export type ReplayStepContext = {
   signal: AbortSignal | undefined;
   /** #1478 P4b: the one locked gateway to this request's repair transaction. */
   coordinator: ReplayCoordinator;
-  /** #1478 P5 stage C: the one selector-port instance this request threads through the divergence-report chain. */
-  port: ReplaySelectorPort;
 };
 
 /**
@@ -403,7 +393,6 @@ async function buildReplayActionFailure(
       logPath: ctx.logPath,
       planActions: ctx.actions,
       planDigest: ctx.planDigest,
-      port: ctx.port,
     }),
   );
 }
@@ -411,10 +400,9 @@ async function buildReplayActionFailure(
 /**
  * A replay-test progress step's display value: the recorded selector's
  * label/text/id term value when every alternative agrees on ONE value, else
- * `undefined`. Needs `readReplaySelectorDisplayValue`'s private selector AST
- * (`replay-selector-port.ts` deliberately keeps it daemon-only — see that
- * file's own comment), so this stays daemon-side and is handed to the engine
- * loop as the narrow `describeStepValue` capability.
+ * `undefined`. `readReplaySelectorDisplayValue` keeps the selector AST inside
+ * `@agent-device/selectors`; this stays daemon-side and is handed to the
+ * engine loop as the narrow `describeStepValue` capability.
  */
 function describeReplayStepValue(action: SessionAction): string | undefined {
   const positionals = action.positionals ?? [];

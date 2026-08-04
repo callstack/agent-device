@@ -34,9 +34,9 @@
     "src/daemon/ref-frame.ts",
     "src/commands/interaction/runtime/settle.ts",
     "src/utils/scroll-edge-state.ts",
-    "src/selectors/**/*.ts",
-    "!src/selectors/**/*.test.ts",
-    "!src/selectors/__tests__/**",
+    "packages/selectors/src/**/*.ts",
+    "!packages/selectors/src/**/*.test.ts",
+    "!packages/selectors/src/internal/__tests__/**",
     "packages/ad-script/src/internal/target-annotation-serde.ts",
     "src/snapshot/snapshot-occlusion.ts"
   ]

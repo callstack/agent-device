@@ -17,7 +17,7 @@ import { containsPoint } from '@agent-device/kernel/rect';
 import { resolveRectCenter } from '../utils/rect-center.ts';
 import { demoteNonUniqueLocalIdentity, readNodeLocalIdentity } from '@agent-device/ad-script';
 import { buildIndexMap } from '../replay/target-evidence-tree.ts';
-import { normalizeSelectorText } from '../selectors/build.ts';
+import { normalizeSelectorText } from '@agent-device/selectors';
 import { isSemanticTouchTarget } from './interaction-targeting.ts';
 
 /**

@@ -20,11 +20,7 @@ import { createAgentBrowserWebProvider } from './agent-browser-provider.ts';
 import type { WebSnapshotResult } from './provider.ts';
 import { withCommandExecutorOverride, type ExecResult } from '../../utils/exec.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  buildSelectorChainForNode,
-  parseSelectorChain,
-  resolveSelectorChain,
-} from '../../selectors/index.ts';
+import { buildSelectorChainForNode, resolveSelectorChain } from '@agent-device/selectors';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { installFakeManagedAgentBrowser } from './__tests__/test-utils.ts';
 
@@ -562,7 +558,7 @@ function assertRoleSelectorResolves(snapshot: WebSnapshotResult): void {
   const nodesWithRefs = attachRefs(snapshot.nodes);
   const selectorChain = buildSelectorChainForNode(nodesWithRefs[2]!, 'web');
   assert.deepEqual(selectorChain, ['role="button" label="Save"', 'label="Save"']);
-  const resolved = resolveSelectorChain(nodesWithRefs, parseSelectorChain(selectorChain[0]!), {
+  const resolved = resolveSelectorChain(nodesWithRefs, selectorChain[0]!, {
     platform: 'web',
   });
   assert.equal(resolved?.node.label, 'Save');

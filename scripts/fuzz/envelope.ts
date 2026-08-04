@@ -18,8 +18,6 @@ import { runCmdSync } from '../../src/utils/exec.ts';
 import type { FuzzFailure } from './invariant.ts';
 
 const FILENAME = 'run-envelope.json';
-/** Shared with the property suite (#1437): its hazard list feeds the fuzz arbitraries. */
-const PROPERTY_ARBITRARIES = '../../src/__tests__/test-utils/property-arbitraries.ts';
 const LANE = 'parser-fuzz';
 const TOOL = 'scripts/fuzz/run.ts';
 
@@ -92,14 +90,13 @@ const CASE_GENERATION_INPUTS = [
   'invariant.ts',
 ] as const;
 
-/** Content hash of `CASE_GENERATION_INPUTS`, alongside their shared source of hazards. */
+/** Content hash of `CASE_GENERATION_INPUTS`. */
 function harnessHash(): string {
   const here = path.dirname(new URL(import.meta.url).pathname);
   const digest = crypto.createHash('sha256');
   for (const name of CASE_GENERATION_INPUTS) {
     digest.update(fs.readFileSync(path.join(here, name)));
   }
-  digest.update(fs.readFileSync(path.join(here, PROPERTY_ARBITRARIES)));
   return `sha256:${digest.digest('hex').slice(0, 16)}`;
 }
 

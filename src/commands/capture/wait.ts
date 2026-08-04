@@ -4,7 +4,7 @@ import { parseWaitPositionals } from '../../core/wait-positionals.ts';
 import { SELECTOR_SNAPSHOT_FLAGS } from '../cli-grammar/flag-groups.ts';
 import { type CliFlags } from '../cli-grammar/flag-types.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { tryParseSelectorChain } from '../../selectors/parse.ts';
+import { isValidSelectorExpression } from '@agent-device/selectors';
 import {
   booleanField,
   enumField,
@@ -143,7 +143,7 @@ function waitPositionals(options: WaitCommandOptions): string[] {
     return ['stable', ...quiet, ...timeout];
   }
   const selector = options.selector!;
-  if (!tryParseSelectorChain(selector)) {
+  if (!isValidSelectorExpression(selector)) {
     throw new AppError('INVALID_ARGS', `Invalid wait selector: ${selector}`);
   }
   return [selector, ...timeout];

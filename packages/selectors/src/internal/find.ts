@@ -1,6 +1,6 @@
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
-import { tryParseSelectorChain, type SelectorChain } from './parse.ts';
+import { tryParseSelectorChain } from './parse.ts';
 
 export const FIND_LOCATORS = ['any', 'text', 'label', 'value', 'role', 'id'] as const;
 export type FindLocator = (typeof FIND_LOCATORS)[number];
@@ -39,7 +39,7 @@ export function isReadOnlyFindAction(action: FindAction['kind']): action is Read
   );
 }
 
-type FindMatchOptions = {
+export type FindMatchOptions = {
   requireRect?: boolean;
 };
 
@@ -209,13 +209,10 @@ export function parseFindArgs(args: string[]): ParsedFindArgs {
   throw new AppError('INVALID_ARGS', `Unsupported find action: ${actionTokens[0]}`);
 }
 
-export function parseFindSelectorExpression(
-  locator: FindLocator,
-  query: string,
-): SelectorChain | null {
+export function parseFindSelectorExpression(locator: FindLocator, query: string): string | null {
   if (locator !== 'any') return null;
   if (!query.includes('=') && !query.includes('||')) return null;
-  return tryParseSelectorChain(query);
+  return tryParseSelectorChain(query) ? query : null;
 }
 
 function parseTimeout(value: string | undefined): number | null {

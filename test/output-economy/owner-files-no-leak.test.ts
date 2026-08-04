@@ -31,8 +31,8 @@ describe('owner-file metadata', () => {
 
     expect(
       fs.existsSync(path.join(distPath, 'sdk-selectors.js')),
-      'selector runtime should keep the stable sdk-selectors.js chunk',
-    ).toBe(true);
+      'selector runtime should no longer emit the deleted root SDK selector chunk',
+    ).toBe(false);
     expect(
       fs.existsSync(path.join(distPath, 'selectors2.js')),
       'selector runtime should not fall back to an auto-numbered chunk',

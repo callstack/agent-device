@@ -2,7 +2,7 @@ import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { FindOptions, IsOptions } from '@agent-device/contracts/client';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
-import { checkIsPredicate, normalizeIsPositionals } from '../../selectors/predicates.ts';
+import { checkIsPredicate, normalizeIsPositionals } from '@agent-device/selectors';
 import {
   direct,
   optionalCliNumber,

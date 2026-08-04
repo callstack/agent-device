@@ -2,7 +2,6 @@ import { asAppError } from '@agent-device/kernel/errors';
 import type { DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { errorResponse } from './response.ts';
-import { createDaemonReplaySelectorPort } from '../replay-selector-port.ts';
 import { runAdReplay } from '@agent-device/ad-replay';
 import type { SnapshotTimingSample } from '@agent-device/contracts/capture';
 import { summarizeSnapshotTimingSamples } from '@agent-device/contracts/capture';
@@ -63,10 +62,6 @@ export async function runReplayScriptFile(params: ReplayScriptFileParams): Promi
   // #1478 P4b: the one locked coordinator this request reaches the repair
   // transaction and resume watermark through.
   const coordinator = createReplayCoordinator({ sessionStore, sessionName });
-  // #1478 P5 stage C: the one selector-port instance this request threads
-  // through the divergence-report chain (verification, classification,
-  // suggestion building) — never a second-constructed adapter.
-  const port = createDaemonReplaySelectorPort();
   try {
     resolved = SessionStore.expandHome(filePath, req.meta?.cwd);
     if (isMaestroYamlPath(resolved) && req.flags?.replayBackend !== 'maestro') {
@@ -123,7 +118,6 @@ export async function runReplayScriptFile(params: ReplayScriptFileParams): Promi
       invoke,
       signal: getRequestSignal(req.meta?.requestId),
       coordinator,
-      port,
     };
     const { runtime, readLastResponse } = createAdReplayStepRuntime({
       ctx: stepContext,

@@ -270,7 +270,7 @@ The perfect-shape refactor is complete and merged. Its end-state:
   it ranks an explicit target spine — as rank groups, lowest (kernel sink) to highest, where `A ◄ B`
   means B may not be outranked by A (the back-edge order the gate rejects), NOT that every displayed
   import exists:
-  `{ contracts, request, selectors, platforms, utils, replay, recording, snapshot, screenshot-diff } ◄ core ◄ { commands, cli-schema, mcp } ◄ { client, daemon-server, compat, remote, metro, sdk } ◄ daemon-client ◄ cli` (the former rank-0 kernel zone lives in `packages/kernel` since #1490 W0, the former `cloud-webdriver` leaf lives behind the single `@agent-device/provider-webdriver` facade since W1b, Limrun lives behind the single `@agent-device/provider-limrun` facade since W1d, and the dependency-free XML codec lives behind the single `@agent-device/xml` facade; R11 package-boundaries owns these physical seams) —
+  `{ contracts, request, selectors, platforms, utils, replay, recording, snapshot, screenshot-diff } ◄ core ◄ { commands, cli-schema, mcp } ◄ { client, daemon-server, compat, remote, metro, sdk } ◄ daemon-client ◄ cli` (the former rank-0 kernel zone lives in `packages/kernel` since #1490 W0, and shared selectors now live behind the private `@agent-device/selectors` package between `@agent-device/ad-script` and `@agent-device/ad-replay`; the former `cloud-webdriver` leaf lives behind the single `@agent-device/provider-webdriver` facade since W1b, Limrun lives behind the single `@agent-device/provider-limrun` facade since W1d, and the dependency-free XML codec lives behind the single `@agent-device/xml` facade; R11 package-boundaries owns these physical seams) —
   and rejects every back-edge within it. Only `(root)` is unranked among `src/` zones
   (`UNRANKED_ZONES` in `scripts/layering/model.ts`): it holds the entrypoints and the composition
   roots that wire the command surface into the daemon, and R2 forbids `daemon/` from importing
@@ -327,7 +327,7 @@ The perfect-shape refactor is complete and merged. Its end-state:
   it. This per-zone ratchet is intentionally stricter than R9's ordinary total-growth rule: even
   moving cycle membership into a zone at its ceiling must be justified by lowering another ceiling
   or changing the baseline explicitly. The #1478 extraction arc (P0–P5) completed against these
-  ratchets: engines live behind the `packages/{maestro,replay-test,ad-replay}` façades, engines
+  ratchets: engines live behind the `packages/{maestro,replay-test,ad-replay,selectors}` façades, engines
   cannot import daemon/platform/provider implementations, and no logical module may deep-import
   another module's `internal/` tree. The P6 platform-modularity phases were measured and deferred
   at the #1478 checkpoint (2026-08-04): the Apple perf edge no longer participates in any cycle,
@@ -378,11 +378,12 @@ when landing it, satisfy the gate where one exists.
   axis of change. The one gated slice of this norm is tests: CI forbids test-only DI seams — a
   missing seam gets added as a real one or not at all.
 - **Module seams** (the #1478 extraction's durable rules). State crosses seams as immutable
-  values, authority crosses as capabilities, and both only narrow; a seam exists when its port has
-  two real adapters (normally the daemon adapter and a deterministic in-memory adapter running the
-  same contract suite), otherwise it is indirection. Calls go down through module façades and back
-  through ports; no inter-module event bus — ADR 0018's journal is an observation channel, never a
-  coordination mechanism. No engine receives `DaemonRequest`, `DaemonError`, `SessionStore`,
+  values, authority crosses seams as capabilities, and both only narrow; a capability seam earns
+  its port only when it has two real adapters, normally the daemon adapter and a deterministic
+  adapter running the same contract suite. A pure shared kernel instead stays behind its direct
+  package façade; the selector engine is the worked example. Calls go down through module façades
+  and back through ports; no inter-module event bus — ADR 0018's journal is an observation channel,
+  never a coordination mechanism. No engine receives `DaemonRequest`, `DaemonError`, `SessionStore`,
   mutable `SessionState`, provider handles, or concrete platform implementations; the daemon
   adapter closes each capability over one already-admitted request, so an engine cannot express a
   session name, acquire a lock, or select a provider scope. Session state keeps three consistency

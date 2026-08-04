@@ -118,13 +118,13 @@ test('guaranteeRowsForFile matches module-qualified cells only, on the whole pat
       path: 'runtime-selector',
       guarantee: 'disambiguation',
       kind: 'runtime',
-      via: 'src/selectors/resolve.ts#resolveSelectorChain',
+      via: 'packages/selectors/src/internal/resolve.ts#resolveSelectorChain',
     },
     {
       path: 'runtime-ref',
       guarantee: 'occlusion',
       kind: 'runtime',
-      via: 'src/selectors/resolve-extra.ts#other',
+      via: 'packages/selectors/src/internal/resolve-extra.ts#other',
     },
     {
       path: 'native-ref',
@@ -135,7 +135,9 @@ test('guaranteeRowsForFile matches module-qualified cells only, on the whole pat
   ];
 
   assert.deepEqual(
-    guaranteeRowsForFile('src/selectors/resolve.ts', rows).map((row) => row.guarantee),
+    guaranteeRowsForFile('packages/selectors/src/internal/resolve.ts', rows).map(
+      (row) => row.guarantee,
+    ),
     ['disambiguation'],
   );
 });

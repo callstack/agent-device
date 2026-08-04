@@ -4,7 +4,7 @@ import type { BackendSnapshotOptions } from '../../../backend.ts';
 import { ref, selector } from './selector-read-utils.ts';
 import { resolveActionableTouchResolution } from '../../../core/interaction-targeting.ts';
 import { throwIfOffscreenInteractionTarget, tryResolveRefNode } from './resolution.ts';
-import { parseSelectorChain, resolveSelectorChain } from '../../../selectors/index.ts';
+import { resolveSelectorChain } from '@agent-device/selectors';
 import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
 import type { Point } from '@agent-device/kernel/snapshot';
 import {
@@ -372,11 +372,11 @@ test('runtime fill #1280: fill is excluded from retargeting — the chain stays 
   assert.deepEqual(result.selectorChain, ['role="edittext" editable=true']);
   // ...and it resolves back to the editable container on the record-time
   // tree — the saved script stays replayable.
-  const resolved = resolveSelectorChain(
-    snapshot.nodes,
-    parseSelectorChain(result.selectorChain!.join(' || ')),
-    { platform: 'android', requireRect: true, requireUnique: true },
-  );
+  const resolved = resolveSelectorChain(snapshot.nodes, result.selectorChain!.join(' || '), {
+    platform: 'android',
+    requireRect: true,
+    requireUnique: true,
+  });
   assert.equal(resolved?.node.type, 'EditText');
 });
 

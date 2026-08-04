@@ -2,7 +2,7 @@ import { resolveCommandRecordingEffect } from '../core/command-descriptor/regist
 import { parseWaitPositionals } from '../core/wait-positionals.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { isTouchTargetCommand } from '@agent-device/ad-script';
-import { tryParseSelectorChain } from '../selectors/parse.ts';
+import { isValidSelectorExpression } from '@agent-device/selectors';
 import type { SessionAction } from './types.ts';
 
 export function validateActivePublicationActions(actions: SessionAction[]): void {
@@ -78,7 +78,7 @@ export function assertActivePublicationPortability(actions: SessionAction[]): vo
       );
     }
     const token = targetToken;
-    if (!token || !tryParseSelectorChain(token) || action.targetEvidence) continue;
+    if (!token || !isValidSelectorExpression(token) || action.targetEvidence) continue;
     throw new AppError(
       'COMMAND_FAILED',
       `Cannot publish recorded step "${action.command} ${token}": recording-time target identity evidence is missing.`,
@@ -127,7 +127,7 @@ export function toActivePublicationFailure(
 function isPortableDestinationGuard(action: SessionAction): boolean {
   if (action.command !== 'wait') return false;
   const parsed = parseWaitPositionals(action.positionals);
-  if (parsed?.kind !== 'selector' || tryParseSelectorChain(parsed.selectorExpression) === null) {
+  if (parsed?.kind !== 'selector' || !isValidSelectorExpression(parsed.selectorExpression)) {
     return false;
   }
   // #1349: a guard proves recorded landmark identity, not bare selector

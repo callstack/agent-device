@@ -8,7 +8,7 @@
 // attribute a stall to a case if the case runs to completion in one tick.
 
 import { parseArgs } from '../../src/cli/parser/args.ts';
-import { parseSelectorChain } from '../../src/selectors/parse.ts';
+import { validateSelectorExpression } from '@agent-device/selectors';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import { readCliBatchStepsJson } from '../../src/cli/batch-steps.ts';
 import { inspectMaestroFlow } from '@agent-device/maestro';
@@ -42,8 +42,8 @@ export const FUZZ_TARGETS: readonly FuzzTarget[] = [
   },
   {
     name: 'selector',
-    description: 'parseSelectorChain',
-    run: (input) => void parseSelectorChain(input),
+    description: 'validateSelectorExpression',
+    run: (input) => void validateSelectorExpression(input),
     seeds: [
       'text=Login',
       'label="Sign in" && role=button',

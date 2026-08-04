@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { buildNodes } from '../__tests__/test-utils/snapshot-builders.ts';
 import { computeTargetEvidence } from '../daemon/session-target-evidence.ts';
-import { buildSelectorChainForNode } from '../selectors/build.ts';
-import { parseSelectorChain, resolveSelectorChain } from '../selectors/index.ts';
+import { buildSelectorChainForNode, resolveSelectorChain } from '@agent-device/selectors';
 import { readNodeLocalIdentity } from '@agent-device/ad-script';
 import { resolvePressRecordingTarget } from './press-retarget.ts';
 
@@ -285,7 +284,7 @@ function assertChainAndEvidenceAgreeOnRecordedNode(params: {
   assert.equal(evidence.role, readNodeLocalIdentity(recordedNode).role);
 
   const chain = buildSelectorChainForNode(recordedNode, platform, { action: 'click', nodes });
-  const resolved = resolveSelectorChain(nodes, parseSelectorChain(chain.join(' || ')), {
+  const resolved = resolveSelectorChain(nodes, chain.join(' || '), {
     platform,
     requireRect: true,
     requireUnique: true,

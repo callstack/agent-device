@@ -15,7 +15,6 @@ import type {
   AdReplayTargetBindingEvidence,
   AdReplayTargetClassification,
   AdReplayVerificationEntry,
-  ReplaySelectorPort,
 } from '@agent-device/ad-replay';
 import {
   createReplayDivergenceSanitizer,
@@ -385,9 +384,8 @@ export function resolveTargetVerificationEntry(params: {
   resolvedAction: SessionAction;
   sessionName: string;
   sessionStore: SessionStore;
-  port: ReplaySelectorPort;
 }): AdReplayVerificationEntry {
-  const { action, resolvedAction, sessionName, sessionStore, port } = params;
+  const { action, resolvedAction, sessionName, sessionStore } = params;
   const session = sessionStore.get(sessionName);
   if (!session) return { kind: 'inactive' };
   if (resolveTargetIdentityVerification(action.command) === 'post-resolution') {
@@ -400,7 +398,7 @@ export function resolveTargetVerificationEntry(params: {
     // dispatch will parse (and fail) it the same way an unannotated action
     // would; `extractReplayTargetToken` returning a token here is not proof
     // it parses (the engine's pre-dispatch plan runs that check itself).
-    token: extractReplayTargetToken(resolvedAction, port),
+    token: extractReplayTargetToken(resolvedAction),
     platform: session.device.platform,
   };
 }
@@ -422,9 +420,8 @@ export function classifyPreDispatchTarget(params: {
   action: SessionAction;
   nodes: SnapshotNode[];
   platform: Platform | PublicPlatform;
-  port: ReplaySelectorPort;
 }): AdReplayTargetClassification {
-  const { recorded, token, action, nodes, platform, port } = params;
+  const { recorded, token, action, nodes, platform } = params;
   const config = resolveSuggestionMatchingConfig(action);
   const classification = classifyReplayTarget({
     recorded,
@@ -434,7 +431,6 @@ export function classifyPreDispatchTarget(params: {
     refLabel: readRefLabel(action),
     requireRect: config.requiresRect,
     allowDisambiguation: config.allowDisambiguation,
-    port,
   });
   if (classification.verified) {
     return {

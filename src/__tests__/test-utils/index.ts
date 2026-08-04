@@ -32,14 +32,12 @@ export { makeSessionStore } from './store-factory.ts';
 export {
   COMPACT_VIEWPORTS,
   formatRef,
-  formatSelectorChainExpression,
   gestureInViewportArb,
   PROPERTY_RUNS,
   PROPERTY_RUNS_SMALL,
   rawSnapshotNodesArb,
   refArb,
   replayScriptArb,
-  selectorChainArb,
 } from './property-arbitraries.ts';
 
 export { withNoColor } from './color.ts';

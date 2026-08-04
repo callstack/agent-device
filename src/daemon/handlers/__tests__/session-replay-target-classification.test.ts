@@ -3,18 +3,14 @@ import assert from 'node:assert/strict';
 import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { computeTargetEvidence } from '../../session-target-evidence.ts';
-import { buildSelectorChainForNode } from '../../../selectors/build.ts';
-import { parseSelectorChain, resolveSelectorChain } from '../../../selectors/index.ts';
+import { buildSelectorChainForNode, resolveSelectorChain } from '@agent-device/selectors';
 import { resolvePressRecordingTarget } from '../../../core/press-retarget.ts';
 import { classifyReplayTarget } from '../session-replay-target-classification.ts';
-import { createDaemonReplaySelectorPort } from '../../replay-selector-port.ts';
 import {
   bottomTabsRealCaptureFixture,
   recordArticleEvidence,
   toSnapshotNodes,
 } from './session-replay-target-classification-fixtures.ts';
-
-const port = createDaemonReplaySelectorPort();
 
 /** Verified outcomes carry the verified member + matchCount (for the post-resolution guard). */
 function assertVerified(
@@ -42,7 +38,6 @@ test('classifyReplayTarget: real-capture fixture verifies by @ref when the tree 
     refLabel: undefined,
     requireRect: true,
     allowDisambiguation: true,
-    port,
   });
   assertVerified(result, { winnerRef: winner.ref, matchCount: 1 });
 });
@@ -64,7 +59,6 @@ test('classifyReplayTarget: real-capture fixture — a relabeled node is identit
     refLabel: undefined,
     requireRect: true,
     allowDisambiguation: true,
-    port,
   });
   assert.equal(result.verified, false);
   if (result.verified) throw new Error('unreachable');
@@ -127,7 +121,6 @@ test('classifyReplayTarget path 2: selector-miss when the recorded target is gon
     refLabel: undefined,
     requireRect: true,
     allowDisambiguation: true,
-    port,
   });
   assert.equal(result.verified, false);
   if (result.verified) throw new Error('unreachable');
@@ -147,7 +140,6 @@ test('classifyReplayTarget path 4: verified via @ref on an unchanged tree', () =
     refLabel: undefined,
     requireRect: true,
     allowDisambiguation: true,
-    port,
   });
   assertVerified(result, { winnerRef: 'e3', matchCount: 1 });
 });
@@ -186,7 +178,6 @@ test('classifyReplayTarget uses the later chain alternative that resolution sele
     refLabel: undefined,
     requireRect: true,
     allowDisambiguation: true,
-    port,
   });
 
   // The first alternative ties, so `resolveSelectorChain` skips it and
@@ -207,7 +198,6 @@ test('classifyReplayTarget path 4: verified by ref-label fallback when the ref i
     refLabel: 'Save',
     requireRect: true,
     allowDisambiguation: true,
-    port,
   });
   assertVerified(result, { winnerRef: 'e3', matchCount: 1 });
 });
@@ -223,7 +213,6 @@ test('classifyReplayTarget: an unparseable-but-@-ref token with no fallback labe
     refLabel: undefined,
     requireRect: true,
     allowDisambiguation: true,
-    port,
   });
   assert.equal(result.verified, false);
   if (result.verified) throw new Error('unreachable');
@@ -269,7 +258,6 @@ test('classifyReplayTarget path 5: a unique-but-wrong rebind is caught even when
     refLabel: undefined,
     requireRect: true,
     allowDisambiguation: true,
-    port,
   });
   assert.equal(result.verified, false);
   if (result.verified) throw new Error('unreachable');
@@ -359,7 +347,6 @@ test('classifyReplayTarget path 6: same sibling ordinal recurring under a differ
     // genuine (non-tied) winner here — exercising path 6's compare-with-W
     // step, not just the identity-set/region math in isolation.
     allowDisambiguation: true,
-    port,
   });
   // Sibling ordinal 0 recurs under both anonymous sections (e5 and e7): the
   // sibling signal alone cannot isolate. Region-scoped viewportOrder (all
@@ -379,7 +366,6 @@ test('classifyReplayTarget path 6: viewport order resolves a lower row via docum
     refLabel: undefined,
     requireRect: true,
     allowDisambiguation: false,
-    port,
   });
   assert.equal(result.verified, false);
   if (result.verified) throw new Error('unreachable');
@@ -406,7 +392,6 @@ test('classifyReplayTarget path 6: a recorded scroll region that no longer exist
     refLabel: undefined,
     requireRect: true,
     allowDisambiguation: false,
-    port,
   });
   assert.equal(result.verified, false);
   if (result.verified) throw new Error('unreachable');
@@ -431,7 +416,6 @@ test('classifyReplayTarget path 6: an out-of-range recorded viewportOrder falls 
     refLabel: undefined,
     requireRect: true,
     allowDisambiguation: false,
-    port,
   });
   assert.equal(result.verified, false);
   if (result.verified) throw new Error('unreachable');
@@ -478,7 +462,6 @@ test('classifyReplayTarget: document-order determinism for equal rect centers', 
     refLabel: undefined,
     requireRect: true,
     allowDisambiguation: true,
-    port,
   });
   assertVerified(result, { winnerRef: 'e4', matchCount: 2 });
 });
@@ -558,7 +541,6 @@ test('#1269 e2e: a demoted shared-id row rebinds by role+label after the shared-
     refLabel: undefined,
     requireRect: true,
     allowDisambiguation: true,
-    port,
   });
   assertVerified(result, { winnerRef: expected.ref, matchCount: 1 });
 
@@ -566,19 +548,15 @@ test('#1269 e2e: a demoted shared-id row rebinds by role+label after the shared-
   // matches all four rows (no unique bind → resolution refuses), while the
   // demoted role+label resolves the correct row uniquely. This is the
   // FDR 1.0 → 0 difference the demotion buys.
-  const idResolved = resolveSelectorChain(
-    replayNodes,
-    parseSelectorChain('id="android:id/title"'),
-    {
-      platform: ANDROID,
-      requireRect: true,
-      requireUnique: true,
-    },
-  );
+  const idResolved = resolveSelectorChain(replayNodes, 'id="android:id/title"', {
+    platform: ANDROID,
+    requireRect: true,
+    requireUnique: true,
+  });
   assert.equal(idResolved, null); // non-unique: refuses to bind
   const labelResolved = resolveSelectorChain(
     replayNodes,
-    parseSelectorChain('role="textview" label="Connected devices"'),
+    'role="textview" label="Connected devices"',
     { platform: ANDROID, requireRect: true, requireUnique: true },
   );
   assert.equal(labelResolved?.node.ref, expected.ref);
@@ -641,7 +619,6 @@ test('#1280 e2e: a retargeted press on a row container rebinds its labeled desce
     refLabel: undefined,
     requireRect: true,
     allowDisambiguation: true,
-    port,
   });
   assertVerified(result, { winnerRef: expected.ref, matchCount: 1 });
 
@@ -654,11 +631,11 @@ test('#1280 e2e: a retargeted press on a row container rebinds its labeled desce
     nodes: recordNodes,
   });
   assert.deepEqual(containerChain, ['role="linearlayout"']);
-  const containerResolved = resolveSelectorChain(
-    replayNodes,
-    parseSelectorChain(containerChain.join(' || ')),
-    { platform: ANDROID, requireRect: true, requireUnique: true },
-  );
+  const containerResolved = resolveSelectorChain(replayNodes, containerChain.join(' || '), {
+    platform: ANDROID,
+    requireRect: true,
+    requireUnique: true,
+  });
   assert.equal(
     containerResolved,
     null,

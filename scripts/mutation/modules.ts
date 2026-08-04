@@ -67,9 +67,13 @@ export const KERNEL_MODULES: readonly KernelModule[] = [
   {
     id: 'selectors',
     label: 'Selector parsing + matching',
-    mutate: ['src/selectors/**/*.ts', '!src/selectors/**/*.test.ts', '!src/selectors/__tests__/**'],
-    // Selector tests live under the owned directory, so the prefix covers them.
-    owns: ['src/selectors/'],
+    mutate: [
+      'packages/selectors/src/**/*.ts',
+      '!packages/selectors/src/**/*.test.ts',
+      '!packages/selectors/src/internal/__tests__/**',
+    ],
+    // Selector tests live under the owned package source, so the prefix covers them.
+    owns: ['packages/selectors/src/'],
     // ~1,280 mutants at the observed ~3s/mutant on a 2-core runner is ~64
     // minutes in one job — past the acceptance budget and its own timeout.
     shards: 4,

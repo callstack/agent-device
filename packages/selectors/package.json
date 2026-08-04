@@ -1,0 +1,19 @@
+{
+  "name": "@agent-device/selectors",
+  "version": "0.0.0",
+  "private": true,
+  "sideEffects": false,
+  "type": "module",
+  "description": "Private shared selector matching, argument, and replay semantics for agent-device.",
+  "dependencies": {
+    "@agent-device/ad-script": "workspace:*",
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/kernel": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  }
+}

@@ -4,7 +4,6 @@ import { runAdReplay } from '../step-loop.ts';
 import type { AdReplayStepRuntime } from '../runtime-port-types.ts';
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
-import type { ReplaySelectorPort } from '../selector-port.ts';
 
 /**
  * #1554 fold-in: `resolveSuppressedTerminalCloseIndex` (the pure structural
@@ -63,7 +62,6 @@ function createFakeRuntime(params: { isRepairArmed?: () => boolean } = {}): {
   const dispatched: string[] = [];
   let armCount = 0;
   const runtime: AdReplayStepRuntime = {
-    port: {} as ReplaySelectorPort,
     beginTargetVerification: () => ({ kind: 'inactive' }),
     captureObservation: async () => {
       throw new Error('captureObservation: not used by this fixture (no targetEvidence)');
@@ -173,7 +171,6 @@ test("a post-dispatch target-binding mismatch reports the pre-step artifact snap
 
   let receivedArtifactPaths: readonly string[] | undefined;
   const runtime: AdReplayStepRuntime = {
-    port: {} as ReplaySelectorPort,
     // Only `waitAction` carries `targetEvidence`, so this is only ever
     // called for it — routed to the #1349 deferred-landmark path, which
     // dispatches with a guard WITHOUT any capture/classify round trip.

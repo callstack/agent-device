@@ -91,7 +91,6 @@ export async function verifyAndDispatchStep(
   const preDispatchPlan = planPreDispatchTargetVerification({
     recorded,
     token: entry.token,
-    port: runtime.port,
   });
   if (preDispatchPlan.kind === 'skip') {
     return dispatchNoGuard(runtime, action, resolvedAction, index, artifactPaths);

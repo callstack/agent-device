@@ -30,7 +30,7 @@ on:
       - 'src/daemon/ref-frame.ts'
       - 'src/commands/interaction/runtime/settle.ts'
       - 'src/utils/scroll-edge-state.ts'
-      - 'src/selectors/**'
+      - 'packages/selectors/src/**'
       - 'packages/ad-script/src/internal/target-annotation-serde.ts'
       - 'src/snapshot/snapshot-occlusion.ts'
       - 'src/**/*.test.ts'

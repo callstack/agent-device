@@ -1,8 +1,7 @@
 import type { RefTarget, SelectorTarget } from '@agent-device/contracts/interaction';
 import { AppError } from '@agent-device/kernel/errors';
 import type { SnapshotQualityVerdict } from '../../../snapshot/snapshot-quality.ts';
-import type { FindLocator } from '../../../selectors/find.ts';
-import type { SelectorChain } from '../../../selectors/parse.ts';
+import type { FindLocator } from '@agent-device/selectors';
 
 export { findNodeByLabel, resolveRefLabel } from '../../../snapshot/snapshot-processing.ts';
 
@@ -28,9 +27,9 @@ export function findSnapshotScope(
   platform: string,
   locator: FindLocator,
   query: string,
-  selectorChain: SelectorChain | null,
+  selectorExpression: string | null,
 ): string | undefined {
-  if (selectorChain || platform === 'web') return undefined;
+  if (selectorExpression || platform === 'web') return undefined;
   return shouldScopeFind(locator) ? query : undefined;
 }
 

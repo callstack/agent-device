@@ -1,19 +1,16 @@
 import { isTouchTargetCommand } from '@agent-device/ad-script';
-import type { ReplaySelectorPort } from '@agent-device/ad-replay';
+import { readSelectorExpression } from '@agent-device/selectors';
 import type { SessionAction } from '../types.ts';
 
 /** Returns the resolved-target token carried by an eligible replay action. */
-export function extractReplayTargetToken(
-  action: SessionAction,
-  port: ReplaySelectorPort,
-): string | undefined {
+export function extractReplayTargetToken(action: SessionAction): string | undefined {
   const positionals = action.positionals ?? [];
   if (action.command === 'get') return positionals[1];
   // #1349: `is <predicate> <selector> [expected]` — the selector expression is
   // the target token (an `is exists` step is never annotated, so this only
   // runs for unique-resolving predicates).
   if (action.command === 'is') {
-    const outcome = port.readSelectorExpression('is', positionals);
+    const outcome = readSelectorExpression('is', positionals);
     return outcome.kind === 'expression' ? outcome.expression : undefined;
   }
   if (!isTouchTargetCommand(action.command) && action.command !== 'fill') return undefined;

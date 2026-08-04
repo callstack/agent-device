@@ -323,7 +323,6 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
           },
           './metro': (mod) => mod.buildBundleUrl('https://public.example.test', 'ios'),
           './remote-config': (mod) => typeof mod,
-          './selectors': (mod) => mod.isSelectorToken('||') && typeof mod.parseSelectorChain === 'function',
         };
         const subpathSmokeResults = {};
         for (const subpath of Object.keys(subpathSmoke).sort()) {
@@ -335,6 +334,7 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
           'agent-device/commands',
           'agent-device/testing/conformance',
           'agent-device/observability',
+          'agent-device/selectors',
         ].map(async (specifier) => {
           try {
             await import(specifier);
@@ -398,7 +398,6 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       // the entire runtime check.
       './remote-config': 'object',
       './metro': 'https://public.example.test/index.bundle?platform=ios&dev=true&minify=false',
-      './selectors': true,
     });
     const cliStdout = await execFileText(
       process.execPath,

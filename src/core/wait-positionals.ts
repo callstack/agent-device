@@ -1,5 +1,5 @@
 import { parseTimeout } from '../utils/parse-timeout.ts';
-import { splitSelectorFromArgs, tryParseSelectorChain } from '../selectors/parse.ts';
+import { isValidSelectorExpression, splitSelectorFromArgs } from '@agent-device/selectors';
 
 export type WaitParsed =
   | { kind: 'sleep'; durationMs: number }
@@ -27,7 +27,7 @@ export function parseWaitPositionals(args: string[]): WaitParsed | null {
   if (firstArg.startsWith('@')) return { kind: 'ref', rawRef: firstArg, timeoutMs };
   const argsWithoutTimeout = timeoutMs !== null ? args.slice(0, -1) : args.slice();
   const split = splitSelectorFromArgs(argsWithoutTimeout);
-  if (split && split.rest.length === 0 && tryParseSelectorChain(split.selectorExpression)) {
+  if (split && split.rest.length === 0 && isValidSelectorExpression(split.selectorExpression)) {
     return { kind: 'selector', selectorExpression: split.selectorExpression, timeoutMs };
   }
   const text = timeoutMs !== null ? args.slice(0, -1).join(' ') : args.join(' ');

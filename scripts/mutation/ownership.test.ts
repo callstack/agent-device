@@ -84,7 +84,7 @@ test('derived selection unions source ownership with test reachability', () => {
   assert.deepEqual(
     derivedAffectedModules(
       [
-        'src/selectors/parse.ts',
+        'packages/selectors/src/internal/parse.ts',
         'src/daemon/__tests__/ref-frame.test.ts',
         'docs/agents/testing.md',
       ],

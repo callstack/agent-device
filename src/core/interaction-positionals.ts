@@ -5,7 +5,7 @@ import {
   isSelectorToken,
   SELECTOR_KEY_NAMES,
   splitSelectorFromArgs,
-} from '../selectors/parse.ts';
+} from '@agent-device/selectors';
 
 type PositionalInteractionTarget =
   | { x: number; y: number }

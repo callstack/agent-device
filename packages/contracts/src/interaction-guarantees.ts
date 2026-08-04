@@ -188,17 +188,17 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       ...RUNTIME_TREE_SHARED_GUARANTEES,
       disambiguation: {
         kind: 'runtime',
-        via: 'src/selectors/resolve.ts#resolveSelectorChain',
+        via: 'packages/selectors/src/internal/resolve.ts#resolveSelectorChain',
       },
       errorTaxonomy: {
         kind: 'runtime',
-        via: 'src/selectors/resolve.ts#formatSelectorFailure',
+        via: 'packages/selectors/src/internal/resolve.ts#formatSelectorFailure',
       },
       // Full pre-action diagnostic shape; same via as `disambiguation` — the
       // disclosure reports what the heuristic did, never changes it.
       resolutionDisclosure: {
         kind: 'runtime',
-        via: 'src/selectors/resolve.ts#resolveSelectorChain',
+        via: 'packages/selectors/src/internal/resolve.ts#resolveSelectorChain',
       },
     },
   },
@@ -214,7 +214,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       errorTaxonomy: {
         kind: 'runtime',
-        via: 'src/selectors/resolve.ts#STALE_REF_HINT',
+        via: 'packages/selectors/src/internal/resolve.ts#STALE_REF_HINT',
       },
       // ADR 0012 decision 2: tryResolveRefNode produces both outcomes — exact
       // for a resolved @ref, label-fallback for trailing-label recovery.
@@ -335,7 +335,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       errorTaxonomy: {
         kind: 'runtime',
-        via: 'src/selectors/resolve.ts#STALE_REF_HINT',
+        via: 'packages/selectors/src/internal/resolve.ts#STALE_REF_HINT',
       },
       // An @ref names exactly one node by construction (same cell as runtime-ref).
       resolutionDisclosure: {

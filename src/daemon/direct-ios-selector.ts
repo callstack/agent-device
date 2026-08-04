@@ -2,7 +2,7 @@ import { isIosFamily } from '@agent-device/kernel/device';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 import type { SessionState } from './types.ts';
-import { tryParseSelectorChain } from '../selectors/index.ts';
+import { readSimpleSelectorTarget } from '@agent-device/selectors';
 import { asAppError } from '@agent-device/kernel/errors';
 import type { ElementSelectorTapOptions } from '@agent-device/contracts/interaction';
 
@@ -46,19 +46,7 @@ export function readSimpleIosSelectorTarget(params: {
   if (!isLocalIosRunnerSession(session, { skipPendingPostGestureStabilization: true })) {
     return null;
   }
-  const chain = tryParseSelectorChain(selectorExpression);
-  if (!chain) return null;
-  if (chain.selectors.length !== 1) return null;
-  const selector = chain.selectors[0];
-  if (!selector || selector.terms.length !== 1) return null;
-  const term = selector.terms[0];
-  if (!term || typeof term.value !== 'string') return null;
-  if (!isRunnerNativeSelectorKey(term.key)) return null;
-  return { key: term.key, value: term.value, raw: selector.raw };
-}
-
-function isRunnerNativeSelectorKey(key: string): key is DirectIosSelectorTarget['key'] {
-  return key === 'id' || key === 'label' || key === 'text' || key === 'value';
+  return readSimpleSelectorTarget(selectorExpression);
 }
 
 /**

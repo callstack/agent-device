@@ -65,7 +65,7 @@ declaration site rather than any map someone wrote down:
 `src/daemon.ts` stays a thin router and `src/daemon/request-router.ts` orchestration-only; command
 logic belongs in handlers. New daemon handler-family commands update the daemon command registry.
 
-Shared selector parsing/matching/resolution lives in `src/selectors`; request cancellation/progress
+Shared selector parsing/matching/resolution lives in `@agent-device/selectors`; request cancellation/progress
 primitives in `src/request`; cross-layer platform and command data contracts in `src/contracts`. CLI
 grammar owns flag declarations under `src/commands/cli-grammar`; cross-surface CLI schema composition
 lives in `src/cli-schema`.
@@ -103,7 +103,7 @@ the new thing — never to suppress or allowlist it.
 - iOS simulator-set scoping is iOS-specific: `iosSimulatorDeviceSet` must not hide the host macOS
   desktop target when `--platform macos` or `--target desktop` is requested.
 - Use `inferFillText` (`src/daemon/action-utils.ts`), `uniqueStrings` (`@agent-device/kernel/collections`),
-  and `evaluateIsPredicate` (`src/selectors/predicates.ts`) rather than reimplementing them.
+  and `evaluateIsPredicate` (`@agent-device/selectors`) rather than reimplementing them.
 - Do not update `skills/**/SKILL.md` for command behavior or workflow guidance unless the user asks.
   Skills are thin routers to versioned CLI help; they must not carry behavior details.
 
@@ -216,7 +216,7 @@ connect errors, retry policy, or command typing, start in
   `collectReplaySelectorCandidates` (`src/daemon/handlers/session-replay-heal.ts`) can rank it in a
   divergence report (`session-replay-divergence.ts`). ADR 0012 retired `--update`'s silent
   rewrite-on-heal; there is no automated write path to hook into.
-- New selector keys stay centralized in `src/selectors/parse.ts`; new `is` predicates belong in
+- New selector keys stay centralized in the private parser under `packages/selectors`; new `is` predicates belong in
   `evaluateIsPredicate`.
 - On macOS, snapshot rects are absolute in window space. Point-based runner interactions translate
   through the interaction root frame — do not assume app-origin `(0,0)`. Prefer selector or `@ref`

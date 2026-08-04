@@ -96,9 +96,6 @@ function hashWithout(skip: string): string {
   for (const name of ['arbitraries.ts', 'generate.ts', 'targets.ts', 'invariant.ts']) {
     if (name !== skip) digest.update(fs.readFileSync(path.join(FUZZ_DIR, name)));
   }
-  digest.update(
-    fs.readFileSync(path.join(FUZZ_DIR, '../../src/__tests__/test-utils/property-arbitraries.ts')),
-  );
   return `sha256:${digest.digest('hex').slice(0, 16)}`;
 }
 

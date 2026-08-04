@@ -13,10 +13,11 @@ import {
   filterIdentitySet,
 } from '../../../replay/target-evidence-tree.ts';
 import type { PublicPlatform } from '@agent-device/kernel/device';
-import { checkWaitText } from '../../../selectors/arguments.ts';
-import { listSelectorChainMatches } from '../../../selectors/index.ts';
-import { parseSelectorChain } from '../../../selectors/parse.ts';
-import type { SelectorChainMatchList } from '../../../selectors/resolve.ts';
+import {
+  checkWaitText,
+  listSelectorChainMatches,
+  type SelectorChainMatchList,
+} from '@agent-device/selectors';
 import { deriveSelectorCapturePolicy } from './selector-capture-policy.ts';
 import { findNodeByLabel, resolveRefLabel } from './selector-read-utils.ts';
 import {
@@ -218,8 +219,7 @@ async function waitForSelector<Runtime extends SelectorWaitRuntime>(
   recordedLandmark: TargetAnnotationV1 | undefined,
 ): Promise<WaitCommandResult> {
   const polling = createWaitPolling(runtime, options, timeoutMs);
-  const chain = parseSelectorChain(selectorExpression);
-  const capturePolicy = deriveSelectorCapturePolicy({ selectorChain: chain });
+  const capturePolicy = deriveSelectorCapturePolicy({ selectorExpression });
   // ADR 0012 / #1349: the LAST poll whose capture matched the recorded
   // selector without any match carrying the recorded landmark identity. A
   // transient same-selector impostor (the previous screen mid-transition)
@@ -248,7 +248,7 @@ async function waitForSelector<Runtime extends SelectorWaitRuntime>(
     const capture = poll.value;
     if (capture) {
       const nodes = capture.snapshot.nodes;
-      const matchList = listSelectorChainMatches(nodes, chain, {
+      const matchList = listSelectorChainMatches(nodes, selectorExpression, {
         platform: runtime.backend.platform,
       });
       if (matchList) {
@@ -256,7 +256,7 @@ async function waitForSelector<Runtime extends SelectorWaitRuntime>(
         if (landmark.kind === 'satisfied') {
           return {
             kind: 'selector',
-            selector: matchList.selector.raw,
+            selector: matchList.selector,
             waitedMs: polling.waitedMs(),
             node: landmark.node,
             preActionNodes: nodes,

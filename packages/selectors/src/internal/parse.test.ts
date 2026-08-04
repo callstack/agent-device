@@ -5,7 +5,7 @@ import {
   formatSelectorChainExpression,
   PROPERTY_RUNS,
   selectorChainArb,
-} from '../__tests__/test-utils/index.ts';
+} from './__tests__/property-arbitraries.ts';
 import { parseSelectorChain } from './parse.ts';
 import type { SelectorTerm } from './parse.ts';
 

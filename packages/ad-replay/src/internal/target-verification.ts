@@ -50,7 +50,7 @@ import {
   identityFieldMismatches,
   type LocalIdentity,
 } from '@agent-device/ad-script';
-import type { ReplaySelectorPort } from './selector-port.ts';
+import { readSelectorExpression } from '@agent-device/selectors';
 
 /**
  * The verified/observed member's structural position within its capture
@@ -120,24 +120,23 @@ export type ReplayPreDispatchVerificationPlan =
  * dispatch parses, and fails, it the same way an unannotated action would);
  * only past that does a recorded-`unverifiable` annotation refuse pre-action.
  *
- * #1555 structural-quality review ("fix the engine's parse gate to honor its
- * own port contract"): the parse check used to call `resolveRecordedTarget`
+ * #1555 structural-quality review ("fix the engine's parse gate to use the
+ * selector engine directly"): the parse check used to call `resolveRecordedTarget`
  * over an EMPTY tree purely to read its `parse-invalid` reason — a resolve
  * call standing in for a parse call, and the one call site in this package
- * that never used `readSelectorExpression` (operation 1 of the port's own
- * three-operation contract) despite existing to answer exactly this
+ * that never used the selectors package's `readSelectorExpression` operation
+ * despite existing to answer exactly this
  * question. `readSelectorExpression('ordinary', [token])` is the real parse
  * check now.
  *
- * The outcome mapping is NOT `'invalid' -> skip` on the production adapter:
+ * The outcome mapping is NOT limited to `'invalid' -> skip`:
  * `readSelectorExpression`'s `'ordinary'`/`'wait'` grammars
  * (`splitSelectorFromArgs`) only ever record a prefix boundary once it has
  * already parsed, so a single already-whole token that fails to parse can
  * only come back `'not-applicable'` (no selector-shaped boundary was ever
  * found) — production's `'invalid'` case is structurally unreachable from
- * this call site (see `selector-port-contract.test.ts`'s "ordinary bare
- * token: production vs. in-memory 'invalid' reachability" cell, which pins
- * this precisely and documents where the two adapters legitimately diverge).
+ * this call site (the direct selectors-package replay tests pin the
+ * production grammar's "ordinary bare token" reachability precisely).
  * Both non-`'expression'` outcomes are treated identically here — the
  * historical behavior this replaces made no distinction either (a single
  * `parse-invalid` reason covered both "not selector-shaped at all" and
@@ -146,12 +145,11 @@ export type ReplayPreDispatchVerificationPlan =
 export function planPreDispatchTargetVerification(params: {
   recorded: TargetAnnotationV1;
   token: string | undefined;
-  port: ReplaySelectorPort;
 }): ReplayPreDispatchVerificationPlan {
-  const { recorded, token, port } = params;
+  const { recorded, token } = params;
   if (token === undefined) return { kind: 'skip' };
   if (!token.startsWith('@')) {
-    const parseCheck = port.readSelectorExpression('ordinary', [token]);
+    const parseCheck = readSelectorExpression('ordinary', [token]);
     if (parseCheck.kind !== 'expression') {
       return { kind: 'skip' };
     }

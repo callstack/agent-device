@@ -1,9 +1,8 @@
-import type { IsPredicate } from '../../../selectors/predicates.ts';
-import type { SelectorChain } from '../../../selectors/parse.ts';
+import type { IsPredicate } from '@agent-device/selectors';
 
 export type SelectorCapturePolicyInput = {
   predicate?: IsPredicate;
-  selectorChain?: SelectorChain | null;
+  selectorExpression?: string | null;
 };
 
 export type SelectorCapturePolicy = {

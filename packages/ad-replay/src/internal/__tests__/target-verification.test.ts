@@ -9,11 +9,6 @@ import {
   type AdReplayGuardMismatchEvidence,
   type AdReplayLandmarkMismatchEvidence,
 } from '../target-verification.ts';
-import type {
-  ReplaySelectorExpressionOutcome,
-  ReplaySelectorGrammar,
-  ReplaySelectorPort,
-} from '../selector-port.ts';
 
 /**
  * #1555 structural-quality review ("package-local tests... target-verification.ts's
@@ -73,94 +68,45 @@ test('planPostResolutionTargetVerification: a selector wait with a verifiable an
 // planPreDispatchTargetVerification
 // ---------------------------------------------------------------------------
 
-/** A port whose `readSelectorExpression` returns a fixed outcome and records how it was called. */
-function fakePort(outcome: ReplaySelectorExpressionOutcome): {
-  port: ReplaySelectorPort;
-  calls: Array<{ grammar: ReplaySelectorGrammar; positionals: readonly string[] }>;
-} {
-  const calls: Array<{ grammar: ReplaySelectorGrammar; positionals: readonly string[] }> = [];
-  const port: ReplaySelectorPort = {
-    readSelectorExpression: (grammar, positionals) => {
-      calls.push({ grammar, positionals });
-      return outcome;
-    },
-    resolveRecordedTarget: () => {
-      throw new Error('resolveRecordedTarget: not used by planPreDispatchTargetVerification');
-    },
-    buildSelectorCandidates: () => {
-      throw new Error('buildSelectorCandidates: not used by planPreDispatchTargetVerification');
-    },
-  };
-  return { port, calls };
-}
-
-test('planPreDispatchTargetVerification: no recorded token means nothing to verify (skip), and the port is never called', () => {
-  const { port, calls } = fakePort({ kind: 'expression', expression: 'id="x"', rest: [] });
-  const plan = planPreDispatchTargetVerification({ recorded: recorded(), token: undefined, port });
+test('planPreDispatchTargetVerification: no recorded token means nothing to verify (skip)', () => {
+  const plan = planPreDispatchTargetVerification({ recorded: recorded(), token: undefined });
   assert.deepEqual(plan, { kind: 'skip' });
-  assert.deepEqual(calls, []);
 });
 
 test('planPreDispatchTargetVerification: a @ref token skips the parse gate entirely', () => {
-  const { port, calls } = fakePort({ kind: 'invalid' });
   const plan = planPreDispatchTargetVerification({
     recorded: recorded(),
     token: '@e1~s0',
-    port,
   });
   assert.deepEqual(plan, { kind: 'verify', token: '@e1~s0' });
-  assert.deepEqual(calls, []);
 });
 
 test("planPreDispatchTargetVerification: a parseable non-@ token proceeds to 'verify' (or 'recorded-unverifiable')", () => {
-  const { port } = fakePort({ kind: 'expression', expression: 'id="save"', rest: [] });
   const verify = planPreDispatchTargetVerification({
     recorded: recorded({ verification: 'verified' }),
     token: 'id="save"',
-    port,
   });
   assert.deepEqual(verify, { kind: 'verify', token: 'id="save"' });
 
   const unverifiable = planPreDispatchTargetVerification({
     recorded: recorded({ verification: 'unverifiable' }),
     token: 'id="save"',
-    port,
   });
   assert.deepEqual(unverifiable, { kind: 'recorded-unverifiable' });
 });
 
-test("planPreDispatchTargetVerification: the port is called with ('ordinary', [token]) exactly", () => {
-  const { port, calls } = fakePort({ kind: 'expression', expression: 'id="save"', rest: [] });
-  planPreDispatchTargetVerification({ recorded: recorded(), token: 'id="save"', port });
-  assert.deepEqual(calls, [{ grammar: 'ordinary', positionals: ['id="save"'] }]);
+test('planPreDispatchTargetVerification: a malformed selector skips pre-dispatch verification', () => {
+  const plan = planPreDispatchTargetVerification({
+    recorded: recorded({ verification: 'unverifiable' }),
+    token: 'id=',
+  });
+  assert.deepEqual(plan, { kind: 'skip' });
 });
 
-// #1555 structural-quality review ("fix the engine's parse gate to honor its
-// own port contract"): this is the item-2 fix's own decision surface — a
-// token that fails to parse must skip pre-dispatch verification, exactly
-// like the pre-fix `resolveRecordedTarget`-over-empty-nodes check did for
-// `parse-invalid`. Covering BOTH non-'expression' discriminants
-// ('not-applicable', the one production's 'ordinary' grammar actually
-// reaches from a bare token, and 'invalid', defensively) because the fix's
-// whole point is that the mapping does not hinge on which one fires.
-test("planPreDispatchTargetVerification: a token that fails to parse ('not-applicable' or 'invalid') skips pre-dispatch verification", () => {
-  for (const outcome of [{ kind: 'not-applicable' as const }, { kind: 'invalid' as const }]) {
-    const { port } = fakePort(outcome);
-    const plan = planPreDispatchTargetVerification({
-      recorded: recorded({ verification: 'unverifiable' }),
-      token: 'id=',
-      port,
-    });
-    assert.deepEqual(plan, { kind: 'skip' }, `outcome ${outcome.kind} must skip`);
-  }
-});
-
-// Counterfactual (docs/agents/testing.md): reverting the `parseCheck.kind !==
-// 'expression'` check to `parseCheck.kind === 'invalid'` (the literal, too-
-// narrow reading of "'invalid' -> skip") makes the 'not-applicable' case fall
-// through to `recorded.verification === 'unverifiable'` and report
-// `{ kind: 'recorded-unverifiable' }` instead of `{ kind: 'skip' }` — turning
-// the cell above red. Verified by hand (see below), restored before commit.
+// Counterfactual (docs/agents/testing.md): removing the direct selector-engine
+// parse gate makes the malformed-selector case report `recorded-unverifiable`
+// instead of `skip`; the focused test was run red against that mutation and
+// restored before commit.
 
 // ---------------------------------------------------------------------------
 // deriveReplayTargetGuardMismatchEvidence

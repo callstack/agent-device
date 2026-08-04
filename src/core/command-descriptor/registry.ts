@@ -3,7 +3,7 @@ import type { CommandCapability } from '../capabilities.ts';
 // descriptors read `command`, `positionals` and `flags` and never touch `internal`.
 import type { DispatchedCommand } from '@agent-device/contracts/command';
 import type { RefFrameEffect } from '@agent-device/contracts/replay';
-import { isReadOnlyFindAction, parseFindArgs } from '../../selectors/find.ts';
+import { isReadOnlyFindAction, parseFindArgs } from '@agent-device/selectors';
 import { resolveWaitBudgetMs } from '../wait-positionals.ts';
 import {
   DEFAULT_TIMEOUT_POLICY,

@@ -1,4 +1,4 @@
-import type { AdReplayScrubValue, ReplaySelectorPort } from '@agent-device/ad-replay';
+import type { AdReplayScrubValue } from '@agent-device/ad-replay';
 import {
   summarizeSnapshotTimingSamples,
   type SnapshotDiagnosticsSummary,
@@ -33,7 +33,6 @@ export async function withReplayFailureDiagnostics(params: {
   logPath: string;
   planActions: SessionAction[];
   planDigest: string;
-  port: ReplaySelectorPort;
 }): Promise<DaemonResponse> {
   return await withReplayFailureContext({
     ...params,
@@ -60,7 +59,6 @@ async function withReplayFailureContext(params: {
   logPath: string;
   planActions: SessionAction[];
   planDigest: string;
-  port: ReplaySelectorPort;
 }): Promise<DaemonResponse> {
   const {
     response,
@@ -79,7 +77,6 @@ async function withReplayFailureContext(params: {
     logPath,
     planActions,
     planDigest,
-    port,
   } = params;
   if (response.ok) return response;
   const failureSource = readReplayFailureSource(response.error.details?.replaySource);
@@ -100,7 +97,6 @@ async function withReplayFailureContext(params: {
     planActions,
     planDigest,
     signal: getRequestSignal(req.meta?.requestId),
-    port,
   });
   return buildReplayDivergenceFailureResponse({
     error: cause,

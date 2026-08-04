@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { checkIsArgs } from '../arguments.ts';
-import { checkIsPredicate, IS_PREDICATE_USAGE_HINT } from '../predicates.ts';
-import { readInputFromCli } from '../../commands/cli-grammar.ts';
+import { checkIsArgs, checkIsPredicate, IS_PREDICATE_USAGE_HINT } from '@agent-device/selectors';
+import { readInputFromCli } from '../commands/cli-grammar.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 
 // Parity gate for the `is` argument contract across every surface that admits one.
