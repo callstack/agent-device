@@ -94,6 +94,10 @@ final class RunnerTests: XCTestCase {
   // on target process change, so screens that regain deep-capture ability are re-probed.
   let privateAXAcceptedDepthLock = NSLock()
   var privateAXAcceptedDepthBundleId: String?
+  // PID-bound: a relaunch (external or A->B->A while inactive) changes the process, and the new
+  // tree may accept the full depth again. Any invalidation path that drops the cached PID makes
+  // the memory unmatchable, so every fresh activation re-probes the full requested depth.
+  var privateAXAcceptedDepthProcessIdentifier: Int?
   var privateAXAcceptedDepth: Int?
   var privateAXAcceptedDepthUntil = Date.distantPast
   // Bluesky-class screens can grind ~4-8s before an XCTest-backed snapshot tier fails; anything

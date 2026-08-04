@@ -11,6 +11,7 @@ import {
 import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
 import { ref, selector } from './selector-read-utils.ts';
 import { buildSettleTailEntries, NEVER_SETTLED_HINT } from './settle.ts';
+import { readSnapshotQualityVerdict } from '../../../snapshot/snapshot-quality.ts';
 
 // #1101 --settle: quiet-window settle loop composition on the interaction
 // commands. Budgets are injected (fake clock) — no real waiting.
@@ -213,12 +214,15 @@ test('penalty-deferred private-ax captures do not reset the settle budget', asyn
   // and times out instead of being extended.
   const before = buttonSnapshot();
   const deferredAfter = welcomeSnapshot();
-  deferredAfter.snapshotQuality = {
+  // Parsed from a raw runner-wire object on purpose: if 'deferred' is ever dropped from the
+  // accepted reason-code set, the parser strips it, the reset fires again, and this test fails.
+  deferredAfter.snapshotQuality = readSnapshotQualityVerdict({
     state: 'recovered',
     backend: 'private-ax',
     reasonCode: 'deferred',
     reason: 'XCTest-backed snapshot tiers were deferred after recent slow accessibility work',
-  };
+  });
+  assert.equal(deferredAfter.snapshotQuality?.reasonCode, 'deferred');
   let captures = 0;
   const clock = createFakeClock();
   const device = createSettleDevice({

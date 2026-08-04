@@ -45,6 +45,20 @@ test('readSnapshotQualityVerdict keeps the verdict but drops an unknown reasonCo
   assert.equal(verdict?.reasonCode, undefined);
 });
 
+test("the runner-wire 'deferred' reasonCode survives parsing into warning suppression", () => {
+  // End-to-end through the raw wire parser: 'deferred' must be a member of the accepted
+  // reason-code set, or it is silently stripped and every downstream deferred behavior
+  // (warning suppression, settle budget-reset skip) quietly reverts.
+  const verdict = readSnapshotQualityVerdict({
+    state: 'recovered',
+    backend: 'private-ax',
+    reason: 'XCTest-backed snapshot tiers were deferred after recent slow accessibility work',
+    reasonCode: 'deferred',
+  });
+  assert.equal(verdict?.reasonCode, 'deferred');
+  assert.deepEqual(renderSnapshotQualityWarnings(verdict!, []), []);
+});
+
 test('penalty-deferred recovered captures suppress the fallback warning but keep depth copy', () => {
   // Every capture of a hostile screen re-stamps recovered/deferred; the capture that armed the
   // penalty already carried the full warning, so repeating it each capture is context noise.
