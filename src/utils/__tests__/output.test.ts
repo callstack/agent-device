@@ -1786,6 +1786,48 @@ test('formatAmbiguousMatchCandidateLines returns nothing when details carry no c
   assert.deepEqual(formatAmbiguousMatchCandidateLines({ candidates: [] }), []);
 });
 
+// P2 review on #1597: `details.candidates` is not unique to the find
+// handler's element-match shape. The device-domain resolver
+// (findBootedAppleSimulatorWithApp, src/core/dispatch-resolve.ts) reuses the
+// same key for `{ id, name }` device objects on both AMBIGUOUS_MATCH and
+// APP_NOT_INSTALLED, and never sets `details.matches` — this must render
+// nothing (its behavior before this renderer existed), never
+// "Candidates:\n  [object Object]".
+test('printHumanError renders device-domain candidate objects as nothing, never [object Object]', () => {
+  const deviceCandidates = [
+    { id: 'SIM-001', name: 'iPhone 17 Pro' },
+    { id: 'SIM-002', name: 'iPhone 17' },
+  ];
+
+  const ambiguousDeviceErr = new AppError(
+    'AMBIGUOUS_MATCH',
+    'Multiple booted iOS simulators have com.example.app installed',
+    { appTarget: 'com.example.app', candidates: deviceCandidates },
+  );
+  const ambiguousOutput = captureStderr(() => printHumanError(ambiguousDeviceErr));
+  assert.equal(ambiguousOutput.includes('[object Object]'), false);
+  assert.equal(ambiguousOutput.includes('Candidates:'), false);
+
+  const notInstalledErr = new AppError(
+    'APP_NOT_INSTALLED',
+    'No booted iOS simulator has com.example.app installed',
+    { appTarget: 'com.example.app', candidates: deviceCandidates },
+  );
+  const notInstalledOutput = captureStderr(() => printHumanError(notInstalledErr));
+  assert.equal(notInstalledOutput.includes('[object Object]'), false);
+  assert.equal(notInstalledOutput.includes('Candidates:'), false);
+
+  // The formatter itself, not just the CLI render, must reject this shape —
+  // both the missing `matches` and the object-shaped entries disqualify it.
+  assert.deepEqual(
+    formatAmbiguousMatchCandidateLines({
+      appTarget: 'com.example.app',
+      candidates: deviceCandidates,
+    }),
+    [],
+  );
+});
+
 test('printHumanError shows an unavailable screen reason and omitted suggestions hint', () => {
   const err = new AppError('REPLAY_DIVERGENCE', 'Replay failed at step 1', {
     divergence: {

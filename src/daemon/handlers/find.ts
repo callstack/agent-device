@@ -547,7 +547,9 @@ function publicFindFlags(flags: DaemonRequest['flags']): Record<string, unknown>
 // label/identifier. Capped at AMBIGUOUS_MATCH_CANDIDATE_LIMIT to bound the
 // error payload — `matches` (the true total) is what a "+N more" marker is
 // computed from at render time (src/utils/output.ts, src/mcp/tool-error.ts).
-export const AMBIGUOUS_MATCH_CANDIDATE_LIMIT = 5;
+// Module-local: no consumer outside this file needs the raw cap, only the
+// already-capped `candidates` array on the response.
+const AMBIGUOUS_MATCH_CANDIDATE_LIMIT = 5;
 
 // Exported as the single AMBIGUOUS_MATCH producer so the help-benchmark
 // sample parity test renders the exact error this handler returns; a message

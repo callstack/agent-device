@@ -70,16 +70,28 @@ export function printHumanError(
 // AMBIGUOUS_MATCH_CANDIDATE_LIMIT by buildAmbiguousMatchError,
 // src/daemon/handlers/find.ts) and `details.matches` (the true total) to
 // compute the "+N more" marker for whatever the cap omitted.
+//
+// `details.candidates` is NOT unique to that one producer: the device-domain
+// AMBIGUOUS_MATCH/APP_NOT_INSTALLED resolvers (findBootedAppleSimulatorWithApp,
+// src/core/dispatch-resolve.ts) reuse the same key for `{ id, name }` device
+// objects, and never set `details.matches` at all. Both guards below —
+// numeric `matches` and every candidate being a pre-rendered string — must
+// hold together, or this renders "[object Object]" for that shape instead of
+// silently rendering nothing (its prior, pre-#1597 behavior).
 export function formatAmbiguousMatchCandidateLines(
   details: Record<string, unknown> | undefined,
 ): string[] {
   const candidates = details?.candidates;
   if (!Array.isArray(candidates) || candidates.length === 0) return [];
-  const totalMatches = typeof details?.matches === 'number' ? details.matches : candidates.length;
+  if (typeof details?.matches !== 'number') return [];
+  if (!candidates.every((candidate): candidate is string => typeof candidate === 'string')) {
+    return [];
+  }
+  const totalMatches = details.matches;
   const remaining = totalMatches - candidates.length;
   return [
     'Candidates:',
-    ...candidates.map((candidate) => `  ${String(candidate)}`),
+    ...candidates.map((candidate) => `  ${candidate}`),
     ...(remaining > 0 ? [`  +${remaining} more`] : []),
   ];
 }
