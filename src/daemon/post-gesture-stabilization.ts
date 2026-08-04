@@ -7,6 +7,7 @@ import {
   areInteractionSurfaceSignaturesStable,
   buildInteractionSurfaceSignature,
   classifyBaselineSurfaceEvidence,
+  haveIdenticalDiscriminatingSurfaces,
   type InteractionSurfaceSignature,
 } from './interaction-outcome-policy.ts';
 import type { SessionState } from './types.ts';
@@ -154,10 +155,14 @@ function emitPostGestureSettleDiagnostic(
 export type PostGestureStabilizedResult<T> = {
   value: T;
   /**
-   * Present when the loop accepted a stale read: the quiet capture PROVABLY
-   * still equals the pre-gesture baseline after the distrust cap (#1600).
-   * Callers surface this to the agent — a diagnostics-only verdict let one
-   * benchmark run burn 40 calls re-issuing scrolls the daemon knew did nothing.
+   * Present ONLY when the accept-stale verdict is corroborated by full-surface
+   * evidence: every discriminating entry of the quiet capture matches the
+   * pre-gesture baseline exactly, in both directions
+   * (`haveIdenticalDiscriminatingSurfaces`). The bare verdict is NOT enough —
+   * it is subset-tolerant by design, and a successful scroll that replaced
+   * every list cell under fixed chrome still reads accept-stale (#1601 review
+   * P1). Callers surface this to the agent: a diagnostics-only signal let one
+   * benchmark run burn 40 calls re-issuing scrolls that moved nothing (#1600).
    */
   gestureNoEffect?: { action: string; positionals: string[] };
 };
@@ -204,7 +209,8 @@ export async function capturePostGestureStabilizedResult<T>(params: {
       emitPostGestureSettleDiagnostic(verdict, pending.action, attempts, elapsedMs);
       return {
         value: current.value,
-        ...(verdict === 'accept-stale'
+        ...(verdict === 'accept-stale' &&
+        haveIdenticalDiscriminatingSurfaces(pending.baselineSignature ?? [], current.signature)
           ? {
               gestureNoEffect: {
                 action: pending.action,

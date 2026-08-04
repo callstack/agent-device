@@ -251,6 +251,44 @@ export function classifyBaselineSurfaceEvidence(
   return discriminatingOverlap > 0 ? 'unchanged' : 'ambiguous';
 }
 
+/**
+ * Full-surface agreement over DISCRIMINATING entries, in BOTH directions —
+ * the stronger bar an agent-facing no-effect claim needs (#1601 review P1).
+ *
+ * `classifyBaselineSurfaceEvidence` is deliberately subset-tolerant for the
+ * distrust loop, where a false 'unchanged' only buys extra polling. But a
+ * fixed-chrome screen whose list cells were fully replaced by a SUCCESSFUL
+ * scroll classifies 'unchanged' on the shared chrome alone — new cells are
+ * absent from the baseline and silently ignored. Requiring the discriminating
+ * entry sets to match exactly (same keys both ways, every rect within
+ * tolerance) vetoes that shape: any appeared or vanished real element kills
+ * the claim. Scope drift between baseline and capture vetoes too — silence
+ * is the safe failure mode for a message that steers the agent's next move.
+ */
+export function haveIdenticalDiscriminatingSurfaces(
+  left: InteractionSurfaceSignature,
+  right: InteractionSurfaceSignature,
+): boolean {
+  const leftEntries = left.filter((entry) => entry.discriminating);
+  const rightEntries = right.filter((entry) => entry.discriminating);
+  if (leftEntries.length === 0 || leftEntries.length !== rightEntries.length) return false;
+  // Keys carry an occurrence ordinal (`|#N`), so a map by key is lossless.
+  const rightByKey = new Map(rightEntries.map((entry) => [entry.key, entry]));
+  for (const entry of leftEntries) {
+    const other = rightByKey.get(entry.key);
+    if (!other) return false;
+    if (
+      Math.abs(entry.x - other.x) > RECT_TOLERANCE_PX ||
+      Math.abs(entry.y - other.y) > RECT_TOLERANCE_PX ||
+      Math.abs(entry.width - other.width) > RECT_TOLERANCE_PX ||
+      Math.abs(entry.height - other.height) > RECT_TOLERANCE_PX
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function supportsInteractionOutcomePolicy(session: SessionState): boolean {
   return isMobilePlatform(session.device);
 }

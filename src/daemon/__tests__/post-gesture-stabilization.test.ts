@@ -9,6 +9,7 @@ import {
   markPostGestureStabilization,
 } from '../post-gesture-stabilization.ts';
 import {
+  chromeWithListSnapshot,
   deliverySnapshot,
   keyboardWindowNodes,
   makeSession,
@@ -155,6 +156,38 @@ test('capturePostGestureStabilizedResult keeps polling past the normal deadline 
   // Proves it kept polling well past the OLD 1.5s accept point (2 attempts,
   // ~200ms) instead of trusting the first quiet match.
   assert.ok(captureCount > 8, `expected sustained polling, saw ${captureCount} captures`);
+});
+
+test('a replaced list under fixed chrome accepts stale but never claims no-effect (#1601 P1)', async () => {
+  // The reviewer's counterexample: a SUCCESSFUL scroll swapped every list
+  // cell while the tab-bar chrome (discriminating, shared, unmoved) kept the
+  // subset-tolerant classifier at 'unchanged'. The loop may still accept the
+  // stale read — but the agent-facing no-effect claim must be vetoed by the
+  // unmatched discriminating cells on both sides.
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  session.snapshot = chromeWithListSnapshot(['row-1', 'row-2']);
+  markPostGestureStabilization(session, 'scroll');
+
+  const capture = vi.fn(async () => chromeWithListSnapshot(['row-3', 'row-4']));
+
+  const resultPromise = withDiagnosticsScope({}, async () => {
+    const result = await capturePostGestureStabilizedResult({
+      session,
+      capture,
+      readSnapshot: (snapshot) => snapshot,
+    });
+    return {
+      result,
+      staleAccepts: countDiagnosticEventsByPhase(['post_gesture_snapshot_stale_accept']),
+    };
+  });
+
+  await vi.advanceTimersByTimeAsync(10_000);
+  const { result, staleAccepts } = await resultPromise;
+
+  assert.equal(staleAccepts, 1);
+  assert.equal(result.gestureNoEffect, undefined);
 });
 
 test('formatGestureNoEffectWarning names the gesture and the raw-drag escape hatch', () => {

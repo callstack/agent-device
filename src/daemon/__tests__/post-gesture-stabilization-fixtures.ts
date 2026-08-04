@@ -62,6 +62,45 @@ export function pickupSnapshotWithExtraText(y = 500) {
   };
 }
 
+/**
+ * Fixed tab-bar chrome + a list whose visible cells sit at stable row rects.
+ * Two captures with DIFFERENT cell ids model a successful scroll that
+ * replaced every list row while the chrome (a discriminating, shared,
+ * unmoved entry) stayed put: `classifyBaselineSurfaceEvidence` reads
+ * 'unchanged' from the shared chrome alone (#1601 review P1) — the exact
+ * accept-stale false negative that must never surface as an agent-facing
+ * no-effect claim.
+ */
+export function chromeWithListSnapshot(cellIds: [string, string]) {
+  return makeSnapshotState([
+    { index: 0, type: 'Application', label: 'App', rect: { x: 0, y: 0, width: 390, height: 844 } },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: 'tab-home',
+      label: 'Home',
+      rect: { x: 0, y: 800, width: 195, height: 44 },
+    },
+    {
+      index: 2,
+      parentIndex: 0,
+      type: 'Cell',
+      identifier: cellIds[0],
+      label: cellIds[0],
+      rect: { x: 0, y: 100, width: 390, height: 60 },
+    },
+    {
+      index: 3,
+      parentIndex: 0,
+      type: 'Cell',
+      identifier: cellIds[1],
+      label: cellIds[1],
+      rect: { x: 0, y: 160, width: 390, height: 60 },
+    },
+  ]);
+}
+
 export function applicationRootNode() {
   return {
     ref: 'e-root',
