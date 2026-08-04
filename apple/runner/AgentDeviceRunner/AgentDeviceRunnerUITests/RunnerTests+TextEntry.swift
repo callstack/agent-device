@@ -4,6 +4,24 @@ import XCTest
 // pipeline, readiness polling, and field clearing. Behavior-preserving extraction from
 // RunnerTests+Interaction.swift (no logic changes) to keep that file navigable.
 extension RunnerTests {
+  enum TextEntryFailure: String {
+    case notFocused = "TEXT_INPUT_NOT_FOCUSED"
+
+    var message: String {
+      switch self {
+      case .notFocused:
+        return "No focused text input was available for typing."
+      }
+    }
+
+    var hint: String {
+      switch self {
+      case .notFocused:
+        return "Focus a visible text input, then retry type or fill. If the input is not exposed by accessibility, use a coordinate focus command before typing."
+      }
+    }
+  }
+
   enum TextTypingRepairMode {
     case none
     case append
@@ -25,6 +43,7 @@ extension RunnerTests {
     let expectedText: String?
     let observedText: String?
     var textEntryRoute: String? = nil
+    var failure: TextEntryFailure? = nil
   }
 
   struct TextEntryTarget {

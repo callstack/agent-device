@@ -340,6 +340,26 @@ extension RunnerTests {
   }
 #endif
 
+#if os(iOS)
+  func testTypeWithoutResolvedInputReturnsTypedFailureBeforeDispatchingText() throws {
+    let command = try runnerCommandFixture(
+      #"{"command":"type","commandId":"type-without-focus","text":"hello"}"#
+    )
+
+    let response = executeTypeCommand(
+      activeApp: XCUIApplication(bundleIdentifier: "com.example.agentdevice.missing-input"),
+      command: command
+    )
+
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.code, "TEXT_INPUT_NOT_FOCUSED")
+    XCTAssertEqual(
+      response.error?.hint,
+      "Focus a visible text input, then retry type or fill. If the input is not exposed by accessibility, use a coordinate focus command before typing."
+    )
+  }
+#endif
+
   func testXCTestRecordedFailureResponseFailsMutatingSuccesses() throws {
     let command = try runnerCommandFixture(#"{"command":"tap","commandId":"tap-1"}"#)
     let response = Response(ok: true, data: DataPayload(message: "tapped"))
@@ -2578,6 +2598,12 @@ extension RunnerTests {
       synthesizer: PrivateXCTestTextEntrySynthesizer(),
       commandId: command.commandId
     )
+    if let failure = textResult.failure {
+      return Response(
+        ok: false,
+        error: ErrorPayload(code: failure.rawValue, message: failure.message, hint: failure.hint)
+      )
+    }
     if textResult.verified == false {
       let expected = textResult.expectedText ?? ""
       let observed = textResult.observedText ?? ""

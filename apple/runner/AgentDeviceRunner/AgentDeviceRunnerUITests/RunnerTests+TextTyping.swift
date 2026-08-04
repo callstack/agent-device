@@ -60,6 +60,26 @@ extension RunnerTests {
       mode: repairMode
     )
 
+    // Dispatching text through XCTest without a resolved target or evidence of a focused
+    // responder records a test failure. That tears down the long-lived runner and turns a
+    // single invalid request into a restart cascade, so fail before entering that channel.
+    guard initialTarget != nil || (activeTarget.prefersFocusedElement && isKeyboardVisible(app: app)) else {
+      logTextEntryPhase(
+        commandId: commandId,
+        phase: "total",
+        startedAt: totalStartedAt,
+        chars: text.count,
+        mode: repairMode
+      )
+      return TextEntryResult(
+        verified: nil,
+        repaired: false,
+        expectedText: expectedText,
+        observedText: nil,
+        failure: .notFocused
+      )
+    }
+
     if repairMode == .replacement {
       guard let replacementTarget = initialTarget else {
         logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: text.count, mode: repairMode)
@@ -84,7 +104,7 @@ extension RunnerTests {
         textEntryRoute = "xctest-element"
         currentTarget.typeText(value)
         return currentTarget
-      } else {
+      } else if activeTarget.prefersFocusedElement && isKeyboardVisible(app: app) {
 #if os(iOS)
         textEntryRoute = "synthesized-first-responder"
         NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder")
@@ -110,6 +130,7 @@ extension RunnerTests {
 #endif
         return resolveTextEntryElement(app: app, target: activeTarget)
       }
+      return nil
     }
 
     func waitForWarmupValue(_ expectedValue: String?, target: TextEntryTarget) {
