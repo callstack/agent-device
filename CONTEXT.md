@@ -319,17 +319,19 @@ The perfect-shape refactor is complete and merged. Its end-state:
   improvement into a baseline edit. A shrunk tree is reported in the success line instead of
   failing. Hubs by in-component dependents: `runtime-contract.ts` (25),
   `commands/runtime-types.ts` (21), `backend.ts` (15), `commands/runtime-common.ts` (12).
-- Daemon modularity migration (R10). The same tooling-only declaration records R7 at 30
-  writer-owned fields / 42 owner-file claims, R9's 76 members by zone (`commands` 33,
-  `daemon-server` 20, `core` 10, `platforms` 7, root 5, `client` 1), and the four
-  production importers of `daemon/types.ts` from outside daemon. R7 counts and external importers may
+- Daemon modularity ratchets (R10). The same tooling-only declaration pins R7's writer-owned
+  field/owner-claim counts, R9's 76 members by zone (`commands` 33, `daemon-server` 20, `core` 10,
+  `platforms` 7, root 5, `client` 1), and the external production importers of `daemon/types.ts`
+  (down to 2: the client normalizers and remote artifacts). R7 counts and external importers may
   only shrink; no zone may grow inside R9, and replay/Maestro/replay-test engine files remain outside
-  it. This per-zone migration ratchet is intentionally stricter than R9's ordinary total-growth
-  rule: during the extraction, even moving cycle membership into a zone at its ceiling must be
-  justified by lowering another ceiling or changing the migration baseline explicitly. Zero-count
-  policies begin enforcing when `src/ad-replay/` or `src/maestro/` first exists and
-  already protect `src/replay/test/`: engines cannot import daemon/platform/provider implementations,
-  and no logical module may deep-import another module's `internal/` tree. These are migration
+  it. This per-zone ratchet is intentionally stricter than R9's ordinary total-growth rule: even
+  moving cycle membership into a zone at its ceiling must be justified by lowering another ceiling
+  or changing the baseline explicitly. The #1478 extraction arc (P0–P5) completed against these
+  ratchets: engines live behind the `packages/{maestro,replay-test,ad-replay}` façades, engines
+  cannot import daemon/platform/provider implementations, and no logical module may deep-import
+  another module's `internal/` tree. The P6 platform-modularity phases were measured and deferred
+  at the #1478 checkpoint (2026-08-04): the Apple perf edge no longer participates in any cycle,
+  so the remaining R9 work sits at the command-registration hubs, not the platform seam. These are
   ratchets, not permission to scaffold façades before a real seam has two adapters.
 - Zero-dep CI jobs (R8). Some jobs run scripts straight from a checkout with `install-deps: false`,
   so they have no `node_modules`. Nothing local can feel that constraint — every dev machine has
@@ -375,6 +377,21 @@ when landing it, satisfy the gate where one exists.
   (#1409) was closed unmerged. A new abstraction layer needs a demonstrated second consumer or
   axis of change. The one gated slice of this norm is tests: CI forbids test-only DI seams — a
   missing seam gets added as a real one or not at all.
+- **Module seams** (the #1478 extraction's durable rules). State crosses seams as immutable
+  values, authority crosses as capabilities, and both only narrow; a seam exists when its port has
+  two real adapters (normally the daemon adapter and a deterministic in-memory adapter running the
+  same contract suite), otherwise it is indirection. Calls go down through module façades and back
+  through ports; no inter-module event bus — ADR 0018's journal is an observation channel, never a
+  coordination mechanism. No engine receives `DaemonRequest`, `DaemonError`, `SessionStore`,
+  mutable `SessionState`, provider handles, or concrete platform implementations; the daemon
+  adapter closes each capability over one already-admitted request, so an engine cannot express a
+  session name, acquire a lock, or select a provider scope. Session state keeps three consistency
+  disciplines distinct and never forces them through one generic transaction: immediate pessimistic
+  transitions for ref/observation lineage (ADR 0014's mid-request expiry is why end-of-request
+  commit/rollback is rejected), staged arm/complete/close-succeeded/commit-or-abort protocols with
+  operation-keyed receipts for repair/publication (ADR 0012/0016), and append-only facts for
+  recorded actions and diagnostics. Gates: R10 zero-count module policies, R11 package boundaries,
+  the façade symbol pins, and R7 ownership.
 - **Tests couple to stable interfaces.** Norm (see [Testing Principles](#testing-principles))
   backed by the test-only-DI-seam gate above; broader test-strength enforcement is planned, not
   present — tracked under [#1412](https://github.com/callstack/agent-device/issues/1412).
@@ -433,7 +450,7 @@ the observable freshness and failure semantics below before any runtime refactor
 Evidence: [ADR 0002](docs/adr/0002-persistent-platform-helper-sessions.md),
 [ADR 0004](docs/adr/0004-ios-snapshot-backend-strategy.md),
 [ADR 0005](docs/adr/0005-ios-runner-interaction-lifecycle.md),
-[Maestro compatibility debt map](docs/maestro-compat-debt-map.md),
+[ADR 0015](docs/adr/0015-direct-maestro-engine.md),
 [`find.test.ts`](src/daemon/handlers/__tests__/find.test.ts),
 [`snapshot-handler.test.ts`](src/daemon/handlers/__tests__/snapshot-handler.test.ts),
 [`snapshot-scoped-refs.test.ts`](src/daemon/handlers/__tests__/snapshot-scoped-refs.test.ts),
