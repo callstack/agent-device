@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const { mockExecFileSync, mockRunCmdSync } = vi.hoisted(() => ({
   mockExecFileSync: vi.fn(),
@@ -80,7 +81,7 @@ mockRunCmdSync.mockImplementation((command: string, args: string[]) => ({
 }));
 
 async function withTempDir<T>(prefix: string, fn: (root: string) => Promise<T> | T): Promise<T> {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const root = mkdtempForTestSync(prefix);
   try {
     return await fn(root);
   } finally {
@@ -163,7 +164,7 @@ function assertRedirectTargetsRequestedSet(paths: RedirectPaths): void {
 }
 
 test('findXctestrun prefers simulator xctestrun over newer macos candidate', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runner-xctestrun-'));
+  const root = mkdtempForTestSync('runner-xctestrun-');
   try {
     const simulatorPath = path.join(
       root,
@@ -193,7 +194,7 @@ test('findXctestrun prefers simulator xctestrun over newer macos candidate', () 
 });
 
 test('findXctestrun prefers base xctestrun over newer env xctestrun for matching platform', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runner-xctestrun-'));
+  const root = mkdtempForTestSync('runner-xctestrun-');
   try {
     const basePath = path.join(
       root,

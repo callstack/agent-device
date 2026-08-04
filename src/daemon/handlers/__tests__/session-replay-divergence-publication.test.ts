@@ -1,7 +1,7 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -27,7 +27,7 @@ beforeEach(() => {
 });
 
 function scenario(refCount = 20) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-divergence-publication-'));
+  const root = mkdtempForTestSync('agent-device-divergence-publication-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   const session = makeIosSession(sessionName, { appBundleId: 'com.example.app' });

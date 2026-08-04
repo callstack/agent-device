@@ -1,7 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import type { DaemonResponse } from '../daemon/client/daemon-client.ts';
 import { resolveDaemonPaths } from '../daemon/config.ts';
@@ -10,6 +9,7 @@ import {
   type CapturedCliRun,
   type CapturedDaemonRequest,
 } from './cli-capture.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 async function runCliCapture(
   argv: string[],
@@ -45,7 +45,7 @@ test('cli forwards --debug as verbose/debug metadata', async () => {
 });
 
 test('cli does not tail local daemon log when remote daemon base URL is set', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-cli-remote-'));
+  const stateDir = mkdtempForTestSync('agent-device-cli-remote-');
   const daemonPaths = resolveDaemonPaths(stateDir);
   fs.mkdirSync(path.dirname(daemonPaths.logPath), { recursive: true });
   fs.writeFileSync(daemonPaths.logPath, 'REMOTE_TAIL_SENTINEL\n', 'utf8');
@@ -76,7 +76,7 @@ test('cli does not tail local daemon log when remote daemon base URL is set', as
 });
 
 test('cli debug log tail starts at the current daemon log end', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-cli-tail-'));
+  const stateDir = mkdtempForTestSync('agent-device-cli-tail-');
   const daemonPaths = resolveDaemonPaths(stateDir);
   fs.mkdirSync(path.dirname(daemonPaths.logPath), { recursive: true });
   fs.writeFileSync(daemonPaths.logPath, 'OLD_TAIL_SENTINEL\n', 'utf8');

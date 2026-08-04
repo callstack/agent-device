@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { DaemonStopResult } from '../../../daemon/daemon-stop.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 const mocks = vi.hoisted(() => ({
   cleanupRunnerLeasesForOwner: vi.fn(async () => undefined),
@@ -66,7 +65,7 @@ test('accepts only daemon stop', async () => {
 });
 
 test('merges a graceful shutdown report and cleans runner leases with the start-time identity', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-command-'));
+  const stateDir = mkdtempForTestSync('agent-device-daemon-command-');
   mocks.readDaemonStopIdentity.mockReturnValue({ pid: 123, processStartTime: 'start-time' });
   mocks.stopDaemon.mockResolvedValue(GRACEFUL_RESULT);
   mocks.readDaemonShutdownReport.mockReturnValue({
@@ -105,7 +104,7 @@ test('merges a graceful shutdown report and cleans runner leases with the start-
 });
 
 test('reports graceful provider cleanup as unknown when the shutdown report is unavailable', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-command-'));
+  const stateDir = mkdtempForTestSync('agent-device-daemon-command-');
   mocks.readDaemonStopIdentity.mockReturnValue(null);
   mocks.stopDaemon.mockResolvedValue(GRACEFUL_RESULT);
   mocks.readDaemonShutdownReport.mockReturnValue(null);

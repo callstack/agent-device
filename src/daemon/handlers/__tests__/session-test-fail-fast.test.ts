@@ -4,9 +4,10 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { handleSessionCommands } from '../session.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 test('test --fail-fast continues after passing scripts', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-fail-fast-pass-'));
+  const root = mkdtempForTestSync('agent-device-test-fail-fast-pass-');
   fs.writeFileSync(path.join(root, '01-first.ad'), 'context platform=ios\nopen "Demo"\n');
   fs.writeFileSync(path.join(root, '02-second.ad'), 'context platform=ios\nopen "Demo"\n');
 

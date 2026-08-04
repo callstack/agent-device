@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 
@@ -9,6 +8,7 @@ import {
   applyXctestRunnerAppIcon,
   applyXctestRunnerAppIconFromDerivedPath,
 } from '../runner/runner-icon.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 type AppleToolCall = [string, string[]];
 
@@ -27,7 +27,7 @@ const IPAD_ICON_PLIST = {
 };
 
 async function withTempDir<T>(prefix: string, fn: (root: string) => Promise<T> | T): Promise<T> {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const root = mkdtempForTestSync(prefix);
   try {
     return await fn(root);
   } finally {

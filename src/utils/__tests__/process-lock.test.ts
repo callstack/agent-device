@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { acquireProcessLock, type ProcessLockOwner } from '../process-lock.ts';
 import { readProcessStartTime } from '../host-process.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 let tmpDir: string;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-process-lock-test-'));
+  tmpDir = mkdtempForTestSync('agent-device-process-lock-test-');
 });
 
 afterEach(() => {

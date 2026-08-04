@@ -10,6 +10,7 @@ import { HEAL_COMPLETE_SENTINEL } from '../session-script-writer.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { repairPublication } from '../../__tests__/test-utils/session-factories.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 type RecordActionEntry = Parameters<SessionStore['recordAction']>[1];
 
@@ -49,7 +50,7 @@ function readWrittenSessionScript(root: string): string {
 }
 
 function makeFixture(prefix: string, sessionsDir?: string): SessionStoreFixture {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const root = mkdtempForTestSync(prefix);
   return {
     root,
     store: new SessionStore(sessionsDir ? path.join(root, sessionsDir) : root),
@@ -721,7 +722,7 @@ test('writeSessionLog never fabricates a target-v1 annotation for actions record
 // SESSION_NOT_FOUND into REPAIR_SESSION_EXPIRED with re-run guidance. ---
 
 test('writeRepairTombstone/readRepairTombstone round-trips owner + source path', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-tombstone-'));
+  const root = mkdtempForTestSync('agent-device-tombstone-');
   const store = new SessionStore(path.join(root, 'sessions'));
   const session = makeSession('default');
   session.scriptPublication = repairPublication('armed', {
@@ -738,7 +739,7 @@ test('writeRepairTombstone/readRepairTombstone round-trips owner + source path',
 });
 
 test('readRepairTombstone returns undefined once the tombstone has expired', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-tombstone-expiry-'));
+  const root = mkdtempForTestSync('agent-device-tombstone-expiry-');
   const store = new SessionStore(path.join(root, 'sessions'));
   const session = makeSession('default');
   // TTL 0 => expiresAt <= now => already stale.
@@ -747,7 +748,7 @@ test('readRepairTombstone returns undefined once the tombstone has expired', () 
 });
 
 test('clearRepairTombstone removes a tombstone (a fresh replay --save-script clears the key)', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-tombstone-clear-'));
+  const root = mkdtempForTestSync('agent-device-tombstone-clear-');
   const store = new SessionStore(path.join(root, 'sessions'));
   const session = makeSession('default');
   store.writeRepairTombstone(session);
@@ -763,7 +764,7 @@ test('clearRepairTombstone removes a tombstone (a fresh replay --save-script cle
 // not lost behind a generic "reaped before it was finalized" tombstone. ---
 
 test('BLOCKER 2: finalizeRepairTeardown of a COMPLETE transaction whose commit FAILS preserves the failure in a distinct tombstone, not a generic expiry', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-teardown-commit-fail-'));
+  const root = mkdtempForTestSync('agent-device-teardown-commit-fail-');
   const store = new SessionStore(path.join(root, 'sessions'));
   const healedPath = path.join(root, 'flow.healed.ad');
   // A prior COMPLETE (sentinel-marked) healed artifact already sits at the
@@ -812,7 +813,7 @@ test('BLOCKER 2: finalizeRepairTeardown of a COMPLETE transaction whose commit F
 // an explicit `close --save-script` commit. ---
 
 test('BLOCKER 3: finalizeRepairTeardown auto-commit records a terminal close, producing a self-contained, fresh-replayable healed .ad', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-teardown-autocommit-close-'));
+  const root = mkdtempForTestSync('agent-device-teardown-autocommit-close-');
   const store = new SessionStore(path.join(root, 'sessions'));
   const healedPath = path.join(root, 'flow.healed.ad');
 

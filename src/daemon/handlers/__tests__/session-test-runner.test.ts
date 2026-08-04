@@ -12,6 +12,7 @@ import {
 } from './session-test-harness.ts';
 import type { DaemonRequest } from '../../types.ts';
 import { handleSessionCommands } from '../session.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 test('session_list includes device_udid and ios_simulator_device_set for iOS sessions', async () => {
   const sessionStore = makeSessionStore();
@@ -78,7 +79,7 @@ test('session_list includes device_udid and ios_simulator_device_set for iOS ses
 
 test('test filters replay scripts by context platform and skips untyped files', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-filter-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-filter-');
   fs.writeFileSync(path.join(root, '01-android.ad'), 'context platform=android\nopen "Demo"\n');
   fs.writeFileSync(path.join(root, '02-ios.ad'), 'context platform=ios\nopen "Settings"\n');
   fs.writeFileSync(path.join(root, '03-untyped.ad'), 'open "Calculator"\n');
@@ -122,7 +123,7 @@ test('test filters replay scripts by context platform and skips untyped files', 
 
 test('test binds each replay script to its declared platform metadata', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-platforms-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-platforms-');
   const scripts = ['01-android.ad', '02-ios.ad'];
   fs.writeFileSync(path.join(root, scripts[0]!), 'context platform=android\nopen "Demo"\n');
   fs.writeFileSync(path.join(root, scripts[1]!), 'context platform=ios\nopen "Settings"\n');
@@ -189,7 +190,7 @@ test('test binds each replay script to its declared platform metadata', async ()
 
 test('test cleans up suite-owned sessions after each executed script', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-cleanup-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-cleanup-');
   fs.writeFileSync(path.join(root, '01-android.ad'), 'context platform=android\nopen "Demo"\n');
 
   const response = await handleSessionCommands({
@@ -224,7 +225,7 @@ test('test cleans up suite-owned sessions after each executed script', async () 
 
 test('test retries failed scripts with fresh suite-owned sessions', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-retries-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-retries-');
   fs.writeFileSync(
     path.join(root, '01-retry.ad'),
     'context platform=android retries=9\nopen "Demo"\n',
@@ -275,7 +276,7 @@ test('test retries failed scripts with fresh suite-owned sessions', async () => 
 
 test('test applies per-script timeout and writes attempt artifacts', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-timeout-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-timeout-');
   const screenshotPath = path.join(root, 'capture.png');
   fs.writeFileSync(screenshotPath, 'screenshot');
   fs.writeFileSync(
@@ -379,7 +380,7 @@ test('open does not retain a session when the request was canceled before comple
 
 test('test returns invalid args when no replay scripts match the platform filter', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-empty-filter-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-empty-filter-');
   fs.writeFileSync(path.join(root, '01-ios.ad'), 'context platform=ios\nopen "Settings"\n');
 
   const response = await handleSessionCommands({
@@ -402,7 +403,7 @@ test('test returns invalid args when no replay scripts match the platform filter
 
 test('test rejects duplicate replay test metadata in the context header', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-metadata-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-metadata-');
   fs.writeFileSync(
     path.join(root, '01-invalid.ad'),
     'context platform=ios timeout=1000\ncontext timeout=2000\nopen "Demo"\n',

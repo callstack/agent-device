@@ -1,21 +1,19 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { PNG } from '../../../../utils/png.ts';
 import { screenshotIos } from '../screenshot.ts';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
+import { mkdtempForTest } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 function startsWithArgs(args: string[], expected: string[]): boolean {
   return expected.every((value, index) => args[index] === value);
 }
 
 test('screenshotIos caches simulator screen scale per device', async () => {
-  const tmpDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), 'agent-device-ios-screenshot-scale-cache-'),
-  );
+  const tmpDir = await mkdtempForTest('agent-device-ios-screenshot-scale-cache-');
   const outPath = path.join(tmpDir, 'screen.png');
   const sourcePngPath = path.join(tmpDir, 'source.png');
   const device: DeviceInfo = {

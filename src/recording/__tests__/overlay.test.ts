@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../utils/exec.ts', async () => {
   const fs = await import('node:fs');
@@ -45,7 +45,7 @@ const mockRunCmd = vi.mocked(runCmd);
 let tmpDir: string;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-overlay-test-'));
+  tmpDir = mkdtempForTestSync('agent-device-overlay-test-');
   vi.stubEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', path.join(tmpDir, 'swift-cache'));
   vi.clearAllMocks();
 });

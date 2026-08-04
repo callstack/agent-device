@@ -6,6 +6,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
+import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../utils/exec.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
@@ -477,7 +478,7 @@ async function withTempScreenshot(
   name: string,
   callback: (outPath: string) => Promise<void>,
 ): Promise<void> {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), name));
+  const tmpDir = await mkdtempForTest(name);
   try {
     await callback(path.join(tmpDir, 'out.png'));
   } finally {
@@ -505,7 +506,7 @@ async function captureDiagnostics(
   callback: () => Promise<string | null>,
 ): Promise<string> {
   const previousHome = process.env.HOME;
-  process.env.HOME = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-android-diag-'));
+  process.env.HOME = await mkdtempForTest('agent-device-android-diag-');
   try {
     const diagnosticsPath = await withDiagnosticsScope(scope, callback);
     assert.ok(diagnosticsPath);

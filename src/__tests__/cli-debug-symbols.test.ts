@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { withCommandExecutorOverride } from '../utils/exec.ts';
 import { runCliCapture } from './cli-capture.ts';
+import { mkdtempForTest } from './test-utils/tmp-dir.ts';
 
 const UUID = 'ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB';
 
@@ -87,7 +87,7 @@ async function makeCrashFixture(label: string): Promise<{
   dsym: string;
   out: string;
 }> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `agent-device-cli-debug-${label}-`));
+  const dir = await mkdtempForTest(`agent-device-cli-debug-${label}-`);
   const dsym = path.join(dir, 'Demo.app.dSYM');
   const out = path.join(dir, 'crash-symbolicated.log');
   await fs.mkdir(dsym);

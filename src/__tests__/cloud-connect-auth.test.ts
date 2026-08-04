@@ -1,12 +1,12 @@
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { connectCommand } from '../cli/commands/connection.ts';
 import { resolveCloudAccessForConnect } from '../cli/auth-session.ts';
 import { readActiveConnectionState } from '../remote/remote-connection-state.ts';
 import type { AgentDeviceClient } from '../agent-device-client.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 test('cloud connect reuses explicit env auth when login is disabled', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-cloud-auth-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-cloud-auth-');
   const stateDir = path.join(tempRoot, '.state');
   const fetchMock = mockConnectionProfileFetch();
   vi.stubEnv('AGENT_DEVICE_DAEMON_AUTH_TOKEN', 'adc_live_service');
@@ -43,7 +43,7 @@ test('cloud connect reuses explicit env auth when login is disabled', async () =
 test('cloud access with no-login reports auth requirement after reuse options are exhausted', async () => {
   await assert.rejects(
     resolveCloudAccessForConnect({
-      stateDir: fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-cloud-auth-miss-')),
+      stateDir: mkdtempForTestSync('agent-device-connect-cloud-auth-miss-'),
       flags: {
         json: false,
         help: false,

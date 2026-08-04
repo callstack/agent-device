@@ -1,8 +1,8 @@
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 vi.mock('../utils/exec.ts', () => ({
   runCmdDetached: vi.fn(),
@@ -54,7 +54,7 @@ function assertCompanionRunArg(callIndex: number, runArg: string): void {
 }
 
 test('companion ownership is profile-scoped and consumer-counted', async () => {
-  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-metro-companion-state-'));
+  const projectRoot = mkdtempForTestSync('agent-device-metro-companion-state-');
   try {
     vi.mocked(runCmdDetached).mockReturnValueOnce(111).mockReturnValueOnce(222);
     vi.mocked(isProcessAlive).mockReturnValue(true);
@@ -151,9 +151,7 @@ test('companion ownership is profile-scoped and consumer-counted', async () => {
 });
 
 test('launchUrl changes force a companion respawn for the same profile', async () => {
-  const projectRoot = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-metro-companion-launch-'),
-  );
+  const projectRoot = mkdtempForTestSync('agent-device-metro-companion-launch-');
   try {
     vi.mocked(runCmdDetached).mockReturnValueOnce(333).mockReturnValueOnce(444);
     vi.mocked(isProcessAlive).mockReturnValue(true);
@@ -204,7 +202,7 @@ test('launchUrl changes force a companion respawn for the same profile', async (
 });
 
 test('metro and React DevTools companions use distinct profile state paths', async () => {
-  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-companion-paths-'));
+  const projectRoot = mkdtempForTestSync('agent-device-companion-paths-');
   try {
     vi.mocked(runCmdDetached).mockReturnValueOnce(777).mockReturnValueOnce(888);
     vi.mocked(readProcessStartTime).mockImplementation((pid) =>
@@ -252,7 +250,7 @@ test('metro and React DevTools companions use distinct profile state paths', asy
 });
 
 test('spawned companion uses neutral env names', async () => {
-  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-companion-env-'));
+  const projectRoot = mkdtempForTestSync('agent-device-companion-env-');
   try {
     vi.mocked(runCmdDetached).mockReturnValueOnce(999);
     vi.mocked(readProcessStartTime).mockReturnValue('start-999');
@@ -285,7 +283,7 @@ test('spawned companion uses neutral env names', async () => {
 });
 
 test('state sentinel exists before spawning companion worker', async () => {
-  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-companion-sentinel-'));
+  const projectRoot = mkdtempForTestSync('agent-device-companion-sentinel-');
   try {
     vi.mocked(runCmdDetached).mockImplementationOnce((_, __, options) => {
       const statePath = options?.env?.AGENT_DEVICE_COMPANION_TUNNEL_STATE_PATH;
@@ -322,9 +320,7 @@ test('state sentinel exists before spawning companion worker', async () => {
 });
 
 test('legacy state without bridge scope is stopped before respawn', async () => {
-  const projectRoot = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-metro-companion-legacy-'),
-  );
+  const projectRoot = mkdtempForTestSync('agent-device-metro-companion-legacy-');
   const statePath = path.join(projectRoot, '.agent-device', 'metro-companion.json');
   try {
     fs.mkdirSync(path.dirname(statePath), { recursive: true });

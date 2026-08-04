@@ -53,6 +53,16 @@ barrel and prefer named shared fixtures over inlining new `DeviceInfo`, `Session
 store, or mocked-binary objects. If a helper is missing, add it near the concept it serves and export
 it through the barrel.
 
+Need a scratch directory? Use `mkdtempForTest` / `mkdtempForTestSync` from
+`src/__tests__/test-utils/tmp-dir.ts`, not `fs.mkdtemp(path.join(os.tmpdir(), ...))` directly. They're
+plain wrappers — `os.tmpdir()` is already redirected for the whole unit-test run
+(`scripts/vitest-tmpdir-global-setup.ts`) to one directory that gets removed in a single recursive rm
+once every worker finishes, so raw calls would still be cleaned up automatically either way. The
+helpers exist for discoverability, not correctness: don't add a per-test `afterEach`/`onTestFinished`
+cleanup for a directory they created — that's the global teardown's job, and per-test cleanup that
+already existed for other reasons should stay (it's the fallback global sweep that's new, not a
+replacement for tests being tidy).
+
 Keep tests behavioral. Do not assert shapes or cases TypeScript already proves.
 
 A test added as a regression pin must be shown to fail without the change it pins — vacuity is the

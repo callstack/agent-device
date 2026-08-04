@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../utils/exec.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../utils/exec.ts')>();
@@ -74,7 +75,7 @@ test('daemon session teardown budget extends past the recorder-stop escalation f
 test('daemon shutdown lets a slow recorder run its full stop escalation instead of timing out', async () => {
   vi.useFakeTimers();
   const processKill = vi.spyOn(process, 'kill').mockImplementation(() => true);
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-shutdown-recording-'));
+  const root = mkdtempForTestSync('agent-device-shutdown-recording-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'shutdown-slow-recorder-session';
   const session = makeRecordingSession(sessionName);

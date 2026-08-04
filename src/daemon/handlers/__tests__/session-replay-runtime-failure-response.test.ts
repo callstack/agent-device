@@ -1,11 +1,10 @@
 import { test, expect, vi, beforeEach } from 'vitest';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
   return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
 });
-import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { buildReplayDivergenceFailureResponseFromDescriptor } from '../session-replay-runtime-failure-response.ts';
 import { runReplayScriptFile } from '../session-replay-runtime.ts';
@@ -70,7 +69,7 @@ test('native replay failure metadata keeps machine fields and daemon-owned paths
   expect(response.error.details).not.toHaveProperty('reas<var:MODE>');
 });
 test('divergence cause and action strings pass through the central redactor at construction', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-redact-'));
+  const root = mkdtempForTestSync('agent-device-replay-divergence-redact-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName));
@@ -104,7 +103,7 @@ test('divergence cause and action strings pass through the central redactor at c
 test('a fill divergence never serializes the typed text at any response level', async () => {
   const sentinel = 'SuperSecretPassword-do-not-leak-12345';
   for (const level of ['digest', 'default', 'full'] as const) {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-fill-leak-'));
+    const root = mkdtempForTestSync('agent-device-replay-fill-leak-');
     const sessionStore = new SessionStore(path.join(root, 'sessions'));
     const sessionName = 'default';
     sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
@@ -158,7 +157,7 @@ test('a fill divergence never serializes the typed text at any response level', 
 // --- Blocker 3a: capture-error screen hint is sanitized ---
 
 test('a capture-failed screen hint redacts a secret in the capture error', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-screen-redact-'));
+  const root = mkdtempForTestSync('agent-device-replay-screen-redact-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
@@ -192,7 +191,7 @@ test('a capture-failed screen hint redacts a secret in the capture error', async
 
 test('an expanded ${VAR} value echoed by a selector error never reaches the public divergence', async () => {
   const sentinel = 'ExpandedVarSecret-98765-do-not-leak';
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-var-leak-'));
+  const root = mkdtempForTestSync('agent-device-replay-var-leak-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
@@ -237,7 +236,7 @@ test('an expanded ${VAR} value echoed by a selector error never reaches the publ
 test('an expanded built-in AD_DEVICE_ID never reaches the public divergence', async () => {
   const deviceId = 'BuiltInDeviceId-486b3d4c-8f92-4dc0-b5c6-unique';
   const sessionName = 'static-session-context';
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-builtin-var-leak-'));
+  const root = mkdtempForTestSync('agent-device-replay-builtin-var-leak-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
   const filePath = writeReplayFile(root, ['press label="${AD_DEVICE_ID}"']);

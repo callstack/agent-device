@@ -13,7 +13,6 @@
 import fs from 'node:fs';
 import { NO_SCRIPT_PUBLICATION, scriptTargetPath } from '../session-script-publication-state.ts';
 import net from 'node:net';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 import { LeaseRegistry } from '../lease-registry.ts';
@@ -28,6 +27,7 @@ import {
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
 } from '../../__tests__/test-utils/loopback.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const TOKEN = 'save-script-transport-token';
 const SESSION = 'save-script-transport';
@@ -55,7 +55,7 @@ afterEach(() => {
 });
 
 function setup(): Harness {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-save-script-transport-'));
+  const root = mkdtempForTestSync('agent-device-save-script-transport-');
   roots.push(root);
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const session = makeIosSession(SESSION);

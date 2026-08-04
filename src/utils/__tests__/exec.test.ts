@@ -1,7 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../diagnostics.ts';
 import {
@@ -16,6 +15,7 @@ import {
   type ExecResult,
 } from '../exec.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 test('runCmd enforces timeoutMs and rejects with COMMAND_FAILED', async () => {
   await assert.rejects(
@@ -58,10 +58,7 @@ test('runCmd abort keeps cancellation details while writing stdin', async () => 
 });
 
 test('runCmd emits exec_command diagnostics when the scope is debug-enabled', async () => {
-  const logPath = path.join(
-    fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-exec-debug-')),
-    'diag.ndjson',
-  );
+  const logPath = path.join(mkdtempForTestSync('agent-device-exec-debug-'), 'diag.ndjson');
   const diagnosticsPath = await withDiagnosticsScope(
     {
       session: 'exec-debug',
@@ -214,7 +211,7 @@ test('whichCmd resolves bare commands from PATH', async () => {
 test.runIf(process.platform !== 'win32')(
   'process helpers reject relative executable paths',
   async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-runcmd-relative-'));
+    const root = mkdtempForTestSync('agent-device-runcmd-relative-');
     const target = path.join(root, 'local-node');
     fs.symlinkSync(process.execPath, target);
 
@@ -261,7 +258,7 @@ test.runIf(process.platform !== 'win32')(
 test.runIf(process.platform !== 'win32')(
   'runCmd accepts absolute executable paths without shell execution',
   async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-runcmd-absolute-'));
+    const root = mkdtempForTestSync('agent-device-runcmd-absolute-');
     const target = path.join(root, 'local-node');
     fs.symlinkSync(process.execPath, target);
 
@@ -282,7 +279,7 @@ test('whichCmd rejects suspicious command strings', async () => {
 });
 
 test.sequential('whichCmd ignores directories that match a command name in PATH', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-whichcmd-'));
+  const root = mkdtempForTestSync('agent-device-whichcmd-');
   const fakeCommandDir = path.join(root, 'fake-tool');
   fs.mkdirSync(fakeCommandDir);
 

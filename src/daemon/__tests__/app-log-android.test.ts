@@ -2,9 +2,9 @@ import { test, expect, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../utils/exec.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../utils/exec.ts')>();
@@ -60,7 +60,7 @@ function mockBackgroundChild(child: MockChild): ReturnType<typeof runCmdBackgrou
 }
 
 test('startAndroidAppLog returns to active state after a successful reattach', async () => {
-  const logDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-android-log-'));
+  const logDir = mkdtempForTestSync('agent-device-android-log-');
   const stream = fs.createWriteStream(path.join(logDir, 'app.log'));
   const firstChild = makeMockChild(1001);
   const secondChild = makeMockChild(1002);
@@ -106,7 +106,7 @@ test('startAndroidAppLog returns to active state after a successful reattach', a
 });
 
 test('startAndroidAppLog reports active for provider streams without host pid', async () => {
-  const logDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-android-log-'));
+  const logDir = mkdtempForTestSync('agent-device-android-log-');
   const stream = fs.createWriteStream(path.join(logDir, 'app.log'));
   const child = makeMockChild();
 

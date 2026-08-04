@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { executeMaestroFlow, inspectMaestroFlow } from '@agent-device/maestro';
@@ -13,9 +12,10 @@ import {
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
 import { MAESTRO_OBSERVATION_POLL_MS } from '../daemon-runtime-port-observation.ts';
 import { makeBaseRequest, makeDependencies, makeSnapshot } from './daemon-runtime-port-fixtures.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 test('registers Maestro inputText as sensitive before nested platform work', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-input-diagnostics-'));
+  const root = mkdtempForTestSync('agent-device-maestro-input-diagnostics-');
   const logPath = path.join(root, 'request.ndjson');
   const text = 'opaque-maestro-input';
   const port = createDaemonMaestroRuntimePort({
@@ -452,7 +452,7 @@ test('does not repeat Enter after an ambiguous keyboard failure', async () => {
 });
 
 test('keeps absent negative observations, script output, and artifacts typed', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-daemon-port-'));
+  const root = mkdtempForTestSync('agent-device-maestro-daemon-port-');
   const sourcePath = path.join(root, 'flow.yaml');
   fs.writeFileSync(sourcePath, '---\n- runScript: setup.js\n');
   fs.writeFileSync(path.join(root, 'setup.js'), 'output.token = PREFIX + "-ready";\n');

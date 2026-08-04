@@ -29,6 +29,8 @@ export {
 
 export { makeSessionStore } from './store-factory.ts';
 
+export { mkdtempForTest, mkdtempForTestSync } from './tmp-dir.ts';
+
 export {
   COMPACT_VIEWPORTS,
   distinctRectPairArb,

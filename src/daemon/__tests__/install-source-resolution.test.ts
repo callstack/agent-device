@@ -1,10 +1,10 @@
 import { test, expect } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { resolveInstallSource } from '../install-source-resolution.ts';
 import { trackUploadedArtifact } from '../artifact-tracking.ts';
 import type { DaemonRequest } from '../types.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 function makeRequest(meta?: DaemonRequest['meta']): DaemonRequest {
   return {
@@ -18,7 +18,7 @@ function makeRequest(meta?: DaemonRequest['meta']): DaemonRequest {
 }
 
 test('resolveInstallSource uses uploaded artifact path for uploaded path sources', () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-install-source-upload-'));
+  const tempRoot = mkdtempForTestSync('agent-device-install-source-upload-');
   const artifactPath = path.join(tempRoot, 'Sample.apk');
   fs.writeFileSync(artifactPath, 'apk-binary');
   const uploadedArtifactId = trackUploadedArtifact({ artifactPath, tempDir: tempRoot });

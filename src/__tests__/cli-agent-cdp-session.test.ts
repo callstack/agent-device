@@ -1,8 +1,8 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 vi.mock('../cli/commands/agent-cdp.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../cli/commands/agent-cdp.ts')>();
@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 test('cdp receives active remote connection session and runtime after defaults are merged', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-agent-cdp-session-'));
+  const tempRoot = mkdtempForTestSync('agent-device-agent-cdp-session-');
   const stateDir = path.join(tempRoot, 'state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(

@@ -1,8 +1,8 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { mkdtempForTest } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../../utils/exec.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../../utils/exec.ts')>();
@@ -119,7 +119,7 @@ test('shouldRetryIosSimulatorScreenshot ignores unrelated screenshot failures', 
 });
 
 test('captureSimulatorScreenshotWithFallback falls back to runner after retry exhaustion', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-runner-fallback-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-runner-fallback-');
   let ensureBootedCalls = 0;
   const containerPath = path.join(tmpDir, 'container');
   const runnerImage = path.join(containerPath, 'tmp', 'fallback.png');
@@ -167,7 +167,7 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after retry ex
 });
 
 test('captureSimulatorScreenshotWithFallback falls back to runner after simctl screenshot timeout', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-runner-timeout-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-runner-timeout-');
   const containerPath = path.join(tmpDir, 'container');
   const runnerImage = path.join(containerPath, 'tmp', 'fallback-timeout.png');
   await fs.mkdir(path.dirname(runnerImage), { recursive: true });
@@ -346,7 +346,7 @@ test('captureSimulatorScreenshotWithFallback skips status bar normalization by d
 });
 
 test('captureSimulatorScreenshotWithFallback emits fallback diagnostic before using runner', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-screenshot-diag-test-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-screenshot-diag-test-');
   const logPath = path.join(tmpDir, 'diag.ndjson');
   try {
     await withDiagnosticsScope(
@@ -405,7 +405,7 @@ test('captureSimulatorScreenshotWithFallback emits fallback diagnostic before us
 });
 
 test('captureSimulatorScreenshotWithFallback uses simulator runner fallback by default', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-default-fallback-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-default-fallback-');
   const containerPath = path.join(tmpDir, 'container');
   const runnerImage = path.join(containerPath, 'tmp', 'default-fallback.png');
   await fs.mkdir(path.dirname(runnerImage), { recursive: true });
@@ -458,7 +458,7 @@ test('resolveSimulatorRunnerScreenshotCandidatePaths handles empty runner path',
 });
 
 test('captureScreenshotViaRunner reuses a verified simulator container path', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-runner-cache-'));
+  const tmpDir = await mkdtempForTest('agent-device-runner-cache-');
   const containerPath = path.join(tmpDir, 'container');
   const runnerImage = path.join(containerPath, 'tmp', 'capture.png');
   const device = { ...IOS_TEST_SIMULATOR, id: 'sim-runner-container-cache' };
@@ -491,7 +491,7 @@ test('captureScreenshotViaRunner reuses a verified simulator container path', as
 });
 
 test('captureScreenshotViaRunner copies macOS runner screenshots from the host', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-macos-screenshot-'));
+  const tmpDir = await mkdtempForTest('agent-device-macos-screenshot-');
   const sourcePath = path.join(tmpDir, 'runner.png');
   const outPath = path.join(tmpDir, 'screen.png');
   await fs.writeFile(sourcePath, 'runner-image', 'utf8');

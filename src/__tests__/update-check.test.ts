@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 vi.mock('../utils/exec.ts', () => ({
   runCmdDetached: vi.fn(),
@@ -12,7 +12,7 @@ import { runCmdDetached } from '../utils/exec.ts';
 import { maybeRunUpgradeNotifier, runUpdateCheckWorker } from '../utils/update-check.ts';
 
 function makeTempStateDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-update-check-'));
+  return mkdtempForTestSync('agent-device-update-check-');
 }
 
 function writeCache(stateDir: string, payload: Record<string, unknown>): void {

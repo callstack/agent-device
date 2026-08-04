@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import { makeIosSession } from '../../__tests__/test-utils/index.ts';
@@ -13,12 +12,13 @@ import {
   isDaemonIdle,
   resolveDaemonIdleReapMs,
 } from './daemon-idle-reap.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 let stateDir: string;
 let sessionStore: SessionStore;
 
 beforeEach(() => {
-  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-idle-reap-'));
+  stateDir = mkdtempForTestSync('agent-device-daemon-idle-reap-');
   sessionStore = new SessionStore(path.join(stateDir, 'sessions'));
 });
 

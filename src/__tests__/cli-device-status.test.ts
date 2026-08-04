@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test, vi } from 'vitest';
 import { readCurrentOwnerIdentity } from '../utils/owner-identity.ts';
 import { runCliCapture } from './cli-capture.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 // readProcessStartTime shells out to `ps` with a 1s timeout (see
 // utils/host-process.ts). This file's fixtures read our own start time once
@@ -43,7 +43,7 @@ test('device status is daemonless and does not send a daemon request', async () 
 });
 
 test('keeps normal status compact while retaining proven-stale claims for explicit inspection', async () => {
-  const claimsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-cli-claims-'));
+  const claimsDir = mkdtempForTestSync('agent-device-cli-claims-');
   const owner = readCurrentOwnerIdentity();
   try {
     fs.writeFileSync(
@@ -119,7 +119,7 @@ test('keeps normal status compact while retaining proven-stale claims for explic
 });
 
 test('keeps corrupt and state-dir-gone claims visible in normal status', async () => {
-  const claimsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-cli-claims-'));
+  const claimsDir = mkdtempForTestSync('agent-device-cli-claims-');
   const owner = readCurrentOwnerIdentity();
   try {
     fs.writeFileSync(path.join(claimsDir, 'corrupt.json'), '{bad json');
@@ -164,7 +164,7 @@ test('keeps corrupt and state-dir-gone claims visible in normal status', async (
 test('states that nothing is claimed when every claim is stale', async () => {
   // Regression: the all-stale case rendered only the hidden-claim notice, so a
   // user asking what holds a device saw a maintenance warning and no answer.
-  const claimsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-cli-claims-'));
+  const claimsDir = mkdtempForTestSync('agent-device-cli-claims-');
   try {
     fs.writeFileSync(
       path.join(claimsDir, 'stale.json'),

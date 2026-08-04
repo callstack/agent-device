@@ -1,10 +1,9 @@
 import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import type { DeviceLease } from '@agent-device/contracts/device';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 test('retries an expired live-only provider lease release after a transient failure', async () => {
   vi.useFakeTimers();
@@ -47,7 +46,7 @@ test('retries an expired live-only provider lease release after a transient fail
 });
 
 test('retries a persisted expired provider lease after daemon restart', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-expired-provider-lease-'));
+  const stateDir = mkdtempForTestSync('agent-device-expired-provider-lease-');
   const lease = new LeaseRegistry().allocateLease({
     tenantId: 'tenant-a',
     runId: 'run-1',
@@ -91,7 +90,7 @@ test('retries a persisted expired provider lease after daemon restart', async ()
 });
 
 test('does not release until the expired lease record is durable', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-expired-provider-lease-'));
+  const stateDir = mkdtempForTestSync('agent-device-expired-provider-lease-');
   const lease = new LeaseRegistry().allocateLease({
     tenantId: 'tenant-a',
     runId: 'run-1',

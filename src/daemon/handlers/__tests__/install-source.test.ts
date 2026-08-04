@@ -1,10 +1,10 @@
 import { test, expect, vi } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { handleInstallFromSourceCommand } from '../install-source.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, SessionState } from '../../types.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../device-ready.ts', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
@@ -66,7 +66,7 @@ function makeIosSession(name: string): SessionState {
 }
 
 function makeSessionStore(): SessionStore {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-install-source-session-'));
+  const root = mkdtempForTestSync('agent-device-install-source-session-');
   return new SessionStore(path.join(root, 'sessions'));
 }
 
@@ -150,7 +150,7 @@ test('install_from_source returns an error when Android package identity cannot 
 test('install_from_source prepares and installs a local iOS simulator app source with typed identity', async () => {
   const { resolveTargetDevice } = await import('../../../core/dispatch.ts');
   const { installIosInstallablePath } = await import('../../../platforms/apple/core/apps.ts');
-  const sourceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-ios-source-'));
+  const sourceRoot = mkdtempForTestSync('agent-device-ios-source-');
   const appPath = path.join(sourceRoot, 'AgentDeviceTester.app');
   fs.mkdirSync(appPath);
   fs.writeFileSync(

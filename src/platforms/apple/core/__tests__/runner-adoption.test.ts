@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -17,6 +16,7 @@ import {
 } from '../runner/runner-adoption.ts';
 import { sendRunnerCommandOnce } from '../runner/runner-transport.ts';
 import { isProcessAlive } from '../../../../utils/host-process.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../runner/runner-transport.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../runner/runner-transport.ts')>();
@@ -76,7 +76,7 @@ function writeStaleLease(overrides: Partial<RunnerLease> = {}): RunnerLease {
 }
 
 beforeEach(() => {
-  leaseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-lease-test-'));
+  leaseDir = mkdtempForTestSync('agent-device-lease-test-');
   process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR = leaseDir;
   expectedDerived = path.join(leaseDir, 'derived');
   mockSendRunnerCommandOnce.mockReset();
@@ -184,7 +184,7 @@ test('adoption is refused when the owner state dir is gone but the owner process
   // via the force-stop path: silently adopting a runner whose live owner
   // still believes it owns it would create two masters. Adoption must refuse
   // it outright - before ever probing the runner.
-  const goneStateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-adopt-dir-gone-'));
+  const goneStateDir = mkdtempForTestSync('agent-device-adopt-dir-gone-');
   fs.rmSync(goneStateDir, { recursive: true, force: true });
   writeStaleLease({
     ownerToken: 'owner-foreign-dir-gone',

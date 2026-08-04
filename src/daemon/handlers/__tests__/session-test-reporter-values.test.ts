@@ -11,6 +11,7 @@
 // The same reason session-test-suite.test.ts mocks it: ADR 0012 attempts a post-failure
 // screen digest via dispatchCommand('snapshot', ...), and these fixtures model no runner.
 import { expect, test, vi } from 'vitest';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -85,7 +86,7 @@ function createRecordingReporter(): { reporter: ReplayTestReporter; hooks: Recor
 }
 
 function makeSessionStore(): SessionStore {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-reporter-values-'));
+  const root = mkdtempForTestSync('agent-device-reporter-values-');
   return new SessionStore(path.join(root, 'sessions'));
 }
 
@@ -145,7 +146,7 @@ async function runRetrySuite(): Promise<{
   suite: ReplaySuiteResult;
   exitCode: number;
 }> {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-reporter-session-'));
+  const root = mkdtempForTestSync('agent-device-reporter-session-');
   fs.writeFileSync(path.join(root, '01-untyped.ad'), 'open "Demo"\n');
   fs.writeFileSync(
     path.join(root, '02-retry.ad'),
@@ -313,7 +314,7 @@ test('reporter step and result sessions track the running attempt, not the start
 });
 
 test('a failing suite reaches the reporter with the failure message, hint fields, and exit code', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-reporter-fail-'));
+  const root = mkdtempForTestSync('agent-device-reporter-fail-');
   fs.writeFileSync(path.join(root, '01-fail.ad'), 'context platform=android\nopen "Demo"\n');
 
   const { hooks, suite, exitCode } = await runSuiteThroughReporter({
@@ -344,7 +345,7 @@ test('a failing suite reaches the reporter with the failure message, hint fields
 });
 
 test('sharded runs give the reporter shard-scoped sessions and device identity', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-reporter-shard-'));
+  const root = mkdtempForTestSync('agent-device-reporter-shard-');
   fs.writeFileSync(path.join(root, '01-login.ad'), 'context platform=android\nopen "Demo"\n');
 
   const { hooks } = await runSuiteThroughReporter({

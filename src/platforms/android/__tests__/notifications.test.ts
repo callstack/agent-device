@@ -1,13 +1,13 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { pushAndroidNotification } from '../notifications.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 test('pushAndroidNotification broadcasts action with typed extras', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-android-push-test-'));
+  const tmpDir = await mkdtempForTest('agent-device-android-push-test-');
   const adbPath = path.join(tmpDir, 'adb');
   const argsLogPath = path.join(tmpDir, 'args.log');
   await fs.writeFile(
@@ -78,9 +78,7 @@ test('pushAndroidNotification broadcasts action with typed extras', async () => 
 });
 
 test('pushAndroidNotification ignores empty extra keys when reporting extrasCount', async () => {
-  const tmpDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), 'agent-device-android-push-empty-key-test-'),
-  );
+  const tmpDir = await mkdtempForTest('agent-device-android-push-empty-key-test-');
   const adbPath = path.join(tmpDir, 'adb');
   const argsLogPath = path.join(tmpDir, 'args.log');
   await fs.writeFile(

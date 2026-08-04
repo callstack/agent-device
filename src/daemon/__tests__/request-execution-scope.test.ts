@@ -1,6 +1,5 @@
 import { afterAll, test, expect } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import {
   emitDiagnostic,
@@ -22,8 +21,9 @@ import {
 } from '../request-execution-scope.ts';
 import { resolveSessionRequestLogPath } from '../session-store.ts';
 import type { DaemonRequest } from '../types.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
-const TEST_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-request-execution-scope-'));
+const TEST_ROOT = mkdtempForTestSync('agent-device-request-execution-scope-');
 const LOG_PATH = path.join(TEST_ROOT, 'diagnostics.log');
 
 afterAll(() => {

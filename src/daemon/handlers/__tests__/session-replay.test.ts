@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
 import { SessionStore } from '../../session-store.ts';
@@ -10,6 +9,7 @@ import { makeIosSession } from '../../../__tests__/test-utils/index.ts';
 import { buildNestedReplayFlags, handleSessionReplayCommands } from '../session-replay.ts';
 import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from '../session-replay-test-policy.ts';
 import { replayCommandFamily } from '../../../commands/replay/index.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 const recordTraceMocks = vi.hoisted(() => ({
   handleRecordCommand: vi.fn(),
@@ -40,7 +40,7 @@ type MockRecordingState = {
 };
 
 function createRecordVideoFixture(): RecordVideoFixture {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-record-video-'));
+  const root = mkdtempForTestSync('agent-device-replay-record-video-');
   const replayPath = path.join(root, 'flow.ad');
   fs.writeFileSync(replayPath, 'open "Demo"\nclick "Continue"\n');
   return {
@@ -295,7 +295,7 @@ test('raw test-request guards enumerate every daemon-visible replay-only CLI fla
 });
 
 test('test rejects raw --keep-session with INVALID_ARGS before running the suite', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-keep-session-rejected-'));
+  const root = mkdtempForTestSync('agent-device-test-keep-session-rejected-');
   const replayPath = path.join(root, 'flow.ad');
   fs.writeFileSync(replayPath, 'open "Demo"\n');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
@@ -326,7 +326,7 @@ test('test rejects raw --keep-session with INVALID_ARGS before running the suite
 });
 
 test('test rejects --from with INVALID_ARGS before running the suite', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-from-rejected-'));
+  const root = mkdtempForTestSync('agent-device-test-from-rejected-');
   const replayPath = path.join(root, 'flow.ad');
   fs.writeFileSync(replayPath, 'open "Demo"\nclick "Continue"\n');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
@@ -357,7 +357,7 @@ test('test rejects --from with INVALID_ARGS before running the suite', async () 
 });
 
 test('test rejects --plan-digest alone with INVALID_ARGS before running the suite', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-digest-rejected-'));
+  const root = mkdtempForTestSync('agent-device-test-digest-rejected-');
   const replayPath = path.join(root, 'flow.ad');
   fs.writeFileSync(replayPath, 'open "Demo"\nclick "Continue"\n');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
@@ -389,7 +389,7 @@ test('test rejects --plan-digest alone with INVALID_ARGS before running the suit
 // --- ADR 0012 decision 6: `--save-script` is replay-only ---
 
 test('test rejects --save-script with INVALID_ARGS before running the suite', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-savescript-rejected-'));
+  const root = mkdtempForTestSync('agent-device-test-savescript-rejected-');
   const replayPath = path.join(root, 'flow.ad');
   fs.writeFileSync(replayPath, 'open "Demo"\nclick "Continue"\n');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
@@ -420,7 +420,7 @@ test('test rejects --save-script with INVALID_ARGS before running the suite', as
 });
 
 test('test rejects raw --force without --save-script before running the suite', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-force-rejected-'));
+  const root = mkdtempForTestSync('agent-device-test-force-rejected-');
   const replayPath = path.join(root, 'flow.ad');
   fs.writeFileSync(replayPath, 'open "Demo"\n');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));

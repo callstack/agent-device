@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import { parseXmlDocumentSync, type XmlNode } from '@agent-device/xml';
 import { createJunitReplayTestReporter } from '../junit.ts';
 import type { ReplayTestReporterContext } from '../types.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const context: ReplayTestReporterContext = {
   stdout: { isTTY: false, write() {} },
@@ -20,7 +20,7 @@ const TRICKY_TITLE = 'Sign in <required> & "quoted"\nsecond line';
 const TRICKY_MESSAGE = 'Expected <button id="ok"> & none found\nsecond line';
 
 function writeSuiteAndParse(suite: ReplaySuiteResult): XmlNode[] {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-junit-reporter-'));
+  const dir = mkdtempForTestSync('agent-device-junit-reporter-');
   const reportPath = path.join(dir, 'report.xml');
   const reporter = createJunitReplayTestReporter(reportPath);
   reporter.onSuiteEnd?.(suite, context);

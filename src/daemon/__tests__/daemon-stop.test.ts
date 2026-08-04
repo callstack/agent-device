@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const mocks = vi.hoisted(() => ({
   isAgentDeviceDaemonProcess: vi.fn(),
@@ -30,7 +29,7 @@ afterEach(() => {
 });
 
 function createDaemonPaths(): ReturnType<typeof resolveDaemonPaths> {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-stop-'));
+  const stateDir = mkdtempForTestSync('agent-device-daemon-stop-');
   const paths = resolveDaemonPaths(stateDir);
   fs.mkdirSync(paths.baseDir, { recursive: true });
   fs.writeFileSync(paths.infoPath, JSON.stringify({ pid: 123, processStartTime: 'start-time' }));
@@ -42,9 +41,7 @@ function removeDaemonPaths(paths: ReturnType<typeof resolveDaemonPaths>): void {
 }
 
 test('reports not-running when daemon metadata is absent', async () => {
-  const paths = resolveDaemonPaths(
-    fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-stop-')),
-  );
+  const paths = resolveDaemonPaths(mkdtempForTestSync('agent-device-daemon-stop-'));
 
   try {
     const result = await stopDaemon({ paths });

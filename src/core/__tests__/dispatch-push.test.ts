@@ -1,11 +1,11 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { dispatchCommand } from '../dispatch.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { ANDROID_EMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
+import { mkdtempForTest } from '../../__tests__/test-utils/tmp-dir.ts';
 
 test('dispatch push reports missing payload file as INVALID_ARGS', async () => {
   await assert.rejects(
@@ -20,7 +20,7 @@ test('dispatch push reports missing payload file as INVALID_ARGS', async () => {
 });
 
 test('dispatch push reports directory payload path as INVALID_ARGS', async () => {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-dispatch-push-dir-'));
+  const tempDir = await mkdtempForTest('agent-device-dispatch-push-dir-');
   try {
     await assert.rejects(
       () => dispatchCommand(ANDROID_EMULATOR, 'push', ['com.example.app', tempDir]),
@@ -37,7 +37,7 @@ test('dispatch push reports directory payload path as INVALID_ARGS', async () =>
 });
 
 test('dispatch push prefers existing brace-prefixed payload file over inline parsing', async () => {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-dispatch-push-brace-'));
+  const tempDir = await mkdtempForTest('agent-device-dispatch-push-brace-');
   const adbPath = path.join(tempDir, 'adb');
   const argsLogPath = path.join(tempDir, 'args.log');
   const payloadPath = path.join(tempDir, '{payload}.json');

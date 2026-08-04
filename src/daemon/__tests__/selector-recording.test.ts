@@ -8,16 +8,15 @@
  * repair-armed.
  */
 import { test, expect } from 'vitest';
-import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { recordIfSession } from '../selector-recording.ts';
 import { SessionStore } from '../session-store.ts';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import type { DaemonRequest } from '../types.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 function makeStore(): SessionStore {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-selector-recording-'));
+  const root = mkdtempForTestSync('agent-device-selector-recording-');
   return new SessionStore(path.join(root, 'sessions'));
 }
 

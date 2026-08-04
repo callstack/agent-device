@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 vi.mock('../../utils/host-process.ts', async (importOriginal) => {
@@ -139,7 +140,7 @@ test('fresh open uses app-aware device selection for advisory locking and dispat
 });
 
 test('fresh replay reserves its authored app simulator before any replay step', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-app-lock-'));
+  const root = mkdtempForTestSync('agent-device-replay-app-lock-');
   const replayPath = path.join(root, 'flow.ad');
   fs.writeFileSync(
     replayPath,
@@ -173,7 +174,7 @@ test('fresh replay reserves its authored app simulator before any replay step', 
 });
 
 test('fresh replay leaves a first deep-link open unbound when a later app target exists', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-deep-link-lock-'));
+  const root = mkdtempForTestSync('agent-device-replay-deep-link-lock-');
   const replayPath = path.join(root, 'flow.ad');
   fs.writeFileSync(
     replayPath,
@@ -199,7 +200,7 @@ test('fresh replay leaves a first deep-link open unbound when a later app target
 });
 
 test('fresh replay preserves an authored Android platform before advisory locking', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-android-lock-'));
+  const root = mkdtempForTestSync('agent-device-replay-android-lock-');
   const replayPath = path.join(root, 'flow.ad');
   fs.writeFileSync(
     replayPath,

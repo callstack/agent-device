@@ -1,7 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { finished } from 'node:stream/promises';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -17,6 +16,7 @@ import {
   startIosDeviceAppLog,
 } from '../app-log-ios.ts';
 import { APP_LOG_PID_FILENAME, cleanupStaleAppLogProcesses } from '../app-log-process.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const IOS_DEVICE_ID = '00008150-0000AAAA';
 const IOS_DEVICE: DeviceInfo = {
@@ -58,7 +58,7 @@ async function withFakeDevicectl<T>(
 }
 
 function makeAppLogWriteStream(prefix: string): fs.WriteStream {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const root = mkdtempForTestSync(prefix);
   return fs.createWriteStream(path.join(root, 'app.log'), { flags: 'a' });
 }
 
@@ -87,7 +87,7 @@ test('assertAndroidPackageArgSafe rejects unsafe values', () => {
 });
 
 test('rotateAppLogIfNeeded rotates and truncates oldest by configured max files', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-app-log-rotate-'));
+  const root = mkdtempForTestSync('agent-device-app-log-rotate-');
   const outPath = path.join(root, 'app.log');
   fs.writeFileSync(outPath, 'a'.repeat(20));
   fs.writeFileSync(`${outPath}.1`, 'old1');
@@ -101,7 +101,7 @@ test('rotateAppLogIfNeeded rotates and truncates oldest by configured max files'
 });
 
 test('cleanupStaleAppLogProcesses removes pid files even when pid is stale', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-app-log-clean-'));
+  const root = mkdtempForTestSync('agent-device-app-log-clean-');
   const sessionDir = path.join(root, 'default');
   fs.mkdirSync(sessionDir, { recursive: true });
   const pidPath = path.join(sessionDir, APP_LOG_PID_FILENAME);
@@ -198,7 +198,7 @@ test('runAppLogDoctor reports supported iOS physical-device console capture', as
 });
 
 test('startIosDeviceAppLog marks clean devicectl console exit as ended', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-ios-device-console-'));
+  const root = mkdtempForTestSync('agent-device-ios-device-console-');
   const fakeBinDir = path.join(root, 'bin');
   fs.mkdirSync(fakeBinDir);
   const fakeXcrun = path.join(fakeBinDir, 'xcrun');
@@ -274,7 +274,7 @@ test('buildIosSimulatorLogStreamArgs respects simulator device set scoping', () 
 });
 
 test('cleanupStaleAppLogProcesses removes legacy plain pid files safely', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-app-log-clean-legacy-'));
+  const root = mkdtempForTestSync('agent-device-app-log-clean-legacy-');
   const sessionDir = path.join(root, 'default');
   fs.mkdirSync(sessionDir, { recursive: true });
   const pidPath = path.join(sessionDir, APP_LOG_PID_FILENAME);

@@ -1,10 +1,9 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { retryWithPolicy } from '../retry.ts';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../diagnostics.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 test('retryWithPolicy retries until success', async () => {
   let attempts = 0;
@@ -41,7 +40,7 @@ test('retryWithPolicy emits telemetry events', async () => {
 
 test('retryWithPolicy publishes retry diagnostics events', async () => {
   const previousHome = process.env.HOME;
-  const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-retry-home-'));
+  const tempHome = mkdtempForTestSync('agent-device-retry-home-');
   process.env.HOME = tempHome;
   try {
     const outPath = await withDiagnosticsScope(

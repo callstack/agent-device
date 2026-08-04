@@ -1,7 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { createDaemonHttpServer } from '../server/http-server.ts';
 import {
@@ -17,6 +16,7 @@ import {
   skipWhenLoopbackUnavailable,
 } from '../../__tests__/test-utils/index.ts';
 import { ANDROID_ARTIFACTS_CONTRACT_EVIDENCE } from './http-server-artifacts.coverage.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 type ArtifactInventoryResponse = {
   artifacts: Array<{
@@ -31,7 +31,7 @@ type ArtifactInventoryResponse = {
 };
 
 test(ANDROID_ARTIFACTS_CONTRACT_EVIDENCE.testName, async () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-artifacts-tenants-'));
+  const tempDir = mkdtempForTestSync('agent-device-artifacts-tenants-');
   const publicPath = path.join(tempDir, 'public.txt');
   const tenantAPath = path.join(tempDir, 'tenant-a.txt');
   const tenantBPath = path.join(tempDir, 'tenant-b.txt');
@@ -80,7 +80,7 @@ test(ANDROID_ARTIFACTS_CONTRACT_EVIDENCE.testName, async () => {
 });
 
 test('downloadable artifact inventory skips directory artifacts that fail to archive', async () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-artifacts-archive-error-'));
+  const tempDir = mkdtempForTestSync('agent-device-artifacts-archive-error-');
   const filePath = path.join(tempDir, 'report.json');
   const tracePath = path.join(tempDir, '--profile.trace');
   fs.writeFileSync(filePath, '{}\n');
@@ -122,7 +122,7 @@ test('downloadable artifact inventory skips directory artifacts that fail to arc
 test('daemon artifact inventory exposes directory artifacts as tar.gz downloads', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-artifacts-directory-'));
+  const tempDir = mkdtempForTestSync('agent-device-artifacts-directory-');
   const tracePath = path.join(tempDir, '--profile.trace');
   fs.mkdirSync(tracePath, { recursive: true });
   fs.writeFileSync(path.join(tracePath, 'metadata.json'), '{"ok":true}\n');
@@ -186,7 +186,7 @@ test('daemon artifact inventory exposes directory artifacts as tar.gz downloads'
 test('daemon artifact inventory lists artifacts and downloads consume them', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-artifacts-http-'));
+  const tempDir = mkdtempForTestSync('agent-device-artifacts-http-');
   const artifactPath = path.join(tempDir, 'shot.png');
   fs.writeFileSync(artifactPath, 'png-body');
   const artifactId = trackDownloadableArtifact({
@@ -242,7 +242,7 @@ test('daemon artifact inventory lists artifacts and downloads consume them', asy
 test('daemon artifact downloads can keep the source file while consuming the inventory entry', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-artifacts-retain-file-'));
+  const tempDir = mkdtempForTestSync('agent-device-artifacts-retain-file-');
   const artifactPath = path.join(tempDir, 'runner-output.txt');
   fs.writeFileSync(artifactPath, 'runner-output');
   const artifactId = trackDownloadableArtifact({
@@ -291,7 +291,7 @@ test('daemon artifact downloads can keep the source file while consuming the inv
 test('daemon artifact downloads can be forced retained by server option', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-artifacts-retain-all-'));
+  const tempDir = mkdtempForTestSync('agent-device-artifacts-retain-all-');
   const artifactPath = path.join(tempDir, 'session-log.txt');
   fs.writeFileSync(artifactPath, 'log-body');
   const artifactId = trackDownloadableArtifact({

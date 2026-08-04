@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const { providerStartupCleanupMock } = vi.hoisted(() => ({
   providerStartupCleanupMock: vi.fn(),
@@ -420,9 +420,7 @@ test('agent-browser provider adds doctor guidance for missing binary and invalid
   // Pin a web-supported Node version so the missing-binary path yields the
   // setup hint instead of the Node upgrade hint on Node <24 hosts.
   await withNodeRuntimeVersion('24.0.0', async () => {
-    const missingStateDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'agent-device-web-provider-missing-'),
-    );
+    const missingStateDir = mkdtempForTestSync('agent-device-web-provider-missing-');
     try {
       const provider = createAgentBrowserWebProvider({ stateDir: missingStateDir });
       await assert.rejects(
@@ -456,9 +454,7 @@ test('agent-browser provider adds doctor guidance for missing binary and invalid
 
 test('agent-browser provider preserves Node version guidance for missing managed backend', async () => {
   await withNodeRuntimeVersion('22.19.0', async () => {
-    const missingStateDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'agent-device-web-provider-node-'),
-    );
+    const missingStateDir = mkdtempForTestSync('agent-device-web-provider-node-');
     try {
       const provider = createAgentBrowserWebProvider({ stateDir: missingStateDir });
       await assert.rejects(
@@ -480,7 +476,7 @@ async function withManagedAgentBrowserProvider(
   options: { session?: string; openWebSessionNames?: () => readonly string[] },
   testFn: (provider: ReturnType<typeof createAgentBrowserWebProvider>) => void | Promise<void>,
 ): Promise<void> {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-web-provider-'));
+  const stateDir = mkdtempForTestSync('agent-device-web-provider-');
   try {
     installFakeManagedAgentBrowser(stateDir);
     const provider = createAgentBrowserWebProvider({ ...options, stateDir });

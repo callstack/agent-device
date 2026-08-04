@@ -1,11 +1,11 @@
 import { test, type TestContext } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { SessionStore } from '../session-store.ts';
 import { resolveEffectiveSessionName } from '../session-routing.ts';
 import type { SessionState } from '../types.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 function makeSession(name: string): SessionState {
   return {
@@ -23,7 +23,7 @@ function makeSession(name: string): SessionState {
 }
 
 function makeStore(t: TestContext): SessionStore {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-session-routing-'));
+  const root = mkdtempForTestSync('agent-device-session-routing-');
   t.onTestFinished(() => {
     fs.rmSync(root, { recursive: true, force: true });
   });
@@ -33,7 +33,7 @@ function makeStore(t: TestContext): SessionStore {
 test('does not reuse lone active session for implicit default session from another scope', (t) => {
   const store = makeStore(t);
   store.set('android', makeSession('android'));
-  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-cwd-scope-'));
+  const cwd = mkdtempForTestSync('agent-device-cwd-scope-');
   t.onTestFinished(() => {
     fs.rmSync(cwd, { recursive: true, force: true });
   });
@@ -55,7 +55,7 @@ test('does not reuse lone active session for implicit default session from anoth
 });
 
 test('uses git worktree root for implicit default session scope', (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-cwd-scope-'));
+  const root = mkdtempForTestSync('agent-device-cwd-scope-');
   const nested = path.join(root, 'packages', 'app');
   fs.mkdirSync(path.join(root, '.git'));
   fs.mkdirSync(nested, { recursive: true });
@@ -92,7 +92,7 @@ test('uses git worktree root for implicit default session scope', (t) => {
 
 test('keeps explicitly configured default session global', (t) => {
   const store = makeStore(t);
-  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-cwd-scope-'));
+  const cwd = mkdtempForTestSync('agent-device-cwd-scope-');
   t.onTestFinished(() => {
     fs.rmSync(cwd, { recursive: true, force: true });
   });

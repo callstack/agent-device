@@ -3,7 +3,7 @@ import { TEST_RUN_TMP_PREFIX } from './vitest-tmpdir-global-setup.ts';
 
 const PID_SUFFIX = new RegExp(`^${TEST_RUN_TMP_PREFIX}(\\d+)-`);
 
-export function isProcessAlive(pid: number): boolean {
+function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;

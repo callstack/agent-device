@@ -1,8 +1,8 @@
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 vi.mock('../metro/client-metro-companion.ts', () => ({
   ensureMetroCompanion: vi.fn(),
@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 test('prepareMetroRuntime starts the local companion only after bridge setup needs it', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-metro-companion-'));
+  const tempRoot = mkdtempForTestSync('agent-device-metro-companion-');
   const projectRoot = path.join(tempRoot, 'project');
   fs.mkdirSync(path.join(projectRoot, 'node_modules'), { recursive: true });
   fs.writeFileSync(
@@ -154,7 +154,7 @@ test('prepareMetroRuntime starts the local companion only after bridge setup nee
 });
 
 test('prepareMetroRuntime rejects bridged descriptors without iOS bundle URLs', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-metro-descriptor-'));
+  const tempRoot = mkdtempForTestSync('agent-device-metro-descriptor-');
   const projectRoot = path.join(tempRoot, 'project');
   fs.mkdirSync(path.join(projectRoot, 'node_modules'), { recursive: true });
   fs.writeFileSync(
@@ -226,7 +226,7 @@ test('prepareMetroRuntime rejects bridged descriptors without iOS bundle URLs', 
 });
 
 test('prepareMetroRuntime preserves the initial bridge error if companion startup fails', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-metro-companion-error-'));
+  const tempRoot = mkdtempForTestSync('agent-device-metro-companion-error-');
   const projectRoot = path.join(tempRoot, 'project');
   fs.mkdirSync(path.join(projectRoot, 'node_modules'), { recursive: true });
   fs.writeFileSync(
@@ -279,7 +279,7 @@ test('prepareMetroRuntime preserves the initial bridge error if companion startu
 });
 
 test('prepareMetroRuntime fails fast when initial bridge failure is non-retryable', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-metro-companion-401-'));
+  const tempRoot = mkdtempForTestSync('agent-device-metro-companion-401-');
   const projectRoot = path.join(tempRoot, 'project');
   fs.mkdirSync(path.join(projectRoot, 'node_modules'), { recursive: true });
   fs.writeFileSync(
@@ -330,7 +330,7 @@ test('prepareMetroRuntime fails fast when initial bridge failure is non-retryabl
 });
 
 test('prepareMetroRuntime fails fast on non-retryable bridge errors after companion startup', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-metro-companion-401-'));
+  const tempRoot = mkdtempForTestSync('agent-device-metro-companion-401-');
   const projectRoot = path.join(tempRoot, 'project');
   fs.mkdirSync(path.join(projectRoot, 'node_modules'), { recursive: true });
   fs.writeFileSync(
@@ -406,7 +406,7 @@ test('prepareMetroRuntime fails fast on non-retryable bridge errors after compan
 });
 
 test('prepareMetroRuntime retries malformed retryable bridge responses after companion startup', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-metro-companion-html-'));
+  const tempRoot = mkdtempForTestSync('agent-device-metro-companion-html-');
   const projectRoot = path.join(tempRoot, 'project');
   fs.mkdirSync(path.join(projectRoot, 'node_modules'), { recursive: true });
   fs.writeFileSync(

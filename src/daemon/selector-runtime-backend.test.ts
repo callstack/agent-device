@@ -1,10 +1,9 @@
-import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { createSelectorRuntimeForDevice } from './selector-runtime-backend.ts';
 import { SessionStore } from './session-store.ts';
 import type { SessionState } from './types.ts';
+import { mkdtempForTestSync } from '../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
   const actual =
@@ -33,7 +32,7 @@ beforeEach(() => {
 test('wait text passes its poll deadline signal to the Apple runner fast path', async () => {
   const sessionName = 'ios-wait-deadline';
   const sessionStore = new SessionStore(
-    path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'selector-runtime-')), 'sessions'),
+    path.join(mkdtempForTestSync('selector-runtime-'), 'sessions'),
   );
   const session: SessionState = {
     name: sessionName,

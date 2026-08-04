@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
 import { IOS_DEVICE, IOS_SIMULATOR } from '../../../../__tests__/test-utils/index.ts';
@@ -15,6 +14,7 @@ import {
   withDiagnosticsScope,
 } from '../../../../utils/diagnostics.ts';
 import type { RunnerSession } from '../runner/runner-session-types.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const {
   mockAcquireXcodebuildSimulatorSetRedirect,
@@ -140,8 +140,8 @@ beforeEach(async () => {
   await abortAllIosRunnerSessions();
   vi.resetAllMocks();
   setRunnerLeaseOwnerStateDir(undefined);
-  process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-runner-lease-test-'),
+  process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR = mkdtempForTestSync(
+    'agent-device-runner-lease-test-',
   );
   mockRunXcrun.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   mockEnsureXctestrunArtifact.mockResolvedValue({
@@ -1115,7 +1115,7 @@ test('runner session startup reclaims dead foreign runner lease before launching
 
 test('runner session startup reclaims a foreign runner lease whose owner state dir is gone', async () => {
   const device = { ...IOS_SIMULATOR, id: 'runner-session-owner-state-dir-gone-sim' };
-  const goneStateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-owner-state-dir-gone-'));
+  const goneStateDir = mkdtempForTestSync('agent-device-owner-state-dir-gone-');
   fs.rmSync(goneStateDir, { recursive: true, force: true });
   // The owner PID is alive (isProcessAlive defaults to true in beforeEach) but
   // its AGENT_DEVICE_STATE_DIR no longer exists - the orphaned-daemon shape
@@ -1187,9 +1187,7 @@ test('runner session startup fails closed when the owner state dir cannot be sta
 
 test('runner session startup still rejects a live foreign lease whose owner state dir exists', async () => {
   const device = { ...IOS_SIMULATOR, id: 'runner-session-owner-state-dir-present-sim' };
-  const liveStateDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-owner-state-dir-present-'),
-  );
+  const liveStateDir = mkdtempForTestSync('agent-device-owner-state-dir-present-');
   writeRunnerLease(
     makeRunnerLease({
       deviceId: device.id,
@@ -1894,7 +1892,7 @@ function runnerError(error: { code: string; message: string }): Response {
 
 async function captureDiagnostics(callback: () => Promise<void>): Promise<string> {
   const previousHome = process.env.HOME;
-  process.env.HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-runner-diag-'));
+  process.env.HOME = mkdtempForTestSync('agent-device-runner-diag-');
   try {
     return await withDiagnosticsScope(
       { session: 'runner-session-test', requestId: 'request-1', command: 'tap' },

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const { mockRunCmdSync } = vi.hoisted(() => ({ mockRunCmdSync: vi.fn() }));
 
@@ -37,7 +37,7 @@ beforeEach(() => {
       stderr: '',
     };
   });
-  derivedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-cache-probe-'));
+  derivedDir = mkdtempForTestSync('agent-device-cache-probe-');
   process.env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH = derivedDir;
 });
 

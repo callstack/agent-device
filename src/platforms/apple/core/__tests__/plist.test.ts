@@ -1,8 +1,8 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { mkdtempForTest } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../../utils/exec.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../../utils/exec.ts')>();
@@ -19,7 +19,7 @@ beforeEach(() => {
 });
 
 test('readInfoPlistString falls back to XML parsing when plutil is unavailable', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-plist-'));
+  const tmpDir = await mkdtempForTest('agent-device-plist-');
   const infoPlistPath = path.join(tmpDir, 'Info.plist');
   await fs.writeFile(
     infoPlistPath,

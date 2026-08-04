@@ -1,13 +1,13 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { applyRuntimeHintsToApp, clearRuntimeHintsFromApp } from '../runtime-hints.ts';
 import { applyDeviceDefaultMetroHost } from '../handlers/session-runtime.ts';
 import { resolveRuntimeTransportHints } from '../../utils/runtime-transport.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { mkdtempForTest } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const LEGACY_PREFS_PATH = 'shared_prefs/ReactNativeDevPrefs.xml';
 
@@ -27,7 +27,7 @@ async function withMockedAdb(
     readWrittenPrefsFile: (prefsPath: string) => Promise<string | undefined>;
   }) => Promise<void>,
 ): Promise<void> {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-runtime-hints-android-'));
+  const tmpDir = await mkdtempForTest('agent-device-runtime-hints-android-');
   const adbPath = path.join(tmpDir, 'adb');
   const argsLogPath = path.join(tmpDir, 'args.log');
   const seedDir = path.join(tmpDir, 'seed');
@@ -153,7 +153,7 @@ async function withMockedAdb(
 async function withMockedXcrun(
   run: (ctx: { device: DeviceInfo; argsLogPath: string }) => Promise<void>,
 ): Promise<void> {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-runtime-hints-ios-'));
+  const tmpDir = await mkdtempForTest('agent-device-runtime-hints-ios-');
   const xcrunPath = path.join(tmpDir, 'xcrun');
   const argsLogPath = path.join(tmpDir, 'args.log');
   await fs.writeFile(

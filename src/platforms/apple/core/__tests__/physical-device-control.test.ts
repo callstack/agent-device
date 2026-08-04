@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { IOS_DEVICE as SHARED_IOS_DEVICE } from '../../../../__tests__/test-utils/index.ts';
@@ -13,6 +12,7 @@ import { listIosApps } from '../app-resolution.ts';
 import { resolveIosPhysicalDeviceControl } from '../physical-device-control.ts';
 import { withAppleRunnerProvider } from '../runner/runner-provider.ts';
 import { withAppleToolProvider } from '../tool-provider.ts';
+import { mkdtempForTest } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const IOS_DEVICE: DeviceInfo = {
   ...SHARED_IOS_DEVICE,
@@ -91,10 +91,7 @@ test('app lifecycle uses runner commands for an xctrace-only physical device', a
 });
 
 test('default interactor screenshots stay in-band without invoking devicectl', async () => {
-  const outPath = path.join(
-    await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-xctest-screenshot-')),
-    'screen.png',
-  );
+  const outPath = path.join(await mkdtempForTest('agent-device-xctest-screenshot-'), 'screen.png');
   const toolCalls: string[][] = [];
   try {
     await withAppleToolProvider(

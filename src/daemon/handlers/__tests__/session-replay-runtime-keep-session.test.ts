@@ -1,4 +1,5 @@
 import { test, expect, vi } from 'vitest';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 /**
  * #1555 structural-quality review ("topology fix... its subject now lives
@@ -37,7 +38,6 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
 });
 
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { runReplayScriptFile } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
@@ -49,7 +49,7 @@ import {
 } from './session-replay-runtime.fixtures.ts';
 
 test('--keep-session suppresses a close that is terminal among executable actions', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-keep-marker-tail-'));
+  const root = mkdtempForTestSync('agent-device-replay-keep-marker-tail-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName));
@@ -75,7 +75,7 @@ test('--keep-session suppresses a close that is terminal among executable action
 });
 
 test('--keep-session fails explicitly when the completed replay has no live session', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-keep-postcondition-'));
+  const root = mkdtempForTestSync('agent-device-replay-keep-postcondition-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName));
@@ -102,7 +102,7 @@ test('--keep-session fails explicitly when the completed replay has no live sess
 });
 
 test('--keep-session suppresses only the authored terminal close and reports the surviving session', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-keep-session-'));
+  const root = mkdtempForTestSync('agent-device-replay-keep-session-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName));
@@ -129,7 +129,7 @@ test('--keep-session suppresses only the authored terminal close and reports the
 });
 
 test('--keep-session preserves an interior close instead of broad command filtering', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-keep-interior-close-'));
+  const root = mkdtempForTestSync('agent-device-replay-keep-interior-close-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName));
@@ -152,7 +152,7 @@ test('--keep-session preserves an interior close instead of broad command filter
 });
 
 test('--keep-session is a no-op for an already close-less script', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-keep-close-less-'));
+  const root = mkdtempForTestSync('agent-device-replay-keep-close-less-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName));
@@ -174,7 +174,7 @@ test('--keep-session is a no-op for an already close-less script', async () => {
 });
 
 test('--keep-session rejects Maestro YAML before engine dispatch', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-keep-maestro-'));
+  const root = mkdtempForTestSync('agent-device-replay-keep-maestro-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName));

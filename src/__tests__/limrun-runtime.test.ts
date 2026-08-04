@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { LimrunRuntime } from '../sdk/limrun.ts';
@@ -9,6 +8,7 @@ import type { SimulatorLease } from '../daemon/lease-registry.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { runCmd } from '../utils/exec.ts';
 import { readVersion } from '../utils/version.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 type LimrunInstancePage = {
   getPaginatedItems: () => Array<{ metadata: { id: string } }>;
@@ -225,7 +225,7 @@ test('Limrun reclaims a labeled iOS instance without an in-memory session', asyn
 });
 
 test('Limrun recovers a failed expired lease release after a daemon restart', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-limrun-expiry-'));
+  const stateDir = mkdtempForTestSync('agent-device-limrun-expiry-');
   const lease: SimulatorLease = {
     leaseId: 'lease-recovered-after-restart',
     tenantId: 'team-a',
@@ -450,7 +450,7 @@ test('Limrun Android shares an in-flight ADB tunnel across concurrent port rever
 });
 
 test('Limrun iOS installs direct local artifacts through Limrun assets', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-limrun-install-'));
+  const tempRoot = mkdtempForTestSync('agent-device-limrun-install-');
   const ipaPath = path.join(tempRoot, 'Demo.ipa');
   fs.writeFileSync(ipaPath, 'demo');
   const runtime = new LimrunRuntime({
@@ -506,7 +506,7 @@ test('Limrun iOS installs direct local artifacts through Limrun assets', async (
 });
 
 test('Limrun iOS reads the bundle display name before uploading an app bundle', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-limrun-app-name-'));
+  const tempRoot = mkdtempForTestSync('agent-device-limrun-app-name-');
   const appPath = path.join(tempRoot, 'Renamed.app');
   fs.mkdirSync(appPath);
   fs.writeFileSync(

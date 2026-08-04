@@ -1,4 +1,5 @@
 import { test, expect, vi } from 'vitest';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 // ADR 0012 migration step 2: every replay step failure now attempts a
 // post-failure screen digest capture + suggestion re-resolution via
@@ -34,7 +35,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeAndroidSession } from '../../../__tests__/test-utils/index.ts';
 
 function makeSessionStore(): SessionStore {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-session-test-suite-'));
+  const root = mkdtempForTestSync('agent-device-session-test-suite-');
   return new SessionStore(path.join(root, 'sessions'));
 }
 
@@ -62,7 +63,7 @@ const ANDROID_TWO: DeviceInfo = {
 
 test('test does not retry infrastructure startup failures and stops the suite', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-infra-fail-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-infra-fail-');
   fs.writeFileSync(path.join(root, '01-runner.ad'), 'context platform=ios\nopen "Demo"\n');
   fs.writeFileSync(path.join(root, '02-after.ad'), 'context platform=ios\nopen "Demo"\n');
 
@@ -104,7 +105,7 @@ test('test does not retry infrastructure startup failures and stops the suite', 
 
 test('test --fail-fast stops the suite after the first failure and leaves the rest notRun', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-fail-fast-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-fail-fast-');
   const firstPath = path.join(root, '01-first.ad');
   const secondPath = path.join(root, '02-second.ad');
   const thirdPath = path.join(root, '03-third.ad');
@@ -149,7 +150,7 @@ test('test --fail-fast stops the suite after the first failure and leaves the re
 
 test('test surfaces a suite-level failure when a source fails to parse', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-bad-source-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-bad-source-');
   // Malformed env directive (missing "="): readReplayScriptMetadata throws during source
   // discovery, before any entry is runnable. The suite-level try/catch in session-test.ts must
   // convert that throw into a failed outcome rather than letting it escape the handler.
@@ -186,7 +187,7 @@ test('test surfaces a suite-level failure when a source fails to parse', async (
 
 test('test discovers Maestro YAML suites when replay backend is set', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-maestro-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-maestro-');
   fs.writeFileSync(
     path.join(root, 'auth-flow.yml'),
     ['appId: demo.app', 'name: Authentication flow', '---', '- launchApp', ''].join('\n'),
@@ -220,7 +221,7 @@ test('test discovers Maestro YAML suites when replay backend is set', async () =
 
 test('test emits progress when attempts retry and pass', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-progress-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-progress-');
   fs.writeFileSync(path.join(root, '01-progress.ad'), 'context platform=ios\nopen "Demo"\n');
 
   const events: RequestProgressEvent[] = [];
@@ -328,7 +329,7 @@ test('test emits progress when attempts retry and pass', async () => {
 
 test('test stops retrying after maxAttempts when every attempt fails', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-retry-exhaust-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-retry-exhaust-');
   fs.writeFileSync(path.join(root, '01-always-fails.ad'), 'context platform=ios\nopen "Demo"\n');
 
   let attemptCount = 0;
@@ -365,7 +366,7 @@ test('test stops retrying after maxAttempts when every attempt fails', async () 
 
 test('test emits skip progress without synthetic duration', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-skip-progress-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-skip-progress-');
   const missingPlatformPath = path.join(root, '01-missing-platform.ad');
   const androidPath = path.join(root, '02-android.ad');
   fs.writeFileSync(missingPlatformPath, 'open "Demo"\n');
@@ -422,7 +423,7 @@ test('test emits skip progress without synthetic duration', async () => {
 
 test('test aggregates snapshot diagnostics from replay session samples', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-snapshots-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-snapshots-');
   fs.writeFileSync(path.join(root, '01-first.ad'), 'context platform=android\nopen "Demo"\n');
   fs.writeFileSync(path.join(root, '02-second.ad'), 'context platform=android\nopen "Demo"\n');
   let captures = 0;
@@ -478,7 +479,7 @@ test('test aggregates snapshot diagnostics from replay session samples', async (
 
 test('test aggregates snapshot diagnostics from failed replay session samples', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-snapshot-fail-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-snapshot-fail-');
   fs.writeFileSync(path.join(root, '01-fail.ad'), 'context platform=android\nopen "Demo"\n');
 
   const response = await handleSessionCommands({
@@ -536,7 +537,7 @@ test('test aggregates snapshot diagnostics from failed replay session samples', 
 
 test('test stops the suite when the parent request is canceled during an active replay attempt', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-parent-cancel-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-parent-cancel-');
   fs.writeFileSync(path.join(root, '01-first.ad'), 'context platform=ios\nopen "Demo"\n');
   fs.writeFileSync(path.join(root, '02-second.ad'), 'context platform=ios\nopen "Demo"\n');
 
@@ -604,7 +605,7 @@ test('test stops the suite when the parent request is canceled during an active 
 
 test('test --shard-all runs each runnable entry on each selected device', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-shard-all-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-shard-all-');
   const loginPath = path.join(root, '01-login.ad');
   const payPath = path.join(root, '02-pay.ad');
   fs.writeFileSync(loginPath, 'context platform=android\nopen "Demo"\n');
@@ -675,7 +676,7 @@ test('test --shard-all runs each runnable entry on each selected device', async 
 
 test('test --shard-split distributes runnable entries by modulo and keeps skips once', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-shard-split-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-shard-split-');
   const missingPlatformPath = path.join(root, '01-missing-platform.ad');
   const aPath = path.join(root, '02-a.ad');
   const bPath = path.join(root, '03-b.ad');
@@ -734,7 +735,7 @@ test('test --shard-split distributes runnable entries by modulo and keeps skips 
 
 test('test sharding rejects mutually exclusive shard modes', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-shard-modes-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-shard-modes-');
   fs.writeFileSync(path.join(root, '01-a.ad'), 'context platform=android\nopen "Demo"\n');
 
   const response = await handleSessionCommands({
@@ -760,7 +761,7 @@ test('test sharding rejects mutually exclusive shard modes', async () => {
 
 test('test sharding rejects non-positive shard counts', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-shard-count-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-shard-count-');
   fs.writeFileSync(path.join(root, '01-a.ad'), 'context platform=android\nopen "Demo"\n');
 
   const response = await handleSessionCommands({
@@ -786,7 +787,7 @@ test('test sharding rejects non-positive shard counts', async () => {
 
 test('test sharding rejects fewer matched devices than requested shards', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-shard-devices-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-shard-devices-');
   fs.writeFileSync(path.join(root, '01-a.ad'), 'context platform=android\nopen "Demo"\n');
 
   const response = await withDeviceInventoryProvider(
@@ -816,7 +817,7 @@ test('test sharding rejects fewer matched devices than requested shards', async 
 
 test('test sharding does not require devices when every entry is skipped', async () => {
   const sessionStore = makeSessionStore();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-suite-shard-skipped-'));
+  const root = mkdtempForTestSync('agent-device-test-suite-shard-skipped-');
   fs.writeFileSync(path.join(root, '01-missing-platform.ad'), 'open "Demo"\n');
 
   let inventoryResolved = false;

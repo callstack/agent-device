@@ -1,12 +1,11 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { handleReactNativeCommands } from '../react-native.ts';
 import { captureSnapshot } from '../snapshot-capture.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { SessionState } from '../../types.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../snapshot-capture.ts', () => ({
   captureSnapshot: vi.fn(),
@@ -865,7 +864,7 @@ test('react-native dismiss-overlay ignores app copy that only mentions RN overla
 });
 
 function makeSessionStore(): SessionStore {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-rn-handler-'));
+  const root = mkdtempForTestSync('agent-device-rn-handler-');
   return new SessionStore(path.join(root, 'sessions'));
 }
 

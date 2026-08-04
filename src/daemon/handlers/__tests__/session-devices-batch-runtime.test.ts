@@ -14,6 +14,7 @@ import {
 } from './session-test-harness.ts';
 import type { DaemonRequest } from '../../types.ts';
 import { handleSessionCommands } from '../session.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 test('devices filters Apple-family platform selectors', async () => {
   const sessionStore = makeSessionStore();
@@ -541,7 +542,7 @@ test('close clears retained materialized install paths bound to the session', as
       booted: true,
     }),
   });
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-session-materialized-'));
+  const tempRoot = mkdtempForTestSync('agent-device-session-materialized-');
   const appPath = path.join(tempRoot, 'Sample.app');
   fs.mkdirSync(appPath, { recursive: true });
   fs.writeFileSync(path.join(appPath, 'Info.plist'), 'plist');
@@ -579,7 +580,7 @@ test('close clears retained materialized install paths bound to the session', as
 
 test('release_materialized_paths removes retained install artifacts', async () => {
   const sessionStore = makeSessionStore();
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-release-materialized-'));
+  const tempRoot = mkdtempForTestSync('agent-device-release-materialized-');
   const appPath = path.join(tempRoot, 'Sample.app');
   fs.mkdirSync(appPath, { recursive: true });
   fs.writeFileSync(path.join(appPath, 'Info.plist'), 'plist');

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const { cleanupManagedAgentBrowserOrphansMock } = vi.hoisted(() => ({
   cleanupManagedAgentBrowserOrphansMock: vi.fn(),
@@ -29,7 +29,7 @@ beforeEach(() => {
 });
 
 test('daemon-startup web cleanup passes open web sessions to the reaper', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-web-daemon-cleanup-'));
+  const stateDir = mkdtempForTestSync('agent-device-web-daemon-cleanup-');
   try {
     installFakeManagedAgentBrowser(stateDir);
     const sessionStore = new SessionStore(path.join(stateDir, 'sessions'));
@@ -53,7 +53,7 @@ test('daemon-startup web cleanup passes open web sessions to the reaper', async 
 });
 
 test('daemon-startup web cleanup does not run when the managed backend is absent', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-web-daemon-cleanup-'));
+  const stateDir = mkdtempForTestSync('agent-device-web-daemon-cleanup-');
   try {
     const sessionStore = new SessionStore(path.join(stateDir, 'sessions'));
 

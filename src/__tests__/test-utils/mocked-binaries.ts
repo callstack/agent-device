@@ -1,8 +1,8 @@
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { ANDROID_EMULATOR } from './device-fixtures.ts';
+import { mkdtempForTest } from './tmp-dir.ts';
 
 /**
  * Creates a temporary stub `adb` binary that logs all args to a file,
@@ -12,7 +12,7 @@ export async function withMockedAdb(
   tempPrefix: string,
   run: (argsLogPath: string) => Promise<void>,
 ): Promise<void> {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), tempPrefix));
+  const tmpDir = await mkdtempForTest(tempPrefix);
   const adbPath = path.join(tmpDir, 'adb');
   const argsLogPath = path.join(tmpDir, 'args.log');
   await fs.writeFile(
@@ -47,7 +47,7 @@ export async function withScriptedAdb(
   script: string,
   run: (ctx: { argsLogPath: string; device: DeviceInfo }) => Promise<void>,
 ): Promise<void> {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), tempPrefix));
+  const tmpDir = await mkdtempForTest(tempPrefix);
   const adbPath = path.join(tmpDir, 'adb');
   const argsLogPath = path.join(tmpDir, 'args.log');
   await fs.writeFile(adbPath, script, 'utf8');

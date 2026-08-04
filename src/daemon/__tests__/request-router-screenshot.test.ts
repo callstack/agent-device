@@ -2,6 +2,7 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../core/dispatch.ts')>();
@@ -73,7 +74,7 @@ function writeSolidPng(filePath: string, width = 100, height = 50): void {
 }
 
 test('screenshot resolves relative positional path against request cwd', async () => {
-  const callerCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-screenshot-cwd-caller-'));
+  const callerCwd = mkdtempForTestSync('agent-device-screenshot-cwd-caller-');
   const sessionStore = makeSessionStore('agent-device-router-screenshot-');
   sessionStore.set('default', makeSession('default'));
 
@@ -488,7 +489,7 @@ test('iOS simulator screenshot omits logical density metadata after --max-size d
 });
 
 test('screenshot resolves --out flag path against request cwd', async () => {
-  const callerCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-screenshot-out-cwd-'));
+  const callerCwd = mkdtempForTestSync('agent-device-screenshot-out-cwd-');
   const sessionStore = makeSessionStore('agent-device-router-screenshot-');
   sessionStore.set('default', makeSession('default'));
 

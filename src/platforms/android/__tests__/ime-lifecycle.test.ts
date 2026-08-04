@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { promises as fsp } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
+import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 const HELPER_SERVICE = 'com.callstack.agentdevice.imehelper/.TestInputMethodService';
 const SETTINGS_KEY = 'agent_device_ime_helper_previous_ime';
@@ -53,7 +53,7 @@ beforeEach(() => {
 });
 
 async function makeStateDir(): Promise<string> {
-  return await fsp.mkdtemp(path.join(os.tmpdir(), 'ime-lifecycle-state-'));
+  return await mkdtempForTest('ime-lifecycle-state-');
 }
 
 function pendingFile(stateDir: string, serial: string): string {

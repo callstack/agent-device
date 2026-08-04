@@ -3,9 +3,9 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../exec.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../exec.ts')>();
@@ -73,7 +73,7 @@ afterEach(() => {
 });
 
 function makeTempStateDir(prefix: string): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  return mkdtempForTestSync(prefix);
 }
 
 function resolveCurrentDaemonCodeSignature(): string {

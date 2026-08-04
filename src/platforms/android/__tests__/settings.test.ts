@@ -1,12 +1,12 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { setAndroidSetting } from '../settings.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { withScriptedAdb } from '../../../__tests__/test-utils/mocked-binaries.ts';
+import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 test('setAndroidSetting appearance toggle flips current mode', async () => {
   await withScriptedAdb(
@@ -186,9 +186,7 @@ test('setAndroidSetting fingerprint returns COMMAND_FAILED for transport/runtime
 });
 
 test('setAndroidSetting fingerprint does not use adb emu command on physical devices', async () => {
-  const tmpDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), 'agent-device-android-fingerprint-device-'),
-  );
+  const tmpDir = await mkdtempForTest('agent-device-android-fingerprint-device-');
   const adbPath = path.join(tmpDir, 'adb');
   const argsLogPath = path.join(tmpDir, 'args.log');
   await fs.writeFile(

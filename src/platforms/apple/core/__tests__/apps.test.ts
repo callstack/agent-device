@@ -1,8 +1,8 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { mkdtempForTest } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../../utils/exec.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../../utils/exec.ts')>();
@@ -66,7 +66,7 @@ beforeEach(() => {
 });
 
 test('resolveMacOsHelperPackageRootFrom finds helper package from source and dist-like paths', async () => {
-  const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-helper-root-'));
+  const repoRoot = await mkdtempForTest('agent-device-helper-root-');
   const helperRoot = path.join(repoRoot, 'apple', 'macos-helper');
   await fs.mkdir(helperRoot, { recursive: true });
   await fs.writeFile(path.join(helperRoot, 'Package.swift'), '// test\n', 'utf8');
@@ -117,9 +117,7 @@ test('openIosApp custom scheme deep links on iOS devices require app bundle cont
 });
 
 test('screenshotIos retries simulator capture timeouts and eventually succeeds', async () => {
-  const tmpDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), 'agent-device-ios-screenshot-retry-test-'),
-  );
+  const tmpDir = await mkdtempForTest('agent-device-ios-screenshot-retry-test-');
   const xcrunPath = path.join(tmpDir, 'xcrun');
   const openPath = path.join(tmpDir, 'open');
   const commandLogPath = path.join(tmpDir, 'commands.log');
@@ -245,7 +243,7 @@ test('screenshotIos retries simulator capture timeouts and eventually succeeds',
 }, 10_000);
 
 test('screenshotIos keeps requested simulator pixel density', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-screenshot-density-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-screenshot-density-');
   const xcrunPath = path.join(tmpDir, 'xcrun');
   const outPath = path.join(tmpDir, 'screen.png');
   const sourcePngPath = path.join(tmpDir, 'source.png');
@@ -299,7 +297,7 @@ test('screenshotIos keeps requested simulator pixel density', async () => {
 });
 
 test('openIosApp web URL on iOS device without app falls back to Safari', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-safari-test-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-safari-test-');
   const xcrunPath = path.join(tmpDir, 'xcrun');
   const argsLogPath = path.join(tmpDir, 'args.log');
   await fs.writeFile(
@@ -348,7 +346,7 @@ test('openIosApp web URL on iOS device without app falls back to Safari', async 
 });
 
 test('openIosApp custom scheme on iOS device uses active app context', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-openurl-test-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-openurl-test-');
   const xcrunPath = path.join(tmpDir, 'xcrun');
   const argsLogPath = path.join(tmpDir, 'args.log');
   await fs.writeFile(
@@ -397,7 +395,7 @@ test('openIosApp custom scheme on iOS device uses active app context', async () 
 });
 
 test('openIosApp captures iOS simulator launch console output when requested', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-console-test-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-console-test-');
   const xcrunPath = path.join(tmpDir, 'xcrun');
   const argsLogPath = path.join(tmpDir, 'args.log');
   const launchConsolePath = path.join(tmpDir, 'console.log');
@@ -443,7 +441,7 @@ test('openIosApp captures iOS simulator launch console output when requested', a
 });
 
 test('openIosApp emits a clean simctl launch when launchArgs is an empty array', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-launch-args-empty-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-launch-args-empty-');
   const xcrunPath = path.join(tmpDir, 'xcrun');
   const argsLogPath = path.join(tmpDir, 'args.log');
   await fs.writeFile(
@@ -478,7 +476,7 @@ test('openIosApp emits a clean simctl launch when launchArgs is an empty array',
 });
 
 test('openIosApp appends launchArgs after the bundle id on iOS device', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-launch-args-dev-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-launch-args-dev-');
   const xcrunPath = path.join(tmpDir, 'xcrun');
   const argsLogPath = path.join(tmpDir, 'args.log');
   await fs.writeFile(
@@ -523,7 +521,7 @@ test('openIosApp appends launchArgs after the bundle id on iOS device', async ()
 });
 
 test('openIosApp appends launchArgs alongside --payload-url for iOS device deep links', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-launch-args-deep-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-launch-args-deep-');
   const xcrunPath = path.join(tmpDir, 'xcrun');
   const argsLogPath = path.join(tmpDir, 'args.log');
   await fs.writeFile(
@@ -848,7 +846,7 @@ test('installIosInstallablePath on iOS physical device uses extended devicectl i
 });
 
 test('installIosApp on iOS physical device accepts .ipa and installs extracted .app payload', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-install-ipa-test-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-install-ipa-test-');
   const xcrunPath = path.join(tmpDir, 'xcrun');
   const unzipPath = path.join(tmpDir, 'unzip');
   const argsLogPath = path.join(tmpDir, 'args.log');
@@ -898,7 +896,7 @@ test('installIosApp on iOS physical device accepts .ipa and installs extracted .
 });
 
 test('installIosApp returns bundleId and launchTarget for nested archive sources', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-install-archive-test-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-install-archive-test-');
   const xcrunPath = path.join(tmpDir, 'xcrun');
   const unzipPath = path.join(tmpDir, 'unzip');
   const plutilPath = path.join(tmpDir, 'plutil');
@@ -984,9 +982,7 @@ test('installIosApp returns bundleId and launchTarget for nested archive sources
 });
 
 test('installIosApp on iOS physical device resolves multi-app .ipa using bundle identifier hint', async () => {
-  const tmpDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), 'agent-device-ios-install-ipa-multi-test-'),
-  );
+  const tmpDir = await mkdtempForTest('agent-device-ios-install-ipa-multi-test-');
   const xcrunPath = path.join(tmpDir, 'xcrun');
   const unzipPath = path.join(tmpDir, 'unzip');
   const plutilPath = path.join(tmpDir, 'plutil');
@@ -1051,9 +1047,7 @@ test('installIosApp on iOS physical device resolves multi-app .ipa using bundle 
 });
 
 test('installIosApp rejects multi-app .ipa when no hint is provided', async () => {
-  const tmpDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), 'agent-device-ios-install-ipa-multi-missing-hint-test-'),
-  );
+  const tmpDir = await mkdtempForTest('agent-device-ios-install-ipa-multi-missing-hint-test-');
   const xcrunPath = path.join(tmpDir, 'xcrun');
   const unzipPath = path.join(tmpDir, 'unzip');
   const plutilPath = path.join(tmpDir, 'plutil');
@@ -1108,9 +1102,7 @@ test('installIosApp rejects multi-app .ipa when no hint is provided', async () =
 });
 
 test('installIosApp rejects invalid .ipa payloads without embedded .app', async () => {
-  const tmpDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), 'agent-device-ios-install-ipa-invalid-test-'),
-  );
+  const tmpDir = await mkdtempForTest('agent-device-ios-install-ipa-invalid-test-');
   const xcrunPath = path.join(tmpDir, 'xcrun');
   const unzipPath = path.join(tmpDir, 'unzip');
   const ipaPath = path.join(tmpDir, 'Broken.ipa');
@@ -1140,7 +1132,7 @@ test('installIosApp rejects invalid .ipa payloads without embedded .app', async 
 });
 
 test('openIosApp with app and URL on iOS device launches app bundle with payload URL', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-open-app-url-test-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-open-app-url-test-');
   const xcrunPath = path.join(tmpDir, 'xcrun');
   const argsLogPath = path.join(tmpDir, 'args.log');
   await fs.writeFile(
@@ -1189,7 +1181,7 @@ test('openIosApp with app and URL on iOS device launches app bundle with payload
 });
 
 test('pushIosNotification uses simctl push with temporary payload file', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-push-test-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-push-test-');
   const xcrunPath = path.join(tmpDir, 'xcrun');
   const argsLogPath = path.join(tmpDir, 'args.log');
   const payloadCapturePath = path.join(tmpDir, 'payload.json');
@@ -1250,7 +1242,7 @@ test('pushIosNotification uses simctl push with temporary payload file', async (
 });
 
 test('resolveIosApp resolves app display name on iOS physical devices', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-app-resolve-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-app-resolve-');
   const xcrunPath = path.join(tmpDir, 'xcrun');
   await fs.writeFile(
     xcrunPath,
@@ -1300,7 +1292,7 @@ test('resolveIosApp resolves app display name on iOS physical devices', async ()
 });
 
 test('resolveIosApp caches display-name bundle matches but bypasses exact bundle ids', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-resolve-cache-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-resolve-cache-');
   const xcrunPath = path.join(tmpDir, 'xcrun');
   const argsLogPath = path.join(tmpDir, 'args.log');
   await fs.writeFile(
@@ -1357,7 +1349,7 @@ test('resolveIosApp caches display-name bundle matches but bypasses exact bundle
 });
 
 test('resolveIosSimulatorDeepLinkBundleId maps custom URL scheme to installed user app', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-scheme-resolve-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-scheme-resolve-');
   const xcrunPath = path.join(tmpDir, 'xcrun');
   const plutilPath = path.join(tmpDir, 'plutil');
   const appPath = path.join(tmpDir, 'ReactNavigationExample.app');
@@ -1427,7 +1419,7 @@ test('resolveIosSimulatorDeepLinkBundleId maps custom URL scheme to installed us
 });
 
 test('installIosInstallablePath invalidates cached display-name bundle matches', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-install-cache-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-install-cache-');
   const xcrunPath = path.join(tmpDir, 'xcrun');
   const appPath = path.join(tmpDir, 'Cache.app');
   const markerPath = path.join(tmpDir, 'installed.marker');
@@ -1708,9 +1700,7 @@ exit 1
 });
 
 test('setIosSetting appearance toggle queries current osascript appearance on macOS', async () => {
-  const tmpDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), 'agent-device-macos-appearance-toggle-test-'),
-  );
+  const tmpDir = await mkdtempForTest('agent-device-macos-appearance-toggle-test-');
   const osascriptPath = path.join(tmpDir, 'osascript');
   const argsLogPath = path.join(tmpDir, 'args.log');
   await fs.writeFile(

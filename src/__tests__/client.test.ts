@@ -1,8 +1,5 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import type {
   ClickCommandResponseData,
   FillCommandResponseData,
@@ -33,9 +30,10 @@ import type {
   DaemonResponseData,
 } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 // Isolated so open/close metro-session-hint file writes never touch the real state dir.
-const TEST_STATE_DIR = mkdtempSync(path.join(os.tmpdir(), 'agent-device-client-test-'));
+const TEST_STATE_DIR = mkdtempForTestSync('agent-device-client-test-');
 
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;

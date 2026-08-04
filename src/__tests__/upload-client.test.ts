@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
 import { once } from 'node:events';
 import { uploadArtifact } from '../remote/upload-client.ts';
 import type { UploadProgressEvent } from '../remote/upload-progress.ts';
 import { runCmdSync, withCommandExecutorOverride } from '../utils/exec.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 const TEST_TOKEN = 'agent-device-upload-test-token';
 const tempDirs: string[] = [];
@@ -919,7 +919,7 @@ test('uploadArtifact uploads APK, AAB, and IPA files without wrapping them', asy
 });
 
 function createTempDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `agent-device-upload-client-${randomUUID()}-`));
+  const dir = mkdtempForTestSync(`agent-device-upload-client-${randomUUID()}-`);
   tempDirs.push(dir);
   return dir;
 }

@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, expect, test } from 'vitest';
 import { INTERNAL_COMMANDS } from '../../../command-catalog.ts';
@@ -17,6 +16,7 @@ import {
   scriptTargetPath,
   scriptTargetForce,
 } from '../../session-script-publication-state.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 const TARGET_EVIDENCE: TargetAnnotationV1 = {
   id: 'continue',
@@ -43,7 +43,7 @@ let root: string;
 let store: SessionStore;
 
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-active-publication-'));
+  root = mkdtempForTestSync('agent-device-active-publication-');
   store = new SessionStore(path.join(root, 'sessions'));
 });
 

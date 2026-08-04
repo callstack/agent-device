@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { onTestFinished, test } from 'vitest';
 import {
   resolveAppleRunnerProjectPath,
   resolveAppleRunnerSourceRoot,
 } from '../runner/runner-source.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 test('resolveAppleRunnerSourceRoot prefers checkout source over packaged source', () => {
   const root = makeTempRoot();
@@ -35,7 +35,7 @@ test('resolveAppleRunnerSourceRoot falls back to packaged source', () => {
 });
 
 function makeTempRoot(): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-runner-source-'));
+  const root = mkdtempForTestSync('agent-device-runner-source-');
   onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
   return root;
 }

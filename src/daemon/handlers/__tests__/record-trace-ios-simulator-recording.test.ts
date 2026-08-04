@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, test, vi } from 'vitest';
@@ -8,6 +7,7 @@ import { afterEach, test, vi } from 'vitest';
 import { IOS_SIMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import type { RecordTraceDeps } from '../record-trace-types.ts';
 import { startIosSimulatorRecording } from '../record-trace-ios-simulator-recording.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 const temporaryRoots: string[] = [];
 
@@ -271,7 +271,7 @@ function makeDeps(overrides: Pick<RecordTraceDeps, 'startIosSimulatorRecording'>
 }
 
 function makeTemporaryRoot(prefix: string): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const root = mkdtempForTestSync(prefix);
   temporaryRoots.push(root);
   return root;
 }

@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { withTargetDeviceResolutionScope } from '../../core/dispatch-resolve.ts';
@@ -13,6 +12,7 @@ import { handleLeaseCommands } from '../handlers/lease.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { runRequestHandlerChain } from '../request-handler-chain.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const SPECIALIZED_ROUTES = [
   'lease',
@@ -290,7 +290,7 @@ function catalogRouteRequest(command: string): DaemonRequest {
 }
 
 function trackProxyLeaseArtifact(): { artifactId: string; tempDir: string } {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-lease-artifacts-'));
+  const tempDir = mkdtempForTestSync('agent-device-lease-artifacts-');
   const artifactPath = path.join(tempDir, 'proxy-shot.png');
   fs.writeFileSync(artifactPath, 'png-body');
   return {

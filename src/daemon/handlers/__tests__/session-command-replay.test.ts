@@ -5,10 +5,11 @@ import * as path from 'node:path';
 import { makeSessionStore } from './session-test-harness.ts';
 import { handleSessionCommands } from '../session.ts';
 import type { DaemonRequest } from '../../types.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 test('replay parses open --relaunch flag and replays open with relaunch semantics', async () => {
   const sessionStore = makeSessionStore();
-  const replayRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-relaunch-'));
+  const replayRoot = mkdtempForTestSync('agent-device-replay-relaunch-');
   const replayPath = path.join(replayRoot, 'relaunch.ad');
   fs.writeFileSync(replayPath, 'open "Settings" --relaunch\n');
 
@@ -43,7 +44,7 @@ test('replay parses open --relaunch flag and replays open with relaunch semantic
 
 test('replay parses runtime set flags and replays runtime command', async () => {
   const sessionStore = makeSessionStore();
-  const replayRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-runtime-'));
+  const replayRoot = mkdtempForTestSync('agent-device-replay-runtime-');
   const replayPath = path.join(replayRoot, 'runtime.ad');
   fs.writeFileSync(
     replayPath,
@@ -82,7 +83,7 @@ test('replay parses runtime set flags and replays runtime command', async () => 
 
 test('replay parses inline open runtime flags and replays open with runtime payload', async () => {
   const sessionStore = makeSessionStore();
-  const replayRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-open-runtime-'));
+  const replayRoot = mkdtempForTestSync('agent-device-replay-open-runtime-');
   const replayPath = path.join(replayRoot, 'runtime-open.ad');
   fs.writeFileSync(
     replayPath,
@@ -122,7 +123,7 @@ test('replay parses inline open runtime flags and replays open with runtime payl
 
 test('replay resolves relative script path against request cwd', async () => {
   const sessionStore = makeSessionStore();
-  const replayRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-cwd-'));
+  const replayRoot = mkdtempForTestSync('agent-device-replay-cwd-');
   const replayDir = path.join(replayRoot, 'workflows');
   fs.mkdirSync(replayDir, { recursive: true });
   fs.writeFileSync(path.join(replayDir, 'flow.ad'), 'open "Settings"\n');
@@ -155,9 +156,7 @@ test('replay resolves relative script path against request cwd', async () => {
 
 test('replay inherits parent device selectors for each invoked step', async () => {
   const sessionStore = makeSessionStore();
-  const replayRoot = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-replay-parent-selectors-'),
-  );
+  const replayRoot = mkdtempForTestSync('agent-device-replay-parent-selectors-');
   const replayPath = path.join(replayRoot, 'selectors.ad');
   fs.writeFileSync(replayPath, 'open "com.whoop.iphone"\n');
 

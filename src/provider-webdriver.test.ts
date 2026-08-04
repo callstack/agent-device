@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { providerWebDriver } from './provider-webdriver.ts';
+import { mkdtempForTestSync } from './__tests__/test-utils/tmp-dir.ts';
 
 test('root provider facade runs AWS artifact lookup through the host command adapter', async () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-provider-webdriver-'));
+  const tempDir = mkdtempForTestSync('agent-device-provider-webdriver-');
   const awsPath = path.join(tempDir, 'aws');
   const callsPath = path.join(tempDir, 'aws-calls.ndjson');
   const previousPath = process.env.PATH;

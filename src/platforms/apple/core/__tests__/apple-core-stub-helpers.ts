@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { mkdtempForTest } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 export const IOS_TEST_DEVICE: DeviceInfo = {
   platform: 'apple',
@@ -43,7 +43,7 @@ export async function withMockedXcrun(
   script: string,
   run: (ctx: { tmpDir: string; argsLogPath: string; device: DeviceInfo }) => Promise<void>,
 ): Promise<void> {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), tempPrefix));
+  const tmpDir = await mkdtempForTest(tempPrefix);
   const xcrunPath = path.join(tmpDir, 'xcrun');
   const argsLogPath = path.join(tmpDir, 'args.log');
   const scriptWithPrivacyHelp = injectDefaultPrivacyHelp(script);

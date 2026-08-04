@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
@@ -128,7 +129,7 @@ test('a replay --from continuation on a reaped repair session gets REPAIR_SESSIO
   };
   mockResolveTargetDevice.mockResolvedValue(iosDevice);
   const { sessionStore, handler } = makeHandler('agent-device-router-from-expired-');
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-router-from-script-'));
+  const root = mkdtempForTestSync('agent-device-router-from-script-');
   const scriptPath = path.join(root, 'flow.ad');
   fs.writeFileSync(scriptPath, 'open "Demo"\nclick id="a"\n');
 

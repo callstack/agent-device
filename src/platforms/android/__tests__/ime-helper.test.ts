@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, test } from 'vitest';
 import {
@@ -11,6 +10,7 @@ import {
   clearAndroidImeHelperText,
 } from '../ime-helper.ts';
 import type { AndroidAdbExecutor, AndroidAdbProvider } from '../adb-executor.ts';
+import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 const PACKAGE = 'com.callstack.agentdevice.imehelper';
 
@@ -77,7 +77,7 @@ test('a failed broadcast raises COMMAND_FAILED', async () => {
 });
 
 test('ensureAndroidImeHelper installs with semantic provider install options', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ime-helper-install-'));
+  const tmpDir = await mkdtempForTest('ime-helper-install-');
   const apkPath = path.join(tmpDir, 'helper.apk');
   await fs.writeFile(apkPath, 'helper-apk');
   const installCalls: Array<{
@@ -116,7 +116,7 @@ test('ensureAndroidImeHelper installs with semantic provider install options', a
 });
 
 test('ensureAndroidImeHelper skips install when a newer version is already present', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ime-helper-current-'));
+  const tmpDir = await mkdtempForTest('ime-helper-current-');
   const apkPath = path.join(tmpDir, 'helper.apk');
   await fs.writeFile(apkPath, 'helper-apk');
   const adb: AndroidAdbExecutor = async (args) => {

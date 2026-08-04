@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import type { AndroidAdbExecutor } from '../adb-executor.ts';
 import { createDeviceAdbExecutor } from '../adb-executor.ts';
 import { getAndroidAppStateWithAdb, listAndroidAppsWithAdb } from '../app-helpers.ts';
+import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 async function withMockedAdbScript(script: string, run: () => Promise<void>): Promise<void> {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-android-app-helpers-'));
+  const tmpDir = await mkdtempForTest('agent-device-android-app-helpers-');
   const adbPath = path.join(tmpDir, 'adb');
   await fs.writeFile(adbPath, script, 'utf8');
   await fs.chmod(adbPath, 0o755);

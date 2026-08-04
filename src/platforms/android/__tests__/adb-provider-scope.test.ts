@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { runCmd } from '../../../utils/exec.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 const device = {
   platform: 'android',
@@ -39,7 +39,7 @@ test('withAndroidAdbProvider intercepts adb commands for the scoped serial', asy
 
 test('withAndroidAdbProvider ignores adb commands for another serial', async () => {
   const calls: string[][] = [];
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-adb-provider-scope-'));
+  const tmpDir = mkdtempForTestSync('agent-device-adb-provider-scope-');
   const adbPath = path.join(tmpDir, 'adb');
   fs.writeFileSync(
     adbPath,

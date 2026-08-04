@@ -1,7 +1,6 @@
-import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -47,7 +46,7 @@ beforeEach(() => {
 });
 
 test('buildReplayFailureDivergence dedupes suggestions using the strongest basis', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-suggest-dedupe-'));
+  const root = mkdtempForTestSync('agent-device-replay-suggest-dedupe-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
@@ -157,7 +156,7 @@ function keyboardSwampedNodes(actionableLabel: string) {
 }
 
 test('buildReplayFailureDivergence excludes keyboard chrome from screen.refs and surfaces the actionable target within the cap', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-keyboard-'));
+  const root = mkdtempForTestSync('agent-device-replay-divergence-keyboard-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
@@ -268,7 +267,7 @@ function structuralNoiseNodes() {
 }
 
 test('buildReplayFailureDivergence drops unlabeled non-interactive structural nodes so actionable controls surface within the cap', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-structural-'));
+  const root = mkdtempForTestSync('agent-device-replay-divergence-structural-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
@@ -383,7 +382,7 @@ function keyboardWithAccessoryNodes() {
 }
 
 test('buildReplayFailureDivergence keeps an app inputAccessoryView control in screen.refs while filtering keyboard keys', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-accessory-'));
+  const root = mkdtempForTestSync('agent-device-replay-divergence-accessory-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
@@ -438,7 +437,7 @@ test('buildReplayFailureDivergence keeps an app inputAccessoryView control in sc
 // walk's own inclusion/drop decisions are exercised for real; only the
 // on-device transport that produces the pre-walk raw tree is stubbed.
 test('buildReplayFailureDivergence excludes Android status-bar/IME chrome from screen.refs on a real (walked) non-raw capture', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-android-'));
+  const root = mkdtempForTestSync('agent-device-replay-divergence-android-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(
@@ -507,7 +506,7 @@ test('buildReplayFailureDivergence excludes Android status-bar/IME chrome from s
 // ordering, so it does NOT by itself prove cap-burial resistance — that is the
 // dedicated realistic-tree test below.
 test('buildReplayFailureDivergence: a system-overlay window survives into screen.refs while status/nav chrome is filtered (#1264)', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-overlay-'));
+  const root = mkdtempForTestSync('agent-device-replay-divergence-overlay-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(
@@ -623,7 +622,7 @@ function appSwampWithTrailingOverlay(appBundleId: string) {
 }
 
 test('buildReplayFailureDivergence: a fully-captured overlay dismiss-target enumerating LAST still lands within the screen.refs cap (#1264 cap burial)', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-burial-'));
+  const root = mkdtempForTestSync('agent-device-replay-divergence-burial-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   const appBundleId = 'com.callstack.agentdevicelab';
@@ -722,7 +721,7 @@ function overlayMassCoveringApp(appBundleId: string) {
 }
 
 test('buildReplayFailureDivergence: when a system overlay mass-covers the app, the overlay dismiss-target surfaces in screen.refs and refs is non-empty (#1264 occlusion)', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-occlusion-'));
+  const root = mkdtempForTestSync('agent-device-replay-divergence-occlusion-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   const appBundleId = 'com.callstack.agentdevicelab';
@@ -800,7 +799,7 @@ function bareScrimMassCoveringApp(appBundleId: string) {
 }
 
 test('buildReplayFailureDivergence: a mass-covered app with no actionable overlay node still returns non-empty screen.refs (#1264 occlusion fallback)', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-scrim-'));
+  const root = mkdtempForTestSync('agent-device-replay-divergence-scrim-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   const appBundleId = 'com.callstack.agentdevicelab';
@@ -853,7 +852,7 @@ test('buildReplayFailureDivergence: a mass-covered app with no actionable overla
 // leaving the agent a ref the screen advertised but the frame rejects. Assert
 // the frame scope equals the emitted screen ref set (covered refs included).
 test('buildReplayFailureDivergence: the partial ref frame authorizes exactly the emitted screen.refs, including mass-covered fallback refs (#1257 + #1264)', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-frame-'));
+  const root = mkdtempForTestSync('agent-device-replay-divergence-frame-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   const appBundleId = 'com.callstack.agentdevicelab';
@@ -913,7 +912,7 @@ test('buildReplayFailureDivergence: the partial ref frame authorizes exactly the
 // retried tree. The retry delay (`sleep`) is stubbed to a no-op at the top of
 // this file, so the retry BRANCH runs without a real wall-clock wait.
 test('buildReplayFailureDivergence: routes through the freshness-retry wrapper and uses the retried fresh tree, not the first stale dump (#1264 capture parity)', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-fresh-'));
+  const root = mkdtempForTestSync('agent-device-replay-divergence-fresh-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   const appBundleId = 'com.callstack.agentdevicelab';
@@ -1013,7 +1012,7 @@ test('buildReplayFailureDivergence: routes through the freshness-retry wrapper a
 // context handed to the snapshot dispatch and asserts those narrowing flags are
 // dropped while the interactive-only policy is still applied.
 test('buildReplayFailureDivergence: divergence capture drops the action snapshotRaw/scope/depth flags (#1264 clean flags policy)', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-flags-'));
+  const root = mkdtempForTestSync('agent-device-replay-divergence-flags-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   const appBundleId = 'com.callstack.agentdevicelab';
@@ -1094,7 +1093,7 @@ test.each([
       nodes.map((node) => ({ ...node, systemChrome: true as const })),
   },
 ])('buildReplayFailureDivergence: a full-cover quick-settings shade $name', async ({ prepare }) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-qsshade-'));
+  const root = mkdtempForTestSync('agent-device-replay-divergence-qsshade-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(
@@ -1166,7 +1165,7 @@ test.each([
 test('captureDivergenceObservation retryLaunchRace: the 12s deadline bounds retries even when captures themselves consume wall-clock time', async () => {
   vi.useFakeTimers();
   try {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-deadline-'));
+    const root = mkdtempForTestSync('agent-device-replay-divergence-deadline-');
     const sessionStore = new SessionStore(path.join(root, 'sessions'));
     const sessionName = 'default';
     sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));

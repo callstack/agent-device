@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { resolveDaemonPaths } from '../daemon/config.ts';
@@ -14,6 +13,7 @@ import {
 import { runCmdBackground } from '../utils/exec.ts';
 import { isProcessAlive, waitForProcessExit } from '../utils/host-process.ts';
 import { closeLoopbackServer, listenOnLoopback, waitForHttpOk } from './test-utils/index.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 type DaemonInfoFile = {
   httpPort?: number;
@@ -62,7 +62,7 @@ function waitForStdoutLine(
 }
 
 test('daemon runtime starts HTTP transport in-process and shuts down cleanly', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-runtime-'));
+  const stateDir = mkdtempForTestSync('agent-device-daemon-runtime-');
   const paths = resolveDaemonPaths(stateDir);
   const artifactPath = path.join(stateDir, 'runtime-artifact.txt');
   fs.writeFileSync(artifactPath, 'runtime-artifact');
@@ -129,7 +129,7 @@ test('daemon runtime starts HTTP transport in-process and shuts down cleanly', a
 });
 
 test('daemon runtime publishes dual transport metadata', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-runtime-dual-'));
+  const stateDir = mkdtempForTestSync('agent-device-daemon-runtime-dual-');
   const paths = resolveDaemonPaths(stateDir);
   const stdout: string[] = [];
   let exitCode: number | undefined;
@@ -171,7 +171,7 @@ test('daemon runtime publishes dual transport metadata', async () => {
 });
 
 test('daemon default provider composition serves cloud artifacts over RPC', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-provider-'));
+  const stateDir = mkdtempForTestSync('agent-device-daemon-provider-');
   const providerRequests: string[] = [];
   const providerServer = http.createServer((req, res) => {
     providerRequests.push(req.url ?? '');
@@ -248,7 +248,7 @@ test('daemon default provider composition serves cloud artifacts over RPC', asyn
 });
 
 test('daemon entrypoint publishes HTTP metadata and cleans up on shutdown', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-entrypoint-'));
+  const stateDir = mkdtempForTestSync('agent-device-daemon-entrypoint-');
   const paths = resolveDaemonPaths(stateDir);
   const daemon = runCmdBackground(
     process.execPath,
@@ -301,8 +301,8 @@ test('daemon runtime records the startup device-claim prune in daemon.log', asyn
   // daemon.log — so the event was written and then wiped, leaving nothing in
   // the log users are told to inspect. Asserted against a real runtime start
   // rather than the prune in isolation, since the ordering is the bug.
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-prune-log-'));
-  const claimsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-prune-claims-'));
+  const stateDir = mkdtempForTestSync('agent-device-daemon-prune-log-');
+  const claimsDir = mkdtempForTestSync('agent-device-daemon-prune-claims-');
   const paths = resolveDaemonPaths(stateDir);
   const deviceKey = 'local:android:none:prune-log';
   // resolveDeviceClaimRoot reads process.env directly, not the env passed to

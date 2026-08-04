@@ -5,6 +5,7 @@ import path from 'node:path';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../platforms/apple/core/simulator.ts', async (importOriginal) => {
   const actual =
@@ -82,7 +83,7 @@ const mockStopIosRunnerSession = vi.mocked(stopIosRunnerSession);
 const noopInvoke = async (_req: DaemonRequest): Promise<DaemonResponse> => ({ ok: true, data: {} });
 
 function makeSessionStore(): SessionStore {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-session-close-shutdown-'));
+  const root = mkdtempForTestSync('agent-device-session-close-shutdown-');
   return new SessionStore(path.join(root, 'sessions'));
 }
 

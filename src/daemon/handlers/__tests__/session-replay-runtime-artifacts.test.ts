@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { collectReplayActionArtifactPaths } from '../session-replay-runtime-artifacts.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 test('collectReplayActionArtifactPaths includes existing failed action artifacts', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-artifacts-'));
+  const root = mkdtempForTestSync('agent-device-replay-artifacts-');
   const snapshotPath = path.join(root, 'failure-snapshot.txt');
   fs.writeFileSync(snapshotPath, 'snapshot');
 
@@ -25,7 +25,7 @@ test('collectReplayActionArtifactPaths includes existing failed action artifacts
 });
 
 test('collectReplayActionArtifactPaths collects top-level and nested successful artifacts', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-success-artifacts-'));
+  const root = mkdtempForTestSync('agent-device-replay-success-artifacts-');
   const pathValue = path.join(root, 'path.txt');
   const outPath = path.join(root, 'out.txt');
   const localPath = path.join(root, 'local.txt');

@@ -1,4 +1,5 @@
 import { test, vi } from 'vitest';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 // ADR 0012 migration step 2: every replay step failure now attempts a
 // post-failure screen digest capture + suggestion re-resolution, both via
@@ -48,7 +49,6 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { PNG } from '../../../utils/png.ts';
@@ -78,7 +78,7 @@ async function runReplayFixture(params: {
   root: string;
   scriptPath: string;
 }> {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), `agent-device-replay-${params.label}-`));
+  const root = mkdtempForTestSync(`agent-device-replay-${params.label}-`);
   writeFixtureFiles(root, params.files);
   const isMaestro = params.flags?.replayBackend === 'maestro';
   const scriptPath = path.join(root, isMaestro ? 'flow.yaml' : 'flow.ad');
@@ -252,7 +252,7 @@ test('.ad replay normalizes resolved gesture and swipe syntax into structured da
 });
 
 test('runReplayScriptFile reports snapshot diagnostics from per-action session samples', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-snapshot-samples-'));
+  const root = mkdtempForTestSync('agent-device-replay-snapshot-samples-');
   const scriptPath = path.join(root, 'flow.ad');
   fs.writeFileSync(scriptPath, ['snapshot', 'snapshot', ''].join('\n'));
   const sessionStore = new SessionStore(path.join(root, 'state'));
@@ -310,7 +310,7 @@ test('runReplayScriptFile reports snapshot diagnostics from per-action session s
 });
 
 test('runReplayScriptFile reports snapshot diagnostics on replay failure', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-snapshot-failure-'));
+  const root = mkdtempForTestSync('agent-device-replay-snapshot-failure-');
   const scriptPath = path.join(root, 'flow.ad');
   fs.writeFileSync(scriptPath, ['snapshot', 'click "Missing"', ''].join('\n'));
   const sessionStore = new SessionStore(path.join(root, 'state'));
@@ -1926,7 +1926,7 @@ test('runReplayScriptFile falls back to process.env when request omits replayShe
 });
 
 test('runReplayScriptFile writes per-action timing events to active trace', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-trace-'));
+  const root = mkdtempForTestSync('agent-device-replay-trace-');
   const scriptPath = path.join(root, 'flow.ad');
   const tracePath = path.join(root, 'trace.ndjson');
   fs.writeFileSync(scriptPath, 'context platform=ios\nclick id="submit"\nwait "Done" 5000\n');

@@ -1,13 +1,13 @@
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { readNotificationPayload } from './dispatch-payload.ts';
+import { mkdtempForTest } from '../__tests__/test-utils/tmp-dir.ts';
 
 let tmpDir: string;
 
 beforeEach(async () => {
-  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dispatch-payload-'));
+  tmpDir = await mkdtempForTest('dispatch-payload-');
 });
 
 afterEach(async () => {

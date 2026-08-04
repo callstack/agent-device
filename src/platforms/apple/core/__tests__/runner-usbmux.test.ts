@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import net, { type Server, type Socket } from 'node:net';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { createUsbmuxRunnerTransport } from '../runner/runner-usbmux.ts';
+import { mkdtempForTest } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const DEVICE_UDID = '00008020-001C2D2234567890';
 const USBMUX_DEVICE_ID = 42;
@@ -208,7 +208,7 @@ test('reports a refused runner port as the runner not listening, not a cable pro
 });
 
 async function createSocketPath(): Promise<string> {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-usbmux-test-'));
+  const directory = await mkdtempForTest('agent-device-usbmux-test-');
   const socketPath = path.join(directory, 'usbmuxd.sock');
   socketDirectories.push(directory);
   return socketPath;

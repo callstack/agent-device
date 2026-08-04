@@ -4,7 +4,6 @@ import http from 'node:http';
 import net from 'node:net';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import {
   closeLoopbackServer,
@@ -35,6 +34,7 @@ import {
 } from '../host-process.ts';
 import { stopProcessForTakeover } from '../../daemon/daemon-process.ts';
 import { findProjectRoot, readVersion } from '../version.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 // readProcessStartTime/readProcessCommand shell out to `ps` with a 1s
 // timeout (see host-process.ts). isAgentDeviceDaemonProcess re-reads both for
@@ -402,7 +402,7 @@ test('snapshot uses the standard daemon request timeout with an explicit overrid
 });
 
 test('cleanupFailedDaemonStartupMetadata removes partial startup metadata', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-cleanup-'));
+  const stateDir = mkdtempForTestSync('agent-device-daemon-cleanup-');
   const paths = resolveDaemonPaths(stateDir);
   try {
     fs.mkdirSync(paths.baseDir, { recursive: true });
@@ -426,8 +426,8 @@ test('cleanupFailedDaemonStartupMetadata removes partial startup metadata', asyn
 });
 
 test('cleanupFailedDaemonStartupMetadata retains live startup daemon on timeout', async (t) => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-live-cleanup-'));
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-live-daemon-'));
+  const stateDir = mkdtempForTestSync('agent-device-daemon-live-cleanup-');
+  const root = mkdtempForTestSync('agent-device-live-daemon-');
   const daemonDir = path.join(root, 'agent-device', 'dist', 'src', 'internal');
   const daemonScriptPath = path.join(daemonDir, 'daemon.js');
   fs.mkdirSync(daemonDir, { recursive: true });
@@ -506,7 +506,7 @@ test('cleanupFailedDaemonStartupMetadata retains live startup daemon on timeout'
 });
 
 test('cleanupFailedDaemonStartupMetadata removes stale daemon metadata on timeout', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-stale-cleanup-'));
+  const stateDir = mkdtempForTestSync('agent-device-daemon-stale-cleanup-');
   const paths = resolveDaemonPaths(stateDir);
   try {
     fs.mkdirSync(paths.baseDir, { recursive: true });
@@ -579,7 +579,7 @@ test('sendToDaemon reuses reachable local socket daemon metadata', async (t) => 
     return;
   }
 
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-local-socket-daemon-'));
+  const stateDir = mkdtempForTestSync('agent-device-local-socket-daemon-');
   let requestBody = '';
   const server = net.createServer((socket) => {
     socket.setEncoding('utf8');
@@ -614,7 +614,7 @@ test('sendToDaemon reuses reachable local socket daemon metadata', async (t) => 
 });
 
 test('sendToDaemon forwards replay test progress before the socket response', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-socket-progress-'));
+  const stateDir = mkdtempForTestSync('agent-device-socket-progress-');
   const artifactsDir = path.join(stateDir, 'login-flow');
   const attemptDir = path.join(artifactsDir, 'attempt-2');
   fs.mkdirSync(attemptDir, { recursive: true });
@@ -866,7 +866,7 @@ test('sendToDaemon reuses reachable local HTTP daemon metadata with token params
     return;
   }
 
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-local-http-daemon-'));
+  const stateDir = mkdtempForTestSync('agent-device-local-http-daemon-');
   const seenPaths: string[] = [];
   const observed: { rpcRequest?: Record<string, any> } = {};
   const server = http.createServer((req, res) => {
@@ -1531,7 +1531,7 @@ test('downloadRemoteArtifact downloads daemon artifact URL', async (t) => {
     t.skip('loopback listeners are not permitted in this environment');
     return;
   }
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-remote-artifact-'));
+  const tempRoot = mkdtempForTestSync('agent-device-remote-artifact-');
   const destinationPath = path.join(tempRoot, 'artifacts', 'screen.png');
   let seenUrl = '';
   let seenAuth = '';
@@ -1565,7 +1565,7 @@ test('downloadRemoteArtifact times out stalled artifact responses and removes pa
     t.skip('loopback listeners are not permitted in this environment');
     return;
   }
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-remote-artifact-timeout-'));
+  const tempRoot = mkdtempForTestSync('agent-device-remote-artifact-timeout-');
   const destinationPath = path.join(tempRoot, 'artifacts', 'screen.png');
   const server = http.createServer((req, res) => {
     if (req.url?.includes('/artifacts/')) {
@@ -1607,7 +1607,7 @@ test('downloadRemoteArtifact removes partial files after mid-stream aborts', asy
     t.skip('loopback listeners are not permitted in this environment');
     return;
   }
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-remote-artifact-abort-'));
+  const tempRoot = mkdtempForTestSync('agent-device-remote-artifact-abort-');
   const destinationPath = path.join(tempRoot, 'artifacts', 'screen.png');
   const server = http.createServer((req, res) => {
     if (req.url?.includes('/artifacts/')) {
@@ -1647,7 +1647,7 @@ test('downloadRemoteArtifact removes partial files after mid-stream aborts', asy
 });
 
 test('computeDaemonCodeSignature fingerprints the daemon runtime import graph', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-signature-'));
+  const root = mkdtempForTestSync('agent-device-daemon-signature-');
   try {
     const daemonEntryPath = path.join(root, 'src', 'daemon.ts');
     const helperPath = path.join(root, 'src', 'helper.ts');
@@ -1685,7 +1685,7 @@ test('computeDaemonCodeSignature fingerprints the daemon runtime import graph', 
 });
 
 test('stopDaemonProcessForTakeover terminates a matching daemon process', async (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-test-'));
+  const root = mkdtempForTestSync('agent-device-daemon-test-');
   const daemonDir = path.join(root, 'agent-device', 'dist', 'src', 'internal');
   const daemonScriptPath = path.join(daemonDir, 'daemon.js');
   fs.mkdirSync(daemonDir, { recursive: true });

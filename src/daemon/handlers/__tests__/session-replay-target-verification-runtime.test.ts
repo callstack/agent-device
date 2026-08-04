@@ -7,6 +7,7 @@
  * for the actual action dispatch).
  */
 import { test, expect, vi, beforeEach } from 'vitest';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -24,7 +25,6 @@ vi.mock('../../../utils/timeouts.ts', async (importOriginal) => {
 });
 
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { runReplayScriptFile } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
@@ -64,9 +64,7 @@ function setupSession(root: string): { sessionStore: SessionStore; sessionName: 
 }
 
 test('an unannotated action executes unchanged (old-script pass-through)', async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-replay-target-verify-passthrough-'),
-  );
+  const root = mkdtempForTestSync('agent-device-replay-target-verify-passthrough-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, ['click id="save"']);
 
@@ -90,9 +88,7 @@ test('an unannotated action executes unchanged (old-script pass-through)', async
 });
 
 test('a verified target proceeds to dispatch the action', async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-replay-target-verify-verified-'),
-  );
+  const root = mkdtempForTestSync('agent-device-replay-target-verify-verified-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
 
@@ -129,7 +125,7 @@ test('a verified target proceeds to dispatch the action', async () => {
 });
 
 test('a selector-miss divergence blocks dispatch and never sends the action', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-target-verify-miss-'));
+  const root = mkdtempForTestSync('agent-device-replay-target-verify-miss-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
 
@@ -163,9 +159,7 @@ test('a selector-miss divergence blocks dispatch and never sends the action', as
 });
 
 test('an identity-mismatch divergence reports matchCount and an observed identity', async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-replay-target-verify-mismatch-'),
-  );
+  const root = mkdtempForTestSync('agent-device-replay-target-verify-mismatch-');
   const { sessionStore, sessionName } = setupSession(root);
   // A label-based selector so it can match a node whose id changed.
   const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click label="Save"']);
@@ -218,9 +212,7 @@ test('an identity-mismatch divergence reports matchCount and an observed identit
 });
 
 test('a recorded-unverifiable annotation is an identity-unverifiable divergence with matchCount omitted', async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-replay-target-verify-unverifiable-'),
-  );
+  const root = mkdtempForTestSync('agent-device-replay-target-verify-unverifiable-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [UNVERIFIABLE_ANNOTATION, 'click id="save"']);
 
@@ -262,7 +254,7 @@ test('a recorded-unverifiable annotation is an identity-unverifiable divergence 
 });
 
 test('a verified annotated action carries the post-resolution guard on its dispatch request', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-target-guard-thread-'));
+  const root = mkdtempForTestSync('agent-device-replay-target-guard-thread-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
 
@@ -304,7 +296,7 @@ test('a verified annotated action carries the post-resolution guard on its dispa
 });
 
 test('an unannotated action never carries a post-resolution guard', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-target-guard-none-'));
+  const root = mkdtempForTestSync('agent-device-replay-target-guard-none-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, ['click id="save"']);
 
@@ -325,7 +317,7 @@ test('an unannotated action never carries a post-resolution guard', async () => 
 });
 
 test('a dispatch-time guard mismatch converts to an identity-mismatch target-binding divergence', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-target-guard-mismatch-'));
+  const root = mkdtempForTestSync('agent-device-replay-target-guard-mismatch-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
 
@@ -396,7 +388,7 @@ test('a dispatch-time guard mismatch converts to an identity-mismatch target-bin
 });
 
 test('a same-identity guard mismatch surfaces the structural position difference in the divergence', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-target-guard-struct-'));
+  const root = mkdtempForTestSync('agent-device-replay-target-guard-struct-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
 
@@ -457,7 +449,7 @@ test('a same-identity guard mismatch surfaces the structural position difference
 // never heals/retries a step; there is no healed action to re-verify.
 
 test('a target-binding divergence carries a real computed resume (step 5 wiring, not the retired stub)', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-target-resume-'));
+  const root = mkdtempForTestSync('agent-device-replay-target-resume-');
   const { sessionStore, sessionName } = setupSession(root);
   // Two leading plain actions then the annotated (verified→miss) action at
   // step 3: a pre-action divergence resumes AT the failed step, and step 3 is
@@ -538,9 +530,7 @@ function throwAdbMechanismFailureMarkedRetriable(): never {
 }
 
 test('a transient content-quality capture failure right after launch recovers within the bounded retry, and the action still dispatches', async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-replay-target-verify-launch-race-recover-'),
-  );
+  const root = mkdtempForTestSync('agent-device-replay-target-verify-launch-race-recover-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
 
@@ -583,9 +573,7 @@ test('a transient content-quality capture failure right after launch recovers wi
 });
 
 test('a content-quality capture failure that never recovers still fails closed as identity-unverifiable once the bounded retry is exhausted', async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-replay-target-verify-launch-race-exhausted-'),
-  );
+  const root = mkdtempForTestSync('agent-device-replay-target-verify-launch-race-exhausted-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
 
@@ -637,9 +625,7 @@ function iosSparseCapture(): {
 }
 
 test('an iOS sparse-snapshot verdict right after launch recovers within the bounded retry, and the action still dispatches', async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-replay-target-verify-launch-race-sparse-recover-'),
-  );
+  const root = mkdtempForTestSync('agent-device-replay-target-verify-launch-race-sparse-recover-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
 
@@ -682,8 +668,8 @@ test('an iOS sparse-snapshot verdict right after launch recovers within the boun
 });
 
 test('an iOS sparse-snapshot verdict that never recovers still fails closed as identity-unverifiable once the bounded retry is exhausted', async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-replay-target-verify-launch-race-sparse-exhausted-'),
+  const root = mkdtempForTestSync(
+    'agent-device-replay-target-verify-launch-race-sparse-exhausted-',
   );
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
@@ -716,9 +702,7 @@ test('an iOS sparse-snapshot verdict that never recovers still fails closed as i
 });
 
 test('a permanent (non-content-quality) capture failure fails fast without retrying', async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-replay-target-verify-launch-race-permanent-'),
-  );
+  const root = mkdtempForTestSync('agent-device-replay-target-verify-launch-race-permanent-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
 
@@ -749,9 +733,7 @@ test('a permanent (non-content-quality) capture failure fails fast without retry
 });
 
 test('an adb mechanism failure marked retriable at the transport level still fails fast (retriable is not a content-quality signal)', async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-replay-target-verify-launch-race-adb-mechanism-'),
-  );
+  const root = mkdtempForTestSync('agent-device-replay-target-verify-launch-race-adb-mechanism-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
 
@@ -797,7 +779,7 @@ const WAIT_UNVERIFIABLE_ANNOTATION =
   '# agent-device:target-v1 {"role":"statictext","label":"Screen X","ancestry":[{"role":"other","label":"Detail Screen"}],"sibling":0,"viewportOrder":0,"verification":"unverifiable"}';
 
 test('an annotated selector wait dispatches with the landmark guard and no eager pre-action refusal', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-wait-landmark-thread-'));
+  const root = mkdtempForTestSync('agent-device-replay-wait-landmark-thread-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [WAIT_ANNOTATION, 'wait "label=\\"Screen X\\"" 2000']);
 
@@ -830,9 +812,7 @@ test('an annotated selector wait dispatches with the landmark guard and no eager
 });
 
 test('a recorded-unverifiable wait annotation refuses before polling with matchCount omitted', async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-replay-wait-landmark-unverifiable-'),
-  );
+  const root = mkdtempForTestSync('agent-device-replay-wait-landmark-unverifiable-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [
     WAIT_UNVERIFIABLE_ANNOTATION,
@@ -863,7 +843,7 @@ test('a recorded-unverifiable wait annotation refuses before polling with matchC
 });
 
 test("the wait loop's landmark refusal converts into an identity-mismatch divergence", async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-wait-landmark-miss-'));
+  const root = mkdtempForTestSync('agent-device-replay-wait-landmark-miss-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [WAIT_ANNOTATION, 'wait "label=\\"Screen X\\"" 2000']);
 
@@ -924,7 +904,7 @@ test("the wait loop's landmark refusal converts into an identity-mismatch diverg
 });
 
 test('a plain wait timeout on an annotated wait stays an action-failure divergence', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-wait-plain-timeout-'));
+  const root = mkdtempForTestSync('agent-device-replay-wait-plain-timeout-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [WAIT_ANNOTATION, 'wait "label=\\"Screen X\\"" 2000']);
 
@@ -951,7 +931,7 @@ test('a plain wait timeout on an annotated wait stays an action-failure divergen
 });
 
 test('an annotation on a duration wait is inert (no guard, no refusal)', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-wait-duration-inert-'));
+  const root = mkdtempForTestSync('agent-device-replay-wait-duration-inert-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [WAIT_UNVERIFIABLE_ANNOTATION, 'wait 500']);
 
@@ -981,7 +961,7 @@ const IS_ANNOTATION =
   '# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"verified"}';
 
 test('an annotated is step verifies pre-dispatch and threads the post-resolution guard', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-is-verified-'));
+  const root = mkdtempForTestSync('agent-device-replay-is-verified-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [IS_ANNOTATION, 'is visible id="save"']);
 
@@ -1020,7 +1000,7 @@ test('an annotated is step verifies pre-dispatch and threads the post-resolution
 });
 
 test('an annotated is step whose recorded identity vanished diverges before dispatch', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-is-mismatch-'));
+  const root = mkdtempForTestSync('agent-device-replay-is-mismatch-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [IS_ANNOTATION, 'is visible label="Save"']);
 

@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { runCliCapture } from './cli-capture.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 test('session state-dir prints the resolved source-checkout daemon state dir without daemon startup', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-session-state-dir-'));
+  const root = mkdtempForTestSync('agent-device-session-state-dir-');
   const home = path.join(root, 'home');
   fs.mkdirSync(home, { recursive: true });
   try {
@@ -26,7 +26,7 @@ test('session state-dir prints the resolved source-checkout daemon state dir wit
 });
 
 test('session state-dir respects explicit state dir overrides', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-session-state-dir-'));
+  const root = mkdtempForTestSync('agent-device-session-state-dir-');
   try {
     const result = await runCliCapture(['session', 'state-dir', '--state-dir', './custom-state'], {
       cwd: root,

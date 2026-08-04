@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
@@ -49,7 +50,7 @@ beforeEach(() => {
 });
 
 test('replay runs active-session actions inside the parent request provider scope', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-scope-'));
+  const root = mkdtempForTestSync('agent-device-replay-scope-');
   const replayPath = path.join(root, 'flow.ad');
   fs.writeFileSync(replayPath, 'home\nback\n');
   const sessionStore = makeSessionStore('agent-device-replay-scope-');
@@ -79,7 +80,7 @@ test('replay runs active-session actions inside the parent request provider scop
 });
 
 test('replay routes session-changing actions through the full request path', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-full-route-'));
+  const root = mkdtempForTestSync('agent-device-replay-full-route-');
   const replayPath = path.join(root, 'flow.ad');
   fs.writeFileSync(replayPath, 'runtime set --platform ios --metro-host localhost\nhome\n');
   const sessionStore = makeSessionStore('agent-device-replay-full-route-');
@@ -109,7 +110,7 @@ test('replay routes session-changing actions through the full request path', asy
 });
 
 test('session list includes a cwd-scoped session opened by replay', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-open-scope-'));
+  const root = mkdtempForTestSync('agent-device-replay-open-scope-');
   const replayPath = path.join(root, 'flow.ad');
   fs.writeFileSync(replayPath, 'open "com.example.app"\n');
   const sessionStore = makeSessionStore('agent-device-replay-open-scope-');
@@ -154,7 +155,7 @@ test('session list includes a cwd-scoped session opened by replay', async () => 
 });
 
 test('fresh replay retains a dynamically selected device through finalization', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-device-lock-'));
+  const root = mkdtempForTestSync('agent-device-replay-device-lock-');
   const replayPath = path.join(root, 'flow.ad');
   fs.writeFileSync(
     replayPath,

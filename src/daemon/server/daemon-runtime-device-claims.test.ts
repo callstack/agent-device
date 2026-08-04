@@ -1,7 +1,7 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../session-teardown.ts', () => ({ teardownSessionResources: vi.fn() }));
 
@@ -20,7 +20,7 @@ afterEach(() => {
 });
 
 function setup(): { session: SessionState; sessionStore: SessionStore; stateDir: string } {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-shutdown-claim-'));
+  const stateDir = mkdtempForTestSync('agent-device-shutdown-claim-');
   roots.push(stateDir);
   const session: SessionState = {
     name: 'claim-session',

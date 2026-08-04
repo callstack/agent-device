@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
@@ -14,6 +13,7 @@ import {
   commitRepairScriptBeforeClose,
   finalizeOrdinaryCloseScript,
 } from '../session-close-script.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 const roots: string[] = [];
 
@@ -23,7 +23,7 @@ afterEach(() => {
 });
 
 function setup(name: string, session = makeIosSession(name, { appBundleId: 'com.example.app' })) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-session-close-script-'));
+  const root = mkdtempForTestSync('agent-device-session-close-script-');
   roots.push(root);
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   sessionStore.set(name, session);

@@ -1,4 +1,5 @@
 import { test, expect, vi, beforeEach } from 'vitest';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -6,7 +7,6 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
 });
 
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { runReplayScriptFile } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
@@ -31,7 +31,7 @@ beforeEach(() => {
   mockResolveTargetDevice.mockResolvedValue(makeIosSession('resolved').device);
 });
 test('resume skips steps 1..from-1 without invoking them and executes only from the reported step', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-resume-skip-'));
+  const root = mkdtempForTestSync('agent-device-replay-resume-skip-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName));
@@ -90,7 +90,7 @@ test('resume skips steps 1..from-1 without invoking them and executes only from 
 });
 
 test('resume requires both --from and --plan-digest together', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-resume-pair-'));
+  const root = mkdtempForTestSync('agent-device-replay-resume-pair-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName));
@@ -122,7 +122,7 @@ test('resume requires both --from and --plan-digest together', async () => {
 });
 
 test('resume rejects an out-of-range --from before any action', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-resume-range-'));
+  const root = mkdtempForTestSync('agent-device-replay-resume-range-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName));
@@ -157,7 +157,7 @@ test('resume rejects an out-of-range --from before any action', async () => {
  * exists to protect.
  */
 test("a rejected --from/--plan-digest resume never reaches prepareReplaySession's coordinator-mutating writes", async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-resume-no-mutate-'));
+  const root = mkdtempForTestSync('agent-device-replay-resume-no-mutate-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName));
@@ -207,7 +207,7 @@ test("a rejected --from/--plan-digest resume never reaches prepareReplaySession'
 });
 
 test('resume rejects a stale --plan-digest after the script changed', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-resume-stale-digest-'));
+  const root = mkdtempForTestSync('agent-device-replay-resume-stale-digest-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName));
@@ -254,9 +254,7 @@ test('resume rejects a stale --plan-digest after the script changed', async () =
 });
 
 test('resume rejects a digest from a different effective platform or target before any action', async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-replay-resume-effective-target-'),
-  );
+  const root = mkdtempForTestSync('agent-device-replay-resume-effective-target-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName));
@@ -312,7 +310,7 @@ test('resume rejects a digest from a different effective platform or target befo
   }
 });
 test('resume rejects resuming past a retry-wrapped step in the skipped range', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-resume-control-flow-'));
+  const root = mkdtempForTestSync('agent-device-replay-resume-control-flow-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName));
@@ -381,7 +379,7 @@ test('resume rejects resuming past a retry-wrapped step in the skipped range', a
 });
 
 test('typed Maestro resume digest binds an inferred session target', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-session-target-'));
+  const root = mkdtempForTestSync('agent-device-maestro-session-target-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   const session = makeIosSession(sessionName);
@@ -433,7 +431,7 @@ test('typed Maestro resume digest binds an inferred session target', async () =>
 });
 
 test('typed Maestro rejects selectors that conflict with an active session', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-session-conflict-'));
+  const root = mkdtempForTestSync('agent-device-maestro-session-conflict-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName));
@@ -460,7 +458,7 @@ test('typed Maestro rejects selectors that conflict with an active session', asy
 });
 
 test('fresh typed Maestro replay resolves its configured app before runtime defaults', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-app-selection-'));
+  const root = mkdtempForTestSync('agent-device-maestro-app-selection-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const flowPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(flowPath, 'appId: com.example.demo\n---\n- launchApp\n');
@@ -497,7 +495,7 @@ test('fresh typed Maestro replay resolves its configured app before runtime defa
 });
 
 test('native replay applies an authored Android platform to its static app open', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-native-android-selection-'));
+  const root = mkdtempForTestSync('agent-device-native-android-selection-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const replayPath = path.join(root, 'flow.ad');
   fs.writeFileSync(
@@ -525,7 +523,7 @@ test('native replay applies an authored Android platform to its static app open'
 });
 
 test('platform-less typed Maestro replay preserves a resolved Android device', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-android-selection-'));
+  const root = mkdtempForTestSync('agent-device-maestro-android-selection-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const flowPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(flowPath, 'appId: com.example.demo\n---\n- launchApp\n');
@@ -556,7 +554,7 @@ test('platform-less typed Maestro replay preserves a resolved Android device', a
 });
 
 test('typed Maestro resume digest binds effective stored runtime hints', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-session-runtime-'));
+  const root = mkdtempForTestSync('agent-device-maestro-session-runtime-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName));

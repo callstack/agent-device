@@ -1,13 +1,13 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import type { IncomingMessage } from 'node:http';
 import { receiveUpload } from '../upload.ts';
 import { streamReadableToFile } from '../artifact-download.ts';
 import { runCmdSync } from '../../utils/exec.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 function makeUploadRequest(body: Buffer, headers: Record<string, string>): IncomingMessage {
   return Object.assign(Readable.from(body), { headers }) as IncomingMessage;
@@ -24,7 +24,7 @@ test('receiveUpload rejects uploads that exceed the configured content-length li
 });
 
 test('receiveUpload rejects app bundle archives containing symlinks', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-upload-archive-'));
+  const tempRoot = mkdtempForTestSync('agent-device-upload-archive-');
   const appDir = path.join(tempRoot, 'Sample.app');
   const targetFile = path.join(tempRoot, 'payload.txt');
   const archivePath = path.join(tempRoot, 'Sample.tar');
@@ -51,7 +51,7 @@ test('receiveUpload rejects app bundle archives containing symlinks', async () =
 });
 
 test('streamReadableToFile removes partial files after stream errors', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-upload-error-'));
+  const tempRoot = mkdtempForTestSync('agent-device-upload-error-');
   const destPath = path.join(tempRoot, 'partial.bin');
   const source = new Readable({
     read() {

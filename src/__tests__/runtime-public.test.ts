@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import {
@@ -19,6 +18,7 @@ import {
   type FileInputRef,
   type FileOutputRef,
 } from '../io.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 const backend = {
   platform: 'ios',
@@ -136,7 +136,7 @@ test('local artifact adapter marks command outputs and temp files by visibility'
 });
 
 test('local artifact adapter can constrain explicit local paths to a root', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-local-root-'));
+  const root = mkdtempForTestSync('agent-device-local-root-');
   try {
     const adapter = createLocalArtifactAdapter({ cwd: root, rootDir: root });
 

@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { createAgentDeviceClient } from '../../agent-device-client.ts';
@@ -9,6 +8,7 @@ import type { AgentDeviceClient } from '../../client/client-types.ts';
 import type { CommandExecutionResult } from '../../commands/command-surface.ts';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
 import { validateAgainstSchema } from './output-schema-validator.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -65,7 +65,7 @@ test('MCP collection results use object envelopes without changing object result
 });
 
 test('MCP applies config-backed command defaults with explicit-input precedence and applicability', async () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-mcp-config-'));
+  const home = mkdtempForTestSync('agent-device-mcp-config-');
   temporaryDirectory = home;
   const configuredXctestrun = path.join(home, 'configured.xctestrun');
   fs.mkdirSync(path.join(home, '.agent-device'));

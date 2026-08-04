@@ -4,9 +4,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { readRecentNetworkTraffic } from '../network-log.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 test('readRecentNetworkTraffic parses latest HTTP entries from session log', () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-network-log-'));
+  const tempDir = mkdtempForTestSync('agent-device-network-log-');
   const logPath = path.join(tempDir, 'app.log');
   fs.writeFileSync(
     logPath,
@@ -41,7 +42,7 @@ test('readRecentNetworkTraffic parses latest HTTP entries from session log', () 
 });
 
 test('readRecentNetworkTraffic enriches Android GIBSDK URL lines with timing metadata', () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-network-log-'));
+  const tempDir = mkdtempForTestSync('agent-device-network-log-');
   const logPath = path.join(tempDir, 'app.log');
   fs.writeFileSync(
     logPath,
@@ -72,7 +73,7 @@ test('readRecentNetworkTraffic enriches Android GIBSDK URL lines with timing met
 });
 
 test('readRecentNetworkTraffic tolerates interleaved Android lines within the packet scan window', () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-network-log-'));
+  const tempDir = mkdtempForTestSync('agent-device-network-log-');
   const logPath = path.join(tempDir, 'app.log');
   fs.writeFileSync(
     logPath,
@@ -103,7 +104,7 @@ test('readRecentNetworkTraffic tolerates interleaved Android lines within the pa
 });
 
 test('readRecentNetworkTraffic keeps Android packet enrichment disabled for Apple backends', () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-network-log-'));
+  const tempDir = mkdtempForTestSync('agent-device-network-log-');
   const logPath = path.join(tempDir, 'app.log');
   fs.writeFileSync(
     logPath,
@@ -130,7 +131,7 @@ test('readRecentNetworkTraffic keeps Android packet enrichment disabled for Appl
 });
 
 test('readRecentNetworkTraffic ignores plain documentation URLs in non-network log messages', () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-network-log-'));
+  const tempDir = mkdtempForTestSync('agent-device-network-log-');
   const logPath = path.join(tempDir, 'app.log');
   fs.writeFileSync(
     logPath,

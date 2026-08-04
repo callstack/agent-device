@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import fs, { promises as fsPromises } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test, vi } from 'vitest';
 import type { AndroidAdbExecutor } from '../adb-executor.ts';
@@ -17,6 +16,7 @@ import {
   type AndroidNativePerfSession,
 } from '../perf.ts';
 import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
+import { mkdtempForTest, mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 test('parseAndroidMemInfoSample supports legacy total row layout', () => {
   const sample = parseAndroidMemInfoSample(
@@ -65,7 +65,7 @@ test('parseAndroidMemInfoSample returns bounded top memory consumers', () => {
 
 test('captureAndroidHeapSnapshot resolves pid, dumps heap, pulls artifact, and cleans remote path', async () => {
   const calls: string[][] = [];
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-android-hprof-test-'));
+  const tmpDir = mkdtempForTestSync('agent-device-android-hprof-test-');
   const outPath = path.join(tmpDir, 'app.hprof');
   const adb: AndroidAdbExecutor = async (args) => {
     calls.push([...args]);
@@ -124,7 +124,7 @@ test('captureAndroidHeapSnapshot explains missing process failures', async () =>
 
 test('captureAndroidHeapSnapshot cleans remote path when dumpheap fails', async () => {
   const calls: string[][] = [];
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-android-hprof-dump-fail-'));
+  const tmpDir = mkdtempForTestSync('agent-device-android-hprof-dump-fail-');
   const outPath = path.join(tmpDir, 'app.hprof');
   const adb: AndroidAdbExecutor = async (args) => {
     calls.push([...args]);
@@ -153,7 +153,7 @@ test('captureAndroidHeapSnapshot cleans remote path when dumpheap fails', async 
 });
 
 test('captureAndroidHeapSnapshot removes partial local artifact when pull fails', async () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-android-hprof-pull-fail-'));
+  const tmpDir = mkdtempForTestSync('agent-device-android-hprof-pull-fail-');
   const outPath = path.join(tmpDir, 'app.hprof');
   const adb: AndroidAdbExecutor = async (args) => {
     if (args.join(' ') === 'shell pidof com.example.app') {
@@ -366,7 +366,7 @@ test('startAndroidSimpleperfProfile resolves pid and starts a bounded simpleperf
 });
 
 test('stopAndroidSimpleperfProfile pulls the profile artifact and reports compact metadata', async () => {
-  const tmpDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'agent-device-simpleperf-test-'));
+  const tmpDir = await mkdtempForTest('agent-device-simpleperf-test-');
   const outPath = path.join(tmpDir, 'cpu.perf.data');
   const calls: string[][] = [];
   const session: AndroidNativePerfSession = {
@@ -409,9 +409,7 @@ test('stopAndroidSimpleperfProfile pulls the profile artifact and reports compac
 
 test('stopAndroidSimpleperfProfile fails before pull when remote artifact never stabilizes', async () => {
   vi.useFakeTimers();
-  const tmpDir = await fsPromises.mkdtemp(
-    path.join(os.tmpdir(), 'agent-device-simpleperf-missing-test-'),
-  );
+  const tmpDir = await mkdtempForTest('agent-device-simpleperf-missing-test-');
   const session: AndroidNativePerfSession = {
     type: 'cpu-profile',
     kind: 'simpleperf',
@@ -490,7 +488,7 @@ test('cleanupAndroidNativePerfSession stops profiler and removes remote artifact
 });
 
 test('start and stop Android Perfetto trace use perfetto trace storage and cleanup remote artifact', async () => {
-  const tmpDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'agent-device-perfetto-test-'));
+  const tmpDir = await mkdtempForTest('agent-device-perfetto-test-');
   const outPath = path.join(tmpDir, 'app.perfetto-trace');
   const calls: string[][] = [];
   const adb = makePerfettoTraceAdbExecutor(outPath, calls);
@@ -522,9 +520,7 @@ test('start and stop Android Perfetto trace use perfetto trace storage and clean
 });
 
 test('writeAndroidSimpleperfReport writes JSON report artifact without returning report contents', async () => {
-  const tmpDir = await fsPromises.mkdtemp(
-    path.join(os.tmpdir(), 'agent-device-simpleperf-report-test-'),
-  );
+  const tmpDir = await mkdtempForTest('agent-device-simpleperf-report-test-');
   const outPath = path.join(tmpDir, 'cpu-report.json');
   const session: AndroidNativePerfSession = {
     type: 'cpu-profile',

@@ -1,9 +1,9 @@
 import { beforeEach, test, onTestFinished, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { mkdtempForTest, mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const { mockRunCmdStreaming, mockRunCmdSync, mockRepairMacOsRunnerProductsIfNeeded } = vi.hoisted(
   () => ({
@@ -196,7 +196,7 @@ const runnerProtocolCommandFixtures: Record<RunnerCommand['command'], RunnerComm
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../..');
 
 async function makeTmpDir(): Promise<string> {
-  const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'agent-device-xctestrun-'));
+  const tmpDir = await mkdtempForTest('agent-device-xctestrun-');
   onTestFinished(async () => {
     await fs.promises.rm(tmpDir, { recursive: true, force: true });
   });
@@ -953,7 +953,7 @@ test('parseRunnerResponse emits diagnostics for runner gesture fallbacks', async
 });
 
 function writeRunnerLogTail(contents: string): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-runner-log-'));
+  const dir = mkdtempForTestSync('agent-device-runner-log-');
   onTestFinished(() => fs.rmSync(dir, { recursive: true, force: true }));
   const logPath = path.join(dir, 'runner.log');
   fs.writeFileSync(logPath, contents);
@@ -970,7 +970,7 @@ test('isRetryableRunnerError does not retry xcodebuild early-exit errors', () =>
 
 async function captureParseRunnerDiagnostics(callback: () => Promise<void>): Promise<string> {
   const previousHome = process.env.HOME;
-  process.env.HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-runner-parse-diag-'));
+  process.env.HOME = mkdtempForTestSync('agent-device-runner-parse-diag-');
   try {
     return await withDiagnosticsScope(
       { session: 'runner-parse-test', requestId: 'request-1', command: 'drag' },

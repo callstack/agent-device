@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
@@ -7,10 +6,11 @@ import { LeaseRegistry } from '../lease-registry.ts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
 import { finalizeDaemonSessionLease } from './daemon-session-lease-finalizer.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 test('journals and bounds a hung recoverable session lease release before the final drain', async () => {
   vi.useFakeTimers();
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-lease-finalizer-'));
+  const stateDir = mkdtempForTestSync('agent-device-daemon-lease-finalizer-');
   const leaseRegistry = new LeaseRegistry();
   const lease = leaseRegistry.allocateLease({
     tenantId: 'tenant-a',

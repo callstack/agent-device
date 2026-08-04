@@ -1,8 +1,8 @@
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 vi.mock('../utils/exec.ts', () => ({
   runCmdDetached: vi.fn(),
@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 test('prepareMetroRuntime stops a spawned Metro process when startup readiness times out', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-metro-startup-cleanup-'));
+  const tempRoot = mkdtempForTestSync('agent-device-metro-startup-cleanup-');
   const projectRoot = path.join(tempRoot, 'project');
   fs.mkdirSync(path.join(projectRoot, 'node_modules'), { recursive: true });
   fs.writeFileSync(

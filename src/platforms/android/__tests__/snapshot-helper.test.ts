@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, test } from 'vitest';
 import {
@@ -22,6 +21,7 @@ import type {
 } from '../snapshot-helper-types.ts';
 import type { AndroidAdbProvider } from '../adb-executor.ts';
 import { resetAndroidSnapshotHelperRetirements } from '../snapshot-helper-retirement.ts';
+import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 const manifest: AndroidSnapshotHelperManifest = {
   name: 'android-snapshot-helper',
@@ -169,7 +169,7 @@ test('parseAndroidSnapshotHelperOutput falls back to error type for null helper 
 });
 
 test('ensureAndroidSnapshotHelper installs when missing and skips a newer version', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapshot-helper-install-'));
+  const tmpDir = await mkdtempForTest('snapshot-helper-install-');
   const apkPath = path.join(tmpDir, 'helper.apk');
   await fs.writeFile(apkPath, 'helper-apk');
   const localManifest = {
@@ -208,7 +208,7 @@ test('ensureAndroidSnapshotHelper installs when missing and skips a newer versio
 });
 
 test('ensureAndroidSnapshotHelper tags a device-side install rejection distinctly from artifact resolution', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapshot-helper-install-reject-'));
+  const tmpDir = await mkdtempForTest('snapshot-helper-install-reject-');
   const apkPath = path.join(tmpDir, 'helper.apk');
   await fs.writeFile(apkPath, 'helper-apk');
   const adb: AndroidAdbExecutor = async (args) => {
@@ -240,7 +240,7 @@ test('ensureAndroidSnapshotHelper tags a device-side install rejection distinctl
 });
 
 test('ensureAndroidSnapshotHelper tags a rejected provider install without losing the enriched error', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapshot-helper-install-throw-'));
+  const tmpDir = await mkdtempForTest('snapshot-helper-install-throw-');
   const apkPath = path.join(tmpDir, 'helper.apk');
   await fs.writeFile(apkPath, 'helper-apk');
   const installError = new AppError('COMMAND_FAILED', 'Failed to install Android snapshot helper', {
@@ -282,7 +282,7 @@ test('ensureAndroidSnapshotHelper tags a rejected provider install without losin
 });
 
 test('ensureAndroidSnapshotHelper replaces same-version helper when APK bytes differ', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapshot-helper-identity-'));
+  const tmpDir = await mkdtempForTest('snapshot-helper-identity-');
   const apkPath = path.join(tmpDir, 'helper.apk');
   await fs.writeFile(apkPath, 'new-helper-apk');
   const localManifest = {
@@ -327,7 +327,7 @@ test('ensureAndroidSnapshotHelper replaces same-version helper when APK bytes di
 });
 
 test('installing a same-version different-sha helper evicts the stale install memo', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapshot-helper-memo-evict-'));
+  const tmpDir = await mkdtempForTest('snapshot-helper-memo-evict-');
   const apkPathA = path.join(tmpDir, 'helper-a.apk');
   const apkPathB = path.join(tmpDir, 'helper-b.apk');
   await fs.writeFile(apkPathA, 'helper-apk-a');
@@ -395,7 +395,7 @@ test('installing a same-version different-sha helper evicts the stale install me
 });
 
 test('ensureAndroidSnapshotHelper caches successful install checks per device and helper version', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapshot-helper-install-cache-'));
+  const tmpDir = await mkdtempForTest('snapshot-helper-install-cache-');
   const apkPath = path.join(tmpDir, 'helper.apk');
   await fs.writeFile(apkPath, 'helper-apk');
   const localManifest = {
@@ -463,7 +463,7 @@ test('ensureAndroidSnapshotHelper caches successful install checks per device an
 });
 
 test('ensureAndroidSnapshotHelper always policy bypasses cached install result', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapshot-helper-install-always-'));
+  const tmpDir = await mkdtempForTest('snapshot-helper-install-always-');
   const apkPath = path.join(tmpDir, 'helper.apk');
   await fs.writeFile(apkPath, 'helper-apk');
   const localManifest = {
@@ -523,7 +523,7 @@ test('ensureAndroidSnapshotHelper always policy bypasses cached install result',
 });
 
 test('shared Android helper verifier rejects snapshot helper checksum mismatch', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapshot-helper-sha-'));
+  const tmpDir = await mkdtempForTest('snapshot-helper-sha-');
   const apkPath = path.join(tmpDir, 'helper.apk');
   await fs.writeFile(apkPath, 'actual');
 
@@ -551,7 +551,7 @@ test('ensureAndroidSnapshotHelper never policy does not probe device', async () 
 });
 
 test('ensureAndroidSnapshotHelper uninstalls and retries when signatures differ', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapshot-helper-reinstall-'));
+  const tmpDir = await mkdtempForTest('snapshot-helper-reinstall-');
   const apkPath = path.join(tmpDir, 'helper.apk');
   await fs.writeFile(apkPath, 'helper-apk');
   const calls: string[][] = [];
@@ -593,7 +593,7 @@ test('ensureAndroidSnapshotHelper uninstalls and retries when signatures differ'
 });
 
 test('ensureAndroidSnapshotHelper uses provider install capability and semantic install options', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapshot-helper-provider-install-'));
+  const tmpDir = await mkdtempForTest('snapshot-helper-provider-install-');
   const apkPath = path.join(tmpDir, 'helper.apk');
   await fs.writeFile(apkPath, 'helper-apk');
   const installCalls: Array<{
@@ -649,7 +649,7 @@ test('ensureAndroidSnapshotHelper uses provider install capability and semantic 
 });
 
 test('ensureAndroidSnapshotHelper retry install also uses provider install capability', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapshot-helper-provider-retry-'));
+  const tmpDir = await mkdtempForTest('snapshot-helper-provider-retry-');
   const apkPath = path.join(tmpDir, 'helper.apk');
   await fs.writeFile(apkPath, 'helper-apk');
   const adbCalls: string[][] = [];

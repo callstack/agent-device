@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { createCustomReplayTestReporter } from '../custom.ts';
+import { mkdtempForTest } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 test.each([
   {
@@ -27,7 +27,7 @@ test.each([
     expectedName: 'async-factory',
   },
 ])('loads the shipped $label form', async ({ source, expectedName }) => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-reporter-contract-'));
+  const root = await mkdtempForTest('agent-device-reporter-contract-');
   const modulePath = path.join(root, 'reporter.mjs');
   try {
     await fs.writeFile(modulePath, source, 'utf8');
@@ -46,7 +46,7 @@ test.each([
 // public surface a shipped custom reporter is written against. The extraction preserves them
 // exactly, so they are pinned by name rather than by structural inference.
 test('prefers createReporter over default and reporter when a module exports several', async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-reporter-precedence-'));
+  const root = await mkdtempForTest('agent-device-reporter-precedence-');
   const modulePath = path.join(root, 'reporter.mjs');
   try {
     await fs.writeFile(
@@ -92,7 +92,7 @@ test.each([
   'onSuiteEnd',
   'getExitCode',
 ])('validates the shipped optional hook name %s', async (hook) => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-reporter-hook-'));
+  const root = await mkdtempForTest('agent-device-reporter-hook-');
   const modulePath = path.join(root, 'reporter.mjs');
   try {
     await fs.writeFile(
@@ -113,7 +113,7 @@ test.each([
 });
 
 test('rejects malformed reporter hooks when the module is loaded', async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-reporter-invalid-'));
+  const root = await mkdtempForTest('agent-device-reporter-invalid-');
   const modulePath = path.join(root, 'reporter.mjs');
   try {
     await fs.writeFile(

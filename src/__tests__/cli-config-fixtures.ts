@@ -1,9 +1,9 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 export function makeTempWorkspace(): { root: string; home: string; project: string } {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-config-'));
+  const root = mkdtempForTestSync('agent-device-config-');
   const home = path.join(root, 'home');
   const project = path.join(root, 'project');
   fs.mkdirSync(home, { recursive: true });

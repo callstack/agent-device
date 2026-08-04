@@ -1,11 +1,11 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { PNG } from '../../utils/png.ts';
 import { annotateScreenshotWithRefs, buildScreenshotOverlayRefs } from '../screenshot-overlay.ts';
 import { makeSnapshotState } from '../../__tests__/test-utils/snapshot-builders.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 function writeSolidPng(filePath: string, width: number, height: number): void {
   const png = new PNG({ width, height });
@@ -445,7 +445,7 @@ test('buildScreenshotOverlayRefs trims Android row spacing from unlabeled action
 });
 
 test('annotateScreenshotWithRefs draws the overlay onto the saved PNG', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-screenshot-overlay-'));
+  const root = mkdtempForTestSync('agent-device-screenshot-overlay-');
   const screenshotPath = path.join(root, 'screen.png');
   writeSolidPng(screenshotPath, 100, 50);
   const snapshot = makeSnapshotState([

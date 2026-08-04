@@ -1,14 +1,14 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { ensureAndroidSdkPathConfigured, resolveAndroidSdkRoots } from '../sdk.ts';
+import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 async function withTempSdkLayout(
   run: (ctx: { env: NodeJS.ProcessEnv; sdkRoot: string }) => Promise<void>,
 ): Promise<void> {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-android-sdk-'));
+  const tmpDir = await mkdtempForTest('agent-device-android-sdk-');
   const sdkRoot = path.join(tmpDir, 'Android', 'Sdk');
   const cmdlineToolsLatestDir = path.join(sdkRoot, 'cmdline-tools', 'latest', 'bin');
   const cmdlineToolsToolsDir = path.join(sdkRoot, 'cmdline-tools', 'tools', 'bin');

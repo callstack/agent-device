@@ -21,6 +21,7 @@
 // fixed Android emulator, and `snapshot` returns an empty hierarchy (which is what makes
 // `assertNotVisible` pass deterministically without a screen).
 import { expect, test, vi } from 'vitest';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -149,7 +150,7 @@ function maestroInvoke(req: DaemonRequest): DaemonResponse {
 }
 
 test('a Maestro suite reaches the reporter with step payloads and attempt-scoped identity', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-reporter-maestro-'));
+  const root = mkdtempForTestSync('agent-device-reporter-maestro-');
   fs.writeFileSync(path.join(root, '01-login.yaml'), MAESTRO_FLOW);
 
   const { hooks, suite, exitCode } = await runMaestroSuiteThroughReporter({
@@ -230,7 +231,7 @@ test('a Maestro suite reaches the reporter with step payloads and attempt-scoped
 });
 
 test('Maestro step sessions track the running attempt across a retry', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-reporter-maestro-retry-'));
+  const root = mkdtempForTestSync('agent-device-reporter-maestro-retry-');
   fs.writeFileSync(path.join(root, '01-retry.yaml'), MAESTRO_FLOW);
 
   // The first attempt's `back` fails, so attempt 1 fails at step 2 and attempt 2 passes.

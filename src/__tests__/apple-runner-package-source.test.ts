@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { onTestFinished, test } from 'vitest';
 import { runCmd } from '../utils/exec.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const packageScript = path.join(repoRoot, 'scripts', 'package-apple-runner-source.mjs');
@@ -14,7 +14,7 @@ const runnerSnapshotSwiftPath = path.join(
 );
 
 test('package apple runner source strips unit-test blocks without mutating checkout source', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-runner-package-'));
+  const root = mkdtempForTestSync('agent-device-runner-package-');
   onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
   writeStripFixtureTree(root);
 
@@ -114,7 +114,7 @@ test('package apple runner source allows only the runner entrypoint test method'
 });
 
 test('package apple runner source removes legacy dist/apple-runner output before shipping', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-runner-package-legacy-'));
+  const root = mkdtempForTestSync('agent-device-runner-package-legacy-');
   onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
 
   // Minimal current-layout source so packaging succeeds.

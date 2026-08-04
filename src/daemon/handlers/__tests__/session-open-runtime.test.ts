@@ -1,10 +1,10 @@
 import { test, expect, vi, beforeEach } from 'vitest';
-import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -67,7 +67,7 @@ const mockResolveAndroidPackage = vi.mocked(resolveAndroidPackageForOpen);
 const noopInvoke = async (_req: DaemonRequest): Promise<DaemonResponse> => ({ ok: true, data: {} });
 
 function makeSessionStore(): SessionStore {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-session-open-runtime-'));
+  const root = mkdtempForTestSync('agent-device-session-open-runtime-');
   return new SessionStore(path.join(root, 'sessions'));
 }
 

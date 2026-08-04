@@ -1,5 +1,6 @@
 import { isMacOs } from '@agent-device/kernel/device';
 import { expect, vi, beforeEach } from 'vitest';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -96,8 +97,6 @@ vi.mock('../session-deploy.ts', async (importOriginal) => {
   };
 });
 
-import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { cleanupRetainedMaterializedPathsForSession } from '../../materialized-path-registry.ts';
 import { SessionStore } from '../../session-store.ts';
@@ -230,7 +229,7 @@ beforeEach(() => {
 });
 
 export function makeSessionStore(): SessionStore {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-session-handler-'));
+  const root = mkdtempForTestSync('agent-device-session-handler-');
   return new SessionStore(path.join(root, 'sessions'));
 }
 

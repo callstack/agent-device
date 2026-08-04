@@ -1,8 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import {
   loginWithDeviceAuth,
   readCliSession,
@@ -13,6 +11,7 @@ import {
   writeCliSession,
 } from '../auth-session.ts';
 import { normalizeError } from '@agent-device/kernel/errors';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const baseFlags = {
   json: false,
@@ -24,7 +23,7 @@ const baseFlags = {
 };
 
 test('remote auth uses AGENT_DEVICE_DAEMON_AUTH_TOKEN without login', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-auth-env-'));
+  const tempRoot = mkdtempForTestSync('agent-device-auth-env-');
   const calls: string[] = [];
   const result = await resolveRemoteAuth({
     command: 'connect',
@@ -46,7 +45,7 @@ test('remote auth uses AGENT_DEVICE_DAEMON_AUTH_TOKEN without login', async () =
 });
 
 test('remote auth fails in CI with service token instructions', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-auth-ci-'));
+  const tempRoot = mkdtempForTestSync('agent-device-auth-ci-');
 
   await assert.rejects(
     async () =>
@@ -65,7 +64,7 @@ test('remote auth fails in CI with service token instructions', async () => {
 });
 
 test('non-interactive auth hint preserves safe API-token setup URL', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-auth-url-hint-'));
+  const tempRoot = mkdtempForTestSync('agent-device-auth-url-hint-');
 
   try {
     await resolveRemoteAuth({
@@ -90,7 +89,7 @@ test('non-interactive auth hint preserves safe API-token setup URL', async () =>
 });
 
 test('remote auth leaves non-cloud remote daemons to existing daemon auth validation', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-auth-non-cloud-'));
+  const tempRoot = mkdtempForTestSync('agent-device-auth-non-cloud-');
   writeCliSession({
     stateDir: tempRoot,
     session: {
@@ -122,7 +121,7 @@ test('remote auth leaves non-cloud remote daemons to existing daemon auth valida
 });
 
 test('remote auth refreshes a stored CLI session into an agent token', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-auth-refresh-'));
+  const tempRoot = mkdtempForTestSync('agent-device-auth-refresh-');
   writeCliSession({
     stateDir: tempRoot,
     session: {
@@ -166,7 +165,7 @@ test('remote auth refreshes a stored CLI session into an agent token', async () 
 });
 
 test('remote auth fails immediately when stored CLI session is revoked', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-auth-revoked-'));
+  const tempRoot = mkdtempForTestSync('agent-device-auth-revoked-');
   writeCliSession({
     stateDir: tempRoot,
     session: {
@@ -197,7 +196,7 @@ test('remote auth fails immediately when stored CLI session is revoked', async (
 });
 
 test('device login opens browser, stores CLI session, and returns agent token', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-auth-login-'));
+  const tempRoot = mkdtempForTestSync('agent-device-auth-login-');
   const opened: string[] = [];
   let stderr = '';
   const requests: string[] = [];
@@ -272,7 +271,7 @@ test('device login opens browser, stores CLI session, and returns agent token', 
 });
 
 test('auth summary and logout do not expose stored refresh credentials', () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-auth-summary-'));
+  const tempRoot = mkdtempForTestSync('agent-device-auth-summary-');
   writeCliSession({
     stateDir: tempRoot,
     session: {

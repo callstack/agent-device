@@ -25,6 +25,10 @@ export const TEST_RUN_TMP_PREFIX = 'agent-device-test-run-';
 
 let testRunTmpDir: string;
 
+// setup/teardown are vitest's globalSetup contract: it imports this file by
+// the path string in vitest.config.ts and calls these by name, so nothing in
+// the source graph references them directly.
+// fallow-ignore-next-line unused-exports
 export function setup(): void {
   // The pid is embedded so check-tmpdir-leaks.ts can tell a directory that's
   // still in active use (its vitest process is alive — a concurrent run in
@@ -36,6 +40,7 @@ export function setup(): void {
   process.env.TMPDIR = testRunTmpDir;
 }
 
+// fallow-ignore-next-line unused-exports
 export function teardown(): void {
   fs.rmSync(testRunTmpDir, { recursive: true, force: true });
 }

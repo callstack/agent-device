@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { resolveAgentBrowserTool } from './agent-browser-tool.ts';
 import { installFakeManagedAgentBrowser } from './__tests__/test-utils.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 test('managed agent-browser tool reports actionable guidance when install is missing', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-web-tool-'));
+  const stateDir = mkdtempForTestSync('agent-device-web-tool-');
   try {
     await assert.rejects(
       () => resolveAgentBrowserTool({ stateDir }),
@@ -24,7 +24,7 @@ test('managed agent-browser tool reports actionable guidance when install is mis
 });
 
 test('managed agent-browser tool uses short runtime home for backend state', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-web-tool-'));
+  const stateDir = mkdtempForTestSync('agent-device-web-tool-');
   try {
     const status = installFakeManagedAgentBrowser(stateDir);
 

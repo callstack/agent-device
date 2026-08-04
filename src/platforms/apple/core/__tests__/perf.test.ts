@@ -1,8 +1,8 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { mkdtempForTest } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../../utils/exec.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../../utils/exec.ts')>();
@@ -159,7 +159,7 @@ test('parseAppleFramePerfSample summarizes app hitches and worst windows', () =>
 });
 
 test('sampleApplePerfMetrics aggregates host ps metrics for macOS app bundle', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-macos-perf-'));
+  const tmpDir = await mkdtempForTest('agent-device-macos-perf-');
   const bundlePath = path.join(tmpDir, 'Example.app');
   await fs.mkdir(path.join(bundlePath, 'Contents'), { recursive: true });
   await fs.writeFile(
@@ -206,7 +206,7 @@ test('sampleApplePerfMetrics aggregates host ps metrics for macOS app bundle', a
 });
 
 test('sampleApplePerfMetrics uses simctl spawn ps for iOS simulators', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-sim-perf-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-sim-perf-');
   const appPath = path.join(tmpDir, 'Example.app');
   await fs.mkdir(appPath, { recursive: true });
   await fs.writeFile(
@@ -251,7 +251,7 @@ test('sampleApplePerfMetrics uses simctl spawn ps for iOS simulators', async () 
 });
 
 test('captureAppleMemorySnapshot records memgraph for iOS simulator processes', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-sim-memgraph-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-sim-memgraph-');
   const appPath = path.join(tmpDir, 'Example.app');
   const outPath = path.join(tmpDir, 'app.memgraph');
   await fs.mkdir(appPath, { recursive: true });
@@ -313,7 +313,7 @@ test('captureAppleMemorySnapshot records memgraph for iOS simulator processes', 
 });
 
 test('captureAppleMemorySnapshot records memgraph for macOS app processes', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-macos-memgraph-'));
+  const tmpDir = await mkdtempForTest('agent-device-macos-memgraph-');
   const bundlePath = path.join(tmpDir, 'Example.app');
   const outPath = path.join(tmpDir, 'app.memgraph');
   await fs.mkdir(path.join(bundlePath, 'Contents'), { recursive: true });
@@ -363,7 +363,7 @@ test('captureAppleMemorySnapshot records memgraph for macOS app processes', asyn
 });
 
 test('captureAppleMemorySnapshot removes partial memgraph when leaks exits nonzero', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-memgraph-fail-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-memgraph-fail-');
   const appPath = path.join(tmpDir, 'Example.app');
   const outPath = path.join(tmpDir, 'app.memgraph');
   await fs.mkdir(appPath, { recursive: true });
@@ -411,7 +411,7 @@ test('captureAppleMemorySnapshot removes partial memgraph when leaks exits nonze
 });
 
 test('captureAppleMemorySnapshot removes partial memgraph and hints when leaks times out', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-memgraph-timeout-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-memgraph-timeout-');
   const appPath = path.join(tmpDir, 'Example.app');
   const outPath = path.join(tmpDir, 'app.memgraph');
   await fs.mkdir(appPath, { recursive: true });
@@ -486,7 +486,7 @@ test('captureAppleMemorySnapshot reports physical iOS as unavailable', async () 
 });
 
 test('captureAppleMemorySnapshot reports iOS simulator without process tools as unavailable', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-sim-no-ps-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-sim-no-ps-');
   const appPath = path.join(tmpDir, 'Example.app');
   await fs.mkdir(appPath, { recursive: true });
   await fs.writeFile(
@@ -540,7 +540,7 @@ test('captureAppleMemorySnapshot reports iOS simulator without process tools as 
 });
 
 test('sampleApplePerfMetrics falls back to host ps when simulator ps is unavailable', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-sim-perf-'));
+  const tmpDir = await mkdtempForTest('agent-device-ios-sim-perf-');
   const appPath = path.join(tmpDir, 'Example.app');
   await fs.mkdir(appPath, { recursive: true });
   await fs.writeFile(
@@ -657,7 +657,7 @@ test('sampleAppleFramePerf retries transient kperf lock failures', async () => {
 }, 10_000);
 
 test('startAppleXctracePerfCapture attaches to an active iOS simulator app process', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-xctrace-sim-'));
+  const tmpDir = await mkdtempForTest('agent-device-xctrace-sim-');
   const appPath = path.join(tmpDir, 'Example.app');
   const tracePath = path.join(tmpDir, 'app.trace');
   await fs.mkdir(appPath, { recursive: true });
@@ -724,7 +724,7 @@ test('startAppleXctracePerfCapture attaches to an active iOS simulator app proce
 });
 
 test('startAppleXctracePerfCapture retries transient kperf lock failures', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-xctrace-retry-'));
+  const tmpDir = await mkdtempForTest('agent-device-xctrace-retry-');
   const tracePath = path.join(tmpDir, 'app.trace');
   mockXcrunCommands([mockIosDeviceApps, mockIosDeviceProcesses]);
   mockRunCmdBackground
@@ -754,7 +754,7 @@ test('startAppleXctracePerfCapture retries transient kperf lock failures', async
 }, 10_000);
 
 test('stopAppleXctracePerfCapture returns compact artifact metadata', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-xctrace-stop-'));
+  const tmpDir = await mkdtempForTest('agent-device-xctrace-stop-');
   const tracePath = path.join(tmpDir, 'app.trace');
   const child = { kill: vi.fn((_signal?: NodeJS.Signals) => true), pid: 1234 };
   await fs.writeFile(tracePath, 'trace', 'utf8');
@@ -786,7 +786,7 @@ test('stopAppleXctracePerfCapture returns compact artifact metadata', async () =
 
 test('stopAppleXctracePerfCapture force-kills xctrace when graceful stop times out', async () => {
   vi.useFakeTimers();
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-xctrace-stop-timeout-'));
+  const tmpDir = await mkdtempForTest('agent-device-xctrace-stop-timeout-');
   const tracePath = path.join(tmpDir, 'app.trace');
   const child = { kill: vi.fn((_signal?: NodeJS.Signals) => true), pid: 1234 };
   const capture: AppleXctracePerfCapture = {
@@ -825,7 +825,7 @@ test('stopAppleXctracePerfCapture force-kills xctrace when graceful stop times o
 
 test('stopAppleXctracePerfCapture reports confirmed cleanup after forced kill exits', async () => {
   vi.useFakeTimers();
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-xctrace-force-exit-'));
+  const tmpDir = await mkdtempForTest('agent-device-xctrace-force-exit-');
   const tracePath = path.join(tmpDir, 'app.trace');
   let resolveWait!: (result: MockRunCmdResult) => void;
   const wait = new Promise<MockRunCmdResult>((resolve) => {
@@ -871,7 +871,7 @@ test('stopAppleXctracePerfCapture reports confirmed cleanup after forced kill ex
 });
 
 test('writeAppleXctracePerfReport writes compact trace metadata JSON', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-xctrace-report-'));
+  const tmpDir = await mkdtempForTest('agent-device-xctrace-report-');
   const tracePath = path.join(tmpDir, 'app.trace');
   const reportPath = path.join(tmpDir, 'app-profile.json');
   await fs.writeFile(tracePath, 'trace', 'utf8');

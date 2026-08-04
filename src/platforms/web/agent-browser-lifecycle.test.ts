@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, test, vi } from 'vitest';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const { runCmdMock } = vi.hoisted(() => ({
   runCmdMock: vi.fn(),
@@ -41,7 +41,7 @@ afterEach(() => {
 });
 
 test('managed Chrome launch args include a stable agent-device ownership marker once', () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-web-life-'));
+  const stateDir = mkdtempForTestSync('agent-device-web-life-');
   try {
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({ stateDir });
@@ -79,7 +79,7 @@ test('managed agent-browser idle timeout defaults to five minutes and respects o
 });
 
 test('ownership detection accepts only Chrome-like processes with managed markers', () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-web-life-'));
+  const stateDir = mkdtempForTestSync('agent-device-web-life-');
   try {
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({ stateDir });
@@ -131,7 +131,7 @@ test('ownership detection accepts only Chrome-like processes with managed marker
 });
 
 test('cleanup skips reaping when the daemon reports open web sessions', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-web-life-'));
+  const stateDir = mkdtempForTestSync('agent-device-web-life-');
   try {
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({ stateDir });
@@ -148,7 +148,7 @@ test('cleanup skips reaping when the daemon reports open web sessions', async ()
 });
 
 test('cleanup skips reaping when managed browser socket activity is recent', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-web-life-'));
+  const stateDir = mkdtempForTestSync('agent-device-web-life-');
   const originalIdleTimeout = process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS;
   process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS = '60000';
   try {
@@ -172,7 +172,7 @@ test('cleanup skips reaping when managed browser socket activity is recent', asy
 });
 
 test('cleanup does not treat the shared socket directory mtime as browser activity', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-web-life-'));
+  const stateDir = mkdtempForTestSync('agent-device-web-life-');
   const originalIdleTimeout = process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS;
   process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS = '60000';
   try {
@@ -197,7 +197,7 @@ test('cleanup does not treat the shared socket directory mtime as browser activi
 
 test('cleanup signals matched browser process trees with TERM then KILL only for live pids', async () => {
   vi.useFakeTimers();
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-web-life-'));
+  const stateDir = mkdtempForTestSync('agent-device-web-life-');
   const originalIdleTimeout = process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS;
   process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS = '1';
   const alivePids = new Set([101, 201, 301, 999]);
@@ -259,7 +259,7 @@ test('cleanup signals matched browser process trees with TERM then KILL only for
 });
 
 test('process summary reports only conservatively owned managed Chrome processes', () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-web-life-'));
+  const stateDir = mkdtempForTestSync('agent-device-web-life-');
   try {
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({ stateDir });

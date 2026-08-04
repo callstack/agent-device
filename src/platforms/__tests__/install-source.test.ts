@@ -23,6 +23,7 @@ import {
   withAppleToolProvider,
 } from '../apple/core/tool-provider.ts';
 import { ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE } from './install-source.coverage.ts';
+import { mkdtempForTest } from '../../__tests__/test-utils/tmp-dir.ts';
 
 test('validateDownloadSourceUrl rejects localhost and private literal addresses by default', async () => {
   await assert.rejects(
@@ -85,7 +86,7 @@ test('isTrustedInstallSourceUrl recognizes supported artifact services', () => {
 });
 
 test('materializeInstallablePath rejects archive extraction when disabled', async () => {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-install-source-archive-'));
+  const tempRoot = await mkdtempForTest('agent-device-install-source-archive-');
   const archivePath = path.join(tempRoot, 'bundle.zip');
   await fs.writeFile(archivePath, 'placeholder');
   try {
@@ -108,7 +109,7 @@ test.sequential('materializeInstallablePath extracts zip archives without ditto'
   const unzipPath = findExecutableInPath('unzip');
   assert.ok(unzipPath, 'unzip must be available for portable zip extraction');
 
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-install-source-unzip-'));
+  const tempRoot = await mkdtempForTest('agent-device-install-source-unzip-');
   const archivePath = path.join(tempRoot, 'bundle.zip');
   const binDir = path.join(tempRoot, 'bin');
   const payloadDir = path.join(tempRoot, 'payload');
@@ -143,7 +144,7 @@ test.sequential('materializeInstallablePath extracts zip archives without ditto'
 });
 
 test('materializeInstallablePath extracts tar.gz archives', async () => {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-install-source-tar-'));
+  const tempRoot = await mkdtempForTest('agent-device-install-source-tar-');
   const archivePath = path.join(tempRoot, 'bundle.tar.gz');
   const payloadDir = path.join(tempRoot, 'payload');
   const apkPath = path.join(payloadDir, 'Sample.apk');
@@ -183,7 +184,7 @@ test('prepareIosInstallArtifact rejects untrusted URL sources', async () => {
 });
 
 test(ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE.testName, async () => {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-direct-apk-url-'));
+  const tempRoot = await mkdtempForTest('agent-device-direct-apk-url-');
   try {
     const manifestPath = path.join(tempRoot, 'AndroidManifest.xml');
     const apkPath = path.join(tempRoot, 'fixture.apk');
@@ -228,7 +229,7 @@ test('prepareAndroidInstallArtifact rejects private direct APK URL sources', asy
 });
 
 test('prepareAndroidInstallArtifact accepts direct AAB URL sources', async () => {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-direct-aab-url-'));
+  const tempRoot = await mkdtempForTest('agent-device-direct-aab-url-');
   try {
     const manifestDir = path.join(tempRoot, 'base', 'manifest');
     const aabPath = path.join(tempRoot, 'fixture.aab');
@@ -474,7 +475,7 @@ test('prepareIosInstallArtifact cleans URL materialization when IPA payload reso
 });
 
 test('prepareAndroidInstallArtifact rejects trusted artifact archives with multiple installables', async () => {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-github-multiple-'));
+  const tempRoot = await mkdtempForTest('agent-device-github-multiple-');
   const archivePath = path.join(tempRoot, 'artifact.zip');
   await fs.writeFile(path.join(tempRoot, 'one.apk'), 'one', 'utf8');
   await fs.writeFile(path.join(tempRoot, 'two.apk'), 'two', 'utf8');
@@ -494,7 +495,7 @@ test('prepareAndroidInstallArtifact rejects trusted artifact archives with multi
 });
 
 test('prepareAndroidInstallArtifact rejects untrusted URL archives instead of extracting them', async () => {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-untrusted-archive-'));
+  const tempRoot = await mkdtempForTest('agent-device-untrusted-archive-');
   const archivePath = path.join(tempRoot, 'artifact.zip');
   await fs.writeFile(path.join(tempRoot, 'app.apk'), 'apk', 'utf8');
   execFileSync('zip', ['-q', archivePath, 'app.apk'], { cwd: tempRoot });
@@ -621,7 +622,7 @@ async function withMockedInstallSourceFetch(
 async function withIsolatedInstallTempRoot(
   run: (tempRoot: string) => Promise<void>,
 ): Promise<void> {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-install-source-root-'));
+  const tempRoot = await mkdtempForTest('agent-device-install-source-root-');
   const tmpdirSpy = vi.spyOn(os, 'tmpdir').mockReturnValue(tempRoot);
   try {
     await run(tempRoot);

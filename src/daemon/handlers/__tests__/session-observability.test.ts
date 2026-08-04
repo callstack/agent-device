@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import fs, { promises as fsPromises } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
 import type { AndroidAdbExecutor } from '../../../platforms/android/adb-executor.ts';
@@ -9,6 +8,7 @@ import { makeAndroidSession, makeIosSession } from '../../../__tests__/test-util
 import { AppError } from '@agent-device/kernel/errors';
 import type { AppleXctracePerfCapture } from '../../../platforms/apple/core/perf-xctrace.ts';
 import type { DaemonResponse } from '../../types.ts';
+import { mkdtempForTest, mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 const applePerfMocks = vi.hoisted(() => ({
   startAppleXctracePerfCapture: vi.fn(),
@@ -466,7 +466,7 @@ test('perf memory sample routes to memory-only Android sampler', async () => {
 });
 
 test('perf memory snapshot resolves relative output and returns Android artifact metadata', async () => {
-  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-perf-memory-cwd-'));
+  const cwd = mkdtempForTestSync('agent-device-perf-memory-cwd-');
   const sessionStore = makeSessionStore('agent-device-session-observability-');
   sessionStore.set('android', {
     name: 'android',
@@ -681,9 +681,7 @@ test('perf memory snapshot returns artifact-shaped unsupported payload on unsupp
 });
 
 test('perf cpu profile start and stop route through Android simpleperf and preserve compact artifact state', async () => {
-  const tmpDir = await fsPromises.mkdtemp(
-    path.join(os.tmpdir(), 'agent-device-daemon-simpleperf-'),
-  );
+  const tmpDir = await mkdtempForTest('agent-device-daemon-simpleperf-');
   const outPath = path.join(tmpDir, 'cpu.perf.data');
   const sessionStore = makeSessionStore('agent-device-session-observability-');
   sessionStore.set('android', makeAndroidSession('android', { appBundleId: 'com.example.app' }));
@@ -734,9 +732,7 @@ test('perf cpu profile start and stop route through Android simpleperf and prese
 });
 
 test('perf rejects starting a second Android native capture while one is active', async () => {
-  const tmpDir = await fsPromises.mkdtemp(
-    path.join(os.tmpdir(), 'agent-device-daemon-double-start-'),
-  );
+  const tmpDir = await mkdtempForTest('agent-device-daemon-double-start-');
   const outPath = path.join(tmpDir, 'cpu.perf.data');
   const sessionStore = makeSessionStore('agent-device-session-observability-');
   sessionStore.set('android', makeAndroidSession('android', { appBundleId: 'com.example.app' }));
@@ -782,7 +778,7 @@ test('perf rejects starting a second Android native capture while one is active'
 });
 
 test('perf trace start and stop route through Android perfetto and preserve compact artifact state', async () => {
-  const tmpDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'agent-device-daemon-perfetto-'));
+  const tmpDir = await mkdtempForTest('agent-device-daemon-perfetto-');
   const outPath = path.join(tmpDir, 'app.perfetto-trace');
   const sessionStore = makeSessionStore('agent-device-session-observability-');
   sessionStore.set('android', makeAndroidSession('android', { appBundleId: 'com.example.app' }));

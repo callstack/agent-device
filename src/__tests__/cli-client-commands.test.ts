@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
@@ -16,6 +15,7 @@ import type {
 import type { SettingsUpdateOptions } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveCliOptions } from '../cli/resolve-cli-options.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 test('install-from-source forwards URL and repeated headers to client.apps.installFromSource', async () => {
   let observed: AppInstallFromSourceOptions | undefined;
@@ -473,7 +473,7 @@ test('screenshot forwards --overlay-refs to the client capture API', async () =>
 });
 
 test('diff screenshot forwards --surface to live client screenshot capture', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-cli-diff-surface-'));
+  const dir = mkdtempForTestSync('agent-device-cli-diff-surface-');
   const baseline = path.join(dir, 'baseline.png');
   const out = path.join(dir, 'diff.png');
   fs.writeFileSync(baseline, solidPngBuffer(4, 4, { r: 0, g: 0, b: 0 }));
@@ -675,7 +675,7 @@ test('screenshot reports annotated ref count in non-json mode', async () => {
 });
 
 test('replay export writes Maestro YAML without contacting the daemon', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-export-'));
+  const dir = mkdtempForTestSync('agent-device-replay-export-');
   const sourcePath = path.join(dir, 'flow.ad');
   const outPath = path.join(dir, 'flow.yaml');
   fs.writeFileSync(
@@ -891,7 +891,7 @@ test('metro prepare wraps output in the standard success envelope for --json', a
 });
 
 test('metro prepare with --remote-config loads profile defaults', async () => {
-  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-remote-metro-'));
+  const tmpRoot = mkdtempForTestSync('agent-device-remote-metro-');
   const configDir = path.join(tmpRoot, 'config');
   fs.mkdirSync(configDir, { recursive: true });
   const remoteConfigPath = path.join(configDir, 'remote.json');

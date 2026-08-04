@@ -20,6 +20,7 @@
  * sentinel, so a stale/partial file never blocks a later repair.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../platforms/apple/core/simulator.ts', async (importOriginal) => {
   const actual =
@@ -54,7 +55,6 @@ vi.mock('../session-device-utils.ts', async (importOriginal) => {
 });
 
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { runReplayScriptFile } from '../session-replay-runtime.ts';
 import { handleCloseCommand } from '../session-close.ts';
@@ -129,7 +129,7 @@ const SAVE_ANNOTATION =
   '# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"verified"}';
 
 function setup(prefix: string) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const root = mkdtempForTestSync(prefix);
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));

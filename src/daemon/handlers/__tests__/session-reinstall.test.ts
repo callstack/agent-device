@@ -1,4 +1,5 @@
 import { test, expect, vi, beforeEach } from 'vitest';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -15,7 +16,6 @@ vi.mock('../session-deploy.ts', async (importOriginal) => {
 });
 
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { handleSessionCommands } from '../session.ts';
 import { trackUploadedArtifact } from '../../artifact-tracking.ts';
@@ -41,7 +41,7 @@ beforeEach(() => {
 });
 
 function makeStore(): SessionStore {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-session-app-deploy-'));
+  const tempRoot = mkdtempForTestSync('agent-device-session-app-deploy-');
   return new SessionStore(path.join(tempRoot, 'sessions'));
 }
 
@@ -153,7 +153,7 @@ test('install omits app id fields when platform op cannot resolve them', async (
   });
   sessionStore.set('default', session);
   mockResolveTargetDevice.mockResolvedValue(session.device!);
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-install-fallback-appid-'));
+  const tempRoot = mkdtempForTestSync('agent-device-install-fallback-appid-');
   const appPath = path.join(tempRoot, 'Sample.apk');
   fs.writeFileSync(appPath, 'placeholder');
 
@@ -196,7 +196,7 @@ test('install accepts path without app id hint', async () => {
   });
   sessionStore.set('default', session);
   mockResolveTargetDevice.mockResolvedValue(session.device!);
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-install-path-only-'));
+  const tempRoot = mkdtempForTestSync('agent-device-install-path-only-');
   const appPath = path.join(tempRoot, 'Sample.apk');
   fs.writeFileSync(appPath, 'placeholder');
 
@@ -241,7 +241,7 @@ test('reinstall resolves uploaded artifacts by id and cleans temp files after co
   });
   sessionStore.set('default', session);
   mockResolveTargetDevice.mockResolvedValue(session.device!);
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-uploaded-artifact-'));
+  const tempRoot = mkdtempForTestSync('agent-device-uploaded-artifact-');
   const appPath = path.join(tempRoot, 'Sample.app');
   fs.writeFileSync(appPath, 'placeholder');
   const uploadedArtifactId = trackUploadedArtifact({ artifactPath: appPath, tempDir: tempRoot });

@@ -7,6 +7,7 @@
  */
 import { test, expect, vi, beforeEach } from 'vitest';
 import { markRepairTransactionComplete } from '../../session-replay-transaction.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -14,7 +15,6 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
 });
 
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { runReplayScriptFile } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
@@ -62,7 +62,7 @@ const SAVE_ANNOTATION =
   '# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"verified"}';
 
 test('a healed script survives repair + fresh-session replay: self-contained open, every selector step annotated, no bare @ref', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-repair-accept-'));
+  const root = mkdtempForTestSync('agent-device-replay-repair-accept-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
@@ -139,7 +139,7 @@ test('a healed script survives repair + fresh-session replay: self-contained ope
   // --- Replay the healed script end-to-end in a completely FRESH session
   // (separate SessionStore, separate state dir — never reuses the repair
   // session). ---
-  const freshRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-repair-fresh-'));
+  const freshRoot = mkdtempForTestSync('agent-device-replay-repair-fresh-');
   const freshSessionStore = new SessionStore(path.join(freshRoot, 'sessions'));
   const freshSessionName = 'fresh';
   const invokedFresh: DaemonRequest[] = [];

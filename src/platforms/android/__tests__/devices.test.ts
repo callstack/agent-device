@@ -1,8 +1,9 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { appendFileSync, existsSync, promises as fs, writeFileSync } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
+
 vi.mock('../../../utils/exec.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
   return { ...actual, runCmdDetached: vi.fn(actual.runCmdDetached) };
@@ -179,7 +180,7 @@ async function withMockedAndroidTools(
   run: (ctx: { emulatorLogPath: string; emulatorBootedPath: string }) => Promise<void>,
   options: { avdNameMode?: 'success' | 'missing' } = {},
 ): Promise<void> {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-android-headless-'));
+  const tmpDir = await mkdtempForTest('agent-device-android-headless-');
   const emulatorLogPath = path.join(tmpDir, 'emulator.log');
   const emulatorBootedPath = path.join(tmpDir, 'emulator.booted');
   const adbPath = path.join(tmpDir, 'adb');
@@ -221,7 +222,7 @@ async function withMockedAndroidSdkRoot(
     sdkRoot: string;
   }) => Promise<void>,
 ): Promise<void> {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-android-sdk-root-'));
+  const tmpDir = await mkdtempForTest('agent-device-android-sdk-root-');
   const sdkRoot = path.join(tmpDir, 'Android', 'Sdk');
   const platformToolsDir = path.join(sdkRoot, 'platform-tools');
   const emulatorDir = path.join(sdkRoot, 'emulator');

@@ -1,6 +1,5 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { PNG } from '../../../utils/png.ts';
 import { handleSnapshotCommands } from '../snapshot.ts';
@@ -14,6 +13,7 @@ import { buildInteractionSurfaceSignature } from '../../interaction-outcome-poli
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
 import { snapshotCliOutput } from '../../../commands/capture/output.ts';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -54,7 +54,7 @@ const mockStopIosRunnerSession = vi.mocked(stopIosRunnerSession);
 const mockCloseIosApp = vi.mocked(closeIosApp);
 
 function makeSessionStore(): SessionStore {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-snapshot-handler-'));
+  const root = mkdtempForTestSync('agent-device-snapshot-handler-');
   return new SessionStore(path.join(root, 'sessions'));
 }
 

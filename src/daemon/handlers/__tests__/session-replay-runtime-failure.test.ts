@@ -1,11 +1,11 @@
 import { test, expect, vi, beforeEach } from 'vitest';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
   return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
 });
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { runReplayScriptFile } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
@@ -25,7 +25,7 @@ beforeEach(() => {
   mockDispatchCommand.mockResolvedValue({});
 });
 test('a failing replay step returns REPLAY_DIVERGENCE with cause preserved and correct step provenance', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-'));
+  const root = mkdtempForTestSync('agent-device-replay-divergence-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
@@ -104,7 +104,7 @@ test('a failing replay step returns REPLAY_DIVERGENCE with cause preserved and c
 });
 
 test('#1262: a LAST-step failure with NO active session carries NO empty-tail alternateFrom and never advertises --from length+1 in text', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-no-session-tail-'));
+  const root = mkdtempForTestSync('agent-device-replay-no-session-tail-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   // NO session is pre-seeded — a single-step plan whose only (LAST) step fails
@@ -150,7 +150,7 @@ test('#1262: a LAST-step failure with NO active session carries NO empty-tail al
 });
 
 test('a normalized nested failure preserves typed recovery signals on REPLAY_DIVERGENCE', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-recovery-signals-'));
+  const root = mkdtempForTestSync('agent-device-replay-recovery-signals-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
@@ -183,7 +183,7 @@ test('a normalized nested failure preserves typed recovery signals on REPLAY_DIV
 });
 
 test('a failing replay step captures an available screen digest with blessed refs', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-screen-'));
+  const root = mkdtempForTestSync('agent-device-replay-divergence-screen-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
@@ -230,7 +230,7 @@ test('a failing replay step captures an available screen digest with blessed ref
 });
 
 test('a failing replay step ranks a re-resolved suggestion when the recorded selector still matches', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-suggest-'));
+  const root = mkdtempForTestSync('agent-device-replay-divergence-suggest-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
@@ -281,7 +281,7 @@ test('a failing replay step ranks a re-resolved suggestion when the recorded sel
 });
 
 test('divergence screen never masks the original cause when the session already closed', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-no-session-'));
+  const root = mkdtempForTestSync('agent-device-replay-divergence-no-session-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   // Intentionally no session stored: simulates the session closing mid-replay.
@@ -327,7 +327,7 @@ function writeMaestroInclude(root: string): string {
 }
 
 test('a failure inside a retry-wrapped runFlow include reports the include file and line', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-retry-provenance-'));
+  const root = mkdtempForTestSync('agent-device-replay-retry-provenance-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName));
@@ -378,7 +378,7 @@ test('a failure inside a retry-wrapped runFlow include reports the include file 
 });
 
 test('a failure inside a runtime runFlow.when-wrapped include reports the include file and line', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-when-provenance-'));
+  const root = mkdtempForTestSync('agent-device-replay-when-provenance-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName));
@@ -428,7 +428,7 @@ test('a failure inside a runtime runFlow.when-wrapped include reports the includ
 });
 
 test('typed Maestro failures rank suggestions with Maestro regex selector semantics', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-suggestion-'));
+  const root = mkdtempForTestSync('agent-device-maestro-suggestion-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName));
@@ -484,7 +484,7 @@ test('typed Maestro failures rank suggestions with Maestro regex selector semant
 });
 
 test('typed Maestro failures never serialize input text', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-text-redaction-'));
+  const root = mkdtempForTestSync('agent-device-maestro-text-redaction-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName));

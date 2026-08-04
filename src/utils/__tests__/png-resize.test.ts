@@ -1,11 +1,11 @@
 import { afterAll, test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { PNG } from '../png.ts';
 import { resizePngFileToMaxSize } from '../png-resize.ts';
 import { terminatePngWorker } from '../png-worker-client.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 afterAll(async () => {
   await terminatePngWorker();
@@ -42,10 +42,7 @@ test('resizePngFileToMaxSize shrinks the longest edge to the limit', async () =>
 });
 
 function tmpPngPath(prefix: string): string {
-  return path.join(
-    fs.mkdtempSync(path.join(os.tmpdir(), `agent-device-png-${prefix}-`)),
-    'image.png',
-  );
+  return path.join(mkdtempForTestSync(`agent-device-png-${prefix}-`), 'image.png');
 }
 
 function setPngPixel(

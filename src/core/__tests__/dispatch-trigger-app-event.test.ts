@@ -1,7 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { dispatchCommand } from '../dispatch.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -10,6 +9,7 @@ import {
   IOS_DEVICE,
   MACOS_DEVICE,
 } from '../../__tests__/test-utils/device-fixtures.ts';
+import { mkdtempForTest } from '../../__tests__/test-utils/tmp-dir.ts';
 
 test('trigger-app-event reports missing URL template as UNSUPPORTED_OPERATION', async () => {
   const previousGlobalTemplate = process.env.AGENT_DEVICE_APP_EVENT_URL_TEMPLATE;
@@ -63,7 +63,7 @@ test('trigger-app-event validates payload JSON', async () => {
 });
 
 test('trigger-app-event opens deep link with encoded event payload', async () => {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-dispatch-trigger-event-'));
+  const tempDir = await mkdtempForTest('agent-device-dispatch-trigger-event-');
   const adbPath = path.join(tempDir, 'adb');
   const argsLogPath = path.join(tempDir, 'args.log');
   await fs.writeFile(
@@ -107,9 +107,7 @@ test('trigger-app-event opens deep link with encoded event payload', async () =>
 });
 
 test('trigger-app-event prefers platform-specific template over global template', async () => {
-  const tempDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), 'agent-device-dispatch-trigger-template-'),
-  );
+  const tempDir = await mkdtempForTest('agent-device-dispatch-trigger-template-');
   const adbPath = path.join(tempDir, 'adb');
   const argsLogPath = path.join(tempDir, 'args.log');
   await fs.writeFile(
@@ -148,7 +146,7 @@ test('trigger-app-event prefers platform-specific template over global template'
 });
 
 test('trigger-app-event supports iOS device path and prefers iOS template', async () => {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-dispatch-trigger-ios-'));
+  const tempDir = await mkdtempForTest('agent-device-dispatch-trigger-ios-');
   const xcrunPath = path.join(tempDir, 'xcrun');
   const argsLogPath = path.join(tempDir, 'args.log');
   await fs.writeFile(
@@ -205,7 +203,7 @@ test('trigger-app-event supports iOS device path and prefers iOS template', asyn
 });
 
 test('trigger-app-event supports macOS and prefers macOS template', async () => {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-dispatch-trigger-macos-'));
+  const tempDir = await mkdtempForTest('agent-device-dispatch-trigger-macos-');
   const openPath = path.join(tempDir, 'open');
   const argsLogPath = path.join(tempDir, 'args.log');
   await fs.writeFile(

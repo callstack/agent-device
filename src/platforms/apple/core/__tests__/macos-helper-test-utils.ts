@@ -1,15 +1,13 @@
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
+import { mkdtempForTest } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 export async function withMockedMacOsHelper<T>(
   script: string,
   run: (ctx: { tmpDir: string; helperPath: string }) => Promise<T>,
   options?: { tempPrefix?: string },
 ): Promise<T> {
-  const tmpDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), options?.tempPrefix ?? 'agent-device-macos-helper-test-'),
-  );
+  const tmpDir = await mkdtempForTest(options?.tempPrefix ?? 'agent-device-macos-helper-test-');
   const helperPath = path.join(tmpDir, 'agent-device-macos-helper');
   await fs.writeFile(helperPath, script, 'utf8');
   await fs.chmod(helperPath, 0o755);

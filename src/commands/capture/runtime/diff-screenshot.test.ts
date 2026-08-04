@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { PNG } from '../../../utils/png.ts';
 import { test } from 'vitest';
@@ -15,6 +14,7 @@ import {
   localCommandPolicy,
   type CommandSessionStore,
 } from '../../../runtime.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 const sessions = {
   get: () => undefined,
@@ -22,7 +22,7 @@ const sessions = {
 } satisfies CommandSessionStore;
 
 test('runtime diff screenshot captures live current image and cleans temporary capture', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-diff-screenshot-'));
+  const dir = mkdtempForTestSync('runtime-diff-screenshot-');
   const baseline = path.join(dir, 'baseline.png');
   const diffOut = path.join(dir, 'diff.png');
   let capturedCurrentPath: string | undefined;
@@ -65,7 +65,7 @@ test('runtime diff screenshot captures live current image and cleans temporary c
 });
 
 test('runtime diff screenshot compares supplied current image without backend capture', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-diff-screenshot-'));
+  const dir = mkdtempForTestSync('runtime-diff-screenshot-');
   const baseline = path.join(dir, 'baseline.png');
   const current = path.join(dir, 'current.png');
   fs.writeFileSync(baseline, solidPngBuffer(10, 10, { r: 0, g: 0, b: 0 }));
@@ -116,7 +116,7 @@ test('runtime diff screenshot rejects overlay refs with supplied current image',
 });
 
 test('runtime diff screenshot enforces max image pixels policy', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-diff-screenshot-'));
+  const dir = mkdtempForTestSync('runtime-diff-screenshot-');
   const baseline = path.join(dir, 'baseline.png');
   const current = path.join(dir, 'current.png');
   fs.writeFileSync(baseline, solidPngBuffer(10, 10, { r: 0, g: 0, b: 0 }));
@@ -146,7 +146,7 @@ test('runtime diff screenshot enforces max image pixels policy', async () => {
 });
 
 test('runtime diff screenshot attaches overlay refs to live mismatch regions', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-diff-screenshot-'));
+  const dir = mkdtempForTestSync('runtime-diff-screenshot-');
   const baseline = path.join(dir, 'baseline.png');
   const diffOut = path.join(dir, 'diff.png');
   const overlayOut = path.join(dir, 'diff.current-overlay.png');

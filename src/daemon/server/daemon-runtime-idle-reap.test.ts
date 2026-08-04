@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { resolveDaemonPaths } from '../config.ts';
 import { startDaemonRuntime } from './daemon-runtime.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -12,7 +11,7 @@ afterEach(() => {
 
 test('daemon runtime self-reaps after the idle window when nothing ever uses it', async () => {
   vi.useFakeTimers();
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-idle-reap-rt-'));
+  const stateDir = mkdtempForTestSync('agent-device-daemon-idle-reap-rt-');
   const paths = resolveDaemonPaths(stateDir);
   let exitCode: number | undefined;
   let resolveExit: () => void;
@@ -56,7 +55,7 @@ test('daemon runtime self-reaps after the idle window when nothing ever uses it'
 
 test('daemon runtime never self-reaps when AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS is 0', async () => {
   vi.useFakeTimers();
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-idle-reap-off-'));
+  const stateDir = mkdtempForTestSync('agent-device-daemon-idle-reap-off-');
   let exitCode: number | undefined;
 
   try {

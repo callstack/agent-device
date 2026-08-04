@@ -20,14 +20,13 @@
  * zero-match selector) instead of returning it.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
   return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
 });
 
-import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { runReplayScriptFile } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
@@ -95,9 +94,7 @@ function assertDivergenceShape(
 }
 
 test('(a) an ANNOTATED press whose dispatch throws a selector-miss yields REPLAY_DIVERGENCE, not COMMAND_FAILED', async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-replay-dispatch-miss-annotated-'),
-  );
+  const root = mkdtempForTestSync('agent-device-replay-dispatch-miss-annotated-');
   const { sessionStore, sessionName } = setupSession(root);
   const evidence = recordArticleEvidence();
   const filePath = writeReplayFile(root, [
@@ -151,9 +148,7 @@ test('(a) an ANNOTATED press whose dispatch throws a selector-miss yields REPLAY
 });
 
 test('(b) an UNANNOTATED press whose dispatch throws a selector-miss yields REPLAY_DIVERGENCE, not COMMAND_FAILED', async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-replay-dispatch-miss-unannotated-'),
-  );
+  const root = mkdtempForTestSync('agent-device-replay-dispatch-miss-unannotated-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, ['click label="Renamed Button"']);
 
@@ -186,7 +181,7 @@ test('(b) an UNANNOTATED press whose dispatch throws a selector-miss yields REPL
 });
 
 test('(c) a fill selector-miss thrown at dispatch yields REPLAY_DIVERGENCE, not COMMAND_FAILED', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-dispatch-miss-fill-'));
+  const root = mkdtempForTestSync('agent-device-replay-dispatch-miss-fill-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, [`fill 'label="Email"' "someone@example.com"`]);
 
@@ -218,9 +213,7 @@ test('(c) a fill selector-miss thrown at dispatch yields REPLAY_DIVERGENCE, not 
 });
 
 test('(d) a thrown NON-AppError at dispatch propagates as an internal error, not REPLAY_DIVERGENCE', async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-replay-dispatch-miss-nonapperror-'),
-  );
+  const root = mkdtempForTestSync('agent-device-replay-dispatch-miss-nonapperror-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, ['click label="Renamed Button"']);
 
@@ -253,9 +246,7 @@ test('(d) a thrown NON-AppError at dispatch propagates as an internal error, not
 });
 
 test('(e) a thrown AppError with retriable/supportedOn preserves them at the top level of the divergence response', async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-replay-dispatch-miss-retriable-'),
-  );
+  const root = mkdtempForTestSync('agent-device-replay-dispatch-miss-retriable-');
   const { sessionStore, sessionName } = setupSession(root);
   const filePath = writeReplayFile(root, ['click label="Renamed Button"']);
 

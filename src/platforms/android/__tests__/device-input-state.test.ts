@@ -3,8 +3,6 @@ import { test } from 'vitest';
 import type { AndroidAdbExecutor } from '../adb-executor.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import {
   dismissAndroidKeyboard,
   getAndroidKeyboardState,
@@ -12,6 +10,7 @@ import {
 } from '../device-input-state.ts';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
 import { withScriptedAdb } from '../../../__tests__/test-utils/mocked-binaries.ts';
+import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 test('getAndroidKeyboardStatusWithAdb exposes active input method package', async () => {
   const adb: AndroidAdbExecutor = async (args) => {
@@ -136,7 +135,7 @@ test('getAndroidKeyboardState diagnoses fallback IME ownership classification', 
       '',
     ].join('\n'),
     async ({ device }) => {
-      const homeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-diagnostics-home-'));
+      const homeDir = await mkdtempForTest('agent-device-diagnostics-home-');
       const previousHome = process.env.HOME;
       let diagnosticsPath: string | null = null;
       try {

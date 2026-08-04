@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -59,7 +59,7 @@ afterEach(() => {
 });
 
 function setup(): { store: SessionStore; stateDir: string } {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-session-device-claim-'));
+  const stateDir = mkdtempForTestSync('agent-device-session-device-claim-');
   const claimsDir = path.join(stateDir, 'claims');
   process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
   roots.push(stateDir);

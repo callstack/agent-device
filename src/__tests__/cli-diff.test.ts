@@ -10,6 +10,7 @@ import {
   type CapturedCliRun,
   type CapturedDaemonRequest,
 } from './cli-capture.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 type RunCliCaptureOptions = {
   preserveHome?: boolean;
@@ -35,7 +36,7 @@ async function runCliCapture(
   argv: string[],
   options: RunCliCaptureOptions = {},
 ): Promise<CapturedCliRun> {
-  const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-diff-home-'));
+  const tempHome = mkdtempForTestSync('cli-diff-home-');
 
   const sendToDaemon = async (req: CapturedDaemonRequest): Promise<DaemonResponse> => {
     if (req.command === 'screenshot') {
@@ -164,7 +165,7 @@ describe('cli diff commands', () => {
   test('diff screenshot renders human-readable mismatch output', async () => {
     // Create a real baseline PNG (black) so compareScreenshots can run against it.
     // The mock sendToDaemon writes a white PNG as the "current" screenshot.
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-diff-test-'));
+    const dir = mkdtempForTestSync('cli-diff-test-');
     const baseline = path.join(dir, 'baseline.png');
     fs.writeFileSync(baseline, solidPngBuffer(10, 10, { r: 0, g: 0, b: 0 }));
 
@@ -191,7 +192,7 @@ describe('cli diff commands', () => {
   });
 
   test('diff screenshot --json outputs structured result', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-diff-test-'));
+    const dir = mkdtempForTestSync('cli-diff-test-');
     const baseline = path.join(dir, 'baseline.png');
     // Same color as mock current screenshot → should match
     fs.writeFileSync(baseline, solidPngBuffer(10, 10, { r: 255, g: 255, b: 255 }));
@@ -215,7 +216,7 @@ describe('cli diff commands', () => {
   });
 
   test('diff screenshot sends screenshot capture request to daemon', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-diff-test-'));
+    const dir = mkdtempForTestSync('cli-diff-test-');
     const baseline = path.join(dir, 'baseline.png');
     fs.writeFileSync(baseline, solidPngBuffer(10, 10, { r: 255, g: 255, b: 255 }));
 
@@ -242,7 +243,7 @@ describe('cli diff commands', () => {
   });
 
   test('diff screenshot uses supplied current image instead of capturing from daemon', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-diff-test-'));
+    const dir = mkdtempForTestSync('cli-diff-test-');
     const baseline = path.join(dir, 'baseline.png');
     const current = path.join(dir, 'current.png');
     fs.writeFileSync(baseline, solidPngBuffer(10, 10, { r: 0, g: 0, b: 0 }));
@@ -269,7 +270,7 @@ describe('cli diff commands', () => {
   });
 
   test('diff screenshot rejects overlay refs with supplied current image', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-diff-test-'));
+    const dir = mkdtempForTestSync('cli-diff-test-');
     const baseline = path.join(dir, 'baseline.png');
     const current = path.join(dir, 'current.png');
     fs.writeFileSync(baseline, solidPngBuffer(10, 10, { r: 0, g: 0, b: 0 }));
@@ -293,7 +294,7 @@ describe('cli diff commands', () => {
   });
 
   test('diff screenshot uses os.tmpdir for temporary current capture', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-diff-test-'));
+    const dir = mkdtempForTestSync('cli-diff-test-');
     const baseline = path.join(dir, 'baseline.png');
     fs.writeFileSync(baseline, solidPngBuffer(10, 10, { r: 255, g: 255, b: 255 }));
 
@@ -312,7 +313,7 @@ describe('cli diff commands', () => {
   });
 
   test('diff screenshot expands ~/ for baseline and out paths', async () => {
-    const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-diff-home-'));
+    const fakeHome = mkdtempForTestSync('cli-diff-home-');
     const originalHome = process.env.HOME;
     const baselineRelative = path.join('fixtures', 'baseline.png');
     const diffRelative = path.join('fixtures', 'diff.png');
@@ -357,7 +358,7 @@ describe('cli diff commands', () => {
   });
 
   test('diff screenshot --overlay-refs writes a separate current overlay guide', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-diff-test-'));
+    const dir = mkdtempForTestSync('cli-diff-test-');
     const baseline = path.join(dir, 'baseline.png');
     const diffOut = path.join(dir, 'diff.png');
     const overlayOut = path.join(dir, 'diff.current-overlay.png');

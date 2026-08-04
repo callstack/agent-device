@@ -1,8 +1,8 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 vi.mock('../cli/commands/react-devtools.ts', () => ({
   runReactDevtoolsCommand: vi.fn(async () => 0),
@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 function createLimrunConnectionFixture(): { tempRoot: string; stateDir: string } {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-react-devtools-limrun-'));
+  const tempRoot = mkdtempForTestSync('agent-device-react-devtools-limrun-');
   const stateDir = path.join(tempRoot, 'state');
   const remoteConfigPath = path.join(tempRoot, 'limrun.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ platform: 'android' }));
@@ -52,7 +52,7 @@ function createLimrunConnectionFixture(): { tempRoot: string; stateDir: string }
 }
 
 test('react-devtools uses active remote connection session after defaults are merged', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-react-devtools-session-'));
+  const tempRoot = mkdtempForTestSync('agent-device-react-devtools-session-');
   const stateDir = path.join(tempRoot, 'state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(

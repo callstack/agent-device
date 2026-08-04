@@ -15,6 +15,7 @@ import { withAndroidAdbProvider } from '../adb-executor.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { withScriptedAdb } from '../../../__tests__/test-utils/mocked-binaries.ts';
+import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 test('parseAndroidLaunchComponent extracts final resolved component', () => {
   const stdout = [
@@ -90,7 +91,7 @@ test('installAndroidInstallablePath uses provider install capability when availa
 });
 
 test('installAndroidApp resolves packageName and launchTarget from nested archive artifacts', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-android-install-archive-'));
+  const tmpDir = await mkdtempForTest('agent-device-android-install-archive-');
   const adbPath = path.join(tmpDir, 'adb');
   const argsLogPath = path.join(tmpDir, 'args.log');
   const installMarkerPath = path.join(tmpDir, 'installed.marker');
@@ -165,7 +166,7 @@ test('installAndroidApp resolves packageName and launchTarget from nested archiv
 });
 
 test('installAndroidApp installs .aab via bundletool build-apks + install-apks', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-android-install-aab-'));
+  const tmpDir = await mkdtempForTest('agent-device-android-install-aab-');
   const adbPath = path.join(tmpDir, 'adb');
   const bundletoolPath = path.join(tmpDir, 'bundletool');
   const argsLogPath = path.join(tmpDir, 'args.log');
@@ -245,9 +246,7 @@ test('installAndroidApp installs .aab via bundletool build-apks + install-apks',
 });
 
 test('installAndroidApp .aab reports missing bundletool tooling', async () => {
-  const tmpDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), 'agent-device-android-install-aab-missing-tool-'),
-  );
+  const tmpDir = await mkdtempForTest('agent-device-android-install-aab-missing-tool-');
   const adbPath = path.join(tmpDir, 'adb');
   const aabPath = path.join(tmpDir, 'Sample.aab');
   await fs.writeFile(aabPath, 'placeholder', 'utf8');
@@ -289,9 +288,7 @@ test('installAndroidApp .aab reports missing bundletool tooling', async () => {
 });
 
 test('installAndroidApp .aab rejects relative AGENT_DEVICE_BUNDLETOOL_JAR overrides', async () => {
-  const tmpDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), 'agent-device-android-install-aab-relative-jar-'),
-  );
+  const tmpDir = await mkdtempForTest('agent-device-android-install-aab-relative-jar-');
   const adbPath = path.join(tmpDir, 'adb');
   const aabPath = path.join(tmpDir, 'Sample.aab');
   await fs.writeFile(aabPath, 'placeholder', 'utf8');
@@ -402,7 +399,7 @@ test('installAndroidInstallablePath invalidates cached display-name package matc
       '',
     ].join('\n'),
     async ({ device }) => {
-      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-android-cache-apk-'));
+      const tmpDir = await mkdtempForTest('agent-device-android-cache-apk-');
       const apkPath = path.join(tmpDir, 'App.apk');
       const previousMarker = process.env.AGENT_DEVICE_TEST_INSTALL_MARKER;
       process.env.AGENT_DEVICE_TEST_INSTALL_MARKER = path.join(tmpDir, 'installed.marker');

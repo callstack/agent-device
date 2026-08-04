@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
 import type { AgentBrowserProcessSummary } from '../../../platforms/web/agent-browser-lifecycle.ts';
 import { installFakeManagedAgentBrowser } from '../../../platforms/web/__tests__/test-utils.ts';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../platforms/web/agent-browser-lifecycle.ts', async () => {
   const actual = await vi.importActual<
@@ -28,7 +27,7 @@ beforeEach(() => {
 });
 
 test('web doctor lifecycle check reports live managed Chrome process count', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-web-doctor-'));
+  const stateDir = mkdtempForTestSync('agent-device-web-doctor-');
   try {
     installFakeManagedAgentBrowser(stateDir);
     mockInspectManagedAgentBrowserProcesses.mockResolvedValue({
@@ -61,7 +60,7 @@ test('web doctor lifecycle check reports live managed Chrome process count', asy
 });
 
 test('web doctor lifecycle check stays informational when managed backend is missing', async () => {
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-web-doctor-missing-'));
+  const stateDir = mkdtempForTestSync('agent-device-web-doctor-missing-');
   try {
     const checks: DoctorCheck[] = [];
     await appendWebBrowserLifecycleCheck(checks, stateDir);

@@ -1,7 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import {
   emitDiagnostic,
@@ -9,10 +8,11 @@ import {
   registerDiagnosticSensitiveValue,
   withDiagnosticsScope,
 } from '../diagnostics.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 test('diagnostics redacts sensitive fields', async () => {
   const previousHome = process.env.HOME;
-  const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-diag-redact-'));
+  const tempHome = mkdtempForTestSync('agent-device-diag-redact-');
   process.env.HOME = tempHome;
   try {
     const outputPath = await withDiagnosticsScope(
@@ -71,7 +71,7 @@ test('diagnostics redacts sensitive fields', async () => {
 
 test('diagnostics scrubs caller-declared recorded input literals regardless of field name', async () => {
   const outputPath = path.join(
-    fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-diag-recorded-input-')),
+    mkdtempForTestSync('agent-device-diag-recorded-input-'),
     'request.ndjson',
   );
   const secret = 'opaque-value-without-sensitive-keywords';

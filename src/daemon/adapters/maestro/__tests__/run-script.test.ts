@@ -1,12 +1,12 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { executeRunScriptFile } from '../run-script-execution.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 test('executeRunScriptFile exposes env and serializes output values', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-run-script-'));
+  const root = mkdtempForTestSync('agent-device-maestro-run-script-');
   const scriptPath = path.join(root, 'setup.js');
   fs.writeFileSync(
     scriptPath,
@@ -31,7 +31,7 @@ output.object = { ready: true }
 });
 
 test('executeRunScriptFile rejects output keys that cannot become replay variables', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-run-script-'));
+  const root = mkdtempForTestSync('agent-device-maestro-run-script-');
   const scriptPath = path.join(root, 'setup.js');
   fs.writeFileSync(scriptPath, `output['nested.value'] = 'ambiguous'`);
 
@@ -51,7 +51,7 @@ test('executeRunScriptFile rejects output keys that cannot become replay variabl
 });
 
 test('executeRunScriptFile keeps recovery guidance separate from its bounded error message', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-run-script-'));
+  const root = mkdtempForTestSync('agent-device-maestro-run-script-');
   const scriptPath = path.join(root, 'setup.js');
   fs.writeFileSync(scriptPath, `output.result = json('').value`);
 
@@ -73,7 +73,7 @@ test('executeRunScriptFile keeps recovery guidance separate from its bounded err
 });
 
 test('executeRunScriptFile strips prototype keys from json output', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-run-script-'));
+  const root = mkdtempForTestSync('agent-device-maestro-run-script-');
   const scriptPath = path.join(root, 'setup.js');
   fs.writeFileSync(
     scriptPath,

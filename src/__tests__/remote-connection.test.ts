@@ -1,8 +1,8 @@
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 vi.mock('../metro/client-metro-companion.ts', () => ({
   stopMetroCompanion: vi.fn(),
@@ -161,7 +161,7 @@ function createTestClient(
 }
 
 test('connect auto-generates a local session and writes minimal remote state', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(
@@ -202,7 +202,7 @@ test('connect auto-generates a local session and writes minimal remote state', a
 });
 
 test('connect proxy writes normal remote state with generated non-secret profile', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-proxy-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-proxy-');
   const stateDir = path.join(tempRoot, '.state');
 
   await captureStdout(async () => {
@@ -252,7 +252,7 @@ test('connect proxy writes normal remote state with generated non-secret profile
 });
 
 test('connect daemon-base-url shortcut uses proxy profile for direct proxy URLs', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-proxy-shortcut-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-proxy-shortcut-');
   const stateDir = path.join(tempRoot, '.state');
 
   await captureStdout(async () => {
@@ -285,7 +285,7 @@ test('connect daemon-base-url shortcut uses proxy profile for direct proxy URLs'
 });
 
 test('connect proxy scopes generated client identity by explicit session', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-proxy-sessions-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-proxy-sessions-');
   const stateDir = path.join(tempRoot, '.state');
 
   for (const session of ['agent-a', 'agent-b']) {
@@ -316,7 +316,7 @@ test('connect proxy scopes generated client identity by explicit session', async
 });
 
 test('connect proxy notice distinguishes safe inventory from lease allocation', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-proxy-notice-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-proxy-notice-');
   const stateDir = path.join(tempRoot, '.state');
 
   const stdout = await captureStdout(async () => {
@@ -343,7 +343,7 @@ test('connect proxy notice distinguishes safe inventory from lease allocation', 
 });
 
 test('generated remote config writer strips secret fields', () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-generated-profile-'));
+  const tempRoot = mkdtempForTestSync('agent-device-generated-profile-');
   const configPath = writeGeneratedRemoteConfig({
     stateDir: path.join(tempRoot, '.state'),
     provider: 'proxy',
@@ -367,7 +367,7 @@ test('generated remote config writer strips secret fields', () => {
 });
 
 test('connect proxy rejects remote-config and unknown provider combinations', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-proxy-errors-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-proxy-errors-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, '{}');
@@ -406,7 +406,7 @@ test('connect proxy rejects remote-config and unknown provider combinations', as
 });
 
 test('connect reports deferred Metro runtime preparation when remote config has Metro settings', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-metro-notice-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-metro-notice-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(
@@ -445,7 +445,7 @@ test('connect reports deferred Metro runtime preparation when remote config has 
 });
 
 test('connect without a session reuses the active generated connection', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-idempotent-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-idempotent-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(
@@ -493,7 +493,7 @@ test('connect without a session reuses the active generated connection', async (
 });
 
 test('connect missing scope errors mention remote config or flags', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-scope-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-scope-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
@@ -539,7 +539,7 @@ test('connect missing scope errors mention remote config or flags', async () => 
 });
 
 test('deferred materialization allocates lease and prepares Metro for open', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-open-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-open-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
@@ -624,7 +624,7 @@ test('deferred materialization allocates lease and prepares Metro for open', asy
 
 // fallow-ignore-next-line complexity
 test('proxy open resolves device key before allocating lease', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-proxy-open-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-proxy-open-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
@@ -704,7 +704,7 @@ test('proxy open resolves device key before allocating lease', async () => {
 });
 
 test('proxy install allocates a device lease before dispatch', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-proxy-install-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-proxy-install-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
@@ -771,7 +771,7 @@ test('proxy install allocates a device lease before dispatch', async () => {
 });
 
 test('artifacts command reuses the stored cloud lease without allocating', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-cloud-artifacts-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-cloud-artifacts-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({}));
@@ -817,7 +817,7 @@ test('artifacts command reuses the stored cloud lease without allocating', async
 });
 
 test('cloud webdriver connection allocates and heartbeats with extended lease TTL', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-cloud-ttl-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-cloud-ttl-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({}));
@@ -894,7 +894,7 @@ test('cloud webdriver connection allocates and heartbeats with extended lease TT
 });
 
 test('proxy commands without active device lease fail before allocation', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-proxy-closed-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-proxy-closed-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
@@ -942,7 +942,7 @@ test('proxy commands without active device lease fail before allocation', async 
 });
 
 test('direct remote-config materialization creates state and prepares Metro for open', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-direct-remote-open-'));
+  const tempRoot = mkdtempForTestSync('agent-device-direct-remote-open-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(
@@ -1020,7 +1020,7 @@ test('direct remote-config materialization creates state and prepares Metro for 
 });
 
 test('deferred materialization prepares Metro for batch when a step opens an app', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-batch-open-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-batch-open-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
@@ -1074,7 +1074,7 @@ test('deferred materialization prepares Metro for batch when a step opens an app
 });
 
 test('deferred materialization re-prepares runtime when explicit Metro overrides are provided', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-runtime-override-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-runtime-override-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
@@ -1174,7 +1174,7 @@ test('deferred materialization re-prepares runtime when explicit Metro overrides
 });
 
 test('cdp remote materialization prepares Metro runtime for bridge target discovery', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-agent-cdp-runtime-'));
+  const tempRoot = mkdtempForTestSync('agent-device-agent-cdp-runtime-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
@@ -1246,7 +1246,7 @@ test('cdp remote materialization prepares Metro runtime for bridge target discov
 });
 
 test('cdp remote materialization skips Metro runtime for non-target commands', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-agent-cdp-memory-'));
+  const tempRoot = mkdtempForTestSync('agent-device-agent-cdp-memory-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(path.join(tempRoot, 'remote.json'), JSON.stringify({}));
@@ -1288,7 +1288,7 @@ test('cdp remote materialization skips Metro runtime for non-target commands', a
 });
 
 test('cdp remote materialization skips Metro runtime without public CDP url', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-agent-cdp-no-public-'));
+  const tempRoot = mkdtempForTestSync('agent-device-agent-cdp-no-public-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({}));
@@ -1329,7 +1329,7 @@ test('cdp remote materialization skips Metro runtime without public CDP url', as
 });
 
 test('deferred materialization heartbeats an existing lease before dispatch', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-heartbeat-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-heartbeat-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
@@ -1401,7 +1401,7 @@ test('deferred materialization heartbeats an existing lease before dispatch', as
 });
 
 test('deferred materialization allocates pending lease for devices', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-devices-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-devices-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
@@ -1461,7 +1461,7 @@ test('deferred materialization allocates pending lease for devices', async () =>
 });
 
 test('deferred provider materialization forwards provider profile fields to lease allocation', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-provider-lease-flags-'));
+  const tempRoot = mkdtempForTestSync('agent-device-provider-lease-flags-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'browserstack.json');
   fs.writeFileSync(
@@ -1544,7 +1544,7 @@ test('deferred provider materialization forwards provider profile fields to leas
 });
 
 test('deferred materialization reallocates when the persisted lease is inactive', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-stale-lease-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-stale-lease-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
@@ -1605,7 +1605,7 @@ test('deferred materialization reallocates when the persisted lease is inactive'
 });
 
 test('deferred materialization preserves auth failures from lease allocation', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-auth-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-auth-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
@@ -1656,7 +1656,7 @@ test('deferred materialization preserves auth failures from lease allocation', a
 });
 
 test('deferred materialization does not require a lease backend for close', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-close-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-close-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
@@ -1705,7 +1705,7 @@ test('deferred materialization does not require a lease backend for close', asyn
 });
 
 test('deferred materialization stops the new Metro companion if state persistence fails', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-write-fail-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-write-fail-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
@@ -1787,7 +1787,7 @@ test('deferred materialization stops the new Metro companion if state persistenc
 });
 
 test('connect requires force when compatible scope changes platform', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-platform-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-platform-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
@@ -1833,7 +1833,7 @@ test('connect requires force when compatible scope changes platform', async () =
 });
 
 test('connect requires force when the daemon endpoint changes', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-daemon-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-daemon-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://old.example' }));
@@ -1879,7 +1879,7 @@ test('connect requires force when the daemon endpoint changes', async () => {
 });
 
 test('connect --force stops replaced Metro companion after state is updated', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-force-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-force-');
   const stateDir = path.join(tempRoot, '.state');
   const oldRemoteConfigPath = path.join(tempRoot, 'old-remote.json');
   const newRemoteConfigPath = path.join(tempRoot, 'new-remote.json');
@@ -1949,7 +1949,7 @@ test('connect --force stops replaced Metro companion after state is updated', as
 });
 
 test('connect --force without a session replaces the active generated connection', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-force-active-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-force-active-');
   const stateDir = path.join(tempRoot, '.state');
   const oldRemoteConfigPath = path.join(tempRoot, 'old-remote.json');
   const newRemoteConfigPath = path.join(tempRoot, 'new-remote.json');
@@ -2025,7 +2025,7 @@ test('connect --force without a session replaces the active generated connection
 });
 
 test('disconnect tolerates prior close and removes local connection state', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-disconnect-'));
+  const tempRoot = mkdtempForTestSync('agent-device-disconnect-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.mkdirSync(path.join(stateDir, 'remote-connections'), { recursive: true });
@@ -2083,7 +2083,7 @@ test('disconnect tolerates prior close and removes local connection state', asyn
 });
 
 test('disconnect after connect-only cleanup stays local when no session resources exist', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-disconnect-pending-'));
+  const tempRoot = mkdtempForTestSync('agent-device-disconnect-pending-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, '{}');
@@ -2128,7 +2128,7 @@ test('disconnect after connect-only cleanup stays local when no session resource
 });
 
 test('disconnect without a session uses active connection state', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-disconnect-active-'));
+  const tempRoot = mkdtempForTestSync('agent-device-disconnect-active-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   const closedSessions: Array<{ session: string | undefined; shutdown: boolean | undefined }> = [];
@@ -2177,7 +2177,7 @@ test('disconnect without a session uses active connection state', async () => {
 });
 
 test('disconnect human output surfaces provider release warnings and artifact links', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-disconnect-provider-'));
+  const tempRoot = mkdtempForTestSync('agent-device-disconnect-provider-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, '{}');
@@ -2253,7 +2253,7 @@ test('disconnect human output surfaces provider release warnings and artifact li
 });
 
 test('disconnect releases proxy lease with provider client and device metadata', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-disconnect-proxy-'));
+  const tempRoot = mkdtempForTestSync('agent-device-disconnect-proxy-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, '{}');
@@ -2312,7 +2312,7 @@ test('disconnect releases proxy lease with provider client and device metadata',
 });
 
 test('connection status reports missing state without daemon calls', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connection-status-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connection-status-');
   let handled = false;
   await captureStdout(async () => {
     handled = await connectionCommand({
@@ -2332,7 +2332,7 @@ test('connection status reports missing state without daemon calls', async () =>
 });
 
 test('connection status reports active connection state', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connection-active-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connection-active-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, '{}');
@@ -2370,7 +2370,7 @@ test('connection status reports active connection state', async () => {
 });
 
 test('connection state filenames distinguish unsafe session names', () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connection-state-names-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connection-state-names-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, '{}');

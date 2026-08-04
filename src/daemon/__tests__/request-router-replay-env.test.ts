@@ -1,13 +1,13 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { makeSessionStore } from '../../__tests__/test-utils/index.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createRequestHandler } from '../request-router.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 function createHarness() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-router-replay-env-'));
+  const root = mkdtempForTestSync('agent-device-router-replay-env-');
   return {
     root,
     handler: createRequestHandler({

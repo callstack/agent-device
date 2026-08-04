@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import {
@@ -11,6 +10,7 @@ import {
 } from '../device-claims.ts';
 import { inspectDeviceClaims } from '../device-claim-inspection.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const device: DeviceInfo = {
   platform: 'android',
@@ -29,7 +29,7 @@ afterEach(() => {
 });
 
 function useClaimsRoot(): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-claims-'));
+  const root = mkdtempForTestSync('agent-device-claims-');
   roots.push(root);
   process.env.AGENT_DEVICE_CLAIMS_DIR = root;
   return root;

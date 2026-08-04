@@ -1,8 +1,8 @@
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../utils/png-worker-client.ts', async () => {
   const [{ PNG }, { decodePng }, { computeScreenshotDiffPixels }] = await Promise.all([
@@ -23,7 +23,7 @@ import { PNG } from '../../utils/png.ts';
 import { compareScreenshots } from '../screenshot-diff.ts';
 
 function tmpDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-screenshot-diff-'));
+  return mkdtempForTestSync('agent-device-screenshot-diff-');
 }
 
 /** Create a solid-color PNG and write it to disk. */

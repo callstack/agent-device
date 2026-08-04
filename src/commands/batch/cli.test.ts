@@ -1,7 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import type { DaemonResponse } from '../../daemon/client/daemon-client.ts';
 import {
@@ -10,6 +9,7 @@ import {
   type CapturedDaemonRequest,
   type CliCaptureOptions,
 } from '../../__tests__/cli-capture.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const batchDefaultResponse: DaemonResponse = {
   ok: true,
@@ -47,7 +47,7 @@ test('batch --steps parses JSON and forwards batchSteps only', async () => {
 });
 
 test('batch --steps-file parses file payload', async () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-batch-'));
+  const tmpDir = mkdtempForTestSync('agent-device-batch-');
   const stepsPath = path.join(tmpDir, 'steps.json');
   fs.writeFileSync(
     stepsPath,
@@ -207,7 +207,7 @@ test('batch --steps-file returns clear error for missing file', async () => {
 });
 
 test('batch --steps-file rejects invalid JSON payload', async () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-batch-invalid-'));
+  const tmpDir = mkdtempForTestSync('agent-device-batch-invalid-');
   const stepsPath = path.join(tmpDir, 'steps.json');
   fs.writeFileSync(stepsPath, '{"command":"open"', 'utf8');
   const result = await runCliCapture(['batch', '--steps-file', stepsPath]);

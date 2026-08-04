@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { connectCommand } from '../cli/commands/connection.ts';
 import { resolveCloudAccessForConnect } from '../cli/auth-session.ts';
@@ -16,6 +15,7 @@ import { resolveCloudWebDriverConnectProfile } from '../cli/connection/cloud-web
 import { AppError } from '@agent-device/kernel/errors';
 import { verifyLimrunConnection } from '@agent-device/provider-limrun';
 import { providerWebDriver } from '../provider-webdriver.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 vi.mock('../cli/auth-session.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../cli/auth-session.ts')>()),
@@ -91,7 +91,7 @@ beforeEach(() => {
 });
 
 test('connect without remote config generates one from cloud connection profile', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-cloud-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-cloud-');
   const stateDir = path.join(tempRoot, '.state');
   const fetchMock = mockCloudConnectionProfile({
     remoteConfigProfile: {
@@ -146,7 +146,7 @@ test('cloud connect uses neutral public service wording in human and JSON output
 });
 
 test('connect limrun generates a local daemon remote profile', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-limrun-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-limrun-');
   const stateDir = path.join(tempRoot, '.state');
   vi.stubEnv('LIMRUN_API_KEY', 'lim_test_key');
 
@@ -198,7 +198,7 @@ test('connect limrun generates a local daemon remote profile', async () => {
 });
 
 test('connect limrun persists deferred Metro bridge settings', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-limrun-metro-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-limrun-metro-');
   const stateDir = path.join(tempRoot, '.state');
   vi.stubEnv('LIMRUN_API_KEY', 'lim_test_key');
 
@@ -253,7 +253,7 @@ test('connect limrun persists deferred Metro bridge settings', async () => {
 });
 
 test('connect limrun requires LIMRUN_API_KEY', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-limrun-env-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-limrun-env-');
   const stateDir = path.join(tempRoot, '.state');
   vi.stubEnv('LIMRUN_API_KEY', '');
   vi.stubEnv('LIM_API_KEY', 'lim_test_key');
@@ -302,7 +302,7 @@ test('connect limrun rejects unsupported public device and backend selections', 
 });
 
 test('connect without remote config rejects legacy remoteConfig string profile response', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-cloud-legacy-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-cloud-legacy-');
   const stateDir = path.join(tempRoot, '.state');
   mockCloudConnectionProfile({
     remoteConfig: JSON.stringify({
@@ -325,7 +325,7 @@ test('connect without remote config rejects legacy remoteConfig string profile r
 });
 
 test('connect without remote config reports cloud profile authorization failures', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-cloud-denied-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-cloud-denied-');
   const stateDir = path.join(tempRoot, '.state');
   mockedResolveCloudAccessForConnect.mockResolvedValue({
     accessToken: 'adc_agent_cloud',
@@ -357,7 +357,7 @@ test('connect without remote config reports cloud profile authorization failures
 });
 
 test('connect without remote config reports unsupported cloud profile keys', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-cloud-invalid-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-cloud-invalid-');
   const stateDir = path.join(tempRoot, '.state');
   mockCloudConnectionProfile({
     remoteConfigProfile: {
@@ -380,7 +380,7 @@ test('connect without remote config reports unsupported cloud profile keys', asy
 });
 
 test('connect browserstack generates local provider profile without credentials', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-browserstack-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-browserstack-');
   const stateDir = path.join(tempRoot, '.state');
   vi.stubEnv('BROWSERSTACK_USERNAME', 'browser-user');
   vi.stubEnv('BROWSERSTACK_ACCESS_KEY', 'browser-key');
@@ -416,7 +416,7 @@ test('connect browserstack generates local provider profile without credentials'
 });
 
 test('connect --remote-config verifies a direct provider profile before saving state', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-provider-config-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-provider-config-');
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfig = path.join(tempRoot, 'browserstack.remote.json');
   fs.writeFileSync(
@@ -461,7 +461,7 @@ test('connect --remote-config verifies a direct provider profile before saving s
 });
 
 test('connect browserstack persists a local app artifact as an absolute path', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-browserstack-app-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-browserstack-app-');
   const stateDir = path.join(tempRoot, '.state');
   const appPath = path.join(tempRoot, 'sample.apk');
   fs.writeFileSync(appPath, 'fixture');
@@ -494,7 +494,7 @@ test('connect browserstack persists a local app artifact as an absolute path', a
 });
 
 test('connect aws-device-farm generates local provider profile from flags', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-aws-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-aws-');
   const stateDir = path.join(tempRoot, '.state');
 
   try {
@@ -617,7 +617,7 @@ test('connect JSON preserves BrowserStack workflow notes from human output', asy
 });
 
 test('connect does not activate provider state when verification fails', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-verify-fail-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-verify-fail-');
   const stateDir = path.join(tempRoot, '.state');
   vi.stubEnv('LIMRUN_API_KEY', 'lim_bad_key');
   mockedVerifyLimrunConnection.mockRejectedValueOnce(
@@ -649,7 +649,7 @@ test('connect does not activate provider state when verification fails', async (
 });
 
 test('connect aws-device-farm rejects BrowserStack-only device-feature flags', () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-aws-reject-'));
+  const tempRoot = mkdtempForTestSync('agent-device-connect-aws-reject-');
 
   try {
     assert.throws(

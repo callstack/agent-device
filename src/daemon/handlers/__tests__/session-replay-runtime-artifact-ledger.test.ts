@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { runReplayScriptFile } from '../session-replay-runtime.ts';
@@ -10,6 +9,7 @@ import {
   baseReplayRequest as baseReq,
   writeReplayFile,
 } from './session-replay-runtime.fixtures.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 /**
  * #1478 P5 follow-up (one daemon-owned artifact ledger): artifact-path
@@ -28,7 +28,7 @@ import {
  * value instead.
  */
 test('a mid-loop throw reports exactly the artifacts of the steps that ran before it', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-artifact-ledger-'));
+  const root = mkdtempForTestSync('agent-device-replay-artifact-ledger-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
@@ -84,7 +84,7 @@ test('a mid-loop throw reports exactly the artifacts of the steps that ran befor
  * yields every step's artifacts, not just the final step's.
  */
 test('a completed run reports every step’s artifacts through the threaded ledger value', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-artifact-ledger-ok-'));
+  const root = mkdtempForTestSync('agent-device-replay-artifact-ledger-ok-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));

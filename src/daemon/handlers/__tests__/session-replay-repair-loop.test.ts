@@ -10,14 +10,13 @@
  * `session.actions` accumulates for real instead of staying empty.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
   return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
 });
 
-import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { runReplayScriptFile } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
@@ -68,7 +67,7 @@ const SAVE_ANNOTATION =
   '# agent-device:target-v1 {"id":"save","role":"button","label":"Recorded Original","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"verified"}';
 
 function setup(prefix: string, sessionOverrides = {}) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const root = mkdtempForTestSync(prefix);
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName, sessionOverrides));
@@ -389,7 +388,7 @@ test('a --no-record state-fix action never enters session.actions', () => {
 });
 
 test('R1 bootstrap: a session created by step 1 (open) arms in time for step 2 to get fresh evidence', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-repair-bootstrap-'));
+  const root = mkdtempForTestSync('agent-device-replay-repair-bootstrap-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   // No pre-existing session — `open` (step 1) creates it.
@@ -416,7 +415,7 @@ test('R1 bootstrap: a session created by step 1 (open) arms in time for step 2 t
 });
 
 test('BLOCKER 4: a minimal [open, terminal close] cold-start script arms the transaction and skips the close', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-repair-open-close-'));
+  const root = mkdtempForTestSync('agent-device-replay-repair-open-close-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   // No pre-existing session — step 1 (`open`) CREATES it, so pre-open arming is

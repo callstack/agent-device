@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
 import type { Duplex } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -13,6 +12,7 @@ import {
   runCompanionTunnelWorker,
 } from '../client/client-companion-tunnel-worker.ts';
 import { closeLoopbackServer, listenOnLoopback } from './test-utils/index.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 type Deferred<T> = {
   promise: Promise<T>;
@@ -307,7 +307,7 @@ function startMetroCompanionWorker(options: {
   statePath?: string;
   unregisterPath?: string;
 }): CompanionWorkerProcess {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-metro-companion-worker-'));
+  const tempRoot = mkdtempForTestSync('agent-device-metro-companion-worker-');
   const statePath = options.statePath ?? path.join(tempRoot, 'metro-companion.json');
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
   if (!fs.existsSync(statePath)) {
@@ -706,7 +706,7 @@ test('metro companion worker retries registration failures with retry-after dela
 });
 
 test('metro companion worker exits after its state file is removed', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-metro-companion-worker-'));
+  const tempRoot = mkdtempForTestSync('agent-device-metro-companion-worker-');
   const statePath = path.join(tempRoot, 'metro-companion.json');
   fs.writeFileSync(statePath, '{}', 'utf8');
   cleanupTasks.push(async () => {
@@ -774,7 +774,7 @@ test('metro companion worker exits after its state file is removed', async () =>
 });
 
 test('companion tunnel entrypoint reads neutral env and exits when state file is missing', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-metro-companion-worker-'));
+  const tempRoot = mkdtempForTestSync('agent-device-metro-companion-worker-');
   const statePath = path.join(tempRoot, 'missing-metro-companion.json');
   cleanupTasks.push(async () => {
     fs.rmSync(tempRoot, { recursive: true, force: true });

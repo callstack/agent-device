@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
@@ -7,6 +6,7 @@ import { resolveTargetDevice } from '../../../core/dispatch.ts';
 import { SessionStore } from '../../session-store.ts';
 import { runReplayScriptFile } from '../session-replay-runtime.ts';
 import { baseReplayRequest as baseReq } from './session-replay-runtime.fixtures.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -21,7 +21,7 @@ beforeEach(() => {
 });
 
 test('typed Maestro does not resolve a device before an explicit-platform flow needs one', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-explicit-platform-'));
+  const root = mkdtempForTestSync('agent-device-maestro-explicit-platform-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const flowPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(flowPath, 'appId: com.example.app\n---\n- launchApp\n');
@@ -47,7 +47,7 @@ test('typed Maestro does not resolve a device before an explicit-platform flow n
 });
 
 test('typed Maestro keeps a port-only runtime digest stable after launch binds the device', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-runtime-device-'));
+  const root = mkdtempForTestSync('agent-device-maestro-runtime-device-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   const flowPath = path.join(root, 'flow.yaml');

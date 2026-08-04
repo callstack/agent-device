@@ -1,6 +1,4 @@
 import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { runCli } from '../cli.ts';
 import type {
   DaemonRequest,
@@ -8,6 +6,7 @@ import type {
   sendToDaemon,
 } from '../daemon/client/daemon-client.ts';
 import { installIsolatedCliTestEnv } from './cli-test-env.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 class ExitSignal extends Error {
   public readonly code: number;
@@ -61,9 +60,7 @@ export async function runCliCapture(
   let code: number | null = null;
   const calls: CapturedDaemonRequest[] = [];
   const transportOptions: DaemonTransportOptions[] = [];
-  const stateDir = options.stateDirPrefix
-    ? fs.mkdtempSync(path.join(os.tmpdir(), options.stateDirPrefix))
-    : undefined;
+  const stateDir = options.stateDirPrefix ? mkdtempForTestSync(options.stateDirPrefix) : undefined;
 
   const originalExit = process.exit;
   const originalStdoutWrite = process.stdout.write.bind(process.stdout);

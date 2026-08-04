@@ -2,6 +2,7 @@ import { test, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../utils/exec.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
@@ -99,7 +100,7 @@ const overlaySupportWarning = getRecordingOverlaySupportWarning();
 const mockedIosRecordingOutputs: string[] = [];
 
 function makeSessionStore(): SessionStore {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-record-trace-'));
+  const root = mkdtempForTestSync('agent-device-record-trace-');
   return new SessionStore(path.join(root, 'sessions'));
 }
 

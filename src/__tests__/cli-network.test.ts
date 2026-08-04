@@ -1,9 +1,9 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { runCliCapture } from './cli-capture.ts';
+import { mkdtempForTest } from './test-utils/tmp-dir.ts';
 
 function makeFailedReplayResult() {
   return {
@@ -239,7 +239,7 @@ test('test command colors suite summary segments when color is enabled', async (
 });
 
 test('test command --verbose omits step telemetry for passing tests without debug mode', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-cli-test-verbose-'));
+  const tmpDir = await mkdtempForTest('agent-device-cli-test-verbose-');
   const artifactsDir = path.join(tmpDir, 'auth-flow');
   const attemptDir = path.join(artifactsDir, 'attempt-1');
   await fs.mkdir(attemptDir, { recursive: true });
@@ -322,7 +322,7 @@ test('test command --verbose omits step telemetry for passing tests without debu
 });
 
 test('test command --verbose includes step telemetry in completed progress output', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-cli-test-live-verbose-'));
+  const tmpDir = await mkdtempForTest('agent-device-cli-test-live-verbose-');
   const artifactsDir = path.join(tmpDir, 'auth-flow');
   const attemptDir = path.join(artifactsDir, 'attempt-1');
   await fs.mkdir(attemptDir, { recursive: true });
@@ -403,7 +403,7 @@ test('test command --verbose includes step telemetry in completed progress outpu
 });
 
 test('test command --verbose omits nested passing step telemetry', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-cli-test-verbose-retry-'));
+  const tmpDir = await mkdtempForTest('agent-device-cli-test-verbose-retry-');
   const artifactsDir = path.join(tmpDir, 'material-top-tabs');
   const attemptDir = path.join(artifactsDir, 'attempt-1');
   await fs.mkdir(attemptDir, { recursive: true });
@@ -561,7 +561,7 @@ test('test command reports flaky passed-on-retry cases in the default summary', 
 });
 
 test('test command --debug prints failed attempt step window when timing trace exists', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-cli-test-steps-'));
+  const tmpDir = await mkdtempForTest('agent-device-cli-test-steps-');
   const artifactsDir = path.join(tmpDir, 'checkout-flow');
   const attemptDir = path.join(artifactsDir, 'attempt-2');
   await fs.mkdir(attemptDir, { recursive: true });
@@ -684,7 +684,7 @@ test('test command --debug prints failed attempt step window when timing trace e
 });
 
 test('test --maestro forwards Maestro backend and platform for directory suites', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-cli-maestro-suite-'));
+  const tmpDir = await mkdtempForTest('agent-device-cli-maestro-suite-');
   await fs.writeFile(
     path.join(tmpDir, 'auth-flow.yml'),
     ['appId: demo.app', '---', '- launchApp', ''].join('\n'),
@@ -749,7 +749,7 @@ test('test forwards shard flags and comma device lists', async () => {
 });
 
 test('test command writes JUnit report with failure metadata', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-junit-test-'));
+  const tmpDir = await mkdtempForTest('agent-device-junit-test-');
   const reportPath = path.join(tmpDir, 'replays.junit.xml');
 
   try {
@@ -853,7 +853,7 @@ test('test command writes JUnit report with failure metadata', async () => {
 });
 
 test('test command supports explicit reporter lists', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-reporter-test-'));
+  const tmpDir = await mkdtempForTest('agent-device-reporter-test-');
   const reportPath = path.join(tmpDir, 'replays.junit.xml');
 
   try {
@@ -872,7 +872,7 @@ test('test command supports explicit reporter lists', async () => {
 });
 
 test('test command loads custom reporter modules', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-custom-reporter-test-'));
+  const tmpDir = await mkdtempForTest('agent-device-custom-reporter-test-');
   const reporterPath = path.join(tmpDir, 'custom-reporter.mjs');
   const outputPath = path.join(tmpDir, 'custom-report.json');
 
@@ -922,7 +922,7 @@ test('test command loads custom reporter modules', async () => {
 });
 
 test('test command streams progress to custom reporter modules', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-live-reporter-test-'));
+  const tmpDir = await mkdtempForTest('agent-device-live-reporter-test-');
   const reporterPath = path.join(tmpDir, 'live-reporter.mjs');
 
   try {
@@ -980,7 +980,7 @@ test('test command streams progress to custom reporter modules', async () => {
 });
 
 test('test command reuses custom reporter instance for progress and final output', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-stateful-reporter-test-'));
+  const tmpDir = await mkdtempForTest('agent-device-stateful-reporter-test-');
   const reporterPath = path.join(tmpDir, 'stateful-reporter.mjs');
 
   try {
@@ -1027,7 +1027,7 @@ test('test command reuses custom reporter instance for progress and final output
 });
 
 test('test command surfaces a throwing live reporter hook without aborting the run', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-throwing-reporter-test-'));
+  const tmpDir = await mkdtempForTest('agent-device-throwing-reporter-test-');
   const reporterPath = path.join(tmpDir, 'throwing-reporter.mjs');
 
   try {

@@ -1,7 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -9,9 +8,10 @@ import {
   cleanupRetainedMaterializedPathsForSession,
   retainMaterializedPaths,
 } from '../materialized-path-registry.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 test('retainMaterializedPaths copies file and directory artifacts into managed storage', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-retained-paths-'));
+  const tempRoot = mkdtempForTestSync('agent-device-retained-paths-');
   const archivePath = path.join(tempRoot, 'Sample.zip');
   const appPath = path.join(tempRoot, 'Sample.app');
   fs.writeFileSync(archivePath, 'archive-bytes');
@@ -39,7 +39,7 @@ test('retainMaterializedPaths copies file and directory artifacts into managed s
 });
 
 test('cleanupRetainedMaterializedPathsForSession removes retained paths bound to a session', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-retained-session-'));
+  const tempRoot = mkdtempForTestSync('agent-device-retained-session-');
   const appPath = path.join(tempRoot, 'Sample.app');
   fs.mkdirSync(appPath, { recursive: true });
   fs.writeFileSync(path.join(appPath, 'Info.plist'), 'plist');
@@ -71,7 +71,7 @@ test('cleanup of unknown materialization reports expiry with a recovery hint', a
 });
 
 test('cleanup of tenant-owned materialization rejects other tenants', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-retained-tenant-'));
+  const tempRoot = mkdtempForTestSync('agent-device-retained-tenant-');
   const appPath = path.join(tempRoot, 'Sample.app');
   fs.mkdirSync(appPath, { recursive: true });
 
@@ -95,7 +95,7 @@ test('cleanup of tenant-owned materialization rejects other tenants', async () =
 });
 
 test('TTL expiry cleans up tenant-owned materializations without a tenant context', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-retained-ttl-'));
+  const tempRoot = mkdtempForTestSync('agent-device-retained-ttl-');
   const appPath = path.join(tempRoot, 'Sample.app');
   fs.mkdirSync(appPath, { recursive: true });
 

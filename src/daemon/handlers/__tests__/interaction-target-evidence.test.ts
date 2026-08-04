@@ -1,6 +1,5 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { handleInteractionCommands } from '../interaction.ts';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
@@ -12,6 +11,7 @@ import {
 import { SessionScriptWriter } from '../../session-script-writer.ts';
 import type { CommandFlags } from '../../../core/dispatch.ts';
 import type { SessionState } from '../../types.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 // ADR 0012 decision 3, daemon-routed recording: target-v1 evidence is
 // computed only while the session is being recorded, lands on the recorded
@@ -307,7 +307,7 @@ function expectDescendantBasedRecording(session: SessionState): void {
 }
 
 function writeSessionScript(session: SessionState): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-press-retarget-'));
+  const root = mkdtempForTestSync('agent-device-press-retarget-');
   const writer = new SessionScriptWriter(path.join(root, 'sessions'));
   const written = writer.write(session);
   if (!written.written) throw new Error('expected the script to be written');

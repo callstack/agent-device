@@ -1,13 +1,13 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 export function installIsolatedCliTestEnv(
   explicitEnv: Record<string, string | undefined> = {},
 ): () => void {
   const previousEnv = new Map<string, string | undefined>();
   const explicitKeys = new Set(Object.keys(explicitEnv));
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-cli-env-'));
+  const tempRoot = mkdtempForTestSync('agent-device-cli-env-');
   const tempHome = path.join(tempRoot, 'home');
   fs.mkdirSync(path.join(tempHome, '.agent-device'), { recursive: true });
 

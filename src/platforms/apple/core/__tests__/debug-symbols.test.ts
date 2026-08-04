@@ -1,18 +1,18 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { symbolicateCrashArtifact } from '../debug-symbols.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { withCommandExecutorOverride } from '../../../../utils/exec.ts';
+import { mkdtempForTest } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const UUID = 'ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB';
 const NORMALIZED_UUID = 'ABCDEFABCDEFABCDEFABCDEFABCDEFAB';
 const OTHER_UUID = '11111111-2222-3333-4444-555555555555';
 
 test('symbolicates Apple text crash frames with a matching dSYM UUID', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-debug-symbols-'));
+  const dir = await mkdtempForTest('agent-device-debug-symbols-');
   const artifact = path.join(dir, 'crash.log');
   const out = path.join(dir, 'crash-symbolicated.log');
   const dsym = path.join(dir, 'Demo.app.dSYM');
@@ -90,7 +90,7 @@ test('symbolicates Apple text crash frames with a matching dSYM UUID', async () 
 });
 
 test('matches dSYMs discovered under search path and symbolicates IPS frames', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-debug-ips-'));
+  const dir = await mkdtempForTest('agent-device-debug-ips-');
   const artifact = path.join(dir, 'crash.ips');
   const buildDir = path.join(dir, 'build');
   const dsym = path.join(buildDir, 'Products', 'Demo.app.dSYM');
@@ -140,7 +140,7 @@ test('matches dSYMs discovered under search path and symbolicates IPS frames', a
 });
 
 test('preserves modern two-document IPS headers while symbolicating payload frames', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-debug-ips-header-'));
+  const dir = await mkdtempForTest('agent-device-debug-ips-header-');
   const artifact = path.join(dir, 'crash.ips');
   const dsym = path.join(dir, 'Demo.app.dSYM');
   const out = path.join(dir, 'crash-symbolicated.ips');
@@ -196,7 +196,7 @@ test('preserves modern two-document IPS headers while symbolicating payload fram
 });
 
 test('reports a UUID mismatch with actionable details', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-debug-mismatch-'));
+  const dir = await mkdtempForTest('agent-device-debug-mismatch-');
   const artifact = path.join(dir, 'crash.log');
   const dsym = path.join(dir, 'Demo.app.dSYM');
   await fs.mkdir(dsym);
@@ -255,7 +255,7 @@ test('reports a UUID mismatch with actionable details', async () => {
 });
 
 test('normalizes malformed IPS numeric fields into AppErrors', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-debug-invalid-ips-'));
+  const dir = await mkdtempForTest('agent-device-debug-invalid-ips-');
   const artifact = path.join(dir, 'crash.ips');
   const dsym = path.join(dir, 'Demo.app.dSYM');
   await fs.mkdir(dsym);
@@ -276,7 +276,7 @@ test('normalizes malformed IPS numeric fields into AppErrors', async () => {
 });
 
 test('normalizes malformed IPS image bases into AppErrors', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-debug-invalid-base-'));
+  const dir = await mkdtempForTest('agent-device-debug-invalid-base-');
   const artifact = path.join(dir, 'crash.ips');
   const dsym = path.join(dir, 'Demo.app.dSYM');
   await fs.mkdir(dsym);
@@ -297,7 +297,7 @@ test('normalizes malformed IPS image bases into AppErrors', async () => {
 });
 
 test('rejects nonexistent search paths with an actionable invalid-args hint', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-debug-missing-search-'));
+  const dir = await mkdtempForTest('agent-device-debug-missing-search-');
   const artifact = path.join(dir, 'crash.log');
   const searchPath = path.join(dir, 'missing-build');
   await fs.writeFile(
@@ -316,7 +316,7 @@ test('rejects nonexistent search paths with an actionable invalid-args hint', as
 });
 
 test('rejects oversized crash artifacts before loading them into memory', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-debug-large-artifact-'));
+  const dir = await mkdtempForTest('agent-device-debug-large-artifact-');
   const artifact = path.join(dir, 'crash.log');
   const dsym = path.join(dir, 'Demo.app.dSYM');
   await fs.mkdir(dsym);
@@ -334,7 +334,7 @@ test('rejects oversized crash artifacts before loading them into memory', async 
 });
 
 test('uses address ranges for duplicate text crash image names and supports arm64_32', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-debug-duplicate-images-'));
+  const dir = await mkdtempForTest('agent-device-debug-duplicate-images-');
   const artifact = path.join(dir, 'crash.log');
   const dsym = path.join(dir, 'Demo.app.dSYM');
   await fs.mkdir(dsym);
@@ -389,7 +389,7 @@ test('uses address ranges for duplicate text crash image names and supports arm6
 });
 
 test('keeps atos output aligned and ignores unsymbolicated address echoes', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-debug-atos-align-'));
+  const dir = await mkdtempForTest('agent-device-debug-atos-align-');
   const artifact = path.join(dir, 'crash.log');
   const out = path.join(dir, 'crash-symbolicated.log');
   const dsym = path.join(dir, 'Demo.app.dSYM');
@@ -438,7 +438,7 @@ test('keeps atos output aligned and ignores unsymbolicated address echoes', asyn
 });
 
 test('reports missing Apple tools before attempting symbolication', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-debug-tool-'));
+  const dir = await mkdtempForTest('agent-device-debug-tool-');
   const artifact = path.join(dir, 'crash.log');
   const dsym = path.join(dir, 'Demo.app.dSYM');
   await fs.mkdir(dsym);
@@ -468,7 +468,7 @@ test('reports missing Apple tools before attempting symbolication', async () => 
 });
 
 test('defers Android crash symbolication with a clear hint', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-debug-android-'));
+  const dir = await mkdtempForTest('agent-device-debug-android-');
   const artifact = path.join(dir, 'android-crash.log');
   await fs.writeFile(
     artifact,

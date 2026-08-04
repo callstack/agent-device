@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
 import { IOS_DEVICE, IOS_SIMULATOR } from '../../../../__tests__/test-utils/index.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const {
   mockAcquireXcodebuildSimulatorSetRedirect,
@@ -107,8 +107,8 @@ beforeEach(async () => {
   await abortAllIosRunnerSessions();
   vi.resetAllMocks();
   setRunnerLeaseOwnerStateDir(undefined);
-  process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-runner-cancellation-test-'),
+  process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR = mkdtempForTestSync(
+    'agent-device-runner-cancellation-test-',
   );
   mockRunXcrun.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   mockEnsureXctestrunArtifact.mockResolvedValue({

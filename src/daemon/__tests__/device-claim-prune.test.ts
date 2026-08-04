@@ -7,6 +7,7 @@ import { pruneDeadDeviceClaims } from '../device-claims.ts';
 import { resolveDeviceClaimPath } from '../device-claim-paths.ts';
 import { acquireProcessLock } from '../../utils/process-lock.ts';
 import { readCurrentOwnerIdentity } from '../../utils/owner-identity.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
 
@@ -41,7 +42,7 @@ function writeClaim(
 }
 
 test('prunes claims whose owner is gone and keeps every other claim', async () => {
-  const claimsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-prune-claims-'));
+  const claimsDir = mkdtempForTestSync('agent-device-prune-claims-');
   process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
   const owner = readCurrentOwnerIdentity();
   try {
@@ -79,7 +80,7 @@ test('leaves a live successor written while the prune waited for the claim lock'
   // prune the same dead claim and a new session can write its live successor
   // to that exact path. Holding the lock here reproduces that window: the scan
   // sees a dead claim, then the file is replaced before the prune can unlink.
-  const claimsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-prune-race-'));
+  const claimsDir = mkdtempForTestSync('agent-device-prune-race-');
   process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
   const owner = readCurrentOwnerIdentity();
   const deviceKey = 'local:android:none:contested';

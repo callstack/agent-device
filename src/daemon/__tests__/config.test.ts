@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { resolveDaemonPaths } from '../config.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 test('resolveDaemonPaths keeps explicit state directories authoritative', () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-config-home-'));
+  const home = mkdtempForTestSync('agent-device-config-home-');
   try {
     const paths = resolveDaemonPaths('~/custom-daemon', { env: { HOME: home } });
     assert.equal(paths.baseDir, path.join(home, 'custom-daemon'));
@@ -16,8 +16,8 @@ test('resolveDaemonPaths keeps explicit state directories authoritative', () => 
 });
 
 test('resolveDaemonPaths keeps packaged installs on the global daemon state directory', () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-config-home-'));
-  const packageRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-package-root-'));
+  const home = mkdtempForTestSync('agent-device-config-home-');
+  const packageRoot = mkdtempForTestSync('agent-device-package-root-');
   try {
     fs.writeFileSync(path.join(packageRoot, 'package.json'), '{"name":"agent-device"}\n');
 
@@ -34,9 +34,9 @@ test('resolveDaemonPaths keeps packaged installs on the global daemon state dire
 });
 
 test('resolveDaemonPaths scopes source checkout defaults by project root', () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-config-home-'));
-  const firstRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-source-a-'));
-  const secondRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-source-b-'));
+  const home = mkdtempForTestSync('agent-device-config-home-');
+  const firstRoot = mkdtempForTestSync('agent-device-source-a-');
+  const secondRoot = mkdtempForTestSync('agent-device-source-b-');
   try {
     for (const root of [firstRoot, secondRoot]) {
       fs.writeFileSync(path.join(root, 'package.json'), '{"name":"agent-device"}\n');

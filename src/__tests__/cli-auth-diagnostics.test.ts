@@ -1,13 +1,12 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { runCliCapture } from './cli-capture.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 test('daemon auth tokens are scrubbed from CLI diagnostics and serialized requests', async () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-auth-diagnostics-'));
+  const home = mkdtempForTestSync('agent-device-auth-diagnostics-');
   const authToken = 'opaque-auth-value-1348';
   try {
     const result = await runCliCapture(
