@@ -18,7 +18,6 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { parseSync } from 'oxc-parser';
 import { parseImports } from './model.ts';
 
 export type PackageBoundaryViolation = {
@@ -54,61 +53,6 @@ export type SpecifierSite = {
  */
 export function specifierSites(file: string, source: string): SpecifierSite[] {
   return parseImports(source).map((edge) => ({ file, line: edge.line, specifier: edge.spec }));
-}
-
-/**
- * Every name a façade module exports, value or type-only, sorted — the exact
- * "named-export-list" a package-boundaries gate can pin (#1555 review P1,
- * "add the reviewer-required exact exported-symbol gate"). Covers both
- * re-export forms (`export { a, b } from './x.ts'`,
- * `export type { a, b } from './x.ts'`, with or without `as` aliasing — the
- * alias is reported, since that is the name a consumer actually imports),
- * `export * as ns from './x.ts'` (one real name, `ns`), and direct
- * declarations (`export function`/`const`/`class`/`type`/`interface`,
- * including `export const a = 1, b = 2`'s multiple declarators). A stray
- * export — intentional or not — changes this list, so a test that pins it
- * exactly turns "the façade grew a symbol" into a loud failure instead of a
- * silent widening only a PR diff review would catch.
- *
- * AST-based (`oxc-parser`, already a devDependency — `session-state.ts` is
- * the existing precedent for using it in this gate), not a regex, for the
- * SAME reason `session-state.ts` gives: a regex has to enumerate every
- * export FORM by hand, and the one it forgets is exactly the one that slips
- * through. That is precisely what happened here (#1555 review, second pass,
- * "the gate also ignores export-star declarations, so it can miss future
- * widening"): `export * from './x.ts'` re-exports an unbounded, statically
- * unknowable set of names — the old regex scanner had no case for it at all,
- * so it silently contributed NOTHING to the list instead of failing loudly.
- * `parsed.module.staticExports` is oxc's own resolved export-entry table
- * (built for exactly this purpose, not re-derived from a manual AST walk),
- * and its `exportName.kind` already draws the line this function needs:
- * `'None'` is bare `export *` (unenumerable — thrown), `'Default'` is
- * `export default …` (also thrown — a facade pinned to an exact named-export
- * list must not carry one), and `'Name'` is every enumerable form above,
- * `export * as ns` included (oxc reports its one real bound name, `ns`).
- */
-export function readNamedExports(source: string): string[] {
-  const parsed = parseSync('package-boundaries-export-scan.ts', source);
-  const names = new Set<string>();
-  for (const staticExport of parsed.module.staticExports) {
-    for (const entry of staticExport.entries) {
-      if (entry.exportName.kind === 'None') {
-        throw new Error(
-          "readNamedExports cannot enumerate 'export * from …' — it re-exports an unknown set " +
-            'of names, exactly the widening an exact-export-list gate exists to catch. Name the ' +
-            're-exported symbols explicitly instead of re-exporting the whole module.',
-        );
-      }
-      if (entry.exportName.kind === 'Default') {
-        throw new Error(
-          "readNamedExports cannot enumerate 'export default …' as a named symbol — a facade a " +
-            'caller pins to an exact named-export list must not carry a default export.',
-        );
-      }
-      if (entry.exportName.name) names.add(entry.exportName.name);
-    }
-  }
-  return [...names].sort();
 }
 
 export function readWorkspacePackages(repoRoot: string): WorkspacePackage[] {

@@ -6,17 +6,20 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
+import { readFacadeExports, readNamedExports } from './facade-exports.ts';
+import { FACADE_SYMBOLS } from './facade-symbols.ts';
 import {
   checkPackageBoundaries,
   checkPackageInternalSites,
   checkRootSites,
-  readNamedExports,
   readWorkspacePackages,
   rootExternalDependencyRanges,
   rootWorkspaceDependencyNames,
   specifierSites,
   type WorkspacePackage,
 } from './package-boundaries.ts';
+
+const repoRoot = path.resolve(import.meta.dirname, '../..');
 
 const kernel: WorkspacePackage = {
   dir: 'packages/kernel',
@@ -72,53 +75,32 @@ test('specifier sites carry 1-based lines for static and dynamic imports', () =>
   );
 });
 
-test('readNamedExports collects re-export and direct-declaration forms, resolving aliases', () => {
-  const source = [
-    "export { a, b } from './x.ts';",
-    "export type { C, D } from './y.ts';",
-    "export { e as f } from './z.ts';",
-    "export type { g as h } from './z.ts';",
-    'export function i() {}',
-    'export const j = 1;',
-    'export type K = string;',
-    'export interface L {}',
-    "export {\n  m,\n  n,\n} from './multi.ts';",
-  ].join('\n');
+test('every workspace package façade exports exactly its pinned symbol list', () => {
+  const packages = readWorkspacePackages(repoRoot);
+  const pinned = new Map(FACADE_SYMBOLS.map(([specifier, names]) => [specifier, names]));
+  // The table and the manifests must agree in BOTH directions: a new package
+  // (or a new subpath on an existing one) that nobody pinned is exactly the
+  // widening this gate exists to catch, so an unpinned façade fails here
+  // rather than being silently skipped.
+  const declared = packages
+    .filter((pkg) => pkg.name !== '@agent-device/ad-replay')
+    .flatMap((pkg) => [...pkg.exportTargets.keys()]);
   assert.deepEqual(
-    readNamedExports(source),
-    ['D', 'C', 'K', 'L', 'a', 'b', 'f', 'h', 'i', 'j', 'm', 'n'].sort(),
+    declared.slice().sort(),
+    [...pinned.keys()].sort(),
+    'every exports-map subpath needs a pinned symbol list (and vice versa)',
   );
-});
-
-test('readNamedExports never reports the original name behind an `as` alias', () => {
-  const source = "export { internalOnly as publicName } from './x.ts';";
-  const names = readNamedExports(source);
-  assert.deepEqual(names, ['publicName']);
-  assert.ok(!names.includes('internalOnly'));
-});
-
-test('readNamedExports resolves `export * as ns` to its one real bound name', () => {
-  // Unlike bare `export *`, this binds exactly one importable name (`ns`) —
-  // enumerable, not a widening blind spot.
-  const source = "export * as ns from './x.ts';";
-  assert.deepEqual(readNamedExports(source), ['ns']);
-});
-
-// #1555 review P1 (second pass, "the gate also ignores export-star
-// declarations, so it can miss future widening"): a facade pinned to an
-// exact named-export list must not silently accept a form that widens its
-// real surface with no enumerable name at all. These two forms throw instead
-// of contributing nothing to the list — plant-verified (temporarily reverted
-// to a no-op, confirmed both tests failed, restored) rather than merely
-// asserted.
-test('readNamedExports rejects a bare `export *` re-export', () => {
-  const source = "export { runAdReplay } from './step-loop.ts';\nexport * from './leak.ts';\n";
-  assert.throws(() => readNamedExports(source), /export \* from/);
-});
-
-test('readNamedExports rejects a default export', () => {
-  assert.throws(() => readNamedExports('export default function leak() {}'), /export default/);
-  assert.throws(() => readNamedExports('export default 42;'), /export default/);
+  for (const pkg of packages) {
+    for (const [specifier, target] of pkg.exportTargets) {
+      const expected = pinned.get(specifier);
+      if (!expected) continue;
+      assert.deepEqual(
+        readFacadeExports(path.join(repoRoot, target)),
+        [...expected],
+        `${specifier} exports exactly its pinned symbol list`,
+      );
+    }
+  }
 });
 
 test('double-quoted and re-export routes into packages are not invisible to R11', () => {
@@ -253,7 +235,6 @@ test('root workspace specifiers need a root workspace:* entry and an exported su
 });
 
 test('the real tree parses, declares, and passes R11', () => {
-  const repoRoot = path.resolve(import.meta.dirname, '../..');
   const packages = readWorkspacePackages(repoRoot);
   assert.ok(packages.length >= 1, 'expected at least the kernel package');
   const kernelPackage = packages.find((pkg) => pkg.name === '@agent-device/kernel');

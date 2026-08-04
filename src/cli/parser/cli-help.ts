@@ -139,6 +139,15 @@ const EXAMPLE_LINES = [
   'agent-device test ./suite --platform android',
 ] as const;
 
+const WAIT_FAILURE_CONTRACT = `Wait failure contract:
+  Read wait failures from error.details.reason in --json output; do not infer the verdict from the message.
+  wait_target_absent means at least one readable capture saw no matching target. It includes readableCaptures and waitedMs, and may include currentSurface details.
+  wait_capture_stalled means no readable capture established an observation before the deadline. It is retriable; retry or use screenshot to inspect the surface.
+  wait_deadline_exceeded means a later capture consumed the remaining budget after an earlier readable capture; it includes captureTruncated and readableCaptures.
+  wait_landmark_identity_mismatch means a replay destination guard found the selector but not the recorded target identity.
+  wait_stable_timeout means wait stable did not observe a stable UI; it is not an element-absence verdict.
+`;
+
 const HELP_TOPICS = {
   'manual-qa': {
     summary: 'Follow manual test scripts with exact interactions and verification',
@@ -180,7 +189,9 @@ Recovery:
   Network/typeahead result missing: wait text "Expected result" or wait <selector>.
   Keyboard visible over the next target: the on-screen keyboard usually does not block presses, so press the target directly instead of dismissing. If the press fails or reports no visible effect, scroll the target into view or use keyboard enter when submission is wanted.
   Sparse or recovered accessibility snapshot: use screenshot as visual truth, leave the bad screen if needed, then retry snapshot -i.
-  Non-hittable success hint: verify with the settled diff or snapshot; retarget by a better ref/selector if the UI did not change.`,
+  Non-hittable success hint: verify with the settled diff or snapshot; retarget by a better ref/selector if the UI did not change.
+
+${WAIT_FAILURE_CONTRACT}`,
   },
   maestro: {
     summary: 'Supported Maestro YAML commands, grammar, and runtime boundaries',
@@ -298,6 +309,7 @@ Session ordering:
   It is fine to parallelize independent read-only collection or commands that use different sessions/devices.
 
 Read-only and waits:
+${WAIT_FAILURE_CONTRACT}
   Read-only visible/state question: use snapshot/get/is/find.
   agent-device snapshot
   agent-device get text 'id="product-title"'

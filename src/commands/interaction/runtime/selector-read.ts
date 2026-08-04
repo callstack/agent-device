@@ -36,12 +36,7 @@ import {
 } from './selector-read-shared.ts';
 import { findSnapshotScope, sparseSelectorSnapshotError } from './selector-read-utils.ts';
 import { deriveSelectorCapturePolicy } from './selector-capture-policy.ts';
-import {
-  createWaitPolling,
-  type WaitPollDeadline,
-  waitCaptureStalledError,
-  waitDeadlineExceededError,
-} from './wait-polling.ts';
+import { createWaitPolling, type WaitPollDeadline, waitTimeoutError } from './wait-polling.ts';
 import {
   createSelectorWaitCommands,
   type WaitCommandOptions,
@@ -413,14 +408,7 @@ async function waitForFindMatch(
     }
     await polling.sleepUntilNextPoll();
   }
-  if (deadline === 'capture-stalled') {
-    throw waitCaptureStalledError('find wait timed out', polling.timeoutMs);
-  }
-  if (deadline === 'capture-truncated') {
-    throw waitDeadlineExceededError('find wait timed out', polling.timeoutMs, true);
-  }
-  polling.rethrowIfNeverReadable();
-  throw waitDeadlineExceededError('find wait timed out', polling.timeoutMs, false);
+  throw waitTimeoutError('find wait timed out', polling, deadline);
 }
 
 async function findFirstLocatorMatch(

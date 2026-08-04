@@ -1560,7 +1560,7 @@ test('wait text timeout includes compact current-surface labels and buttons', as
     analysis: { rawNodeCount: 4, maxDepth: 1 },
   });
 
-  const response = await runWaitCommand(sessionName, androidDevice, ['Receipt uploaded', '0']);
+  const response = await runWaitCommand(sessionName, androidDevice, ['Receipt uploaded', '50']);
 
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
@@ -1583,7 +1583,7 @@ test('wait selector timeout includes compact current-surface details', async () 
     analysis: { rawNodeCount: 2, maxDepth: 0 },
   });
 
-  const response = await runWaitCommand(sessionName, androidDevice, ['id=receipt-uploaded', '0']);
+  const response = await runWaitCommand(sessionName, androidDevice, ['id=receipt-uploaded', '50']);
 
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
@@ -1681,7 +1681,7 @@ test('wait timeout summary prefers content labels over chrome and identifier noi
 
   const response = await runWaitCommand(sessionName, iosSimulatorDevice, [
     'Impossible success text',
-    '0',
+    '50',
   ]);
 
   expect(response?.ok).toBe(false);
@@ -1703,7 +1703,7 @@ test('wait timeout summary prefers content labels over chrome and identifier noi
   }
 });
 
-test('wait timeout preserves current behavior when current-surface inspection fails', async () => {
+test('wait timeout without readable capture does not inspect the current surface', async () => {
   const sessionName = 'android-wait-timeout-surface-fails';
   mockDispatch.mockRejectedValue(new Error('snapshot unavailable'));
 
@@ -1712,8 +1712,11 @@ test('wait timeout preserves current behavior when current-surface inspection fa
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
     expect(response.error.message).toBe('wait timed out for text: Receipt uploaded');
-    expect(response.error.details).toBeUndefined();
+    expect(response.error.details?.reason).toBe('wait_capture_stalled');
+    expect(response.error.details?.retriable).toBe(true);
+    expect(response.error.details?.readableCaptures).toBe(0);
   }
+  expect(mockDispatch).not.toHaveBeenCalled();
 });
 
 test('settings rejects unsupported iOS physical devices', async () => {

@@ -73,7 +73,9 @@ export default defineConfig({
     'internal/png-worker': 'src/utils/png-worker.ts',
     'internal/update-check-entry': 'src/utils/update-check-entry.ts',
   },
-  noExternal: [/^@agent-device\//, 'pngjs'],
+  deps: {
+    alwaysBundle: [/^@agent-device\//, 'pngjs'],
+  },
   format: 'esm',
   platform: 'node',
   target: 'es2022',

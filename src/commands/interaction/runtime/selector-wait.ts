@@ -1,4 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
+import { WAIT_REASONS } from '@agent-device/contracts/interaction';
 import { findNodeByRef, normalizeRef, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   readNodeLocalIdentity,
@@ -23,8 +24,7 @@ import {
   createWaitPolling,
   DEFAULT_WAIT_TIMEOUT_MS,
   type WaitPollDeadline,
-  waitCaptureStalledError,
-  waitDeadlineExceededError,
+  waitTimeoutError,
 } from './wait-polling.ts';
 
 type WaitCommandContext = {
@@ -268,32 +268,14 @@ async function waitForSelector<Runtime extends SelectorWaitRuntime>(
     }
     await polling.sleepUntilNextPoll();
   }
-  if (deadline === 'capture-stalled') {
-    throw waitCaptureStalledError(
-      `wait timed out for selector: ${selectorExpression}`,
-      polling.timeoutMs,
-    );
-  }
-  if (landmarkMismatch) {
+  if (deadline !== 'capture-stalled' && landmarkMismatch) {
     throw new AppError(
       'COMMAND_FAILED',
       `wait matched selector ${selectorExpression} but no candidate carried the recorded landmark identity`,
       { reason: WAIT_LANDMARK_MISMATCH_REASON, ...landmarkMismatch },
     );
   }
-  if (deadline === 'capture-truncated') {
-    throw waitDeadlineExceededError(
-      `wait timed out for selector: ${selectorExpression}`,
-      polling.timeoutMs,
-      true,
-    );
-  }
-  polling.rethrowIfNeverReadable();
-  throw waitDeadlineExceededError(
-    `wait timed out for selector: ${selectorExpression}`,
-    polling.timeoutMs,
-    false,
-  );
+  throw waitTimeoutError(`wait timed out for selector: ${selectorExpression}`, polling, deadline);
 }
 
 type LandmarkMatchOutcome =
@@ -361,14 +343,7 @@ async function waitForText<Runtime extends SelectorWaitRuntime>(
     if (found) return { kind: 'text', text, waitedMs: polling.waitedMs() };
     await polling.sleepUntilNextPoll();
   }
-  if (deadline === 'capture-stalled') {
-    throw waitCaptureStalledError(`wait timed out for text: ${text}`, polling.timeoutMs);
-  }
-  if (deadline === 'capture-truncated') {
-    throw waitDeadlineExceededError(`wait timed out for text: ${text}`, polling.timeoutMs, true);
-  }
-  polling.rethrowIfNeverReadable();
-  throw waitDeadlineExceededError(`wait timed out for text: ${text}`, polling.timeoutMs, false);
+  throw waitTimeoutError(`wait timed out for text: ${text}`, polling, deadline);
 }
 
 async function snapshotContainsText<Runtime extends SelectorWaitRuntime>(
@@ -403,7 +378,7 @@ async function waitForStable<Runtime extends SelectorWaitRuntime>(
   });
   if (!outcome.settled) {
     throw new AppError('COMMAND_FAILED', 'wait timed out waiting for a stable UI', {
-      reason: 'wait_stable_timeout',
+      reason: WAIT_REASONS.stableTimeout,
       ...(outcome.stalled ? { captureStalled: true } : {}),
       quietMs: quiet,
       timeoutMs: timeout,

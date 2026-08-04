@@ -42,3 +42,30 @@ test('deadline-truncated wait does not start a post-deadline diagnostic capture'
   expect(result).toBe(response);
   expect(captureSnapshot).not.toHaveBeenCalled();
 });
+
+test('wait surface decoration requires a structured wait timeout reason', async () => {
+  const response = {
+    ok: false as const,
+    error: {
+      code: 'COMMAND_FAILED' as const,
+      message: 'wait timed out for text: Agent Device Tester',
+    },
+  };
+
+  const result = await maybeWaitTimeoutSurfaceResponse(
+    {
+      req: {
+        command: 'wait',
+        positionals: ['Agent Device Tester', '10000'],
+        session: 'android-e2e',
+        token: 'test-token',
+      },
+      session: undefined,
+      device: ANDROID_EMULATOR,
+    },
+    response,
+  );
+
+  expect(result).toBe(response);
+  expect(captureSnapshot).not.toHaveBeenCalled();
+});

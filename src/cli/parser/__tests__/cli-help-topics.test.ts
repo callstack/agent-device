@@ -245,6 +245,11 @@ test('usageForCommand resolves workflow help topic', async () => {
   assert.match(help, /published script contain only \$\{PASSWORD\}/);
   assert.match(help, /Do not record passwords, tokens, or other secrets without --record-as/);
   assert.match(help, /Read-only visible\/state question: use snapshot\/get\/is\/find/);
+  assert.match(help, /wait_target_absent means at least one readable capture/);
+  assert.match(help, /wait_capture_stalled means no readable capture/);
+  assert.match(help, /wait_deadline_exceeded means a later capture/);
+  assert.match(help, /wait_landmark_identity_mismatch means a replay destination guard/);
+  assert.match(help, /wait_stable_timeout means wait stable/);
   assert.match(help, /Use snapshot -i only when refs are needed/);
   assert.match(help, /install-from-source --github-actions-artifact org\/repo:app-debug/);
   assert.match(help, /Discovery is not enough when the task asks to open\/start/);
@@ -535,6 +540,8 @@ test('usageForCommand resolves manual QA help topic', async () => {
   assert.match(help, /use fill <target> <text> --settle to replace/);
   assert.match(help, /use type only to append to an already-focused field/);
   assert.match(help, /Do not use placeholders such as @ref/);
+  assert.match(help, /wait_target_absent means at least one readable capture/);
+  assert.match(help, /wait_capture_stalled means no readable capture/);
 });
 
 test('usageForCommand resolves validate help topic', async () => {
