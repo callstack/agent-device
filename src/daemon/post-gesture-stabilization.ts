@@ -207,18 +207,7 @@ export async function capturePostGestureStabilizedResult<T>(params: {
       }
       clearPostGestureStabilization(session);
       emitPostGestureSettleDiagnostic(verdict, pending.action, attempts, elapsedMs);
-      return {
-        value: current.value,
-        ...(verdict === 'accept-stale' &&
-        haveIdenticalDiscriminatingSurfaces(pending.baselineSignature ?? [], current.signature)
-          ? {
-              gestureNoEffect: {
-                action: pending.action,
-                positionals: pending.positionals ?? [],
-              },
-            }
-          : {}),
-      };
+      return buildAcceptedStabilizedResult(verdict, pending, current);
     }
     previous = current;
   }
@@ -252,6 +241,30 @@ export function formatGestureNoEffectWarning(action: string, positionals: string
     'Either the container is already at its edge, or it ignores synthesized scrolls — ' +
     'a raw drag moves such lists: swipe x1 y1 x2 y2 (start inside the list).'
   );
+}
+
+/**
+ * The no-effect claim needs BOTH the accept-stale verdict AND full-surface
+ * corroboration (`haveIdenticalDiscriminatingSurfaces`): the verdict alone is
+ * subset-tolerant, and a successful scroll that replaced every list cell
+ * under fixed chrome still reads accept-stale (#1601 review P1).
+ */
+function buildAcceptedStabilizedResult<T>(
+  verdict: 'trust' | 'accept-stale',
+  pending: NonNullable<SessionState['postGestureStabilization']>,
+  current: CapturedSurface<T>,
+): PostGestureStabilizedResult<T> {
+  const corroborated =
+    verdict === 'accept-stale' &&
+    haveIdenticalDiscriminatingSurfaces(pending.baselineSignature ?? [], current.signature);
+  if (!corroborated) return { value: current.value };
+  return {
+    value: current.value,
+    gestureNoEffect: {
+      action: pending.action,
+      positionals: pending.positionals ?? [],
+    },
+  };
 }
 
 function isPostGestureStabilizingAction(
