@@ -2607,7 +2607,8 @@ extension RunnerTests {
         y: point.map { Double($0.y) },
         referenceWidth: frame.isEmpty ? nil : Double(frame.width),
         referenceHeight: frame.isEmpty ? nil : Double(frame.height),
-        maestroNonHittableCoordinateFallbackUsed: maestroNonHittableCoordinateFallbackUsed
+        maestroNonHittableCoordinateFallbackUsed: maestroNonHittableCoordinateFallbackUsed,
+        textEntryRoute: textResult.textEntryRoute
       )
     )
   }

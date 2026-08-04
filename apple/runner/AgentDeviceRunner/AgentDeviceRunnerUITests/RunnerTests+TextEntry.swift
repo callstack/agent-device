@@ -24,6 +24,7 @@ extension RunnerTests {
     let repaired: Bool
     let expectedText: String?
     let observedText: String?
+    var textEntryRoute: String? = nil
   }
 
   struct TextEntryTarget {

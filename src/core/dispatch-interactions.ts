@@ -83,8 +83,14 @@ export async function handleTypeCommand(
   const text = positionals.join(' ');
   if (!text) throw new AppError('INVALID_ARGS', 'type requires text');
   const delayMs = requireIntInRange(context?.delayMs ?? 0, 'delay-ms', 0, 10_000);
-  await interactor.type(text, delayMs);
-  return { text, delayMs, ...successText(formatTextLengthMessage('Typed', text)) };
+  const backendResult = await interactor.type(text, delayMs);
+  const textEntryRoute = backendResult?.textEntryRoute;
+  return {
+    ...(typeof textEntryRoute === 'string' ? { textEntryRoute } : {}),
+    text,
+    delayMs,
+    ...successText(formatTextLengthMessage('Typed', text)),
+  };
 }
 
 export async function handleFillCommand(

@@ -129,6 +129,7 @@ extension RunnerTests {
     )
     XCTAssertNil(result.verified)
     XCTAssertFalse(result.repaired)
+    XCTAssertEqual(result.textEntryRoute, "synthesized-first-responder-replacement")
   }
 #endif
 }

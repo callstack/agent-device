@@ -51,6 +51,7 @@ extension RunnerTests {
     let currentText = editableTextValue(for: initialTarget, treatingPlaceholderAsEmpty: true)
     let initialText = repairMode == .append ? currentText : nil
     let expectedText = expectedTextEntryValue(typedText: text, mode: repairMode, initialText: initialText)
+    var textEntryRoute: String?
     logTextEntryPhase(
       commandId: commandId,
       phase: "initial-resolve",
@@ -80,10 +81,12 @@ extension RunnerTests {
 
     func typeIntoCurrentTarget(_ value: String) -> XCUIElement? {
       if let currentTarget = resolveTextEntryElement(app: app, target: activeTarget) {
+        textEntryRoute = "xctest-element"
         currentTarget.typeText(value)
         return currentTarget
       } else {
 #if os(iOS)
+        textEntryRoute = "synthesized-first-responder"
         NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder")
         let action = synthesizer.enterText(
           app: app,
@@ -92,6 +95,7 @@ extension RunnerTests {
         )
         switch action {
         case .fallback:
+          textEntryRoute = "xctest-application-fallback"
           app.typeText(value)
         case .raise(let message):
           NSException(
@@ -141,10 +145,16 @@ extension RunnerTests {
       )
       if repairMode == .none {
         logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: text.count, mode: repairMode)
-        return TextEntryResult(verified: nil, repaired: false, expectedText: nil, observedText: nil)
+        return TextEntryResult(
+          verified: nil,
+          repaired: false,
+          expectedText: nil,
+          observedText: nil,
+          textEntryRoute: textEntryRoute
+        )
       }
       let verifyStartedAt = Date()
-      let result = verifyTextEntryWithRepairIfNeeded(
+      var result = verifyTextEntryWithRepairIfNeeded(
         app: app,
         target: activeTarget.withElement(typedTarget),
         expectedText: expectedText,
@@ -158,6 +168,7 @@ extension RunnerTests {
         mode: repairMode
       )
       logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: text.count, mode: repairMode)
+      result.textEntryRoute = textEntryRoute
       return result
     }
 
@@ -212,10 +223,16 @@ extension RunnerTests {
     }
     if repairMode == .none {
       logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: text.count, mode: repairMode)
-      return TextEntryResult(verified: nil, repaired: false, expectedText: nil, observedText: nil)
+      return TextEntryResult(
+        verified: nil,
+        repaired: false,
+        expectedText: nil,
+        observedText: nil,
+        textEntryRoute: textEntryRoute
+      )
     }
     let verifyStartedAt = Date()
-    let result = verifyTextEntryWithRepairIfNeeded(
+    var result = verifyTextEntryWithRepairIfNeeded(
       app: app,
       target: activeTarget.withElement(typedTarget),
       expectedText: expectedText,
@@ -229,6 +246,7 @@ extension RunnerTests {
       mode: repairMode
     )
     logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: text.count, mode: repairMode)
+    result.textEntryRoute = textEntryRoute
     return result
   }
 

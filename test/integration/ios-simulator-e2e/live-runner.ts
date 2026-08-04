@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import path from 'node:path';
 
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
@@ -203,12 +202,14 @@ async function assertFormInput(context: LiveContext): Promise<void> {
     String(emailRect.x + emailRect.width / 2),
     String(emailRect.y + emailRect.height / 2),
   ]);
-  await runStep(context, 'append email suffix from coordinate focus', ['type', '.test']);
+  const typedSuffix = await runStep(context, 'append email suffix from coordinate focus', [
+    'type',
+    '.test',
+  ]);
   assert.ok(context.runnerLogPath, 'cold-launch open response should retain runnerLogPath');
-  const runnerLog = fs.readFileSync(context.runnerLogPath, 'utf8');
-  assert.match(
-    runnerLog,
-    /AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder/,
+  assert.equal(
+    typedSuffix.json?.data?.textEntryRoute,
+    'synthesized-first-responder',
     'bare iOS type should use the AX-independent first-responder route',
   );
   const email = await runStep(context, 'read typed email', ['get', 'attrs', 'id="field-email"']);

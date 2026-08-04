@@ -115,7 +115,7 @@ export function iosRunnerOverrides(
         return await runAppleRunnerCommand(device, iosTapCommand(device, ctx, x, y), runnerOpts);
       },
       type: async (text, delayMs) => {
-        await runAppleRunnerCommand(
+        return await runAppleRunnerCommand(
           device,
           {
             command: 'type',

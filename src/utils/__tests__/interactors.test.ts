@@ -265,11 +265,11 @@ test('ios type uses verified append text-entry mode', async () => {
   const commands: RunnerCommand[] = [];
   mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
     commands.push(command);
-    return {};
+    return { textEntryRoute: 'synthesized-first-responder' };
   });
   const interactor = await getInteractor(iosSimulator, { appBundleId: 'com.example.app' });
 
-  await interactor.type('hello', 25);
+  const result = await interactor.type('hello', 25);
 
   assert.deepEqual(commands, [
     {
@@ -280,4 +280,5 @@ test('ios type uses verified append text-entry mode', async () => {
       appBundleId: 'com.example.app',
     },
   ]);
+  assert.deepEqual(result, { textEntryRoute: 'synthesized-first-responder' });
 });

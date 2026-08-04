@@ -134,7 +134,8 @@ extension RunnerTests {
         verified: nil,
         repaired: false,
         expectedText: request.text,
-        observedText: nil
+        observedText: nil,
+        textEntryRoute: "synthesized-first-responder-replacement"
       )
     )
 #else
