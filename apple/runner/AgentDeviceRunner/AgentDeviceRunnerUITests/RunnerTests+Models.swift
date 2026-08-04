@@ -120,6 +120,7 @@ struct Command: Codable {
   let allowNonHittableCoordinateFallback: Bool?
   let delayMs: Int?
   let textEntryMode: String?
+  let resolvedTextInputTarget: Bool?
   let action: String?
   let x: Double?
   let y: Double?

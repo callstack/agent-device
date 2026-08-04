@@ -9,12 +9,45 @@ extension RunnerTests {
     text: String,
     delaySeconds: Double,
     repairMode: TextTypingRepairMode = .none,
+    resolvedTextInputTarget: Bool = false,
     commandId: String? = nil
   ) -> TextEntryResult {
     let totalStartedAt = Date()
     guard !text.isEmpty else {
       logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: 0, mode: repairMode)
       return TextEntryResult(verified: true, repaired: false, expectedText: "", observedText: "")
+    }
+    if repairMode == .replacement,
+       Self.shouldUseSynthesizedFirstResponderReplacement(
+         hasResolvedElement: target.element != nil,
+         hasRefreshPoint: target.refreshPoint != nil,
+         resolvedTextInputTarget: resolvedTextInputTarget
+       ) {
+#if os(iOS)
+      NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder-replacement")
+      if let message = RunnerSynthesizedTextEntry.replaceText(
+        withApplication: app,
+        text: text
+      ) {
+        NSException(
+          name: NSExceptionName.internalInconsistencyException,
+          reason: message
+        ).raise()
+      }
+      logTextEntryPhase(
+        commandId: commandId,
+        phase: "total",
+        startedAt: totalStartedAt,
+        chars: text.count,
+        mode: repairMode
+      )
+      return TextEntryResult(
+        verified: nil,
+        repaired: false,
+        expectedText: text,
+        observedText: nil
+      )
+#endif
     }
     var activeTarget = target
     let initialResolveStartedAt = Date()
@@ -61,7 +94,10 @@ extension RunnerTests {
           withApplication: app,
           text: value
         ) {
-          XCTFail(message)
+          NSException(
+            name: NSExceptionName.internalInconsistencyException,
+            reason: message
+          ).raise()
         }
 #else
         app.typeText(value)

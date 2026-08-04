@@ -9,6 +9,11 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSString * _Nullable)synthesizeTextWithApplication:(id)application
                                                     text:(NSString *)text;
 
+// Replaces the current first responder's contents using one synthesized
+// Command-A, Delete, and text-input event sequence.
++ (NSString * _Nullable)replaceTextWithApplication:(id)application
+                                              text:(NSString *)text;
+
 @end
 
 NS_ASSUME_NONNULL_END

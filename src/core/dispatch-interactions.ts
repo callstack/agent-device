@@ -108,7 +108,9 @@ export async function handleFillCommand(
     throw new AppError('INVALID_ARGS', 'fill requires x y text');
   }
   const delayMs = requireIntInRange(context?.delayMs ?? 0, 'delay-ms', 0, 10_000);
-  await interactor.fill(x, y, text, delayMs);
+  await interactor.fill(x, y, text, delayMs, {
+    resolvedTextInputTarget: context?.resolvedTextInputTarget,
+  });
   return { x, y, text, delayMs, ...successText(formatTextLengthMessage('Filled', text)) };
 }
 

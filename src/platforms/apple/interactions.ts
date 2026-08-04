@@ -143,7 +143,7 @@ export function iosRunnerOverrides(
           runnerOpts,
         );
       },
-      fill: async (x, y, text, delayMs) => {
+      fill: async (x, y, text, delayMs, options) => {
         return await runAppleRunnerCommand(
           device,
           {
@@ -153,6 +153,7 @@ export function iosRunnerOverrides(
             text,
             delayMs,
             textEntryMode: 'replace',
+            ...(options?.resolvedTextInputTarget ? { resolvedTextInputTarget: true } : {}),
             appBundleId: ctx.appBundleId,
           },
           runnerOpts,

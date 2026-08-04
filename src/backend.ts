@@ -148,6 +148,7 @@ export type BackendRefTarget = {
 
 export type BackendFillOptions = {
   delayMs?: number;
+  resolvedTextInputTarget?: boolean;
 };
 
 export type BackendLongPressOptions = {

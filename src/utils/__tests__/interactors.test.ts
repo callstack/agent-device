@@ -238,7 +238,31 @@ test('ios scroll without reference dims derives pixels from endpoint travel', as
   assert.equal(pixels, 300);
 });
 
-test('ios fill sends one verified replacement text-entry command at the target coordinates', async () => {
+test('ios fill marks only a shared-runtime-resolved text input for AX-independent replacement', async () => {
+  const commands: RunnerCommand[] = [];
+  mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
+    commands.push(command);
+    return {};
+  });
+  const interactor = await getInteractor(iosSimulator, { appBundleId: 'com.example.app' });
+
+  await interactor.fill(120, 240, 'hunter2', undefined, { resolvedTextInputTarget: true });
+
+  assert.deepEqual(commands, [
+    {
+      command: 'type',
+      x: 120,
+      y: 240,
+      text: 'hunter2',
+      textEntryMode: 'replace',
+      resolvedTextInputTarget: true,
+      delayMs: undefined,
+      appBundleId: 'com.example.app',
+    },
+  ]);
+});
+
+test('ios coordinate fill does not claim semantic text-input resolution', async () => {
   const commands: RunnerCommand[] = [];
   mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
     commands.push(command);

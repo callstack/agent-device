@@ -114,6 +114,7 @@ export type Interactor = {
     y: number,
     text: string,
     delayMs?: number,
+    options?: { resolvedTextInputTarget?: boolean },
   ): Promise<Record<string, unknown> | void>;
   scroll(
     direction: ScrollDirection,

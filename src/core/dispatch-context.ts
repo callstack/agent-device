@@ -42,6 +42,8 @@ export type DispatchContext = ScreenshotDispatchFlags & {
   count?: number;
   intervalMs?: number;
   delayMs?: number;
+  /** The shared interaction runtime resolved this coordinate as a text input. */
+  resolvedTextInputTarget?: boolean;
   durationMs?: number;
   holdMs?: number;
   jitterPx?: number;

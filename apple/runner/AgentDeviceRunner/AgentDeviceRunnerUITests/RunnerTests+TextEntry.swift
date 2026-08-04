@@ -50,6 +50,23 @@ extension RunnerTests {
     let focusConfirmed: Bool
   }
 
+  static func shouldUseSynthesizedFirstResponderReplacement(
+    hasResolvedElement: Bool,
+    hasRefreshPoint: Bool,
+    resolvedTextInputTarget: Bool
+  ) -> Bool {
+    !hasResolvedElement && hasRefreshPoint && resolvedTextInputTarget
+  }
+
+  static func shouldUseResolvedCoordinateTextEntryRoute(
+    repairMode: TextTypingRepairMode,
+    hasX: Bool,
+    hasY: Bool,
+    resolvedTextInputTarget: Bool
+  ) -> Bool {
+    repairMode == .replacement && hasX && hasY && resolvedTextInputTarget
+  }
+
   func clearTextInput(_ element: XCUIElement) {
     // Skip the clear (delete burst + moveCaretToEnd edge-tap) ONLY when we can confirm the
     // field is empty. Why skip: the edge-tap computes a point from the element frame, which can

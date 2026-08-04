@@ -105,16 +105,21 @@ export const fillCommand: RuntimeCommand<FillCommandOptions, FillCommandResult> 
     throw new AppError('UNSUPPORTED_OPERATION', 'fill is not supported by this backend');
   }
   const point = requireResolvedPoint(resolved);
+  const nodeType = 'node' in resolved ? (resolved.node?.type ?? '') : '';
+  const resolvedTextInputTarget =
+    nodeType !== '' && isFillableType(nodeType, runtime.backend.platform);
   const backendResult = await runtime.backend.fill(
     toBackendContext(runtime, options),
     point,
     options.text,
-    { delayMs: options.delayMs },
+    {
+      delayMs: options.delayMs,
+      ...(resolvedTextInputTarget ? { resolvedTextInputTarget: true } : {}),
+    },
   );
   const formattedBackendResult = toBackendResult(backendResult);
-  const nodeType = 'node' in resolved ? (resolved.node?.type ?? '') : '';
   const warning =
-    nodeType && !isFillableType(nodeType, runtime.backend.platform)
+    nodeType && !resolvedTextInputTarget
       ? `fill target ${formatTargetForWarning(resolved)} resolved to "${nodeType}", attempting fill anyway.`
       : undefined;
   return await applyPostActionObservation(

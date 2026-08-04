@@ -126,7 +126,7 @@ function createInteractionBackend(
           return { ref: stripAtPrefix(target.ref) };
         }
       : undefined,
-    fill: async (_context, point, text): Promise<BackendActionResult> => {
+    fill: async (_context, point, text, options): Promise<BackendActionResult> => {
       expireRefFrame(session);
       return toBackendActionResult(
         await dispatchCommand(
@@ -134,7 +134,10 @@ function createInteractionBackend(
           'fill',
           [String(point.x), String(point.y), text],
           req.flags?.out,
-          params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
+          {
+            ...params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
+            ...(options?.resolvedTextInputTarget ? { resolvedTextInputTarget: true } : {}),
+          },
         ),
       );
     },
