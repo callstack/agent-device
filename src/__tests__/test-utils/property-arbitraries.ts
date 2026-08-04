@@ -72,6 +72,26 @@ const viewportRectArb: fc.Arbitrary<Rect> = fc.oneof(
   }),
 );
 
+export const scrollingContainerTypeArb = fc.constantFrom(
+  'XCUIElementTypeScrollView',
+  'XCUIElementTypeTable',
+  'XCUIElementTypeCollectionView',
+  'android.widget.ListView',
+  'androidx.recyclerview.widget.RecyclerView',
+);
+
+export const distinctRectPairArb: fc.Arbitrary<{ ancestor: Rect; target: Rect }> = fc
+  .record({
+    x: fc.integer({ min: -200, max: 200 }),
+    y: fc.integer({ min: -200, max: 200 }),
+    width: fc.integer({ min: 1, max: 1200 }),
+    height: fc.integer({ min: 1, max: 1200 }),
+  })
+  .map((ancestor) => ({
+    ancestor,
+    target: { ...ancestor, x: ancestor.x + 1 },
+  }));
+
 /** A point sampled from the viewport's own box, so most gestures are plannable. */
 function pointInViewportArb(viewport: Rect): fc.Arbitrary<Point> {
   return fc.record({

@@ -132,10 +132,27 @@ function isOverlyBroadAncestor(
   const nodeRect = normalizeRect(node.rect);
   const ancestorRect = normalizeRect(ancestor.rect);
   if (!nodeRect || !ancestorRect) return false;
+  if (isScrollingContainer(ancestor) && !areRectsApproximatelyEqual(nodeRect, ancestorRect)) {
+    return true;
+  }
   const rootViewportRect = resolveRootViewportRect(nodes, nodeRect);
   if (!rootViewportRect) return false;
   if (!isRectViewportSized(ancestorRect, rootViewportRect)) return false;
   return !areRectsApproximatelyEqual(nodeRect, ancestorRect);
+}
+
+function isScrollingContainer(node: SnapshotNode): boolean {
+  const type = normalizeType(node.type ?? '');
+  return (
+    type.includes('scrollview') ||
+    type.includes('scrollarea') ||
+    type.includes('listview') ||
+    type.includes('recyclerview') ||
+    type.includes('collectionview') ||
+    type === 'list' ||
+    type === 'table' ||
+    type === 'collection'
+  );
 }
 
 function resolveRootViewportRect(nodes: SnapshotNode[], targetRect: Rect): Rect | null {

@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { BackendSnapshotOptions } from '../../../backend.ts';
 import { ref, selector } from './selector-read-utils.ts';
-import { resolveActionableTouchResolution } from '../../../core/interaction-targeting.ts';
 import { throwIfOffscreenInteractionTarget, tryResolveRefNode } from './resolution.ts';
 import { resolveSelectorChain } from '@agent-device/selectors';
 import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
@@ -414,104 +413,6 @@ test('runtime click still promotes non-touchable nodes to hittable ancestors', a
   assert.deepEqual(calls, [{ x: 160, y: 60 }]);
   assert.equal(result.kind, 'ref');
   assert.equal(result.node?.label, 'Clickable group');
-});
-
-test('touch resolution promotes static text inside a hittable row to the row', () => {
-  const snapshot = makeSnapshotState([
-    {
-      index: 0,
-      depth: 0,
-      type: 'XCUIElementTypeCell',
-      label: 'Account row',
-      rect: { x: 10, y: 20, width: 300, height: 60 },
-      hittable: true,
-    },
-    {
-      index: 1,
-      depth: 1,
-      parentIndex: 0,
-      type: 'XCUIElementTypeStaticText',
-      label: 'Account',
-      rect: { x: 24, y: 32, width: 80, height: 20 },
-      hittable: false,
-    },
-  ]);
-
-  const resolution = resolveActionableTouchResolution(snapshot.nodes, snapshot.nodes[1]!);
-
-  assert.equal(resolution.reason, 'hittable-ancestor');
-  assert.equal(resolution.node.label, 'Account row');
-});
-
-test('touch resolution prefers same-rect hittable descendants over semantic targets', () => {
-  const snapshot = makeSnapshotState([
-    {
-      index: 0,
-      depth: 0,
-      type: 'XCUIElementTypeButton',
-      label: 'Profile',
-      rect: { x: 30, y: 40, width: 120, height: 50 },
-      hittable: false,
-    },
-    {
-      index: 1,
-      depth: 1,
-      parentIndex: 0,
-      type: 'XCUIElementTypeImage',
-      identifier: 'profile-hit-area',
-      rect: { x: 30, y: 40, width: 120, height: 50 },
-      hittable: true,
-    },
-  ]);
-
-  const resolution = resolveActionableTouchResolution(snapshot.nodes, snapshot.nodes[0]!);
-
-  assert.equal(resolution.reason, 'same-rect-descendant');
-  assert.equal(resolution.node.identifier, 'profile-hit-area');
-});
-
-test('touch resolution prevents full-screen window-like ancestors from stealing taps', () => {
-  const snapshot = makeSnapshotState([
-    {
-      index: 0,
-      depth: 0,
-      type: 'XCUIElementTypeApplication',
-      label: 'Example',
-      rect: { x: 0, y: 0, width: 390, height: 844 },
-      hittable: true,
-    },
-    {
-      index: 1,
-      depth: 1,
-      parentIndex: 0,
-      type: 'XCUIElementTypeStaticText',
-      label: 'Status',
-      rect: { x: 24, y: 72, width: 80, height: 24 },
-      hittable: false,
-    },
-  ]);
-
-  const resolution = resolveActionableTouchResolution(snapshot.nodes, snapshot.nodes[1]!);
-
-  assert.equal(resolution.reason, 'overly-broad-ancestor');
-  assert.equal(resolution.node.label, 'Status');
-});
-
-test('touch resolution falls back to the original node when no usable touch target exists', () => {
-  const snapshot = makeSnapshotState([
-    {
-      index: 0,
-      depth: 0,
-      type: 'XCUIElementTypeOther',
-      label: 'Virtual item',
-      hittable: false,
-    },
-  ]);
-
-  const resolution = resolveActionableTouchResolution(snapshot.nodes, snapshot.nodes[0]!);
-
-  assert.equal(resolution.reason, 'original');
-  assert.equal(resolution.node.label, 'Virtual item');
 });
 
 test('runtime interactions reject unsupported macOS desktop and menubar surfaces', async () => {

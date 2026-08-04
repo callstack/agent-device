@@ -31,6 +31,7 @@ export { makeSessionStore } from './store-factory.ts';
 
 export {
   COMPACT_VIEWPORTS,
+  distinctRectPairArb,
   formatRef,
   gestureInViewportArb,
   PROPERTY_RUNS,
@@ -38,6 +39,7 @@ export {
   rawSnapshotNodesArb,
   refArb,
   replayScriptArb,
+  scrollingContainerTypeArb,
 } from './property-arbitraries.ts';
 
 export { withNoColor } from './color.ts';
