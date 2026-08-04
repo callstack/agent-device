@@ -18,6 +18,7 @@ import {
   withSessionlessRunnerCleanup,
 } from './handlers/snapshot-session.ts';
 import { activateCompleteRefFrame } from './ref-frame.ts';
+import { applyRecoveredWarningLatch } from './snapshot-quality-latch.ts';
 import { createDaemonRuntimePolicy } from './runtime-policy.ts';
 import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
 import { isInteractiveObservation } from './session-action-recorder.ts';
@@ -180,7 +181,11 @@ async function dispatchSnapshotRuntimeCommand(
     });
     return {
       ok: true,
-      data: result.data,
+      data: applyRecoveredWarningLatch({
+        session: sessionStore.get(sessionName),
+        data: result.data,
+        internalObservation: req.internal?.observationOnly === true,
+      }),
     };
   });
 }

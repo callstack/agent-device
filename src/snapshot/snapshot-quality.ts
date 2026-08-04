@@ -79,14 +79,25 @@ export function renderSnapshotQualityWarnings(
   ];
 }
 
+/**
+ * The full recovered-state warning line. Shared with the daemon's one-shot deferred
+ * latch (`src/daemon/snapshot-quality-latch.ts`), which re-renders it exactly once when
+ * the penalty was armed by an internal capture that never reached the user.
+ */
+export function recoveredSnapshotQualityWarning(
+  backend: SnapshotQualityVerdict['backend'],
+): string {
+  return `Detected an overly complex or slow accessibility tree. Fell back to the ${backend} snapshot backend. It is OK to continue; use --json to inspect snapshotQuality.reason if you need recovery details.`;
+}
+
 function stateWarning(verdict: SnapshotQualityVerdict): string[] {
   if (verdict.state === 'recovered') {
-    // Penalty-deferred captures repeat on every capture of a hostile screen; the capture that
-    // ARMED the penalty already carried the full warning, so repeating it is pure noise.
+    // Penalty-deferred captures repeat on every capture of a hostile screen, so the full
+    // warning is suppressed here. When the capture that ARMED the penalty was internal
+    // (selector resolution, settle observation, system-modal probe) and never rendered it,
+    // the daemon's session latch re-renders the warning once at the response seam.
     if (verdict.reasonCode === 'deferred') return [];
-    return [
-      `Detected an overly complex or slow accessibility tree. Fell back to the ${verdict.backend} snapshot backend. It is OK to continue; use --json to inspect snapshotQuality.reason if you need recovery details.`,
-    ];
+    return [recoveredSnapshotQualityWarning(verdict.backend)];
   }
   if (verdict.state === 'sparse') {
     return [

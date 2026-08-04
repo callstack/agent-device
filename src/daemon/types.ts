@@ -319,6 +319,18 @@ export type SessionState = {
    * probabilistic (seeded), NOT identity-based.
    */
   snapshotGeneration?: number;
+  /**
+   * One-shot latch: the full "overly complex or slow accessibility tree" warning has been
+   * rendered to this session's client for the app currently under the XCTest-channel
+   * penalty. Penalty-deferred verdicts (`reasonCode: 'deferred'`) suppress the repeated
+   * warning in `renderSnapshotQualityWarnings`, but internal captures (selector
+   * resolution, settle observation, system-modal probes) can arm the runner-side penalty
+   * without any user-facing render — when the latch is not held, the first public
+   * deferred verdict re-renders the warning once. Managed only through
+   * `src/daemon/snapshot-quality-latch.ts`: a genuine recovered render sets it, a healthy
+   * public verdict clears it, and an app switch supersedes it.
+   */
+  recoveredSnapshotWarningLatch?: { appBundleId?: string };
   /** Source snapshot used to resolve repeated `snapshot -s @ref` after scoped output replaces refs. */
   snapshotScopeSource?: SnapshotState;
   /**
