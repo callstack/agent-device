@@ -13,12 +13,9 @@
  * (`interaction-touch-response.ts`), never in the wire response.
  */
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { containsPoint } from '../utils/rect-visibility.ts';
+import { containsPoint } from '@agent-device/contracts/snapshot';
 import { resolveRectCenter } from '../utils/rect-center.ts';
-import {
-  demoteNonUniqueLocalIdentity,
-  readNodeLocalIdentity,
-} from '../replay/target-identity-node.ts';
+import { demoteNonUniqueLocalIdentity, readNodeLocalIdentity } from '@agent-device/ad-script';
 import { buildIndexMap } from '../replay/target-evidence-tree.ts';
 import { normalizeSelectorText } from '../selectors/build.ts';
 import { isSemanticTouchTarget } from './interaction-targeting.ts';

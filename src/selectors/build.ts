@@ -1,8 +1,8 @@
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isNodeVisible } from './node.ts';
-import { extractNodeText, normalizeType } from '../snapshot/snapshot-processing.ts';
-import { idMatchCountInTree, readNodeLocalIdentity } from '../replay/target-identity-node.ts';
+import { extractNodeText, normalizeType } from '@agent-device/contracts/snapshot';
+import { idMatchCountInTree, readNodeLocalIdentity } from '@agent-device/ad-script';
 
 export function buildSelectorChainForNode(
   node: SnapshotNode,

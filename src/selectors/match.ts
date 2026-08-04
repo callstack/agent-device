@@ -1,7 +1,7 @@
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isNodeEditable, isNodeVisible } from './node.ts';
-import { extractNodeText, normalizeType } from '../snapshot/snapshot-processing.ts';
+import { extractNodeText, normalizeType } from '@agent-device/contracts/snapshot';
 import { normalizeText } from './find.ts';
 import type { Selector, SelectorTerm } from './parse.ts';
 

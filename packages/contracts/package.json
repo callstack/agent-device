@@ -56,6 +56,10 @@
       "types": "./src/facades/replay.ts",
       "default": "./src/facades/replay.ts"
     },
+    "./snapshot": {
+      "types": "./src/facades/snapshot.ts",
+      "default": "./src/facades/snapshot.ts"
+    },
     "./divergence": {
       "types": "./src/facades/divergence.ts",
       "default": "./src/facades/divergence.ts"

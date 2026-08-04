@@ -1,7 +1,7 @@
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { centerOfRect } from '@agent-device/kernel/snapshot';
-import { containsPoint, pickLargestRect } from '../utils/rect-visibility.ts';
-import { findNearestHittableAncestor, normalizeType } from '../snapshot/snapshot-processing.ts';
+import { containsPoint, normalizeType, pickLargestRect } from '@agent-device/contracts/snapshot';
+import { findNearestHittableAncestor } from '../snapshot/snapshot-processing.ts';
 import { isSnapshotNodeInteractionBlocked } from '../snapshot/snapshot-occlusion.ts';
 import {
   areRectsApproximatelyEqual,

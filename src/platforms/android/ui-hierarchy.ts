@@ -1,7 +1,7 @@
 import type { RawSnapshotNode, Rect, SnapshotOptions } from '@agent-device/kernel/snapshot';
 import { parseBounds } from '@agent-device/kernel/bounds';
 import { decodeXmlCharacterReferences } from '@agent-device/xml';
-import { isScrollableType } from '../../utils/scrollable.ts';
+import { isScrollableType } from '@agent-device/contracts/snapshot';
 import { intersectArea } from '../../utils/screenshot-geometry.ts';
 import {
   type AndroidSystemChromeProvenance,

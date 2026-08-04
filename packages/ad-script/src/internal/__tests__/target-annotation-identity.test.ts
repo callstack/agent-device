@@ -1,6 +1,13 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { matchesAncestryPrefix, matchesLocalIdentity } from '../target-annotation-identity.ts';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import {
+  demoteNonUniqueLocalIdentity,
+  idMatchCountInTree,
+  matchesAncestryPrefix,
+  matchesLocalIdentity,
+  readNodeLocalIdentity,
+} from '../target-annotation-identity.ts';
 
 // The `# agent-device:target-v1` SERDE (serialize/parse, normalization,
 // bounds) lives alongside this in `target-annotation-serde.ts` — see
@@ -58,4 +65,55 @@ test('matchesLocalIdentity: a recorded id never matches a node without that id',
 test('matchesLocalIdentity: with no recorded id, role+label must both match, absent-absent counts as equal', () => {
   assert.equal(matchesLocalIdentity({ role: 'button' }, { role: 'button' }), true);
   assert.equal(matchesLocalIdentity({ role: 'button', label: 'Save' }, { role: 'button' }), false);
+});
+
+// ---------------------------------------------------------------------------
+// Shared id demotion
+// ---------------------------------------------------------------------------
+
+function sharedIdRows(): RawSnapshotNode[] {
+  return [
+    {
+      index: 0,
+      type: 'TextView',
+      identifier: 'android:id/title',
+      label: 'Network & internet',
+    },
+    {
+      index: 1,
+      type: 'TextView',
+      identifier: 'android:id/title',
+      label: 'Apps',
+    },
+    { index: 2, type: 'Button', identifier: 'save', label: 'Save' },
+  ];
+}
+
+test('idMatchCountInTree counts every node sharing the canonical id, independent of role or label', () => {
+  const nodes = sharedIdRows();
+  assert.equal(idMatchCountInTree(nodes, 'android:id/title'), 2);
+  assert.equal(idMatchCountInTree(nodes, 'save'), 1);
+  assert.equal(idMatchCountInTree(nodes, 'does-not-exist'), 0);
+});
+
+test('demoteNonUniqueLocalIdentity drops only a shared id tier', () => {
+  const nodes = sharedIdRows();
+
+  const sharedIdentity = readNodeLocalIdentity(nodes[0]!);
+  assert.equal(sharedIdentity.id, 'android:id/title');
+  assert.deepEqual(demoteNonUniqueLocalIdentity(sharedIdentity, nodes), {
+    role: 'textview',
+    label: 'Network & internet',
+  });
+
+  const uniqueIdentity = readNodeLocalIdentity(nodes[2]!);
+  assert.equal(uniqueIdentity.id, 'save');
+  assert.deepEqual(demoteNonUniqueLocalIdentity(uniqueIdentity, nodes), uniqueIdentity);
+});
+
+test('demoteNonUniqueLocalIdentity passes through identities without an id', () => {
+  const nodes: RawSnapshotNode[] = [{ index: 0, type: 'Button', label: 'Unlabeled row' }];
+  const identity = readNodeLocalIdentity(nodes[0]!);
+  assert.equal(identity.id, undefined);
+  assert.deepEqual(demoteNonUniqueLocalIdentity(identity, nodes), identity);
 });

@@ -788,7 +788,7 @@ test('an adb mechanism failure marked retriable at the transport level still fai
 // landmark and converts the loop's timeout refusal afterwards.
 // ---------------------------------------------------------------------------
 
-import { WAIT_LANDMARK_MISMATCH_REASON } from '../../../replay/target-identity-node.ts';
+import { WAIT_LANDMARK_MISMATCH_REASON } from '@agent-device/contracts/replay';
 
 const WAIT_ANNOTATION =
   '# agent-device:target-v1 {"role":"statictext","label":"Screen X","ancestry":[{"role":"other","label":"Detail Screen"}],"sibling":0,"viewportOrder":0,"verification":"verified"}';

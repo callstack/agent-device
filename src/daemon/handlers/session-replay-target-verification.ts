@@ -6,6 +6,7 @@ import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
 import {
   annotationLocalIdentity,
   formatDivergenceActionLabel,
+  readNodeStructuralDenotation,
   type LocalIdentity,
 } from '@agent-device/ad-script';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
@@ -24,10 +25,9 @@ import {
   type ReplayDivergenceTargetIdentity,
 } from '@agent-device/contracts/divergence';
 import {
-  readNodeStructuralDenotation,
   REPLAY_TARGET_GUARD_MISMATCH_REASON,
   WAIT_LANDMARK_MISMATCH_REASON,
-} from '../../replay/target-identity-node.ts';
+} from '@agent-device/contracts/replay';
 import { resolveTargetIdentityVerification } from '../../core/command-descriptor/registry.ts';
 import { parseWaitPositionals } from '../../core/wait-positionals.ts';
 import type { DaemonResponse, SessionAction, SessionState } from '../types.ts';
@@ -93,7 +93,7 @@ import { extractReplayTargetToken, readRefLabel } from './session-replay-target-
  * `@agent-device/ad-replay`'s `AdReplayVerifiedTargetGuard` — so it now
  * imports the engine's type directly instead of maintaining a shadow copy
  * that could silently drift. `ReplayTargetGuardDenotation`
- * (`target-identity-node.ts`) stays the concrete producer type for
+ * (`@agent-device/contracts/replay`) stays the concrete producer type for
  * `expected`; it is structurally assignable to `AdReplayVerifiedTargetGuard['expected']`
  * (both `{ identity: LocalIdentity; structural: { documentOrder: number;
  * sibling: number } }`) without a name-level dependency between the two

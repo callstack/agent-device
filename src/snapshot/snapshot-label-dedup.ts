@@ -1,5 +1,5 @@
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { buildSnapshotNodeMap } from './snapshot-tree.ts';
+import { buildSnapshotNodeMap } from '@agent-device/contracts/snapshot';
 
 /**
  * Output-only label/identifier dedup: when a node's `label` (or, separately,

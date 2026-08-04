@@ -58,6 +58,7 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/replay',
   '@agent-device/contracts/session',
   '@agent-device/contracts/settings',
+  '@agent-device/contracts/snapshot',
 ] as const;
 
 function rules(violations: { rule: string }[]): string[] {
@@ -406,6 +407,8 @@ test('Node resolution enforces the exports map at runtime', () => {
     '@agent-device/contracts/gesture-plan',
     '@agent-device/contracts/src/gesture-plan.ts',
     '@agent-device/contracts',
+    '@agent-device/contracts/src/snapshot-text.ts',
+    '@agent-device/contracts/src/facades/snapshot.ts',
     '@agent-device/provider-webdriver/runtime',
     '@agent-device/provider-webdriver/src/runtime.ts',
     '@agent-device/provider-limrun/runtime',
@@ -430,6 +433,11 @@ test('Node resolution enforces the exports map at runtime', () => {
   assert.ok(
     contractsResolved.endsWith('packages/contracts/src/facades/interaction.ts'),
     contractsResolved,
+  );
+  const contractsSnapshotResolved = import.meta.resolve('@agent-device/contracts/snapshot');
+  assert.ok(
+    contractsSnapshotResolved.endsWith('packages/contracts/src/facades/snapshot.ts'),
+    contractsSnapshotResolved,
   );
   const providerWebDriverResolved = import.meta.resolve('@agent-device/provider-webdriver');
   assert.ok(

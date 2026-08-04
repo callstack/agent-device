@@ -6,7 +6,7 @@ import {
   isReactNativeOverlayDismissLabel,
   isReactNativeOverlayMinimizeLabel,
 } from '../../../core/react-native-overlay.ts';
-import { normalizeType } from '../../../snapshot/snapshot-processing.ts';
+import { normalizeType } from '@agent-device/contracts/snapshot';
 import { collectIosScrollIndicatorPresentation } from './scroll.ts';
 import {
   areRectsApproximatelyEqual,

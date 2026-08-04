@@ -5,7 +5,7 @@ import { buildNodes } from '../__tests__/test-utils/snapshot-builders.ts';
 import { computeTargetEvidence } from '../daemon/session-target-evidence.ts';
 import { buildSelectorChainForNode } from '../selectors/build.ts';
 import { parseSelectorChain, resolveSelectorChain } from '../selectors/index.ts';
-import { readNodeLocalIdentity } from '../replay/target-identity-node.ts';
+import { readNodeLocalIdentity } from '@agent-device/ad-script';
 import { resolvePressRecordingTarget } from './press-retarget.ts';
 
 function findByLabel(nodes: SnapshotNode[], label: string): SnapshotNode {

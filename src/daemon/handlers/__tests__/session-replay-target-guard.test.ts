@@ -6,12 +6,11 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
-import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
-import {
-  readNodeLocalIdentity,
-  readNodeStructuralDenotation,
-  type ReplayTargetGuardDenotation,
-} from '../../../replay/target-identity-node.ts';
+import type {
+  ReplayTargetGuardDenotation,
+  TargetAnnotationV1,
+} from '@agent-device/contracts/replay';
+import { readNodeLocalIdentity, readNodeStructuralDenotation } from '@agent-device/ad-script';
 import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
 import {
   ref as interactionRef,

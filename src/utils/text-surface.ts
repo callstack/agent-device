@@ -1,3 +1,5 @@
+import { normalizeType } from '@agent-device/contracts/snapshot';
+
 type TextSurfaceNode = {
   type?: string;
   label?: string;
@@ -70,19 +72,6 @@ function shouldSummarizeTextSurface(text: string): boolean {
 
 export function trimText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
-}
-
-export function normalizeType(type: string): string {
-  let normalized = type
-    .trim()
-    .replace(/XCUIElementType/gi, '')
-    .replace(/^AX/, '')
-    .toLowerCase();
-  const lastSeparator = Math.max(normalized.lastIndexOf('.'), normalized.lastIndexOf('/'));
-  if (lastSeparator !== -1) {
-    normalized = normalized.slice(lastSeparator + 1);
-  }
-  return normalized;
 }
 
 /**

@@ -16,7 +16,16 @@
  * here, not through `@agent-device/ad-replay`'s façade (#1555 review).
  */
 
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import { normalizeType } from '@agent-device/contracts/snapshot';
 import type { TargetAncestryEntry, TargetAnnotationV1 } from '@agent-device/contracts/replay';
+import {
+  normalizeIdentifierField,
+  normalizeLabelField,
+  normalizeRoleField,
+  truncateToUtf8Bytes,
+  TARGET_ANNOTATION_MAX_FIELD_BYTES,
+} from './target-annotation-serde.ts';
 
 // ---------------------------------------------------------------------------
 // Local identity + ancestry-prefix matching (decision 3 "Local identity" /
@@ -26,6 +35,81 @@ import type { TargetAncestryEntry, TargetAnnotationV1 } from '@agent-device/cont
 // ---------------------------------------------------------------------------
 
 export type LocalIdentity = { id?: string; role: string; label?: string };
+
+type IdentityTreeNode = Pick<RawSnapshotNode, 'type' | 'identifier' | 'label'>;
+
+/** The single normalized local-identity reader shared by record and replay paths. */
+export function readNodeLocalIdentity(
+  node: Pick<RawSnapshotNode, 'type' | 'identifier' | 'label'>,
+): LocalIdentity {
+  const role = normalizeRoleField(normalizeType(node.type ?? ''));
+  const id = normalizeIdentifierField(node.identifier);
+  const label = normalizeLabelField(node.label);
+  return {
+    ...(id !== undefined ? { id: truncateToUtf8Bytes(id, TARGET_ANNOTATION_MAX_FIELD_BYTES) } : {}),
+    role: truncateToUtf8Bytes(role, TARGET_ANNOTATION_MAX_FIELD_BYTES),
+    ...(label !== undefined
+      ? { label: truncateToUtf8Bytes(label, TARGET_ANNOTATION_MAX_FIELD_BYTES) }
+      : {}),
+  };
+}
+
+/** Exact-equality comparison of two normalized local identities. */
+export function localIdentitiesEqual(a: LocalIdentity, b: LocalIdentity): boolean {
+  return a.id === b.id && a.role === b.role && a.label === b.label;
+}
+
+/** Counts every node in a tree carrying the canonical identity id. */
+export function idMatchCountInTree(nodes: readonly IdentityTreeNode[], id: string): number {
+  let count = 0;
+  for (const node of nodes) {
+    if (readNodeLocalIdentity(node).id === id) count += 1;
+  }
+  return count;
+}
+
+/** Drops a non-unique id while preserving the role and label identity tiers. */
+export function demoteNonUniqueLocalIdentity(
+  identity: LocalIdentity,
+  nodes: readonly IdentityTreeNode[],
+): LocalIdentity {
+  if (identity.id === undefined) return identity;
+  if (idMatchCountInTree(nodes, identity.id) <= 1) return identity;
+  const { role, label } = identity;
+  return { role, ...(label !== undefined ? { label } : {}) };
+}
+
+export type NodeStructuralDenotation = {
+  documentOrder: number;
+  sibling: number;
+};
+
+type StructuralNode = Pick<RawSnapshotNode, 'index' | 'parentIndex'>;
+
+/** Zero-based ordinal among the node's own parent's children, in document order. */
+export function siblingOrdinal(nodes: readonly StructuralNode[], node: StructuralNode): number {
+  let ordinal = 0;
+  for (const candidate of nodes) {
+    if (candidate.parentIndex !== node.parentIndex) continue;
+    if (candidate.index === node.index) return ordinal;
+    ordinal += 1;
+  }
+  return 0;
+}
+
+export function readNodeStructuralDenotation(
+  node: StructuralNode,
+  nodes: readonly StructuralNode[],
+): NodeStructuralDenotation {
+  return { documentOrder: node.index, sibling: siblingOrdinal(nodes, node) };
+}
+
+export function structuralDenotationsEqual(
+  a: NodeStructuralDenotation,
+  b: NodeStructuralDenotation,
+): boolean {
+  return a.documentOrder === b.documentOrder && a.sibling === b.sibling;
+}
 
 /** The recorded annotation's identity tier as a bare `LocalIdentity` (drop-empty-keys form). */
 export function annotationLocalIdentity(

@@ -1,5 +1,27 @@
 import type { DaemonError } from '@agent-device/kernel/errors';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
+import { WAIT_REASONS } from './wait.ts';
+
+/**
+ * The verified snapshot member carried into the pre-action interaction guard.
+ * These neutral shapes live in contracts so daemon and command layers can
+ * share the guard without depending on the annotation codec package.
+ */
+export type ReplayTargetGuardDenotation = {
+  identity: { id?: string; role: string; label?: string };
+  structural: { documentOrder: number; sibling: number };
+};
+
+export const REPLAY_TARGET_GUARD_MISMATCH_REASON = 'replay_target_guard_mismatch';
+
+export const WAIT_LANDMARK_MISMATCH_REASON = WAIT_REASONS.landmarkIdentityMismatch;
+
+/** Compact evidence retained by a selector wait's final mismatching poll. */
+export type WaitLandmarkMismatchEvidence = {
+  matchCount: number;
+  observed: { id?: string; role: string; label?: string };
+  observedAncestry: { role: string; label?: string }[];
+};
 
 export type ReplayCommandResult = {
   replayed: number;

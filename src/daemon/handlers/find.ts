@@ -11,7 +11,7 @@ import { expireRefFrame } from '../ref-frame.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { contextFromFlags } from '../context.ts';
-import { extractNodeText } from '../../snapshot/snapshot-processing.ts';
+import { extractNodeText } from '@agent-device/contracts/snapshot';
 import {
   resolveActionableTouchNode,
   resolveActionableTouchResolution,

@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { buildSnapshotState } from '../../../daemon/handlers/snapshot-capture.ts';
-import { isNodeVisibleOnScreen } from '../../../snapshot/mobile-snapshot-semantics.ts';
+import { isNodeVisibleOnScreen } from '@agent-device/contracts/snapshot';
 import { androidUiNodes, parseUiHierarchy } from '../ui-hierarchy.ts';
 
 test('parseUiHierarchy does not truncate when no max node count is requested', () => {

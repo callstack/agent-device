@@ -24,24 +24,22 @@ import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { resolveRectCenter } from '../utils/rect-center.ts';
 import { findNearestScrollableContainer } from './snapshot-presentation/tree.ts';
 import {
-  demoteNonUniqueLocalIdentity,
-  readNodeLocalIdentity,
-  siblingOrdinal,
-} from '../replay/target-identity-node.ts';
-import {
-  buildAncestryChain,
-  buildIndexMap,
-  filterIdentitySet,
-} from '../replay/target-evidence-tree.ts';
-import {
   classifyTargetBindingMatch,
+  demoteNonUniqueLocalIdentity,
   matchesLocalIdentity,
+  readNodeLocalIdentity,
   serializeTargetAnnotationV1,
+  siblingOrdinal,
   utf8ByteLength,
   type LocalIdentity,
   TARGET_ANNOTATION_MAX_ANCESTRY,
   TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
 } from '@agent-device/ad-script';
+import {
+  buildAncestryChain,
+  buildIndexMap,
+  filterIdentitySet,
+} from '../replay/target-evidence-tree.ts';
 import type {
   TargetAncestryEntry,
   TargetAnnotationV1,
@@ -243,7 +241,7 @@ type DisambiguationDomain = {
  * disagreeing (demoting one but not the other). The rule is capture-time
  * uniqueness, not an id-namespace heuristic: a reused RN `FlatList` `testID`
  * hits the same demotion on iOS. Delegates to the shared
- * `demoteNonUniqueLocalIdentity` (`target-identity-node.ts`), which #1280's
+ * `demoteNonUniqueLocalIdentity` (`@agent-device/ad-script`), which #1280's
  * press-retarget check also uses.
  */
 function demoteNonUniqueId(identity: LocalIdentity, nodes: readonly SnapshotNode[]): LocalIdentity {

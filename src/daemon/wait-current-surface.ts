@@ -3,7 +3,7 @@ import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { captureSnapshot } from './handlers/snapshot-capture.ts';
 import { errorResponse } from './handlers/response.ts';
-import { normalizeType } from '../snapshot/snapshot-processing.ts';
+import { normalizeType } from '@agent-device/contracts/snapshot';
 
 type WaitCurrentSurfaceParams = {
   req: DaemonRequest;

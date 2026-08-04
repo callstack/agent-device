@@ -10,10 +10,10 @@
  */
 
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { readNodeLocalIdentity } from './target-identity-node.ts';
 import {
   matchesAncestryPrefix,
   matchesLocalIdentity,
+  readNodeLocalIdentity,
   type LocalIdentity,
 } from '@agent-device/ad-script';
 import type { TargetAncestryEntry } from '@agent-device/contracts/replay';

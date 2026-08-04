@@ -1,8 +1,6 @@
-import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { RawSnapshotNode, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
-import { extractReadableText, normalizeType } from '../utils/text-surface.ts';
-
-export { normalizeType };
+import { buildSnapshotNodeMap, normalizeType } from '@agent-device/contracts/snapshot';
+import { extractReadableText } from '../utils/text-surface.ts';
 
 export function findNodeByLabel(nodes: SnapshotState['nodes'], label: string) {
   const query = label.toLowerCase();
@@ -81,32 +79,12 @@ export function pruneGroupNodes(nodes: RawSnapshotNode[]): RawSnapshotNode[] {
   return result;
 }
 
-export function isFillableType(type: string, platform: Platform | PublicPlatform): boolean {
-  const normalized = normalizeType(type);
-  if (!normalized) return true;
-  if (platform === 'android') {
-    return normalized.includes('edittext') || normalized.includes('autocompletetextview');
-  }
-  return (
-    normalized.includes('textfield') ||
-    normalized.includes('securetextfield') ||
-    normalized.includes('searchfield') ||
-    normalized.includes('textview') ||
-    normalized.includes('textarea') ||
-    normalized === 'search'
-  );
-}
-
 export function findNearestHittableAncestor(
   nodes: SnapshotState['nodes'],
   node: SnapshotState['nodes'][number],
 ): SnapshotState['nodes'][number] | null {
   if (node.hittable) return node;
   return findNearestAncestor(nodes, node, (parent) => parent.hittable === true);
-}
-
-export function buildSnapshotNodeByIndex(nodes: SnapshotState['nodes']): Map<number, SnapshotNode> {
-  return new Map(nodes.map((candidate) => [candidate.index, candidate]));
 }
 
 /**
@@ -140,17 +118,10 @@ export function findNearestAncestor(
   node: SnapshotState['nodes'][number],
   predicate: (node: SnapshotState['nodes'][number]) => boolean,
 ): SnapshotState['nodes'][number] | null {
-  const nodesByIndex = buildSnapshotNodeByIndex(nodes);
+  const nodesByIndex = buildSnapshotNodeMap(nodes);
   return findSnapshotAncestor(nodes, node, nodesByIndex, (parent) =>
     predicate(parent) ? parent : null,
   );
-}
-
-export function extractNodeText(node: SnapshotState['nodes'][number]): string {
-  const candidates = [node.label, node.value, node.identifier]
-    .map((value) => (typeof value === 'string' ? value.trim() : ''))
-    .filter((value) => value.length > 0);
-  return candidates[0] ?? '';
 }
 
 export function extractNodeReadText(node: SnapshotState['nodes'][number]): string {

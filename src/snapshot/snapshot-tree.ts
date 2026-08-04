@@ -36,10 +36,6 @@ export function normalizeSnapshotTree(nodes: RawSnapshotNode[]): RawSnapshotNode
   return normalized;
 }
 
-export function buildSnapshotNodeMap<T extends { index: number }>(nodes: T[]): Map<number, T> {
-  return new Map(nodes.map((node) => [node.index, node]));
-}
-
 export function displayNodeLabel(node: SnapshotNode): string {
   return node.label?.trim() || node.value?.trim() || node.identifier?.trim() || '';
 }

@@ -4,8 +4,8 @@ import {
   buildMobileSnapshotPresentation,
   classifyOffscreenScrollDirection,
   isConfirmedOnScreenProbe,
-  isNodeVisibleInEffectiveViewport,
 } from '../../snapshot/mobile-snapshot-semantics.ts';
+import { isNodeVisibleInEffectiveViewport } from '@agent-device/contracts/snapshot';
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 test('mobile presentation keeps only visible nodes and adds off-screen summary fallback', () => {

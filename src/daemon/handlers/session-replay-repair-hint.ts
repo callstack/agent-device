@@ -14,7 +14,7 @@
  * defined.
  *
  * Lives in the daemon zone (not `src/replay/`, which stays tree-agnostic per
- * `target-identity-node.ts`'s own contract) because the container-presence test
+ * the replay package contract) because the container-presence test
  * below is a genuine structural containment check over `parentIndex` — the
  * same tree-walking machinery decision 3's own identity-set filter uses
  * (`buildAncestryChain`/`computeScrollRegionKey`, `session-target-evidence.ts`)

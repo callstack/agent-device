@@ -22,7 +22,7 @@ import {
   type InteractionResponseDataTransformCommand,
 } from '../../core/interaction-response-data-transform.ts';
 import { normalizeAppleRunnerResultForResponse } from '../../platforms/apple/core/runner/runner-result-response-normalization.ts';
-import type { ReplayTargetGuardDenotation } from '../../replay/target-identity-node.ts';
+import type { ReplayTargetGuardDenotation } from '@agent-device/contracts/replay';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { getActiveAndroidSnapshotFreshness } from '../android-snapshot-freshness.ts';
 import {

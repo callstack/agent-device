@@ -5,7 +5,7 @@ import {
 } from '@agent-device/contracts/platform';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isAndroidInputMethodSnapshotNode } from '../snapshot/android-input-method-overlays.ts';
-import { normalizeType } from '../utils/text-surface.ts';
+import { normalizeType } from '@agent-device/contracts/snapshot';
 
 /**
  * Structural keyboard / IME / persistent-system chrome classifier over a

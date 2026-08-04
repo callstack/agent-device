@@ -1,9 +1,9 @@
+import { deriveMobileSnapshotHiddenContentHints } from '../snapshot/mobile-snapshot-semantics.ts';
 import {
-  deriveMobileSnapshotHiddenContentHints,
   isNodeVisibleInEffectiveViewport,
-} from '../snapshot/mobile-snapshot-semantics.ts';
+  isScrollableNodeLike,
+} from '@agent-device/contracts/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
-import { isScrollableNodeLike } from './scrollable.ts';
 import type { ScrollDirection } from '@agent-device/contracts/interaction';
 import type {
   HiddenContentHint,

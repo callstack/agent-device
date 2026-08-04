@@ -3,7 +3,7 @@ import { isMobilePlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { collectKeyboardChromeRefs } from '../core/snapshot-chrome.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
-import { normalizeType } from '../utils/text-surface.ts';
+import { normalizeType } from '@agent-device/contracts/snapshot';
 import { contextFromFlags } from './context.ts';
 import type { SessionState } from './types.ts';
 

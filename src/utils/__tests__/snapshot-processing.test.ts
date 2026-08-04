@@ -1,10 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import {
-  buildSnapshotNodeByIndex,
-  findNearestAncestor,
-  findSnapshotAncestor,
-} from '../../snapshot/snapshot-processing.ts';
+import { buildSnapshotNodeMap } from '@agent-device/contracts/snapshot';
+import { findNearestAncestor, findSnapshotAncestor } from '../../snapshot/snapshot-processing.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 
 test('findSnapshotAncestor walks non-contiguous parent indexes until resolver returns a value', () => {
@@ -15,15 +12,10 @@ test('findSnapshotAncestor walks non-contiguous parent indexes until resolver re
   ];
   const visited: number[] = [];
 
-  const ancestor = findSnapshotAncestor(
-    nodes,
-    nodes[1]!,
-    buildSnapshotNodeByIndex(nodes),
-    (node) => {
-      visited.push(node.index);
-      return node.type === 'Window' ? node : null;
-    },
-  );
+  const ancestor = findSnapshotAncestor(nodes, nodes[1]!, buildSnapshotNodeMap(nodes), (node) => {
+    visited.push(node.index);
+    return node.type === 'Window' ? node : null;
+  });
 
   assert.deepEqual(visited, [20, 10]);
   assert.equal(ancestor?.index, 10);

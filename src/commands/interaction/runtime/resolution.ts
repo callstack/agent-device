@@ -18,18 +18,18 @@ import {
 import { buildSelectorChainForNode } from '../../../selectors/build.ts';
 import { resolvePressRecordingTarget } from '../../../core/press-retarget.ts';
 import { requireSnapshotSession } from './selector-read-shared.ts';
+import { findNodeByLabel, resolveRefLabel } from '../../../snapshot/snapshot-processing.ts';
 import {
-  findNodeByLabel,
+  containsPoint,
+  isNodeVisibleOnScreen,
   normalizeType,
-  resolveRefLabel,
-} from '../../../snapshot/snapshot-processing.ts';
+  resolveEffectiveViewportRect,
+  resolveViewportRect,
+} from '@agent-device/contracts/snapshot';
 import {
   classifyOffscreenScrollDirection,
-  isNodeVisibleOnScreen,
-  resolveEffectiveViewportRect,
   type OffscreenScrollDirection,
 } from '../../../snapshot/mobile-snapshot-semantics.ts';
-import { containsPoint, resolveViewportRect } from '../../../utils/rect-visibility.ts';
 import { isSnapshotNodeInteractionBlocked } from '../../../snapshot/snapshot-occlusion.ts';
 import { truncateUtf8 } from '../../../utils/truncate-utf8.ts';
 import type {
@@ -47,9 +47,11 @@ import {
   readNodeLocalIdentity,
   readNodeStructuralDenotation,
   structuralDenotationsEqual,
+} from '@agent-device/ad-script';
+import {
   REPLAY_TARGET_GUARD_MISMATCH_REASON,
   type ReplayTargetGuardDenotation,
-} from '../../../replay/target-identity-node.ts';
+} from '@agent-device/contracts/replay';
 
 export type { InteractionTarget, ResolvedInteractionTarget };
 

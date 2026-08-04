@@ -1,5 +1,5 @@
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { normalizeType } from '../../snapshot/snapshot-processing.ts';
+import { normalizeType } from '@agent-device/contracts/snapshot';
 export { areRectsApproximatelyEqual } from '../../utils/rect-center.ts';
 
 export type SnapshotTreeRuleContext = {

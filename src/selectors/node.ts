@@ -1,6 +1,6 @@
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { isFillableType } from '../snapshot/snapshot-processing.ts';
+import { isFillableType } from '@agent-device/contracts/snapshot';
 
 export function isNodeVisible(node: SnapshotNode): boolean {
   if (node.hittable === true) return true;

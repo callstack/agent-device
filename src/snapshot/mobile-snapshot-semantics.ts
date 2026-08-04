@@ -1,12 +1,15 @@
 import {
-  containsPoint,
+  buildSnapshotNodeMap,
+  findNearestScrollableAncestor,
+  isNodeVisibleInEffectiveViewport,
   isRectVisibleInViewport,
+  isTapPointInsideViewport,
+  resolveEffectiveViewportRect,
   resolveViewportRect,
-} from '../utils/rect-visibility.ts';
+} from '@agent-device/contracts/snapshot';
 import { inferVerticalScrollIndicatorDirections } from '../utils/scroll-indicator.ts';
 import type { HiddenContentHint, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
-import { buildSnapshotNodeMap, displayNodeLabel } from './snapshot-tree.ts';
-import { isScrollableNodeLike } from '../utils/scrollable.ts';
+import { displayNodeLabel } from './snapshot-tree.ts';
 
 type Direction = 'above' | 'below';
 
@@ -81,63 +84,6 @@ function analyzeMobileSnapshotVisibility(nodes: SnapshotNode[]): {
   return { byIndex, visibleNodeIndexes, offscreenNodes, hintedContainers };
 }
 
-export function isNodeVisibleInEffectiveViewport(
-  node: Pick<SnapshotNode, 'rect' | 'index' | 'parentIndex' | 'type' | 'role' | 'subrole'>,
-  nodes: SnapshotNode[],
-  byIndex: Map<number, SnapshotNode> = buildSnapshotNodeMap(nodes),
-): boolean {
-  if (!node.rect) {
-    return true;
-  }
-  const viewport = resolveEffectiveViewportRect(node, nodes, byIndex);
-  if (!viewport) {
-    return true;
-  }
-  return isRectVisibleInViewport(node.rect, viewport);
-}
-
-// Effective-viewport visibility measures a node against its nearest scrollable
-// ancestor, so items inside an off-screen container (e.g. a closed drawer's own
-// ScrollView at negative x) still read as "visible" within that container.
-// On-screen visibility additionally requires the node's CENTER — the point an
-// interaction would tap — to sit inside the root Application/Window viewport.
-// Edge overlap is not enough: a mostly-off-screen drawer container can graze
-// the viewport by a fraction of a pixel while its center (the tap point) is
-// far off-screen. Interaction guards and selector disambiguation use this
-// stricter form; scroll-direction summaries keep the effective form.
-export function isNodeVisibleOnScreen(
-  node: Pick<SnapshotNode, 'rect' | 'index' | 'parentIndex' | 'type' | 'role' | 'subrole'>,
-  nodes: SnapshotNode[],
-  byIndex: Map<number, SnapshotNode> = buildSnapshotNodeMap(nodes),
-): boolean {
-  if (!node.rect) {
-    return true;
-  }
-  if (!isNodeVisibleInEffectiveViewport(node, nodes, byIndex)) {
-    return false;
-  }
-  const rootViewport = resolveViewportRect(nodes, node.rect);
-  return isTapPointInsideViewport(node.rect, rootViewport);
-}
-
-// The tap-point rule shared with the iOS runner (ADR 0011 Layer 2): the tap
-// point is the rect's exact CENTER; it is inside the viewport iff it lies
-// within the frame, edges inclusive. A missing, empty, or invalid viewport
-// fails open (allowed) — resolving the best available viewport is the
-// caller's job, and the rule must not turn a missing frame into a refusal.
-//
-// Swift twin: apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/
-// RunnerTapPointPolicy.swift (TapPointPolicy.isAllowed). Parity is enforced
-// by the golden fixture table contracts/fixtures/tap-point-policy.json,
-// asserted on both sides (tap-point-policy-parity.test.ts / the gated XCTest
-// in RunnerTapPointPolicy.swift). Change the rule only via the table.
-export function isTapPointInsideViewport(rect: Rect, viewport: Rect | null): boolean {
-  if (!viewport || viewport.width <= 0 || viewport.height <= 0) {
-    return true;
-  }
-  return containsPoint(viewport, rect.x + rect.width / 2, rect.y + rect.height / 2);
-}
-
 /**
  * #1542: the pure geometry boundary the off-screen refusal double-check's
  * direct probe (`src/daemon/offscreen-target-probe.ts`) reduces its decision
@@ -157,18 +103,6 @@ export function isConfirmedOnScreenProbe(
   rootViewport: Rect | null,
 ): boolean {
   return probe.hittable && isTapPointInsideViewport(probe.rect, rootViewport);
-}
-
-export function resolveEffectiveViewportRect(
-  node: Pick<SnapshotNode, 'rect' | 'index' | 'parentIndex' | 'type' | 'role' | 'subrole'>,
-  nodes: SnapshotNode[],
-  byIndex: Map<number, SnapshotNode> = buildSnapshotNodeMap(nodes),
-): Rect | null {
-  const clippingAncestorRect = findNearestScrollableAncestorRect(node, byIndex);
-  if (clippingAncestorRect) {
-    return clippingAncestorRect;
-  }
-  return resolveViewportRect(nodes, node.rect ?? { x: 0, y: 0, width: 0, height: 0 });
 }
 
 /** The concrete `scroll <direction>` that brings an off-screen target into view. */
@@ -439,7 +373,7 @@ function findNearestVisibleScrollableAncestor(
   visibleNodeIndexes: Set<number>,
   byIndex: Map<number, SnapshotNode>,
 ): SnapshotNode | null {
-  return findNearestScrollableAncestorMatching(node, byIndex, (current) =>
+  return findNearestScrollableAncestor(node, byIndex, (current) =>
     visibleNodeIndexes.has(current.index),
   );
 }
@@ -485,32 +419,4 @@ function inferDirectionsFromScrollIndicator(node: SnapshotNode): Set<Direction> 
     directions.add('below');
   }
   return directions.size > 0 ? directions : null;
-}
-
-function findNearestScrollableAncestorRect(
-  node: Pick<SnapshotNode, 'index' | 'parentIndex' | 'type' | 'role' | 'subrole'>,
-  byIndex: Map<number, SnapshotNode>,
-): Rect | null {
-  return (
-    findNearestScrollableAncestorMatching(node, byIndex, (current) => Boolean(current.rect))
-      ?.rect ?? null
-  );
-}
-
-function findNearestScrollableAncestorMatching(
-  node: Pick<SnapshotNode, 'index' | 'parentIndex' | 'type' | 'role' | 'subrole'>,
-  byIndex: Map<number, SnapshotNode>,
-  predicate: (node: SnapshotNode) => boolean,
-): SnapshotNode | null {
-  let current = typeof node.parentIndex === 'number' ? byIndex.get(node.parentIndex) : undefined;
-  const visited = new Set<number>();
-  while (current && !visited.has(current.index)) {
-    visited.add(current.index);
-    if (predicate(current) && isScrollableNodeLike(current)) {
-      return current;
-    }
-    current =
-      typeof current.parentIndex === 'number' ? byIndex.get(current.parentIndex) : undefined;
-  }
-  return null;
 }

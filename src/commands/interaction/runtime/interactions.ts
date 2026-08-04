@@ -7,7 +7,7 @@ import type {
 import { AppError } from '@agent-device/kernel/errors';
 import type { Point } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
-import { isFillableType } from '../../../snapshot/snapshot-processing.ts';
+import { isFillableType } from '@agent-device/contracts/snapshot';
 import { successText } from '../../../utils/success-text.ts';
 import { findMistargetedTypeRefToken } from '../../../utils/type-target-warning.ts';
 import { requireIntInRange } from '../../../utils/validation.ts';

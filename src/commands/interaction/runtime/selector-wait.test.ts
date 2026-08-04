@@ -14,7 +14,7 @@ import {
   selectorReadSnapshot,
 } from './__tests__/test-utils/index.ts';
 import { computeTargetEvidence } from '../../../daemon/session-target-evidence.ts';
-import { WAIT_LANDMARK_MISMATCH_REASON } from '../../../replay/target-identity-node.ts';
+import { WAIT_LANDMARK_MISMATCH_REASON } from '@agent-device/contracts/replay';
 import { AppError } from '@agent-device/kernel/errors';
 
 test('runtime focused selector waits against a full snapshot', async () => {

@@ -3,15 +3,15 @@ import { refuse, type SelectorArgumentRefusal } from './argument-refusal.ts';
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
-import { isNodeVisibleInEffectiveViewport } from '../snapshot/mobile-snapshot-semantics.ts';
+import {
+  buildSnapshotNodeMap,
+  extractNodeText,
+  isNodeVisibleInEffectiveViewport,
+  normalizeType,
+} from '@agent-device/contracts/snapshot';
 import { isNodeEditable, isNodeVisible } from './node.ts';
 import { tryParseSelectorChain } from './parse.ts';
-import {
-  buildSnapshotNodeByIndex,
-  extractNodeText,
-  findSnapshotAncestor,
-  normalizeType,
-} from '../snapshot/snapshot-processing.ts';
+import { findSnapshotAncestor } from '../snapshot/snapshot-processing.ts';
 
 export type IsPredicate =
   | 'visible'
@@ -141,7 +141,7 @@ function resolveVisibilityAnchor(
   nodes: SnapshotState['nodes'],
   platform: Platform | PublicPlatform,
 ): SnapshotState['nodes'][number] | null {
-  const nodesByIndex = buildSnapshotNodeByIndex(nodes);
+  const nodesByIndex = buildSnapshotNodeMap(nodes);
   return findSnapshotAncestor(nodes, node, nodesByIndex, (parent) =>
     isUsefulVisibilityAnchor(parent, platform) ? parent : null,
   );

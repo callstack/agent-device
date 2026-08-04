@@ -80,12 +80,22 @@ export {
 
 export {
   annotationLocalIdentity,
+  demoteNonUniqueLocalIdentity,
   firstAncestryMismatch,
+  idMatchCountInTree,
   identityFieldMismatches,
+  localIdentitiesEqual,
   matchesAncestryPrefix,
   matchesLocalIdentity,
+  readNodeLocalIdentity,
+  readNodeStructuralDenotation,
+  siblingOrdinal,
+  structuralDenotationsEqual,
 } from './internal/target-annotation-identity.ts';
-export type { LocalIdentity } from './internal/target-annotation-identity.ts';
+export type {
+  LocalIdentity,
+  NodeStructuralDenotation,
+} from './internal/target-annotation-identity.ts';
 
 export { classifyTargetBindingMatch } from './internal/target-annotation-classification.ts';
 export type {
