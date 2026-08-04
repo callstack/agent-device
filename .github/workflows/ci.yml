@@ -266,9 +266,9 @@ jobs:
           OUTPUT_ECONOMY_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: pnpm test:coverage:ci
 
-      # Every unit-test worker redirects TMPDIR to its own directory and
-      # removes it in an afterAll hook; anything left here means a worker was
-      # killed before that hook ran.
+      # Each vitest run redirects TMPDIR to one run-scoped directory and
+      # removes it in globalTeardown; anything left here means the run was
+      # killed before that could happen.
       - name: Check tmpdir leaks
         if: always()
         run: pnpm check:tmpdir-leaks

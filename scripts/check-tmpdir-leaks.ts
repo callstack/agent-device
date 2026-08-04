@@ -1,24 +1,29 @@
-// Fails if any `agent-device-test-run-<pid>` directory remains in the real
-// system tmpdir after the unit suite finishes. Each worker removes its own
-// directory in its vitest afterAll hook (src/__tests__/tmp-dir-setup.ts); a
-// leftover one means a worker was killed (crash, OOM, timeout) before that
-// hook ran. Run this after `pnpm test:unit`, not concurrently with it.
+// Fails if any agent-device-test-run-* directory remains under
+// TEST_RUN_TMP_ROOT after the unit suite finishes. scripts/vitest-tmpdir-global-setup.ts
+// creates exactly one such directory per `vitest run` invocation and removes
+// it in its globalTeardown; a leftover one means that invocation's process
+// was killed (crash, OOM, timeout) before teardown could run. Run this after
+// `pnpm test:unit`, not concurrently with it.
+//
+// Only covers vitest runs. node --test lanes (test:smoke,
+// test:integration:node, ...) still use the real os.tmpdir() unredirected.
 
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { TEST_RUN_TMP_PREFIX, TEST_RUN_TMP_ROOT } from './vitest-tmpdir-global-setup.ts';
 
-const tmpRoot = os.tmpdir();
 const leaks = fs
-  .readdirSync(tmpRoot, { withFileTypes: true })
-  .filter((entry) => entry.isDirectory() && /^agent-device-test-run-\d+$/.test(entry.name));
+  .readdirSync(TEST_RUN_TMP_ROOT, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory() && entry.name.startsWith(TEST_RUN_TMP_PREFIX));
 
 if (leaks.length > 0) {
-  const details = leaks.map((entry) => `- ${path.join(tmpRoot, entry.name)}`).join('\n');
+  const details = leaks.map((entry) => `- ${path.join(TEST_RUN_TMP_ROOT, entry.name)}`).join('\n');
   throw new Error(
-    `Found ${leaks.length} leftover agent-device-test-run-* director${leaks.length === 1 ? 'y' : 'ies'} in ${tmpRoot}:\n${details}\n` +
-      'A unit-test worker was killed before its cleanup hook ran; investigate the run that produced them.',
+    `Found ${leaks.length} leftover ${TEST_RUN_TMP_PREFIX}* director${leaks.length === 1 ? 'y' : 'ies'} in ${TEST_RUN_TMP_ROOT}:\n${details}\n` +
+      'A vitest run was killed before its globalTeardown could run; investigate the run that produced them.',
   );
 }
 
-process.stdout.write(`No leaked agent-device-test-run-* directories found in ${tmpRoot}.\n`);
+process.stdout.write(
+  `No leaked ${TEST_RUN_TMP_PREFIX}* directories found in ${TEST_RUN_TMP_ROOT}.\n`,
+);
