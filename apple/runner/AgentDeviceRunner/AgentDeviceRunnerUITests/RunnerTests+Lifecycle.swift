@@ -96,6 +96,7 @@ extension RunnerTests {
     currentApp = nil
     currentBundleId = nil
     currentAppProcessIdentifier = nil
+    clearRememberedTextEntryTap()
     snapshotXCTestPenaltyWarmupExemptionPending = false
   }
 

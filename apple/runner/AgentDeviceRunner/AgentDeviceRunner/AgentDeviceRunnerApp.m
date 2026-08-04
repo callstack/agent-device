@@ -78,6 +78,24 @@ int main(int argc, const char *argv[]) {
     [label.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
     [label.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
   ]];
+
+  // Keep the fixture behind a launch argument so normal runner snapshots remain unchanged.
+#if TARGET_OS_IOS
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-regression"]) {
+    UITextField *textField = [[UITextField alloc] init];
+    textField.accessibilityIdentifier = @"agent-device-hardware-keyboard-input";
+    textField.borderStyle = UITextBorderStyleRoundedRect;
+    textField.inputView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 1, 1)];
+    textField.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:textField];
+    [NSLayoutConstraint activateConstraints:@[
+      [textField.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+      [textField.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:24],
+      [textField.widthAnchor constraintEqualToConstant:240],
+      [textField.heightAnchor constraintEqualToConstant:44],
+    ]];
+  }
+#endif
 }
 
 @end

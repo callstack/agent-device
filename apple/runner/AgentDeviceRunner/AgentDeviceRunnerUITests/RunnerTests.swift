@@ -48,6 +48,11 @@ final class RunnerTests: XCTestCase {
   var currentApp: XCUIApplication?
   var currentBundleId: String?
   var currentAppProcessIdentifier: Int?
+  // iOS does not reliably expose hasKeyboardFocus for a bare type request, especially when
+  // hardware-keyboard input hides the software keyboard. A successful tap on a concrete text
+  // input is a scoped witness for the immediately-following bare type; lifecycle and non-text
+  // interactions clear it before it can become stale.
+  var lastTappedTextInput: XCUIElement?
   let maxRequestBytes = 2 * 1024 * 1024
   let mainThreadExecutionTimeout: TimeInterval = 30
   let appExistenceTimeout: TimeInterval = 30

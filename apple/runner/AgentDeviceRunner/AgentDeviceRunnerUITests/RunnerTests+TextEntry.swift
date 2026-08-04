@@ -115,6 +115,32 @@ extension RunnerTests {
 #endif
   }
 
+  func rememberTextEntryTap(_ element: XCUIElement?) {
+    guard let element, isTextEntryElement(element) else {
+      clearRememberedTextEntryTap()
+      return
+    }
+    lastTappedTextInput = element
+  }
+
+  func clearRememberedTextEntryTap() {
+    lastTappedTextInput = nil
+  }
+
+  private func rememberedTextEntryTarget() -> TextEntryTarget? {
+    guard let element = lastTappedTextInput else {
+      return nil
+    }
+    guard safely("LAST_TAPPED_TEXT_INPUT_EXISTS", false, { element.exists }) else {
+      clearRememberedTextEntryTap()
+      return nil
+    }
+    // Keep the target scoped to the element that the preceding tap actually selected. Do not
+    // attach a refresh point: if that element disappeared, bare type must fail closed rather
+    // than rediscovering a different field or dispatching unscoped app.typeText.
+    return TextEntryTarget(element: element, refreshPoint: nil, prefersFocusedElement: false)
+  }
+
   func stabilizeTextInputBeforeTyping(
     app: XCUIApplication,
     target: XCUIElement?,
@@ -143,11 +169,15 @@ extension RunnerTests {
 
   func focusTextInputForTextEntry(app: XCUIApplication, x: Double?, y: Double?) -> TextEntryTarget {
     guard let x, let y else {
+      let softwareKeyboardVisible = isKeyboardVisible(app: app)
+      if !softwareKeyboardVisible, let rememberedTarget = rememberedTextEntryTarget() {
+        return rememberedTarget
+      }
       // Bare `type` targets the current first responder. On iOS we intentionally do not trust
       // `hasKeyboardFocus`, but an already-visible software keyboard is sufficient evidence that
       // app.typeText has a receiver; waiting the full readiness timeout cannot prove a stronger
       // target because there is no selector/coordinate focus move to validate.
-      if isKeyboardVisible(app: app) {
+      if softwareKeyboardVisible {
         return TextEntryTarget(
           element: focusedTextInput(app: app),
           refreshPoint: nil,

@@ -92,6 +92,8 @@ jobs:
             -xctestrun "$XCTESTRUN_PATH" \
             -destination "platform=iOS Simulator,id=${{ steps.ios-simulator.outputs.simulator-udid }}" \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSinglePointerFlingFallsBackToXCTestCoordinateDragWhenPrivateSynthesisFails \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTypeWithoutResolvedInputReturnsTypedFailureBeforeDispatchingText \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareTypeUsesTappedInputWhenSoftwareKeyboardIsHidden \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testMissingBundleCommandInvalidatesCompleteCachedTargetState \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCachedTargetInvalidationClearsProcessBoundState \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertResolutionCannotBypassRequestedDeadline \
