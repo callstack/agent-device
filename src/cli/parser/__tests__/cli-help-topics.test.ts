@@ -93,6 +93,8 @@ test('usage includes agent workflows, config, environment, and examples footers'
     usageText,
     /Use --settle only on planned press, click, fill, or longpress commands; never add it to open, snapshot, or close/,
   );
+  assert.match(usageText, /type never accepts --settle/);
+  assert.match(usageText, /explicit success confirmation is visible, stop/);
   assert.match(usageText, /Follow structured command hints before choosing a recovery action/);
   assert.match(usageText, /Targets are concrete refs or selectors/);
   assert.ok(
@@ -233,6 +235,8 @@ test('usageForCommand resolves workflow help topic', async () => {
   const help = await usageForCommand('workflow');
   if (help === null) throw new Error('Expected workflow help text');
   assert.match(help, /agent-device help workflow/);
+  assert.match(help, /type never accepts --settle/);
+  assert.match(help, /explicit success confirmation is visible, stop/);
   assert.match(help, /Use selectors as positional targets/);
   assert.match(help, /Do not use CSS selectors/);
   assert.match(help, /Snapshot legend:/);

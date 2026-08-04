@@ -49,6 +49,26 @@ export const CASES = [
     ],
   },
   {
+    id: 'focused-type-stops-at-success',
+    docs: ['--help:first30', 'workflow'],
+    task: 'Plan commands to open the installed app com.example.messages, press the visible New message control, focus the Message field, type the exact text "hello", press Send, wait for the explicit "Sent" confirmation, and close. The task ends at Sent; do not open the transient "View message" follow-up.',
+    expectations: [
+      'validPlanCommands',
+      'fullPrefix',
+      'usesSnapshotI',
+      'usesSettleOnMutations',
+      'opensAndCloses',
+    ],
+    matchers: [
+      { id: 'typesExactMessage', pattern: /\bagent-device\s+type\s+(?:"hello"|'hello')/i },
+      { id: 'waitsForSent', pattern: /\bagent-device\s+wait\s+text\s+(?:"Sent"|'Sent')/i },
+    ],
+    forbidden: [
+      { id: 'typeDoesNotUseSettle', pattern: /\bagent-device\s+type\b[^\n]*--settle\b/i },
+      { id: 'stopsBeforeTransientFollowUp', pattern: /View message/i },
+    ],
+  },
+  {
     id: 'metamorphic-community-search',
     docs: ['--help:first30'],
     task: 'Plan commands to open the already installed app com.example.community, open the visible Discover destination, fill the People search field with "react native", open the @react.dev account, press Connect or Connected, and close.',

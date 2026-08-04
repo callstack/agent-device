@@ -78,7 +78,7 @@ const AGENT_START_LINES = [
   // Haiku from 0/2 baseline to 4/4; generic structured-hint recovery passed 8/8
   // uncoached output cases versus 7/8 with the longer special-case prose.
   'Default app loop: agent-device open <app> -> agent-device snapshot -i -> mutate a current target with --settle -> continue from that settled diff -> agent-device close.',
-  'Use --settle only on planned press, click, fill, or longpress commands; never add it to open, snapshot, or close.',
+  "Use --settle only on planned press, click, fill, or longpress commands; never add it to open, snapshot, or close. type never accepts --settle: run agent-device type \"text\", then diff snapshot if verification is needed. Once the task's requested end state or an explicit success confirmation is visible, stop; do not tap transient follow-up controls or navigate away only to re-verify.",
   'Follow structured command hints before choosing a recovery action.',
   'Targets are concrete refs or selectors: @e12, label="Query", role=button label="Submit".',
   'Selector keys are only: id, role, text, label, value, appname, windowtitle, visible, hidden, editable, selected, focused, enabled, hittable. placeholder, index, and key are not selector keys.',
@@ -213,6 +213,7 @@ Version-matched operating guide for normal agent-device work.
 Core loop:
   Start with the top-level Agent Starting Point for the default settle-first loop. This topic is the full reference for command shapes, refs, selectors, waits, recovery, and platform limits.
   If you intentionally skip --settle or use a command that does not support it, verify a mutation with diff snapshot (or diff snapshot -i) instead of a full snapshot: it diffs the rendered snapshot lines against the previous one in this session and prints only what changed.
+  Once the task's requested end state or an explicit success confirmation is visible, stop; do not tap transient follow-up controls or navigate away only to re-verify.
 
 Command shape:
   Plans should use agent-device commands, not raw platform tools, pseudo commands, package-manager aliases, or helper prose.
@@ -224,6 +225,7 @@ Command shape:
   Snapshot refs look like @e12. After snapshot -i, use the exact @eN ref from that output.
   If the exact ref is not known yet, first output snapshot -i, then use a concrete example shape like press @e12 in the next command; do not write @<ref>, @ref, @Label_Name, or @eN placeholders.
   Close means agent-device close. App-owned back means back; system back means back --system.
+  type never accepts --settle: run agent-device type "text", then diff snapshot if verification is needed.
   Taps are press or click; tap is an alias for press. On Android TV, tvOS, and Vega OS, read help tv and use tv-remote press up|down|left|right|select to move D-pad/remote focus before activating controls; use tv-remote longpress <button> for a held remote button. Gestures use swipe, longpress, or gesture <pan|fling|swipe|pinch|rotate|transform>. Use gesture swipe left|right for reliable in-page horizontal swipes, and gesture swipe right-edge for left-edge navigation/back gestures. gesture pan is one finger by default; add --pointer-count 2 for a parallel two-finger pan. Android swipe and multi-touch gestures use provider-native touch injection when available, then the bundled touch helper. iOS simulator multi-touch uses private XCTest synthesis for a continuous two-pointer path; otherwise it reports UNSUPPORTED_OPERATION.
 
 Bootstrap:
