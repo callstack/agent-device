@@ -55,6 +55,32 @@ test('runtime system commands call typed backend primitives', async () => {
   ]);
 });
 
+// #1598: the SDK-level keyboard.dismiss result must also disclose which
+// mechanism the backend used, mirroring the CLI/daemon dispatch surface.
+test('runtime keyboard dismiss discloses the mechanism reported by the backend', async () => {
+  const device = createAgentDevice({
+    backend: {
+      platform: 'ios',
+      setKeyboard: async (_context, options) => ({
+        action: options.action,
+        dismissed: true,
+        visible: false,
+        mechanism: 'safeAreaTap',
+      }),
+    },
+    artifacts: createLocalArtifactAdapter(),
+    policy: localCommandPolicy(),
+  });
+
+  const keyboard = await device.system.keyboard({ action: 'dismiss' });
+
+  assert.equal(keyboard.kind, 'keyboardDismissed');
+  if (keyboard.kind === 'keyboardDismissed') {
+    assert.equal(keyboard.state.mechanism, 'safeAreaTap');
+  }
+  assert.match(String(keyboard.message), /safe-area tap/);
+});
+
 test('runtime system commands validate options before backend calls', async () => {
   const calls: unknown[] = [];
   const device = createAgentDevice({

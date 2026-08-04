@@ -257,6 +257,7 @@ struct DataPayload: Codable {
   let visible: Bool?
   let wasVisible: Bool?
   let dismissed: Bool?
+  let keyboardDismissMechanism: String?
   let orientation: String?
   let gestureFallback: String?
   let gestureFallbackMessage: String?
@@ -297,6 +298,7 @@ struct DataPayload: Codable {
     visible: Bool? = nil,
     wasVisible: Bool? = nil,
     dismissed: Bool? = nil,
+    keyboardDismissMechanism: String? = nil,
     orientation: String? = nil,
     gestureFallback: String? = nil,
     gestureFallbackMessage: String? = nil,
@@ -336,6 +338,7 @@ struct DataPayload: Codable {
     self.visible = visible
     self.wasVisible = wasVisible
     self.dismissed = dismissed
+    self.keyboardDismissMechanism = keyboardDismissMechanism
     self.orientation = orientation
     self.gestureFallback = gestureFallback
     self.gestureFallbackMessage = gestureFallbackMessage

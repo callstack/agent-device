@@ -21,23 +21,35 @@ private enum KeyboardDismissObservationTiming {
   static let settleRequiredConsecutiveMatches: Int = 3
 }
 
+// The mechanism that actually resigned the keyboard, disclosed to the caller
+// (#1598) so a response never claims "dismissed" without saying how — a
+// safe-area tap has a very different reliability/side-effect profile than
+// tapping the keyboard's own Done key, and callers need to know which one
+// fired.
+enum RunnerKeyboardDismissMechanism: String {
+  case dismissKey
+  case safeAreaTap
+}
+
 extension RunnerTests {
   func isKeyboardVisible(app: XCUIApplication) -> Bool {
     return visibleKeyboardFrame(app: app) != nil
   }
 
-  func dismissKeyboard(app: XCUIApplication) -> (wasVisible: Bool, dismissed: Bool, visible: Bool) {
+  func dismissKeyboard(
+    app: XCUIApplication
+  ) -> (wasVisible: Bool, dismissed: Bool, visible: Bool, mechanism: RunnerKeyboardDismissMechanism?) {
     let keyboard = app.keyboards.firstMatch
     let wasVisible = isKeyboardVisible(app: app)
     guard wasVisible else {
-      return (wasVisible: false, dismissed: false, visible: false)
+      return (wasVisible: false, dismissed: false, visible: false, mechanism: nil)
     }
 
 #if os(tvOS)
     _ = pressTvRemote(.menu)
     sleepFor(0.2)
     let visible = isKeyboardVisible(app: app)
-    return (wasVisible: true, dismissed: !visible, visible: visible)
+    return (wasVisible: true, dismissed: !visible, visible: visible, mechanism: visible ? nil : .dismissKey)
 #else
     if tapKeyboardDismissControl(app: app) {
       _ = keyboard.waitForNonExistence(timeout: KeyboardDismissObservationTiming.timeout)
@@ -47,10 +59,89 @@ extension RunnerTests {
         requiredConsecutiveMatches: KeyboardDismissObservationTiming.settleRequiredConsecutiveMatches
       )
       let visible = isKeyboardVisible(app: app)
-      return (wasVisible: true, dismissed: !visible, visible: visible)
+      return (wasVisible: true, dismissed: !visible, visible: visible, mechanism: visible ? nil : .dismissKey)
     }
 
-    return (wasVisible: true, dismissed: false, visible: isKeyboardVisible(app: app))
+    if tapKeyboardDismissSafeArea(app: app) {
+      _ = keyboard.waitForNonExistence(timeout: KeyboardDismissObservationTiming.timeout)
+      waitForScreenshotStability(
+        timeout: KeyboardDismissObservationTiming.settleTimeout,
+        sampleInterval: KeyboardDismissObservationTiming.settleSampleInterval,
+        requiredConsecutiveMatches: KeyboardDismissObservationTiming.settleRequiredConsecutiveMatches
+      )
+      let visible = isKeyboardVisible(app: app)
+      return (wasVisible: true, dismissed: !visible, visible: visible, mechanism: visible ? nil : .safeAreaTap)
+    }
+
+    return (wasVisible: true, dismissed: false, visible: isKeyboardVisible(app: app), mechanism: nil)
+#endif
+  }
+
+  // #1598 fallback (candidate 4): tap a point the current AX tree proves is
+  // outside both the keyboard and every hittable element it knows about.
+  // Live-verified this is NOT a guaranteed dismiss — a stock iOS 26
+  // simulator did not resign Settings/Safari/Contacts' keyboards this way —
+  // but it is a *safe* no-op when it fails (nothing hittable sits under the
+  // tap) and it does work on screens that wire their own background-tap
+  // dismiss (a common RN pattern). Returns whether the tap was performed at
+  // all; the caller re-checks keyboard visibility to learn whether it worked.
+  private func tapKeyboardDismissSafeArea(app: XCUIApplication) -> Bool {
+#if os(tvOS)
+    return false
+#else
+    guard let keyboardFrame = visibleKeyboardFrame(app: app) else {
+      return false
+    }
+    let windowFrame = onScreenWindowFrame(app: app)
+    let obstacles = keyboardDismissObstacleFrames(app: app)
+    guard let point = RunnerKeyboardDismissSafeArea.safePoint(
+      windowFrame: windowFrame,
+      keyboardFrame: keyboardFrame,
+      obstacles: obstacles
+    ) else {
+      return false
+    }
+    let coordinate = app.coordinate(withNormalizedOffset: .zero)
+      .withOffset(CGVector(dx: point.x, dy: point.y))
+    let exceptionMessage = RunnerObjCExceptionCatcher.catchException({
+      coordinate.tap()
+    })
+    if let exceptionMessage {
+      NSLog("AGENT_DEVICE_RUNNER_KEYBOARD_SAFE_AREA_TAP_IGNORED_EXCEPTION=%@", exceptionMessage)
+      return false
+    }
+    return true
+#endif
+  }
+
+  // Public, non-private XCUIElement queries only (no AX-server bridge): the
+  // types most likely to react to an accidental tap. Bounded by construction
+  // — each query is scoped to a specific control type, not "every element" —
+  // so this stays cheap even on large trees.
+  private func keyboardDismissObstacleFrames(app: XCUIApplication) -> [CGRect] {
+#if os(tvOS)
+    return []
+#else
+    let queries: [XCUIElementQuery] = [
+      app.buttons,
+      app.cells,
+      app.links,
+      app.textFields,
+      app.secureTextFields,
+      app.searchFields,
+      app.textViews,
+      app.switches,
+      app.sliders,
+      app.images,
+    ]
+    var frames: [CGRect] = []
+    for query in queries {
+      let elements = safely("KEYBOARD_SAFE_AREA_OBSTACLES", []) {
+        query.allElementsBoundByIndex.filter { $0.exists && $0.isHittable }
+      }
+      frames.append(contentsOf: elements.map(\.frame))
+    }
+    return frames
 #endif
   }
 

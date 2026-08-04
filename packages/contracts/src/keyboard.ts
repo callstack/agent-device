@@ -26,4 +26,10 @@ export type KeyboardCommandResult = {
   focusedResourceId?: string;
   inputOwner?: 'app' | 'ime' | 'unknown';
   message?: string;
+  /** iOS `dismiss` only (#1598): which mechanism actually resigned the
+   *  keyboard — 'dismissKey' (tapped the keyboard's own Hide/Dismiss/Done
+   *  key) or 'safeAreaTap' (a last-resort tap outside the keyboard and every
+   *  known-hittable element; not guaranteed to work, but safe to attempt).
+   *  Absent when the keyboard was not dismissed. */
+  mechanism?: 'dismissKey' | 'safeAreaTap';
 };

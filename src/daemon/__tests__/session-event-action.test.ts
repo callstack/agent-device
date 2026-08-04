@@ -216,6 +216,51 @@ test('structural action events preserve navigation, viewport, keyboard, and gest
   });
 });
 
+// #1598: the keyboard-dismiss mechanism must show up in both the human
+// summary and the structured details, so a transcript reader can tell a
+// dismiss-key tap apart from a last-resort safe-area tap.
+test('keyboard dismiss action events disclose the safe-area-tap mechanism', () => {
+  const keyboard = action('keyboard', {
+    action: 'dismiss',
+    platform: 'ios',
+    wasVisible: true,
+    visible: false,
+    dismissed: true,
+    mechanism: 'safeAreaTap',
+  });
+
+  assert.equal(buildActionSummary(keyboard), 'Dismissed keyboard (safe-area tap)');
+  assert.deepEqual(buildActionDetails(keyboard), {
+    command: 'keyboard',
+    platform: 'ios',
+    action: 'dismiss',
+    visible: false,
+    wasVisible: true,
+    dismissed: true,
+    mechanism: 'safeAreaTap',
+  });
+});
+
+test('keyboard dismiss action events omit mechanism when the keyboard was already hidden', () => {
+  const keyboard = action('keyboard', {
+    action: 'dismiss',
+    platform: 'ios',
+    wasVisible: false,
+    visible: false,
+    dismissed: false,
+  });
+
+  assert.equal(buildActionSummary(keyboard), 'Keyboard was already hidden');
+  assert.deepEqual(buildActionDetails(keyboard), {
+    command: 'keyboard',
+    platform: 'ios',
+    action: 'dismiss',
+    visible: false,
+    wasVisible: false,
+    dismissed: false,
+  });
+});
+
 test('record and trace events expose only bounded artifact basenames', () => {
   const trace = action(
     'trace',

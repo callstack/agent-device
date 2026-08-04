@@ -47,3 +47,77 @@ test('dispatch keyboard enter sends native iOS keyboard return command', async (
     appBundleId: 'com.example.app',
   });
 });
+
+// #1598: the response must disclose which mechanism the runner used to
+// resign the keyboard — a dismiss-key tap and a safe-area tap carry very
+// different reliability guarantees, and the CLI/SDK message must say which
+// one actually fired rather than a bare "dismissed".
+test('dispatch keyboard dismiss surfaces the dismissKey mechanism and message', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValue({
+    message: 'keyboardDismiss',
+    wasVisible: true,
+    visible: false,
+    dismissed: true,
+    keyboardDismissMechanism: 'dismissKey',
+  });
+
+  const result = await dispatchCommand(IOS_DEVICE, 'keyboard', ['dismiss'], undefined, {
+    appBundleId: 'com.example.app',
+  });
+
+  assert.equal(result?.action, 'dismiss');
+  assert.equal(result?.dismissed, true);
+  assert.equal(result?.mechanism, 'dismissKey');
+  assert.equal(result?.message, 'Keyboard dismissed via its dismiss key');
+});
+
+test('dispatch keyboard dismiss surfaces the safeAreaTap mechanism and message', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValue({
+    message: 'keyboardDismiss',
+    wasVisible: true,
+    visible: false,
+    dismissed: true,
+    keyboardDismissMechanism: 'safeAreaTap',
+  });
+
+  const result = await dispatchCommand(IOS_DEVICE, 'keyboard', ['dismiss'], undefined, {
+    appBundleId: 'com.example.app',
+  });
+
+  assert.equal(result?.mechanism, 'safeAreaTap');
+  assert.match(String(result?.message), /safe-area tap/);
+});
+
+test('dispatch keyboard dismiss omits mechanism when every mechanism failed', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValue({
+    message: 'keyboardDismiss',
+    wasVisible: true,
+    visible: true,
+    dismissed: false,
+  });
+
+  const result = await dispatchCommand(IOS_DEVICE, 'keyboard', ['dismiss'], undefined, {
+    appBundleId: 'com.example.app',
+  });
+
+  assert.equal(result?.dismissed, false);
+  assert.equal(result?.mechanism, undefined);
+  assert.equal(result?.message, 'Keyboard already hidden');
+});
+
+test('dispatch keyboard dismiss omits mechanism when the keyboard was never visible', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValue({
+    message: 'keyboardDismiss',
+    wasVisible: false,
+    visible: false,
+    dismissed: false,
+  });
+
+  const result = await dispatchCommand(IOS_DEVICE, 'keyboard', ['dismiss'], undefined, {
+    appBundleId: 'com.example.app',
+  });
+
+  assert.equal(result?.wasVisible, false);
+  assert.equal(result?.mechanism, undefined);
+  assert.equal(result?.message, 'Keyboard already hidden');
+});

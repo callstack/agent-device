@@ -181,7 +181,7 @@ const orientationCliSchema = {
 const keyboardCliSchema = {
   usageOverride: 'keyboard [status|get|dismiss|enter|return]',
   helpDescription:
-    'Inspect Android keyboard visibility/type or press/dismiss the device keyboard. To hide the keyboard, use keyboard dismiss. It taps safe controls like Done when available, verifies the keyboard closed, and reports UNSUPPORTED_OPERATION when no safe control is available.',
+    'Inspect Android keyboard visibility/type or press/dismiss the device keyboard. To hide the keyboard, use keyboard dismiss. It taps safe controls like Done when available, falls back to a safe-area tap on iOS when none is exposed, verifies the keyboard closed, and reports UNSUPPORTED_OPERATION when every mechanism failed.',
   summary: 'Inspect, press, or dismiss the device keyboard',
   positionalArgs: ['action?'],
 } as const satisfies CommandSchemaOverride;

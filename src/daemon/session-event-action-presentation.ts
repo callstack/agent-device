@@ -194,9 +194,9 @@ function buildKeyboardActionSummary(result: Record<string, unknown>): string {
   const action = readSessionEventString(result.action);
   if (!action || !isKeyboardAction(action)) return 'Used keyboard';
   if (action === 'dismiss') {
-    return readBoolean(result.dismissed) === false
-      ? 'Keyboard was already hidden'
-      : 'Dismissed keyboard';
+    if (readBoolean(result.dismissed) === false) return 'Keyboard was already hidden';
+    const mechanism = readSessionEventString(result.mechanism);
+    return mechanism === 'safeAreaTap' ? 'Dismissed keyboard (safe-area tap)' : 'Dismissed keyboard';
   }
   if (action === 'enter' || action === 'return') return 'Pressed keyboard return';
   const visible = readBoolean(result.visible);
@@ -213,6 +213,7 @@ function buildKeyboardActionDetails(result: Record<string, unknown>): Record<str
     wasVisible: readBoolean(result.wasVisible),
     dismissed: readBoolean(result.dismissed),
     attempts: readSessionEventNumber(result.attempts),
+    mechanism: readEnum(result.mechanism, ['dismissKey', 'safeAreaTap']),
   });
 }
 
