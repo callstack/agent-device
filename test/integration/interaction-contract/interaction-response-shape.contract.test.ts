@@ -49,8 +49,6 @@ const UNIQUE_RUNTIME_RESOLUTION = {
   phase: 'pre-action',
   kind: 'unique',
 } as const;
-const DIRECT_IOS_NOT_OBSERVED_RESOLUTION = { source: 'direct-ios', kind: 'not-observed' } as const;
-
 const NOISY_DEFAULT_TAP_RESULT = {
   count: 1,
   currentUptimeMs: 1_418_719_052.9,
@@ -140,16 +138,23 @@ test('interaction response shape: press selector uses the canonical selector env
 
 test('interaction response shape: fill selector uses the canonical selector envelope', async () => {
   await withIosContractDaemon(
-    [runnerTypeEntry({ ...NOISY_DEFAULT_TAP_RESULT, x: 200, y: 322 })],
+    [
+      runnerSnapshotEntry(RUNNER_CONTINUE_NODES),
+      runnerTypeEntry({ ...NOISY_DEFAULT_TAP_RESULT, x: 200, y: 322 }),
+    ],
     async (daemon, transcript) => {
       const data = assertRpcOk(await daemon.callCommand('fill', ['label=Continue', 'Hello']));
-      assertRunnerRequest(transcript, 'ios.runner.type', selectorTypeRequest('Hello'));
+      assertRunnerRequest(transcript, 'ios.runner.type', typeRequest(200, 322, 'Hello'));
 
-      assertCanonicalDirectSelector(data, {
+      assertCanonicalSelector(data, {
         message: 'Filled 5 chars',
         x: 200,
         y: 322,
-        extra: { delayMs: 0, text: 'Hello' },
+        extra: {
+          delayMs: 0,
+          text: 'Hello',
+          warning: 'fill target label=Continue resolved to "Button", attempting fill anyway.',
+        },
       });
     },
   );
@@ -283,42 +288,6 @@ function assertCanonicalSelector(
   assertNoWireNoise(data);
 }
 
-function assertCanonicalDirectSelector(
-  data: WireData,
-  expected: { message: string; x: number; y: number; extra?: WireData },
-): void {
-  assertExactKeys(data, [
-    'message',
-    'resolution',
-    'selector',
-    'targetKind',
-    'x',
-    'y',
-    ...Object.keys(expected.extra ?? {}),
-  ]);
-  assert.deepEqual(
-    pick(data, [
-      'message',
-      'resolution',
-      'selector',
-      'targetKind',
-      'x',
-      'y',
-      ...Object.keys(expected.extra ?? {}),
-    ]),
-    {
-      message: expected.message,
-      resolution: DIRECT_IOS_NOT_OBSERVED_RESOLUTION,
-      selector: 'label=Continue',
-      targetKind: 'selector',
-      x: expected.x,
-      y: expected.y,
-      ...(expected.extra ?? {}),
-    },
-  );
-  assertNoWireNoise(data);
-}
-
 function assertCanonicalPoint(
   data: WireData,
   expected: { message: string; x: number; y: number; extra?: WireData },
@@ -389,18 +358,6 @@ function typeRequest(x: number, y: number, text: string): WireData {
     command: 'type',
     x,
     y,
-    text,
-    delayMs: 0,
-    textEntryMode: 'replace',
-    appBundleId: CONTRACT_APP,
-  };
-}
-
-function selectorTypeRequest(text: string): WireData {
-  return {
-    command: 'type',
-    selectorKey: 'label',
-    selectorValue: 'Continue',
     text,
     delayMs: 0,
     textEntryMode: 'replace',
