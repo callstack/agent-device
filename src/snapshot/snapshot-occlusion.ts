@@ -17,6 +17,7 @@ const OVERLAY_KIND_FRAGMENTS = [
   'popover',
   'menu',
 ];
+const VIEWPORT_CHROME_KIND_FRAGMENTS = ['tabbar', 'toolbar', 'navigationbar'];
 const SEMANTIC_TOUCH_KIND_FRAGMENTS = [
   'button',
   'link',
@@ -220,12 +221,35 @@ function isOverlayLikeNode(
 ): boolean {
   if (!positiveRect(node.rect)) return false;
   if (isViewportRoot(node)) return false;
+  if (isFullViewportChromeContainer(node, byIndex)) return false;
   // This is a presentation-order heuristic: only known floating UI chrome should cover
   // later targets. Generic hittable containers can appear later without being visually on top.
   return (
     nodeKindIncludesAny(node, OVERLAY_KIND_FRAGMENTS) ||
     isAdditionalOverlayRootNode(node, byIndex, options)
   );
+}
+
+function isFullViewportChromeContainer(
+  node: RawSnapshotNode,
+  byIndex: Map<number, RawSnapshotNode>,
+): boolean {
+  if (!nodeKindIncludesAny(node, VIEWPORT_CHROME_KIND_FRAGMENTS)) return false;
+  const rect = positiveRect(node.rect);
+  if (!rect) return false;
+
+  let current = typeof node.parentIndex === 'number' ? byIndex.get(node.parentIndex) : undefined;
+  const visited = new Set<number>();
+  while (current && !visited.has(current.index)) {
+    if (isViewportRoot(current)) {
+      const viewportRect = positiveRect(current.rect);
+      return Boolean(viewportRect && areRectsApproximatelyEqual(rect, viewportRect));
+    }
+    visited.add(current.index);
+    current =
+      typeof current.parentIndex === 'number' ? byIndex.get(current.parentIndex) : undefined;
+  }
+  return false;
 }
 
 function isAdditionalOverlayRootNode(

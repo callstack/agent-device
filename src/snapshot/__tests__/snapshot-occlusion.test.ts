@@ -500,6 +500,33 @@ test('a node classified as viewport root never covers, even if its kind text oth
   assert.equal(annotated[0]?.interactionBlocked, undefined);
 });
 
+test('a full-viewport toolbar container does not cover its application siblings', () => {
+  const application: RawSnapshotNode = {
+    index: 0,
+    type: 'application',
+    rect: { x: 0, y: 0, width: 400, height: 800 },
+  };
+  const target: RawSnapshotNode = {
+    index: 1,
+    type: 'button',
+    role: 'button',
+    parentIndex: 0,
+    label: 'Drag source',
+    rect: { x: 20, y: 100, width: 120, height: 50 },
+  };
+  const toolbarContainer: RawSnapshotNode = {
+    index: 2,
+    type: 'toolbar',
+    parentIndex: 0,
+    label: 'Toolbar',
+    rect: { x: 0, y: 0, width: 400, height: 800 },
+  };
+
+  const annotated = annotateCoveredSnapshotNodes([application, target, toolbarContainer]);
+
+  assert.equal(annotated[1]?.interactionBlocked, undefined);
+});
+
 test('the kind fields join with a separator, so adjacent fragments never accidentally concatenate into a match', () => {
   // type "tab" + role "bar" must read as "tab bar" (no match for the
   // 'tabbar' overlay fragment) — never "tabbar" via an unseparated join,
