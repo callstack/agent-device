@@ -431,6 +431,11 @@ the observable freshness and failure semantics below before any runtime refactor
 - iOS sparse and AX failures are not proof of empty UI. Regular visible snapshots can recover through
   the capture plan; raw and strict paths preserve failure. `runnerFatal` invalidates the cached target
   and must never refresh healthy mutation recency.
+- An `XCTEST_RECORDED_FAILURE` after an iOS tap is an ambiguous outcome, not proof that the tap missed.
+  The daemon may take one same-presentation post-action capture against a usable retained snapshot;
+  only a changed accessibility digest converts the result to success with a warning. Capture failure,
+  sparse or mismatched presentation, and an unchanged digest remain failures so corroboration cannot
+  turn an unknown tap into a false success.
 - Android helper reuse must not become snapshot result caching. Freshness is short lived, marked only
   after navigation-sensitive actions, compared against broad route-safe baselines, and not learned
   from scoped, depth-limited, interactive, or ref-refresh snapshots.

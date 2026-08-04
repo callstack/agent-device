@@ -2481,7 +2481,7 @@ extension RunnerTests {
       error: ErrorPayload(
         code: "XCTEST_RECORDED_FAILURE",
         message: "XCTest recorded a failure while executing \(command.command.rawValue); the action may not have been performed.",
-        hint: "The iOS runner session will be restarted. Retry after a fresh snapshot, or use screenshot plus coordinate commands when the accessibility tree is unavailable."
+        hint: "The iOS runner session was invalidated. Re-observe with a fresh snapshot before retrying; if the accessibility tree is unavailable, use screenshot plus coordinate commands instead of retrying the tap blindly."
       )
     )
   }

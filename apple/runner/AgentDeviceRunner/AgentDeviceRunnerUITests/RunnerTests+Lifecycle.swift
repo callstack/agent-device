@@ -103,6 +103,11 @@ extension RunnerTests {
 
   func resetTargetAfterExternalRelaunch() -> Response {
     invalidateCachedTarget(reason: "external_app_relaunch")
+    // The app process is replaced, but the retained runner survives. Clear
+    // process-bound capture state explicitly because invalidation drops the
+    // old PID before refreshCachedTargetIfProcessChanged can observe it.
+    clearSnapshotXCTestChannelPenalty(reason: "external_app_relaunch")
+    clearPrivateAXAcceptedDepth(reason: "external_app_relaunch")
     needsFirstInteractionDelay = true
     return Response(ok: true, data: DataPayload(message: "target reset"))
   }

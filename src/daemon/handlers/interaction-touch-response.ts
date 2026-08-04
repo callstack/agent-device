@@ -47,6 +47,17 @@ export type InteractionResponseSource =
       targetKind: InteractionRuntimeResult['kind'];
       data: Record<string, unknown>;
       point: { x: number; y: number };
+    })
+  | (InteractionResponseSourceBase & {
+      // An XCTest mutation failure was corroborated by a changed same-scope
+      // post-action capture. The target was resolved before the runner error,
+      // but no runtime result survived the thrown backend failure.
+      kind: 'corroborated-tap';
+      targetKind: InteractionRuntimeResult['kind'];
+      data: Record<string, unknown>;
+      publicData?: Record<string, unknown>;
+      point?: { x: number; y: number };
+      resolution?: ResolutionDisclosure;
     });
 
 // ADR 0012 decision 2: the XCTest fast path has no daemon tree, so it can only
@@ -92,6 +103,28 @@ export type InteractionResponsePayloads = {
   recordedTarget?: RecordedTargetCapture;
 };
 
+export function buildCorroboratedTapResponseData(params: {
+  targetKind: InteractionRuntimeResult['kind'];
+  point?: { x: number; y: number };
+  warning: string;
+  resolution?: ResolutionDisclosure;
+  referenceFrame?: GestureReferenceFrame;
+  extra?: Record<string, unknown>;
+}): InteractionResponsePayloads {
+  return buildInteractionResponseData({
+    source: {
+      kind: 'corroborated-tap',
+      targetKind: params.targetKind,
+      data: { warning: params.warning },
+      publicData: { warning: params.warning },
+      point: params.point,
+      resolution: params.resolution,
+    },
+    referenceFrame: params.referenceFrame,
+    extra: params.extra,
+  });
+}
+
 export function buildInteractionResponseData(params: {
   source: InteractionResponseSource;
   referenceFrame: GestureReferenceFrame | undefined;
@@ -120,25 +153,30 @@ export function buildInteractionResponseData(params: {
   settleRefsGeneration?: number;
 }): InteractionResponsePayloads {
   const { source, referenceFrame, extra } = params;
-  if (source.kind === 'runner-payload') {
+  if (source.kind === 'runner-payload' || source.kind === 'corroborated-tap') {
     const commonExtra = {
       targetKind: source.targetKind,
-      ...applyResolutionDisclosurePolicy(source, {
-        resolution: DIRECT_IOS_NOT_OBSERVED_RESOLUTION,
-      }),
+      ...applyResolutionDisclosurePolicy(
+        source,
+        source.kind === 'runner-payload'
+          ? { resolution: DIRECT_IOS_NOT_OBSERVED_RESOLUTION }
+          : source.resolution
+            ? { resolution: source.resolution }
+            : {},
+      ),
       ...(extra ?? {}),
     };
     const result = buildTouchPayload({
       data: source.data,
-      fallbackX: source.point.x,
-      fallbackY: source.point.y,
+      fallbackX: source.point?.x,
+      fallbackY: source.point?.y,
       referenceFrame,
       extra: commonExtra,
     });
     const responseData = buildTouchPayload({
       data: source.publicData,
-      fallbackX: source.point.x,
-      fallbackY: source.point.y,
+      fallbackX: source.point?.x,
+      fallbackY: source.point?.y,
       referenceFrame,
       extra: commonExtra,
     });

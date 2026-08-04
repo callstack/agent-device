@@ -727,7 +727,8 @@ test('parseRunnerResponse preserves iOS AX snapshot failure code and hint', asyn
 });
 
 test('parseRunnerResponse preserves XCTest recorded failure code and hint', async () => {
-  const hint = 'The iOS runner session will be restarted.';
+  const hint =
+    'The iOS runner session was invalidated. Re-observe with a fresh snapshot before retrying; if the accessibility tree is unavailable, use screenshot plus coordinate commands instead of retrying the tap blindly.';
   const response = new Response(
     JSON.stringify({
       ok: false,
