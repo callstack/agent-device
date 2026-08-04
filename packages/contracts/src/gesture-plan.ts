@@ -328,9 +328,10 @@ function initialSpanRatioForIntent(intent: MultiTouchGesturePlan['intent']): num
   return intent === 'pinch' ? GESTURE_PINCH_INITIAL_SPAN_RATIO : GESTURE_INITIAL_SPAN_RATIO;
 }
 
+/** The floor of three frames is what lets transport lowering claim a denser-than-endpoints path. */
 export function sampleGestureOffsets(
   durationMs: number,
-  profile: GestureSamplingProfile = 'default',
+  profile: GestureSamplingProfile,
 ): number[] {
   if (!Number.isFinite(durationMs) || durationMs <= 0) {
     throw new AppError('INVALID_ARGS', 'gesture sample duration must be a positive finite number');

@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
-import { buildGesturePlan } from '@agent-device/contracts/interaction';
+import { expectTypeOf, test } from 'vitest';
+import {
+  buildGesturePlan,
+  type SinglePointerGesturePlan,
+} from '@agent-device/contracts/interaction';
 import { lowerAndroidTouchPlan, type AndroidLoweredTouchPlan } from '../touch-plan.ts';
 import { longPressPlan } from './touch-helper.fixtures.ts';
 
@@ -76,4 +79,11 @@ test('lowered endpoint plans are valid Android transport plans', () => {
   );
   const lowered: AndroidLoweredTouchPlan = lowerAndroidTouchPlan(plan);
   assert.equal(lowered.pointers[0].samples.length, 5);
+});
+
+// The transport types are the enforcement, so widening them back to a plain sample array must
+// fail a gate rather than quietly re-admit a two-sample plan at the injection seams.
+test('a canonical endpoint plan cannot reach the transport unlowered', () => {
+  expectTypeOf<SinglePointerGesturePlan>().not.toExtend<AndroidLoweredTouchPlan>();
+  expectTypeOf<ReturnType<typeof lowerAndroidTouchPlan>>().toExtend<AndroidLoweredTouchPlan>();
 });

@@ -67,7 +67,7 @@ test('dual-pointer plans normalize to a transform request and preserve exact sam
     },
     viewport,
   );
-  const request = normalizeAndroidTouchHelperGestureRequest(pan);
+  const request = normalizeAndroidTouchHelperGestureRequest(lowerAndroidTouchPlan(pan));
 
   assert.equal(request.kind, 'transform');
   assert.equal(request.durationMs, 32);

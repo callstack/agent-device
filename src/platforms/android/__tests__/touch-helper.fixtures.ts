@@ -2,7 +2,7 @@ import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
 import { buildGesturePlan } from '@agent-device/contracts/interaction';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AndroidAdbExecutor } from '../adb-executor.ts';
-import type { AndroidTouchPlan } from '../touch-plan.ts';
+import type { AndroidLongPressTouchPlan } from '../touch-plan.ts';
 
 // The one-shot touch helper path now runs through the snapshot-helper APK/runner
 // (issue #1275 consolidation), so these fixtures mirror the snapshot helper's
@@ -39,7 +39,7 @@ export function makeIsolatedDevice(): DeviceInfo {
   return { ...ANDROID_EMULATOR, id: `emulator-touch-helper-${deviceSequence}` };
 }
 
-export function longPressPlan(durationMs = 120_000): AndroidTouchPlan {
+export function longPressPlan(durationMs = 120_000): AndroidLongPressTouchPlan {
   const point = { x: 20, y: 30 };
   return {
     topology: 'single',

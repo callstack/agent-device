@@ -74,7 +74,9 @@ Platform adapters consume the canonical plan:
   the physical movement for scroll and long-press, to provider-native touch injection when
   available, otherwise to the bundled instrumentation helper. One-contact endpoint plans lower in
   `src/platforms/android/touch-plan.ts` to 16 ms linear transport samples before either injection
-  path; two-contact plans retain their exact planned samples. A stationary long-press needs no
+  path; two-contact plans retain their exact planned samples. Transport samples are typed as
+  strictly denser than the canonical endpoint pair, so skipping that lowering is a type error at
+  the injection seams instead of a silently sparse gesture. A stationary long-press needs no
   viewport on the helper path; the executor adds the paired provider-owned viewport only for
   provider-native touch. Android touch execution never falls back to `adb input swipe`. Public
   scroll durations below one 16 ms planner frame normalize to that physical minimum and report the
