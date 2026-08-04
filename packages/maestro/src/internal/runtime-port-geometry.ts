@@ -105,6 +105,25 @@ function findLargestViewportRect(nodes: SnapshotState['nodes']): Rect | undefine
     )[0]?.rect;
 }
 
+// NOT interchangeable with contracts' isScrollableNodeLike, which the
+// visibility walk in snapshot-policy.ts uses. That one substring-matches the
+// raw type; this one exact-matches the normalized type, so they disagree in
+// both directions:
+//   android.widget.{ListView,GridView,RecyclerView}, HorizontalScrollView,
+//     AXScrollBar, and nodes scrollable only via role/subrole
+//     -> scrollable for visibility, not a scroll container here
+//   XCUIElementTypeTable, AXTable
+//     -> scroll container here, not scrollable for visibility (there 'table'
+//        is an equality test against the unnormalized type, so prefixed forms
+//        miss)
+// The two questions are not the same, and the failure modes are asymmetric.
+// Visibility asks "does an ancestor clip me": over-matching only shrinks a
+// viewport. This asks "which container does scrollUntilVisible swipe inside":
+// over-matching starts the swipe in the wrong element, while under-matching
+// yields no viewport and daemon-runtime-port.ts falls back to a plain screen
+// scroll. Widening this predicate therefore trades a safe fallback for a
+// silent mis-aimed gesture and needs its own conformance evidence.
+// Pinned by __tests__/scrollable-predicate-divergence.test.ts.
 function isScrollableSnapshotType(type: string | undefined): boolean {
   const normalized = normalizeType(type ?? '');
   return (

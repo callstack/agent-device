@@ -1,9 +1,10 @@
-import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import {
   buildSnapshotNodeMap,
+  findNearestScrollableAncestor,
   findSnapshotAncestor,
   isUsefulVisibilityAnchor,
 } from '@agent-device/contracts/snapshot';
+import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 export function isMaestroNodeVisible(
@@ -44,44 +45,9 @@ function isVisibleInEffectiveViewport(node: SnapshotNode, nodes: SnapshotNode[])
   if (!node.rect) return true;
   const byIndex = buildSnapshotNodeMap(nodes);
   const viewport =
-    findScrollableAncestorRect(node, byIndex) ?? resolveRootViewport(nodes, node.rect);
+    findNearestScrollableAncestor(node, byIndex, (ancestor) => Boolean(ancestor.rect))?.rect ??
+    resolveRootViewport(nodes, node.rect);
   return viewport ? rectsOverlap(node.rect, viewport) : true;
-}
-
-// Structurally the same parent walk as `@agent-device/contracts/snapshot`'s
-// `findNearestScrollableAncestor` and `runtime-port-geometry.ts`'s
-// `findNearestScrollableContainer`, but each uses a DIFFERENT scrollable
-// predicate, and the three have not been shown to agree. Collapsing them is a
-// Maestro-conformance change, not a cleanup — left alone deliberately.
-function findScrollableAncestorRect(
-  node: SnapshotNode,
-  byIndex: ReadonlyMap<number, SnapshotNode>,
-): Rect | null {
-  let current = typeof node.parentIndex === 'number' ? byIndex.get(node.parentIndex) : undefined;
-  const visited = new Set<number>();
-  while (current && !visited.has(current.index)) {
-    visited.add(current.index);
-    if (current.rect && isScrollableNode(current)) return current.rect;
-    current =
-      typeof current.parentIndex === 'number' ? byIndex.get(current.parentIndex) : undefined;
-  }
-  return null;
-}
-
-// fallow-ignore-next-line complexity
-function isScrollableNode(node: SnapshotNode): boolean {
-  const type = `${node.type ?? ''}`.toLowerCase();
-  if (
-    type.includes('scroll') ||
-    type.includes('recyclerview') ||
-    type.includes('listview') ||
-    type.includes('gridview') ||
-    type.includes('collectionview') ||
-    type === 'table'
-  ) {
-    return true;
-  }
-  return `${node.role ?? ''} ${node.subrole ?? ''}`.toLowerCase().includes('scroll');
 }
 
 function resolveRootViewport(nodes: SnapshotNode[], target: Rect): Rect | null {
