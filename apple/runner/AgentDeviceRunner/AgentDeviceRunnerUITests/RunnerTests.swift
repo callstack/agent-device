@@ -87,6 +87,15 @@ final class RunnerTests: XCTestCase {
   var snapshotXCTestChannelPenaltyUntil = Date.distantPast
   let snapshotXCTestChannelPenaltyDuration: TimeInterval = 120
   var snapshotXCTestPenaltyWarmupExemptionPending = false
+  // Sticky per-bundle hint for the private AX depth ladder: deep RN screens reject the default
+  // depth with kAXErrorIllegalArgument on EVERY capture, so once a shallower rung is accepted
+  // later captures start there instead of re-paying the rejected deep request (~300ms per
+  // capture on the Bluesky feed). Shares the penalty's lifetime model: same duration, cleared
+  // on target process change, so screens that regain deep-capture ability are re-probed.
+  let privateAXAcceptedDepthLock = NSLock()
+  var privateAXAcceptedDepthBundleId: String?
+  var privateAXAcceptedDepth: Int?
+  var privateAXAcceptedDepthUntil = Date.distantPast
   // Bluesky-class screens can grind ~4-8s before an XCTest-backed snapshot tier fails; anything
   // past this threshold marks the screen hostile so the next capture uses non-XCTest recovery.
   let snapshotXCTestSlowCaptureThreshold: TimeInterval = 3

@@ -10,6 +10,45 @@ extension RunnerTests {
   /// apps where the AX surface is genuinely unavailable.
   static let privateAXSnapshotDepthLadder = [56, 40, 24, 12]
 
+  /// Ladder rungs for one capture. A remembered accepted depth (recorded when a prior capture's
+  /// deep request was rejected) drops the rungs above it, so the known-rejected deep request is
+  /// not re-paid on every capture of the same screen class.
+  static func privateAXAttemptDepths(requestedDepth: Int, rememberedDepth: Int?) -> [Int] {
+    var depths = [requestedDepth]
+    depths.append(contentsOf: privateAXSnapshotDepthLadder.filter { $0 < requestedDepth })
+    guard let remembered = rememberedDepth, remembered < requestedDepth else { return depths }
+    return depths.filter { $0 <= remembered }
+  }
+
+  func rememberPrivateAXAcceptedDepth(bundleId: String?, depth: Int) {
+    privateAXAcceptedDepthLock.lock()
+    privateAXAcceptedDepthBundleId = bundleId
+    privateAXAcceptedDepth = depth
+    privateAXAcceptedDepthUntil = Date().addingTimeInterval(snapshotXCTestChannelPenaltyDuration)
+    privateAXAcceptedDepthLock.unlock()
+    NSLog("AGENT_DEVICE_RUNNER_PRIVATE_AX_DEPTH_REMEMBERED depth=%ld bundle=%@", depth, bundleId ?? "")
+  }
+
+  func rememberedPrivateAXAcceptedDepth(bundleId: String?) -> Int? {
+    privateAXAcceptedDepthLock.lock()
+    defer { privateAXAcceptedDepthLock.unlock() }
+    guard Date() < privateAXAcceptedDepthUntil else { return nil }
+    guard privateAXAcceptedDepthBundleId == bundleId else { return nil }
+    return privateAXAcceptedDepth
+  }
+
+  func clearPrivateAXAcceptedDepth(reason: String) {
+    privateAXAcceptedDepthLock.lock()
+    let hadMemory = privateAXAcceptedDepth != nil && Date() < privateAXAcceptedDepthUntil
+    privateAXAcceptedDepthBundleId = nil
+    privateAXAcceptedDepth = nil
+    privateAXAcceptedDepthUntil = .distantPast
+    privateAXAcceptedDepthLock.unlock()
+    if hadMemory {
+      NSLog("AGENT_DEVICE_RUNNER_PRIVATE_AX_DEPTH_MEMORY_CLEARED reason=%@", reason)
+    }
+  }
+
   func privateAXSnapshotCapture(
     app: XCUIApplication,
     options: SnapshotOptions,
@@ -17,9 +56,13 @@ extension RunnerTests {
   ) -> SnapshotBackendCapture? {
     #if os(iOS) && targetEnvironment(simulator)
       let requestedDepth = options.depth ?? 64
-      var attemptDepths = [requestedDepth]
-      attemptDepths.append(
-        contentsOf: Self.privateAXSnapshotDepthLadder.filter { $0 < requestedDepth }
+      // An explicit --depth request is honored as asked; only default-depth captures consult
+      // (and feed) the accepted-depth memory.
+      let rememberedDepth =
+        options.depth == nil ? rememberedPrivateAXAcceptedDepth(bundleId: currentBundleId) : nil
+      let attemptDepths = Self.privateAXAttemptDepths(
+        requestedDepth: requestedDepth,
+        rememberedDepth: rememberedDepth
       )
       var response: [String: Any] = [:]
       var effectiveDepth = requestedDepth
@@ -51,6 +94,12 @@ extension RunnerTests {
       guard response["ok"] as? Bool == true else {
         NSLog("AGENT_DEVICE_RUNNER_PRIVATE_AX_SNAPSHOT_FAILED=%@", lastError)
         return nil
+      }
+      // Only a capture that actually descended records memory: a first-rung success on a
+      // remembered depth deliberately does NOT refresh the TTL, so expiry re-probes the full
+      // requested depth once per window instead of capping this screen class forever.
+      if options.depth == nil, effectiveDepth != attemptDepths.first {
+        rememberPrivateAXAcceptedDepth(bundleId: currentBundleId, depth: effectiveDepth)
       }
       guard let root = response["root"] as? [String: Any] else {
         NSLog("AGENT_DEVICE_RUNNER_PRIVATE_AX_SNAPSHOT_FAILED=missing root")
@@ -91,7 +140,13 @@ extension RunnerTests {
 
   private func privateAXSnapshotViewport(app: XCUIApplication, rootFrame: CGRect) -> CGRect {
     let fallback = rootFrame.isEmpty ? CGRect.infinite : rootFrame
-    guard !hasAbandonedTreeCapture() else {
+    // The viewport read is XCTest main-thread work — the exact channel the penalty marks as
+    // grinding on this screen class. Under penalty it reliably burns its full timeout and
+    // falls back anyway (~1s added to every private AX capture on the Bluesky bench feed),
+    // so honor the penalty here the same way capture plans do.
+    guard !hasAbandonedTreeCapture(),
+      !isSnapshotXCTestChannelPenalized(bundleId: currentBundleId)
+    else {
       return fallback
     }
     do {
@@ -237,6 +292,37 @@ extension RunnerTests {
 // MARK: - In-bundle unit tests
 
 extension RunnerTests {
+  func testPrivateAXAttemptDepthsAppliesRememberedDepth() {
+    XCTAssertEqual(
+      Self.privateAXAttemptDepths(requestedDepth: 64, rememberedDepth: nil),
+      [64, 56, 40, 24, 12]
+    )
+    XCTAssertEqual(
+      Self.privateAXAttemptDepths(requestedDepth: 64, rememberedDepth: 56),
+      [56, 40, 24, 12]
+    )
+    XCTAssertEqual(Self.privateAXAttemptDepths(requestedDepth: 64, rememberedDepth: 12), [12])
+    // Remembered at/above the requested depth changes nothing.
+    XCTAssertEqual(
+      Self.privateAXAttemptDepths(requestedDepth: 64, rememberedDepth: 64),
+      [64, 56, 40, 24, 12]
+    )
+    // A shallower explicit request keeps its own rungs; deeper stale memory is ignored.
+    XCTAssertEqual(Self.privateAXAttemptDepths(requestedDepth: 24, rememberedDepth: 56), [24, 12])
+  }
+
+  func testPrivateAXAcceptedDepthMemoryMatchesBundleAndExpires() {
+    defer { clearPrivateAXAcceptedDepth(reason: "test-cleanup") }
+
+    rememberPrivateAXAcceptedDepth(bundleId: "xyz.blueskyweb.app", depth: 56)
+    XCTAssertEqual(rememberedPrivateAXAcceptedDepth(bundleId: "xyz.blueskyweb.app"), 56)
+    XCTAssertNil(rememberedPrivateAXAcceptedDepth(bundleId: "com.other.app"))
+
+    // Expired memory stops applying (the expiry re-probes the full requested depth).
+    privateAXAcceptedDepthUntil = Date(timeIntervalSinceNow: -1)
+    XCTAssertNil(rememberedPrivateAXAcceptedDepth(bundleId: "xyz.blueskyweb.app"))
+  }
+
   func testPrivateAXScopeSelectsSubtreeNotMatchingLabels() {
     let tree: [String: Any] = [
       "type": 1, "label": "App",

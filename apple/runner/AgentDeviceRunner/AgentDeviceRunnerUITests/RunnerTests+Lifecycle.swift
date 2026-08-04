@@ -122,6 +122,7 @@ extension RunnerTests {
     currentApp = candidate
     currentAppProcessIdentifier = observedProcessIdentifier
     clearSnapshotXCTestChannelPenalty(reason: "target_process_changed")
+    clearPrivateAXAcceptedDepth(reason: "target_process_changed")
     snapshotXCTestPenaltyWarmupExemptionPending = true
     needsFirstInteractionDelay = true
   }
