@@ -4,6 +4,7 @@ import type {
   InteractionTarget,
   LongPressCommandResult,
   PressCommandResult,
+  ResolvedInteractionTarget,
 } from '@agent-device/contracts/interaction';
 import {
   buttonTag,
@@ -25,6 +26,7 @@ import { normalizeAppleRunnerResultForResponse } from '../../platforms/apple/cor
 import type { ReplayTargetGuardDenotation } from '@agent-device/contracts/replay';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { getActiveAndroidSnapshotFreshness } from '../android-snapshot-freshness.ts';
+import { readResolvedInteractionTarget } from '../../contracts/interaction-outcome.ts';
 import {
   ensureAndroidBlockingSystemDialogReady,
   type AndroidBlockingDialogReadinessResult,
@@ -891,6 +893,8 @@ async function buildRuntimeIosCorroboratedResponse(params: {
   androidFreshnessBaseline: SessionState['snapshot'] | undefined;
 }): Promise<DaemonResponse | undefined> {
   if (!params.target) return undefined;
+  const resolvedTarget = readResolvedInteractionTarget(params.error);
+  if (!resolvedTarget && params.session.recordSession) return undefined;
   const corroboration = await corroborateIosTapFailure({
     error: params.error,
     command: params.handlerParams.req.command,
@@ -903,17 +907,12 @@ async function buildRuntimeIosCorroboratedResponse(params: {
   });
   if (!corroboration) return undefined;
 
-  const target = params.target;
-  const point = target.kind === 'point' ? { x: target.x, y: target.y } : undefined;
-  const { result, responseData } = buildCorroboratedTapResponseData({
-    targetKind: target.kind,
-    point,
+  const payloads = buildIosCorroboratedPayloads({
+    target: params.target,
+    resolvedTarget,
     warning: corroboration.warning,
     referenceFrame: readSnapshotNodesReferenceFrame(params.session.snapshot?.nodes ?? []),
-    extra: {
-      ...interactionTargetExtra(target),
-      ...(params.extra ?? {}),
-    },
+    extra: params.extra,
   });
   return finalizeTouchInteraction({
     session: params.session,
@@ -921,12 +920,48 @@ async function buildRuntimeIosCorroboratedResponse(params: {
     command: params.handlerParams.req.command,
     positionals: params.handlerParams.req.positionals ?? [],
     flags: params.handlerParams.req.flags,
-    result,
-    responseData,
+    result: payloads.result,
+    responseData: payloads.responseData,
+    recordedTarget: payloads.recordedTarget,
     actionStartedAt: params.actionStartedAt,
     actionFinishedAt: Date.now(),
     androidFreshnessBaseline: params.androidFreshnessBaseline,
   });
+}
+
+function buildIosCorroboratedPayloads(params: {
+  target: InteractionTarget;
+  resolvedTarget: ResolvedInteractionTarget | undefined;
+  warning: string;
+  referenceFrame: GestureReferenceFrame | undefined;
+  extra: Record<string, unknown> | undefined;
+}): InteractionResponsePayloads {
+  if (params.resolvedTarget) {
+    return buildInteractionResponseData({
+      source: {
+        kind: 'runtime',
+        result: { ...params.resolvedTarget, warning: params.warning },
+      },
+      referenceFrame: params.referenceFrame,
+      extra: params.extra,
+    });
+  }
+  return buildCorroboratedTapResponseData({
+    targetKind: params.target.kind,
+    point: pointFromInteractionTarget(params.target),
+    warning: params.warning,
+    referenceFrame: params.referenceFrame,
+    extra: {
+      ...interactionTargetExtra(params.target),
+      ...(params.extra ?? {}),
+    },
+  });
+}
+
+function pointFromInteractionTarget(
+  target: InteractionTarget,
+): { x: number; y: number } | undefined {
+  return target.kind === 'point' ? { x: target.x, y: target.y } : undefined;
 }
 
 type RefAdmissionContext = {

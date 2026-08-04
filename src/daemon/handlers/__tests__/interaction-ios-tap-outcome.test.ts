@@ -1,4 +1,7 @@
 import { beforeEach, expect, test, vi } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { buildSnapshotState } from '../snapshot-capture.ts';
 import { handleInteractionCommands } from '../interaction.ts';
@@ -6,6 +9,8 @@ import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import type { CommandFlags } from '../../../core/dispatch.ts';
+import { SessionScriptWriter } from '../../session-script-writer.ts';
+import { runReplayScriptFile } from '../session-replay-runtime.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -180,4 +185,99 @@ test('runtime-resolved taps use the same corroboration boundary', async () => {
     expect(response.data?.warning).toMatch(/post-action accessibility capture changed/);
   expect(snapshotCount).toBe(2);
   expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
+});
+
+test('corroborated runtime taps retain target evidence through save and replay', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-ios-tap-replay-'));
+  const sessionName = 'ios-recorded-tap';
+  const sessionStore = makeSessionStore();
+  sessionStore.set(
+    sessionName,
+    makeIosSession(sessionName, {
+      appBundleId: 'com.example.app',
+      recordSession: true,
+      snapshot: snapshot(profileNodes),
+    }),
+  );
+  let recording = true;
+  let snapshotCount = 0;
+  let pressCount = 0;
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command === 'press') {
+      pressCount += 1;
+      if (recording) {
+        throw new AppError(
+          'XCTEST_RECORDED_FAILURE',
+          'XCTest recorded a failure while executing tap; the action may not have been performed.',
+        );
+      }
+      return {};
+    }
+    if (command === 'snapshot') {
+      snapshotCount += 1;
+      return {
+        backend: 'xctest',
+        nodes: recording && snapshotCount === 2 ? imageViewerNodes : profileNodes,
+      };
+    }
+    return {};
+  });
+
+  const recordedResponse = await runClick(sessionStore, sessionName);
+  expect(recordedResponse?.ok).toBe(true);
+  const recordedAction = sessionStore.get(sessionName)?.actions[0];
+  expect(recordedAction?.result?.selectorChain).toEqual([
+    'id="unfollow"',
+    'role="button" label="Unfollow"',
+    'label="Unfollow"',
+  ]);
+  expect(recordedAction?.targetEvidence).toBeDefined();
+
+  const written = new SessionScriptWriter(path.join(root, 'sessions')).write(
+    sessionStore.get(sessionName)!,
+  );
+  expect(written.written).toBe(true);
+  if (!written.written) return;
+  const savedScript = fs.readFileSync(written.path, 'utf8');
+  expect(savedScript).toContain('# agent-device:target-v1');
+  expect(savedScript).toContain(
+    'click "id=\\"unfollow\\" || role=\\"button\\" label=\\"Unfollow\\" || label=\\"Unfollow\\""',
+  );
+
+  recording = false;
+  const replaySessionName = 'ios-replayed-tap';
+  const replayStore = makeSessionStore();
+  replayStore.set(
+    replaySessionName,
+    makeIosSession(replaySessionName, {
+      appBundleId: 'com.example.app',
+      snapshot: snapshot(profileNodes),
+    }),
+  );
+  const replayResponse = await runReplayScriptFile({
+    req: {
+      token: 'test',
+      session: replaySessionName,
+      command: 'replay',
+      positionals: [written.path],
+      flags: { replayKeepSession: true },
+    },
+    sessionName: replaySessionName,
+    logPath: path.join(root, 'replay-daemon.log'),
+    sessionStore: replayStore,
+    invoke: async (req) => {
+      const response = await handleInteractionCommands({
+        req,
+        sessionName: replaySessionName,
+        sessionStore: replayStore,
+        contextFromFlags,
+      });
+      if (!response) throw new Error(`unexpected empty response for ${req.command}`);
+      return response;
+    },
+  });
+
+  expect(replayResponse.ok).toBe(true);
+  expect(pressCount).toBe(2);
+  expect(snapshotCount).toBeGreaterThanOrEqual(4);
 });
