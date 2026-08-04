@@ -212,6 +212,9 @@ jobs:
       - name: Check for production-unused exports
         run: pnpm check:production-exports
 
+      - name: Check test tmpdir helper adoption
+        run: pnpm check:test-tmpdir-helper
+
   replay-compat-provenance:
     # The frozen replay-compat corpus (#1417) claims each entry was published by
     # a released tag. Only a full-history checkout can re-derive that claim, so
@@ -262,6 +265,13 @@ jobs:
         env:
           OUTPUT_ECONOMY_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: pnpm test:coverage:ci
+
+      # Every unit-test worker redirects TMPDIR to its own directory and
+      # removes it in an afterAll hook; anything left here means a worker was
+      # killed before that hook ran.
+      - name: Check tmpdir leaks
+        if: always()
+        run: pnpm check:tmpdir-leaks
 
       - name: Upload contention-retry envelope
         if: always()

@@ -36,6 +36,10 @@ export function reporters(env: NodeJS.ProcessEnv = process.env): Array<string | 
 
 export default defineConfig({
   test: {
+    // Redirects TMPDIR to one per-run directory for the whole invocation (all
+    // projects, every worker) and removes it once at the end — see the file
+    // for why a single global hook beats per-file cleanup here.
+    globalSetup: ['scripts/vitest-tmpdir-global-setup.ts'],
     // Wall-clock discipline: unit tests must not wait real time. Measured
     // 2026-07-04: the suite's duration was bounded by files sleeping through
     // production timeout budgets. slowTestThreshold surfaces creep in local
