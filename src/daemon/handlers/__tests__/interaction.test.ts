@@ -517,15 +517,36 @@ test('click simple iOS id selector uses direct runner selector tap without snaps
   }
 });
 
-test('fill simple iOS id selector uses direct runner selector fill without snapshot coordinates', async () => {
+test('fill simple iOS id selector resolves runtime text input evidence before coordinate fill', async () => {
   const sessionStore = makeSessionStore();
-  const sessionName = 'ios-direct-selector-fill';
+  const sessionName = 'ios-runtime-selector-fill';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
 
-  mockDispatch.mockResolvedValue({
+  mockCaptureSnapshotForSession.mockResolvedValueOnce({
+    nodes: attachRefs([
+      {
+        index: 0,
+        type: 'Application',
+        rect: { x: 0, y: 0, width: 440, height: 956 },
+      },
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'TextField',
+        identifier: 'email',
+        label: 'Email',
+        rect: { x: 40, y: 80, width: 300, height: 44 },
+        enabled: true,
+        hittable: false,
+      },
+    ]),
+    createdAt: Date.now(),
+    backend: 'xctest',
+  });
+  mockDispatch.mockResolvedValueOnce({
     message: 'filled',
-    x: 439.5,
-    y: 100.5,
+    x: 190,
+    y: 102,
     referenceWidth: 440,
     referenceHeight: 956,
   });
@@ -544,15 +565,13 @@ test('fill simple iOS id selector uses direct runner selector fill without snaps
   });
 
   expect(response?.ok).toBe(true);
+  expect(mockCaptureSnapshotForSession).toHaveBeenCalledTimes(1);
   expect(mockDispatch).toHaveBeenCalledTimes(1);
   expect(mockDispatch.mock.calls[0]?.[1]).toBe('fill');
-  expect(mockDispatch.mock.calls[0]?.[2]).toEqual(['ada@example.com']);
+  expect(mockDispatch.mock.calls[0]?.[2]).toEqual(['190', '102', 'ada@example.com']);
   const context = mockDispatch.mock.calls[0]?.[4] as Record<string, unknown>;
-  expect(context.directElementSelector).toEqual({
-    key: 'id',
-    value: 'email',
-    raw: 'id="email"',
-  });
+  expect(context.directElementSelector).toBeUndefined();
+  expect(context.resolvedTextInputTarget).toBe(true);
   expect(context.delayMs).toBe(25);
   if (response?.ok) {
     expect(response.data?.selector).toBe('id="email"');
