@@ -309,7 +309,7 @@ function convertWaitAction(
       ],
     };
   }
-  const selector = selectorExpressionToMaestro(first, resolveSelector);
+  const selector = resolveSelector(first);
   if (!selector) return { kind: 'unsupported', message: 'wait selector is not Maestro-compatible' };
   return {
     kind: 'commands',
@@ -403,14 +403,7 @@ function readTapTarget(
 ): unknown | null {
   if (isNumber(first) && isNumber(second)) return { point: formatMaestroPoint(first, second) };
   if (first.startsWith('@')) return null;
-  return selectorExpressionToMaestro(first, resolveSelector);
-}
-
-function selectorExpressionToMaestro(
-  expression: string,
-  resolveSelector: MaestroExportOptions['resolveSelector'],
-): unknown | null {
-  return resolveSelector(expression);
+  return resolveSelector(first);
 }
 
 function readRepeatedTapOptions(

@@ -4,21 +4,21 @@ import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot'
 import { buildSnapshotNodeMap, isNodeVisibleOnScreen } from '@agent-device/contracts/snapshot';
 import { matchesSelector } from './match.ts';
 import type { Selector, SelectorChain } from './parse.ts';
+import type {
+  SelectorDiagnostics,
+  SelectorDisambiguationDisclosure,
+  SelectorMatchOptions,
+  SelectorResolutionOptions,
+} from './public-resolution-types.ts';
 
-export type SelectorDiagnostics = {
-  selector: string;
-  matches: number;
-};
-
-/** Present only when the heuristic picked among N>1 matches (ADR 0012). */
-export type SelectorDisambiguationDisclosure = {
-  matchCount: number;
-  tiebreak: DisambiguationTiebreak;
-  /** Every losing matched node, document order, uncapped (response layer caps). */
-  alternatives: SnapshotNode[];
-};
-
-export type SelectorResolution = {
+/**
+ * The parser-side twin of the façade's `SelectorResolution`: identical except
+ * that the winning alternative is the `Selector` node itself, which the façade
+ * flattens to its `raw` text before any consumer sees it. Only the fields that
+ * differ are restated; everything else is shared with
+ * `public-resolution-types.ts`.
+ */
+export type AstSelectorResolution = {
   node: SnapshotNode;
   selector: Selector;
   selectorIndex: number;
@@ -30,13 +30,8 @@ export type SelectorResolution = {
 export function resolveSelectorChain(
   nodes: SnapshotState['nodes'],
   chain: SelectorChain,
-  options: {
-    platform: Platform | PublicPlatform;
-    requireRect?: boolean;
-    requireUnique?: boolean;
-    disambiguateAmbiguous?: boolean;
-  },
-): SelectorResolution | null {
+  options: SelectorResolutionOptions,
+): AstSelectorResolution | null {
   const requireRect = options.requireRect ?? false;
   const requireUnique = options.requireUnique ?? true;
   const diagnostics: SelectorDiagnostics[] = [];
@@ -72,7 +67,8 @@ export function resolveSelectorChain(
   return null;
 }
 
-export type SelectorChainMatchList = {
+/** The parser-side twin of the façade's `SelectorChainMatchList`. */
+export type AstSelectorChainMatchList = {
   selector: Selector;
   selectorIndex: number;
   matchedNodes: SnapshotNode[];
@@ -90,8 +86,8 @@ export type SelectorChainMatchList = {
 export function listSelectorChainMatches(
   nodes: SnapshotState['nodes'],
   chain: SelectorChain,
-  options: { platform: Platform | PublicPlatform; requireRect?: boolean },
-): SelectorChainMatchList | null {
+  options: SelectorMatchOptions,
+): AstSelectorChainMatchList | null {
   const requireRect = options.requireRect ?? false;
   for (const [i, selector] of chain.selectors.entries()) {
     const matchedNodes = nodes.filter((node) => {
@@ -103,19 +99,19 @@ export function listSelectorChainMatches(
   return null;
 }
 
-export function findSelectorChainMatch(
-  nodes: SnapshotState['nodes'],
-  chain: SelectorChain,
-  options: {
-    platform: Platform | PublicPlatform;
-    requireRect?: boolean;
-  },
-): {
+/** The parser-side twin of the façade's `SelectorChainMatch`. */
+export type AstSelectorChainMatch = {
   selectorIndex: number;
   selector: Selector;
   matches: number;
   diagnostics: SelectorDiagnostics[];
-} | null {
+};
+
+export function findSelectorChainMatch(
+  nodes: SnapshotState['nodes'],
+  chain: SelectorChain,
+  options: SelectorMatchOptions,
+): AstSelectorChainMatch | null {
   const requireRect = options.requireRect ?? false;
   const diagnostics: SelectorDiagnostics[] = [];
   for (const [i, selector] of chain.selectors.entries()) {
@@ -144,13 +140,12 @@ export function selectorFailureHint(diagnostics: SelectorDiagnostics[]): string 
 }
 
 export function formatSelectorFailure(
-  chain: SelectorChain | string,
+  expression: string,
   diagnostics: SelectorDiagnostics[],
   options: { unique?: boolean },
 ): string {
-  const raw = typeof chain === 'string' ? chain : chain.raw;
   if (diagnostics.length === 0) {
-    return `Selector did not match: ${raw}`;
+    return `Selector did not match: ${expression}`;
   }
   const summary = diagnostics.map((entry) => `${entry.selector} -> ${entry.matches}`).join(', ');
   return (options.unique ?? true)

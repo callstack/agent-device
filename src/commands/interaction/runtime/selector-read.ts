@@ -288,7 +288,7 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
   const selectorExpression = options.selector;
   const capture = await captureSelectorSnapshot(runtime, options, {
     updateSession: true,
-    ...deriveSelectorCapturePolicy({ predicate: predicate, selectorExpression }),
+    ...deriveSelectorCapturePolicy(predicate),
   });
 
   if (predicate === 'exists') {
@@ -429,7 +429,7 @@ async function findFirstLocatorMatch(
     updateSession: true,
     scope: findSnapshotScope(runtime.backend.platform, locator, options.query, selectorExpression),
     includeHiddenContentHints: captureOverrides?.includeHiddenContentHints,
-    ...deriveSelectorCapturePolicy({ selectorExpression }),
+    ...deriveSelectorCapturePolicy(),
   });
   if (isSparseSnapshotQualityVerdict(capture.snapshot.snapshotQuality)) {
     throw sparseSelectorSnapshotError(capture.snapshot.snapshotQuality);
@@ -459,7 +459,7 @@ async function resolveSelectorNode(
     { ...options, session: sessionName },
     {
       updateSession: true,
-      ...deriveSelectorCapturePolicy({ selectorExpression: params.selector }),
+      ...deriveSelectorCapturePolicy(),
     },
   );
   const resolved = resolveSelectorChain(capture.snapshot.nodes, params.selector, {

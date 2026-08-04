@@ -5,8 +5,6 @@ import { extractNodeText, normalizeType } from '@agent-device/contracts/snapshot
 import { normalizeText } from './find.ts';
 import type { Selector, SelectorTerm } from './parse.ts';
 
-export { isNodeEditable, isNodeVisible } from './node.ts';
-
 export function matchesSelector(
   node: SnapshotNode,
   selector: Selector,

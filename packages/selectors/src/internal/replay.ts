@@ -8,8 +8,15 @@ import { matchesSelector } from './match.ts';
 import { tryParseSelectorChain } from './parse.ts';
 import { listSelectorChainMatches, resolveSelectorChain } from './resolve.ts';
 
-/** Which selector-bearing positional grammar a replay action uses. */
-export type ReplaySelectorGrammar = 'is' | 'wait' | 'ordinary';
+/**
+ * Which selector-bearing positional grammar a replay action uses. `is` puts a
+ * predicate beside the selector and so needs its own split; every other
+ * command — `wait`, `click`, `fill`, a bare recorded token — carries the
+ * selector as a plain leading positional and shares one rule. Two variants,
+ * because there are two splits: naming each command's grammar separately would
+ * advertise a distinction this module does not make.
+ */
+export type ReplaySelectorGrammar = 'is' | 'positional';
 
 export type ReplaySelectorExpressionOutcome =
   | {

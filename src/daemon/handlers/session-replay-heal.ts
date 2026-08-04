@@ -23,7 +23,7 @@ function parseSelectorWaitPositionals(positionals: string[]): {
     maybeTimeout !== undefined && /^\d+$/.test(maybeTimeout) ? maybeTimeout : null;
   const hasTimeout = selectorTimeout !== null;
   const selectorTokens = hasTimeout ? positionals.slice(0, -1) : positionals.slice();
-  const outcome = readSelectorExpression('wait', selectorTokens);
+  const outcome = readSelectorExpression('positional', selectorTokens);
   if (outcome.kind !== 'expression' || outcome.rest.length > 0) {
     return { selectorExpression: null, selectorTimeout: null };
   }

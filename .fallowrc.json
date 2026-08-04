@@ -11,7 +11,6 @@
     "src/sdk/install-source.ts",
     "src/sdk/android-adb.ts",
     "src/sdk/contracts.ts",
-    "src/sdk/selectors.ts",
     "src/sdk/finders.ts",
     "src/bin.ts",
     "src/client/companion-tunnel.ts",

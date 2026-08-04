@@ -1,10 +1,10 @@
-import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
-import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type {
   SelectorChainMatch,
   SelectorChainMatchList,
-  SelectorDiagnostics,
+  SelectorMatchOptions,
   SelectorResolution,
+  SelectorResolutionOptions,
 } from './internal/public-resolution-types.ts';
 import {
   checkElementTargetArgs,
@@ -13,7 +13,6 @@ import {
   checkWaitText,
   IS_TEXT_VALUE_REQUIRED_MESSAGE,
   SELECTOR_EXPRESSION_REQUIRED_MESSAGE,
-  splitIsSelectorArgs,
 } from './internal/arguments.ts';
 import { buildSelectorChainForNode, normalizeSelectorText } from './internal/build.ts';
 import {
@@ -28,19 +27,16 @@ import {
 import {
   checkIsPredicate,
   evaluateIsPredicate,
-  IS_PREDICATE_REQUIRED_MESSAGE,
   IS_PREDICATE_USAGE_HINT,
   normalizeIsPositionals,
 } from './internal/predicates.ts';
 import {
   findSelectorChainMatch as findSelectorChainMatchAst,
-  formatSelectorFailure as formatSelectorFailureAst,
   listSelectorChainMatches as listSelectorChainMatchesAst,
   resolveSelectorChain as resolveSelectorChainAst,
   selectorFailureHint,
   STALE_REF_HINT,
 } from './internal/resolve.ts';
-import { isNodeEditable, isNodeVisible } from './internal/node.ts';
 import {
   findBestMatchesByLocator,
   checkFindArgs,
@@ -49,7 +45,6 @@ import {
   parseFindSelectorExpression,
   FIND_LOCATORS,
   FIND_VALUE_REQUIRED_MESSAGE,
-  normalizeText,
 } from './internal/find.ts';
 import {
   buildSelectorCandidates,
@@ -73,21 +68,18 @@ export type {
   SelectorChainMatchList,
   SelectorChainMatch,
   SelectorDiagnostics,
-  SelectorDisambiguationDisclosure,
   SelectorResolution,
 } from './internal/public-resolution-types.ts';
 export type {
-  ReplayRecordedTargetDisambiguation,
   ReplayRecordedTargetPolicy,
   ReplayRecordedTargetResolution,
-  ReplayRecordedTargetResolved,
-  ReplayRecordedTargetUnresolved,
-  ReplaySelectorCandidateAction,
   ReplaySelectorCandidateOptions,
   ReplaySelectorExpressionOutcome,
   ReplaySelectorGrammar,
   ReplaySuggestionCandidateMatch,
 } from './internal/replay.ts';
+
+export { formatSelectorFailure } from './internal/resolve.ts';
 
 export {
   buildSelectorCandidates,
@@ -102,9 +94,6 @@ export {
   evaluateIsPredicate,
   findBestMatchesByLocator,
   findSelectorChainMatch,
-  formatSelectorFailure,
-  isNodeEditable,
-  isNodeVisible,
   isReadOnlyFindAction,
   isRoleHintWord,
   isSelectorToken,
@@ -112,7 +101,6 @@ export {
   listSelectorChainMatches,
   normalizeIsPositionals,
   normalizeSelectorText,
-  normalizeText,
   parseFindArgs,
   parseFindSelectorExpression,
   projectSelectorExpression,
@@ -125,8 +113,6 @@ export {
   resolveSelectorChain,
   selectorFailureHint,
   selectorContainsValue,
-  selectorUsesKey,
-  splitIsSelectorArgs,
   splitSelectorFromArgs,
   validateSelectorExpression,
 };
@@ -134,15 +120,12 @@ export {
 export {
   FIND_LOCATORS,
   FIND_VALUE_REQUIRED_MESSAGE,
-  IS_PREDICATE_REQUIRED_MESSAGE,
   IS_PREDICATE_USAGE_HINT,
   IS_TEXT_VALUE_REQUIRED_MESSAGE,
   SELECTOR_EXPRESSION_REQUIRED_MESSAGE,
   SELECTOR_KEY_NAMES,
   STALE_REF_HINT,
 };
-
-export type { Platform, PublicPlatform, SnapshotNode, SnapshotState };
 
 /** A single native runner selector suitable for direct iOS lookup. */
 export type SimpleSelectorTarget = Readonly<{
@@ -155,16 +138,17 @@ export type SelectorProjection = string | Readonly<Record<string, string | boole
 
 /**
  * Project a selector expression into a consumer-owned target map without exposing selector AST
- * nodes. The caller supplies the target vocabulary (for example, Maestro's text and state keys).
+ * nodes. `vocabulary` is the caller's own — Maestro passes `MAESTRO_SELECTOR_PROJECTION`, because
+ * which keys a Maestro flow understands is that package's knowledge, not this one's.
  */
 function projectSelectorExpression(
   expression: string,
-  options: { textKeys: readonly string[]; booleanKeys: readonly string[] },
+  vocabulary: { textKeys: readonly string[]; booleanKeys: readonly string[] },
 ): SelectorProjection {
   const parsed = tryParseSelectorChain(expression);
   if (!parsed) return expression.includes('=') || expression.includes('||') ? null : expression;
-  const textKeys = new Set(options.textKeys);
-  const booleanKeys = new Set(options.booleanKeys);
+  const textKeys = new Set(vocabulary.textKeys);
+  const booleanKeys = new Set(vocabulary.booleanKeys);
   if (parsed.selectors.length > 1) {
     const values = parsed.selectors.map((selector) => {
       const term = selector.terms.length === 1 ? selector.terms[0] : undefined;
@@ -225,14 +209,6 @@ function selectorContainsValue(expression: string, literal: string): boolean {
   );
 }
 
-/** Whether a valid selector contains a term with the requested key. */
-function selectorUsesKey(expression: string, key: string): boolean {
-  const parsed = tryParseSelectorChain(expression);
-  return (
-    parsed?.selectors.some((selector) => selector.terms.some((term) => term.key === key)) ?? false
-  );
-}
-
 /** Return the canonical alternative strings without exposing selector nodes or terms. */
 function readSelectorAlternatives(expression: string): string[] {
   return parseSelectorChain(expression).selectors.map((selector) => selector.raw);
@@ -252,10 +228,9 @@ function validateSelectorExpression(expression: string): void {
 function findSelectorChainMatch(
   nodes: SnapshotState['nodes'],
   expression: string,
-  options: { platform: Platform | PublicPlatform; requireRect?: boolean },
+  options: SelectorMatchOptions,
 ): SelectorChainMatch | null {
-  const chain = parsePrivateSelector(expression);
-  const result = findSelectorChainMatchAst(nodes, chain, options);
+  const result = findSelectorChainMatchAst(nodes, parseSelectorChain(expression), options);
   return result ? { ...result, selector: result.selector.raw } : null;
 }
 
@@ -263,10 +238,9 @@ function findSelectorChainMatch(
 function listSelectorChainMatches(
   nodes: SnapshotState['nodes'],
   expression: string,
-  options: { platform: Platform | PublicPlatform; requireRect?: boolean },
+  options: SelectorMatchOptions,
 ): SelectorChainMatchList | null {
-  const chain = parsePrivateSelector(expression);
-  const result = listSelectorChainMatchesAst(nodes, chain, options);
+  const result = listSelectorChainMatchesAst(nodes, parseSelectorChain(expression), options);
   return result ? { ...result, selector: result.selector.raw } : null;
 }
 
@@ -274,26 +248,8 @@ function listSelectorChainMatches(
 function resolveSelectorChain(
   nodes: SnapshotState['nodes'],
   expression: string,
-  options: {
-    platform: Platform | PublicPlatform;
-    requireRect?: boolean;
-    requireUnique?: boolean;
-    disambiguateAmbiguous?: boolean;
-  },
+  options: SelectorResolutionOptions,
 ): SelectorResolution | null {
-  const chain = parsePrivateSelector(expression);
-  const result = resolveSelectorChainAst(nodes, chain, options);
+  const result = resolveSelectorChainAst(nodes, parseSelectorChain(expression), options);
   return result ? { ...result, selector: result.selector.raw } : null;
-}
-
-function formatSelectorFailure(
-  expression: string,
-  diagnostics: SelectorDiagnostics[],
-  options: { unique?: boolean },
-): string {
-  return formatSelectorFailureAst(expression, diagnostics, options);
-}
-
-function parsePrivateSelector(expression: string) {
-  return parseSelectorChain(expression);
 }

@@ -1,13 +1,9 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import {
-  findSelectorChainMatch,
-  parseSelectorChain,
-  resolveSelectorChain,
-  splitIsSelectorArgs,
-  splitSelectorFromArgs,
-} from './index.ts';
+import { splitIsSelectorArgs } from './arguments.ts';
+import { parseSelectorChain, splitSelectorFromArgs } from './parse.ts';
+import { findSelectorChainMatch, resolveSelectorChain } from './resolve.ts';
 
 const nodes: SnapshotState['nodes'] = [
   {

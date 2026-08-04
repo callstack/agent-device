@@ -31,7 +31,7 @@ function policy(overrides: Partial<Parameters<typeof resolveRecordedTarget>[2]> 
 }
 
 test('replay expression reading preserves the dispatch grammar outcomes', () => {
-  assert.deepEqual(readSelectorExpression('ordinary', ['label=Save']), {
+  assert.deepEqual(readSelectorExpression('positional', ['label=Save']), {
     kind: 'expression',
     expression: 'label=Save',
     rest: [],
@@ -41,8 +41,8 @@ test('replay expression reading preserves the dispatch grammar outcomes', () => 
     expression: 'label=Save',
     rest: [],
   });
-  assert.deepEqual(readSelectorExpression('ordinary', ['hello']), { kind: 'not-applicable' });
-  assert.notEqual(readSelectorExpression('ordinary', ['id=']).kind, 'expression');
+  assert.deepEqual(readSelectorExpression('positional', ['hello']), { kind: 'not-applicable' });
+  assert.notEqual(readSelectorExpression('positional', ['id=']).kind, 'expression');
 });
 
 test('recorded-target resolution distinguishes parse failure, no match, fallback, and ambiguity', () => {

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { exportReplayActionsToMaestro } from '@agent-device/maestro';
+import { exportReplayActionsToMaestro, MAESTRO_SELECTOR_PROJECTION } from '@agent-device/maestro';
 import { AppError } from '@agent-device/kernel/errors';
 import { parseReplayScriptDetailed, readReplayScriptMetadata } from '@agent-device/ad-script';
 import { projectSelectorExpression } from '@agent-device/selectors';
@@ -45,10 +45,7 @@ async function handleReplayExportCommand({
     actionLines: parsed.actionLines,
     metadata: readReplayScriptMetadata(script),
     resolveSelector: (expression) =>
-      projectSelectorExpression(expression, {
-        textKeys: ['id', 'text', 'label'],
-        booleanKeys: ['enabled', 'selected'],
-      }),
+      projectSelectorExpression(expression, MAESTRO_SELECTOR_PROJECTION),
   });
   const outputPath = typeof flags.out === 'string' ? resolveUserPath(flags.out) : undefined;
   if (outputPath) {

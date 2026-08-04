@@ -1,7 +1,11 @@
 import { parseAllDocuments } from 'yaml';
 import { describe, expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { exportReplayActionsToMaestro, inspectMaestroFlow } from '@agent-device/maestro';
+import {
+  exportReplayActionsToMaestro,
+  inspectMaestroFlow,
+  MAESTRO_SELECTOR_PROJECTION,
+} from '@agent-device/maestro';
 import { parseReplayScriptDetailed, readReplayScriptMetadata } from '@agent-device/ad-script';
 import { projectSelectorExpression } from '@agent-device/selectors';
 
@@ -172,10 +176,7 @@ function exportReplayScriptToMaestro(script: string) {
     actionLines: parsed.actionLines,
     metadata: readReplayScriptMetadata(script),
     resolveSelector: (expression) =>
-      projectSelectorExpression(expression, {
-        textKeys: ['id', 'text', 'label'],
-        booleanKeys: ['enabled', 'selected'],
-      }),
+      projectSelectorExpression(expression, MAESTRO_SELECTOR_PROJECTION),
   });
 }
 

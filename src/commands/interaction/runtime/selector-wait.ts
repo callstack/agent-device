@@ -219,7 +219,7 @@ async function waitForSelector<Runtime extends SelectorWaitRuntime>(
   recordedLandmark: TargetAnnotationV1 | undefined,
 ): Promise<WaitCommandResult> {
   const polling = createWaitPolling(runtime, options, timeoutMs);
-  const capturePolicy = deriveSelectorCapturePolicy({ selectorExpression });
+  const capturePolicy = deriveSelectorCapturePolicy();
   // ADR 0012 / #1349: the LAST poll whose capture matched the recorded
   // selector without any match carrying the recorded landmark identity. A
   // transient same-selector impostor (the previous screen mid-transition)

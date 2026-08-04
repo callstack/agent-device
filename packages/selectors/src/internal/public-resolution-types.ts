@@ -8,10 +8,14 @@ export type SelectorDiagnostics = {
   matches: number;
 };
 
-/** The disclosure for an ambiguous selector that was resolved by the heuristic. */
+/**
+ * The disclosure for an ambiguous selector that was resolved by the heuristic;
+ * present only when the heuristic picked among N>1 matches (ADR 0012).
+ */
 export type SelectorDisambiguationDisclosure = {
   matchCount: number;
   tiebreak: DisambiguationTiebreak;
+  /** Every losing matched node, document order, uncapped (response layer caps). */
   alternatives: SnapshotNode[];
 };
 
@@ -40,10 +44,18 @@ export type SelectorChainMatch = {
   diagnostics: SelectorDiagnostics[];
 };
 
-/** Shared options used by selector operations. */
-export type SelectorResolutionOptions = {
+/**
+ * The options every selector lookup takes. Stated once here rather than inline
+ * per function so a façade wrapper and the parser-side function it forwards to
+ * cannot drift apart.
+ */
+export type SelectorMatchOptions = {
   platform: Platform | PublicPlatform;
   requireRect?: boolean;
+};
+
+/** {@link SelectorMatchOptions} plus the uniqueness policy resolution adds. */
+export type SelectorResolutionOptions = SelectorMatchOptions & {
   requireUnique?: boolean;
   disambiguateAmbiguous?: boolean;
 };

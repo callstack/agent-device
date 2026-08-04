@@ -13,9 +13,11 @@ export {
 
 export {
   exportReplayActionsToMaestro,
+  MAESTRO_SELECTOR_PROJECTION,
   type MaestroExportOptions,
   type MaestroExportResult,
   type MaestroExportWarning,
+  type MaestroSelectorProjection,
 } from './internal/facade-export.ts';
 
 export {
