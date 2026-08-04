@@ -55,7 +55,7 @@ test('package apple runner source strips unit-test blocks without mutating check
 });
 
 test('package apple runner source rejects unit tests that would ship un-stripped', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-runner-package-testgate-'));
+  const root = mkdtempForTestSync('agent-device-runner-package-testgate-');
   onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
 
   writeFixtureFile(
@@ -82,7 +82,7 @@ test('package apple runner source rejects unit tests that would ship un-stripped
 });
 
 test('package apple runner source allows only the runner entrypoint test method', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-runner-package-entry-'));
+  const root = mkdtempForTestSync('agent-device-runner-package-entry-');
   onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
 
   writeFixtureFile(
