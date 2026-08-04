@@ -226,8 +226,8 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
   },
   'direct-ios-selector': {
     description:
-      'Simple selectors on iOS are sent to the XCTest runner, which queries and taps natively without a daemon tree capture.',
-    commands: ['press', 'fill'],
+      'Simple press selectors on iOS are sent to the XCTest runner, which queries and taps natively without a daemon tree capture. Fill deliberately resolves through the runtime tree so AX-hostile text inputs carry typed target evidence into coordinate entry.',
+    commands: ['press'],
     guarantees: {
       disambiguation: {
         kind: 'waived',

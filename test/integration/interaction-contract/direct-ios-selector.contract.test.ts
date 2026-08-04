@@ -93,6 +93,23 @@ test(scenario('resolutionDisclosure'), async () => {
   });
 });
 
+test('default simple-selector fill resolves through the runtime before typing', async () => {
+  await withIosContractDaemon(
+    [runnerSnapshotEntry(RECORDING_TARGET_NODES), runnerTypeEntry({ x: 180, y: 262 })],
+    async (daemon, transcript) => {
+      assertRpcOk(await daemon.callCommand('fill', ['id=email', 'ada@example.com']));
+
+      assert.equal(transcript.calls[0]?.command, 'ios.runner.snapshot');
+      assert.equal(transcript.calls[1]?.command, 'ios.runner.type');
+      const typeRequest = transcript.calls[1]?.request as Record<string, unknown> | undefined;
+      assert.equal(typeRequest?.selectorKey, undefined);
+      assert.equal(typeRequest?.x, 180);
+      assert.equal(typeRequest?.y, 262);
+      assert.equal(typeRequest?.resolvedTextInputTarget, true);
+    },
+  );
+});
+
 test('recorded simple iOS selector click and fill use runtime resolution and persist target-v1 evidence', async () => {
   await withIosContractDaemon(
     [

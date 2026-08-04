@@ -19,6 +19,27 @@ extension RunnerTests {
     static let verificationStabilityWindow: TimeInterval = 0.2
   }
 
+  struct SynthesizedReplacementStep: Equatable {
+    let text: String
+    let replacesExistingText: Bool
+  }
+
+  static func synthesizedReplacementSteps(
+    text: String,
+    delaySeconds: Double
+  ) -> [SynthesizedReplacementStep] {
+    let characters = Array(text)
+    guard delaySeconds > 0, characters.count > 1 else {
+      return [SynthesizedReplacementStep(text: text, replacesExistingText: true)]
+    }
+    return characters.enumerated().map { index, character in
+      SynthesizedReplacementStep(
+        text: String(character),
+        replacesExistingText: index == 0
+      )
+    }
+  }
+
   struct TextEntryResult {
     let verified: Bool?
     let repaired: Bool

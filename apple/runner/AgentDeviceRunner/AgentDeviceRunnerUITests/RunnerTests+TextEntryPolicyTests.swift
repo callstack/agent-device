@@ -66,4 +66,19 @@ extension RunnerTests {
       )
     )
   }
+
+  func testSynthesizedReplacementPacesCharactersAfterSelectingOnce() {
+    XCTAssertEqual(
+      Self.synthesizedReplacementSteps(text: "abc", delaySeconds: 0.05),
+      [
+        SynthesizedReplacementStep(text: "a", replacesExistingText: true),
+        SynthesizedReplacementStep(text: "b", replacesExistingText: false),
+        SynthesizedReplacementStep(text: "c", replacesExistingText: false),
+      ]
+    )
+    XCTAssertEqual(
+      Self.synthesizedReplacementSteps(text: "abc", delaySeconds: 0),
+      [SynthesizedReplacementStep(text: "abc", replacesExistingText: true)]
+    )
+  }
 }

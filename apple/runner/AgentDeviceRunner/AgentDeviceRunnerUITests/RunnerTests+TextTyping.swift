@@ -25,14 +25,20 @@ extension RunnerTests {
        ) {
 #if os(iOS)
       NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder-replacement")
-      if let message = RunnerSynthesizedTextEntry.replaceText(
-        withApplication: app,
-        text: text
-      ) {
-        NSException(
-          name: NSExceptionName.internalInconsistencyException,
-          reason: message
-        ).raise()
+      let steps = Self.synthesizedReplacementSteps(text: text, delaySeconds: delaySeconds)
+      for (index, step) in steps.enumerated() {
+        let message = step.replacesExistingText
+          ? RunnerSynthesizedTextEntry.replaceText(withApplication: app, text: step.text)
+          : RunnerSynthesizedTextEntry.synthesizeText(withApplication: app, text: step.text)
+        if let message {
+          NSException(
+            name: NSExceptionName.internalInconsistencyException,
+            reason: message
+          ).raise()
+        }
+        if index + 1 < steps.count {
+          sleepFor(delaySeconds)
+        }
       }
       logTextEntryPhase(
         commandId: commandId,
