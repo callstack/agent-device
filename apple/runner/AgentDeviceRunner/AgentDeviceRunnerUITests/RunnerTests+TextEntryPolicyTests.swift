@@ -5,60 +5,57 @@ extension RunnerTests {
   final class RecordingTextEntrySynthesizer: TextEntrySynthesizing {
     var steps: [SynthesizedReplacementStep] = []
 
-    func synthesizeText(app _: XCUIApplication, text: String) -> SynthesizedTextEntryAttempt {
-      steps.append(SynthesizedReplacementStep(text: text, replacesExistingText: false))
-      return SynthesizedTextEntryAttempt(status: .succeeded, message: nil)
-    }
-
-    func replaceText(app _: XCUIApplication, text: String) -> SynthesizedTextEntryAttempt {
-      steps.append(SynthesizedReplacementStep(text: text, replacesExistingText: true))
-      return SynthesizedTextEntryAttempt(status: .succeeded, message: nil)
+    func enterText(
+      app _: XCUIApplication,
+      text: String,
+      replacingExistingText: Bool
+    ) -> SynthesizedTextEntryAction {
+      steps.append(
+        SynthesizedReplacementStep(
+          text: text,
+          replacesExistingText: replacingExistingText
+        )
+      )
+      return .continueTyping
     }
   }
 #endif
 
   func testSynthesizedReplacementRequiresPenalizedXCTestAndCoordinates() {
-    XCTAssertTrue(
-      Self.shouldUseSynthesizedFirstResponderReplacement(
-        hasResolvedElement: false,
-        hasRefreshPoint: true,
-        xCTestChannelPenalized: true
+    let cases = [
+      (hasElement: false, hasPoint: true, penalized: true, expected: true),
+      (hasElement: false, hasPoint: true, penalized: false, expected: false),
+      (hasElement: false, hasPoint: false, penalized: true, expected: false),
+      (hasElement: true, hasPoint: true, penalized: true, expected: false),
+    ]
+    for testCase in cases {
+      XCTAssertEqual(
+        Self.shouldUseSynthesizedFirstResponderReplacement(
+          hasResolvedElement: testCase.hasElement,
+          hasRefreshPoint: testCase.hasPoint,
+          xCTestChannelPenalized: testCase.penalized
+        ),
+        testCase.expected
       )
-    )
-    XCTAssertFalse(
-      Self.shouldUseSynthesizedFirstResponderReplacement(
-        hasResolvedElement: false,
-        hasRefreshPoint: true,
-        xCTestChannelPenalized: false
-      )
-    )
-    XCTAssertFalse(
-      Self.shouldUseSynthesizedFirstResponderReplacement(
-        hasResolvedElement: false,
-        hasRefreshPoint: false,
-        xCTestChannelPenalized: true
-      )
-    )
-    XCTAssertFalse(
-      Self.shouldUseSynthesizedFirstResponderReplacement(
-        hasResolvedElement: true,
-        hasRefreshPoint: true,
-        xCTestChannelPenalized: true
-      )
-    )
+    }
   }
 
+#if os(iOS)
   func testSynthesizedTextEntryFallsBackOnlyWhenPrivateSynthesisIsUnavailable() {
     XCTAssertEqual(
-      Self.synthesizedTextEntryDisposition(status: .succeeded),
+      PrivateXCTestTextEntrySynthesizer.action(status: .succeeded, message: nil),
       .continueTyping
     )
     XCTAssertEqual(
-      Self.synthesizedTextEntryDisposition(status: .unavailable),
+      PrivateXCTestTextEntrySynthesizer.action(status: .unavailable, message: nil),
       .fallback
     )
-    XCTAssertEqual(Self.synthesizedTextEntryDisposition(status: .failed), .raise)
+    XCTAssertEqual(
+      PrivateXCTestTextEntrySynthesizer.action(status: .failed, message: "failed"),
+      .raise("failed")
+    )
   }
+#endif
 
   func testResolvedCoordinateTextEntryFallsBackWhenSynthesizedFocusIsUnavailable() {
     XCTAssertFalse(Self.shouldFallbackFromSynthesizedTextEntryFocus(.performed))
@@ -70,46 +67,24 @@ extension RunnerTests {
   }
 
   func testResolvedCoordinateTextEntryRouteRequiresReplacementCoordinatesAndPenalizedXCTest() {
-    XCTAssertFalse(
-      Self.shouldUseResolvedCoordinateTextEntryRoute(
-        repairMode: .replacement,
-        hasX: true,
-        hasY: true,
-        xCTestChannelPenalized: false
+    let cases: [(TextTypingRepairMode, Bool, Bool, Bool, Bool)] = [
+      (.replacement, true, true, false, false),
+      (.replacement, true, true, true, true),
+      (.append, true, true, true, false),
+      (.replacement, false, true, true, false),
+      (.replacement, true, false, true, false),
+    ]
+    for (mode, hasX, hasY, penalized, expected) in cases {
+      XCTAssertEqual(
+        Self.shouldUseResolvedCoordinateTextEntryRoute(
+          repairMode: mode,
+          hasX: hasX,
+          hasY: hasY,
+          xCTestChannelPenalized: penalized
+        ),
+        expected
       )
-    )
-    XCTAssertTrue(
-      Self.shouldUseResolvedCoordinateTextEntryRoute(
-        repairMode: .replacement,
-        hasX: true,
-        hasY: true,
-        xCTestChannelPenalized: true
-      )
-    )
-    XCTAssertFalse(
-      Self.shouldUseResolvedCoordinateTextEntryRoute(
-        repairMode: .append,
-        hasX: true,
-        hasY: true,
-        xCTestChannelPenalized: true
-      )
-    )
-    XCTAssertFalse(
-      Self.shouldUseResolvedCoordinateTextEntryRoute(
-        repairMode: .replacement,
-        hasX: false,
-        hasY: true,
-        xCTestChannelPenalized: true
-      )
-    )
-    XCTAssertFalse(
-      Self.shouldUseResolvedCoordinateTextEntryRoute(
-        repairMode: .replacement,
-        hasX: true,
-        hasY: false,
-        xCTestChannelPenalized: true
-      )
-    )
+    }
   }
 
   func testSynthesizedReplacementPacesCharactersAfterSelectingOnce() {

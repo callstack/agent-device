@@ -17,6 +17,8 @@ static RunnerSynthesizedTextEntryResult *RunnerTextEntryResult(
   RunnerSynthesizedTextEntryStatus status,
   NSString * _Nullable message
 );
+static RunnerSynthesizedTextEntryResult *RunnerTextEntryUnavailable(NSString *message);
+static RunnerSynthesizedTextEntryResult *RunnerTextEntryFailed(NSString *message);
 static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
   id application,
   NSString *text,
@@ -66,28 +68,27 @@ static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
     SEL processID = NSSelectorFromString(@"processID");
 
     NSString *missing = RunnerRequireTextClass(recordClass, @"XCSynthesizedEventRecord");
-    if (missing != nil) return RunnerTextEntryResult(RunnerSynthesizedTextEntryStatusUnavailable, missing);
+    if (missing != nil) return RunnerTextEntryUnavailable(missing);
     missing = RunnerRequireTextClass(pathClass, @"XCPointerEventPath");
-    if (missing != nil) return RunnerTextEntryResult(RunnerSynthesizedTextEntryStatusUnavailable, missing);
+    if (missing != nil) return RunnerTextEntryUnavailable(missing);
     missing = RunnerRequireTextSelector(recordClass, initRecord, @"initWithName:");
-    if (missing != nil) return RunnerTextEntryResult(RunnerSynthesizedTextEntryStatusUnavailable, missing);
+    if (missing != nil) return RunnerTextEntryUnavailable(missing);
     missing = RunnerRequireTextSelector(recordClass, addPath, @"addPointerEventPath:");
-    if (missing != nil) return RunnerTextEntryResult(RunnerSynthesizedTextEntryStatusUnavailable, missing);
+    if (missing != nil) return RunnerTextEntryUnavailable(missing);
     missing = RunnerRequireTextSelector(recordClass, setTargetProcessID, @"setTargetProcessID:");
-    if (missing != nil) return RunnerTextEntryResult(RunnerSynthesizedTextEntryStatusUnavailable, missing);
+    if (missing != nil) return RunnerTextEntryUnavailable(missing);
     missing = RunnerRequireTextSelector(recordClass, synthesize, @"synthesizeWithError:");
-    if (missing != nil) return RunnerTextEntryResult(RunnerSynthesizedTextEntryStatusUnavailable, missing);
+    if (missing != nil) return RunnerTextEntryUnavailable(missing);
     missing = RunnerRequireTextSelector(pathClass, initPath, @"initForTextInput");
-    if (missing != nil) return RunnerTextEntryResult(RunnerSynthesizedTextEntryStatusUnavailable, missing);
+    if (missing != nil) return RunnerTextEntryUnavailable(missing);
     missing = RunnerRequireTextSelector(pathClass, typeText, @"typeText:atOffset:typingSpeed:shouldRedact:");
-    if (missing != nil) return RunnerTextEntryResult(RunnerSynthesizedTextEntryStatusUnavailable, missing);
+    if (missing != nil) return RunnerTextEntryUnavailable(missing);
     if (replace) {
       missing = RunnerRequireTextSelector(pathClass, typeKey, @"typeKey:modifiers:atOffset:");
-      if (missing != nil) return RunnerTextEntryResult(RunnerSynthesizedTextEntryStatusUnavailable, missing);
+      if (missing != nil) return RunnerTextEntryUnavailable(missing);
     }
     if (![application respondsToSelector:processID]) {
-      return RunnerTextEntryResult(
-        RunnerSynthesizedTextEntryStatusUnavailable,
+      return RunnerTextEntryUnavailable(
         @"private XCTest text synthesis unavailable: XCUIApplication missing processID"
       );
     }
@@ -95,8 +96,7 @@ static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
     NSInteger targetProcessID =
       ((RunnerTextMsgSendInteger)objc_msgSend)(application, processID);
     if (targetProcessID <= 0) {
-      return RunnerTextEntryResult(
-        RunnerSynthesizedTextEntryStatusUnavailable,
+      return RunnerTextEntryUnavailable(
         @"private XCTest text synthesis unavailable: could not resolve target process ID"
       );
     }
@@ -107,8 +107,7 @@ static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
       );
       id selectionPath = ((RunnerTextMsgSendInitPath)objc_msgSend)([pathClass alloc], initPath);
       if (selectionRecord == nil || selectionPath == nil) {
-        return RunnerTextEntryResult(
-          RunnerSynthesizedTextEntryStatusFailed,
+        return RunnerTextEntryFailed(
           @"private XCTest text synthesis failed: could not create the selection event"
         );
       }
@@ -130,8 +129,7 @@ static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
       );
       if (!selected) {
         NSString *detail = selectionError.localizedDescription ?: @"synthesizeWithError returned false";
-        return RunnerTextEntryResult(
-          RunnerSynthesizedTextEntryStatusFailed,
+        return RunnerTextEntryFailed(
           [NSString stringWithFormat:@"private XCTest text selection failed: %@", detail]
         );
       }
@@ -142,8 +140,7 @@ static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
     );
     id path = ((RunnerTextMsgSendInitPath)objc_msgSend)([pathClass alloc], initPath);
     if (record == nil || path == nil) {
-      return RunnerTextEntryResult(
-        RunnerSynthesizedTextEntryStatusFailed,
+      return RunnerTextEntryFailed(
         @"private XCTest text synthesis failed: could not create the text event"
       );
     }
@@ -155,8 +152,7 @@ static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
     BOOL ok = ((RunnerTextMsgSendSynthesize)objc_msgSend)(record, synthesize, &error);
     if (!ok) {
       NSString *detail = error.localizedDescription ?: @"synthesizeWithError returned false";
-      return RunnerTextEntryResult(
-        RunnerSynthesizedTextEntryStatusFailed,
+      return RunnerTextEntryFailed(
         [NSString stringWithFormat:@"private XCTest text synthesis failed: %@", detail]
       );
     }
@@ -164,10 +160,7 @@ static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
   } @catch (NSException *exception) {
     NSString *name = exception.name ?: @"NSException";
     NSString *reason = exception.reason ?: @"private XCTest text synthesis failed";
-    return RunnerTextEntryResult(
-      RunnerSynthesizedTextEntryStatusFailed,
-      [NSString stringWithFormat:@"%@: %@", name, reason]
-    );
+    return RunnerTextEntryFailed([NSString stringWithFormat:@"%@: %@", name, reason]);
   }
 }
 
@@ -179,6 +172,14 @@ static RunnerSynthesizedTextEntryResult *RunnerTextEntryResult(
   result.status = status;
   result.message = message;
   return result;
+}
+
+static RunnerSynthesizedTextEntryResult *RunnerTextEntryUnavailable(NSString *message) {
+  return RunnerTextEntryResult(RunnerSynthesizedTextEntryStatusUnavailable, message);
+}
+
+static RunnerSynthesizedTextEntryResult *RunnerTextEntryFailed(NSString *message) {
+  return RunnerTextEntryResult(RunnerSynthesizedTextEntryStatusFailed, message);
 }
 
 static NSString * _Nullable RunnerRequireTextClass(Class cls, NSString *name) {

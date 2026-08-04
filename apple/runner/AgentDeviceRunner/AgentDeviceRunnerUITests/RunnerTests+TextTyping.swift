@@ -20,56 +20,30 @@ extension RunnerTests {
     }
     var activeTarget = target
     if repairMode == .replacement,
-       Self.shouldUseSynthesizedFirstResponderReplacement(
-         hasResolvedElement: target.element != nil,
-         hasRefreshPoint: target.refreshPoint != nil,
-         xCTestChannelPenalized: xCTestChannelPenalized
-       ) {
-#if os(iOS)
-      NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder-replacement")
-      let steps = Self.synthesizedReplacementSteps(text: text, delaySeconds: delaySeconds)
-      var synthesisUnavailable = false
-      for (index, step) in steps.enumerated() {
-        let synthesis = step.replacesExistingText
-          ? synthesizer.replaceText(app: app, text: step.text)
-          : synthesizer.synthesizeText(app: app, text: step.text)
-        switch Self.synthesizedTextEntryDisposition(status: synthesis.status) {
-        case .fallback:
-          NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=verified-fallback reason=synthesis-unavailable")
-          if let point = target.refreshPoint {
-            activeTarget = focusTextInputForTextEntry(app: app, x: point.x, y: point.y)
-          }
-          synthesisUnavailable = true
-          break
-        case .raise:
-          NSException(
-            name: NSExceptionName.internalInconsistencyException,
-            reason: synthesis.message ?? "private XCTest text synthesis failed"
-          ).raise()
-        case .continueTyping:
-          break
-        }
-        if synthesisUnavailable { break }
-        if index + 1 < steps.count {
-          sleepFor(delaySeconds)
-        }
-      }
-      if !synthesisUnavailable {
-        logTextEntryPhase(
+      Self.shouldUseSynthesizedFirstResponderReplacement(
+        hasResolvedElement: target.element != nil,
+        hasRefreshPoint: target.refreshPoint != nil,
+        xCTestChannelPenalized: xCTestChannelPenalized
+      )
+    {
+      switch runSynthesizedReplacementRoute(
+        SynthesizedReplacementRequest(
+          app: app,
+          target: target,
+          text: text,
+          delaySeconds: delaySeconds,
+          synthesizer: synthesizer,
           commandId: commandId,
-          phase: "total",
-          startedAt: totalStartedAt,
-          chars: text.count,
-          mode: repairMode
+          startedAt: totalStartedAt
         )
-        return TextEntryResult(
-          verified: nil,
-          repaired: false,
-          expectedText: text,
-          observedText: nil
-        )
+      ) {
+      case .notApplicable:
+        break
+      case .completed(let result):
+        return result
+      case .fallback(let fallbackTarget):
+        activeTarget = fallbackTarget
       }
-#endif
     }
     let initialResolveStartedAt = Date()
     let initialTarget = resolveTextEntryElement(app: app, target: activeTarget)
@@ -111,14 +85,18 @@ extension RunnerTests {
       } else {
 #if os(iOS)
         NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder")
-        let synthesis = synthesizer.synthesizeText(app: app, text: value)
-        switch Self.synthesizedTextEntryDisposition(status: synthesis.status) {
+        let action = synthesizer.enterText(
+          app: app,
+          text: value,
+          replacingExistingText: false
+        )
+        switch action {
         case .fallback:
           app.typeText(value)
-        case .raise:
+        case .raise(let message):
           NSException(
             name: NSExceptionName.internalInconsistencyException,
-            reason: synthesis.message ?? "private XCTest text synthesis failed"
+            reason: message ?? "private XCTest text synthesis failed"
           ).raise()
         case .continueTyping:
           break
@@ -254,7 +232,7 @@ extension RunnerTests {
     return result
   }
 
-  private func logTextEntryPhase(
+  func logTextEntryPhase(
     commandId: String?,
     phase: String,
     startedAt: Date,
