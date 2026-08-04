@@ -2011,7 +2011,7 @@ extension RunnerTests {
           ok: false,
           error: ErrorPayload(
             code: "UNSUPPORTED_OPERATION",
-            message: "Unable to dismiss the iOS keyboard: no dismiss key was exposed and a safe-area tap did not resign it",
+            message: "Unable to dismiss the iOS keyboard: the keyboard exposes no dismiss key, and background taps are never attempted (no tap outside the keyboard can be proven side-effect-free)",
             hint:
               "The on-screen keyboard usually does not block agent-device interactions: press the next target directly instead of retrying dismiss. If that press fails or reports no visible effect, scroll the target into view, or use keyboard enter to press the return key when submission is wanted."
           )

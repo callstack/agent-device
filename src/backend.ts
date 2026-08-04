@@ -109,10 +109,7 @@ export type BackendKeyboardResult = {
   dismissed?: boolean;
   attempts?: number;
   /** iOS only: which mechanism resigned the keyboard (#1598) — 'dismissKey'
-   *  (tapped the keyboard's own Hide/Dismiss/Done key) or 'safeAreaTap' (a
-   *  last-resort tap outside the keyboard and every known-hittable element,
-   *  which does not always succeed but is safe to attempt). Undefined when
-   *  the keyboard was not dismissed or the platform is not iOS. */
+   *  (tapped the keyboard's own Hide/Dismiss/Done key); background-tap dismissal is deliberately unsupported (#1606 review). */
   mechanism?: string;
 };
 

@@ -527,14 +527,11 @@ async function handleIosKeyboardCommand(
 }
 
 // Discloses which mechanism actually resigned the keyboard (#1598): a
-// dismiss-key tap and a snapshot-derived safe-area tap have very different
-// reliability/side-effect profiles, so a bare "dismissed" is not enough for
-// a caller deciding whether to trust the outcome.
+// Discloses that the keyboard's own dismiss key did the work (#1598); a bare
+// "dismissed" would leave the caller unable to tell a vouched-for control tap
+// from app-side coincidence.
 function iosKeyboardDismissMessage(dismissed: boolean, mechanism: string | undefined): string {
   if (!dismissed) return 'Keyboard already hidden';
-  if (mechanism === 'safeAreaTap') {
-    return 'Keyboard dismissed via a safe-area tap (no dismiss key was available)';
-  }
   if (mechanism === 'dismissKey') {
     return 'Keyboard dismissed via its dismiss key';
   }

@@ -65,7 +65,7 @@ test('runtime keyboard dismiss discloses the mechanism reported by the backend',
         action: options.action,
         dismissed: true,
         visible: false,
-        mechanism: 'safeAreaTap',
+        mechanism: 'legacySafeAreaTap',
       }),
     },
     artifacts: createLocalArtifactAdapter(),
@@ -76,9 +76,9 @@ test('runtime keyboard dismiss discloses the mechanism reported by the backend',
 
   assert.equal(keyboard.kind, 'keyboardDismissed');
   if (keyboard.kind === 'keyboardDismissed') {
-    assert.equal(keyboard.state.mechanism, 'safeAreaTap');
+    assert.equal(keyboard.state.mechanism, 'legacySafeAreaTap');
   }
-  assert.match(String(keyboard.message), /safe-area tap/);
+  assert.equal(String(keyboard.message), 'Keyboard dismissed');
 });
 
 test('runtime system commands validate options before backend calls', async () => {

@@ -414,14 +414,11 @@ function normalizeKeyboardDismissResult(
 }
 
 // Mirrors the CLI/daemon dispatch message (src/core/dispatch.ts) so both
-// public surfaces disclose the same thing (#1598): a safe-area tap is not as
+// public surfaces disclose the same thing (#1598): only a dismiss-key tap is as
 // trustworthy as tapping a real dismiss key, and callers should be able to
 // tell the two apart from the message alone.
 function keyboardDismissMessage(state: BackendKeyboardResult): string {
   if (state.dismissed === false) return 'Keyboard already hidden';
-  if (state.mechanism === 'safeAreaTap') {
-    return 'Keyboard dismissed via a safe-area tap (no dismiss key was available)';
-  }
   if (state.mechanism === 'dismissKey') {
     return 'Keyboard dismissed via its dismiss key';
   }

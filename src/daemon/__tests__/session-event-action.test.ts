@@ -218,18 +218,18 @@ test('structural action events preserve navigation, viewport, keyboard, and gest
 
 // #1598: the keyboard-dismiss mechanism must show up in both the human
 // summary and the structured details, so a transcript reader can tell a
-// dismiss-key tap apart from a last-resort safe-area tap.
-test('keyboard dismiss action events disclose the safe-area-tap mechanism', () => {
+// vouched-for dismiss-key tap; unrecognized mechanisms are dropped (#1606).
+test('keyboard dismiss action events drop an unrecognized mechanism', () => {
   const keyboard = action('keyboard', {
     action: 'dismiss',
     platform: 'ios',
     wasVisible: true,
     visible: false,
     dismissed: true,
-    mechanism: 'safeAreaTap',
+    mechanism: 'legacySafeAreaTap',
   });
 
-  assert.equal(buildActionSummary(keyboard), 'Dismissed keyboard (safe-area tap)');
+  assert.equal(buildActionSummary(keyboard), 'Dismissed keyboard');
   assert.deepEqual(buildActionDetails(keyboard), {
     command: 'keyboard',
     platform: 'ios',
@@ -237,7 +237,6 @@ test('keyboard dismiss action events disclose the safe-area-tap mechanism', () =
     visible: false,
     wasVisible: true,
     dismissed: true,
-    mechanism: 'safeAreaTap',
   });
 });
 

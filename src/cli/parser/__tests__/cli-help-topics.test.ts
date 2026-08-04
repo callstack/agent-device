@@ -276,8 +276,8 @@ test('usageForCommand resolves workflow help topic', async () => {
   assert.match(help, /Empty replacement is not a supported clear-field command/);
   assert.match(help, /do not plan fill <target> ""/);
   assert.match(help, /To hide the keyboard, use keyboard dismiss/);
-  assert.match(help, /falls back to a snapshot-derived safe-area tap/);
-  assert.match(help, /discloses which mechanism worked \(dismissKey or safeAreaTap\)/);
+  assert.match(help, /reports UNSUPPORTED_OPERATION rather than tapping elsewhere/);
+  assert.match(help, /no tap outside the keyboard can be proven side-effect-free/);
   assert.match(
     help,
     /On iOS, if it still returns UNSUPPORTED_OPERATION, both mechanisms were exhausted/,

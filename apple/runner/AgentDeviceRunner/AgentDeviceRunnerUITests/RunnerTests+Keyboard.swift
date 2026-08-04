@@ -28,7 +28,6 @@ private enum KeyboardDismissObservationTiming {
 // fired.
 enum RunnerKeyboardDismissMechanism: String {
   case dismissKey
-  case safeAreaTap
 }
 
 extension RunnerTests {
@@ -62,83 +61,16 @@ extension RunnerTests {
       return (wasVisible: true, dismissed: !visible, visible: visible, mechanism: visible ? nil : .dismissKey)
     }
 
-    if tapKeyboardDismissSafeArea(app: app) {
-      _ = keyboard.waitForNonExistence(timeout: KeyboardDismissObservationTiming.timeout)
-      waitForScreenshotStability(
-        timeout: KeyboardDismissObservationTiming.settleTimeout,
-        sampleInterval: KeyboardDismissObservationTiming.settleSampleInterval,
-        requiredConsecutiveMatches: KeyboardDismissObservationTiming.settleRequiredConsecutiveMatches
-      )
-      let visible = isKeyboardVisible(app: app)
-      return (wasVisible: true, dismissed: !visible, visible: visible, mechanism: visible ? nil : .safeAreaTap)
-    }
-
+    // #1606 review P1 (twice): generic background-tap dismissal is
+    // deliberately UNSUPPORTED. No geometry or role query can prove a
+    // coordinate is side-effect-free — a full-screen unlabeled Pressable is
+    // indistinguishable from an inert backdrop, so a "safe-area" tap can
+    // navigate or submit while reporting a successful dismiss. The dismiss
+    // key is the only mechanism the runner can vouch for.
     return (wasVisible: true, dismissed: false, visible: isKeyboardVisible(app: app), mechanism: nil)
 #endif
   }
 
-  // #1598 fallback (candidate 4): tap a point the current AX tree proves is
-  // outside both the keyboard and every hittable element it knows about.
-  // Live-verified this is NOT a guaranteed dismiss — a stock iOS 26
-  // simulator did not resign Settings/Safari/Contacts' keyboards this way —
-  // but it is a *safe* no-op when it fails (nothing hittable sits under the
-  // tap) and it does work on screens that wire their own background-tap
-  // dismiss (a common RN pattern). Returns whether the tap was performed at
-  // all; the caller re-checks keyboard visibility to learn whether it worked.
-  private func tapKeyboardDismissSafeArea(app: XCUIApplication) -> Bool {
-#if os(tvOS)
-    return false
-#else
-    guard let keyboardFrame = visibleKeyboardFrame(app: app) else {
-      return false
-    }
-    let windowFrame = onScreenWindowFrame(app: app)
-    let obstacles = keyboardDismissObstacleFrames(app: app, windowFrame: windowFrame)
-    guard let point = RunnerKeyboardDismissSafeArea.safePoint(
-      windowFrame: windowFrame,
-      keyboardFrame: keyboardFrame,
-      obstacles: obstacles
-    ) else {
-      return false
-    }
-    let coordinate = app.coordinate(withNormalizedOffset: .zero)
-      .withOffset(CGVector(dx: point.x, dy: point.y))
-    let exceptionMessage = RunnerObjCExceptionCatcher.catchException({
-      coordinate.tap()
-    })
-    if let exceptionMessage {
-      NSLog("AGENT_DEVICE_RUNNER_KEYBOARD_SAFE_AREA_TAP_IGNORED_EXCEPTION=%@", exceptionMessage)
-      return false
-    }
-    return true
-#endif
-  }
-
-  // EVERY known element counts as an obstacle, regardless of role or
-  // hittability (#1606 review P1): a role allowlist cannot prove a point is
-  // AX-empty — an unlabeled RN `Pressable` surfaces as a hittable `Other`,
-  // and a tappable parent can cover a point its static-text child does not.
-  // Only structural, ~window-sized frames are exempt
-  // (`isStructuralRootFrame`): every candidate lies inside those by
-  // construction, so counting them would make every point unsafe and the
-  // fallback unreachable. One `.any` resolution costs a single tree snapshot
-  // — cheaper than the ten typed queries it replaces — and skipping the
-  // per-element `isHittable` round trips keeps it that way.
-  private func keyboardDismissObstacleFrames(
-    app: XCUIApplication,
-    windowFrame: CGRect
-  ) -> [CGRect] {
-#if os(tvOS)
-    return []
-#else
-    let elements = safely("KEYBOARD_SAFE_AREA_OBSTACLES", []) {
-      app.descendants(matching: .any).allElementsBoundByIndex.filter { $0.exists }
-    }
-    return elements.map(\.frame).filter {
-      !RunnerKeyboardDismissSafeArea.isStructuralRootFrame($0, windowFrame: windowFrame)
-    }
-#endif
-  }
 
   // AX-free on purpose (screenshot bytes, not the accessibility tree) so it holds
   // under the same AX degradation the synthesized gesture lane is built to survive.

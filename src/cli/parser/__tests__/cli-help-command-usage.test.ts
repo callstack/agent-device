@@ -62,7 +62,7 @@ test('usageForCommand documents keyboard dismissal flow', async () => {
   const help = await usageForCommand('keyboard');
   assert.equal(help === null, false);
   assert.match(help ?? '', /To hide the keyboard, use keyboard dismiss/);
-  assert.match(help ?? '', /taps safe controls like Done/);
+  assert.match(help ?? '', /taps the keyboard dismiss\/hide key when one is exposed/);
   assert.match(help ?? '', /UNSUPPORTED_OPERATION/);
 });
 
