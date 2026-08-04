@@ -1,13 +1,9 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { resolveAndroidTouchProvider } from './adb-executor.ts';
-import {
-  executeAndroidTouchHelperPlan,
-  lowerAndroidTouchPlan,
-  readAndroidTouchHelperViewport,
-} from './touch-helper.ts';
+import { executeAndroidTouchHelperPlan, readAndroidTouchHelperViewport } from './touch-helper.ts';
 import { validateAndroidGestureViewport } from './gesture-viewport.ts';
-import type { AndroidTouchPlan } from './touch-plan.ts';
+import { lowerAndroidTouchPlan, type AndroidTouchPlan } from './touch-plan.ts';
 
 export async function executeAndroidTouchPlan(
   device: DeviceInfo,

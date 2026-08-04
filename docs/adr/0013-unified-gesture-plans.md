@@ -54,8 +54,10 @@ components atomically. Intent remains on the plan even when aliases share an exe
 The planner owns deterministic multi-touch geometry. Contacts start at -90 degrees, except Android
 pinch starts horizontally because a vertical pinch is captured by common vertical app scroll
 containers before the pinch recognizer activates. The same explicit planning profile preserves the
-proven frame-count convention: Android rounds while Apple truncates the duration/16 ms frame count.
-These are planner inputs, not adapter-generated trajectories. The larger of pinch's initial and final spans is 40% of the
+proven frame-count convention for dense two-contact trajectories: Android rounds while Apple
+truncates the duration/16 ms frame count. The Android transport lowerer uses that same Android
+sampling profile for one-contact endpoint plans. These are planner inputs, not adapter-generated
+trajectories. The larger of pinch's initial and final spans is 40% of the
 viewport's shorter side, preserving the proven Apple pinch geometry; other two-contact intents use
 25% to keep translation and rotation trajectories compact. The other span follows from the requested scale, and both must
 satisfy a 48-point reliability floor. Combined transforms progress translation, scale, and rotation
@@ -70,18 +72,19 @@ Platform adapters consume the canonical plan:
 
 - Android's `executeAndroidTouchPlan` adapter seam sends planned touch, including gesture plans plus
   the physical movement for scroll and long-press, to provider-native touch injection when
-  available, otherwise to the bundled instrumentation helper. One-contact endpoint plans lower to
-  16 ms linear transport samples; two-contact plans retain their exact planned samples. A
-  stationary long-press needs no viewport on the helper path; the executor adds the paired
-  provider-owned viewport only for provider-native touch. Android touch execution never falls back
-  to `adb input swipe`. Public scroll durations below one 16 ms planner frame normalize to that
-  physical minimum and report the executed duration. Scroll evidence reports absolute injected
-  coordinates against zero-origin extents that include the viewport offset. Because Android permits
-  only one instrumentation owner of `UiAutomation`, snapshot capture, gesture viewport resolution,
-  and planned-touch injection share one bundled automation helper: a live persistent helper session
-  executes touch commands directly, and without one the same helper runs one-shot. Nothing stops
-  the snapshot session around gestures anymore (amended 2026-07, issue #1275; previously a
-  separate one-shot multi-touch helper forced a session stop/restart around every local gesture).
+  available, otherwise to the bundled instrumentation helper. One-contact endpoint plans lower in
+  `src/platforms/android/touch-plan.ts` to 16 ms linear transport samples before either injection
+  path; two-contact plans retain their exact planned samples. A stationary long-press needs no
+  viewport on the helper path; the executor adds the paired provider-owned viewport only for
+  provider-native touch. Android touch execution never falls back to `adb input swipe`. Public
+  scroll durations below one 16 ms planner frame normalize to that physical minimum and report the
+  executed duration. Scroll evidence reports absolute injected coordinates against zero-origin
+  extents that include the viewport offset. Because Android permits only one instrumentation owner
+  of `UiAutomation`, snapshot capture, gesture viewport resolution, and planned-touch injection
+  share one bundled automation helper: a live persistent helper session executes touch commands
+  directly, and without one the same helper runs one-shot. Nothing stops the snapshot session
+  around gestures anymore (amended 2026-07, issue #1275; previously a separate one-shot
+  multi-touch helper forced a session stop/restart around every local gesture).
 - iOS lowers one-contact endpoint-hold plans to the established fast-swipe synthesis profile. That
   profile reaches the endpoint in 100 ms, then holds there for the planned duration before lifting,
   matching Maestro's XCTest driver. One-contact plans are linear and therefore carry only their
@@ -90,8 +93,10 @@ Platform adapters consume the canonical plan:
   macOS lowers a one-contact plan to its drag executor and tvOS lowers it to remote direction. Core
   admission and the Apple adapter both consume the same shared multi-touch support policy;
   multi-touch remains capability-gated to iOS simulators.
-- WebDriver lowers a supported plan to synchronized W3C pointer action sources. Multi-touch remains
-  capability-gated until a provider proves it.
+- WebDriver lowers a supported plan to synchronized W3C pointer action sources. A one-contact
+  endpoint plan becomes pointer down, one timed W3C `pointerMove` from start to end, and pointer up;
+  the driver owns interpolation across that W3C tick. Multi-touch remains capability-gated until a
+  provider proves it.
 
 The `Interactor` and backend expose one compositional `performGesture(plan)` primitive instead of a
 method per semantic alias. The old scalar Apple and Android multi-touch executors and the
@@ -139,8 +144,13 @@ selectors or refs and therefore cannot claim element-targeting guarantees.
 - On bare ADB, Android scroll and long-press require the bundled automation helper (the snapshot
   helper APK) and `UiAutomation`; helper installation or runtime failure is surfaced directly
   rather than degrading to an approximate `adb input swipe`.
-- Pointer plans are larger than scalar requests but bounded by duration and the 16 ms sample
-  cadence; deleting duplicate scalar executors offsets the package cost.
+- Canonical one-contact plans contain only two samples: a 10-second pan is two shared-plan samples
+  instead of 626. Android expands that plan only at the transport boundary, while two-contact
+  plans remain cadence-bounded because their synchronized geometry is part of their contract.
+- Unit tests cover canonical plan shape, Android lowering, helper/provider payloads, and WebDriver
+  action construction. They cannot prove timing or event delivery inside the private XCTest bridge,
+  so iOS timing changes require live simulator evidence that observes the requested content change
+  and records the runner start/end uptime delta alongside the requested duration.
 
 ## Alternatives Considered
 

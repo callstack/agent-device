@@ -14,6 +14,7 @@ import type {
   MultiTouchGesturePlan,
   PointerTrajectory,
   SinglePointerGesturePlan,
+  SinglePointerTrajectory,
 } from './gesture-plan-types.ts';
 
 export * from './gesture-plan-types.ts';
@@ -33,21 +34,23 @@ const DEFAULT_MULTI_TOUCH_DURATION_MS = 300;
 const MAX_ROTATION_DEGREES_PER_SAMPLE = 3;
 const MAX_ROTATION_DEFAULT_DURATION_MS = 2_400;
 
+export type GestureSamplingProfile = 'default' | 'android';
+
 type GesturePlatformProfile = {
   pinchAxisDegrees: number;
-  frameCount: (rawFrameCount: number) => number;
+  samplingProfile: GestureSamplingProfile;
 };
 
 const DEFAULT_GESTURE_PLATFORM_PROFILE: GesturePlatformProfile = {
   pinchAxisDegrees: GESTURE_INITIAL_ANGLE_DEGREES,
-  frameCount: Math.floor,
+  samplingProfile: 'default',
 };
 const GESTURE_PLATFORM_PROFILES = {
   ios: DEFAULT_GESTURE_PLATFORM_PROFILE,
   macos: DEFAULT_GESTURE_PLATFORM_PROFILE,
   android: {
     pinchAxisDegrees: GESTURE_HORIZONTAL_ANGLE_DEGREES,
-    frameCount: Math.round,
+    samplingProfile: 'android',
   },
   vega: DEFAULT_GESTURE_PLATFORM_PROFILE,
   linux: DEFAULT_GESTURE_PLATFORM_PROFILE,
@@ -121,12 +124,12 @@ export function singlePointerPlanEndpoints(plan: SinglePointerGesturePlan): {
   start: Point;
   end: Point;
 } {
-  const start = plan.pointers[0].samples[0]?.point;
-  const end = plan.pointers[0].samples.at(-1)?.point;
-  if (!start || !end) {
-    throw new AppError('INVALID_ARGS', 'single-pointer gesture plan requires samples');
-  }
-  return { start, end };
+  const [
+    {
+      samples: [start, end],
+    },
+  ] = plan.pointers;
+  return { start: start.point, end: end.point };
 }
 
 function buildFlingPlan(
@@ -218,7 +221,7 @@ function buildSinglePointerPlan(
 ): SinglePointerGesturePlan {
   const start = finitePoint(from, `gesture ${intent} start`);
   const end = finitePoint(to, `gesture ${intent} end`);
-  const samples = [
+  const samples: SinglePointerTrajectory['samples'] = [
     { offsetMs: 0, point: start },
     { offsetMs: durationMs, point: end },
   ];
@@ -263,7 +266,7 @@ function buildTransformPlan(
   }
   const initialRadius = initialSpan / 2;
 
-  const offsets = sampleOffsets(motion.durationMs, profile);
+  const offsets = sampleGestureOffsets(motion.durationMs, profile.samplingProfile);
   const trajectory = (pointerId: 0 | 1, side: 1 | -1): PointerTrajectory => {
     const samples = offsets.map((offsetMs) => ({
       offsetMs,
@@ -303,7 +306,7 @@ function transformPointAt(options: {
   profile: GesturePlatformProfile;
 }): Point {
   const progress = options.offsetMs / options.durationMs;
-  const centroid = interpolatePoint(options.start, options.end, progress);
+  const centroid = interpolateGesturePoint(options.start, options.end, progress);
   const radius = options.initialRadius * (1 + (options.scale - 1) * progress);
   const angle = degreesToRadians(
     initialAngleForIntent(options.intent, options.profile) + options.rotationDegrees * progress,
@@ -325,9 +328,18 @@ function initialSpanRatioForIntent(intent: MultiTouchGesturePlan['intent']): num
   return intent === 'pinch' ? GESTURE_PINCH_INITIAL_SPAN_RATIO : GESTURE_INITIAL_SPAN_RATIO;
 }
 
-function sampleOffsets(durationMs: number, profile: GesturePlatformProfile): number[] {
+export function sampleGestureOffsets(
+  durationMs: number,
+  profile: GestureSamplingProfile = 'default',
+): number[] {
+  if (!Number.isFinite(durationMs) || durationMs <= 0) {
+    throw new AppError('INVALID_ARGS', 'gesture sample duration must be a positive finite number');
+  }
   const rawFrameCount = durationMs / GESTURE_SAMPLE_INTERVAL_MS;
-  const frameCount = Math.max(3, profile.frameCount(rawFrameCount));
+  const frameCount = Math.max(
+    3,
+    profile === 'android' ? Math.round(rawFrameCount) : Math.floor(rawFrameCount),
+  );
   return Array.from({ length: frameCount + 1 }, (_, index) =>
     Math.round((durationMs * index) / frameCount),
   );
@@ -440,7 +452,7 @@ function addPoints(left: Point, right: Point): Point {
   return { x: left.x + right.x, y: left.y + right.y };
 }
 
-function interpolatePoint(start: Point, end: Point, progress: number): Point {
+export function interpolateGesturePoint(start: Point, end: Point, progress: number): Point {
   return {
     x: start.x + (end.x - start.x) * progress,
     y: start.y + (end.y - start.y) * progress,

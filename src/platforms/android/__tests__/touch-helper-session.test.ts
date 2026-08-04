@@ -22,6 +22,7 @@ import {
   getAndroidSnapshotHelperSessionDeviceKey,
   resetAndroidSnapshotHelperSessions,
 } from '../snapshot-helper-session.ts';
+import { lowerAndroidTouchPlan } from '../touch-plan.ts';
 import { executeAndroidTouchHelperPlan, readAndroidTouchHelperViewport } from '../touch-helper.ts';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../../__tests__/test-utils/android-snapshot-helper.ts';
 import {
@@ -194,7 +195,7 @@ test('touch helper does not run one-shot while snapshot retirement is unconfirme
         }),
       },
       { serial: device.id },
-      async () => await executeAndroidTouchHelperPlan(device, flingPlan()),
+      async () => await executeAndroidTouchHelperPlan(device, lowerAndroidTouchPlan(flingPlan())),
     ),
     (error: unknown) =>
       (error as { details?: { reason?: string } }).details?.reason ===
@@ -266,7 +267,7 @@ test('gesture uses the persistent snapshot-helper session and does not stop it',
       }),
     },
     { serial: device.id },
-    async () => await executeAndroidTouchHelperPlan(device, flingPlan()),
+    async () => await executeAndroidTouchHelperPlan(device, lowerAndroidTouchPlan(flingPlan())),
   );
 
   assert.equal(result.helperTransport, 'persistent-session');
@@ -319,7 +320,7 @@ test('an APK replacement stops the stale session and the gesture runs one-shot',
       }),
     },
     { serial: device.id },
-    async () => await executeAndroidTouchHelperPlan(device, flingPlan()),
+    async () => await executeAndroidTouchHelperPlan(device, lowerAndroidTouchPlan(flingPlan())),
   );
 
   assert.equal(result.installReason, 'outdated');
@@ -387,7 +388,7 @@ test('a provider artifact that mismatches the live session helper stops it and r
       snapshotHelperArtifact: providerArtifact,
     },
     { serial: device.id },
-    async () => await executeAndroidTouchHelperPlan(device, flingPlan()),
+    async () => await executeAndroidTouchHelperPlan(device, lowerAndroidTouchPlan(flingPlan())),
   );
 
   assert.equal(result.installReason, 'current');
@@ -458,7 +459,7 @@ test('a same-version artifact with a different sha stops the live session and ru
       snapshotHelperArtifact: artifactA,
     },
     { serial: device.id },
-    async () => await executeAndroidTouchHelperPlan(device, flingPlan()),
+    async () => await executeAndroidTouchHelperPlan(device, lowerAndroidTouchPlan(flingPlan())),
   );
 
   assert.equal(result.installReason, 'current');
@@ -497,7 +498,7 @@ test('a structured ok=false session gesture response throws but leaves the sessi
         }),
       },
       { serial: device.id },
-      async () => await executeAndroidTouchHelperPlan(device, flingPlan()),
+      async () => await executeAndroidTouchHelperPlan(device, lowerAndroidTouchPlan(flingPlan())),
     ),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
@@ -531,7 +532,7 @@ test('a malformed session gesture response stops the session and does not fall b
         }),
       },
       { serial: device.id },
-      async () => await executeAndroidTouchHelperPlan(device, flingPlan()),
+      async () => await executeAndroidTouchHelperPlan(device, lowerAndroidTouchPlan(flingPlan())),
     ),
   );
 

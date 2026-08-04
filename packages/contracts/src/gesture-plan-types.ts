@@ -46,13 +46,18 @@ export type PointerTrajectory = {
   samples: readonly PointerTrajectorySample[];
 };
 
+export type SinglePointerTrajectory = {
+  pointerId: 0;
+  samples: readonly [PointerTrajectorySample, PointerTrajectorySample];
+};
+
 export type SinglePointerGesturePlan = {
   topology: 'single';
   intent: 'fling' | 'pan';
   executionProfile: GestureExecutionProfile;
   durationMs: number;
   viewport: Rect;
-  pointers: readonly [PointerTrajectory];
+  pointers: readonly [SinglePointerTrajectory];
 };
 
 export type MultiTouchGesturePlan = {

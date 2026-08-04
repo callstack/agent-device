@@ -4,6 +4,8 @@ import { buildGesturePlan } from '@agent-device/contracts/interaction';
 import { AppError } from '@agent-device/kernel/errors';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session.ts';
+import { executeAndroidTouchPlan } from '../touch-executor.ts';
+import { lowerAndroidTouchPlan } from '../touch-plan.ts';
 import {
   ANDROID_TOUCH_PLAN_PROTOCOL,
   executeAndroidTouchHelperPlan,
@@ -48,7 +50,7 @@ afterEach(async () => {
 });
 
 test('single-pointer plans normalize to a swipe request', () => {
-  const request = normalizeAndroidTouchHelperGestureRequest(flingPlan());
+  const request = normalizeAndroidTouchHelperGestureRequest(lowerAndroidTouchPlan(flingPlan()));
   assert.equal(request.kind, 'swipe');
   assert.equal(request.pointers.length, 1);
   assert.equal(request.durationMs, 100);
@@ -160,7 +162,7 @@ test('one-shot gesture instruments the snapshot-helper runner with the touch-pla
       }),
     },
     { serial: device.id },
-    async () => await executeAndroidTouchHelperPlan(device, flingPlan()),
+    async () => await executeAndroidTouchHelperPlan(device, lowerAndroidTouchPlan(flingPlan())),
   );
 
   assert.deepEqual(capturedArgs?.slice(0, 9), [
@@ -180,6 +182,10 @@ test('one-shot gesture instruments the snapshot-helper runner with the touch-pla
   const payload = JSON.parse(Buffer.from(capturedArgs![9]!, 'base64').toString('utf8'));
   assert.equal(payload.protocol, ANDROID_TOUCH_PLAN_PROTOCOL);
   assert.equal(payload.kind, 'swipe');
+  assert.deepEqual(
+    payload.pointers[0].samples.map(({ offsetMs }: { offsetMs: number }) => offsetMs),
+    [0, 17, 33, 50, 67, 83, 100],
+  );
 
   assert.equal(result.backend, 'android-helper');
   assert.equal(result.helperVersion, manifest.version);
@@ -188,6 +194,49 @@ test('one-shot gesture instruments the snapshot-helper runner with the touch-pla
   assert.equal(result.helperKind, 'swipe');
   assert.equal(result.injectedEvents, 4);
   assert.equal(result.elapsedMs, 12);
+});
+
+test('executor sends lowered endpoint samples to the helper transport', async () => {
+  const device = makeIsolatedDevice();
+  let capturedSamples: Array<{ offsetMs: number; x: number; y: number }> | undefined;
+  await withAndroidAdbProvider(
+    {
+      exec: currentVersionAdb(async (args) => {
+        const payloadBase64 = args[args.indexOf('payloadBase64') + 1];
+        const payload = JSON.parse(Buffer.from(payloadBase64!, 'base64').toString('utf8')) as {
+          pointers: Array<{ samples: Array<{ offsetMs: number; x: number; y: number }> }>;
+        };
+        capturedSamples = payload.pointers[0]?.samples;
+        return {
+          exitCode: 0,
+          stdout: [resultRecord({ ok: 'true', kind: 'swipe' }), 'INSTRUMENTATION_CODE: 0'].join(
+            '\n',
+          ),
+          stderr: '',
+        };
+      }),
+    },
+    { serial: device.id },
+    async () =>
+      await executeAndroidTouchPlan(
+        device,
+        buildGesturePlan(
+          {
+            intent: 'pan',
+            origin: { x: 200, y: 300 },
+            delta: { x: 100, y: -80 },
+            durationMs: 64,
+          },
+          viewport,
+        ),
+      ),
+  );
+
+  assert.deepEqual(
+    capturedSamples?.map(({ offsetMs }) => offsetMs),
+    [0, 16, 32, 48, 64],
+  );
+  assert.deepEqual(capturedSamples?.[2], { offsetMs: 32, x: 250, y: 260 });
 });
 
 test('a provider-supplied snapshotHelperArtifact overrides the bundled artifact for touch', async () => {
@@ -236,7 +285,7 @@ test('a provider-supplied snapshotHelperArtifact overrides the bundled artifact 
       snapshotHelperArtifact: providerArtifact,
     },
     { serial: device.id },
-    async () => await executeAndroidTouchHelperPlan(device, flingPlan()),
+    async () => await executeAndroidTouchHelperPlan(device, lowerAndroidTouchPlan(flingPlan())),
   );
 
   assert.equal(vi.mocked(resolveAndroidHelperArtifact).mock.calls.length, 0);
@@ -290,7 +339,7 @@ test('one-shot gesture failure propagates as a structured COMMAND_FAILED error',
         })),
       },
       { serial: device.id },
-      async () => await executeAndroidTouchHelperPlan(device, flingPlan()),
+      async () => await executeAndroidTouchHelperPlan(device, lowerAndroidTouchPlan(flingPlan())),
     ),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
@@ -308,7 +357,7 @@ test('unparseable output with a zero exit code reports a parse failure', async (
     withAndroidAdbProvider(
       { exec: currentVersionAdb(async () => ({ exitCode: 0, stdout: 'garbage', stderr: '' })) },
       { serial: device.id },
-      async () => await executeAndroidTouchHelperPlan(device, flingPlan()),
+      async () => await executeAndroidTouchHelperPlan(device, lowerAndroidTouchPlan(flingPlan())),
     ),
     { message: 'Android automation helper output could not be parsed' },
   );
@@ -320,7 +369,7 @@ test('unparseable output with a non-zero exit code reports a helper failure', as
     withAndroidAdbProvider(
       { exec: currentVersionAdb(async () => ({ exitCode: 1, stdout: '', stderr: 'boom' })) },
       { serial: device.id },
-      async () => await executeAndroidTouchHelperPlan(device, flingPlan()),
+      async () => await executeAndroidTouchHelperPlan(device, lowerAndroidTouchPlan(flingPlan())),
     ),
     { message: 'Android automation helper failed before returning parseable output' },
   );
