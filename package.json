@@ -58,6 +58,10 @@
       "types": "./dist/src/contracts.d.ts",
       "import": "./dist/src/contracts.js"
     },
+    "./selectors": {
+      "types": "./dist/src/selectors.d.ts",
+      "import": "./dist/src/selectors.js"
+    },
     "./finders": {
       "types": "./dist/src/finders.d.ts",
       "import": "./dist/src/finders.js"

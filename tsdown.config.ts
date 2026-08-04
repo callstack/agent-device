@@ -50,6 +50,7 @@ const publicSdkChunkGroups = [
     /src[\\/]remote[\\/]remote-config-schema\.d\.[cm]?ts$/,
     /src[\\/]remote[\\/]remote-config-schema\.ts$/,
   ],
+  ['sdk-selectors', /src[\\/]sdk[\\/]selectors\.d\.[cm]?ts$/, /src[\\/]sdk[\\/]selectors\.ts$/],
 ] as const;
 
 export default defineConfig({
@@ -64,6 +65,7 @@ export default defineConfig({
     'android-adb': 'src/sdk/android-adb.ts',
     limrun: 'src/sdk/limrun.ts',
     contracts: 'src/sdk/contracts.ts',
+    selectors: 'src/sdk/selectors.ts',
     finders: 'src/sdk/finders.ts',
     'internal/bin': 'src/bin.ts',
     'internal/companion-tunnel': 'src/client/companion-tunnel.ts',

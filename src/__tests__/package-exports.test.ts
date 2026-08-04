@@ -31,6 +31,7 @@ const supportedSubpaths = [
   './android-adb',
   './limrun',
   './contracts',
+  './selectors',
   './finders',
 ];
 const typeOnlySubpaths = new Set(['./remote-config']);
@@ -66,7 +67,6 @@ test('package exports only supported public subpaths', () => {
 
   assert.equal(pkg.exports['./android-apps'], undefined);
   assert.equal(pkg.exports['./daemon'], undefined);
-  assert.equal(pkg.exports['./selectors'], undefined);
 });
 
 test('every public subpath is backed by a configured tsdown build entry', () => {

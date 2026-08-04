@@ -86,6 +86,21 @@ export const FACADE_SYMBOLS: readonly (readonly [string, readonly string[]])[] =
     ],
   ],
   [
+    '@agent-device/selectors/ast',
+    [
+      'SelectorChain',
+      'SelectorDiagnostics',
+      'findSelectorChainMatch',
+      'formatSelectorFailure',
+      'isNodeEditable',
+      'isNodeVisible',
+      'isSelectorToken',
+      'parseSelectorChain',
+      'resolveSelectorChain',
+      'tryParseSelectorChain',
+    ],
+  ],
+  [
     '@agent-device/ad-script',
     [
       'LocalIdentity',

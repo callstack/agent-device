@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
+import { listSourceFiles } from './check.ts';
 import { readFacadeExports, readNamedExports } from './facade-exports.ts';
 import { FACADE_SYMBOLS } from './facade-symbols.ts';
 import {
@@ -315,7 +316,14 @@ test('the real tree parses, declares, and passes R11', () => {
   );
   const selectorsPackage = packages.find((pkg) => pkg.name === '@agent-device/selectors');
   assert.ok(selectorsPackage, 'selectors package must exist');
-  assert.deepEqual([...selectorsPackage.exportTargets.keys()], ['@agent-device/selectors']);
+  // Two subpaths, and the split is the point: `.` is the string-only façade
+  // every in-repo consumer uses, `./ast` is the published parser surface that
+  // `agent-device/selectors` has shipped since before the engine moved into
+  // this package. A third subpath, or the AST leaking into `.`, fails here.
+  assert.deepEqual([...selectorsPackage.exportTargets.keys()].sort(), [
+    '@agent-device/selectors',
+    '@agent-device/selectors/ast',
+  ]);
   assert.deepEqual([...selectorsPackage.workspaceDependencies].sort(), [
     '@agent-device/ad-script',
     '@agent-device/contracts',
@@ -329,6 +337,17 @@ test('the real tree parses, declares, and passes R11', () => {
     ),
     [],
     'selectors façade keeps AST and grammar internals private',
+  );
+  // The AST subpath's one in-repo consumer is the published SDK re-export.
+  // Anything else importing it means the string-only façade was bypassed.
+  assert.deepEqual(
+    listSourceFiles()
+      .filter((file) => !file.startsWith('packages/selectors/'))
+      .filter((file) =>
+        fs.readFileSync(path.join(repoRoot, file), 'utf8').includes('@agent-device/selectors/ast'),
+      ),
+    ['src/sdk/selectors.ts'],
+    'only the published SDK subpath may import the selector AST',
   );
   const providerWebDriverPackage = packages.find(
     (pkg) => pkg.name === '@agent-device/provider-webdriver',
