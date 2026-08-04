@@ -3,18 +3,15 @@ import { test } from 'vitest';
 import type { RawSnapshotNode, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   buildSnapshotNodeMap,
-  containsPoint,
   extractNodeText,
   findNearestScrollableAncestor,
   isFillableType,
   isNodeVisibleInEffectiveViewport,
   isNodeVisibleOnScreen,
-  isRectVisibleInViewport,
   isScrollableNodeLike,
   isScrollableType,
   isTapPointInsideViewport,
   normalizeType,
-  pickLargestRect,
   resolveEffectiveViewportRect,
   resolveViewportRect,
 } from './facades/snapshot.ts';
@@ -55,15 +52,12 @@ test('snapshot tree and scroll semantics identify nodes through their stable ind
   assert.strictEqual(findNearestScrollableAncestor(nodes[2]!, byIndex), nodes[1]);
 });
 
-test('snapshot geometry selects the containing application viewport and keeps rectangle rules inclusive', () => {
+test('resolveViewportRect selects the containing application viewport', () => {
   const viewport: Rect = { x: 0, y: 0, width: 300, height: 500 };
   const target: Rect = { x: 20, y: 20, width: 40, height: 40 };
   const nodes = [node({ index: 0, type: 'Application', rect: viewport })];
 
   assert.deepEqual(resolveViewportRect(nodes, target), viewport);
-  assert.equal(containsPoint(viewport, 0, 0), true);
-  assert.equal(isRectVisibleInViewport(target, viewport), true);
-  assert.deepEqual(pickLargestRect([{ x: 0, y: 0, width: 2, height: 2 }, viewport]), viewport);
 });
 
 test('snapshot visibility uses the nearest scrollable viewport before applying the tap-point rule', () => {

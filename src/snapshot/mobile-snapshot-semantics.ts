@@ -1,8 +1,8 @@
+import { isRectVisibleInViewport } from '@agent-device/kernel/rect';
 import {
   buildSnapshotNodeMap,
   findNearestScrollableAncestor,
   isNodeVisibleInEffectiveViewport,
-  isRectVisibleInViewport,
   isTapPointInsideViewport,
   resolveEffectiveViewportRect,
   resolveViewportRect,

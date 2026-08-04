@@ -13,7 +13,7 @@
  * (`interaction-touch-response.ts`), never in the wire response.
  */
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { containsPoint } from '@agent-device/contracts/snapshot';
+import { containsPoint } from '@agent-device/kernel/rect';
 import { resolveRectCenter } from '../utils/rect-center.ts';
 import { demoteNonUniqueLocalIdentity, readNodeLocalIdentity } from '@agent-device/ad-script';
 import { buildIndexMap } from '../replay/target-evidence-tree.ts';

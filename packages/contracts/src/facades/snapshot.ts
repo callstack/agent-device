@@ -1,9 +1,3 @@
-export {
-  containsPoint,
-  isRectVisibleInViewport,
-  pickLargestRect,
-  resolveViewportRect,
-} from '../snapshot-geometry.ts';
 export { isScrollableNodeLike, isScrollableType } from '../snapshot-scroll.ts';
 export { buildSnapshotNodeMap } from '../snapshot-tree.ts';
 export {
@@ -12,5 +6,6 @@ export {
   isNodeVisibleOnScreen,
   isTapPointInsideViewport,
   resolveEffectiveViewportRect,
+  resolveViewportRect,
 } from '../snapshot-visibility.ts';
 export { extractNodeText, isFillableType, normalizeType } from '../snapshot-text.ts';

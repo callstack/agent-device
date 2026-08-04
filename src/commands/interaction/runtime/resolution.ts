@@ -19,8 +19,8 @@ import { buildSelectorChainForNode } from '../../../selectors/build.ts';
 import { resolvePressRecordingTarget } from '../../../core/press-retarget.ts';
 import { requireSnapshotSession } from './selector-read-shared.ts';
 import { findNodeByLabel, resolveRefLabel } from '../../../snapshot/snapshot-processing.ts';
+import { containsPoint } from '@agent-device/kernel/rect';
 import {
-  containsPoint,
   isNodeVisibleOnScreen,
   normalizeType,
   resolveEffectiveViewportRect,

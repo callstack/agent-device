@@ -1,9 +1,10 @@
-import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
+import { centerOfRect } from '@agent-device/kernel/snapshot';
 import {
   containsPoint,
   isRectVisibleInViewport,
-  resolveViewportRect,
-} from './snapshot-geometry.ts';
+  pickLargestRect,
+} from '@agent-device/kernel/rect';
 import { isScrollableNodeLike } from './snapshot-scroll.ts';
 import { buildSnapshotNodeMap } from './snapshot-tree.ts';
 
@@ -11,6 +12,49 @@ type SnapshotVisibilityNode = Pick<
   SnapshotNode,
   'rect' | 'index' | 'parentIndex' | 'type' | 'role' | 'subrole'
 >;
+
+/**
+ * The root viewport a target rect is measured against: the largest
+ * Application/Window rect containing the target's center, falling back to the
+ * largest such rect, then to the largest containing rect of any node.
+ */
+export function resolveViewportRect(nodes: RawSnapshotNode[], targetRect: Rect): Rect | null {
+  const targetCenter = centerOfRect(targetRect);
+  const rectNodes = nodes.filter((node) => hasValidRect(node.rect));
+  const viewportNodes = rectNodes.filter((node) => {
+    const type = (node.type ?? '').toLowerCase();
+    return type.includes('application') || type.includes('window');
+  });
+
+  const containingViewport = pickLargestRect(
+    viewportNodes
+      .map((node) => node.rect as Rect)
+      .filter((rect) => containsPoint(rect, targetCenter.x, targetCenter.y)),
+  );
+  if (containingViewport) return containingViewport;
+
+  const viewportFallback = pickLargestRect(viewportNodes.map((node) => node.rect as Rect));
+  if (viewportFallback) return viewportFallback;
+
+  const genericContaining = pickLargestRect(
+    rectNodes
+      .map((node) => node.rect as Rect)
+      .filter((rect) => containsPoint(rect, targetCenter.x, targetCenter.y)),
+  );
+  if (genericContaining) return genericContaining;
+
+  return null;
+}
+
+function hasValidRect(rect: Rect | undefined): rect is Rect {
+  if (!rect) return false;
+  return (
+    Number.isFinite(rect.x) &&
+    Number.isFinite(rect.y) &&
+    Number.isFinite(rect.width) &&
+    Number.isFinite(rect.height)
+  );
+}
 
 export function isNodeVisibleInEffectiveViewport(
   node: SnapshotVisibilityNode,
