@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { expectTypeOf, test } from 'vitest';
 import {
+  buildDragGesturePlan,
   buildGesturePlan,
   type SinglePointerGesturePlan,
 } from '@agent-device/contracts/interaction';
@@ -48,6 +49,49 @@ test('preserves the pre-endpoint Android sample schedule and interpolation', () 
     { offsetMs: 83, point: { x: 134, y: 400 } },
     { offsetMs: 100, point: { x: 100, y: 400 } },
   ]);
+});
+
+test('lowers drag trajectories piecewise without dropping either hold or movement', () => {
+  const source = { x: 20, y: 30 };
+  const destination = { x: 120, y: 230 };
+  const plan = buildDragGesturePlan(
+    {
+      from: source,
+      to: destination,
+      sourceHoldMs: 75,
+      moveMs: 90,
+      destinationHoldMs: 35,
+    },
+    viewport,
+  );
+
+  const lowered = lowerAndroidTouchPlan(plan);
+  const samples = lowered.pointers[0].samples;
+
+  assert.deepEqual(
+    samples.filter(({ offsetMs }) => offsetMs <= 75).map(({ point }) => point),
+    Array.from({ length: samples.filter(({ offsetMs }) => offsetMs <= 75).length }, () => source),
+  );
+  assert.deepEqual(samples.find(({ offsetMs }) => offsetMs === 75)?.point, source);
+  assert.ok(
+    samples.some(
+      ({ offsetMs, point }) =>
+        offsetMs > 75 &&
+        offsetMs < 165 &&
+        point.x > source.x &&
+        point.x < destination.x &&
+        point.y > source.y &&
+        point.y < destination.y,
+    ),
+  );
+  assert.deepEqual(samples.find(({ offsetMs }) => offsetMs === 165)?.point, destination);
+  assert.deepEqual(
+    samples.filter(({ offsetMs }) => offsetMs >= 165).map(({ point }) => point),
+    Array.from(
+      { length: samples.filter(({ offsetMs }) => offsetMs >= 165).length },
+      () => destination,
+    ),
+  );
 });
 
 test('does not lower long-press or two-pointer plans', () => {

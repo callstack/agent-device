@@ -55,16 +55,36 @@ export type AndroidProviderTouchPlan =
 export function lowerAndroidTouchPlan(plan: AndroidTouchPlan): AndroidLoweredTouchPlan {
   if (plan.topology === 'two' || plan.intent === 'longPress') return plan;
 
-  const [
-    {
-      pointerId,
-      samples: [start, end],
-    },
-  ] = plan.pointers;
-  const dense = sampleGestureOffsets(plan.durationMs, 'android').map((offsetMs) => ({
-    offsetMs,
-    point: interpolateGesturePoint(start.point, end.point, offsetMs / plan.durationMs),
-  }));
+  const [{ pointerId, samples: canonicalSamples }] = plan.pointers;
+  const offsets = [
+    ...new Set([
+      ...sampleGestureOffsets(plan.durationMs, 'android'),
+      ...canonicalSamples.map(({ offsetMs }) => offsetMs),
+    ]),
+  ].sort((left, right) => left - right);
+  let segmentIndex = 0;
+  const dense = offsets.map((offsetMs) => {
+    while (
+      segmentIndex < canonicalSamples.length - 2 &&
+      offsetMs > canonicalSamples[segmentIndex + 1]!.offsetMs
+    ) {
+      segmentIndex += 1;
+    }
+    const start = canonicalSamples[segmentIndex]!;
+    const end = canonicalSamples[segmentIndex + 1]!;
+    const segmentDurationMs = end.offsetMs - start.offsetMs;
+    return {
+      offsetMs,
+      point:
+        offsetMs === end.offsetMs || segmentDurationMs === 0
+          ? end.point
+          : interpolateGesturePoint(
+              start.point,
+              end.point,
+              (offsetMs - start.offsetMs) / segmentDurationMs,
+            ),
+    };
+  });
   // The sampler floors the frame count at three, so `dense` always holds at least four samples.
   const samples: AndroidTransportSamples = [dense[0]!, dense[1]!, dense[2]!, ...dense.slice(3)];
 
