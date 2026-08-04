@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
@@ -203,6 +204,15 @@ async function assertFormInput(context: LiveContext): Promise<void> {
     String(emailRect.y + emailRect.height / 2),
   ]);
   await runStep(context, 'append email suffix from coordinate focus', ['type', '.test']);
+  const runnerLog = fs.readFileSync(
+    path.join(context.stateDir, 'sessions', context.session, 'runner.log'),
+    'utf8',
+  );
+  assert.match(
+    runnerLog,
+    /AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder/,
+    'bare iOS type should use the AX-independent first-responder route',
+  );
   const email = await runStep(context, 'read typed email', ['get', 'attrs', 'id="field-email"']);
   assertJsonContains(email, 'ada@example.test', 'typed email suffix should be observable');
   verifyBehavior(
@@ -211,7 +221,11 @@ async function assertFormInput(context: LiveContext): Promise<void> {
     'fill showed the keyboard, dismissal changed pixels, and coordinate focus enabled typed text',
   );
   verifyCommand(context, C.focus, 'snapshot-derived coordinate focus directs subsequent typing');
-  verifyCommand(context, C.type, 'typed suffix is read back from the coordinate-focused field');
+  verifyCommand(
+    context,
+    C.type,
+    'AX-independent first-responder typing appends a suffix to the coordinate-focused field',
+  );
 }
 
 async function assertCapture(context: LiveContext): Promise<void> {

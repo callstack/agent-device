@@ -191,7 +191,10 @@ export const IOS_SIMULATOR_E2E_COVERAGE = {
       test: 'capability classifications match executable simulator behavior',
     },
   },
-  [C.type]: live('smoke:form-input', 'typed suffix is read back from a focused fixture field'),
+  [C.type]: live(
+    'smoke:form-input',
+    'AX-independent first-responder typing appends and is read back from a focused fixture field',
+  ),
   [C.viewport]: {
     assertion: 'iOS simulator capability model rejects viewport resizing, a web-only contract',
     level: 'capability-denial',
