@@ -36,6 +36,23 @@ enum RunnerKeyboardDismissSafeArea {
   // (hit-testing slop, rounded corners, shadows extending the visual bounds).
   static let obstacleMargin: Double = 6
 
+  // A frame covering (almost) the whole window is a structural container —
+  // Application/Window roots, full-screen scrims, or an RN background
+  // `Pressable` — not a discrete control the safe-area tap can route around:
+  // every candidate lies inside it by construction. Exempting them from the
+  // obstacle set is what keeps the any-element rule (#1606 review P1)
+  // satisfiable at all; the trade-off (a genuinely tappable full-screen
+  // backdrop is NOT treated as an obstacle) is exactly the disclosed,
+  // accepted behavior of this fallback — on many RN screens that backdrop
+  // tap IS what resigns the keyboard.
+  static let structuralRootCoverage: Double = 0.95
+
+  static func isStructuralRootFrame(_ frame: CGRect, windowFrame: CGRect) -> Bool {
+    guard !windowFrame.isEmpty else { return false }
+    return frame.width >= windowFrame.width * structuralRootCoverage
+      && frame.height >= windowFrame.height * structuralRootCoverage
+  }
+
   /// Returns a point inside `windowFrame`, above `keyboardFrame`, and outside
   /// every frame in `obstacles` (each expanded by `obstacleMargin`) — or nil
   /// if no candidate clears all of them, in which case the caller must not
@@ -130,6 +147,37 @@ extension RunnerTests {
       obstacles: []
     )
     XCTAssertEqual(point, CGPoint(x: 200, y: 50))
+  }
+
+  func testKeyboardDismissStructuralRootFramesAreExemptButControlsAreNot() {
+    let window = CGRect(x: 0, y: 0, width: 400, height: 800)
+    // Application/Window roots and full-bleed backdrops are structural.
+    XCTAssertTrue(RunnerKeyboardDismissSafeArea.isStructuralRootFrame(window, windowFrame: window))
+    XCTAssertTrue(
+      RunnerKeyboardDismissSafeArea.isStructuralRootFrame(
+        CGRect(x: 5, y: 5, width: 390, height: 790),
+        windowFrame: window
+      )
+    )
+    // A wide banner, a half-screen sheet, and a small control are not.
+    XCTAssertFalse(
+      RunnerKeyboardDismissSafeArea.isStructuralRootFrame(
+        CGRect(x: 0, y: 0, width: 400, height: 100),
+        windowFrame: window
+      )
+    )
+    XCTAssertFalse(
+      RunnerKeyboardDismissSafeArea.isStructuralRootFrame(
+        CGRect(x: 0, y: 400, width: 400, height: 400),
+        windowFrame: window
+      )
+    )
+    XCTAssertFalse(
+      RunnerKeyboardDismissSafeArea.isStructuralRootFrame(
+        CGRect(x: 20, y: 40, width: 60, height: 44),
+        windowFrame: window
+      )
+    )
   }
 
   func testKeyboardDismissSafeAreaObstacleMarginCoversNearMisses() {

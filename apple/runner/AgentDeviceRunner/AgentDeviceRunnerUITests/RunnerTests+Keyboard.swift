@@ -93,7 +93,7 @@ extension RunnerTests {
       return false
     }
     let windowFrame = onScreenWindowFrame(app: app)
-    let obstacles = keyboardDismissObstacleFrames(app: app)
+    let obstacles = keyboardDismissObstacleFrames(app: app, windowFrame: windowFrame)
     guard let point = RunnerKeyboardDismissSafeArea.safePoint(
       windowFrame: windowFrame,
       keyboardFrame: keyboardFrame,
@@ -114,34 +114,29 @@ extension RunnerTests {
 #endif
   }
 
-  // Public, non-private XCUIElement queries only (no AX-server bridge): the
-  // types most likely to react to an accidental tap. Bounded by construction
-  // — each query is scoped to a specific control type, not "every element" —
-  // so this stays cheap even on large trees.
-  private func keyboardDismissObstacleFrames(app: XCUIApplication) -> [CGRect] {
+  // EVERY known element counts as an obstacle, regardless of role or
+  // hittability (#1606 review P1): a role allowlist cannot prove a point is
+  // AX-empty — an unlabeled RN `Pressable` surfaces as a hittable `Other`,
+  // and a tappable parent can cover a point its static-text child does not.
+  // Only structural, ~window-sized frames are exempt
+  // (`isStructuralRootFrame`): every candidate lies inside those by
+  // construction, so counting them would make every point unsafe and the
+  // fallback unreachable. One `.any` resolution costs a single tree snapshot
+  // — cheaper than the ten typed queries it replaces — and skipping the
+  // per-element `isHittable` round trips keeps it that way.
+  private func keyboardDismissObstacleFrames(
+    app: XCUIApplication,
+    windowFrame: CGRect
+  ) -> [CGRect] {
 #if os(tvOS)
     return []
 #else
-    let queries: [XCUIElementQuery] = [
-      app.buttons,
-      app.cells,
-      app.links,
-      app.textFields,
-      app.secureTextFields,
-      app.searchFields,
-      app.textViews,
-      app.switches,
-      app.sliders,
-      app.images,
-    ]
-    var frames: [CGRect] = []
-    for query in queries {
-      let elements = safely("KEYBOARD_SAFE_AREA_OBSTACLES", []) {
-        query.allElementsBoundByIndex.filter { $0.exists && $0.isHittable }
-      }
-      frames.append(contentsOf: elements.map(\.frame))
+    let elements = safely("KEYBOARD_SAFE_AREA_OBSTACLES", []) {
+      app.descendants(matching: .any).allElementsBoundByIndex.filter { $0.exists }
     }
-    return frames
+    return elements.map(\.frame).filter {
+      !RunnerKeyboardDismissSafeArea.isStructuralRootFrame($0, windowFrame: windowFrame)
+    }
 #endif
   }
 
