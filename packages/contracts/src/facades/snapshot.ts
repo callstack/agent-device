@@ -4,6 +4,7 @@ export {
   findNearestScrollableAncestor,
   isNodeVisibleInEffectiveViewport,
   isNodeVisibleOnScreen,
+  isUsefulVisibilityAnchor,
   isTapPointInsideViewport,
   resolveEffectiveViewportRect,
   resolveViewportRect,

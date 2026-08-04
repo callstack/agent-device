@@ -1,4 +1,9 @@
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
+import {
+  buildSnapshotNodeMap,
+  findSnapshotAncestor,
+  isUsefulVisibilityAnchor,
+} from '@agent-device/contracts/snapshot';
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 export function isMaestroNodeVisible(
@@ -12,7 +17,7 @@ export function isMaestroNodeVisible(
   }
   if (node.rect) return false;
   if (platform !== 'android' && node.hittable === true) return true;
-  const anchor = findSnapshotAncestor(nodes, node, (parent) =>
+  const anchor = findSnapshotAncestor(nodes, node, buildSnapshotNodeMap(nodes), (parent) =>
     isUsefulVisibilityAnchor(parent, platform) ? parent : null,
   );
   if (!anchor) return false;
@@ -22,10 +27,6 @@ export function isMaestroNodeVisible(
   return isVisibleInEffectiveViewport(anchor, nodes);
 }
 
-export function buildSnapshotNodeByIndex(nodes: SnapshotNode[]): Map<number, SnapshotNode> {
-  return new Map(nodes.map((node) => [node.index, node]));
-}
-
 export function isDescendantOfSnapshotNode(
   nodes: SnapshotNode[],
   node: SnapshotNode,
@@ -33,72 +34,25 @@ export function isDescendantOfSnapshotNode(
   nodeByIndex: ReadonlyMap<number, SnapshotNode>,
 ): boolean {
   return Boolean(
-    findSnapshotAncestor(
-      nodes,
-      node,
-      (candidate) => (candidate.index === ancestor.index ? candidate : null),
-      nodeByIndex,
+    findSnapshotAncestor(nodes, node, nodeByIndex, (candidate) =>
+      candidate.index === ancestor.index ? candidate : null,
     ),
   );
 }
 
-export function normalizeType(type: string): string {
-  let normalized = type
-    .trim()
-    .replace(/XCUIElementType/gi, '')
-    .replace(/^AX/, '')
-    .toLowerCase();
-  const separator = Math.max(normalized.lastIndexOf('.'), normalized.lastIndexOf('/'));
-  if (separator !== -1) normalized = normalized.slice(separator + 1);
-  return normalized;
-}
-
-function findSnapshotAncestor<T>(
-  nodes: SnapshotNode[],
-  node: SnapshotNode,
-  resolve: (ancestor: SnapshotNode) => T | null,
-  nodeByIndex: ReadonlyMap<number, SnapshotNode> = buildSnapshotNodeByIndex(nodes),
-): T | null {
-  let current: SnapshotNode | undefined = node;
-  const visited = new Set<number>();
-  while (typeof current.parentIndex === 'number' && !visited.has(current.index)) {
-    visited.add(current.index);
-    current = nodeByIndex.get(current.parentIndex) ?? nodes[current.parentIndex];
-    if (!current) return null;
-    const result = resolve(current);
-    if (result !== null) return result;
-  }
-  return null;
-}
-
-function isUsefulVisibilityAnchor(node: SnapshotNode, platform: 'android' | 'ios'): boolean {
-  if (platform === 'android' && node.visibleToUser === false) return false;
-  const type = normalizeType(node.type ?? '');
-  if (
-    type.includes('application') ||
-    type.includes('window') ||
-    type.includes('scrollview') ||
-    type.includes('tableview') ||
-    type.includes('collectionview') ||
-    type === 'table' ||
-    type === 'list' ||
-    type === 'listview'
-  ) {
-    return false;
-  }
-  return platform === 'android'
-    ? node.hittable === true && isPositiveFiniteRect(node.rect)
-    : node.hittable === true || isPositiveFiniteRect(node.rect);
-}
-
 function isVisibleInEffectiveViewport(node: SnapshotNode, nodes: SnapshotNode[]): boolean {
   if (!node.rect) return true;
-  const byIndex = buildSnapshotNodeByIndex(nodes);
+  const byIndex = buildSnapshotNodeMap(nodes);
   const viewport =
     findScrollableAncestorRect(node, byIndex) ?? resolveRootViewport(nodes, node.rect);
   return viewport ? rectsOverlap(node.rect, viewport) : true;
 }
 
+// Structurally the same parent walk as `@agent-device/contracts/snapshot`'s
+// `findNearestScrollableAncestor` and `runtime-port-geometry.ts`'s
+// `findNearestScrollableContainer`, but each uses a DIFFERENT scrollable
+// predicate, and the three have not been shown to agree. Collapsing them is a
+// Maestro-conformance change, not a cleanup — left alone deliberately.
 function findScrollableAncestorRect(
   node: SnapshotNode,
   byIndex: ReadonlyMap<number, SnapshotNode>,
@@ -114,6 +68,7 @@ function findScrollableAncestorRect(
   return null;
 }
 
+// fallow-ignore-next-line complexity
 function isScrollableNode(node: SnapshotNode): boolean {
   const type = `${node.type ?? ''}`.toLowerCase();
   if (

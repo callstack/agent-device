@@ -28,7 +28,7 @@ function selectorKeysOfKind(kind: 'text' | 'boolean'): SelectorKey[] {
   return SELECTOR_KEY_NAMES.filter((key) => SELECTOR_KEY_VALUE_KINDS[key] === kind);
 }
 
-export const SELECTOR_VALUE_HAZARDS = [
+const SELECTOR_VALUE_HAZARDS = [
   '',
   ' ',
   '"',

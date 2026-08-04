@@ -1,4 +1,5 @@
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { Selector } from './internal/parse.ts';
 import type {
   SelectorChainMatch,
   SelectorChainMatchList,
@@ -54,31 +55,13 @@ import {
   resolveReplaySuggestionCandidate,
 } from './internal/replay.ts';
 
-export type { SelectorArgumentRefusal } from './internal/argument-refusal.ts';
-export type {
-  FindAction,
-  FindArgumentCheck,
-  FindLocator,
-  FindMatchOptions,
-  ReadOnlyFindAction,
-  ParsedFindArgs,
-} from './internal/find.ts';
+export type { FindAction, FindLocator } from './internal/find.ts';
 export type { IsPredicate } from './internal/predicates.ts';
 export type {
   SelectorChainMatchList,
   SelectorChainMatch,
-  SelectorDiagnostics,
   SelectorResolution,
 } from './internal/public-resolution-types.ts';
-export type {
-  ReplayRecordedTargetPolicy,
-  ReplayRecordedTargetResolution,
-  ReplaySelectorCandidateOptions,
-  ReplaySelectorExpressionOutcome,
-  ReplaySelectorGrammar,
-  ReplaySuggestionCandidateMatch,
-} from './internal/replay.ts';
-
 export { formatSelectorFailure } from './internal/resolve.ts';
 
 export {
@@ -146,38 +129,57 @@ function projectSelectorExpression(
   vocabulary: { textKeys: readonly string[]; booleanKeys: readonly string[] },
 ): SelectorProjection {
   const parsed = tryParseSelectorChain(expression);
+  // Not selector-shaped at all: pass plain text through, refuse anything that
+  // tried to be a selector and failed.
   if (!parsed) return expression.includes('=') || expression.includes('||') ? null : expression;
   const textKeys = new Set(vocabulary.textKeys);
-  const booleanKeys = new Set(vocabulary.booleanKeys);
-  if (parsed.selectors.length > 1) {
-    const values = parsed.selectors.map((selector) => {
-      const term = selector.terms.length === 1 ? selector.terms[0] : undefined;
-      return term && textKeys.has(term.key) && typeof term.value === 'string'
-        ? term.value
-        : undefined;
-    });
-    const first = values[0];
-    return first !== undefined && values.every((value) => value === first) ? first : null;
-  }
-  const selector = parsed.selectors[0];
+  return parsed.selectors.length > 1
+    ? readAgreedTextValue(parsed.selectors, textKeys)
+    : projectSelectorTerms(parsed.selectors[0], textKeys, new Set(vocabulary.booleanKeys));
+}
+
+/**
+ * Alternatives collapse only when every branch is a single text term naming the
+ * same value — the one case where a target vocabulary with no `||` can still
+ * express the selector faithfully.
+ */
+function readAgreedTextValue(
+  selectors: readonly Selector[],
+  textKeys: ReadonlySet<string>,
+): SelectorProjection {
+  const values = selectors.map((selector) => {
+    const term = selector.terms.length === 1 ? selector.terms[0] : undefined;
+    return term && textKeys.has(term.key) && typeof term.value === 'string'
+      ? term.value
+      : undefined;
+  });
+  const first = values[0];
+  return first !== undefined && values.every((value) => value === first) ? first : null;
+}
+
+/** Every term must map into the vocabulary, and at most one may be a text key. */
+function projectSelectorTerms(
+  selector: Selector | undefined,
+  textKeys: ReadonlySet<string>,
+  booleanKeys: ReadonlySet<string>,
+): SelectorProjection {
   if (!selector) return null;
   const result: Record<string, string | boolean> = {};
+  let textTerms = 0;
   for (const term of selector.terms) {
-    if (textKeys.has(term.key)) {
-      if (typeof term.value !== 'string' || Object.keys(result).some((key) => textKeys.has(key))) {
-        return null;
-      }
-      result[term.key] = term.value;
-      continue;
-    }
-    if (booleanKeys.has(term.key)) {
-      if (typeof term.value !== 'boolean') return null;
-      result[term.key] = term.value;
-      continue;
-    }
-    return null;
+    if (termMatches(term, textKeys, 'string')) textTerms += 1;
+    else if (!termMatches(term, booleanKeys, 'boolean')) return null;
+    result[term.key] = term.value;
   }
-  return Object.keys(result).length > 0 ? result : null;
+  return textTerms <= 1 && Object.keys(result).length > 0 ? result : null;
+}
+
+function termMatches(
+  term: Selector['terms'][number],
+  keys: ReadonlySet<string>,
+  expected: 'string' | 'boolean',
+): boolean {
+  return keys.has(term.key) && typeof term.value === expected;
 }
 
 /** Read a one-term selector without exposing the parser's AST. */

@@ -19,5 +19,8 @@
       "types": "./src/ast.ts",
       "default": "./src/ast.ts"
     }
+  },
+  "devDependencies": {
+    "fast-check": "^4.9.0"
   }
 }

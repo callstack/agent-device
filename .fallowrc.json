@@ -110,6 +110,11 @@
       "exports": ["ownedTestFiles"]
     },
     {
+      "comment": "ADR 0010 shared-hint pin: the facade re-export's only consumer is src/__tests__/is-argument-surface-parity.test.ts, which asserts the daemon and CLI `is` surfaces raise the SAME hint text. The constant is live inside the package (predicates.ts raises it); a production consumer of the re-export would defeat the point, since it exists so neither surface copies the string.",
+      "file": "packages/selectors/src/index.ts",
+      "exports": ["IS_PREDICATE_USAGE_HINT"]
+    },
+    {
       "comment": "Help-benchmark conformance seams: helpTopicIds feeds the topic-coverage gate and PRIVATE_AX_RECOVERY_SAMPLE feeds the bench sample producers; both consumers are test-tree files outside --production analysis.",
       "file": "{src/cli/parser/cli-help.ts,scripts/help-conformance-sample-outputs.mjs}",
       "exports": ["helpTopicIds", "PRIVATE_AX_RECOVERY_SAMPLE"]

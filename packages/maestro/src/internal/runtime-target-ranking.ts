@@ -1,10 +1,7 @@
 import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
-import {
-  buildSnapshotNodeByIndex,
-  isDescendantOfSnapshotNode,
-  normalizeType,
-} from './snapshot-policy.ts';
+import { buildSnapshotNodeMap, normalizeType } from '@agent-device/contracts/snapshot';
+import { isDescendantOfSnapshotNode } from './snapshot-policy.ts';
 import { normalizeText } from './shared.ts';
 import type { MaestroSelector } from './program-ir.ts';
 import {
@@ -48,7 +45,7 @@ function normalizeMaestroSnapshotMatches(
   platform: MaestroPlatform,
 ): SnapshotNode[] {
   if (platform !== 'ios' || !hasTextualSelector(selector)) return matches;
-  const nodeByIndex = buildSnapshotNodeByIndex(nodes);
+  const nodeByIndex = buildSnapshotNodeMap(nodes);
   return matches.filter((candidate) => {
     if (isInteractiveControl(candidate)) return true;
     const equivalentMatches = matches.filter(
@@ -138,7 +135,7 @@ function scopeMatchesByAncestor(
   if (!childOf) return { matches, parentMatched: true };
   const parents = snapshot.nodes.filter((node) => matchesMaestroTypedSelector(node, childOf));
   if (parents.length === 0) return { matches: [], parentMatched: false };
-  const nodeByIndex = buildSnapshotNodeByIndex(snapshot.nodes);
+  const nodeByIndex = buildSnapshotNodeMap(snapshot.nodes);
   return {
     matches: matches.filter((node) =>
       parents.some((parent) =>

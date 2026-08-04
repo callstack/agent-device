@@ -4,11 +4,11 @@ import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import {
+  isUsefulVisibilityAnchor,
   buildSnapshotNodeMap,
   extractNodeText,
   findSnapshotAncestor,
   isNodeVisibleInEffectiveViewport,
-  normalizeType,
 } from '@agent-device/contracts/snapshot';
 import { isNodeEditable, isNodeVisible } from './node.ts';
 import { tryParseSelectorChain } from './parse.ts';
@@ -145,30 +145,4 @@ function resolveVisibilityAnchor(
   return findSnapshotAncestor(nodes, node, nodesByIndex, (parent) =>
     isUsefulVisibilityAnchor(parent, platform) ? parent : null,
   );
-}
-
-// fallow-ignore-next-line complexity
-function isUsefulVisibilityAnchor(
-  node: SnapshotState['nodes'][number],
-  platform: Platform | PublicPlatform,
-): boolean {
-  if (platform === 'android' && node.visibleToUser === false) return false;
-  const type = normalizeType(node.type ?? '');
-  // These containers often report the full content frame, not the clipped on-screen geometry.
-  if (
-    type.includes('application') ||
-    type.includes('window') ||
-    type.includes('scrollview') ||
-    type.includes('tableview') ||
-    type.includes('collectionview') ||
-    type === 'table' ||
-    type === 'list' ||
-    type === 'listview'
-  ) {
-    return false;
-  }
-  if (platform === 'android') {
-    return node.hittable === true && isPositiveFiniteRect(node.rect);
-  }
-  return node.hittable === true || isPositiveFiniteRect(node.rect);
 }

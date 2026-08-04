@@ -3,7 +3,7 @@ import { buildInPageSwipeGesturePlan } from '@agent-device/contracts/interaction
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
 import { pointInsideRect } from './shared.ts';
-import { normalizeType } from './snapshot-policy.ts';
+import { normalizeType } from '@agent-device/contracts/snapshot';
 import { MAESTRO_COMPATIBILITY_PRESETS } from './compatibility-policy.ts';
 import { resolveNumeric } from './engine-flow.ts';
 import type { MaestroRuntimeRequest } from './engine-types.ts';
@@ -115,6 +115,8 @@ function isScrollableSnapshotType(type: string | undefined): boolean {
   );
 }
 
+// See the note on `snapshot-policy.ts`'s `findScrollableAncestorRect`: same
+// walk, third scrollable predicate, deliberately not merged.
 function findNearestScrollableContainer(
   node: SnapshotState['nodes'][number],
   byIndex: ReadonlyMap<number, SnapshotState['nodes'][number]>,

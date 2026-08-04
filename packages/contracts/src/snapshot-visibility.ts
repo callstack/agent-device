@@ -1,7 +1,13 @@
 import type { RawSnapshotNode, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { centerOfRect } from '@agent-device/kernel/snapshot';
-import { containsPoint, isRectVisibleInViewport, pickLargestRect } from '@agent-device/kernel/rect';
+import {
+  containsPoint,
+  isPositiveFiniteRect,
+  isRectVisibleInViewport,
+  pickLargestRect,
+} from '@agent-device/kernel/rect';
 import { isScrollableNodeLike } from './snapshot-scroll.ts';
+import { normalizeType } from './snapshot-text.ts';
 import { buildSnapshotNodeMap } from './snapshot-tree.ts';
 
 type SnapshotVisibilityNode = Pick<
@@ -136,4 +142,41 @@ export function findNearestScrollableAncestor(
       typeof current.parentIndex === 'number' ? byIndex.get(current.parentIndex) : undefined;
   }
   return null;
+}
+
+/**
+ * Whether a node's own geometry can be trusted as evidence of what is on
+ * screen. Containers that report their full content frame rather than the
+ * clipped on-screen geometry are excluded, so a closed drawer's rows cannot
+ * vouch for a viewport they are scrolled out of.
+ *
+ * The platform split is real: Android reports `hittable` reliably enough to
+ * require it alongside a usable rect, while an iOS node with either signal is
+ * still worth anchoring on.
+ *
+ * Shared because two packages need the identical judgement — `@agent-device/selectors`
+ * when evaluating `is visible`, and `@agent-device/maestro` when picking a
+ * visibility anchor — and a copy in each is a copy that can drift.
+ */
+export function isUsefulVisibilityAnchor(
+  node: Pick<SnapshotNode, 'rect' | 'type' | 'hittable' | 'visibleToUser'>,
+  platform: string,
+): boolean {
+  if (platform === 'android' && node.visibleToUser === false) return false;
+  const type = normalizeType(node.type ?? '');
+  if (
+    type.includes('application') ||
+    type.includes('window') ||
+    type.includes('scrollview') ||
+    type.includes('tableview') ||
+    type.includes('collectionview') ||
+    type === 'table' ||
+    type === 'list' ||
+    type === 'listview'
+  ) {
+    return false;
+  }
+  return platform === 'android'
+    ? node.hittable === true && isPositiveFiniteRect(node.rect)
+    : node.hittable === true || isPositiveFiniteRect(node.rect);
 }
