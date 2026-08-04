@@ -10,6 +10,11 @@ import type { Rect } from '@agent-device/kernel/snapshot';
 // AgentDeviceRunnerUITests/RunnerTapPointPolicy.swift, gated XCTest in the
 // same file), so drift between the runner's ELEMENT_OFFSCREEN guard and the
 // runtime's offscreen rule turns CI red on whichever side changed.
+//
+// Scope: the table proves the GEOMETRIC rule only — element-frame center
+// inside the window frame, edges inclusive, empty frame fails open. The
+// scrollable-ancestor (effective viewport) logic layered on top by
+// isNodeVisibleOnScreen is TS-only and out of scope here.
 
 type FixtureCase = {
   name: string;

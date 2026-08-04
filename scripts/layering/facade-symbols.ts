@@ -578,6 +578,8 @@ export const FACADE_SYMBOLS: readonly (readonly [string, readonly string[]])[] =
   [
     '@agent-device/contracts/replay',
     [
+      'LocalIdentity',
+      'NodeStructuralDenotation',
       'REPLAY_TARGET_GUARD_MISMATCH_REASON',
       'RefFrameEffect',
       'ReplayCommandResult',

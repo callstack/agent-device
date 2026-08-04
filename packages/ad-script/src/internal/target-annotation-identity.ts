@@ -18,7 +18,12 @@
 
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { normalizeType } from '@agent-device/contracts/snapshot';
-import type { TargetAncestryEntry, TargetAnnotationV1 } from '@agent-device/contracts/replay';
+import type {
+  LocalIdentity,
+  NodeStructuralDenotation,
+  TargetAncestryEntry,
+  TargetAnnotationV1,
+} from '@agent-device/contracts/replay';
 import {
   normalizeIdentifierField,
   normalizeLabelField,
@@ -31,14 +36,26 @@ import {
 // Local identity + ancestry-prefix matching (decision 3 "Local identity" /
 // "Ancestry"). Pure over the small structural shapes above — no tree
 // dependency, so both the writer (over `SnapshotNode`-derived values) and a
-// replay verifier can share it verbatim.
+// replay verifier can share it verbatim. The type vocabulary (`LocalIdentity`,
+// `NodeStructuralDenotation`) lives in `@agent-device/contracts/replay` so the
+// guard shapes there reference it nominally; this module re-exports it beside
+// the readers that produce it.
 // ---------------------------------------------------------------------------
 
-export type LocalIdentity = { id?: string; role: string; label?: string };
+export type { LocalIdentity, NodeStructuralDenotation };
 
 type IdentityTreeNode = Pick<RawSnapshotNode, 'type' | 'identifier' | 'label'>;
 
-/** The single normalized local-identity reader shared by record and replay paths. */
+/**
+ * ADR 0012 decision 3: the ONE snapshot-node local-identity reader —
+ * normalized (NFC, label whitespace collapse, `normalizeType` role) AND
+ * 256-byte field-capped, on every path. Shared by the record-time writer
+ * (`src/daemon/session-target-evidence.ts`), replay-time verification
+ * (`src/daemon/handlers/session-replay-target-verification.ts`), and the
+ * dispatch-side post-resolution guard
+ * (`src/commands/interaction/runtime/resolution.ts`), so all three compute
+ * a node's identity with byte-identical semantics.
+ */
 export function readNodeLocalIdentity(
   node: Pick<RawSnapshotNode, 'type' | 'identifier' | 'label'>,
 ): LocalIdentity {
@@ -59,7 +76,22 @@ export function localIdentitiesEqual(a: LocalIdentity, b: LocalIdentity): boolea
   return a.id === b.id && a.role === b.role && a.label === b.label;
 }
 
-/** Counts every node in a tree carrying the canonical identity id. */
+/**
+ * ADR 0012 decision 3 amendment (#1269): how many nodes in `nodes` carry the
+ * canonical identity `id`. THE single uniqueness predicate behind both
+ * id-demotion sites — `computeTargetEvidence`'s `target-v1` identity tuple
+ * and `buildSelectorChainForNode`'s selector chain. Sharing it is the
+ * correctness guarantee: a non-unique id is dropped from BOTH or NEITHER,
+ * never half-demoted (dropped from identity while still leading the chain, or
+ * the reverse — the exact split #1269's fix exists to close).
+ *
+ * `id` is a canonical identity id (`readNodeLocalIdentity(node).id`: NFC +
+ * 256-byte field cap, no trimming), and every candidate is measured through
+ * the SAME reader, so the count is over exactly the identities the replay
+ * verifier keys on. There is deliberately NO ancestry / parent-walk
+ * exclusion: an id is non-selective the moment two nodes anywhere in the tree
+ * carry it, independent of structural context or a broken parent linkage.
+ */
 export function idMatchCountInTree(nodes: readonly IdentityTreeNode[], id: string): number {
   let count = 0;
   for (const node of nodes) {
@@ -68,7 +100,17 @@ export function idMatchCountInTree(nodes: readonly IdentityTreeNode[], id: strin
   return count;
 }
 
-/** Drops a non-unique id while preserving the role and label identity tiers. */
+/**
+ * ADR 0012 decision 3 amendment (#1269): `identity` with its `id` demoted
+ * whenever the id is non-unique in `nodes`, built on the SAME
+ * `idMatchCountInTree` predicate `buildSelectorChainForNode`'s
+ * `selectableId` keys off directly. `computeTargetEvidence` uses this
+ * whole-identity form; extracted so a third call site (#1280's
+ * press-retarget identity-empty check, `src/core/press-retarget.ts`)
+ * shares it rather than re-deriving the rule a third way. A demoted id
+ * falls back to role+label, the same shape an unrecorded id already
+ * computes.
+ */
 export function demoteNonUniqueLocalIdentity(
   identity: LocalIdentity,
   nodes: readonly IdentityTreeNode[],
@@ -78,11 +120,6 @@ export function demoteNonUniqueLocalIdentity(
   const { role, label } = identity;
   return { role, ...(label !== undefined ? { label } : {}) };
 }
-
-export type NodeStructuralDenotation = {
-  documentOrder: number;
-  sibling: number;
-};
 
 type StructuralNode = Pick<RawSnapshotNode, 'index' | 'parentIndex'>;
 
@@ -104,6 +141,12 @@ export function readNodeStructuralDenotation(
   return { documentOrder: node.index, sibling: siblingOrdinal(nodes, node) };
 }
 
+/**
+ * The guard passes only when BOTH structural discriminators agree — a
+ * fail-closed comparison: two same-local-identity duplicates differ in
+ * `documentOrder` (always) and usually `sibling`, so the guard refuses
+ * whenever dispatch resolved a different member than verification isolated.
+ */
 export function structuralDenotationsEqual(
   a: NodeStructuralDenotation,
   b: NodeStructuralDenotation,

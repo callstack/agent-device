@@ -78,6 +78,8 @@ export function isNodeVisibleInEffectiveViewport(
 // interaction would tap — to sit inside the root Application/Window viewport.
 // Edge overlap is not enough: a mostly-off-screen drawer container can graze the
 // viewport by a fraction of a pixel while its center is far off-screen.
+// Interaction guards and selector disambiguation use this stricter form;
+// scroll-direction summaries keep the effective form.
 export function isNodeVisibleOnScreen(
   node: SnapshotVisibilityNode,
   nodes: SnapshotNode[],
@@ -96,7 +98,9 @@ export function isNodeVisibleOnScreen(
 // The tap-point rule shared with the iOS runner (ADR 0011 Layer 2): the tap
 // point is the rect's exact CENTER; it is inside the viewport iff it lies
 // within the frame, edges inclusive. A missing, empty, or invalid viewport
-// fails open (allowed). The Swift twin and this function are checked against
+// fails open (allowed) — resolving the best available viewport is the
+// caller's job, and the rule must not turn a missing frame into a refusal.
+// The Swift twin and this function are checked against
 // contracts/fixtures/tap-point-policy.json; change the rule only via that table.
 export function isTapPointInsideViewport(rect: Rect, viewport: Rect | null): boolean {
   if (!viewport || viewport.width <= 0 || viewport.height <= 0) {

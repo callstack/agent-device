@@ -1,26 +1,56 @@
 import type { DaemonError } from '@agent-device/kernel/errors';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
+import type {
+  LocalIdentity,
+  NodeStructuralDenotation,
+  TargetAncestryEntry,
+} from './target-annotation.ts';
 import { WAIT_REASONS } from './wait.ts';
 
 /**
- * The verified snapshot member carried into the pre-action interaction guard.
- * These neutral shapes live in contracts so daemon and command layers can
- * share the guard without depending on the annotation codec package.
+ * The verified-member denotation carried on the pre-action guard
+ * (`DaemonRequest.internal.replayTargetGuard`): its normalized local identity
+ * PLUS the structural discriminator path 6 used to isolate it among same
+ * local-identity duplicates. Comparing local identity alone would let a
+ * different duplicate (identical id/role/label) pass the guard — the exact
+ * verified-but-taps-different-node mis-binding step 4 exists to prevent.
+ * Lives in contracts so daemon and command layers can share the guard
+ * without depending on the annotation codec package.
  */
 export type ReplayTargetGuardDenotation = {
-  identity: { id?: string; role: string; label?: string };
-  structural: { documentOrder: number; sibling: number };
+  identity: LocalIdentity;
+  structural: NodeStructuralDenotation;
 };
 
+/**
+ * `details.reason` marker on the pre-action refusal thrown by dispatch's
+ * post-resolution guard (`assertExpectedResolvedTarget`,
+ * `src/commands/interaction/runtime/resolution.ts`), detected by the replay
+ * step loop to convert the refusal into an identity-mismatch target-binding
+ * divergence.
+ */
 export const REPLAY_TARGET_GUARD_MISMATCH_REASON = 'replay_target_guard_mismatch';
 
+/**
+ * #1349: `details.reason` marker on the timeout refusal `wait` throws when
+ * candidates matching the recorded selector appeared during polling but none
+ * ever carried the recorded landmark identity (local identity + leaf-anchored
+ * ancestry prefix). The replay step loop converts it into an
+ * identity-mismatch target-binding divergence; the wait never reports
+ * success.
+ */
 export const WAIT_LANDMARK_MISMATCH_REASON = WAIT_REASONS.landmarkIdentityMismatch;
 
-/** Compact evidence retained by a selector wait's final mismatching poll. */
+/**
+ * The compact evidence `wait` retains from its LAST poll whose capture
+ * matched the recorded selector: the domain size and the first match's
+ * identity/ancestry, enough for the daemon to build the divergence's
+ * `targetBinding` payload without shipping node trees through error details.
+ */
 export type WaitLandmarkMismatchEvidence = {
   matchCount: number;
-  observed: { id?: string; role: string; label?: string };
-  observedAncestry: { role: string; label?: string }[];
+  observed: LocalIdentity;
+  observedAncestry: TargetAncestryEntry[];
 };
 
 export type ReplayCommandResult = {
