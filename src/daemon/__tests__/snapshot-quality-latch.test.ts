@@ -293,6 +293,20 @@ test('an empty ref-scoped diff latches on the captured verdict, not the retained
   expect(storedLatch(input)).toEqual({ appBundleId: 'com.example.app' });
 });
 
+test('an app switch supersedes the held latch through the dispatch seam', async () => {
+  const input = scenario();
+  seedCapture(deferredVerdict());
+  await dispatchPublicSnapshot(input);
+  expect(storedLatch(input)).toEqual({ appBundleId: 'com.example.app' });
+
+  // The runner clears its penalty per target process, so a latch held for the
+  // previous app must not silence the new app's first deferred verdict.
+  input.sessionStore.get(input.sessionName)!.appBundleId = 'com.example.other';
+  const switched = await dispatchPublicSnapshot(input);
+  expect(responseWarnings(switched).filter((line) => line === FULL_WARNING)).toHaveLength(1);
+  expect(storedLatch(input)).toEqual({ appBundleId: 'com.example.other' });
+});
+
 test('a genuine recovered render keeps later deferred captures quiet without doubling', async () => {
   const input = scenario();
   seedCapture(genuineRecoveredVerdict());
