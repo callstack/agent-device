@@ -138,9 +138,9 @@ test('internal observation responses neither consume nor clear the latch', () =>
 
 test('sessionless responses pass through unchanged', () => {
   const data = { snapshotQuality: deferredVerdict() };
-  expect(
-    applyRecoveredWarningLatch({ session: undefined, data, internalObservation: false }),
-  ).toBe(data);
+  expect(applyRecoveredWarningLatch({ session: undefined, data, internalObservation: false })).toBe(
+    data,
+  );
 });
 
 function scenario() {
@@ -184,7 +184,9 @@ function responseWarnings(response: Awaited<ReturnType<typeof dispatchSnapshotVi
   return (response.data?.warnings ?? []) as string[];
 }
 
-function storedLatch(input: ReturnType<typeof scenario>): SessionState['recoveredSnapshotWarningLatch'] {
+function storedLatch(
+  input: ReturnType<typeof scenario>,
+): SessionState['recoveredSnapshotWarningLatch'] {
   return input.sessionStore.get(input.sessionName)?.recoveredSnapshotWarningLatch;
 }
 

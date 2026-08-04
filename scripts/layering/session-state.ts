@@ -48,6 +48,9 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
   snapshotGeneration: ['src/daemon/session-snapshot.ts'],
   lastComparisonSafeSnapshot: ['src/daemon/session-snapshot.ts'],
   androidSnapshotFreshness: ['src/daemon/android-snapshot-freshness.ts'],
+  // One-shot deferred-warning latch (#1587 follow-up): the transition function is the only
+  // writer, so the latch's window semantics live in a single module.
+  recoveredSnapshotWarningLatch: ['src/daemon/snapshot-quality-latch.ts'],
 
   // #1478 P4a script publication. The tagged aggregate replaced the eight co-resident
   // `saveScript*`/`scriptRecordingState`/`repair*` fields; its ONLY writers are the two
