@@ -193,15 +193,18 @@ function buildClipboardActionSummary(result: Record<string, unknown>): string {
 function buildKeyboardActionSummary(result: Record<string, unknown>): string {
   const action = readSessionEventString(result.action);
   if (!action || !isKeyboardAction(action)) return 'Used keyboard';
-  if (action === 'dismiss') {
-    if (readBoolean(result.dismissed) === false) return 'Keyboard was already hidden';
-    const mechanism = readSessionEventString(result.mechanism);
-    return mechanism === 'safeAreaTap' ? 'Dismissed keyboard (safe-area tap)' : 'Dismissed keyboard';
-  }
+  if (action === 'dismiss') return buildKeyboardDismissSummary(result);
   if (action === 'enter' || action === 'return') return 'Pressed keyboard return';
   const visible = readBoolean(result.visible);
   if (visible === undefined) return 'Inspected keyboard';
   return visible ? 'Keyboard is visible' : 'Keyboard is hidden';
+}
+
+function buildKeyboardDismissSummary(result: Record<string, unknown>): string {
+  if (readBoolean(result.dismissed) === false) return 'Keyboard was already hidden';
+  return readSessionEventString(result.mechanism) === 'safeAreaTap'
+    ? 'Dismissed keyboard (safe-area tap)'
+    : 'Dismissed keyboard';
 }
 
 function buildKeyboardActionDetails(result: Record<string, unknown>): Record<string, unknown> {

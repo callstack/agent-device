@@ -512,7 +512,9 @@ async function handleIosKeyboardCommand(
     runnerCtx,
   );
   const mechanism =
-    typeof result.keyboardDismissMechanism === 'string' ? result.keyboardDismissMechanism : undefined;
+    typeof result.keyboardDismissMechanism === 'string'
+      ? result.keyboardDismissMechanism
+      : undefined;
   return {
     platform: 'ios',
     action: 'dismiss',
