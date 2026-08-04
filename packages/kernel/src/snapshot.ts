@@ -12,7 +12,13 @@ export type SnapshotQualityVerdict = {
   reason?: string;
   // 'deferred' = the penalty circuit breaker pre-selected a non-XCTest backend; nothing new
   // degraded on THIS capture (no repeated warning, no settle budget reset).
-  reasonCode?: 'ax-rejected' | 'sparse-tree' | 'budget' | 'no-nodes' | 'capture-failed' | 'deferred';
+  reasonCode?:
+    | 'ax-rejected'
+    | 'sparse-tree'
+    | 'budget'
+    | 'no-nodes'
+    | 'capture-failed'
+    | 'deferred';
   effectiveDepth?: number;
   collapsedLeafIndexes?: number[];
 };
