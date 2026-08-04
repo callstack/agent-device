@@ -26,7 +26,13 @@ export const TEST_RUN_TMP_PREFIX = 'agent-device-test-run-';
 let testRunTmpDir: string;
 
 export function setup(): void {
-  testRunTmpDir = fs.mkdtempSync(path.join(TEST_RUN_TMP_ROOT, TEST_RUN_TMP_PREFIX));
+  // The pid is embedded so check-tmpdir-leaks.ts can tell a directory that's
+  // still in active use (its vitest process is alive — a concurrent run in
+  // another worktree, say) apart from one actually abandoned by a killed
+  // process; the trailing mkdtemp suffix still guards against same-pid reuse.
+  testRunTmpDir = fs.mkdtempSync(
+    path.join(TEST_RUN_TMP_ROOT, `${TEST_RUN_TMP_PREFIX}${process.pid}-`),
+  );
   process.env.TMPDIR = testRunTmpDir;
 }
 
