@@ -2086,11 +2086,6 @@ extension RunnerTests {
             synthesizedProfile: .fastSwipe
           )
         )
-      case .continuousPan:
-        let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
-          continuousPlannedGesture(app: activeApp, plan: plan)
-        }
-        return plannedGestureResponse(plan: plan, timing: timing, outcome: outcome)
       case .sampled:
         let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
           sampledPlannedGesture(app: activeApp, plan: plan)

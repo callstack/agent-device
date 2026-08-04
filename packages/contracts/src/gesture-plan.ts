@@ -64,7 +64,7 @@ export function buildGesturePlan(
   const profile = gesturePlatformProfile(platform);
   switch (input.intent) {
     case 'fling':
-      return buildFlingPlan(input, frame, profile);
+      return buildFlingPlan(input, frame);
     case 'pan':
       return buildPanPlan(input, frame, profile);
     case 'pinch':
@@ -132,7 +132,6 @@ export function singlePointerPlanEndpoints(plan: SinglePointerGesturePlan): {
 function buildFlingPlan(
   input: Extract<GestureSemanticInput, { intent: 'fling' }>,
   viewport: Rect,
-  profile: GesturePlatformProfile,
 ): SinglePointerGesturePlan {
   if ('preset' in input) {
     const { from, to } = presetGestureEndpoints(input.preset, viewport);
@@ -143,7 +142,6 @@ function buildFlingPlan(
       GESTURE_FLING_DURATION_MS,
       viewport,
       'endpoint-hold',
-      profile,
     );
   }
   if ('from' in input) {
@@ -154,7 +152,6 @@ function buildFlingPlan(
       GESTURE_FLING_DURATION_MS,
       viewport,
       'endpoint-hold',
-      profile,
     );
   }
   const start = finitePoint(input.origin, 'gesture fling origin');
@@ -169,7 +166,6 @@ function buildFlingPlan(
     GESTURE_FLING_DURATION_MS,
     viewport,
     'endpoint-hold',
-    profile,
   );
 }
 
@@ -193,7 +189,6 @@ function buildPanPlan(
       durationMs,
       viewport,
       input.executionProfile ?? 'timed-pan',
-      profile,
     );
   }
   if (input.pointerCount !== 2) {
@@ -220,14 +215,13 @@ function buildSinglePointerPlan(
   durationMs: number,
   viewport: Rect,
   executionProfile: GestureExecutionProfile,
-  profile: GesturePlatformProfile,
 ): SinglePointerGesturePlan {
   const start = finitePoint(from, `gesture ${intent} start`);
   const end = finitePoint(to, `gesture ${intent} end`);
-  const samples = sampleOffsets(durationMs, profile).map((offsetMs) => ({
-    offsetMs,
-    point: interpolatePoint(start, end, offsetMs / durationMs),
-  }));
+  const samples = [
+    { offsetMs: 0, point: start },
+    { offsetMs: durationMs, point: end },
+  ];
   assertSamplesInViewport(samples, viewport, { intent, pointerId: 0 });
   return {
     topology: 'single',

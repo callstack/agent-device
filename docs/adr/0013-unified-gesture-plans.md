@@ -84,14 +84,13 @@ Platform adapters consume the canonical plan:
   around every local gesture).
 - iOS lowers one-contact endpoint-hold plans to the established fast-swipe synthesis profile. That
   profile reaches the endpoint in 100 ms, then holds there for the planned duration before lifting,
-  matching Maestro's XCTest driver. Two-contact plans convert every point to native orientation
-  and feed the exact planned arrays to the private XCTest event bridge. One-contact timed pans
-  preserve the planned endpoints and duration but use the runner's native continuous-drag profile:
-  on current iOS simulators, the dense per-sample bridge can report success without delivering pan
-  updates. Android and WebDriver continue to execute the plan samples across the authored duration,
-  matching their native Maestro drivers. macOS lowers a one-contact plan to its drag executor and
-  tvOS lowers it to remote direction. Core admission and the Apple adapter both consume the same
-  shared multi-touch support policy; multi-touch remains capability-gated to iOS simulators.
+  matching Maestro's XCTest driver. One-contact plans are linear and therefore carry only their
+  start and end samples, with the authored duration between them. Two-contact plans convert every
+  planned point to native orientation and feed the exact arrays to the private XCTest event bridge.
+  Android and WebDriver execute the same plan samples across the authored duration, matching their
+  native Maestro drivers. macOS lowers a one-contact plan to its drag executor and tvOS lowers it to
+  remote direction. Core admission and the Apple adapter both consume the same shared multi-touch
+  support policy; multi-touch remains capability-gated to iOS simulators.
 - WebDriver lowers a supported plan to synchronized W3C pointer action sources. Multi-touch remains
   capability-gated until a provider proves it.
 

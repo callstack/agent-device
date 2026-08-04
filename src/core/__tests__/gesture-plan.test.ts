@@ -29,6 +29,10 @@ describe('single-pointer plans', () => {
     assert.equal(plan.durationMs, 500);
     assert.deepEqual(plan.pointers[0].samples[0]?.point, { x: 100, y: 200 });
     assert.deepEqual(plan.pointers[0].samples.at(-1)?.point, { x: 60, y: 225 });
+    assert.deepEqual(
+      plan.pointers[0].samples.map(({ offsetMs }) => offsetMs),
+      [0, 500],
+    );
   });
 
   test('fling has one fixed internal schedule and no public duration', () => {
