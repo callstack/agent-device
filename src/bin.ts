@@ -33,9 +33,12 @@ function runVersionFastPath(argv: string[]): boolean {
 function runNoCommandFastPath(argv: string[]): boolean {
   if (argv.length !== 0) return false;
   import('./cli/parser/cli-help.ts')
-    .then(({ buildUsageText }) => {
+    .then(async ({ buildUsageText }) => {
       process.stdout.write(`${buildUsageText()}\n`);
-      process.exit(1);
+      // #1596: exitAfterFlush (not a bare process.exit) so the full usage
+      // text reaches a piped caller before the process terminates.
+      const { exitAfterFlush } = await import('./utils/process-exit.ts');
+      await exitAfterFlush(1);
     })
     .catch(handleStartupError);
   return true;
@@ -118,5 +121,8 @@ function runCli(argv: string[]): void {
 
 function handleStartupError(error: unknown): void {
   process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-  process.exit(1);
+  // #1596: exitAfterFlush so the message above isn't dropped on a piped stderr.
+  import('./utils/process-exit.ts')
+    .then(({ exitAfterFlush }) => exitAfterFlush(1))
+    .catch(() => process.exit(1));
 }

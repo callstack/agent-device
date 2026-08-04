@@ -7,6 +7,7 @@ import {
   throwDaemonError,
 } from '@agent-device/kernel/errors';
 import { printHumanError, printJson } from './utils/output.ts';
+import { exitAfterFlush } from './utils/process-exit.ts';
 import { readVersion } from './utils/version.ts';
 import { pathToFileURL } from 'node:url';
 import { sendToDaemon } from './daemon/client/daemon-client.ts';
@@ -112,7 +113,7 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
         debugEnabled,
       });
       const debugOutputEnabled = isParsedDebugRequested(command, parsed.providedFlags);
-      const ctx = resolveRunContextOrExit(parsed, {
+      const ctx = await resolveRunContextOrExit(parsed, {
         command,
         positionals,
         requestId,
@@ -122,11 +123,11 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
       let logTailStopper: (() => void) | null = null;
       try {
         if (command === 'react-devtools') {
-          process.exit(await runReactDevtoolsCli(ctx, deps));
+          await exitAfterFlush(await runReactDevtoolsCli(ctx, deps));
           return;
         }
         if (command === 'web') {
-          process.exit(
+          await exitAfterFlush(
             await runWebCommand(positionals, {
               flags: ctx.effectiveFlags,
               stateDir: ctx.daemonPaths.baseDir,
@@ -143,7 +144,7 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
         await resolveRemoteContext(ctx, deps);
         registerDaemonAuthDiagnosticValue(ctx.effectiveFlags);
         if (command === 'cdp') {
-          process.exit(
+          await exitAfterFlush(
             await runAgentCdpCommand(positionals, {
               flags: ctx.effectiveFlags,
               runtime: ctx.resolvedRuntime,
@@ -165,7 +166,7 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
         });
         await dispatchCliCommand(ctx, client, replayTestReporterRuntime);
       } catch (err) {
-        handleRunCliFailure(err, ctx, logTailStopper);
+        await handleRunCliFailure(err, ctx, logTailStopper);
       } finally {
         if (logTailStopper) logTailStopper();
       }
@@ -207,7 +208,7 @@ async function parseCliInputOrExit(
     } else {
       printHumanError(normalized, { showDetails: options.debugEnabled });
     }
-    process.exit(1);
+    return exitAfterFlush(1);
   }
 
   for (const warning of parsed.warnings) {
@@ -216,7 +217,7 @@ async function parseCliInputOrExit(
 
   if (parsed.flags.version) {
     process.stdout.write(`${options.version}\n`);
-    process.exit(0);
+    return exitAfterFlush(0);
   }
 
   const isHelpAlias = parsed.command === 'help';
@@ -224,26 +225,26 @@ async function parseCliInputOrExit(
   if (isHelpAlias || isHelpFlag) {
     if (isHelpAlias && parsed.positionals.length > 1) {
       printHumanError(new AppError('INVALID_ARGS', 'help accepts at most one command.'));
-      process.exit(1);
+      return exitAfterFlush(1);
     }
     const helpTarget = isHelpAlias ? parsed.positionals[0] : parsed.command;
     if (!helpTarget) {
       process.stdout.write(`${await usage()}\n`);
-      process.exit(0);
+      return exitAfterFlush(0);
     }
     const commandHelp = await usageForCommand(helpTarget);
     if (commandHelp) {
       process.stdout.write(commandHelp);
-      process.exit(0);
+      return exitAfterFlush(0);
     }
     printHumanError(new AppError('INVALID_ARGS', formatUnknownHelpTargetMessage(helpTarget)));
     process.stdout.write(`${await usage()}\n`);
-    process.exit(1);
+    return exitAfterFlush(1);
   }
 
   if (!parsed.command) {
     process.stdout.write(`${await usage()}\n`);
-    process.exit(1);
+    return exitAfterFlush(1);
   }
 
   return { parsed, command: parsed.command, positionals: parsed.positionals };
@@ -270,10 +271,10 @@ type CliRunContext = {
   parsedBatchSteps: BatchStep[] | undefined;
 };
 
-function resolveRunContextOrExit(
+async function resolveRunContextOrExit(
   parsed: ReturnType<typeof resolveCliOptions>,
   base: { command: string; positionals: string[]; requestId: string; debugOutputEnabled: boolean },
-): CliRunContext {
+): Promise<CliRunContext> {
   const explicitFlagKeys = new Set(parsed.providedFlags.map((entry) => entry.key));
   try {
     const binding = resolveBindingSettings({
@@ -325,7 +326,7 @@ function resolveRunContextOrExit(
     } else {
       printHumanError(normalized, { showDetails: base.debugOutputEnabled });
     }
-    process.exit(1);
+    return exitAfterFlush(1);
   }
 }
 
@@ -536,11 +537,11 @@ async function dispatchCliCommand(
   throw new AppError('INVALID_ARGS', formatUnhandledCommandMessage(command));
 }
 
-function handleRunCliFailure(
+async function handleRunCliFailure(
   err: unknown,
   ctx: CliRunContext,
   logTailStopper: (() => void) | null,
-): void {
+): Promise<void> {
   const appErr = asAppError(err);
   const normalized = normalizeError(appErr, {
     diagnosticId: getDiagnosticsMeta().diagnosticId,
@@ -564,15 +565,24 @@ function handleRunCliFailure(
     }
   }
   if (logTailStopper) logTailStopper();
-  process.exit(1);
+  // #1596: a bare `process.exit()` right after these writes can drop them —
+  // Node flushes stdout/stderr synchronously only to a file or TTY, and this
+  // CLI is commonly piped by whatever is driving it. `exitAfterFlush` waits
+  // for the writes above to actually reach the pipe first.
+  await exitAfterFlush(1);
 }
+
+const DAEMON_LOG_TAIL_MAX_BYTES = 64_000;
 
 function printDaemonLogTailOnError(logPath: string): void {
   try {
     if (fs.existsSync(logPath)) {
       const content = fs.readFileSync(logPath, 'utf8');
       const lines = content.split('\n');
-      const tail = lines.slice(Math.max(0, lines.length - 200)).join('\n');
+      let tail = lines.slice(Math.max(0, lines.length - 200)).join('\n');
+      if (tail.length > DAEMON_LOG_TAIL_MAX_BYTES) {
+        tail = tail.slice(tail.length - DAEMON_LOG_TAIL_MAX_BYTES);
+      }
       if (tail.trim().length > 0) {
         process.stderr.write(`\n[daemon log]\n${tail}\n`);
       }
@@ -801,10 +811,10 @@ function guessSessionFromArgv(argv: string[]): string | null {
 
 const isDirectRun = pathToFileURL(process.argv[1] ?? '').href === import.meta.url;
 if (isDirectRun) {
-  runCli(process.argv.slice(2)).catch((err) => {
+  runCli(process.argv.slice(2)).catch(async (err) => {
     const appErr = asAppError(err);
     printHumanError(normalizeError(appErr), { showDetails: true });
-    process.exit(1);
+    await exitAfterFlush(1);
   });
 }
 
