@@ -8,6 +8,7 @@ import { runCmdSync } from '../../src/utils/exec.ts';
 import { stopProcessForTakeover } from '../../src/daemon/daemon-process.ts';
 import { isProcessAlive } from '../../src/utils/host-process.ts';
 import { runCliJson } from './test-helpers.ts';
+import { PAYLOAD_MARKER } from './support/exit-payload.ts';
 
 // #1596: a CLI command that finds its recorded daemon unreachable replaces it
 // (`Replacing daemon (pid N, vX) in <state-dir>: unreachable`) and retries
@@ -17,7 +18,6 @@ import { runCliJson } from './test-helpers.ts';
 // replace-mid-command always ends in a normal, fully-delivered structured
 // error rather than a truncated or hung process.
 
-const PAYLOAD_MARKER = 'EXIT_PAYLOAD_END_MARKER';
 const SUPPORT_DIR = path.join(import.meta.dirname, 'support');
 const FIXTURE_TIMEOUT_MS = 10_000;
 
@@ -67,7 +67,11 @@ test('daemon replace mid-command returns a structured, parseable error and exits
     // just "fresh daemon, good luck" — this is the daemon.json truthfully
     // having no sessions, which is expected; only the error's shape/delivery
     // was ever in question.
-    assert.match(result.json.error?.hint ?? '', /open/i, formatUnexpected('an `open` hint', result));
+    assert.match(
+      result.json.error?.hint ?? '',
+      /open/i,
+      formatUnexpected('an `open` hint', result),
+    );
 
     info = readDaemonInfo(stateDir);
   } finally {
@@ -101,7 +105,10 @@ test('a bare process.exit() after a large write truncates it on a piped stream',
 test('exitAfterFlush (the #1596 fix) delivers the full write before the process exits', () => {
   const { exitCode, stderr } = runFixture('exit-after-flush.ts');
   assert.equal(exitCode, 1);
-  assert.ok(stderr.includes(PAYLOAD_MARKER), 'expected the full payload, including its trailing marker');
+  assert.ok(
+    stderr.includes(PAYLOAD_MARKER),
+    'expected the full payload, including its trailing marker',
+  );
 });
 
 function runFixture(name: string): { exitCode: number; stderr: string } {
@@ -126,7 +133,10 @@ function readDaemonInfo(stateDir: string): DaemonInfo {
   return JSON.parse(fs.readFileSync(path.join(stateDir, 'daemon.json'), 'utf8')) as DaemonInfo;
 }
 
-function formatUnexpected(expected: string, result: { status: number; stdout: string; stderr: string }): string {
+function formatUnexpected(
+  expected: string,
+  result: { status: number; stdout: string; stderr: string },
+): string {
   return [
     `expected ${expected}`,
     `status: ${result.status}`,
