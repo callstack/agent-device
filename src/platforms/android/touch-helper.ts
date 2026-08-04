@@ -1,4 +1,7 @@
-import type { PointerTrajectory } from '@agent-device/contracts/interaction';
+import {
+  GESTURE_SAMPLE_INTERVAL_MS,
+  type PointerTrajectory,
+} from '@agent-device/contracts/interaction';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
@@ -51,6 +54,32 @@ type PreparedAndroidTouchHelper = {
   install: AndroidSnapshotHelperInstallResult;
   deviceKey: string;
 };
+
+export function lowerAndroidTouchPlan(plan: AndroidTouchPlan): AndroidTouchPlan {
+  if (plan.topology !== 'single' || plan.intent === 'longPress') return plan;
+  const pointer = plan.pointers[0];
+  const start = pointer.samples[0];
+  const end = pointer.samples.at(-1);
+  if (!start || !end || pointer.samples.length !== 2) return plan;
+
+  const frameCount = Math.max(3, Math.round(plan.durationMs / GESTURE_SAMPLE_INTERVAL_MS));
+  const samples = Array.from({ length: frameCount + 1 }, (_, index) => {
+    const offsetMs = Math.round((plan.durationMs * index) / frameCount);
+    const progress = offsetMs / plan.durationMs;
+    return {
+      offsetMs,
+      point: {
+        x: start.point.x + (end.point.x - start.point.x) * progress,
+        y: start.point.y + (end.point.y - start.point.y) * progress,
+      },
+    };
+  });
+
+  return {
+    ...plan,
+    pointers: [{ ...pointer, samples }],
+  };
+}
 
 export async function executeAndroidTouchHelperPlan(
   device: DeviceInfo,

@@ -70,27 +70,26 @@ Platform adapters consume the canonical plan:
 
 - Android's `executeAndroidTouchPlan` adapter seam sends planned touch, including gesture plans plus
   the physical movement for scroll and long-press, to provider-native touch injection when
-  available, otherwise to the bundled instrumentation helper. The helper injects the exact planned
-  pointer samples. A stationary long-press needs no viewport on the helper path; the executor adds
-  the paired provider-owned viewport only for provider-native touch. Android touch execution never
-  falls back to `adb input swipe`. Public scroll durations below one 16 ms planner frame normalize
-  to that physical minimum and report the executed duration. Scroll evidence reports absolute
-  injected coordinates against zero-origin extents that include the viewport offset. Because
-  Android permits only one instrumentation owner of `UiAutomation`, snapshot capture, gesture
-  viewport resolution, and planned-touch injection share one bundled automation helper: a live
-  persistent helper session executes touch commands directly, and without one the same helper runs
-  one-shot. Nothing stops the snapshot session around gestures anymore (amended 2026-07,
-  issue #1275; previously a separate one-shot multi-touch helper forced a session stop/restart
-  around every local gesture).
+  available, otherwise to the bundled instrumentation helper. One-contact endpoint plans lower to
+  16 ms linear transport samples; two-contact plans retain their exact planned samples. A
+  stationary long-press needs no viewport on the helper path; the executor adds the paired
+  provider-owned viewport only for provider-native touch. Android touch execution never falls back
+  to `adb input swipe`. Public scroll durations below one 16 ms planner frame normalize to that
+  physical minimum and report the executed duration. Scroll evidence reports absolute injected
+  coordinates against zero-origin extents that include the viewport offset. Because Android permits
+  only one instrumentation owner of `UiAutomation`, snapshot capture, gesture viewport resolution,
+  and planned-touch injection share one bundled automation helper: a live persistent helper session
+  executes touch commands directly, and without one the same helper runs one-shot. Nothing stops
+  the snapshot session around gestures anymore (amended 2026-07, issue #1275; previously a
+  separate one-shot multi-touch helper forced a session stop/restart around every local gesture).
 - iOS lowers one-contact endpoint-hold plans to the established fast-swipe synthesis profile. That
   profile reaches the endpoint in 100 ms, then holds there for the planned duration before lifting,
   matching Maestro's XCTest driver. One-contact plans are linear and therefore carry only their
   start and end samples, with the authored duration between them. Two-contact plans convert every
   planned point to native orientation and feed the exact arrays to the private XCTest event bridge.
-  Android and WebDriver execute the same plan samples across the authored duration, matching their
-  native Maestro drivers. macOS lowers a one-contact plan to its drag executor and tvOS lowers it to
-  remote direction. Core admission and the Apple adapter both consume the same shared multi-touch
-  support policy; multi-touch remains capability-gated to iOS simulators.
+  macOS lowers a one-contact plan to its drag executor and tvOS lowers it to remote direction. Core
+  admission and the Apple adapter both consume the same shared multi-touch support policy;
+  multi-touch remains capability-gated to iOS simulators.
 - WebDriver lowers a supported plan to synchronized W3C pointer action sources. Multi-touch remains
   capability-gated until a provider proves it.
 

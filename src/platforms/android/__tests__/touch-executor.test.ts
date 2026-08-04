@@ -31,6 +31,40 @@ test('provider-native touch receives the plan as its only source of truth', asyn
   assert.deepEqual(result, { backend: 'provider-native-touch', injected: true });
 });
 
+test('provider-native touch receives linear one-pointer samples at the Android transport cadence', async () => {
+  const plan = buildGesturePlan(
+    {
+      intent: 'pan',
+      origin: { x: 200, y: 300 },
+      delta: { x: 100, y: -80 },
+      durationMs: 64,
+    },
+    viewport,
+  );
+  const calls: unknown[] = [];
+  await withAndroidAdbProvider(
+    {
+      exec: async () => {
+        throw new Error('adb must not run');
+      },
+      gestureViewport: async () => viewport,
+      touch: async (request) => {
+        calls.push(request);
+        return {};
+      },
+    },
+    { serial: ANDROID_EMULATOR.id },
+    async () => await executeAndroidTouchPlan(ANDROID_EMULATOR, plan),
+  );
+
+  const loweredPlan = calls[0] as typeof plan;
+  assert.deepEqual(
+    loweredPlan.pointers[0].samples.map(({ offsetMs }) => offsetMs),
+    [0, 16, 32, 48, 64],
+  );
+  assert.deepEqual(loweredPlan.pointers[0].samples[2]?.point, { x: 250, y: 260 });
+});
+
 test('provider touch viewport bypasses local helper transport and is validated', async () => {
   let calls = 0;
   await withAndroidAdbProvider(
