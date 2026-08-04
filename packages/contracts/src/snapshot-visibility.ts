@@ -1,10 +1,6 @@
 import type { RawSnapshotNode, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { centerOfRect } from '@agent-device/kernel/snapshot';
-import {
-  containsPoint,
-  isRectVisibleInViewport,
-  pickLargestRect,
-} from '@agent-device/kernel/rect';
+import { containsPoint, isRectVisibleInViewport, pickLargestRect } from '@agent-device/kernel/rect';
 import { isScrollableNodeLike } from './snapshot-scroll.ts';
 import { buildSnapshotNodeMap } from './snapshot-tree.ts';
 
