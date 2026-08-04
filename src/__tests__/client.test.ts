@@ -210,6 +210,10 @@ test('apps.open resolves session device identifiers from open response', async (
         ok: true,
         data: {
           session: 'qa',
+          sessionStateDir: '/tmp/agent-device/sessions/qa',
+          runnerLogPath: '/tmp/agent-device/sessions/qa/runner.log',
+          requestLogPath: '/tmp/agent-device/sessions/qa/requests/open.ndjson',
+          eventLogPath: '/tmp/agent-device/sessions/qa/events.ndjson',
           appName: 'Settings',
           appBundleId: 'com.apple.Preferences',
           platform: 'ios',
@@ -247,6 +251,10 @@ test('apps.open resolves session device identifiers from open response', async (
   assert.equal(result.identifiers.deviceId, 'SIM-001');
   assert.equal(result.identifiers.udid, 'SIM-001');
   assert.equal(result.identifiers.appId, 'com.apple.Preferences');
+  assert.equal(result.sessionStateDir, '/tmp/agent-device/sessions/qa');
+  assert.equal(result.runnerLogPath, '/tmp/agent-device/sessions/qa/runner.log');
+  assert.equal(result.requestLogPath, '/tmp/agent-device/sessions/qa/requests/open.ndjson');
+  assert.equal(result.eventLogPath, '/tmp/agent-device/sessions/qa/events.ndjson');
   assert.equal(result.device?.name, 'iPhone 16');
   assert.equal(result.device?.ios?.simulatorSetPath, '/tmp/sim-set');
   assert.deepEqual(result.warnings, [

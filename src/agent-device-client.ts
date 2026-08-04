@@ -269,6 +269,8 @@ export function createAgentDeviceClient(
           session,
           ...(warnings.length > 0 ? { warnings } : {}),
           sessionStateDir: readOptionalString(data, 'sessionStateDir'),
+          runnerLogPath: readOptionalString(data, 'runnerLogPath'),
+          requestLogPath: readOptionalString(data, 'requestLogPath'),
           eventLogPath: readOptionalString(data, 'eventLogPath'),
           appName: readOptionalString(data, 'appName'),
           appBundleId,
