@@ -7,10 +7,7 @@ import path from 'node:path';
  * Creates a fresh scratch directory for one test. Cleanup is automatic: the
  * unit suite redirects TMPDIR to a per-run directory (scripts/vitest-tmpdir-global-setup.ts)
  * that gets removed in one recursive rm after every worker finishes, so
- * individual tests never need their own afterEach/afterAll for this. Prefer
- * this over calling fs.mkdtemp(path.join(os.tmpdir(), ...)) directly — a
- * lint guard (check:test-tmpdir-helper) caps how many raw call sites remain
- * outside this file.
+ * individual tests never need their own afterEach/afterAll for this.
  */
 export async function mkdtempForTest(prefix: string): Promise<string> {
   return fsPromises.mkdtemp(path.join(os.tmpdir(), prefix));
