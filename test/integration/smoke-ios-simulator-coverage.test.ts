@@ -16,6 +16,7 @@ import {
   unsupportedHintForDevice,
 } from '../../src/core/capabilities.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
+import { isValidSelectorExpression } from '@agent-device/selectors';
 import { IOS_SIMULATOR_BEHAVIOR_COVERAGE } from './ios-simulator-e2e/behavior-coverage.ts';
 import {
   IOS_SIMULATOR_E2E_COVERAGE,
@@ -205,6 +206,31 @@ test('fixture replay gestures fit the smallest supported iPhone viewport', () =>
     'examples/test-app/replays/gesture-lab.ad',
   ];
   for (const replayPath of replayPaths) assertReplayFitsViewports(replayPath, compactViewports);
+});
+
+test('drag replay fixtures use parseable source and destination selectors', () => {
+  const replayPaths = [
+    'examples/test-app/replays/drag.ad',
+    'examples/test-app/replays/drag-android.ad',
+  ];
+
+  for (const replayPath of replayPaths) {
+    const drag = parseReplayScriptDetailed(fs.readFileSync(replayPath, 'utf8')).actions.find(
+      (action) => action.command === 'gesture' && action.positionals?.[0] === 'drag',
+    );
+    assert.ok(drag, `${replayPath} must contain a drag gesture`);
+
+    const source = drag.positionals?.[1];
+    const destination = drag.positionals?.[2];
+    assert.ok(
+      source && isValidSelectorExpression(source),
+      `${replayPath} source must be a selector`,
+    );
+    assert.ok(
+      destination && isValidSelectorExpression(destination),
+      `${replayPath} destination must be a selector`,
+    );
+  }
 });
 
 test('fixture navigation uses edge-aware traversal without losing direct swipe evidence', () => {

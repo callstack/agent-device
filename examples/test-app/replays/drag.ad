@@ -8,7 +8,7 @@ wait "Gesture lab" 30000
 wait "gesture canary ready" 5000
 wait "drag completed no" 5000
 
-gesture drag 'id="drag-source"' 'id="drag-destination"' 600 500 0
+gesture drag id="drag-source" id="drag-destination" 600 500 0
 wait "drag completed yes" 5000
 
 close
