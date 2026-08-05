@@ -18,6 +18,7 @@ import {
 } from '../../core/interaction-targeting.ts';
 import { isSnapshotNodeInteractionBlocked } from '../../snapshot/snapshot-occlusion.ts';
 import { formatSnapshotLine } from '../../snapshot/snapshot-lines.ts';
+import type { ElementMatchCandidateDetails } from '../../utils/error-candidates.ts';
 import { readCommandMessage, successText } from '../../utils/success-text.ts';
 import { errorResponse, noActiveSessionError } from './response.ts';
 import { withSystemSurfaceDisclosure } from './system-surface-disclosure.ts';
@@ -546,7 +547,7 @@ function publicFindFlags(flags: DaemonRequest['flags']): Record<string, unknown>
 // candidate reads identically to its row in `snapshot -i` output: ref, role,
 // label/identifier. Capped at AMBIGUOUS_MATCH_CANDIDATE_LIMIT to bound the
 // error payload — `matches` (the true total) is what a "+N more" marker is
-// computed from at render time (src/utils/output.ts, src/mcp/tool-error.ts).
+// computed from at render time (src/utils/error-candidates.ts).
 // Module-local: no consumer outside this file needs the raw cap, only the
 // already-capped `candidates` array on the response.
 const AMBIGUOUS_MATCH_CANDIDATE_LIMIT = 5;
@@ -559,18 +560,16 @@ export function buildAmbiguousMatchError(
   locator: FindLocator,
   query: string,
 ): DaemonResponse {
-  const candidates = matches
-    .slice(0, AMBIGUOUS_MATCH_CANDIDATE_LIMIT)
-    .map((candidate) => formatSnapshotLine(candidate, 0, false));
+  const candidateDetails: ElementMatchCandidateDetails = {
+    matches: matches.length,
+    candidates: matches
+      .slice(0, AMBIGUOUS_MATCH_CANDIDATE_LIMIT)
+      .map((candidate) => formatSnapshotLine(candidate, 0, false)),
+  };
   return errorResponse(
     'AMBIGUOUS_MATCH',
     `find matched ${matches.length} elements for ${locator} "${query}". Use a more specific locator or selector.`,
-    {
-      locator,
-      query,
-      matches: matches.length,
-      candidates,
-    },
+    { locator, query, ...candidateDetails },
   );
 }
 

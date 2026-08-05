@@ -105,28 +105,40 @@ test('handleFillCommand forwards validated coordinates and delay', async () => {
 
   await handleFillCommand(interactor, ['120', '240', 'semantic'], { delayMs: 25 });
   await handleFillCommand(interactor, ['120', '240', 'coordinate'], undefined);
+  await handleFillCommand(interactor, ['120', '240', 'replay'], {
+    allowNonHittableCoordinateFallback: true,
+  });
 
+  // One call shape regardless of the Maestro fallback permission: the option is
+  // always passed and always a boolean, never "absent" for the default.
   assert.deepEqual(calls, [
-    [120, 240, 'semantic', 25],
-    [120, 240, 'coordinate', 0],
+    [120, 240, 'semantic', 25, { allowNonHittableCoordinateFallback: false }],
+    [120, 240, 'coordinate', 0, { allowNonHittableCoordinateFallback: false }],
+    [120, 240, 'replay', 0, { allowNonHittableCoordinateFallback: true }],
   ]);
 });
 
+// The backend result is a typed TypeTextBackendResult, not a bag: the route is
+// the only passenger, and the runner payload's other keys are dropped at the
+// Apple boundary (readTypeTextBackendResult, src/platforms/apple/interactions.ts,
+// covered in src/platforms/apple/core/__tests__/interactions.test.ts).
 test('handleTypeCommand preserves structured backend route evidence', async () => {
-  const interactor = {
+  const interactor: Interactor = {
     ...makeUnusedInteractor(),
-    type: async () => ({
-      textEntryRoute: 'synthesized-first-responder',
-      referenceWidth: 0,
-      referenceHeight: 0,
-    }),
+    type: async () => ({ textEntryRoute: 'synthesized-first-responder' }),
   };
 
   const result = await handleTypeCommand(interactor, ['hello'], { delayMs: 25 });
 
   assert.equal(result.textEntryRoute, 'synthesized-first-responder');
-  assert.equal(result.referenceWidth, undefined);
-  assert.equal(result.referenceHeight, undefined);
+});
+
+test('handleTypeCommand omits textEntryRoute when the backend reports none', async () => {
+  const interactor: Interactor = { ...makeUnusedInteractor(), type: async () => {} };
+
+  const result = await handleTypeCommand(interactor, ['hello'], undefined);
+
+  assert.equal('textEntryRoute' in result, false);
 });
 
 test('handlePressCommand fuses an iOS hold series into longPress sequence steps', async () => {

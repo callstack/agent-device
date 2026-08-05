@@ -452,7 +452,7 @@ async function dispatchDirectIosSelectorInteraction(params: {
       flags: handlerParams.req.flags,
       data,
     });
-    const fallbackDetails = maestroFallbackDetails(
+    const maestroFallback = maestroFallbackDisclosure(
       selector.allowNonHittableCoordinateFallback === true,
       data,
     );
@@ -463,12 +463,12 @@ async function dispatchDirectIosSelectorInteraction(params: {
         data,
         publicData,
         point,
-        maestroFallbackUsed: fallbackDetails.maestroNonHittableCoordinateFallbackUsed === true,
+        maestroCoordinateFallbackDispatched: maestroFallback.used,
       },
       referenceFrame: readReferenceFrameFromDirectSelectorTapResult(data),
       extra: {
         ...extra,
-        ...fallbackDetails,
+        ...maestroFallback.extra,
       },
     });
     return finalizeTouchInteraction({
@@ -532,16 +532,36 @@ function readInteractionResponseDataTransformCommand(
   return dispatchCommand;
 }
 
-function maestroFallbackDetails(
+/** The response fields disclosing the Maestro coordinate fallback's policy and outcome. */
+type MaestroFallbackResponseFields = {
+  maestroNonHittableCoordinateFallbackAllowed?: true;
+  maestroNonHittableCoordinateFallbackUsed?: boolean;
+  maestroFallbackReason?: 'non-hittable-coordinate';
+};
+
+type MaestroFallbackDisclosure = {
+  /**
+   * The runner EXECUTED the coordinate fallback. Separate from the response
+   * fields because it also selects the dispatch path the response builder
+   * discloses a resolution for (interaction-touch-response.ts).
+   */
+  used: boolean;
+  extra: MaestroFallbackResponseFields;
+};
+
+function maestroFallbackDisclosure(
   allowed: boolean,
   data: Record<string, unknown> | undefined,
-): Record<string, unknown> {
-  if (!allowed) return {};
+): MaestroFallbackDisclosure {
+  if (!allowed) return { used: false, extra: {} };
   const used = data?.maestroNonHittableCoordinateFallbackUsed === true;
   return {
-    maestroNonHittableCoordinateFallbackAllowed: true,
-    maestroNonHittableCoordinateFallbackUsed: used,
-    ...(used ? { maestroFallbackReason: 'non-hittable-coordinate' } : {}),
+    used,
+    extra: {
+      maestroNonHittableCoordinateFallbackAllowed: true,
+      maestroNonHittableCoordinateFallbackUsed: used,
+      ...(used ? { maestroFallbackReason: 'non-hittable-coordinate' as const } : {}),
+    },
   };
 }
 
@@ -677,7 +697,7 @@ function buildFillResponsePayloads(params: {
   staleRefsWarning: string | undefined;
 }): InteractionResponsePayloads {
   const { session, result } = params;
-  const fallbackDetails = maestroFallbackDetails(
+  const maestroFallback = maestroFallbackDisclosure(
     params.flags?.maestro?.allowNonHittableCoordinateFallback === true,
     result.backendResult,
   );
@@ -695,10 +715,10 @@ function buildFillResponsePayloads(params: {
         flags: params.flags,
         data: result.backendResult,
       }),
-      maestroFallbackUsed: fallbackDetails.maestroNonHittableCoordinateFallbackUsed === true,
+      maestroCoordinateFallbackDispatched: maestroFallback.used,
     },
     referenceFrame,
-    extra: { text: params.text, ...fallbackDetails },
+    extra: { text: params.text, ...maestroFallback.extra },
     staleRefsWarning: params.staleRefsWarning,
     settleRefsGeneration: settleRefsGenerationIssue(session, result),
   });

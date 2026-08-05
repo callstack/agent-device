@@ -88,8 +88,8 @@ Hint: Ref @e12 was minted from snapshot s5 but the session's ref frame is now s7
 // — the parity test drives that exact producer. The by-design rejection
 // instead of silent disambiguation: #1597 made the candidate refs (ref, role,
 // label/identifier — the same compact rendering as snapshot -i) print
-// unconditionally via formatAmbiguousMatchCandidateLines
-// (src/utils/output.ts), capped at AMBIGUOUS_MATCH_CANDIDATE_LIMIT (5) with a
+// unconditionally via formatErrorCandidateLines
+// (src/utils/error-candidates.ts), capped at AMBIGUOUS_MATCH_CANDIDATE_LIMIT (5) with a
 // "+N more" marker. Here all 3 candidates share the identical "Follow" label,
 // so the printed refs still cannot be told apart from this output alone —
 // the agent must re-observe or narrow, not guess which @ref is the right row.

@@ -25,25 +25,29 @@ import { interactionResultExtra } from './interaction-touch-targets.ts';
 
 type InteractionRuntimeResult = PressCommandResult | FillCommandResult | LongPressCommandResult;
 
+type InteractionResponseSourceBase = {
+  publicData?: Record<string, unknown>;
+  /**
+   * The runner EXECUTED its Maestro non-hittable coordinate fallback, never the
+   * mere permission to. Names the dispatch path that ran, not a request flag —
+   * see {@link suppressesResolutionDisclosure}.
+   */
+  maestroCoordinateFallbackDispatched?: boolean;
+};
+
 export type InteractionResponseSource =
-  | {
+  | (InteractionResponseSourceBase & {
       kind: 'runtime';
       result: InteractionRuntimeResult;
-      publicData?: Record<string, unknown>;
-      /** Runtime-resolved Maestro fill used the runner's non-hittable coordinate path. */
-      maestroFallbackUsed?: boolean;
-    }
-  | {
+    })
+  | (InteractionResponseSourceBase & {
       // Direct iOS selector dispatch: no runtime result exists, only the raw
       // runner payload; identity extras are a declared gap on that path.
       kind: 'runner-payload';
       targetKind: InteractionRuntimeResult['kind'];
       data: Record<string, unknown>;
-      publicData?: Record<string, unknown>;
       point: { x: number; y: number };
-      /** The runner actually EXECUTED the non-hittable coordinate fallback (never the mere permission) — that dispatch is the maestro path, whose resolutionDisclosure is inapplicable (ADR 0012). */
-      maestroFallbackUsed?: boolean;
-    };
+    });
 
 // ADR 0012 decision 2: the XCTest fast path has no daemon tree, so it can only
 // disclose that resolution was not observed.
@@ -51,6 +55,33 @@ const DIRECT_IOS_NOT_OBSERVED_RESOLUTION: ResolutionDisclosure = {
   source: 'direct-ios',
   kind: 'not-observed',
 };
+
+/**
+ * ADR 0012: `resolution` discloses how the daemon resolved the target. When the
+ * runner executed its Maestro non-hittable coordinate fallback, the dispatch
+ * that ran reached a coordinate — Maestro owns the matching and nothing about
+ * daemon resolution is being reported — so any disclosure the source would
+ * otherwise carry describes a dispatch that did not happen and is dropped. Cell
+ * membership in `maestro-non-hittable-fallback`
+ * (packages/contracts/src/interaction-guarantees.ts) is usage-based for exactly
+ * this reason: allowed-but-not-taken is still the direct path and keeps its
+ * not-observed disclosure.
+ *
+ * Both source variants route their extras through here, so the rule is stated
+ * and applied once rather than re-encoded per branch.
+ */
+function applyResolutionDisclosurePolicy<TExtra extends { resolution?: unknown }>(
+  source: InteractionResponseSource,
+  extra: TExtra,
+): TExtra | Omit<TExtra, 'resolution'> {
+  if (!suppressesResolutionDisclosure(source)) return extra;
+  const { resolution: _resolution, ...withoutResolutionDisclosure } = extra;
+  return withoutResolutionDisclosure;
+}
+
+function suppressesResolutionDisclosure(source: InteractionResponseSource): boolean {
+  return source.maestroCoordinateFallbackDispatched === true;
+}
 
 export type InteractionResponsePayloads = {
   /** Recorded in session history and used for touch visualization. */
@@ -92,7 +123,9 @@ export function buildInteractionResponseData(params: {
   if (source.kind === 'runner-payload') {
     const commonExtra = {
       targetKind: source.targetKind,
-      ...(source.maestroFallbackUsed ? {} : { resolution: DIRECT_IOS_NOT_OBSERVED_RESOLUTION }),
+      ...applyResolutionDisclosurePolicy(source, {
+        resolution: DIRECT_IOS_NOT_OBSERVED_RESOLUTION,
+      }),
       ...(extra ?? {}),
     };
     const result = buildTouchPayload({
@@ -113,11 +146,9 @@ export function buildInteractionResponseData(params: {
   }
 
   const { result } = source;
-  const resultExtra = interactionResultExtra(result);
-  const { resolution: _resolution, ...resultExtraWithoutResolution } = resultExtra;
   const commonExtra = {
     targetKind: result.kind,
-    ...(source.maestroFallbackUsed ? resultExtraWithoutResolution : resultExtra),
+    ...applyResolutionDisclosurePolicy(source, interactionResultExtra(result)),
     ...settleExtra(result.settle, params.settleRefsGeneration),
     ...(extra ?? {}),
   };

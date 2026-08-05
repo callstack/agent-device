@@ -71,6 +71,33 @@ export type ElementSelectorTapOptions = {
  */
 export const MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE = 'tapped via non-hittable coordinate fallback';
 
+/**
+ * The channel the XCTest runner actually entered text through — the Swift
+ * `TextEntryResult.textEntryRoute` (RunnerTests+TextTyping.swift,
+ * RunnerTests+SynthesizedTextEntry.swift). Closed set, because the runner is
+ * its only producer and the boundary that narrows it
+ * (readTypeTextBackendResult, src/platforms/apple/interactions.ts) drops a
+ * route it cannot name — so a Swift-side addition would silently vanish. The
+ * route-parity test in src/platforms/apple/core/__tests__/interactions.test.ts
+ * reads the Swift sources and fails instead.
+ */
+export const TEXT_ENTRY_ROUTES = [
+  'xctest-element',
+  'synthesized-first-responder',
+  'synthesized-first-responder-replacement',
+  'xctest-application-fallback',
+] as const;
+
+export type TextEntryRoute = (typeof TEXT_ENTRY_ROUTES)[number];
+
+/**
+ * What `Interactor.type` reports back about the entry it performed. Only the
+ * Apple runner populates it; every other platform types blind and returns void.
+ */
+export type TypeTextBackendResult = {
+  textEntryRoute?: TextEntryRoute;
+};
+
 export type SnapshotOptions = BaseSnapshotOptions & {
   appBundleId?: string;
   signal?: AbortSignal;
@@ -103,7 +130,7 @@ export type Interactor = {
   doubleTap(x: number, y: number): Promise<Record<string, unknown> | void>;
   longPress(x: number, y: number, durationMs?: number): Promise<Record<string, unknown> | void>;
   focus(x: number, y: number): Promise<Record<string, unknown> | void>;
-  type(text: string, delayMs?: number): Promise<Record<string, unknown> | void>;
+  type(text: string, delayMs?: number): Promise<TypeTextBackendResult | void>;
   fillElementSelector?(
     selector: ElementSelectorTapOptions,
     text: string,

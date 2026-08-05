@@ -5,7 +5,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { assertRpcError, assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';
 import { scenarioName } from './coverage-manifest.ts';
-import { RUNNER_NON_HITTABLE_TEXT_INPUT_NODES } from './fixtures.ts';
+import { RUNNER_CONTINUE_NODES, RUNNER_NON_HITTABLE_TEXT_INPUT_NODES } from './fixtures.ts';
 import { MAESTRO_FALLBACK_COVERAGE } from './maestro-fallback.coverage.ts';
 import {
   runnerSnapshotEntry,
@@ -79,6 +79,31 @@ test('maestro-non-hittable-fallback resolutionDisclosure: allowed-but-not-taken 
       assert.equal(data.maestroNonHittableCoordinateFallbackAllowed, true);
       assert.equal(data.maestroNonHittableCoordinateFallbackUsed, false);
       assert.deepEqual(data.resolution, { source: 'direct-ios', kind: 'not-observed' });
+    },
+  );
+});
+
+// The fourth cell of the resolution-suppression matrix. The other three are
+// above: runner-payload/taken (no resolution), runner-payload/not-taken
+// (direct-ios not-observed), runtime/taken (no resolution). Suppression is
+// keyed on the dispatch that RAN — a runtime fill the fallback never touched
+// still discloses how the daemon resolved it, whether or not the request
+// carried the Maestro permission.
+test('runtime fill the coordinate fallback did not execute keeps its resolution disclosure', async () => {
+  await withIosContractDaemon(
+    [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerTypeEntry({ x: 200, y: 322 })],
+    async (daemon) => {
+      const data = assertRpcOk(
+        await daemon.callCommand('fill', ['label=Continue', '1234'], MAESTRO_FLAGS),
+      );
+
+      assert.equal(data.maestroNonHittableCoordinateFallbackAllowed, true);
+      assert.equal(data.maestroNonHittableCoordinateFallbackUsed, false);
+      assert.deepEqual(data.resolution, {
+        source: 'runtime',
+        phase: 'pre-action',
+        kind: 'unique',
+      });
     },
   );
 });

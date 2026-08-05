@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
 import {
-  formatAmbiguousMatchCandidateLines,
   formatScreenshotDiffText,
   formatSnapshotDiffText,
   formatSnapshotText,
@@ -1749,8 +1748,8 @@ test('printHumanError lists AMBIGUOUS_MATCH candidates unconditionally, not gate
   // This is the exact old-message shape the bug reported: the human render
   // used to stop at "Error (...): ...\nHint: ...", so an agent reading it had
   // no @ref to act on. Asserting the candidate lines appear proves this red
-  // against that shape (it would fail before formatAmbiguousMatchCandidateLines
-  // was wired into printHumanError).
+  // against that shape (it would fail before formatErrorCandidateLines was
+  // wired into printHumanError).
   const output = captureStderr(() => printHumanError(err));
 
   assert.match(output, /^Error \(AMBIGUOUS_MATCH\): find matched 3 elements/);
@@ -1780,52 +1779,28 @@ test('printHumanError appends a "+N more" marker when candidates were capped', (
   assert.match(output, /@e6 \[button\] "Row"\n {2}\+2 more/);
 });
 
-test('formatAmbiguousMatchCandidateLines returns nothing when details carry no candidates', () => {
-  assert.deepEqual(formatAmbiguousMatchCandidateLines(undefined), []);
-  assert.deepEqual(formatAmbiguousMatchCandidateLines({ matches: 3 }), []);
-  assert.deepEqual(formatAmbiguousMatchCandidateLines({ candidates: [] }), []);
-});
-
-// P2 review on #1597: `details.candidates` is not unique to the find
-// handler's element-match shape. The device-domain resolver
-// (findBootedAppleSimulatorWithApp, src/core/dispatch-resolve.ts) reuses the
-// same key for `{ id, name }` device objects on both AMBIGUOUS_MATCH and
-// APP_NOT_INSTALLED, and never sets `details.matches` — this must render
-// nothing (its behavior before this renderer existed), never
-// "Candidates:\n  [object Object]".
-test('printHumanError renders device-domain candidate objects as nothing, never [object Object]', () => {
-  const deviceCandidates = [
-    { id: 'SIM-001', name: 'iPhone 17 Pro' },
-    { id: 'SIM-002', name: 'iPhone 17' },
-  ];
-
-  const ambiguousDeviceErr = new AppError(
+// The device-domain resolvers (findBootedAppleSimulatorWithApp,
+// src/core/dispatch-resolve.ts) key their candidate list `devices`, so the CLI
+// renders the udids the "pass --udid" hint asks for. Shape rules live with the
+// renderer (src/utils/__tests__/error-candidates.test.ts).
+test('printHumanError lists device candidates for the device-domain resolvers', () => {
+  const err = new AppError(
     'AMBIGUOUS_MATCH',
     'Multiple booted iOS simulators have com.example.app installed',
-    { appTarget: 'com.example.app', candidates: deviceCandidates },
-  );
-  const ambiguousOutput = captureStderr(() => printHumanError(ambiguousDeviceErr));
-  assert.equal(ambiguousOutput.includes('[object Object]'), false);
-  assert.equal(ambiguousOutput.includes('Candidates:'), false);
-
-  const notInstalledErr = new AppError(
-    'APP_NOT_INSTALLED',
-    'No booted iOS simulator has com.example.app installed',
-    { appTarget: 'com.example.app', candidates: deviceCandidates },
-  );
-  const notInstalledOutput = captureStderr(() => printHumanError(notInstalledErr));
-  assert.equal(notInstalledOutput.includes('[object Object]'), false);
-  assert.equal(notInstalledOutput.includes('Candidates:'), false);
-
-  // The formatter itself, not just the CLI render, must reject this shape —
-  // both the missing `matches` and the object-shaped entries disqualify it.
-  assert.deepEqual(
-    formatAmbiguousMatchCandidateLines({
+    {
       appTarget: 'com.example.app',
-      candidates: deviceCandidates,
-    }),
-    [],
+      devices: [
+        { id: 'SIM-001', name: 'iPhone 17 Pro' },
+        { id: 'SIM-002', name: 'iPhone 17' },
+      ],
+      hint: 'Pass --udid to select the intended simulator explicitly.',
+    },
   );
+
+  const output = captureStderr(() => printHumanError(err));
+
+  assert.match(output, /Devices:\n {2}SIM-001 {2}iPhone 17 Pro\n {2}SIM-002 {2}iPhone 17/);
+  assert.equal(output.includes('[object Object]'), false);
 });
 
 test('printHumanError shows an unavailable screen reason and omitted suggestions hint', () => {

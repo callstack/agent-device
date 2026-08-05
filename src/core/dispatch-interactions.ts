@@ -86,7 +86,7 @@ export async function handleTypeCommand(
   const backendResult = await interactor.type(text, delayMs);
   const textEntryRoute = backendResult?.textEntryRoute;
   return {
-    ...(typeof textEntryRoute === 'string' ? { textEntryRoute } : {}),
+    ...(textEntryRoute === undefined ? {} : { textEntryRoute }),
     text,
     delayMs,
     ...successText(formatTextLengthMessage('Typed', text)),
@@ -114,9 +114,9 @@ export async function handleFillCommand(
     throw new AppError('INVALID_ARGS', 'fill requires x y text');
   }
   const delayMs = requireIntInRange(context?.delayMs ?? 0, 'delay-ms', 0, 10_000);
-  const result = context?.allowNonHittableCoordinateFallback
-    ? await interactor.fill(x, y, text, delayMs, { allowNonHittableCoordinateFallback: true })
-    : await interactor.fill(x, y, text, delayMs);
+  const result = await interactor.fill(x, y, text, delayMs, {
+    allowNonHittableCoordinateFallback: context?.allowNonHittableCoordinateFallback === true,
+  });
   return {
     x,
     y,

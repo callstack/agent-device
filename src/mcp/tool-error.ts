@@ -1,6 +1,6 @@
 import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { formatReplayDivergenceReport } from '@agent-device/contracts/divergence';
-import { formatAmbiguousMatchCandidateLines } from '../utils/output.ts';
+import { formatErrorCandidateLines } from '../utils/error-candidates.ts';
 
 /**
  * Shared MCP error normalization + text rendering (executor and router
@@ -16,7 +16,7 @@ export function formatToolErrorText(normalized: NormalizedError): string {
   // #1597: printed unconditionally, same as the CLI text path
   // (src/utils/output.ts printHumanError) — an MCP-connected agent must see
   // the candidate refs directly in the tool result text.
-  lines.push(...formatAmbiguousMatchCandidateLines(normalized.details));
+  lines.push(...formatErrorCandidateLines(normalized.details));
   if (normalized.supportedOn) lines.push(`Supported on: ${normalized.supportedOn}`);
   // ADR 0012: the MCP text path must carry the same repair data as
   // structuredContent — a text-only divergence loses the screen refs and

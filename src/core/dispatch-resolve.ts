@@ -20,6 +20,7 @@ import {
   resolveIosSimulatorDeviceSetPath,
 } from '../utils/device-isolation.ts';
 import { withDiagnosticTimer } from '../utils/diagnostics.ts';
+import type { DeviceCandidateDetails } from '../utils/error-candidates.ts';
 import { listLocalDeviceInventory } from './platform-inventory.ts';
 export type ResolveDeviceFlags = Pick<
   CliFlags,
@@ -124,14 +125,10 @@ async function findBootedAppleSimulatorWithApp(
 
   if (matches.length === 1) return matches[0];
 
-  const candidates = bootedSimulators.map((device) => ({
-    id: device.id,
-    name: device.name,
-  }));
   if (matches.length === 0) {
     throw new AppError('APP_NOT_INSTALLED', `No booted iOS simulator has ${appTarget} installed`, {
       appTarget,
-      candidates,
+      ...deviceCandidateDetails(bootedSimulators),
       hint: 'Install the app on a booted simulator, or pass --udid to select the intended device explicitly.',
     });
   }
@@ -141,10 +138,19 @@ async function findBootedAppleSimulatorWithApp(
     `Multiple booted iOS simulators have ${appTarget} installed`,
     {
       appTarget,
-      candidates: matches.map((device) => ({ id: device.id, name: device.name })),
+      ...deviceCandidateDetails(matches),
       hint: 'Pass --udid to select the intended simulator explicitly.',
     },
   );
+}
+
+/**
+ * The device-domain candidate list. Keyed `devices`, not `candidates`: the find
+ * handler's element matches own that key with an incompatible shape
+ * (src/utils/error-candidates.ts).
+ */
+function deviceCandidateDetails(devices: DeviceInfo[]): DeviceCandidateDetails {
+  return { devices: devices.map((device) => ({ id: device.id, name: device.name })) };
 }
 
 async function resolveAppleDeviceCandidate(
