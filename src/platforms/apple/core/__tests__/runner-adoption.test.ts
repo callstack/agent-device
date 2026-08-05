@@ -15,7 +15,11 @@ import {
   tryAdoptRunnerSessionFromLease,
 } from '../runner/runner-adoption.ts';
 import { sendRunnerCommandOnce } from '../runner/runner-transport.ts';
-import { isProcessAlive, readProcessCommand } from '../../../../utils/host-process.ts';
+import {
+  isProcessAlive,
+  readProcessCommand,
+  readProcessStartTime,
+} from '../../../../utils/host-process.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../runner/runner-transport.ts', async (importOriginal) => {
@@ -43,6 +47,7 @@ vi.mock('../runner/runner-xctestrun.ts', async (importOriginal) => {
 const mockSendRunnerCommandOnce = vi.mocked(sendRunnerCommandOnce);
 const mockIsProcessAlive = vi.mocked(isProcessAlive);
 const mockReadProcessCommand = vi.mocked(readProcessCommand);
+const mockReadProcessStartTime = vi.mocked(readProcessStartTime);
 
 const simulator: DeviceInfo = {
   platform: 'apple',
@@ -86,6 +91,8 @@ beforeEach(() => {
   mockIsProcessAlive.mockReturnValue(false);
   mockReadProcessCommand.mockReset();
   mockReadProcessCommand.mockReturnValue(null);
+  mockReadProcessStartTime.mockReset();
+  mockReadProcessStartTime.mockReturnValue('test-process-start');
   delete process.env.AGENT_DEVICE_IOS_RUNNER_DETACH;
 });
 
@@ -150,6 +157,23 @@ test('adoption is skipped for a recycled runner pid (start time mismatch)', asyn
 
   expect(await tryAdoptRunnerSessionFromLease(simulator, {})).toBeNull();
   expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
+});
+
+test('adoption is refused when the pid is recycled while the uptime probe is in flight', async () => {
+  // Identity holds at the first check, then the xcodebuild exits and its pid
+  // is recycled during the awaited probe while the old port still answers.
+  // Adoption must re-verify after the probe: re-stamping the recycled pid
+  // would hand disposal a strongly-verified lease over an innocent process.
+  const lease = writeStaleLease();
+  mockIsProcessAlive.mockReturnValue(true);
+  mockSendRunnerCommandOnce.mockImplementation(async () => {
+    mockReadProcessStartTime.mockReturnValue('recycled-during-probe-start');
+    return new Response(JSON.stringify({ ok: true }));
+  });
+
+  expect(await tryAdoptRunnerSessionFromLease(simulator, {})).toBeNull();
+  // The stale lease must survive untouched — ownership was never transferred.
+  expect(readStaleRunnerLease(simulator.id)?.ownerToken).toBe(lease.ownerToken);
 });
 
 test('adoption is skipped for a legacy lease whose live pid is not runner-shaped', async () => {

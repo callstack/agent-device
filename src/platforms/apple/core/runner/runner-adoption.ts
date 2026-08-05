@@ -84,6 +84,12 @@ export async function tryAdoptRunnerSessionFromLease(
     return skip('artifact_fingerprint_mismatch');
   }
   if (!(await probeRunnerAnswersUptime(device, lease.port))) return skip('probe_failed');
+  // The probe awaited network I/O — the xcodebuild can have exited and its pid
+  // been recycled while the old port still answers. Re-verify before the
+  // adopted lease re-stamps the pid; everything below is synchronous.
+  if (!isProcessAlive(runnerPid) || !verifyLeaseRunnerPidIdentity(lease, runnerPid)) {
+    return skip('runner_pid_recycled');
+  }
 
   const session = buildAdoptedRunnerSession(device, lease, runnerPid, expectedDerived, options);
   try {
