@@ -14,6 +14,7 @@ test('the configured Vitest lifecycle redirects worker TMPDIR and removes it aft
   const probePath = path.join(REPOSITORY_ROOT, 'src', '__tests__', probeName);
   const evidenceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vitest-tmpdir-lifecycle-test-'));
   const evidencePath = path.join(evidenceRoot, 'worker-tmpdir.txt');
+  const expectedSwiftCacheDir = path.join(os.tmpdir(), 'agent-device-swift-cache');
   let workerTmpDir: string | undefined;
 
   fs.writeFileSync(
@@ -29,6 +30,8 @@ test('worker inherits the run-owned temp directory', () => {
   expect(path.basename(tmpdir)).toMatch(new RegExp(${JSON.stringify(
     `^${TEST_RUN_TMP_PREFIX}\\d+-`,
   )}));
+  expect(process.env.AGENT_DEVICE_SWIFT_CACHE_DIR).toBe(${JSON.stringify(expectedSwiftCacheDir)});
+  expect(process.env.AGENT_DEVICE_SWIFT_CACHE_DIR?.startsWith(tmpdir)).toBe(false);
   fs.writeFileSync(process.env.AGENT_DEVICE_TEST_TMPDIR_EVIDENCE_PATH!, tmpdir);
 });
 `,
@@ -42,6 +45,7 @@ test('worker inherits the run-owned temp directory', () => {
         cwd: REPOSITORY_ROOT,
         env: {
           ...process.env,
+          AGENT_DEVICE_SWIFT_CACHE_DIR: '',
           AGENT_DEVICE_TEST_TMPDIR_EVIDENCE_PATH: evidencePath,
         },
         timeoutMs: 30_000,

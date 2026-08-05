@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 // os.tmpdir() reads TMPDIR on every call, so redirecting it here covers every
@@ -24,12 +25,26 @@ export const TEST_RUN_TMP_ROOT = '/tmp';
 export const TEST_RUN_TMP_PREFIX = 'agent-device-test-run-';
 
 let testRunTmpDir: string;
+let previousTmpDir: string | undefined;
+let previousSwiftCacheDir: string | undefined;
 
 // setup/teardown are vitest's globalSetup contract: it imports this file by
 // the path string in vitest.config.ts and calls these by name, so nothing in
 // the source graph references them directly.
 // fallow-ignore-next-line unused-export
 export function setup(): void {
+  previousTmpDir = process.env.TMPDIR;
+  previousSwiftCacheDir = process.env.AGENT_DEVICE_SWIFT_CACHE_DIR;
+  const originalTmpDir = os.tmpdir();
+  if (!previousSwiftCacheDir?.trim()) {
+    // The Swift compiler cache is intentionally durable across test runs. If it
+    // followed the disposable TMPDIR, AVFoundation helpers would recompile on
+    // every invocation and push integration scenarios past their 5s budgets.
+    process.env.AGENT_DEVICE_SWIFT_CACHE_DIR = path.join(
+      originalTmpDir,
+      'agent-device-swift-cache',
+    );
+  }
   // The pid is embedded so check-tmpdir-leaks.ts can tell a directory that's
   // still in active use (its vitest process is alive — a concurrent run in
   // another worktree, say) apart from one actually abandoned by a killed
@@ -43,4 +58,11 @@ export function setup(): void {
 // fallow-ignore-next-line unused-export
 export function teardown(): void {
   fs.rmSync(testRunTmpDir, { recursive: true, force: true });
+  restoreEnv('TMPDIR', previousTmpDir);
+  restoreEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', previousSwiftCacheDir);
+}
+
+function restoreEnv(key: string, value: string | undefined): void {
+  if (value === undefined) delete process.env[key];
+  else process.env[key] = value;
 }
