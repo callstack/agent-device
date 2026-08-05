@@ -47,6 +47,12 @@ export const doctorCommandFacet = defineCommandFacet({
   metadata: doctorCommandMetadata,
   definition: doctorCommandDefinition,
   cliSchema: doctorCliSchema,
+  guidance: {
+    mcp: {
+      description:
+        'Diagnose device, app, development-server, and React Native or Expo readiness issues. Returns compact evidence for local inventory, sessions, optional app discovery, toolchains, and server reachability.',
+    },
+  },
   cliReader: doctorCliReader,
   daemonWriter: doctorDaemonWriter,
   cliOutputFormatter: managementCliOutputFormatters.doctor,

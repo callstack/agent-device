@@ -95,6 +95,12 @@ const capabilitiesCommandFacet = defineCommandFacet({
   metadata: capabilitiesCommandMetadata,
   definition: capabilitiesCommandDefinition,
   cliSchema: capabilitiesCliSchema,
+  guidance: {
+    mcp: {
+      description:
+        'List the commands supported by the selected device or active session. Use device-selection inputs when checking support before a session is open.',
+    },
+  },
   cliReader: commonCliReader,
   daemonWriter: capabilitiesDaemonWriter,
   cliOutputFormatter: managementCliOutputFormatters.capabilities,

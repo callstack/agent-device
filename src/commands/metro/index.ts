@@ -148,6 +148,12 @@ const metroCommandFacet = defineCommandFacet({
   metadata: metroCommandMetadata,
   definition: metroCommandDefinition,
   cliSchema: metroCliSchema,
+  guidance: {
+    mcp: {
+      description:
+        "Prepare a React Native development server or reload connected apps using the session's bound development-server settings. Use explicit runtime inputs only when overriding that session binding.",
+    },
+  },
   cliReader: metroCliReader,
   cliOutputFormatter: metroCliOutputFormatters.metro,
 });

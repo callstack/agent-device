@@ -109,6 +109,12 @@ const recordCommandFacet = defineCommandFacet({
   metadata: recordCommandMetadata,
   definition: recordCommandDefinition,
   cliSchema: recordCliSchema,
+  guidance: {
+    mcp: {
+      description:
+        'Start or stop a screen recording for the active app session or, where supported, the selected device. Long Android recordings can return multiple video artifacts.',
+    },
+  },
   cliReader: recordCliReader,
   daemonWriter: recordDaemonWriter,
   cliOutputFormatter: recordingCliOutputFormatters.record,
@@ -119,6 +125,12 @@ const traceCommandFacet = defineCommandFacet({
   metadata: traceCommandMetadata,
   definition: traceCommandDefinition,
   cliSchema: traceCliSchema,
+  guidance: {
+    mcp: {
+      description:
+        'Start or stop trace-log capture and return the resulting artifact when capture ends. Use the same artifact path for the matching start and stop requests when an explicit path is required.',
+    },
+  },
   cliReader: traceCliReader,
   daemonWriter: traceDaemonWriter,
 });

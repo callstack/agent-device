@@ -78,6 +78,12 @@ const perfCommandFacet = defineCommandFacet({
   metadata: perfCommandMetadata,
   definition: perfCommandDefinition,
   cliSchema: perfCliSchema,
+  guidance: {
+    mcp: {
+      description:
+        'Collect session performance metrics, frame health, memory diagnostics, and platform profiling artifacts. Prefer structured metrics for a first-pass diagnosis; raw profiles and traces remain session artifacts.',
+    },
+  },
   cliReader: perfCliReader,
   daemonWriter: perfDaemonWriter,
   cliOutputFormatter: perfCliOutputFormatters.perf,

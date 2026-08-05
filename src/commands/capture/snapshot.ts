@@ -69,6 +69,12 @@ export const snapshotCommandFacet = defineCommandFacet({
   metadata: snapshotCommandMetadata,
   definition: snapshotCommandDefinition,
   cliSchema: snapshotCliSchema,
+  guidance: {
+    mcp: {
+      description:
+        'Capture the accessibility tree or compare it with the previous session baseline. Use the returned refs for subsequent semantic interactions and the diff option to verify UI changes.',
+    },
+  },
   cliReader: snapshotCliReader,
   daemonWriter: snapshotDaemonWriter,
   cliOutputFormatter: captureCliOutputFormatters.snapshot,

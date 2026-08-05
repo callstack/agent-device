@@ -7,6 +7,7 @@ import type {
   JsonSchema,
 } from '../command-contract.ts';
 import type { CliOutputFormatter } from '../output-common.ts';
+import { projectCommandGuidance, type CommandGuidance } from '../command-guidance.ts';
 
 export type AnyCommandMetadata<Name extends string = string> = CommandMetadata<Name, unknown>;
 
@@ -39,6 +40,7 @@ export type CommandFacet<TCommandName extends string = string> = {
   cliReader: CliReader;
   daemonWriter?: DaemonWriter;
   cliOutputFormatter?: CliOutputFormatter;
+  guidance?: CommandGuidance;
 };
 
 type CommandFacetMetadata<TCommands extends readonly CommandFacet[]> = {
@@ -62,15 +64,17 @@ export function defineCommandFacet<
   const TCommandName extends string,
   const TCommand extends CommandFacet<TCommandName>,
 >(command: TCommand): TCommand {
-  const description = command.cliSchema?.helpDescription ?? command.cliSchema?.summary;
-  if (!description) return command;
-
-  // CLI help is the command-surface owner for agent-facing guidance. Keep MCP
-  // tool descriptions aligned by default so the two projections cannot drift.
+  const { cliSchema, mcpDescription } = projectCommandGuidance(
+    command.metadata.description,
+    command.cliSchema,
+    command.metadata.inputSchema,
+    command.guidance,
+  );
   return {
     ...command,
-    metadata: { ...command.metadata, description },
-    definition: { ...command.definition, description },
+    metadata: { ...command.metadata, description: mcpDescription },
+    definition: { ...command.definition, description: mcpDescription },
+    ...(cliSchema ? { cliSchema } : {}),
   } as TCommand;
 }
 

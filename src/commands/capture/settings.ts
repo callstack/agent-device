@@ -61,6 +61,12 @@ export const settingsCommandFacet = defineCommandFacet({
   metadata: settingsCommandMetadata,
   definition: settingsCommandDefinition,
   cliSchema: settingsCliSchema,
+  guidance: {
+    mcp: {
+      description:
+        'Change supported operating-system settings, animation scales, appearance, or app permissions on the selected target. Platform support varies by setting and action.',
+    },
+  },
   cliReader: settingsCliReader,
   daemonWriter: settingsDaemonWriter,
 });

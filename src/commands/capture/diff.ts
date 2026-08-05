@@ -65,6 +65,12 @@ export const diffCommandFacet = defineCommandFacet({
   metadata: diffCommandMetadata,
   definition: diffCommandDefinition,
   cliSchema: diffCliSchema,
+  guidance: {
+    mcp: {
+      description:
+        'Compare accessibility snapshots or screenshots to identify UI changes. Use snapshot comparisons for semantic tree changes and screenshot comparisons for pixel differences.',
+    },
+  },
   cliReader: diffCliReader,
   daemonWriter: diffDaemonWriter,
 });

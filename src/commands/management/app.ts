@@ -178,6 +178,12 @@ export const appsCommandFacet = defineCommandFacet({
   metadata: appsCommandMetadata,
   definition: appsCommandDefinition,
   cliSchema: appsCliSchema,
+  guidance: {
+    mcp: {
+      description:
+        'List the apps installed on the selected device. Include system or OEM apps only when they are needed as automation targets.',
+    },
+  },
   cliReader: appsCliReader,
   daemonWriter: appsDaemonWriter,
   cliOutputFormatter: managementCliOutputFormatters.apps,
@@ -188,6 +194,14 @@ export const openCommandFacet = defineCommandFacet({
   metadata: openCommandMetadata,
   definition: openCommandDefinition,
   cliSchema: openCliSchema,
+  guidance: {
+    mcp: {
+      description:
+        'Boot the selected device when needed, then open an app, deep link, or URL in a session. Use the app or URL inputs to choose what becomes the foreground automation target.',
+      parameters: ['app', 'url', 'surface'],
+    },
+    cli: { flags: ['surface', 'launchConsole'] },
+  },
   cliReader: openCliReader,
   daemonWriter: openDaemonWriter,
   cliOutputFormatter: managementCliOutputFormatters.open,

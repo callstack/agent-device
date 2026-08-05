@@ -205,6 +205,12 @@ const replayCommandFacet = defineCommandFacet({
   metadata: replayCommandMetadata,
   definition: replayCommandDefinition,
   cliSchema: replayCliSchema,
+  guidance: {
+    mcp: {
+      description:
+        'Run a recorded automation script, including compatible Maestro YAML flows. A script without a terminal close leaves its session active for subsequent automation.',
+    },
+  },
   cliReader: replayCliReader,
   daemonWriter: replayDaemonWriter,
 });

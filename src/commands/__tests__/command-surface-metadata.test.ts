@@ -41,18 +41,37 @@ test('CI-only prepare command stays out of MCP tool surface', () => {
   assert.equal(listMcpExposedCommandNames().includes('prepare'), false);
 });
 
-test('MCP tool descriptions inherit complete CLI guidance', () => {
+test('command guidance projects consistent metadata and executable descriptions', () => {
   const cliSchemas = listCommandFamilyCliSchemas();
   const definitionsByName = new Map(
     listCommandFamilyDefinitions().map((definition) => [definition.name, definition] as const),
   );
 
   for (const metadata of listMcpCommandMetadata()) {
-    const cliSchema = cliSchemas[metadata.name];
-    const cliDescription = cliSchema?.helpDescription ?? cliSchema?.summary;
-    assert.ok(cliDescription, `${metadata.name} must define CLI guidance for its MCP description`);
-    assert.equal(metadata.description, cliDescription);
-    assert.equal(definitionsByName.get(metadata.name)?.description, cliDescription);
+    assert.ok(metadata.description, `${metadata.name} must define MCP guidance`);
+    assert.equal(definitionsByName.get(metadata.name)?.description, metadata.description);
+  }
+
+  assert.match(
+    listMcpCommandMetadata().find((metadata) => metadata.name === 'open')?.description ?? '',
+    /foreground automation target/,
+  );
+  assert.doesNotMatch(
+    listMcpCommandMetadata().find((metadata) => metadata.name === 'open')?.description ?? '',
+    /--platform/,
+  );
+  assert.match(
+    cliSchemas.open?.helpDescription ?? '',
+    /Relevant flags: --surface, --launch-console\./,
+  );
+});
+
+test('MCP tool descriptions avoid CLI syntax', () => {
+  const cliSyntax = [/--[a-z]/, /<[^>]+>|\[[^\]]+\]/, /agent-device/, /\bpositional\b/];
+  for (const metadata of listMcpCommandMetadata()) {
+    for (const pattern of cliSyntax) {
+      assert.doesNotMatch(metadata.description, pattern, `${metadata.name} contains CLI syntax`);
+    }
   }
 });
 

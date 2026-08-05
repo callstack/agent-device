@@ -214,6 +214,13 @@ const audioCommandFacet = defineCommandFacet({
   metadata: audioCommandMetadata,
   definition: audioCommandDefinition,
   cliSchema: audioCliSchema,
+  guidance: {
+    mcp: {
+      description:
+        'Measure browser or host-rendered simulator/emulator audio as compact dBFS buckets. Start a probe before requesting its status or stopping it.',
+      parameters: ['durationMs', 'bucketMs'],
+    },
+  },
   cliReader: audioCliReader,
   daemonWriter: audioDaemonWriter,
   cliOutputFormatter: observabilityCliOutputFormatters.audio,

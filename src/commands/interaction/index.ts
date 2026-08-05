@@ -247,6 +247,13 @@ const clickCommandFacet = defineCommandFacet({
   metadata: metadata('click'),
   definition: clickCommandDefinition,
   cliSchema: interactionCliSchemas.click,
+  guidance: {
+    mcp: {
+      description:
+        'Activate a UI target by snapshot ref, selector, or coordinates. Prefer a ref or selector after a snapshot; use coordinates only when semantic targeting is unavailable.',
+      parameters: ['target', 'settle', 'verify'],
+    },
+  },
   cliReader: interactionCliReaders.click,
   daemonWriter: interactionDaemonWriters.click,
   cliOutputFormatter: interactionCliOutputFormatters.click,
@@ -257,6 +264,13 @@ const pressCommandFacet = defineCommandFacet({
   metadata: metadata('press'),
   definition: pressCommandDefinition,
   cliSchema: interactionCliSchemas.press,
+  guidance: {
+    mcp: {
+      description:
+        'Short-press a UI target by snapshot ref, selector, or coordinates. Use longpress instead when the target requires a context-menu or hold gesture.',
+      parameters: ['target', 'settle', 'verify'],
+    },
+  },
   cliReader: interactionCliReaders.press,
   daemonWriter: interactionDaemonWriters.press,
   cliOutputFormatter: interactionCliOutputFormatters.press,
@@ -277,6 +291,13 @@ const longPressCommandFacet = defineCommandFacet({
   metadata: metadata('longpress'),
   definition: longPressCommandDefinition,
   cliSchema: interactionCliSchemas.longpress,
+  guidance: {
+    mcp: {
+      description:
+        'Hold a UI target by snapshot ref, selector, or coordinates to open a context menu or perform another hold gesture. Set durationMs when the default hold duration is unsuitable.',
+      parameters: ['target', 'durationMs'],
+    },
+  },
   cliReader: interactionCliReaders.longpress,
   daemonWriter: interactionDaemonWriters.longpress,
   cliOutputFormatter: interactionCliOutputFormatters.longpress,
@@ -353,6 +374,13 @@ const gestureCommandFacet = defineCommandFacet({
   metadata: metadata('gesture'),
   definition: gestureCommandDefinition,
   cliSchema: interactionCliSchemas.gesture,
+  guidance: {
+    mcp: {
+      description:
+        'Perform a structured pan, fling, swipe, pinch, rotate, transform, or drag gesture. Select the gesture kind, then provide only the inputs that apply to that kind.',
+      parameters: ['kind', 'direction', 'preset', 'durationMs'],
+    },
+  },
   cliReader: gestureCliReaders.gesture,
   daemonWriter: gestureDaemonWriters.gesture,
 });

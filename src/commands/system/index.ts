@@ -348,6 +348,12 @@ const tvRemoteCommandFacet = defineCommandFacet({
   metadata: tvRemoteCommandMetadata,
   definition: tvRemoteCommandDefinition,
   cliSchema: tvRemoteCliSchema,
+  guidance: {
+    mcp: {
+      description:
+        'Press or long-press a TV remote or D-pad button on Android TV, tvOS, or Vega OS. Choose the button and optional hold duration through the input fields.',
+    },
+  },
   cliReader: tvRemoteCliReader,
   daemonWriter: tvRemoteDaemonWriter,
   cliOutputFormatter: systemCliOutputFormatters['tv-remote'],

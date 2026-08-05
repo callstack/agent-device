@@ -102,6 +102,13 @@ const triggerAppEventCommandFacet = defineCommandFacet({
   metadata: triggerAppEventCommandMetadata,
   definition: triggerAppEventCommandDefinition,
   cliSchema: triggerAppEventCliSchema,
+  guidance: {
+    mcp: {
+      description:
+        'Ask the app to handle an app-defined automation or test event. Call this only for event names and payload shapes the app documents.',
+      parameters: ['event', 'payload'],
+    },
+  },
   cliReader: triggerAppEventCliReader,
   daemonWriter: triggerAppEventDaemonWriter,
 });

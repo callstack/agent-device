@@ -65,6 +65,12 @@ export const screenshotCommandFacet = defineCommandFacet({
   metadata: screenshotCommandMetadata,
   definition: screenshotCommandDefinition,
   cliSchema: screenshotCliSchema,
+  guidance: {
+    mcp: {
+      description:
+        'Capture a screenshot of the active app or web session. Choose the capture scope, density, size, or annotations through the corresponding input fields when needed.',
+    },
+  },
   cliReader: screenshotCliReader,
   daemonWriter: screenshotDaemonWriter,
 });
