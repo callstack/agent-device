@@ -86,6 +86,7 @@ extension RunnerTests {
     currentApp = app
     currentBundleId = nil
     currentAppProcessIdentifier = nil
+    clearRememberedTextEntryTap()
     snapshotXCTestPenaltyWarmupExemptionPending = false
   }
 
@@ -122,6 +123,7 @@ extension RunnerTests {
     )
     currentApp = candidate
     currentAppProcessIdentifier = observedProcessIdentifier
+    clearRememberedTextEntryTap()
     clearSnapshotXCTestChannelPenalty(reason: "target_process_changed")
     clearPrivateAXAcceptedDepth(reason: "target_process_changed")
     snapshotXCTestPenaltyWarmupExemptionPending = true
@@ -196,6 +198,7 @@ extension RunnerTests {
     currentApp = target
     currentBundleId = bundleId
     currentAppProcessIdentifier = Self.processIdentifier(of: target)
+    clearRememberedTextEntryTap()
     snapshotXCTestPenaltyWarmupExemptionPending = false
     needsFirstInteractionDelay = true
     return target

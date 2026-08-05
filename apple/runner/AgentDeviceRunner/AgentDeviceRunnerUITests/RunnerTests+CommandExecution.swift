@@ -393,6 +393,17 @@ extension RunnerTests {
     XCTAssertTrue(typeResponse.ok, String(describing: typeResponse.error))
     XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
     XCTAssertEqual(String(describing: textField.value ?? ""), "hardware-keyboard")
+
+    let secondFailureCountBefore = currentXCTestFailureCount()
+    let secondTypeCommand = try runnerCommandFixture(
+      #"{"command":"type","commandId":"type-hardware-keyboard-again","text":"-again"}"#
+    )
+    let secondTypeResponse = executeTypeCommand(activeApp: app, command: secondTypeCommand)
+
+    XCTAssertFalse(secondTypeResponse.ok)
+    XCTAssertEqual(secondTypeResponse.error?.code, "TEXT_INPUT_NOT_FOCUSED")
+    XCTAssertFalse(didRecordXCTestFailure(since: secondFailureCountBefore))
+    XCTAssertEqual(String(describing: textField.value ?? ""), "hardware-keyboard")
   }
 #endif
 

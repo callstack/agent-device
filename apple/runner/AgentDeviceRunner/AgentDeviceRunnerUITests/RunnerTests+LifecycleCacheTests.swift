@@ -49,8 +49,14 @@ extension RunnerTests {
     }
 
     RunnerTargetActivationSpy.state = .runningForeground
+    textEntryTapWitness = TextEntryTapWitness(
+      element: app,
+      bundleId: "com.example.previous",
+      processIdentifier: 41
+    )
     _ = activateTarget(bundleId: "com.example.foreground", reason: "unit_test")
     XCTAssertEqual(RunnerTargetActivationSpy.activationCount, 0)
+    XCTAssertNil(textEntryTapWitness)
 
     RunnerTargetActivationSpy.state = .runningBackground
     _ = activateTarget(bundleId: "com.example.background", reason: "unit_test")
@@ -108,6 +114,18 @@ extension RunnerTests {
     XCTAssertNil(currentBundleId)
     XCTAssertNil(currentAppProcessIdentifier)
     XCTAssertFalse(snapshotXCTestPenaltyWarmupExemptionPending)
+  }
+
+  func testTextEntryTapWitnessIsBoundToTargetIdentity() {
+    let witness = TextEntryTapWitness(
+      element: app,
+      bundleId: "com.example.app",
+      processIdentifier: 42
+    )
+
+    XCTAssertTrue(witness.matches(bundleId: "com.example.app", processIdentifier: 42))
+    XCTAssertFalse(witness.matches(bundleId: "com.example.other", processIdentifier: 42))
+    XCTAssertFalse(witness.matches(bundleId: "com.example.app", processIdentifier: 43))
   }
 
   func testTargetResetInvalidatesProcessBoundStateWithoutRestartingRunner() {

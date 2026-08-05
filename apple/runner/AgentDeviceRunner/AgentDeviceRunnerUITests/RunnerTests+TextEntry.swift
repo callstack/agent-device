@@ -70,6 +70,16 @@ extension RunnerTests {
     let focusConfirmed: Bool
   }
 
+  struct TextEntryTapWitness {
+    let element: XCUIElement
+    let bundleId: String?
+    let processIdentifier: Int?
+
+    func matches(bundleId: String?, processIdentifier: Int?) -> Bool {
+      self.bundleId == bundleId && self.processIdentifier == processIdentifier
+    }
+  }
+
   func clearTextInput(_ element: XCUIElement) {
     // Skip the clear (delete burst + moveCaretToEnd edge-tap) ONLY when we can confirm the
     // field is empty. Why skip: the edge-tap computes a point from the element frame, which can
@@ -120,19 +130,32 @@ extension RunnerTests {
       clearRememberedTextEntryTap()
       return
     }
-    lastTappedTextInput = element
+    textEntryTapWitness = TextEntryTapWitness(
+      element: element,
+      bundleId: currentBundleId,
+      processIdentifier: currentAppProcessIdentifier
+    )
   }
 
   func clearRememberedTextEntryTap() {
-    lastTappedTextInput = nil
+    textEntryTapWitness = nil
   }
 
   private func rememberedTextEntryTarget() -> TextEntryTarget? {
-    guard let element = lastTappedTextInput else {
+    guard let witness = textEntryTapWitness else {
       return nil
     }
+    // The tap is proof for one immediately-following bare type only. Consume it before checking
+    // the element so a failed or interrupted type cannot reuse stale focus evidence.
+    clearRememberedTextEntryTap()
+    guard witness.matches(
+      bundleId: currentBundleId,
+      processIdentifier: currentAppProcessIdentifier
+    ) else {
+      return nil
+    }
+    let element = witness.element
     guard safely("LAST_TAPPED_TEXT_INPUT_EXISTS", false, { element.exists }) else {
-      clearRememberedTextEntryTap()
       return nil
     }
     // Keep the target scoped to the element that the preceding tap actually selected. Do not
