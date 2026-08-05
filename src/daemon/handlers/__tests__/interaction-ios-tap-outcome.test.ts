@@ -15,6 +15,7 @@ import {
   imageViewerNodes,
   profileNodes,
   snapshot,
+  snapshotPayload,
 } from './interaction-ios-tap-outcome-fixtures.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
@@ -73,7 +74,7 @@ test('a changed post-action capture corroborates a direct iOS tap reported as fa
         'XCTest recorded a failure while executing tap; the action may not have been performed.',
       );
     }
-    if (command === 'snapshot') return { backend: 'xctest', nodes: imageViewerNodes };
+    if (command === 'snapshot') return snapshotPayload(imageViewerNodes);
     return {};
   });
 
@@ -103,7 +104,126 @@ test('an unchanged post-action capture keeps a failed iOS tap failed', async () 
         'XCTest recorded a failure while executing tap; the action may not have been performed.',
       );
     }
-    if (command === 'snapshot') return { backend: 'xctest', nodes: profileNodes };
+    if (command === 'snapshot') return snapshotPayload(profileNodes);
+    return {};
+  });
+
+  const response = await runClick(sessionStore, sessionName);
+
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) expect(response.error.code).toBe('XCTEST_RECORDED_FAILURE');
+  expect(sessionStore.get(sessionName)?.actions).toHaveLength(0);
+});
+
+test('a changed capture from a different iOS backend keeps the tap failure', async () => {
+  const sessionName = 'ios-cross-backend-tap-corroboration';
+  const sessionStore = makeSessionStore();
+  sessionStore.set(
+    sessionName,
+    makeIosSession(sessionName, {
+      appBundleId: 'com.example.app',
+      snapshot: snapshot(profileNodes),
+    }),
+  );
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command === 'press') {
+      throw new AppError(
+        'XCTEST_RECORDED_FAILURE',
+        'XCTest recorded a failure while executing tap; the action may not have been performed.',
+      );
+    }
+    if (command === 'snapshot') return snapshotPayload(imageViewerNodes, 'private-ax');
+    return {};
+  });
+
+  const response = await runClick(sessionStore, sessionName);
+
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) expect(response.error.code).toBe('XCTEST_RECORDED_FAILURE');
+  expect(sessionStore.get(sessionName)?.actions).toHaveLength(0);
+});
+
+test('a sparse changed capture keeps the tap failure', async () => {
+  const sessionName = 'ios-sparse-tap-corroboration';
+  const sessionStore = makeSessionStore();
+  sessionStore.set(
+    sessionName,
+    makeIosSession(sessionName, {
+      appBundleId: 'com.example.app',
+      snapshot: snapshot(profileNodes),
+    }),
+  );
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command === 'press') {
+      throw new AppError(
+        'XCTEST_RECORDED_FAILURE',
+        'XCTest recorded a failure while executing tap; the action may not have been performed.',
+      );
+    }
+    if (command === 'snapshot') {
+      return {
+        ...snapshotPayload(imageViewerNodes),
+        quality: { state: 'sparse', backend: 'tree', reason: 'capture incomplete' },
+      };
+    }
+    return {};
+  });
+
+  const response = await runClick(sessionStore, sessionName);
+
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) expect(response.error.code).toBe('XCTEST_RECORDED_FAILURE');
+  expect(sessionStore.get(sessionName)?.actions).toHaveLength(0);
+});
+
+test('a corroboration capture failure keeps the tap failure', async () => {
+  const sessionName = 'ios-capture-failed-tap-corroboration';
+  const sessionStore = makeSessionStore();
+  sessionStore.set(
+    sessionName,
+    makeIosSession(sessionName, {
+      appBundleId: 'com.example.app',
+      snapshot: snapshot(profileNodes),
+    }),
+  );
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command === 'press') {
+      throw new AppError(
+        'XCTEST_RECORDED_FAILURE',
+        'XCTest recorded a failure while executing tap; the action may not have been performed.',
+      );
+    }
+    if (command === 'snapshot') throw new Error('forced corroboration capture failure');
+    return {};
+  });
+
+  const response = await runClick(sessionStore, sessionName);
+
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) expect(response.error.code).toBe('XCTEST_RECORDED_FAILURE');
+  expect(sessionStore.get(sessionName)?.actions).toHaveLength(0);
+});
+
+test('a changed capture with a different presentation keeps the tap failure', async () => {
+  const sessionName = 'ios-presentation-mismatch-tap-corroboration';
+  const sessionStore = makeSessionStore();
+  const baseline = snapshot(profileNodes);
+  baseline.presentationKey = 'unreadable-presentation';
+  sessionStore.set(
+    sessionName,
+    makeIosSession(sessionName, {
+      appBundleId: 'com.example.app',
+      snapshot: baseline,
+    }),
+  );
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command === 'press') {
+      throw new AppError(
+        'XCTEST_RECORDED_FAILURE',
+        'XCTest recorded a failure while executing tap; the action may not have been performed.',
+      );
+    }
+    if (command === 'snapshot') return snapshotPayload(imageViewerNodes);
     return {};
   });
 
@@ -134,10 +254,7 @@ test('runtime-resolved taps use the same corroboration boundary', async () => {
     }
     if (command === 'snapshot') {
       snapshotCount += 1;
-      return {
-        backend: 'xctest',
-        nodes: snapshotCount === 1 ? profileNodes : imageViewerNodes,
-      };
+      return snapshotPayload(snapshotCount === 1 ? profileNodes : imageViewerNodes);
     }
     return {};
   });
@@ -173,7 +290,7 @@ test('a corroborated runtime coordinate tap does not schedule a no-change retry'
       }
       return {};
     }
-    if (command === 'snapshot') return { backend: 'xctest', nodes: imageViewerNodes };
+    if (command === 'snapshot') return snapshotPayload(imageViewerNodes);
     return {};
   });
 
@@ -232,10 +349,7 @@ test('corroborated runtime taps retain target evidence through save and replay',
     }
     if (command === 'snapshot') {
       snapshotCount += 1;
-      return {
-        backend: 'xctest',
-        nodes: recording && snapshotCount === 2 ? imageViewerNodes : profileNodes,
-      };
+      return snapshotPayload(recording && snapshotCount === 2 ? imageViewerNodes : profileNodes);
     }
     return {};
   });

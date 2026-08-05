@@ -111,6 +111,20 @@ function hasMatchingPresentation(
   after: SnapshotState,
   command: string,
 ): boolean {
+  const baselineBackend = baseline.snapshotQuality?.backend;
+  const afterBackend = after.snapshotQuality?.backend;
+  if (!baselineBackend || baselineBackend !== afterBackend) {
+    emitDiagnostic({
+      level: 'debug',
+      phase: 'ios_tap_failure_corroboration_backend_mismatch',
+      data: {
+        command,
+        baselineBackend,
+        afterBackend,
+      },
+    });
+    return false;
+  }
   if (!baseline.presentationKey || baseline.presentationKey === after.presentationKey) return true;
   emitDiagnostic({
     level: 'debug',
