@@ -61,6 +61,8 @@ import { selectorCliReaders, selectorDaemonWriters } from './selectors.ts';
 const interactionCliSchemas = {
   get: {
     usageOverride: 'get text|attrs <@ref|selector>',
+    helpDescription:
+      'Read text or accessibility attributes from a snapshot ref or selector without changing the app. Use format text for visible content or attrs for the element attribute map.',
     positionalArgs: ['subcommand', 'target'],
     allowsExtraPositionals: true,
     allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS, 'record'],
@@ -74,12 +76,16 @@ const interactionCliSchemas = {
     allowedFlags: ['snapshotDepth', 'snapshotRaw', 'findFirst', 'findLast', 'record'],
   },
   is: {
+    helpDescription:
+      'Check whether a selector satisfies a UI predicate such as visible, hidden, editable, selected, focused, or text. Use wait when the condition may appear asynchronously.',
     positionalArgs: ['predicate', 'selector', 'value?'],
     allowsExtraPositionals: true,
     allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS, 'record'],
   },
   click: {
     usageOverride: 'click <x y|@ref|selector>',
+    helpDescription:
+      'Activate a UI target by snapshot ref, selector, or coordinates. Prefer a ref or selector after snapshot; use coordinates only when semantic targeting is unavailable. This can change app state; use settle or snapshot to verify the result.',
     positionalArgs: ['target'],
     allowsExtraPositionals: true,
     allowedFlags: [
@@ -128,15 +134,21 @@ const interactionCliSchemas = {
     allowedFlags: ['pointerCount'],
   },
   focus: {
+    helpDescription:
+      'Move input focus to explicit screen coordinates without entering text. Prefer semantic interactions when a snapshot ref or selector is available; use type or fill after focus.',
     positionalArgs: ['x', 'y'],
   },
   type: {
+    helpDescription:
+      'Append text to the currently focused input. Use fill when the existing field value should be replaced, and focus first when no input is active.',
     positionalArgs: ['text'],
     allowsExtraPositionals: true,
     allowedFlags: ['delayMs'],
   },
   fill: {
     usageOverride: 'fill <x> <y> <text> | fill <@ref|selector> <text>',
+    helpDescription:
+      'Replace text in a UI input selected by snapshot ref, selector, or coordinates. Prefer refs or selectors after snapshot; use recordAs to keep sensitive text out of a recorded replay while sending it to the live app.',
     positionalArgs: ['targetOrX', 'yOrText', 'text?'],
     allowsExtraPositionals: true,
     allowedFlags: [

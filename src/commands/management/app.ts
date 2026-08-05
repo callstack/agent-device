@@ -128,6 +128,8 @@ const openCliSchema = {
 } as const satisfies CommandSchemaOverride;
 
 const closeCliSchema = {
+  helpDescription:
+    'Close the named app, or close the active session app when app is omitted. Use shutdown only when the selected simulator or emulator should also stop.',
   positionalArgs: ['app?'],
   allowedFlags: ['saveScript', 'force', 'shutdown'],
 } as const satisfies CommandSchemaOverride;

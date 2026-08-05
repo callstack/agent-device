@@ -49,6 +49,8 @@ const waitCommandDefinition = defineExecutableCommand(waitCommandMetadata, (clie
 
 const waitCliSchema = {
   usageOverride: 'wait <ms>|text <text>|@ref|<selector>|stable [quietMs] [timeoutMs]',
+  helpDescription:
+    'Wait for a duration, text, snapshot ref, selector, or stable UI. Use text, ref, or selector for a specific readiness condition; stable waits until the UI stays quiet for the requested window.',
   positionalArgs: ['durationOrSelector', 'timeoutMs?'],
   allowsExtraPositionals: true,
   allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS],

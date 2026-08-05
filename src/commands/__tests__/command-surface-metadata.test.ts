@@ -41,6 +41,21 @@ test('CI-only prepare command stays out of MCP tool surface', () => {
   assert.equal(listMcpExposedCommandNames().includes('prepare'), false);
 });
 
+test('MCP tool descriptions inherit complete CLI guidance', () => {
+  const cliSchemas = listCommandFamilyCliSchemas();
+  const definitionsByName = new Map(
+    listCommandFamilyDefinitions().map((definition) => [definition.name, definition] as const),
+  );
+
+  for (const metadata of listMcpCommandMetadata()) {
+    const cliSchema = cliSchemas[metadata.name];
+    const cliDescription = cliSchema?.helpDescription ?? cliSchema?.summary;
+    assert.ok(cliDescription, `${metadata.name} must define CLI guidance for its MCP description`);
+    assert.equal(metadata.description, cliDescription);
+    assert.equal(definitionsByName.get(metadata.name)?.description, cliDescription);
+  }
+});
+
 test('common command input accepts web platform selector', () => {
   const snapshotMetadata = listCommandMetadata().find((metadata) => metadata.name === 'snapshot');
   if (!snapshotMetadata) throw new Error('Expected snapshot command metadata');

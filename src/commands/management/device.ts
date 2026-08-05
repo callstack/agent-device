@@ -53,6 +53,11 @@ const bootCliSchema = {
   allowedFlags: ['headless'],
 } as const satisfies CommandSchemaOverride;
 
+const devicesCliSchema = {
+  helpDescription:
+    'List available devices and simulators that can be selected for automation. Use platform, device, udid, or serial inputs on later commands to target one result.',
+} as const satisfies CommandSchemaOverride;
+
 const capabilitiesCliSchema = {
   summary: 'List supported commands for the selected device',
   helpDescription:
@@ -79,6 +84,7 @@ const devicesCommandFacet = defineCommandFacet({
   name: 'devices',
   metadata: devicesCommandMetadata,
   definition: devicesCommandDefinition,
+  cliSchema: devicesCliSchema,
   cliReader: commonCliReader,
   daemonWriter: devicesDaemonWriter,
   cliOutputFormatter: managementCliOutputFormatters.devices,

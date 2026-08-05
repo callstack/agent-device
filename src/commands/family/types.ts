@@ -62,7 +62,16 @@ export function defineCommandFacet<
   const TCommandName extends string,
   const TCommand extends CommandFacet<TCommandName>,
 >(command: TCommand): TCommand {
-  return command;
+  const description = command.cliSchema?.helpDescription ?? command.cliSchema?.summary;
+  if (!description) return command;
+
+  // CLI help is the command-surface owner for agent-facing guidance. Keep MCP
+  // tool descriptions aligned by default so the two projections cannot drift.
+  return {
+    ...command,
+    metadata: { ...command.metadata, description },
+    definition: { ...command.definition, description },
+  } as TCommand;
 }
 
 export function defineCommandFamilyFromFacets<

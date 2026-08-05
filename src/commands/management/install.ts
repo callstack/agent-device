@@ -68,10 +68,14 @@ const installFromSourceCommandDefinition = defineExecutableCommand(
 const installCliSchema = {
   usageOverride: 'install <path> | install <app> <path>',
   listUsageOverride: 'install <path>',
+  helpDescription:
+    'Install an app binary from a local path. Provide an app identifier with the path when the target needs explicit app selection; use reinstall to replace an already installed app.',
   positionalArgs: ['appOrPath', 'path?'],
 } as const satisfies CommandSchemaOverride;
 
 const reinstallCliSchema = {
+  helpDescription:
+    'Replace an installed app with a binary from a local path. Use this when preserving the same app identity while installing a new build on the selected device.',
   positionalArgs: ['app', 'path'],
 } as const satisfies CommandSchemaOverride;
 

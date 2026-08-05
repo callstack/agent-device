@@ -169,7 +169,19 @@ const appStateCliSchema = {
 
 const backCliSchema = {
   usageOverride: 'back [--in-app|--system]',
+  helpDescription:
+    'Navigate back in the app or through system navigation. Use in-app for the app navigation stack and system when the platform back behavior is required.',
   allowedFlags: ['backMode'],
+} as const satisfies CommandSchemaOverride;
+
+const homeCliSchema = {
+  helpDescription:
+    'Send the selected device to its home screen. This leaves the app session open but moves the foreground away from the app.',
+} as const satisfies CommandSchemaOverride;
+
+const appSwitcherCliSchema = {
+  helpDescription:
+    'Open the device app switcher to inspect or change foreground apps. This changes the visible system UI and may move focus away from the current app.',
 } as const satisfies CommandSchemaOverride;
 
 const orientationCliSchema = {
@@ -283,6 +295,7 @@ const homeCommandFacet = defineCommandFacet({
   name: HOME_COMMAND_NAME,
   metadata: homeCommandMetadata,
   definition: homeCommandDefinition,
+  cliSchema: homeCliSchema,
   cliReader: homeCliReader,
   daemonWriter: homeDaemonWriter,
   cliOutputFormatter: systemCliOutputFormatters.home,
@@ -302,6 +315,7 @@ const appSwitcherCommandFacet = defineCommandFacet({
   name: APP_SWITCHER_COMMAND_NAME,
   metadata: appSwitcherCommandMetadata,
   definition: appSwitcherCommandDefinition,
+  cliSchema: appSwitcherCliSchema,
   cliReader: appSwitcherCliReader,
   daemonWriter: appSwitcherDaemonWriter,
   cliOutputFormatter: systemCliOutputFormatters['app-switcher'],

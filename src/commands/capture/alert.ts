@@ -34,6 +34,8 @@ const alertCommandDefinition = defineExecutableCommand(alertCommandMetadata, (cl
 
 const alertCliSchema = {
   usageOverride: 'alert [get|accept|dismiss|wait] [timeout]',
+  helpDescription:
+    'Inspect, wait for, accept, or dismiss a platform alert. Use get before acting when the alert content matters; accept and dismiss change the active alert state.',
   positionalArgs: ['action?', 'timeout?'],
 } as const;
 

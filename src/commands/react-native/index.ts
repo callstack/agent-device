@@ -28,6 +28,8 @@ export const reactNativeCommandDefinition = defineExecutableCommand(
 const reactNativeCliSchema = {
   usageOverride: 'react-native dismiss-overlay',
   listUsageOverride: 'react-native dismiss-overlay',
+  helpDescription:
+    'Run supported React Native automation helpers. Use dismiss-overlay to close a visible development error overlay before continuing normal UI automation.',
   positionalArgs: ['dismiss-overlay'],
 } as const satisfies CommandSchemaOverride;
 
