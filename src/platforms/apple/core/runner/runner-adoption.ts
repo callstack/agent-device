@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { resolveIosSimulatorDeviceSetPath } from '../../../../utils/device-isolation.ts';
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
-import { isProcessAlive, readProcessStartTime } from '../../../../utils/host-process.ts';
+import { isProcessAlive } from '../../../../utils/host-process.ts';
 import { parseBooleanLiteral } from '../../../../utils/source-value.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ExecResult } from '../../../../utils/exec.ts';
@@ -10,6 +10,7 @@ import { withRunnerCommandId } from './runner-contract.ts';
 import {
   buildRunnerLease,
   readStaleRunnerLease,
+  verifyLeaseRunnerPidIdentity,
   writeRunnerLease,
   type RunnerLease,
 } from './runner-lease.ts';
@@ -69,9 +70,12 @@ export async function tryAdoptRunnerSessionFromLease(
   const runnerPid = lease.runnerPid;
   if (!runnerPid) return skip('runner_pid_missing');
   if (!isProcessAlive(runnerPid)) return skip('runner_process_dead');
-  // The adopted session later signals this pid on disposal, so a recycled pid
-  // must never be adopted even if some process answers the leased port.
-  if (lease.runnerStartTime && readProcessStartTime(runnerPid) !== lease.runnerStartTime) {
+  // The adopted session later signals this pid on disposal — and adoption
+  // re-stamps the lease with the live pid's start time — so a pid that cannot
+  // be proven to still be the leased runner must never be adopted, even if
+  // some process answers the leased port. Legacy leases without a recorded
+  // start time fall back to the runner-shaped command-line check.
+  if (!verifyLeaseRunnerPidIdentity(lease, runnerPid)) {
     return skip('runner_pid_recycled');
   }
   const expectedDerived = resolveExpectedDerivedPath(device);

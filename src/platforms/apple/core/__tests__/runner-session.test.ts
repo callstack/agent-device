@@ -1189,6 +1189,26 @@ test('stale-lease cleanup signals the runner pid when its start time still match
   ]);
 });
 
+test('stale-lease cleanup re-verifies the pid before the SIGKILL escalation', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-lease-recycled-between-signals-sim' };
+  writeStaleLeaseWithRunner(device.id, { runnerPid: 55_555, runnerStartTime: 'lease-time-start' });
+  // The runner dies on SIGTERM and its pid is recycled while the awaited
+  // xcodebuild sweep runs — the SIGKILL escalation must not trust the
+  // verification performed for SIGTERM.
+  let verifications = 0;
+  mockReadProcessStartTime.mockImplementation((pid: number) =>
+    pid === 55_555 ? (++verifications === 1 ? 'lease-time-start' : 'recycled-newer-start') : null,
+  );
+  const { adapter, treeKills } = makeRecordingCleanupAdapter();
+
+  await prepareRunnerLeaseForStartup(device.id, adapter);
+
+  assert.deepEqual(treeKills, [
+    { pid: 55_555, signal: 'SIGTERM' },
+    { pid: undefined, signal: 'SIGKILL' },
+  ]);
+});
+
 test('stale-lease cleanup without a recorded start time trusts only runner-shaped commands', async () => {
   const device = { ...IOS_SIMULATOR, id: 'runner-lease-legacy-pid-sim' };
 

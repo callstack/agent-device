@@ -15,7 +15,7 @@ import {
   tryAdoptRunnerSessionFromLease,
 } from '../runner/runner-adoption.ts';
 import { sendRunnerCommandOnce } from '../runner/runner-transport.ts';
-import { isProcessAlive } from '../../../../utils/host-process.ts';
+import { isProcessAlive, readProcessCommand } from '../../../../utils/host-process.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../runner/runner-transport.ts', async (importOriginal) => {
@@ -27,6 +27,7 @@ vi.mock('../../../../utils/host-process.ts', async (importOriginal) => {
   return {
     ...actual,
     isProcessAlive: vi.fn(() => false),
+    readProcessCommand: vi.fn(() => null),
     readProcessStartTime: vi.fn(() => 'test-process-start'),
   };
 });
@@ -41,6 +42,7 @@ vi.mock('../runner/runner-xctestrun.ts', async (importOriginal) => {
 
 const mockSendRunnerCommandOnce = vi.mocked(sendRunnerCommandOnce);
 const mockIsProcessAlive = vi.mocked(isProcessAlive);
+const mockReadProcessCommand = vi.mocked(readProcessCommand);
 
 const simulator: DeviceInfo = {
   platform: 'apple',
@@ -82,6 +84,8 @@ beforeEach(() => {
   mockSendRunnerCommandOnce.mockReset();
   mockIsProcessAlive.mockReset();
   mockIsProcessAlive.mockReturnValue(false);
+  mockReadProcessCommand.mockReset();
+  mockReadProcessCommand.mockReturnValue(null);
   delete process.env.AGENT_DEVICE_IOS_RUNNER_DETACH;
 });
 
@@ -146,6 +150,34 @@ test('adoption is skipped for a recycled runner pid (start time mismatch)', asyn
 
   expect(await tryAdoptRunnerSessionFromLease(simulator, {})).toBeNull();
   expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
+});
+
+test('adoption is skipped for a legacy lease whose live pid is not runner-shaped', async () => {
+  // Leases written before `runnerStartTime` existed carry no start time; the
+  // only identity evidence left is the command line. An unverified pid must
+  // not be adopted — adoption re-stamps the lease with the live pid's start
+  // time, so a recycled pid would be laundered into a strongly-verified lease
+  // that disposal later kills.
+  writeStaleLease({ runnerStartTime: null });
+  mockIsProcessAlive.mockReturnValue(true);
+  mockReadProcessCommand.mockReturnValue('node /usr/local/bin/opencode run --model gpt-high');
+
+  expect(await tryAdoptRunnerSessionFromLease(simulator, {})).toBeNull();
+  expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
+});
+
+test('adoption accepts a legacy lease whose live pid is runner-shaped', async () => {
+  writeStaleLease({ runnerStartTime: null });
+  mockIsProcessAlive.mockReturnValue(true);
+  mockReadProcessCommand.mockReturnValue(
+    'xcodebuild test-without-building -xctestrun /tmp/AgentDeviceRunner.env.session-x.xctestrun',
+  );
+  mockSendRunnerCommandOnce.mockResolvedValue(new Response(JSON.stringify({ ok: true })));
+
+  const session = await tryAdoptRunnerSessionFromLease(simulator, {});
+
+  expect(session?.ready).toBe(true);
+  expect(session?.child.pid).toBe(424242);
 });
 
 test('adoption is skipped for devices in a custom simulator set', async () => {
