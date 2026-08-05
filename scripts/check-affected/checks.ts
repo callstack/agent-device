@@ -84,7 +84,7 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
     id: 'package',
     label: 'Published package (publint, attw, clean-install resolution)',
     kind: { type: 'script', script: 'check:package' },
-    ciJobs: ['Packaged CLI Node 22.12', 'Build npm package'],
+    ciJobs: ['Packaged CLI Node 22.12'],
     // Needs a `pnpm build` output and the npm registry, both of which local runs already have.
     localRunnable: true,
   },
