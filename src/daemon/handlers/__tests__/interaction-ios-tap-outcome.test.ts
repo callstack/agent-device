@@ -3,14 +3,19 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { buildSnapshotState } from '../snapshot-capture.ts';
 import { handleInteractionCommands } from '../interaction.ts';
+import { handleSnapshotCommands } from '../snapshot.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import type { CommandFlags } from '../../../core/dispatch.ts';
 import { SessionScriptWriter } from '../../session-script-writer.ts';
 import { runReplayScriptFile } from '../session-replay-runtime.ts';
+import {
+  imageViewerNodes,
+  profileNodes,
+  snapshot,
+} from './interaction-ios-tap-outcome-fixtures.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -32,57 +37,18 @@ const contextFromFlags = (flags: CommandFlags | undefined) => ({
   clickButton: flags?.clickButton,
 });
 
-const profileNodes = [
-  {
-    index: 0,
-    type: 'Application',
-    label: 'Profile',
-    rect: { x: 0, y: 0, width: 390, height: 844 },
-  },
-  {
-    index: 1,
-    parentIndex: 0,
-    type: 'Button',
-    identifier: 'unfollow',
-    label: 'Unfollow',
-    rect: { x: 24, y: 200, width: 160, height: 44 },
-    hittable: true,
-  },
-];
-
-const imageViewerNodes = [
-  {
-    index: 0,
-    type: 'Application',
-    label: 'Image viewer',
-    rect: { x: 0, y: 0, width: 390, height: 844 },
-  },
-  {
-    index: 1,
-    parentIndex: 0,
-    type: 'Button',
-    identifier: 'close-image',
-    label: 'Close image',
-    rect: { x: 24, y: 40, width: 120, height: 44 },
-    hittable: true,
-  },
-];
-
-function snapshot(nodes: typeof profileNodes) {
-  return buildSnapshotState({ nodes, backend: 'xctest' }, { snapshotInteractiveOnly: false });
-}
-
 async function runClick(
   sessionStore: ReturnType<typeof makeSessionStore>,
   sessionName: string,
+  options: { positionals?: string[]; flags?: CommandFlags } = {},
 ): Promise<Awaited<ReturnType<typeof handleInteractionCommands>>> {
   return await handleInteractionCommands({
     req: {
       token: 'test',
       session: sessionName,
       command: 'click',
-      positionals: ['id="unfollow"'],
-      flags: {},
+      positionals: options.positionals ?? ['id="unfollow"'],
+      flags: options.flags ?? {},
     },
     sessionName,
     sessionStore,
@@ -90,9 +56,7 @@ async function runClick(
   });
 }
 
-beforeEach(() => {
-  mockDispatch.mockReset();
-});
+beforeEach(() => mockDispatch.mockReset());
 
 test('a changed post-action capture corroborates a direct iOS tap reported as failed', async () => {
   const sessionName = 'ios-direct-tap-corroboration';
@@ -185,6 +149,59 @@ test('runtime-resolved taps use the same corroboration boundary', async () => {
     expect(response.data?.warning).toMatch(/post-action accessibility capture changed/);
   expect(snapshotCount).toBe(2);
   expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
+});
+
+test('a corroborated runtime coordinate tap does not schedule a no-change retry', async () => {
+  const sessionName = 'ios-runtime-coordinate-corroboration';
+  const sessionStore = makeSessionStore();
+  sessionStore.set(
+    sessionName,
+    makeIosSession(sessionName, {
+      appBundleId: 'com.example.app',
+      snapshot: snapshot(profileNodes),
+    }),
+  );
+  let pressCount = 0;
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command === 'press') {
+      pressCount += 1;
+      if (pressCount === 1) {
+        throw new AppError(
+          'XCTEST_RECORDED_FAILURE',
+          'XCTest recorded a failure while executing tap; the action may not have been performed.',
+        );
+      }
+      return {};
+    }
+    if (command === 'snapshot') return { backend: 'xctest', nodes: imageViewerNodes };
+    return {};
+  });
+
+  const clickResponse = await runClick(sessionStore, sessionName, {
+    positionals: ['104', '222'],
+    flags: { interactionOutcome: { retryOnNoChange: true } },
+  });
+  expect(clickResponse?.ok).toBe(true);
+  if (clickResponse?.ok) {
+    expect(clickResponse.data?.warning).toMatch(/post-action accessibility capture changed/);
+  }
+
+  const snapshotResponse = await handleSnapshotCommands({
+    req: {
+      token: 'test',
+      session: sessionName,
+      command: 'snapshot',
+      positionals: [],
+      flags: {},
+    },
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(snapshotResponse?.ok).toBe(true);
+  expect(pressCount).toBe(1);
+  expect(sessionStore.get(sessionName)?.pendingInteractionOutcome).toBeUndefined();
 });
 
 test('corroborated runtime taps retain target evidence through save and replay', async () => {

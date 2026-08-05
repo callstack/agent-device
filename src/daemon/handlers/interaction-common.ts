@@ -46,6 +46,8 @@ export function finalizeTouchInteraction(params: {
   /** ADR 0012 decision 3: record-time input for the `target-v1` annotation. */
   recordedTarget?: RecordedTargetCapture;
   recordedTargets?: { source: RecordedTargetCapture; destination: RecordedTargetCapture };
+  /** False when a post-action observation already proved the interaction landed. */
+  scheduleInteractionOutcomeRetry?: boolean;
   actionStartedAt: number;
   actionFinishedAt: number;
   androidFreshnessBaseline?: SnapshotState | undefined;
@@ -62,6 +64,7 @@ export function finalizeTouchInteraction(params: {
     responseData,
     recordedTarget,
     recordedTargets,
+    scheduleInteractionOutcomeRetry = true,
     actionStartedAt,
     actionFinishedAt,
     androidFreshnessBaseline,
@@ -88,13 +91,15 @@ export function finalizeTouchInteraction(params: {
     ...(targetEvidence ? { targetEvidence } : {}),
     ...(targetEvidences ? { targetEvidences } : {}),
   });
-  markPendingInteractionOutcome({
-    session,
-    command,
-    positionals: retryPositionals ?? positionals,
-    flags,
-    preSnapshot: session.snapshot,
-  });
+  if (scheduleInteractionOutcomeRetry) {
+    markPendingInteractionOutcome({
+      session,
+      command,
+      positionals: retryPositionals ?? positionals,
+      flags,
+      preSnapshot: session.snapshot,
+    });
+  }
   if (isNavigationSensitiveAction(actionCommand)) {
     markAndroidSnapshotFreshness(
       session,

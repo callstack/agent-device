@@ -565,6 +565,7 @@ async function buildDirectIosCorroboratedResponse(params: {
     flags: handlerParams.req.flags,
     result,
     responseData,
+    scheduleInteractionOutcomeRetry: false,
     actionStartedAt,
     actionFinishedAt: Date.now(),
   });
@@ -923,6 +924,7 @@ async function buildRuntimeIosCorroboratedResponse(params: {
     result: payloads.result,
     responseData: payloads.responseData,
     recordedTarget: payloads.recordedTarget,
+    scheduleInteractionOutcomeRetry: false,
     actionStartedAt: params.actionStartedAt,
     actionFinishedAt: Date.now(),
     androidFreshnessBaseline: params.androidFreshnessBaseline,
