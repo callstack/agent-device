@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { projectCommandGuidance } from './command-guidance.ts';
+import { composeMcpDescription, projectCommandGuidance } from './command-guidance.ts';
 
 describe('projectCommandGuidance', () => {
   test('projects one canonical body with a per-surface tail', () => {
@@ -13,10 +13,12 @@ describe('projectCommandGuidance', () => {
       },
     );
 
+    // The canonical body is what every non-MCP consumer reads, unmodified.
+    expect(guidance.description).toBe('Open an app or URL in the selected session.');
     expect(guidance.cliSchema?.helpDescription).toBe(
       'Open an app or URL in the selected session. macOS also supports --surface app|desktop.',
     );
-    expect(guidance.mcpDescription).toBe(
+    expect(composeMcpDescription(guidance)).toBe(
       'Open an app or URL in the selected session. Prefer this over booting the device separately.',
     );
   });
@@ -27,7 +29,7 @@ describe('projectCommandGuidance', () => {
       cliDetail: 'Use --surface to pick a macOS surface.',
     });
 
-    expect(guidance.mcpDescription).toBe('Open an app.');
+    expect(composeMcpDescription(guidance)).toBe('Open an app.');
     expect(guidance.cliSchema?.helpDescription).toContain('--surface');
   });
 
@@ -38,18 +40,17 @@ describe('projectCommandGuidance', () => {
       undefined,
     );
 
-    expect(guidance.mcpDescription).toBe(
+    expect(guidance.description).toBe(
       'Boot or prepare a selected device without using CLI positional arguments.',
     );
-    expect(guidance.cliSchema?.helpDescription).toBe(
-      'Boot or prepare a selected device without using CLI positional arguments.',
-    );
+    expect(guidance.cliSchema?.helpDescription).toBe(guidance.description);
   });
 
   test('leaves commands without a CLI schema or guidance untouched', () => {
     const guidance = projectCommandGuidance('Show foreground app.', undefined, undefined);
 
     expect(guidance.cliSchema).toBeUndefined();
-    expect(guidance.mcpDescription).toBe('Show foreground app.');
+    expect(guidance.description).toBe('Show foreground app.');
+    expect(guidance.mcpDetail).toBeUndefined();
   });
 });

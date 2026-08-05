@@ -20,6 +20,9 @@ import {
   listCommandFamilyMetadata,
 } from '../family/registry.ts';
 import { listExecutableCommandNames } from '../command-surface.ts';
+import { composeMcpDescription } from '../command-guidance.ts';
+import { explainCommand } from '../command-explain.ts';
+import { getDaemonRouteOwnerFiles } from '../../daemon/route-owner-files.ts';
 
 test('MCP exposed command names have metadata and executable command definitions', () => {
   const mcpExposedNames = listMcpExposedCommandNames().sort();
@@ -41,19 +44,37 @@ test('CI-only prepare command stays out of MCP tool surface', () => {
   assert.equal(listMcpExposedCommandNames().includes('prepare'), false);
 });
 
-test('every surface description derives from the same canonical body', () => {
+test('every surface reports the same canonical description', () => {
   const cliSchemas = listCommandFamilyCliSchemas();
+  const definitionsByName = new Map(
+    listCommandFamilyDefinitions().map((definition) => [definition.name, definition] as const),
+  );
 
-  for (const metadata of listMcpCommandMetadata()) {
-    const mcpDescription = metadata.mcpDescription ?? metadata.description;
-    const helpDescription = cliSchemas[metadata.name]?.helpDescription ?? metadata.description;
-    assert.ok(mcpDescription, `${metadata.name} must have an MCP description`);
-    // Guidance can only append a per-surface tail, so both surfaces share a prefix.
-    // A per-surface description override would break this and reintroduce drift.
-    const shared = sharedPrefix(mcpDescription, helpDescription);
+  for (const metadata of listCommandMetadata()) {
+    const definition = definitionsByName.get(metadata.name);
+    // `explain` and the CLI schema base both read metadata.description, and the executable
+    // definition carries its own copy; a surface left on a pre-guidance variant is the bug
+    // this pins. Only the CLI tail and the MCP tail may extend the body.
+    assert.equal(
+      definition?.description,
+      metadata.description,
+      `${metadata.name}: executable definition description drifted from metadata`,
+    );
+    assert.equal(
+      describeCommand(metadata.name),
+      metadata.description,
+      `${metadata.name}: explain reports a description other than the canonical body`,
+    );
+    const helpDescription = cliSchemas[metadata.name]?.helpDescription;
+    if (helpDescription) {
+      assert.ok(
+        helpDescription.startsWith(metadata.description),
+        `${metadata.name}: CLI help replaces the canonical body instead of appending to it:\n  body: ${metadata.description}\n  help: ${helpDescription}`,
+      );
+    }
     assert.ok(
-      shared.length >= Math.min(40, mcpDescription.length, helpDescription.length),
-      `${metadata.name} CLI and MCP descriptions diverge instead of sharing a canonical body:\n  MCP:  ${mcpDescription}\n  CLI:  ${helpDescription}`,
+      composeMcpDescription(metadata).startsWith(metadata.description),
+      `${metadata.name}: MCP description replaces the canonical body instead of appending to it`,
     );
   }
 });
@@ -74,21 +95,15 @@ test('a short CLI summary never replaces a command description', () => {
 test('open keeps flag guidance on the CLI surface only', () => {
   const cliSchemas = listCommandFamilyCliSchemas();
   const open = listMcpCommandMetadata().find((metadata) => metadata.name === 'open');
-  assert.match(open?.mcpDescription ?? '', /foreground automation target/);
+  assert.match(composeMcpDescription(open!), /foreground automation target/);
   assert.match(cliSchemas.open?.helpDescription ?? '', /foreground automation target/);
   assert.match(cliSchemas.open?.helpDescription ?? '', /--launch-console/);
 });
 
-function sharedPrefix(left: string, right: string): string {
-  let index = 0;
-  while (index < left.length && index < right.length && left[index] === right[index]) index += 1;
-  return left.slice(0, index);
-}
-
 test('MCP tool descriptions avoid CLI syntax', () => {
   const cliSyntax = [/--[a-z]/, /<[^>]+>|\[[^\]]+\]/, /agent-device/, /\bpositional\b/];
   for (const metadata of listMcpCommandMetadata()) {
-    const description = metadata.mcpDescription ?? metadata.description;
+    const description = composeMcpDescription(metadata);
     for (const pattern of cliSyntax) {
       assert.doesNotMatch(description, pattern, `${metadata.name} contains CLI syntax`);
     }
@@ -207,3 +222,10 @@ test('command family facets keep daemon writers as an explicit projection subset
     assert.ok(metadataNames.has(name), `${name} daemon writer must belong to command metadata`);
   }
 });
+
+const daemonRouteOwnerFiles = getDaemonRouteOwnerFiles();
+
+function describeCommand(name: string): string | undefined {
+  const result = explainCommand(name, { daemonRouteOwnerFiles });
+  return result.found ? result.explanation.description : undefined;
+}

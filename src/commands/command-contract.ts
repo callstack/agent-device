@@ -19,11 +19,11 @@ export type CommandMetadata<Name extends string, Input> = {
   name: Name;
   description: string;
   /**
-   * Canonical description plus any MCP-only tail, projected from the command's guidance.
-   * Only the MCP tool surface reads this; `description` stays surface-neutral for CLI help,
-   * `explain`, and docs.
+   * MCP-only tail appended to `description` for the MCP tool surface. Stored as the tail alone
+   * so `description` remains the single home of the canonical body for CLI help, `explain`,
+   * the executable definition, and docs. Compose with `composeMcpDescription`.
    */
-  mcpDescription?: string;
+  mcpDetail?: string;
   inputSchema: JsonSchema;
   readInput: (input: unknown) => Input;
 };

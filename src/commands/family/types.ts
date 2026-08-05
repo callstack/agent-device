@@ -14,6 +14,7 @@ export type AnyCommandMetadata<Name extends string = string> = CommandMetadata<N
 export type AnyCommandDefinition<Name extends string = string> = {
   name: Name;
   description: string;
+  mcpDetail?: string;
   inputSchema: JsonSchema;
   invoke: (client: AgentDeviceClient, input: unknown) => Promise<unknown>;
   projection?: ExecutableCommandProjection;
@@ -64,16 +65,19 @@ export function defineCommandFacet<
   const TCommandName extends string,
   const TCommand extends CommandFacet<TCommandName>,
 >(command: TCommand): TCommand {
-  const { cliSchema, mcpDescription } = projectCommandGuidance(
+  const { cliSchema, description, mcpDetail } = projectCommandGuidance(
     command.metadata.description,
     command.cliSchema,
     command.guidance,
   );
-  // `description` stays canonical for CLI help, `explain`, and docs; the MCP tool surface
-  // reads `mcpDescription` instead of having its variant written back over the shared field.
+  // The canonical body reaches every consumer — metadata (CLI schema base, `explain`, docs) and
+  // the executable definition — so none of them can be left holding a pre-guidance variant.
+  // Only the MCP-only tail is stored separately.
+  const mcpTail = mcpDetail ? { mcpDetail } : {};
   return {
     ...command,
-    metadata: { ...command.metadata, mcpDescription },
+    metadata: { ...command.metadata, description, ...mcpTail },
+    definition: { ...command.definition, description, ...mcpTail },
     ...(cliSchema ? { cliSchema } : {}),
   } as TCommand;
 }

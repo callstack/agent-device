@@ -22,24 +22,42 @@ export type CommandGuidance = {
   mcpDetail?: string;
 };
 
+export type ProjectedCommandGuidance = {
+  /**
+   * The canonical body. Every surface that describes the command reads this — CLI help (before
+   * its own tail), `explain`, the executable definition, and the MCP tool (before its own tail) —
+   * so no consumer can be left holding a stale variant.
+   */
+  description: string;
+  cliSchema: CommandSchemaOverride | undefined;
+  /** MCP-only tail. Stored on its own rather than as a second full string, so the body has one home. */
+  mcpDetail: string | undefined;
+};
+
 export function projectCommandGuidance(
   metadataDescription: string,
   cliSchema: CommandSchemaOverride | undefined,
   guidance: CommandGuidance | undefined,
-): { cliSchema: CommandSchemaOverride | undefined; mcpDescription: string } {
+): ProjectedCommandGuidance {
   // `summary` is the short list-view line, so it is deliberately not in this chain:
-  // falling back to it would replace a full description with a fragment on both surfaces.
-  const shared = guidance?.description ?? cliSchema?.helpDescription ?? metadataDescription;
+  // falling back to it would replace a full description with a fragment on every surface.
+  const description = guidance?.description ?? cliSchema?.helpDescription ?? metadataDescription;
   return {
+    description,
     cliSchema:
       (cliSchema ?? guidance)
-        ? {
-            ...cliSchema,
-            helpDescription: appendDetail(shared, guidance?.cliDetail),
-          }
+        ? { ...cliSchema, helpDescription: appendDetail(description, guidance?.cliDetail) }
         : undefined,
-    mcpDescription: appendDetail(shared, guidance?.mcpDetail),
+    mcpDetail: guidance?.mcpDetail,
   };
+}
+
+/** Composes the MCP tool description from the canonical body and the MCP-only tail. */
+export function composeMcpDescription(command: {
+  description: string;
+  mcpDetail?: string;
+}): string {
+  return appendDetail(command.description, command.mcpDetail);
 }
 
 function appendDetail(description: string, detail: string | undefined): string {
