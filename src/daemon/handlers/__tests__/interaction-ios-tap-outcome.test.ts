@@ -234,6 +234,68 @@ test('a changed capture with a different presentation keeps the tap failure', as
   expect(sessionStore.get(sessionName)?.actions).toHaveLength(0);
 });
 
+test('a changed capture against a stale baseline keeps the tap failure', async () => {
+  const sessionName = 'ios-stale-baseline-tap-corroboration';
+  const sessionStore = makeSessionStore();
+  const baseline = snapshot(profileNodes);
+  baseline.createdAt = Date.now() - 5_001;
+  sessionStore.set(
+    sessionName,
+    makeIosSession(sessionName, {
+      appBundleId: 'com.example.app',
+      snapshot: baseline,
+    }),
+  );
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command === 'press') {
+      throw new AppError(
+        'XCTEST_RECORDED_FAILURE',
+        'XCTest recorded a failure while executing tap; the action may not have been performed.',
+      );
+    }
+    if (command === 'snapshot') return snapshotPayload(imageViewerNodes);
+    return {};
+  });
+
+  const response = await runClick(sessionStore, sessionName);
+
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) expect(response.error.code).toBe('XCTEST_RECORDED_FAILURE');
+  expect(mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(0);
+  expect(sessionStore.get(sessionName)?.actions).toHaveLength(0);
+});
+
+test('a changed capture against a keyless baseline keeps the tap failure', async () => {
+  const sessionName = 'ios-keyless-baseline-tap-corroboration';
+  const sessionStore = makeSessionStore();
+  const baseline = snapshot(profileNodes);
+  baseline.presentationKey = undefined;
+  sessionStore.set(
+    sessionName,
+    makeIosSession(sessionName, {
+      appBundleId: 'com.example.app',
+      snapshot: baseline,
+    }),
+  );
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command === 'press') {
+      throw new AppError(
+        'XCTEST_RECORDED_FAILURE',
+        'XCTest recorded a failure while executing tap; the action may not have been performed.',
+      );
+    }
+    if (command === 'snapshot') return snapshotPayload(imageViewerNodes);
+    return {};
+  });
+
+  const response = await runClick(sessionStore, sessionName);
+
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) expect(response.error.code).toBe('XCTEST_RECORDED_FAILURE');
+  expect(mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(0);
+  expect(sessionStore.get(sessionName)?.actions).toHaveLength(0);
+});
+
 test('runtime-resolved taps use the same corroboration boundary', async () => {
   const sessionName = 'ios-runtime-tap-corroboration';
   const sessionStore = makeSessionStore();

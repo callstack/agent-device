@@ -13,6 +13,7 @@ import type { ContextFromFlags } from './interaction-common.ts';
 import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
 
 const XCTEST_RECORDED_FAILURE = 'XCTEST_RECORDED_FAILURE';
+const IOS_TAP_CORROBORATION_BASELINE_MAX_AGE_MS = 5_000;
 
 const IOS_TAP_CORROBORATION_WARNING =
   'XCTest reported the tap as failed, but a same-scope post-action accessibility capture changed; treating the tap as landed. Observe the current screen before issuing another tap.';
@@ -73,9 +74,20 @@ function isTapCommand(command: string): boolean {
 
 function readCorroborationBaseline(
   snapshot: SnapshotState | undefined,
-): { snapshot: SnapshotState; presentation: SnapshotPresentation | undefined } | undefined {
+): { snapshot: SnapshotState; presentation: SnapshotPresentation } | undefined {
   if (!hasUsableBaseline(snapshot)) return undefined;
-  return { snapshot, presentation: readSnapshotPresentation(snapshot.presentationKey) };
+  const ageMs = Date.now() - snapshot.createdAt;
+  if (ageMs < 0 || ageMs > IOS_TAP_CORROBORATION_BASELINE_MAX_AGE_MS) {
+    emitDiagnostic({
+      level: 'debug',
+      phase: 'ios_tap_failure_corroboration_stale_baseline',
+      data: { ageMs },
+    });
+    return undefined;
+  }
+  const presentation = readSnapshotPresentation(snapshot.presentationKey);
+  if (!presentation) return undefined;
+  return { snapshot, presentation };
 }
 
 async function captureCorroborationSnapshot(
@@ -125,7 +137,7 @@ function hasMatchingPresentation(
     });
     return false;
   }
-  if (!baseline.presentationKey || baseline.presentationKey === after.presentationKey) return true;
+  if (baseline.presentationKey === after.presentationKey) return true;
   emitDiagnostic({
     level: 'debug',
     phase: 'ios_tap_failure_corroboration_scope_mismatch',
