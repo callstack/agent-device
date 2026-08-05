@@ -156,14 +156,10 @@ export function buildInteractionResponseData(params: {
   if (source.kind === 'runner-payload' || source.kind === 'corroborated-tap') {
     const commonExtra = {
       targetKind: source.targetKind,
-      ...applyResolutionDisclosurePolicy(
-        source,
-        source.kind === 'runner-payload'
-          ? { resolution: DIRECT_IOS_NOT_OBSERVED_RESOLUTION }
-          : source.resolution
-            ? { resolution: source.resolution }
-            : {},
-      ),
+      ...applyResolutionDisclosurePolicy(source, {
+        resolution:
+          source.kind === 'runner-payload' ? DIRECT_IOS_NOT_OBSERVED_RESOLUTION : source.resolution,
+      }),
       ...(extra ?? {}),
     };
     const result = buildTouchPayload({
