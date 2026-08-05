@@ -225,6 +225,18 @@ test('fixture navigation uses edge-aware traversal without losing direct swipe e
   );
 });
 
+test('fixture navigation establishes the home route before selecting Catalog', () => {
+  const actions = parseReplayScriptDetailed(
+    fs.readFileSync('test/integration/replays/ios/fixture/01-navigation-scroll.ad', 'utf8'),
+  ).actions;
+  const open = actions[0];
+  assert.equal(open?.command, 'open');
+  assert.equal(open?.flags.relaunch, true);
+  assert.equal(open?.runtime?.launchUrl, 'agent-device-test-app:///');
+  assert.equal(actions[2]?.command, 'click');
+  assert.equal(actions[2]?.positionals?.[0], 'label="Catalog"');
+});
+
 test('event timeline coverage follows cursors beyond the first page', async () => {
   const requestedCursors: Array<string | undefined> = [];
   const timeline = await collectPagedEventTimeline(async (cursor) => {

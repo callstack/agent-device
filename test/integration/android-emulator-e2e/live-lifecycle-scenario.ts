@@ -7,6 +7,7 @@ import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live
 const C = PUBLIC_COMMANDS;
 const AUTOMATION_DEEP_LINK =
   'agent-device-test-app:///automation?event=full.lifecycle&payload=%7B%22source%22%3A%22android-nightly%22%7D';
+export const ANDROID_PERMISSION_PROMPT_COMMAND = ['alert', 'wait', '10000'] as const;
 
 export async function assertLifecycleAndSystem(context: LiveContext): Promise<void> {
   await runStep(context, 'open Android fixture lifecycle route', [
@@ -73,8 +74,7 @@ async function resetAndRequestMicrophonePermission(
     'id="automation-request-microphone"',
   ]);
   const prompt = await runStep(context, `inspect Android microphone prompt for ${action}`, [
-    'alert',
-    'get',
+    ...ANDROID_PERMISSION_PROMPT_COMMAND,
   ]);
   assert.equal(prompt.json?.data?.alert?.source, 'permission', JSON.stringify(prompt.json));
   const alertAction = action === 'deny' ? 'dismiss' : 'accept';

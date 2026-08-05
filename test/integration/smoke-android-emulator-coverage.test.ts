@@ -4,6 +4,7 @@ import test from 'node:test';
 import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
 import { isCommandSupportedOnDevice } from '../../src/core/capabilities.ts';
 import { ANDROID_EMULATOR_BEHAVIOR_COVERAGE } from './android-emulator-e2e/behavior-coverage.ts';
+import { ANDROID_PERMISSION_PROMPT_COMMAND } from './android-emulator-e2e/live-lifecycle-scenario.ts';
 import {
   ANDROID_EMULATOR_COVERAGE_CLASSIFICATION_SUMMARY,
   ANDROID_EMULATOR_E2E_COVERAGE,
@@ -134,6 +135,10 @@ test('Android app scenarios declare deterministic starting surfaces and IME mode
       { id: 'full:fixture-replays', start: undefined },
     ],
   );
+});
+
+test('Android permission recovery waits for the asynchronous native prompt', () => {
+  assert.deepEqual(ANDROID_PERMISSION_PROMPT_COMMAND, ['alert', 'wait', '10000']);
 });
 
 test('Android emulator scenarios can be selected as an ordered subset', () => {

@@ -3,7 +3,7 @@ context platform=ios kind=simulator timeout=120000
 
 env APP_TARGET="Agent Device Tester"
 
-open "${APP_TARGET}" --relaunch
+open "${APP_TARGET}" --relaunch --launch-url "agent-device-test-app:///"
 wait "Agent Device Tester" 30000
 click "label=\"Catalog\""
 wait "Search, filter, scroll, favorite, and drill into detail without extra dependencies." 5000
