@@ -1,3 +1,5 @@
+[![MCP Toplist](https://mcptoplist.com/badge/io.github.callstackincubator%2Fagent-device.svg)](https://mcptoplist.com/server/io.github.callstackincubator%2Fagent-device)
+
 <a href="https://www.callstack.com/open-source?utm_campaign=generic&utm_source=github&utm_medium=referral&utm_content=agent-device" align="center">
   <picture>
     <img alt="agent-device: device automation CLI for AI agents" src="website/docs/public/agent-device-banner.jpg">
