@@ -9,7 +9,7 @@ import {
 import type { PNG } from '../utils/png.ts';
 import { decodePngAsync, encodePngAsync } from '../utils/png-worker-client.ts';
 import { analyzeReactNativeOverlay } from '../core/react-native-overlay.ts';
-import { normalizeType } from '@agent-device/contracts/snapshot';
+import { isViewportRootNode, normalizeType } from '@agent-device/contracts/snapshot';
 import { findNearestAncestor } from '../snapshot/snapshot-processing.ts';
 import { resolveAndroidOverlaySourceRect } from './screenshot-overlay-android.ts';
 import { hasPositiveRect, rectArea, rectContains } from './screenshot-overlay-rects.ts';
@@ -212,7 +212,7 @@ function isAndroidUnlabeledClickableSource(
   node: SnapshotNode,
 ): boolean {
   if (snapshot.backend !== 'android') return false;
-  if (!node.hittable || !hasPositiveRect(node.rect) || isViewportLikeNode(node)) return false;
+  if (!node.hittable || !hasPositiveRect(node.rect) || isViewportRootNode(node)) return false;
   const normalizedType = normalizeType(node.type ?? '');
   if (ANDROID_UNLABELED_CLICKABLE_EXCLUDED_TYPES.some((type) => normalizedType.includes(type))) {
     return false;
@@ -318,7 +318,7 @@ function projectRectToScreenshot(
 function resolveSnapshotBounds(nodes: SnapshotState['nodes']): Rect | null {
   let viewport: Rect | null = null;
   for (const node of nodes) {
-    if (!isViewportLikeNode(node) || !hasPositiveRect(node.rect)) continue;
+    if (!isViewportRootNode(node) || !hasPositiveRect(node.rect)) continue;
     if (!viewport || rectArea(node.rect) > rectArea(viewport)) {
       viewport = node.rect;
     }
@@ -366,7 +366,7 @@ function hasActionableRole(node: SnapshotNode): boolean {
 }
 
 function isOverlayActionableNode(node: SnapshotNode): boolean {
-  return hasActionableRole(node) && !isViewportLikeNode(node);
+  return hasActionableRole(node) && !isViewportRootNode(node);
 }
 
 function isProxyOverlayNode(node: SnapshotNode): boolean {
@@ -379,15 +379,8 @@ function isProxyOverlayNode(node: SnapshotNode): boolean {
   );
 }
 
-function isViewportLikeNode(node: Pick<SnapshotNode, 'type' | 'role' | 'subrole'>): boolean {
-  const roleText = [node.type, node.role, node.subrole]
-    .map((value) => normalizeType(value ?? ''))
-    .join(' ');
-  return roleText.includes('application') || roleText.includes('window');
-}
-
 function isUsableOverlayTarget(node: SnapshotNode | null): node is SnapshotNode {
-  return Boolean(node?.rect && hasPositiveRect(node.rect) && !isViewportLikeNode(node));
+  return Boolean(node?.rect && hasPositiveRect(node.rect) && !isViewportRootNode(node));
 }
 
 function isMeaningfulSignal(value: string | undefined): boolean {

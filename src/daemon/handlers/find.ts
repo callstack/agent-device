@@ -1,4 +1,5 @@
 import { dispatchCommand } from '../../core/dispatch.ts';
+import { isViewportRootNode } from '@agent-device/contracts/snapshot';
 import {
   findBestMatchesByLocator,
   isReadOnlyFindAction,
@@ -371,8 +372,7 @@ function isRootInteractionContainer(
   root: SnapshotState['nodes'][number] | undefined,
 ): boolean {
   if (!root?.rect || !node.rect) return false;
-  const type = node.type?.toLowerCase() ?? '';
-  if (!type.includes('application') && !type.includes('window')) return false;
+  if (!isViewportRootNode(node)) return false;
   return rectsMatch(node.rect, root.rect);
 }
 

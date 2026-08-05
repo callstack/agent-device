@@ -6,7 +6,7 @@ import { pointInsideRect } from './shared.ts';
 import {
   findNearestScrollableAncestor,
   isScrollableNodeLike,
-  normalizeType,
+  isViewportRootNode,
 } from '@agent-device/contracts/snapshot';
 import { MAESTRO_COMPATIBILITY_PRESETS } from './compatibility-policy.ts';
 import { resolveNumeric } from './engine-flow.ts';
@@ -108,8 +108,7 @@ function findScrollContainer(
 function findLargestViewportRect(nodes: SnapshotState['nodes']): Rect | undefined {
   return nodes
     .filter((node) => {
-      const type = normalizeType(node.type ?? '');
-      return isPositiveFiniteRect(node.rect) && (type === 'application' || type === 'window');
+      return isPositiveFiniteRect(node.rect) && isViewportRootNode(node);
     })
     .sort(
       (left, right) =>

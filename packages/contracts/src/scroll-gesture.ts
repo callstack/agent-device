@@ -1,5 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { defineStringEnum } from './string-enum.ts';
+import { isViewportRootNode } from './snapshot-visibility.ts';
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 // What a caller may ASK for, as opposed to `ScrollDirection` (what the gesture resolves to):
@@ -273,7 +274,7 @@ export function parseScrollDirection(direction: string): ScrollDirection {
 
 function inferViewportRect(nodes: Array<Pick<SnapshotNode, 'type' | 'rect'>>): Rect | undefined {
   const candidate = nodes
-    .filter((node) => isViewportNode(node.type) && isValidRect(node.rect))
+    .filter((node) => isViewportRootNode(node) && isValidRect(node.rect))
     .map((node) => node.rect)
     .sort(
       (left, right) =>
@@ -288,12 +289,6 @@ function inferViewportRect(nodes: Array<Pick<SnapshotNode, 'type' | 'rect'>>): R
   const height = Math.max(...rects.map((rect) => rect.y + rect.height));
   if (width <= 0 || height <= 0) return undefined;
   return { x: 0, y: 0, width, height };
-}
-
-function isViewportNode(type: string | undefined): boolean {
-  if (!type) return false;
-  const normalized = type.toLowerCase();
-  return normalized.includes('application') || normalized.includes('window');
 }
 
 function isValidRect(rect: Rect | undefined): rect is Rect {

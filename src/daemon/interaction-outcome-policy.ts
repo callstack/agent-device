@@ -3,7 +3,7 @@ import { isMobilePlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { collectKeyboardChromeRefs } from '../core/snapshot-chrome.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
-import { normalizeType } from '@agent-device/contracts/snapshot';
+import { isViewportRootNode } from '@agent-device/contracts/snapshot';
 import { contextFromFlags } from './context.ts';
 import type { SessionState } from './types.ts';
 
@@ -390,22 +390,7 @@ function isNonDiscriminatingSurfaceNode(
   node: SnapshotNode,
   keyboardChromeRefs: ReadonlySet<string>,
 ): boolean {
-  return isViewportRootKind(node) || (node.ref !== undefined && keyboardChromeRefs.has(node.ref));
-}
-
-/**
- * Minimal local equivalent of `isViewportRoot` in
- * `src/snapshot/snapshot-occlusion.ts` (source of truth) — that function is
- * module-private and keyed off the broader `RawSnapshotNode` shape used by
- * occlusion/viewport resolution, so it is reimplemented here rather than
- * exported solely for this caller. Same normalized-kind substring test; keep
- * the two in lockstep if the underlying AX vocabulary changes.
- */
-function isViewportRootKind(node: Pick<SnapshotNode, 'type' | 'role' | 'subrole'>): boolean {
-  const normalizedKind = [node.type, node.role, node.subrole]
-    .map((value) => normalizeType(value ?? ''))
-    .join(' ');
-  return normalizedKind.includes('application') || normalizedKind.includes('window');
+  return isViewportRootNode(node) || (node.ref !== undefined && keyboardChromeRefs.has(node.ref));
 }
 
 function interactionSurfaceSemanticKey(node: SnapshotNode): string | undefined {

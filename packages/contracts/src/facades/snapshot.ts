@@ -5,6 +5,7 @@ export {
   isNodeVisibleInEffectiveViewport,
   isNodeVisibleOnScreen,
   isUsefulVisibilityAnchor,
+  isViewportRootNode,
   isTapPointInsideViewport,
   resolveEffectiveViewportRect,
   resolveViewportRect,
