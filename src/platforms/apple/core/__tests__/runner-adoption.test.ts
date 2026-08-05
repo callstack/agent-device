@@ -137,6 +137,17 @@ test('adoption succeeds for a live, matching, probe-healthy runner', async () =>
   expect(readStaleRunnerLease(simulator.id)).toBeNull();
 });
 
+test('adoption is skipped for a recycled runner pid (start time mismatch)', async () => {
+  // The live process on the leased pid started at a different time than the
+  // lease recorded — pid recycled since the owner died (#1596). Adopting it
+  // would make later disposal signal an innocent process.
+  writeStaleLease({ runnerStartTime: 'runner-original-start' });
+  mockIsProcessAlive.mockReturnValue(true);
+
+  expect(await tryAdoptRunnerSessionFromLease(simulator, {})).toBeNull();
+  expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
+});
+
 test('adoption is skipped for devices in a custom simulator set', async () => {
   writeStaleLease();
   mockIsProcessAlive.mockReturnValue(true);

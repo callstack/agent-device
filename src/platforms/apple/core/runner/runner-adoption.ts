@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { resolveIosSimulatorDeviceSetPath } from '../../../../utils/device-isolation.ts';
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
-import { isProcessAlive } from '../../../../utils/host-process.ts';
+import { isProcessAlive, readProcessStartTime } from '../../../../utils/host-process.ts';
 import { parseBooleanLiteral } from '../../../../utils/source-value.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ExecResult } from '../../../../utils/exec.ts';
@@ -69,6 +69,11 @@ export async function tryAdoptRunnerSessionFromLease(
   const runnerPid = lease.runnerPid;
   if (!runnerPid) return skip('runner_pid_missing');
   if (!isProcessAlive(runnerPid)) return skip('runner_process_dead');
+  // The adopted session later signals this pid on disposal, so a recycled pid
+  // must never be adopted even if some process answers the leased port.
+  if (lease.runnerStartTime && readProcessStartTime(runnerPid) !== lease.runnerStartTime) {
+    return skip('runner_pid_recycled');
+  }
   const expectedDerived = resolveExpectedDerivedPath(device);
   if (!expectedDerived) return skip('expected_derived_unresolved');
   if (!lease.xctestrunPath.startsWith(`${expectedDerived}${path.sep}`)) {
