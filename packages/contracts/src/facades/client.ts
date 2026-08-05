@@ -41,7 +41,25 @@ export type {
   DeviceShutdownOptions,
   StartupPerfSample,
 } from '../client-device-view.ts';
-export type { ClickOptions, DragOptions, FillOptions, FlingOptions, FocusOptions, LongPressOptions, PanOptions, PinchOptions, PressOptions, RepeatedPressOptions, RotateGestureOptions, ScrollOptions, SettleCommandOptions, SwipeGestureOptions, SwipeOptions, TransformGestureOptions, TypeTextOptions } from '../client-gesture.ts';
+export type {
+  ClickOptions,
+  DragOptions,
+  FillOptions,
+  FlingOptions,
+  FocusOptions,
+  LongPressOptions,
+  PanOptions,
+  PinchOptions,
+  PressOptions,
+  RepeatedPressOptions,
+  RotateGestureOptions,
+  ScrollOptions,
+  SettleCommandOptions,
+  SwipeGestureOptions,
+  SwipeOptions,
+  TransformGestureOptions,
+  TypeTextOptions,
+} from '../client-gesture.ts';
 export type {
   CloudArtifactsOptions,
   Lease,

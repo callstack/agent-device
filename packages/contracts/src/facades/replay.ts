@@ -12,4 +12,13 @@ export type {
   ReplayTargetGuardDenotation,
   WaitLandmarkMismatchEvidence,
 } from '../replay.ts';
-export type { LocalIdentity, MultiTargetAnnotationV1, NodeStructuralDenotation, TargetAncestryEntry, TargetAnnotationV1, TargetRect, TargetScrollRegion, TargetVerification } from '../target-annotation.ts';
+export type {
+  LocalIdentity,
+  MultiTargetAnnotationV1,
+  NodeStructuralDenotation,
+  TargetAncestryEntry,
+  TargetAnnotationV1,
+  TargetRect,
+  TargetScrollRegion,
+  TargetVerification,
+} from '../target-annotation.ts';

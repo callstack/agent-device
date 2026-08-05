@@ -25,9 +25,25 @@ export type {
   SwipeGesturePayload,
   TransformGesturePayload,
 } from '../gesture-input.ts';
-export { assertNoRemovedSwipeInput, describeReplayGestureArityError, dragGesturePayloadFromPositionals, gesturePayloadFromPositionals, gesturePayloadToPositionals, normalizeGestureCommandInput, normalizePublicGesture, normalizePublicSwipeMotion, swipePayloadFromPositionals } from '../gesture-normalization.ts';
+export {
+  assertNoRemovedSwipeInput,
+  describeReplayGestureArityError,
+  dragGesturePayloadFromPositionals,
+  gesturePayloadFromPositionals,
+  gesturePayloadToPositionals,
+  normalizeGestureCommandInput,
+  normalizePublicGesture,
+  normalizePublicSwipeMotion,
+  swipePayloadFromPositionals,
+} from '../gesture-normalization.ts';
 export type { NormalizedPublicGesture, SwipePayload } from '../gesture-normalization.ts';
-export { DEFAULT_DRAG_DESTINATION_HOLD_MS, DEFAULT_DRAG_MOVE_MS, DEFAULT_DRAG_SOURCE_HOLD_MS, GESTURE_DURATION_MAX_MS, GESTURE_DURATION_MIN_MS } from '../gesture-plan-types.ts';
+export {
+  DEFAULT_DRAG_DESTINATION_HOLD_MS,
+  DEFAULT_DRAG_MOVE_MS,
+  DEFAULT_DRAG_SOURCE_HOLD_MS,
+  GESTURE_DURATION_MAX_MS,
+  GESTURE_DURATION_MIN_MS,
+} from '../gesture-plan-types.ts';
 export type {
   GestureExecutionProfile,
   GestureIntent,
@@ -40,7 +56,16 @@ export type {
   SinglePointerGesturePlan,
   SinglePointerTrajectory,
 } from '../gesture-plan-types.ts';
-export { GESTURE_FLING_DURATION_MS, GESTURE_INITIAL_ANGLE_DEGREES, GESTURE_SAMPLE_INTERVAL_MS, buildDragGesturePlan, buildGesturePlan, interpolateGesturePoint, sampleGestureOffsets, singlePointerPlanEndpoints } from '../gesture-plan.ts';
+export {
+  GESTURE_FLING_DURATION_MS,
+  GESTURE_INITIAL_ANGLE_DEGREES,
+  GESTURE_SAMPLE_INTERVAL_MS,
+  buildDragGesturePlan,
+  buildGesturePlan,
+  interpolateGesturePoint,
+  sampleGestureOffsets,
+  singlePointerPlanEndpoints,
+} from '../gesture-plan.ts';
 export type { GestureSamplingProfile } from '../gesture-plan.ts';
 export {
   INTERACTION_DISPATCH_PATHS,

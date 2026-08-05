@@ -108,6 +108,63 @@ test('every workspace package façade names its exports explicitly (no bare `exp
   }
 });
 
+test('every façade re-exports its sources exhaustively (no silent narrowing)', () => {
+  // The star-rejection above catches a façade WIDENING invisibly. This catches the
+  // opposite, which is the failure an explicit list makes newly possible: a symbol
+  // added to a source module simply never reaches the façade, and nothing notices.
+  // `export *` could not narrow by construction; an explicit list can, so the
+  // property `export *` gave for free is asserted here instead.
+  //
+  // Found by review on #1614: this conversion was generated against the surface at
+  // fork time, and #1567 landed 13 new exports meanwhile (`DragOptions`, the drag
+  // gesture vocabulary, `MultiTargetAnnotationV1`). The rebase silently dropped all
+  // 13 and only a human diff caught it. Exhaustiveness is what makes that mechanical.
+  //
+  // Scoped to `packages/*/src/facades/` — the barrels this PR converted, which were
+  // exhaustive by construction because `export *` cannot narrow. A hand-curated
+  // package `index.ts` is a different thing: `@agent-device/ad-replay` deliberately
+  // publishes two values out of a much larger `internal/`, and forcing it exhaustive
+  // would widen a surface its owner narrowed on purpose (#1555).
+  const facadeFiles = listSourceFiles().filter((file) => file.includes('/src/facades/'));
+  assert.ok(facadeFiles.length > 0, 'expected at least one converted façade to check');
+  for (const file of [...facadeFiles].sort()) {
+    const absolute = path.join(repoRoot, file);
+    const exported = new Set(readNamedExports(fs.readFileSync(absolute, 'utf8')));
+    for (const specifier of reExportSources(fs.readFileSync(absolute, 'utf8'))) {
+      const sourcePath = path.resolve(path.dirname(absolute), specifier);
+      if (!fs.existsSync(sourcePath)) continue;
+      // A source module may itself carry a bare `export *` (e.g. contracts'
+      // `gesture-plan.ts` re-exports `gesture-plan-types.ts` wholesale). Its names are
+      // then unknowable from that file alone — but they are reachable, because the
+      // façade re-exports the starred module directly too, and THAT path is checked.
+      let sourceNames: string[];
+      try {
+        sourceNames = readNamedExports(fs.readFileSync(sourcePath, 'utf8'));
+      } catch {
+        continue;
+      }
+      const dropped = sourceNames.filter((name) => name !== 'default' && !exported.has(name));
+      assert.deepEqual(
+        dropped,
+        [],
+        `${file} re-exports from ${specifier} but omits ${dropped.join(', ')} — an explicit ` +
+          'façade list must stay exhaustive over its sources, or a symbol added upstream ' +
+          'silently never becomes public. Add the names, or move them out of that module.',
+      );
+    }
+  }
+});
+
+/** The relative specifiers a façade re-exports from, in source order. */
+function reExportSources(source: string): string[] {
+  const found = new Set<string>();
+  for (const match of source.matchAll(/\bfrom\s+'(\.[^']*)'/g)) {
+    const specifier = match[1];
+    if (specifier) found.add(specifier);
+  }
+  return [...found];
+}
+
 test('double-quoted and re-export routes into packages are not invisible to R11', () => {
   // The scanner is the layering parser, so quote style and statement form
   // cannot carve out a bypass: a double-quoted import, a re-export, and a
