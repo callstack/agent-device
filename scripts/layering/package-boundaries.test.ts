@@ -7,8 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { listSourceFiles } from './check.ts';
-import { readFacadeExports, readNamedExports } from './facade-exports.ts';
-import { FACADE_SYMBOLS } from './facade-symbols.ts';
+import { readNamedExports } from './facade-exports.ts';
 import {
   checkPackageBoundaries,
   checkPackageInternalSites,
@@ -77,29 +76,33 @@ test('specifier sites carry 1-based lines for static and dynamic imports', () =>
   );
 });
 
-test('every workspace package façade exports exactly its pinned symbol list', () => {
+test('every workspace package façade names its exports explicitly (no bare `export *`)', () => {
+  // #1574 built a hand-maintained pin table (`facade-symbols.ts`, 816 symbols across every
+  // workspace-package façade) plus a ~200-line star-chain resolver (`readFacadeExports`) whose
+  // entire job was enumerating what `export *` hides. Once a façade names its exports explicitly,
+  // the façade file itself IS the pin — a widening shows up in the diff of the file that grew,
+  // not in a table two files away that only a gate failure would surface. This structural gate is
+  // what keeps that property true: every façade a package manifest declares (`exportTargets`),
+  // plus every file under a `packages/*/src/facades/` directory, must parse through
+  // `readNamedExports` without hitting the bare-`export *`/`export default` rejection it already
+  // implements — reusing that check rather than writing a second, regex-based one that would have
+  // to independently rediscover every export form to be trustworthy.
   const packages = readWorkspacePackages(repoRoot);
-  const pinned = new Map(FACADE_SYMBOLS.map(([specifier, names]) => [specifier, names]));
-  // The table and the manifests must agree in BOTH directions: a new package
-  // (or a new subpath on an existing one) that nobody pinned is exactly the
-  // widening this gate exists to catch, so an unpinned façade fails here
-  // rather than being silently skipped.
-  const declared = packages
-    .filter((pkg) => pkg.name !== '@agent-device/ad-replay')
-    .flatMap((pkg) => [...pkg.exportTargets.keys()]);
-  assert.deepEqual(
-    declared.slice().sort(),
-    [...pinned.keys()].sort(),
-    'every exports-map subpath needs a pinned symbol list (and vice versa)',
-  );
-  for (const pkg of packages) {
-    for (const [specifier, target] of pkg.exportTargets) {
-      const expected = pinned.get(specifier);
-      if (!expected) continue;
-      assert.deepEqual(
-        readFacadeExports(path.join(repoRoot, target)),
-        [...expected],
-        `${specifier} exports exactly its pinned symbol list`,
+  const facadeFiles = new Set<string>(packages.flatMap((pkg) => [...pkg.exportTargets.values()]));
+  for (const file of listSourceFiles()) {
+    if (file.includes('/src/facades/')) facadeFiles.add(file);
+  }
+  assert.ok(facadeFiles.size > 0, 'expected at least one workspace package façade to check');
+  for (const file of [...facadeFiles].sort()) {
+    const source = fs.readFileSync(path.join(repoRoot, file), 'utf8');
+    try {
+      readNamedExports(source);
+    } catch (error) {
+      assert.fail(
+        `${file} must name its exports explicitly instead of a bare \`export *\` (or an ` +
+          '`export default`) — a façade widened by a star re-export hides the new symbol from ' +
+          'its own diff, exactly what the retired symbol-pin table (#1574) used to catch by ' +
+          `hand. Underlying error: ${(error as Error).message}`,
       );
     }
   }
@@ -330,7 +333,9 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/kernel',
   ]);
   assert.deepEqual(
-    readFacadeExports(path.join(repoRoot, 'packages/selectors/src/index.ts')).filter((name) =>
+    readNamedExports(
+      fs.readFileSync(path.join(repoRoot, 'packages/selectors/src/index.ts'), 'utf8'),
+    ).filter((name) =>
       ['Selector', 'SelectorChain', 'SelectorTerm', 'SelectorKey', 'parseSelectorChain'].includes(
         name,
       ),

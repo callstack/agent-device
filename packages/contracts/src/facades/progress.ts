@@ -1,1 +1,7 @@
-export * from '../request-progress.ts';
+export type {
+  CommandProgressEvent,
+  ReplayTestProgressEvent,
+  ReplayTestSuiteProgressEvent,
+  RequestProgressEvent,
+  RequestProgressSink,
+} from '../request-progress.ts';
