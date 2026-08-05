@@ -129,8 +129,6 @@ const audioCliSchema = {
   usageOverride:
     'audio probe start [durationSeconds] [bucketMs] | audio probe status | audio probe stop',
   listUsageOverride: 'audio',
-  helpDescription:
-    'Probe browser or host-rendered simulator/emulator audio as compact dBFS buckets',
   summary: 'Probe audio levels',
   positionalArgs: ['probe', 'start|status|stop', 'durationSeconds?', 'bucketMs?'],
 } as const satisfies CommandSchemaOverride;
@@ -215,11 +213,8 @@ const audioCommandFacet = defineCommandFacet({
   definition: audioCommandDefinition,
   cliSchema: audioCliSchema,
   guidance: {
-    mcp: {
-      description:
-        'Measure browser or host-rendered simulator/emulator audio as compact dBFS buckets. Start a probe before requesting its status or stopping it.',
-      parameters: ['durationMs', 'bucketMs'],
-    },
+    description:
+      'Measure browser or host-rendered simulator/emulator audio as compact dBFS buckets. Start a probe before requesting its status or stopping it.',
   },
   cliReader: audioCliReader,
   daemonWriter: audioDaemonWriter,

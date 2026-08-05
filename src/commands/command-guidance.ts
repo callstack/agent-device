@@ -1,82 +1,47 @@
 import type { CommandSchemaOverride } from '../cli-schema/types.ts';
-import type { FlagKey } from './cli-grammar/flag-types.ts';
-import type { JsonSchema } from './command-contract.ts';
 
+/**
+ * One canonical description per command, plus an optional tail per surface.
+ *
+ * There is deliberately no per-surface description *override*: a surface can only append
+ * to the shared body, never replace it, so CLI help and MCP tool text cannot drift apart.
+ * Terminal-only vocabulary — flags, positional syntax, `agent-device` examples — belongs in
+ * `cliDetail`, which the MCP surface never reads; that is what keeps MCP descriptions free of
+ * CLI syntax structurally rather than by review.
+ *
+ * Input fields are documented once, in the command's `inputSchema`. Both surfaces already
+ * render those descriptions (MCP sends the schema with the tool, `--help` prints the flag
+ * section), so guidance never restates them.
+ */
 export type CommandGuidance = {
-  /** Surface-neutral intent shared by the CLI, MCP, and command explanation. */
+  /** Canonical intent. Defaults to the CLI help description, then the command metadata description. */
   description?: string;
-  cli?: {
-    /** Replaces the shared description when terminal phrasing needs to differ. */
-    description?: string;
-    /** CLI-only operational detail that does not belong in an MCP tool description. */
-    detail?: string;
-    /** Flags worth naming in the CLI synopsis; full flag docs remain in the flag section. */
-    flags?: readonly FlagKey[];
-  };
-  mcp?: {
-    /** Replaces the shared description when MCP phrasing needs to differ. */
-    description?: string;
-    /** MCP-only operational detail that does not belong in terminal help. */
-    detail?: string;
-    /** Input fields whose schema descriptions should be appended to the MCP tool description. */
-    parameters?: readonly string[];
-  };
+  /** Appended to CLI help only: flags, positional syntax, terminal examples. */
+  cliDetail?: string;
+  /** Appended to the MCP tool description only: when-to-use and sequencing hints. */
+  mcpDetail?: string;
 };
 
 export function projectCommandGuidance(
-  fallbackDescription: string,
+  metadataDescription: string,
   cliSchema: CommandSchemaOverride | undefined,
-  inputSchema: JsonSchema,
   guidance: CommandGuidance | undefined,
 ): { cliSchema: CommandSchemaOverride | undefined; mcpDescription: string } {
-  const shared =
-    guidance?.description ??
-    cliSchema?.helpDescription ??
-    cliSchema?.summary ??
-    fallbackDescription;
+  // `summary` is the short list-view line, so it is deliberately not in this chain:
+  // falling back to it would replace a full description with a fragment on both surfaces.
+  const shared = guidance?.description ?? cliSchema?.helpDescription ?? metadataDescription;
   return {
-    cliSchema: injectCliGuidance(guidance?.cli?.description ?? shared, cliSchema, guidance?.cli),
-    mcpDescription: injectMcpGuidance(
-      guidance?.mcp?.description ?? shared,
-      inputSchema,
-      guidance?.mcp,
-    ),
+    cliSchema:
+      (cliSchema ?? guidance)
+        ? {
+            ...cliSchema,
+            helpDescription: appendDetail(shared, guidance?.cliDetail),
+          }
+        : undefined,
+    mcpDescription: appendDetail(shared, guidance?.mcpDetail),
   };
 }
 
-function injectCliGuidance(
-  shared: string,
-  cliSchema: CommandSchemaOverride | undefined,
-  guidance: CommandGuidance['cli'] | undefined,
-): CommandSchemaOverride | undefined {
-  if (!cliSchema && !guidance) return undefined;
-  const flagNames = guidance?.flags?.map((flag) => `--${toKebabCase(flag)}`) ?? [];
-  const additions = [
-    guidance?.detail,
-    flagNames.length > 0 ? `Relevant flags: ${flagNames.join(', ')}.` : undefined,
-  ]
-    .filter((value): value is string => Boolean(value))
-    .join(' ');
-  return { ...cliSchema, helpDescription: [shared, additions].filter(Boolean).join(' ') };
-}
-
-function injectMcpGuidance(
-  shared: string,
-  inputSchema: JsonSchema,
-  guidance: CommandGuidance['mcp'] | undefined,
-): string {
-  const properties = inputSchema.properties ?? {};
-  const parameterHints = (guidance?.parameters ?? []).flatMap((name) => {
-    const description = properties[name]?.description;
-    return description ? [`${name}: ${description}`] : [];
-  });
-  const additions = [
-    guidance?.detail,
-    parameterHints.length > 0 ? `Key inputs: ${parameterHints.join(' ')}` : undefined,
-  ].filter((value): value is string => Boolean(value));
-  return [shared, ...additions].join(' ');
-}
-
-function toKebabCase(value: string): string {
-  return value.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+function appendDetail(description: string, detail: string | undefined): string {
+  return detail ? `${description} ${detail}` : description;
 }

@@ -43,8 +43,6 @@ const settingsCommandDefinition = defineExecutableCommand(
 const settingsCliSchema = {
   usageOverride: SETTINGS_USAGE_OVERRIDE,
   listUsageOverride: 'settings [area] [options]',
-  helpDescription:
-    'Toggle OS settings, animation scales, appearance, and app permissions (macOS supports only settings appearance <light|dark|toggle> and settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>; wifi|airplane|location|animations remain unsupported on macOS; mobile permission actions use the active session app)',
   summary: 'Change OS settings and app permissions',
   positionalArgs: ['setting', 'state', 'target?', 'mode?'],
 } as const satisfies CommandSchemaOverride;
@@ -62,10 +60,10 @@ export const settingsCommandFacet = defineCommandFacet({
   definition: settingsCommandDefinition,
   cliSchema: settingsCliSchema,
   guidance: {
-    mcp: {
-      description:
-        'Change supported operating-system settings, animation scales, appearance, or app permissions on the selected target. Platform support varies by setting and action.',
-    },
+    description:
+      'Change supported operating-system settings, animation scales, appearance, or app permissions on the selected target. Platform support varies by setting and action.',
+    cliDetail:
+      'macOS supports only settings appearance <light|dark|toggle> and settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>; wifi|airplane|location|animations remain unsupported on macOS. Mobile permission actions use the active session app.',
   },
   cliReader: settingsCliReader,
   daemonWriter: settingsDaemonWriter,

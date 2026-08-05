@@ -84,8 +84,6 @@ const interactionCliSchemas = {
   },
   click: {
     usageOverride: 'click <x y|@ref|selector>',
-    helpDescription:
-      'Activate a UI target by snapshot ref, selector, or coordinates. Prefer a ref or selector after snapshot; use coordinates only when semantic targeting is unavailable. This can change app state; use settle or snapshot to verify the result.',
     positionalArgs: ['target'],
     allowsExtraPositionals: true,
     allowedFlags: [
@@ -97,8 +95,6 @@ const interactionCliSchemas = {
   },
   press: {
     usageOverride: 'press <x y|@ref|selector>',
-    helpDescription:
-      'Short press a semantic UI target by ref, selector, or point. For native context menus or hold gestures, use longpress <target> <durationMs> instead of press --hold-ms.',
     positionalArgs: ['targetOrX', 'y?'],
     allowsExtraPositionals: true,
     allowedFlags: [
@@ -109,8 +105,6 @@ const interactionCliSchemas = {
   },
   longpress: {
     usageOverride: 'longpress <x y|@ref|selector> [durationMs]',
-    helpDescription:
-      'Open native context menus or long-press targets by ref, selector, or point. Duration is positional, for example longpress @e12 800 or longpress 300 500 800.',
     positionalArgs: ['targetOrX', 'yOrDurationMs?', 'durationMs?'],
     allowsExtraPositionals: true,
     allowedFlags: [...postActionObservationCliFlags('longpress'), ...SELECTOR_SNAPSHOT_FLAGS],
@@ -126,8 +120,6 @@ const interactionCliSchemas = {
   gesture: {
     usageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform|drag> ...',
     listUsageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform|drag> ...',
-    helpDescription:
-      'Run touch gestures: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge>, pinch <scale> [x] [y], rotate <degrees> [x] [y], transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs], or drag <source-selector|pinned-ref> <destination-selector|pinned-ref> [sourceHoldMs] [moveMs] [destinationHoldMs]. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values.',
     summary: 'Run pan, fling, swipe, pinch, rotate, transform, or drag gestures',
     positionalArgs: ['pan|fling|swipe|pinch|rotate|transform|drag', 'args?'],
     allowsExtraPositionals: true,
@@ -248,11 +240,8 @@ const clickCommandFacet = defineCommandFacet({
   definition: clickCommandDefinition,
   cliSchema: interactionCliSchemas.click,
   guidance: {
-    mcp: {
-      description:
-        'Activate a UI target by snapshot ref, selector, or coordinates. Prefer a ref or selector after a snapshot; use coordinates only when semantic targeting is unavailable.',
-      parameters: ['target', 'settle', 'verify'],
-    },
+    description:
+      'Activate a UI target by snapshot ref, selector, or coordinates. Prefer a ref or selector after a snapshot; use coordinates only when semantic targeting is unavailable. This can change app state; use settle or verify to confirm the result without a follow-up snapshot.',
   },
   cliReader: interactionCliReaders.click,
   daemonWriter: interactionDaemonWriters.click,
@@ -265,11 +254,9 @@ const pressCommandFacet = defineCommandFacet({
   definition: pressCommandDefinition,
   cliSchema: interactionCliSchemas.press,
   guidance: {
-    mcp: {
-      description:
-        'Short-press a UI target by snapshot ref, selector, or coordinates. Use longpress instead when the target requires a context-menu or hold gesture.',
-      parameters: ['target', 'settle', 'verify'],
-    },
+    description:
+      'Short-press a UI target by snapshot ref, selector, or coordinates. Use longpress instead when the target requires a context-menu or hold gesture.',
+    cliDetail: 'Use longpress <target> <durationMs> rather than press --hold-ms.',
   },
   cliReader: interactionCliReaders.press,
   daemonWriter: interactionDaemonWriters.press,
@@ -292,11 +279,9 @@ const longPressCommandFacet = defineCommandFacet({
   definition: longPressCommandDefinition,
   cliSchema: interactionCliSchemas.longpress,
   guidance: {
-    mcp: {
-      description:
-        'Hold a UI target by snapshot ref, selector, or coordinates to open a context menu or perform another hold gesture. Set durationMs when the default hold duration is unsuitable.',
-      parameters: ['target', 'durationMs'],
-    },
+    description:
+      'Hold a UI target by snapshot ref, selector, or coordinates to open a context menu or perform another hold gesture. Set durationMs when the default hold duration is unsuitable.',
+    cliDetail: 'Duration is positional, for example longpress @e12 800 or longpress 300 500 800.',
   },
   cliReader: interactionCliReaders.longpress,
   daemonWriter: interactionDaemonWriters.longpress,
@@ -375,11 +360,10 @@ const gestureCommandFacet = defineCommandFacet({
   definition: gestureCommandDefinition,
   cliSchema: interactionCliSchemas.gesture,
   guidance: {
-    mcp: {
-      description:
-        'Perform a structured pan, fling, swipe, pinch, rotate, transform, or drag gesture. Select the gesture kind, then provide only the inputs that apply to that kind.',
-      parameters: ['kind', 'direction', 'preset', 'durationMs'],
-    },
+    description:
+      'Perform a structured pan, fling, swipe, pinch, rotate, transform, or drag gesture. Select the gesture kind, then provide only the inputs that apply to that kind.',
+    cliDetail:
+      'Argument shapes: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge>, pinch <scale> [x] [y], rotate <degrees> [x] [y], transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs], or drag <source-selector|pinned-ref> <destination-selector|pinned-ref> [sourceHoldMs] [moveMs] [destinationHoldMs]. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values.',
   },
   cliReader: gestureCliReaders.gesture,
   daemonWriter: gestureDaemonWriters.gesture,

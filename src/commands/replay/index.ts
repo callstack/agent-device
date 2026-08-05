@@ -55,7 +55,9 @@ export const replayCommandMetadata = defineFieldCommandMetadata(
     // ADR 0012 decision 6, R1/R6: arms agent-supervised re-record repair
     // from the first replay attempt; optional string value is the healed
     // script's output path.
-    saveScript: jsonSchemaField<boolean | string>({ oneOf: [booleanSchema(), stringSchema()] }),
+    saveScript: jsonSchemaField<boolean | string>({
+      oneOf: [booleanSchema(), stringSchema()],
+    }),
     // #1258: overwrite an existing --save-script target (arm-time preflight +
     // publish) instead of refusing. Alias: --overwrite.
     force: booleanField(),
@@ -95,8 +97,6 @@ export const testCommandDefinition = defineExecutableCommand(testCommandMetadata
 
 const replayCliSchema = {
   usageOverride: 'replay <path> | replay export <file.ad> [--out <path>]',
-  helpDescription:
-    'Replay a recorded session. For Maestro YAML compatibility flows, use replay <flow.yaml> --maestro and keep the target binding such as --platform ios on the replay command. A script with no terminal close leaves its session (and daemon) running until you close it or it idle-reaps — no different from a session opened interactively. For native .ad scripts, --keep-session suppresses exactly an authored terminal close so you can continue interactively.',
   summary: replayCommandDescription,
   positionalArgs: ['path'],
   allowsExtraPositionals: true,
@@ -206,10 +206,10 @@ const replayCommandFacet = defineCommandFacet({
   definition: replayCommandDefinition,
   cliSchema: replayCliSchema,
   guidance: {
-    mcp: {
-      description:
-        'Run a recorded automation script, including compatible Maestro YAML flows. A script without a terminal close leaves its session active for subsequent automation.',
-    },
+    description:
+      'Run a recorded automation script, including compatible Maestro YAML flows. A script without a terminal close leaves its session active for subsequent automation.',
+    cliDetail:
+      'For Maestro YAML compatibility flows, use replay <flow.yaml> --maestro and keep the target binding such as --platform ios on the replay command. A script with no terminal close leaves its session (and daemon) running until you close it or it idle-reaps — no different from a session opened interactively. For native .ad scripts, --keep-session suppresses exactly an authored terminal close so you can continue interactively.',
   },
   cliReader: replayCliReader,
   daemonWriter: replayDaemonWriter,

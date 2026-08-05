@@ -34,8 +34,6 @@ const diffCommandDefinition = defineExecutableCommand(diffCommandMetadata, (clie
 const diffCliSchema = {
   usageOverride:
     'diff snapshot | diff screenshot --baseline <path> [current.png] [--out <diff.png>] [--threshold <0-1>] [--overlay-refs]',
-  helpDescription:
-    'Diff accessibility snapshot or compare screenshots pixel-by-pixel. Live iOS simulator screenshot diffs normalize status-bar chrome by default; use screenshot --normalize-status-bar when capturing reusable baselines.',
   summary: 'Diff snapshot or screenshot',
   positionalArgs: ['kind', 'current?'],
   allowedFlags: [...SNAPSHOT_FLAGS, 'baseline', 'threshold', 'out', 'overlayRefs'],
@@ -66,10 +64,10 @@ export const diffCommandFacet = defineCommandFacet({
   definition: diffCommandDefinition,
   cliSchema: diffCliSchema,
   guidance: {
-    mcp: {
-      description:
-        'Compare accessibility snapshots or screenshots to identify UI changes. Use snapshot comparisons for semantic tree changes and screenshot comparisons for pixel differences.',
-    },
+    description:
+      'Compare accessibility snapshots or screenshots to identify UI changes. Use snapshot comparisons for semantic tree changes and screenshot comparisons for pixel differences.',
+    cliDetail:
+      'Live iOS simulator screenshot diffs normalize status-bar chrome by default; use screenshot --normalize-status-bar when capturing reusable baselines.',
   },
   cliReader: diffCliReader,
   daemonWriter: diffDaemonWriter,

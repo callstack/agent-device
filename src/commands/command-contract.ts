@@ -18,6 +18,12 @@ export type JsonSchema = {
 export type CommandMetadata<Name extends string, Input> = {
   name: Name;
   description: string;
+  /**
+   * Canonical description plus any MCP-only tail, projected from the command's guidance.
+   * Only the MCP tool surface reads this; `description` stays surface-neutral for CLI help,
+   * `explain`, and docs.
+   */
+  mcpDescription?: string;
   inputSchema: JsonSchema;
   readInput: (input: unknown) => Input;
 };

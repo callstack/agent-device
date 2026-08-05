@@ -61,7 +61,7 @@ export function listCommandTools(): Array<{
         : undefined;
     return {
       name: definition.name,
-      description: definition.description,
+      description: definition.mcpDescription ?? definition.description,
       inputSchema: withMcpConfigSchema(definition.name, definition.inputSchema),
       // Only typed commands carry an outputSchema; untyped tools stay
       // byte-identical to today (no key at all), additive-only.

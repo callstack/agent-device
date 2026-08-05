@@ -18,7 +18,7 @@ const capabilitiesCommandMetadata = defineFieldCommandMetadata(
 
 const bootCommandMetadata = defineFieldCommandMetadata(
   'boot',
-  'Boot or prepare a selected device without using CLI positional arguments.',
+  'Boot or prepare the selected device or simulator so later commands can target it. The device is chosen through the device-selection inputs, not by naming it here.',
   {
     headless: booleanField('Boot without showing simulator UI when supported.'),
   },
@@ -60,8 +60,6 @@ const devicesCliSchema = {
 
 const capabilitiesCliSchema = {
   summary: 'List supported commands for the selected device',
-  helpDescription:
-    'List command names supported by the selected session device or explicit --platform/--device/--udid/--serial target.',
 } as const satisfies CommandSchemaOverride;
 
 const shutdownCliSchema = {
@@ -96,10 +94,9 @@ const capabilitiesCommandFacet = defineCommandFacet({
   definition: capabilitiesCommandDefinition,
   cliSchema: capabilitiesCliSchema,
   guidance: {
-    mcp: {
-      description:
-        'List the commands supported by the selected device or active session. Use device-selection inputs when checking support before a session is open.',
-    },
+    description:
+      'List the commands supported by the selected device or active session. Use device-selection inputs when checking support before a session is open.',
+    cliDetail: 'Select an explicit target with --platform/--device/--udid/--serial.',
   },
   cliReader: commonCliReader,
   daemonWriter: capabilitiesDaemonWriter,

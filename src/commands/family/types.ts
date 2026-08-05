@@ -67,13 +67,13 @@ export function defineCommandFacet<
   const { cliSchema, mcpDescription } = projectCommandGuidance(
     command.metadata.description,
     command.cliSchema,
-    command.metadata.inputSchema,
     command.guidance,
   );
+  // `description` stays canonical for CLI help, `explain`, and docs; the MCP tool surface
+  // reads `mcpDescription` instead of having its variant written back over the shared field.
   return {
     ...command,
-    metadata: { ...command.metadata, description: mcpDescription },
-    definition: { ...command.definition, description: mcpDescription },
+    metadata: { ...command.metadata, mcpDescription },
     ...(cliSchema ? { cliSchema } : {}),
   } as TCommand;
 }

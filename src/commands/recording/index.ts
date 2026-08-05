@@ -63,8 +63,6 @@ const recordCliSchema = {
   usageOverride:
     'record start [path] [--scope <app|device|system>] [--fps <n>] [--max-size <px>] [--quality <medium|high>] [--hide-touches] | record stop',
   listUsageOverride: 'record start [path] | record stop',
-  helpDescription:
-    'Start/stop screen recording. The default --scope app requires an active app session from open <app>; use --scope device/system to explicitly request whole-screen recording where the selected backend supports it. Android record start publishes a durable device manifest, recordings longer than the 180s adb screenrecord limit are returned as multiple MP4 chunks while the daemon stays alive, and daemon-restart recovery uses only manifest-owned chunks. Use --max-size to limit dimensions and --quality to choose medium or high export quality',
   summary: 'Start or stop screen recording',
   positionalArgs: ['start|stop', 'path?'],
   allowedFlags: ['recordingScope', 'fps', 'screenshotMaxSize', 'quality', 'hideTouches'],
@@ -73,8 +71,6 @@ const recordCliSchema = {
 const traceCliSchema = {
   usageOverride: 'trace start <path> | trace stop <path>',
   listUsageOverride: 'trace start <path> | trace stop <path>',
-  helpDescription:
-    'Start/stop trace log capture; when an artifact path is requested, pass the same positional path to start and stop',
   summary: 'Start or stop trace capture',
   positionalArgs: ['start|stop', 'path?'],
 } as const satisfies CommandSchemaOverride;
@@ -110,10 +106,10 @@ const recordCommandFacet = defineCommandFacet({
   definition: recordCommandDefinition,
   cliSchema: recordCliSchema,
   guidance: {
-    mcp: {
-      description:
-        'Start or stop a screen recording for the active app session or, where supported, the selected device. Long Android recordings can return multiple video artifacts.',
-    },
+    description:
+      'Start or stop a screen recording for the active app session or, where supported, the selected device. Long Android recordings can return multiple video artifacts.',
+    cliDetail:
+      'The default --scope app requires an active app session from open <app>; use --scope device/system to explicitly request whole-screen recording where the selected backend supports it. Android record start publishes a durable device manifest, recordings longer than the 180s adb screenrecord limit are returned as multiple MP4 chunks while the daemon stays alive, and daemon-restart recovery uses only manifest-owned chunks. Use --max-size to limit dimensions and --quality to choose medium or high export quality.',
   },
   cliReader: recordCliReader,
   daemonWriter: recordDaemonWriter,
@@ -126,10 +122,9 @@ const traceCommandFacet = defineCommandFacet({
   definition: traceCommandDefinition,
   cliSchema: traceCliSchema,
   guidance: {
-    mcp: {
-      description:
-        'Start or stop trace-log capture and return the resulting artifact when capture ends. Use the same artifact path for the matching start and stop requests when an explicit path is required.',
-    },
+    description:
+      'Start or stop trace-log capture and return the resulting artifact when capture ends. Use the same artifact path for the matching start and stop requests when an explicit path is required.',
+    cliDetail: 'Pass that path as the same positional argument to start and stop.',
   },
   cliReader: traceCliReader,
   daemonWriter: traceDaemonWriter,

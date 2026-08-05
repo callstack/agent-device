@@ -62,8 +62,6 @@ const pushCliSchema = {
 const triggerAppEventCliSchema = {
   usageOverride: 'trigger-app-event <event> [payloadJson]',
   listUsageOverride: 'trigger-app-event',
-  helpDescription:
-    'Invoke app-defined automation or test events with an optional structured payload.',
   summary: 'Invoke app-defined automation/test events with optional structured payloads',
   positionalArgs: ['event', 'payloadJson?'],
 } as const satisfies CommandSchemaOverride;
@@ -103,11 +101,8 @@ const triggerAppEventCommandFacet = defineCommandFacet({
   definition: triggerAppEventCommandDefinition,
   cliSchema: triggerAppEventCliSchema,
   guidance: {
-    mcp: {
-      description:
-        'Ask the app to handle an app-defined automation or test event. Call this only for event names and payload shapes the app documents.',
-      parameters: ['event', 'payload'],
-    },
+    description:
+      'Ask the app to handle an app-defined automation or test event, with an optional structured payload. Call this only for event names and payload shapes the app documents.',
   },
   cliReader: triggerAppEventCliReader,
   daemonWriter: triggerAppEventDaemonWriter,

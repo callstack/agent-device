@@ -136,7 +136,7 @@ test('usage includes agent workflows, config, environment, and examples footers'
   assert.match(usageText, /After mutation: refs are stale/);
   assert.match(usageText, /use its selector directly; otherwise refresh with snapshot -i/);
   assert.match(usageText, /fill <targetOrX> <yOrText> \[text\]\s+Replace text in/);
-  assert.match(usageText, /type <text>\s+Append text to the focused field/);
+  assert.match(usageText, /type <text>\s+Append text to the currently focused input/);
   assert.match(usageText, /macOS context menus use click <ref> --button secondary/);
   assert.match(
     usageText,

@@ -209,8 +209,6 @@ const clipboardCliSchema = {
 const tvRemoteCliSchema = {
   usageOverride: `tv-remote [press|longpress] ${TV_REMOTE_BUTTON_USAGE} [--duration-ms <ms>]`,
   listUsageOverride: 'tv-remote press|longpress <button> [--duration-ms <ms>]',
-  helpDescription:
-    'Press a TV remote/D-pad button on Android TV, tvOS, or Vega OS. Use longpress for a 500ms held remote button; --duration-ms overrides the preset. Aliases ok, center, and enter map to select.',
   summary: 'Press a TV remote/D-pad button',
   positionalArgs: ['press|longpress?', 'button'],
   allowedFlags: ['durationMs'],
@@ -248,7 +246,10 @@ export const tvRemoteCliReader: CliReader = (positionals, flags) => ({
 export const appStateDaemonWriter: DaemonWriter = direct(APPSTATE_COMMAND_NAME);
 
 export const backDaemonWriter: DaemonWriter = (input) =>
-  request(BACK_COMMAND_NAME, [], { ...input, backMode: readBackMode(input.mode) });
+  request(BACK_COMMAND_NAME, [], {
+    ...input,
+    backMode: readBackMode(input.mode),
+  });
 
 export const homeDaemonWriter: DaemonWriter = direct(HOME_COMMAND_NAME);
 
@@ -349,10 +350,9 @@ const tvRemoteCommandFacet = defineCommandFacet({
   definition: tvRemoteCommandDefinition,
   cliSchema: tvRemoteCliSchema,
   guidance: {
-    mcp: {
-      description:
-        'Press or long-press a TV remote or D-pad button on Android TV, tvOS, or Vega OS. Choose the button and optional hold duration through the input fields.',
-    },
+    description:
+      'Press or long-press a TV remote or D-pad button on Android TV, tvOS, or Vega OS. Choose the button and optional hold duration through the input fields. The aliases ok, center, and enter all map to select.',
+    cliDetail: 'longpress holds for 500ms by default; --duration-ms overrides the preset.',
   },
   cliReader: tvRemoteCliReader,
   daemonWriter: tvRemoteDaemonWriter,

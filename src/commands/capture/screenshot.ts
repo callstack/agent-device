@@ -40,8 +40,6 @@ const screenshotCommandDefinition = defineExecutableCommand(
 );
 
 const screenshotCliSchema = {
-  helpDescription:
-    'Capture screenshot (web defaults to the viewport; use --fullscreen, --full, or -f for the entire page. iOS simulators default to 1x logical-point output; use --pixel-density to request a different screenshot density. macOS app sessions default to the app window; use --fullscreen for full desktop, --max-size to downscale, --overlay-refs to annotate current refs, --normalize-status-bar for deterministic iOS simulator chrome, or --no-stabilize for low-latency Android capture loops)',
   summary:
     'Capture screenshot with optional density, full-page, desktop, downscale, or ref overlay modes',
   positionalArgs: ['path?'],
@@ -66,10 +64,10 @@ export const screenshotCommandFacet = defineCommandFacet({
   definition: screenshotCommandDefinition,
   cliSchema: screenshotCliSchema,
   guidance: {
-    mcp: {
-      description:
-        'Capture a screenshot of the active app or web session. Choose the capture scope, density, size, or annotations through the corresponding input fields when needed.',
-    },
+    description:
+      'Capture a screenshot of the active app or web session. Choose the capture scope, density, size, or annotations through the corresponding input fields when needed.',
+    cliDetail:
+      'Web defaults to the viewport; use --fullscreen, --full, or -f for the entire page. iOS simulators default to 1x logical-point output; use --pixel-density to request a different screenshot density. macOS app sessions default to the app window; use --fullscreen for full desktop, --max-size to downscale, --overlay-refs to annotate current refs, --normalize-status-bar for deterministic iOS simulator chrome, or --no-stabilize for low-latency Android capture loops.',
   },
   cliReader: screenshotCliReader,
   daemonWriter: screenshotDaemonWriter,

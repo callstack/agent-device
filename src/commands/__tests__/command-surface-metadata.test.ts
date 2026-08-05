@@ -41,36 +41,56 @@ test('CI-only prepare command stays out of MCP tool surface', () => {
   assert.equal(listMcpExposedCommandNames().includes('prepare'), false);
 });
 
-test('command guidance projects consistent metadata and executable descriptions', () => {
+test('every surface description derives from the same canonical body', () => {
   const cliSchemas = listCommandFamilyCliSchemas();
-  const definitionsByName = new Map(
-    listCommandFamilyDefinitions().map((definition) => [definition.name, definition] as const),
-  );
 
   for (const metadata of listMcpCommandMetadata()) {
-    assert.ok(metadata.description, `${metadata.name} must define MCP guidance`);
-    assert.equal(definitionsByName.get(metadata.name)?.description, metadata.description);
+    const mcpDescription = metadata.mcpDescription ?? metadata.description;
+    const helpDescription = cliSchemas[metadata.name]?.helpDescription ?? metadata.description;
+    assert.ok(mcpDescription, `${metadata.name} must have an MCP description`);
+    // Guidance can only append a per-surface tail, so both surfaces share a prefix.
+    // A per-surface description override would break this and reintroduce drift.
+    const shared = sharedPrefix(mcpDescription, helpDescription);
+    assert.ok(
+      shared.length >= Math.min(40, mcpDescription.length, helpDescription.length),
+      `${metadata.name} CLI and MCP descriptions diverge instead of sharing a canonical body:\n  MCP:  ${mcpDescription}\n  CLI:  ${helpDescription}`,
+    );
   }
-
-  assert.match(
-    listMcpCommandMetadata().find((metadata) => metadata.name === 'open')?.description ?? '',
-    /foreground automation target/,
-  );
-  assert.doesNotMatch(
-    listMcpCommandMetadata().find((metadata) => metadata.name === 'open')?.description ?? '',
-    /--platform/,
-  );
-  assert.match(
-    cliSchemas.open?.helpDescription ?? '',
-    /Relevant flags: --surface, --launch-console\./,
-  );
 });
+
+test('a short CLI summary never replaces a command description', () => {
+  const cliSchemas = listCommandFamilyCliSchemas();
+  for (const metadata of listCommandMetadata()) {
+    const schema = cliSchemas[metadata.name];
+    if (!schema?.summary || !schema.helpDescription) continue;
+    assert.notEqual(
+      schema.helpDescription,
+      schema.summary,
+      `${metadata.name} help fell back to its short summary`,
+    );
+  }
+});
+
+test('open keeps flag guidance on the CLI surface only', () => {
+  const cliSchemas = listCommandFamilyCliSchemas();
+  const open = listMcpCommandMetadata().find((metadata) => metadata.name === 'open');
+  assert.match(open?.mcpDescription ?? '', /foreground automation target/);
+  assert.match(cliSchemas.open?.helpDescription ?? '', /foreground automation target/);
+  assert.match(cliSchemas.open?.helpDescription ?? '', /--launch-console/);
+});
+
+function sharedPrefix(left: string, right: string): string {
+  let index = 0;
+  while (index < left.length && index < right.length && left[index] === right[index]) index += 1;
+  return left.slice(0, index);
+}
 
 test('MCP tool descriptions avoid CLI syntax', () => {
   const cliSyntax = [/--[a-z]/, /<[^>]+>|\[[^\]]+\]/, /agent-device/, /\bpositional\b/];
   for (const metadata of listMcpCommandMetadata()) {
+    const description = metadata.mcpDescription ?? metadata.description;
     for (const pattern of cliSyntax) {
-      assert.doesNotMatch(metadata.description, pattern, `${metadata.name} contains CLI syntax`);
+      assert.doesNotMatch(description, pattern, `${metadata.name} contains CLI syntax`);
     }
   }
 });
@@ -80,7 +100,9 @@ test('common command input accepts web platform selector', () => {
   if (!snapshotMetadata) throw new Error('Expected snapshot command metadata');
 
   const platformSchema = snapshotMetadata.inputSchema.properties?.platform;
-  const input = snapshotMetadata.readInput({ platform: 'web' }) as { platform?: unknown };
+  const input = snapshotMetadata.readInput({ platform: 'web' }) as {
+    platform?: unknown;
+  };
   assert.deepEqual(platformSchema?.enum, [
     'apple',
     'android',
@@ -98,7 +120,11 @@ test('trigger-app-event rejects non-object payloads at command input read time',
   if (!metadata) throw new Error('Expected trigger-app-event command metadata');
 
   assert.throws(
-    () => metadata.readInput({ event: 'screenshot_taken', payload: 'not-json-object' }),
+    () =>
+      metadata.readInput({
+        event: 'screenshot_taken',
+        payload: 'not-json-object',
+      }),
     /Expected payload to be an object\./,
   );
 });

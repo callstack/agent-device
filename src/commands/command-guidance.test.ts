@@ -2,30 +2,54 @@ import { describe, expect, test } from 'vitest';
 import { projectCommandGuidance } from './command-guidance.ts';
 
 describe('projectCommandGuidance', () => {
-  test('keeps CLI-only flag guidance out of the MCP description and injects selected MCP inputs', () => {
+  test('projects one canonical body with a per-surface tail', () => {
     const guidance = projectCommandGuidance(
       'Open an app.',
-      { helpDescription: 'Open an app with --surface.' },
+      { summary: 'Open an app' },
       {
-        properties: {
-          app: { description: 'App name or bundle identifier.' },
-          surface: { description: 'macOS presentation surface.' },
-        },
-      },
-      {
-        mcp: {
-          description: 'Open an app or URL in the selected session.',
-          parameters: ['app', 'surface'],
-        },
-        cli: { flags: ['surface'] },
+        description: 'Open an app or URL in the selected session.',
+        cliDetail: 'macOS also supports --surface app|desktop.',
+        mcpDetail: 'Prefer this over booting the device separately.',
       },
     );
 
     expect(guidance.cliSchema?.helpDescription).toBe(
-      'Open an app with --surface. Relevant flags: --surface.',
+      'Open an app or URL in the selected session. macOS also supports --surface app|desktop.',
     );
     expect(guidance.mcpDescription).toBe(
-      'Open an app or URL in the selected session. Key inputs: app: App name or bundle identifier. surface: macOS presentation surface.',
+      'Open an app or URL in the selected session. Prefer this over booting the device separately.',
     );
+  });
+
+  test('keeps CLI-only flag guidance out of the MCP description', () => {
+    const guidance = projectCommandGuidance('Open an app.', undefined, {
+      description: 'Open an app.',
+      cliDetail: 'Use --surface to pick a macOS surface.',
+    });
+
+    expect(guidance.mcpDescription).toBe('Open an app.');
+    expect(guidance.cliSchema?.helpDescription).toContain('--surface');
+  });
+
+  test('never falls back to the short list-view summary', () => {
+    const guidance = projectCommandGuidance(
+      'Boot or prepare a selected device without using CLI positional arguments.',
+      { summary: 'Boot target device/simulator' },
+      undefined,
+    );
+
+    expect(guidance.mcpDescription).toBe(
+      'Boot or prepare a selected device without using CLI positional arguments.',
+    );
+    expect(guidance.cliSchema?.helpDescription).toBe(
+      'Boot or prepare a selected device without using CLI positional arguments.',
+    );
+  });
+
+  test('leaves commands without a CLI schema or guidance untouched', () => {
+    const guidance = projectCommandGuidance('Show foreground app.', undefined, undefined);
+
+    expect(guidance.cliSchema).toBeUndefined();
+    expect(guidance.mcpDescription).toBe('Show foreground app.');
   });
 });
