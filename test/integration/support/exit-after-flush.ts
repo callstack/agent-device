@@ -1,5 +1,5 @@
-// Counterpart to exit-naive.ts using the #1596 fix: same oversized write,
-// exited through `exitAfterFlush` instead of a bare `process.exit()`.
+// #1596 fixture: writes an oversized payload to piped stderr, then exits
+// through `exitAfterFlush` so the parent must receive the trailing marker.
 import { exitAfterFlush } from '../../../src/utils/process-exit.ts';
 import { buildPayload } from './exit-payload.ts';
 

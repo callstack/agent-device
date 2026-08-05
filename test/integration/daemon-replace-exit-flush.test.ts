@@ -86,22 +86,10 @@ test('daemon replace mid-command returns a structured, parseable error and exits
   }
 });
 
-// Isolates the exact mechanism from the end-to-end test above: Node flushes
-// stdout/stderr synchronously only to a file or TTY, so `process.exit()`
-// called right after a write can drop that write when the stream is a pipe
-// (this CLI's normal condition, driven as a subprocess). Runs the write+exit
-// sequence directly as a real piped child process, independent of any
-// daemon/device setup, so the mechanism itself is proven deterministically.
-test('a bare process.exit() after a large write truncates it on a piped stream', () => {
-  const { exitCode, stderr } = runFixture('exit-naive.ts');
-  assert.equal(exitCode, 1);
-  assert.ok(
-    !stderr.includes(PAYLOAD_MARKER),
-    'expected the naive exit to truncate before the trailing marker; the pipe-buffer ' +
-      'reproduction this test depends on may not hold on this platform',
-  );
-});
-
+// Isolates the delivery guarantee from the end-to-end test above. The fixture
+// writes a large payload through a real piped subprocess without asserting
+// that the unsafe alternative must truncate under a particular OS, Node
+// version, pipe configuration, or scheduler interleaving.
 test('exitAfterFlush (the #1596 fix) delivers the full write before the process exits', () => {
   const { exitCode, stderr } = runFixture('exit-after-flush.ts');
   assert.equal(exitCode, 1);

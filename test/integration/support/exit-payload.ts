@@ -1,6 +1,5 @@
-// Shared payload for the #1596 exit-flush fixtures: sized past a pipe's
-// kernel buffer (64 KiB on macOS/Linux) so a truncated write is observable,
-// and ends with a marker that only survives the write if it wasn't cut off.
+// Large payload for the #1596 exit-flush fixture, ending with a marker that
+// proves the whole write reached the parent process.
 export const PAYLOAD_MARKER = 'EXIT_PAYLOAD_END_MARKER';
 const PAYLOAD_BYTES = 200_000;
 
