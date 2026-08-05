@@ -23,8 +23,10 @@ const RECORD_COMMAND_NAME = 'record';
 const TRACE_COMMAND_NAME = 'trace';
 const RECORDING_ACTION_VALUES = ['start', 'stop'] as const;
 
-const recordCommandDescription = 'Start or stop screen recording.';
-const traceCommandDescription = 'Start or stop trace capture.';
+const recordCommandDescription =
+  'Start or stop a screen recording for the active app session or, where supported, the selected device. Long Android recordings can return multiple video artifacts.';
+const traceCommandDescription =
+  'Start or stop trace-log capture and return the resulting artifact when capture ends. Use the same artifact path for the matching start and stop requests when an explicit path is required.';
 
 export const recordCommandMetadata = defineFieldCommandMetadata(
   RECORD_COMMAND_NAME,
@@ -106,8 +108,6 @@ const recordCommandFacet = defineCommandFacet({
   definition: recordCommandDefinition,
   cliSchema: recordCliSchema,
   guidance: {
-    description:
-      'Start or stop a screen recording for the active app session or, where supported, the selected device. Long Android recordings can return multiple video artifacts.',
     cliDetail:
       'The default --scope app requires an active app session from open <app>; use --scope device/system to explicitly request whole-screen recording where the selected backend supports it. Android record start publishes a durable device manifest, recordings longer than the 180s adb screenrecord limit are returned as multiple MP4 chunks while the daemon stays alive, and daemon-restart recovery uses only manifest-owned chunks. Use --max-size to limit dimensions and --quality to choose medium or high export quality.',
   },
@@ -122,8 +122,6 @@ const traceCommandFacet = defineCommandFacet({
   definition: traceCommandDefinition,
   cliSchema: traceCliSchema,
   guidance: {
-    description:
-      'Start or stop trace-log capture and return the resulting artifact when capture ends. Use the same artifact path for the matching start and stop requests when an explicit path is required.',
     cliDetail: 'Pass that path as the same positional argument to start and stop.',
   },
   cliReader: traceCliReader,

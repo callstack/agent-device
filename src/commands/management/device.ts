@@ -12,7 +12,7 @@ const devicesCommandMetadata = defineFieldCommandMetadata('devices', 'List avail
 
 const capabilitiesCommandMetadata = defineFieldCommandMetadata(
   'capabilities',
-  'List commands supported by the selected device.',
+  'List the commands supported by the selected device or active session. Use device-selection inputs when checking support before a session is open.',
   {},
 );
 
@@ -94,8 +94,6 @@ const capabilitiesCommandFacet = defineCommandFacet({
   definition: capabilitiesCommandDefinition,
   cliSchema: capabilitiesCliSchema,
   guidance: {
-    description:
-      'List the commands supported by the selected device or active session. Use device-selection inputs when checking support before a session is open.',
     cliDetail: 'Select an explicit target with --platform/--device/--udid/--serial.',
   },
   cliReader: commonCliReader,

@@ -10,7 +10,7 @@ import { managementCliOutputFormatters } from './output.ts';
 
 const doctorCommandMetadata = defineFieldCommandMetadata(
   'doctor',
-  'Diagnose device, app, Metro, and React Native setup/readiness issues.',
+  'Diagnose device, app, development-server, and React Native or Expo readiness issues. Returns compact evidence for local inventory, sessions, optional app discovery, toolchains, and server reachability.',
   {
     targetApp: commandInput.stringField(
       'Installed app package/bundle id or app name to verify without opening a session.',
@@ -46,8 +46,6 @@ export const doctorCommandFacet = defineCommandFacet({
   definition: doctorCommandDefinition,
   cliSchema: doctorCliSchema,
   guidance: {
-    description:
-      'Diagnose device, app, development-server, and React Native or Expo readiness issues. Returns compact evidence for local inventory, sessions, optional app discovery, toolchains, and server reachability.',
     mcpDetail:
       'On iOS simulators it also warms the XCTest runner build cache in the background when missing, so run it before the first Apple snapshot or interaction of a session.',
     cliDetail:

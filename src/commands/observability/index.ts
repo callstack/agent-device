@@ -35,7 +35,8 @@ const AUDIO_PROBE_ACTION_VALUES = ['start', 'status', 'stop'] as const;
 const logsCommandDescription = 'Manage session app logs.';
 const eventsCommandDescription = 'Read the session event timeline.';
 const networkCommandDescription = 'Show recent HTTP traffic.';
-const audioCommandDescription = 'Probe audio levels.';
+const audioCommandDescription =
+  'Measure browser or host-rendered simulator/emulator audio as compact dBFS buckets. Start a probe before requesting its status or stopping it.';
 
 export const logsCommandMetadata = defineFieldCommandMetadata(
   LOGS_COMMAND_NAME,
@@ -212,10 +213,6 @@ const audioCommandFacet = defineCommandFacet({
   metadata: audioCommandMetadata,
   definition: audioCommandDefinition,
   cliSchema: audioCliSchema,
-  guidance: {
-    description:
-      'Measure browser or host-rendered simulator/emulator audio as compact dBFS buckets. Start a probe before requesting its status or stopping it.',
-  },
   cliReader: audioCliReader,
   daemonWriter: audioDaemonWriter,
   cliOutputFormatter: observabilityCliOutputFormatters.audio,

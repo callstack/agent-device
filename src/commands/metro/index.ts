@@ -26,7 +26,8 @@ import { readMetroPrepareKind } from './prepare-kind.ts';
 const METRO_COMMAND_NAME = 'metro';
 const METRO_ACTION_VALUES = ['prepare', 'reload'] as const;
 
-const metroCommandDescription = 'Prepare React Native dev-server runtime or reload apps.';
+const metroCommandDescription =
+  'Prepare a React Native development server or ask connected apps to reload, using the development server this session is bound to. Provide explicit runtime inputs only to override that binding for one call.';
 
 export const metroCommandMetadata = defineFieldCommandMetadata(
   METRO_COMMAND_NAME,
@@ -149,8 +150,6 @@ const metroCommandFacet = defineCommandFacet({
   definition: metroCommandDefinition,
   cliSchema: metroCliSchema,
   guidance: {
-    description:
-      'Prepare a React Native development server or ask connected apps to reload, using the development server this session is bound to. Provide explicit runtime inputs only to override that binding for one call.',
     mcpDetail:
       'The binding is cleared when the session closes, and a fresh open without runtime hints also clears any leftover binding from a previous same-name session.',
     cliDetail: metroCliDetail,

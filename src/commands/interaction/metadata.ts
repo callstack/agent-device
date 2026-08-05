@@ -58,10 +58,13 @@ const FIND_ACTION_VALUES = [
 ] as const;
 
 const interactionCommandDescriptions = {
-  click: 'Click or tap a semantic UI target by ref, selector, or point.',
-  press: 'Press a semantic UI target by ref, selector, or point.',
+  click:
+    'Activate a UI target by snapshot ref, selector, or coordinates. Prefer a ref or selector after a snapshot; use coordinates only when semantic targeting is unavailable. This can change app state; use settle or verify to confirm the result without a follow-up snapshot.',
+  press:
+    'Short-press a UI target by snapshot ref, selector, or coordinates. Use longpress instead when the target requires a context-menu or hold gesture.',
   fill: 'Replace text in a semantic UI target by ref, selector, or point.',
-  longpress: 'Long press by ref, selector, or point.',
+  longpress:
+    'Hold a UI target by snapshot ref, selector, or coordinates to open a context menu or perform another hold gesture. Set durationMs when the default hold duration is unsuitable.',
   swipe: 'Swipe between two points.',
   focus: 'Focus input at coordinates.',
   type: 'Append text to the focused field.',
@@ -69,7 +72,8 @@ const interactionCommandDescriptions = {
   get: 'Get element text or attributes.',
   is: 'Assert UI state.',
   find: 'Find an element and optionally act on it.',
-  gesture: 'Run a structured gesture.',
+  gesture:
+    'Perform a structured pan, fling, swipe, pinch, rotate, transform, or drag gesture. Select the gesture kind, then provide only the inputs that apply to that kind.',
 } as const;
 
 type InteractionCommandName = keyof typeof interactionCommandDescriptions;

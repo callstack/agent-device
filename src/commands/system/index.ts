@@ -55,7 +55,8 @@ const orientationCommandDescription = 'Set device orientation.';
 const appSwitcherCommandDescription = 'Open the app switcher.';
 const keyboardCommandDescription = 'Inspect or dismiss the keyboard.';
 const clipboardCommandDescription = 'Read or write clipboard text.';
-const tvRemoteCommandDescription = 'Press a TV remote/D-pad button.';
+const tvRemoteCommandDescription =
+  'Press or long-press a TV remote or D-pad button on Android TV, tvOS, or Vega OS. Choose the button and optional hold duration through the input fields. The aliases ok, center, and enter all map to select.';
 
 const appStateCommandMetadata = defineFieldCommandMetadata(
   APPSTATE_COMMAND_NAME,
@@ -350,8 +351,6 @@ const tvRemoteCommandFacet = defineCommandFacet({
   definition: tvRemoteCommandDefinition,
   cliSchema: tvRemoteCliSchema,
   guidance: {
-    description:
-      'Press or long-press a TV remote or D-pad button on Android TV, tvOS, or Vega OS. Choose the button and optional hold duration through the input fields. The aliases ok, center, and enter all map to select.',
     cliDetail: 'longpress holds for 500ms by default; --duration-ms overrides the preset.',
   },
   cliReader: tvRemoteCliReader,

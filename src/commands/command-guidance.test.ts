@@ -5,9 +5,8 @@ describe('projectCommandGuidance', () => {
   test('projects one canonical body with a per-surface tail', () => {
     const guidance = projectCommandGuidance(
       'Open an app.',
-      { summary: 'Open an app' },
+      { summary: 'Open an app', helpDescription: 'Open an app or URL in the selected session.' },
       {
-        description: 'Open an app or URL in the selected session.',
         cliDetail: 'macOS also supports --surface app|desktop.',
         mcpDetail: 'Prefer this over booting the device separately.',
       },
@@ -25,7 +24,6 @@ describe('projectCommandGuidance', () => {
 
   test('keeps CLI-only flag guidance out of the MCP description', () => {
     const guidance = projectCommandGuidance('Open an app.', undefined, {
-      description: 'Open an app.',
       cliDetail: 'Use --surface to pick a macOS surface.',
     });
 

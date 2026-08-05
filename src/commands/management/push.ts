@@ -36,7 +36,7 @@ const pushCommandMetadata = defineFieldCommandMetadata('push', 'Deliver a push p
 
 const triggerAppEventCommandMetadata = defineFieldCommandMetadata(
   'trigger-app-event',
-  'Trigger an app-defined event.',
+  'Ask the app to handle an app-defined automation or test event, with an optional structured payload. Call this only for event names and payload shapes the app documents.',
   {
     event: requiredField(
       stringField('Name of an app-defined automation or test event the app documents.'),
@@ -104,10 +104,6 @@ const triggerAppEventCommandFacet = defineCommandFacet({
   metadata: triggerAppEventCommandMetadata,
   definition: triggerAppEventCommandDefinition,
   cliSchema: triggerAppEventCliSchema,
-  guidance: {
-    description:
-      'Ask the app to handle an app-defined automation or test event, with an optional structured payload. Call this only for event names and payload shapes the app documents.',
-  },
   cliReader: triggerAppEventCliReader,
   daemonWriter: triggerAppEventDaemonWriter,
 });

@@ -14,7 +14,8 @@ import { captureCliOutputFormatters } from './output.ts';
 
 const SNAPSHOT_COMMAND_NAME = 'snapshot';
 
-const snapshotCommandDescription = 'Capture an accessibility snapshot.';
+const snapshotCommandDescription =
+  'Capture the accessibility tree or compare it with the previous session baseline. Use the returned refs for subsequent semantic interactions and the diff option to verify UI changes.';
 
 const snapshotCommandMetadata = defineFieldCommandMetadata(
   SNAPSHOT_COMMAND_NAME,
@@ -68,8 +69,6 @@ export const snapshotCommandFacet = defineCommandFacet({
   definition: snapshotCommandDefinition,
   cliSchema: snapshotCliSchema,
   guidance: {
-    description:
-      'Capture the accessibility tree or compare it with the previous session baseline. Use the returned refs for subsequent semantic interactions and the diff option to verify UI changes.',
     cliDetail:
       'For iOS raw-coordinate fallback after a no-op ref press, inspect rects with snapshot -i --json, press the rect center, then verify with diff snapshot -i or snapshot --diff.',
   },

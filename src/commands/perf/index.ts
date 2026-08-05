@@ -29,7 +29,8 @@ import { perfCliOutputFormatters } from './output.ts';
 
 const PERF_COMMAND_NAME = 'perf';
 
-const perfCommandDescription = 'Show session performance, frame health, and memory diagnostics.';
+const perfCommandDescription =
+  'Collect session performance metrics, frame health, memory diagnostics, and platform profiling artifacts. Prefer structured metrics for a first-pass diagnosis; raw profiles and traces remain session artifacts.';
 
 export const perfCommandMetadata = defineFieldCommandMetadata(
   PERF_COMMAND_NAME,
@@ -77,8 +78,6 @@ const perfCommandFacet = defineCommandFacet({
   definition: perfCommandDefinition,
   cliSchema: perfCliSchema,
   guidance: {
-    description:
-      'Collect session performance metrics, frame health, memory diagnostics, and platform profiling artifacts. Prefer structured metrics for a first-pass diagnosis; raw profiles and traces remain session artifacts.',
     mcpDetail:
       'For CPU profiles, start and stop write the raw artifact while report writes a compact summary; request the report when the task needs readable native CPU evidence. Profiling output is evidence only: compact state, artifact path, and size.',
     cliDetail:

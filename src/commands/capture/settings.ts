@@ -19,7 +19,8 @@ import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 
 const SETTINGS_COMMAND_NAME = 'settings';
-const settingsCommandDescription = 'Change OS settings and app permissions.';
+const settingsCommandDescription =
+  'Change supported operating-system settings, animation scales, appearance, or app permissions on the selected target. Platform support varies by setting and action.';
 
 const settingsCommandMetadata = defineFieldCommandMetadata(
   SETTINGS_COMMAND_NAME,
@@ -60,8 +61,6 @@ export const settingsCommandFacet = defineCommandFacet({
   definition: settingsCommandDefinition,
   cliSchema: settingsCliSchema,
   guidance: {
-    description:
-      'Change supported operating-system settings, animation scales, appearance, or app permissions on the selected target. Platform support varies by setting and action.',
     cliDetail:
       'macOS supports only settings appearance <light|dark|toggle> and settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>; wifi|airplane|location|animations remain unsupported on macOS. Mobile permission actions use the active session app.',
   },

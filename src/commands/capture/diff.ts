@@ -16,7 +16,8 @@ import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 
 const DIFF_COMMAND_NAME = 'diff';
 
-const diffCommandDescription = 'Diff accessibility snapshots.';
+const diffCommandDescription =
+  'Compare accessibility snapshots or screenshots to identify UI changes. Use snapshot comparisons for semantic tree changes and screenshot comparisons for pixel differences.';
 
 const diffCommandMetadata = defineFieldCommandMetadata(DIFF_COMMAND_NAME, diffCommandDescription, {
   kind: requiredField(jsonSchemaField<'snapshot'>({ type: 'string', const: 'snapshot' })),
@@ -64,8 +65,6 @@ export const diffCommandFacet = defineCommandFacet({
   definition: diffCommandDefinition,
   cliSchema: diffCliSchema,
   guidance: {
-    description:
-      'Compare accessibility snapshots or screenshots to identify UI changes. Use snapshot comparisons for semantic tree changes and screenshot comparisons for pixel differences.',
     cliDetail:
       'Live iOS simulator screenshot diffs normalize status-bar chrome by default; use screenshot --normalize-status-bar when capturing reusable baselines.',
   },

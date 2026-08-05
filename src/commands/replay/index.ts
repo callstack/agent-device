@@ -27,7 +27,8 @@ const TEST_COMMAND_NAME = 'test';
 
 const REPLAY_SHELL_ENV_PREFIX = 'AD_VAR_';
 
-const replayCommandDescription = 'Replay a recorded session.';
+const replayCommandDescription =
+  'Run a recorded automation script, including compatible Maestro YAML flows. A script without a terminal close leaves its session active for subsequent automation.';
 const testCommandDescription = 'Run one or more replay scripts.';
 
 export const replayCommandMetadata = defineFieldCommandMetadata(
@@ -206,8 +207,6 @@ const replayCommandFacet = defineCommandFacet({
   definition: replayCommandDefinition,
   cliSchema: replayCliSchema,
   guidance: {
-    description:
-      'Run a recorded automation script, including compatible Maestro YAML flows. A script without a terminal close leaves its session active for subsequent automation.',
     cliDetail:
       'For Maestro YAML compatibility flows, use replay <flow.yaml> --maestro and keep the target binding such as --platform ios on the replay command. A script with no terminal close leaves its session (and daemon) running until you close it or it idle-reaps — no different from a session opened interactively. For native .ad scripts, --keep-session suppresses exactly an authored terminal close so you can continue interactively.',
   },

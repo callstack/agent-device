@@ -9,13 +9,14 @@ import type { CommandSchemaOverride } from '../cli-schema/types.ts';
  * `cliDetail`, which the MCP surface never reads; that is what keeps MCP descriptions free of
  * CLI syntax structurally rather than by review.
  *
+ * The body itself is not part of this type: it is the command's own `description`, so there is
+ * one place to write it and no shadowed copy left behind in the metadata literal.
+ *
  * Input fields are documented once, in the command's `inputSchema`. Both surfaces already
  * render those descriptions (MCP sends the schema with the tool, `--help` prints the flag
  * section), so guidance never restates them.
  */
 export type CommandGuidance = {
-  /** Canonical intent. Defaults to the CLI help description, then the command metadata description. */
-  description?: string;
   /** Appended to CLI help only: flags, positional syntax, terminal examples. */
   cliDetail?: string;
   /** Appended to the MCP tool description only: when-to-use and sequencing hints. */
@@ -41,7 +42,7 @@ export function projectCommandGuidance(
 ): ProjectedCommandGuidance {
   // `summary` is the short list-view line, so it is deliberately not in this chain:
   // falling back to it would replace a full description with a fragment on every surface.
-  const description = guidance?.description ?? cliSchema?.helpDescription ?? metadataDescription;
+  const description = cliSchema?.helpDescription ?? metadataDescription;
   return {
     description,
     cliSchema:

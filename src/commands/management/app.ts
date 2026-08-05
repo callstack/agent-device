@@ -23,16 +23,20 @@ import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { withCommandRuntimeHints } from '../runtime-hints.ts';
 import { managementCliOutputFormatters } from './output.ts';
 
-const appsCommandMetadata = defineFieldCommandMetadata('apps', 'List installed apps.', {
-  appsFilter: enumField(
-    ['user-installed', 'all'],
-    'Restrict the listing to user-installed apps, or include system and OEM apps.',
-  ),
-});
+const appsCommandMetadata = defineFieldCommandMetadata(
+  'apps',
+  'List the apps installed on the selected device. Include system or OEM apps only when they are needed as automation targets.',
+  {
+    appsFilter: enumField(
+      ['user-installed', 'all'],
+      'Restrict the listing to user-installed apps, or include system and OEM apps.',
+    ),
+  },
+);
 
 const openCommandMetadata = defineFieldCommandMetadata(
   'open',
-  'Open an app, deep link, URL, or platform surface.',
+  'Boot the selected device when needed, then open an app, deep link, or URL in a session. Use the app or URL inputs to choose what becomes the foreground automation target.',
   {
     app: stringField('App name, bundle id, package, or URL.'),
     url: stringField('Optional URL passed with an app shell.'),
@@ -186,8 +190,6 @@ export const appsCommandFacet = defineCommandFacet({
   definition: appsCommandDefinition,
   cliSchema: appsCliSchema,
   guidance: {
-    description:
-      'List the apps installed on the selected device. Include system or OEM apps only when they are needed as automation targets.',
     cliDetail: 'Defaults to user-installed apps; use --all to include system/OEM apps.',
   },
   cliReader: appsCliReader,
@@ -201,8 +203,6 @@ export const openCommandFacet = defineCommandFacet({
   definition: openCommandDefinition,
   cliSchema: openCliSchema,
   guidance: {
-    description:
-      'Boot the selected device when needed, then open an app, deep link, or URL in a session. Use the app or URL inputs to choose what becomes the foreground automation target.',
     mcpDetail:
       "Metro and debug runtime hints given here are recorded as the session's dev-server binding, so a later reload reuses them; a fresh open without them clears any binding left by a previous same-name session.",
     cliDetail:
