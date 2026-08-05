@@ -40,6 +40,16 @@ static NSString * _Nullable RunnerResolveXCTestEventBridge(
 static NSString * _Nullable RunnerRequireClass(Class cls, NSString *className);
 static NSString * _Nullable RunnerRequireSelector(Class cls, SEL selector, NSString *selectorName);
 static NSString * _Nullable RunnerRequireApplicationSelector(id application, SEL selector, NSString *selectorName);
+static NSString * _Nullable RunnerCreateEventRecord(
+  id application,
+  NSString *recordName,
+  RunnerXCTestEventBridge *bridge,
+  id *record
+);
+static NSString * _Nullable RunnerSynthesizeEventRecord(
+  const RunnerXCTestEventBridge *bridge,
+  id record
+);
 static id RunnerSwipePointerPath(
   const RunnerXCTestEventBridge *bridge,
   CGPoint start,
@@ -60,6 +70,7 @@ static NSString * _Nullable RunnerTrySynthesizeDrag(
   NSString *recordName,
   RunnerDragPointerPathFactory pathFactory
 );
+static NSString * _Nullable RunnerTrySynthesizeTap(id application, CGPoint point);
 // XCTest's proven swipe profile reaches the endpoint in 100 ms, then holds for the planned
 // fling duration. Fast movement is what lets UIKit distinguish a fling from a timed pan.
 static const NSTimeInterval RunnerSwipeMovementDurationSeconds = 0.1;
@@ -118,7 +129,7 @@ static id RunnerTapPointerPath(
                                                    x:(double)x
                                                    y:(double)y {
   @try {
-    return [self trySynthesizeTapWithApplication:application x:x y:y];
+    return RunnerTrySynthesizeTap(application, CGPointMake(x, y));
   } @catch (NSException *exception) {
     NSString *name = exception.name ?: @"NSException";
     NSString *reason = exception.reason ?: @"private XCTest event synthesis failed";
@@ -130,27 +141,14 @@ static id RunnerTapPointerPath(
                                           pointerSamples:(NSArray<NSArray<NSDictionary<NSString *, NSNumber *> *> *> *)pointerSamples {
   @try {
     RunnerXCTestEventBridge bridge;
-    NSString *missing = RunnerResolveXCTestEventBridge(application, &bridge);
-    if (missing != nil) return missing;
-
-    NSInteger interfaceOrientation =
-      ((RunnerMsgSendInteger)objc_msgSend)(application, bridge.interfaceOrientationSelector);
-    NSInteger targetProcessID =
-      ((RunnerMsgSendInteger)objc_msgSend)(application, bridge.processIDSelector);
-    if (targetProcessID <= 0) {
-      return @"private XCTest event synthesis unavailable: could not resolve target process ID";
-    }
-
-    id record = ((RunnerMsgSendInitRecord)objc_msgSend)(
-      [bridge.recordClass alloc],
-      bridge.initRecordSelector,
+    id record = nil;
+    NSString *error = RunnerCreateEventRecord(
+      application,
       @"agent-device-gesture-plan",
-      interfaceOrientation
+      &bridge,
+      &record
     );
-    if (record == nil) {
-      return @"private XCTest event synthesis failed: could not create event record";
-    }
-    ((RunnerMsgSendSetInteger)objc_msgSend)(record, bridge.setTargetProcessIDSelector, targetProcessID);
+    if (error != nil) return error;
 
     for (NSArray<NSDictionary<NSString *, NSNumber *> *> *samples in pointerSamples) {
       NSDictionary<NSString *, NSNumber *> *first = samples.firstObject;
@@ -184,13 +182,7 @@ static id RunnerTapPointerPath(
       ((RunnerMsgSendAddPath)objc_msgSend)(record, bridge.addPathSelector, path);
     }
 
-    NSError *error = nil;
-    BOOL ok = ((RunnerMsgSendSynthesize)objc_msgSend)(record, bridge.synthesizeSelector, &error);
-    if (!ok) {
-      NSString *detail = error.localizedDescription ?: @"synthesizeWithError returned false";
-      return [NSString stringWithFormat:@"private XCTest event synthesis failed: %@", detail];
-    }
-    return nil;
+    return RunnerSynthesizeEventRecord(&bridge, record);
   } @catch (NSException *exception) {
     NSString *name = exception.name ?: @"NSException";
     NSString *reason = exception.reason ?: @"private XCTest event synthesis failed";
@@ -215,28 +207,9 @@ static NSString * _Nullable RunnerTrySynthesizeDrag(
   RunnerDragPointerPathFactory pathFactory
 ) {
   RunnerXCTestEventBridge bridge;
-  NSString *missing = RunnerResolveXCTestEventBridge(application, &bridge);
-  if (missing != nil) {
-    return missing;
-  }
-
-  NSInteger interfaceOrientation =
-    ((RunnerMsgSendInteger)objc_msgSend)(application, bridge.interfaceOrientationSelector);
-  NSInteger targetProcessID = ((RunnerMsgSendInteger)objc_msgSend)(application, bridge.processIDSelector);
-  if (targetProcessID <= 0) {
-    return @"private XCTest event synthesis unavailable: could not resolve target process ID";
-  }
-
-  id record = ((RunnerMsgSendInitRecord)objc_msgSend)(
-    [bridge.recordClass alloc],
-    bridge.initRecordSelector,
-    recordName,
-    interfaceOrientation
-  );
-  if (record == nil) {
-    return @"private XCTest event synthesis failed: could not create event record";
-  }
-  ((RunnerMsgSendSetInteger)objc_msgSend)(record, bridge.setTargetProcessIDSelector, targetProcessID);
+  id record = nil;
+  NSString *error = RunnerCreateEventRecord(application, recordName, &bridge, &record);
+  if (error != nil) return error;
 
   id path = pathFactory(&bridge, start, end, durationMs);
   if (path == nil) {
@@ -244,55 +217,26 @@ static NSString * _Nullable RunnerTrySynthesizeDrag(
   }
   ((RunnerMsgSendAddPath)objc_msgSend)(record, bridge.addPathSelector, path);
 
-  NSError *error = nil;
-  BOOL ok = ((RunnerMsgSendSynthesize)objc_msgSend)(record, bridge.synthesizeSelector, &error);
-  if (!ok) {
-    NSString *detail = error.localizedDescription ?: @"synthesizeWithError returned false";
-    return [NSString stringWithFormat:@"private XCTest event synthesis failed: %@", detail];
-  }
-  return nil;
+  return RunnerSynthesizeEventRecord(&bridge, record);
 }
 
-+ (NSString * _Nullable)trySynthesizeTapWithApplication:(id)application
-                                                      x:(double)x
-                                                      y:(double)y {
+static NSString * _Nullable RunnerTrySynthesizeTap(id application, CGPoint point) {
   RunnerXCTestEventBridge bridge;
-  NSString *missing = RunnerResolveXCTestEventBridge(application, &bridge);
-  if (missing != nil) {
-    return missing;
-  }
-
-  NSInteger interfaceOrientation =
-    ((RunnerMsgSendInteger)objc_msgSend)(application, bridge.interfaceOrientationSelector);
-  NSInteger targetProcessID = ((RunnerMsgSendInteger)objc_msgSend)(application, bridge.processIDSelector);
-  if (targetProcessID <= 0) {
-    return @"private XCTest event synthesis unavailable: could not resolve target process ID";
-  }
-
-  id record = ((RunnerMsgSendInitRecord)objc_msgSend)(
-    [bridge.recordClass alloc],
-    bridge.initRecordSelector,
+  id record = nil;
+  NSString *error = RunnerCreateEventRecord(
+    application,
     @"agent-device-tap",
-    interfaceOrientation
+    &bridge,
+    &record
   );
-  if (record == nil) {
-    return @"private XCTest event synthesis failed: could not create event record";
-  }
-  ((RunnerMsgSendSetInteger)objc_msgSend)(record, bridge.setTargetProcessIDSelector, targetProcessID);
+  if (error != nil) return error;
 
-  id path = RunnerTapPointerPath(&bridge, CGPointMake(x, y));
+  id path = RunnerTapPointerPath(&bridge, point);
   if (path == nil) {
     return @"private XCTest event synthesis failed: could not create pointer path";
   }
   ((RunnerMsgSendAddPath)objc_msgSend)(record, bridge.addPathSelector, path);
-
-  NSError *error = nil;
-  BOOL ok = ((RunnerMsgSendSynthesize)objc_msgSend)(record, bridge.synthesizeSelector, &error);
-  if (!ok) {
-    NSString *detail = error.localizedDescription ?: @"synthesizeWithError returned false";
-    return [NSString stringWithFormat:@"private XCTest event synthesis failed: %@", detail];
-  }
-  return nil;
+  return RunnerSynthesizeEventRecord(&bridge, record);
 }
 
 static NSString * _Nullable RunnerResolveXCTestEventBridge(
@@ -382,6 +326,53 @@ static NSString * _Nullable RunnerRequireApplicationSelector(
   return nil;
 }
 
+static NSString * _Nullable RunnerCreateEventRecord(
+  id application,
+  NSString *recordName,
+  RunnerXCTestEventBridge *bridge,
+  id *record
+) {
+  NSString *missing = RunnerResolveXCTestEventBridge(application, bridge);
+  if (missing != nil) return missing;
+
+  NSInteger interfaceOrientation =
+    ((RunnerMsgSendInteger)objc_msgSend)(application, bridge->interfaceOrientationSelector);
+  NSInteger targetProcessID =
+    ((RunnerMsgSendInteger)objc_msgSend)(application, bridge->processIDSelector);
+  if (targetProcessID <= 0) {
+    return @"private XCTest event synthesis unavailable: could not resolve target process ID";
+  }
+
+  id eventRecord = ((RunnerMsgSendInitRecord)objc_msgSend)(
+    [bridge->recordClass alloc],
+    bridge->initRecordSelector,
+    recordName,
+    interfaceOrientation
+  );
+  if (eventRecord == nil) {
+    return @"private XCTest event synthesis failed: could not create event record";
+  }
+  ((RunnerMsgSendSetInteger)objc_msgSend)(
+    eventRecord,
+    bridge->setTargetProcessIDSelector,
+    targetProcessID
+  );
+  *record = eventRecord;
+  return nil;
+}
+
+static NSString * _Nullable RunnerSynthesizeEventRecord(
+  const RunnerXCTestEventBridge *bridge,
+  id record
+) {
+  NSError *error = nil;
+  BOOL ok = ((RunnerMsgSendSynthesize)objc_msgSend)(record, bridge->synthesizeSelector, &error);
+  if (!ok) {
+    NSString *detail = error.localizedDescription ?: @"synthesizeWithError returned false";
+    return [NSString stringWithFormat:@"private XCTest event synthesis failed: %@", detail];
+  }
+  return nil;
+}
 
 static id RunnerSwipePointerPath(
   const RunnerXCTestEventBridge *bridge,
