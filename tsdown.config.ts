@@ -75,6 +75,7 @@ export default defineConfig({
   },
   deps: {
     alwaysBundle: [/^@agent-device\//, 'pngjs'],
+    onlyBundle: ['pngjs'],
   },
   inputOptions: {
     // A build with missing workspace links resolves nothing under `alwaysBundle` and emits the
