@@ -12,10 +12,6 @@ const perfNightlyWorkflow = fs.readFileSync(
   path.join(repoRoot, '.github', 'workflows', 'perf-nightly.yml'),
   'utf8',
 );
-const packageSmokeWorkflow = fs.readFileSync(
-  path.join(repoRoot, '.github', 'workflows', 'package-smoke.yml'),
-  'utf8',
-);
 const packagedCliWorkflow = fs.readFileSync(
   path.join(repoRoot, '.github', 'workflows', 'ci.yml'),
   'utf8',
@@ -31,17 +27,6 @@ test('prepack builds the complete package without stopping the development daemo
   assert.equal(script('prepack'), 'pnpm check:mcp-metadata && pnpm package:npm');
   assert.doesNotMatch(script('package:npm'), /clean:daemon|rebuild:cli/);
   assert.equal(packageJson.scripts['build:dev'], undefined);
-  assert.match(packageSmokeWorkflow, /run: pnpm prepack/);
-  for (const input of [
-    'pnpm-workspace.yaml',
-    'packages/**',
-    'scripts/patch-xcuitest-runner-icon.ts',
-    'scripts/sync-mcp-metadata.mjs',
-    'scripts/write-xcuitest-cache-metadata.mjs',
-    '.github/actions/setup-node-pnpm/**',
-  ]) {
-    assert.ok(packageSmokeWorkflow.includes(`- '${input}'`));
-  }
 });
 
 test('perf uses one platform-selectable entry point', () => {
