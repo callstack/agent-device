@@ -23,10 +23,9 @@
     "scripts/vitest-runner-timeout-setup.ts",
     "test/contention-retry-fixtures/vitest.fixture.config.ts",
     "test/contention-retry-fixtures/timeout-provenance.fixture.ts",
-    // #1596 regression fixtures: run as real `node --experimental-strip-types`
-    // subprocesses (test/integration/daemon-replace-exit-flush.test.ts), so
-    // dependency analysis cannot follow the runCmdSync string path to either.
-    "test/integration/support/exit-naive.ts",
+    // #1596 regression fixture: runs as a real `node --experimental-strip-types`
+    // subprocess (test/integration/daemon-replace-exit-flush.test.ts), so
+    // dependency analysis cannot follow the runCmdSync string path to it.
     "test/integration/support/exit-after-flush.ts",
     "src/utils/update-check-entry.ts",
     "examples/sdk/client-session.ts",
