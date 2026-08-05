@@ -104,7 +104,7 @@ export type {
   SettleParams,
   SettleTailEntry,
 } from '../interaction.ts';
-export { MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE } from '../interactor-types.ts';
+export { MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE, TEXT_ENTRY_ROUTES } from '../interactor-types.ts';
 export type {
   ElementSelectorKey,
   ElementSelectorTapOptions,
@@ -114,6 +114,8 @@ export type {
   ScreenshotOptions,
   SnapshotOptions,
   SnapshotResult,
+  TextEntryRoute,
+  TypeTextBackendResult,
 } from '../interactor-types.ts';
 export type { KeyboardCommandResult } from '../keyboard.ts';
 export type {

@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { listSourceFiles } from './check.ts';
-import { readNamedExports } from './facade-exports.ts';
+import { readDirectNamedExports, readNamedExports } from './facade-exports.ts';
 import {
   checkPackageBoundaries,
   checkPackageInternalSites,
@@ -133,16 +133,14 @@ test('every façade re-exports its sources exhaustively (no silent narrowing)', 
     for (const specifier of reExportSources(fs.readFileSync(absolute, 'utf8'))) {
       const sourcePath = path.resolve(path.dirname(absolute), specifier);
       if (!fs.existsSync(sourcePath)) continue;
-      // A source module may itself carry a bare `export *` (e.g. contracts'
-      // `gesture-plan.ts` re-exports `gesture-plan-types.ts` wholesale). Its names are
-      // then unknowable from that file alone — but they are reachable, because the
-      // façade re-exports the starred module directly too, and THAT path is checked.
-      let sourceNames: string[];
-      try {
-        sourceNames = readNamedExports(fs.readFileSync(sourcePath, 'utf8'));
-      } catch {
-        continue;
-      }
+      // A source may itself carry a bare `export *` (contracts' `gesture-plan.ts`
+      // stars `gesture-plan-types.ts`). Read its DIRECT exports rather than skipping
+      // the file: skipping would also drop `buildDragGesturePlan` and friends from
+      // this check, so removing one from a façade would narrow the surface silently
+      // (#1614 review P2). The starred names are covered because the façade
+      // re-exports the starred module directly too, and that path is checked here on
+      // its own turn.
+      const sourceNames = readDirectNamedExports(fs.readFileSync(sourcePath, 'utf8'));
       const dropped = sourceNames.filter((name) => name !== 'default' && !exported.has(name));
       assert.deepEqual(
         dropped,

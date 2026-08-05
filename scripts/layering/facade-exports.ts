@@ -72,3 +72,27 @@ export function readNamedExports(source: string): string[] {
   }
   return [...names].sort();
 }
+
+/**
+ * Every name a module declares or re-exports BY NAME, ignoring any bare
+ * `export *` it also carries. `readNamedExports` refuses such a module
+ * outright, which is right for a façade — a star there is unbounded widening —
+ * but wrong for a SOURCE the exhaustiveness gate is reading: skipping the whole
+ * file also skips its direct exports, so removing one of those from a façade
+ * would narrow the surface undetected (#1614 review P2). The starred names are
+ * not lost: a façade must re-export the starred module directly too, and that
+ * path is checked on its own.
+ */
+export function readDirectNamedExports(source: string): string[] {
+  const parsed = parseSync('facade-source-export-scan.ts', source);
+  const names = new Set<string>();
+  for (const staticExport of parsed.module.staticExports) {
+    for (const entry of staticExport.entries) {
+      // `None` is the bare star (unenumerable here, covered elsewhere);
+      // `Default` is never reachable through a star re-export.
+      if (entry.exportName.kind !== 'Name') continue;
+      if (entry.exportName.name) names.add(entry.exportName.name);
+    }
+  }
+  return [...names].sort();
+}
