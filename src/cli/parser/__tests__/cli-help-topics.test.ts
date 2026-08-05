@@ -5,10 +5,7 @@ import { usage, usageForCommand } from '../args.ts';
 
 test('usage includes concise top-level commands', async () => {
   const usageText = await usage();
-  assert.match(
-    usageText,
-    /install-from-source\s{2,}Install app builds from URLs, remote source specs, or CI artifacts/,
-  );
+  assert.match(usageText, /install-from-source\s{2,}Install app builds from URLs or CI artifacts/);
   assert.match(usageText, /prepare\s{2,}Pre-warm platform helpers before automation/);
   assert.match(usageText, /metro\s{2,}Prepare the dev server or reload apps/);
   assert.match(usageText, /batch --steps <json> \| --steps-file <path>/);

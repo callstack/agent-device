@@ -20,7 +20,7 @@ import {
   listCommandFamilyMetadata,
 } from '../family/registry.ts';
 import { listExecutableCommandNames } from '../command-surface.ts';
-import { helpBody, mcpBody } from '../../cli-schema/command-text.ts';
+import { helpBody, mcpBody } from '../command-text.ts';
 import { explainCommand } from '../command-explain.ts';
 import { getDaemonRouteOwnerFiles } from '../../daemon/route-owner-files.ts';
 
@@ -93,7 +93,18 @@ test('every command states a summary that is shorter than its description', () =
       !summary.endsWith('.'),
       `${name}: summary should read as a label, without a trailing period`,
     );
-    assert.notEqual(summary, description, `${name}: summary duplicates the description`);
+    // Compare loosely: `push` differed from its description only by a trailing period.
+    assert.notEqual(
+      summary
+        .toLowerCase()
+        .replace(/[^a-z0-9 ]/g, '')
+        .trim(),
+      description
+        .toLowerCase()
+        .replace(/[^a-z0-9 ]/g, '')
+        .trim(),
+      `${name}: summary duplicates the description`,
+    );
   }
 });
 

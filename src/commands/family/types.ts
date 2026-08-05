@@ -7,7 +7,7 @@ import type {
   JsonSchema,
 } from '../command-contract.ts';
 import type { CliOutputFormatter } from '../output-common.ts';
-import { resolveFacetText, type FacetCommandText } from '../../cli-schema/command-text.ts';
+import { resolveFacetText, type FacetCommandText } from '../command-text.ts';
 
 export type AnyCommandMetadata<Name extends string = string> = CommandMetadata<Name, unknown>;
 
@@ -32,7 +32,11 @@ export type CommandFamilyFacet<TCommandName extends string = string> = {
   cliOutputFormatters?: Readonly<Partial<Record<TCommandName, CliOutputFormatter>>>;
 };
 
-export type CommandFacet<TCommandName extends string = string> = {
+/**
+ * What a command file authors. `cliSchema` carries grammar only and may be omitted entirely;
+ * `text` is required, because a command with no list line has nowhere to appear in `--help`.
+ */
+export type CommandFacetInput<TCommandName extends string = string> = {
   name: TCommandName;
   metadata: AnyCommandMetadata<TCommandName>;
   definition: AnyCommandDefinition<TCommandName>;
@@ -41,8 +45,15 @@ export type CommandFacet<TCommandName extends string = string> = {
   cliReader: CliReader;
   daemonWriter?: DaemonWriter;
   cliOutputFormatter?: CliOutputFormatter;
-  /** Required: every command states its own list line, and may add a per-surface tail. */
   text: FacetCommandText;
+};
+
+/**
+ * What `defineCommandFacet` returns: the same facet with its schema completed. Stating this as a
+ * distinct type is what lets the registry read `cliSchema` without asserting it is populated.
+ */
+export type CommandFacet<TCommandName extends string = string> = CommandFacetInput<TCommandName> & {
+  cliSchema: CommandSchema;
 };
 
 type CommandFacetMetadata<TCommands extends readonly CommandFacet[]> = {
@@ -64,8 +75,8 @@ export type ProjectedCommandOutputSchemas<TDefinitions extends readonly AnyComma
 
 export function defineCommandFacet<
   const TCommandName extends string,
-  const TCommand extends CommandFacet<TCommandName>,
->(command: TCommand): TCommand {
+  const TCommand extends CommandFacetInput<TCommandName>,
+>(command: TCommand): TCommand & { cliSchema: CommandSchema } {
   // The metadata already holds the canonical description, so the facet never repeats it; the
   // resolved text is what every surface renders from.
   const text = resolveFacetText(command.text, command.metadata.description);
@@ -75,7 +86,7 @@ export function defineCommandFacet<
     metadata: { ...command.metadata, ...mcpTail },
     definition: { ...command.definition, ...mcpTail },
     cliSchema: { ...command.cliSchema, text },
-  } as unknown as TCommand;
+  };
 }
 
 export function defineCommandFamilyFromFacets<
@@ -89,7 +100,7 @@ export function defineCommandFamilyFromFacets<
   const cliOutputFormatters: Record<string, CliOutputFormatter> = {};
 
   for (const command of family.commands) {
-    addRecordEntry(cliSchemas, 'CLI schema', command.name, command.cliSchema as CommandSchema);
+    addRecordEntry(cliSchemas, 'CLI schema', command.name, command.cliSchema);
     const clientMethod = command.definition.projection?.clientMethod ?? command.clientMethod;
     if (clientMethod) {
       addRecordEntry(clientCommandMethods, 'client command method', clientMethod, command.name);

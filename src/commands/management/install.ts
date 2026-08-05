@@ -144,7 +144,7 @@ const reinstallCommandFacet = defineCommandFacet({
 const installFromSourceCommandFacet = defineCommandFacet({
   name: 'install-from-source',
   text: {
-    summary: 'Install app builds from URLs, remote source specs, or CI artifacts',
+    summary: 'Install app builds from URLs or CI artifacts',
   },
   metadata: installFromSourceCommandMetadata,
   definition: installFromSourceCommandDefinition,

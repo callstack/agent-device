@@ -1,6 +1,6 @@
 import type { FlagKey } from '../commands/cli-grammar/flag-types.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
-import type { CommandText } from './command-text.ts';
+import type { CommandText } from '../commands/command-text.ts';
 
 /**
  * Command grammar plus its resolved text. Prose lives entirely in `text`; everything else here

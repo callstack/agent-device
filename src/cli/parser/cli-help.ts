@@ -4,7 +4,7 @@ import {
   MAESTRO_COMPATIBILITY_ADR_URL,
   MAESTRO_COMPATIBILITY_ISSUE_URL,
 } from '@agent-device/maestro';
-import { helpBody } from '../../cli-schema/command-text.ts';
+import { helpBody } from '../../commands/command-text.ts';
 import {
   getCliCommandSchema,
   getCommandSchema,

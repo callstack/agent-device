@@ -94,7 +94,7 @@ const triggerAppEventDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.trigger
 const pushCommandFacet = defineCommandFacet({
   name: 'push',
   text: {
-    summary: 'Deliver push notification payloads to an installed app',
+    summary: 'Deliver a push notification payload',
   },
   metadata: pushCommandMetadata,
   definition: pushCommandDefinition,
