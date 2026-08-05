@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.callstackincubator/agent-device",
+  "name": "io.github.callstack/agent-device",
   "title": "agent-device",
   "description": "Let AI agents inspect, control, and debug real iOS, Android, desktop, and TV apps",
   "repository": {
