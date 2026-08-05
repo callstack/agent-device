@@ -439,6 +439,16 @@ extension RunnerTests {
   }
 #endif
 
+  func testInjectedTapRecordedFailureGateIsTapOnlyAndCountGated() {
+    // The seam's recording side cannot run in-bundle (a real XCTIssue would
+    // fail this very test run — same constraint the record(_:) suppression
+    // tests document); the live daemon proof covers it. This pins the gate.
+    XCTAssertFalse(RunnerTests.shouldInjectTapRecordedFailure(command: .tap, remaining: 0))
+    XCTAssertTrue(RunnerTests.shouldInjectTapRecordedFailure(command: .tap, remaining: 1))
+    XCTAssertFalse(RunnerTests.shouldInjectTapRecordedFailure(command: .type, remaining: 1))
+    XCTAssertFalse(RunnerTests.shouldInjectTapRecordedFailure(command: .snapshot, remaining: 1))
+  }
+
   func testXCTestRecordedFailureResponseFailsMutatingSuccesses() throws {
     let command = try runnerCommandFixture(#"{"command":"tap","commandId":"tap-1"}"#)
     let response = Response(ok: true, data: DataPayload(message: "tapped"))
@@ -1227,6 +1237,20 @@ extension RunnerTests {
           userInfo: [NSLocalizedDescriptionKey: "command returned no response"]
         )
       }
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+      // #1605 merge gate: the REAL gesture already executed above; recording a
+      // production-shaped issue here makes the per-command failure-count
+      // conversion below fire exactly as in the field (bsky-24: activation
+      // lands, bookkeeping records a failure). Compiled out of production.
+      if consumeInjectedTapRecordedFailureForTesting(command: command.command) {
+        record(
+          XCTIssue(
+            type: .assertionFailure,
+            compactDescription: "Injected tap recorded-failure (#1605 corroboration merge gate)"
+          )
+        )
+      }
+#endif
       if didRecordXCTestFailure(since: failureCountBefore),
         let failureResponse = xctestRecordedFailureResponse(command: command, response: response)
       {
