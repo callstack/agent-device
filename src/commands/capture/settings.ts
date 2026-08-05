@@ -44,7 +44,6 @@ const settingsCommandDefinition = defineExecutableCommand(
 const settingsCliSchema = {
   usageOverride: SETTINGS_USAGE_OVERRIDE,
   listUsageOverride: 'settings [area] [options]',
-  summary: 'Change OS settings and app permissions',
   positionalArgs: ['setting', 'state', 'target?', 'mode?'],
 } as const satisfies CommandSchemaOverride;
 
@@ -57,13 +56,14 @@ export const settingsDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.setting
 
 export const settingsCommandFacet = defineCommandFacet({
   name: SETTINGS_COMMAND_NAME,
-  metadata: settingsCommandMetadata,
-  definition: settingsCommandDefinition,
-  cliSchema: settingsCliSchema,
-  guidance: {
+  text: {
+    summary: 'Change OS settings and app permissions',
     cliDetail:
       'macOS supports only settings appearance <light|dark|toggle> and settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>; wifi|airplane|location|animations remain unsupported on macOS. Mobile permission actions use the active session app.',
   },
+  metadata: settingsCommandMetadata,
+  definition: settingsCommandDefinition,
+  cliSchema: settingsCliSchema,
   cliReader: settingsCliReader,
   daemonWriter: settingsDaemonWriter,
 });

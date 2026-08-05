@@ -23,7 +23,6 @@ const artifactsCommandDefinition = defineExecutableCommand(
 );
 
 const artifactsCliSchema = {
-  summary: 'List daemon or cloud provider session artifacts',
   usageOverride: 'artifacts [provider-session-id] [--provider <name>]',
   positionalArgs: ['provider-session-id?'],
   allowedFlags: ['provider', 'providerSessionId'],
@@ -39,6 +38,9 @@ const artifactsDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.artifacts);
 
 export const artifactsCommandFacet = defineCommandFacet({
   name: 'artifacts',
+  text: {
+    summary: 'List daemon or cloud provider session artifacts',
+  },
   metadata: artifactsCommandMetadata,
   definition: artifactsCommandDefinition,
   cliSchema: artifactsCliSchema,

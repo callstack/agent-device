@@ -20,7 +20,7 @@ import {
   listCommandFamilyMetadata,
 } from '../family/registry.ts';
 import { listExecutableCommandNames } from '../command-surface.ts';
-import { composeMcpDescription } from '../command-guidance.ts';
+import { helpBody, mcpBody } from '../../cli-schema/command-text.ts';
 import { explainCommand } from '../command-explain.ts';
 import { getDaemonRouteOwnerFiles } from '../../daemon/route-owner-files.ts';
 
@@ -52,9 +52,6 @@ test('every surface reports the same canonical description', () => {
 
   for (const metadata of listCommandMetadata()) {
     const definition = definitionsByName.get(metadata.name);
-    // `explain` and the CLI schema base both read metadata.description, and the executable
-    // definition carries its own copy; a surface left on a pre-guidance variant is the bug
-    // this pins. Only the CLI tail and the MCP tail may extend the body.
     assert.equal(
       definition?.description,
       metadata.description,
@@ -65,45 +62,53 @@ test('every surface reports the same canonical description', () => {
       metadata.description,
       `${metadata.name}: explain reports a description other than the canonical body`,
     );
-    const helpDescription = cliSchemas[metadata.name]?.helpDescription;
-    if (helpDescription) {
-      assert.ok(
-        helpDescription.startsWith(metadata.description),
-        `${metadata.name}: CLI help replaces the canonical body instead of appending to it:\n  body: ${metadata.description}\n  help: ${helpDescription}`,
-      );
-    }
+    const text = cliSchemas[metadata.name]?.text;
+    assert.ok(text, `${metadata.name}: missing command text`);
+    assert.equal(
+      text.description,
+      metadata.description,
+      `${metadata.name}: CLI text description drifted from metadata`,
+    );
+    // Surfaces may only extend the body, never replace it.
     assert.ok(
-      composeMcpDescription(metadata).startsWith(metadata.description),
-      `${metadata.name}: MCP description replaces the canonical body instead of appending to it`,
+      helpBody(text).startsWith(metadata.description),
+      `${metadata.name}: help replaces body`,
+    );
+    assert.ok(
+      mcpBody(metadata).startsWith(metadata.description),
+      `${metadata.name}: MCP replaces body`,
     );
   }
 });
 
-test('a short CLI summary never replaces a command description', () => {
-  const cliSchemas = listCommandFamilyCliSchemas();
-  for (const metadata of listCommandMetadata()) {
-    const schema = cliSchemas[metadata.name];
-    if (!schema?.summary || !schema.helpDescription) continue;
-    assert.notEqual(
-      schema.helpDescription,
-      schema.summary,
-      `${metadata.name} help fell back to its short summary`,
+test('every command states a summary that is shorter than its description', () => {
+  for (const [name, schema] of Object.entries(listCommandFamilyCliSchemas())) {
+    const { summary, description } = schema.text;
+    assert.ok(summary.length > 0, `${name}: summary must not be empty`);
+    assert.ok(
+      summary.length <= 72,
+      `${name}: summary is ${summary.length} chars; the command list wants one short line`,
     );
+    assert.ok(
+      !summary.endsWith('.'),
+      `${name}: summary should read as a label, without a trailing period`,
+    );
+    assert.notEqual(summary, description, `${name}: summary duplicates the description`);
   }
 });
 
 test('open keeps flag guidance on the CLI surface only', () => {
   const cliSchemas = listCommandFamilyCliSchemas();
   const open = listMcpCommandMetadata().find((metadata) => metadata.name === 'open');
-  assert.match(composeMcpDescription(open!), /foreground automation target/);
-  assert.match(cliSchemas.open?.helpDescription ?? '', /foreground automation target/);
-  assert.match(cliSchemas.open?.helpDescription ?? '', /--launch-console/);
+  assert.match(mcpBody(open!), /foreground automation target/);
+  assert.match(helpBody(cliSchemas.open!.text), /foreground automation target/);
+  assert.match(helpBody(cliSchemas.open!.text), /--launch-console/);
 });
 
 test('MCP tool descriptions avoid CLI syntax', () => {
   const cliSyntax = [/--[a-z]/, /<[^>]+>|\[[^\]]+\]/, /agent-device/, /\bpositional\b/];
   for (const metadata of listMcpCommandMetadata()) {
-    const description = composeMcpDescription(metadata);
+    const description = mcpBody(metadata);
     for (const pattern of cliSyntax) {
       assert.doesNotMatch(description, pattern, `${metadata.name} contains CLI syntax`);
     }

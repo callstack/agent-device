@@ -25,14 +25,18 @@ import {
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 
-const pushCommandMetadata = defineFieldCommandMetadata('push', 'Deliver a push payload.', {
-  app: requiredField(stringField()),
-  payload: requiredField(
-    jsonSchemaField<string | JsonObject>({
-      oneOf: [stringSchema(), looseObjectSchema()],
-    }),
-  ),
-});
+const pushCommandMetadata = defineFieldCommandMetadata(
+  'push',
+  'Deliver push notification payloads to an installed app.',
+  {
+    app: requiredField(stringField()),
+    payload: requiredField(
+      jsonSchemaField<string | JsonObject>({
+        oneOf: [stringSchema(), looseObjectSchema()],
+      }),
+    ),
+  },
+);
 
 const triggerAppEventCommandMetadata = defineFieldCommandMetadata(
   'trigger-app-event',
@@ -58,15 +62,12 @@ const triggerAppEventCommandDefinition = defineExecutableCommand(
 
 const pushCliSchema = {
   listUsageOverride: 'push',
-  helpDescription: 'Deliver push notification payloads to an installed app.',
-  summary: 'Deliver push notification payloads to an installed app',
   positionalArgs: ['bundleOrPackage', 'payloadOrJson'],
 } as const satisfies CommandSchemaOverride;
 
 const triggerAppEventCliSchema = {
   usageOverride: 'trigger-app-event <event> [payloadJson]',
   listUsageOverride: 'trigger-app-event',
-  summary: 'Invoke app-defined automation/test events with optional structured payloads',
   positionalArgs: ['event', 'payloadJson?'],
 } as const satisfies CommandSchemaOverride;
 
@@ -92,6 +93,9 @@ const triggerAppEventDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.trigger
 
 const pushCommandFacet = defineCommandFacet({
   name: 'push',
+  text: {
+    summary: 'Deliver push notification payloads to an installed app',
+  },
   metadata: pushCommandMetadata,
   definition: pushCommandDefinition,
   cliSchema: pushCliSchema,
@@ -101,6 +105,9 @@ const pushCommandFacet = defineCommandFacet({
 
 const triggerAppEventCommandFacet = defineCommandFacet({
   name: 'trigger-app-event',
+  text: {
+    summary: 'Invoke an app-defined automation event',
+  },
   metadata: triggerAppEventCommandMetadata,
   definition: triggerAppEventCommandDefinition,
   cliSchema: triggerAppEventCliSchema,

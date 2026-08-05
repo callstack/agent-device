@@ -28,7 +28,6 @@ const doctorCommandDefinition = defineExecutableCommand(doctorCommandMetadata, (
 const doctorCliSchema = {
   usageOverride:
     'doctor [--platform ios|android|vega|macos|linux|web|apple] [--app <id-or-name>] [--remote]',
-  summary: 'Diagnose device, app, dev-server, and RN/Expo readiness',
   allowedFlags: ['targetApp', 'remote'],
 } as const satisfies CommandSchemaOverride;
 
@@ -42,15 +41,16 @@ const doctorDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.doctor);
 
 export const doctorCommandFacet = defineCommandFacet({
   name: 'doctor',
+  text: {
+    summary: 'Diagnose device, app, dev-server, and RN/Expo readiness',
+    cliDetail:
+      'Metro reachability is inferred from cwd/runtime. On iOS simulators it also warms the XCTest runner build cache in the background when missing. Pass --app to verify a target app on the one matching booted device without opening a session. Use --remote to check remote connection setup without probing local devices. Default output is compact; use --json for full checks and evidence.',
+    mcpDetail:
+      'On iOS simulators it also warms the XCTest runner build cache in the background when missing, so run it before the first Apple snapshot or interaction of a session.',
+  },
   metadata: doctorCommandMetadata,
   definition: doctorCommandDefinition,
   cliSchema: doctorCliSchema,
-  guidance: {
-    mcpDetail:
-      'On iOS simulators it also warms the XCTest runner build cache in the background when missing, so run it before the first Apple snapshot or interaction of a session.',
-    cliDetail:
-      'Metro reachability is inferred from cwd/runtime. On iOS simulators it also warms the XCTest runner build cache in the background when missing. Pass --app to verify a target app on the one matching booted device without opening a session. Use --remote to check remote connection setup without probing local devices. Default output is compact; use --json for full checks and evidence.',
-  },
   cliReader: doctorCliReader,
   daemonWriter: doctorDaemonWriter,
   cliOutputFormatter: managementCliOutputFormatters.doctor,

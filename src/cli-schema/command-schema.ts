@@ -18,10 +18,12 @@ export type { CliFlags, FlagDefinition, FlagKey };
 export type { CommandSchema };
 export { getFlagDefinition, getFlagDefinitions, GLOBAL_FLAG_KEYS };
 
-const COMMAND_SCHEMA_BASES = new Map<string, CommandSchema>(
+// Bases hold only the flags every command supports; prose arrives with the facet's schema,
+// which always carries a complete `text`.
+const COMMAND_SCHEMA_BASES = new Map<string, Omit<CommandSchema, 'text'>>(
   listCommandMetadata().map((metadata) => [
     metadata.name,
-    { helpDescription: metadata.description, supportedFlags: COMMON_COMMAND_SUPPORTED_FLAG_KEYS },
+    { supportedFlags: COMMON_COMMAND_SUPPORTED_FLAG_KEYS },
   ]),
 );
 
@@ -59,8 +61,8 @@ function readCommandSchema(command: string): CommandSchema | undefined {
   if (schemaOnly) return schemaOnly;
   const base = COMMAND_SCHEMA_BASES.get(command);
   const override = getCliCommandOverride(command);
-  if (!base) return undefined;
-  return override ? { ...base, ...override } : base;
+  if (!base || !override) return undefined;
+  return { ...base, ...override };
 }
 
 export function applyCommandDefaults(

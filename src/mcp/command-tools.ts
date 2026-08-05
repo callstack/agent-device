@@ -10,7 +10,7 @@ import {
   listMcpCommandMetadata,
   type CommandName,
 } from '../commands/command-metadata.ts';
-import { composeMcpDescription } from '../commands/command-guidance.ts';
+import { mcpBody } from '../cli-schema/command-text.ts';
 import { resolveCommandRecordsSessionAction } from '../core/command-descriptor/registry.ts';
 import { MCP_COMMAND_OUTPUT_SCHEMAS } from './mcp-output-schemas.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -62,7 +62,7 @@ export function listCommandTools(): Array<{
         : undefined;
     return {
       name: definition.name,
-      description: composeMcpDescription(definition),
+      description: mcpBody(definition),
       inputSchema: withMcpConfigSchema(definition.name, definition.inputSchema),
       // Only typed commands carry an outputSchema; untyped tools stay
       // byte-identical to today (no key at all), additive-only.

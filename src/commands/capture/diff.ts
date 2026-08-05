@@ -35,7 +35,6 @@ const diffCommandDefinition = defineExecutableCommand(diffCommandMetadata, (clie
 const diffCliSchema = {
   usageOverride:
     'diff snapshot | diff screenshot --baseline <path> [current.png] [--out <diff.png>] [--threshold <0-1>] [--overlay-refs]',
-  summary: 'Diff snapshot or screenshot',
   positionalArgs: ['kind', 'current?'],
   allowedFlags: [...SNAPSHOT_FLAGS, 'baseline', 'threshold', 'out', 'overlayRefs'],
 } as const;
@@ -61,13 +60,14 @@ const diffDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.diff, (input) => [
 
 export const diffCommandFacet = defineCommandFacet({
   name: DIFF_COMMAND_NAME,
-  metadata: diffCommandMetadata,
-  definition: diffCommandDefinition,
-  cliSchema: diffCliSchema,
-  guidance: {
+  text: {
+    summary: 'Diff snapshot or screenshot',
     cliDetail:
       'Live iOS simulator screenshot diffs normalize status-bar chrome by default; use screenshot --normalize-status-bar when capturing reusable baselines.',
   },
+  metadata: diffCommandMetadata,
+  definition: diffCommandDefinition,
+  cliSchema: diffCliSchema,
   cliReader: diffCliReader,
   daemonWriter: diffDaemonWriter,
 });

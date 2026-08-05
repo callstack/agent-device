@@ -11,7 +11,8 @@ import { debuggingCliOutputFormatters } from './output.ts';
 const DEBUG_COMMAND_NAME = 'debug';
 const DEBUG_ACTION_VALUES = ['symbols'] as const;
 
-const debugCommandDescription = 'Symbolicate crash artifacts with matching debug symbols.';
+const debugCommandDescription =
+  'Symbolicate Apple crash artifacts with matching dSYM UUIDs. This debug namespace is intentionally narrow: use logs for app logs, network for HTTP evidence, perf for performance samples, record/trace for media and traces, and react-devtools for React Native profiles.';
 
 export const debugCommandMetadata = defineFieldCommandMetadata(
   DEBUG_COMMAND_NAME,
@@ -34,10 +35,6 @@ const debugCliSchema = {
   usageOverride:
     'debug symbols --artifact <crash.ips|crash.log> (--dsym <App.dSYM> | --search-path <dir>) [--out <symbolicated>]',
   listUsageOverride: 'debug',
-  helpDescription:
-    'Symbolicate Apple crash artifacts with matching dSYM UUIDs. This debug namespace is intentionally narrow: use logs for app logs, network for HTTP evidence, perf for performance samples, record/trace for media and traces, and react-devtools for React Native profiles.',
-  summary:
-    'Symbolicate Apple crash artifacts with dSYMs; use logs/network/perf for other diagnostics',
   positionalArgs: ['symbols'],
   allowedFlags: ['artifact', 'dsym', 'searchPath', 'out'],
 } as const satisfies CommandSchemaOverride;
@@ -53,6 +50,9 @@ export const debugCliReader: CliReader = (positionals, flags) => ({
 
 const debugCommandFacet = defineCommandFacet({
   name: DEBUG_COMMAND_NAME,
+  text: {
+    summary: 'Symbolicate Apple crash artifacts',
+  },
   metadata: debugCommandMetadata,
   definition: debugCommandDefinition,
   cliSchema: debugCliSchema,

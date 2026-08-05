@@ -46,7 +46,6 @@ const snapshotCommandDefinition = defineExecutableCommand(
 const snapshotCliSchema = {
   usageOverride:
     'snapshot [--diff] [-i] [-d <depth>] [-s <scope>] [--raw] [--force-full] [--timeout <ms>]',
-  summary: 'Capture accessibility tree or diff against the previous session baseline',
   allowedFlags: ['snapshotDiff', ...SNAPSHOT_FLAGS, 'snapshotForceFull', 'timeoutMs', 'record'],
 } as const;
 
@@ -65,13 +64,14 @@ const snapshotDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.snapshot);
 
 export const snapshotCommandFacet = defineCommandFacet({
   name: SNAPSHOT_COMMAND_NAME,
-  metadata: snapshotCommandMetadata,
-  definition: snapshotCommandDefinition,
-  cliSchema: snapshotCliSchema,
-  guidance: {
+  text: {
+    summary: 'Capture or diff the accessibility tree',
     cliDetail:
       'For iOS raw-coordinate fallback after a no-op ref press, inspect rects with snapshot -i --json, press the rect center, then verify with diff snapshot -i or snapshot --diff.',
   },
+  metadata: snapshotCommandMetadata,
+  definition: snapshotCommandDefinition,
+  cliSchema: snapshotCliSchema,
   cliReader: snapshotCliReader,
   daemonWriter: snapshotDaemonWriter,
   cliOutputFormatter: captureCliOutputFormatters.snapshot,

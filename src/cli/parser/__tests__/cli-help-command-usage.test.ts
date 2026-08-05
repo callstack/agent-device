@@ -359,7 +359,7 @@ test('clipboard command usage is documented', async () => {
   const help = await usageForCommand('clipboard');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /clipboard read \| clipboard write <text>/);
-  assert.match(help, /Read or write device clipboard text/);
+  assert.match(help, /Read the current device clipboard text, or replace its contents/);
 });
 
 test('keyboard command usage is documented', async () => {

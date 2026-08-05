@@ -76,7 +76,7 @@ const openCommandMetadata = defineFieldCommandMetadata(
 
 const closeCommandMetadata = defineFieldCommandMetadata(
   'close',
-  'Close an app or end the active session.',
+  'Close the named app, or close the active session app when app is omitted. Use shutdown only when the selected simulator or emulator should also stop.',
   {
     app: stringField('Optional app to close.'),
     shutdown: booleanField('Shutdown the session/device where supported.'),
@@ -114,13 +114,11 @@ const closeCommandDefinition = defineExecutableCommand(closeCommandMetadata, (cl
 );
 
 const appsCliSchema = {
-  summary: 'List installed apps',
   allowedFlags: ['appsFilter'],
   defaults: { appsFilter: DEFAULT_APPS_FILTER },
 } as const satisfies CommandSchemaOverride;
 
 const openCliSchema = {
-  summary: 'Open an app, deep link or URL, save replays',
   positionalArgs: ['appOrUrl?', 'url?'],
   allowedFlags: [
     'activity',
@@ -139,8 +137,6 @@ const openCliSchema = {
 } as const satisfies CommandSchemaOverride;
 
 const closeCliSchema = {
-  helpDescription:
-    'Close the named app, or close the active session app when app is omitted. Use shutdown only when the selected simulator or emulator should also stop.',
   positionalArgs: ['app?'],
   allowedFlags: ['saveScript', 'force', 'shutdown'],
 } as const satisfies CommandSchemaOverride;
@@ -186,12 +182,13 @@ const closeDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.close, (input) =>
 
 export const appsCommandFacet = defineCommandFacet({
   name: 'apps',
+  text: {
+    summary: 'List installed apps',
+    cliDetail: 'Defaults to user-installed apps; use --all to include system/OEM apps.',
+  },
   metadata: appsCommandMetadata,
   definition: appsCommandDefinition,
   cliSchema: appsCliSchema,
-  guidance: {
-    cliDetail: 'Defaults to user-installed apps; use --all to include system/OEM apps.',
-  },
   cliReader: appsCliReader,
   daemonWriter: appsDaemonWriter,
   cliOutputFormatter: managementCliOutputFormatters.apps,
@@ -199,15 +196,16 @@ export const appsCommandFacet = defineCommandFacet({
 
 export const openCommandFacet = defineCommandFacet({
   name: 'open',
+  text: {
+    summary: 'Open an app, deep link or URL, save replays',
+    cliDetail:
+      'Use --platform to bind URL/deep-link opens to the target platform. For iOS simulator initial stdout/stderr, put --launch-console <path> on this open command, for example agent-device open "Agent Device Tester" --platform ios --launch-console artifacts/launch-console.log. Expo Go/dev-client shells accept host + URL, for example agent-device open "Expo Go" exp://127.0.0.1:8081 --platform ios. macOS also supports --surface app|frontmost-app|desktop|menubar. --metro-host/--metro-port/--bundle-url/--launch-url set this session\'s Metro/debug runtime hints as part of open itself (applied to the app\'s dev-server prefs and recorded as the session\'s dev-server binding), so a fresh session has them before its first reload instead of needing a throwaway reload-first call just to seed hints; a later plain metro reload in the same session reuses whichever of these were set. A fresh open without these flags clears any leftover binding from a previous same-name session; close also clears it.',
+    mcpDetail:
+      "Metro and debug runtime hints given here are recorded as the session's dev-server binding, so a later reload reuses them; a fresh open without them clears any binding left by a previous same-name session.",
+  },
   metadata: openCommandMetadata,
   definition: openCommandDefinition,
   cliSchema: openCliSchema,
-  guidance: {
-    mcpDetail:
-      "Metro and debug runtime hints given here are recorded as the session's dev-server binding, so a later reload reuses them; a fresh open without them clears any binding left by a previous same-name session.",
-    cliDetail:
-      'Use --platform to bind URL/deep-link opens to the target platform. For iOS simulator initial stdout/stderr, put --launch-console <path> on this open command, for example agent-device open "Agent Device Tester" --platform ios --launch-console artifacts/launch-console.log. Expo Go/dev-client shells accept host + URL, for example agent-device open "Expo Go" exp://127.0.0.1:8081 --platform ios. macOS also supports --surface app|frontmost-app|desktop|menubar. --metro-host/--metro-port/--bundle-url/--launch-url set this session\'s Metro/debug runtime hints as part of open itself (applied to the app\'s dev-server prefs and recorded as the session\'s dev-server binding), so a fresh session has them before its first reload instead of needing a throwaway reload-first call just to seed hints; a later plain metro reload in the same session reuses whichever of these were set. A fresh open without these flags clears any leftover binding from a previous same-name session; close also clears it.',
-  },
   cliReader: openCliReader,
   daemonWriter: openDaemonWriter,
   cliOutputFormatter: managementCliOutputFormatters.open,
@@ -215,6 +213,9 @@ export const openCommandFacet = defineCommandFacet({
 
 export const closeCommandFacet = defineCommandFacet({
   name: 'close',
+  text: {
+    summary: 'Close an app or end the session',
+  },
   metadata: closeCommandMetadata,
   definition: closeCommandDefinition,
   cliSchema: closeCliSchema,

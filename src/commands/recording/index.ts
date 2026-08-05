@@ -65,7 +65,6 @@ const recordCliSchema = {
   usageOverride:
     'record start [path] [--scope <app|device|system>] [--fps <n>] [--max-size <px>] [--quality <medium|high>] [--hide-touches] | record stop',
   listUsageOverride: 'record start [path] | record stop',
-  summary: 'Start or stop screen recording',
   positionalArgs: ['start|stop', 'path?'],
   allowedFlags: ['recordingScope', 'fps', 'screenshotMaxSize', 'quality', 'hideTouches'],
 } as const satisfies CommandSchemaOverride;
@@ -73,7 +72,6 @@ const recordCliSchema = {
 const traceCliSchema = {
   usageOverride: 'trace start <path> | trace stop <path>',
   listUsageOverride: 'trace start <path> | trace stop <path>',
-  summary: 'Start or stop trace capture',
   positionalArgs: ['start|stop', 'path?'],
 } as const satisfies CommandSchemaOverride;
 
@@ -104,13 +102,14 @@ export const traceDaemonWriter: DaemonWriter = direct(TRACE_COMMAND_NAME, (input
 
 const recordCommandFacet = defineCommandFacet({
   name: RECORD_COMMAND_NAME,
-  metadata: recordCommandMetadata,
-  definition: recordCommandDefinition,
-  cliSchema: recordCliSchema,
-  guidance: {
+  text: {
+    summary: 'Start or stop screen recording',
     cliDetail:
       'The default --scope app requires an active app session from open <app>; use --scope device/system to explicitly request whole-screen recording where the selected backend supports it. Android record start publishes a durable device manifest, recordings longer than the 180s adb screenrecord limit are returned as multiple MP4 chunks while the daemon stays alive, and daemon-restart recovery uses only manifest-owned chunks. Use --max-size to limit dimensions and --quality to choose medium or high export quality.',
   },
+  metadata: recordCommandMetadata,
+  definition: recordCommandDefinition,
+  cliSchema: recordCliSchema,
   cliReader: recordCliReader,
   daemonWriter: recordDaemonWriter,
   cliOutputFormatter: recordingCliOutputFormatters.record,
@@ -118,12 +117,13 @@ const recordCommandFacet = defineCommandFacet({
 
 const traceCommandFacet = defineCommandFacet({
   name: TRACE_COMMAND_NAME,
+  text: {
+    summary: 'Start or stop trace capture',
+    cliDetail: 'Pass that path as the same positional argument to start and stop.',
+  },
   metadata: traceCommandMetadata,
   definition: traceCommandDefinition,
   cliSchema: traceCliSchema,
-  guidance: {
-    cliDetail: 'Pass that path as the same positional argument to start and stop.',
-  },
   cliReader: traceCliReader,
   daemonWriter: traceDaemonWriter,
 });

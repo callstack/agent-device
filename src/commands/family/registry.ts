@@ -12,11 +12,11 @@ import { reactNativeCommandFamily } from '../react-native/index.ts';
 import { recordingCommandFamily } from '../recording/index.ts';
 import { replayCommandFamily } from '../replay/index.ts';
 import { systemCommandFamily } from '../system/index.ts';
-import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
+import type { CommandSchema } from '../../cli-schema/types.ts';
 import { type CommandFamilyFacet } from './types.ts';
 
 type CommandFamilyRecordMap = {
-  cliSchemas: CommandSchemaOverride;
+  cliSchemas: CommandSchema;
   cliReaders: CliReader;
   daemonWriters: DaemonWriter;
   cliOutputFormatters: CliOutputFormatter;
@@ -49,7 +49,7 @@ export function listCommandFamilyDefinitions(): CommandFamilyDefinition[] {
   return commandFamilies.flatMap((family) => [...family.definitions]);
 }
 
-export function listCommandFamilyCliSchemas(): Record<string, CommandSchemaOverride> {
+export function listCommandFamilyCliSchemas(): Record<string, CommandSchema> {
   return mergeFamilyRecords('cliSchemas');
 }
 

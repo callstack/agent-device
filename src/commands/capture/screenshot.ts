@@ -41,8 +41,6 @@ const screenshotCommandDefinition = defineExecutableCommand(
 );
 
 const screenshotCliSchema = {
-  summary:
-    'Capture screenshot with optional density, full-page, desktop, downscale, or ref overlay modes',
   positionalArgs: ['path?'],
   allowedFlags: SCREENSHOT_COMMAND_FLAG_KEYS,
 } as const;
@@ -61,13 +59,14 @@ export const screenshotDaemonWriter: DaemonWriter = (input) =>
 
 export const screenshotCommandFacet = defineCommandFacet({
   name: SCREENSHOT_COMMAND_NAME,
-  metadata: screenshotCommandMetadata,
-  definition: screenshotCommandDefinition,
-  cliSchema: screenshotCliSchema,
-  guidance: {
+  text: {
+    summary: 'Capture a screenshot',
     cliDetail:
       'Web defaults to the viewport; use --fullscreen, --full, or -f for the entire page. iOS simulators default to 1x logical-point output; use --pixel-density to request a different screenshot density. macOS app sessions default to the app window; use --fullscreen for full desktop, --max-size to downscale, --overlay-refs to annotate current refs, --normalize-status-bar for deterministic iOS simulator chrome, or --no-stabilize for low-latency Android capture loops.',
   },
+  metadata: screenshotCommandMetadata,
+  definition: screenshotCommandDefinition,
+  cliSchema: screenshotCliSchema,
   cliReader: screenshotCliReader,
   daemonWriter: screenshotDaemonWriter,
 });
