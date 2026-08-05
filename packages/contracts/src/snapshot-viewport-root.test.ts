@@ -1,4 +1,9 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 import { isViewportRootNode } from './snapshot-visibility.ts';
 
 /**
@@ -129,29 +134,32 @@ const MACOS_EMITTED_NODES = [
   { type: 'AXScrollBar', role: 'AXScrollBar' },
   { type: 'AXSplitGroup', role: 'AXSplitGroup' },
   { type: 'AXToolbar', role: 'AXToolbar' },
-  { type: 'AXSearchField', role: 'AXTextField', subrole: 'AXSearchField' },
+  // A subrole on an UNMAPPED role: the default arm returns `subrole ?? role`, so the
+  // subrole wins. (`AXTextField` cannot appear here — its own arm always returns
+  // `TextField`, whatever the subrole.)
+  { type: 'AXSortButton', role: 'AXCell', subrole: 'AXSortButton' },
 ] as const;
 
 /**
- * The 13 fixed outputs above are the complete set `normalizedSnapshotType`'s
- * switch can return, so a role added to that switch without being added here
- * is the drift this table exists to catch. Asserted rather than trusted.
+ * The emitter's fixed outputs, READ FROM THE EMITTER — not a second hand-kept
+ * list. A hand-kept twin compared against a hand-kept table is circular: both
+ * drift together and the comparison stays green (#1613 review). Parsing the
+ * Swift switch is what makes "a role added there fails here" a real claim.
  */
-const MACOS_FIXED_OUTPUTS = [
-  'Application',
-  'Sheet',
-  'Dialog',
-  'Button',
-  'StaticText',
-  'TextField',
-  'TextArea',
-  'ScrollArea',
-  'Group',
-  'MenuBar',
-  'MenuBarItem',
-  'Menu',
-  'MenuItem',
-] as const;
+function macosFixedOutputsFromEmitter(): string[] {
+  const swift = fs.readFileSync(
+    path.join(
+      REPO_ROOT,
+      'apple/macos-helper/Sources/AgentDeviceMacOSHelper/SnapshotTraversal.swift',
+    ),
+    'utf8',
+  );
+  const fn = /private func normalizedSnapshotType\([\s\S]*?\n\}/.exec(swift)?.[0];
+  if (!fn) throw new Error('normalizedSnapshotType not found — the emitter moved; fix this parser');
+  // `case "AXWindow":` returns a subrole expression, not a literal, so it is
+  // deliberately absent from the literal-return set the table pins.
+  return [...fn.matchAll(/return "([A-Za-z]+)"/g)].map((match) => match[1]!).sort();
+}
 
 describe('isViewportRootNode over emitted backend vocabulary', () => {
   test('iOS: exactly Application and Window, out of 31 emitted names', () => {
@@ -189,9 +197,11 @@ describe('isViewportRootNode over emitted backend vocabulary', () => {
   // The table's own completeness claim, asserted rather than trusted: every
   // fixed output the emitter's switch can return appears above, so adding a
   // role to that switch without adding it here fails.
-  test('macOS: the table covers every fixed output normalizedSnapshotType returns', () => {
-    const covered = new Set(MACOS_EMITTED_NODES.map((node) => node.type));
-    expect(MACOS_FIXED_OUTPUTS.filter((name) => !covered.has(name))).toEqual([]);
+  test('macOS: the table covers every fixed output the Swift emitter can return', () => {
+    const covered = new Set<string>(MACOS_EMITTED_NODES.map((node) => node.type));
+    const emitted = macosFixedOutputsFromEmitter();
+    expect(emitted.length).toBeGreaterThan(10);
+    expect(emitted.filter((name) => !covered.has(name))).toEqual([]);
   });
 
   // Why the canonical predicate reads role/subrole and not `type` alone: these

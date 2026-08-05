@@ -3,5 +3,5 @@
 appId: com.example.app
 ---
 - swipe:
-    start: "50.5%, 50%"
-    end: "10%, 50%"
+    start: '50.5%, 50%'
+    end: '10%, 50%'

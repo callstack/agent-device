@@ -1,5 +1,5 @@
 appId: com.example.app
 ---
-- tapOn: "Before"
+- tapOn: 'Before'
 - runFlow: runflow-child.yaml
-- tapOn: "After"
+- tapOn: 'After'

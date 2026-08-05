@@ -1,5 +1,5 @@
 appId: com.example.app
 ---
 - tapOn:
-    text: ".*button.*"
+    text: '.*button.*'
     retryTapIfNoChange: true
