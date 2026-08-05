@@ -155,6 +155,10 @@ extension RunnerTests {
       return nil
     }
     let element = witness.element
+    // XCUIElement is query-backed rather than a stable node identity. A same-identifier field
+    // introduced by app-side navigation between tap and this immediate type can therefore
+    // re-resolve here; keep the witness one-shot and fail closed on every observable identity
+    // boundary instead of using frame equality, which would reject legitimate layout changes.
     guard safely("LAST_TAPPED_TEXT_INPUT_EXISTS", false, { element.exists }) else {
       return nil
     }
