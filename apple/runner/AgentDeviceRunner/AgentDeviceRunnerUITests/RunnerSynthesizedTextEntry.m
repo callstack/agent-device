@@ -1,18 +1,31 @@
 #import "RunnerSynthesizedTextEntry.h"
+#import "RunnerXCTestEventBridge.h"
 
 #import <objc/message.h>
 
-typedef NSInteger (*RunnerTextMsgSendInteger)(id, SEL);
+static NSString *const RunnerTextSynthesisSurface = @"text";
+
 typedef id (*RunnerTextMsgSendInit)(id, SEL, NSString *);
 typedef id (*RunnerTextMsgSendInitPath)(id, SEL);
 typedef void (*RunnerTextMsgSendType)(id, SEL, NSString *, NSTimeInterval, NSUInteger, BOOL);
 typedef void (*RunnerTextMsgSendTypeKey)(id, SEL, NSString *, NSUInteger, NSTimeInterval);
-typedef void (*RunnerTextMsgSendObject)(id, SEL, id);
-typedef void (*RunnerTextMsgSendSetInteger)(id, SEL, NSInteger);
-typedef BOOL (*RunnerTextMsgSendSynthesize)(id, SEL, NSError **);
 
-static NSString * _Nullable RunnerRequireTextClass(Class cls, NSString *name);
-static NSString * _Nullable RunnerRequireTextSelector(Class cls, SEL selector, NSString *name);
+// Text-entry-specific extension of the shared bridge: the 1-arg `initWithName:`
+// record initializer and the text-input path selectors, none of which gesture
+// synthesis needs.
+typedef struct {
+  RunnerXCTestEventBridge core;
+  SEL initRecordSelector;
+  SEL initPathSelector;
+  SEL typeTextSelector;
+  SEL typeKeySelector;  // only required in `replace` mode
+} RunnerTextEventBridge;
+
+static NSString * _Nullable RunnerResolveTextEventBridge(
+  id application,
+  BOOL replace,
+  RunnerTextEventBridge *bridge
+);
 static RunnerSynthesizedTextEntryResult *RunnerTextEntryResult(
   RunnerSynthesizedTextEntryStatus status,
   NSString * _Nullable message
@@ -56,45 +69,12 @@ static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
   BOOL replace
 ) {
   @try {
-    Class recordClass = NSClassFromString(@"XCSynthesizedEventRecord");
-    Class pathClass = NSClassFromString(@"XCPointerEventPath");
-    SEL initRecord = NSSelectorFromString(@"initWithName:");
-    SEL initPath = NSSelectorFromString(@"initForTextInput");
-    SEL typeText = NSSelectorFromString(@"typeText:atOffset:typingSpeed:shouldRedact:");
-    SEL typeKey = NSSelectorFromString(@"typeKey:modifiers:atOffset:");
-    SEL addPath = NSSelectorFromString(@"addPointerEventPath:");
-    SEL setTargetProcessID = NSSelectorFromString(@"setTargetProcessID:");
-    SEL synthesize = NSSelectorFromString(@"synthesizeWithError:");
-    SEL processID = NSSelectorFromString(@"processID");
-
-    NSString *missing = RunnerRequireTextClass(recordClass, @"XCSynthesizedEventRecord");
+    RunnerTextEventBridge bridge;
+    NSString *missing = RunnerResolveTextEventBridge(application, replace, &bridge);
     if (missing != nil) return RunnerTextEntryUnavailable(missing);
-    missing = RunnerRequireTextClass(pathClass, @"XCPointerEventPath");
-    if (missing != nil) return RunnerTextEntryUnavailable(missing);
-    missing = RunnerRequireTextSelector(recordClass, initRecord, @"initWithName:");
-    if (missing != nil) return RunnerTextEntryUnavailable(missing);
-    missing = RunnerRequireTextSelector(recordClass, addPath, @"addPointerEventPath:");
-    if (missing != nil) return RunnerTextEntryUnavailable(missing);
-    missing = RunnerRequireTextSelector(recordClass, setTargetProcessID, @"setTargetProcessID:");
-    if (missing != nil) return RunnerTextEntryUnavailable(missing);
-    missing = RunnerRequireTextSelector(recordClass, synthesize, @"synthesizeWithError:");
-    if (missing != nil) return RunnerTextEntryUnavailable(missing);
-    missing = RunnerRequireTextSelector(pathClass, initPath, @"initForTextInput");
-    if (missing != nil) return RunnerTextEntryUnavailable(missing);
-    missing = RunnerRequireTextSelector(pathClass, typeText, @"typeText:atOffset:typingSpeed:shouldRedact:");
-    if (missing != nil) return RunnerTextEntryUnavailable(missing);
-    if (replace) {
-      missing = RunnerRequireTextSelector(pathClass, typeKey, @"typeKey:modifiers:atOffset:");
-      if (missing != nil) return RunnerTextEntryUnavailable(missing);
-    }
-    if (![application respondsToSelector:processID]) {
-      return RunnerTextEntryUnavailable(
-        @"private XCTest text synthesis unavailable: XCUIApplication missing processID"
-      );
-    }
 
     NSInteger targetProcessID =
-      ((RunnerTextMsgSendInteger)objc_msgSend)(application, processID);
+      ((RunnerMsgSendInteger)objc_msgSend)(application, bridge.core.processIDSelector);
     if (targetProcessID <= 0) {
       return RunnerTextEntryUnavailable(
         @"private XCTest text synthesis unavailable: could not resolve target process ID"
@@ -103,16 +83,17 @@ static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
 
     if (replace) {
       id selectionRecord = ((RunnerTextMsgSendInit)objc_msgSend)(
-        [recordClass alloc], initRecord, @"agent-device-fill-select-all"
+        [bridge.core.recordClass alloc], bridge.initRecordSelector, @"agent-device-fill-select-all"
       );
-      id selectionPath = ((RunnerTextMsgSendInitPath)objc_msgSend)([pathClass alloc], initPath);
+      id selectionPath =
+        ((RunnerTextMsgSendInitPath)objc_msgSend)([bridge.core.pathClass alloc], bridge.initPathSelector);
       if (selectionRecord == nil || selectionPath == nil) {
         return RunnerTextEntryFailed(
           @"private XCTest text synthesis failed: could not create the selection event"
         );
       }
-      ((RunnerTextMsgSendSetInteger)objc_msgSend)(
-        selectionRecord, setTargetProcessID, targetProcessID
+      ((RunnerMsgSendSetInteger)objc_msgSend)(
+        selectionRecord, bridge.core.setTargetProcessIDSelector, targetProcessID
       );
       // XCUIKeyModifierCommand is public XCTest API (1 << 4). Keeping the value local
       // avoids importing XCUIAutomation headers into the bridging helper. A text-input
@@ -120,12 +101,12 @@ static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
       // use ordered records rather than one multi-operation path.
       NSUInteger commandModifier = 1UL << 4;
       ((RunnerTextMsgSendTypeKey)objc_msgSend)(
-        selectionPath, typeKey, @"a", commandModifier, 0.0
+        selectionPath, bridge.typeKeySelector, @"a", commandModifier, 0.0
       );
-      ((RunnerTextMsgSendObject)objc_msgSend)(selectionRecord, addPath, selectionPath);
+      ((RunnerMsgSendAddPath)objc_msgSend)(selectionRecord, bridge.core.addPathSelector, selectionPath);
       NSError *selectionError = nil;
-      BOOL selected = ((RunnerTextMsgSendSynthesize)objc_msgSend)(
-        selectionRecord, synthesize, &selectionError
+      BOOL selected = ((RunnerMsgSendSynthesize)objc_msgSend)(
+        selectionRecord, bridge.core.synthesizeSelector, &selectionError
       );
       if (!selected) {
         NSString *detail = selectionError.localizedDescription ?: @"synthesizeWithError returned false";
@@ -136,20 +117,22 @@ static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
     }
 
     id record = ((RunnerTextMsgSendInit)objc_msgSend)(
-      [recordClass alloc], initRecord, replace ? @"agent-device-fill-text" : @"agent-device-type"
+      [bridge.core.recordClass alloc],
+      bridge.initRecordSelector,
+      replace ? @"agent-device-fill-text" : @"agent-device-type"
     );
-    id path = ((RunnerTextMsgSendInitPath)objc_msgSend)([pathClass alloc], initPath);
+    id path = ((RunnerTextMsgSendInitPath)objc_msgSend)([bridge.core.pathClass alloc], bridge.initPathSelector);
     if (record == nil || path == nil) {
       return RunnerTextEntryFailed(
         @"private XCTest text synthesis failed: could not create the text event"
       );
     }
-    ((RunnerTextMsgSendSetInteger)objc_msgSend)(record, setTargetProcessID, targetProcessID);
-    ((RunnerTextMsgSendType)objc_msgSend)(path, typeText, text, 0.0, 60, YES);
-    ((RunnerTextMsgSendObject)objc_msgSend)(record, addPath, path);
+    ((RunnerMsgSendSetInteger)objc_msgSend)(record, bridge.core.setTargetProcessIDSelector, targetProcessID);
+    ((RunnerTextMsgSendType)objc_msgSend)(path, bridge.typeTextSelector, text, 0.0, 60, YES);
+    ((RunnerMsgSendAddPath)objc_msgSend)(record, bridge.core.addPathSelector, path);
 
     NSError *error = nil;
-    BOOL ok = ((RunnerTextMsgSendSynthesize)objc_msgSend)(record, synthesize, &error);
+    BOOL ok = ((RunnerMsgSendSynthesize)objc_msgSend)(record, bridge.core.synthesizeSelector, &error);
     if (!ok) {
       NSString *detail = error.localizedDescription ?: @"synthesizeWithError returned false";
       return RunnerTextEntryFailed(
@@ -158,10 +141,56 @@ static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
     }
     return RunnerTextEntryResult(RunnerSynthesizedTextEntryStatusSucceeded, nil);
   } @catch (NSException *exception) {
-    NSString *name = exception.name ?: @"NSException";
-    NSString *reason = exception.reason ?: @"private XCTest text synthesis failed";
-    return RunnerTextEntryFailed([NSString stringWithFormat:@"%@: %@", name, reason]);
+    return RunnerTextEntryFailed(
+      RunnerFormatXCTestException(exception, @"private XCTest text synthesis failed")
+    );
   }
+}
+
+static NSString * _Nullable RunnerResolveTextEventBridge(
+  id application,
+  BOOL replace,
+  RunnerTextEventBridge *bridge
+) {
+  RunnerXCTestEventBridge core;
+  NSString *missing = RunnerResolveXCTestEventBridge(application, RunnerTextSynthesisSurface, &core);
+  if (missing != nil) return missing;
+
+  SEL initRecordSelector = NSSelectorFromString(@"initWithName:");
+  SEL initPathSelector = NSSelectorFromString(@"initForTextInput");
+  SEL typeTextSelector = NSSelectorFromString(@"typeText:atOffset:typingSpeed:shouldRedact:");
+  SEL typeKeySelector = NSSelectorFromString(@"typeKey:modifiers:atOffset:");
+
+  missing = RunnerRequireSelector(
+    core.recordClass, initRecordSelector, @"initWithName:", RunnerTextSynthesisSurface
+  );
+  if (missing != nil) return missing;
+  missing = RunnerRequireSelector(
+    core.pathClass, initPathSelector, @"initForTextInput", RunnerTextSynthesisSurface
+  );
+  if (missing != nil) return missing;
+  missing = RunnerRequireSelector(
+    core.pathClass,
+    typeTextSelector,
+    @"typeText:atOffset:typingSpeed:shouldRedact:",
+    RunnerTextSynthesisSurface
+  );
+  if (missing != nil) return missing;
+  if (replace) {
+    missing = RunnerRequireSelector(
+      core.pathClass, typeKeySelector, @"typeKey:modifiers:atOffset:", RunnerTextSynthesisSurface
+    );
+    if (missing != nil) return missing;
+  }
+
+  *bridge = (RunnerTextEventBridge){
+    .core = core,
+    .initRecordSelector = initRecordSelector,
+    .initPathSelector = initPathSelector,
+    .typeTextSelector = typeTextSelector,
+    .typeKeySelector = typeKeySelector,
+  };
+  return nil;
 }
 
 static RunnerSynthesizedTextEntryResult *RunnerTextEntryResult(
@@ -180,22 +209,4 @@ static RunnerSynthesizedTextEntryResult *RunnerTextEntryUnavailable(NSString *me
 
 static RunnerSynthesizedTextEntryResult *RunnerTextEntryFailed(NSString *message) {
   return RunnerTextEntryResult(RunnerSynthesizedTextEntryStatusFailed, message);
-}
-
-static NSString * _Nullable RunnerRequireTextClass(Class cls, NSString *name) {
-  if (cls == Nil) {
-    return [NSString stringWithFormat:@"private XCTest text synthesis unavailable: missing %@", name];
-  }
-  return nil;
-}
-
-static NSString * _Nullable RunnerRequireTextSelector(Class cls, SEL selector, NSString *name) {
-  if (![cls instancesRespondToSelector:selector]) {
-    return [NSString stringWithFormat:
-      @"private XCTest text synthesis unavailable: %@ missing %@",
-      NSStringFromClass(cls),
-      name
-    ];
-  }
-  return nil;
 }
