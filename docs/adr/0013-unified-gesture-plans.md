@@ -96,6 +96,32 @@ Platform adapters consume the canonical plan:
   macOS lowers a one-contact plan to its drag executor and tvOS lowers it to remote direction. Core
   admission and the Apple adapter both consume the same shared multi-touch support policy;
   multi-touch remains capability-gated to iOS simulators.
+
+  iOS deliberately retains three one-contact motion schedules behind the shared private-XCTest event
+  bridge. Apple's public drag API models the phases independently as an
+  [initial hold, movement velocity, and destination hold](https://developer.apple.com/documentation/xcuiautomation/xcuicoordinate/press%28forduration%3Athendragto%3Awithvelocity%3Athenholdforduration%3A%29).
+  UIKit likewise reports the velocity at finger-up together with the scroll view's predicted
+  [resting content offset](https://developer.apple.com/documentation/uikit/uiscrollviewdelegate/scrollviewwillenddragging%28_%3Awithvelocity%3Atargetcontentoffset%3A%29),
+  then applies the scroll view's configured
+  [post-lift deceleration rate](https://developer.apple.com/documentation/uikit/uiscrollview/decelerationrate-swift.property).
+  The distribution of movement over time is therefore observable gesture input, not an adapter
+  implementation detail.
+
+  The three schedules shape that velocity differently. `endpoint-hold` moves quickly for 100 ms and
+  becomes stationary before lift. `timed-pan` and target-authored drag submit the authored samples
+  unchanged, preserving piecewise-linear movement plus explicit source and destination holds. The
+  runner's coordinate `drag` and fused `scroll` compatibility path instead expands the movement to
+  roughly 16 ms samples using smoothstep `s(t) = 3t² - 2t³`. A linear segment has constant movement
+  velocity through its endpoint unless a destination hold follows it; smoothstep has zero slope at
+  both endpoints and a peak velocity 1.5 times its average. Identical endpoints and total durations
+  can consequently produce different recognizer and deceleration outcomes.
+
+  Live iOS characterization in [issue #1586](https://github.com/callstack/agent-device/issues/1586)
+  confirmed that distinction: the schedules crossed the same fling-recognizer thresholds in the
+  tested range but produced materially different post-release ScrollView positions and
+  long-duration recognition behavior. The distinction is intentional policy at the Apple adapter
+  boundary, not a second interpretation of a `GesturePlan`; changes require live evidence for both
+  recognizer activation and post-release content movement.
 - WebDriver lowers a supported plan to synchronized W3C pointer action sources. A one-contact
   endpoint plan becomes pointer down, one timed W3C `pointerMove` from start to end, and pointer up;
   the driver owns interpolation across that W3C tick. Multi-touch remains capability-gated until a

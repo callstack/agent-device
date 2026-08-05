@@ -422,6 +422,9 @@ static id RunnerContinuousDragPointerPath(
     return nil;
   }
 
+  // This is velocity shaping, not just interpolation density: smoothstep's endpoint slope is zero,
+  // while a planned linear segment reaches lift with nonzero velocity unless a destination hold
+  // follows it. UIKit uses finger-up velocity for scroll deceleration. See ADR 0013 and issue #1586.
   int frameCount = MAX(3, (int)(durationMs / 16.0));
   NSTimeInterval durationSeconds = durationMs / 1000.0;
   for (int index = 1; index <= frameCount; index += 1) {
