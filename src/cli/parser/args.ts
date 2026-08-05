@@ -301,7 +301,10 @@ function parseFlagValue(
   if (typeof definition.max === 'number' && parsed > definition.max) {
     throw new AppError('INVALID_ARGS', `Invalid ${labelForFlag(token)}: ${value}`);
   }
-  return { value: Math.floor(parsed), consumeNext: inlineValue === undefined };
+  return {
+    value: definition.type === 'int' ? Math.floor(parsed) : parsed,
+    consumeNext: inlineValue === undefined,
+  };
 }
 
 function labelForFlag(token: string): string {

@@ -172,7 +172,7 @@ function summarizeProviderScenarioFlagCoverage(files) {
     ['out', 'artifact output path plumbing'],
     ['overlayRefs', 'screenshot ref overlay annotation'],
     ['screenshotFullscreen', 'screenshot full-screen capture mode'],
-    ['screenshotMaxSize', 'screenshot max-size post-processing'],
+    ['screenshotScale', 'screenshot proportional scaling post-processing'],
     ['screenshotNoStabilize', 'screenshot stabilization opt-out', ['stabilize']],
     ['restart', 'logs clear --restart workflow'],
     ['networkInclude', 'network dump include modes', ['include']],

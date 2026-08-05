@@ -124,7 +124,7 @@ async function recordPhysicalHappyPath(daemon: ScenarioDaemon, outPath: string):
   const start = await daemon.callCommand(
     'record',
     ['start', outPath],
-    { fps: 30, screenshotMaxSize: 720, quality: 'high', hideTouches: true },
+    { fps: 30, quality: 'high', hideTouches: true },
     { meta: { requestId: 'ios-physical-record-start' } },
   );
   assertRecordingStarted(start, { showTouches: false });
@@ -166,13 +166,11 @@ function assertPhysicalRecordingEvidence(
     {
       command: request?.command,
       fps: request?.fps,
-      maxSize: request?.maxSize,
       appBundleId: request?.appBundleId,
     },
     {
       command: 'recordStart',
       fps: 30,
-      maxSize: 720,
       appBundleId: 'com.apple.Preferences',
     },
   );

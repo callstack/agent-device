@@ -25,7 +25,6 @@ export type RecordingRecordCommandOptions = CommandContext & {
   action: 'start' | 'stop';
   out?: FileOutputRef;
   fps?: number;
-  maxSize?: number;
   quality?: RecordingExportQuality;
   hideTouches?: boolean;
 };
@@ -129,8 +128,6 @@ function normalizeRecordingOptions(
   if (outPath) backendOptions.outPath = outPath;
   const fps = normalizeRecordingFps(options.fps);
   if (fps !== undefined) backendOptions.fps = fps;
-  const maxSize = normalizeRecordingMaxSize(options.maxSize);
-  if (maxSize !== undefined) backendOptions.maxSize = maxSize;
   const quality = normalizeRecordingExportQuality(options.quality);
   if (quality !== undefined) backendOptions.quality = quality;
   if (options.hideTouches !== undefined) backendOptions.showTouches = options.hideTouches !== true;
@@ -139,12 +136,6 @@ function normalizeRecordingOptions(
 
 function normalizeRecordingFps(value: number | undefined): number | undefined {
   return value === undefined ? undefined : requireIntInRange(value, 'fps', 1, 60);
-}
-
-function normalizeRecordingMaxSize(value: number | undefined): number | undefined {
-  return value === undefined
-    ? undefined
-    : requireIntInRange(value, 'maxSize', 1, Number.MAX_SAFE_INTEGER);
 }
 
 function normalizeRecordingExportQuality(

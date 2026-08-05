@@ -290,7 +290,6 @@ export type BackendInstallResult = Record<string, unknown> & {
 export type BackendRecordingOptions = {
   outPath?: string;
   fps?: number;
-  maxSize?: number;
   quality?: RecordingExportQuality;
   showTouches?: boolean;
 };

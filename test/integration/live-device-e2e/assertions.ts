@@ -51,7 +51,7 @@ export function createLiveDeviceAssertions<
   }
 
   async function capturePng(context: Context, step: string, outputPath: string): Promise<void> {
-    await runStep(context, step, ['screenshot', outputPath, '--max-size', '900']);
+    await runStep(context, step, ['screenshot', outputPath, '--scale', '0.5']);
     assertPngFile(outputPath);
   }
 

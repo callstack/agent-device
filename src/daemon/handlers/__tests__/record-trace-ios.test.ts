@@ -34,7 +34,6 @@ test('startIosDeviceRecording stops stale runner recording and retries with the 
     waitForStableFile: async () => {},
     isPlayableVideo: async () => true,
     trimRecordingStart: async () => {},
-    resizeRecording: async () => {},
     overlayRecordingTouches: async () => {},
   };
 

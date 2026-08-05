@@ -41,7 +41,7 @@ export async function readScreenshotResultMetadata(params: {
   device: ScreenshotDensityDevice;
   path: string;
   requestedPixelDensity: number | undefined;
-  maxSize: number | undefined;
+  scale: number | undefined;
 }): Promise<ScreenshotResultData> {
   const requiresDensityMetadata = supportsScreenshotPixelDensity(params.device);
   let size: ScreenshotPixelSize;
@@ -55,7 +55,7 @@ export async function readScreenshotResultMetadata(params: {
     width: size.width,
     height: size.height,
   };
-  if (!requiresDensityMetadata || params.maxSize !== undefined) {
+  if (!requiresDensityMetadata || (params.scale !== undefined && params.scale !== 1)) {
     return result;
   }
 

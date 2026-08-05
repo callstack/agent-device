@@ -504,10 +504,12 @@ export const FACADE_SYMBOLS: readonly (readonly [string, readonly string[]])[] =
       'readSnapshotDiagnosticsSummary',
       'recordSnapshotTiming',
       'screenshotFlagsFromOptions',
+      'screenshotFlagsFromPublicOptions',
       'screenshotOptionsFromFlags',
       'snapshotCaptureAnnotationsFrom',
       'summarizeSnapshotDiagnostics',
       'summarizeSnapshotTimingSamples',
+      'validateScreenshotScale',
     ],
   ],
   [

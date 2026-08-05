@@ -82,8 +82,6 @@ async function assertTraceAndRecording(context: LiveContext): Promise<void> {
     'start',
     recordingPath,
     '--hide-touches',
-    '--max-size',
-    '720',
   ]);
   await runStep(context, 'return to Android fixture home before recording', [
     'click',

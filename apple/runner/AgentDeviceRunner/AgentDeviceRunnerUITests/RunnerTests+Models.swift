@@ -136,7 +136,6 @@ struct Command: Codable {
   let gesturePlan: RunnerGesturePlan?
   let outPath: String?
   let fps: Int?
-  let maxSize: Int?
   let interactiveOnly: Bool?
   let depth: Int?
   let scope: String?

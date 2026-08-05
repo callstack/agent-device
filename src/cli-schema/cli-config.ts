@@ -67,7 +67,7 @@ const PROJECT_CONFIG_FLAG_KEYS = new Set<FlagKey>([
   'snapshotForceFull',
   'screenshotPixelDensity',
   'screenshotFullscreen',
-  'screenshotMaxSize',
+  'screenshotScale',
   'screenshotNoStabilize',
   'screenshotNormalizeStatusBar',
   'overlayRefs',

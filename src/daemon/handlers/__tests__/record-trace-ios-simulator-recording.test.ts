@@ -265,7 +265,6 @@ function makeDeps(overrides: Pick<RecordTraceDeps, 'startIosSimulatorRecording'>
     waitForStableFile: async () => {},
     isPlayableVideo: async () => true,
     trimRecordingStart: async () => {},
-    resizeRecording: async () => {},
     overlayRecordingTouches: async () => {},
   };
 }

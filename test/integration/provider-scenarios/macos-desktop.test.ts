@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'vitest';
-import { assertFlatToolCall, assertPngFile } from './assertions.ts';
+import { assertFlatToolCall, assertPngDimensions, assertPngFile } from './assertions.ts';
 import { PROVIDER_SCENARIO_MACOS } from './fixtures.ts';
 import { createProviderScenarioTempPath, withProviderScenarioResource } from './harness.ts';
 import { createMacOsDesktopWorld } from './macos-world.ts';
@@ -88,6 +88,10 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
     async ({ daemon, appleTool }) => {
       const screenshotPath = createProviderScenarioTempPath(
         'agent-device-provider-scenario-macos',
+        'png',
+      );
+      const scaledScreenshotPath = createProviderScenarioTempPath(
+        'agent-device-provider-scenario-macos-scaled',
         'png',
       );
       try {
@@ -293,16 +297,28 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
             },
           },
           {
-            name: 'capture fullscreen desktop screenshot with max-size',
+            name: 'capture fullscreen desktop screenshot',
             command: 'screenshot',
             flags: {
               out: screenshotPath,
               screenshotFullscreen: true,
-              screenshotMaxSize: 1,
             },
             expectData: { path: screenshotPath },
             assert: () => {
               assertPngFile(screenshotPath);
+            },
+          },
+          {
+            name: 'capture token-conscious desktop screenshot with scale',
+            command: 'screenshot',
+            flags: {
+              out: scaledScreenshotPath,
+              screenshotFullscreen: true,
+              screenshotScale: 0.5,
+            },
+            expectData: { path: scaledScreenshotPath },
+            assert: () => {
+              assertPngDimensions(scaledScreenshotPath, 32, 32);
             },
           },
           {
@@ -462,6 +478,15 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
         ]);
         assertFlatToolCall(appleTool.calls, [
           'macos-helper',
+          'screenshot',
+          '--out',
+          scaledScreenshotPath,
+          '--surface',
+          'desktop',
+          '--fullscreen',
+        ]);
+        assertFlatToolCall(appleTool.calls, [
+          'macos-helper',
           'read',
           '--x',
           '116',
@@ -505,6 +530,7 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
         ]);
       } finally {
         fs.rmSync(screenshotPath, { force: true });
+        fs.rmSync(scaledScreenshotPath, { force: true });
       }
       runnerTranscript.assertComplete();
     },

@@ -49,7 +49,7 @@ export type ScreenshotCommandOptions = CommandContext & {
   fullscreen?: boolean;
   overlayRefs?: boolean;
   pixelDensity?: number;
-  maxSize?: number;
+  scale?: number;
   stabilize?: boolean;
   normalizeStatusBar?: boolean;
   appId?: string;

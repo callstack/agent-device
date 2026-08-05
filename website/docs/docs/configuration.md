@@ -35,6 +35,7 @@ Environment variables follow the same fields using `AGENT_DEVICE_*` uppercase sn
 - `session` -> `AGENT_DEVICE_SESSION`
 - `daemonBaseUrl` -> `AGENT_DEVICE_DAEMON_BASE_URL`
 - `androidDeviceAllowlist` -> `AGENT_DEVICE_ANDROID_DEVICE_ALLOWLIST`
+- `screenshotScale` -> `AGENT_DEVICE_SCREENSHOT_SCALE`
 
 Config and environment sources use canonical option values rather than CLI flag names. Example:
 - config: `"appsFilter": "user-installed"`
@@ -87,7 +88,7 @@ user- or explicit-config only:
 - request headers and structured install sources
 - local code and write destinations (`reporter`, `reportJunit`, `saveScript`, `launchConsole`)
 
-Project config can use project-safe command defaults such as `snapshotDepth`, `snapshotScope`, `activity`, `relaunch`, `shutdown`, `fps`, and `quality`. Local path and executable-module selectors such as `stepsFile` and `reporter` are user- or explicit-config only.
+Project config can use project-safe command defaults such as `snapshotDepth`, `snapshotScope`, `screenshotScale`, `activity`, `relaunch`, `shutdown`, `fps`, and `quality`. Local path and executable-module selectors such as `stepsFile` and `reporter` are user- or explicit-config only.
 
 `install-from-source` can read a structured GitHub Actions artifact source from user or explicit config when a compatible remote daemon resolves CI artifacts server-side. Repository config rejects this operator-controlled source:
 
@@ -115,7 +116,7 @@ These env vars are the supported user-facing configuration surface. Other `AGENT
 
 | Category | Env vars | Decision |
 | --- | --- | --- |
-| CLI defaults and config | `AGENT_DEVICE_CONFIG`, `AGENT_DEVICE_SESSION`, `AGENT_DEVICE_PLATFORM`, `AGENT_DEVICE_SESSION_LOCK`, `AGENT_DEVICE_DAEMON_BASE_URL`, `AGENT_DEVICE_DAEMON_AUTH_TOKEN`, `AGENT_DEVICE_CLOUD_BASE_URL` | Public |
+| CLI defaults and config | `AGENT_DEVICE_CONFIG`, `AGENT_DEVICE_SESSION`, `AGENT_DEVICE_PLATFORM`, `AGENT_DEVICE_SCREENSHOT_SCALE`, `AGENT_DEVICE_SESSION_LOCK`, `AGENT_DEVICE_DAEMON_BASE_URL`, `AGENT_DEVICE_DAEMON_AUTH_TOKEN`, `AGENT_DEVICE_CLOUD_BASE_URL` | Public |
 | Device scoping | `AGENT_DEVICE_ANDROID_DEVICE_ALLOWLIST` | Public |
 | Local daemon storage | `AGENT_DEVICE_STATE_DIR` | Public |
 | Metro and install helpers | `AGENT_DEVICE_METRO_BEARER_TOKEN`, `AGENT_DEVICE_BUNDLETOOL_JAR` | Public |
@@ -130,6 +131,7 @@ Command-specific keys are applied only when the current command supports them.
 Examples:
 - A default `snapshotDepth` applies to `snapshot`, `diff snapshot`, `click`, `fill`, `get`, `wait`, `find`, and `is`.
 - The same `snapshotDepth` value is ignored for commands like `open`, `close`, or `devices`.
+- A default `screenshotScale` (or `AGENT_DEVICE_SCREENSHOT_SCALE`) applies to `screenshot`; an explicit `--scale` wins.
 
 This keeps one shared config file usable across different command families.
 

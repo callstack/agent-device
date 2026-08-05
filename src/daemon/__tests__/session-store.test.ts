@@ -432,7 +432,6 @@ test('writeSessionLog persists record --hide-touches flags in script output', ()
     flags: {
       platform: 'ios',
       fps: 30,
-      screenshotMaxSize: 1024,
       quality: 'high',
       hideTouches: true,
     },
@@ -440,10 +439,7 @@ test('writeSessionLog persists record --hide-touches flags in script output', ()
   });
 
   const script = writeScript(fixture);
-  assert.match(
-    script,
-    /record start "\.\/capture\.mp4" --fps 30 --max-size 1024 --quality high --hide-touches/,
-  );
+  assert.match(script, /record start "\.\/capture\.mp4" --fps 30 --quality high --hide-touches/);
 });
 
 test('writeSessionLog persists screenshot flags in script output', () => {
@@ -452,12 +448,12 @@ test('writeSessionLog persists screenshot flags in script output', () => {
   fixture.store.recordAction(fixture.session, {
     command: 'screenshot',
     positionals: ['./page.png'],
-    flags: { platform: 'ios', screenshotFullscreen: true, screenshotMaxSize: 1024 },
+    flags: { platform: 'ios', screenshotFullscreen: true, screenshotScale: 0.3 },
     result: {},
   });
 
   const script = writeScript(fixture);
-  assert.match(script, /screenshot "\.\/page\.png" --fullscreen --max-size 1024/);
+  assert.match(script, /screenshot "\.\/page\.png" --fullscreen --scale 0\.3/);
 });
 
 test('writeSessionLog persists inline open runtime hints in script output', () => {

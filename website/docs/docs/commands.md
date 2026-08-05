@@ -835,7 +835,7 @@ agent-device metro reload --bundle-url "http://localhost:8081/index.bundle?platf
 ```bash
 agent-device screenshot                 # Auto filename
 agent-device screenshot page.png        # Explicit screenshot path
-agent-device screenshot page.png --max-size 1024  # Downscale longest edge for agent-friendly artifacts
+agent-device screenshot page.png --scale 0.3  # Resize both dimensions to 30% for agent context
 agent-device screenshot page.png --overlay-refs  # Draw current @eN refs and target rectangles onto the PNG
 agent-device screenshot baseline.png --normalize-status-bar  # Normalize iOS simulator chrome for reusable diff baselines
 agent-device screenshot page.png --platform web --fullscreen  # On web, --fullscreen/--full/-f captures the entire document
@@ -850,16 +850,17 @@ agent-device record start               # Start app-scoped recording after open 
 agent-device record start session.mp4   # Start app-scoped recording to explicit path
 agent-device record start session.mp4 --scope device  # Intentionally record the full simulator/device screen
 agent-device record start session.mp4 --fps 30  # Override iOS device runner FPS
-agent-device record start session.mp4 --max-size 1024 # Downscale longest edge
 agent-device record start session.mp4 --quality high # Higher-quality export (slower)
 agent-device record stop                # Stop active recording
 ```
 
 - Recordings always produce a video artifact. `record start` defaults to app scope and requires an active session from `open <app>`; use `--scope device` or `--scope system` to explicitly request whole-screen capture where the selected backend supports it, such as recordings that intentionally span the full screen, multiple apps, settings, home screen, or app transitions. When touch visualization is enabled, recordings also produce a gesture telemetry sidecar that can be used for post-processing or inspection.
-- `screenshot --max-size <px>` preserves aspect ratio and only downscales when the saved PNG's longest edge is larger than the requested size.
+- `screenshot --scale <factor>` proportionally resizes both dimensions. The accepted range is `0.01` through `1`; use `1` for full resolution.
+- Set `AGENT_DEVICE_SCREENSHOT_SCALE=0.3` (or `screenshotScale` in config) to mirror Argent-style token-conscious screenshot defaults. An explicit `--scale` overrides it.
+- Keep the scale default unset, or use `--scale 1`, when full-resolution screenshots are required for reusable pixel-diff baselines.
 - `screenshot --overlay-refs` captures a fresh full snapshot and burns visible `@eN` refs plus their target rectangles into the saved PNG.
 - `screenshot --normalize-status-bar` temporarily normalizes iOS simulator status-bar chrome for deterministic screenshot baselines; ordinary screenshots leave the simulator's current chrome visible.
-- `screenshot --max-size <px> --overlay-refs` writes a smaller image and draws refs for that final image size; avoid very small max sizes when text, icons, or labels need to remain readable.
+- `screenshot --scale <factor> --overlay-refs` writes a smaller image and draws refs for that final image size; avoid very small scales when text, icons, or labels need to remain readable.
 - `diff screenshot` compares the current live screenshot to `--baseline`, or compares `--baseline` to an optional saved `current.png` path without requiring an active session. Its text output reports ranked changed regions with screen-space rectangles, changed-pixel counts, and each region's share of the diff; JSON also includes normalized rectangles. The earlier best-effort `ocr` and `nonTextDeltas` analyzers are retired; their optional result fields remain for source compatibility but are no longer emitted, so use the baseline/current images and diff artifact with vision for qualitative interpretation. It writes a diff PNG with a light grayscale current-screen context, red-tinted changed pixels, and outlined changed regions when `--out` is provided. Live iOS simulator diffs normalize status-bar chrome by default; use `screenshot --normalize-status-bar` when capturing reusable baselines.
 - `diff screenshot --overlay-refs` additionally writes a separate current-screen overlay guide for live captures without using that annotated image for the pixel comparison. If current-screen refs intersect changed regions, the output lists the best ref matches under those regions. Saved-image comparisons do not have live accessibility refs, so `--overlay-refs` is unavailable when a `current.png` path is provided.
 - In `--json` mode, each overlay ref also includes a screenshot-space `center` point for coordinate fallback like `press <x> <y>`.
@@ -942,7 +943,6 @@ tail -50 ~/.agent-device/sessions/default/app.log
 - Physical iOS device capture is best-effort: dropped frames are expected and true 60 FPS is not guaranteed even with `--fps 60`.
 - Physical-device capture defaults to 15 FPS.
 - `--fps <n>` (1-120) applies to physical iOS device recording as an explicit FPS cap.
-- `--max-size <px>` preserves aspect ratio and only downscales when the recording's longest edge is larger than the requested size.
 - `--quality <medium|high>` controls recording output quality. Android maps it to `adb shell screenrecord --bit-rate`; Apple targets use it for export/encoding. `medium` is the default; pass `high` for evidence, release notes, or debugging visual artifacts. Legacy numeric values are still accepted for compatibility: `5`-`7` map to `medium`, and `8`-`10` map to `high`.
 
 ## Tracing

@@ -30,11 +30,11 @@ test('contextFromFlags forwards generic app-state clearing', () => {
 test('contextFromFlags forwards screenshot flags from CLI flags', () => {
   const flags: CommandFlags = {
     screenshotFullscreen: true,
-    screenshotMaxSize: 1024,
+    screenshotScale: 0.3,
     screenshotNoStabilize: true,
   };
   const context = contextFromFlags('/tmp/agent-device.log', flags);
   assert.equal(context.screenshotFullscreen, true);
-  assert.equal(context.screenshotMaxSize, 1024);
+  assert.equal(context.screenshotScale, 0.3);
   assert.equal(context.screenshotNoStabilize, true);
 });

@@ -96,8 +96,16 @@ export function stringSchema(description?: string): JsonSchema {
   return { type: 'string', ...(description ? { description } : {}) };
 }
 
-function numberSchema(description?: string): JsonSchema {
-  return { type: 'number', ...(description ? { description } : {}) };
+function numberSchema(
+  description?: string,
+  options: { min?: number; max?: number } = {},
+): JsonSchema {
+  return {
+    type: 'number',
+    ...(description ? { description } : {}),
+    ...(options.min === undefined ? {} : { minimum: options.min }),
+    ...(options.max === undefined ? {} : { maximum: options.max }),
+  };
 }
 
 function integerSchema(description?: string): JsonSchema {
@@ -161,8 +169,13 @@ export function stringField(description?: string): CommandField<string> {
   return optionalField(stringSchema(description), optionalString);
 }
 
-export function numberField(description?: string): CommandField<number> {
-  return optionalField(numberSchema(description), optionalNumberValue);
+export function numberField(
+  description?: string,
+  options: { min?: number; max?: number } = {},
+): CommandField<number> {
+  return optionalField(numberSchema(description, options), (record, key) =>
+    optionalNumberValue(record, key, options),
+  );
 }
 
 export function integerField(
@@ -392,11 +405,21 @@ function requiredNumber(record: Record<string, unknown>, key: string): number {
   return value;
 }
 
-function optionalNumberValue(record: Record<string, unknown>, key: string): number | undefined {
+function optionalNumberValue(
+  record: Record<string, unknown>,
+  key: string,
+  options: { min?: number; max?: number } = {},
+): number | undefined {
   const value = record[key];
   if (value === undefined) return undefined;
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw new AppError('INVALID_ARGS', `Expected ${key} to be a finite number.`);
+  }
+  if (options.min !== undefined && value < options.min) {
+    throw new Error(`Expected ${key} to be at least ${options.min}.`);
+  }
+  if (options.max !== undefined && value > options.max) {
+    throw new Error(`Expected ${key} to be at most ${options.max}.`);
   }
   return value;
 }

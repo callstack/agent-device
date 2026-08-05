@@ -217,7 +217,7 @@ async function executeScreenshotPlatformCommand(params: {
       device: session.device,
       path: data.path,
       requestedPixelDensity: request.flags?.screenshotPixelDensity,
-      maxSize: request.flags?.screenshotMaxSize,
+      scale: request.flags?.screenshotScale,
     }),
   );
   return data;

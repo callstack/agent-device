@@ -28,8 +28,6 @@ import {
   writeAndroidRecoveryRotatingMetadata,
 } from './record-trace-android-recovery.ts';
 
-type AndroidRecordingSize = { width: number; height: number };
-
 const ANDROID_RECORDING_BIT_RATE: Record<RecordingExportQuality, number> = {
   medium: 8_000_000,
   high: 20_000_000,
@@ -52,7 +50,6 @@ type AndroidRecordingBase = Pick<
   | 'clientOutPath'
   | 'telemetryPath'
   | 'startedAt'
-  | 'maxSize'
   | 'exportQuality'
   | 'showTouches'
   | 'gestureEvents'
@@ -181,66 +178,11 @@ function androidRemoteRecordingPaths(timestamp: number, preferredDir?: string): 
   return orderedDirs.map((dir) => `${dir}/${fileName}`);
 }
 
-async function resolveAndroidRecordingSize(params: {
-  deviceId: string;
-  maxSize: number | undefined;
-}): Promise<AndroidRecordingSize | undefined> {
-  const { deviceId, maxSize } = params;
-  if (maxSize === undefined) {
-    return undefined;
-  }
-
-  const sizeResult = await runAndroidRecordingAdb(deviceId, ['shell', 'wm', 'size'], {
-    allowFailure: true,
-    timeoutMs: ANDROID_RECORDING_PROBE_TIMEOUT_MS,
-  });
-  const match =
-    sizeResult.stdout.match(/Override size:\s*(\d+)x(\d+)/) ??
-    sizeResult.stdout.match(/Physical size:\s*(\d+)x(\d+)/);
-  if (sizeResult.exitCode !== 0 || !match) {
-    throw new Error(
-      `failed to resolve Android screen size for recording max-size: ${formatRecordTraceExecFailure(sizeResult, 'adb shell wm size')}`,
-    );
-  }
-
-  return scaledSizeToMax({
-    width: Number(match[1]),
-    height: Number(match[2]),
-    maxSize,
-  });
-}
-
-function scaledSizeToMax(size: AndroidRecordingSize & { maxSize: number }): AndroidRecordingSize {
-  const longest = Math.max(size.width, size.height);
-  if (longest <= size.maxSize) {
-    return { width: size.width, height: size.height };
-  }
-  if (longest === 0) {
-    return { width: size.width, height: size.height };
-  }
-  const scale = size.maxSize / longest;
-  if (!Number.isFinite(scale)) {
-    return { width: size.width, height: size.height };
-  }
-  return {
-    width: scaledEvenDimension(size.width, scale),
-    height: scaledEvenDimension(size.height, scale),
-  };
-}
-
-function scaledEvenDimension(value: number, scale: number): number {
-  return Math.max(2, Math.round((value * scale) / 2) * 2);
-}
-
 function buildAndroidScreenrecordCommand(
   remotePath: string,
-  size: AndroidRecordingSize | undefined,
   quality: RecordingExportQuality,
 ): string {
   const screenrecordArgs = ['screenrecord'];
-  if (size) {
-    screenrecordArgs.push('--size', `${size.width}x${size.height}`);
-  }
   screenrecordArgs.push('--bit-rate', String(ANDROID_RECORDING_BIT_RATE[quality]));
   screenrecordArgs.push(remotePath);
   return `${screenrecordArgs.join(' ')} >/dev/null 2>&1 & echo $!`;
@@ -277,19 +219,17 @@ async function forceStopAndroidProcess(deviceId: string, pid: string): Promise<b
 
 async function startAndroidScreenrecordChunk(params: {
   device: AndroidDevice;
-  recordingSize: AndroidRecordingSize | undefined;
   quality: RecordingExportQuality;
   preferredRemoteDir?: string;
   hooks?: AndroidRecordingChunkStartHooks;
 }): Promise<AndroidRecordingChunkStart | { error: DaemonResponse }> {
-  const { device, recordingSize, quality, preferredRemoteDir, hooks } = params;
+  const { device, quality, preferredRemoteDir, hooks } = params;
   let lastStartError =
     'failed to start recording: Android screenrecord did not begin producing frames';
 
   for (const remotePath of androidRemoteRecordingPaths(Date.now(), preferredRemoteDir)) {
     const attempt = await tryStartAndroidScreenrecordAtPath({
       device,
-      recordingSize,
       quality,
       remotePath,
       hooks,
@@ -305,12 +245,11 @@ async function startAndroidScreenrecordChunk(params: {
 
 async function tryStartAndroidScreenrecordAtPath(params: {
   device: AndroidDevice;
-  recordingSize: AndroidRecordingSize | undefined;
   quality: RecordingExportQuality;
   remotePath: string;
   hooks?: AndroidRecordingChunkStartHooks;
 }): Promise<AndroidRecordingChunkStartAttempt> {
-  const { device, recordingSize, quality, remotePath, hooks } = params;
+  const { device, quality, remotePath, hooks } = params;
   const prepareError = await hooks?.prepareRemotePath?.(remotePath);
   if (prepareError) {
     return { kind: 'failed', message: prepareError };
@@ -318,7 +257,7 @@ async function tryStartAndroidScreenrecordAtPath(params: {
 
   const startResult = await runAndroidRecordingAdb(
     device.id,
-    ['shell', buildAndroidScreenrecordCommand(remotePath, recordingSize, quality)],
+    ['shell', buildAndroidScreenrecordCommand(remotePath, quality)],
     {
       allowFailure: true,
       timeoutMs: ANDROID_RECORDING_PROBE_TIMEOUT_MS,
@@ -379,21 +318,10 @@ export async function startAndroidRecording(params: {
   recordingBase: AndroidRecordingBase;
 }): Promise<DaemonResponse | AndroidRecording> {
   const { sessionName, activeSession, device, recordingBase } = params;
-  let recordingSize: AndroidRecordingSize | undefined;
-  try {
-    recordingSize = await resolveAndroidRecordingSize({
-      deviceId: device.id,
-      maxSize: recordingBase.maxSize,
-    });
-  } catch (error) {
-    return errorResponse('COMMAND_FAILED', error instanceof Error ? error.message : String(error));
-  }
-
   const quality = recordingBase.exportQuality ?? DEFAULT_RECORDING_EXPORT_QUALITY;
   const recordingId = randomUUID();
   const chunk = await startAndroidScreenrecordChunk({
     device,
-    recordingSize,
     quality,
     hooks: {
       prepareRemotePath: async (remotePath) =>
@@ -433,7 +361,6 @@ export async function startAndroidRecording(params: {
     sessionName,
     device,
     recording,
-    recordingSize,
     quality,
   });
   return recording;
@@ -468,10 +395,9 @@ function scheduleAndroidRecordingChunks(params: {
   sessionName: string;
   device: AndroidDevice;
   recording: AndroidRecording;
-  recordingSize: AndroidRecordingSize | undefined;
   quality: RecordingExportQuality;
 }): void {
-  const { activeSession, sessionName, device, recording, recordingSize, quality } = params;
+  const { activeSession, sessionName, device, recording, quality } = params;
   scheduleAndroidRecordingRotation({
     recording,
     finishCurrentChunk: async (chunk) =>
@@ -488,7 +414,6 @@ function scheduleAndroidRecordingChunks(params: {
     startNextChunk: async (preferredRemoteDir, nextIndex) => {
       const nextChunk = await startAndroidScreenrecordChunk({
         device,
-        recordingSize,
         quality,
         preferredRemoteDir,
         hooks: {

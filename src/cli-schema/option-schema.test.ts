@@ -56,6 +56,12 @@ test('option schema exposes env defaults and command scoping', () => {
   assert.equal(snapshotDepth.supportsCommand('snapshot'), true);
   assert.equal(snapshotDepth.supportsCommand('open'), false);
 
+  const screenshotScale = getOptionSpec('screenshotScale');
+  assert.ok(screenshotScale);
+  assert.deepEqual(screenshotScale.env.names, ['AGENT_DEVICE_SCREENSHOT_SCALE']);
+  assert.equal(screenshotScale.supportsCommand('screenshot'), true);
+  assert.equal(screenshotScale.supportsCommand('record'), false);
+
   const metroBearerToken = getOptionSpec('metroBearerToken');
   assert.ok(metroBearerToken);
   assert.deepEqual(metroBearerToken.env.names, ['AGENT_DEVICE_METRO_BEARER_TOKEN']);

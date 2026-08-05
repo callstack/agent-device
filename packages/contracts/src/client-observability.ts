@@ -45,7 +45,6 @@ export type RecordOptions = AgentDeviceRequestOverrides & {
   action: 'start' | 'stop';
   path?: string;
   fps?: number;
-  maxSize?: number;
   quality?: RecordingExportQuality;
   hideTouches?: boolean;
   recordingScope?: RecordingScope;

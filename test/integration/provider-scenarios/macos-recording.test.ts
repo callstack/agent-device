@@ -21,7 +21,6 @@ test('Provider-backed integration macOS recording flow uses runner provider thro
         command: 'recordStart',
         outPath: recordingPath,
         fps: 30,
-        maxSize: 1024,
         appBundleId: 'com.apple.systempreferences',
       },
       result: {},
@@ -47,7 +46,6 @@ test('Provider-backed integration macOS recording flow uses runner provider thro
       const recordStart = await daemon.callCommand('record', ['start', recordingPath], {
         hideTouches: true,
         fps: 30,
-        screenshotMaxSize: 1024,
       });
       assertRecordingStarted(recordStart, { outPath: recordingPath, showTouches: false });
 

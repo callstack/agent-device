@@ -301,10 +301,10 @@ test('command usage shows record touch-overlay opt-out flag', async () => {
   if (help === null) throw new Error('Expected command help text');
   assert.match(
     help,
-    /record start \[path\] \[--scope <app\|device\|system>\] \[--fps <n>\] \[--max-size <px>\] \[--quality <medium\|high>\] \[--hide-touches\] \| record stop/,
+    /record start \[path\] \[--scope <app\|device\|system>\] \[--fps <n>\] \[--quality <medium\|high>\] \[--hide-touches\] \| record stop/,
   );
   assert.match(help, /--scope <app\|device\|system>/);
-  assert.match(help, /--max-size <px>/);
+  assert.doesNotMatch(help, /--max-size/);
   assert.match(help, /--quality <medium\|high>/);
   assert.match(help, /--hide-touches/);
   assert.match(help, /skip touch-overlay post-processing/);

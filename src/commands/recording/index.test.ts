@@ -34,7 +34,6 @@ describe('recording command interface', () => {
     expect(
       recordCliReader(['start', './capture.mp4'], {
         fps: 30,
-        screenshotMaxSize: 1024,
         quality: 'high',
         hideTouches: true,
         recordingScope: 'device',
@@ -43,7 +42,6 @@ describe('recording command interface', () => {
       action: 'start',
       path: './capture.mp4',
       fps: 30,
-      maxSize: 1024,
       quality: 'high',
       hideTouches: true,
       recordingScope: 'device',

@@ -1,6 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
+import { validateScreenshotScale } from '@agent-device/contracts/capture';
 import { successText } from '../../../utils/success-text.ts';
-import { resizePngFileToMaxSize } from '../../../utils/png-resize.ts';
+import { resizePngFileToScale } from '../../../utils/png-resize.ts';
 import type { ArtifactDescriptor } from '../../../io.ts';
 import type { RuntimeCommand, ScreenshotCommandOptions } from '../../runtime-types.ts';
 import { reserveCommandOutput } from '../../io-policy.ts';
@@ -18,6 +19,7 @@ export const screenshotCommand: RuntimeCommand<
   if (!runtime.backend.captureScreenshot) {
     throw new AppError('UNSUPPORTED_OPERATION', 'screenshot is not supported by this backend');
   }
+  validateScreenshotScale(options);
 
   const reserved = await reserveCommandOutput(runtime, options.out, {
     field: 'path',
@@ -46,8 +48,8 @@ export const screenshotCommand: RuntimeCommand<
         surface: options.surface,
       },
     );
-    if (options.maxSize !== undefined) {
-      await resizePngFileToMaxSize(reserved.path, options.maxSize);
+    if (options.scale !== undefined) {
+      await resizePngFileToScale(reserved.path, options.scale);
     }
     artifact = await reserved.publish();
   } catch (error) {

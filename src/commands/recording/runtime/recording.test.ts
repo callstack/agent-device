@@ -46,7 +46,6 @@ test('record and trace runtime commands call typed backend lifecycle primitives'
     action: 'start',
     out: { kind: 'path', path: '/tmp/out.mp4' },
     fps: 30,
-    maxSize: 1024,
     quality: 'high',
     hideTouches: true,
   });
@@ -64,7 +63,6 @@ test('record and trace runtime commands call typed backend lifecycle primitives'
       options: {
         outPath: '/tmp/out.mp4',
         fps: 30,
-        maxSize: 1024,
         quality: 'high',
         showTouches: false,
       },

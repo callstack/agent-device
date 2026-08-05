@@ -156,6 +156,19 @@ describe('parseSourceValue integers', () => {
   });
 });
 
+describe('parseSourceValue numbers', () => {
+  test('accepts finite decimal numbers and numeric strings', () => {
+    expect(parse({ type: 'number' }, 0.3)).toBe(0.3);
+    expect(parse({ type: 'number' }, '0.75')).toBe(0.75);
+  });
+
+  test('rejects non-numeric input and enforces bounds', () => {
+    expectInvalidArgs(() => parse({ type: 'number' }, 'abc'), 'Expected number');
+    expectInvalidArgs(() => parse({ type: 'number', min: 0.01 }, 0), 'Must be >= 0.01');
+    expectInvalidArgs(() => parse({ type: 'number', max: 1 }, 1.1), 'Must be <= 1');
+  });
+});
+
 describe('parseSourceValue multiple', () => {
   test('maps over an array, parsing each entry with the singular definition', () => {
     expect(parse({ type: 'int', multiple: true }, ['1', '2', 3])).toEqual([1, 2, 3]);

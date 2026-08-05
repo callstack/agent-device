@@ -3,10 +3,17 @@ import type { CaptureScreenshotOptions } from '@agent-device/contracts/client';
 import { SESSION_SURFACES } from '@agent-device/contracts/session';
 import {
   SCREENSHOT_COMMAND_FLAG_KEYS,
-  screenshotFlagsFromOptions,
+  screenshotFlagsFromPublicOptions,
   screenshotOptionsFromFlags,
+  validateScreenshotScale,
 } from '@agent-device/contracts/capture';
-import { booleanField, enumField, integerField, stringField } from '../command-input.ts';
+import {
+  booleanField,
+  enumField,
+  integerField,
+  numberField,
+  stringField,
+} from '../command-input.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { commonInputFromFlags, optionalString, request } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
@@ -27,7 +34,7 @@ const screenshotCommandMetadata = defineFieldCommandMetadata(
       min: 1,
     }),
     fullscreen: booleanField(),
-    maxSize: integerField(),
+    scale: numberField('Screenshot scale factor.', { min: 0.01, max: 1 }),
     stabilize: booleanField(),
     normalizeStatusBar: booleanField(),
     surface: enumField(SESSION_SURFACES),
@@ -41,7 +48,7 @@ const screenshotCommandDefinition = defineExecutableCommand(
 
 const screenshotCliSchema = {
   helpDescription:
-    'Capture screenshot (web defaults to the viewport; use --fullscreen, --full, or -f for the entire page. iOS simulators default to 1x logical-point output; use --pixel-density to request a different screenshot density. macOS app sessions default to the app window; use --fullscreen for full desktop, --max-size to downscale, --overlay-refs to annotate current refs, --normalize-status-bar for deterministic iOS simulator chrome, or --no-stabilize for low-latency Android capture loops)',
+    'Capture screenshot (web defaults to the viewport; use --fullscreen, --full, or -f for the entire page. iOS simulators default to 1x logical-point output; use --pixel-density to request a different screenshot density. macOS app sessions default to the app window; use --fullscreen for full desktop, --scale to downscale, --overlay-refs to annotate current refs, --normalize-status-bar for deterministic iOS simulator chrome, or --no-stabilize for low-latency Android capture loops)',
   summary:
     'Capture screenshot with optional density, full-page, desktop, downscale, or ref overlay modes',
   positionalArgs: ['path?'],
@@ -54,11 +61,13 @@ export const screenshotCliReader: CliReader = (positionals, flags) => ({
   ...screenshotOptionsFromFlags(flags),
 });
 
-export const screenshotDaemonWriter: DaemonWriter = (input) =>
-  request(PUBLIC_COMMANDS.screenshot, optionalString(input.path), {
+export const screenshotDaemonWriter: DaemonWriter = (input) => {
+  validateScreenshotScale(input as CaptureScreenshotOptions);
+  return request(PUBLIC_COMMANDS.screenshot, optionalString(input.path), {
     ...input,
-    ...screenshotFlagsFromOptions(input as CaptureScreenshotOptions),
+    ...screenshotFlagsFromPublicOptions(input as CaptureScreenshotOptions),
   });
+};
 
 export const screenshotCommandFacet = defineCommandFacet({
   name: SCREENSHOT_COMMAND_NAME,

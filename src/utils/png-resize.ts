@@ -3,28 +3,30 @@ import { AppError } from '@agent-device/kernel/errors';
 import { PNG } from './png.ts';
 import { decodePngAsync, encodePngAsync } from './png-worker-client.ts';
 
-/**
- * Resizes a PNG file in place so its longest edge fits `maxSize`. Decode and
- * encode run on the PNG worker thread (daemon screenshot `--max-size` path);
- * the in-memory box-filter resample itself is cheap enough to stay inline.
- */
-export async function resizePngFileToMaxSize(filePath: string, maxSize: number): Promise<void> {
-  if (!Number.isInteger(maxSize) || maxSize < 1) {
-    throw new AppError('INVALID_ARGS', 'Screenshot max size must be a positive integer');
+/** Resizes a PNG in place by a proportional scale factor from 0.01 through 1. */
+export async function resizePngFileToScale(filePath: string, scale: number): Promise<void> {
+  if (!Number.isFinite(scale) || scale < 0.01 || scale > 1) {
+    throw new AppError('INVALID_ARGS', 'Screenshot scale must be between 0.01 and 1');
   }
+  if (scale === 1) return;
 
-  const source = await decodePngAsync(await fs.readFile(filePath), 'screenshot');
-  const longestEdge = Math.max(source.width, source.height);
-
-  if (longestEdge <= maxSize) {
-    return;
-  }
-
-  const scale = maxSize / longestEdge;
+  const source = await readPng(filePath);
   const width = Math.max(1, Math.round(source.width * scale));
   const height = Math.max(1, Math.round(source.height * scale));
-  const resized = resizePngBox(source, width, height);
+  await writeResizedPng(filePath, source, width, height);
+}
 
+async function readPng(filePath: string): Promise<PNG> {
+  return await decodePngAsync(await fs.readFile(filePath), 'screenshot');
+}
+
+async function writeResizedPng(
+  filePath: string,
+  source: PNG,
+  width: number,
+  height: number,
+): Promise<void> {
+  const resized = resizePngBox(source, width, height);
   await fs.writeFile(filePath, await encodePngAsync(resized));
 }
 

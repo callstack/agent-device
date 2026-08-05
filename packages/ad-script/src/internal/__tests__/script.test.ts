@@ -50,14 +50,12 @@ test('formatPortableActionLine preserves inline open runtime hints', () => {
   );
 });
 
-test('record replay script parses fps, max-size, quality, and hide-touches flags', () => {
-  const script =
-    'record start "./capture.mp4" --fps 24 --max-size 1024 --quality high --hide-touches\n';
+test('record replay script parses fps, quality, and hide-touches flags', () => {
+  const script = 'record start "./capture.mp4" --fps 24 --quality high --hide-touches\n';
   const parsed = parseReplayScriptDetailed(script).actions;
 
   assert.deepEqual(parsed[0]?.positionals, ['start', './capture.mp4']);
   assert.equal(parsed[0]?.flags.fps, 24);
-  assert.equal(parsed[0]?.flags.screenshotMaxSize, 1024);
   assert.equal(parsed[0]?.flags.quality, 'high');
   assert.equal(parsed[0]?.flags.hideTouches, true);
 });
@@ -71,7 +69,7 @@ test('screenshot replay script round-trips screenshot flags', () => {
       flags: {
         screenshotPixelDensity: 2,
         screenshotFullscreen: true,
-        screenshotMaxSize: 1024,
+        screenshotScale: 0.3,
         screenshotNoStabilize: true,
       },
     },
@@ -80,14 +78,14 @@ test('screenshot replay script round-trips screenshot flags', () => {
   const script = formatReplayScriptForTest(actions);
   assert.match(
     script,
-    /screenshot "\.\/page\.png" --pixel-density 2 --fullscreen --max-size 1024 --no-stabilize/,
+    /screenshot "\.\/page\.png" --pixel-density 2 --fullscreen --scale 0.3 --no-stabilize/,
   );
 
   const parsed = parseReplayScriptDetailed(script).actions;
   assert.deepEqual(parsed[0]?.positionals, ['./page.png']);
   assert.equal(parsed[0]?.flags.screenshotPixelDensity, 2);
   assert.equal(parsed[0]?.flags.screenshotFullscreen, true);
-  assert.equal(parsed[0]?.flags.screenshotMaxSize, 1024);
+  assert.equal(parsed[0]?.flags.screenshotScale, 0.3);
   assert.equal(parsed[0]?.flags.screenshotNoStabilize, true);
 });
 

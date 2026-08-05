@@ -432,7 +432,7 @@ test('screenshot forwards --overlay-refs to the client capture API', async () =>
     | {
         path?: string;
         overlayRefs?: boolean;
-        maxSize?: number;
+        scale?: number;
         stabilize?: boolean;
       }
     | undefined;
@@ -457,7 +457,7 @@ test('screenshot forwards --overlay-refs to the client capture API', async () =>
       help: false,
       version: false,
       overlayRefs: true,
-      screenshotMaxSize: 1024,
+      screenshotScale: 0.3,
       screenshotNoStabilize: true,
     },
     client,
@@ -467,7 +467,7 @@ test('screenshot forwards --overlay-refs to the client capture API', async () =>
   assert.deepEqual(observed, {
     path: '/tmp/screenshot.png',
     overlayRefs: true,
-    maxSize: 1024,
+    scale: 0.3,
     stabilize: false,
   });
 });

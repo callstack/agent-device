@@ -232,8 +232,8 @@ async function assertCapture(context: LiveContext): Promise<void> {
   const screenshot = await runStep(context, 'capture fixture screenshot', [
     'screenshot',
     screenshotPath,
-    '--max-size',
-    '900',
+    '--scale',
+    '0.5',
   ]);
   assertJsonContains(screenshot, screenshotPath, 'screenshot response should return artifact path');
   assertPngFile(screenshotPath);

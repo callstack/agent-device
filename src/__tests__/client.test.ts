@@ -1218,6 +1218,29 @@ test('capture.screenshot normalizes the default-level result (unchanged)', async
   assert.deepEqual(result.identifiers, { session: 'qa' });
 });
 
+test('capture.screenshot forwards public scale as the screenshot sizing flag', async () => {
+  const setup = createTransport(async (req) => {
+    assert.equal(req.command, 'screenshot');
+    assert.equal(req.flags?.screenshotScale, 0.3);
+    return { ok: true, data: { path: '/tmp/shot.png' } };
+  });
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  await client.capture.screenshot({ scale: 0.3 });
+});
+
+test('gesture scale does not leak into screenshot sizing flags', async () => {
+  const setup = createTransport(async (req) => {
+    assert.equal(req.command, 'gesture');
+    assert.deepEqual(req.input, { kind: 'pinch', scale: 0.8 });
+    assert.equal(req.flags?.screenshotScale, undefined);
+    return { ok: true, data: {} };
+  });
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  await client.interactions.pinch({ scale: 0.8 });
+});
+
 test('capture.snapshot passes a digest (non-default level) payload through unnormalized', async () => {
   const digest = {
     nodeCount: 3,

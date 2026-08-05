@@ -12,8 +12,8 @@ export async function assertCaptureAndClose(context: LiveContext): Promise<void>
   const screenshot = await runStep(context, 'capture fixture screenshot', [
     'screenshot',
     screenshotPath,
-    '--max-size',
-    '900',
+    '--scale',
+    '0.5',
   ]);
   assert.ok(
     JSON.stringify(screenshot.json?.data).includes(screenshotPath),

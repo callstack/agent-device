@@ -35,7 +35,6 @@ vi.mock('../../../recording/overlay.ts', async (importOriginal) => {
   return {
     ...actual,
     trimRecordingStart: vi.fn(async () => {}),
-    resizeRecording: vi.fn(async () => {}),
     overlayRecordingTouches: vi.fn(async () => {}),
   };
 });
@@ -58,14 +57,13 @@ import { handleRecordTraceCommands } from '../record-trace.ts';
 import { stopSessionRecordingForTeardown } from '../record-trace-recording.ts';
 import { deriveRecordingTelemetryPath } from '../../recording-telemetry.ts';
 import { SessionStore } from '../../session-store.ts';
-import type { SessionState } from '../../types.ts';
+import type { DaemonRequest, SessionState } from '../../types.ts';
 import {
   IOS_RUNNER_CONTAINER_BUNDLE_IDS,
   runAppleRunnerCommand,
 } from '../../../platforms/apple/core/runner/runner-client.ts';
 import {
   getRecordingOverlaySupportWarning,
-  resizeRecording,
   trimRecordingStart,
   overlayRecordingTouches,
 } from '../../../recording/overlay.ts';
@@ -79,7 +77,6 @@ type RunnerCall = {
   command: string;
   outPath?: string;
   fps?: number;
-  maxSize?: number;
   appBundleId?: string;
   logPath?: string;
   traceLogPath?: string;
@@ -90,7 +87,6 @@ const mockRunCmdBackground = vi.mocked(runCmdBackground);
 const mockRunAppleRunnerCommand = vi.mocked(runAppleRunnerCommand);
 const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
-const mockResizeRecording = vi.mocked(resizeRecording);
 const mockTrimRecordingStart = vi.mocked(trimRecordingStart);
 const mockOverlayRecordingTouches = vi.mocked(overlayRecordingTouches);
 const mockWaitForStableFile = vi.mocked(waitForStableFile);
@@ -230,7 +226,7 @@ function mockIosSimulatorRecordingStart(
 }
 
 function isAndroidScreenrecordStartCommand(command: string): boolean {
-  return /^-s emulator-5554 shell screenrecord (?:--size 756x1344 )?--bit-rate (?:8000000|20000000) \/(?:sdcard|data\/local\/tmp)\/agent-device-recording-\d+\.mp4 >\/dev\/null 2>&1 & echo \$!$/.test(
+  return /^-s emulator-5554 shell screenrecord --bit-rate (?:8000000|20000000) \/(?:sdcard|data\/local\/tmp)\/agent-device-recording-\d+\.mp4 >\/dev\/null 2>&1 & echo \$!$/.test(
     command,
   );
 }
@@ -244,10 +240,10 @@ async function runRecordCommand(params: {
   flags?: {
     fps?: number;
     quality?: string;
-    screenshotMaxSize?: number;
     hideTouches?: boolean;
     recordingScope?: 'app' | 'device' | 'system';
   };
+  rawFlags?: Record<string, unknown>;
   sessionExplicit?: boolean;
   clientArtifactPaths?: Record<string, string>;
 }) {
@@ -257,7 +253,7 @@ async function runRecordCommand(params: {
       session: params.sessionName,
       command: 'record',
       positionals: params.positionals,
-      flags: params.flags ?? {},
+      flags: (params.rawFlags ?? params.flags ?? {}) as DaemonRequest['flags'],
       meta:
         params.cwd || params.clientArtifactPaths || params.sessionExplicit
           ? {
@@ -284,7 +280,6 @@ function setupRunnerRecordingMocks(
       command: command.command,
       outPath: command.outPath,
       fps: command.fps,
-      maxSize: command.maxSize,
       appBundleId: command.appBundleId,
       logPath: options?.logPath,
       traceLogPath: options?.traceLogPath,
@@ -311,7 +306,6 @@ beforeEach(() => {
     throw new Error('runCmdBackground should not be used in this test');
   });
   mockRunAppleRunnerCommand.mockImplementation(async () => ({}));
-  mockResizeRecording.mockImplementation(async () => {});
   mockTrimRecordingStart.mockImplementation(async () => {});
   mockOverlayRecordingTouches.mockImplementation(async () => {});
   mockWaitForStableFile.mockImplementation(async () => {});
@@ -526,7 +520,7 @@ test('record start web rejects native recording flags before delegating', async 
       sessionStore,
       sessionName,
       positionals: ['start', path.join(os.tmpdir(), `${sessionName}.webm`)],
-      flags: { fps: 0, quality: 'high', screenshotMaxSize: 1024, hideTouches: true },
+      flags: { fps: 0, quality: 'high', hideTouches: true },
     });
 
     expect(start?.ok).toBe(false);
@@ -534,8 +528,28 @@ test('record start web rejects native recording flags before delegating', async 
       throw new Error(`expected web recording start failure, got ${JSON.stringify(start)}`);
     }
     expect(start.error.code).toBe('INVALID_ARGS');
-    expect(start.error.message).toContain('--fps, --quality, --max-size, --hide-touches');
+    expect(start.error.message).toContain('--fps, --quality, --hide-touches');
   });
+});
+
+test('record start rejects the removed max-size field from older remote clients', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'recording-legacy-max-size';
+  sessionStore.set(sessionName, makeOpenedIosSimulatorSession(sessionName));
+
+  const start = await runRecordCommand({
+    sessionStore,
+    sessionName,
+    positionals: ['start', './legacy-max-size.mp4'],
+    rawFlags: { screenshotMaxSize: 720 },
+  });
+
+  expect(start?.ok).toBe(false);
+  if (!start || start.ok) {
+    throw new Error(`expected recording start failure, got ${JSON.stringify(start)}`);
+  }
+  expect(start.error.code).toBe('INVALID_ARGS');
+  expect(start.error.message).toBe('record --max-size is not supported');
 });
 
 test('record start web requires an existing browser session', async () => {
@@ -927,64 +941,6 @@ test('record stop trims iOS device recordings from target app readiness before o
   }
   expect(lifecycleCalls).toEqual(expectedLifecycleCalls);
   expect((response as any).data?.overlayWarning).toBe(overlaySupportWarning);
-});
-
-test('record stop resizes iOS simulator recording when max-size is explicit', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'ios-sim-quality';
-  sessionStore.set(sessionName, makeOpenedIosSimulatorSession(sessionName));
-
-  mockIosSimulatorRecordingStart();
-
-  await runRecordCommand({
-    sessionStore,
-    sessionName,
-    positionals: ['start', './sim-quality.mp4'],
-    flags: { screenshotMaxSize: 720 },
-  });
-
-  const responseStop = await runRecordCommand({
-    sessionStore,
-    sessionName,
-    positionals: ['stop'],
-  });
-
-  expect(responseStop?.ok).toBe(true);
-  expect(mockResizeRecording).toHaveBeenCalledWith({
-    videoPath: path.resolve('./sim-quality.mp4'),
-    maxSize: 720,
-    exportQuality: 'medium',
-    targetLabel: 'iOS recording',
-  });
-});
-
-test('record stop forwards the requested quality to the resize step', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'ios-sim-export-quality';
-  sessionStore.set(sessionName, makeOpenedIosSimulatorSession(sessionName));
-
-  mockIosSimulatorRecordingStart();
-
-  await runRecordCommand({
-    sessionStore,
-    sessionName,
-    positionals: ['start', './sim-export-quality.mp4'],
-    flags: { screenshotMaxSize: 720, quality: 'high' },
-  });
-
-  const responseStop = await runRecordCommand({
-    sessionStore,
-    sessionName,
-    positionals: ['stop'],
-  });
-
-  expect(responseStop?.ok).toBe(true);
-  expect(mockResizeRecording).toHaveBeenCalledWith({
-    videoPath: path.resolve('./sim-export-quality.mp4'),
-    maxSize: 720,
-    exportQuality: 'high',
-    targetLabel: 'iOS recording',
-  });
 });
 
 test('record stop leaves a short visual tail after iOS simulator gestures', async () => {
@@ -1548,34 +1504,6 @@ test('record stop skips touch overlay export when no gestures were recorded', as
   expect((responseStop as any).data?.overlayWarning).toBeUndefined();
 });
 
-test('record stop keeps iOS simulator video when resize export fails', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'ios-sim-resize-fail';
-  sessionStore.set(sessionName, makeOpenedIosSimulatorSession(sessionName));
-
-  mockIosSimulatorRecordingStart();
-
-  mockResizeRecording.mockImplementation(async () => {
-    throw new Error('resize failed');
-  });
-
-  await runRecordCommand({
-    sessionStore,
-    sessionName,
-    positionals: ['start', './sim-resize-fail.mp4'],
-    flags: { screenshotMaxSize: 720 },
-  });
-
-  const responseStop = await runRecordCommand({
-    sessionStore,
-    sessionName,
-    positionals: ['stop'],
-  });
-
-  expect(responseStop?.ok).toBe(true);
-  expect((responseStop as any).data?.overlayWarning ?? '').toMatch(/failed to resize recording/i);
-});
-
 test('record start does not fail when iOS simulator runner warm-up fails', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-warm-failure';
@@ -1887,39 +1815,6 @@ test('record start/stop overlays Android gestures by default on devices', async 
     ]);
     expect(responseStop.data?.overlayWarning).toBeUndefined();
   }
-});
-
-test('record start rejects Android max-size when wm size is unparseable', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'android-quality-unparseable';
-  sessionStore.set(
-    sessionName,
-    makeSession(sessionName, {
-      platform: 'android',
-      id: 'emulator-5554',
-      name: 'Android',
-      kind: 'device',
-      booted: true,
-    }),
-  );
-
-  mockRunCmd.mockImplementation(async (_cmd, args) => {
-    const command = args.join(' ');
-    if (command === '-s emulator-5554 shell wm size') {
-      return { stdout: 'w=oops\n', stderr: '', exitCode: 0 };
-    }
-    return { stdout: '', stderr: '', exitCode: 0 };
-  });
-
-  const response = await runRecordCommand({
-    sessionStore,
-    sessionName,
-    positionals: ['start', './android.mp4'],
-    flags: { screenshotMaxSize: 720, quality: 'high' },
-  });
-
-  expect(response?.ok).toBe(false);
-  expect((response as any).error?.code).toBe('COMMAND_FAILED');
 });
 
 test('record stop keeps Android video when overlay export fails', async () => {

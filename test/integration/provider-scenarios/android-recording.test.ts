@@ -895,7 +895,6 @@ async function exerciseAndroidRecordingFlow(context: {
 
   const recordStart = await context.daemon.callCommand('record', ['start', context.recordingPath], {
     hideTouches: true,
-    screenshotMaxSize: 1344,
     quality: 'high',
   });
   assertRecordingStarted(recordStart, { showTouches: false });
@@ -911,7 +910,10 @@ function assertAndroidRecordingFlow(context: {
 }): void {
   const { recordingPath, adbCalls, pullCalls } = context;
   assert.equal(fs.existsSync(recordingPath), true);
-  assertCommandCall(adbCalls, ['shell', 'wm', 'size']);
+  assert.equal(
+    adbCalls.some((args) => args.join(' ') === 'shell wm size'),
+    false,
+  );
   assert.ok(adbCalls.some((args) => isAndroidHighQualityScreenrecordStartCommand(args.join(' '))));
   assertCommandCall(adbCalls, ['shell', 'kill', '-2', '4321']);
   assert.equal(pullCalls.length, 1);
@@ -1551,20 +1553,6 @@ function androidAdbResult(args: string[]): {
   if (command === 'shell getprop sys.boot_completed') {
     return { stdout: '1\n', stderr: '', exitCode: 0 };
   }
-  if (command === 'shell wm size') {
-    return {
-      stdout: 'Physical size: 1440x2560\nOverride size: 1080x1920\n',
-      stderr: '',
-      exitCode: 0,
-    };
-  }
-  if (
-    /^shell screenrecord --size 756x1344 --bit-rate 20000000 \/sdcard\/agent-device-recording-\d+\.mp4 >\/dev\/null 2>&1 & echo \$!$/.test(
-      command,
-    )
-  ) {
-    return { stdout: '4321\n', stderr: '', exitCode: 0 };
-  }
   if (isAndroidScreenrecordStartCommand(command)) {
     return { stdout: '4321\n', stderr: '', exitCode: 0 };
   }
@@ -1582,13 +1570,13 @@ function androidAdbResult(args: string[]): {
 }
 
 function isAndroidScreenrecordStartCommand(command: string): boolean {
-  return /^shell screenrecord (?:--size 756x1344 )?--bit-rate (?:8000000|20000000) \/sdcard\/agent-device-recording-\d+\.mp4 >\/dev\/null 2>&1 & echo \$!$/.test(
+  return /^shell screenrecord --bit-rate (?:8000000|20000000) \/sdcard\/agent-device-recording-\d+\.mp4 >\/dev\/null 2>&1 & echo \$!$/.test(
     command,
   );
 }
 
 function isAndroidHighQualityScreenrecordStartCommand(command: string): boolean {
-  return /^shell screenrecord --size 756x1344 --bit-rate 20000000 \/sdcard\/agent-device-recording-\d+\.mp4 >\/dev\/null 2>&1 & echo \$!$/.test(
+  return /^shell screenrecord --bit-rate 20000000 \/sdcard\/agent-device-recording-\d+\.mp4 >\/dev\/null 2>&1 & echo \$!$/.test(
     command,
   );
 }

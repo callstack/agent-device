@@ -322,7 +322,6 @@ const RECORDING_BACKENDS_BY_TAG: Record<RecordingBackendTag, RecordingStartBacke
 const WEB_UNSUPPORTED_RECORDING_FLAGS = [
   ['fps', '--fps'],
   ['quality', '--quality'],
-  ['screenshotMaxSize', '--max-size'],
   ['hideTouches', '--hide-touches'],
 ] as const satisfies readonly (readonly [keyof NonNullable<DaemonRequest['flags']>, string])[];
 

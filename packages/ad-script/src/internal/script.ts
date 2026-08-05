@@ -436,14 +436,6 @@ function parseReplayScriptLine(line: string): SessionAction | null {
         index += 1;
         continue;
       }
-      if (token === '--max-size' && index + 1 < args.length) {
-        const parsedMaxSize = Number(args[index + 1]);
-        if (Number.isFinite(parsedMaxSize)) {
-          action.flags.screenshotMaxSize = Math.floor(parsedMaxSize);
-        }
-        index += 1;
-        continue;
-      }
       positionals.push(token);
     }
     action.positionals = positionals;

@@ -32,7 +32,7 @@ Examples:
 ```
 
 ```json
-{ "command": "recordStart", "outPath": "/tmp/demo.mp4", "fps": 30, "maxSize": 720 }
+{ "command": "recordStart", "outPath": "/tmp/demo.mp4", "fps": 30 }
 ```
 
 ```json

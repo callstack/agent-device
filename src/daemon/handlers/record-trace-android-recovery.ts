@@ -41,7 +41,6 @@ type AndroidRecordingBase = Pick<
   | 'clientOutPath'
   | 'telemetryPath'
   | 'startedAt'
-  | 'maxSize'
   | 'exportQuality'
   | 'showTouches'
   | 'gestureEvents'
@@ -699,7 +698,6 @@ function buildAndroidRecordingFromManifest(
     clientOutPath: recordingBase.clientOutPath,
     telemetryPath: recordingBase.telemetryPath,
     startedAt: manifest.startedAt,
-    maxSize: recordingBase.maxSize,
     exportQuality: recordingBase.exportQuality,
     showTouches: false,
     gestureEvents: [],

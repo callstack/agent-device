@@ -13,11 +13,7 @@ import path from 'node:path';
 import { resolveTargetDevice } from '../../core/dispatch.ts';
 import { runAppleRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 import { runXcrun } from '../../platforms/apple/core/tool-provider.ts';
-import {
-  overlayRecordingTouches,
-  resizeRecording,
-  trimRecordingStart,
-} from '../../recording/overlay.ts';
+import { overlayRecordingTouches, trimRecordingStart } from '../../recording/overlay.ts';
 import { runCmd } from '../../utils/exec.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import { isPlayableVideo, waitForStableFile } from '../../utils/video.ts';
@@ -84,7 +80,6 @@ function buildRecordTraceDeps(): RecordTraceDeps {
     waitForStableFile,
     isPlayableVideo,
     trimRecordingStart,
-    resizeRecording,
     overlayRecordingTouches,
   };
 }
@@ -119,7 +114,6 @@ function buildRecordingBase(params: {
           ...(activeSession.appName ? { name: activeSession.appName } : {}),
         }
       : undefined,
-    maxSize: req.flags?.screenshotMaxSize,
     exportQuality: exportQuality ?? DEFAULT_RECORDING_EXPORT_QUALITY,
     showTouches: req.flags?.hideTouches !== true,
     gestureEvents: [],
@@ -187,12 +181,12 @@ function validateRecordingStartRequest(params: {
   const { req, activeSession, device, backend } = params;
   const validators = [
     () => validateNoActiveRecording(activeSession),
+    () => validateRemovedRecordingMaxSizeFlag(req.flags),
     () => backend.validateStart?.(req) ?? null,
     () =>
       validateRecordingStartFlags({
         fpsFlag: req.flags?.fps,
         qualityFlag: req.flags?.quality,
-        maxSizeFlag: req.flags?.screenshotMaxSize,
       }),
     () => requireCommandSupported('record', device),
   ];
@@ -249,14 +243,16 @@ function validateNoActiveRecording(activeSession: SessionState): DaemonResponse 
 function validateRecordingStartFlags(flags: {
   fpsFlag: number | undefined;
   qualityFlag: RecordingQualityInput;
-  maxSizeFlag: number | undefined;
 }): DaemonResponse | null {
-  const { fpsFlag, qualityFlag, maxSizeFlag } = flags;
-  return (
-    validateRecordingFpsFlag(fpsFlag) ??
-    validateRecordingQualityFlag(qualityFlag) ??
-    validateRecordingMaxSizeFlag(maxSizeFlag)
-  );
+  const { fpsFlag, qualityFlag } = flags;
+  return validateRecordingFpsFlag(fpsFlag) ?? validateRecordingQualityFlag(qualityFlag);
+}
+
+function validateRemovedRecordingMaxSizeFlag(flags: DaemonRequest['flags']): DaemonResponse | null {
+  const rawFlags = flags as Record<string, unknown> | undefined;
+  return rawFlags && Object.hasOwn(rawFlags, 'screenshotMaxSize')
+    ? errorResponse('INVALID_ARGS', 'record --max-size is not supported')
+    : null;
 }
 
 function validateRecordingFpsFlag(fpsFlag: number | undefined): DaemonResponse | null {
@@ -283,13 +279,6 @@ function validateRecordingQualityFlag(qualityFlag: RecordingQualityInput): Daemo
       'INVALID_ARGS',
       `quality must be one of: ${RECORDING_EXPORT_QUALITIES.join(', ')} (legacy numeric values 5-10 are accepted)`,
     );
-  }
-  return null;
-}
-
-function validateRecordingMaxSizeFlag(maxSizeFlag: number | undefined): DaemonResponse | null {
-  if (maxSizeFlag !== undefined && (!Number.isInteger(maxSizeFlag) || maxSizeFlag < 1)) {
-    return errorResponse('INVALID_ARGS', 'max-size must be a positive integer');
   }
   return null;
 }

@@ -176,27 +176,6 @@ export async function stopIosSimulatorRecording(params: {
     );
   }
 
-  if (recording.maxSize !== undefined) {
-    try {
-      await withDiagnosticTimer(
-        'record_stop_resize',
-        () =>
-          deps.resizeRecording({
-            videoPath: recording.outPath,
-            maxSize: recording.maxSize!,
-            exportQuality: recording.exportQuality,
-            targetLabel: 'iOS recording',
-          }),
-        {
-          outPath: recording.outPath,
-          maxSize: recording.maxSize,
-        },
-      );
-    } catch (error) {
-      recording.overlayWarning = `failed to resize recording: ${formatRecordTraceError(error)}`;
-    }
-  }
-
   await withDiagnosticTimer(
     'record_stop_finalize_overlay',
     () =>

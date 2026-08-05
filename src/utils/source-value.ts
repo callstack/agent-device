@@ -1,7 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 
 export type SourceValueDefinition = {
-  type: 'boolean' | 'int' | 'enum' | 'string' | 'booleanOrString';
+  type: 'boolean' | 'int' | 'number' | 'enum' | 'string' | 'booleanOrString';
   multiple?: boolean;
   enumValues?: readonly string[];
   min?: number;
@@ -75,10 +75,10 @@ export function parseSourceValue(
   }
   const parsed =
     typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
-  if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+  if (!Number.isFinite(parsed) || (definition.type === 'int' && !Number.isInteger(parsed))) {
     throw new AppError(
       'INVALID_ARGS',
-      `Invalid value for "${rawKey}" in ${sourceLabel}. Expected integer.`,
+      `Invalid value for "${rawKey}" in ${sourceLabel}. Expected ${definition.type === 'int' ? 'integer' : 'number'}.`,
     );
   }
   if (typeof definition.min === 'number' && parsed < definition.min) {

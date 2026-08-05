@@ -27,11 +27,7 @@ vi.mock('../../utils/video.ts', () => ({
   waitForPlayableVideo: vi.fn(async () => {}),
 }));
 
-import {
-  buildRecordingScriptPathCandidates,
-  overlayRecordingTouches,
-  resizeRecording,
-} from '../overlay.ts';
+import { buildRecordingScriptPathCandidates, overlayRecordingTouches } from '../overlay.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '../../utils/exec.ts';
 
@@ -131,28 +127,6 @@ test('overlay forwards the requested high export preset', async () => {
 
   expect(helperScriptArgs()).toEqual(
     expect.arrayContaining(['--events', telemetryPath, '--quality', 'high']),
-  );
-});
-
-test('resize forwards max-size and defaults to the fast medium export preset', async () => {
-  const videoPath = path.join(tmpDir, 'recording.mp4');
-  fs.writeFileSync(videoPath, 'original');
-
-  await resizeRecording({ videoPath, maxSize: 1024 });
-
-  expect(helperScriptArgs()).toEqual(
-    expect.arrayContaining(['--max-size', '1024', '--quality', 'medium']),
-  );
-});
-
-test('resize forwards the requested high export preset', async () => {
-  const videoPath = path.join(tmpDir, 'recording.mp4');
-  fs.writeFileSync(videoPath, 'original');
-
-  await resizeRecording({ videoPath, maxSize: 720, exportQuality: 'high' });
-
-  expect(helperScriptArgs()).toEqual(
-    expect.arrayContaining(['--max-size', '720', '--quality', 'high']),
   );
 });
 

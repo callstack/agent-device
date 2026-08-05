@@ -211,13 +211,14 @@ test('parseArgs recognizes record --quality flag', () => {
   assert.equal(parsed.flags.quality, 'high');
 });
 
-test('parseArgs recognizes record --max-size flag', () => {
-  const parsed = parseArgs(['record', 'start', './capture.mp4', '--max-size', '1024'], {
-    strictFlags: true,
-  });
-  assert.equal(parsed.command, 'record');
-  assert.deepEqual(parsed.positionals, ['start', './capture.mp4']);
-  assert.equal(parsed.flags.screenshotMaxSize, 1024);
+test('parseArgs rejects removed record --max-size flag', () => {
+  assert.throws(
+    () =>
+      parseArgs(['record', 'start', './capture.mp4', '--max-size', '1024'], {
+        strictFlags: true,
+      }),
+    /Unknown flag: --max-size/,
+  );
 });
 
 test('parseArgs recognizes record --hide-touches flag', () => {
@@ -248,8 +249,8 @@ test('parseArgs recognizes screenshot flags', () => {
       '--full',
       '-f',
       '--fullscreen',
-      '--max-size',
-      '1024',
+      '--scale',
+      '0.3',
       '--no-stabilize',
       '--normalize-status-bar',
     ],
@@ -261,7 +262,7 @@ test('parseArgs recognizes screenshot flags', () => {
   assert.deepEqual(parsed.positionals, ['page.png']);
   assert.equal(parsed.flags.screenshotPixelDensity, 2);
   assert.equal(parsed.flags.screenshotFullscreen, true);
-  assert.equal(parsed.flags.screenshotMaxSize, 1024);
+  assert.equal(parsed.flags.screenshotScale, 0.3);
   assert.equal(parsed.flags.screenshotNoStabilize, true);
   assert.equal(parsed.flags.screenshotNormalizeStatusBar, true);
 });

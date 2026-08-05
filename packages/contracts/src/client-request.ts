@@ -31,7 +31,6 @@ export type CommandExecutionOptions = Partial<ScreenshotRequestFlags> & {
   forceFull?: boolean;
   count?: number;
   fps?: number;
-  maxSize?: number;
   recordingScope?: RecordingScope;
   quality?: RecordingExportQuality;
   hideTouches?: boolean;

@@ -320,7 +320,9 @@ Web probes sample HTML media elements. Host-system probes use `platform: 'macos'
 
 For Apple native profiling, call `perf({ area: 'cpu', subject: 'profile', action: 'start', kind: 'xctrace', template: 'Time Profiler', out: 'app.trace' })`, then stop with the same trace path and write a compact report with `action: 'report'`. `area: 'trace'` supports xctrace templates such as `Animation Hitches`. Responses include artifact paths and compact metadata only.
 
-`client.recording.record({ action: 'start', path, maxSize: 1024, quality: 'medium' })` starts a recording capped to a 1024 px longest edge with medium output quality.
+`client.recording.record({ action: 'start', path, quality: 'medium' })` starts a recording with medium output quality.
+
+`client.capture.screenshot({ path, scale: 0.3 })` captures a screenshot at 30% of its original width and height. `scale` accepts `0.01` through `1`.
 
 `client.batch.run({ steps })` accepts structured steps:
 `{ command: 'open', input: { app: 'settings' } }`. Step `input` uses the same fields as the

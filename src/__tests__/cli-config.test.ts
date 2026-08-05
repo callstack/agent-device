@@ -42,6 +42,30 @@ test('CLI merges config defaults with precedence user < project < env < CLI', as
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test('screenshot scale supports env defaults with CLI precedence', async () => {
+  const { root, home, project } = makeTempWorkspace();
+
+  const fromEnv = await runCliCapture(['screenshot', 'env.png', '--json'], {
+    cwd: project,
+    env: { HOME: home, AGENT_DEVICE_SCREENSHOT_SCALE: '0.3' },
+    defaultResponse: { ok: true, data: { path: 'env.png' } },
+  });
+
+  assert.equal(fromEnv.code, null);
+  assert.equal(fromEnv.calls[0]?.flags?.screenshotScale, 0.3);
+
+  const fromCli = await runCliCapture(['screenshot', 'cli.png', '--scale', '0.5', '--json'], {
+    cwd: project,
+    env: { HOME: home, AGENT_DEVICE_SCREENSHOT_SCALE: '0.3' },
+    defaultResponse: { ok: true, data: { path: 'cli.png' } },
+  });
+
+  assert.equal(fromCli.code, null);
+  assert.equal(fromCli.calls[0]?.flags?.screenshotScale, 0.5);
+
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
 test('config can set appsFilter through canonical enum values', async () => {
   const { root, home, project } = makeTempWorkspace();
   fs.mkdirSync(path.join(home, '.agent-device'), { recursive: true });

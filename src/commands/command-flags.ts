@@ -77,7 +77,6 @@ function buildFlags(options: InternalRequestOptions): CommandFlags {
     out: options.out,
     count: options.count,
     fps: options.fps,
-    screenshotMaxSize: options.maxSize,
     quality: options.quality,
     hideTouches: options.hideTouches,
     recordingScope: options.recordingScope,

@@ -288,7 +288,6 @@ type SessionRecordingBase = {
     bundleId: string;
     name?: string;
   };
-  maxSize?: number;
   exportQuality?: RecordingExportQuality;
   showTouches: boolean;
   gestureEvents: RecordingGestureEvent[];

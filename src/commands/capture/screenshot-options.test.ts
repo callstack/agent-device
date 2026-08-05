@@ -7,7 +7,9 @@ import {
   SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS,
   readScreenshotScriptFlag,
   screenshotFlagsFromOptions,
+  screenshotFlagsFromPublicOptions,
   screenshotOptionsFromFlags,
+  validateScreenshotScale,
 } from '@agent-device/contracts/capture';
 
 test('screenshot flag projection maps CLI flags to runtime options', () => {
@@ -16,7 +18,7 @@ test('screenshot flag projection maps CLI flags to runtime options', () => {
       overlayRefs: true,
       screenshotPixelDensity: 2,
       screenshotFullscreen: true,
-      screenshotMaxSize: 1024,
+      screenshotScale: 0.3,
       screenshotNoStabilize: true,
       screenshotNormalizeStatusBar: true,
     }),
@@ -24,7 +26,7 @@ test('screenshot flag projection maps CLI flags to runtime options', () => {
       overlayRefs: true,
       pixelDensity: 2,
       fullscreen: true,
-      maxSize: 1024,
+      scale: 0.3,
       stabilize: false,
       normalizeStatusBar: true,
     },
@@ -37,7 +39,6 @@ test('screenshot flag projection maps public options to request flags', () => {
       overlayRefs: true,
       pixelDensity: 3,
       fullscreen: true,
-      maxSize: 512,
       stabilize: false,
       normalizeStatusBar: true,
     }),
@@ -45,11 +46,22 @@ test('screenshot flag projection maps public options to request flags', () => {
       overlayRefs: true,
       screenshotPixelDensity: 3,
       screenshotFullscreen: true,
-      screenshotMaxSize: 512,
       screenshotNoStabilize: true,
       screenshotNormalizeStatusBar: true,
     },
   );
+});
+
+test('screenshot flag projection maps public scale to its request flag', () => {
+  assert.deepEqual(screenshotFlagsFromPublicOptions({ scale: 0.3 }), {
+    screenshotScale: 0.3,
+  });
+});
+
+test('screenshot scale is bounded', () => {
+  assert.doesNotThrow(() => validateScreenshotScale({ scale: 0.3 }));
+  assert.throws(() => validateScreenshotScale({ scale: 0 }), /between 0\.01 and 1/);
+  assert.throws(() => validateScreenshotScale({ scale: 1.01 }), /between 0\.01 and 1/);
 });
 
 test('screenshot script flags use the shared recorded flag contract', () => {
@@ -62,7 +74,7 @@ test('screenshot script flags use the shared recorded flag contract', () => {
   assert.deepEqual(result, { handled: true, nextIndex: 0 });
   result = readScreenshotScriptFlag({ args: ['--fullscreen'], index: 0, flags });
   assert.deepEqual(result, { handled: true, nextIndex: 0 });
-  result = readScreenshotScriptFlag({ args: ['--max-size', '640'], index: 0, flags });
+  result = readScreenshotScriptFlag({ args: ['--scale', '0.3'], index: 0, flags });
   assert.deepEqual(result, { handled: true, nextIndex: 1 });
   result = readScreenshotScriptFlag({ args: ['--no-stabilize'], index: 0, flags });
   assert.deepEqual(result, { handled: true, nextIndex: 0 });
@@ -77,15 +89,15 @@ test('screenshot script flags use the shared recorded flag contract', () => {
     '--pixel-density',
     '3',
     '--fullscreen',
-    '--max-size',
-    '640',
+    '--scale',
+    '0.3',
     '--no-stabilize',
     '--normalize-status-bar',
   ]);
   assert.deepEqual(SCREENSHOT_ACTION_FLAG_KEYS, [
     'screenshotPixelDensity',
     'screenshotFullscreen',
-    'screenshotMaxSize',
+    'screenshotScale',
     'screenshotNoStabilize',
     'screenshotNormalizeStatusBar',
   ]);
@@ -98,7 +110,7 @@ test('screenshot script flags use the shared recorded flag contract', () => {
     'overlayRefs',
     'screenshotPixelDensity',
     'screenshotFullscreen',
-    'screenshotMaxSize',
+    'screenshotScale',
     'screenshotNoStabilize',
     'screenshotNormalizeStatusBar',
   ]);

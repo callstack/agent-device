@@ -7,7 +7,6 @@ extension RunnerTests {
   final class ScreenRecorder {
     private let outputPath: String
     private let fps: Int32?
-    private let maxSize: Int?
     private var effectiveFps: Int32 {
       max(1, fps ?? RunnerTests.defaultRecordingFps)
     }
@@ -26,10 +25,9 @@ extension RunnerTests {
     private var startedSession = false
     private var startError: Error?
 
-    init(outputPath: String, fps: Int32?, maxSize: Int?) {
+    init(outputPath: String, fps: Int32?) {
       self.outputPath = outputPath
       self.fps = fps
-      self.maxSize = maxSize
     }
 
     func start(captureFrame: @escaping () -> RunnerImage?) throws {
@@ -50,7 +48,7 @@ extension RunnerTests {
       while Date() < bootstrapDeadline {
         if let image = captureFrame(), let cgImage = runnerCGImage(from: image) {
           bootstrapImage = image
-          dimensions = scaledDimensions(width: cgImage.width, height: cgImage.height)
+          dimensions = CGSize(width: cgImage.width, height: cgImage.height)
           break
         }
         Thread.sleep(forTimeInterval: 0.05)
@@ -261,23 +259,5 @@ extension RunnerTests {
       return pixelBuffer
     }
 
-    private func scaledDimensions(width: Int, height: Int) -> CGSize {
-      guard let maxSize, maxSize > 0 else {
-        return CGSize(width: width, height: height)
-      }
-      let longest = max(width, height)
-      guard longest > maxSize else {
-        return CGSize(width: width, height: height)
-      }
-      let scale = Double(maxSize) / Double(longest)
-      return CGSize(
-        width: scaledEvenDimension(width, scale: scale),
-        height: scaledEvenDimension(height, scale: scale)
-      )
-    }
-
-    private func scaledEvenDimension(_ value: Int, scale: Double) -> Int {
-      max(2, Int((Double(value) * scale / 2.0).rounded()) * 2)
-    }
   }
 }

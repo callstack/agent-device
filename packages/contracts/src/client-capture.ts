@@ -61,7 +61,7 @@ export type CaptureScreenshotOptions = AgentDeviceRequestOverrides & {
   overlayRefs?: boolean;
   pixelDensity?: number;
   fullscreen?: boolean;
-  maxSize?: number;
+  scale?: number;
   stabilize?: boolean;
   normalizeStatusBar?: boolean;
   surface?: SessionSurface;

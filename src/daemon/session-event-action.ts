@@ -310,7 +310,7 @@ const SAFE_ACTION_FLAG_SPECS: Record<string, SafeFlagSpec> = {
     ],
     numbers: [
       { source: 'screenshotPixelDensity', output: 'pixelDensity' },
-      { source: 'screenshotMaxSize', output: 'maxSize' },
+      { source: 'screenshotScale', output: 'scale' },
     ],
   },
   [PUBLIC_COMMANDS.snapshot]: {
@@ -327,7 +327,7 @@ const SAFE_ACTION_FLAG_SPECS: Record<string, SafeFlagSpec> = {
   },
   [PUBLIC_COMMANDS.record]: {
     booleans: [{ source: 'hideTouches' }],
-    numbers: [{ source: 'fps' }, { source: 'screenshotMaxSize', output: 'maxSize' }],
+    numbers: [{ source: 'fps' }],
     enums: [{ source: 'recordingScope', output: 'scope', values: RECORDING_SCOPE_VALUES }],
   },
   [PUBLIC_COMMANDS.apps]: {
