@@ -136,7 +136,7 @@
     "check:command-docs": "vitest run --project unit-core src/__tests__/command-doc-coverage.test.ts",
     "check:replay-compat": "node --experimental-strip-types scripts/check-replay-compat-provenance.ts",
     "check:tmpdir-leaks": "node --experimental-strip-types scripts/check-tmpdir-leaks.ts",
-    "check:tmpdir-leaks:test": "node --experimental-strip-types --test scripts/check-tmpdir-leaks-model.test.ts",
+    "check:tmpdir-leaks:test": "node --experimental-strip-types --test scripts/check-tmpdir-leaks-model.test.ts scripts/vitest-tmpdir-global-setup.test.ts",
     "check:freerange": "fr",
     "check:quick": "pnpm lint && pnpm typecheck",
     "sync:mcp-metadata": "node scripts/sync-mcp-metadata.mjs",
