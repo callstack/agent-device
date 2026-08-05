@@ -38,8 +38,12 @@ const triggerAppEventCommandMetadata = defineFieldCommandMetadata(
   'trigger-app-event',
   'Trigger an app-defined event.',
   {
-    event: requiredField(stringField()),
-    payload: jsonObjectField(),
+    event: requiredField(
+      stringField('Name of an app-defined automation or test event the app documents.'),
+    ),
+    payload: jsonObjectField(
+      'Structured payload passed to the event, in the shape the app documents for it.',
+    ),
   },
 );
 
@@ -121,6 +125,6 @@ function triggerEventPositionals(input: AppTriggerEventOptions): string[] {
   return [input.event, ...(input.payload ? [JSON.stringify(input.payload)] : [])];
 }
 
-function jsonObjectField(): CommandField<JsonObject> {
-  return looseObjectField() as CommandField<JsonObject>;
+function jsonObjectField(description?: string): CommandField<JsonObject> {
+  return looseObjectField(description) as CommandField<JsonObject>;
 }

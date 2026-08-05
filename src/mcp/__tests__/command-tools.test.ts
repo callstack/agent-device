@@ -909,3 +909,126 @@ test('MCP forwards noRecord from a press tool call through to the executed comma
     },
   ]);
 });
+
+// Guidance no longer restates input fields in prose, so a tool's inputSchema is the only
+// place its inputs are documented — for the model, for `--help`, and for the docs site.
+// An undescribed property is therefore a silent gap rather than a cosmetic one. These
+// budgets ratchet: they must go down as properties gain descriptions, never up.
+const UNDESCRIBED_INPUT_BUDGET = 132;
+const UNDESCRIBED_INPUT_KEYS = new Set([
+  'action',
+  'app',
+  'area',
+  'artifactsDir',
+  'backend',
+  'bearerToken',
+  'bridgeScope',
+  'bundleUrl',
+  'button',
+  'cursor',
+  'depth',
+  'direction',
+  'durationMs',
+  'env',
+  'failFast',
+  'first',
+  'force',
+  'forceFull',
+  'format',
+  'fps',
+  'fullscreen',
+  'hideTouches',
+  'include',
+  'installDependenciesIfNeeded',
+  'interactiveOnly',
+  'kind',
+  'last',
+  'latitude',
+  'launchUrl',
+  'limit',
+  'listenHost',
+  'locator',
+  'logPath',
+  'longitude',
+  'maestro',
+  'maxSize',
+  'message',
+  'metroHost',
+  'metroPort',
+  'mode',
+  'normalizeStatusBar',
+  'orientation',
+  'out',
+  'overlayRefs',
+  'path',
+  'paths',
+  'pattern',
+  'payload',
+  'permission',
+  'port',
+  'predicate',
+  'probeAction',
+  'probeTimeoutMs',
+  'projectRoot',
+  'proxyBaseUrl',
+  'publicBaseUrl',
+  'quality',
+  'query',
+  'quietMs',
+  'raw',
+  'recordVideo',
+  'recordingScope',
+  'ref',
+  'restart',
+  'resumeFrom',
+  'resumePlanDigest',
+  'retainPaths',
+  'retentionMs',
+  'retries',
+  'reuseExisting',
+  'runtimeFilePath',
+  'saveScript',
+  'scope',
+  'selector',
+  'setting',
+  'shardAll',
+  'shardSplit',
+  'stabilize',
+  'stable',
+  'startupTimeoutMs',
+  'state',
+  'statusHost',
+  'subject',
+  'surface',
+  'text',
+  'timeoutMs',
+  'update',
+  'value',
+]);
+
+test('MCP tool inputs do not add undocumented properties', () => {
+  const undescribed: string[] = [];
+  for (const tool of listCommandTools()) {
+    for (const [key, schema] of Object.entries(tool.inputSchema.properties ?? {})) {
+      if (!schema.description) undescribed.push(`${tool.name}.${key}`);
+    }
+  }
+
+  const newKeys = undescribed
+    .map((entry) => entry.slice(entry.indexOf('.') + 1))
+    .filter((key) => !UNDESCRIBED_INPUT_KEYS.has(key));
+  assert.deepEqual(
+    newKeys,
+    [],
+    `New MCP input properties are missing a schema description: ${newKeys.join(', ')}`,
+  );
+  assert.ok(
+    undescribed.length <= UNDESCRIBED_INPUT_BUDGET,
+    `Undescribed MCP inputs grew to ${undescribed.length} (budget ${UNDESCRIBED_INPUT_BUDGET}): ${undescribed.join(', ')}`,
+  );
+  assert.equal(
+    undescribed.length,
+    UNDESCRIBED_INPUT_BUDGET,
+    `Undescribed MCP inputs dropped to ${undescribed.length}; lower UNDESCRIBED_INPUT_BUDGET to match.`,
+  );
+});
