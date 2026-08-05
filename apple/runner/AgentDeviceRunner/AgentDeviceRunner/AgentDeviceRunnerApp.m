@@ -62,6 +62,13 @@ int main(int argc, const char *argv[]) {
 
 @implementation AgentDeviceRunnerViewController
 
+- (void)agentDeviceTextEntryDidChange:(UITextField *)textField {
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-disappear-after-input"] &&
+      textField.text.length > 0) {
+    [textField removeFromSuperview];
+  }
+}
+
 - (void)viewDidLoad {
   [super viewDidLoad];
 
@@ -86,6 +93,9 @@ int main(int argc, const char *argv[]) {
     textField.accessibilityIdentifier = @"agent-device-hardware-keyboard-input";
     textField.borderStyle = UITextBorderStyleRoundedRect;
     textField.inputView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 1, 1)];
+    [textField addTarget:self
+                  action:@selector(agentDeviceTextEntryDidChange:)
+        forControlEvents:UIControlEventEditingChanged];
     textField.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:textField];
     [NSLayoutConstraint activateConstraints:@[

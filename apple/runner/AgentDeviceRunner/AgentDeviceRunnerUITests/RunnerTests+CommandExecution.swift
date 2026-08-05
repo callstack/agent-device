@@ -405,6 +405,38 @@ extension RunnerTests {
     XCTAssertFalse(didRecordXCTestFailure(since: secondFailureCountBefore))
     XCTAssertEqual(String(describing: textField.value ?? ""), "hardware-keyboard")
   }
+
+  func testBareDelayedTypeFailsWhenTappedInputDisappearsMidCommand() throws {
+    app.launchArguments = [
+      "--agent-device-text-entry-regression",
+      "--agent-device-text-entry-disappear-after-input",
+    ]
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+
+    let textField = app.textFields["agent-device-hardware-keyboard-input"]
+    XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
+    let tapCommand = try runnerCommandFixture(
+      #"{"command":"tap","commandId":"tap-disappearing-input","selectorKey":"id","selectorValue":"agent-device-hardware-keyboard-input"}"#
+    )
+    let tapResponse = try executeOnMainPrepared(command: tapCommand, activeApp: app)
+    XCTAssertTrue(tapResponse.ok, String(describing: tapResponse.error))
+
+    let failureCountBefore = currentXCTestFailureCount()
+    let typeCommand = try runnerCommandFixture(
+      #"{"command":"type","commandId":"type-disappearing-input","text":"ab","delayMs":50}"#
+    )
+    let typeResponse = executeTypeCommand(activeApp: app, command: typeCommand)
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertFalse(typeResponse.ok)
+    XCTAssertEqual(typeResponse.error?.code, "TEXT_INPUT_NOT_FOCUSED")
+    XCTAssertFalse(textField.exists)
+  }
 #endif
 
   func testXCTestRecordedFailureResponseFailsMutatingSuccesses() throws {
