@@ -1,4 +1,9 @@
+import {
+  snapshotCaptureAnnotationsFrom,
+  type SnapshotCaptureAnnotations,
+} from '@agent-device/contracts/capture';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import { sleep } from '../utils/timeouts.ts';
 import type { AndroidSnapshotFreshness, SessionState } from './types.ts';
 
 export type { AndroidSnapshotFreshness } from './types.ts';
@@ -13,8 +18,8 @@ const ANDROID_COMPARISON_BASELINE_MAX_AGE_MS = 5_000;
 // Retry suspicious snapshots until this post-action deadline expires.  The delay
 // sequence stays short in the happy path; the 600 ms tail retry is opportunistic
 // and may be skipped when slower devices spend the budget inside each capture.
-export const ANDROID_FRESHNESS_RETRY_DEADLINE_MS = 1_500;
-export const ANDROID_FRESHNESS_RETRY_DELAYS_MS = [250, 400, 600] as const;
+const ANDROID_FRESHNESS_RETRY_DEADLINE_MS = 1_500;
+const ANDROID_FRESHNESS_RETRY_DELAYS_MS = [250, 400, 600] as const;
 
 export function markAndroidSnapshotFreshness(
   session: SessionState,
@@ -99,6 +104,120 @@ export function isLikelyStaleSnapshotDrop(previousCount: number, currentCount: n
     return false;
   }
   return currentCount <= Math.floor(previousCount * 0.2);
+}
+
+export type AndroidFreshnessReason = 'empty-interactive' | 'sharp-drop' | 'stuck-route';
+export type AndroidFreshnessMode = 'default' | 'ref-refresh';
+
+/**
+ * The whole "is this capture suspicious?" decision, in one place with its
+ * thresholds: which of the three staleness shapes (if any) the attempt
+ * matches against an active freshness window. `rawNodeCount` is the capture
+ * backend's pre-filter node count when it disclosed one.
+ */
+export function getAndroidFreshnessReason(
+  attempt: { snapshot: SnapshotState; rawNodeCount: number | undefined },
+  freshness: AndroidSnapshotFreshness,
+  options: { interactiveOnly: boolean; mode?: AndroidFreshnessMode },
+): AndroidFreshnessReason | null {
+  // When interactive-only filtering produces zero visible nodes from ≥12 raw nodes,
+  // the dump likely captured a transitional frame.  The 12-node floor avoids
+  // false positives on deliberately minimal screens (splash, loading).
+  if (
+    options.interactiveOnly &&
+    attempt.snapshot.nodes.length === 0 &&
+    attempt.rawNodeCount !== undefined &&
+    attempt.rawNodeCount >= 12
+  ) {
+    return 'empty-interactive';
+  }
+
+  if (options.mode === 'ref-refresh') {
+    return null;
+  }
+
+  if (isLikelyStaleSnapshotDrop(freshness.baselineCount, attempt.snapshot.nodes.length)) {
+    return !hasMeaningfulSnapshotContent(attempt.snapshot) ? 'sharp-drop' : null;
+  }
+
+  return freshness.routeComparable &&
+    isNavigationSensitiveAction(freshness.action) &&
+    isLikelySnapshotStuckOnPreviousRoute(freshness.baselineSignatures, attempt.snapshot.nodes)
+    ? 'stuck-route'
+    : null;
+}
+
+/**
+ * The whole freshness recovery: re-capture past suspicious dumps until the
+ * capture stops matching a staleness shape or the post-action deadline
+ * expires, then annotate what happened. The freshness window is cleared only
+ * when a trustworthy capture was seen; a still-suspicious final attempt keeps
+ * the window so the next capture can try again, and the annotation discloses
+ * `staleAfterRetries` to the caller.
+ */
+export async function captureAndroidFreshnessRecoveredAttempt<
+  T extends { snapshot: SnapshotState; annotations: SnapshotCaptureAnnotations },
+>(
+  params: {
+    session: SessionState | undefined;
+    interactiveOnly: boolean;
+    androidFreshnessMode?: AndroidFreshnessMode;
+    capture: () => Promise<T>;
+  },
+  freshness: AndroidSnapshotFreshness,
+): Promise<T> {
+  const classify = (attempt: T) =>
+    getAndroidFreshnessReason(
+      { snapshot: attempt.snapshot, rawNodeCount: attempt.annotations.analysis?.rawNodeCount },
+      freshness,
+      { interactiveOnly: params.interactiveOnly, mode: params.androidFreshnessMode },
+    );
+
+  let latest = await params.capture();
+  let suspiciousReason = classify(latest);
+  let retryCount = 0;
+  const retryUntilMs = freshness.markedAt + ANDROID_FRESHNESS_RETRY_DEADLINE_MS;
+
+  for (const delayMs of ANDROID_FRESHNESS_RETRY_DELAYS_MS) {
+    if (!suspiciousReason) break;
+    const remainingMs = retryUntilMs - Date.now();
+    if (remainingMs <= 0) break;
+    await sleep(Math.min(delayMs, remainingMs));
+    latest = await params.capture();
+    retryCount += 1;
+    suspiciousReason = classify(latest);
+  }
+
+  if (!suspiciousReason) {
+    clearAndroidSnapshotFreshness(params.session);
+  }
+
+  const freshnessAnnotation =
+    retryCount > 0 || Boolean(suspiciousReason)
+      ? {
+          action: freshness.action,
+          retryCount,
+          staleAfterRetries: Boolean(suspiciousReason),
+          reason: suspiciousReason ?? undefined,
+        }
+      : undefined;
+  return {
+    ...latest,
+    annotations: {
+      ...latest.annotations,
+      ...snapshotCaptureAnnotationsFrom({ freshness: freshnessAnnotation }),
+    },
+  };
+}
+
+function hasMeaningfulSnapshotContent(snapshot: SnapshotState): boolean {
+  return snapshot.nodes.some(
+    (node) =>
+      node.hittable === true ||
+      Boolean(node.label?.trim()) ||
+      Boolean(node.value?.trim()) ||
+      Boolean(node.identifier?.trim()),
+  );
 }
 
 export function isLikelySnapshotStuckOnPreviousRoute(

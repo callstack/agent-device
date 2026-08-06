@@ -14,15 +14,11 @@ import {
   recoverAndroidBlockingSystemDialog,
 } from './android-system-dialog.ts';
 import { annotateScreenshotWithRefs } from './screenshot-overlay.ts';
-import {
-  isNavigationSensitiveAction,
-  markAndroidSnapshotFreshness,
-} from './android-snapshot-freshness.ts';
+import { markDeferredInteractionOutcome } from './deferred-interaction-outcome.ts';
 import {
   augmentScrollVisualizationResult,
   recordTouchVisualizationEvent,
 } from './recording-gestures.ts';
-import { markPostGestureStabilization } from './post-gesture-stabilization.ts';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { expireRefFrame } from './ref-frame.ts';
 import {
@@ -112,10 +108,12 @@ export async function dispatchGenericCommand(params: {
     clientArtifactPaths: req.meta?.clientArtifactPaths,
   });
 
-  if (isNavigationSensitiveAction(platformCommand)) {
-    markAndroidSnapshotFreshness(session, platformCommand);
-  }
-  markPostGestureStabilization(session, platformCommand, resolvedPositionals, req.flags);
+  markDeferredInteractionOutcome({
+    session,
+    command: platformCommand,
+    positionals: resolvedPositionals,
+    flags: req.flags,
+  });
 
   return { ok: true, data: data ?? {} };
 }

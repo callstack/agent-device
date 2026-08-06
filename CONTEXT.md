@@ -114,6 +114,16 @@ task touches:
 - Ref generation pin: optional `~s<n>` suffix on an @ref carrying the snapshot generation it was
   minted from. Accepted as input everywhere, emitted by no tree output (snapshot token budget),
   auto-appended by the MCP layer, stripped and ignored by replay.
+- Deferred interaction outcome: the daemon's post-response answer to "did that mutation actually
+  take effect" — pending interaction outcome retry, post-gesture stabilization, and Android
+  snapshot freshness recovery. `src/daemon/deferred-interaction-outcome.ts` is its one interface:
+  every mutating route marks through it after dispatch, and every snapshot capture resolves
+  through it; the three `SessionState` fields stay with their R7 owners (the module itself owns
+  `postGestureStabilization`, so the seam adds no node to the R9 cycle). Marking
+  order is load-bearing (pending outcome retry before stabilization), each marker keeps its own
+  eligibility gate, and the module owns only these post-action markers — never ADR 0014 ref-frame
+  expiry or the ADR 0012/0016 staged protocols. Distinct from the same-response settled
+  observation below.
 - Settled observation: opt-in (`--settle`) post-action payload on press/click/fill/longpress — the
   quiet-window stable loop re-captures until the UI settles, and the response carries the diff vs the
   pre-action tree (changed lines only, added lines with fresh refs, `refsGeneration` when the settled
